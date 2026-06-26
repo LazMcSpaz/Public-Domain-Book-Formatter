@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Public-Domain Book Reprint Tool</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header class="app-header">
+        <h1>Public-Domain Book Reprint Tool</h1>
+        <p class="subtitle">App shell — bridge smoke test</p>
+      </header>
+
+      <main class="app-main">
+        <section class="panel" id="deps-panel">
+          <div class="panel-head">
+            <h2>System dependencies</h2>
+            <button id="check-deps" type="button">Check dependencies</button>
+          </div>
+          <ul id="deps-list" class="deps-list">
+            <li class="empty">Not checked yet.</li>
+          </ul>
+        </section>
+
+        <section class="panel" id="progress-panel">
+          <h2>Pipeline progress</h2>
+          <div id="progress-status" class="progress-status">Idle — no pipeline running.</div>
+        </section>
+      </main>
+    </div>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
