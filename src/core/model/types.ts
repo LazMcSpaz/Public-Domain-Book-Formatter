@@ -237,6 +237,12 @@ export interface ProjectFile {
     pageCount: number
   }
   pages: SourcePage[]
+  /**
+   * The cleaned, formatted output text (Markdown intermediate, SPEC §3). This is
+   * what the review instrument renders in the output pane; every `MappingEntry`'s
+   * `output` range indexes into char offsets of this string.
+   */
+  markdown: string
   /** Serialized coordinate map. */
   coordinateMap: MappingEntry[]
   flags: Flag[]

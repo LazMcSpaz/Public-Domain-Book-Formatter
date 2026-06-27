@@ -114,6 +114,7 @@ export async function runPipeline(
       pageCount,
     })
     project.pages = ctx.pages ?? []
+    project.markdown = ctx.markdown ?? ''
     project.coordinateMap = ctx.coordinateMap ?? []
     project.flags = ctx.flags ?? []
     await saveProject(opts.projectPath, project)

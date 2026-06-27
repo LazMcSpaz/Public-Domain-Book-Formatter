@@ -4,18 +4,21 @@
  * errors propagate cleanly across the bridge (ipcMain.handle rejects the
  * renderer's invoke promise with the error message).
  */
+import { readFile } from 'node:fs/promises'
 import { dirname, join, parse } from 'node:path'
-import { BrowserWindow, ipcMain, webContents } from 'electron'
+import { BrowserWindow, dialog, ipcMain, webContents } from 'electron'
 import type { ProjectFile } from '@core/model'
 import {
   IpcChannel,
   type DependencyStatus,
+  type FileDialogFilter,
   type PipelineProgress,
   type PipelineResult
 } from '@shared/ipc-types'
 import { loadProject, saveProject } from '@core/project'
 import { runPipeline } from '@pipeline'
 import { detectDependencies } from '@tooling/deps/detect'
+import { allowProjectRoot, mimeForPath, resolveProjectImage } from '../asset-access'
 
 /**
  * Wrap a handler so any thrown error is logged in the main process and then
@@ -36,12 +39,13 @@ function guard<Args extends unknown[], Result>(
 }
 
 /**
- * Derive the project manifest path for a given source PDF: a `project.json`
- * sitting alongside the PDF, named after it.
+ * Derive the project DIRECTORY for a given source PDF: a `<name>.bookproj`
+ * folder sitting alongside the PDF. The persistence layer treats a project as a
+ * directory (manifest + assets/), so this must be a dir, not a file.
  */
 function projectPathForPdf(pdfPath: string): string {
   const { name } = parse(pdfPath)
-  return join(dirname(pdfPath), `${name}.project.json`)
+  return join(dirname(pdfPath), `${name}.bookproj`)
 }
 
 /** Wire every IpcChannel to its handler. Call once, after app is ready. */
@@ -49,6 +53,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle(
     IpcChannel.OpenProject,
     guard(IpcChannel.OpenProject, (_event, projectPath: string): Promise<ProjectFile> => {
+      allowProjectRoot(projectPath)
       return loadProject(projectPath)
     })
   )
@@ -71,11 +76,51 @@ export function registerIpcHandlers(): void {
   )
 
   ipcMain.handle(
+    IpcChannel.OpenFileDialog,
+    guard(
+      IpcChannel.OpenFileDialog,
+      async (_event, filters?: FileDialogFilter[]): Promise<string | null> => {
+        const result = await dialog.showOpenDialog({
+          properties: ['openFile'],
+          filters: filters ?? [{ name: 'PDF', extensions: ['pdf'] }]
+        })
+        return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]!
+      }
+    )
+  )
+
+  ipcMain.handle(
+    IpcChannel.OpenFolderDialog,
+    guard(IpcChannel.OpenFolderDialog, async (): Promise<string | null> => {
+      const result = await dialog.showOpenDialog({ properties: ['openDirectory'] })
+      return result.canceled || result.filePaths.length === 0 ? null : result.filePaths[0]!
+    })
+  )
+
+  ipcMain.handle(
+    IpcChannel.GetPageImage,
+    guard(
+      IpcChannel.GetPageImage,
+      async (_event, projectPath: string, imagePath: string): Promise<string> => {
+        const abs = resolveProjectImage(projectPath, imagePath)
+        if (!abs) {
+          throw new Error(`Refusing to read image outside project: ${imagePath}`)
+        }
+        allowProjectRoot(projectPath)
+        const bytes = await readFile(abs)
+        const mime = mimeForPath(abs) ?? 'application/octet-stream'
+        return `data:${mime};base64,${bytes.toString('base64')}`
+      }
+    )
+  )
+
+  ipcMain.handle(
     IpcChannel.RunPipeline,
     guard(
       IpcChannel.RunPipeline,
       (event, pdfPath: string): Promise<PipelineResult> => {
         const projectPath = projectPathForPdf(pdfPath)
+        allowProjectRoot(projectPath)
         // Prefer the window that issued the request; fall back to the focused
         // window so progress always reaches a live renderer.
         const sender = webContents.fromId(event.sender.id) ?? null

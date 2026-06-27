@@ -14,7 +14,13 @@ export const IpcChannel = {
   SaveProject: 'project:save',
   RunPipeline: 'pipeline:run',
   PipelineProgress: 'pipeline:progress',
-  GetDependencies: 'deps:get'
+  GetDependencies: 'deps:get',
+  /** Show a native open-file dialog (e.g. to pick a source PDF). */
+  OpenFileDialog: 'dialog:openFile',
+  /** Show a native open-folder dialog (e.g. to open an existing project dir). */
+  OpenFolderDialog: 'dialog:openFolder',
+  /** Read a project page image and return it as a base64 data URL. */
+  GetPageImage: 'review:pageImage'
 } as const
 
 export type IpcChannel = (typeof IpcChannel)[keyof typeof IpcChannel]
@@ -55,6 +61,12 @@ export interface PipelineResult {
   pageCount: number
 }
 
+/** A file-type filter for the native open-file dialog. */
+export interface FileDialogFilter {
+  name: string
+  extensions: string[]
+}
+
 /**
  * The API surface exposed to the renderer on `window.api`. Every method is async
  * (it crosses the process boundary). Progress is delivered via a subscription
@@ -71,6 +83,17 @@ export interface BridgeApi {
   onPipelineProgress(listener: (progress: PipelineProgress) => void): () => void
   /** Report presence/versions of required system tools (SPEC §2 note). */
   getDependencies(): Promise<DependencyStatus[]>
+  /** Show a native open-file dialog; resolves to the chosen path or null. */
+  openFileDialog(filters?: FileDialogFilter[]): Promise<string | null>
+  /** Show a native open-folder dialog; resolves to the chosen path or null. */
+  openFolderDialog(): Promise<string | null>
+  /**
+   * Read a page image from a project's assets and return it as a base64 data
+   * URL (used for canvas crops in the source-image-on-hover popover, SPEC §4).
+   * `imagePath` is resolved relative to the project and validated to stay inside
+   * the project directory.
+   */
+  getPageImage(projectPath: string, imagePath: string): Promise<string>
 }
 
 declare global {

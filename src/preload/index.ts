@@ -9,6 +9,7 @@ import {
   IpcChannel,
   type BridgeApi,
   type DependencyStatus,
+  type FileDialogFilter,
   type PipelineProgress,
   type PipelineResult
 } from '@shared/ipc-types'
@@ -28,6 +29,18 @@ const api: BridgeApi = {
 
   getDependencies(): Promise<DependencyStatus[]> {
     return ipcRenderer.invoke(IpcChannel.GetDependencies)
+  },
+
+  openFileDialog(filters?: FileDialogFilter[]): Promise<string | null> {
+    return ipcRenderer.invoke(IpcChannel.OpenFileDialog, filters)
+  },
+
+  openFolderDialog(): Promise<string | null> {
+    return ipcRenderer.invoke(IpcChannel.OpenFolderDialog)
+  },
+
+  getPageImage(projectPath: string, imagePath: string): Promise<string> {
+    return ipcRenderer.invoke(IpcChannel.GetPageImage, projectPath, imagePath)
   },
 
   onPipelineProgress(listener: (progress: PipelineProgress) => void): () => void {

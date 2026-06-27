@@ -6,9 +6,38 @@
  * (electron-vite dev server when available, otherwise the built HTML), wires
  * standard window lifecycle behaviour, and registers all IPC handlers.
  */
+import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { app, BrowserWindow } from 'electron'
+import { app, BrowserWindow, protocol } from 'electron'
 import { registerIpcHandlers } from './ipc/handlers'
+import { isAllowedImage, mimeForPath } from './asset-access'
+
+/** Custom scheme used by the renderer to display project page images directly. */
+const ASSET_SCHEME = 'local-asset'
+
+// Must run before app `ready`: treat the scheme like a standard, secure origin
+// so the renderer can load it from <img> under a strict CSP.
+protocol.registerSchemesAsPrivileged([
+  { scheme: ASSET_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } }
+])
+
+/**
+ * Serve `local-asset://asset/<encoded-abs-path>` → the file on disk, but only
+ * for image files inside an allowed project root (see asset-access.ts).
+ */
+function registerAssetProtocol(): void {
+  protocol.handle(ASSET_SCHEME, async (request) => {
+    const url = new URL(request.url)
+    const abs = decodeURIComponent(url.pathname.replace(/^\//, ''))
+    if (!isAllowedImage(abs)) {
+      return new Response('Forbidden', { status: 403 })
+    }
+    const bytes = await readFile(abs)
+    return new Response(bytes, {
+      headers: { 'Content-Type': mimeForPath(abs) ?? 'application/octet-stream' }
+    })
+  })
+}
 
 /** Build the main application window. */
 function createWindow(): BrowserWindow {
@@ -43,6 +72,7 @@ function createWindow(): BrowserWindow {
 }
 
 void app.whenReady().then(() => {
+  registerAssetProtocol()
   registerIpcHandlers()
   createWindow()
 

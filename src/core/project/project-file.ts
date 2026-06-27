@@ -17,8 +17,11 @@ import type {
   FindReplaceRule,
 } from '@core/model'
 
-/** Current manifest schema version. Bump + extend `migrate` on shape changes. */
-export const CURRENT_SCHEMA_VERSION = 1
+/**
+ * Current manifest schema version. Bump + extend `migrate` on shape changes.
+ * v2 adds the `markdown` output field (SPEC §3/§4 review instrument).
+ */
+export const CURRENT_SCHEMA_VERSION = 2
 
 /** Default per-book config (SPEC §7). Content is filled in by the user later. */
 function defaultConfig(): PerBookConfig {
@@ -48,6 +51,7 @@ export function createEmptyProject(init: {
       pageCount: init.pageCount,
     },
     pages: [],
+    markdown: '',
     coordinateMap: [],
     flags: [],
     tags: [],
@@ -126,6 +130,7 @@ export function migrate(raw: unknown): ProjectFile {
       pageCount,
     },
     pages: asArray<SourcePage>(raw.pages),
+    markdown: typeof raw.markdown === 'string' ? raw.markdown : '',
     coordinateMap: asArray<MappingEntry>(raw.coordinateMap),
     flags: asArray<Flag>(raw.flags),
     tags: asArray<StructuralTag>(raw.tags),
