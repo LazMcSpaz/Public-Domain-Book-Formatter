@@ -30,6 +30,8 @@ const INITIAL_STATE: ReviewState = {
   hover: EMPTY_HOVER,
   activeFlagIndex: -1,
   dirtyTokenIds: new Set<string>(),
+  activeTagId: null,
+  activeImageRegion: null,
   isDirty: false
 }
 
@@ -44,6 +46,8 @@ export function reviewReducer(state: ReviewState, action: ReviewAction): ReviewS
         hover: EMPTY_HOVER,
         activeFlagIndex: -1,
         dirtyTokenIds: new Set<string>(),
+        activeTagId: null,
+        activeImageRegion: null,
         isDirty: false
       }
 
@@ -101,6 +105,90 @@ export function reviewReducer(state: ReviewState, action: ReviewAction): ReviewS
 
     case 'MARK_SAVED':
       return { ...state, isDirty: false }
+
+    // --- Phase 3: structural tagging (SPEC §5) ---
+    case 'ADD_TAG':
+      if (!state.project) return state
+      return {
+        ...state,
+        project: { ...state.project, tags: [...state.project.tags, action.tag] },
+        activeTagId: action.tag.id,
+        isDirty: true
+      }
+
+    case 'REMOVE_TAG':
+      if (!state.project) return state
+      return {
+        ...state,
+        project: {
+          ...state.project,
+          tags: state.project.tags.filter((t) => t.id !== action.id)
+        },
+        activeTagId: state.activeTagId === action.id ? null : state.activeTagId,
+        isDirty: true
+      }
+
+    case 'UPDATE_TAG':
+      if (!state.project) return state
+      return {
+        ...state,
+        project: {
+          ...state.project,
+          tags: state.project.tags.map((t) =>
+            t.id === action.id ? { ...t, ...action.patch } : t
+          )
+        },
+        isDirty: true
+      }
+
+    case 'SET_ACTIVE_TAG':
+      return { ...state, activeTagId: action.id }
+
+    // --- Phase 3: images (SPEC §6) ---
+    case 'SET_REGION_ACCEPTED':
+      if (!state.project) return state
+      return {
+        ...state,
+        project: {
+          ...state.project,
+          pages: state.project.pages.map((p) =>
+            p.index === action.pageIndex
+              ? {
+                  ...p,
+                  regions: p.regions.map((r) =>
+                    r.id === action.regionId ? { ...r, accepted: action.accepted } : r
+                  )
+                }
+              : p
+          )
+        },
+        isDirty: true
+      }
+
+    case 'SET_PAGES':
+      if (!state.project) return state
+      return { ...state, project: { ...state.project, pages: action.pages }, isDirty: true }
+
+    case 'SET_IMAGE_EDITS': {
+      if (!state.project) return state
+      const existing = state.project.imageEdits
+      const has = existing.some((e) => e.regionId === action.regionId)
+      const imageEdits = has
+        ? existing.map((e) =>
+            e.regionId === action.regionId ? { regionId: action.regionId, ops: action.ops } : e
+          )
+        : [...existing, { regionId: action.regionId, ops: action.ops }]
+      return { ...state, project: { ...state.project, imageEdits }, isDirty: true }
+    }
+
+    case 'OPEN_IMAGE_EDITOR':
+      return {
+        ...state,
+        activeImageRegion: { pageIndex: action.pageIndex, regionId: action.regionId }
+      }
+
+    case 'CLOSE_IMAGE_EDITOR':
+      return { ...state, activeImageRegion: null }
 
     default:
       return state

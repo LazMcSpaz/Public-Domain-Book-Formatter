@@ -5,7 +5,15 @@
  * panel reads from it and dispatches `ReviewAction`s, so source/output sync,
  * flags, edits, and reading prefs all stay coherent across the UI.
  */
-import type { CoordinateIndex, Flag, FindReplaceRule, ProjectFile } from '@core/model'
+import type {
+  CoordinateIndex,
+  Flag,
+  FindReplaceRule,
+  ImageEditOp,
+  ProjectFile,
+  SourcePage,
+  StructuralTag
+} from '@core/model'
 
 /** Reading-comfort settings for the panes — independent of final typesetting. */
 export interface ReadingPrefs {
@@ -59,6 +67,10 @@ export interface ReviewState {
   activeFlagIndex: number
   /** Token ids whose text was edited (lose confidence/hover-sync until re-OCR). */
   dirtyTokenIds: ReadonlySet<string>
+  /** Currently-selected structural tag (for highlight / panel focus); null = none. */
+  activeTagId: string | null
+  /** Region open in the image editor, or null when the editor is closed. */
+  activeImageRegion: { pageIndex: number; regionId: string } | null
   /** True when there are unsaved changes. */
   isDirty: boolean
 }
@@ -78,3 +90,14 @@ export type ReviewAction =
   /** Shallow-merge a patch into the loaded project (tags, config, etc.). */
   | { type: 'PATCH_PROJECT'; patch: Partial<ProjectFile> }
   | { type: 'MARK_SAVED' }
+  // --- Phase 3: structural tagging (SPEC §5) ---
+  | { type: 'ADD_TAG'; tag: StructuralTag }
+  | { type: 'REMOVE_TAG'; id: string }
+  | { type: 'UPDATE_TAG'; id: string; patch: Partial<Omit<StructuralTag, 'id'>> }
+  | { type: 'SET_ACTIVE_TAG'; id: string | null }
+  // --- Phase 3: images (SPEC §6) ---
+  | { type: 'SET_REGION_ACCEPTED'; pageIndex: number; regionId: string; accepted: boolean | null }
+  | { type: 'SET_PAGES'; pages: SourcePage[] }
+  | { type: 'SET_IMAGE_EDITS'; regionId: string; ops: ImageEditOp[] }
+  | { type: 'OPEN_IMAGE_EDITOR'; pageIndex: number; regionId: string }
+  | { type: 'CLOSE_IMAGE_EDITOR' }

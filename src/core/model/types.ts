@@ -174,12 +174,60 @@ export interface StructuralTag {
   data?: Record<string, unknown>
 }
 
+/**
+ * A probable heading found by structure detection (SPEC §12 #11). Low-trust: the
+ * user confirms it in review, which promotes it to a `heading` StructuralTag.
+ */
+export interface HeadingCandidate {
+  /** Output range of the heading text in `ProjectFile.markdown`. */
+  range: OutputRange
+  /** Verbatim heading text. */
+  text: string
+  /** Heuristic nesting level (1 = top). */
+  level: number
+  /** Page the heading was found on. */
+  pageIndex: number
+}
+
+/**
+ * One auto-generated table-of-contents entry (SPEC §7). Built from confirmed
+ * heading tags in document order. The *edition* page number is filled in after
+ * typesetting (Phase 4); during review only the output offset is known.
+ */
+export interface TocEntry {
+  title: string
+  level: number
+  /** Char offset of the heading in `ProjectFile.markdown`. */
+  outputOffset: number
+  /** Final printed page number, set after typesetting; null until then. */
+  pageNumber: number | null
+}
+
 // ---------------------------------------------------------------------------
 // Non-destructive image edits (SPEC §6)
 // ---------------------------------------------------------------------------
 
+/**
+ * Known non-destructive edit operations (SPEC §6). The image engine applies an
+ * ordered op list over the original pixels, so the source is never mutated.
+ * `crop`/`rotate`/`straighten`/`grayscale`/`threshold`/`despeckle` are the
+ * reliable tools; `removeBackground` is best-effort with a tolerance param.
+ */
+export type ImageEditOpKind =
+  | 'crop'
+  | 'rotate'
+  | 'straighten'
+  | 'brightness'
+  | 'contrast'
+  | 'levels'
+  | 'curves'
+  | 'grayscale'
+  | 'threshold'
+  | 'despeckle'
+  | 'removeBackground'
+
 export interface ImageEditOp {
-  op: string
+  op: ImageEditOpKind
   params: Record<string, number | string | boolean>
 }
 
