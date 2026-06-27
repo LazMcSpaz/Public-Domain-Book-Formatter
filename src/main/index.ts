@@ -10,7 +10,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { app, BrowserWindow, protocol } from 'electron'
 import { registerIpcHandlers } from './ipc/handlers'
-import { isAllowedImage, mimeForPath } from './asset-access'
+import { isAllowedImage, mimeForPath, resolveProjectImage } from './asset-access'
 
 /** Custom scheme used by the renderer to display project page images directly. */
 const ASSET_SCHEME = 'local-asset'
@@ -22,14 +22,24 @@ protocol.registerSchemesAsPrivileged([
 ])
 
 /**
- * Serve `local-asset://asset/<encoded-abs-path>` → the file on disk, but only
- * for image files inside an allowed project root (see asset-access.ts).
+ * Serve project page images to the renderer. The renderer references images as:
+ *
+ *   local-asset://img/?root=<enc(projectPath)>&path=<enc(relativeImagePath)>
+ *
+ * Main resolves `root` + `path` to an absolute file (rejecting `../` escapes)
+ * and serves it only if it is an image inside an allowed project root. This
+ * keeps the renderer from constructing absolute OS paths and centralizes the
+ * safety checks in asset-access.ts.
  */
 function registerAssetProtocol(): void {
   protocol.handle(ASSET_SCHEME, async (request) => {
     const url = new URL(request.url)
-    const abs = decodeURIComponent(url.pathname.replace(/^\//, ''))
-    if (!isAllowedImage(abs)) {
+    const root = url.searchParams.get('root')
+    const relPath = url.searchParams.get('path')
+    if (!root || !relPath) return new Response('Bad request', { status: 400 })
+
+    const abs = resolveProjectImage(root, relPath)
+    if (!abs || !isAllowedImage(abs)) {
       return new Response('Forbidden', { status: 403 })
     }
     const bytes = await readFile(abs)
