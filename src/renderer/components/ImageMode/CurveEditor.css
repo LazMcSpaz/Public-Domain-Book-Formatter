@@ -1,0 +1,38 @@
+.curve-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.curve-editor__svg {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  background: #2a2622;
+  border: 1px solid #4a443c;
+  border-radius: 4px;
+  touch-action: none;
+  cursor: crosshair;
+}
+
+.curve-editor__diag {
+  stroke: #4a443c;
+  stroke-width: 1;
+}
+
+.curve-editor__curve {
+  stroke: #e7a45c;
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+}
+
+.curve-editor__pt {
+  fill: #fbfaf7;
+  stroke: #e7a45c;
+  stroke-width: 1.5;
+  vector-effect: non-scaling-stroke;
+  cursor: grab;
+}
+
+.curve-editor__pt:hover {
+  fill: #e7a45c;
+}

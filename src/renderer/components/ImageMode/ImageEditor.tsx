@@ -21,7 +21,7 @@
  * background removal is clearly labeled best-effort (SPEC §6).
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ChangeEvent } from 'react'
+import type { ChangeEvent, PointerEvent as ReactPointerEvent } from 'react'
 import type { ImageEditOp, ImageRegion, SourcePage } from '@core/model'
 import { effectiveDpi, dpiStatus } from '@core/image'
 // NOTE: the engine barrel re-exports both the op *constructors* (ops.ts) and the
@@ -34,6 +34,7 @@ import { applyOps, fromImageData, toImageData, type RasterImage } from './engine
 import { useReview } from '../../store/ReviewContext'
 import { cropImage } from '../../utils/crop-image'
 import { MIN_PRINT_DPI, trimWidthInches } from './dpi'
+import { CurveEditor, IDENTITY_CURVE, isIdentityCurve, type CurvePoint } from './CurveEditor'
 import './ImageEditor.css'
 
 // --- Local op-record builders (the serializable form of each edit, SPEC §6) ---
@@ -48,6 +49,10 @@ const opContrast = (amount: number): ImageEditOp => ({ op: 'contrast', params: {
 const opLevels = (p: { black: number; white: number; gamma: number }): ImageEditOp => ({
   op: 'levels',
   params: { ...p }
+})
+const opCurves = (points: readonly CurvePoint[]): ImageEditOp => ({
+  op: 'curves',
+  params: { points: JSON.stringify(points) }
 })
 const opGrayscale = (): ImageEditOp => ({ op: 'grayscale', params: {} })
 const opThreshold = (level: number): ImageEditOp => ({ op: 'threshold', params: { level } })
@@ -138,7 +143,11 @@ interface CropRect {
  * (crop/rotate/straighten) first, then tonal, then conversion, then cleanup,
  * then best-effort background removal last.
  */
-function buildOps(tools: ToolState, cropRect: CropRect | null): ImageEditOp[] {
+function buildOps(
+  tools: ToolState,
+  cropRect: CropRect | null,
+  curve: readonly CurvePoint[]
+): ImageEditOp[] {
   const ops: ImageEditOp[] = []
   if (cropRect) ops.push(opCrop(cropRect))
   if (tools.rotation % 360 !== 0) ops.push(opRotate(tools.rotation))
@@ -148,6 +157,7 @@ function buildOps(tools: ToolState, cropRect: CropRect | null): ImageEditOp[] {
   if (tools.black !== 0 || tools.white !== 255 || tools.gamma !== 1) {
     ops.push(opLevels({ black: tools.black, white: tools.white, gamma: tools.gamma }))
   }
+  if (!isIdentityCurve(curve)) ops.push(opCurves(curve))
   if (tools.grayscale) ops.push(opGrayscale())
   if (tools.threshold !== null) ops.push(opThreshold(tools.threshold))
   if (tools.despeckle > 0) ops.push(opDespeckle(tools.despeckle))
@@ -168,6 +178,9 @@ export function ImageEditor(): JSX.Element | null {
   const [error, setError] = useState<string | null>(null)
   const [tools, setTools] = useState<ToolState>(DEFAULT_TOOLS)
   const [cropRect, setCropRect] = useState<CropRect | null>(null)
+  const [curve, setCurve] = useState<CurvePoint[]>(IDENTITY_CURVE)
+  const [cropDraw, setCropDraw] = useState(false)
+  const [drawRect, setDrawRect] = useState<CropRect | null>(null)
   const [originalDims, setOriginalDims] = useState<{ width: number; height: number } | null>(null)
   // Bumps whenever the decoded original is ready, to retrigger the preview paint.
   const [ready, setReady] = useState(0)
@@ -180,13 +193,6 @@ export function ImageEditor(): JSX.Element | null {
     if (!active || !project) return []
     return project.imageEdits.find((e) => e.regionId === active.regionId)?.ops ?? []
   }, [active, project])
-
-  // Curves are edited rarely and serialized as JSON; keep them as raw ops so a
-  // saved curve is preserved across the session even though there's no slider.
-  const savedCurveOps = useMemo<ImageEditOp[]>(
-    () => savedOps.filter((o) => o.op === 'curves'),
-    [savedOps]
-  )
 
   // --- Open: pull original full-res pixels and seed tool state from saved ops.
   useEffect(() => {
@@ -206,6 +212,9 @@ export function ImageEditor(): JSX.Element | null {
     setError(null)
     setTools(seedTools(savedOps))
     setCropRect(seedCrop(savedOps))
+    setCurve(seedCurve(savedOps))
+    setCropDraw(false)
+    setDrawRect(null)
 
     window.api
       .getPageImage(projectPath, imagePath)
@@ -231,25 +240,44 @@ export function ImageEditor(): JSX.Element | null {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active?.regionId, active?.pageIndex, projectPath])
 
-  // Effective op list = geometry/tonal/etc from sliders + any saved curve op.
-  const ops = useMemo<ImageEditOp[]>(() => {
-    const built = buildOps(tools, cropRect)
-    // Insert saved curves right after the tonal levels op for stable ordering.
-    return savedCurveOps.length ? [...built, ...savedCurveOps] : built
-  }, [tools, cropRect, savedCurveOps])
+  // Effective op list = geometry/tonal/etc from sliders + the tone curve.
+  const ops = useMemo<ImageEditOp[]>(
+    () => buildOps(tools, cropRect, curve),
+    [tools, cropRect, curve]
+  )
 
-  // --- Live preview: applyOps(original, ops) → paint to the visible canvas.
+  // --- Live preview: paint to the visible canvas. In crop-draw mode we show the
+  // UNCROPPED original (so a dragged selection maps 1:1 to original pixels) and
+  // overlay the in-progress selection rectangle.
   useEffect(() => {
     const original = originalRef.current
     const canvas = canvasRef.current
     if (!original || !canvas) return
-    const result = applyOps(original, ops)
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+
+    if (cropDraw) {
+      canvas.width = original.width
+      canvas.height = original.height
+      ctx.putImageData(toImageData(original), 0, 0)
+      if (drawRect) {
+        ctx.save()
+        ctx.lineWidth = Math.max(1, original.width / 300)
+        ctx.setLineDash([6, 4])
+        ctx.strokeStyle = '#d9534f'
+        ctx.fillStyle = 'rgba(217,83,79,0.12)'
+        ctx.fillRect(drawRect.x, drawRect.y, drawRect.width, drawRect.height)
+        ctx.strokeRect(drawRect.x, drawRect.y, drawRect.width, drawRect.height)
+        ctx.restore()
+      }
+      return
+    }
+
+    const result = applyOps(original, ops)
     canvas.width = result.width
     canvas.height = result.height
     ctx.putImageData(toImageData(result), 0, 0)
-  }, [ops, ready])
+  }, [ops, ready, cropDraw, drawRect])
 
   // DPI badge: source pixel width of the current crop placed at the book width.
   const placedWidthIn = trimWidthInches(project?.config.trimSize)
@@ -270,6 +298,50 @@ export function ImageEditor(): JSX.Element | null {
   const handleReset = (): void => {
     setTools(DEFAULT_TOOLS)
     setCropRect(null)
+    setCurve(IDENTITY_CURVE)
+  }
+
+  // Drag a crop rectangle directly on the canvas. Coordinates map 1:1 to the
+  // original because crop-draw mode shows the uncropped original at native size.
+  const cropPointerDown = (e: ReactPointerEvent<HTMLCanvasElement>): void => {
+    const canvas = canvasRef.current
+    if (!cropDraw || !canvas || !originalDims) return
+    const rect = canvas.getBoundingClientRect()
+    const sx = canvas.width / rect.width
+    const sy = canvas.height / rect.height
+    const x0 = (e.clientX - rect.left) * sx
+    const y0 = (e.clientY - rect.top) * sy
+    const at = (v: number, lo: number, hi: number): number => Math.max(lo, Math.min(v, hi))
+    const move = (ev: globalThis.PointerEvent): void => {
+      const x1 = at((ev.clientX - rect.left) * sx, 0, canvas.width)
+      const y1 = at((ev.clientY - rect.top) * sy, 0, canvas.height)
+      setDrawRect({
+        x: Math.min(x0, x1),
+        y: Math.min(y0, y1),
+        width: Math.abs(x1 - x0),
+        height: Math.abs(y1 - y0)
+      })
+    }
+    const up = (): void => {
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      setDrawRect((r) => {
+        if (r && r.width >= 4 && r.height >= 4) {
+          setCropRect(
+            withCrop(null, originalDims, {
+              x: Math.round(r.x),
+              y: Math.round(r.y),
+              width: Math.round(r.width),
+              height: Math.round(r.height)
+            })
+          )
+        }
+        return null
+      })
+      setCropDraw(false)
+    }
+    window.addEventListener('pointermove', move)
+    window.addEventListener('pointerup', up)
   }
 
   return (
@@ -298,7 +370,14 @@ export function ImageEditor(): JSX.Element | null {
         <div className="image-editor__stage">
           {loading && <div className="image-editor__status">Loading full-resolution image…</div>}
           {error && <div className="image-editor__status image-editor__status--err">{error}</div>}
-          <canvas ref={canvasRef} className="image-editor__canvas" />
+          <canvas
+            ref={canvasRef}
+            className={`image-editor__canvas${cropDraw ? ' image-editor__canvas--crop' : ''}`}
+            onPointerDown={cropPointerDown}
+          />
+          {cropDraw && (
+            <div className="image-editor__crophint">Drag to select the crop · Esc/Save to apply</div>
+          )}
 
           {originalDims && (
             <div
@@ -344,6 +423,17 @@ export function ImageEditor(): JSX.Element | null {
 
             <fieldset className="ie-field ie-crop">
               <legend>Crop (px, source space)</legend>
+              <button
+                type="button"
+                className={`ie-btn ie-btn--small${cropDraw ? ' ie-btn--active' : ''}`}
+                onClick={() => {
+                  setDrawRect(null)
+                  setCropDraw((on) => !on)
+                }}
+                disabled={!originalDims}
+              >
+                {cropDraw ? 'Cancel draw' : 'Draw crop on image'}
+              </button>
               {originalDims && (
                 <div className="ie-crop__grid">
                   <label>
@@ -457,9 +547,21 @@ export function ImageEditor(): JSX.Element | null {
                 onChange={(e) => patch({ gamma: num(e) })}
               />
             </label>
-            {savedCurveOps.length > 0 && (
-              <p className="ie-note">A saved tone curve is applied (preserved on save).</p>
-            )}
+            <div className="ie-field">
+              <div className="ie-curve-head">
+                <span>Tone curve</span>
+                {!isIdentityCurve(curve) && (
+                  <button
+                    type="button"
+                    className="ie-btn ie-btn--small"
+                    onClick={() => setCurve(IDENTITY_CURVE)}
+                  >
+                    Reset curve
+                  </button>
+                )}
+              </div>
+              <CurveEditor points={curve} onChange={setCurve} />
+            </div>
           </section>
 
           <section className="ie-group">
@@ -564,6 +666,28 @@ function seedTools(savedOps: readonly ImageEditOp[]): ToolState {
     despeckle: numParam(by('despeckle'), 'radius', 0),
     removeBg: by('removeBackground') ? numParam(by('removeBackground'), 'tolerance', 32) : null
   }
+}
+
+function seedCurve(savedOps: readonly ImageEditOp[]): CurvePoint[] {
+  const c = savedOps.find((o) => o.op === 'curves')
+  const raw = c?.params['points']
+  if (typeof raw !== 'string') return IDENTITY_CURVE
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (
+      Array.isArray(parsed) &&
+      parsed.every(
+        (p): p is CurvePoint =>
+          Array.isArray(p) && p.length >= 2 && typeof p[0] === 'number' && typeof p[1] === 'number'
+      ) &&
+      parsed.length >= 2
+    ) {
+      return parsed.map((p) => [p[0], p[1]] as CurvePoint)
+    }
+  } catch {
+    // fall through to identity
+  }
+  return IDENTITY_CURVE
 }
 
 function seedCrop(savedOps: readonly ImageEditOp[]): CropRect | null {

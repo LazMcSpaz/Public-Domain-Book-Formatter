@@ -229,3 +229,34 @@
 .ie-btn--primary:hover {
   background: #1976d2;
 }
+
+/* --- Phase 3 polish: drag-crop + curve editor --- */
+.image-editor__canvas--crop {
+  cursor: crosshair;
+}
+
+.image-editor__crophint {
+  position: absolute;
+  top: 0.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(217, 83, 79, 0.9);
+  color: #fff;
+  padding: 0.25rem 0.6rem;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  pointer-events: none;
+}
+
+.ie-btn--active {
+  background: #d9534f;
+  color: #fff;
+  border-color: #d9534f;
+}
+
+.ie-curve-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
