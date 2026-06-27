@@ -7,6 +7,7 @@
  */
 import type {
   Flag,
+  FrontMatterFields,
   ImageEditDescriptor,
   MappingEntry,
   PerBookConfig,
@@ -20,8 +21,9 @@ import type {
 /**
  * Current manifest schema version. Bump + extend `migrate` on shape changes.
  * v2 adds the `markdown` output field (SPEC §3/§4 review instrument).
+ * v3 adds `styleProfileId` + `frontMatter` (SPEC §7 templates/style system).
  */
-export const CURRENT_SCHEMA_VERSION = 2
+export const CURRENT_SCHEMA_VERSION = 3
 
 /** Default per-book config (SPEC §7). Content is filled in by the user later. */
 function defaultConfig(): PerBookConfig {
@@ -36,6 +38,33 @@ function defaultConfig(): PerBookConfig {
 
 function defaultReadingProgress(): ReadingProgress {
   return { lastPageIndex: 0, approvedPages: [] }
+}
+
+function defaultFrontMatter(): FrontMatterFields {
+  return {
+    isbn: null,
+    publicationDate: null,
+    editionStatement: null,
+    imprint: null,
+    copyrightHolder: null,
+    notices: [],
+  }
+}
+
+function normalizeFrontMatter(raw: unknown): FrontMatterFields {
+  const base = defaultFrontMatter()
+  if (!isObject(raw)) return base
+  const str = (v: unknown): string | null => (typeof v === 'string' ? v : null)
+  return {
+    isbn: str(raw.isbn),
+    publicationDate: str(raw.publicationDate),
+    editionStatement: str(raw.editionStatement),
+    imprint: str(raw.imprint),
+    copyrightHolder: str(raw.copyrightHolder),
+    notices: Array.isArray(raw.notices)
+      ? (raw.notices.filter((n) => typeof n === 'string') as string[])
+      : base.notices,
+  }
 }
 
 /** Build a fresh, valid `ProjectFile` for a newly imported PDF. */
@@ -59,6 +88,8 @@ export function createEmptyProject(init: {
     config: { ...defaultConfig(), ...init.config },
     findReplace: [],
     readingProgress: defaultReadingProgress(),
+    styleProfileId: null,
+    frontMatter: defaultFrontMatter(),
   }
 }
 
@@ -138,6 +169,8 @@ export function migrate(raw: unknown): ProjectFile {
     config: normalizeConfig(raw.config),
     findReplace: asArray<FindReplaceRule>(raw.findReplace),
     readingProgress: normalizeReadingProgress(raw.readingProgress),
+    styleProfileId: typeof raw.styleProfileId === 'string' ? raw.styleProfileId : null,
+    frontMatter: normalizeFrontMatter(raw.frontMatter),
   }
 
   return project

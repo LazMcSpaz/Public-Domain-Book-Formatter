@@ -9,11 +9,15 @@ import type {
   CoordinateIndex,
   Flag,
   FindReplaceRule,
+  FrontMatterFields,
   ImageEditOp,
   ProjectFile,
   SourcePage,
   StructuralTag
 } from '@core/model'
+
+/** Which top-level screen of the review window is showing. */
+export type ActiveView = 'review' | 'style' | 'export'
 
 /** Reading-comfort settings for the panes — independent of final typesetting. */
 export interface ReadingPrefs {
@@ -71,6 +75,8 @@ export interface ReviewState {
   activeTagId: string | null
   /** Region open in the image editor, or null when the editor is closed. */
   activeImageRegion: { pageIndex: number; regionId: string } | null
+  /** Which top-level screen is showing (review / style editor / export). */
+  activeView: ActiveView
   /** True when there are unsaved changes. */
   isDirty: boolean
 }
@@ -101,3 +107,7 @@ export type ReviewAction =
   | { type: 'SET_IMAGE_EDITS'; regionId: string; ops: ImageEditOp[] }
   | { type: 'OPEN_IMAGE_EDITOR'; pageIndex: number; regionId: string }
   | { type: 'CLOSE_IMAGE_EDITOR' }
+  // --- Phase 4: style profile, front matter, navigation (SPEC §7) ---
+  | { type: 'SET_STYLE_PROFILE'; styleProfileId: string | null }
+  | { type: 'PATCH_FRONT_MATTER'; patch: Partial<FrontMatterFields> }
+  | { type: 'SET_ACTIVE_VIEW'; view: ActiveView }

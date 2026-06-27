@@ -32,6 +32,7 @@ const INITIAL_STATE: ReviewState = {
   dirtyTokenIds: new Set<string>(),
   activeTagId: null,
   activeImageRegion: null,
+  activeView: 'review',
   isDirty: false
 }
 
@@ -48,6 +49,7 @@ export function reviewReducer(state: ReviewState, action: ReviewAction): ReviewS
         dirtyTokenIds: new Set<string>(),
         activeTagId: null,
         activeImageRegion: null,
+        activeView: 'review',
         isDirty: false
       }
 
@@ -189,6 +191,29 @@ export function reviewReducer(state: ReviewState, action: ReviewAction): ReviewS
 
     case 'CLOSE_IMAGE_EDITOR':
       return { ...state, activeImageRegion: null }
+
+    // --- Phase 4: style profile, front matter, navigation (SPEC §7) ---
+    case 'SET_STYLE_PROFILE':
+      if (!state.project) return state
+      return {
+        ...state,
+        project: { ...state.project, styleProfileId: action.styleProfileId },
+        isDirty: true
+      }
+
+    case 'PATCH_FRONT_MATTER':
+      if (!state.project) return state
+      return {
+        ...state,
+        project: {
+          ...state.project,
+          frontMatter: { ...state.project.frontMatter, ...action.patch }
+        },
+        isDirty: true
+      }
+
+    case 'SET_ACTIVE_VIEW':
+      return { ...state, activeView: action.view }
 
     default:
       return state

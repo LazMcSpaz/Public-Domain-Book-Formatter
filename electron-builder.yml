@@ -1,0 +1,40 @@
+# electron-builder packaging config (SPEC §12 #21).
+#
+# Targets a Windows NSIS installer. NOTE: the actual installer build requires a
+# Windows (or wine-equipped) runner with the Electron binary present, so it is
+# performed in CI / on a real Windows machine — not in the Linux dev sandbox.
+# The first-run dependency bootstrapper (SetupWizard) verifies Tesseract,
+# Pandoc, and TeX Live at runtime via the dependency detector; bundling those
+# heavy system installers is a CI packaging concern handled here.
+appId: com.publicdomain.bookformatter
+productName: Public-Domain Book Reprint Tool
+copyright: Public domain reprints
+
+directories:
+  output: release
+  buildResources: build
+
+files:
+  - out/**/*
+  - package.json
+
+# Ship the starter ornament library alongside the app (SPEC §8).
+extraResources:
+  - from: resources/ornaments
+    to: ornaments
+    filter:
+      - '**/*'
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true

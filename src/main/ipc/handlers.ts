@@ -7,7 +7,12 @@
 import { readFile } from 'node:fs/promises'
 import { dirname, join, parse } from 'node:path'
 import { BrowserWindow, dialog, ipcMain, webContents } from 'electron'
-import type { ProjectFile } from '@core/model'
+import type {
+  ExportResult,
+  KdpValidationReport,
+  ProjectFile,
+  StyleProfile
+} from '@core/model'
 import {
   IpcChannel,
   type DependencyStatus,
@@ -19,6 +24,12 @@ import { loadProject, saveProject } from '@core/project'
 import { runPipeline } from '@pipeline'
 import { detectDependencies } from '@tooling/deps/detect'
 import { allowProjectRoot, mimeForPath, resolveProjectImage } from '../asset-access'
+import {
+  deleteStyleProfile,
+  listStyleProfiles,
+  saveStyleProfile
+} from '../profile-store'
+import { exportProject, validateProject } from '../export'
 
 /**
  * Wrap a handler so any thrown error is logged in the main process and then
@@ -134,6 +145,44 @@ export function registerIpcHandlers(): void {
             }
           }
         })
+      }
+    )
+  )
+
+  ipcMain.handle(
+    IpcChannel.ListStyleProfiles,
+    guard(IpcChannel.ListStyleProfiles, (): Promise<StyleProfile[]> => listStyleProfiles())
+  )
+
+  ipcMain.handle(
+    IpcChannel.SaveStyleProfile,
+    guard(IpcChannel.SaveStyleProfile, (_event, profile: StyleProfile): Promise<void> =>
+      saveStyleProfile(profile)
+    )
+  )
+
+  ipcMain.handle(
+    IpcChannel.DeleteStyleProfile,
+    guard(IpcChannel.DeleteStyleProfile, (_event, id: string): Promise<void> =>
+      deleteStyleProfile(id)
+    )
+  )
+
+  ipcMain.handle(
+    IpcChannel.ExportPdf,
+    guard(IpcChannel.ExportPdf, (_event, projectPath: string): Promise<ExportResult> => {
+      allowProjectRoot(projectPath)
+      return exportProject(projectPath)
+    })
+  )
+
+  ipcMain.handle(
+    IpcChannel.ValidateExport,
+    guard(
+      IpcChannel.ValidateExport,
+      (_event, projectPath: string): Promise<KdpValidationReport> => {
+        allowProjectRoot(projectPath)
+        return validateProject(projectPath)
       }
     )
   )

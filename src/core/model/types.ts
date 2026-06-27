@@ -270,6 +270,118 @@ export interface ReadingProgress {
 }
 
 // ---------------------------------------------------------------------------
+// Style system & typesetting (SPEC §7, §8) — the reusable look
+// ---------------------------------------------------------------------------
+
+/** Page margins in inches. `inner` is the spine/gutter side. */
+export interface Margins {
+  top: number
+  bottom: number
+  inner: number
+  outer: number
+}
+
+/** What a running head shows on a given page side (SPEC §8). */
+export type RunningHeadMode = 'none' | 'bookTitle' | 'author' | 'chapterTitle' | 'pageNumber'
+
+/** Where/how page numbers are set. */
+export type PageNumberPosition = 'none' | 'bottomCenter' | 'bottomOuter' | 'topOuter'
+
+/** A reusable ornament (printer's flourish / rule / fleuron), SPEC §8. */
+export interface OrnamentRef {
+  id: string
+  name: string
+  /** `page` = repeats across the book; `chapter` = once per chapter opener; `divider` = section break. */
+  kind: 'page' | 'chapter' | 'divider'
+  source: 'builtin' | 'user'
+  /** Path to the ornament's vector file (SVG source or converted PDF). */
+  file: string
+}
+
+/** Ornament selections for a profile. Any may be null (no ornament). */
+export interface OrnamentChoices {
+  chapterOpener: string | null
+  sectionDivider: string | null
+  pageNumber: string | null
+}
+
+/**
+ * The reusable *look*, divorced from content (SPEC §7). Banked once and applied
+ * across books/series. Shipped defaults → user tweaks → saved profiles.
+ */
+export interface StyleProfile {
+  id: string
+  name: string
+  /** Trim size token, e.g. "6x9". */
+  trimSize: string
+  margins: Margins
+  /** Extra inner margin added for binding, in inches. */
+  gutter: number
+  bodyFont: string
+  bodyFontSize: number
+  headingFont: string
+  /** Heading style knobs (LaTeX-friendly). */
+  headingStyle: {
+    smallCaps: boolean
+    centered: boolean
+    /** Scale factor relative to body size for top-level headings. */
+    scale: number
+  }
+  runningHeads: {
+    verso: RunningHeadMode
+    recto: RunningHeadMode
+  }
+  pageNumber: PageNumberPosition
+  ornaments: OrnamentChoices
+  /** Front-matter visual toggles. */
+  frontMatter: {
+    titlePage: boolean
+    copyrightPage: boolean
+    halfTitle: boolean
+  }
+}
+
+/** Templated front/back-matter fill-ins, content-specific (SPEC §7). */
+export interface FrontMatterFields {
+  isbn: string | null
+  publicationDate: string | null
+  editionStatement: string | null
+  imprint: string | null
+  copyrightHolder: string | null
+  /** Extra free-text lines for the copyright page. */
+  notices: string[]
+}
+
+// ---------------------------------------------------------------------------
+// KDP export validation (SPEC §10)
+// ---------------------------------------------------------------------------
+
+export type ValidationLevel = 'ok' | 'warn' | 'fail'
+
+export interface ValidationCheck {
+  id: string
+  label: string
+  level: ValidationLevel
+  detail: string
+}
+
+/** The export readiness report; honest checks, not pass/fail theater (SPEC §10). */
+export interface KdpValidationReport {
+  checks: ValidationCheck[]
+  /** Final interior page count — input for the user's externally-made spine. */
+  pageCount: number
+  /** True when no check is at 'fail'. */
+  ready: boolean
+}
+
+/** Result of an export run. */
+export interface ExportResult {
+  pdfPath: string | null
+  pageCount: number
+  validation: KdpValidationReport
+}
+
+// ---------------------------------------------------------------------------
 // Project file (SPEC §9) — the save/resume unit
 // ---------------------------------------------------------------------------
 
@@ -299,4 +411,8 @@ export interface ProjectFile {
   config: PerBookConfig
   findReplace: FindReplaceRule[]
   readingProgress: ReadingProgress
+  /** Id of the applied saved style profile (SPEC §7); null = shipped default. */
+  styleProfileId: string | null
+  /** Templated front/back-matter content for this book (SPEC §7). */
+  frontMatter: FrontMatterFields
 }

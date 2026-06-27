@@ -4,7 +4,7 @@
  * contextBridge. The renderer never touches Node or ipcRenderer directly.
  */
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
-import type { ProjectFile } from '@core/model'
+import type { ExportResult, KdpValidationReport, ProjectFile, StyleProfile } from '@core/model'
 import {
   IpcChannel,
   type BridgeApi,
@@ -41,6 +41,26 @@ const api: BridgeApi = {
 
   getPageImage(projectPath: string, imagePath: string): Promise<string> {
     return ipcRenderer.invoke(IpcChannel.GetPageImage, projectPath, imagePath)
+  },
+
+  listStyleProfiles(): Promise<StyleProfile[]> {
+    return ipcRenderer.invoke(IpcChannel.ListStyleProfiles)
+  },
+
+  saveStyleProfile(profile: StyleProfile): Promise<void> {
+    return ipcRenderer.invoke(IpcChannel.SaveStyleProfile, profile)
+  },
+
+  deleteStyleProfile(id: string): Promise<void> {
+    return ipcRenderer.invoke(IpcChannel.DeleteStyleProfile, id)
+  },
+
+  exportPdf(projectPath: string): Promise<ExportResult> {
+    return ipcRenderer.invoke(IpcChannel.ExportPdf, projectPath)
+  },
+
+  validateExport(projectPath: string): Promise<KdpValidationReport> {
+    return ipcRenderer.invoke(IpcChannel.ValidateExport, projectPath)
   },
 
   onPipelineProgress(listener: (progress: PipelineProgress) => void): () => void {

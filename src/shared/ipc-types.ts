@@ -6,7 +6,7 @@
  * boundary stays type-safe. Channel name constants live in `IpcChannel` so the
  * string is defined exactly once.
  */
-import type { ProjectFile } from '@core/model'
+import type { ExportResult, KdpValidationReport, ProjectFile, StyleProfile } from '@core/model'
 
 /** IPC channel names — single source of truth for both ends of the bridge. */
 export const IpcChannel = {
@@ -20,7 +20,17 @@ export const IpcChannel = {
   /** Show a native open-folder dialog (e.g. to open an existing project dir). */
   OpenFolderDialog: 'dialog:openFolder',
   /** Read a project page image and return it as a base64 data URL. */
-  GetPageImage: 'review:pageImage'
+  GetPageImage: 'review:pageImage',
+  /** List saved style profiles from the app userData store (SPEC §7). */
+  ListStyleProfiles: 'style:list',
+  /** Create/update a saved style profile. */
+  SaveStyleProfile: 'style:save',
+  /** Delete a saved style profile by id. */
+  DeleteStyleProfile: 'style:delete',
+  /** Assemble + typeset the project to a print-ready KDP PDF (SPEC §10). */
+  ExportPdf: 'export:pdf',
+  /** Compute the KDP validation report without rendering when possible. */
+  ValidateExport: 'export:validate'
 } as const
 
 export type IpcChannel = (typeof IpcChannel)[keyof typeof IpcChannel]
@@ -94,6 +104,16 @@ export interface BridgeApi {
    * the project directory.
    */
   getPageImage(projectPath: string, imagePath: string): Promise<string>
+  /** List saved style profiles (SPEC §7 reusable looks). */
+  listStyleProfiles(): Promise<StyleProfile[]>
+  /** Persist a style profile to the app-level store. */
+  saveStyleProfile(profile: StyleProfile): Promise<void>
+  /** Delete a saved style profile by id. */
+  deleteStyleProfile(id: string): Promise<void>
+  /** Assemble + typeset the project to a KDP-ready interior PDF (SPEC §10). */
+  exportPdf(projectPath: string): Promise<ExportResult>
+  /** Compute the KDP validation report (SPEC §10) for the project. */
+  validateExport(projectPath: string): Promise<KdpValidationReport>
 }
 
 declare global {
