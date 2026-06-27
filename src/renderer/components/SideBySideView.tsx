@@ -1,17 +1,15 @@
 /**
  * SideBySideView — the linked source/output panes (SPEC §4 centerpiece).
  *
- * Owns the two scroll containers, passes their refs to the panes, wires
- * `useScrollSync`, and applies the reading-comfort CSS variables. Hover-sync is
- * driven by the panes themselves through `useHoverSync`.
- *
- * PLACEHOLDER (Phase 2 scaffold). The full implementation (mounting SourcePane /
- * OutputPane and wiring the sync hooks) is committed in the integration step,
- * once the pane components exist. For now it renders a stub so the app boots.
+ * Owns the two scroll containers' refs, mounts the panes, wires `useScrollSync`,
+ * applies the reading-comfort CSS variables, and scrolls to the active flag when
+ * jump-to-next-flag changes it. Hover-sync is driven by the panes themselves.
  */
-import { useRef, type CSSProperties } from 'react'
+import { useEffect, useRef, type CSSProperties } from 'react'
 import { useReview } from '../store/ReviewContext'
-import { useScrollSync } from '../hooks/useScrollSync'
+import { useScrollSync, scrollElementToToken } from '../hooks/useScrollSync'
+import { SourcePane } from './SourcePane/SourcePane'
+import { OutputPane } from './OutputPane/OutputPane'
 
 export function SideBySideView(): JSX.Element {
   const { state } = useReview()
@@ -20,6 +18,23 @@ export function SideBySideView(): JSX.Element {
   useScrollSync(sourceRef, outputRef)
 
   const { fontSize, lineSpacing, lineLength, leftPaneWidthPct } = state.readingPrefs
+  const { activeFlagIndex, project, coordinateMap } = state
+
+  // Jump-to-flag: scroll the output pane to the active flag's token; scroll-sync
+  // mirrors the source side. Heuristic flags without a tokenId fall back to the
+  // token owning their output range.
+  useEffect(() => {
+    if (activeFlagIndex < 0 || !project) return
+    const flag = project.flags[activeFlagIndex]
+    if (!flag) return
+    let tokenId: string | null = flag.tokenId ?? null
+    if (!tokenId && flag.kind === 'heuristic' && flag.range) {
+      tokenId = coordinateMap?.atOutputOffset(flag.range.start)?.tokenId ?? null
+    }
+    if (!tokenId) return
+    const out = outputRef.current
+    if (out) scrollElementToToken(out, tokenId, 48)
+  }, [activeFlagIndex, project, coordinateMap])
 
   return (
     <div
@@ -33,11 +48,11 @@ export function SideBySideView(): JSX.Element {
         } as CSSProperties
       }
     >
-      <div className="pane source-pane" ref={sourceRef}>
-        <p className="pane-placeholder">Source pane (pending integration).</p>
+      <div className="sbs-source">
+        <SourcePane containerRef={sourceRef} />
       </div>
-      <div className="pane output-pane" ref={outputRef}>
-        <p className="pane-placeholder">Output pane (pending integration).</p>
+      <div className="sbs-output">
+        <OutputPane containerRef={outputRef} />
       </div>
     </div>
   )

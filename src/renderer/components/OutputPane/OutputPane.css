@@ -1,0 +1,64 @@
+/**
+ * OutputPane styling (SPEC §4).
+ *
+ * Reading comfort first: the body is constrained to --reading-line-length and
+ * inherits the pane's font-size / line-spacing CSS variables. Confidence tint
+ * colors are gated under `.tint-on` so they're invisible during a normal read
+ * and only appear when the user flips tinting on.
+ */
+
+.output-pane-root {
+  height: 100%;
+  overflow: auto;
+}
+
+.output-body {
+  max-width: var(--reading-line-length, 70ch);
+  margin: 0 auto;
+  padding: 2rem 1.5rem 6rem;
+  font-size: var(--reading-font-size, 17px);
+  line-height: var(--reading-line-spacing, 1.6);
+}
+
+.paragraph {
+  margin: 0 0 1em;
+  white-space: pre-wrap;
+  outline: none;
+}
+
+/* Mapped words. Invisible by default — just inline text — so the read is clean. */
+.word-span {
+  border-radius: 2px;
+  transition: background-color 0.08s ease;
+}
+
+/* Hover-sync highlight: the hovered token glows on both panes. */
+.word-span--hover {
+  background-color: rgba(255, 214, 102, 0.55);
+}
+
+/* Edited tokens: mapping is stale until re-OCR — dim and strike to signal that. */
+.word-span--dirty {
+  opacity: 0.55;
+  text-decoration: line-through;
+  text-decoration-color: rgba(180, 60, 60, 0.5);
+}
+
+/*
+ * Confidence tinting — subtle, and only when `.tint-on` is set. Bands per
+ * SPEC §4 / WordOverlay: <60 red-ish, 60–89 amber-ish, >=90 no tint. The band
+ * class is computed in WordSpan from the numeric `data-conf`; CSS only colors it
+ * when tinting is enabled.
+ */
+.tint-on .word-span--conf-mid {
+  background-color: rgba(240, 180, 60, 0.22);
+}
+
+.tint-on .word-span--conf-low {
+  background-color: rgba(220, 70, 70, 0.22);
+}
+
+/* Hover always wins over tint, regardless of band. */
+.tint-on .word-span--hover {
+  background-color: rgba(255, 214, 102, 0.6);
+}

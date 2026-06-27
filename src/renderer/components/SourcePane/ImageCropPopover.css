@@ -1,0 +1,30 @@
+/* Source-image-on-hover popover (SPEC §4): a floating, full-resolution crop of
+   the hovered word's scan pixels, near the cursor. */
+
+.image-crop-popover {
+  position: fixed;
+  z-index: 1000;
+  max-width: 360px;
+  padding: 6px;
+  background: #1e1e1e;
+  border: 1px solid #444;
+  border-radius: 6px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  pointer-events: none;
+}
+
+.image-crop-popover__img {
+  display: block;
+  max-width: 100%;
+  max-height: 160px;
+  image-rendering: pixelated; /* show real pixels for l-vs-1 disambiguation */
+  background: #fff;
+}
+
+.image-crop-popover__meta {
+  margin-top: 4px;
+  color: #ddd;
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  text-align: center;
+}

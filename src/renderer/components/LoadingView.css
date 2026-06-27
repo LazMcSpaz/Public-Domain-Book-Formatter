@@ -1,0 +1,26 @@
+.loading-meta {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+  width: min(420px, 60%);
+  font-size: 0.85rem;
+  color: var(--fg-muted);
+}
+
+.loading-stage {
+  text-transform: capitalize;
+}
+
+.loading-pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.loading-message {
+  margin: 0;
+  max-width: min(420px, 60%);
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+}

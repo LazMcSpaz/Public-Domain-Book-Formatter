@@ -1,0 +1,86 @@
+/* Source pane: a vertical stack of page scans with word overlays (SPEC §4). */
+
+.source-pane-inner {
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #f3f3f1;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+/* One page: positioning context for the <img> and the SVG overlay. The
+   aspect-ratio (set inline from page dims) reserves correct height before the
+   image loads, keeping scroll-sync stable. */
+.source-page {
+  position: relative;
+  width: 100%;
+  margin: 0 auto 24px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18);
+}
+
+.source-page__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+.source-page__placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  color: #888;
+  font-size: 14px;
+  background: repeating-linear-gradient(
+    45deg,
+    #fafafa,
+    #fafafa 10px,
+    #f0f0f0 10px,
+    #f0f0f0 20px
+  );
+}
+
+/* Overlay stretched exactly over the image; viewBox = page pixel dims. */
+.source-page__overlay {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: auto;
+}
+
+/* Word rects. Transparent by default so reading stays clean; fills come from
+   confidence tinting or the active hover. */
+.word-rect {
+  fill: transparent;
+  stroke: none;
+  pointer-events: none;
+}
+
+/* Confidence tint (gated under readingPrefs.confidenceTint). Low opacity so the
+   scan beneath stays readable. */
+.word-rect--low {
+  fill: #e53935; /* red-ish: confidence < 60 */
+  fill-opacity: 0.22;
+}
+
+.word-rect--mid {
+  fill: #f6a609; /* amber-ish: 60–89 */
+  fill-opacity: 0.18;
+}
+
+/* Hovered token — strong highlight, overrides any tint. */
+.word-rect--hover {
+  fill: #2979ff;
+  fill-opacity: 0.3;
+  stroke: #1565c0;
+  stroke-width: 2;
+  stroke-opacity: 0.9;
+  paint-order: stroke;
+}

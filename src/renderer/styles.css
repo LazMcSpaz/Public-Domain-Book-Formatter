@@ -118,36 +118,26 @@ button:disabled {
   margin-left: auto;
 }
 
-/* --- Side-by-side panes --- */
+/* --- Side-by-side panes ---
+ * SideBySideView lays out two full-height wrappers; each pane component owns its
+ * own scroll container (.source-pane-inner / .output-pane-root) and inner chrome. */
 .side-by-side {
   display: flex;
   flex: 1;
   min-height: 0;
-}
-
-.pane {
-  overflow-y: auto;
   height: 100%;
-  padding: 1.5rem;
 }
 
-.source-pane {
+.sbs-source {
   width: var(--left-pane-width);
+  min-width: 0;
+  height: 100%;
   border-right: 1px solid var(--border);
   background: #f3efe6;
 }
 
-.output-pane {
+.sbs-output {
   flex: 1;
-  font-size: var(--reading-font-size);
-  line-height: var(--reading-line-spacing);
-}
-
-.output-pane .output-body {
-  max-width: var(--reading-line-length);
-  margin: 0 auto;
-}
-
-.pane-placeholder {
-  color: var(--fg-muted);
+  min-width: 0;
+  height: 100%;
 }

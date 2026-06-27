@@ -1,0 +1,75 @@
+.control-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem 1.5rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.control-group {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.control-sliders {
+  flex-wrap: wrap;
+}
+
+.control-slider {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+  white-space: nowrap;
+}
+
+.control-slider-label {
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.control-slider input[type='range'] {
+  width: 88px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.control-slider-value {
+  min-width: 3ch;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.control-actions {
+  margin-left: auto;
+}
+
+.control-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.control-toggle input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.control-next-flag {
+  font-weight: 600;
+}
+
+.control-save {
+  min-width: 5.5rem;
+}
+
+.control-save-error {
+  font-size: 0.8rem;
+}

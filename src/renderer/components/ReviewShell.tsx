@@ -1,16 +1,22 @@
 /**
- * ReviewShell — the main review layout: control bar on top, the linked panes in
- * the center, and the flag / find-replace panels alongside. Reads everything
- * from ReviewContext.
+ * ReviewShell — the main review layout (SPEC §4): a ControlBar on top, the
+ * linked SideBySideView filling the center, and a collapsible right sidebar
+ * holding the FlagPanel and FindReplacePanel. Reads everything from
+ * ReviewContext.
  *
- * PLACEHOLDER (Phase 2 scaffold). Keep rendering <SideBySideView /> as the
- * center; add ControlBar, FlagPanel, and FindReplacePanel when reimplementing.
+ * SideBySideView is owned by the integrator and rendered, not edited, here.
  */
+import { useState } from 'react'
 import { useReview } from '../store/ReviewContext'
 import { SideBySideView } from './SideBySideView'
+import { ControlBar } from './ControlBar/ControlBar'
+import { FlagPanel } from './FlagPanel/FlagPanel'
+import { FindReplacePanel } from './FindReplacePanel/FindReplacePanel'
+import './ReviewShell.css'
 
 export function ReviewShell(): JSX.Element {
   const { state, dispatch } = useReview()
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const title = state.project?.config.title || 'Untitled'
 
   return (
@@ -18,11 +24,32 @@ export function ReviewShell(): JSX.Element {
       <header className="review-topbar">
         <span className="review-title">{title}</span>
         <span className="review-dirty">{state.isDirty ? '● unsaved' : 'saved'}</span>
+        <button
+          type="button"
+          className="review-sidebar-toggle"
+          aria-pressed={sidebarOpen}
+          onClick={() => setSidebarOpen((open) => !open)}
+        >
+          {sidebarOpen ? 'Hide panels ▸' : '◂ Show panels'}
+        </button>
         <button type="button" onClick={() => dispatch({ type: 'CLOSE_PROJECT' })}>
           Close
         </button>
       </header>
-      <SideBySideView />
+
+      <ControlBar />
+
+      <div className="review-body">
+        <div className="review-center">
+          <SideBySideView />
+        </div>
+        {sidebarOpen ? (
+          <aside className="review-sidebar">
+            <FlagPanel />
+            <FindReplacePanel />
+          </aside>
+        ) : null}
+      </div>
     </div>
   )
 }

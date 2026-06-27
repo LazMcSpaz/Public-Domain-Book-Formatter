@@ -7,9 +7,10 @@ side-by-side review surface to bring output to publishable quality.
 
 See [`SPEC.md`](./SPEC.md) for the full design.
 
-> **Status:** foundation in progress (SPEC §12 Phase 1 + the architectural
-> backbone). The review UI, image editor, tagging, templates, and install
-> wizard are not built yet.
+> **Status:** Phase 1 (core pipeline + backbone) and Phase 2 (the side-by-side
+> review instrument: linked panes, hover/scroll-sync, inline editing, confidence
+> tinting, flag review, find-replace) are in place. The image editor, structural
+> tagging, templates, and install wizard (SPEC §12 Phases 3–4) are not built yet.
 
 ## Architecture
 
@@ -18,7 +19,7 @@ src/
   shared/     Types shared across processes (the IPC contract)
   main/       Electron main process (window, lifecycle, IPC handlers)
   preload/    contextBridge API exposed to the renderer
-  renderer/   UI (the side-by-side review instrument; placeholder for now)
+  renderer/   React UI: the side-by-side review instrument (panes, store, hooks)
   core/       Domain engine — no Electron/Node-UI deps
     model/    The backbone: hOCR coordinate mapping, document model, honest flags
     project/  Versioned project file + atomic save/load (save/resume)
