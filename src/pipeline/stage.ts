@@ -12,6 +12,7 @@ import type {
   MappingEntry,
   SourceDocument,
   SourcePage,
+  StructuralTag,
 } from '@core/model'
 import type { CommandRunner } from '@tooling/process'
 
@@ -37,6 +38,8 @@ export interface PipelineContext {
   coordinateMap?: MappingEntry[]
   markdown?: string
   flags?: Flag[]
+  /** Structural tags produced by the structure stage (persisted by the integrator). */
+  tags?: StructuralTag[]
 }
 
 /** One step of the pipeline. Mutates `ctx`; resolves when done. */

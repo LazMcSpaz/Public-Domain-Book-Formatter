@@ -117,6 +117,7 @@ export async function runPipeline(
     project.markdown = ctx.markdown ?? ''
     project.coordinateMap = ctx.coordinateMap ?? []
     project.flags = ctx.flags ?? []
+    project.tags = ctx.tags ?? []
     await saveProject(opts.projectPath, project)
   }
 

@@ -12,6 +12,8 @@ import { SideBySideView } from './SideBySideView'
 import { ControlBar } from './ControlBar/ControlBar'
 import { FlagPanel } from './FlagPanel/FlagPanel'
 import { FindReplacePanel } from './FindReplacePanel/FindReplacePanel'
+import { StructurePanel } from './Tagging'
+import { ImageEditor } from './ImageMode'
 import './ReviewShell.css'
 
 export function ReviewShell(): JSX.Element {
@@ -45,11 +47,14 @@ export function ReviewShell(): JSX.Element {
         </div>
         {sidebarOpen ? (
           <aside className="review-sidebar">
+            <StructurePanel />
             <FlagPanel />
             <FindReplacePanel />
           </aside>
         ) : null}
       </div>
+
+      <ImageEditor />
     </div>
   )
 }

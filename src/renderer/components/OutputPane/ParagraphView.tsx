@@ -11,7 +11,7 @@
  */
 import { Fragment } from 'react'
 import type { Paragraph } from '../../utils/markdown-to-spans'
-import { WordSpan } from './WordSpan'
+import { WordSpan, type TagDecoration } from './WordSpan'
 
 export interface ParagraphViewProps {
   paragraph: Paragraph
@@ -19,6 +19,8 @@ export interface ParagraphViewProps {
   dirtyTokenIds: ReadonlySet<string>
   /** tokenId → OCR confidence (0–100); high default applied by the parent. */
   confidenceOf: (tokenId: string) => number
+  /** Structural-tag decoration for a token's output range, or undefined. */
+  decorationOf: (start: number, end: number) => TagDecoration | undefined
   onHover: (offset: number) => void
 }
 
@@ -27,6 +29,7 @@ export function ParagraphView({
   hoverTokenId,
   dirtyTokenIds,
   confidenceOf,
+  decorationOf,
   onHover
 }: ParagraphViewProps): JSX.Element {
   return (
@@ -46,6 +49,7 @@ export function ParagraphView({
               confidence={confidenceOf(node.entry.tokenId)}
               isHovered={node.entry.tokenId === hoverTokenId}
               isDirty={dirtyTokenIds.has(node.entry.tokenId)}
+              decoration={decorationOf(node.entry.output.start, node.entry.output.end)}
               onHover={onHover}
             />
           )

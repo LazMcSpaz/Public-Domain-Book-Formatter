@@ -7,10 +7,13 @@ side-by-side review surface to bring output to publishable quality.
 
 See [`SPEC.md`](./SPEC.md) for the full design.
 
-> **Status:** Phase 1 (core pipeline + backbone) and Phase 2 (the side-by-side
-> review instrument: linked panes, hover/scroll-sync, inline editing, confidence
-> tinting, flag review, find-replace) are in place. The image editor, structural
-> tagging, templates, and install wizard (SPEC §12 Phases 3–4) are not built yet.
+> **Status:** Phases 1–3 are in place — the core pipeline + backbone (P1), the
+> side-by-side review instrument (P2: linked panes, hover/scroll-sync, inline
+> editing, confidence tinting, flag review, find-replace), and structure & images
+> (P3: right-click semantic tagging, auto TOC, image-region detection, the
+> non-destructive image editor, DPI awareness). Phase 4 (templates/profiles,
+> front/back-matter, ornaments, running heads, KDP export validation, Windows
+> install wizard) is not built yet.
 
 ## Architecture
 

@@ -5,5 +5,6 @@
  */
 export * from './types'
 export * from './raster'
+export * from './pixels'
 export * from './apply-ops'
 export * from './ops'

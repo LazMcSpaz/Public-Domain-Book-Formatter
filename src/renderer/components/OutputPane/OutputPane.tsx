@@ -14,18 +14,40 @@
  * the DOM the user is editing untouched. Only EXTERNAL markdown changes (e.g.
  * find-replace) — which differ from what we emitted — trigger a fresh render.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+  type RefObject
+} from 'react'
 import './OutputPane.css'
+import type { OutputRange } from '@core/model'
 import { useReview } from '../../store/ReviewContext'
 import { useHoverSync } from '../../hooks/useHoverSync'
+import { useSelectionRange } from '../../hooks/useSelectionRange'
 import { splitParagraphs } from '../../utils/markdown-to-spans'
 import { ParagraphView } from './ParagraphView'
+import { buildDecorationIndex } from './tag-decorations'
+import { TagContextMenu } from '../Tagging'
 
 /** No-OCR-flag tokens are trusted: high confidence so they never tint. */
 const DEFAULT_CONFIDENCE = 100
 
 /** Debounce window for committing inline edits (ms). */
 const EDIT_DEBOUNCE_MS = 300
+
+/**
+ * Read a paragraph element's text for markdown reconstruction, excluding the
+ * decoration-only tag badges (SPEC §5) so they never leak into the document.
+ */
+function paragraphText(el: HTMLElement): string {
+  const clone = el.cloneNode(true) as HTMLElement
+  for (const badge of clone.querySelectorAll('.tag-badge')) badge.remove()
+  return clone.textContent ?? ''
+}
 
 export interface OutputPaneProps {
   containerRef: RefObject<HTMLDivElement>
@@ -44,6 +66,14 @@ export function OutputPane({ containerRef }: OutputPaneProps): JSX.Element | nul
   const [renderMarkdown, setRenderMarkdown] = useState(markdown)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const bodyRef = useRef<HTMLDivElement>(null)
+
+  // Selection → markdown range, used by the right-click tag menu (SPEC §5).
+  const getSelectionRange = useSelectionRange(bodyRef)
+
+  // Context-menu state: open + cursor position + captured selection range.
+  const [menu, setMenu] = useState<{ x: number; y: number; range: OutputRange | null } | null>(
+    null
+  )
 
   // Sync renderMarkdown from external markdown changes only. When the incoming
   // markdown equals what we just emitted, the DOM is already correct (the user
@@ -75,12 +105,39 @@ export function OutputPane({ containerRef }: OutputPaneProps): JSX.Element | nul
     [renderMarkdown, project?.coordinateMap]
   )
 
+  // Per-token structural-tag decoration lookup, rebuilt when tags / active tag
+  // change. WordSpans query it by their output range to render tag styling.
+  const decorationIndex = useMemo(
+    () => buildDecorationIndex(project?.tags ?? [], state.activeTagId),
+    [project?.tags, state.activeTagId]
+  )
+  const decorationOf = useCallback(
+    (start: number, end: number) => decorationIndex.at(start, end),
+    [decorationIndex]
+  )
+
+  // Right-click in the output body opens the tag menu at the cursor, carrying
+  // the current selection range (note text for the footnote two-step flow).
+  const onContextMenu = useCallback(
+    (e: ReactMouseEvent) => {
+      const range = getSelectionRange()
+      if (!range) return // no selection → let the native menu through
+      e.preventDefault()
+      setMenu({ x: e.clientX, y: e.clientY, range })
+    },
+    [getSelectionRange]
+  )
+
+  const closeMenu = useCallback(() => setMenu(null), [])
+
   const commitEdit = useCallback(() => {
     const body = bodyRef.current
     if (!body) return
 
     const paraEls = Array.from(body.querySelectorAll<HTMLElement>('.paragraph'))
-    const nextMarkdown = paraEls.map((el) => el.textContent ?? '').join('\n\n')
+    // Tag badges (SPEC §5) are decoration-only (contentEditable=false). Strip
+    // them from a clone before reading text so they never enter the markdown.
+    const nextMarkdown = paraEls.map((el) => paragraphText(el)).join('\n\n')
 
     // Token ids inside edited paragraphs lose reliable mapping. We mark every
     // token id currently rendered in the DOM dirty whenever the text changed —
@@ -119,6 +176,7 @@ export function OutputPane({ containerRef }: OutputPaneProps): JSX.Element | nul
         ref={bodyRef}
         onMouseLeave={clearHover}
         onInput={onInput}
+        onContextMenu={onContextMenu}
       >
         {paragraphs.map((paragraph) => (
           <ParagraphView
@@ -127,10 +185,19 @@ export function OutputPane({ containerRef }: OutputPaneProps): JSX.Element | nul
             hoverTokenId={hoverTokenId}
             dirtyTokenIds={state.dirtyTokenIds}
             confidenceOf={confidenceOf}
+            decorationOf={decorationOf}
             onHover={setHoverFromOutput}
           />
         ))}
       </div>
+      <TagContextMenu
+        open={menu !== null}
+        x={menu?.x ?? 0}
+        y={menu?.y ?? 0}
+        range={menu?.range ?? null}
+        getLiveRange={getSelectionRange}
+        onClose={closeMenu}
+      />
     </div>
   )
 }

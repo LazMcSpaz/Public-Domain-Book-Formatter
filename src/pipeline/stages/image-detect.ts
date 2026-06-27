@@ -1,19 +1,28 @@
 /**
- * Image-detection stage (SPEC §6) — STUB.
+ * Image-detection stage (SPEC §6).
  *
- * Layout analysis will flag candidate illustration regions (low trust) and
- * leave markers in the text flow. Not yet implemented: this is a typed no-op so
- * the pipeline shape is complete and the ordering is fixed.
+ * Runs the pure, low-trust `detectRegions` heuristic over each page's OCR layout
+ * to populate `SourcePage.regions` with candidate illustration regions
+ * (`accepted: null`). Detection is explicitly a first guess; the user
+ * reviews/accepts/rejects each region in the image-editing mode.
  *
- * TODO(SPEC §6): run layout analysis over each page image, populate
- * `SourcePage.regions` with `ImageRegion` candidates (accepted: null), and
- * insert placement markers into the output. Detection is explicitly low-trust.
+ * Mirrors the OCR stage's pattern: writes the updated pages back to `ctx.pages`
+ * and, if present, `ctx.document.pages`.
  */
+import type { SourcePage } from '@core/model'
+import { detectRegions } from '@core/image'
 import type { PipelineContext, Stage } from '../stage'
 
 export const imageDetectStage: Stage = {
   name: 'image-detect',
-  async run(_ctx: PipelineContext): Promise<void> {
-    // No-op until SPEC §6 layout analysis lands.
+  async run(ctx: PipelineContext): Promise<void> {
+    const pages = ctx.pages ?? []
+    const updated: SourcePage[] = pages.map((page) => ({
+      ...page,
+      regions: detectRegions(page),
+    }))
+
+    ctx.pages = updated
+    if (ctx.document) ctx.document.pages = updated
   },
 }

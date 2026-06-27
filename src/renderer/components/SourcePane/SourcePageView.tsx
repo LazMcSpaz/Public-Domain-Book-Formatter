@@ -11,6 +11,7 @@ import type { SourcePage } from '@core/model'
 import { assetUrl } from '../../utils/asset-url'
 import { useHoverSync } from '../../hooks/useHoverSync'
 import { WordOverlay } from './WordOverlay'
+import { RegionMarkers } from '../ImageMode/RegionMarkers'
 
 export interface SourcePageViewProps {
   page: SourcePage
@@ -101,6 +102,7 @@ export function SourcePageView({
           hoverTokenId={hoverTokenId}
           confidenceTint={confidenceTint}
         />
+        <RegionMarkers page={page} />
       </svg>
     </div>
   )
