@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Centered fleuron — a classic printer's flower for a section break or
+  chapter-opener accent. Public-domain-style hand-authored vector art.
+  Single black fill so it embeds cleanly as a vector PDF (rsvg-convert).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 60" width="120" height="60">
+  <g fill="#000000" stroke="none">
+    <!-- central diamond -->
+    <path d="M60 18 C66 26 66 34 60 42 C54 34 54 26 60 18 Z"/>
+    <!-- left leaf -->
+    <path d="M58 30 C46 22 34 24 24 30 C34 36 46 38 58 30 Z"/>
+    <!-- right leaf -->
+    <path d="M62 30 C74 22 86 24 96 30 C86 36 74 38 62 30 Z"/>
+    <!-- left terminal dot -->
+    <circle cx="18" cy="30" r="2.4"/>
+    <!-- right terminal dot -->
+    <circle cx="102" cy="30" r="2.4"/>
+  </g>
+</svg>

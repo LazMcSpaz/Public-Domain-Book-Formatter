@@ -19,3 +19,4 @@ export {
   type XelatexOptions,
   type TypesetResult,
 } from './xelatex'
+export { svgToPdf, buildSvg2PdfArgs } from './svg2pdf'

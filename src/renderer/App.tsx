@@ -11,15 +11,29 @@ import { useReview } from './store/ReviewContext'
 import { OpenProjectView } from './components/OpenProjectView'
 import { LoadingView } from './components/LoadingView'
 import { ReviewShell } from './components/ReviewShell'
+import { SetupWizard, hasMissingRequired } from './components/SetupWizard'
 
 export function App(): JSX.Element {
   const { state, dispatch } = useReview()
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState<PipelineProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [needsSetup, setNeedsSetup] = useState(false)
+  const [setupDismissed, setSetupDismissed] = useState(false)
 
   // Forward pipeline progress events into local state for the loading view.
   useEffect(() => window.api.onPipelineProgress(setProgress), [])
+
+  // First-run check: surface the dependency wizard if required tools are missing.
+  useEffect(() => {
+    let cancelled = false
+    void window.api.getDependencies().then((deps) => {
+      if (!cancelled) setNeedsSetup(hasMissingRequired(deps))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const pickPdf = useCallback(async () => {
     setError(null)
@@ -49,6 +63,19 @@ export function App(): JSX.Element {
       setError(err instanceof Error ? err.message : String(err))
     }
   }, [dispatch])
+
+  if (needsSetup && !setupDismissed) {
+    return (
+      <div className="setup-gate">
+        <SetupWizard />
+        <div className="setup-gate__actions">
+          <button type="button" onClick={() => setSetupDismissed(true)}>
+            Continue anyway
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   if (state.project) return <ReviewShell />
   if (loading) return <LoadingView progress={progress} />

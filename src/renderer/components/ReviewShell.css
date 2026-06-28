@@ -67,3 +67,45 @@
   font-size: 0.85rem;
   margin: 0.25rem 0;
 }
+
+/* --- Phase 4: view nav + full-screen design/export views --- */
+.review-nav {
+  display: flex;
+  gap: 0.25rem;
+  margin-left: 1rem;
+}
+
+.review-nav-tab {
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 0.3em 0.8em;
+  border-radius: 6px;
+}
+
+.review-nav-tab--active {
+  background: var(--bg, #fbfaf7);
+  border-color: var(--border, #e2ddd2);
+  font-weight: 600;
+}
+
+.review-scroll-view {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 1.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.setup-gate {
+  height: 100%;
+  overflow-y: auto;
+  padding: 2rem;
+}
+
+.setup-gate__actions {
+  display: flex;
+  justify-content: center;
+  margin-top: 1.5rem;
+}

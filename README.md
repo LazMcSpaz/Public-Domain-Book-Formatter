@@ -7,13 +7,21 @@ side-by-side review surface to bring output to publishable quality.
 
 See [`SPEC.md`](./SPEC.md) for the full design.
 
-> **Status:** Phases 1–3 are in place — the core pipeline + backbone (P1), the
-> side-by-side review instrument (P2: linked panes, hover/scroll-sync, inline
-> editing, confidence tinting, flag review, find-replace), and structure & images
-> (P3: right-click semantic tagging, auto TOC, image-region detection, the
-> non-destructive image editor, DPI awareness). Phase 4 (templates/profiles,
-> front/back-matter, ornaments, running heads, KDP export validation, Windows
-> install wizard) is not built yet.
+> **Status:** all four SPEC §12 phases are in place —
+> **P1** core pipeline + the hOCR coordinate-mapping backbone;
+> **P2** the side-by-side review instrument (linked panes, hover/scroll-sync,
+> inline editing, confidence tinting, flag review, find-replace);
+> **P3** structure & images (right-click semantic tagging, auto TOC,
+> image-region detection, the non-destructive image editor + curve editor &
+> drag-crop, DPI awareness);
+> **P4** polish & packaging (two-level style/profile system, templated
+> front/back matter, ornament layer + SVG→PDF, fancyhdr running heads, the
+> LaTeX document builder, KDP export validation + final page-count report, and
+> the Windows install wizard / first-run dependency bootstrapper).
+>
+> Live OCR/typesetting and the Windows installer build require the system
+> toolchain (Tesseract, Pandoc, TeX Live) on a real machine; the codebase is
+> unit-tested against fixtures and generated-output assertions here.
 
 ## Architecture
 

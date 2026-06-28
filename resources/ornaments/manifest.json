@@ -1,0 +1,37 @@
+[
+  {
+    "id": "fleuron-center",
+    "name": "Centered Fleuron",
+    "kind": "divider",
+    "source": "builtin",
+    "file": "fleuron-center.svg"
+  },
+  {
+    "id": "section-rule",
+    "name": "Thin Section Rule",
+    "kind": "divider",
+    "source": "builtin",
+    "file": "section-rule.svg"
+  },
+  {
+    "id": "diamond-divider",
+    "name": "Diamond Dinkus",
+    "kind": "divider",
+    "source": "builtin",
+    "file": "diamond-divider.svg"
+  },
+  {
+    "id": "chapter-flourish",
+    "name": "Chapter-Opener Flourish",
+    "kind": "chapter",
+    "source": "builtin",
+    "file": "chapter-flourish.svg"
+  },
+  {
+    "id": "page-dingbat",
+    "name": "Page-Number Dingbat",
+    "kind": "page",
+    "source": "builtin",
+    "file": "page-dingbat.svg"
+  }
+]

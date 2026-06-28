@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Thin section rule — a slender horizontal divider with a small lozenge at
+  its midpoint. Used as a quiet section break between scenes.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 16" width="200" height="16">
+  <g fill="#000000" stroke="none">
+    <!-- left hairline -->
+    <rect x="10" y="7.4" width="78" height="1.2"/>
+    <!-- right hairline -->
+    <rect x="112" y="7.4" width="78" height="1.2"/>
+    <!-- center lozenge -->
+    <path d="M100 3 L106 8 L100 13 L94 8 Z"/>
+  </g>
+</svg>
