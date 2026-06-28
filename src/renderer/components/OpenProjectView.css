@@ -1,0 +1,54 @@
+.open-project-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  max-width: 30rem;
+  padding: 2.5rem 2.25rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--bg-panel);
+  box-shadow: 0 10px 40px -24px rgba(29, 27, 22, 0.45);
+}
+
+.open-project-mark {
+  font-size: 2.5rem;
+  color: var(--accent);
+  line-height: 1;
+}
+
+.open-project-card h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.open-project-tagline {
+  margin: 0;
+  color: var(--fg-muted);
+  line-height: 1.5;
+}
+
+.open-project-actions {
+  margin-top: 0.5rem;
+}
+
+.open-project-primary {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+  font-weight: 600;
+}
+
+.open-project-primary:hover:not(:disabled) {
+  filter: brightness(1.08);
+}
+
+.open-project-hint {
+  margin: 0.25rem 0 0;
+  font-size: 0.8rem;
+  color: var(--fg-muted);
+}
+
+.open-project-error {
+  margin: 0.5rem 0 0;
+}

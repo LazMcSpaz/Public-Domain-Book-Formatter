@@ -1,0 +1,148 @@
+/*
+ * Global base styles for the renderer. Component-specific styles live alongside
+ * their components. The review panes read these CSS custom properties (set on
+ * .side-by-side from ReadingPrefs) so reading comfort is adjustable live.
+ */
+:root {
+  --bg: #fbfaf7;
+  --bg-panel: #ffffff;
+  --fg: #1d1b16;
+  --fg-muted: #6b6557;
+  --border: #e2ddd2;
+  --accent: #7a5c3e;
+
+  /* Reading-comfort defaults; overridden inline on .side-by-side. */
+  --reading-font-size: 17px;
+  --reading-line-spacing: 1.6;
+  --reading-line-length: 70ch;
+  --left-pane-width: 50%;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family:
+    system-ui,
+    -apple-system,
+    'Segoe UI',
+    Roboto,
+    sans-serif;
+  font-size: 14px;
+}
+
+button {
+  font: inherit;
+  padding: 0.45em 0.9em;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: var(--fg);
+  cursor: pointer;
+}
+
+button:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.error {
+  color: #a3271f;
+}
+
+/* --- Open / loading screens --- */
+.open-project,
+.loading-view {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  height: 100%;
+  text-align: center;
+}
+
+.open-project-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.loading-bar {
+  width: min(420px, 60%);
+  height: 8px;
+  background: var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.loading-bar-fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+/* --- Review shell --- */
+.review-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.review-topbar {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+}
+
+.review-title {
+  font-weight: 600;
+}
+
+.review-dirty {
+  color: var(--fg-muted);
+}
+
+.review-topbar button {
+  margin-left: auto;
+}
+
+/* --- Side-by-side panes ---
+ * SideBySideView lays out two full-height wrappers; each pane component owns its
+ * own scroll container (.source-pane-inner / .output-pane-root) and inner chrome. */
+.side-by-side {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.sbs-source {
+  width: var(--left-pane-width);
+  min-width: 0;
+  height: 100%;
+  border-right: 1px solid var(--border);
+  background: #f3efe6;
+}
+
+.sbs-output {
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+}

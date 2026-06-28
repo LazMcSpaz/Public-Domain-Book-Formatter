@@ -1,0 +1,106 @@
+/* Region accept/reject markers drawn inside the page SVG (SPEC §6). */
+
+.region-markers {
+  pointer-events: none; /* frames are decorative; controls re-enable below */
+}
+
+/* The region frame. Candidate = dashed/low-trust, accepted = solid, rejected =
+   faint so the page stays clean. Stroke widths are in page-pixel space. */
+.region-marker__frame {
+  fill: transparent;
+  vector-effect: non-scaling-stroke;
+}
+
+.region-marker__frame--candidate {
+  stroke: #8e24aa;
+  stroke-width: 2;
+  stroke-dasharray: 8 6;
+  fill: #8e24aa;
+  fill-opacity: 0.06;
+}
+
+.region-marker__frame--accepted {
+  stroke: #2e7d32;
+  stroke-width: 2;
+  fill: #2e7d32;
+  fill-opacity: 0.05;
+}
+
+.region-marker__frame--rejected {
+  stroke: #9e9e9e;
+  stroke-width: 1;
+  stroke-dasharray: 3 5;
+  stroke-opacity: 0.5;
+}
+
+/* foreignObject host must not clip the toolbar's controls. */
+.region-marker__fo {
+  overflow: visible;
+  pointer-events: none;
+}
+
+.region-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font:
+    13px/1.3 system-ui,
+    -apple-system,
+    sans-serif;
+  pointer-events: auto; /* re-enable interaction for the controls */
+}
+
+.region-toolbar__label {
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.72);
+  color: #fff;
+  white-space: nowrap;
+}
+
+.region-toolbar[data-status='candidate'] .region-toolbar__label {
+  background: #8e24aa;
+}
+
+.region-toolbar__actions {
+  display: inline-flex;
+  gap: 6px;
+}
+
+.region-btn {
+  cursor: pointer;
+  border: 1px solid rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+  padding: 3px 10px;
+  font: inherit;
+  background: #fff;
+  color: #222;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.region-btn:hover {
+  filter: brightness(0.97);
+}
+
+.region-btn--accept {
+  background: #2e7d32;
+  border-color: #2e7d32;
+  color: #fff;
+}
+
+.region-btn--reject {
+  background: #c62828;
+  border-color: #c62828;
+  color: #fff;
+}
+
+.region-btn--edit {
+  background: #1565c0;
+  border-color: #1565c0;
+  color: #fff;
+}
+
+.region-btn--ghost {
+  background: #f4f4f4;
+}

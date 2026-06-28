@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Chapter-opener flourish — a symmetric scrollwork band set beneath a
+  chapter title. Wider and more decorative than the section rule.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 48" width="240" height="48">
+  <g fill="none" stroke="#000000" stroke-width="1.6" stroke-linecap="round">
+    <!-- central stem -->
+    <path d="M120 24 C120 16 124 12 132 12"/>
+    <path d="M120 24 C120 16 116 12 108 12"/>
+    <!-- right scroll -->
+    <path d="M120 24 C140 24 156 18 168 24 C180 30 196 26 210 22"/>
+    <path d="M210 22 C214 21 216 24 213 26 C210 28 206 26 208 23"/>
+    <!-- left scroll (mirror) -->
+    <path d="M120 24 C100 24 84 18 72 24 C60 30 44 26 30 22"/>
+    <path d="M30 22 C26 21 24 24 27 26 C30 28 34 26 32 23"/>
+  </g>
+  <g fill="#000000" stroke="none">
+    <!-- crowning dot -->
+    <circle cx="120" cy="9" r="2.2"/>
+  </g>
+</svg>

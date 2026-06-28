@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Page-number dingbat — a tiny asterisk-fleuron set beside or beneath the
+  folio. Small footprint so it sits comfortably in the running foot.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <g fill="#000000" stroke="none">
+    <!-- six radiating petals around a center -->
+    <g>
+      <path d="M12 4 C13.4 8 13.4 9.4 12 11 C10.6 9.4 10.6 8 12 4 Z"/>
+      <path d="M12 20 C13.4 16 13.4 14.6 12 13 C10.6 14.6 10.6 16 12 20 Z"/>
+      <path d="M4 8 C8 8.6 9.2 9.4 10.4 11.2 C8.2 11.6 6.6 10.8 4 8 Z"/>
+      <path d="M20 8 C16 8.6 14.8 9.4 13.6 11.2 C15.8 11.6 17.4 10.8 20 8 Z"/>
+      <path d="M4 16 C8 15.4 9.2 14.6 10.4 12.8 C8.2 12.4 6.6 13.2 4 16 Z"/>
+      <path d="M20 16 C16 15.4 14.8 14.6 13.6 12.8 C15.8 12.4 17.4 13.2 20 16 Z"/>
+    </g>
+    <circle cx="12" cy="12" r="1.4"/>
+  </g>
+</svg>

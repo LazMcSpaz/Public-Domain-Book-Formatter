@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ESNext", "DOM", "DOM.Iterable"],
+    "types": ["node"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitOverride": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "skipLibCheck": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@core": ["src/core/index.ts"],
+      "@core/*": ["src/core/*"],
+      "@shared": ["src/shared/index.ts"],
+      "@shared/*": ["src/shared/*"],
+      "@tooling": ["src/tooling/index.ts"],
+      "@tooling/*": ["src/tooling/*"],
+      "@pipeline": ["src/pipeline/index.ts"],
+      "@pipeline/*": ["src/pipeline/*"]
+    }
+  },
+  "include": ["src/**/*.ts", "test/**/*.ts", "electron.vite.config.ts", "vitest.config.ts"]
+}

@@ -1,0 +1,223 @@
+/* StyleEditor — two-column layout: the form on the left, the profile bank on
+   the right. Matches the warm panel chrome used across the review instrument. */
+.style-editor {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.se-form {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 1rem 1.25rem;
+}
+
+.se-header h2 {
+  margin: 0 0 0.25rem;
+}
+
+.se-subhead {
+  margin: 0 0 1rem;
+  color: var(--fg-muted);
+  font-size: 0.85rem;
+  max-width: 60ch;
+}
+
+.se-section {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem 1rem;
+  margin: 0 0 1rem;
+  background: var(--bg-panel);
+}
+
+.se-section legend {
+  padding: 0 0.4rem;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.se-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.6rem 1rem;
+}
+
+.se-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.se-field-label {
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.se-field-control {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.se-field input[type='text'],
+.se-field input[type='number'],
+.se-field select {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 0.35em 0.5em;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.se-field input:focus,
+.se-field select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.se-field-unit {
+  color: var(--fg-muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
+}
+
+.se-checks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+  margin-top: 0.6rem;
+}
+
+.se-check {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  user-select: none;
+}
+
+.se-check input {
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+
+.se-form-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* --- Profile manager sidebar --- */
+.profile-manager {
+  width: 320px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  background: var(--bg-panel);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  padding: 1rem;
+  gap: 0.75rem;
+}
+
+.pm-header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.pm-header h3 {
+  margin: 0;
+  font-size: 0.95rem;
+}
+
+.pm-applied {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+}
+
+.pm-saveas {
+  display: flex;
+  gap: 0.4rem;
+}
+
+.pm-saveas input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  padding: 0.35em 0.5em;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--fg);
+}
+
+.pm-error {
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.pm-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.pm-item {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.pm-item-applied {
+  border-color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.pm-item-main {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.pm-item-name {
+  font-weight: 600;
+}
+
+.pm-item-meta {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+}
+
+.pm-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.pm-item-actions button {
+  font-size: 0.8rem;
+  padding: 0.25em 0.55em;
+}
+
+.pm-delete:hover:not(:disabled) {
+  border-color: #a3271f;
+  color: #a3271f;
+}
+
+.pm-footer {
+  margin-top: auto;
+}

@@ -1,0 +1,160 @@
+/**
+ * StructurePanel styling (SPEC §5, §7). A scrollable sidebar with a tag list and
+ * a TOC preview, tuned to sit quietly next to the reading panes.
+ */
+
+.structure-panel {
+  height: 100%;
+  overflow: auto;
+  padding: 12px 12px 32px;
+  font-size: 13px;
+  box-sizing: border-box;
+}
+
+.structure-panel--empty,
+.structure-empty {
+  color: var(--menu-muted, #777);
+}
+
+.structure-empty {
+  margin: 4px 0 0;
+  line-height: 1.4;
+}
+
+.structure-section + .structure-section {
+  margin-top: 20px;
+}
+
+.structure-heading {
+  margin: 0 0 8px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--menu-muted, #888);
+}
+
+.structure-list,
+.structure-toc {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.structure-row {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  border-radius: 6px;
+  margin-bottom: 2px;
+}
+
+.structure-row--active {
+  background: rgba(46, 125, 50, 0.12);
+}
+
+.structure-row-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 6px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  border-radius: 6px;
+}
+
+.structure-row-main:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+
+.structure-badge {
+  flex: 0 0 auto;
+  min-width: 22px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 4px;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 18px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.structure-row-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.structure-row-type {
+  font-weight: 600;
+}
+
+.structure-row-slice {
+  color: var(--menu-muted, #777);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.structure-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  flex: 0 0 auto;
+}
+
+.structure-act {
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  border-radius: 4px;
+  width: 24px;
+  height: 24px;
+  line-height: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: inherit;
+}
+
+.structure-act:hover {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+.structure-act--confirm {
+  color: #2e7d32;
+}
+
+.structure-act--reject {
+  color: #b00020;
+}
+
+.structure-toc-row {
+  margin-bottom: 2px;
+}
+
+.structure-toc-link {
+  display: block;
+  width: 100%;
+  padding: 4px 6px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  border-radius: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.structure-toc-link:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
