@@ -31,7 +31,7 @@ export const DEFAULT_STAGES: Stage[] = [
   imageDetectStage,
   cleanupStage,
   structureStage,
-  markdownStage,
+  markdownStage
 ]
 
 export interface RunPipelineOptions {
@@ -59,9 +59,7 @@ function makeWorkDir(projectPath: string): string {
  * after each stage, throws `Error('Pipeline aborted')` if the signal fires
  * between stages, persists results, and returns `{ projectPath, pageCount }`.
  */
-export async function runPipeline(
-  opts: RunPipelineOptions,
-): Promise<PipelineResult> {
+export async function runPipeline(opts: RunPipelineOptions): Promise<PipelineResult> {
   const stages = opts.stages ?? DEFAULT_STAGES
   const run = opts.run ?? runCommand
 
@@ -73,7 +71,7 @@ export async function runPipeline(
     projectPath: opts.projectPath,
     workDir,
     run,
-    signal: opts.signal,
+    signal: opts.signal
   }
 
   const total = stages.length
@@ -87,7 +85,7 @@ export async function runPipeline(
       stage: stage.name,
       index: i,
       total,
-      message: `starting ${stage.name}`,
+      message: `starting ${stage.name}`
     })
 
     await stage.run(ctx)
@@ -96,7 +94,7 @@ export async function runPipeline(
       stage: stage.name,
       index: i,
       total,
-      message: `finished ${stage.name}`,
+      message: `finished ${stage.name}`
     })
   }
 
@@ -111,7 +109,7 @@ export async function runPipeline(
   if (opts.projectPath) {
     const project = createEmptyProject({
       pdfPath: opts.pdfPath,
-      pageCount,
+      pageCount
     })
     project.pages = ctx.pages ?? []
     project.markdown = ctx.markdown ?? ''

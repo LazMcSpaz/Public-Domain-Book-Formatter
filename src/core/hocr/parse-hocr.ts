@@ -88,14 +88,13 @@ function confFromProps(props: Map<string, string[]>): number {
 function readTitleAttr(tagOpen: string): string {
   const m = /\btitle\s*=\s*"([^"]*)"|\btitle\s*=\s*'([^']*)'/i.exec(tagOpen)
   if (!m) return ''
-  return (m[1] ?? m[2] ?? '')
+  return m[1] ?? m[2] ?? ''
 }
 
 // Matches an ocr_page opening div. `[^>]*` is fine because hOCR tags don't
 // contain raw `>` in attribute values. Class attr may use single or double
 // quotes (`class='ocr_page'` is common in Tesseract output).
-const PAGE_OPEN_RE =
-  /<div\b[^>]*\bclass\s*=\s*["'][^"']*\bocr_page\b[^"']*["'][^>]*>/gi
+const PAGE_OPEN_RE = /<div\b[^>]*\bclass\s*=\s*["'][^"']*\bocr_page\b[^"']*["'][^>]*>/gi
 // Matches a full ocrx_word span (open tag + inner content + close tag).
 const WORD_RE =
   /<span\b([^>]*\bclass\s*=\s*["'][^"']*\bocrx_word\b[^"']*["'][^>]*)>([\s\S]*?)<\/span>/gi
@@ -118,7 +117,7 @@ export function parseHocr(hocr: string): SourcePage[] {
     pageOpens.push({
       index: pm.index,
       openEnd: pm.index + pm[0].length,
-      title: readTitleAttr(pm[0]),
+      title: readTitleAttr(pm[0])
     })
   }
 
@@ -151,7 +150,7 @@ export function parseHocr(hocr: string): SourcePage[] {
         text,
         bbox,
         pageIndex: p,
-        confidence: confFromProps(wProps),
+        confidence: confFromProps(wProps)
       })
       wordNo++
     }
@@ -163,7 +162,7 @@ export function parseHocr(hocr: string): SourcePage[] {
       height,
       dpi: null,
       words,
-      regions: [],
+      regions: []
     })
   }
 

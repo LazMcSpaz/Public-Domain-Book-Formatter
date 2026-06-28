@@ -25,7 +25,7 @@ export const DEFAULT_STYLE_PROFILES: StyleProfile[] = [
     runningHeads: { verso: 'author', recto: 'chapterTitle' },
     pageNumber: 'bottomCenter',
     ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null },
-    frontMatter: { titlePage: true, copyrightPage: true, halfTitle: true },
+    frontMatter: { titlePage: true, copyrightPage: true, halfTitle: true }
   },
   {
     id: 'compact-5x8',
@@ -40,7 +40,7 @@ export const DEFAULT_STYLE_PROFILES: StyleProfile[] = [
     runningHeads: { verso: 'bookTitle', recto: 'chapterTitle' },
     pageNumber: 'bottomOuter',
     ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null },
-    frontMatter: { titlePage: true, copyrightPage: true, halfTitle: false },
+    frontMatter: { titlePage: true, copyrightPage: true, halfTitle: false }
   },
   {
     id: 'verse-6x9',
@@ -55,8 +55,8 @@ export const DEFAULT_STYLE_PROFILES: StyleProfile[] = [
     runningHeads: { verso: 'author', recto: 'bookTitle' },
     pageNumber: 'bottomCenter',
     ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null },
-    frontMatter: { titlePage: true, copyrightPage: true, halfTitle: true },
-  },
+    frontMatter: { titlePage: true, copyrightPage: true, halfTitle: true }
+  }
 ]
 
 /** Deep clone so callers can't mutate the shipped constants. */
@@ -67,7 +67,7 @@ function clone(p: StyleProfile): StyleProfile {
     headingStyle: { ...p.headingStyle },
     runningHeads: { ...p.runningHeads },
     ornaments: { ...p.ornaments },
-    frontMatter: { ...p.frontMatter },
+    frontMatter: { ...p.frontMatter }
   }
 }
 

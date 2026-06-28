@@ -39,7 +39,7 @@ export class CoordinateMap implements CoordinateIndex {
     // Keep entries sorted by output start for predictable offset lookups and
     // binary search. Ties broken by output end so narrower ranges come first.
     this.entries = [...entries].sort(
-      (a, b) => a.output.start - b.output.start || a.output.end - b.output.end,
+      (a, b) => a.output.start - b.output.start || a.output.end - b.output.end
     )
     this.byId = new Map(this.entries.map((e) => [e.tokenId, e]))
   }

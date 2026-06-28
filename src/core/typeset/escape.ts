@@ -23,7 +23,7 @@ const REPLACEMENTS: Record<string, string> = {
   '{': '\\{',
   '}': '\\}',
   '~': '\\textasciitilde{}',
-  '^': '\\textasciicircum{}',
+  '^': '\\textasciicircum{}'
 }
 
 export function escapeLatex(s: string): string {

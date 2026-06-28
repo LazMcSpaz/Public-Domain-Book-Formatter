@@ -13,13 +13,7 @@
  * This is intentionally low-trust: the user confirms candidates in review, which
  * promotes them to `heading` StructuralTags that feed the TOC (SPEC §7).
  */
-import type {
-  Flag,
-  HeadingCandidate,
-  MappingEntry,
-  SourcePage,
-  WordToken,
-} from '@core/model'
+import type { Flag, HeadingCandidate, MappingEntry, SourcePage, WordToken } from '@core/model'
 
 /** Internal: a run of words sharing roughly one baseline. */
 interface Line {
@@ -36,9 +30,7 @@ function median(values: number[]): number {
   if (values.length === 0) return 0
   const sorted = [...values].sort((a, b) => a - b)
   const mid = Math.floor(sorted.length / 2)
-  return sorted.length % 2 === 0
-    ? (sorted[mid - 1]! + sorted[mid]!) / 2
-    : sorted[mid]!
+  return sorted.length % 2 === 0 ? (sorted[mid - 1]! + sorted[mid]!) / 2 : sorted[mid]!
 }
 
 function wordHeight(w: WordToken): number {
@@ -96,7 +88,7 @@ function groupLines(words: WordToken[]): Line[] {
       height: median(ordered.map(wordHeight)),
       midY: (top + bottom) / 2,
       top,
-      bottom,
+      bottom
     }
   })
 }
@@ -123,7 +115,7 @@ function indexByToken(coordinateMap: MappingEntry[]): Map<string, MappingEntry> 
 export function detectHeadings(
   pages: SourcePage[],
   markdown: string,
-  coordinateMap: MappingEntry[],
+  coordinateMap: MappingEntry[]
 ): { candidates: HeadingCandidate[]; flags: Flag[] } {
   const byToken = indexByToken(coordinateMap)
   const candidates: HeadingCandidate[] = []
@@ -137,9 +129,7 @@ export function detectHeadings(
     if (lines.length === 0) continue
 
     const pageMedianHeight = median(page.words.map(wordHeight)) || 1
-    const pageMedianGap = median(
-      lines.slice(1).map((l, i) => l.top - lines[i]!.bottom),
-    )
+    const pageMedianGap = median(lines.slice(1).map((l, i) => l.top - lines[i]!.bottom))
 
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]!
@@ -152,8 +142,7 @@ export function detectHeadings(
 
       // Vertical isolation: generous whitespace above or below.
       const gapAbove = i > 0 ? line.top - lines[i - 1]!.bottom : Infinity
-      const gapBelow =
-        i < lines.length - 1 ? lines[i + 1]!.top - line.bottom : Infinity
+      const gapBelow = i < lines.length - 1 ? lines[i + 1]!.top - line.bottom : Infinity
       const isoThreshold = Math.max(pageMedianGap * 1.5, pageMedianHeight * 1.0)
       const isIsolated = gapAbove >= isoThreshold || gapBelow >= isoThreshold
 
@@ -185,16 +174,16 @@ export function detectHeadings(
           range: { start, end },
           text: candidateText,
           level: 1,
-          pageIndex: page.index,
+          pageIndex: page.index
         },
-        height: line.height,
+        height: line.height
       })
     }
   }
 
   // Coarse level assignment: bucket distinct heights, biggest → level 1.
   const distinctHeights = [...new Set(scored.map((s) => Math.round(s.height)))].sort(
-    (a, b) => b - a,
+    (a, b) => b - a
   )
   const levelOf = new Map<number, number>()
   distinctHeights.forEach((h, idx) => levelOf.set(h, Math.min(idx + 1, 6)))
@@ -211,7 +200,7 @@ export function detectHeadings(
     kind: 'heuristic',
     source: 'structure',
     label: 'probable heading',
-    range: c.range,
+    range: c.range
   }))
 
   return { candidates, flags }

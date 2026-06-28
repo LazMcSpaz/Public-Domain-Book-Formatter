@@ -71,9 +71,7 @@ export function OutputPane({ containerRef }: OutputPaneProps): JSX.Element | nul
   const getSelectionRange = useSelectionRange(bodyRef)
 
   // Context-menu state: open + cursor position + captured selection range.
-  const [menu, setMenu] = useState<{ x: number; y: number; range: OutputRange | null } | null>(
-    null
-  )
+  const [menu, setMenu] = useState<{ x: number; y: number; range: OutputRange | null } | null>(null)
 
   // Sync renderMarkdown from external markdown changes only. When the incoming
   // markdown equals what we just emitted, the DOM is already correct (the user

@@ -169,7 +169,10 @@ function curves(img: RasterImage, params: Record<string, unknown>): RasterImage 
         points = parsed
           .filter(
             (p): p is [number, number] =>
-              Array.isArray(p) && p.length >= 2 && typeof p[0] === 'number' && typeof p[1] === 'number',
+              Array.isArray(p) &&
+              p.length >= 2 &&
+              typeof p[0] === 'number' &&
+              typeof p[1] === 'number'
           )
           .map((p) => [p[0], p[1]])
       }
@@ -177,7 +180,11 @@ function curves(img: RasterImage, params: Record<string, unknown>): RasterImage 
       points = []
     }
   }
-  if (points.length === 0) points = [[0, 0], [255, 255]]
+  if (points.length === 0)
+    points = [
+      [0, 0],
+      [255, 255]
+    ]
   points.sort((a, b) => a[0] - b[0])
 
   const lut = new Uint8ClampedArray(256)
@@ -297,7 +304,7 @@ function removeBackground(img: RasterImage, params: Record<string, unknown>): Ra
     [0, 0],
     [w - 1, 0],
     [0, h - 1],
-    [w - 1, h - 1],
+    [w - 1, h - 1]
   ]
 
   for (const [cxRaw, cyRaw] of corners) {

@@ -12,7 +12,9 @@ export function blank(width: number, height: number): RasterImage {
   return {
     width: Math.max(0, Math.floor(width)),
     height: Math.max(0, Math.floor(height)),
-    data: new Uint8ClampedArray(Math.max(0, Math.floor(width)) * Math.max(0, Math.floor(height)) * 4),
+    data: new Uint8ClampedArray(
+      Math.max(0, Math.floor(width)) * Math.max(0, Math.floor(height)) * 4
+    )
   }
 }
 
@@ -21,7 +23,7 @@ export function clone(img: RasterImage): RasterImage {
   return {
     width: img.width,
     height: img.height,
-    data: new Uint8ClampedArray(img.data),
+    data: new Uint8ClampedArray(img.data)
   }
 }
 
@@ -55,7 +57,7 @@ export function sampleNearest(
   img: RasterImage,
   x: number,
   y: number,
-  out: [number, number, number, number],
+  out: [number, number, number, number]
 ): void {
   const xi = Math.round(x)
   const yi = Math.round(y)

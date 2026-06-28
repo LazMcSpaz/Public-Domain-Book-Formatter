@@ -24,20 +24,20 @@ export interface ExtractPagesOptions {
 const FORMAT_FLAG: Record<NonNullable<ExtractPagesOptions['format']>, string> = {
   png: '-png',
   jpeg: '-jpeg',
-  tiff: '-tiff',
+  tiff: '-tiff'
 }
 
 const FORMAT_EXT: Record<NonNullable<ExtractPagesOptions['format']>, string> = {
   png: 'png',
   jpeg: 'jpg',
-  tiff: 'tif',
+  tiff: 'tif'
 }
 
 /** Build the argv for a pdftoppm extraction (exported for testability). */
 export function buildExtractArgs(
   pdfPath: string,
   outPrefix: string,
-  opts: ExtractPagesOptions = {},
+  opts: ExtractPagesOptions = {}
 ): string[] {
   const dpi = opts.dpi ?? 300
   const format = opts.format ?? 'png'
@@ -63,7 +63,7 @@ export async function extractPages(
   pdfPath: string,
   outDir: string,
   opts: ExtractPagesOptions = {},
-  run: CommandRunner = runCommand,
+  run: CommandRunner = runCommand
 ): Promise<string[]> {
   const prefix = opts.prefix ?? 'page'
   const outPrefix = path.join(outDir, prefix)
@@ -92,7 +92,7 @@ export async function extractPages(
  */
 export async function pdfPageCount(
   pdfPath: string,
-  run: CommandRunner = runCommand,
+  run: CommandRunner = runCommand
 ): Promise<number | null> {
   try {
     const result = await run('pdfinfo', [pdfPath])

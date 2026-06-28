@@ -39,9 +39,9 @@ function mockRunner(): CommandRunner & { calls: Call[] } {
           'This is XeTeX, Version 3.14159',
           'Overfull \\hbox (5pt too wide) in paragraph at lines 1--2',
           'Output written on book.pdf (123 pages, 456789 bytes).',
-          'Transcript written on book.log.',
+          'Transcript written on book.log.'
         ].join('\n'),
-        stderr: '',
+        stderr: ''
       } satisfies CommandResult
     }
     // rsvg-convert and anything else.
@@ -65,13 +65,11 @@ function makeProject(): ProjectFile {
   const project = createEmptyProject({
     pdfPath: '/in/book.pdf',
     pageCount: 5,
-    config: { title: 'A Title', author: 'An Author', trimSize: '6x9' },
+    config: { title: 'A Title', author: 'An Author', trimSize: '6x9' }
   })
   project.markdown = '# Chapter One\n\nSome body text.\n'
   // A confirmed heading so buildToc yields an entry.
-  project.tags = [
-    { id: 't1', type: 'heading', range: { start: 2, end: 13 }, data: { level: 1 } },
-  ]
+  project.tags = [{ id: 't1', type: 'heading', range: { start: 2, end: 13 }, data: { level: 1 } }]
   return project
 }
 
@@ -83,7 +81,7 @@ function makeProfile(): StyleProfile {
   profile.ornaments = {
     chapterOpener: chapter.id,
     sectionDivider: divider.id,
-    pageNumber: null,
+    pageNumber: null
   }
   return profile
 }
@@ -99,7 +97,7 @@ describe('assembleAndExport', () => {
       projectPath: process.cwd(),
       profile,
       buildDir,
-      run,
+      run
     })
 
     const cmds = run.calls.map((c) => c.cmd)

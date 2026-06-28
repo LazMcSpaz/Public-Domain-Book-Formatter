@@ -376,7 +376,9 @@ export function ImageEditor(): JSX.Element | null {
             onPointerDown={cropPointerDown}
           />
           {cropDraw && (
-            <div className="image-editor__crophint">Drag to select the crop · Esc/Save to apply</div>
+            <div className="image-editor__crophint">
+              Drag to select the crop · Esc/Save to apply
+            </div>
           )}
 
           {originalDims && (
@@ -487,7 +489,11 @@ export function ImageEditor(): JSX.Element | null {
                 </div>
               )}
               {cropRect && (
-                <button type="button" className="ie-btn ie-btn--small" onClick={() => setCropRect(null)}>
+                <button
+                  type="button"
+                  className="ie-btn ie-btn--small"
+                  onClick={() => setCropRect(null)}
+                >
                   Clear crop
                 </button>
               )}
@@ -611,8 +617,8 @@ export function ImageEditor(): JSX.Element | null {
               Background removal <span className="ie-badge">best-effort</span>
             </h3>
             <p className="ie-note">
-              Reliable on clean, uniform backgrounds (line art on cream paper); unreliable on
-              busy or unevenly-lit scans. Treat as an accelerator and touch up manually.
+              Reliable on clean, uniform backgrounds (line art on cream paper); unreliable on busy
+              or unevenly-lit scans. Treat as an accelerator and touch up manually.
             </p>
             <label className="ie-field ie-field--check">
               <input

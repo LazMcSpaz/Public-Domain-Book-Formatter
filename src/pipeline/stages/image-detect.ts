@@ -19,10 +19,10 @@ export const imageDetectStage: Stage = {
     const pages = ctx.pages ?? []
     const updated: SourcePage[] = pages.map((page) => ({
       ...page,
-      regions: detectRegions(page),
+      regions: detectRegions(page)
     }))
 
     ctx.pages = updated
     if (ctx.document) ctx.document.pages = updated
-  },
+  }
 }

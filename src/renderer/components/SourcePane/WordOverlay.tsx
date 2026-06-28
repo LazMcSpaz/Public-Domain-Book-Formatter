@@ -24,11 +24,7 @@ function confidenceClass(confidence: number): string | null {
   return null
 }
 
-export function WordOverlay({
-  page,
-  hoverTokenId,
-  confidenceTint
-}: WordOverlayProps): JSX.Element {
+export function WordOverlay({ page, hoverTokenId, confidenceTint }: WordOverlayProps): JSX.Element {
   return (
     <g className="word-overlay">
       {page.words.map((word) => {

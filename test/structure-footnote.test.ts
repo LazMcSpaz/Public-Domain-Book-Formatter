@@ -19,7 +19,7 @@ describe('linkFootnote', () => {
       markdown,
       refRange: { start: 17, end: 18 },
       noteRange: { start: 38, end: 57 },
-      marker: '*',
+      marker: '*'
     })
     expect(link.marker).toBe('*')
   })
@@ -29,7 +29,7 @@ describe('linkFootnote', () => {
     const link = linkFootnote({
       markdown: md,
       refRange: { start: 4, end: 6 },
-      noteRange: { start: 9, end: 13 },
+      noteRange: { start: 9, end: 13 }
     })
     expect(link.marker).toBe('*')
   })
@@ -48,14 +48,14 @@ describe('footnoteTagData', () => {
     const link: FootnoteLink = {
       refRange: { start: 17, end: 18 },
       noteRange: { start: 38, end: 57 },
-      marker: '1',
+      marker: '1'
     }
     expect(footnoteTagData(link)).toEqual({
       marker: '1',
       refStart: 17,
       refEnd: 18,
       noteStart: 38,
-      noteEnd: 57,
+      noteEnd: 57
     })
   })
 })

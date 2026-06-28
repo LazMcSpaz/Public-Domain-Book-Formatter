@@ -36,10 +36,7 @@ export interface Paragraph {
  * overlaps the previously-emitted entry are skipped (defensive — the pipeline
  * should never emit those, but the UI must not crash if it does).
  */
-export function markdownToSpans(
-  markdown: string,
-  entries: readonly MappingEntry[]
-): SpanNode[] {
+export function markdownToSpans(markdown: string, entries: readonly MappingEntry[]): SpanNode[] {
   const len = markdown.length
   if (len === 0) return []
 
@@ -74,10 +71,7 @@ export function markdownToSpans(
  * within it. The blank-line separators themselves are not part of any
  * paragraph (ParagraphView re-joins paragraphs with `\n\n`).
  */
-export function splitParagraphs(
-  markdown: string,
-  entries: readonly MappingEntry[]
-): Paragraph[] {
+export function splitParagraphs(markdown: string, entries: readonly MappingEntry[]): Paragraph[] {
   if (markdown.length === 0) return []
 
   const nodes = markdownToSpans(markdown, entries)

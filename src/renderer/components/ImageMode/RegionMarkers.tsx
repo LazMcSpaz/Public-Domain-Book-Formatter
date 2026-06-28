@@ -90,8 +90,7 @@ function RegionMarker({
   const w = Math.max(0, Math.abs(x1 - x0))
   const h = Math.max(0, Math.abs(y1 - y0))
 
-  const status =
-    region.accepted === null ? 'candidate' : region.accepted ? 'accepted' : 'rejected'
+  const status = region.accepted === null ? 'candidate' : region.accepted ? 'accepted' : 'rejected'
 
   const frameClass = `region-marker__frame region-marker__frame--${status}`
 

@@ -25,7 +25,7 @@ interface Options {
 const DEFAULTS: Options = {
   minAreaFraction: 0.08,
   gridCols: 32,
-  gridRows: 32,
+  gridRows: 32
 }
 
 /** A rectangle in grid-cell coordinates (half-open [c0,c1) × [r0,r1)). */
@@ -41,11 +41,7 @@ interface CellRect {
  * classic "largest rectangle in histogram per row" sweep, collecting every
  * locally-maximal empty rectangle (not just the single largest). Deterministic.
  */
-function emptyRects(
-  occ: boolean[][],
-  rows: number,
-  cols: number,
-): CellRect[] {
+function emptyRects(occ: boolean[][], rows: number, cols: number): CellRect[] {
   const rects: CellRect[] = []
   // heights[c] = number of consecutive empty cells ending at current row in col c.
   const heights = new Array<number>(cols).fill(0)
@@ -78,7 +74,7 @@ function cellToBBox(
   cols: number,
   rows: number,
   width: number,
-  height: number,
+  height: number
 ): { x0: number; y0: number; x1: number; y1: number } {
   const cw = width / cols
   const ch = height / rows
@@ -86,7 +82,7 @@ function cellToBBox(
     x0: Math.round(rect.c0 * cw),
     y0: Math.round(rect.r0 * ch),
     x1: Math.round(rect.c1 * cw),
-    y1: Math.round(rect.r1 * ch),
+    y1: Math.round(rect.r1 * ch)
   }
 }
 
@@ -101,12 +97,12 @@ function contains(b: CellRect, a: CellRect): boolean {
 
 export function detectRegions(
   page: SourcePage,
-  opts?: { minAreaFraction?: number; gridCols?: number; gridRows?: number },
+  opts?: { minAreaFraction?: number; gridCols?: number; gridRows?: number }
 ): ImageRegion[] {
   const cfg: Options = {
     minAreaFraction: opts?.minAreaFraction ?? DEFAULTS.minAreaFraction,
     gridCols: Math.max(1, opts?.gridCols ?? DEFAULTS.gridCols),
-    gridRows: Math.max(1, opts?.gridRows ?? DEFAULTS.gridRows),
+    gridRows: Math.max(1, opts?.gridRows ?? DEFAULTS.gridRows)
   }
   const width = page.width || 1
   const height = page.height || 1
@@ -118,15 +114,13 @@ export function detectRegions(
         id: `p${page.index}_r0`,
         pageIndex: page.index,
         bbox: { x0: 0, y0: 0, x1: width, y1: height },
-        accepted: null,
-      },
+        accepted: null
+      }
     ]
   }
 
   const { gridCols: cols, gridRows: rows } = cfg
-  const occ: boolean[][] = Array.from({ length: rows }, () =>
-    new Array<boolean>(cols).fill(false),
-  )
+  const occ: boolean[][] = Array.from({ length: rows }, () => new Array<boolean>(cols).fill(false))
 
   // Rasterize each word bbox into the grid (mark any overlapped cell occupied).
   const cw = width / cols
@@ -181,6 +175,6 @@ export function detectRegions(
     id: `p${page.index}_r${n}`,
     pageIndex: page.index,
     bbox: cellToBBox(rect, cols, rows, width, height),
-    accepted: null,
+    accepted: null
   }))
 }

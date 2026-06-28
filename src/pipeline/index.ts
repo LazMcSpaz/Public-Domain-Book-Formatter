@@ -11,7 +11,7 @@ export {
   normalizeLigatures,
   fixOcrConfusions,
   stripHeaderFooter,
-  type CleanupResult,
+  type CleanupResult
 } from './stages/cleanup'
 export { structureStage } from './stages/structure'
 export { markdownStage, assembleMarkdown } from './stages/markdown'

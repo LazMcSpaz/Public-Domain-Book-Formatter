@@ -11,7 +11,7 @@ import {
   grayscale,
   threshold,
   despeckle,
-  removeBackground,
+  removeBackground
 } from '../src/renderer/components/ImageMode/engine'
 import type { RasterImage } from '../src/renderer/components/ImageMode/engine'
 
@@ -25,7 +25,7 @@ import type { RasterImage } from '../src/renderer/components/ImageMode/engine'
 function make(
   w: number,
   h: number,
-  fill: (x: number, y: number) => [number, number, number, number],
+  fill: (x: number, y: number) => [number, number, number, number]
 ): RasterImage {
   const data = new Uint8ClampedArray(w * h * 4)
   for (let y = 0; y < h; y++) {
@@ -149,13 +149,23 @@ describe('levels', () => {
 describe('curves', () => {
   it('maps via the control-point LUT (identity)', () => {
     const img = make(1, 1, () => [100, 150, 200, 255])
-    const out = applyOps(img, [curves([[0, 0], [255, 255]])])
+    const out = applyOps(img, [
+      curves([
+        [0, 0],
+        [255, 255]
+      ])
+    ])
     expect(px(out, 0, 0)).toEqual([100, 150, 200, 255])
   })
 
   it('inverts when points invert', () => {
     const img = make(1, 1, () => [0, 0, 0, 255])
-    const out = applyOps(img, [curves([[0, 255], [255, 0]])])
+    const out = applyOps(img, [
+      curves([
+        [0, 255],
+        [255, 0]
+      ])
+    ])
     expect(px(out, 0, 0)[0]).toBe(255)
   })
 })
@@ -222,10 +232,13 @@ describe('applyOps', () => {
     const img = make(4, 4, () => [120, 120, 120, 255])
     const out = applyOps(img, [
       levels({ black: 0, white: 255, gamma: 1 }),
-      curves([[0, 0], [255, 255]]),
+      curves([
+        [0, 0],
+        [255, 255]
+      ]),
       contrast(10),
       straighten(1),
-      removeBackground(5),
+      removeBackground(5)
     ])
     expect(out.width).toBe(4)
     expect(out.height).toBe(4)

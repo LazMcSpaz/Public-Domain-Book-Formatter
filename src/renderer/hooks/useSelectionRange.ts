@@ -102,9 +102,7 @@ function charsBefore(el: HTMLElement, node: Node, offset: number): number {
     // Tag badges (SPEC §5) are decoration-only and not part of the markdown, so
     // their text must not count toward output offsets.
     acceptNode: (n) =>
-      n.parentElement?.closest('.tag-badge')
-        ? NodeFilter.FILTER_REJECT
-        : NodeFilter.FILTER_ACCEPT
+      n.parentElement?.closest('.tag-badge') ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT
   })
   let cur = walker.nextNode()
   while (cur) {
@@ -124,9 +122,7 @@ function charsBefore(el: HTMLElement, node: Node, offset: number): number {
  * maps it to an absolute markdown `OutputRange`, or null when there's no
  * non-empty selection within the output root.
  */
-export function useSelectionRange(
-  rootRef: RefObject<HTMLElement>
-): () => OutputRange | null {
+export function useSelectionRange(rootRef: RefObject<HTMLElement>): () => OutputRange | null {
   return useCallback(() => {
     const root = rootRef.current
     if (!root) return null

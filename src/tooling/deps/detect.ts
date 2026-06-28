@@ -44,14 +44,14 @@ function parseVersion(spec: ToolSpec, stdout: string, stderr: string): string | 
  */
 export async function detectTool(
   spec: ToolSpec,
-  run: CommandRunner = runCommand,
+  run: CommandRunner = runCommand
 ): Promise<DependencyStatus> {
   const notFound: DependencyStatus = {
     name: spec.name,
     found: false,
     path: null,
     version: null,
-    meetsMinimum: false,
+    meetsMinimum: false
   }
 
   let stdout = ''
@@ -80,7 +80,7 @@ export async function detectTool(
     found: true,
     path: null,
     version,
-    meetsMinimum,
+    meetsMinimum
   }
 }
 
@@ -89,7 +89,7 @@ export async function detectTool(
  * imports: `import { detectDependencies } from '@tooling/deps/detect'`.
  */
 export async function detectDependencies(
-  run: CommandRunner = runCommand,
+  run: CommandRunner = runCommand
 ): Promise<DependencyStatus[]> {
   return Promise.all(REQUIRED_TOOLS.map((spec) => detectTool(spec, run)))
 }

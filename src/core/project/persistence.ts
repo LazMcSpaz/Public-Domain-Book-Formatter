@@ -30,19 +30,13 @@ export function assetsPath(projectPath: string): string {
  * project dir and `assets/` if missing, writes the manifest to a sibling temp
  * file, then renames it over `project.json`.
  */
-export async function saveProject(
-  projectPath: string,
-  project: ProjectFile,
-): Promise<void> {
+export async function saveProject(projectPath: string, project: ProjectFile): Promise<void> {
   await fs.mkdir(projectPath, { recursive: true })
   await fs.mkdir(assetsPath(projectPath), { recursive: true })
 
   const json = JSON.stringify(project, null, 2)
   const target = manifestPath(projectPath)
-  const tmp = path.join(
-    projectPath,
-    `.${MANIFEST_NAME}.${randomBytes(6).toString('hex')}.tmp`,
-  )
+  const tmp = path.join(projectPath, `.${MANIFEST_NAME}.${randomBytes(6).toString('hex')}.tmp`)
 
   try {
     await fs.writeFile(tmp, json, 'utf8')
@@ -64,9 +58,7 @@ export async function loadProject(projectPath: string): Promise<ProjectFile> {
   try {
     parsed = JSON.parse(raw)
   } catch {
-    throw new Error(
-      `Invalid project file: ${manifestPath(projectPath)} is not valid JSON.`,
-    )
+    throw new Error(`Invalid project file: ${manifestPath(projectPath)} is not valid JSON.`)
   }
   return migrate(parsed)
 }

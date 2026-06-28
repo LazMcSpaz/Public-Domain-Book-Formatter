@@ -13,7 +13,7 @@ import type {
   KdpValidationReport,
   StyleProfile,
   ValidationCheck,
-  ValidationLevel,
+  ValidationLevel
 } from '@core/model'
 import { parseTrimSize } from './latex-document'
 
@@ -45,7 +45,7 @@ const KNOWN_TRIMS: ReadonlyArray<[number, number]> = [
   [7.5, 9.25],
   [8, 10],
   [8.25, 11],
-  [8.5, 11],
+  [8.5, 11]
 ]
 
 /**
@@ -77,23 +77,21 @@ export function validateKdp(input: ValidateKdpInput): KdpValidationReport {
       level: embedded ? 'ok' : 'warn',
       detail: embedded
         ? 'All fonts are embedded (XeLaTeX embeds by default).'
-        : 'Fonts may not be fully embedded — KDP requires embedded fonts.',
+        : 'Fonts may not be fully embedded — KDP requires embedded fonts.'
     })
   }
 
   // 2. Known/correct trim size.
   {
     const trim = parseTrimSize(input.profile.trimSize)
-    const known = KNOWN_TRIMS.some(
-      ([w, h]) => close(trim.widthIn, w) && close(trim.heightIn, h),
-    )
+    const known = KNOWN_TRIMS.some(([w, h]) => close(trim.widthIn, w) && close(trim.heightIn, h))
     checks.push({
       id: 'trim-size',
       label: 'Trim size',
       level: known ? 'ok' : 'warn',
       detail: known
         ? `Trim ${input.profile.trimSize} (${trim.widthIn}×${trim.heightIn} in) is a recognized KDP size.`
-        : `Trim ${input.profile.trimSize} (${trim.widthIn}×${trim.heightIn} in) is not a standard KDP size; confirm it is supported.`,
+        : `Trim ${input.profile.trimSize} (${trim.widthIn}×${trim.heightIn} in) is not a standard KDP size; confirm it is supported.`
     })
   }
 
@@ -108,7 +106,7 @@ export function validateKdp(input: ValidateKdpInput): KdpValidationReport {
       level: adequate ? 'ok' : 'fail',
       detail: adequate
         ? `Inside margin ${effective.toFixed(3)} in meets the ${required} in minimum for ${input.pageCount} pages.`
-        : `Inside margin ${effective.toFixed(3)} in is below the ${required} in minimum for ${input.pageCount} pages; text may be swallowed by the spine.`,
+        : `Inside margin ${effective.toFixed(3)} in is below the ${required} in minimum for ${input.pageCount} pages; text may be swallowed by the spine.`
     })
   }
 
@@ -143,7 +141,7 @@ export function validateKdp(input: ValidateKdpInput): KdpValidationReport {
       detail:
         count > 0
           ? `${count} overfull-box / bad-break warning(s) to resolve or acknowledge.`
-          : 'No overfull boxes or bad breaks reported.',
+          : 'No overfull boxes or bad breaks reported.'
     })
   }
 
@@ -152,7 +150,7 @@ export function validateKdp(input: ValidateKdpInput): KdpValidationReport {
     id: 'page-count',
     label: 'Final page count',
     level: 'ok',
-    detail: `Final interior page count: ${input.pageCount} pages (use for cover spine width).`,
+    detail: `Final interior page count: ${input.pageCount} pages (use for cover spine width).`
   })
 
   const ready = !checks.some((c) => c.level === 'fail')
@@ -160,6 +158,6 @@ export function validateKdp(input: ValidateKdpInput): KdpValidationReport {
   return {
     checks,
     pageCount: input.pageCount,
-    ready,
+    ready
   }
 }

@@ -23,5 +23,5 @@ export const markdownStage: Stage = {
   async run(ctx: PipelineContext): Promise<void> {
     const cleaned = ctx.markdown ?? ''
     ctx.markdown = assembleMarkdown(cleaned)
-  },
+  }
 }

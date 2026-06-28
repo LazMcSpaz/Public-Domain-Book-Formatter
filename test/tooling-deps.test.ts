@@ -5,7 +5,7 @@ import { REQUIRED_TOOLS } from '@tooling/deps/registry'
 
 /** Build a mock runner that returns canned output and records calls. */
 function mockRunner(
-  responder: (cmd: string, args: string[]) => CommandResult | Promise<CommandResult>,
+  responder: (cmd: string, args: string[]) => CommandResult | Promise<CommandResult>
 ): CommandRunner & { calls: Array<{ cmd: string; args: string[] }> } {
   const calls: Array<{ cmd: string; args: string[] }> = []
   const runner = (async (cmd: string, args: string[]) => {
@@ -41,7 +41,7 @@ describe('detectTool', () => {
     const run = mockRunner(() => ({
       code: 0,
       stdout: 'tesseract 5.3.0\n leptonica-1.82.0',
-      stderr: '',
+      stderr: ''
     }))
     const status = await detectTool(tesseract, run)
     expect(status.found).toBe(true)
@@ -54,7 +54,7 @@ describe('detectTool', () => {
     const run = mockRunner(() => ({
       code: 0,
       stdout: 'tesseract 3.05.00',
-      stderr: '',
+      stderr: ''
     }))
     const status = await detectTool(tesseract, run)
     expect(status.found).toBe(true)
@@ -83,7 +83,7 @@ describe('detectTool', () => {
     const run = mockRunner(() => ({
       code: 0,
       stdout: '',
-      stderr: 'pdftoppm version 23.08.0',
+      stderr: 'pdftoppm version 23.08.0'
     }))
     const status = await detectTool(pdftoppm, run)
     expect(status.found).toBe(true)
@@ -107,7 +107,7 @@ describe('detectDependencies', () => {
     const run = mockRunner((cmd) => ({
       code: 0,
       stdout: `${cmd} 99.0.0`,
-      stderr: `${cmd} version 99.0.0\nXeTeX 99.0.0`,
+      stderr: `${cmd} version 99.0.0\nXeTeX 99.0.0`
     }))
     const statuses = await detectDependencies(run)
     expect(statuses.map((s) => s.name)).toEqual([
@@ -115,7 +115,7 @@ describe('detectDependencies', () => {
       'ocrmypdf',
       'pandoc',
       'xelatex',
-      'pdftoppm',
+      'pdftoppm'
     ])
     expect(statuses.every((s) => s.found)).toBe(true)
   })

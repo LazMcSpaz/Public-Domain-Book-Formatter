@@ -36,21 +36,21 @@ export const REQUIRED_TOOLS: ToolSpec[] = [
     bin: 'tesseract',
     versionArgs: ['--version'],
     versionRegex: /tesseract\s+v?(\d+\.\d+(?:\.\d+)?)/i,
-    minVersion: '4.0.0',
+    minVersion: '4.0.0'
   },
   {
     name: 'ocrmypdf',
     bin: 'ocrmypdf',
     versionArgs: ['--version'],
     versionRegex: /(\d+\.\d+(?:\.\d+)?)/,
-    minVersion: '13.0.0',
+    minVersion: '13.0.0'
   },
   {
     name: 'pandoc',
     bin: 'pandoc',
     versionArgs: ['--version'],
     versionRegex: /pandoc(?:\.exe)?\s+v?(\d+\.\d+(?:\.\d+)?)/i,
-    minVersion: '2.11.0',
+    minVersion: '2.11.0'
   },
   {
     name: 'xelatex',
@@ -58,13 +58,13 @@ export const REQUIRED_TOOLS: ToolSpec[] = [
     versionArgs: ['--version'],
     // XeTeX reports its own engine version, not a TeX Live year; capture it.
     versionRegex: /XeTeX\s+(\d+\.\d+(?:\.\d+)?)/i,
-    minVersion: null,
+    minVersion: null
   },
   {
     name: 'pdftoppm',
     bin: 'pdftoppm',
     versionArgs: ['-v'],
     versionRegex: /pdftoppm\s+version\s+(\d+\.\d+(?:\.\d+)?)/i,
-    minVersion: null,
-  },
+    minVersion: null
+  }
 ]

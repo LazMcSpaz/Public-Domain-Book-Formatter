@@ -117,9 +117,8 @@ export function SetupWizard(): JSX.Element {
       <header className="sw-header">
         <h2>Set up dependencies</h2>
         <p className="sw-subhead">
-          This tool drives a few external programs. Install any that are missing,
-          then re-check. Required tools must be present; optional ones add
-          capabilities.
+          This tool drives a few external programs. Install any that are missing, then re-check.
+          Required tools must be present; optional ones add capabilities.
         </p>
         <div className="sw-summary">
           <span

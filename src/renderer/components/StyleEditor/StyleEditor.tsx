@@ -10,12 +10,7 @@
  * (ProfileManager + window.api.{list,save,delete}StyleProfile).
  */
 import { useCallback, useEffect, useState, type ChangeEvent } from 'react'
-import type {
-  Margins,
-  PageNumberPosition,
-  RunningHeadMode,
-  StyleProfile
-} from '@core/model'
+import type { Margins, PageNumberPosition, RunningHeadMode, StyleProfile } from '@core/model'
 import { defaultStyleProfile, DEFAULT_STYLE_PROFILES } from '@core/style'
 import { useReview } from '../../store/ReviewContext'
 import { ProfileManager } from './ProfileManager'
@@ -54,10 +49,7 @@ const PAGE_NUMBER_LABELS: Record<PageNumberPosition, string> = {
 }
 
 /** Seed the working profile from the applied saved profile, else the default. */
-function seedProfile(
-  styleProfileId: string | null,
-  saved: StyleProfile[]
-): StyleProfile {
+function seedProfile(styleProfileId: string | null, saved: StyleProfile[]): StyleProfile {
   if (styleProfileId) {
     const fromSaved = saved.find((p) => p.id === styleProfileId)
     if (fromSaved) return structuredClone(fromSaved)
@@ -94,14 +86,7 @@ function NumberField({
     <label className="se-field">
       <span className="se-field-label">{label}</span>
       <span className="se-field-control">
-        <input
-          type="number"
-          value={value}
-          min={min}
-          max={max}
-          step={step ?? 1}
-          onChange={handle}
-        />
+        <input type="number" value={value} min={min} max={max} step={step ?? 1} onChange={handle} />
         {unit ? <span className="se-field-unit">{unit}</span> : null}
       </span>
     </label>
@@ -113,9 +98,7 @@ export function StyleEditor(): JSX.Element {
   const appliedId = state.project?.styleProfileId ?? null
 
   const [saved, setSaved] = useState<StyleProfile[]>([])
-  const [working, setWorking] = useState<StyleProfile>(() =>
-    seedProfile(appliedId, [])
-  )
+  const [working, setWorking] = useState<StyleProfile>(() => seedProfile(appliedId, []))
   const [loadError, setLoadError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
@@ -141,7 +124,6 @@ export function StyleEditor(): JSX.Element {
       cancelled = true
     }
     // Re-seed only when the applied profile id changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [appliedId, refresh])
 
   const patch = useCallback((p: Partial<StyleProfile>) => {
@@ -152,35 +134,26 @@ export function StyleEditor(): JSX.Element {
     setWorking((prev) => ({ ...prev, margins: { ...prev.margins, ...p } }))
   }, [])
 
-  const patchHeading = useCallback(
-    (p: Partial<StyleProfile['headingStyle']>) => {
-      setWorking((prev) => ({
-        ...prev,
-        headingStyle: { ...prev.headingStyle, ...p }
-      }))
-    },
-    []
-  )
+  const patchHeading = useCallback((p: Partial<StyleProfile['headingStyle']>) => {
+    setWorking((prev) => ({
+      ...prev,
+      headingStyle: { ...prev.headingStyle, ...p }
+    }))
+  }, [])
 
-  const patchRunningHeads = useCallback(
-    (p: Partial<StyleProfile['runningHeads']>) => {
-      setWorking((prev) => ({
-        ...prev,
-        runningHeads: { ...prev.runningHeads, ...p }
-      }))
-    },
-    []
-  )
+  const patchRunningHeads = useCallback((p: Partial<StyleProfile['runningHeads']>) => {
+    setWorking((prev) => ({
+      ...prev,
+      runningHeads: { ...prev.runningHeads, ...p }
+    }))
+  }, [])
 
-  const patchFrontMatter = useCallback(
-    (p: Partial<StyleProfile['frontMatter']>) => {
-      setWorking((prev) => ({
-        ...prev,
-        frontMatter: { ...prev.frontMatter, ...p }
-      }))
-    },
-    []
-  )
+  const patchFrontMatter = useCallback((p: Partial<StyleProfile['frontMatter']>) => {
+    setWorking((prev) => ({
+      ...prev,
+      frontMatter: { ...prev.frontMatter, ...p }
+    }))
+  }, [])
 
   const onResetToDefault = useCallback(() => {
     setWorking(defaultStyleProfile())
@@ -196,12 +169,10 @@ export function StyleEditor(): JSX.Element {
         <header className="se-header">
           <h2>Style</h2>
           <p className="se-subhead">
-            Edit the reusable look. Tweaks stay local until you bank them as a
-            profile or apply them to this book.
+            Edit the reusable look. Tweaks stay local until you bank them as a profile or apply them
+            to this book.
           </p>
-          {loadError ? (
-            <p className="error">Couldn’t load saved profiles: {loadError}</p>
-          ) : null}
+          {loadError ? <p className="error">Couldn’t load saved profiles: {loadError}</p> : null}
         </header>
 
         {/* --- Page geometry --- */}
@@ -348,9 +319,7 @@ export function StyleEditor(): JSX.Element {
               <span className="se-field-control">
                 <select
                   value={working.runningHeads.verso}
-                  onChange={(e) =>
-                    patchRunningHeads({ verso: e.target.value as RunningHeadMode })
-                  }
+                  onChange={(e) => patchRunningHeads({ verso: e.target.value as RunningHeadMode })}
                 >
                   {RUNNING_HEAD_MODES.map((m) => (
                     <option key={m} value={m}>
@@ -365,9 +334,7 @@ export function StyleEditor(): JSX.Element {
               <span className="se-field-control">
                 <select
                   value={working.runningHeads.recto}
-                  onChange={(e) =>
-                    patchRunningHeads({ recto: e.target.value as RunningHeadMode })
-                  }
+                  onChange={(e) => patchRunningHeads({ recto: e.target.value as RunningHeadMode })}
                 >
                   {RUNNING_HEAD_MODES.map((m) => (
                     <option key={m} value={m}>
@@ -382,9 +349,7 @@ export function StyleEditor(): JSX.Element {
               <span className="se-field-control">
                 <select
                   value={working.pageNumber}
-                  onChange={(e) =>
-                    patch({ pageNumber: e.target.value as PageNumberPosition })
-                  }
+                  onChange={(e) => patch({ pageNumber: e.target.value as PageNumberPosition })}
                 >
                   {PAGE_NUMBER_POSITIONS.map((p) => (
                     <option key={p} value={p}>
@@ -482,9 +447,7 @@ export function StyleEditor(): JSX.Element {
               <input
                 type="checkbox"
                 checked={working.frontMatter.copyrightPage}
-                onChange={(e) =>
-                  patchFrontMatter({ copyrightPage: e.target.checked })
-                }
+                onChange={(e) => patchFrontMatter({ copyrightPage: e.target.checked })}
               />
               <span>Copyright page</span>
             </label>

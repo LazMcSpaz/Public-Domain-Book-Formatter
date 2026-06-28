@@ -42,7 +42,7 @@ export function linkFootnote(params: {
   return {
     refRange: { start: refRange.start, end: refRange.end },
     noteRange: { start: noteRange.start, end: noteRange.end },
-    marker,
+    marker
   }
 }
 
@@ -57,6 +57,6 @@ export function footnoteTagData(link: FootnoteLink): Record<string, unknown> {
     refStart: link.refRange.start,
     refEnd: link.refRange.end,
     noteStart: link.noteRange.start,
-    noteEnd: link.noteRange.end,
+    noteEnd: link.noteRange.end
   }
 }

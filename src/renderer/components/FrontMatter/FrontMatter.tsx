@@ -63,9 +63,7 @@ export function FrontMatter(): JSX.Element {
     <div className="front-matter">
       <header className="fm-header">
         <h2>Front matter</h2>
-        <p className="fm-subhead">
-          Fill in the templated title and copyright pages for this book.
-        </p>
+        <p className="fm-subhead">Fill in the templated title and copyright pages for this book.</p>
       </header>
 
       {/* --- Title page --- */}
@@ -109,9 +107,7 @@ export function FrontMatter(): JSX.Element {
             <input
               type="text"
               value={fm.publicationDate ?? ''}
-              onChange={(e) =>
-                patchFront({ publicationDate: e.target.value.trim() || null })
-              }
+              onChange={(e) => patchFront({ publicationDate: e.target.value.trim() || null })}
               placeholder="e.g. 2026"
             />
           </label>
@@ -120,9 +116,7 @@ export function FrontMatter(): JSX.Element {
             <input
               type="text"
               value={fm.editionStatement ?? ''}
-              onChange={(e) =>
-                patchFront({ editionStatement: e.target.value.trim() || null })
-              }
+              onChange={(e) => patchFront({ editionStatement: e.target.value.trim() || null })}
               placeholder="e.g. First reprint edition"
             />
           </label>
@@ -140,9 +134,7 @@ export function FrontMatter(): JSX.Element {
             <input
               type="text"
               value={fm.copyrightHolder ?? ''}
-              onChange={(e) =>
-                patchFront({ copyrightHolder: e.target.value.trim() || null })
-              }
+              onChange={(e) => patchFront({ copyrightHolder: e.target.value.trim() || null })}
               placeholder="© holder"
             />
           </label>

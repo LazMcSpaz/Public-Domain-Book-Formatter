@@ -8,7 +8,7 @@ import {
   migrate,
   saveProject,
   loadProject,
-  manifestPath,
+  manifestPath
 } from '@core/project'
 
 const tmpDirs: string[] = []
@@ -46,7 +46,7 @@ describe('createEmptyProject', () => {
     const p = createEmptyProject({
       pdfPath: '/x.pdf',
       pageCount: 1,
-      config: { title: 'Moby-Dick', trimSize: '5x8' },
+      config: { title: 'Moby-Dick', trimSize: '5x8' }
     })
     expect(p.config.title).toBe('Moby-Dick')
     expect(p.config.trimSize).toBe('5x8')
@@ -108,7 +108,7 @@ describe('migrate', () => {
   it('fills missing fields with defaults', () => {
     const result = migrate({
       schemaVersion: 1,
-      source: { pdfPath: '/m.pdf', pageCount: 5 },
+      source: { pdfPath: '/m.pdf', pageCount: 5 }
     })
     expect(result.pages).toEqual([])
     expect(result.coordinateMap).toEqual([])
@@ -120,7 +120,7 @@ describe('migrate', () => {
   it('upgrades a manifest with an absent schemaVersion to current', () => {
     const result = migrate({
       source: { pdfPath: '/old.pdf', pageCount: 2 },
-      config: { title: 'Old Book' },
+      config: { title: 'Old Book' }
     })
     expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION)
     expect(result.config.title).toBe('Old Book')
@@ -130,7 +130,7 @@ describe('migrate', () => {
   it('upgrades a manifest with an older numeric schemaVersion', () => {
     const result = migrate({
       schemaVersion: 0,
-      source: { pdfPath: '/v0.pdf', pageCount: 1 },
+      source: { pdfPath: '/v0.pdf', pageCount: 1 }
     })
     expect(result.schemaVersion).toBe(CURRENT_SCHEMA_VERSION)
   })
@@ -138,7 +138,7 @@ describe('migrate', () => {
   it('normalizes partial config and readingProgress', () => {
     const result = migrate({
       source: { pdfPath: '/p.pdf' },
-      readingProgress: { lastPageIndex: 7, approvedPages: [1, 'bad', 3] },
+      readingProgress: { lastPageIndex: 7, approvedPages: [1, 'bad', 3] }
     })
     expect(result.source.pageCount).toBe(0)
     expect(result.readingProgress.lastPageIndex).toBe(7)
@@ -159,8 +159,8 @@ describe('migrate', () => {
     expect(() =>
       migrate({
         schemaVersion: CURRENT_SCHEMA_VERSION + 1,
-        source: { pdfPath: '/future.pdf', pageCount: 1 },
-      }),
+        source: { pdfPath: '/future.pdf', pageCount: 1 }
+      })
     ).toThrow()
   })
 })

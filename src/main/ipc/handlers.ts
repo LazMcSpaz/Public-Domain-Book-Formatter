@@ -7,12 +7,7 @@
 import { readFile } from 'node:fs/promises'
 import { dirname, join, parse } from 'node:path'
 import { BrowserWindow, dialog, ipcMain, webContents } from 'electron'
-import type {
-  ExportResult,
-  KdpValidationReport,
-  ProjectFile,
-  StyleProfile
-} from '@core/model'
+import type { ExportResult, KdpValidationReport, ProjectFile, StyleProfile } from '@core/model'
 import {
   IpcChannel,
   type DependencyStatus,
@@ -24,11 +19,7 @@ import { loadProject, saveProject } from '@core/project'
 import { runPipeline } from '@pipeline'
 import { detectDependencies } from '@tooling/deps/detect'
 import { allowProjectRoot, mimeForPath, resolveProjectImage } from '../asset-access'
-import {
-  deleteStyleProfile,
-  listStyleProfiles,
-  saveStyleProfile
-} from '../profile-store'
+import { deleteStyleProfile, listStyleProfiles, saveStyleProfile } from '../profile-store'
 import { exportProject, validateProject } from '../export'
 
 /**
@@ -127,26 +118,23 @@ export function registerIpcHandlers(): void {
 
   ipcMain.handle(
     IpcChannel.RunPipeline,
-    guard(
-      IpcChannel.RunPipeline,
-      (event, pdfPath: string): Promise<PipelineResult> => {
-        const projectPath = projectPathForPdf(pdfPath)
-        allowProjectRoot(projectPath)
-        // Prefer the window that issued the request; fall back to the focused
-        // window so progress always reaches a live renderer.
-        const sender = webContents.fromId(event.sender.id) ?? null
-        return runPipeline({
-          pdfPath,
-          projectPath,
-          onProgress: (progress: PipelineProgress) => {
-            const target = sender ?? BrowserWindow.getFocusedWindow()?.webContents ?? null
-            if (target && !target.isDestroyed()) {
-              target.send(IpcChannel.PipelineProgress, progress)
-            }
+    guard(IpcChannel.RunPipeline, (event, pdfPath: string): Promise<PipelineResult> => {
+      const projectPath = projectPathForPdf(pdfPath)
+      allowProjectRoot(projectPath)
+      // Prefer the window that issued the request; fall back to the focused
+      // window so progress always reaches a live renderer.
+      const sender = webContents.fromId(event.sender.id) ?? null
+      return runPipeline({
+        pdfPath,
+        projectPath,
+        onProgress: (progress: PipelineProgress) => {
+          const target = sender ?? BrowserWindow.getFocusedWindow()?.webContents ?? null
+          if (target && !target.isDestroyed()) {
+            target.send(IpcChannel.PipelineProgress, progress)
           }
-        })
-      }
-    )
+        }
+      })
+    })
   )
 
   ipcMain.handle(

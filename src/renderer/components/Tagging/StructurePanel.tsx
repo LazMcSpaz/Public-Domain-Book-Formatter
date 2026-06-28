@@ -29,20 +29,14 @@ export function StructurePanel(): JSX.Element {
   const coordinateMap = state.coordinateMap
 
   // Tags in document order (by range start).
-  const ordered = useMemo(
-    () => [...tags].sort((a, b) => a.range.start - b.range.start),
-    [tags]
-  )
+  const ordered = useMemo(() => [...tags].sort((a, b) => a.range.start - b.range.start), [tags])
 
   const confirmedHeadings = useMemo(
     () => tags.filter((t) => t.type === 'heading' && isConfirmed(t)),
     [tags]
   )
 
-  const toc = useMemo(
-    () => buildToc(confirmedHeadings, markdown),
-    [confirmedHeadings, markdown]
-  )
+  const toc = useMemo(() => buildToc(confirmedHeadings, markdown), [confirmedHeadings, markdown])
 
   const sliceOf = (tag: StructuralTag): string => {
     const raw = markdown.slice(tag.range.start, tag.range.end).replace(/\s+/g, ' ').trim()

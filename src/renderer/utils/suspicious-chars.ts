@@ -70,9 +70,10 @@ export function scanSuspiciousChars(markdown: string): Flag[] {
     if (pattern.id === 'straight-quote' && !curly) continue
 
     // Fresh regex per scan so lastIndex state never leaks between calls.
-    const re = new RegExp(pattern.test.source, pattern.test.flags.includes('g')
-      ? pattern.test.flags
-      : pattern.test.flags + 'g')
+    const re = new RegExp(
+      pattern.test.source,
+      pattern.test.flags.includes('g') ? pattern.test.flags : pattern.test.flags + 'g'
+    )
 
     let match: RegExpExecArray | null
     while ((match = re.exec(markdown)) !== null) {

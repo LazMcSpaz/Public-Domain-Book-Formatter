@@ -48,7 +48,7 @@ function toPdfPath(file: string, pdfDir: string): string {
 export function resolveOrnamentPaths(
   choices: OrnamentChoices,
   library: OrnamentRef[],
-  pdfDir: string,
+  pdfDir: string
 ): ResolvedOrnamentPaths {
   const resolve = (id: string | null): string | null => {
     if (!id) return null
@@ -59,6 +59,6 @@ export function resolveOrnamentPaths(
   return {
     chapterOpener: resolve(choices.chapterOpener),
     sectionDivider: resolve(choices.sectionDivider),
-    pageNumber: resolve(choices.pageNumber),
+    pageNumber: resolve(choices.pageNumber)
   }
 }

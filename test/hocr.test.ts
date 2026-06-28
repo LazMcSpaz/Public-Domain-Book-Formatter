@@ -107,7 +107,7 @@ describe('flagsFromPages', () => {
 describe('decodeEntities', () => {
   it('decodes named and numeric entities', () => {
     expect(decodeEntities('a &amp; b &lt;c&gt; &quot;d&quot; &#39;e&#39;')).toBe(
-      'a & b <c> "d" \'e\'',
+      'a & b <c> "d" \'e\''
     )
     expect(decodeEntities('&#233; &#x00e9;')).toBe('é é')
   })

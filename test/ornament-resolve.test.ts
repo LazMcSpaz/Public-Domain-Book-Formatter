@@ -1,10 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { OrnamentChoices, OrnamentRef } from '@core/model'
-import {
-  BUILTIN_ORNAMENTS,
-  findOrnament,
-  resolveOrnamentPaths,
-} from '@core/ornament'
+import { BUILTIN_ORNAMENTS, findOrnament, resolveOrnamentPaths } from '@core/ornament'
 
 describe('builtin ornament manifest', () => {
   it('loads a non-empty library of well-formed OrnamentRefs', () => {
@@ -29,14 +25,14 @@ describe('resolveOrnamentPaths', () => {
   const library: OrnamentRef[] = [
     { id: 'opener', name: 'Opener', kind: 'chapter', source: 'builtin', file: 'opener.svg' },
     { id: 'divider', name: 'Divider', kind: 'divider', source: 'builtin', file: 'div.svg' },
-    { id: 'folio', name: 'Folio', kind: 'page', source: 'builtin', file: 'folio.svg' },
+    { id: 'folio', name: 'Folio', kind: 'page', source: 'builtin', file: 'folio.svg' }
   ]
 
   it('maps chosen ids to .pdf paths under the build dir', () => {
     const choices: OrnamentChoices = {
       chapterOpener: 'opener',
       sectionDivider: 'divider',
-      pageNumber: 'folio',
+      pageNumber: 'folio'
     }
     const resolved = resolveOrnamentPaths(choices, library, '/build/out')
     expect(resolved.chapterOpener).toBe('/build/out/opener.pdf')
@@ -48,7 +44,7 @@ describe('resolveOrnamentPaths', () => {
     const choices: OrnamentChoices = {
       chapterOpener: null,
       sectionDivider: 'nope',
-      pageNumber: 'folio',
+      pageNumber: 'folio'
     }
     const resolved = resolveOrnamentPaths(choices, library, '/build/out')
     expect(resolved.chapterOpener).toBeNull()

@@ -32,8 +32,8 @@ export function OpenProjectView({
         </div>
         <h1>Public-Domain Book Reprint Tool</h1>
         <p className="open-project-tagline">
-          Turn an old scan into a print-ready KDP interior. Open a book to begin your
-          side-by-side review pass.
+          Turn an old scan into a print-ready KDP interior. Open a book to begin your side-by-side
+          review pass.
         </p>
 
         <div className="open-project-actions">

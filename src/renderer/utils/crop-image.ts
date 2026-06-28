@@ -38,17 +38,7 @@ export function cropImage(dataUrl: string, bbox: BBox, padding = 0): Promise<str
           reject(new Error('cropImage: 2D canvas context unavailable'))
           return
         }
-        ctx.drawImage(
-          img,
-          Math.round(left),
-          Math.round(top),
-          width,
-          height,
-          0,
-          0,
-          width,
-          height
-        )
+        ctx.drawImage(img, Math.round(left), Math.round(top), width, height, 0, 0, width, height)
         resolve(canvas.toDataURL('image/png'))
       } catch (err) {
         reject(err instanceof Error ? err : new Error(String(err)))

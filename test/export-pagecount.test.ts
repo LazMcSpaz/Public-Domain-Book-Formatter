@@ -16,7 +16,7 @@ describe('parsePageCount', () => {
     const log = [
       'This is XeTeX, Version 3.14159',
       'Output written on my-weird_name.pdf (42 pages, 9000 bytes).',
-      'Transcript written on my-weird_name.log.',
+      'Transcript written on my-weird_name.log.'
     ].join('\n')
     expect(parsePageCount(log)).toBe(42)
   })
@@ -24,8 +24,8 @@ describe('parsePageCount', () => {
   it('returns 0 when there is no output line (e.g. a failed run)', () => {
     const log = [
       'This is XeTeX, Version 3.14159',
-      '! LaTeX Error: File `missing.sty\' not found.',
-      'No pages of output.',
+      "! LaTeX Error: File `missing.sty' not found.",
+      'No pages of output.'
     ].join('\n')
     expect(parsePageCount(log)).toBe(0)
   })

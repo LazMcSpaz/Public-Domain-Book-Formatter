@@ -22,7 +22,7 @@ describe('validateKdp', () => {
       pageCount: 120,
       images: [{ effectiveDpi: 600 }],
       warnings: [],
-      fontsEmbedded: true,
+      fontsEmbedded: true
     })
     expect(report.ready).toBe(true)
     expect(report.checks.every((c) => c.level !== 'fail')).toBe(true)
@@ -32,7 +32,7 @@ describe('validateKdp', () => {
     // tiny inner margin + no gutter, large page count
     const profile = mergeStyle(defaultStyleProfile(), {
       margins: { top: 0.5, bottom: 0.5, inner: 0.2, outer: 0.5 },
-      gutter: 0,
+      gutter: 0
     })
     const report = validateKdp({ profile, pageCount: 650, warnings: [] })
     const gutter = check(report, 'gutter')
@@ -45,7 +45,7 @@ describe('validateKdp', () => {
       profile: defaultStyleProfile(),
       pageCount: 100,
       images: [{ effectiveDpi: 150 }, { effectiveDpi: 600 }],
-      warnings: [],
+      warnings: []
     })
     const dpi = check(report, 'image-dpi')
     expect(dpi.level).toBe('warn')
@@ -57,7 +57,7 @@ describe('validateKdp', () => {
       profile: defaultStyleProfile(),
       pageCount: 100,
       images: [{ effectiveDpi: null }],
-      warnings: [],
+      warnings: []
     })
     expect(check(report, 'image-dpi').level).toBe('warn')
   })
@@ -66,7 +66,7 @@ describe('validateKdp', () => {
     const report = validateKdp({
       profile: defaultStyleProfile(),
       pageCount: 100,
-      warnings: ['Overfull \\hbox ...', 'Underfull \\vbox ...'],
+      warnings: ['Overfull \\hbox ...', 'Underfull \\vbox ...']
     })
     const w = check(report, 'latex-warnings')
     expect(w.level).toBe('warn')
@@ -78,7 +78,7 @@ describe('validateKdp', () => {
       profile: defaultStyleProfile(),
       pageCount: 100,
       warnings: [],
-      fontsEmbedded: false,
+      fontsEmbedded: false
     })
     expect(check(report, 'fonts-embedded').level).toBe('warn')
   })

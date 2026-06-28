@@ -8,7 +8,7 @@ const config: PerBookConfig = {
   author: 'Jane Author',
   isbn: '978-0-00-000000-0',
   editionDate: '2026',
-  trimSize: '6x9',
+  trimSize: '6x9'
 }
 
 const frontMatter: FrontMatterFields = {
@@ -17,24 +17,27 @@ const frontMatter: FrontMatterFields = {
   editionStatement: 'First Reprint Edition',
   imprint: 'Reprint House',
   copyrightHolder: 'Public Domain',
-  notices: ['Printed in the United States of America.'],
+  notices: ['Printed in the United States of America.']
 }
 
 const toc: TocEntry[] = [
   { title: 'Chapter One', level: 1, outputOffset: 0, pageNumber: 1 },
-  { title: 'A Subsection', level: 2, outputOffset: 50, pageNumber: 3 },
+  { title: 'A Subsection', level: 2, outputOffset: 50, pageNumber: 3 }
 ]
 
 const body = '\\chapter{Chapter One}\nSome body text.\n'
 
-function build(profile: StyleProfile, opts: Partial<Parameters<typeof buildLatexDocument>[0]> = {}) {
+function build(
+  profile: StyleProfile,
+  opts: Partial<Parameters<typeof buildLatexDocument>[0]> = {}
+) {
   return buildLatexDocument({
     profile,
     config,
     frontMatter,
     toc,
     bodyLatex: body,
-    ...opts,
+    ...opts
   })
 }
 
@@ -73,7 +76,7 @@ describe('buildLatexDocument', () => {
   it('selects body and heading fonts via fontspec', () => {
     const profile = mergeStyle(defaultStyleProfile(), {
       bodyFont: 'EB Garamond',
-      headingFont: 'Linux Libertine',
+      headingFont: 'Linux Libertine'
     })
     const tex = build(profile)
     expect(tex).toContain('\\usepackage{fontspec}')
@@ -83,7 +86,7 @@ describe('buildLatexDocument', () => {
 
   it('sets fancyhdr running heads per verso/recto modes', () => {
     const profile = mergeStyle(defaultStyleProfile(), {
-      runningHeads: { verso: 'author', recto: 'chapterTitle' },
+      runningHeads: { verso: 'author', recto: 'chapterTitle' }
     })
     const tex = build(profile)
     expect(tex).toContain('\\usepackage{fancyhdr}')
@@ -118,7 +121,7 @@ describe('buildLatexDocument', () => {
 
   it('omits title page when toggled off', () => {
     const profile = mergeStyle(defaultStyleProfile(), {
-      frontMatter: { titlePage: false, copyrightPage: false, halfTitle: false },
+      frontMatter: { titlePage: false, copyrightPage: false, halfTitle: false }
     })
     const tex = build(profile)
     expect(tex).not.toContain('Title page')
@@ -136,7 +139,7 @@ describe('buildLatexDocument', () => {
 
   it('includes ornament graphics when paths given', () => {
     const tex = build(defaultStyleProfile(), {
-      ornamentPaths: { chapterOpener: '/o/chap.pdf', sectionDivider: '/o/div.pdf' },
+      ornamentPaths: { chapterOpener: '/o/chap.pdf', sectionDivider: '/o/div.pdf' }
     })
     expect(tex).toContain('\\includegraphics')
     expect(tex).toContain('/o/chap.pdf')

@@ -88,7 +88,7 @@ function geometryBlock(profile: StyleProfile): string {
     `top=${fmtIn(m.top)}`,
     `bottom=${fmtIn(m.bottom)}`,
     `inner=${fmtIn(inner)}`,
-    `outer=${fmtIn(m.outer)}`,
+    `outer=${fmtIn(m.outer)}`
   ]
   return `\\usepackage[${opts.join(',')}]{geometry}`
 }
@@ -99,7 +99,7 @@ function fontBlock(profile: StyleProfile): string {
   return [
     '\\usepackage{fontspec}',
     `\\setmainfont{${body}}`,
-    `\\newfontfamily\\headingfont{${heading}}`,
+    `\\newfontfamily\\headingfont{${heading}}`
   ].join('\n')
 }
 
@@ -136,11 +136,13 @@ function headingMacros(profile: StyleProfile): string {
   const hs = profile.headingStyle
   const open: string[] = ['\\headingfont']
   if (hs.smallCaps) open.push('\\scshape')
-  open.push(`\\fontsize{${Number((profile.bodyFontSize * hs.scale).toFixed(2))}pt}{${Number((profile.bodyFontSize * hs.scale * 1.2).toFixed(2))}pt}\\selectfont`)
+  open.push(
+    `\\fontsize{${Number((profile.bodyFontSize * hs.scale).toFixed(2))}pt}{${Number((profile.bodyFontSize * hs.scale * 1.2).toFixed(2))}pt}\\selectfont`
+  )
   const align = hs.centered ? '\\centering' : '\\raggedright'
   return [
     '% chapter/heading look from profile.headingStyle',
-    `\\newcommand{\\bookheadingstyle}{${open.join('')}${align}}`,
+    `\\newcommand{\\bookheadingstyle}{${open.join('')}${align}}`
   ].join('\n')
 }
 
@@ -161,7 +163,7 @@ function titlePage(input: LatexDocumentInput): string {
     '\\vspace{1in}',
     `{\\large ${author}\\par}`,
     '\\end{center}',
-    '\\clearpage',
+    '\\clearpage'
   ].join('\n')
 }
 
@@ -174,7 +176,7 @@ function halfTitlePage(input: LatexDocumentInput): string {
     '\\vspace*{2in}',
     `{\\bookheadingstyle ${title}\\par}`,
     '\\end{center}',
-    '\\clearpage',
+    '\\clearpage'
   ].join('\n')
 }
 
@@ -185,7 +187,7 @@ function copyrightPage(input: LatexDocumentInput): string {
     '\\thispagestyle{empty}',
     '\\vspace*{\\fill}',
     '\\begin{flushleft}',
-    '\\footnotesize',
+    '\\footnotesize'
   ]
 
   const holder = fm.copyrightHolder ?? input.config.author
@@ -223,7 +225,7 @@ function tocBlock(toc: TocEntry[]): string {
     '\\thispagestyle{empty}',
     '\\begin{center}{\\bookheadingstyle Contents\\par}\\end{center}',
     '\\vspace{1em}',
-    '\\begin{description}',
+    '\\begin{description}'
   ]
   for (const entry of toc) {
     const indent = entry.level > 1 ? `\\hspace{${(entry.level - 1) * 1.5}em}` : ''
@@ -257,17 +259,13 @@ export function buildLatexDocument(input: LatexDocumentInput): string {
 
   // Chapter-opener ornament hook: prepend to every \chapter via \chapterornament.
   if (orn.chapterOpener) {
-    parts.push(
-      `\\newcommand{\\chapterornament}{${ornamentInclude(orn.chapterOpener)}}`,
-    )
+    parts.push(`\\newcommand{\\chapterornament}{${ornamentInclude(orn.chapterOpener)}}`)
   } else {
     parts.push('\\newcommand{\\chapterornament}{}')
   }
   // Section-divider ornament hook: \sectiondivider for use at section breaks.
   if (orn.sectionDivider) {
-    parts.push(
-      `\\newcommand{\\sectiondivider}{${ornamentInclude(orn.sectionDivider)}}`,
-    )
+    parts.push(`\\newcommand{\\sectiondivider}{${ornamentInclude(orn.sectionDivider)}}`)
   } else {
     parts.push('\\newcommand{\\sectiondivider}{\\begin{center}* * *\\end{center}}')
   }

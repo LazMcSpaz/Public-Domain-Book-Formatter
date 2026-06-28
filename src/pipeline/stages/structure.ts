@@ -18,7 +18,7 @@ export const structureStage: Stage = {
     const { candidates, flags } = detectHeadings(
       ctx.pages ?? [],
       ctx.markdown ?? '',
-      ctx.coordinateMap ?? [],
+      ctx.coordinateMap ?? []
     )
 
     ctx.flags = [...(ctx.flags ?? []), ...flags]
@@ -27,8 +27,8 @@ export const structureStage: Stage = {
       id: `tag_h${n}`,
       type: 'heading',
       range: { start: c.range.start, end: c.range.end },
-      data: { level: c.level, confirmed: false },
+      data: { level: c.level, confirmed: false }
     }))
     ctx.tags = [...(ctx.tags ?? []), ...tags]
-  },
+  }
 }

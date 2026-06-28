@@ -25,7 +25,7 @@ export function buildSvg2PdfArgs(svgPath: string, outPdf: string): string[] {
 export async function svgToPdf(
   svgPath: string,
   outPdf: string,
-  run: CommandRunner = runCommand,
+  run: CommandRunner = runCommand
 ): Promise<string> {
   const args = buildSvg2PdfArgs(svgPath, outPdf)
   await run('rsvg-convert', args)

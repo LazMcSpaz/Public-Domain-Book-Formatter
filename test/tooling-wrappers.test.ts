@@ -7,7 +7,7 @@ import { buildPandocArgs } from '@tooling/wrappers/pandoc'
 import { typeset, parseLogWarnings, buildXelatexArgs } from '@tooling/wrappers/xelatex'
 
 function recordingRunner(
-  result: CommandResult = { code: 0, stdout: '', stderr: '' },
+  result: CommandResult = { code: 0, stdout: '', stderr: '' }
 ): CommandRunner & { calls: Array<{ cmd: string; args: string[] }> } {
   const calls: Array<{ cmd: string; args: string[] }> = []
   const runner = (async (cmd: string, args: string[]) => {
@@ -59,7 +59,7 @@ describe('ocrmypdf wrapper', () => {
       inputPdf: '/in.pdf',
       outputPdf: '/out.pdf',
       sidecarTextPath: '/out.txt',
-      language: 'eng',
+      language: 'eng'
     })
     expect(args).toContain('-l')
     expect(args).toContain('eng')
@@ -92,7 +92,7 @@ describe('xelatex wrapper', () => {
       'This is XeTeX, Version 3.14159',
       'Overfull \\hbox (12.34pt too wide) in paragraph at lines 10--12',
       'Underfull \\vbox (badness 10000) has occurred while \\output is active',
-      'just some normal output',
+      'just some normal output'
     ].join('\n')
     const warnings = parseLogWarnings(log)
     expect(warnings.length).toBe(2)
@@ -104,7 +104,7 @@ describe('xelatex wrapper', () => {
     const run = recordingRunner({
       code: 0,
       stdout: 'Overfull \\hbox (5pt too wide) in paragraph at lines 1--2',
-      stderr: '',
+      stderr: ''
     })
     const { pdfPath, warnings } = await typeset('/work/book.tex', '/work/out', {}, run)
     expect(pdfPath).toBe('/work/out/book.pdf')

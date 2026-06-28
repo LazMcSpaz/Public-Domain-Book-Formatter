@@ -15,12 +15,7 @@ import {
   type ReactNode
 } from 'react'
 import { createCoordinateMap } from '@core/model'
-import {
-  DEFAULT_READING_PREFS,
-  EMPTY_HOVER,
-  type ReviewAction,
-  type ReviewState
-} from './types'
+import { DEFAULT_READING_PREFS, EMPTY_HOVER, type ReviewAction, type ReviewState } from './types'
 
 const INITIAL_STATE: ReviewState = {
   project: null,
@@ -136,9 +131,7 @@ export function reviewReducer(state: ReviewState, action: ReviewAction): ReviewS
         ...state,
         project: {
           ...state.project,
-          tags: state.project.tags.map((t) =>
-            t.id === action.id ? { ...t, ...action.patch } : t
-          )
+          tags: state.project.tags.map((t) => (t.id === action.id ? { ...t, ...action.patch } : t))
         },
         isDirty: true
       }

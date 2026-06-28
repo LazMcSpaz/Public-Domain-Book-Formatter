@@ -48,7 +48,7 @@ const LIGATURES: Array<[RegExp, string]> = [
   [/œ/g, 'oe'], // œ
   [/Œ/g, 'OE'], // Œ
   [/æ/g, 'ae'], // æ
-  [/Æ/g, 'AE'], // Æ
+  [/Æ/g, 'AE'] // Æ
 ]
 
 /** Normalize typographic ligatures to their ASCII letter sequences. */
@@ -93,9 +93,9 @@ function looksLikeRunningHeadOrPageNo(line: string): boolean {
   const t = line.trim()
   if (!t) return false
   // Bare page number (possibly with surrounding punctuation/roman numerals).
-  if (/^[\[\(]?\s*(\d{1,4}|[ivxlcdm]{1,7})\s*[\]\)]?$/i.test(t)) return true
+  if (/^[[(]?\s*(\d{1,4}|[ivxlcdm]{1,7})\s*[\])]?$/i.test(t)) return true
   // Short ALL-CAPS running head (few words, no sentence punctuation).
-  if (/^[A-Z0-9 .,'\-]{2,40}$/.test(t) && t === t.toUpperCase() && t.split(/\s+/).length <= 6) {
+  if (/^[A-Z0-9 .,'-]{2,40}$/.test(t) && t === t.toUpperCase() && t.split(/\s+/).length <= 6) {
     return true
   }
   return false
@@ -130,12 +130,7 @@ export function stripHeaderFooter(text: string): CleanupResult {
 export function cleanupText(input: string): CleanupResult {
   const labels: string[] = []
   let text = input
-  for (const transform of [
-    stripHeaderFooter,
-    dehyphenate,
-    normalizeLigatures,
-    fixOcrConfusions,
-  ]) {
+  for (const transform of [stripHeaderFooter, dehyphenate, normalizeLigatures, fixOcrConfusions]) {
     const r = transform(text)
     text = r.text
     labels.push(...r.labels)
@@ -147,9 +142,7 @@ export function cleanupText(input: string): CleanupResult {
 function pagesToText(ctx: PipelineContext): string {
   if (typeof ctx.markdown === 'string') return ctx.markdown
   const pages = ctx.pages ?? []
-  return pages
-    .map((p) => p.words.map((w) => w.text).join(' '))
-    .join('\n\n')
+  return pages.map((p) => p.words.map((w) => w.text).join(' ')).join('\n\n')
 }
 
 export const cleanupStage: Stage = {
@@ -162,8 +155,8 @@ export const cleanupStage: Stage = {
     const flags: Flag[] = labels.map((label) => ({
       kind: 'heuristic',
       source: 'cleanup',
-      label,
+      label
     }))
     ctx.flags = [...(ctx.flags ?? []), ...flags]
-  },
+  }
 }

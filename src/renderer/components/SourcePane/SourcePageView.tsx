@@ -97,11 +97,7 @@ export function SourcePageView({
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
-        <WordOverlay
-          page={page}
-          hoverTokenId={hoverTokenId}
-          confidenceTint={confidenceTint}
-        />
+        <WordOverlay page={page} hoverTokenId={hoverTokenId} confidenceTint={confidenceTint} />
         <RegionMarkers page={page} />
       </svg>
     </div>

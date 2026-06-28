@@ -7,7 +7,7 @@ function entry(
   pageIndex: number,
   bbox: { x0: number; y0: number; x1: number; y1: number },
   start: number,
-  end: number,
+  end: number
 ): MappingEntry {
   return { tokenId, pageIndex, bbox, output: { start, end } }
 }
@@ -18,7 +18,7 @@ const entries: MappingEntry[] = [
   entry('A', 0, { x0: 0, y0: 0, x1: 100, y1: 100 }, 0, 5),
   entry('B', 0, { x0: 10, y0: 10, x1: 30, y1: 30 }, 5, 10),
   entry('C', 0, { x0: 200, y0: 0, x1: 260, y1: 40 }, 10, 15),
-  entry('D', 1, { x0: 0, y0: 0, x1: 50, y1: 50 }, 20, 25),
+  entry('D', 1, { x0: 0, y0: 0, x1: 50, y1: 50 }, 20, 25)
 ]
 
 describe('CoordinateMap.atOutputOffset (binary search)', () => {
@@ -91,13 +91,9 @@ describe('CoordinateMap.inOutputRange', () => {
     // range [5,5) is empty -> no overlap
     expect(map.inOutputRange({ start: 5, end: 5 })).toEqual([])
     // range [4,5) overlaps A only (A is [0,5))
-    expect(map.inOutputRange({ start: 4, end: 5 }).map((e) => e.tokenId)).toEqual([
-      'A',
-    ])
+    expect(map.inOutputRange({ start: 4, end: 5 }).map((e) => e.tokenId)).toEqual(['A'])
     // range [5,6) overlaps B only
-    expect(map.inOutputRange({ start: 5, end: 6 }).map((e) => e.tokenId)).toEqual([
-      'B',
-    ])
+    expect(map.inOutputRange({ start: 5, end: 6 }).map((e) => e.tokenId)).toEqual(['B'])
   })
 
   it('returns empty when the range lands in a gap', () => {

@@ -36,12 +36,12 @@ export function buildOcrArgs(opts: OcrmypdfArgs): string[] {
 /** Run OCRmyPDF, producing a searchable PDF (and optional text sidecar). */
 export async function runOcr(
   opts: OcrmypdfArgs,
-  run: CommandRunner = runCommand,
+  run: CommandRunner = runCommand
 ): Promise<{ outputPdf: string; sidecarTextPath: string | null }> {
   const args = buildOcrArgs(opts)
   await run('ocrmypdf', args)
   return {
     outputPdf: opts.outputPdf,
-    sidecarTextPath: opts.sidecarTextPath ?? null,
+    sidecarTextPath: opts.sidecarTextPath ?? null
   }
 }

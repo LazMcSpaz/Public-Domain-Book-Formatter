@@ -16,12 +16,7 @@
  *   (cleanup/structure) refine as they edit the text.
  */
 import * as fs from 'node:fs/promises'
-import type {
-  Flag,
-  MappingEntry,
-  SourcePage,
-  WordToken,
-} from '@core/model'
+import type { Flag, MappingEntry, SourcePage, WordToken } from '@core/model'
 import { parseHocr, flagsFromPages } from '@core/hocr'
 import { ocrToHocr } from '@tooling/wrappers'
 import type { PipelineContext, Stage } from '../stage'
@@ -51,7 +46,7 @@ export function buildCoordinateMap(pages: SourcePage[]): MappingEntry[] {
         tokenId: word.id,
         pageIndex: word.pageIndex,
         bbox: word.bbox,
-        output: { start, end },
+        output: { start, end }
       })
       // +1 for the single separating space between words.
       cursor = end + 1
@@ -89,7 +84,7 @@ export const ocrStage: Stage = {
       const words: WordToken[] = first.words.map((w, n) => ({
         ...w,
         id: `p${i}_w${n}`,
-        pageIndex: i,
+        pageIndex: i
       }))
 
       merged.push({
@@ -97,7 +92,7 @@ export const ocrStage: Stage = {
         index: i,
         width: first.width || src.width,
         height: first.height || src.height,
-        words,
+        words
       })
     }
 
@@ -107,5 +102,5 @@ export const ocrStage: Stage = {
     ctx.coordinateMap = buildCoordinateMap(merged)
     const ocrFlags: Flag[] = flagsFromPages(merged)
     ctx.flags = [...(ctx.flags ?? []), ...ocrFlags]
-  },
+  }
 }

@@ -112,7 +112,10 @@ export function CurveEditor({ points, onChange }: CurveEditorProps): JSX.Element
 
   // SVG y is inverted (output 255 at top).
   const toSvg = (p: CurvePoint): [number, number] => [p[0], DOMAIN - p[1]]
-  const path = points.map((p) => toSvg(p)).map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x},${y}`).join(' ')
+  const path = points
+    .map((p) => toSvg(p))
+    .map(([x, y], i) => `${i === 0 ? 'M' : 'L'}${x},${y}`)
+    .join(' ')
 
   return (
     <div className="curve-editor">

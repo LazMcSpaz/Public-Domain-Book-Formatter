@@ -17,7 +17,7 @@ function buildPage(
   index: number,
   width: number,
   height: number,
-  lines: LineSpec[],
+  lines: LineSpec[]
 ): { page: SourcePage; map: MappingEntry[] } {
   const words: WordToken[] = []
   const map: MappingEntry[] = []
@@ -47,7 +47,7 @@ function buildPage(
     height,
     dpi: null,
     words,
-    regions: [],
+    regions: []
   }
   return { page, map }
 }
@@ -58,7 +58,7 @@ describe('detectHeadings', () => {
       { texts: ['the', 'quick', 'brown', 'fox', 'ran'], h: 20 },
       { texts: ['Chapter', 'One'], h: 48, gapBefore: 80 },
       { texts: ['then', 'the', 'lazy', 'dog', 'slept'], h: 20, gapBefore: 80 },
-      { texts: ['more', 'body', 'text', 'here', 'now'], h: 20 },
+      { texts: ['more', 'body', 'text', 'here', 'now'], h: 20 }
     ])
     const markdown = page.words.map((w) => w.text).join(' ')
     const { candidates, flags } = detectHeadings([page], markdown, map)
@@ -71,7 +71,7 @@ describe('detectHeadings', () => {
     expect(flags[0]).toMatchObject({
       kind: 'heuristic',
       source: 'structure',
-      label: 'probable heading',
+      label: 'probable heading'
     })
     const flag = flags[0]!
     expect(flag.kind).toBe('heuristic')
@@ -84,7 +84,7 @@ describe('detectHeadings', () => {
     const { page, map } = buildPage(0, 800, 1200, [
       { texts: ['body', 'words', 'aplenty', 'here', 'today'], h: 20 },
       { texts: ['BIG', 'TITLE'], h: 50, gapBefore: 100 },
-      { texts: ['back', 'to', 'small', 'body', 'words'], h: 20, gapBefore: 100 },
+      { texts: ['back', 'to', 'small', 'body', 'words'], h: 20, gapBefore: 100 }
     ])
     const markdown = page.words.map((w) => w.text).join(' ')
     const { candidates } = detectHeadings([page], markdown, map)
@@ -111,7 +111,7 @@ describe('detectHeadings', () => {
       { texts: ['HUGE', 'HEADING'], h: 60, gapBefore: 120 },
       { texts: ['body', 'text', 'four', 'five', 'six'], h: 20, gapBefore: 120 },
       { texts: ['Smaller', 'Heading'], h: 36, gapBefore: 120 },
-      { texts: ['body', 'text', 'seven', 'eight', 'nine'], h: 20, gapBefore: 120 },
+      { texts: ['body', 'text', 'seven', 'eight', 'nine'], h: 20, gapBefore: 120 }
     ])
     const markdown = page.words.map((w) => w.text).join(' ')
     const { candidates } = detectHeadings([page], markdown, map)

@@ -19,18 +19,11 @@
  */
 import * as path from 'node:path'
 import * as fs from 'node:fs/promises'
-import type {
-  ExportResult,
-  ProjectFile,
-  StyleProfile,
-} from '@core/model'
+import type { ExportResult, ProjectFile, StyleProfile } from '@core/model'
 import { buildToc } from '@core/structure'
 import { resolveStyle } from '@core/style'
 import { buildLatexDocument, validateKdp } from '@core/typeset'
-import {
-  BUILTIN_ORNAMENTS,
-  resolveOrnamentPaths,
-} from '@core/ornament'
+import { BUILTIN_ORNAMENTS, resolveOrnamentPaths } from '@core/ornament'
 import { runCommand, type CommandResult, type CommandRunner } from '../process'
 import { markdownToLatex } from '../wrappers/pandoc'
 import { typeset, parseLogWarnings } from '../wrappers/xelatex'
@@ -98,7 +91,7 @@ export async function assembleAndExport(opts: AssembleOptions): Promise<ExportRe
   const pandocStdout = await markdownToLatex(
     project.markdown,
     { inputPath: bodyMdPath, outputPath: bodyTexPath, standalone: false },
-    run,
+    run
   )
   let bodyLatex: string
   try {
@@ -115,7 +108,7 @@ export async function assembleAndExport(opts: AssembleOptions): Promise<ExportRe
   const chosenIds = [
     profile.ornaments.chapterOpener,
     profile.ornaments.sectionDivider,
-    profile.ornaments.pageNumber,
+    profile.ornaments.pageNumber
   ]
   const convertedSvgs = new Set<string>()
   for (const id of chosenIds) {
@@ -125,17 +118,10 @@ export async function assembleAndExport(opts: AssembleOptions): Promise<ExportRe
     if (convertedSvgs.has(ornament.file)) continue
     convertedSvgs.add(ornament.file)
     const svgPath = path.join(projectPath, 'resources', 'ornaments', ornament.file)
-    const outPdf = path.join(
-      buildDir,
-      path.basename(ornament.file).replace(/\.svg$/i, '') + '.pdf',
-    )
+    const outPdf = path.join(buildDir, path.basename(ornament.file).replace(/\.svg$/i, '') + '.pdf')
     await svgToPdf(svgPath, outPdf, run)
   }
-  const ornamentPaths = resolveOrnamentPaths(
-    profile.ornaments,
-    BUILTIN_ORNAMENTS,
-    buildDir,
-  )
+  const ornamentPaths = resolveOrnamentPaths(profile.ornaments, BUILTIN_ORNAMENTS, buildDir)
 
   // (4) assemble the full LaTeX document → book.tex.
   const bookTex = buildLatexDocument({
@@ -147,8 +133,8 @@ export async function assembleAndExport(opts: AssembleOptions): Promise<ExportRe
     ornamentPaths: {
       chapterOpener: ornamentPaths.chapterOpener,
       sectionDivider: ornamentPaths.sectionDivider,
-      pageNumber: ornamentPaths.pageNumber,
-    },
+      pageNumber: ornamentPaths.pageNumber
+    }
   })
   const bookTexPath = path.join(buildDir, 'book.tex')
   await fs.writeFile(bookTexPath, bookTex, 'utf8')
@@ -174,9 +160,7 @@ export async function assembleAndExport(opts: AssembleOptions): Promise<ExportRe
     logText = ''
   }
   const logForParsing = logText || xelatexOutput
-  const warnings = logForParsing
-    ? parseLogWarnings(logForParsing)
-    : typesetResult.warnings
+  const warnings = logForParsing ? parseLogWarnings(logForParsing) : typesetResult.warnings
   const pageCount = parsePageCount(logForParsing)
 
   // (6) image effective-DPI inputs from accepted regions.
@@ -188,13 +172,13 @@ export async function assembleAndExport(opts: AssembleOptions): Promise<ExportRe
     pageCount,
     images,
     warnings,
-    fontsEmbedded: true,
+    fontsEmbedded: true
   })
 
   // (8) result.
   return {
     pdfPath: typesetResult.pdfPath,
     pageCount,
-    validation,
+    validation
   }
 }

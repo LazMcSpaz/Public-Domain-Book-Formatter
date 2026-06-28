@@ -37,7 +37,7 @@ export interface RunOptions {
 export type CommandRunner = (
   cmd: string,
   args: string[],
-  opts?: RunOptions,
+  opts?: RunOptions
 ) => Promise<CommandResult>
 
 /**

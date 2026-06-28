@@ -5,7 +5,7 @@ import {
   defaultStyleProfile,
   resolveStyle,
   normalizeStyleProfile,
-  mergeStyle,
+  mergeStyle
 } from '@core/style'
 
 const config: PerBookConfig = {
@@ -13,7 +13,7 @@ const config: PerBookConfig = {
   author: 'An Author',
   isbn: null,
   editionDate: null,
-  trimSize: '5x8',
+  trimSize: '5x8'
 }
 
 describe('defaults', () => {
@@ -67,7 +67,7 @@ describe('normalizeStyleProfile', () => {
       id: 'mine',
       name: 'Mine',
       bodyFontSize: 12,
-      margins: { top: 1 },
+      margins: { top: 1 }
     })
     expect(p.id).toBe('mine')
     expect(p.name).toBe('Mine')
@@ -81,7 +81,7 @@ describe('normalizeStyleProfile', () => {
   it('rejects invalid enum values and falls back', () => {
     const p = normalizeStyleProfile({
       pageNumber: 'wherever',
-      runningHeads: { verso: 'nope', recto: 'author' },
+      runningHeads: { verso: 'nope', recto: 'author' }
     })
     expect(p.pageNumber).toBe(defaultStyleProfile().pageNumber)
     expect(p.runningHeads.verso).toBe(defaultStyleProfile().runningHeads.verso)
@@ -102,7 +102,7 @@ describe('mergeStyle', () => {
     const patched = mergeStyle(base, {
       bodyFontSize: 13,
       margins: { ...base.margins, top: 2 },
-      headingStyle: { ...base.headingStyle, smallCaps: false },
+      headingStyle: { ...base.headingStyle, smallCaps: false }
     })
     expect(patched.bodyFontSize).toBe(13)
     expect(patched.margins.top).toBe(2)

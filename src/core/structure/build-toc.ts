@@ -24,15 +24,12 @@ export function buildToc(tags: StructuralTag[], markdown: string): TocEntry[] {
     .slice()
     .sort((a, b) => a.range.start - b.range.start)
     .map((tag) => {
-      const title = markdown
-        .slice(tag.range.start, tag.range.end)
-        .trim()
-        .replace(/\s+/g, ' ')
+      const title = markdown.slice(tag.range.start, tag.range.end).trim().replace(/\s+/g, ' ')
       return {
         title,
         level: levelFromData(tag.data),
         outputOffset: tag.range.start,
-        pageNumber: null,
+        pageNumber: null
       }
     })
 }

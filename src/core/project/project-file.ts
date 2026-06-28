@@ -15,7 +15,7 @@ import type {
   ReadingProgress,
   SourcePage,
   StructuralTag,
-  FindReplaceRule,
+  FindReplaceRule
 } from '@core/model'
 
 /**
@@ -32,7 +32,7 @@ function defaultConfig(): PerBookConfig {
     author: '',
     isbn: null,
     editionDate: null,
-    trimSize: '6x9',
+    trimSize: '6x9'
   }
 }
 
@@ -47,7 +47,7 @@ function defaultFrontMatter(): FrontMatterFields {
     editionStatement: null,
     imprint: null,
     copyrightHolder: null,
-    notices: [],
+    notices: []
   }
 }
 
@@ -63,7 +63,7 @@ function normalizeFrontMatter(raw: unknown): FrontMatterFields {
     copyrightHolder: str(raw.copyrightHolder),
     notices: Array.isArray(raw.notices)
       ? (raw.notices.filter((n) => typeof n === 'string') as string[])
-      : base.notices,
+      : base.notices
   }
 }
 
@@ -77,7 +77,7 @@ export function createEmptyProject(init: {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     source: {
       pdfPath: init.pdfPath,
-      pageCount: init.pageCount,
+      pageCount: init.pageCount
     },
     pages: [],
     markdown: '',
@@ -89,7 +89,7 @@ export function createEmptyProject(init: {
     findReplace: [],
     readingProgress: defaultReadingProgress(),
     styleProfileId: null,
-    frontMatter: defaultFrontMatter(),
+    frontMatter: defaultFrontMatter()
   }
 }
 
@@ -109,7 +109,7 @@ function normalizeConfig(raw: unknown): PerBookConfig {
     author: typeof raw.author === 'string' ? raw.author : base.author,
     isbn: typeof raw.isbn === 'string' ? raw.isbn : null,
     editionDate: typeof raw.editionDate === 'string' ? raw.editionDate : null,
-    trimSize: typeof raw.trimSize === 'string' ? raw.trimSize : base.trimSize,
+    trimSize: typeof raw.trimSize === 'string' ? raw.trimSize : base.trimSize
   }
 }
 
@@ -145,20 +145,19 @@ export function migrate(raw: unknown): ProjectFile {
   if (version > CURRENT_SCHEMA_VERSION) {
     throw new Error(
       `Project schema version ${version} is newer than supported (${CURRENT_SCHEMA_VERSION}). ` +
-        'Please update the application.',
+        'Please update the application.'
     )
   }
 
   // For now there is a single forward path: anything at or below v1 normalizes
   // into the v1 shape by backfilling defaults. Future versions add steps here.
-  const pageCount =
-    typeof source.pageCount === 'number' ? source.pageCount : 0
+  const pageCount = typeof source.pageCount === 'number' ? source.pageCount : 0
 
   const project: ProjectFile = {
     schemaVersion: CURRENT_SCHEMA_VERSION,
     source: {
       pdfPath: source.pdfPath,
-      pageCount,
+      pageCount
     },
     pages: asArray<SourcePage>(raw.pages),
     markdown: typeof raw.markdown === 'string' ? raw.markdown : '',
@@ -170,7 +169,7 @@ export function migrate(raw: unknown): ProjectFile {
     findReplace: asArray<FindReplaceRule>(raw.findReplace),
     readingProgress: normalizeReadingProgress(raw.readingProgress),
     styleProfileId: typeof raw.styleProfileId === 'string' ? raw.styleProfileId : null,
-    frontMatter: normalizeFrontMatter(raw.frontMatter),
+    frontMatter: normalizeFrontMatter(raw.frontMatter)
   }
 
   return project

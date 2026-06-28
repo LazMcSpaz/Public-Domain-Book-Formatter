@@ -157,14 +157,7 @@ export type Flag =
 // ---------------------------------------------------------------------------
 
 export type StructuralTagType =
-  | 'footnote'
-  | 'blockquote'
-  | 'verse'
-  | 'heading'
-  | 'table'
-  | 'epigraph'
-  | 'caption'
-  | 'frontmatter'
+  'footnote' | 'blockquote' | 'verse' | 'heading' | 'table' | 'epigraph' | 'caption' | 'frontmatter'
 
 export interface StructuralTag {
   id: string

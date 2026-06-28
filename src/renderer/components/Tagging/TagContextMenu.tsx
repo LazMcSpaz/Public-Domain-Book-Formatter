@@ -114,8 +114,7 @@ export function TagContextMenu({
         {footnoteNoteRange ? (
           <div className="tag-menu-footnote-step">
             <p className="tag-menu-hint">
-              Footnote note captured. Now select the in-text reference mark, then
-              confirm.
+              Footnote note captured. Now select the in-text reference mark, then confirm.
             </p>
             <div className="tag-menu-actions">
               <button type="button" className="tag-menu-confirm" onMouseDown={confirmFootnote}>

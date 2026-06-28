@@ -26,9 +26,9 @@ export const extractStage: Stage = {
         format: 'png',
         prefix: PAGE_PREFIX,
         firstPage: count ? 1 : undefined,
-        lastPage: count ?? undefined,
+        lastPage: count ?? undefined
       },
-      ctx.run,
+      ctx.run
     )
 
     const pageCount = count ?? imagePaths.length
@@ -39,15 +39,15 @@ export const extractStage: Stage = {
       height: 0,
       dpi: 300,
       words: [],
-      regions: [],
+      regions: []
     }))
 
     const document: SourceDocument = {
       pdfPath: ctx.pdfPath,
       pageCount,
-      pages,
+      pages
     }
     ctx.document = document
     ctx.pages = pages
-  },
+  }
 }

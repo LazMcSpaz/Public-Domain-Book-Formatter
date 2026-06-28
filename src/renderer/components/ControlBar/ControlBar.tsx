@@ -27,14 +27,7 @@ function Slider({ label, value, min, max, step, format, onChange }: SliderProps)
   return (
     <label className="control-slider">
       <span className="control-slider-label">{label}</span>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step ?? 1}
-        value={value}
-        onChange={handle}
-      />
+      <input type="range" min={min} max={max} step={step ?? 1} value={value} onChange={handle} />
       <span className="control-slider-value">{format ? format(value) : String(value)}</span>
     </label>
   )

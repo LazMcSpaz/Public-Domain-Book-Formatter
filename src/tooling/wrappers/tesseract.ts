@@ -22,7 +22,7 @@ export interface TesseractOptions {
 export function buildHocrArgs(
   imagePath: string,
   outBase: string,
-  opts: TesseractOptions = {},
+  opts: TesseractOptions = {}
 ): string[] {
   const args = [imagePath, outBase]
   if (opts.language) args.push('-l', opts.language)
@@ -39,7 +39,7 @@ export async function ocrToHocr(
   imagePath: string,
   outBase: string,
   opts: TesseractOptions = {},
-  run: CommandRunner = runCommand,
+  run: CommandRunner = runCommand
 ): Promise<string> {
   const language = opts.language ?? 'eng'
   const args = buildHocrArgs(imagePath, outBase, { ...opts, language })

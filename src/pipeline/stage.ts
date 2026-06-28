@@ -7,13 +7,7 @@
  * resolves with `void`. This keeps the runner simple and the data flow explicit
  * — each stage's outputs are the next stage's inputs on the same object.
  */
-import type {
-  Flag,
-  MappingEntry,
-  SourceDocument,
-  SourcePage,
-  StructuralTag,
-} from '@core/model'
+import type { Flag, MappingEntry, SourceDocument, SourcePage, StructuralTag } from '@core/model'
 import type { CommandRunner } from '@tooling/process'
 
 /**

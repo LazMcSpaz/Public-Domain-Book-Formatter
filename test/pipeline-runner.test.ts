@@ -5,19 +5,13 @@ import * as path from 'node:path'
 import type { PipelineProgress } from '@shared/ipc-types'
 import type { CommandRunner } from '@tooling/process'
 import { runPipeline, DEFAULT_STAGES } from '@pipeline/pipeline'
-import {
-  cleanupText,
-  dehyphenate,
-  normalizeLigatures,
-} from '@pipeline/stages/cleanup'
+import { cleanupText, dehyphenate, normalizeLigatures } from '@pipeline/stages/cleanup'
 import type { Stage } from '@pipeline/stage'
 
 const tmpDirs: string[] = []
 
 afterEach(async () => {
-  await Promise.all(
-    tmpDirs.splice(0).map((d) => fs.rm(d, { recursive: true, force: true })),
-  )
+  await Promise.all(tmpDirs.splice(0).map((d) => fs.rm(d, { recursive: true, force: true })))
 })
 
 async function makeTmpProject(): Promise<string> {
@@ -66,21 +60,19 @@ describe('runPipeline (hermetic)', () => {
       pdfPath: '/fake/book.pdf',
       projectPath,
       run: fakeBinaries(),
-      onProgress: (p) => progress.push(p),
+      onProgress: (p) => progress.push(p)
     })
 
     // 6 stages × (start + finish) = 12 progress events, in stage order.
     expect(progress).toHaveLength(DEFAULT_STAGES.length * 2)
-    const stageOrder = progress
-      .filter((p) => p.message?.startsWith('starting'))
-      .map((p) => p.stage)
+    const stageOrder = progress.filter((p) => p.message?.startsWith('starting')).map((p) => p.stage)
     expect(stageOrder).toEqual([
       'extract',
       'ocr',
       'image-detect',
       'cleanup',
       'structure',
-      'markdown',
+      'markdown'
     ])
     // indices are monotonic and bounded.
     progress.forEach((p) => {
@@ -92,9 +84,7 @@ describe('runPipeline (hermetic)', () => {
     expect(result.projectPath).toBe(projectPath)
 
     // The project manifest was written with pages + coordinate map + flags.
-    const manifest = JSON.parse(
-      await fs.readFile(path.join(projectPath, 'project.json'), 'utf8'),
-    )
+    const manifest = JSON.parse(await fs.readFile(path.join(projectPath, 'project.json'), 'utf8'))
     expect(manifest.source.pageCount).toBe(1)
     expect(manifest.pages[0].words).toHaveLength(2)
     expect(manifest.coordinateMap).toHaveLength(2)
@@ -116,8 +106,8 @@ describe('runPipeline (hermetic)', () => {
         pdfPath: '/fake/book.pdf',
         projectPath,
         run: fakeBinaries(),
-        signal: controller.signal,
-      }),
+        signal: controller.signal
+      })
     ).rejects.toThrow(/aborted/i)
   })
 
@@ -132,21 +122,21 @@ describe('runPipeline (hermetic)', () => {
         name: 'first',
         async run() {
           seen.push('first')
-        },
+        }
       },
       {
         name: 'aborter',
         async run() {
           seen.push('aborter')
           controller.abort()
-        },
+        }
       },
       {
         name: 'should-not-run',
         async run() {
           seen.push('should-not-run')
-        },
-      },
+        }
+      }
     ]
 
     await expect(
@@ -155,8 +145,8 @@ describe('runPipeline (hermetic)', () => {
         projectPath,
         run: fakeBinaries(),
         signal: controller.signal,
-        stages,
-      }),
+        stages
+      })
     ).rejects.toThrow(/aborted/i)
     expect(seen).toEqual(['first', 'aborter'])
   })

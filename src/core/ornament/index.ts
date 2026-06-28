@@ -3,5 +3,5 @@ export {
   BUILTIN_ORNAMENTS,
   findOrnament,
   resolveOrnamentPaths,
-  type ResolvedOrnamentPaths,
+  type ResolvedOrnamentPaths
 } from './ornaments'

@@ -101,8 +101,8 @@ export function ExportPanel(): JSX.Element {
       <header className="ep-header">
         <h2>Export to KDP</h2>
         <p className="ep-subhead">
-          Assemble and typeset the print-ready interior PDF, then read the
-          validation report. Warnings are advisory — only failures block.
+          Assemble and typeset the print-ready interior PDF, then read the validation report.
+          Warnings are advisory — only failures block.
         </p>
       </header>
 
@@ -127,7 +127,7 @@ export function ExportPanel(): JSX.Element {
                   <span className="ep-dep-status">
                     {d.found
                       ? d.meetsMinimum
-                        ? d.version ?? 'found'
+                        ? (d.version ?? 'found')
                         : `outdated${d.version ? ` (${d.version})` : ''}`
                       : 'missing'}
                   </span>
@@ -170,9 +170,7 @@ export function ExportPanel(): JSX.Element {
               interior pages
               <small>use this for your spine width</small>
             </span>
-            <span
-              className={`ep-readybadge ${report.ready ? 'ep-ready' : 'ep-notready'}`}
-            >
+            <span className={`ep-readybadge ${report.ready ? 'ep-ready' : 'ep-notready'}`}>
               {report.ready ? 'Ready' : 'Not ready'}
             </span>
           </div>

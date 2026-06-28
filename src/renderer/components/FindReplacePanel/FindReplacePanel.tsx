@@ -75,12 +75,7 @@ export function FindReplacePanel(): JSX.Element {
       ) : (
         <ul className="rule-list">
           {rules.map((rule) => (
-            <RuleItem
-              key={rule.id}
-              rule={rule}
-              onChange={onChangeRule}
-              onDelete={onDeleteRule}
-            />
+            <RuleItem key={rule.id} rule={rule} onChange={onChangeRule} onDelete={onDeleteRule} />
           ))}
         </ul>
       )}

@@ -11,7 +11,7 @@ function tag(id: string, start: number, end: number, level?: number): Structural
     id,
     type: 'heading',
     range: { start, end },
-    data: level === undefined ? undefined : { level, confirmed: true },
+    data: level === undefined ? undefined : { level, confirmed: true }
   }
 }
 
@@ -20,14 +20,14 @@ describe('buildToc', () => {
     const tags = [
       tag('h2', markdown.indexOf('Chapter Two'), markdown.indexOf('Chapter Two') + 11, 1),
       tag('h1', 0, 11, 1),
-      tag('h3', markdown.indexOf('Appendix'), markdown.indexOf('Appendix') + 8, 2),
+      tag('h3', markdown.indexOf('Appendix'), markdown.indexOf('Appendix') + 8, 2)
     ]
     const toc = buildToc(tags, markdown)
     expect(toc.map((e) => e.title)).toEqual(['Chapter One', 'Chapter Two', 'Appendix'])
     expect(toc.map((e) => e.outputOffset)).toEqual([
       0,
       markdown.indexOf('Chapter Two'),
-      markdown.indexOf('Appendix'),
+      markdown.indexOf('Appendix')
     ])
   })
 
@@ -45,7 +45,7 @@ describe('buildToc', () => {
   it('ignores non-heading tags', () => {
     const tags: StructuralTag[] = [
       tag('h1', 0, 11, 1),
-      { id: 'f1', type: 'footnote', range: { start: 12, end: 16 } },
+      { id: 'f1', type: 'footnote', range: { start: 12, end: 16 } }
     ]
     const toc = buildToc(tags, markdown)
     expect(toc.length).toBe(1)

@@ -44,7 +44,7 @@ export function buildPandocArgs(opts: PandocOptions = {}): string[] {
 export async function markdownToLatex(
   markdown: string,
   opts: PandocOptions = {},
-  run: CommandRunner = runCommand,
+  run: CommandRunner = runCommand
 ): Promise<string> {
   // The pipeline writes `markdown` to opts.inputPath before calling; we keep the
   // argument so callers with in-memory content have a stable signature. If no

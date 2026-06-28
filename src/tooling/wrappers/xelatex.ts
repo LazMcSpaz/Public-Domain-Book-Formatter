@@ -23,14 +23,14 @@ export interface TypesetResult {
 export function buildXelatexArgs(
   texPath: string,
   outDir: string,
-  opts: XelatexOptions = {},
+  opts: XelatexOptions = {}
 ): string[] {
   return [
     '-interaction=nonstopmode',
     '-halt-on-error',
     `-output-directory=${outDir}`,
     ...(opts.extraArgs ?? []),
-    texPath,
+    texPath
   ]
 }
 
@@ -64,7 +64,7 @@ export async function typeset(
   texPath: string,
   outDir: string,
   opts: XelatexOptions = {},
-  run: CommandRunner = runCommand,
+  run: CommandRunner = runCommand
 ): Promise<TypesetResult> {
   const args = buildXelatexArgs(texPath, outDir, opts)
   const result = await run('xelatex', args, { cwd: outDir })

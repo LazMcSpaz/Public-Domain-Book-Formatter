@@ -13,7 +13,7 @@ import type {
   PageNumberPosition,
   PerBookConfig,
   RunningHeadMode,
-  StyleProfile,
+  StyleProfile
 } from '@core/model'
 import { defaultStyleProfile } from './defaults'
 
@@ -22,14 +22,14 @@ const RUNNING_HEAD_MODES: RunningHeadMode[] = [
   'bookTitle',
   'author',
   'chapterTitle',
-  'pageNumber',
+  'pageNumber'
 ]
 
 const PAGE_NUMBER_POSITIONS: PageNumberPosition[] = [
   'none',
   'bottomCenter',
   'bottomOuter',
-  'topOuter',
+  'topOuter'
 ]
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -60,7 +60,7 @@ function cloneProfile(p: StyleProfile): StyleProfile {
     headingStyle: { ...p.headingStyle },
     runningHeads: { ...p.runningHeads },
     ornaments: { ...p.ornaments },
-    frontMatter: { ...p.frontMatter },
+    frontMatter: { ...p.frontMatter }
   }
 }
 
@@ -93,7 +93,7 @@ export function normalizeStyleProfile(raw: unknown): StyleProfile {
     top: num(rawMargins['top'], d.margins.top),
     bottom: num(rawMargins['bottom'], d.margins.bottom),
     inner: num(rawMargins['inner'], d.margins.inner),
-    outer: num(rawMargins['outer'], d.margins.outer),
+    outer: num(rawMargins['outer'], d.margins.outer)
   }
 
   const rawHeading = isRecord(raw['headingStyle']) ? raw['headingStyle'] : {}
@@ -113,11 +113,11 @@ export function normalizeStyleProfile(raw: unknown): StyleProfile {
     headingStyle: {
       smallCaps: bool(rawHeading['smallCaps'], d.headingStyle.smallCaps),
       centered: bool(rawHeading['centered'], d.headingStyle.centered),
-      scale: num(rawHeading['scale'], d.headingStyle.scale),
+      scale: num(rawHeading['scale'], d.headingStyle.scale)
     },
     runningHeads: {
       verso: oneOf(rawRunning['verso'], RUNNING_HEAD_MODES, d.runningHeads.verso),
-      recto: oneOf(rawRunning['recto'], RUNNING_HEAD_MODES, d.runningHeads.recto),
+      recto: oneOf(rawRunning['recto'], RUNNING_HEAD_MODES, d.runningHeads.recto)
     },
     pageNumber: oneOf(raw['pageNumber'], PAGE_NUMBER_POSITIONS, d.pageNumber),
     ornaments: {
@@ -125,14 +125,13 @@ export function normalizeStyleProfile(raw: unknown): StyleProfile {
         typeof rawOrn['chapterOpener'] === 'string' ? (rawOrn['chapterOpener'] as string) : null,
       sectionDivider:
         typeof rawOrn['sectionDivider'] === 'string' ? (rawOrn['sectionDivider'] as string) : null,
-      pageNumber:
-        typeof rawOrn['pageNumber'] === 'string' ? (rawOrn['pageNumber'] as string) : null,
+      pageNumber: typeof rawOrn['pageNumber'] === 'string' ? (rawOrn['pageNumber'] as string) : null
     },
     frontMatter: {
       titlePage: bool(rawFront['titlePage'], d.frontMatter.titlePage),
       copyrightPage: bool(rawFront['copyrightPage'], d.frontMatter.copyrightPage),
-      halfTitle: bool(rawFront['halfTitle'], d.frontMatter.halfTitle),
-    },
+      halfTitle: bool(rawFront['halfTitle'], d.frontMatter.halfTitle)
+    }
   }
 }
 

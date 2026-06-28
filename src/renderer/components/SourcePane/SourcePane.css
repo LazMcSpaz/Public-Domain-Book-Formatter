@@ -37,13 +37,7 @@
   min-height: 200px;
   color: #888;
   font-size: 14px;
-  background: repeating-linear-gradient(
-    45deg,
-    #fafafa,
-    #fafafa 10px,
-    #f0f0f0 10px,
-    #f0f0f0 20px
-  );
+  background: repeating-linear-gradient(45deg, #fafafa, #fafafa 10px, #f0f0f0 10px, #f0f0f0 20px);
 }
 
 /* Overlay stretched exactly over the image; viewBox = page pixel dims. */

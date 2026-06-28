@@ -44,20 +44,17 @@ export function ProfileManager({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const run = useCallback(
-    async (fn: () => Promise<void>) => {
-      setBusy(true)
-      setError(null)
-      try {
-        await fn()
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err))
-      } finally {
-        setBusy(false)
-      }
-    },
-    []
-  )
+  const run = useCallback(async (fn: () => Promise<void>) => {
+    setBusy(true)
+    setError(null)
+    try {
+      await fn()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setBusy(false)
+    }
+  }, [])
 
   const onSaveAs = useCallback(() => {
     const name = newName.trim() || working.name || 'Untitled profile'
@@ -118,9 +115,7 @@ export function ProfileManager({
     <aside className="profile-manager">
       <header className="pm-header">
         <h3>Profiles</h3>
-        <span className="pm-applied">
-          Applied: {appliedId ? appliedId : 'shipped default'}
-        </span>
+        <span className="pm-applied">Applied: {appliedId ? appliedId : 'shipped default'}</span>
       </header>
 
       <div className="pm-saveas">
@@ -142,10 +137,7 @@ export function ProfileManager({
       ) : (
         <ul className="pm-list">
           {saved.map((p) => (
-            <li
-              key={p.id}
-              className={`pm-item${p.id === appliedId ? ' pm-item-applied' : ''}`}
-            >
+            <li key={p.id} className={`pm-item${p.id === appliedId ? ' pm-item-applied' : ''}`}>
               <div className="pm-item-main">
                 <span className="pm-item-name">{p.name}</span>
                 <span className="pm-item-meta">
@@ -158,9 +150,7 @@ export function ProfileManager({
                   onClick={() => onApplyToBook(p.id)}
                   disabled={busy || !canApplyToBook}
                   title={
-                    canApplyToBook
-                      ? 'Apply this profile to the open book'
-                      : 'Open a book to apply'
+                    canApplyToBook ? 'Apply this profile to the open book' : 'Open a book to apply'
                   }
                 >
                   Apply

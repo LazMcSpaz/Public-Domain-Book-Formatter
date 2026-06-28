@@ -64,10 +64,8 @@ export function ImageCropPopover(): JSX.Element | null {
   }, [hoverTokenId])
 
   // Resolve the hovered word + decide whether the popover should show at all.
-  const word =
-    project && hoverTokenId ? findWord(project.pages, hoverTokenId) : null
-  const eligible =
-    word !== null && (confidenceTint || word.confidence < LOW_CONFIDENCE)
+  const word = project && hoverTokenId ? findWord(project.pages, hoverTokenId) : null
+  const eligible = word !== null && (confidenceTint || word.confidence < LOW_CONFIDENCE)
 
   useEffect(() => {
     if (!eligible || !word || !project || !projectPath) {
