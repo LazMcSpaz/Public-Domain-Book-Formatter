@@ -8,6 +8,7 @@
  */
 import type { DependencyStatus } from '@shared/ipc-types'
 import { runCommand, type CommandRunner } from '../process'
+import { resolveToolPath } from '../tool-paths'
 import { REQUIRED_TOOLS, type ToolSpec } from './registry'
 
 /**
@@ -54,10 +55,14 @@ export async function detectTool(
     meetsMinimum: false
   }
 
+  // Use a bundled copy when present so a clean install detects its own tools.
+  const resolved = resolveToolPath(spec.bin)
+  const bundled = resolved !== spec.bin
+
   let stdout = ''
   let stderr = ''
   try {
-    const result = await run(spec.bin, spec.versionArgs)
+    const result = await run(resolved, spec.versionArgs)
     if (result.code !== 0) return notFound
     stdout = result.stdout
     stderr = result.stderr
@@ -68,8 +73,8 @@ export async function detectTool(
 
   const version = parseVersion(spec, stdout, stderr)
   // The tool ran successfully, so it is present even if we couldn't parse a
-  // version banner. `path` is left null: PATH resolution is the OS's job and we
-  // don't shell `which`/`where` here (keeps it cross-platform and binary-free).
+  // version banner. `path` reports the bundled binary when we shipped one;
+  // otherwise it's left null (PATH resolution is the OS's job).
   const meetsMinimum =
     spec.minVersion === null
       ? true
@@ -78,7 +83,7 @@ export async function detectTool(
   return {
     name: spec.name,
     found: true,
-    path: null,
+    path: bundled ? resolved : null,
     version,
     meetsMinimum
   }

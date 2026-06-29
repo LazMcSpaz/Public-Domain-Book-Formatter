@@ -130,14 +130,16 @@ cycles but don't eliminate them (SPEC §10).
 Not buildable on Linux/macOS. On a Windows runner (or the CI `package-windows`
 job, triggered by a `v*` tag or manual dispatch):
 
-```bash
-npm run dist:win       # electron-vite build + electron-builder NSIS → release/*.exe
+```powershell
+pwsh scripts/fetch-win-tools.ps1   # downloads the bundled tools into resources/bin/win
+npm run dist:win                   # electron-vite build + electron-builder NSIS → release/*.exe
 ```
 
-The installer bundles the app and the ornament library. Bundling the heavy
-system tools (Tesseract/Pandoc/TeX Live) into the installer is not yet wired —
-for now the Setup Wizard guides users to install them. That bundling is the main
-remaining packaging task.
+The installer now bundles the **app + the system tools** (Tesseract, Poppler,
+Pandoc, TinyTeX) so end users install nothing else — see
+[`docs/INSTALL.md`](./INSTALL.md) for the end-user flow and how bundling works.
+The `fetch-win-tools.ps1` URLs/versions are pinned and may need bumping; that
+script can only be validated on a real Windows runner.
 
 ---
 

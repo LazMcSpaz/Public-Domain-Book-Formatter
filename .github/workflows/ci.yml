@@ -64,6 +64,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Fetch bundled tools (Tesseract, Poppler, Pandoc, TinyTeX)
+        run: pwsh scripts/fetch-win-tools.ps1
+
       - name: Build + package Windows installer
         run: npm run dist:win
 

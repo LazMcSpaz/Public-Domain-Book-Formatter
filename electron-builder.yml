@@ -18,10 +18,17 @@ files:
   - out/**/*
   - package.json
 
-# Ship the starter ornament library alongside the app (SPEC §8).
+# Ship the starter ornament library + bundled tool binaries alongside the app,
+# so a fresh install needs nothing else (SPEC §8, §12 #21). The app resolves
+# tools from resources/bin/<os>/ first (src/tooling/tool-paths.ts). The win/
+# tree is populated by scripts/fetch-win-tools.ps1 in the package-windows CI job.
 extraResources:
   - from: resources/ornaments
     to: ornaments
+    filter:
+      - '**/*'
+  - from: resources/bin/win
+    to: bin/win
     filter:
       - '**/*'
 

@@ -81,7 +81,9 @@ function statusText(dep: DependencyStatus | undefined): string {
   if (!dep.meetsMinimum) {
     return `Found${dep.version ? ` (${dep.version})` : ''} — below minimum`
   }
-  return dep.version ? `Found · ${dep.version}` : 'Found'
+  // A non-null path means we shipped (bundled) this tool with the app.
+  const where = dep.path ? 'Bundled' : 'Found'
+  return dep.version ? `${where} · ${dep.version}` : where
 }
 
 function statusKind(dep: DependencyStatus | undefined, required: boolean): string {
@@ -117,8 +119,10 @@ export function SetupWizard(): JSX.Element {
       <header className="sw-header">
         <h2>Set up dependencies</h2>
         <p className="sw-subhead">
-          This tool drives a few external programs. Install any that are missing, then re-check.
-          Required tools must be present; optional ones add capabilities.
+          A normal installation bundles everything below, so you usually won&rsquo;t see this
+          screen. If you&rsquo;re running a developer build (or a tool went missing), install the
+          ones flagged as missing and choose Re-check. Required tools must be present; optional ones
+          add capabilities.
         </p>
         <div className="sw-summary">
           <span

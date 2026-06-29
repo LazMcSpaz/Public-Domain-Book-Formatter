@@ -9,6 +9,7 @@
  * installed.
  */
 import { spawn } from 'node:child_process'
+import { resolveToolPath } from './tool-paths'
 
 /** The captured outcome of running a command. */
 export interface CommandResult {
@@ -57,7 +58,10 @@ export const runCommand: CommandRunner = (cmd, args, opts = {}) => {
       return
     }
 
-    const child = spawn(cmd, args, { cwd })
+    // Prefer a bundled copy of the tool (clean self-contained install); falls
+    // back to the bare name (system PATH) when nothing is bundled.
+    const resolved = resolveToolPath(cmd)
+    const child = spawn(resolved, args, { cwd })
 
     let stdout = ''
     let stderr = ''
