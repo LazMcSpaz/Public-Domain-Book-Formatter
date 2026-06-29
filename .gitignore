@@ -7,6 +7,9 @@ dist/
 release/
 *.tsbuildinfo
 
+# Bundled tool binaries (downloaded at packaging time; large, not committed)
+resources/bin/*/
+
 # Logs
 *.log
 npm-debug.log*
