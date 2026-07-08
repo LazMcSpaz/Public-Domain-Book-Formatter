@@ -47,11 +47,15 @@ jobs:
 
   package-windows:
     name: Windows installer (NSIS)
-    # Heavy and only meaningful for release artifacts — run on tags or manual
-    # dispatch, after verification passes. Bundling Tesseract/Pandoc/TeX Live is
-    # out of scope here; this produces the app installer (SPEC §12 #21).
+    # Builds the self-contained installer (SPEC §12 #21). Runs on pushes to main
+    # (so every merge produces a downloadable installer to test), on version
+    # tags, and on manual dispatch — after verification passes. Once things are
+    # stable this can be tightened to tags-only to save CI minutes.
     needs: verify
-    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    if: >-
+      github.ref == 'refs/heads/main' ||
+      startsWith(github.ref, 'refs/tags/v') ||
+      github.event_name == 'workflow_dispatch'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
