@@ -2,7 +2,9 @@
   "name": "public-domain-book-formatter",
   "version": "0.1.0",
   "description": "Windows desktop app that turns public-domain book PDFs into print-ready KDP interiors.",
-  "author": "",
+  "author": {
+    "name": "Public-Domain Book Reprint Tool"
+  },
   "license": "MIT",
   "main": "out/main/index.js",
   "scripts": {
