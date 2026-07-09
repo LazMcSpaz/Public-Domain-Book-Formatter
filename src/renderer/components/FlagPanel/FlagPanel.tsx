@@ -8,34 +8,26 @@
  */
 import { useCallback } from 'react'
 import { useReview } from '../../store/ReviewContext'
+import { useFlagNav } from '../../store/FlagNavContext'
+import { flagTokenId } from '../../utils/flag-token'
+import { jumpToToken } from '../../highlight'
 import { FlagItem } from './FlagItem'
 import './FlagPanel.css'
 
 export function FlagPanel(): JSX.Element {
-  const { state, dispatch } = useReview()
+  const { state } = useReview()
+  const { activeIndex, setActiveIndex } = useFlagNav()
   const flags = state.project?.flags ?? []
 
   const onSelect = useCallback(
     (index: number) => {
-      dispatch({ type: 'SET_ACTIVE_FLAG', index })
+      setActiveIndex(index)
       const flag = state.project?.flags[index]
       if (!flag) return
-      const tokenId = flag.tokenId
-      if (tokenId) {
-        const entry = state.coordinateMap?.byTokenId(tokenId) ?? null
-        dispatch({
-          type: 'SET_HOVER',
-          hover: {
-            tokenId,
-            sourcePageIndex: entry?.pageIndex ?? null,
-            outputOffset: entry?.output.start ?? null
-          }
-        })
-      } else {
-        dispatch({ type: 'CLEAR_HOVER' })
-      }
+      const tokenId = flagTokenId(flag, state.coordinateMap)
+      if (tokenId) jumpToToken(tokenId)
     },
-    [state.project, state.coordinateMap, dispatch]
+    [state.project, state.coordinateMap, setActiveIndex]
   )
 
   const ocrCount = flags.filter((f) => f.kind === 'ocr').length
@@ -58,7 +50,7 @@ export function FlagPanel(): JSX.Element {
               key={index}
               flag={flag}
               index={index}
-              active={index === state.activeFlagIndex}
+              active={index === activeIndex}
               onSelect={onSelect}
             />
           ))}

@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { SourcePage, WordToken } from '@core/model'
 import { useReview } from '../../store/ReviewContext'
-import { useHoverSync } from '../../hooks/useHoverSync'
+import { getHoverToken, subscribeHover } from '../../highlight'
 import { cropImage } from '../../utils/crop-image'
 import './ImageCropPopover.css'
 
@@ -41,10 +41,14 @@ function findWord(pages: SourcePage[], tokenId: string): WordToken | null {
 
 export function ImageCropPopover(): JSX.Element | null {
   const { state } = useReview()
-  const { hoverTokenId } = useHoverSync()
   const project = state.project
   const projectPath = state.projectPath
   const confidenceTint = state.readingPrefs.confidenceTint
+
+  // Subscribe to the imperative hover controller so ONLY this small popover
+  // re-renders on hover — the source/output panes stay render-free.
+  const [hoverTokenId, setHoverTokenId] = useState<string | null>(getHoverToken)
+  useEffect(() => subscribeHover(setHoverTokenId), [])
 
   const [cursor, setCursor] = useState<CursorPos | null>(null)
   const [cropUrl, setCropUrl] = useState<string | null>(null)

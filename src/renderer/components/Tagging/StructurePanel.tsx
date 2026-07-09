@@ -17,6 +17,7 @@ import './StructurePanel.css'
 import type { StructuralTag } from '@core/model'
 import { buildToc } from '@core/structure'
 import { useReview } from '../../store/ReviewContext'
+import { jumpToToken } from '../../highlight'
 import { TAG_META } from './tag-meta'
 
 const MAX_SLICE = 60
@@ -44,15 +45,8 @@ export function StructurePanel(): JSX.Element {
   }
 
   const jumpTo = (outputOffset: number): void => {
-    const entry = coordinateMap?.atOutputOffset(outputOffset) ?? null
-    dispatch({
-      type: 'SET_HOVER',
-      hover: {
-        tokenId: entry?.tokenId ?? null,
-        sourcePageIndex: entry?.pageIndex ?? null,
-        outputOffset
-      }
-    })
+    const tokenId = coordinateMap?.atOutputOffset(outputOffset)?.tokenId ?? null
+    if (tokenId) jumpToToken(tokenId)
   }
 
   const selectTag = (tag: StructuralTag): void => {

@@ -9,7 +9,6 @@
  */
 import type { RefObject } from 'react'
 import { useReview } from '../../store/ReviewContext'
-import { useHoverSync } from '../../hooks/useHoverSync'
 import { SourcePageView } from './SourcePageView'
 import { ImageCropPopover } from './ImageCropPopover'
 import './SourcePane.css'
@@ -21,7 +20,6 @@ export interface SourcePaneProps {
 
 export function SourcePane({ containerRef }: SourcePaneProps): JSX.Element | null {
   const { state } = useReview()
-  const { hoverTokenId } = useHoverSync()
   const project = state.project
   const projectPath = state.projectPath
 
@@ -34,7 +32,6 @@ export function SourcePane({ containerRef }: SourcePaneProps): JSX.Element | nul
           key={page.index}
           page={page}
           projectPath={projectPath}
-          hoverTokenId={hoverTokenId}
           confidenceTint={state.readingPrefs.confidenceTint}
         />
       ))}

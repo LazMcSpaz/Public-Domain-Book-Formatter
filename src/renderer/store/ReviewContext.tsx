@@ -15,15 +15,13 @@ import {
   type ReactNode
 } from 'react'
 import { createCoordinateMap } from '@core/model'
-import { DEFAULT_READING_PREFS, EMPTY_HOVER, type ReviewAction, type ReviewState } from './types'
+import { DEFAULT_READING_PREFS, type ReviewAction, type ReviewState } from './types'
 
 const INITIAL_STATE: ReviewState = {
   project: null,
   projectPath: null,
   coordinateMap: null,
   readingPrefs: DEFAULT_READING_PREFS,
-  hover: EMPTY_HOVER,
-  activeFlagIndex: -1,
   dirtyTokenIds: new Set<string>(),
   activeTagId: null,
   activeImageRegion: null,
@@ -39,8 +37,6 @@ export function reviewReducer(state: ReviewState, action: ReviewAction): ReviewS
         project: action.project,
         projectPath: action.projectPath,
         coordinateMap: createCoordinateMap(action.project.coordinateMap),
-        hover: EMPTY_HOVER,
-        activeFlagIndex: -1,
         dirtyTokenIds: new Set<string>(),
         activeTagId: null,
         activeImageRegion: null,
@@ -63,12 +59,6 @@ export function reviewReducer(state: ReviewState, action: ReviewAction): ReviewS
       }
     }
 
-    case 'SET_HOVER':
-      return { ...state, hover: action.hover }
-
-    case 'CLEAR_HOVER':
-      return { ...state, hover: EMPTY_HOVER }
-
     case 'SET_READING_PREFS':
       return { ...state, readingPrefs: { ...state.readingPrefs, ...action.prefs } }
 
@@ -80,9 +70,6 @@ export function reviewReducer(state: ReviewState, action: ReviewAction): ReviewS
           confidenceTint: !state.readingPrefs.confidenceTint
         }
       }
-
-    case 'SET_ACTIVE_FLAG':
-      return { ...state, activeFlagIndex: action.index }
 
     case 'SET_FLAGS':
       if (!state.project) return state

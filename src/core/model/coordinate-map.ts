@@ -34,6 +34,10 @@ function rangesOverlap(a: OutputRange, b: OutputRange): boolean {
 export class CoordinateMap implements CoordinateIndex {
   readonly entries: readonly MappingEntry[]
   private readonly byId: Map<string, MappingEntry>
+  // Entries bucketed by page so a hover hit-test scans one page, not the whole
+  // book. On large scans this is the difference between a snappy and a laggy
+  // hover (the linear whole-book scan dominated hover latency).
+  private readonly byPage: Map<number, MappingEntry[]>
 
   constructor(entries: MappingEntry[]) {
     // Keep entries sorted by output start for predictable offset lookups and
@@ -42,13 +46,23 @@ export class CoordinateMap implements CoordinateIndex {
       (a, b) => a.output.start - b.output.start || a.output.end - b.output.end
     )
     this.byId = new Map(this.entries.map((e) => [e.tokenId, e]))
+    this.byPage = new Map()
+    for (const e of this.entries) {
+      let bucket = this.byPage.get(e.pageIndex)
+      if (!bucket) {
+        bucket = []
+        this.byPage.set(e.pageIndex, bucket)
+      }
+      bucket.push(e)
+    }
   }
 
   atPoint(pageIndex: number, x: number, y: number): MappingEntry | null {
+    const bucket = this.byPage.get(pageIndex)
+    if (!bucket) return null
     let best: MappingEntry | null = null
     let bestArea = Infinity
-    for (const e of this.entries) {
-      if (e.pageIndex !== pageIndex) continue
+    for (const e of bucket) {
       if (!pointInBBox(e.bbox, x, y)) continue
       const area = bboxArea(e.bbox)
       if (area < bestArea) {
