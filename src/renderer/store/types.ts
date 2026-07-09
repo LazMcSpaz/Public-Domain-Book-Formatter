@@ -41,22 +41,6 @@ export const DEFAULT_READING_PREFS: ReadingPrefs = {
   confidenceTint: false
 }
 
-/** The currently-hovered token, shared so both panes can highlight it. */
-export interface HoverState {
-  /** Token under the cursor, or null. Drives the highlight on both sides. */
-  tokenId: string | null
-  /** Set when the hover originated in the source pane. */
-  sourcePageIndex: number | null
-  /** Set when the hover originated in the output pane (char offset). */
-  outputOffset: number | null
-}
-
-export const EMPTY_HOVER: HoverState = {
-  tokenId: null,
-  sourcePageIndex: null,
-  outputOffset: null
-}
-
 /** Whole-app review state. */
 export interface ReviewState {
   /** Loaded project manifest, or null before a project is opened. */
@@ -66,9 +50,6 @@ export interface ReviewState {
   /** Lookup index built from `project.coordinateMap`; null until a project loads. */
   coordinateMap: CoordinateIndex | null
   readingPrefs: ReadingPrefs
-  hover: HoverState
-  /** Index into `project.flags` for jump-to-next-flag; -1 = none active. */
-  activeFlagIndex: number
   /** Token ids whose text was edited (lose confidence/hover-sync until re-OCR). */
   dirtyTokenIds: ReadonlySet<string>
   /** Currently-selected structural tag (for highlight / panel focus); null = none. */
@@ -86,11 +67,8 @@ export type ReviewAction =
   | { type: 'SET_PROJECT'; project: ProjectFile; projectPath: string }
   | { type: 'CLOSE_PROJECT' }
   | { type: 'SET_MARKDOWN'; markdown: string; dirtyTokenIds?: string[] }
-  | { type: 'SET_HOVER'; hover: HoverState }
-  | { type: 'CLEAR_HOVER' }
   | { type: 'SET_READING_PREFS'; prefs: Partial<ReadingPrefs> }
   | { type: 'TOGGLE_TINT' }
-  | { type: 'SET_ACTIVE_FLAG'; index: number }
   | { type: 'SET_FLAGS'; flags: Flag[] }
   | { type: 'SET_FIND_REPLACE'; rules: FindReplaceRule[] }
   /** Shallow-merge a patch into the loaded project (tags, config, etc.). */

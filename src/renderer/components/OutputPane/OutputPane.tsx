@@ -55,7 +55,7 @@ export interface OutputPaneProps {
 
 export function OutputPane({ containerRef }: OutputPaneProps): JSX.Element | null {
   const { state, dispatch } = useReview()
-  const { hoverTokenId, setHoverFromOutput, clearHover } = useHoverSync()
+  const { setHoverFromOutput, clearHover } = useHoverSync()
 
   const project = state.project
   const markdown = project?.markdown ?? ''
@@ -180,7 +180,6 @@ export function OutputPane({ containerRef }: OutputPaneProps): JSX.Element | nul
           <ParagraphView
             key={paragraph.start}
             paragraph={paragraph}
-            hoverTokenId={hoverTokenId}
             dirtyTokenIds={state.dirtyTokenIds}
             confidenceOf={confidenceOf}
             decorationOf={decorationOf}

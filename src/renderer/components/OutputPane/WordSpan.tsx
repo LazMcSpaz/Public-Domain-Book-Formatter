@@ -3,8 +3,10 @@
  *
  * Carries the data attributes the integrator's scroll-sync scans
  * (`data-start`/`data-end`/`data-token-id`) plus `data-conf` for CSS-driven
- * confidence tinting (gated under `.tint-on`). Highlights when it is the hovered
- * token; dims/strikes when its token id is dirty (edited → mapping stale).
+ * confidence tinting (gated under `.tint-on`). Hover / active-flag highlighting
+ * is applied imperatively (the `is-hover` / `is-active-token` classes toggled by
+ * `renderer/highlight.ts`), so hovering never re-renders this component. Dims/
+ * strikes when its token id is dirty (edited → mapping stale).
  *
  * Structural tags (SPEC §5) decorate the word non-destructively: every covering
  * tag type adds a `word-span--tag-<type>` class (colored left-border / underline
@@ -34,8 +36,6 @@ export interface WordSpanProps {
   text: string
   /** OCR confidence 0–100 for this token (defaults high when no OCR flag). */
   confidence: number
-  /** True when this token is the one currently hovered (either pane). */
-  isHovered: boolean
   /** True when this token's text was edited and its mapping is stale. */
   isDirty: boolean
   /** Structural-tag decoration for this token, if any. */
@@ -47,7 +47,6 @@ export function WordSpan({
   entry,
   text,
   confidence,
-  isHovered,
   isDirty,
   decoration,
   onHover
@@ -55,7 +54,6 @@ export function WordSpan({
   const classes = ['word-span']
   if (confidence < 60) classes.push('word-span--conf-low')
   else if (confidence < 90) classes.push('word-span--conf-mid')
-  if (isHovered) classes.push('word-span--hover')
   if (isDirty) classes.push('word-span--dirty')
 
   if (decoration) {

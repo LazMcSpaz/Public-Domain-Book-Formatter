@@ -9,13 +9,12 @@
  * re-render mid-edit from the user's own keystrokes (the parent guards that by
  * skipping re-sync of self-emitted markdown).
  */
-import { Fragment } from 'react'
+import { Fragment, memo } from 'react'
 import type { Paragraph } from '../../utils/markdown-to-spans'
 import { WordSpan, type TagDecoration } from './WordSpan'
 
 export interface ParagraphViewProps {
   paragraph: Paragraph
-  hoverTokenId: string | null
   dirtyTokenIds: ReadonlySet<string>
   /** tokenId → OCR confidence (0–100); high default applied by the parent. */
   confidenceOf: (tokenId: string) => number
@@ -24,9 +23,11 @@ export interface ParagraphViewProps {
   onHover: (offset: number) => void
 }
 
-export function ParagraphView({
+// Memoized: hover / active-flag highlighting is imperative (renderer/highlight.ts),
+// so a paragraph only needs to re-render when its own inputs (text, tags, dirty
+// set, confidence) change — not on every hover or unrelated store update.
+export const ParagraphView = memo(function ParagraphView({
   paragraph,
-  hoverTokenId,
   dirtyTokenIds,
   confidenceOf,
   decorationOf,
@@ -47,7 +48,6 @@ export function ParagraphView({
               entry={node.entry}
               text={node.text}
               confidence={confidenceOf(node.entry.tokenId)}
-              isHovered={node.entry.tokenId === hoverTokenId}
               isDirty={dirtyTokenIds.has(node.entry.tokenId)}
               decoration={decorationOf(node.entry.output.start, node.entry.output.end)}
               onHover={onHover}
@@ -58,4 +58,4 @@ export function ParagraphView({
       })}
     </div>
   )
-}
+})

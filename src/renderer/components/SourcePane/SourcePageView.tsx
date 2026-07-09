@@ -5,7 +5,7 @@
  * (`preserveAspectRatio="none"`, 100%x100%). Mousemove is converted to
  * source-image pixel coordinates and fed to hover-sync (SPEC §4).
  */
-import { useCallback, useRef } from 'react'
+import { memo, useCallback, useRef } from 'react'
 import type { MouseEvent } from 'react'
 import type { SourcePage } from '@core/model'
 import { assetUrl } from '../../utils/asset-url'
@@ -16,14 +16,14 @@ import { RegionMarkers } from '../ImageMode/RegionMarkers'
 export interface SourcePageViewProps {
   page: SourcePage
   projectPath: string
-  hoverTokenId: string | null
   confidenceTint: boolean
 }
 
-export function SourcePageView({
+// Memoized: hover highlighting is imperative, so a page only re-renders when its
+// own inputs (page data, tint) change — not on every pointer move.
+export const SourcePageView = memo(function SourcePageView({
   page,
   projectPath,
-  hoverTokenId,
   confidenceTint
 }: SourcePageViewProps): JSX.Element {
   const { setHoverFromSource, clearHover } = useHoverSync()
@@ -97,9 +97,9 @@ export function SourcePageView({
         onMouseMove={handleMouseMove}
         onMouseLeave={handleMouseLeave}
       >
-        <WordOverlay page={page} hoverTokenId={hoverTokenId} confidenceTint={confidenceTint} />
+        <WordOverlay page={page} confidenceTint={confidenceTint} />
         <RegionMarkers page={page} />
       </svg>
     </div>
   )
-}
+})

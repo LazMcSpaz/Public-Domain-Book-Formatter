@@ -8,6 +8,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { PipelineProgress } from '@shared/ipc-types'
 import { useReview } from './store/ReviewContext'
+import { FlagNavProvider } from './store/FlagNavContext'
 import { OpenProjectView } from './components/OpenProjectView'
 import { LoadingView } from './components/LoadingView'
 import { ReviewShell } from './components/ReviewShell'
@@ -77,7 +78,13 @@ export function App(): JSX.Element {
     )
   }
 
-  if (state.project) return <ReviewShell />
+  if (state.project) {
+    return (
+      <FlagNavProvider>
+        <ReviewShell />
+      </FlagNavProvider>
+    )
+  }
   if (loading) return <LoadingView progress={progress} />
   return (
     <OpenProjectView

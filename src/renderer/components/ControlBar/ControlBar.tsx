@@ -6,6 +6,9 @@
  */
 import { useCallback, useState, type ChangeEvent } from 'react'
 import { useReview } from '../../store/ReviewContext'
+import { useFlagNav } from '../../store/FlagNavContext'
+import { flagTokenId } from '../../utils/flag-token'
+import { jumpToToken } from '../../highlight'
 import type { ReadingPrefs } from '../../store/types'
 import './ControlBar.css'
 
@@ -35,6 +38,7 @@ function Slider({ label, value, min, max, step, format, onChange }: SliderProps)
 
 export function ControlBar(): JSX.Element {
   const { state, dispatch } = useReview()
+  const { activeIndex, setActiveIndex } = useFlagNav()
   const prefs = state.readingPrefs
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
@@ -61,25 +65,11 @@ export function ControlBar(): JSX.Element {
   const onNextFlag = useCallback(() => {
     const flags = state.project?.flags ?? []
     if (flags.length === 0) return
-    const next = (state.activeFlagIndex + 1 + flags.length) % flags.length
-    dispatch({ type: 'SET_ACTIVE_FLAG', index: next })
-
-    const flag = flags[next]!
-    const tokenId = flag.tokenId
-    if (tokenId) {
-      const entry = state.coordinateMap?.byTokenId(tokenId) ?? null
-      dispatch({
-        type: 'SET_HOVER',
-        hover: {
-          tokenId,
-          sourcePageIndex: entry?.pageIndex ?? null,
-          outputOffset: entry?.output.start ?? null
-        }
-      })
-    } else {
-      dispatch({ type: 'CLEAR_HOVER' })
-    }
-  }, [state.project, state.activeFlagIndex, state.coordinateMap, dispatch])
+    const next = (activeIndex + 1 + flags.length) % flags.length
+    setActiveIndex(next)
+    const tokenId = flagTokenId(flags[next]!, state.coordinateMap)
+    if (tokenId) jumpToToken(tokenId)
+  }, [state.project, state.coordinateMap, activeIndex, setActiveIndex])
 
   const hasFlags = (state.project?.flags.length ?? 0) > 0
 

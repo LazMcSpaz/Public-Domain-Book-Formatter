@@ -1,15 +1,16 @@
 /**
- * useHoverSync — bridges CoordinateMap queries to the shared hover state so a
- * passage and its counterpart highlight together across panes (SPEC §4
- * hover-sync). Source-pane callers pass a page point; output-pane callers pass a
- * char offset. Both resolve to the same `tokenId`.
+ * useHoverSync — bridges CoordinateMap queries to the imperative highlight
+ * controller so a passage and its counterpart highlight together across panes
+ * (SPEC §4 hover-sync). Source-pane callers pass a page point; output-pane
+ * callers pass a char offset. Both resolve to the same `tokenId`, which is then
+ * highlighted directly on the two affected DOM nodes — no React re-render, so
+ * hovering stays snappy on a whole book's worth of words.
  */
 import { useCallback } from 'react'
 import { useReview } from '../store/ReviewContext'
+import { setHoverToken } from '../highlight'
 
 export interface HoverSync {
-  /** The currently-highlighted token id (null when nothing is hovered). */
-  hoverTokenId: string | null
   /** Hover came from the source image at (pageIndex, x, y) in image pixels. */
   setHoverFromSource(pageIndex: number, x: number, y: number): void
   /** Hover came from the output text at a character offset. */
@@ -18,43 +19,28 @@ export interface HoverSync {
 }
 
 export function useHoverSync(): HoverSync {
-  const { state, dispatch } = useReview()
+  const { state } = useReview()
   const map = state.coordinateMap
 
   const setHoverFromSource = useCallback(
     (pageIndex: number, x: number, y: number) => {
       const entry = map?.atPoint(pageIndex, x, y) ?? null
-      dispatch({
-        type: 'SET_HOVER',
-        hover: {
-          tokenId: entry?.tokenId ?? null,
-          sourcePageIndex: pageIndex,
-          outputOffset: entry?.output.start ?? null
-        }
-      })
+      setHoverToken(entry?.tokenId ?? null)
     },
-    [map, dispatch]
+    [map]
   )
 
   const setHoverFromOutput = useCallback(
     (offset: number) => {
       const entry = map?.atOutputOffset(offset) ?? null
-      dispatch({
-        type: 'SET_HOVER',
-        hover: {
-          tokenId: entry?.tokenId ?? null,
-          sourcePageIndex: entry?.pageIndex ?? null,
-          outputOffset: offset
-        }
-      })
+      setHoverToken(entry?.tokenId ?? null)
     },
-    [map, dispatch]
+    [map]
   )
 
-  const clearHover = useCallback(() => dispatch({ type: 'CLEAR_HOVER' }), [dispatch])
+  const clearHover = useCallback(() => setHoverToken(null), [])
 
   return {
-    hoverTokenId: state.hover.tokenId,
     setHoverFromSource,
     setHoverFromOutput,
     clearHover

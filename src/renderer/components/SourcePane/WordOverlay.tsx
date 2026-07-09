@@ -4,15 +4,16 @@
  * Rects are positioned in source-image pixel space, so they sit inside an SVG
  * whose viewBox is the page's pixel dimensions and which is stretched over the
  * <img>. Each rect carries `data-token-id` and `data-page-index` so the
- * integrator's scroll-sync can scan them. The hovered token is highlighted; when
+ * integrator's scroll-sync can scan them. Hover / active-flag highlighting is
+ * applied imperatively (`is-hover` / `is-active-token` classes toggled by
+ * `renderer/highlight.ts`), so hovering never re-renders these rects. When
  * confidence tinting is on, every rect is tinted by OCR confidence.
  */
+import { memo } from 'react'
 import type { SourcePage } from '@core/model'
 
 export interface WordOverlayProps {
   page: SourcePage
-  /** Token id currently under the cursor (either pane), or null. */
-  hoverTokenId: string | null
   /** Whether confidence tinting is enabled (SPEC §4, off by default). */
   confidenceTint: boolean
 }
@@ -24,17 +25,19 @@ function confidenceClass(confidence: number): string | null {
   return null
 }
 
-export function WordOverlay({ page, hoverTokenId, confidenceTint }: WordOverlayProps): JSX.Element {
+// Memoized: a page's rects only change with the tint toggle, not on hover.
+export const WordOverlay = memo(function WordOverlay({
+  page,
+  confidenceTint
+}: WordOverlayProps): JSX.Element {
   return (
     <g className="word-overlay">
       {page.words.map((word) => {
         const { x0, y0, x1, y1 } = word.bbox
-        const isHovered = word.id === hoverTokenId
         const tintClass = confidenceTint ? confidenceClass(word.confidence) : null
 
         const classes = ['word-rect']
         if (tintClass) classes.push(tintClass)
-        if (isHovered) classes.push('word-rect--hover')
 
         return (
           <rect
@@ -51,4 +54,4 @@ export function WordOverlay({ page, hoverTokenId, confidenceTint }: WordOverlayP
       })}
     </g>
   )
-}
+})
