@@ -29,5 +29,12 @@
       "@pipeline/*": ["src/pipeline/*"]
     }
   },
-  "include": ["src/**/*.ts", "test/**/*.ts", "electron.vite.config.ts", "vitest.config.ts"]
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "test/**/*.ts",
+    "test/**/*.tsx",
+    "electron.vite.config.ts",
+    "vitest.config.ts"
+  ]
 }
