@@ -15,7 +15,7 @@ import { FlagPanel } from './FlagPanel/FlagPanel'
 import { FindReplacePanel } from './FindReplacePanel/FindReplacePanel'
 import { StructurePanel } from './Tagging'
 import { ImageEditor } from './ImageMode'
-import { StyleEditor, ProfileManager } from './StyleEditor'
+import { StyleEditor } from './StyleEditor'
 import { FrontMatter } from './FrontMatter'
 import { ExportPanel } from './ExportPanel'
 import './ReviewShell.css'
@@ -85,7 +85,6 @@ export function ReviewShell(): JSX.Element {
 
       {view === 'style' && (
         <div className="review-scroll-view">
-          <ProfileManager />
           <StyleEditor />
           <FrontMatter />
         </div>
