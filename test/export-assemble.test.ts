@@ -161,4 +161,56 @@ describe('assembleAndExport', () => {
     // One pandoc, then three xelatex passes (TOC + running heads + settle).
     expect(cmds).toEqual(['pandoc', 'xelatex', 'xelatex', 'xelatex'])
   })
+
+  it('crops accepted image regions from the source PDF and places figures', async () => {
+    const run = mockRunner()
+    // A real file so the source-PDF existence check passes; content is irrelevant
+    // (the mock runner stands in for pdftoppm).
+    const pdfPath = path.join(buildDir, 'source.pdf')
+    await fs.writeFile(pdfPath, '%PDF-1.4\n', 'utf8')
+
+    const project = makeProject()
+    project.source = { pdfPath, pageCount: 1 }
+    project.pages = [
+      {
+        index: 0,
+        imagePath: null,
+        width: 1000,
+        height: 1500,
+        dpi: 300,
+        words: [],
+        regions: [
+          { id: 'r0', pageIndex: 0, bbox: { x0: 100, y0: 200, x1: 700, y1: 1000 }, accepted: true },
+          { id: 'r1', pageIndex: 0, bbox: { x0: 0, y0: 0, x1: 50, y1: 50 }, accepted: false }
+        ]
+      }
+    ]
+    project.coordinateMap = [
+      {
+        tokenId: 'p0_w0',
+        pageIndex: 0,
+        bbox: { x0: 0, y0: 0, x1: 1, y1: 1 },
+        output: { start: 15, end: 19 }
+      }
+    ]
+
+    await assembleAndExport({
+      project,
+      projectPath: buildDir,
+      profile: defaultStyleProfile(),
+      buildDir,
+      run
+    })
+
+    // Exactly one crop (only the accepted region), single-file, page 1.
+    const crops = run.calls.filter((c) => c.cmd === 'pdftoppm')
+    expect(crops).toHaveLength(1)
+    expect(crops[0]!.args).toContain('-singlefile')
+    expect(crops[0]!.args.join(' ')).toContain('-f 1')
+
+    // The figure landed in the export markdown that pandoc consumed.
+    const bodyMd = await fs.readFile(path.join(buildDir, 'body.md'), 'utf8')
+    expect(bodyMd).toContain('\\includegraphics')
+    expect(bodyMd).toContain('\\IfFileExists{img-0.png}')
+  })
 })

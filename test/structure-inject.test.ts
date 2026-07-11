@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { StructuralTag } from '@core/model'
-import { injectStructure, confirmedHeadings } from '@core/structure'
+import { injectStructure, confirmedHeadings, assembleBody } from '@core/structure'
 
 function heading(
   id: string,
@@ -116,5 +116,37 @@ describe('injectStructure — block tags', () => {
     const out = injectStructure(md, [outer, inner])
     expect(out).toContain('> wo th') // slice(5,10) of the string
     expect(out).not.toContain('# ONE')
+  })
+})
+
+describe('assembleBody — image/figure inserts', () => {
+  it('splices a figure block at the given offset without disturbing the text', () => {
+    const md = 'Page one text.\n\nPage two text.'
+    const insert = { offset: 14, block: '\\begin{figure}IMG\\end{figure}' } // after "Page one text."
+    const out = assembleBody(md, [], [insert])
+    expect(out).toContain('\\begin{figure}IMG\\end{figure}')
+    expect(out).toContain('Page one text.')
+    expect(out).toContain('Page two text.')
+    // The figure sits between the two paragraphs, not inside either word.
+    expect(out.indexOf('IMG')).toBeGreaterThan(out.indexOf('Page one text.'))
+    expect(out.indexOf('IMG')).toBeLessThan(out.indexOf('Page two text.'))
+  })
+
+  it('applies headings and figure inserts together against original offsets', () => {
+    const md = 'TITLE\n\nbody paragraph here'
+    const heads = [heading('h', 0, 5, 1, true)]
+    const inserts = [{ offset: md.length, block: '\\begin{figure}END\\end{figure}' }]
+    const out = assembleBody(md, heads, inserts)
+    expect(out).toContain('# TITLE')
+    expect(out).toContain('body paragraph here')
+    expect(out).toContain('\\begin{figure}END\\end{figure}')
+    // Figure at the end comes after the body.
+    expect(out.indexOf('END')).toBeGreaterThan(out.indexOf('body paragraph here'))
+  })
+
+  it('ignores blank or out-of-range inserts', () => {
+    const md = 'text'
+    expect(assembleBody(md, [], [{ offset: 2, block: '   ' }])).toBe(md)
+    expect(assembleBody(md, [], [{ offset: 999, block: 'X' }])).toBe(md)
   })
 })

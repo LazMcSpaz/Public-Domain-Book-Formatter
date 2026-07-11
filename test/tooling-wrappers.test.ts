@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { CommandRunner, CommandResult } from '@tooling/process'
-import { extractPages, buildExtractArgs } from '@tooling/wrappers/pdf-extract'
+import { extractPages, buildExtractArgs, buildCropRegionArgs } from '@tooling/wrappers/pdf-extract'
 import { ocrToHocr, buildHocrArgs } from '@tooling/wrappers/tesseract'
 import { buildOcrArgs } from '@tooling/wrappers/ocrmypdf'
 import { buildPandocArgs } from '@tooling/wrappers/pandoc'
@@ -33,6 +33,27 @@ describe('pdftoppm wrapper', () => {
     expect(run.calls[0]!.cmd).toBe('pdftoppm')
     expect(paths[0]).toBe('/out/page-01.png')
     expect(paths[11]).toBe('/out/page-12.png')
+  })
+
+  it('builds a single-file crop-region argv with integer pixel box', () => {
+    const args = buildCropRegionArgs('/in/book.pdf', '/out/img-0', {
+      page: 3,
+      dpi: 300,
+      x: 10.7,
+      y: 20.2,
+      w: 100.4,
+      h: 50.9
+    })
+    expect(args).toContain('-singlefile')
+    expect(args.join(' ')).toContain('-f 3')
+    expect(args.join(' ')).toContain('-l 3')
+    // x/y floor, w/h ceil.
+    expect(args.join(' ')).toContain('-x 10')
+    expect(args.join(' ')).toContain('-y 20')
+    expect(args.join(' ')).toContain('-W 101')
+    expect(args.join(' ')).toContain('-H 51')
+    expect(args[args.length - 1]).toBe('/out/img-0')
+    expect(args[args.length - 2]).toBe('/in/book.pdf')
   })
 })
 

@@ -86,6 +86,68 @@ export async function extractPages(
   return paths
 }
 
+/** A crop rectangle in the page image's pixel space (top-left origin). */
+export interface CropRegionOptions {
+  /** 1-based page number to render. */
+  page: number
+  /** Render resolution in DPI — must match the space `x/y/w/h` are given in. */
+  dpi?: number
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
+/**
+ * Build the argv to render just a pixel region of one PDF page to a single PNG
+ * (exported for testability). `-singlefile` makes pdftoppm write exactly
+ * `<outPrefix>.png` (no page-number suffix). The crop box `-x -y -W -H` is in
+ * pixels at the chosen `-r` resolution, so passing the accepted region's bbox
+ * (which lives in the 300-DPI extract space) reproduces that region exactly.
+ */
+export function buildCropRegionArgs(
+  pdfPath: string,
+  outPrefix: string,
+  opts: CropRegionOptions
+): string[] {
+  const dpi = opts.dpi ?? 300
+  return [
+    '-png',
+    '-r',
+    String(dpi),
+    '-f',
+    String(opts.page),
+    '-l',
+    String(opts.page),
+    '-x',
+    String(Math.max(0, Math.floor(opts.x))),
+    '-y',
+    String(Math.max(0, Math.floor(opts.y))),
+    '-W',
+    String(Math.max(1, Math.ceil(opts.w))),
+    '-H',
+    String(Math.max(1, Math.ceil(opts.h))),
+    '-singlefile',
+    pdfPath,
+    outPrefix
+  ]
+}
+
+/**
+ * Render one region of a PDF page to `<outPrefix>.png` and return that path.
+ * The caller is responsible for verifying the file landed (pdftoppm failures
+ * must never break an export — the caller guards and skips the image).
+ */
+export async function cropPageRegion(
+  pdfPath: string,
+  outPrefix: string,
+  opts: CropRegionOptions,
+  run: CommandRunner = runCommand
+): Promise<string> {
+  await run('pdftoppm', buildCropRegionArgs(pdfPath, outPrefix, opts))
+  return `${outPrefix}.png`
+}
+
 /**
  * Best-effort page count via `pdfinfo` (poppler). Optional — guarded so a
  * missing binary or unparsable output yields `null` rather than throwing.
