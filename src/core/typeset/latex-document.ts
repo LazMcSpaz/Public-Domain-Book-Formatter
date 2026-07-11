@@ -81,16 +81,40 @@ function runningHeadField(mode: StyleProfile['runningHeads']['verso']): string {
 function geometryBlock(profile: StyleProfile): string {
   const trim = parseTrimSize(profile.trimSize)
   const m = profile.margins
-  const inner = m.inner + profile.gutter
+  // Two-sided imposition: `twoside` makes `inner`/`outer` mirror across the
+  // spread (the inner/spine margin lands on the right of verso pages and the
+  // left of recto pages), and `bindingoffset` adds the gutter to whichever side
+  // is against the binding — so the text block stays optically centred once the
+  // book is bound. This is the alternating-gutter behaviour print interiors need
+  // (KDP §"Set up your manuscript"); a one-sided layout can't do it.
   const opts = [
     `paperwidth=${fmtIn(trim.widthIn)}`,
     `paperheight=${fmtIn(trim.heightIn)}`,
     `top=${fmtIn(m.top)}`,
     `bottom=${fmtIn(m.bottom)}`,
-    `inner=${fmtIn(inner)}`,
-    `outer=${fmtIn(m.outer)}`
+    `inner=${fmtIn(m.inner)}`,
+    `outer=${fmtIn(m.outer)}`,
+    `bindingoffset=${fmtIn(profile.gutter)}`,
+    'twoside'
   ]
   return `\\usepackage[${opts.join(',')}]{geometry}`
+}
+
+/**
+ * Print-quality typesetting defaults (SPEC §7/§10). Suppresses widows/orphans
+ * and stray broken pages, and uses a ragged bottom so pages aren't vertically
+ * stretched to force equal depth — the usual choice for a text reprint where a
+ * one-line height difference reads better than stretched leading.
+ */
+function printQualityBlock(): string {
+  return [
+    '% --- Print-quality defaults ---',
+    '\\clubpenalty=10000',
+    '\\widowpenalty=10000',
+    '\\displaywidowpenalty=10000',
+    '\\brokenpenalty=10000',
+    '\\raggedbottom'
+  ].join('\n')
 }
 
 function fontBlock(profile: StyleProfile): string {
@@ -105,6 +129,11 @@ function fontBlock(profile: StyleProfile): string {
 
 function fancyhdrBlock(profile: StyleProfile): string {
   const lines: string[] = ['\\usepackage{fancyhdr}', '\\pagestyle{fancy}', '\\fancyhf{}']
+
+  // Clean the auto marks so chapter/section running heads read as the plain
+  // title, not book class's uppercased "CHAPTER 1. TITLE".
+  lines.push('\\renewcommand{\\chaptermark}[1]{\\markboth{#1}{}}')
+  lines.push('\\renewcommand{\\sectionmark}[1]{\\markright{#1}}')
 
   const verso = runningHeadField(profile.runningHeads.verso)
   const recto = runningHeadField(profile.runningHeads.recto)
@@ -219,22 +248,21 @@ function copyrightPage(input: LatexDocumentInput): string {
   return lines.join('\n')
 }
 
+/**
+ * Table of contents. We emit LaTeX's native `\tableofcontents`, whose page
+ * numbers are the *real* typeset ones (resolved on the second XeLaTeX pass from
+ * the injected `\chapter` structure) — not the estimates the old hand-rolled
+ * list carried. Only emitted when the document actually has detected structure;
+ * an unstructured reprint gets no empty Contents page.
+ */
 function tocBlock(toc: TocEntry[]): string {
-  const lines: string[] = [
-    '% --- Auto-generated TOC with edition page numbers (SPEC §7) ---',
-    '\\thispagestyle{empty}',
-    '\\begin{center}{\\bookheadingstyle Contents\\par}\\end{center}',
-    '\\vspace{1em}',
-    '\\begin{description}'
-  ]
-  for (const entry of toc) {
-    const indent = entry.level > 1 ? `\\hspace{${(entry.level - 1) * 1.5}em}` : ''
-    const title = escapeLatex(entry.title)
-    const page = entry.pageNumber === null ? '' : String(entry.pageNumber)
-    lines.push(`\\item[]${indent}${title}\\dotfill ${page}`)
-  }
-  lines.push('\\end{description}', '\\clearpage')
-  return lines.join('\n')
+  if (toc.length === 0) return ''
+  return [
+    '% --- Auto TOC with real typeset page numbers (SPEC §7) ---',
+    '\\cleardoublepage',
+    '\\tableofcontents',
+    '\\cleardoublepage'
+  ].join('\n')
 }
 
 /** Build a complete standalone XeLaTeX document. */
@@ -244,13 +272,15 @@ export function buildLatexDocument(input: LatexDocumentInput): string {
 
   const parts: string[] = []
 
-  // Preamble.
+  // Preamble. `twoside` gives mirrored margins, recto chapter openings, and
+  // verso/recto-aware running heads — the basis of a real print interior.
   parts.push('% !TEX program = xelatex')
-  parts.push(`\\documentclass[${Number(profile.bodyFontSize.toFixed(2))}pt,oneside]{book}`)
+  parts.push(`\\documentclass[${Number(profile.bodyFontSize.toFixed(2))}pt,twoside]{book}`)
   parts.push(geometryBlock(profile))
   parts.push(fontBlock(profile))
   parts.push('\\usepackage{graphicx}')
   parts.push(fancyhdrBlock(profile))
+  parts.push(printQualityBlock())
   parts.push(headingMacros(profile))
 
   // Stored metadata used by running heads.

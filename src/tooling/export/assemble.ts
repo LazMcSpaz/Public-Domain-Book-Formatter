@@ -20,7 +20,7 @@
 import * as path from 'node:path'
 import * as fs from 'node:fs/promises'
 import type { ExportResult, ProjectFile, StyleProfile } from '@core/model'
-import { buildToc } from '@core/structure'
+import { buildToc, injectStructure, confirmedHeadings } from '@core/structure'
 import { resolveStyle } from '@core/style'
 import { buildLatexDocument, validateKdp } from '@core/typeset'
 import { BUILTIN_ORNAMENTS, resolveOrnamentPaths } from '@core/ornament'
@@ -80,17 +80,26 @@ export async function assembleAndExport(opts: AssembleOptions): Promise<ExportRe
 
   await fs.mkdir(buildDir, { recursive: true })
 
-  // (1) Markdown intermediate → build dir.
+  // (1) Markdown intermediate → build dir. Inject the confirmed structure
+  // (headings) as Markdown so Pandoc produces real chapters/TOC/running heads;
+  // this is an export-only copy — the stored project markdown/map are untouched.
   const bodyMdPath = path.join(buildDir, 'body.md')
-  await fs.writeFile(bodyMdPath, project.markdown, 'utf8')
+  const exportMarkdown = injectStructure(project.markdown, project.tags)
+  await fs.writeFile(bodyMdPath, exportMarkdown, 'utf8')
 
   // (2) pandoc: Markdown → LaTeX *body fragment* (standalone:false), written to
-  // body.tex. The wrapper also returns its stdout; prefer reading the file back
-  // (the canonical fragment) and fall back to stdout when no file landed.
+  // body.tex, with level-1 headings mapped to \chapter. The wrapper also returns
+  // its stdout; prefer reading the file back (the canonical fragment) and fall
+  // back to stdout when no file landed.
   const bodyTexPath = path.join(buildDir, 'body.tex')
   const pandocStdout = await markdownToLatex(
-    project.markdown,
-    { inputPath: bodyMdPath, outputPath: bodyTexPath, standalone: false },
+    exportMarkdown,
+    {
+      inputPath: bodyMdPath,
+      outputPath: bodyTexPath,
+      standalone: false,
+      topLevelDivisionChapter: true
+    },
     run
   )
   let bodyLatex: string
@@ -102,7 +111,10 @@ export async function assembleAndExport(opts: AssembleOptions): Promise<ExportRe
 
   // (3) resolve style, build TOC, convert chosen ornaments SVG → vector PDF.
   const resolvedStyle = resolveStyle(profile, project.config)
-  const toc = buildToc(project.tags, project.markdown)
+  // TOC is driven by the confirmed headings (the same ones injected into the
+  // body), so an empty/unstructured book gets no Contents page. Actual page
+  // numbers come from the native \tableofcontents after multi-pass typesetting.
+  const toc = buildToc(confirmedHeadings(project.tags), project.markdown)
 
   // Convert only the ornaments this profile actually uses, in choice order.
   const chosenIds = [
@@ -151,7 +163,9 @@ export async function assembleAndExport(opts: AssembleOptions): Promise<ExportRe
     }
     return result
   }
-  const typesetResult = await typeset('book.tex', buildDir, {}, capturingRun)
+  // Three passes: (1) writes .aux/.toc, (2) resolves TOC + running heads,
+  // (3) settles any page shifts the TOC's own length introduced.
+  const typesetResult = await typeset('book.tex', buildDir, { passes: 3 }, capturingRun)
 
   let logText = ''
   try {

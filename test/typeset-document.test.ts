@@ -62,15 +62,27 @@ describe('buildLatexDocument', () => {
     expect(tex).toContain('\\end{document}')
   })
 
-  it('configures geometry from trim, margins and gutter', () => {
+  it('configures geometry with mirrored margins + binding offset (two-sided)', () => {
     const profile = defaultStyleProfile()
     const tex = build(profile)
     expect(tex).toContain('{geometry}')
     expect(tex).toContain('paperwidth=6in')
     expect(tex).toContain('paperheight=9in')
-    // inner = margins.inner (0.75) + gutter (0.13) = 0.88
-    expect(tex).toContain('inner=0.88in')
+    // Two-sided: inner/outer are the raw margins (geometry mirrors them across
+    // the spread) and the gutter goes to bindingoffset so the spine margin
+    // alternates page to page.
+    expect(tex).toContain('inner=0.75in')
     expect(tex).toContain('outer=0.5in')
+    expect(tex).toContain('bindingoffset=0.13in')
+    expect(tex).toContain('twoside')
+    expect(tex).toContain('twoside]{book}')
+  })
+
+  it('sets print-quality widow/orphan controls', () => {
+    const tex = build(defaultStyleProfile())
+    expect(tex).toContain('\\widowpenalty=10000')
+    expect(tex).toContain('\\clubpenalty=10000')
+    expect(tex).toContain('\\raggedbottom')
   })
 
   it('selects body and heading fonts via fontspec', () => {
@@ -128,13 +140,17 @@ describe('buildLatexDocument', () => {
     expect(tex).not.toContain('Copyright \\textcopyright')
   })
 
-  it('renders the TOC entries with edition page numbers', () => {
+  it('emits a native TOC when the book has structure (real typeset page numbers)', () => {
     const tex = build(defaultStyleProfile())
-    expect(tex).toContain('Contents')
-    expect(tex).toContain('Chapter One')
-    expect(tex).toContain('A Subsection')
-    expect(tex).toContain('\\dotfill 1')
-    expect(tex).toContain('\\dotfill 3')
+    // Native \tableofcontents resolves real page numbers on later passes,
+    // instead of the old hand-rolled list with pre-typeset estimates.
+    expect(tex).toContain('\\tableofcontents')
+    expect(tex).not.toContain('\\dotfill')
+  })
+
+  it('omits the TOC when there is no detected structure', () => {
+    const tex = build(defaultStyleProfile(), { toc: [] })
+    expect(tex).not.toContain('\\tableofcontents')
   })
 
   it('includes ornament graphics when paths given', () => {
