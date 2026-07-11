@@ -11,6 +11,13 @@ import { runCommand, type CommandRunner } from '../process'
 export interface XelatexOptions {
   /** Extra `xelatex` args appended before the tex file. */
   extraArgs?: string[]
+  /**
+   * How many times to run xelatex. A book needs at least two passes so the
+   * table of contents, running heads, and page cross-references resolve (the
+   * first pass writes `.toc`/`.aux`, later passes read them). Default 1 for
+   * simple callers; the export pipeline uses 3 so TOC-induced page shifts settle.
+   */
+  passes?: number
 }
 
 export interface TypesetResult {
@@ -67,7 +74,13 @@ export async function typeset(
   run: CommandRunner = runCommand
 ): Promise<TypesetResult> {
   const args = buildXelatexArgs(texPath, outDir, opts)
-  const result = await run('xelatex', args, { cwd: outDir })
+  const passes = Math.max(1, Math.floor(opts.passes ?? 1))
+  // Warnings from the LAST pass are the ones that reflect the final layout
+  // (earlier passes report transient over/underfull boxes that later resolve).
+  let result = await run('xelatex', args, { cwd: outDir })
+  for (let i = 1; i < passes; i++) {
+    result = await run('xelatex', args, { cwd: outDir })
+  }
 
   const base = path.basename(texPath).replace(/\.tex$/i, '')
   const pdfPath = path.join(outDir, `${base}.pdf`)

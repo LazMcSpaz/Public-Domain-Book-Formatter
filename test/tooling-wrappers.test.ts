@@ -77,6 +77,16 @@ describe('pandoc wrapper', () => {
     expect(args).toContain('-o')
     expect(args).toContain('/out.tex')
   })
+
+  it('maps the top level to \\chapter by default, and can be turned off', () => {
+    expect(buildPandocArgs({})).toContain('--top-level-division=chapter')
+    expect(buildPandocArgs({ topLevelDivisionChapter: true })).toContain(
+      '--top-level-division=chapter'
+    )
+    expect(buildPandocArgs({ topLevelDivisionChapter: false })).not.toContain(
+      '--top-level-division=chapter'
+    )
+  })
 })
 
 describe('xelatex wrapper', () => {
@@ -109,5 +119,15 @@ describe('xelatex wrapper', () => {
     const { pdfPath, warnings } = await typeset('/work/book.tex', '/work/out', {}, run)
     expect(pdfPath).toBe('/work/out/book.pdf')
     expect(warnings).toHaveLength(1)
+  })
+
+  it('runs xelatex once by default and N times when passes is set', async () => {
+    const once = recordingRunner()
+    await typeset('/work/book.tex', '/work/out', {}, once)
+    expect(once.calls.filter((c) => c.cmd === 'xelatex')).toHaveLength(1)
+
+    const thrice = recordingRunner()
+    await typeset('/work/book.tex', '/work/out', { passes: 3 }, thrice)
+    expect(thrice.calls.filter((c) => c.cmd === 'xelatex')).toHaveLength(3)
   })
 })

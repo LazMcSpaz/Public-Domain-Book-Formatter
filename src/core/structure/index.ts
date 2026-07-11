@@ -4,3 +4,4 @@
 export * from './detect-headings'
 export * from './build-toc'
 export * from './footnote-link'
+export * from './inject-structure'

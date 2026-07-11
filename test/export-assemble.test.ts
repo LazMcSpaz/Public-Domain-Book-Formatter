@@ -116,6 +116,8 @@ describe('assembleAndExport', () => {
     const pandoc = run.calls.find((c) => c.cmd === 'pandoc')!
     expect(pandoc.args.slice(0, 4)).toEqual(['-f', 'markdown', '-t', 'latex'])
     expect(pandoc.args).not.toContain('--standalone')
+    // Level-1 headings become \chapter (recto openings, TOC, running heads).
+    expect(pandoc.args).toContain('--top-level-division=chapter')
     expect(pandoc.args).toContain('-o')
     expect(pandoc.args.some((a) => a.endsWith('body.tex'))).toBe(true)
 
@@ -156,6 +158,7 @@ describe('assembleAndExport', () => {
 
     const cmds = run.calls.map((c) => c.cmd)
     expect(cmds.filter((c) => c === 'rsvg-convert')).toHaveLength(0)
-    expect(cmds).toEqual(['pandoc', 'xelatex'])
+    // One pandoc, then three xelatex passes (TOC + running heads + settle).
+    expect(cmds).toEqual(['pandoc', 'xelatex', 'xelatex', 'xelatex'])
   })
 })

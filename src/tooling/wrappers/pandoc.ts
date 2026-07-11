@@ -18,6 +18,12 @@ export interface PandocOptions {
   to?: string
   /** Emit a standalone document (full preamble) rather than a fragment. */
   standalone?: boolean
+  /**
+   * Map the top-level heading to `\chapter` (vs the default `\section`) so the
+   * injected level-1 headings become book chapters — recto openings, TOC
+   * entries, chapter running heads. Default true for our book pipeline.
+   */
+  topLevelDivisionChapter?: boolean
 }
 
 /** Build the pandoc argv (exported for testability). */
@@ -26,6 +32,7 @@ export function buildPandocArgs(opts: PandocOptions = {}): string[] {
   const to = opts.to ?? 'latex'
   const args = ['-f', from, '-t', to]
   if (opts.standalone) args.push('--standalone')
+  if (opts.topLevelDivisionChapter !== false) args.push('--top-level-division=chapter')
   if (opts.outputPath) args.push('-o', opts.outputPath)
   if (opts.inputPath) args.push(opts.inputPath)
   return args
