@@ -67,3 +67,54 @@ describe('injectStructure', () => {
     expect(injectStructure(md, [])).toBe(md)
   })
 })
+
+function tag(
+  id: string,
+  type: StructuralTag['type'],
+  start: number,
+  end: number,
+  data?: Record<string, unknown>
+): StructuralTag {
+  return { id, type, range: { start, end }, ...(data ? { data } : {}) }
+}
+
+describe('injectStructure — block tags', () => {
+  it('renders a block quote as Markdown blockquote lines (no confirm needed)', () => {
+    const md = 'Intro.\n\nTo be or not to be.\n\nOutro.'
+    const start = md.indexOf('To be')
+    const out = injectStructure(md, [
+      tag('q', 'blockquote', start, start + 'To be or not to be.'.length)
+    ])
+    expect(out).toContain('> To be or not to be.')
+  })
+
+  it('renders an epigraph as a blockquote too', () => {
+    const md = 'A wise saying here.'
+    const out = injectStructure(md, [tag('e', 'epigraph', 0, md.length)])
+    expect(out).toContain('> A wise saying here.')
+  })
+
+  it('renders verse as a line block preserving each line', () => {
+    const md = 'Roses are red\nViolets are blue'
+    const out = injectStructure(md, [tag('v', 'verse', 0, md.length)])
+    expect(out).toContain('| Roses are red')
+    expect(out).toContain('| Violets are blue')
+  })
+
+  it('ignores tag types it does not handle (e.g. footnote)', () => {
+    const md = 'Body with a note.'
+    const out = injectStructure(md, [tag('f', 'footnote', 0, 4)])
+    expect(out).toBe(md)
+  })
+
+  it('drops a tag that overlaps an already-applied later tag', () => {
+    // Outer [0,20) heading overlaps inner [5,10) blockquote; the later-starting
+    // (inner) one is applied, the overlapping outer one is skipped.
+    const md = 'ONE two three four five'
+    const inner = tag('in', 'blockquote', 5, 10)
+    const outer = tag('out', 'heading', 0, 20, { level: 1, confirmed: true })
+    const out = injectStructure(md, [outer, inner])
+    expect(out).toContain('> wo th') // slice(5,10) of the string
+    expect(out).not.toContain('# ONE')
+  })
+})
