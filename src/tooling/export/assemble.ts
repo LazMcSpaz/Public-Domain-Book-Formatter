@@ -20,14 +20,22 @@
 import * as path from 'node:path'
 import * as fs from 'node:fs/promises'
 import type { ExportResult, ProjectFile, StyleProfile } from '@core/model'
-import { buildToc, injectStructure, confirmedHeadings } from '@core/structure'
+import { buildToc, assembleBody, confirmedHeadings, type BodyInsert } from '@core/structure'
 import { resolveStyle } from '@core/style'
-import { buildLatexDocument, validateKdp } from '@core/typeset'
+import {
+  buildLatexDocument,
+  validateKdp,
+  textWidthIn,
+  figureWidthIn,
+  figureLatex,
+  pageTextEndOffsets
+} from '@core/typeset'
 import { BUILTIN_ORNAMENTS, resolveOrnamentPaths } from '@core/ornament'
 import { runCommand, type CommandResult, type CommandRunner } from '../process'
 import { markdownToLatex } from '../wrappers/pandoc'
 import { typeset, parseLogWarnings } from '../wrappers/xelatex'
 import { svgToPdf } from '../wrappers/svg2pdf'
+import { cropPageRegion } from '../wrappers/pdf-extract'
 
 export interface AssembleOptions {
   project: ProjectFile
@@ -72,6 +80,64 @@ function collectImageInputs(project: ProjectFile): { effectiveDpi: number | null
 }
 
 /**
+ * Crop every accepted image region out of the source PDF (at the region's
+ * capture DPI, so no upscaling) and return figure inserts positioned after each
+ * region's page in the text. Entirely best-effort: if the source PDF is missing
+ * or a crop fails, that image is skipped and the export proceeds text-only — an
+ * illustration must never break the whole book. The emitted figures are also
+ * `\IfFileExists`-guarded so a crop that didn't land is skipped at typeset time.
+ */
+async function placeImages(
+  project: ProjectFile,
+  projectPath: string,
+  buildDir: string,
+  profile: StyleProfile,
+  run: CommandRunner
+): Promise<BodyInsert[]> {
+  const pdfRef = project.source?.pdfPath
+  if (!pdfRef) return []
+  const pdfPath = path.isAbsolute(pdfRef) ? pdfRef : path.join(projectPath, pdfRef)
+  try {
+    await fs.access(pdfPath)
+  } catch {
+    return [] // source PDF not reachable — export text-only
+  }
+
+  const maxWidthIn = textWidthIn(profile)
+  const ends = pageTextEndOffsets(project.coordinateMap)
+  const fallback = project.markdown.length
+  const inserts: BodyInsert[] = []
+  let n = 0
+
+  for (const page of project.pages) {
+    for (const region of page.regions) {
+      if (region.accepted !== true) continue
+      const b = region.bbox
+      const x = Math.min(b.x0, b.x1)
+      const y = Math.min(b.y0, b.y1)
+      const w = Math.abs(b.x1 - b.x0)
+      const h = Math.abs(b.y1 - b.y0)
+      if (w < 1 || h < 1) continue
+
+      const name = `img-${n++}`
+      const outPrefix = path.join(buildDir, name)
+      const dpi = page.dpi ?? 300
+      try {
+        await cropPageRegion(pdfPath, outPrefix, { page: page.index + 1, dpi, x, y, w, h }, run)
+      } catch {
+        continue // this crop failed; skip just this image
+      }
+      const widthIn = figureWidthIn(w, dpi, maxWidthIn)
+      inserts.push({
+        offset: ends.get(page.index) ?? fallback,
+        block: figureLatex(`${name}.png`, widthIn)
+      })
+    }
+  }
+  return inserts
+}
+
+/**
  * Assemble and export the project to a validated KDP PDF.
  */
 export async function assembleAndExport(opts: AssembleOptions): Promise<ExportResult> {
@@ -80,11 +146,19 @@ export async function assembleAndExport(opts: AssembleOptions): Promise<ExportRe
 
   await fs.mkdir(buildDir, { recursive: true })
 
+  const resolvedStyle = resolveStyle(profile, project.config)
+
+  // (0) Crop accepted image regions from the source scan into the build dir and
+  // build the figure inserts. Best-effort: any failure leaves the export
+  // text-only rather than breaking it (see placeImages).
+  const imageInserts = await placeImages(project, projectPath, buildDir, resolvedStyle, run)
+
   // (1) Markdown intermediate → build dir. Inject the confirmed structure
-  // (headings) as Markdown so Pandoc produces real chapters/TOC/running heads;
-  // this is an export-only copy — the stored project markdown/map are untouched.
+  // (headings/quotes/verse) plus the image figures as Markdown/LaTeX so Pandoc
+  // produces real chapters/TOC/running heads and placed illustrations; this is
+  // an export-only copy — the stored project markdown/map are untouched.
   const bodyMdPath = path.join(buildDir, 'body.md')
-  const exportMarkdown = injectStructure(project.markdown, project.tags)
+  const exportMarkdown = assembleBody(project.markdown, project.tags, imageInserts)
   await fs.writeFile(bodyMdPath, exportMarkdown, 'utf8')
 
   // (2) pandoc: Markdown → LaTeX *body fragment* (standalone:false), written to
@@ -109,8 +183,7 @@ export async function assembleAndExport(opts: AssembleOptions): Promise<ExportRe
     bodyLatex = pandocStdout
   }
 
-  // (3) resolve style, build TOC, convert chosen ornaments SVG → vector PDF.
-  const resolvedStyle = resolveStyle(profile, project.config)
+  // (3) build TOC, convert chosen ornaments SVG → vector PDF.
   // TOC is driven by the confirmed headings (the same ones injected into the
   // body), so an empty/unstructured book gets no Contents page. Actual page
   // numbers come from the native \tableofcontents after multi-pass typesetting.
