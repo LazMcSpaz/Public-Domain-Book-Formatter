@@ -96,6 +96,12 @@ export interface CropRegionOptions {
   y: number
   w: number
   h: number
+  /**
+   * Output format. `png` (default) goes straight into the PDF; `ppm` is
+   * pdftoppm's native uncompressed format, used when the region has saved edits
+   * that must be applied in-process before re-encoding to PNG.
+   */
+  format?: 'png' | 'ppm'
 }
 
 /**
@@ -111,8 +117,10 @@ export function buildCropRegionArgs(
   opts: CropRegionOptions
 ): string[] {
   const dpi = opts.dpi ?? 300
+  // Omit -png for PPM (pdftoppm's default uncompressed format).
+  const formatFlag = (opts.format ?? 'png') === 'png' ? ['-png'] : []
   return [
-    '-png',
+    ...formatFlag,
     '-r',
     String(dpi),
     '-f',
@@ -134,9 +142,9 @@ export function buildCropRegionArgs(
 }
 
 /**
- * Render one region of a PDF page to `<outPrefix>.png` and return that path.
- * The caller is responsible for verifying the file landed (pdftoppm failures
- * must never break an export — the caller guards and skips the image).
+ * Render one region of a PDF page to `<outPrefix>.<ext>` and return that path
+ * (`.png` by default, `.ppm` for the edit path). The caller verifies the file
+ * landed — pdftoppm failures must never break an export.
  */
 export async function cropPageRegion(
   pdfPath: string,
@@ -145,7 +153,7 @@ export async function cropPageRegion(
   run: CommandRunner = runCommand
 ): Promise<string> {
   await run('pdftoppm', buildCropRegionArgs(pdfPath, outPrefix, opts))
-  return `${outPrefix}.png`
+  return `${outPrefix}.${(opts.format ?? 'png') === 'png' ? 'png' : 'ppm'}`
 }
 
 /**
