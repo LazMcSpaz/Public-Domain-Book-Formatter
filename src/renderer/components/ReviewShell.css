@@ -109,3 +109,39 @@
   justify-content: center;
   margin-top: 1.5rem;
 }
+
+/* Design view: style controls on the left, a live PDF preview on the right so
+   the user can tweak the look and rebuild the preview. Collapses to a single
+   column on narrow windows. */
+.design-view {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 1.5rem;
+  padding: 1.5rem;
+  overflow: hidden;
+}
+
+.design-controls {
+  min-width: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding-right: 0.25rem;
+}
+
+.design-preview {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+@media (max-width: 1100px) {
+  .design-view {
+    grid-template-columns: minmax(0, 1fr);
+    overflow-y: auto;
+  }
+}

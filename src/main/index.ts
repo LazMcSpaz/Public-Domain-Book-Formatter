@@ -62,7 +62,10 @@ function createWindow(): BrowserWindow {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      // Enable Chromium's built-in PDF viewer so the Design tab's inline preview
+      // can render the exported interior in an <iframe>.
+      plugins: true
     }
   })
 

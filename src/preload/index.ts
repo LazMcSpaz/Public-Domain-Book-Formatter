@@ -63,6 +63,10 @@ const api: BridgeApi = {
     return ipcRenderer.invoke(IpcChannel.ValidateExport, projectPath)
   },
 
+  getExportPdf(projectPath: string): Promise<string | null> {
+    return ipcRenderer.invoke(IpcChannel.GetExportPdf, projectPath)
+  },
+
   onPipelineProgress(listener: (progress: PipelineProgress) => void): () => void {
     const subscription = (_event: IpcRendererEvent, progress: PipelineProgress): void => {
       listener(progress)

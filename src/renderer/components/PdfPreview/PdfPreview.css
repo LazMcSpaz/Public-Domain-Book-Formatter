@@ -1,0 +1,59 @@
+.pdf-preview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  gap: 0.75rem;
+}
+
+.pp-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.pp-head h3 {
+  margin: 0;
+}
+
+.pp-sub {
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+  color: var(--fg-muted);
+}
+
+.pp-generate {
+  flex-shrink: 0;
+}
+
+.pp-error {
+  margin: 0;
+}
+
+.pp-frame-wrap {
+  flex: 1;
+  min-height: 480px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #525659; /* neutral PDF-viewer backdrop */
+}
+
+.pp-frame {
+  width: 100%;
+  height: 100%;
+  min-height: 480px;
+  border: 0;
+}
+
+.pp-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 480px;
+  padding: 2rem;
+  text-align: center;
+  color: #e8e8e8;
+  font-size: 0.9rem;
+}

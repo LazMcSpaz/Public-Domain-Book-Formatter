@@ -65,7 +65,17 @@ export function ControlBar(): JSX.Element {
   const onNextFlag = useCallback(() => {
     const flags = state.project?.flags ?? []
     if (flags.length === 0) return
-    const next = (activeIndex + 1 + flags.length) % flags.length
+    const resolved = new Set(state.project?.resolvedTokenIds ?? [])
+    const isResolved = (i: number): boolean => {
+      const t = flags[i]!.tokenId
+      return typeof t === 'string' && resolved.has(t)
+    }
+    // Advance to the next flag that hasn't been marked good; if every remaining
+    // flag is resolved, fall back to the next index so the button still moves.
+    let next = (activeIndex + 1 + flags.length) % flags.length
+    for (let step = 0; step < flags.length && isResolved(next); step++) {
+      next = (next + 1) % flags.length
+    }
     setActiveIndex(next)
     const tokenId = flagTokenId(flags[next]!, state.coordinateMap)
     if (tokenId) jumpToToken(tokenId)
@@ -112,6 +122,15 @@ export function ControlBar(): JSX.Element {
       </div>
 
       <div className="control-group control-actions">
+        <label className="control-toggle" title="Show the original scan side-by-side for review">
+          <input
+            type="checkbox"
+            checked={prefs.showSource}
+            onChange={() => setPref({ showSource: !prefs.showSource })}
+          />
+          <span>Show original</span>
+        </label>
+
         <label className="control-toggle" title="Highlight low-confidence / flagged areas">
           <input
             type="checkbox"

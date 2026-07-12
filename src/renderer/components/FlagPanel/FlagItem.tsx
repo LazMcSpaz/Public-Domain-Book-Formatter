@@ -11,13 +11,26 @@ export interface FlagItemProps {
   flag: Flag
   index: number
   active: boolean
+  /** The token this flag anchors to (null = can't be marked good). */
+  tokenId: string | null
+  /** Whether the user has marked this token reviewed-good. */
+  resolved: boolean
   onSelect: (index: number) => void
+  onToggleResolved: (tokenId: string) => void
 }
 
-export function FlagItem({ flag, index, active, onSelect }: FlagItemProps): JSX.Element {
+export function FlagItem({
+  flag,
+  index,
+  active,
+  tokenId,
+  resolved,
+  onSelect,
+  onToggleResolved
+}: FlagItemProps): JSX.Element {
   const isOcr = flag.kind === 'ocr'
   return (
-    <li>
+    <li className={`flag-row${resolved ? ' flag-row--resolved' : ''}`}>
       <button
         type="button"
         className={`flag-item flag-${flag.kind}${active ? ' flag-active' : ''}`}
@@ -42,6 +55,18 @@ export function FlagItem({ flag, index, active, onSelect }: FlagItemProps): JSX.
           </span>
         )}
       </button>
+      <label
+        className="flag-good"
+        title={tokenId ? 'Mark this word reviewed — hides its flag & tint' : 'No token to mark'}
+      >
+        <input
+          type="checkbox"
+          checked={resolved}
+          disabled={!tokenId}
+          onChange={() => tokenId && onToggleResolved(tokenId)}
+        />
+        <span>good</span>
+      </label>
     </li>
   )
 }

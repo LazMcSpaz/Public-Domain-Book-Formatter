@@ -117,6 +117,19 @@ describe('migrate', () => {
     expect(result.readingProgress).toEqual({ lastPageIndex: 0, approvedPages: [] })
   })
 
+  it('backfills resolvedTokenIds for pre-v4 manifests and keeps valid ones', () => {
+    // Old manifest with no resolvedTokenIds → [].
+    const old = migrate({ schemaVersion: 3, source: { pdfPath: '/o.pdf', pageCount: 1 } })
+    expect(old.resolvedTokenIds).toEqual([])
+    // A v4 manifest keeps only string ids.
+    const v4 = migrate({
+      schemaVersion: 4,
+      source: { pdfPath: '/n.pdf', pageCount: 1 },
+      resolvedTokenIds: ['p0_w1', 7, 'p0_w2']
+    })
+    expect(v4.resolvedTokenIds).toEqual(['p0_w1', 'p0_w2'])
+  })
+
   it('upgrades a manifest with an absent schemaVersion to current', () => {
     const result = migrate({
       source: { pdfPath: '/old.pdf', pageCount: 2 },
