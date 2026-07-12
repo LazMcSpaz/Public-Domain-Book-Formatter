@@ -91,9 +91,19 @@ export function OutputPane({ containerRef }: OutputPaneProps): JSX.Element | nul
     return map
   }, [project?.flags])
 
+  // Tokens the user marked reviewed-good: treated as full confidence so their
+  // tint is suppressed (SPEC §4 — a vetted word stops drawing attention).
+  const resolved = useMemo(
+    () => new Set(project?.resolvedTokenIds ?? []),
+    [project?.resolvedTokenIds]
+  )
+
   const confidenceOf = useCallback(
-    (tokenId: string): number => confidenceMap.get(tokenId) ?? DEFAULT_CONFIDENCE,
-    [confidenceMap]
+    (tokenId: string): number =>
+      resolved.has(tokenId)
+        ? DEFAULT_CONFIDENCE
+        : (confidenceMap.get(tokenId) ?? DEFAULT_CONFIDENCE),
+    [confidenceMap, resolved]
   )
 
   // Paragraphs are derived from renderMarkdown (the committed DOM text), NOT the

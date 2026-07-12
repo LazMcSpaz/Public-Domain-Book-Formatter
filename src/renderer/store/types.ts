@@ -31,6 +31,11 @@ export interface ReadingPrefs {
   leftPaneWidthPct: number
   /** Confidence tinting on/off — OFF by default (SPEC §4). */
   confidenceTint: boolean
+  /**
+   * Show the source scan side-by-side. OFF by default: the main screen is the
+   * editing surface, and the original is a review mode the user toggles on.
+   */
+  showSource: boolean
 }
 
 export const DEFAULT_READING_PREFS: ReadingPrefs = {
@@ -38,7 +43,8 @@ export const DEFAULT_READING_PREFS: ReadingPrefs = {
   lineSpacing: 1.6,
   lineLength: 70,
   leftPaneWidthPct: 50,
-  confidenceTint: false
+  confidenceTint: false,
+  showSource: false
 }
 
 /** Whole-app review state. */
@@ -70,6 +76,8 @@ export type ReviewAction =
   | { type: 'SET_READING_PREFS'; prefs: Partial<ReadingPrefs> }
   | { type: 'TOGGLE_TINT' }
   | { type: 'SET_FLAGS'; flags: Flag[] }
+  /** Toggle whether a token is marked reviewed-"good" (hides its flag/tint). */
+  | { type: 'TOGGLE_FLAG_RESOLVED'; tokenId: string }
   | { type: 'SET_FIND_REPLACE'; rules: FindReplaceRule[] }
   /** Shallow-merge a patch into the loaded project (tags, config, etc.). */
   | { type: 'PATCH_PROJECT'; patch: Partial<ProjectFile> }

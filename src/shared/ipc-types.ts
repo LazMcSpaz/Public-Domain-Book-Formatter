@@ -30,7 +30,9 @@ export const IpcChannel = {
   /** Assemble + typeset the project to a print-ready KDP PDF (SPEC §10). */
   ExportPdf: 'export:pdf',
   /** Compute the KDP validation report without rendering when possible. */
-  ValidateExport: 'export:validate'
+  ValidateExport: 'export:validate',
+  /** Read the last-built interior PDF and return it as a base64 data URL. */
+  GetExportPdf: 'export:pdfData'
 } as const
 
 export type IpcChannel = (typeof IpcChannel)[keyof typeof IpcChannel]
@@ -114,6 +116,12 @@ export interface BridgeApi {
   exportPdf(projectPath: string): Promise<ExportResult>
   /** Compute the KDP validation report (SPEC §10) for the project. */
   validateExport(projectPath: string): Promise<KdpValidationReport>
+  /**
+   * Read the project's last-built interior PDF (`build/book.pdf`) and return it
+   * as a base64 `data:application/pdf` URL for the in-app preview, or null when
+   * no build exists yet.
+   */
+  getExportPdf(projectPath: string): Promise<string | null>
 }
 
 declare global {

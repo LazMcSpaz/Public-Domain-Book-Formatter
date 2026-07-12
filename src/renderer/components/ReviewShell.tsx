@@ -18,10 +18,11 @@ import { ImageEditor } from './ImageMode'
 import { StyleEditor } from './StyleEditor'
 import { FrontMatter } from './FrontMatter'
 import { ExportPanel } from './ExportPanel'
+import { PdfPreview } from './PdfPreview'
 import './ReviewShell.css'
 
 const VIEW_TABS: { id: ActiveView; label: string }[] = [
-  { id: 'review', label: 'Review' },
+  { id: 'review', label: 'Edit' },
   { id: 'style', label: 'Design' },
   { id: 'export', label: 'Export' }
 ]
@@ -84,9 +85,14 @@ export function ReviewShell(): JSX.Element {
       )}
 
       {view === 'style' && (
-        <div className="review-scroll-view">
-          <StyleEditor />
-          <FrontMatter />
+        <div className="design-view">
+          <div className="design-controls">
+            <StyleEditor />
+            <FrontMatter />
+          </div>
+          <div className="design-preview">
+            <PdfPreview />
+          </div>
         </div>
       )}
 

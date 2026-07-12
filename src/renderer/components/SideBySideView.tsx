@@ -18,9 +18,11 @@ export function SideBySideView(): JSX.Element {
   const { state } = useReview()
   const sourceRef = useRef<HTMLDivElement>(null)
   const outputRef = useRef<HTMLDivElement>(null)
-  useScrollSync(sourceRef, outputRef)
 
-  const { fontSize, lineSpacing, lineLength, leftPaneWidthPct } = state.readingPrefs
+  const { fontSize, lineSpacing, lineLength, leftPaneWidthPct, showSource } = state.readingPrefs
+
+  // Scroll-sync only matters when both panes are shown (review mode).
+  useScrollSync(sourceRef, outputRef, showSource)
 
   // Register how to scroll to a token so flags/tags/TOC can jump imperatively,
   // without routing through React state (which used to re-render the whole tree).
@@ -34,7 +36,7 @@ export function SideBySideView(): JSX.Element {
 
   return (
     <div
-      className="side-by-side"
+      className={`side-by-side${showSource ? '' : ' side-by-side--single'}`}
       style={
         {
           '--reading-font-size': `${fontSize}px`,
@@ -44,9 +46,11 @@ export function SideBySideView(): JSX.Element {
         } as CSSProperties
       }
     >
-      <div className="sbs-source">
-        <SourcePane containerRef={sourceRef} />
-      </div>
+      {showSource ? (
+        <div className="sbs-source">
+          <SourcePane containerRef={sourceRef} />
+        </div>
+      ) : null}
       <div className="sbs-output">
         <OutputPane containerRef={outputRef} />
       </div>

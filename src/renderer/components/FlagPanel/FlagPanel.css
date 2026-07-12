@@ -85,3 +85,40 @@
 .flag-chip-label {
   color: var(--fg-muted);
 }
+
+/* Mark-good flow (SPEC §4): a per-flag checkbox, a show-resolved toggle, and a
+   dimmed look for rows already marked good. */
+.flag-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.flag-row .flag-item {
+  flex: 1 1 auto;
+}
+
+.flag-good {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--fg-muted);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.flag-row--resolved {
+  opacity: 0.55;
+}
+
+.flag-showresolved {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin: 0 0 0.4rem;
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+  cursor: pointer;
+}

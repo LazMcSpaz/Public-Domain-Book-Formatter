@@ -174,4 +174,19 @@ export function registerIpcHandlers(): void {
       }
     )
   )
+
+  ipcMain.handle(
+    IpcChannel.GetExportPdf,
+    guard(IpcChannel.GetExportPdf, async (_event, projectPath: string): Promise<string | null> => {
+      allowProjectRoot(projectPath)
+      // Canonical build output path — not an arbitrary caller-supplied path.
+      const pdfPath = join(projectPath, 'build', 'book.pdf')
+      try {
+        const bytes = await readFile(pdfPath)
+        return `data:application/pdf;base64,${bytes.toString('base64')}`
+      } catch {
+        return null // no build yet
+      }
+    })
+  )
 }

@@ -22,8 +22,9 @@ import type {
  * Current manifest schema version. Bump + extend `migrate` on shape changes.
  * v2 adds the `markdown` output field (SPEC §3/§4 review instrument).
  * v3 adds `styleProfileId` + `frontMatter` (SPEC §7 templates/style system).
+ * v4 adds `resolvedTokenIds` (SPEC §4 — words the user marked reviewed-good).
  */
-export const CURRENT_SCHEMA_VERSION = 3
+export const CURRENT_SCHEMA_VERSION = 4
 
 /** Default per-book config (SPEC §7). Content is filled in by the user later. */
 function defaultConfig(): PerBookConfig {
@@ -83,6 +84,7 @@ export function createEmptyProject(init: {
     markdown: '',
     coordinateMap: [],
     flags: [],
+    resolvedTokenIds: [],
     tags: [],
     imageEdits: [],
     config: { ...defaultConfig(), ...init.config },
@@ -163,6 +165,7 @@ export function migrate(raw: unknown): ProjectFile {
     markdown: typeof raw.markdown === 'string' ? raw.markdown : '',
     coordinateMap: asArray<MappingEntry>(raw.coordinateMap),
     flags: asArray<Flag>(raw.flags),
+    resolvedTokenIds: asArray<string>(raw.resolvedTokenIds).filter((s) => typeof s === 'string'),
     tags: asArray<StructuralTag>(raw.tags),
     imageEdits: asArray<ImageEditDescriptor>(raw.imageEdits),
     config: normalizeConfig(raw.config),

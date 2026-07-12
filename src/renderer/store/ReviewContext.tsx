@@ -75,6 +75,16 @@ export function reviewReducer(state: ReviewState, action: ReviewAction): ReviewS
       if (!state.project) return state
       return { ...state, project: { ...state.project, flags: action.flags }, isDirty: true }
 
+    case 'TOGGLE_FLAG_RESOLVED': {
+      if (!state.project) return state
+      const current = state.project.resolvedTokenIds
+      const has = current.includes(action.tokenId)
+      const resolvedTokenIds = has
+        ? current.filter((id) => id !== action.tokenId)
+        : [...current, action.tokenId]
+      return { ...state, project: { ...state.project, resolvedTokenIds }, isDirty: true }
+    }
+
     case 'SET_FIND_REPLACE':
       if (!state.project) return state
       return {

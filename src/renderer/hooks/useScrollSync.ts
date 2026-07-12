@@ -44,12 +44,14 @@ export function scrollElementToToken(container: HTMLElement, id: string, delta =
 
 export function useScrollSync(
   sourcePaneRef: RefObject<HTMLElement>,
-  outputPaneRef: RefObject<HTMLElement>
+  outputPaneRef: RefObject<HTMLElement>,
+  enabled = true
 ): void {
   const locked = useRef(false)
   const frame = useRef(0)
 
   useEffect(() => {
+    if (!enabled) return
     const source = sourcePaneRef.current
     const output = outputPaneRef.current
     if (!source || !output) return
@@ -80,5 +82,5 @@ export function useScrollSync(
       output.removeEventListener('scroll', onOutputScroll)
       if (frame.current) cancelAnimationFrame(frame.current)
     }
-  }, [sourcePaneRef, outputPaneRef])
+  }, [sourcePaneRef, outputPaneRef, enabled])
 }

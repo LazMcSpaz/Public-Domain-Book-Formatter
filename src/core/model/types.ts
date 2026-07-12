@@ -399,6 +399,12 @@ export interface ProjectFile {
   /** Serialized coordinate map. */
   coordinateMap: MappingEntry[]
   flags: Flag[]
+  /**
+   * Token ids the user has reviewed and marked "good" (SPEC §4). Their flags are
+   * hidden from the flag list and skipped by jump-to-next-flag, and their
+   * confidence tint is suppressed — so a vetted word stops drawing attention.
+   */
+  resolvedTokenIds: string[]
   tags: StructuralTag[]
   imageEdits: ImageEditDescriptor[]
   config: PerBookConfig
