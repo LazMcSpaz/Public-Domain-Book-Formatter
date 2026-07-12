@@ -3,7 +3,7 @@
  * `RasterImage`. Renderer-only (uses the `ImageData` constructor); the pure op
  * functions in the engine operate on `RasterImage` and stay testable in Node.
  */
-import type { RasterImage } from './types'
+import type { RasterImage } from '@core/image'
 
 export function fromImageData(img: ImageData): RasterImage {
   return { width: img.width, height: img.height, data: new Uint8ClampedArray(img.data) }

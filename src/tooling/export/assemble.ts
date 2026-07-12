@@ -31,11 +31,14 @@ import {
   pageTextEndOffsets
 } from '@core/typeset'
 import { BUILTIN_ORNAMENTS, resolveOrnamentPaths } from '@core/ornament'
+import type { ImageEditOp } from '@core/model'
+import { applyOps } from '@core/image'
 import { runCommand, type CommandResult, type CommandRunner } from '../process'
 import { markdownToLatex } from '../wrappers/pandoc'
 import { typeset, parseLogWarnings } from '../wrappers/xelatex'
 import { svgToPdf } from '../wrappers/svg2pdf'
 import { cropPageRegion } from '../wrappers/pdf-extract'
+import { parsePpm, encodePng } from '../image/raster-io'
 
 export interface AssembleOptions {
   project: ProjectFile
@@ -106,6 +109,10 @@ async function placeImages(
   const maxWidthIn = textWidthIn(profile)
   const ends = pageTextEndOffsets(project.coordinateMap)
   const fallback = project.markdown.length
+  // Saved non-destructive edits per region (SPEC §6), applied at export.
+  const editsByRegion = new Map<string, ImageEditOp[]>(
+    project.imageEdits.map((e) => [e.regionId, e.ops])
+  )
   const inserts: BodyInsert[] = []
   let n = 0
 
@@ -121,13 +128,43 @@ async function placeImages(
 
       const name = `img-${n++}`
       const outPrefix = path.join(buildDir, name)
+      const pngPath = `${outPrefix}.png`
       const dpi = page.dpi ?? 300
-      try {
-        await cropPageRegion(pdfPath, outPrefix, { page: page.index + 1, dpi, x, y, w, h }, run)
-      } catch {
-        continue // this crop failed; skip just this image
+      const ops = editsByRegion.get(region.id) ?? []
+
+      let placedWidthPx = w
+      let placed = false
+
+      if (ops.length > 0) {
+        // Edit path: crop to PPM, apply the op stack, re-encode as PNG.
+        try {
+          const ppmPath = await cropPageRegion(
+            pdfPath,
+            outPrefix,
+            { page: page.index + 1, dpi, x, y, w, h, format: 'ppm' },
+            run
+          )
+          const raster = parsePpm(await fs.readFile(ppmPath))
+          const edited = applyOps(raster, ops)
+          await fs.writeFile(pngPath, encodePng(edited))
+          placedWidthPx = edited.width || w
+          placed = true
+        } catch {
+          placed = false // fall through to the plain crop below
+        }
       }
-      const widthIn = figureWidthIn(w, dpi, maxWidthIn)
+
+      if (!placed) {
+        // No edits (or the edit path failed): crop straight to PNG.
+        try {
+          await cropPageRegion(pdfPath, outPrefix, { page: page.index + 1, dpi, x, y, w, h }, run)
+          placedWidthPx = w
+        } catch {
+          continue // this crop failed; skip just this image
+        }
+      }
+
+      const widthIn = figureWidthIn(placedWidthPx, dpi, maxWidthIn)
       inserts.push({
         offset: ends.get(page.index) ?? fallback,
         block: figureLatex(`${name}.png`, widthIn)

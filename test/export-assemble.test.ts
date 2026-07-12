@@ -213,4 +213,71 @@ describe('assembleAndExport', () => {
     expect(bodyMd).toContain('\\includegraphics')
     expect(bodyMd).toContain('\\IfFileExists{img-0.png}')
   })
+
+  it('applies saved image edits: crops to PPM, runs the op stack, re-encodes PNG', async () => {
+    const pdfPath = path.join(buildDir, 'source.pdf')
+    await fs.writeFile(pdfPath, '%PDF-1.4\n', 'utf8')
+
+    // A runner that, for a PPM crop (pdftoppm without -png), writes a 2×2 P6.
+    const calls: Call[] = []
+    const run: CommandRunner = (async (cmd: string, args: string[]) => {
+      calls.push({ cmd, args })
+      if (cmd === 'pandoc') {
+        const oIdx = args.indexOf('-o')
+        if (oIdx >= 0 && args[oIdx + 1]) await fs.writeFile(args[oIdx + 1]!, 'body\n', 'utf8')
+        return { code: 0, stdout: '', stderr: '' } satisfies CommandResult
+      }
+      if (cmd === 'pdftoppm' && !args.includes('-png')) {
+        const prefix = args[args.length - 1]!
+        const px = [255, 0, 0, 0, 255, 0, 0, 0, 255, 255, 255, 255] // 2×2 RGB
+        await fs.writeFile(
+          `${prefix}.ppm`,
+          Buffer.concat([Buffer.from('P6\n2 2\n255\n', 'ascii'), Buffer.from(px)])
+        )
+        return { code: 0, stdout: '', stderr: '' } satisfies CommandResult
+      }
+      if (cmd === 'xelatex') {
+        return {
+          code: 0,
+          stdout: 'Output written on book.pdf (5 pages, 10 bytes).',
+          stderr: ''
+        } satisfies CommandResult
+      }
+      return { code: 0, stdout: '', stderr: '' } satisfies CommandResult
+    }) as CommandRunner
+
+    const project = makeProject()
+    project.source = { pdfPath, pageCount: 1 }
+    project.pages = [
+      {
+        index: 0,
+        imagePath: null,
+        width: 1000,
+        height: 1500,
+        dpi: 300,
+        words: [],
+        regions: [
+          { id: 'r0', pageIndex: 0, bbox: { x0: 100, y0: 200, x1: 700, y1: 1000 }, accepted: true }
+        ]
+      }
+    ]
+    project.imageEdits = [{ regionId: 'r0', ops: [{ op: 'grayscale', params: {} }] }]
+
+    await assembleAndExport({
+      project,
+      projectPath: buildDir,
+      profile: defaultStyleProfile(),
+      buildDir,
+      run
+    })
+
+    // A PPM crop (edit path), not a PNG crop.
+    const crops = calls.filter((c) => c.cmd === 'pdftoppm')
+    expect(crops).toHaveLength(1)
+    expect(crops[0]!.args).not.toContain('-png')
+
+    // The edited image was re-encoded to a real PNG in the build dir.
+    const png = await fs.readFile(path.join(buildDir, 'img-0.png'))
+    expect(Array.from(png.subarray(0, 4))).toEqual([0x89, 0x50, 0x4e, 0x47])
+  })
 })
