@@ -14,7 +14,11 @@
  *                   (they are auto-detected; the user vets them).
  *   - `blockquote`/`epigraph` → Markdown blockquote (`>` lines → `quote`).
  *   - `verse`     → Markdown line block (`|` lines → line-broken poetry).
- * Other tag types (footnote/table/caption/frontmatter) are left to future passes.
+ *   - `footnote`  → the note text is pulled out of the body flow and a Pandoc
+ *                   footnote reference (`[^fnN]`) is spliced in at the in-text
+ *                   ref mark, with a matching `[^fnN]: …` definition appended;
+ *                   Pandoc/XeLaTeX then set it at the page bottom (SPEC §5).
+ * Remaining tag types (table/caption/frontmatter) are left to future passes.
  *
  * It never touches the stored project markdown or the coordinate map — it's a
  * fresh string built for typesetting.
@@ -97,19 +101,68 @@ export interface BodyInsert {
   block: string
 }
 
-/** Internal unified splice op: replace `[start,end)` with `block`. */
+/**
+ * Internal unified splice op: replace `[start,end)` with `block`.
+ * `inline` ops splice without blank-line wrapping (for in-text footnote refs and
+ * pulling note text out); `block` ops are set off as their own paragraph.
+ */
 interface SpliceOp {
   start: number
   end: number
   block: string
+  inline?: boolean
+}
+
+function num(v: unknown): number | null {
+  return typeof v === 'number' && Number.isFinite(v) ? v : null
 }
 
 /**
- * Assemble the export body: render structural tags as Markdown blocks and splice
- * in any pre-rendered inserts (e.g. image figures), all against the *original*
- * offsets. Ops are applied end-first so earlier offsets stay valid; a tag/insert
- * that would land inside an already-applied block is dropped. Returns a fresh
- * string — the stored markdown/coordinate map are untouched.
+ * Footnote ops (SPEC §5): for each footnote tag, splice a Pandoc footnote ref
+ * `[^fnN]` in place of the in-text mark, delete the note text from the body, and
+ * collect a `[^fnN]: …` definition to append. Returns the inline ops plus the
+ * definition blocks (appended at end of body). Skips malformed/out-of-range tags.
+ */
+function footnoteOps(
+  markdown: string,
+  tags: StructuralTag[]
+): { ops: SpliceOp[]; definitions: string[] } {
+  const ops: SpliceOp[] = []
+  const definitions: string[] = []
+  let n = 0
+  for (const tag of tags) {
+    if (tag.type !== 'footnote') continue
+    const d = tag.data ?? {}
+    const refStart = num(d['refStart'])
+    const refEnd = num(d['refEnd'])
+    const noteStart = num(d['noteStart'])
+    const noteEnd = num(d['noteEnd'])
+    if (refStart === null || refEnd === null || noteStart === null || noteEnd === null) continue
+    if (refEnd <= refStart || noteEnd <= noteStart) continue
+    if (refEnd > markdown.length || noteEnd > markdown.length || refStart < 0 || noteStart < 0) {
+      continue
+    }
+    // Ref and note must be disjoint (else the splices would collide).
+    if (refStart < noteEnd && noteStart < refEnd) continue
+
+    const noteText = markdown.slice(noteStart, noteEnd).replace(/\s+/g, ' ').trim()
+    if (!noteText) continue
+
+    const label = `fn${++n}`
+    ops.push({ start: refStart, end: refEnd, block: `[^${label}]`, inline: true })
+    ops.push({ start: noteStart, end: noteEnd, block: '', inline: true }) // pull note out
+    definitions.push(`[^${label}]: ${noteText}`)
+  }
+  return { ops, definitions }
+}
+
+/**
+ * Assemble the export body: render structural tags as Markdown blocks, resolve
+ * footnotes, and splice in any pre-rendered inserts (e.g. image figures), all
+ * against the *original* offsets. Ops are applied end-first so earlier offsets
+ * stay valid; a tag/insert that would land inside an already-applied block is
+ * dropped. Returns a fresh string — the stored markdown/coordinate map are
+ * untouched.
  */
 export function assembleBody(
   markdown: string,
@@ -127,13 +180,22 @@ export function assembleBody(
     }))
     .filter((op) => op.block.length > 0)
 
+  const { ops: fnOps, definitions } = footnoteOps(markdown, tags)
+
   const insertOps: SpliceOp[] = inserts
     .filter((i) => i.offset >= 0 && i.offset <= markdown.length && i.block.trim().length > 0)
     .map((i) => ({ start: i.offset, end: i.offset, block: i.block }))
 
+  // Footnote definitions are appended after the whole body, as their own blocks.
+  const defOps: SpliceOp[] = definitions.map((block) => ({
+    start: markdown.length,
+    end: markdown.length,
+    block
+  }))
+
   // Apply from the end backwards. Ties: process inserts after tags at the same
   // point so an image tucks just past a heading rather than splitting it.
-  const ops = [...tagOps, ...insertOps].sort(
+  const ops = [...tagOps, ...fnOps, ...insertOps, ...defOps].sort(
     (a, b) => b.start - a.start || b.end - a.end || a.end - a.start - (b.end - b.start)
   )
 
@@ -141,10 +203,14 @@ export function assembleBody(
   let lastStart = out.length // nothing may reach at/after the previous splice point
   for (const op of ops) {
     if (op.end > lastStart) continue // overlaps an already-applied block
-    const before = out.slice(0, op.start).replace(/\s+$/, '')
-    const after = out.slice(op.end).replace(/^\s+/, '')
-    // Blank lines around the block so Pandoc parses it standalone.
-    out = `${before}\n\n${op.block}\n\n${after}`
+    // Inline ops (footnote ref / note deletion) may legitimately be empty and
+    // must not gain blank lines; block ops are set off as their own paragraph.
+    if (!op.inline && op.block.length === 0) continue
+    const before = out.slice(0, op.start)
+    const after = out.slice(op.end)
+    out = op.inline
+      ? `${before}${op.block}${after}`
+      : `${before.replace(/\s+$/, '')}\n\n${op.block}\n\n${after.replace(/^\s+/, '')}`
     lastStart = op.start
   }
   return out.replace(/^\n+/, '').replace(/\n{3,}/g, '\n\n')
