@@ -150,3 +150,54 @@ describe('assembleBody — image/figure inserts', () => {
     expect(assembleBody(md, [], [{ offset: 999, block: 'X' }])).toBe(md)
   })
 })
+
+describe('assembleBody — footnotes', () => {
+  function footnote(md: string, refMark: string, noteText: string): StructuralTag {
+    const refStart = md.indexOf(refMark)
+    const noteStart = md.indexOf(noteText)
+    return tag('fn', 'footnote', noteStart, noteStart + noteText.length, {
+      marker: refMark,
+      refStart,
+      refEnd: refStart + refMark.length,
+      noteStart,
+      noteEnd: noteStart + noteText.length
+    })
+  }
+
+  it('splices a Pandoc footnote ref inline and appends the definition', () => {
+    const note = 'The note text here.'
+    const md = `The cat sat.1 More text.\n\n${note}`
+    const out = assembleBody(md, [footnote(md, '1', note)])
+    expect(out).toContain('sat.[^fn1]') // ref spliced inline where the mark was
+    expect(out).toContain('[^fn1]: The note text here.') // definition appended
+    // The note text is pulled out of the body — it survives only in the definition.
+    expect(out.match(/The note text here\./g)).toHaveLength(1)
+  })
+
+  it('numbers multiple footnotes independently', () => {
+    const md = 'A* and B†.\n\nFirst note.\n\nSecond note.'
+    const f1 = footnote(md, '*', 'First note.')
+    const f2 = footnote(md, '†', 'Second note.')
+    const out = assembleBody(md, [f1, f2])
+    expect(out).toContain('A[^fn1]')
+    expect(out).toContain('B[^fn2]')
+    expect(out).toContain('[^fn1]: First note.')
+    expect(out).toContain('[^fn2]: Second note.')
+  })
+
+  it('ignores a malformed footnote tag (missing ranges)', () => {
+    const md = 'Body text only.'
+    const bad = tag('b', 'footnote', 0, 4, { marker: '1' }) // no ref/note offsets
+    expect(assembleBody(md, [bad])).toBe(md)
+  })
+
+  it('coexists with a heading against original offsets', () => {
+    const note = 'Aside.'
+    const md = `TITLE\n\nBody one.2 Body two.\n\n${note}`
+    const head = heading('h', 0, 5, 1, true)
+    const out = assembleBody(md, [head, footnote(md, '2', note)])
+    expect(out).toContain('# TITLE')
+    expect(out).toContain('one.[^fn1]')
+    expect(out).toContain('[^fn1]: Aside.')
+  })
+})
