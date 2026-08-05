@@ -112,9 +112,12 @@ in `screenshots/`. Don't ship UI blind.
   the vision pass engine (schema, prompt, client, runner, verification, cost) —
   all tested with a mock transport, so no API key or spend is needed to run the
   suite.
-- **Next**: wire the transcribe step into the wizard (key entry, cost
-  confirmation, progress), then the later gates, design-by-interview, and
-  typesetting.
+- **Also done**: the transcribe step is wired (key entry, cost approval,
+  progress, cancel), assembly stitches pages into a book document (seam repair,
+  hyphen healing, footnote linking, front-matter dispositions), and Gate 2
+  surfaces flagged pages with the scan beside each.
+- **Next**: Gate 3 (structure confirmation), design-by-interview, and
+  typesetting/export.
 - **Open question**: TeX in the browser. SwiftLaTeX (XeTeX/WASM) is the candidate
   but is untested here because the sandbox blocks its CDN. The app produces the
   LaTeX document either way; only the final compile step is affected.

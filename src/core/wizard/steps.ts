@@ -14,6 +14,7 @@
 import type { LexiconEntry } from '@core/lexicon'
 import type { BookMetadata, PageClassification } from '@core/pages'
 import { isFrontMatter } from '@core/pages'
+import type { VerificationFinding } from '@core/transcribe'
 import type { Answers, Question, TermRow } from './questions'
 
 export type StepId =
@@ -43,6 +44,12 @@ export interface WizardState {
   cropFor?: (tokenId: string) => string | undefined
   /** True when an API key is already stored locally — don't ask again. */
   hasApiKey: boolean
+  /** Deterministic findings from verification, most severe first. */
+  findings: VerificationFinding[]
+  /** Spans the model itself reported as unreadable, per page. */
+  uncertainties: { pageIndex: number; text: string; alternatives: string[]; reason: string }[]
+  /** Pages that failed transcription entirely. */
+  failedPages: number[]
   /** Answers gathered so far, keyed by step then question id. */
   answers: Record<string, Answers>
   /** Steps the user has completed. */
@@ -66,6 +73,9 @@ export function initialState(): WizardState {
     },
     classifications: [],
     hasApiKey: false,
+    findings: [],
+    uncertainties: [],
+    failedPages: [],
     answers: {},
     completed: []
   }
@@ -287,13 +297,73 @@ const transcribe: Step = {
   }
 }
 
+/**
+ * Gate 2. Shows the places worth a human's eye — and only those. The list comes
+ * from deterministic cross-checks against OCR plus the model's own reported
+ * uncertainties; a page that passed both isn't shown, because reviewing clean
+ * pages is how a proofing pass becomes unbearable.
+ */
 const gateUncertainties: Step = {
   id: 'gate-uncertainties',
   title: 'Check the uncertain spots',
   blurb: 'Everywhere the transcription and the scan disagree, with the pixels beside it.',
   isGate: true,
   canEnter: (s) => s.completed.includes('transcribe'),
-  questions: () => []
+  questions: (s) => {
+    const qs: Question[] = []
+
+    if (s.failedPages.length > 0) {
+      qs.push({
+        id: 'failedPages',
+        type: 'confirm',
+        prompt: `${s.failedPages.length} page(s) could not be transcribed. Continue without them?`,
+        help:
+          `Pages ${s.failedPages.map((p) => p + 1).join(', ')} failed every attempt. ` +
+          'They will be missing from the book unless you re-run.',
+        defaultValue: false,
+        required: true
+      })
+    }
+
+    // One question per flagged page, each carrying that page's image.
+    const byPage = new Map<number, string[]>()
+    for (const f of s.findings) {
+      if (f.severity === 'low') continue
+      const list = byPage.get(f.pageIndex) ?? []
+      list.push(f.message)
+      byPage.set(f.pageIndex, list)
+    }
+    for (const u of s.uncertainties) {
+      const list = byPage.get(u.pageIndex) ?? []
+      const alts = u.alternatives.length ? ` (could be: ${u.alternatives.join(', ')})` : ''
+      list.push(`Couldn't read “${u.text}” — ${u.reason}${alts}`)
+      byPage.set(u.pageIndex, list)
+    }
+
+    for (const [pageIndex, messages] of [...byPage.entries()].sort((a, b) => a[0] - b[0])) {
+      qs.push({
+        id: `page-${pageIndex}`,
+        type: 'choice',
+        prompt: `Page ${pageIndex + 1}`,
+        help: messages.join(' · '),
+        defaultValue: 'accept',
+        evidence: [
+          { kind: 'image', src: `page:${pageIndex}`, alt: `Scan of page ${pageIndex + 1}` }
+        ],
+        options: [
+          { value: 'accept', label: 'Looks fine', description: 'Keep the transcription as-is.' },
+          {
+            value: 'redo',
+            label: 'Read this page again',
+            description: 'Re-run at higher resolution.'
+          },
+          { value: 'skip', label: 'Leave this page out', description: 'Exclude it from the book.' }
+        ]
+      })
+    }
+
+    return qs
+  }
 }
 
 const gateStructure: Step = {

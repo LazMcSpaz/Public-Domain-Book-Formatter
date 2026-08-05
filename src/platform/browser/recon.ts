@@ -76,9 +76,11 @@ export async function runRecon(
       pageText[i] = result.text
       boxesByPage.set(i, result.words)
 
-      // Front matter is where identity is confirmed, so thumbnail the opening
-      // pages; the rest of the book doesn't need one.
-      if (i < 8) thumbnails.set(i, await thumbnailToObjectUrl(rendered.canvas))
+      // Every page gets a thumbnail: front matter needs one for the identity
+      // gate, and any page can later be flagged for review, where the scan is
+      // the evidence. Thumbnails are small (~200px wide) so a whole book of
+      // them is cheap compared with holding page canvases.
+      thumbnails.set(i, await thumbnailToObjectUrl(rendered.canvas))
 
       onProgress?.({ page: i + 1, total, phase: 'ocr', meanConfidence: result.meanConfidence })
 

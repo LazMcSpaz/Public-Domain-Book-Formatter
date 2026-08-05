@@ -247,3 +247,92 @@ describe('transcribe step questions', () => {
     expect(stepById('transcribe').canEnter(ready())).toBe(true)
   })
 })
+
+describe('gate 2 — uncertain spots', () => {
+  const transcribed = (overrides: Partial<WizardState> = {}): WizardState => ({
+    ...reconDone(),
+    completed: ['intake', 'recon', 'gate-identity', 'transcribe'],
+    ...overrides
+  })
+
+  it('shows nothing when every page passed both checks', () => {
+    expect(stepById('gate-uncertainties').questions(transcribed())).toHaveLength(0)
+  })
+
+  it('surfaces a page flagged by deterministic evidence', () => {
+    const qs = stepById('gate-uncertainties').questions(
+      transcribed({
+        findings: [
+          { code: 'text-dropped', severity: 'high', pageIndex: 4, message: '30% shorter than OCR.' }
+        ]
+      })
+    )
+    expect(qs).toHaveLength(1)
+    expect(qs[0]!.prompt).toBe('Page 5')
+    expect(qs[0]!.help).toContain('30% shorter')
+  })
+
+  it('attaches the page scan as evidence so nothing is judged blind', () => {
+    const qs = stepById('gate-uncertainties').questions(
+      transcribed({
+        findings: [{ code: 'empty-page', severity: 'high', pageIndex: 2, message: 'Nothing read.' }]
+      })
+    )
+    expect(qs[0]!.evidence?.[0]).toMatchObject({ kind: 'image', src: 'page:2' })
+  })
+
+  it('ignores low-severity findings — reviewing noise defeats the point', () => {
+    const qs = stepById('gate-uncertainties').questions(
+      transcribed({
+        findings: [
+          { code: 'orphan-footnote', severity: 'low', pageIndex: 1, message: 'No marker.' }
+        ]
+      })
+    )
+    expect(qs).toHaveLength(0)
+  })
+
+  it('includes the model’s own reported uncertainties with alternatives', () => {
+    const qs = stepById('gate-uncertainties').questions(
+      transcribed({
+        uncertainties: [
+          { pageIndex: 3, text: 'chirurgeon', alternatives: ['chirurgeen'], reason: 'faint ink' }
+        ]
+      })
+    )
+    expect(qs[0]!.help).toContain('chirurgeon')
+    expect(qs[0]!.help).toContain('chirurgeen')
+    expect(qs[0]!.help).toContain('faint ink')
+  })
+
+  it('merges both signals for the same page into one question', () => {
+    const qs = stepById('gate-uncertainties').questions(
+      transcribed({
+        findings: [
+          { code: 'text-dropped', severity: 'medium', pageIndex: 6, message: 'Shorter than OCR.' }
+        ],
+        uncertainties: [{ pageIndex: 6, text: 'x', alternatives: [], reason: 'blur' }]
+      })
+    )
+    expect(qs).toHaveLength(1)
+    expect(qs[0]!.help).toContain('Shorter than OCR')
+    expect(qs[0]!.help).toContain('blur')
+  })
+
+  it('requires an explicit decision about pages that failed outright', () => {
+    const qs = stepById('gate-uncertainties').questions(transcribed({ failedPages: [7, 8] }))
+    const failed = qs.find((q) => q.id === 'failedPages')!
+    expect(failed.required).toBe(true)
+    expect(failed.help).toContain('8, 9') // 1-based in the UI
+  })
+
+  it('offers accept / re-read / omit for each flagged page', () => {
+    const qs = stepById('gate-uncertainties').questions(
+      transcribed({
+        findings: [{ code: 'text-added', severity: 'medium', pageIndex: 0, message: 'Longer.' }]
+      })
+    )
+    const opts = (qs[0] as { options: { value: string }[] }).options.map((o) => o.value)
+    expect(opts).toEqual(['accept', 'redo', 'skip'])
+  })
+})

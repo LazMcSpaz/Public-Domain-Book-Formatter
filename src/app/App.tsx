@@ -197,7 +197,17 @@ export function App(): JSX.Element {
           role: t.role,
           selfReportedConfidence: 0,
           furniture: t.furniture
-        }))
+        })),
+        findings: result.findings,
+        uncertainties: result.transcriptions.flatMap((t) =>
+          t.uncertain.map((u) => ({
+            pageIndex: t.pageIndex,
+            text: u.text,
+            alternatives: u.alternatives,
+            reason: u.reason
+          }))
+        ),
+        failedPages: result.failures.map((f) => f.pageIndex)
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
