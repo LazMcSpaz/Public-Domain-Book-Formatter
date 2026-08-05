@@ -26,9 +26,11 @@ export default tseslint.config(
     }
   },
   {
-    // Tests and build scripts run in Node.
+    // Tests and build scripts run in Node. The Playwright driver is Node code
+    // that also *ships functions into a page* via `page.evaluate`, so those
+    // callbacks legitimately reference browser globals — hence both sets here.
     files: ['test/**/*.ts', 'scripts/**/*.mjs', '*.config.ts', '*.config.mjs'],
-    languageOptions: { globals: { ...globals.node } },
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
     rules: { '@typescript-eslint/no-explicit-any': 'off' }
   }
 )
