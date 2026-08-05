@@ -131,14 +131,10 @@ export function App(): JSX.Element {
     try {
       const data = await file.arrayBuffer()
       fileDataRef.current = data
-      const result = await runRecon(data, {
-        assets: {
-          workerPath: '/tesseract/worker.min.js',
-          corePath: '/tesseract/core',
-          langPath: '/tesseract/lang'
-        },
-        onProgress: setProgress
-      })
+      // Asset paths come from the platform default, which resolves them
+      // against the app's base URL. Repeating them here once meant they were
+      // root-absolute and 404'd on any deploy below the domain root.
+      const result = await runRecon(data, { onProgress: setProgress })
       reconRef.current = result
 
       // Placeholder classification until the vision pass lands: page 0 is
@@ -490,18 +486,21 @@ export function App(): JSX.Element {
               <strong>Drop a scanned PDF here</strong>
               <span>or click to choose a file — the whole book, one file</span>
             </div>
-            <input
-              ref={fileInput}
-              type="file"
-              accept="application/pdf"
-              hidden
-              onChange={(e) => {
-                const f = e.target.files?.[0]
-                if (f) void startRecon(f)
-              }}
-            />
           </>
         ) : null}
+
+        {/* Outside the intake branch: a stage that failed offers a retry, and
+            the picker has to exist for that button to open. */}
+        <input
+          ref={fileInput}
+          type="file"
+          accept="application/pdf"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) void startRecon(f)
+          }}
+        />
 
         {/* --- running stage --- */}
         {progressInfo ? (
@@ -610,16 +609,18 @@ export function App(): JSX.Element {
           </>
         ) : null}
 
-        {/* --- stages with nothing to ask yet --- */}
+        {/* --- a stage that stopped without finishing --- */}
         {!exported &&
         !progressInfo &&
         !runProgress &&
         !pendingCost &&
         questions.length === 0 &&
         step.id !== 'intake' ? (
-          <p className="hint">
-            Not built yet — this is where {step.title.toLowerCase()} will happen.
-          </p>
+          <div className="actions">
+            <button type="button" className="primary" onClick={() => fileInput.current?.click()}>
+              {error ? 'Try another file' : 'Choose a book'}
+            </button>
+          </div>
         ) : null}
       </main>
     </div>

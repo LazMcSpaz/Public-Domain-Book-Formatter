@@ -58,17 +58,30 @@ export interface OcrPageResult {
   meanConfidence: number
 }
 
-/** Where the locally-bundled Tesseract assets live, relative to the app root. */
+/** Where the locally-bundled Tesseract assets live. */
 export interface OcrAssetPaths {
   workerPath: string
   corePath: string
   langPath: string
 }
 
+/**
+ * Asset paths resolved against the app's base URL.
+ *
+ * These must NOT be root-absolute. A leading slash resolves against the
+ * *origin*, which is only correct when the app is served from the domain root.
+ * On GitHub Pages it lives at `/<repo>/`, so `/tesseract/worker.min.js` asks
+ * for `lazmcspaz.github.io/tesseract/...` and the worker 404s — with the
+ * failure surfacing from inside a web worker, where it reads as a mysterious
+ * `importScripts` NetworkError rather than a missing file.
+ *
+ * `BASE_URL` is what Vite substitutes for the configured base, and it always
+ * ends in a slash, so this is right in dev ('/') and under a subpath alike.
+ */
 export const DEFAULT_ASSET_PATHS: OcrAssetPaths = {
-  workerPath: '/tesseract/worker.min.js',
-  corePath: '/tesseract/core',
-  langPath: '/tesseract/lang'
+  workerPath: `${import.meta.env.BASE_URL}tesseract/worker.min.js`,
+  corePath: `${import.meta.env.BASE_URL}tesseract/core`,
+  langPath: `${import.meta.env.BASE_URL}tesseract/lang`
 }
 
 /**
