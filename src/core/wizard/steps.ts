@@ -208,8 +208,17 @@ const gateIdentity: Step = {
     }
 
     // The term-review grid: pixels beside the reading, ranked by impact.
-    if (s.lexicon.length > 0) {
-      const rows: TermRow[] = s.lexicon.map((e) => ({
+    //
+    // Only terms whose crop actually exists are offered. Rendering crops is
+    // capped (each one costs a page re-render), and the grid used to list the
+    // whole lexicon regardless — so past the cap every row read "no crop",
+    // asking the user to vet a word with no evidence at all. That is the one
+    // thing this gate must never do.
+    const reviewable = s.cropFor
+      ? s.lexicon.filter((e) => e.sampleTokenId && s.cropFor?.(e.sampleTokenId))
+      : s.lexicon
+    if (reviewable.length > 0) {
+      const rows: TermRow[] = reviewable.map((e) => ({
         id: e.term,
         reading: e.term,
         count: e.count,
@@ -217,13 +226,22 @@ const gateIdentity: Step = {
         signals: e.signals,
         pages: e.pages
       }))
+      // Say plainly when the list is a subset, rather than implying the book
+      // only had this many unusual words.
+      const held = s.lexicon.length - reviewable.length
       qs.push({
         id: 'terms',
         type: 'term-grid',
-        prompt: `Check the ${rows.length} unusual words I found`,
+        prompt:
+          held > 0
+            ? `Check the ${rows.length} highest-impact of ${s.lexicon.length} unusual words`
+            : `Check the ${rows.length} unusual words I found`,
         help:
           'Sorted by how often each appears — the ones at the top affect the most pages. ' +
-          'Confirming a word here fixes it everywhere in the book.',
+          'Confirming a word here fixes it everywhere in the book.' +
+          (held > 0
+            ? ` The other ${held} appear less often; they are still given to the model as context.`
+            : ''),
         rows
       })
     }

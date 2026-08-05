@@ -44,7 +44,7 @@ export interface ReconOptions {
 }
 
 export async function runRecon(
-  fileData: ArrayBuffer,
+  fileData: ArrayBuffer | Blob,
   options: ReconOptions = {}
 ): Promise<ReconResult> {
   const { dpi = 300, cropLimit = 60, onProgress, signal } = options

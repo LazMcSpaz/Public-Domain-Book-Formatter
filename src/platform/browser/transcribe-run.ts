@@ -19,7 +19,7 @@ import { openPdf, renderPage } from './pdf'
 import type { OcrWord } from './ocr'
 
 export interface BrowserRunOptions {
-  fileData: ArrayBuffer
+  fileData: ArrayBuffer | Blob
   ocrWordsByPage: Map<number, OcrWord[]>
   pageText: string[]
   client: ClientConfig

@@ -8,11 +8,14 @@
  */
 import { chromium } from 'playwright'
 import { mkdir } from 'node:fs/promises'
+import { resolve } from 'node:path'
 
 const OUT = process.argv[2] ?? 'screenshots'
 const URL_BASE = process.env.APP_URL ?? 'http://localhost:5173'
 // The sandbox pins an older Chromium than the installed playwright expects.
 const EXECUTABLE = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
+
+const REPO = resolve(import.meta.dirname, '..')
 
 await mkdir(OUT, { recursive: true })
 
@@ -46,6 +49,26 @@ await page.setInputFiles('input[type=file]', {
 // Recon is a real OCR run; give it room.
 await page.waitForSelector('.progress', { timeout: 30000 }).catch(() => {})
 await shot('02-recon-progress')
+
+// The book is opened once by recon and again by transcription. pdf.js transfers
+// the ArrayBuffer it is handed, so a careless implementation leaves the second
+// open with a detached buffer — which is invisible until a paid run starts.
+console.log('2b. the book can be opened twice')
+const reopen = await page.evaluate(async (repo) => {
+  const mod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+  const res = await fetch('test-book.pdf')
+  const file = new File([await res.arrayBuffer()], 'b.pdf', { type: 'application/pdf' })
+  try {
+    const a = await mod.openPdf(file)
+    const b = await mod.openPdf(file)
+    return { ok: a.numPages > 0 && b.numPages === a.numPages }
+  } catch (e) {
+    return { ok: false, error: String(e.message) }
+  }
+}, REPO)
+if (!reopen.ok)
+  throw new Error(`Reopening the PDF failed: ${reopen.error ?? 'page count mismatch'}`)
+console.log('  → openPdf is re-entrant on the same file')
 
 console.log('3. waiting for gate 1')
 await page.waitForSelector('.terms', { timeout: 180000 })

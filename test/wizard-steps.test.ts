@@ -597,3 +597,51 @@ describe('export step', () => {
     expect(stepById('export').canEnter(state)).toBe(false)
   })
 })
+
+describe('gate 1 — never ask about a word without showing it', () => {
+  const lex = (n: number): LexiconEntry[] =>
+    Array.from({ length: n }, (_, i) => entry(`term${i}word`, 100 - i))
+
+  const stateWith = (n: number, cropFor?: (id: string) => string | undefined): WizardState => ({
+    ...initialState(),
+    pagesProcessed: 3,
+    lexicon: lex(n),
+    ...(cropFor ? { cropFor } : {}),
+    completed: ['intake', 'recon'] as StepId[]
+  })
+
+  const grid = (state: WizardState) =>
+    stepById('gate-identity')
+      .questions(state)
+      .find((q) => q.id === 'terms') as
+      { rows: { cropSrc?: string }[]; prompt: string; help?: string } | undefined
+
+  it('lists only the terms whose crop was actually rendered', () => {
+    // Crops are capped, so a big book has terms with no evidence. Those rows
+    // used to render as "no crop" — a question with nothing to answer it by.
+    const cropped = new Set(['term0word-0', 'term1word-0', 'term2word-0'])
+    const g = grid(stateWith(10, (id) => (cropped.has(id) ? `blob:${id}` : undefined)))!
+    expect(g.rows).toHaveLength(3)
+    expect(g.rows.every((r) => r.cropSrc)).toBe(true)
+  })
+
+  it('says the list is a subset instead of implying the book had only those', () => {
+    const g = grid(stateWith(10, (id) => (id === 'term0word-0' ? 'blob:x' : undefined)))!
+    expect(g.prompt).toContain('of 10')
+    expect(g.help).toContain('9 appear less often')
+  })
+
+  it('does not claim a subset when every term has its pixels', () => {
+    const g = grid(stateWith(3, (id) => `blob:${id}`))!
+    expect(g.prompt).toBe('Check the 3 unusual words I found')
+    expect(g.help).not.toContain('appear less often')
+  })
+
+  it('drops the grid entirely rather than showing evidence-free rows', () => {
+    expect(grid(stateWith(5, () => undefined))).toBeUndefined()
+  })
+
+  it('still lists everything when no crop resolver exists at all (headless)', () => {
+    expect(grid(stateWith(4))!.rows).toHaveLength(4)
+  })
+})

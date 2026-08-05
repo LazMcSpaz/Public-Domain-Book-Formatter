@@ -26,7 +26,21 @@ export interface RenderedPage {
   dpi: number
 }
 
-export async function openPdf(data: ArrayBuffer): Promise<PDFDocumentProxy> {
+/**
+ * Open a PDF for rendering.
+ *
+ * Accepts a Blob/File as well as raw bytes, and that matters: pdf.js
+ * *transfers* the ArrayBuffer it is handed, so the caller's copy comes back
+ * detached and every later use throws "Cannot perform Construct on a detached
+ * ArrayBuffer". The book is opened more than once in a run — recon reads it,
+ * then transcription re-renders pages from it — so the source has to survive.
+ *
+ * Passing a File is the better path: the bytes stay on disk between phases
+ * instead of being pinned in the JS heap for the whole session. A raw
+ * ArrayBuffer is copied defensively so it, too, stays usable.
+ */
+export async function openPdf(source: ArrayBuffer | Blob): Promise<PDFDocumentProxy> {
+  const data = source instanceof Blob ? await source.arrayBuffer() : source.slice(0)
   return pdfjs.getDocument({ data }).promise
 }
 

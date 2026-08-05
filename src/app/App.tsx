@@ -51,7 +51,9 @@ export function App(): JSX.Element {
   const [dragOver, setDragOver] = useState(false)
   const reconRef = useRef<ReconResult | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
-  const fileDataRef = useRef<ArrayBuffer | null>(null)
+  // The File, not its bytes: pdf.js detaches any ArrayBuffer it is given, and
+  // holding the whole book in the heap between phases is needless besides.
+  const fileDataRef = useRef<File | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const transcriptionRef = useRef<RunResult | null>(null)
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
@@ -129,12 +131,11 @@ export function App(): JSX.Element {
     }))
 
     try {
-      const data = await file.arrayBuffer()
-      fileDataRef.current = data
+      fileDataRef.current = file
       // Asset paths come from the platform default, which resolves them
       // against the app's base URL. Repeating them here once meant they were
       // root-absolute and 404'd on any deploy below the domain root.
-      const result = await runRecon(data, { onProgress: setProgress })
+      const result = await runRecon(file, { onProgress: setProgress })
       reconRef.current = result
 
       // Placeholder classification until the vision pass lands: page 0 is
