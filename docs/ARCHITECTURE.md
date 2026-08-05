@@ -74,5 +74,7 @@ source of truth. It stays for two reasons that a language model can't provide:
   deliberately isolated as a swappable step.
 - **Project storage** is not implemented for the browser yet (OPFS/IndexedDB).
   The schema and migrations exist in `src/core/project`.
-- **Metadata extraction** (title/author off the title page) needs the vision
-  pass; until then Gate 1's identity fields start empty.
+- **The vision pass is built but not yet wired into the wizard UI** — schema,
+  prompt, client, runner, verification, and cost estimation all exist and are
+  tested against a mock transport; the `transcribe` step still needs its screen
+  (API-key entry, cost confirmation, progress) hooked up.
