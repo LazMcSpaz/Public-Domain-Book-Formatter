@@ -1,39 +1,36 @@
-// Flat ESLint config. Type-aware linting for the TS sources, React-hooks rules
-// for the renderer, and Prettier last to disable stylistic conflicts.
 import js from '@eslint/js'
 import tseslint from 'typescript-eslint'
-import reactHooks from 'eslint-plugin-react-hooks'
-import prettier from 'eslint-config-prettier'
+import globals from 'globals'
 
 export default tseslint.config(
   {
-    ignores: ['out/**', 'dist/**', 'release/**', 'node_modules/**', '*.config.js']
+    // Vendored third-party assets, build output, and generated screenshots are
+    // not ours to lint.
+    ignores: ['dist/**', 'public/**', 'screenshots/**', 'node_modules/**']
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['src/**/*.{ts,tsx}', 'test/**/*.ts'],
+    // App and platform code runs in the browser.
+    files: ['src/**/*.{ts,tsx}'],
     languageOptions: {
-      ecmaVersion: 'latest',
-      sourceType: 'module'
+      globals: { ...globals.browser },
+      parserOptions: { ecmaFeatures: { jsx: true } }
     },
     rules: {
-      // The compiler already enforces unused-vars (noUnusedLocals); allow the
-      // underscore-prefix escape hatch used across the codebase.
       '@typescript-eslint/no-unused-vars': [
         'error',
         { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }
-      ]
+      ],
+      '@typescript-eslint/no-non-null-assertion': 'off'
     }
   },
   {
-    files: ['src/renderer/**/*.{ts,tsx}'],
-    plugins: { 'react-hooks': reactHooks },
-    rules: {
-      ...reactHooks.configs.recommended.rules,
-      // Effects in App/ImageEditor intentionally narrow their deps; warn, don't fail.
-      'react-hooks/exhaustive-deps': 'warn'
-    }
-  },
-  prettier
+    // Tests and build scripts run in Node. The Playwright driver is Node code
+    // that also *ships functions into a page* via `page.evaluate`, so those
+    // callbacks legitimately reference browser globals — hence both sets here.
+    files: ['test/**/*.ts', 'scripts/**/*.mjs', '*.config.ts', '*.config.mjs'],
+    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+    rules: { '@typescript-eslint/no-explicit-any': 'off' }
+  }
 )

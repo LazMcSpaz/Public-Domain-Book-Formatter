@@ -1,1 +1,0 @@
-export { FrontMatter } from './FrontMatter'

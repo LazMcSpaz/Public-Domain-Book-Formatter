@@ -1,0 +1,599 @@
+import { describe, it, expect } from 'vitest'
+import {
+  STEPS,
+  activeStep,
+  initialState,
+  stepById,
+  progress,
+  defaultAnswers,
+  missingRequired,
+  frontMatterPages,
+  type WizardState,
+  type StepId
+} from '@core/wizard'
+import { dispositionFor, partitionByDisposition, strippedFurniture } from '@core/pages'
+import type { LexiconEntry } from '@core/lexicon'
+import { assembleBook } from '@core/assemble'
+import type { TranscribedBlock } from '@core/transcribe'
+import type { PageRole } from '@core/pages'
+import { BODY_FONTS, profileFromAnswers } from '@core/design'
+import { editionFromAnswers } from '@core/export'
+
+function entry(term: string, count: number, extra: Partial<LexiconEntry> = {}): LexiconEntry {
+  return {
+    term,
+    count,
+    meanConfidence: 90,
+    pages: [1, 2],
+    variants: [],
+    signals: ['frequent-unknown'],
+    impact: count,
+    sampleTokenId: `${term}-0`,
+    ...extra
+  }
+}
+
+/** A state that has finished recon on a small book. */
+function reconDone(overrides: Partial<WizardState> = {}): WizardState {
+  return {
+    ...initialState(),
+    fileName: 'alchemist.pdf',
+    pageCount: 12,
+    pagesProcessed: 12,
+    metadata: {
+      title: 'The Alchemist His Practise',
+      subtitle: null,
+      author: 'Anonymous',
+      originalYear: '1662',
+      originalPublisher: 'J. Smith',
+      originalPlace: 'London',
+      contributors: []
+    },
+    classifications: [
+      { pageIndex: 0, role: 'title-page', selfReportedConfidence: 0.95 },
+      { pageIndex: 1, role: 'copyright', selfReportedConfidence: 0.9 },
+      { pageIndex: 2, role: 'table-of-contents', selfReportedConfidence: 0.9 },
+      { pageIndex: 3, role: 'chapter-opening', selfReportedConfidence: 0.9 },
+      {
+        pageIndex: 4,
+        role: 'body',
+        selfReportedConfidence: 0.95,
+        furniture: { runningHead: 'THE ALCHEMIST HIS PRACTISE', folio: '37' }
+      }
+    ],
+    lexicon: [entry('chirurgeon', 43), entry('alembick', 17)],
+    ...overrides
+  }
+}
+
+describe('step ordering', () => {
+  it('starts at intake with an empty state', () => {
+    expect(activeStep(initialState()).id).toBe('intake')
+  })
+
+  it('moves to recon once a file is loaded', () => {
+    const s = {
+      ...initialState(),
+      fileName: 'book.pdf',
+      pageCount: 100,
+      completed: ['intake' as const]
+    }
+    expect(activeStep(s).id).toBe('recon')
+  })
+
+  it('reaches the identity gate once pages are processed', () => {
+    const s = { ...reconDone(), completed: ['intake' as const, 'recon' as const] }
+    expect(activeStep(s).id).toBe('gate-identity')
+  })
+
+  it('will not enter transcription before the identity gate is done', () => {
+    const s = reconDone()
+    expect(stepById('transcribe').canEnter(s)).toBe(false)
+    s.completed = ['intake', 'recon', 'gate-identity']
+    expect(stepById('transcribe').canEnter(s)).toBe(true)
+  })
+
+  it('reports progress across the flow', () => {
+    const p = progress({ ...reconDone(), completed: ['intake', 'recon'] })
+    expect(p.total).toBe(STEPS.length)
+    expect(p.done).toBe(2)
+    expect(p.pct).toBeGreaterThan(0)
+  })
+})
+
+describe('gate 1 questions', () => {
+  it('pre-fills identity from what was read off the title page', () => {
+    const qs = stepById('gate-identity').questions(reconDone())
+    const title = qs.find((q) => q.id === 'title')
+    expect(title?.type).toBe('text')
+    expect((title as { defaultValue: string }).defaultValue).toBe('The Alchemist His Practise')
+    expect(qs.find((q) => q.id === 'author')).toBeDefined()
+    expect(qs.find((q) => q.id === 'originalYear')).toBeDefined()
+  })
+
+  it('attaches the title-page image as evidence', () => {
+    const qs = stepById('gate-identity').questions(reconDone())
+    const title = qs.find((q) => q.id === 'title')!
+    expect(title.evidence?.[0]).toMatchObject({ kind: 'image', src: 'page:0' })
+  })
+
+  it('defaults orthography to preserve (a reprint, not an edit)', () => {
+    const qs = stepById('gate-identity').questions(reconDone())
+    const q = qs.find((x) => x.id === 'orthography')!
+    expect(q.type).toBe('choice')
+    expect((q as { defaultValue: string }).defaultValue).toBe('preserve')
+  })
+
+  it('asks about long-s ONLY when the book actually uses it', () => {
+    const without = stepById('gate-identity').questions(reconDone())
+    expect(without.find((q) => q.id === 'longS')).toBeUndefined()
+
+    const withLongS = stepById('gate-identity').questions(
+      reconDone({ lexicon: [entry('chirurgeon', 5), entry('ſhew', 9)] })
+    )
+    expect(withLongS.find((q) => q.id === 'longS')).toBeDefined()
+  })
+
+  it('builds one batched term grid rather than a question per term', () => {
+    const qs = stepById('gate-identity').questions(reconDone())
+    const grid = qs.filter((q) => q.type === 'term-grid')
+    expect(grid).toHaveLength(1)
+    expect((grid[0] as { rows: unknown[] }).rows).toHaveLength(2)
+  })
+
+  it('wires each term row to its word-crop image', () => {
+    const state = reconDone({ cropFor: (id) => `blob:crop/${id}` })
+    const qs = stepById('gate-identity').questions(state)
+    const grid = qs.find((q) => q.type === 'term-grid')! as { rows: { cropSrc?: string }[] }
+    expect(grid.rows[0]!.cropSrc).toBe('blob:crop/chirurgeon-0')
+  })
+
+  it('omits the grid when nothing unusual was harvested', () => {
+    const qs = stepById('gate-identity').questions(reconDone({ lexicon: [] }))
+    expect(qs.find((q) => q.type === 'term-grid')).toBeUndefined()
+  })
+})
+
+describe('answers', () => {
+  it('provides a complete "just continue" default set', () => {
+    const qs = stepById('gate-identity').questions(reconDone())
+    const a = defaultAnswers(qs)
+    expect(a['orthography']).toBe('preserve')
+    expect(a['title']).toBe('The Alchemist His Practise')
+    // Every term defaults to accepted; the user overrides the wrong ones.
+    expect(a['terms']).toMatchObject({ chirurgeon: { action: 'accept' } })
+  })
+
+  it('reports required questions left blank', () => {
+    const qs = stepById('gate-identity').questions(
+      reconDone({ metadata: { ...reconDone().metadata, title: null, author: null } })
+    )
+    const missing = missingRequired(qs, defaultAnswers(qs))
+    expect(missing).toContain('title')
+    expect(missing).toContain('author')
+  })
+})
+
+describe('page roles', () => {
+  it('mines front matter for metadata instead of transcribing it', () => {
+    expect(dispositionFor('title-page')).toBe('extract-metadata')
+    expect(dispositionFor('copyright')).toBe('extract-metadata')
+  })
+
+  it('discards the scanned TOC and index (their page numbers are the OLD edition’s)', () => {
+    expect(dispositionFor('table-of-contents')).toBe('discard')
+    expect(dispositionFor('index')).toBe('discard')
+  })
+
+  it('transcribes real body content', () => {
+    expect(dispositionFor('body')).toBe('transcribe')
+    expect(dispositionFor('chapter-opening')).toBe('transcribe')
+  })
+
+  it('partitions pages by what happens to them', () => {
+    const parts = partitionByDisposition(reconDone().classifications)
+    expect(parts['extract-metadata']).toEqual([0, 1])
+    expect(parts.discard).toEqual([2])
+    expect(parts.transcribe).toEqual([3, 4])
+  })
+
+  it('lists front-matter pages for the gate', () => {
+    expect(frontMatterPages(reconDone()).map((c) => c.pageIndex)).toEqual([0, 1, 2])
+  })
+
+  it('reports stripped running heads and folios so nothing vanishes silently', () => {
+    const f = strippedFurniture(reconDone().classifications)
+    expect(f.runningHeads).toEqual(['THE ALCHEMIST HIS PRACTISE'])
+    expect(f.folioCount).toBe(1)
+  })
+})
+
+describe('transcribe step questions', () => {
+  const ready = (overrides: Partial<WizardState> = {}): WizardState => ({
+    ...reconDone(),
+    completed: ['intake', 'recon', 'gate-identity'],
+    ...overrides
+  })
+
+  it('asks for an API key only when one is not already stored', () => {
+    const without = stepById('transcribe').questions(ready({ hasApiKey: false }))
+    expect(without.find((q) => q.id === 'apiKey')).toBeDefined()
+
+    const withKey = stepById('transcribe').questions(ready({ hasApiKey: true }))
+    expect(withKey.find((q) => q.id === 'apiKey')).toBeUndefined()
+  })
+
+  it('says plainly where the key is stored', () => {
+    const q = stepById('transcribe')
+      .questions(ready())
+      .find((x) => x.id === 'apiKey')!
+    expect(q.help).toMatch(/only in this browser/i)
+    expect(q.help).toMatch(/never/i)
+  })
+
+  it('offers a model choice and defaults to the highest quality', () => {
+    const q = stepById('transcribe')
+      .questions(ready())
+      .find((x) => x.id === 'model')!
+    expect(q.type).toBe('choice')
+    expect((q as { defaultValue: string }).defaultValue).toBe('claude-opus-5')
+    expect((q as { options: unknown[] }).options).toHaveLength(3)
+  })
+
+  it('invites book context, which measurably helps unusual vocabulary', () => {
+    const q = stepById('transcribe')
+      .questions(ready())
+      .find((x) => x.id === 'bookContext')
+    expect(q).toBeDefined()
+    expect(q!.required).toBeFalsy()
+  })
+
+  it('is not enterable until the identity gate is done', () => {
+    expect(stepById('transcribe').canEnter(reconDone())).toBe(false)
+    expect(stepById('transcribe').canEnter(ready())).toBe(true)
+  })
+})
+
+describe('gate 2 — uncertain spots', () => {
+  const transcribed = (overrides: Partial<WizardState> = {}): WizardState => ({
+    ...reconDone(),
+    completed: ['intake', 'recon', 'gate-identity', 'transcribe'],
+    ...overrides
+  })
+
+  it('shows nothing when every page passed both checks', () => {
+    expect(stepById('gate-uncertainties').questions(transcribed())).toHaveLength(0)
+  })
+
+  it('surfaces a page flagged by deterministic evidence', () => {
+    const qs = stepById('gate-uncertainties').questions(
+      transcribed({
+        findings: [
+          { code: 'text-dropped', severity: 'high', pageIndex: 4, message: '30% shorter than OCR.' }
+        ]
+      })
+    )
+    expect(qs).toHaveLength(1)
+    expect(qs[0]!.prompt).toBe('Page 5')
+    expect(qs[0]!.help).toContain('30% shorter')
+  })
+
+  it('attaches the page scan as evidence so nothing is judged blind', () => {
+    const qs = stepById('gate-uncertainties').questions(
+      transcribed({
+        findings: [{ code: 'empty-page', severity: 'high', pageIndex: 2, message: 'Nothing read.' }]
+      })
+    )
+    expect(qs[0]!.evidence?.[0]).toMatchObject({ kind: 'image', src: 'page:2' })
+  })
+
+  it('ignores low-severity findings — reviewing noise defeats the point', () => {
+    const qs = stepById('gate-uncertainties').questions(
+      transcribed({
+        findings: [
+          { code: 'orphan-footnote', severity: 'low', pageIndex: 1, message: 'No marker.' }
+        ]
+      })
+    )
+    expect(qs).toHaveLength(0)
+  })
+
+  it('includes the model’s own reported uncertainties with alternatives', () => {
+    const qs = stepById('gate-uncertainties').questions(
+      transcribed({
+        uncertainties: [
+          { pageIndex: 3, text: 'chirurgeon', alternatives: ['chirurgeen'], reason: 'faint ink' }
+        ]
+      })
+    )
+    expect(qs[0]!.help).toContain('chirurgeon')
+    expect(qs[0]!.help).toContain('chirurgeen')
+    expect(qs[0]!.help).toContain('faint ink')
+  })
+
+  it('merges both signals for the same page into one question', () => {
+    const qs = stepById('gate-uncertainties').questions(
+      transcribed({
+        findings: [
+          { code: 'text-dropped', severity: 'medium', pageIndex: 6, message: 'Shorter than OCR.' }
+        ],
+        uncertainties: [{ pageIndex: 6, text: 'x', alternatives: [], reason: 'blur' }]
+      })
+    )
+    expect(qs).toHaveLength(1)
+    expect(qs[0]!.help).toContain('Shorter than OCR')
+    expect(qs[0]!.help).toContain('blur')
+  })
+
+  it('requires an explicit decision about pages that failed outright', () => {
+    const qs = stepById('gate-uncertainties').questions(transcribed({ failedPages: [7, 8] }))
+    const failed = qs.find((q) => q.id === 'failedPages')!
+    expect(failed.required).toBe(true)
+    expect(failed.help).toContain('8, 9') // 1-based in the UI
+  })
+
+  it('offers accept / re-read / omit for each flagged page', () => {
+    const qs = stepById('gate-uncertainties').questions(
+      transcribed({
+        findings: [{ code: 'text-added', severity: 'medium', pageIndex: 0, message: 'Longer.' }]
+      })
+    )
+    const opts = (qs[0] as { options: { value: string }[] }).options.map((o) => o.value)
+    expect(opts).toEqual(['accept', 'redo', 'skip'])
+  })
+})
+
+describe('gate 3 — structure', () => {
+  const withDoc = (blocks: Parameters<typeof assembleBook>[0]): WizardState => ({
+    ...reconDone(),
+    completed: ['intake', 'recon', 'gate-identity', 'transcribe', 'gate-uncertainties'],
+    document: assembleBook(blocks)
+  })
+
+  const bodyPage = (pageIndex: number, blocks: TranscribedBlock[], role: PageRole = 'body') => ({
+    pageIndex,
+    role,
+    blocks,
+    uncertain: [],
+    furniture: {}
+  })
+
+  it('asks nothing until the book has been assembled', () => {
+    const s = {
+      ...reconDone(),
+      completed: [
+        'intake',
+        'recon',
+        'gate-identity',
+        'transcribe',
+        'gate-uncertainties'
+      ] as StepId[]
+    }
+    expect(stepById('gate-structure').questions(s)).toHaveLength(0)
+  })
+
+  it('summarizes the shape so an obviously-wrong assembly is visible', () => {
+    const qs = stepById('gate-structure').questions(
+      withDoc([
+        bodyPage(0, [
+          { kind: 'heading', text: 'Chapter IV', level: 1 },
+          { kind: 'paragraph', text: 'one two three four five' }
+        ])
+      ])
+    )
+    const summary = qs.find((q) => q.id === 'structureOk')!
+    expect(summary.help).toContain('1 chapter')
+    // Headings are part of the book, so they count too: 'Chapter IV' + 5 body words.
+    expect(summary.help).toContain('7 words')
+  })
+
+  it('lists the chapters that will become the table of contents', () => {
+    const qs = stepById('gate-structure').questions(
+      withDoc([
+        bodyPage(0, [
+          { kind: 'heading', text: 'Chapter IV', level: 1 },
+          { kind: 'heading', text: 'Of Simples', level: 2 }
+        ])
+      ])
+    )
+    const ev = qs.find((q) => q.id === 'structureOk')!.evidence![0]!
+    expect(ev.kind).toBe('text')
+    expect((ev as { text: string }).text).toContain('Chapter IV')
+    expect((ev as { text: string }).text).toContain('Of Simples')
+  })
+
+  it('says plainly when no chapters were found', () => {
+    const qs = stepById('gate-structure').questions(
+      withDoc([bodyPage(0, [{ kind: 'paragraph', text: 'Just prose.' }])])
+    )
+    const ev = qs.find((q) => q.id === 'structureOk')!.evidence![0]!
+    expect((ev as { text: string }).text).toMatch(/none found/i)
+  })
+
+  it('asks what to do with footnotes that could not be placed', () => {
+    const qs = stepById('gate-structure').questions(
+      withDoc([
+        bodyPage(0, [
+          { kind: 'paragraph', text: 'No marker here.' },
+          { kind: 'footnote', text: 'A stranded note.', marker: '9' }
+        ])
+      ])
+    )
+    const q = qs.find((x) => x.id === 'orphanNotes')!
+    expect(q).toBeDefined()
+    expect((q as { defaultValue: string }).defaultValue).toBe('endnotes')
+  })
+
+  it('does not raise footnote placement when every note was linked', () => {
+    const qs = stepById('gate-structure').questions(
+      withDoc([
+        bodyPage(0, [
+          { kind: 'paragraph', text: 'Referenced here.1' },
+          { kind: 'footnote', text: 'A note.', marker: '1' }
+        ])
+      ])
+    )
+    expect(qs.find((x) => x.id === 'orphanNotes')).toBeUndefined()
+  })
+
+  it('shows which pages were deliberately left out, so nothing vanishes quietly', () => {
+    const qs = stepById('gate-structure').questions(
+      withDoc([
+        bodyPage(0, [{ kind: 'paragraph', text: 'THE ALCHEMIST' }], 'title-page'),
+        bodyPage(1, [{ kind: 'paragraph', text: 'Body.' }])
+      ])
+    )
+    const q = qs.find((x) => x.id === 'skippedOk')!
+    expect(q).toBeDefined()
+    expect(q.help).toContain('title-page')
+  })
+})
+
+describe('design step', () => {
+  const readyForDesign = (answers: Record<string, Record<string, unknown>> = {}): WizardState => ({
+    ...initialState(),
+    completed: [
+      'intake',
+      'recon',
+      'gate-identity',
+      'transcribe',
+      'gate-uncertainties',
+      'gate-structure'
+    ],
+    answers: answers as WizardState['answers']
+  })
+
+  it('is where the flow lands once the structure is confirmed', () => {
+    expect(activeStep(readyForDesign()).id).toBe('design')
+  })
+
+  it('asks about the book, not about typography settings', () => {
+    const ids = stepById('design')
+      .questions(readyForDesign())
+      .map((q) => q.id)
+    expect(ids).toEqual(['kind', 'period', 'font', 'chapterOpener', 'runningHeads'])
+  })
+
+  it('every question offers a usable default, so nothing is required of the user', () => {
+    const qs = stepById('design').questions(readyForDesign())
+    expect(missingRequired(qs, defaultAnswers(qs))).toEqual([])
+  })
+
+  it('pre-selects the typeface that matches the chosen period', () => {
+    const qs = stepById('design').questions(readyForDesign({ design: { period: 'victorian' } }))
+    const font = qs.find((q) => q.id === 'font')!
+    expect((font as { defaultValue: string }).defaultValue).toBe('libre-baskerville')
+    expect(font.help).toContain('Libre Baskerville')
+  })
+
+  it('offers every catalogued typeface, not just the suggestion', () => {
+    const qs = stepById('design').questions(readyForDesign())
+    const font = qs.find((q) => q.id === 'font') as { options: { value: string }[] }
+    expect(font.options.map((o) => o.value)).toEqual(BODY_FONTS.map((f) => f.id))
+  })
+
+  it('tells the user which page size their answer implies', () => {
+    const qs = stepById('design').questions(readyForDesign({ design: { kind: 'poetry' } }))
+    expect(qs.find((q) => q.id === 'kind')!.help).toContain('5.5x8.5')
+  })
+
+  it('turns its own default answers into a complete, coherent profile', () => {
+    const qs = stepById('design').questions(readyForDesign())
+    const a = defaultAnswers(qs)
+    const profile = profileFromAnswers(
+      {
+        kind: a['kind'] as never,
+        period: a['period'] as never,
+        chapterOpener: a['chapterOpener'] as never,
+        runningHeads: a['runningHeads'] as never
+      },
+      a['font'] as string
+    )
+    expect(profile.bodyFont).toBe('IM FELL English')
+    expect(profile.trimSize).toBe('6x9')
+  })
+
+  it('does not open before the structure gate is done', () => {
+    const state = { ...initialState(), completed: ['intake', 'recon'] as StepId[] }
+    expect(stepById('design').canEnter(state)).toBe(false)
+  })
+})
+
+describe('export step', () => {
+  const readyForExport = (): WizardState => ({
+    ...initialState(),
+    pageCount: 240,
+    metadata: { ...initialState().metadata, author: 'Anonymous' },
+    answers: {
+      'gate-identity': { title: 'The Alchemist', author: 'Anonymous', originalYear: '1662' }
+    },
+    completed: [
+      'intake',
+      'recon',
+      'gate-identity',
+      'transcribe',
+      'gate-uncertainties',
+      'gate-structure',
+      'design'
+    ]
+  })
+
+  it('is where the flow lands once the design is chosen', () => {
+    expect(activeStep(readyForExport()).id).toBe('export')
+  })
+
+  it('asks only for details the book itself cannot supply', () => {
+    const ids = stepById('export')
+      .questions(readyForExport())
+      .map((q) => q.id)
+    expect(ids).toEqual([
+      'imprint',
+      'copyrightHolder',
+      'editionDate',
+      'editionStatement',
+      'isbn',
+      'publicDomainNotice'
+    ])
+  })
+
+  it('nothing is required — a reprint with no imprint or ISBN is legitimate', () => {
+    const qs = stepById('export').questions(readyForExport())
+    expect(missingRequired(qs, defaultAnswers(qs))).toEqual([])
+  })
+
+  it('defaults the edition statement from the original year it already knows', () => {
+    const q = stepById('export')
+      .questions(readyForExport())
+      .find((x) => x.id === 'editionStatement')!
+    expect((q as { defaultValue: string }).defaultValue).toContain('1662')
+  })
+
+  it('leaves the edition statement blank when the original year is unknown', () => {
+    const state = { ...readyForExport(), answers: { 'gate-identity': { title: 'Untitled' } } }
+    const q = stepById('export')
+      .questions(state)
+      .find((x) => x.id === 'editionStatement')!
+    expect((q as { defaultValue: string }).defaultValue).toBe('')
+  })
+
+  it('offers the public-domain statement, on by default', () => {
+    const q = stepById('export')
+      .questions(readyForExport())
+      .find((x) => x.id === 'publicDomainNotice')!
+    expect((q as { defaultValue: boolean }).defaultValue).toBe(true)
+  })
+
+  it('turns its own defaults into a buildable edition', () => {
+    const state = readyForExport()
+    const qs = stepById('export').questions(state)
+    const edition = editionFromAnswers(state.answers['gate-identity']!, defaultAnswers(qs))
+    expect(edition.title).toBe('The Alchemist')
+    expect(edition.notices[0]).toContain('1662')
+    expect(edition.editionDate).toBe(String(new Date().getFullYear()))
+  })
+
+  it('does not open before the design is chosen', () => {
+    const state = { ...initialState(), completed: ['intake', 'recon'] as StepId[] }
+    expect(stepById('export').canEnter(state)).toBe(false)
+  })
+})

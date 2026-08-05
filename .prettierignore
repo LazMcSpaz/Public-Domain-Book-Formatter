@@ -1,7 +1,3 @@
-out
 dist
-release
-node_modules
-package-lock.json
-resources/ornaments
-*.hocr
+public/tesseract
+screenshots

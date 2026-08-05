@@ -119,6 +119,7 @@ export function normalizeStyleProfile(raw: unknown): StyleProfile {
       verso: oneOf(rawRunning['verso'], RUNNING_HEAD_MODES, d.runningHeads.verso),
       recto: oneOf(rawRunning['recto'], RUNNING_HEAD_MODES, d.runningHeads.recto)
     },
+    dropCap: bool(raw['dropCap'], d.dropCap),
     pageNumber: oneOf(raw['pageNumber'], PAGE_NUMBER_POSITIONS, d.pageNumber),
     ornaments: {
       chapterOpener:
@@ -150,6 +151,7 @@ export function mergeStyle(base: StyleProfile, patch: Partial<StyleProfile>): St
   if (patch.bodyFontSize !== undefined) next.bodyFontSize = patch.bodyFontSize
   if (patch.headingFont !== undefined) next.headingFont = patch.headingFont
   if (patch.pageNumber !== undefined) next.pageNumber = patch.pageNumber
+  if (patch.dropCap !== undefined) next.dropCap = patch.dropCap
   if (patch.margins !== undefined) next.margins = { ...next.margins, ...patch.margins }
   if (patch.headingStyle !== undefined) {
     next.headingStyle = { ...next.headingStyle, ...patch.headingStyle }

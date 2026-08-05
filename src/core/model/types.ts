@@ -324,6 +324,12 @@ export interface StyleProfile {
     verso: RunningHeadMode
     recto: RunningHeadMode
   }
+  /**
+   * Open each chapter's first paragraph with a large initial (a drop cap).
+   * Traditional in reprints of early-modern books, and mutually intelligible
+   * with — not exclusive of — a chapter-opener ornament.
+   */
+  dropCap: boolean
   pageNumber: PageNumberPosition
   ornaments: OrnamentChoices
   /** Front-matter visual toggles. */
@@ -349,7 +355,12 @@ export interface FrontMatterFields {
 // KDP export validation (SPEC §10)
 // ---------------------------------------------------------------------------
 
-export type ValidationLevel = 'ok' | 'warn' | 'fail'
+/**
+ * `pending` is not a soft warning — it means the check has not been run yet
+ * (typically because the book has not been typeset). Reporting it as `ok` would
+ * be a green tick nothing earned, and as `warn` would cry wolf.
+ */
+export type ValidationLevel = 'ok' | 'warn' | 'fail' | 'pending'
 
 export interface ValidationCheck {
   id: string

@@ -2,14 +2,15 @@
  * The XeLaTeX document builder (SPEC §7/§8).
  *
  * Assembles a complete, standalone XeLaTeX source from a resolved style profile,
- * per-book config, front-matter fields, an auto TOC, and the Pandoc body
- * fragment. It configures:
+ * per-book config, front-matter fields, an auto TOC, and the emitted body
+ * fragment (see emit-body.ts — Pandoc is long gone). It configures:
  *   - `geometry` from trim size + margins + gutter,
  *   - `fontspec` body/heading fonts at the profile body size,
  *   - `fancyhdr` running heads honoring verso/recto modes and page-number pos,
  *   - templated title + copyright pages (gated by front-matter toggles),
  *   - an auto TOC rendered from the discarded-original / rebuilt entries,
- *   - chapter-opener + section-divider ornament hooks (\includegraphics),
+ *   - chapter-opener + section-divider ornament hooks, drawn typographically
+ *     unless real ornament files are supplied,
  * then includes the body fragment.
  *
  * Pure string builder: no I/O, all interpolated content escaped.
@@ -22,7 +23,7 @@ export interface LatexDocumentInput {
   config: PerBookConfig
   frontMatter: FrontMatterFields
   toc: TocEntry[]
-  /** The Pandoc-produced LaTeX body fragment. */
+  /** The emitted LaTeX body fragment (see emit-body.ts). */
   bodyLatex: string
   /** Resolved on-disk paths (PDF form) for selected ornaments, if any. */
   ornamentPaths?: {
@@ -180,6 +181,25 @@ function ornamentInclude(path: string): string {
   return `\\begin{center}\\includegraphics[width=0.3\\textwidth]{${path}}\\end{center}`
 }
 
+/**
+ * Ornaments drawn with TeX primitives rather than included as files.
+ *
+ * The shipped ornament library is SVG, XeLaTeX cannot include SVG, and the app
+ * hands the user a lone `.tex` — so emitting `\includegraphics` of a converted
+ * PDF that was never converted and never delivered produces a document that
+ * simply fails to compile. Rules and `$\ast$` need no external file and no
+ * particular font, so these work wherever XeLaTeX does.
+ *
+ * `ornamentPaths` still wins when real files are supplied, for the day the
+ * export ships them alongside the source.
+ */
+const TYPOGRAPHIC_ORNAMENTS: Record<string, string> = {
+  chapterOpener:
+    '\\begin{center}\\rule{0.16\\textwidth}{0.7pt}\\hspace{0.7em}' +
+    '$\\ast$\\hspace{0.7em}\\rule{0.16\\textwidth}{0.7pt}\\end{center}\\vspace{0.5em}',
+  sectionDivider: '\\begin{center}$\\ast$\\quad$\\ast$\\quad$\\ast$\\end{center}'
+}
+
 function titlePage(input: LatexDocumentInput): string {
   const title = escapeLatex(input.config.title)
   const author = escapeLatex(input.config.author)
@@ -279,6 +299,12 @@ export function buildLatexDocument(input: LatexDocumentInput): string {
   parts.push(geometryBlock(profile))
   parts.push(fontBlock(profile))
   parts.push('\\usepackage{graphicx}')
+  // `lettrine` is only loaded when asked for: it is the package that draws the
+  // large opening initial, and the body emitter only writes \lettrine when the
+  // same flag is set, so the two stay in step.
+  if (profile.dropCap) {
+    parts.push('\\usepackage{lettrine}')
+  }
   parts.push(fancyhdrBlock(profile))
   parts.push(printQualityBlock())
   parts.push(headingMacros(profile))
@@ -288,17 +314,27 @@ export function buildLatexDocument(input: LatexDocumentInput): string {
   parts.push(`\\newcommand{\\theauthor}{${escapeLatex(config.author)}}`)
 
   // Chapter-opener ornament hook: prepend to every \chapter via \chapterornament.
-  if (orn.chapterOpener) {
-    parts.push(`\\newcommand{\\chapterornament}{${ornamentInclude(orn.chapterOpener)}}`)
-  } else {
-    parts.push('\\newcommand{\\chapterornament}{}')
-  }
+  // A supplied file wins; a profile selection with no file falls back to the
+  // typographic form, which always compiles; otherwise nothing.
+  parts.push(
+    `\\newcommand{\\chapterornament}{${
+      orn.chapterOpener
+        ? ornamentInclude(orn.chapterOpener)
+        : profile.ornaments.chapterOpener
+          ? TYPOGRAPHIC_ORNAMENTS['chapterOpener']!
+          : ''
+    }}`
+  )
   // Section-divider ornament hook: \sectiondivider for use at section breaks.
-  if (orn.sectionDivider) {
-    parts.push(`\\newcommand{\\sectiondivider}{${ornamentInclude(orn.sectionDivider)}}`)
-  } else {
-    parts.push('\\newcommand{\\sectiondivider}{\\begin{center}* * *\\end{center}}')
-  }
+  // Unlike the chapter opener this always has *something*: a scene break with
+  // no mark at all reads as a mistake.
+  parts.push(
+    `\\newcommand{\\sectiondivider}{${
+      orn.sectionDivider
+        ? ornamentInclude(orn.sectionDivider)
+        : TYPOGRAPHIC_ORNAMENTS['sectionDivider']!
+    }}`
+  )
 
   void frontMatter // referenced below in front-matter blocks
 
@@ -319,7 +355,7 @@ export function buildLatexDocument(input: LatexDocumentInput): string {
 
   // Body.
   parts.push('\\mainmatter')
-  parts.push('% --- Body (Pandoc fragment) ---')
+  parts.push('% --- Body ---')
   parts.push(input.bodyLatex)
 
   parts.push('\\end{document}')

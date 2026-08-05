@@ -1,18 +1,12 @@
-import { resolve } from 'node:path'
 import { defineConfig } from 'vitest/config'
+import { resolve } from 'node:path'
 
 export default defineConfig({
   resolve: {
     alias: {
       '@core': resolve(__dirname, 'src/core'),
-      '@shared': resolve(__dirname, 'src/shared'),
-      '@tooling': resolve(__dirname, 'src/tooling'),
-      '@pipeline': resolve(__dirname, 'src/pipeline')
+      '@platform': resolve(__dirname, 'src/platform')
     }
   },
-  test: {
-    environment: 'node',
-    include: ['test/**/*.test.ts', 'src/**/*.test.ts'],
-    globals: false
-  }
+  test: { include: ['test/**/*.test.ts'], environment: 'node' }
 })

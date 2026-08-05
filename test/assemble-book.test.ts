@@ -1,0 +1,399 @@
+import { describe, it, expect } from 'vitest'
+import {
+  assembleBook,
+  shouldJoin,
+  joinText,
+  bookWordCount,
+  seamCount,
+  stripSoftHyphens,
+  footnoteMarkerPattern,
+  stripLeadingMarker
+} from '@core/assemble'
+import type { PageTranscription, TranscribedBlock } from '@core/transcribe'
+import type { PageRole } from '@core/pages'
+
+function page(
+  pageIndex: number,
+  blocks: TranscribedBlock[],
+  role: PageRole = 'body'
+): PageTranscription {
+  return { pageIndex, role, blocks, uncertain: [], furniture: {} }
+}
+
+const para = (text: string, extra: Partial<TranscribedBlock> = {}): TranscribedBlock => ({
+  kind: 'paragraph',
+  text,
+  ...extra
+})
+
+describe('shouldJoin', () => {
+  it('joins when the model marked the seam', () => {
+    expect(shouldJoin(para('The spirit', { continuesNext: true }), para('ascendeth.'))).toBe(true)
+    expect(shouldJoin(para('The spirit'), para('ascendeth.', { continuesPrevious: true }))).toBe(
+      true
+    )
+  })
+
+  it('joins an unterminated sentence followed by lowercase', () => {
+    expect(shouldJoin(para('the alembick being set upon'), para('a gentle fire.'))).toBe(true)
+  })
+
+  it('does not join across a completed sentence', () => {
+    expect(shouldJoin(para('It was done.'), para('A new thought begins.'))).toBe(false)
+  })
+
+  it('does not join when the next block starts a new sentence', () => {
+    expect(shouldJoin(para('the alembick being set upon'), para('Nowe the chirurgeon'))).toBe(false)
+  })
+
+  it('never joins across different block kinds', () => {
+    expect(shouldJoin(para('unterminated text'), { kind: 'heading', text: 'chapter v' })).toBe(
+      false
+    )
+  })
+
+  it('joins a hyphenated word even though it ends with punctuation-ish', () => {
+    expect(shouldJoin(para('the chirur-'), para('geon his art'))).toBe(true)
+  })
+})
+
+describe('joinText', () => {
+  it('heals a word split by the page break', () => {
+    expect(joinText('the chirur-', 'geon his art')).toBe('the chirurgeon his art')
+  })
+
+  it('heals a trailing soft hyphen at a page seam', () => {
+    expect(joinText('quintes\u00AD', 'sence')).toBe('quintessence')
+  })
+
+  it('otherwise joins with a single space', () => {
+    expect(joinText('the alembick being set upon', 'a gentle fire.')).toBe(
+      'the alembick being set upon a gentle fire.'
+    )
+  })
+})
+
+describe('stripSoftHyphens', () => {
+  it('removes invisible soft hyphens that would survive into the book', () => {
+    expect(stripSoftHyphens('quintes\u00ADsence')).toBe('quintessence')
+  })
+
+  it('leaves real hyphens alone', () => {
+    expect(stripSoftHyphens('well-nigh')).toBe('well-nigh')
+  })
+})
+
+describe('assembleBook', () => {
+  it('stitches a paragraph that runs across a page boundary', () => {
+    const doc = assembleBook([
+      page(0, [para('the alembick being set upon', { continuesNext: true })]),
+      page(1, [para('a gentle fire.', { continuesPrevious: true })])
+    ])
+    expect(doc.blocks).toHaveLength(1)
+    expect(doc.blocks[0]!.text).toBe('the alembick being set upon a gentle fire.')
+    expect(doc.blocks[0]!.sourcePages).toEqual([0, 1])
+    expect(seamCount(doc)).toBe(1)
+  })
+
+  it('heals a hyphenated word broken by the page edge', () => {
+    const doc = assembleBook([
+      page(0, [para('and so the chirur-', { continuesNext: true })]),
+      page(1, [para('geon proceeded.', { continuesPrevious: true })])
+    ])
+    expect(doc.blocks[0]!.text).toBe('and so the chirurgeon proceeded.')
+  })
+
+  it('keeps genuinely separate paragraphs apart', () => {
+    const doc = assembleBook([
+      page(0, [para('A complete thought.')]),
+      page(1, [para('Another complete thought.')])
+    ])
+    expect(doc.blocks).toHaveLength(2)
+  })
+
+  it('mines front matter for metadata instead of transcribing it', () => {
+    const doc = assembleBook([
+      page(0, [para('THE ALCHEMIST HIS PRACTISE')], 'title-page'),
+      page(1, [para('Entered according to Act of Parliament')], 'copyright'),
+      page(2, [para('Real body text.')])
+    ])
+    expect(doc.blocks).toHaveLength(1)
+    expect(doc.blocks[0]!.text).toBe('Real body text.')
+    expect(doc.skipped.map((s) => s.role)).toEqual(['title-page', 'copyright'])
+  })
+
+  it('discards the scanned TOC and index — their page numbers are the old edition’s', () => {
+    const doc = assembleBook([
+      page(0, [para('CONTENTS … 37')], 'table-of-contents'),
+      page(1, [para('Body.')]),
+      page(2, [para('INDEX … 41')], 'index')
+    ])
+    expect(doc.blocks).toHaveLength(1)
+    expect(doc.skipped.map((s) => s.role).sort()).toEqual(['index', 'table-of-contents'])
+    expect(doc.skipped[0]!.reason).toBeTruthy()
+  })
+
+  it('sets dedications and epigraphs aside from the main flow', () => {
+    const doc = assembleBook([
+      page(0, [para('To my patron.')], 'dedication'),
+      page(1, [para('Body text.')])
+    ])
+    expect(doc.asides).toHaveLength(1)
+    expect(doc.asides[0]!.text).toBe('To my patron.')
+    expect(doc.blocks).toHaveLength(1)
+  })
+
+  it('pulls footnotes out of the body and links them by marker', () => {
+    const doc = assembleBook([
+      page(0, [
+        para('It helde it soveraigne against all putrefaction.1'),
+        { kind: 'footnote', text: 'See the Basilica Chymica of Croll.', marker: '1' }
+      ])
+    ])
+    expect(doc.blocks).toHaveLength(1)
+    expect(doc.blocks[0]!.text).not.toContain('Basilica')
+    expect(doc.footnotes).toHaveLength(1)
+    expect(doc.footnotes[0]).toMatchObject({ id: 'fn1', originalMarker: '1', orphaned: false })
+  })
+
+  it('flags a footnote whose marker never appears in the body', () => {
+    const doc = assembleBook([
+      page(0, [
+        para('Body text with no reference mark.'),
+        { kind: 'footnote', text: 'A stranded note.', marker: '7' }
+      ])
+    ])
+    expect(doc.footnotes[0]!.orphaned).toBe(true)
+  })
+
+  it('does not match a footnote digit inside a longer number', () => {
+    // "1" must not be considered referenced just because "1662" appears.
+    const doc = assembleBook([
+      page(0, [
+        para('Printed in the yeare 1662.'),
+        { kind: 'footnote', text: 'A note.', marker: '1' }
+      ])
+    ])
+    expect(doc.footnotes[0]!.orphaned).toBe(true)
+  })
+
+  it('derives chapters for the regenerated table of contents', () => {
+    const doc = assembleBook([
+      page(0, [{ kind: 'heading', text: 'Chapter IV', level: 1 }, para('Body.')]),
+      page(1, [{ kind: 'heading', text: 'Of Simples', level: 2 }, para('More.')])
+    ])
+    expect(doc.chapters).toHaveLength(2)
+    expect(doc.chapters[0]).toMatchObject({ title: 'Chapter IV', level: 1, sourcePage: 0 })
+    expect(doc.chapters[1]!.level).toBe(2)
+  })
+
+  it('orders pages regardless of the order supplied', () => {
+    const doc = assembleBook([
+      page(2, [para('Third.')]),
+      page(0, [para('First.')]),
+      page(1, [para('Second.')])
+    ])
+    expect(doc.blocks.map((b) => b.text)).toEqual(['First.', 'Second.', 'Third.'])
+  })
+
+  it('can be told to keep every page, ignoring dispositions', () => {
+    const doc = assembleBook(
+      [page(0, [para('THE ALCHEMIST')], 'title-page'), page(1, [para('Body.')])],
+      { applyDispositions: false }
+    )
+    expect(doc.blocks).toHaveLength(2)
+    expect(doc.skipped).toHaveLength(0)
+  })
+
+  it('strips stray soft hyphens from assembled text', () => {
+    const doc = assembleBook([page(0, [para('quintes\u00ADsence of everie thing')])])
+    expect(doc.blocks[0]!.text).toBe('quintessence of everie thing')
+  })
+
+  it('counts the assembled words', () => {
+    const doc = assembleBook([page(0, [para('one two three'), para('four five')])])
+    expect(bookWordCount(doc)).toBe(5)
+  })
+
+  it('handles an empty book without throwing', () => {
+    const doc = assembleBook([])
+    expect(doc).toMatchObject({ blocks: [], footnotes: [], chapters: [], asides: [], skipped: [] })
+  })
+})
+
+describe('footnoteMarkerPattern', () => {
+  const finds = (marker: string, text: string) => {
+    const pattern = footnoteMarkerPattern(marker)
+    return pattern !== null && pattern.test(text)
+  }
+
+  it('finds a plain digit marker', () => {
+    expect(finds('1', 'against all putrefaction.1')).toBe(true)
+  })
+
+  it('finds the superscript form the model actually emits', () => {
+    // Observed against the live API: the model reports marker "1" but writes
+    // the reference mark in the text as "¹". Matching only the plain form
+    // orphaned every numbered footnote in the book.
+    expect(finds('1', 'from the grosse.¹ Herbes gathered')).toBe(true)
+  })
+
+  it('handles superscripts drawn from both Unicode blocks', () => {
+    // ¹²³ are Latin-1; the rest come from U+2070.
+    expect(finds('2', 'a note.² More')).toBe(true)
+    expect(finds('3', 'a note.³ More')).toBe(true)
+    expect(finds('4', 'a note.⁴ More')).toBe(true)
+    expect(finds('9', 'a note.⁹ More')).toBe(true)
+  })
+
+  it('finds a multi-digit superscript marker', () => {
+    expect(finds('12', 'as Croll hath shewn.¹² Herbes')).toBe(true)
+  })
+
+  it('does not match a digit marker inside a numeral', () => {
+    expect(finds('1', 'printed in 1662.')).toBe(false)
+  })
+
+  it('does not match a superscript marker inside a longer superscript run', () => {
+    expect(finds('1', 'a note.¹² More')).toBe(false)
+  })
+
+  it('matches symbol markers, including regex metacharacters', () => {
+    expect(finds('*', 'a note here*')).toBe(true)
+    expect(finds('†', 'a note here†')).toBe(true)
+  })
+
+  it('returns null for a marker that can never be located', () => {
+    expect(footnoteMarkerPattern('')).toBeNull()
+    expect(footnoteMarkerPattern('   ')).toBeNull()
+  })
+})
+
+describe('assembleBook — superscript footnote references', () => {
+  it('does not orphan a note whose reference mark is superscript', () => {
+    const doc = assembleBook([
+      {
+        pageIndex: 0,
+        role: 'body',
+        blocks: [
+          { kind: 'paragraph', text: 'the separation of the subtile from the grosse.¹' },
+          { kind: 'footnote', text: 'See Croll, Basilica Chymica, lib. ii.', marker: '1' }
+        ],
+        uncertain: [],
+        furniture: {}
+      }
+    ])
+    expect(doc.footnotes[0]!.orphaned).toBe(false)
+  })
+})
+
+describe('stripLeadingMarker', () => {
+  it('drops the marker the printed page repeats at the head of the note', () => {
+    // Observed against the live API: the model returns marker "1" *and* text
+    // beginning "1. ", which \footnote would render as a doubled "¹1.".
+    expect(stripLeadingMarker('1. See Croll, Basilica Chymica, lib. ii.', '1')).toBe(
+      'See Croll, Basilica Chymica, lib. ii.'
+    )
+  })
+
+  it('handles the other ways a note head is punctuated', () => {
+    expect(stripLeadingMarker('1) See Croll.', '1')).toBe('See Croll.')
+    expect(stripLeadingMarker('1 See Croll.', '1')).toBe('See Croll.')
+    expect(stripLeadingMarker('¹ See Croll.', '1')).toBe('See Croll.')
+    expect(stripLeadingMarker('* See Croll.', '*')).toBe('See Croll.')
+    expect(stripLeadingMarker('† See Croll.', '†')).toBe('See Croll.')
+  })
+
+  it('leaves a note alone when it does not repeat its marker', () => {
+    expect(stripLeadingMarker('See Croll, lib. ii.', '1')).toBe('See Croll, lib. ii.')
+  })
+
+  it('does not mistake a numeral for a repeated marker', () => {
+    expect(stripLeadingMarker('1662 was the year of the first printing.', '1')).toBe(
+      '1662 was the year of the first printing.'
+    )
+  })
+
+  it('does not strip a different note’s marker', () => {
+    expect(stripLeadingMarker('2. See Croll.', '1')).toBe('2. See Croll.')
+  })
+
+  it('refuses to empty a note that is only its marker', () => {
+    expect(stripLeadingMarker('1.', '1')).toBe('1.')
+  })
+
+  it('is a no-op for a marker that is blank', () => {
+    expect(stripLeadingMarker('  See Croll.  ', '')).toBe('See Croll.')
+  })
+})
+
+describe('assembleBook — notes that repeat their marker', () => {
+  it('stores the note without the duplicated head', () => {
+    const doc = assembleBook([
+      {
+        pageIndex: 0,
+        role: 'body',
+        blocks: [
+          { kind: 'paragraph', text: 'from the grosse.¹' },
+          { kind: 'footnote', text: '1. See Croll, lib. ii.', marker: '1' }
+        ],
+        uncertain: [],
+        furniture: {}
+      }
+    ])
+    expect(doc.footnotes[0]!.text).toBe('See Croll, lib. ii.')
+    expect(doc.footnotes[0]!.orphaned).toBe(false)
+  })
+})
+
+describe('assembleBook — pages the user left out', () => {
+  const page = (pageIndex: number, text: string): PageTranscription => ({
+    pageIndex,
+    role: 'body',
+    blocks: [{ kind: 'paragraph', text }],
+    uncertain: [],
+    furniture: {}
+  })
+
+  it('omits an excluded page from the body', () => {
+    const doc = assembleBook([page(0, 'Kept.'), page(1, 'Dropped.'), page(2, 'Also kept.')], {
+      excludePages: [1]
+    })
+    const text = doc.blocks.map((b) => b.text).join(' ')
+    expect(text).toContain('Kept.')
+    expect(text).not.toContain('Dropped.')
+  })
+
+  it('accounts for it rather than letting it vanish', () => {
+    const doc = assembleBook([page(0, 'Kept.'), page(1, 'Dropped.')], { excludePages: [1] })
+    const record = doc.skipped.find((s) => s.pageIndex === 1)
+    expect(record).toBeDefined()
+    expect(record!.reason).toContain('leave this page out')
+  })
+
+  it('does not join text across the gap an excluded page leaves', () => {
+    const doc = assembleBook(
+      [
+        {
+          ...page(0, 'The alembick being'),
+          blocks: [{ kind: 'paragraph', text: 'The alembick being', continuesNext: true }]
+        },
+        page(1, 'a middle page'),
+        {
+          ...page(2, 'set upon a fire.'),
+          blocks: [{ kind: 'paragraph', text: 'set upon a fire.', continuesPrevious: true }]
+        }
+      ],
+      { excludePages: [1] }
+    )
+    // Page 0 and page 2 were not adjacent in the original, so stitching them
+    // would invent a sentence the book never had.
+    expect(doc.blocks).toHaveLength(2)
+  })
+
+  it('changes nothing when no page is excluded', () => {
+    const plain = assembleBook([page(0, 'One.'), page(1, 'Two.')])
+    const empty = assembleBook([page(0, 'One.'), page(1, 'Two.')], { excludePages: [] })
+    expect(empty).toEqual(plain)
+  })
+})

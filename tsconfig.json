@@ -21,12 +21,8 @@
     "paths": {
       "@core": ["src/core/index.ts"],
       "@core/*": ["src/core/*"],
-      "@shared": ["src/shared/index.ts"],
-      "@shared/*": ["src/shared/*"],
-      "@tooling": ["src/tooling/index.ts"],
-      "@tooling/*": ["src/tooling/*"],
-      "@pipeline": ["src/pipeline/index.ts"],
-      "@pipeline/*": ["src/pipeline/*"]
+
+      "@platform/*": ["src/platform/*"]
     }
   },
   "include": [
