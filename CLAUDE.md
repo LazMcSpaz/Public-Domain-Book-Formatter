@@ -53,16 +53,16 @@ Practical rules:
 ## Architecture in one breath
 
 - `src/core` — **pure domain logic, no DOM and no Node.** Coordinate map, hOCR
-  parsing, lexicon harvesting, page roles, the wizard step machine, structure
-  detection, image algorithms, LaTeX document builder, style system. This is
-  where the tests live.
+  parsing, lexicon harvesting, page roles, the wizard step machine, assembly,
+  design-by-interview, image algorithms, the LaTeX body emitter and document
+  builder, the export seam, style system. This is where the tests live.
 - `src/platform/browser` — the only place browser APIs appear: PDF.js rendering,
   Tesseract.js OCR, canvas crops, the recon runner.
-- `src/app` — the React wizard shell (`App.tsx`) and the generic question
-  renderer (`QuestionView.tsx`).
-- `src/shared` — cross-cutting contract types.
+- `src/app` — the React wizard shell (`App.tsx`), the generic question renderer
+  (`QuestionView.tsx`), the export screen, and a dev-only `#preview` route for
+  looking at gates that sit behind the paid run.
 
-Path aliases: `@core`, `@shared`, `@platform` (defined in `tsconfig.json`,
+Path aliases: `@core`, `@platform` (defined in `tsconfig.json`,
 `vite.config.ts`, and `vitest.config.ts` — update all three together).
 
 ### Conventions that matter

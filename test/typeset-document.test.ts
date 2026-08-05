@@ -182,3 +182,38 @@ describe('buildLatexDocument — drop caps', () => {
     )
   })
 })
+
+describe('buildLatexDocument — ornaments must not reference files we never ship', () => {
+  const ornamented = () =>
+    mergeStyle(defaultStyleProfile(), {
+      ornaments: {
+        chapterOpener: 'chapter-flourish',
+        sectionDivider: 'fleuron-center',
+        pageNumber: null
+      }
+    })
+
+  it('draws a selected ornament typographically when no file path is given', () => {
+    // The app hands the user a lone .tex. An \includegraphics of a PDF that was
+    // never converted and never delivered is a document that will not compile.
+    const tex = build(ornamented())
+    expect(tex).not.toContain('\\includegraphics')
+    expect(tex).toContain('\\newcommand{\\chapterornament}{\\begin{center}\\rule')
+  })
+
+  it('always gives a section break some mark, even with no ornament chosen', () => {
+    const tex = build(defaultStyleProfile())
+    expect(tex).toContain('\\newcommand{\\sectiondivider}{\\begin{center}$\\ast$')
+  })
+
+  it('leaves the chapter opener bare when none was chosen', () => {
+    expect(build(defaultStyleProfile())).toContain('\\newcommand{\\chapterornament}{}')
+  })
+
+  it('still prefers real files when a caller supplies them', () => {
+    const tex = build(ornamented(), {
+      ornamentPaths: { chapterOpener: '/o/chap.pdf', sectionDivider: '/o/div.pdf' }
+    })
+    expect(tex).toContain('\\includegraphics[width=0.3\\textwidth]{/o/chap.pdf}')
+  })
+})

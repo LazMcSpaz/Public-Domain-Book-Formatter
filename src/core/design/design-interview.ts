@@ -196,8 +196,9 @@ export function profileFromAnswers(answers: DesignAnswers, fontId?: string): Sty
     ornaments: {
       ...base.ornaments,
       chapterOpener: answers.chapterOpener === 'ornamented' ? CHAPTER_ORNAMENT_ID : null,
-      // A section break needs *something* between scenes; a period book gets a
-      // fleuron, a modern one the plain asterisk row the preamble falls back to.
+      // Recorded for anyone hand-editing the exported source: the preamble
+      // always defines \sectiondivider, but the vision schema has no
+      // scene-break block, so nothing in the pipeline triggers one yet.
       sectionDivider: answers.period === 'modern' ? null : SECTION_ORNAMENT_ID
     }
   }

@@ -35,7 +35,6 @@ Gates are the only stops. Everything between them runs unattended.
 | **Lexicon**    | `src/core/lexicon`     | Term harvesting, variant clustering, prompt block | no            |
 | **Page roles** | `src/core/pages`       | Roles, dispositions, front-matter metadata        | no            |
 | **Wizard**     | `src/core/wizard`      | Question contract, step machine                   | no            |
-| Structure      | `src/core/structure`   | Headings, footnotes, TOC, body assembly           | no            |
 | Image          | `src/core/image`       | Region detection, DPI math, op engine             | no            |
 | Typeset        | `src/core/typeset`     | LaTeX document + body emitter, KDP validation     | no            |
 | Style          | `src/core/style`       | Profiles, resolution                              | no            |
@@ -63,7 +62,7 @@ source of truth. It stays for two reasons that a language model can't provide:
 
 | What         | How                                                                                     |
 | ------------ | --------------------------------------------------------------------------------------- |
-| Domain logic | `npm test` — 383 tests, pure, no browser                                                |
+| Domain logic | `npm test` — 378 tests, pure, no browser                                                |
 | Types        | `npm run typecheck`                                                                     |
 | UI           | `node scripts/screenshot-flow.mjs` → real Chromium, screenshots per screen              |
 | Later gates  | `#preview` in dev → `src/app/DevPreview.tsx`, so gates behind the paid run stay visible |

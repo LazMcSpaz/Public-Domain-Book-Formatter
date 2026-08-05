@@ -27,6 +27,13 @@ export interface EmitOptions {
    * emitting the command without the package would fail the TeX run.
    */
   dropCap?: boolean
+  /**
+   * Emit `\chapterornament` under each chapter title. Must match
+   * `StyleProfile.ornaments.chapterOpener`: the preamble always *defines* the
+   * macro, but nothing invokes it unless this does, so without this the
+   * ornament the user chose never appears on a page.
+   */
+  chapterOrnament?: boolean
 }
 
 /**
@@ -171,9 +178,13 @@ export function emitBody(doc: BookDocument, options: EmitOptions = {}): string {
     const opensChapter = wantDropCap && afterChapterHeading && block.kind === 'paragraph'
     afterChapterHeading = block.kind === 'heading' && (block.level ?? 1) === 1
 
+    const latex = emitBlock(block, opensChapter ? applyDropCap(text) : text)
     return {
       kind: block.kind,
-      latex: emitBlock(block, opensChapter ? applyDropCap(text) : text)
+      // The ornament goes *after* the \chapter command: \chapter issues its own
+      // page break, so anything emitted before it lands at the foot of the
+      // previous page instead of on the chapter opening.
+      latex: options.chapterOrnament && afterChapterHeading ? `${latex}\n\\chapterornament` : latex
     }
   })
 

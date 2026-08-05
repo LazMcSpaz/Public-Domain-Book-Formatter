@@ -535,7 +535,7 @@ const design: Step = {
           {
             value: 'ornamented',
             label: 'With a printer’s ornament',
-            description: 'A fleuron above the title, in the period tradition.'
+            description: 'A ruled flourish beneath the chapter title.'
           },
           { value: 'drop-cap', label: 'Drop capital', description: 'A large opening initial.' }
         ]

@@ -171,6 +171,7 @@ export function buildExport(input: BuildExportInput): BuildExportResult {
   const asides = emitAsides(document)
   const body = emitBody(document, {
     dropCap: profile.dropCap,
+    chapterOrnament: profile.ornaments.chapterOpener !== null,
     omitOrphanFootnotes: input.omitOrphanFootnotes
   })
   const bodyLatex = asides ? `${asides}\n\n${body}` : body
@@ -181,11 +182,19 @@ export function buildExport(input: BuildExportInput): BuildExportResult {
     frontMatter,
     toc: tocEntries(document),
     bodyLatex,
-    ornamentPaths: resolveOrnamentPaths(
-      profile.ornaments,
-      BUILTIN_ORNAMENTS,
-      input.ornamentDir ?? 'ornaments'
-    )
+    // Only reference ornament *files* when a caller says where they will be.
+    // The default export hands over a lone `.tex`, so pointing it at converted
+    // PDFs nobody has produced would just make the document fail to compile;
+    // `buildLatexDocument` draws the ornament typographically instead.
+    ...(input.ornamentDir
+      ? {
+          ornamentPaths: resolveOrnamentPaths(
+            profile.ornaments,
+            BUILTIN_ORNAMENTS,
+            input.ornamentDir
+          )
+        }
+      : {})
   })
 
   // Before a TeX run the page count is the scan's and there are no layout

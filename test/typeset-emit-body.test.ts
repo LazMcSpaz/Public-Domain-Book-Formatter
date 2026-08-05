@@ -323,3 +323,37 @@ describe('emitBody — superscript footnote references', () => {
     expect(out).toContain('second claim\\footnote{Note two.}')
   })
 })
+
+describe('emitBody — chapter ornament', () => {
+  const chapterDoc2 = () =>
+    assembleBook([
+      page(0, [
+        { kind: 'heading', text: 'Chapter I', level: 1 },
+        { kind: 'paragraph', text: 'Opening prose.' },
+        { kind: 'heading', text: 'A Section', level: 2 }
+      ])
+    ])
+
+  it('is absent unless the style selected one', () => {
+    expect(emitBody(chapterDoc2())).not.toContain('\\chapterornament')
+  })
+
+  it('emits the ornament after the chapter command, not before it', () => {
+    // \chapter issues its own page break, so an ornament emitted before it
+    // would print at the foot of the previous page.
+    const out = emitBody(chapterDoc2(), { chapterOrnament: true })
+    expect(out).toContain('\\chapter{Chapter I}\n\\chapterornament')
+  })
+
+  it('does not decorate lower-level headings', () => {
+    const out = emitBody(chapterDoc2(), { chapterOrnament: true })
+    expect(out.match(/\\chapterornament/g)).toHaveLength(1)
+    expect(out).not.toContain('\\section{A Section}\n\\chapterornament')
+  })
+
+  it('coexists with a drop cap on the same chapter', () => {
+    const out = emitBody(chapterDoc2(), { chapterOrnament: true, dropCap: true })
+    expect(out).toContain('\\chapterornament')
+    expect(out).toContain('\\lettrine{O}{pening}')
+  })
+})

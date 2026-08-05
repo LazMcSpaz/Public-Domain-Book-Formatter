@@ -172,23 +172,6 @@ describe('buildExport', () => {
     expect(withCap).toContain('\\lettrine')
   })
 
-  it('wires the chosen ornament through to an includegraphics path', () => {
-    const ornamented = profileFromAnswers({
-      kind: 'novel',
-      period: 'early-modern',
-      chapterOpener: 'ornamented',
-      runningHeads: 'author-title'
-    })
-    const tex = buildExport({
-      document: sampleDoc(),
-      profile: ornamented,
-      edition: edition(),
-      estimatedPageCount: 180,
-      ornamentDir: 'orn'
-    }).tex
-    expect(tex).toContain('orn/chapter-flourish.pdf')
-  })
-
   it('reports the KDP checks before a PDF exists', () => {
     const { validation } = build()
     expect(validation.checks.length).toBeGreaterThan(0)
@@ -380,5 +363,47 @@ describe('buildExport — the structure gate’s footnote choice', () => {
     const result = buildWith(true)
     expect(result.tex).not.toContain('A stranded note.')
     expect(result.notes.join(' ')).toContain('left out')
+  })
+})
+
+describe('buildExport — the .tex must compile on its own', () => {
+  const ornamented = () =>
+    profileFromAnswers({
+      kind: 'novel',
+      period: 'early-modern',
+      chapterOpener: 'ornamented',
+      runningHeads: 'author-title'
+    })
+
+  it('references no external file the user was never given', () => {
+    const { tex } = build({}, ornamented())
+    expect(tex).not.toContain('\\includegraphics')
+    expect(tex).not.toContain('.pdf}')
+  })
+
+  it('still renders the ornament the user chose', () => {
+    const withOrnament = build({}, ornamented()).tex
+    const plain = build(
+      {},
+      profileFromAnswers({
+        kind: 'novel',
+        period: 'early-modern',
+        chapterOpener: 'plain',
+        runningHeads: 'author-title'
+      })
+    ).tex
+    expect(withOrnament).toContain('\\newcommand{\\chapterornament}{\\begin{center}\\rule')
+    expect(plain).toContain('\\newcommand{\\chapterornament}{}')
+  })
+
+  it('points at real files when a caller says where they will be', () => {
+    const tex = buildExport({
+      document: sampleDoc(),
+      profile: ornamented(),
+      edition: edition(),
+      estimatedPageCount: 100,
+      ornamentDir: 'orn'
+    }).tex
+    expect(tex).toContain('orn/chapter-flourish.pdf')
   })
 })

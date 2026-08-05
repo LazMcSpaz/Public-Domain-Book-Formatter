@@ -21,8 +21,7 @@
     "paths": {
       "@core": ["src/core/index.ts"],
       "@core/*": ["src/core/*"],
-      "@shared": ["src/shared/index.ts"],
-      "@shared/*": ["src/shared/*"],
+
       "@platform/*": ["src/platform/*"]
     }
   },

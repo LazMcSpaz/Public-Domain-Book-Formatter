@@ -5,7 +5,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@core': resolve(__dirname, 'src/core'),
-      '@shared': resolve(__dirname, 'src/shared'),
       '@platform': resolve(__dirname, 'src/platform')
     }
   },
