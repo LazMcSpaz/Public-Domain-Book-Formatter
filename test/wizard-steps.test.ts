@@ -8,10 +8,14 @@ import {
   defaultAnswers,
   missingRequired,
   frontMatterPages,
-  type WizardState
+  type WizardState,
+  type StepId
 } from '@core/wizard'
 import { dispositionFor, partitionByDisposition, strippedFurniture } from '@core/pages'
 import type { LexiconEntry } from '@core/lexicon'
+import { assembleBook } from '@core/assemble'
+import type { TranscribedBlock } from '@core/transcribe'
+import type { PageRole } from '@core/pages'
 
 function entry(term: string, count: number, extra: Partial<LexiconEntry> = {}): LexiconEntry {
   return {
@@ -334,5 +338,111 @@ describe('gate 2 — uncertain spots', () => {
     )
     const opts = (qs[0] as { options: { value: string }[] }).options.map((o) => o.value)
     expect(opts).toEqual(['accept', 'redo', 'skip'])
+  })
+})
+
+describe('gate 3 — structure', () => {
+  const withDoc = (blocks: Parameters<typeof assembleBook>[0]): WizardState => ({
+    ...reconDone(),
+    completed: ['intake', 'recon', 'gate-identity', 'transcribe', 'gate-uncertainties'],
+    document: assembleBook(blocks)
+  })
+
+  const bodyPage = (pageIndex: number, blocks: TranscribedBlock[], role: PageRole = 'body') => ({
+    pageIndex,
+    role,
+    blocks,
+    uncertain: [],
+    furniture: {}
+  })
+
+  it('asks nothing until the book has been assembled', () => {
+    const s = {
+      ...reconDone(),
+      completed: [
+        'intake',
+        'recon',
+        'gate-identity',
+        'transcribe',
+        'gate-uncertainties'
+      ] as StepId[]
+    }
+    expect(stepById('gate-structure').questions(s)).toHaveLength(0)
+  })
+
+  it('summarizes the shape so an obviously-wrong assembly is visible', () => {
+    const qs = stepById('gate-structure').questions(
+      withDoc([
+        bodyPage(0, [
+          { kind: 'heading', text: 'Chapter IV', level: 1 },
+          { kind: 'paragraph', text: 'one two three four five' }
+        ])
+      ])
+    )
+    const summary = qs.find((q) => q.id === 'structureOk')!
+    expect(summary.help).toContain('1 chapter')
+    // Headings are part of the book, so they count too: 'Chapter IV' + 5 body words.
+    expect(summary.help).toContain('7 words')
+  })
+
+  it('lists the chapters that will become the table of contents', () => {
+    const qs = stepById('gate-structure').questions(
+      withDoc([
+        bodyPage(0, [
+          { kind: 'heading', text: 'Chapter IV', level: 1 },
+          { kind: 'heading', text: 'Of Simples', level: 2 }
+        ])
+      ])
+    )
+    const ev = qs.find((q) => q.id === 'structureOk')!.evidence![0]!
+    expect(ev.kind).toBe('text')
+    expect((ev as { text: string }).text).toContain('Chapter IV')
+    expect((ev as { text: string }).text).toContain('Of Simples')
+  })
+
+  it('says plainly when no chapters were found', () => {
+    const qs = stepById('gate-structure').questions(
+      withDoc([bodyPage(0, [{ kind: 'paragraph', text: 'Just prose.' }])])
+    )
+    const ev = qs.find((q) => q.id === 'structureOk')!.evidence![0]!
+    expect((ev as { text: string }).text).toMatch(/none found/i)
+  })
+
+  it('asks what to do with footnotes that could not be placed', () => {
+    const qs = stepById('gate-structure').questions(
+      withDoc([
+        bodyPage(0, [
+          { kind: 'paragraph', text: 'No marker here.' },
+          { kind: 'footnote', text: 'A stranded note.', marker: '9' }
+        ])
+      ])
+    )
+    const q = qs.find((x) => x.id === 'orphanNotes')!
+    expect(q).toBeDefined()
+    expect((q as { defaultValue: string }).defaultValue).toBe('endnotes')
+  })
+
+  it('does not raise footnote placement when every note was linked', () => {
+    const qs = stepById('gate-structure').questions(
+      withDoc([
+        bodyPage(0, [
+          { kind: 'paragraph', text: 'Referenced here.1' },
+          { kind: 'footnote', text: 'A note.', marker: '1' }
+        ])
+      ])
+    )
+    expect(qs.find((x) => x.id === 'orphanNotes')).toBeUndefined()
+  })
+
+  it('shows which pages were deliberately left out, so nothing vanishes quietly', () => {
+    const qs = stepById('gate-structure').questions(
+      withDoc([
+        bodyPage(0, [{ kind: 'paragraph', text: 'THE ALCHEMIST' }], 'title-page'),
+        bodyPage(1, [{ kind: 'paragraph', text: 'Body.' }])
+      ])
+    )
+    const q = qs.find((x) => x.id === 'skippedOk')!
+    expect(q).toBeDefined()
+    expect(q.help).toContain('title-page')
   })
 })

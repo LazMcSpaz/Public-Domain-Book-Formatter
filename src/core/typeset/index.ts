@@ -7,3 +7,10 @@ export { validateKdp, minGutterForPageCount } from './kdp-validate'
 export type { ValidateKdpInput } from './kdp-validate'
 export { escapeLatex, escapeLatexValue } from './escape'
 export { textWidthIn, figureWidthIn, figureLatex, pageTextEndOffsets } from './image-placement'
+export {
+  emitBody,
+  emitAsides,
+  attachFootnotes,
+  tocFromDocument,
+  type EmitOptions
+} from './emit-body'

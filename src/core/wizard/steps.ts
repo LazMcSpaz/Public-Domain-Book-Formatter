@@ -15,6 +15,8 @@ import type { LexiconEntry } from '@core/lexicon'
 import type { BookMetadata, PageClassification } from '@core/pages'
 import { isFrontMatter } from '@core/pages'
 import type { VerificationFinding } from '@core/transcribe'
+import type { BookDocument } from '@core/assemble'
+import { bookWordCount, seamCount } from '@core/assemble'
 import type { Answers, Question, TermRow } from './questions'
 
 export type StepId =
@@ -50,6 +52,8 @@ export interface WizardState {
   uncertainties: { pageIndex: number; text: string; alternatives: string[]; reason: string }[]
   /** Pages that failed transcription entirely. */
   failedPages: number[]
+  /** The assembled book, once transcription and assembly have run. */
+  document: BookDocument | null
   /** Answers gathered so far, keyed by step then question id. */
   answers: Record<string, Answers>
   /** Steps the user has completed. */
@@ -76,6 +80,7 @@ export function initialState(): WizardState {
     findings: [],
     uncertainties: [],
     failedPages: [],
+    document: null,
     answers: {},
     completed: []
   }
@@ -366,13 +371,89 @@ const gateUncertainties: Step = {
   }
 }
 
+/**
+ * Gate 3. The book now exists as a document; this is where its shape gets
+ * confirmed before any design work. Chapters drive the regenerated table of
+ * contents, so a wrong one here propagates through the whole edition.
+ */
 const gateStructure: Step = {
   id: 'gate-structure',
   title: 'Confirm the structure',
-  blurb: 'Chapters, footnotes, and illustrations found in the book.',
+  blurb: 'Chapters, footnotes, and what was left out.',
   isGate: true,
   canEnter: (s) => s.completed.includes('gate-uncertainties'),
-  questions: () => []
+  questions: (s) => {
+    const doc = s.document
+    if (!doc) return []
+    const qs: Question[] = []
+
+    // A summary first: the numbers make an obviously-wrong assembly visible at
+    // a glance (two chapters in a 300-page book means detection failed).
+    const summary = [
+      `${doc.chapters.length} chapter(s)`,
+      `${bookWordCount(doc).toLocaleString()} words`,
+      `${doc.footnotes.length} footnote(s)`,
+      `${seamCount(doc)} paragraph(s) rejoined across page breaks`,
+      `${doc.skipped.length} page(s) not transcribed`
+    ].join(' · ')
+
+    qs.push({
+      id: 'structureOk',
+      type: 'confirm',
+      prompt: 'Does this look like the right shape for the book?',
+      help: summary,
+      defaultValue: true,
+      required: true,
+      evidence: [
+        {
+          kind: 'text',
+          label: 'Chapters found (these become your table of contents)',
+          text:
+            doc.chapters.length > 0
+              ? doc.chapters.map((c) => `${'  '.repeat(c.level - 1)}${c.title}`).join('\n')
+              : 'None found — the book will have no table of contents.'
+        }
+      ]
+    })
+
+    // Orphaned notes can't be placed automatically; ask rather than guess.
+    const orphans = doc.footnotes.filter((f) => f.orphaned)
+    if (orphans.length > 0) {
+      qs.push({
+        id: 'orphanNotes',
+        type: 'choice',
+        prompt: `${orphans.length} footnote(s) have no reference mark in the text`,
+        help:
+          'Their markers were never found in the body, so they cannot be placed ' +
+          'automatically. ' +
+          orphans.map((o) => `“${o.text.slice(0, 60)}…”`).join(' · '),
+        defaultValue: 'endnotes',
+        options: [
+          {
+            value: 'endnotes',
+            label: 'Collect them at the end of the book',
+            description: 'Keeps the text; you can place them properly later.'
+          },
+          { value: 'omit', label: 'Leave them out', description: 'They will not appear at all.' }
+        ]
+      })
+    }
+
+    // Pages the pipeline deliberately dropped — shown so nothing vanishes quietly.
+    if (doc.skipped.length > 0) {
+      qs.push({
+        id: 'skippedOk',
+        type: 'confirm',
+        prompt: `${doc.skipped.length} page(s) were left out on purpose. That's expected — confirm?`,
+        help: doc.skipped
+          .map((sk) => `p${sk.pageIndex + 1} (${sk.role}): ${sk.reason}`)
+          .join(' · '),
+        defaultValue: true
+      })
+    }
+
+    return qs
+  }
 }
 
 const design: Step = {

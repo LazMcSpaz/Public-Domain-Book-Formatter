@@ -30,6 +30,7 @@ import {
   type RunProgress,
   type RunResult
 } from '@core/transcribe'
+import { assembleBook } from '@core/assemble'
 import { runBrowserTranscription } from '../platform/browser/transcribe-run'
 import { loadApiKey, saveApiKey, loadPrefs, savePrefs } from '../platform/browser/settings'
 
@@ -207,7 +208,10 @@ export function App(): JSX.Element {
             reason: u.reason
           }))
         ),
-        failedPages: result.failures.map((f) => f.pageIndex)
+        failedPages: result.failures.map((f) => f.pageIndex),
+        // Assemble immediately: seam repair and footnote linking are pure and
+        // fast, and Gate 3 needs the finished document to describe its shape.
+        document: assembleBook(result.transcriptions)
       })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))

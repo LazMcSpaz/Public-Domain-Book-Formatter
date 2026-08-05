@@ -116,8 +116,10 @@ in `screenshots/`. Don't ship UI blind.
   progress, cancel), assembly stitches pages into a book document (seam repair,
   hyphen healing, footnote linking, front-matter dispositions), and Gate 2
   surfaces flagged pages with the scan beside each.
-- **Next**: Gate 3 (structure confirmation), design-by-interview, and
-  typesetting/export.
+- **Also done**: Gate 3 (structure confirmation) and the LaTeX body emitter,
+  which replaces Pandoc — the vision pass hands us typed structure, so a general
+  Markdown converter would only lose information and add a dependency.
+- **Next**: design-by-interview, then typesetting/export (the open TeX question).
 - **Open question**: TeX in the browser. SwiftLaTeX (XeTeX/WASM) is the candidate
   but is untested here because the sandbox blocks its CDN. The app produces the
   LaTeX document either way; only the final compile step is affected.
