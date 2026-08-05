@@ -103,6 +103,12 @@ export function joinText(previous: string, next: string): string {
 interface AssembleOptions {
   /** Drop pages whose role says they are regenerated or empty. Default true. */
   applyDispositions?: boolean
+  /**
+   * Pages the *user* chose to leave out at the review gate. Recorded in
+   * `skipped` rather than silently dropped, so the export screen can still
+   * account for every page of the scan.
+   */
+  excludePages?: readonly number[]
 }
 
 export function assembleBook(
@@ -118,7 +124,33 @@ export function assembleBook(
 
   const ordered = [...transcriptions].sort((a, b) => a.pageIndex - b.pageIndex)
 
+  const excluded = new Set(options.excludePages ?? [])
+  // Set when real text has been dropped between two pages, so the first block
+  // of the next page is not stitched onto the last block of the previous one.
+  let seamBroken = false
+
   for (const page of ordered) {
+    if (excluded.has(page.pageIndex)) {
+      skipped.push({
+        pageIndex: page.pageIndex,
+        role: page.role,
+        reason: 'you chose to leave this page out'
+      })
+      // Real text is being dropped here, so joining the pages either side of
+      // the gap would splice together two halves of a sentence that never met —
+      // a fabrication, and an invisible one. Clearing the flags is not enough:
+      // `shouldJoin` fires on *either* side's continuation flag, and the next
+      // page still carries `continuesPrevious`.
+      //
+      // This is deliberately not done for a page dropped by its disposition: a
+      // plate or a blank carries no body text, so the paragraph genuinely does
+      // run across it.
+      const last = blocks[blocks.length - 1]
+      if (last) last.continuesNext = false
+      seamBroken = true
+      continue
+    }
+
     const disposition = applyDispositions ? dispositionFor(page.role) : 'transcribe'
 
     if (disposition === 'discard' || disposition === 'extract-metadata') {
@@ -150,7 +182,9 @@ export function assembleBook(
       }
 
       const previous = target[target.length - 1]
-      if (previous && shouldJoin(previous, block)) {
+      const joinable = previous !== undefined && !seamBroken
+      seamBroken = false
+      if (joinable && shouldJoin(previous, block)) {
         previous.text = stripSoftHyphens(joinText(previous.text, block.text))
         if (!previous.sourcePages.includes(page.pageIndex)) {
           previous.sourcePages.push(page.pageIndex)

@@ -54,6 +54,12 @@ export interface BuildExportInput {
    * ones — the report is otherwise explicit that it is pre-typeset.
    */
   compiled?: { pageCount: number; warnings: string[] }
+  /**
+   * What to do with notes whose reference mark was never found — the answer to
+   * the structure gate's question. Dropping them is the default because a note
+   * placed in the wrong spot is worse than one the gate told the user about.
+   */
+  omitOrphanFootnotes?: boolean
 }
 
 export interface BuildExportResult {
@@ -163,7 +169,10 @@ export function buildExport(input: BuildExportInput): BuildExportResult {
   // Asides (dedication, epigraph) belong in the front matter, ahead of the
   // body, which is why they are emitted separately and joined here.
   const asides = emitAsides(document)
-  const body = emitBody(document, { dropCap: profile.dropCap })
+  const body = emitBody(document, {
+    dropCap: profile.dropCap,
+    omitOrphanFootnotes: input.omitOrphanFootnotes
+  })
   const bodyLatex = asides ? `${asides}\n\n${body}` : body
 
   const tex = buildLatexDocument({
@@ -195,7 +204,11 @@ export function buildExport(input: BuildExportInput): BuildExportResult {
   }
   const orphans = document.footnotes.filter((f) => f.orphaned)
   if (orphans.length > 0) {
-    notes.push(`${orphans.length} footnote(s) had no reference mark and were left out of the flow.`)
+    notes.push(
+      (input.omitOrphanFootnotes ?? true)
+        ? `${orphans.length} footnote(s) had no reference mark and were left out.`
+        : `${orphans.length} footnote(s) had no reference mark and were collected at the end.`
+    )
   }
   if (document.skipped.length > 0) {
     notes.push(`${document.skipped.length} page(s) were deliberately not transcribed.`)

@@ -63,7 +63,7 @@ source of truth. It stays for two reasons that a language model can't provide:
 
 | What         | How                                                                                     |
 | ------------ | --------------------------------------------------------------------------------------- |
-| Domain logic | `npm test` — 355 tests, pure, no browser                                                |
+| Domain logic | `npm test` — 383 tests, pure, no browser                                                |
 | Types        | `npm run typecheck`                                                                     |
 | UI           | `node scripts/screenshot-flow.mjs` → real Chromium, screenshots per screen              |
 | Later gates  | `#preview` in dev → `src/app/DevPreview.tsx`, so gates behind the paid run stay visible |
@@ -77,10 +77,11 @@ source of truth. It stays for two reasons that a language model can't provide:
   deliberately isolated as a swappable step.
 - **Project storage** is not implemented for the browser yet (OPFS/IndexedDB).
   The schema and migrations exist in `src/core/project`.
-- **The vision pass has never run against the live API.** Schema, prompt,
-  client, runner, verification, and cost estimation are wired into the wizard
-  and tested against a mock transport, but the real request shape is unverified
-  until a key is available.
+- **The live API has been exercised once, not at book scale.** The request
+  shape, all three offered model IDs, metadata extraction, and uncertainty
+  reporting were verified against real calls; a whole-book run has not been
+  done. Cost estimation was calibrated against real usage and errs high, as
+  intended.
 - **No PDF is produced yet.** `buildExport` emits complete XeLaTeX source and
   the export screen hands it to the user; `TexEngine` is the seam where a
   browser TeX would slot in, and until one does the app says so rather than

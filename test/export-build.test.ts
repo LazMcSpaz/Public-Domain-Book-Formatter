@@ -351,3 +351,34 @@ describe('buildExport — honesty about what has not happened yet', () => {
     expect(build().validation.ready).toBe(true)
   })
 })
+
+describe('buildExport — the structure gate’s footnote choice', () => {
+  const withOrphan = () =>
+    assembleBook([
+      page(0, [
+        { kind: 'paragraph', text: 'No marker anywhere in this text.' },
+        { kind: 'footnote', text: 'A stranded note.', marker: '9' }
+      ])
+    ])
+
+  const buildWith = (omitOrphanFootnotes: boolean) =>
+    buildExport({
+      document: withOrphan(),
+      profile: defaultStyleProfile(),
+      edition: edition(),
+      estimatedPageCount: 100,
+      omitOrphanFootnotes
+    })
+
+  it('collects unplaceable notes at the end when the user asked for that', () => {
+    const result = buildWith(false)
+    expect(result.tex).toContain('A stranded note.')
+    expect(result.notes.join(' ')).toContain('collected at the end')
+  })
+
+  it('leaves them out when the user asked for that instead', () => {
+    const result = buildWith(true)
+    expect(result.tex).not.toContain('A stranded note.')
+    expect(result.notes.join(' ')).toContain('left out')
+  })
+})

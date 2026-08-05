@@ -30,6 +30,8 @@ export interface BrowserRunOptions {
   /** Long edge for the image sent to the model — the main cost lever. */
   imageLongEdge?: number
   maxPages?: number
+  /** Re-run only these pages (the review gate's "read this again"). */
+  onlyPages?: readonly number[]
   onProgress?: (p: RunProgress) => void
   signal?: AbortSignal
 }
@@ -78,8 +80,11 @@ export async function runBrowserTranscription(options: BrowserRunOptions): Promi
   // this eagerly would hold the whole book's images at once (~1 GB for 300
   // pages) and would also make the user wait for every page to render before
   // the first request went out.
+  const wanted = options.onlyPages ? new Set(options.onlyPages) : null
+
   const sources: PageSource[] = []
   for (let i = 0; i < total; i++) {
+    if (wanted && !wanted.has(i)) continue
     sources.push({
       pageIndex: i,
       image: () => renderOne(i),

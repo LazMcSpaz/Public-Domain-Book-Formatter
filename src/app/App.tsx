@@ -27,6 +27,7 @@ import {
   estimateCost,
   formatEstimate,
   mergeMetadata,
+  validateApiKey,
   type RunProgress,
   type RunResult
 } from '@core/transcribe'
@@ -194,6 +195,17 @@ export function App(): JSX.Element {
       setError('An API key is needed to transcribe.')
       return
     }
+
+    // Check the credential before spending anything. Without this a bad key
+    // fails once per page for the whole book — slow, and it looks like the app
+    // is broken rather than the key being wrong.
+    setPendingCost(null)
+    setError(null)
+    const credential = await validateApiKey(key)
+    if (!credential.ok) {
+      setError(credential.message ?? 'That API key could not be used.')
+      return
+    }
     saveApiKey(key)
 
     const prefs = loadPrefs()
@@ -201,8 +213,6 @@ export function App(): JSX.Element {
     const bookContext = (currentAnswers['bookContext'] as string) ?? ''
     savePrefs({ ...prefs, modelId, bookContext })
 
-    setPendingCost(null)
-    setError(null)
     const controller = new AbortController()
     abortRef.current = controller
 
@@ -297,7 +307,9 @@ export function App(): JSX.Element {
       edition: editionFromAnswers(state.answers['gate-identity'] ?? {}, currentAnswers),
       // The true count comes from the TeX run; until then the source page count
       // is the honest stand-in for the gutter check.
-      estimatedPageCount: state.pageCount
+      estimatedPageCount: state.pageCount,
+      // The structure gate asked what to do with notes that couldn't be placed.
+      omitOrphanFootnotes: (state.answers['gate-structure'] ?? {})['orphanNotes'] === 'omit'
     }
     const result = buildExport(input)
     setExported(result)
@@ -323,10 +335,97 @@ export function App(): JSX.Element {
     complete()
   }, [state, currentAnswers, complete])
 
+  /**
+   * Apply the review gate's per-page verdicts. "Read this page again" costs
+   * money, so it re-runs only the pages asked for, at a higher resolution than
+   * the first pass — the reason to look again is usually that the page was hard
+   * to read. "Leave this page out" excludes it, but the export still accounts
+   * for it rather than letting it vanish.
+   */
+  const finishUncertainties = useCallback(async () => {
+    const run = transcriptionRef.current
+    const data = fileDataRef.current
+    const recon = reconRef.current
+    if (!run || !data || !recon) {
+      complete()
+      return
+    }
+
+    const redo: number[] = []
+    const skip: number[] = []
+    for (const [key, value] of Object.entries(currentAnswers)) {
+      const match = /^page-(\d+)$/.exec(key)
+      if (!match) continue
+      if (value === 'redo') redo.push(Number(match[1]))
+      if (value === 'skip') skip.push(Number(match[1]))
+    }
+
+    let transcriptions = run.transcriptions
+    let findings = run.findings
+
+    if (redo.length > 0) {
+      setError(null)
+      const controller = new AbortController()
+      abortRef.current = controller
+      const prefs = loadPrefs()
+      const wordsByPage = new Map<number, typeof recon.words>()
+      for (const w of recon.words) {
+        const list = wordsByPage.get(w.pageIndex) ?? []
+        list.push(w)
+        wordsByPage.set(w.pageIndex, list)
+      }
+
+      try {
+        const identity = state.answers['gate-identity'] ?? {}
+        const again = await runBrowserTranscription({
+          fileData: data,
+          ocrWordsByPage: wordsByPage,
+          pageText: recon.pageText,
+          client: {
+            apiKey: loadApiKey(),
+            modelId: prefs.modelId,
+            effort: 'medium'
+          },
+          lexicon: state.lexicon,
+          orthography: (identity['orthography'] as 'preserve' | 'modernize') ?? 'preserve',
+          normalizeLongS: identity['longS'] === true,
+          bookContext: prefs.bookContext,
+          // A page flagged for another look is usually one that was hard to
+          // read, so give the model more pixels than the first pass had.
+          imageLongEdge: Math.min(2000, Math.round(prefs.imageLongEdge * 1.3)),
+          onlyPages: redo,
+          onProgress: setRunProgress,
+          signal: controller.signal
+        })
+
+        const replaced = new Map(transcriptions.map((t) => [t.pageIndex, t]))
+        for (const t of again.transcriptions) replaced.set(t.pageIndex, t)
+        transcriptions = [...replaced.values()].sort((a, b) => a.pageIndex - b.pageIndex)
+        // Findings for re-read pages are stale; take the new run's instead.
+        findings = [...findings.filter((f) => !redo.includes(f.pageIndex)), ...again.findings]
+        transcriptionRef.current = { ...run, transcriptions, findings }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : String(err))
+      } finally {
+        setRunProgress(null)
+        abortRef.current = null
+      }
+    }
+
+    complete({
+      findings,
+      document: assembleBook(transcriptions, { excludePages: skip })
+    })
+  }, [state, currentAnswers, complete])
+
   /** Leaving a step: transcription needs cost approval first; gates just advance. */
   const advance = useCallback(() => {
     if (step.id === 'export') {
       void runExport()
+      return
+    }
+    if (step.id === 'gate-uncertainties') {
+      void finishUncertainties()
       return
     }
     if (step.id === 'transcribe') {
@@ -339,7 +438,7 @@ export function App(): JSX.Element {
       return
     }
     complete()
-  }, [step.id, state.pageCount, currentAnswers, complete, runExport])
+  }, [step.id, state.pageCount, currentAnswers, complete, runExport, finishUncertainties])
 
   return (
     <div className="shell">

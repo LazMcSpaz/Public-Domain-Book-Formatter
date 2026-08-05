@@ -345,3 +345,55 @@ describe('assembleBook — notes that repeat their marker', () => {
     expect(doc.footnotes[0]!.orphaned).toBe(false)
   })
 })
+
+describe('assembleBook — pages the user left out', () => {
+  const page = (pageIndex: number, text: string): PageTranscription => ({
+    pageIndex,
+    role: 'body',
+    blocks: [{ kind: 'paragraph', text }],
+    uncertain: [],
+    furniture: {}
+  })
+
+  it('omits an excluded page from the body', () => {
+    const doc = assembleBook([page(0, 'Kept.'), page(1, 'Dropped.'), page(2, 'Also kept.')], {
+      excludePages: [1]
+    })
+    const text = doc.blocks.map((b) => b.text).join(' ')
+    expect(text).toContain('Kept.')
+    expect(text).not.toContain('Dropped.')
+  })
+
+  it('accounts for it rather than letting it vanish', () => {
+    const doc = assembleBook([page(0, 'Kept.'), page(1, 'Dropped.')], { excludePages: [1] })
+    const record = doc.skipped.find((s) => s.pageIndex === 1)
+    expect(record).toBeDefined()
+    expect(record!.reason).toContain('leave this page out')
+  })
+
+  it('does not join text across the gap an excluded page leaves', () => {
+    const doc = assembleBook(
+      [
+        {
+          ...page(0, 'The alembick being'),
+          blocks: [{ kind: 'paragraph', text: 'The alembick being', continuesNext: true }]
+        },
+        page(1, 'a middle page'),
+        {
+          ...page(2, 'set upon a fire.'),
+          blocks: [{ kind: 'paragraph', text: 'set upon a fire.', continuesPrevious: true }]
+        }
+      ],
+      { excludePages: [1] }
+    )
+    // Page 0 and page 2 were not adjacent in the original, so stitching them
+    // would invent a sentence the book never had.
+    expect(doc.blocks).toHaveLength(2)
+  })
+
+  it('changes nothing when no page is excluded', () => {
+    const plain = assembleBook([page(0, 'One.'), page(1, 'Two.')])
+    const empty = assembleBook([page(0, 'One.'), page(1, 'Two.')], { excludePages: [] })
+    expect(empty).toEqual(plain)
+  })
+})
