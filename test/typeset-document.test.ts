@@ -173,3 +173,12 @@ describe('buildLatexDocument', () => {
     expect(tex).toContain('Some body text.')
   })
 })
+
+describe('buildLatexDocument — drop caps', () => {
+  it('loads the lettrine package only when the profile asks for a drop cap', () => {
+    expect(build(defaultStyleProfile())).not.toContain('\\usepackage{lettrine}')
+    expect(build(mergeStyle(defaultStyleProfile(), { dropCap: true }))).toContain(
+      '\\usepackage{lettrine}'
+    )
+  })
+})

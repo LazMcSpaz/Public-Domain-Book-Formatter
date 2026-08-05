@@ -65,12 +65,41 @@ await page.waitForTimeout(400)
 await shot('05-gate-identity-mobile')
 await page.setViewportSize({ width: 1360, height: 900 })
 
-console.log('\nresult:')
 const rows = await page.locator('.terms tbody tr').count()
 const crops = await page.locator('.terms img').count()
+
+// The gates after this one sit behind a paid transcription run, so they are
+// shot through the dev-only preview instead (see src/app/DevPreview.tsx) —
+// otherwise looking at them would cost money on every UI change.
+console.log('6. later gates (dev preview)')
+await page.goto(`${URL_BASE}/#preview`, { waitUntil: 'networkidle' })
+await page.waitForSelector('.summary', { timeout: 20000 })
+await shot('06-gate-design')
+
+// The design gate's whole point is that answers about the book produce the
+// typography; check the summary actually moves when an answer does.
+const summary = () => page.locator('.summary b').innerText()
+const before = await summary()
+const pick = (question, label) =>
+  page.locator('.q').filter({ hasText: question }).locator('label', { hasText: label }).click()
+await pick('What kind of book', 'Poetry')
+await pick('How should chapters open', 'Drop capital')
+await page.waitForTimeout(200)
+const after = await summary()
+await shot('07-gate-design-answered')
+
+await page.setViewportSize({ width: 390, height: 844 })
+await page.waitForTimeout(400)
+const overflow = await page.evaluate(() => document.body.scrollWidth - window.innerWidth)
+await shot('08-gate-design-mobile')
+
+console.log('\nresult:')
 console.log(`  term rows: ${rows}`)
 console.log(`  word crops rendered: ${crops}`)
+console.log(`  design summary: ${after}`)
+console.log(`  summary responds to answers: ${before !== after}`)
+console.log(`  mobile horizontal overflow: ${overflow}px`)
 console.log(`  page errors: ${errors.length ? errors.join(' | ') : 'none'}`)
 
 await browser.close()
-process.exit(errors.length === 0 && rows > 0 ? 0 : 1)
+process.exit(errors.length === 0 && rows > 0 && before !== after && overflow <= 0 ? 0 : 1)

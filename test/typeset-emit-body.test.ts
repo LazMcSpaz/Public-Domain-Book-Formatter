@@ -241,3 +241,55 @@ describe('emitBody — whole-document smoke test', () => {
     expect(out).toContain('\\footnote{See Croll, lib. ii.}')
   })
 })
+
+describe('emitBody — drop caps', () => {
+  const chapterDoc = (text: string): BookDocument =>
+    assembleBook([
+      page(0, [
+        { kind: 'heading', text: 'Chapter I', level: 1 },
+        { kind: 'paragraph', text },
+        { kind: 'paragraph', text: 'A later paragraph.' }
+      ])
+    ])
+
+  it('is off unless asked for', () => {
+    expect(emitBody(chapterDoc('The alembick.'))).not.toContain('\\lettrine')
+  })
+
+  it('lifts the initial and sets the rest of the first word beside it', () => {
+    const out = emitBody(chapterDoc('The alembick.'), { dropCap: true })
+    expect(out).toContain('\\lettrine{T}{he} alembick.')
+  })
+
+  it('applies only to the paragraph that opens the chapter', () => {
+    const out = emitBody(chapterDoc('The alembick.'), { dropCap: true })
+    expect(out.match(/\\lettrine/g)).toHaveLength(1)
+    expect(out).toContain('A later paragraph.')
+  })
+
+  it('handles a one-letter opening word', () => {
+    expect(emitBody(chapterDoc('A vessel of glass.'), { dropCap: true })).toContain(
+      '\\lettrine{A}{} vessel'
+    )
+  })
+
+  it('leaves a paragraph alone when it has no clean initial to lift', () => {
+    for (const opener of ['“The alembick.', '1662 was the year.']) {
+      const out = emitBody(chapterDoc(opener), { dropCap: true })
+      expect(out).not.toContain('\\lettrine')
+    }
+  })
+
+  it('does not decorate a paragraph that merely follows a subsection', () => {
+    const out = emitBody(
+      assembleBook([
+        page(0, [
+          { kind: 'heading', text: 'Of Simples', level: 2 },
+          { kind: 'paragraph', text: 'The lesser sort.' }
+        ])
+      ]),
+      { dropCap: true }
+    )
+    expect(out).not.toContain('\\lettrine')
+  })
+})

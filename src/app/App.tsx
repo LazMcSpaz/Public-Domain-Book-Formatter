@@ -33,6 +33,7 @@ import {
 import { assembleBook } from '@core/assemble'
 import { runBrowserTranscription } from '../platform/browser/transcribe-run'
 import { loadApiKey, saveApiKey, loadPrefs, savePrefs } from '../platform/browser/settings'
+import { profileFromAnswers, describeProfile, type DesignAnswers } from '@core/design'
 
 export function App(): JSX.Element {
   const [state, setState] = useState<WizardState>(initialState)
@@ -48,8 +49,21 @@ export function App(): JSX.Element {
   const [pendingCost, setPendingCost] = useState<string | null>(null)
 
   const step = activeStep(state)
-  const questions = useMemo(() => step.questions(state), [step, state])
   const [answers, setAnswers] = useState<Answers>({})
+
+  // Questions are built against the answers *as they are being given*, not only
+  // the committed ones: some questions describe the consequence of an earlier
+  // answer on the same screen (the page size a book kind implies, the typeface
+  // a period suggests), and those have to move as the user answers.
+  //
+  // Only the raw `answers` are folded in — the touched ones. Folding in the
+  // filled-out defaults instead would be circular, since the defaults come from
+  // the questions this is producing.
+  const liveState = useMemo(
+    () => ({ ...state, answers: { ...state.answers, [step.id]: answers } }),
+    [state, step.id, answers]
+  )
+  const questions = useMemo(() => step.questions(liveState), [step, liveState])
 
   // Reset answers to the recommended defaults whenever the gate changes.
   const currentAnswers = useMemo(() => {
@@ -58,6 +72,25 @@ export function App(): JSX.Element {
   }, [questions, answers])
 
   const missing = missingRequired(questions, currentAnswers)
+
+  // The design gate answers questions about the *book*; this is the typography
+  // they add up to, shown live so the consequence of an answer is visible
+  // before it is committed.
+  const designSummary = useMemo(() => {
+    if (step.id !== 'design') return null
+    const a = currentAnswers as Record<string, unknown>
+    return describeProfile(
+      profileFromAnswers(
+        {
+          kind: a['kind'],
+          period: a['period'],
+          chapterOpener: a['chapterOpener'],
+          runningHeads: a['runningHeads']
+        } as DesignAnswers,
+        a['font'] as string
+      )
+    )
+  }, [step.id, currentAnswers])
 
   const resolveEvidence = useCallback((src: string): string | undefined => {
     const m = /^page:(\d+)$/.exec(src)
@@ -376,6 +409,12 @@ export function App(): JSX.Element {
                 resolveEvidence={resolveEvidence}
               />
             ))}
+            {designSummary ? (
+              <div className="summary">
+                <span className="summary-label">Your edition will be set as</span>
+                <b>{designSummary}</b>
+              </div>
+            ) : null}
             <div className="actions">
               <button
                 type="button"

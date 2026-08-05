@@ -16,6 +16,7 @@ import type { BookMetadata, PageClassification } from '@core/pages'
 import { isFrontMatter } from '@core/pages'
 import type { VerificationFinding } from '@core/transcribe'
 import type { BookDocument } from '@core/assemble'
+import { BODY_FONTS, fontForPeriod, trimForKind, type PeriodFeel } from '@core/design'
 import { bookWordCount, seamCount } from '@core/assemble'
 import type { Answers, Question, TermRow } from './questions'
 
@@ -456,13 +457,111 @@ const gateStructure: Step = {
   }
 }
 
+/**
+ * Design by interview. Five questions about the *book* produce a complete
+ * style — the alternative is a panel of forty fields that assumes the user
+ * already knows what a gutter is. The detailed controls remain available
+ * afterwards; they are just never the front door.
+ */
 const design: Step = {
   id: 'design',
   title: 'Design the edition',
-  blurb: 'A few questions, then a real rendered preview you can adjust.',
+  blurb: 'A few questions about the book, and I’ll set the rest.',
   isGate: true,
   canEnter: (s) => s.completed.includes('gate-structure'),
-  questions: () => []
+  questions: (s) => {
+    // The period answer picks the typeface, so it is read back here to
+    // pre-select the matching font rather than making the user match them.
+    const designAnswers = s.answers['design'] ?? {}
+    const period = (designAnswers['period'] as PeriodFeel) ?? 'early-modern'
+    const suggested = fontForPeriod(period)
+    const kind = (designAnswers['kind'] as string) ?? 'novel'
+
+    return [
+      {
+        id: 'kind',
+        type: 'choice',
+        prompt: 'What kind of book is this?',
+        help: `Sets the page size, margins, and text size. Currently ${trimForKind(kind as never)}in.`,
+        defaultValue: 'novel',
+        options: [
+          { value: 'novel', label: 'Novel or narrative', description: '6×9in — the standard.' },
+          { value: 'nonfiction', label: 'Non-fiction prose', description: '6×9in.' },
+          {
+            value: 'poetry',
+            label: 'Poetry or verse',
+            description: '5.5×8.5in — a narrower measure so lines don’t wrap.'
+          },
+          { value: 'illustrated', label: 'Heavily illustrated', description: '7×10in.' },
+          { value: 'reference', label: 'Reference or technical', description: '7×10in.' }
+        ]
+      },
+      {
+        id: 'period',
+        type: 'choice',
+        prompt: 'What period should it feel like?',
+        help: 'Chooses the typeface. All options are licensed for books you sell.',
+        defaultValue: 'early-modern',
+        options: [
+          {
+            value: 'early-modern',
+            label: '17th century',
+            description: 'IM FELL — digitized from real Oxford types of the era.'
+          },
+          { value: 'georgian', label: '18th century', description: 'Libre Caslon.' },
+          { value: 'victorian', label: '19th century', description: 'Libre Baskerville.' },
+          { value: 'modern', label: 'Clean and modern', description: 'Crimson Pro.' }
+        ]
+      },
+      {
+        id: 'font',
+        type: 'choice',
+        prompt: 'Typeface',
+        help: `Suggested for that period: ${suggested.label}. ${suggested.note}`,
+        defaultValue: suggested.id,
+        options: BODY_FONTS.map((f) => ({
+          value: f.id,
+          label: f.label,
+          description: f.note
+        }))
+      },
+      {
+        id: 'chapterOpener',
+        type: 'choice',
+        prompt: 'How should chapters open?',
+        defaultValue: 'plain',
+        options: [
+          { value: 'plain', label: 'Plain', description: 'Just the chapter title.' },
+          {
+            value: 'ornamented',
+            label: 'With a printer’s ornament',
+            description: 'A fleuron above the title, in the period tradition.'
+          },
+          { value: 'drop-cap', label: 'Drop capital', description: 'A large opening initial.' }
+        ]
+      },
+      {
+        id: 'runningHeads',
+        type: 'choice',
+        prompt: 'What should appear at the top of each page?',
+        help: 'Left and right pages carry different text, as in a printed book.',
+        defaultValue: 'author-title',
+        options: [
+          {
+            value: 'author-title',
+            label: 'Author and title',
+            description: 'Author on the left page, title on the right.'
+          },
+          {
+            value: 'chapter',
+            label: 'Title and chapter',
+            description: 'Title on the left, current chapter on the right.'
+          },
+          { value: 'none', label: 'Nothing', description: 'Page numbers only.' }
+        ]
+      }
+    ]
+  }
 }
 
 const exportStep: Step = {

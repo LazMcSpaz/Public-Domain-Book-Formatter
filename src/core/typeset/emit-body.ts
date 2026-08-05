@@ -20,6 +20,12 @@ export interface EmitOptions {
    * the review gate told the user about. Default true.
    */
   omitOrphanFootnotes?: boolean
+  /**
+   * Open each chapter's first paragraph with a large initial. Must match
+   * `StyleProfile.dropCap`, which is what loads the `lettrine` package —
+   * emitting the command without the package would fail the TeX run.
+   */
+  dropCap?: boolean
 }
 
 /** Escape a marker for use inside a regular expression. */
@@ -56,6 +62,23 @@ export function attachFootnotes(
   }
 
   return { text: out, used }
+}
+
+/**
+ * Open a paragraph with a large initial.
+ *
+ * `\lettrine{T}{he}` sets the T as the drop cap and the rest of the first word
+ * in small caps beside it — the convention this reproduces. Applied only when
+ * the paragraph genuinely starts with a letter: text beginning with a quotation
+ * mark, a numeral, or a LaTeX command has no clean initial to lift, and a
+ * mangled one looks far worse than none.
+ */
+export function applyDropCap(text: string): string {
+  const match = /^(\p{Lu}|\p{Ll})(\p{L}*)/u.exec(text)
+  if (!match) return text
+  const initial = match[1]!
+  const restOfWord = match[2] ?? ''
+  return `\\lettrine{${initial}}{${restOfWord}}${text.slice(match[0].length)}`
 }
 
 const HEADING_COMMANDS = ['chapter', 'section', 'subsection', 'subsubsection', 'paragraph']
@@ -139,6 +162,11 @@ export function emitBody(doc: BookDocument, options: EmitOptions = {}): string {
   const placeable = doc.footnotes.filter((f) => !omitOrphans || !f.orphaned)
   const remaining = new Map(placeable.map((f) => [f.id, f]))
 
+  // A drop cap belongs on the paragraph that *opens* a chapter, so the emitter
+  // has to remember whether the last block was a chapter heading.
+  const wantDropCap = options.dropCap ?? false
+  let afterChapterHeading = false
+
   const pieces = doc.blocks.map((block) => {
     // Escape first, then splice in footnote commands, so the note's own text is
     // escaped but the \footnote command itself survives.
@@ -146,7 +174,14 @@ export function emitBody(doc: BookDocument, options: EmitOptions = {}): string {
     const notesForBlock = [...remaining.values()]
     const { text, used } = attachFootnotes(escaped, notesForBlock)
     for (const id of used) remaining.delete(id)
-    return { kind: block.kind, latex: emitBlock(block, text) }
+
+    const opensChapter = wantDropCap && afterChapterHeading && block.kind === 'paragraph'
+    afterChapterHeading = block.kind === 'heading' && (block.level ?? 1) === 1
+
+    return {
+      kind: block.kind,
+      latex: emitBlock(block, opensChapter ? applyDropCap(text) : text)
+    }
   })
 
   const body = groupLists(pieces)

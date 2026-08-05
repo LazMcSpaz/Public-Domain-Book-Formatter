@@ -16,6 +16,7 @@ import type { LexiconEntry } from '@core/lexicon'
 import { assembleBook } from '@core/assemble'
 import type { TranscribedBlock } from '@core/transcribe'
 import type { PageRole } from '@core/pages'
+import { BODY_FONTS, profileFromAnswers } from '@core/design'
 
 function entry(term: string, count: number, extra: Partial<LexiconEntry> = {}): LexiconEntry {
   return {
@@ -444,5 +445,75 @@ describe('gate 3 — structure', () => {
     const q = qs.find((x) => x.id === 'skippedOk')!
     expect(q).toBeDefined()
     expect(q.help).toContain('title-page')
+  })
+})
+
+describe('design step', () => {
+  const readyForDesign = (answers: Record<string, Record<string, unknown>> = {}): WizardState => ({
+    ...initialState(),
+    completed: [
+      'intake',
+      'recon',
+      'gate-identity',
+      'transcribe',
+      'gate-uncertainties',
+      'gate-structure'
+    ],
+    answers: answers as WizardState['answers']
+  })
+
+  it('is where the flow lands once the structure is confirmed', () => {
+    expect(activeStep(readyForDesign()).id).toBe('design')
+  })
+
+  it('asks about the book, not about typography settings', () => {
+    const ids = stepById('design')
+      .questions(readyForDesign())
+      .map((q) => q.id)
+    expect(ids).toEqual(['kind', 'period', 'font', 'chapterOpener', 'runningHeads'])
+  })
+
+  it('every question offers a usable default, so nothing is required of the user', () => {
+    const qs = stepById('design').questions(readyForDesign())
+    expect(missingRequired(qs, defaultAnswers(qs))).toEqual([])
+  })
+
+  it('pre-selects the typeface that matches the chosen period', () => {
+    const qs = stepById('design').questions(readyForDesign({ design: { period: 'victorian' } }))
+    const font = qs.find((q) => q.id === 'font')!
+    expect((font as { defaultValue: string }).defaultValue).toBe('libre-baskerville')
+    expect(font.help).toContain('Libre Baskerville')
+  })
+
+  it('offers every catalogued typeface, not just the suggestion', () => {
+    const qs = stepById('design').questions(readyForDesign())
+    const font = qs.find((q) => q.id === 'font') as { options: { value: string }[] }
+    expect(font.options.map((o) => o.value)).toEqual(BODY_FONTS.map((f) => f.id))
+  })
+
+  it('tells the user which page size their answer implies', () => {
+    const qs = stepById('design').questions(readyForDesign({ design: { kind: 'poetry' } }))
+    expect(qs.find((q) => q.id === 'kind')!.help).toContain('5.5x8.5')
+  })
+
+  it('turns its own default answers into a complete, coherent profile', () => {
+    const qs = stepById('design').questions(readyForDesign())
+    const a = defaultAnswers(qs)
+    const profile = profileFromAnswers(
+      {
+        kind: a['kind'] as never,
+        period: a['period'] as never,
+        chapterOpener: a['chapterOpener'] as never,
+        runningHeads: a['runningHeads'] as never
+      },
+      a['font'] as string
+    )
+    expect(profile.bodyFont).toBe('IM FELL English')
+    expect(profile.trimSize).toBe('6x9')
+  })
+
+  it('does not open before the structure gate is done', () => {
+    const state = { ...initialState(), completed: ['intake', 'recon'] as StepId[] }
+    expect(stepById('design').canEnter(state)).toBe(false)
   })
 })

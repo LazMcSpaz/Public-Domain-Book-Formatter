@@ -279,6 +279,12 @@ export function buildLatexDocument(input: LatexDocumentInput): string {
   parts.push(geometryBlock(profile))
   parts.push(fontBlock(profile))
   parts.push('\\usepackage{graphicx}')
+  // `lettrine` is only loaded when asked for: it is the package that draws the
+  // large opening initial, and the body emitter only writes \lettrine when the
+  // same flag is set, so the two stay in step.
+  if (profile.dropCap) {
+    parts.push('\\usepackage{lettrine}')
+  }
   parts.push(fancyhdrBlock(profile))
   parts.push(printQualityBlock())
   parts.push(headingMacros(profile))

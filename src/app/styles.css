@@ -355,6 +355,31 @@ body {
   cursor: pointer;
 }
 
+/* ---------- live consequence of a gate's answers ---------- */
+.summary {
+  margin-top: 22px;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent);
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.015);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.summary-label {
+  color: var(--muted);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.summary b {
+  font-size: 0.92rem;
+  font-weight: 500;
+  /* A long typographic summary must wrap rather than widen the page. */
+  overflow-wrap: anywhere;
+}
+
 /* ---------- footer actions ---------- */
 .actions {
   display: flex;

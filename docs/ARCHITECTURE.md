@@ -37,8 +37,9 @@ Gates are the only stops. Everything between them runs unattended.
 | **Wizard**     | `src/core/wizard`      | Question contract, step machine                   | no            |
 | Structure      | `src/core/structure`   | Headings, footnotes, TOC, body assembly           | no            |
 | Image          | `src/core/image`       | Region detection, DPI math, op engine             | no            |
-| Typeset        | `src/core/typeset`     | LaTeX document builder, KDP validation            | no            |
+| Typeset        | `src/core/typeset`     | LaTeX document + body emitter, KDP validation     | no            |
 | Style          | `src/core/style`       | Profiles, resolution                              | no            |
+| **Design**     | `src/core/design`      | Interview answers → a complete style profile      | no            |
 | Ornament       | `src/core/ornament`    | SVG ornament library                              | no            |
 | **Platform**   | `src/platform/browser` | PDF.js, Tesseract.js, crops, recon runner         | **yes**       |
 | **App**        | `src/app`              | Wizard shell, generic question renderer           | **yes**       |
@@ -59,12 +60,13 @@ source of truth. It stays for two reasons that a language model can't provide:
 
 ## Verification
 
-| What         | How                                                                                    |
-| ------------ | -------------------------------------------------------------------------------------- |
-| Domain logic | `npm test` — 143 tests, pure, no browser                                               |
-| Types        | `npm run typecheck`                                                                    |
-| UI           | `node scripts/screenshot-flow.mjs` → real Chromium, screenshots per screen             |
-| Test fixture | `node scripts/make-test-book.mjs` → 8-page mock scan with recurring archaic vocabulary |
+| What         | How                                                                                     |
+| ------------ | --------------------------------------------------------------------------------------- |
+| Domain logic | `npm test` — 311 tests, pure, no browser                                                |
+| Types        | `npm run typecheck`                                                                     |
+| UI           | `node scripts/screenshot-flow.mjs` → real Chromium, screenshots per screen              |
+| Later gates  | `#preview` in dev → `src/app/DevPreview.tsx`, so gates behind the paid run stay visible |
+| Test fixture | `node scripts/make-test-book.mjs` → 8-page mock scan with recurring archaic vocabulary  |
 
 ## Known gaps
 
@@ -74,7 +76,10 @@ source of truth. It stays for two reasons that a language model can't provide:
   deliberately isolated as a swappable step.
 - **Project storage** is not implemented for the browser yet (OPFS/IndexedDB).
   The schema and migrations exist in `src/core/project`.
-- **The vision pass is built but not yet wired into the wizard UI** — schema,
-  prompt, client, runner, verification, and cost estimation all exist and are
-  tested against a mock transport; the `transcribe` step still needs its screen
-  (API-key entry, cost confirmation, progress) hooked up.
+- **The vision pass has never run against the live API.** Schema, prompt,
+  client, runner, verification, and cost estimation are wired into the wizard
+  and tested against a mock transport, but the real request shape is unverified
+  until a key is available.
+- **The export step is the last one unbuilt.** Everything it consumes exists —
+  the assembled document, the body emitter, and the style profile the design
+  interview produces.
