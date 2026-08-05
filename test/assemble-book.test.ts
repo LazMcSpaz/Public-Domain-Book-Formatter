@@ -5,7 +5,9 @@ import {
   joinText,
   bookWordCount,
   seamCount,
-  stripSoftHyphens
+  stripSoftHyphens,
+  footnoteMarkerPattern,
+  stripLeadingMarker
 } from '@core/assemble'
 import type { PageTranscription, TranscribedBlock } from '@core/transcribe'
 import type { PageRole } from '@core/pages'
@@ -216,5 +218,130 @@ describe('assembleBook', () => {
   it('handles an empty book without throwing', () => {
     const doc = assembleBook([])
     expect(doc).toMatchObject({ blocks: [], footnotes: [], chapters: [], asides: [], skipped: [] })
+  })
+})
+
+describe('footnoteMarkerPattern', () => {
+  const finds = (marker: string, text: string) => {
+    const pattern = footnoteMarkerPattern(marker)
+    return pattern !== null && pattern.test(text)
+  }
+
+  it('finds a plain digit marker', () => {
+    expect(finds('1', 'against all putrefaction.1')).toBe(true)
+  })
+
+  it('finds the superscript form the model actually emits', () => {
+    // Observed against the live API: the model reports marker "1" but writes
+    // the reference mark in the text as "¹". Matching only the plain form
+    // orphaned every numbered footnote in the book.
+    expect(finds('1', 'from the grosse.¹ Herbes gathered')).toBe(true)
+  })
+
+  it('handles superscripts drawn from both Unicode blocks', () => {
+    // ¹²³ are Latin-1; the rest come from U+2070.
+    expect(finds('2', 'a note.² More')).toBe(true)
+    expect(finds('3', 'a note.³ More')).toBe(true)
+    expect(finds('4', 'a note.⁴ More')).toBe(true)
+    expect(finds('9', 'a note.⁹ More')).toBe(true)
+  })
+
+  it('finds a multi-digit superscript marker', () => {
+    expect(finds('12', 'as Croll hath shewn.¹² Herbes')).toBe(true)
+  })
+
+  it('does not match a digit marker inside a numeral', () => {
+    expect(finds('1', 'printed in 1662.')).toBe(false)
+  })
+
+  it('does not match a superscript marker inside a longer superscript run', () => {
+    expect(finds('1', 'a note.¹² More')).toBe(false)
+  })
+
+  it('matches symbol markers, including regex metacharacters', () => {
+    expect(finds('*', 'a note here*')).toBe(true)
+    expect(finds('†', 'a note here†')).toBe(true)
+  })
+
+  it('returns null for a marker that can never be located', () => {
+    expect(footnoteMarkerPattern('')).toBeNull()
+    expect(footnoteMarkerPattern('   ')).toBeNull()
+  })
+})
+
+describe('assembleBook — superscript footnote references', () => {
+  it('does not orphan a note whose reference mark is superscript', () => {
+    const doc = assembleBook([
+      {
+        pageIndex: 0,
+        role: 'body',
+        blocks: [
+          { kind: 'paragraph', text: 'the separation of the subtile from the grosse.¹' },
+          { kind: 'footnote', text: 'See Croll, Basilica Chymica, lib. ii.', marker: '1' }
+        ],
+        uncertain: [],
+        furniture: {}
+      }
+    ])
+    expect(doc.footnotes[0]!.orphaned).toBe(false)
+  })
+})
+
+describe('stripLeadingMarker', () => {
+  it('drops the marker the printed page repeats at the head of the note', () => {
+    // Observed against the live API: the model returns marker "1" *and* text
+    // beginning "1. ", which \footnote would render as a doubled "¹1.".
+    expect(stripLeadingMarker('1. See Croll, Basilica Chymica, lib. ii.', '1')).toBe(
+      'See Croll, Basilica Chymica, lib. ii.'
+    )
+  })
+
+  it('handles the other ways a note head is punctuated', () => {
+    expect(stripLeadingMarker('1) See Croll.', '1')).toBe('See Croll.')
+    expect(stripLeadingMarker('1 See Croll.', '1')).toBe('See Croll.')
+    expect(stripLeadingMarker('¹ See Croll.', '1')).toBe('See Croll.')
+    expect(stripLeadingMarker('* See Croll.', '*')).toBe('See Croll.')
+    expect(stripLeadingMarker('† See Croll.', '†')).toBe('See Croll.')
+  })
+
+  it('leaves a note alone when it does not repeat its marker', () => {
+    expect(stripLeadingMarker('See Croll, lib. ii.', '1')).toBe('See Croll, lib. ii.')
+  })
+
+  it('does not mistake a numeral for a repeated marker', () => {
+    expect(stripLeadingMarker('1662 was the year of the first printing.', '1')).toBe(
+      '1662 was the year of the first printing.'
+    )
+  })
+
+  it('does not strip a different note’s marker', () => {
+    expect(stripLeadingMarker('2. See Croll.', '1')).toBe('2. See Croll.')
+  })
+
+  it('refuses to empty a note that is only its marker', () => {
+    expect(stripLeadingMarker('1.', '1')).toBe('1.')
+  })
+
+  it('is a no-op for a marker that is blank', () => {
+    expect(stripLeadingMarker('  See Croll.  ', '')).toBe('See Croll.')
+  })
+})
+
+describe('assembleBook — notes that repeat their marker', () => {
+  it('stores the note without the duplicated head', () => {
+    const doc = assembleBook([
+      {
+        pageIndex: 0,
+        role: 'body',
+        blocks: [
+          { kind: 'paragraph', text: 'from the grosse.¹' },
+          { kind: 'footnote', text: '1. See Croll, lib. ii.', marker: '1' }
+        ],
+        uncertain: [],
+        furniture: {}
+      }
+    ])
+    expect(doc.footnotes[0]!.text).toBe('See Croll, lib. ii.')
+    expect(doc.footnotes[0]!.orphaned).toBe(false)
   })
 })

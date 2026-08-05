@@ -44,7 +44,7 @@ function source(
 ): PageSource {
   return {
     pageIndex,
-    imageBase64: 'AAAA',
+    image: () => Promise.resolve('AAAA'),
     ocrText,
     ocrWords: ocrText.split(' ').map((t) => ({ text: t, confidence: 95 }))
   }
@@ -325,5 +325,90 @@ describe('mergeMetadata', () => {
 
   it('is empty when no page carried metadata', () => {
     expect(mergeMetadata([])).toEqual({})
+  })
+})
+
+describe('runTranscription — page images are not accumulated', () => {
+  it('asks for a page image only when it is about to send that page', async () => {
+    const asked: number[] = []
+    const sources = [0, 1, 2].map((pageIndex) => ({
+      pageIndex,
+      image: async () => {
+        asked.push(pageIndex)
+        return 'AAAA'
+      },
+      ocrText: 'the alembick',
+      ocrWords: [{ text: 'the', confidence: 95 }]
+    }))
+
+    const sentBefore: number[][] = []
+    await runTranscription(
+      sources,
+      runOpts(async () => {
+        sentBefore.push([...asked])
+        return jsonResponse(apiReply(goodPage))
+      })
+    )
+
+    // Page n's image must not exist before page n is being sent — the whole
+    // book's images at once is what takes the tab down.
+    expect(sentBefore).toEqual([[0], [0, 1], [0, 1, 2]])
+    expect(asked).toEqual([0, 1, 2])
+  })
+
+  it('renders a page once even when the request has to be retried', async () => {
+    let renders = 0
+    const sources = [
+      {
+        pageIndex: 0,
+        image: async () => {
+          renders++
+          return 'AAAA'
+        },
+        ocrText: 'the alembick',
+        ocrWords: [{ text: 'the', confidence: 95 }]
+      }
+    ]
+
+    let attempts = 0
+    const result = await runTranscription(
+      sources,
+      runOpts(async () => {
+        attempts++
+        return attempts < 3 ? jsonResponse({ error: {} }, 500) : jsonResponse(apiReply(goodPage))
+      })
+    )
+
+    expect(attempts).toBe(3)
+    expect(renders).toBe(1)
+    expect(result.failures).toEqual([])
+  })
+
+  it('does not render pages it never reaches after cancellation', async () => {
+    const controller = new AbortController()
+    let renders = 0
+    const sources = [0, 1, 2, 3].map((pageIndex) => ({
+      pageIndex,
+      image: async () => {
+        renders++
+        return 'AAAA'
+      },
+      ocrText: 'the alembick',
+      ocrWords: [{ text: 'the', confidence: 95 }]
+    }))
+
+    const result = await runTranscription(
+      sources,
+      runOpts(
+        async () => {
+          controller.abort()
+          return jsonResponse(apiReply(goodPage))
+        },
+        { signal: controller.signal }
+      )
+    )
+
+    expect(result.cancelled).toBe(true)
+    expect(renders).toBe(1)
   })
 })

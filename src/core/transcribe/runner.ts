@@ -23,8 +23,16 @@ import type { OcrWordLike } from './types'
 /** What the caller must provide for each page. */
 export interface PageSource {
   pageIndex: number
-  /** Base64 PNG of the page, without a data: prefix. */
-  imageBase64: string
+  /**
+   * Produces the page's base64 PNG on demand, without a data: prefix.
+   *
+   * A *function*, not a string, and that is the whole point: a 1568px page
+   * encodes to roughly 1-3 MB of base64, and JavaScript strings are UTF-16, so
+   * holding a 300-page book's images at once costs over a gigabyte and takes
+   * the tab down. The runner calls this immediately before the request and
+   * drops the result immediately after, so peak usage is one page.
+   */
+  image: () => Promise<string>
   ocrText: string
   ocrWords: readonly OcrWordLike[]
 }
@@ -123,15 +131,21 @@ export async function runTranscription(
     })
 
     let lastError = ''
+    // Scoped to this iteration so the image is collectable as soon as the page
+    // is done, whether it succeeded or failed.
+    let imageBase64: string | null = null
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (signal?.aborted) {
         cancelled = true
         break
       }
       try {
+        // Rendered once and reused across retries — a retry is a network
+        // problem, not a reason to re-render the page.
+        imageBase64 ??= await source.image()
         const result = await transcribePage(client, {
           pageIndex: source.pageIndex,
-          imageBase64: source.imageBase64,
+          imageBase64,
           systemPrompt,
           userPrompt
         })
@@ -149,6 +163,8 @@ export async function runTranscription(
         await sleep(retryDelayMs * 2 ** (attempt - 1))
       }
     }
+
+    imageBase64 = null
 
     if (lastError) {
       // One bad page must not sink the book; record it and carry on.

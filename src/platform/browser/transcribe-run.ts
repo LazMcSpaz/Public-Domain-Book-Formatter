@@ -53,26 +53,39 @@ export async function runBrowserTranscription(options: BrowserRunOptions): Promi
   const total = Math.min(doc.numPages, options.maxPages ?? doc.numPages)
   const longEdge = options.imageLongEdge ?? 1568
 
-  const sources: PageSource[] = []
-  for (let i = 0; i < total; i++) {
-    if (options.signal?.aborted) break
-
-    // Render at the DPI that yields the requested long edge, so cost is
-    // predictable rather than a function of the source page's dimensions.
-    const probe = await renderPage(doc, i, 72)
+  /**
+   * Render one page at the DPI that yields the requested long edge, so cost is
+   * a function of our setting rather than of the source page's dimensions.
+   * The canvas is released before returning; only the base64 survives, and the
+   * runner drops that as soon as the page is sent.
+   */
+  const renderOne = async (pageIndex: number): Promise<string> => {
+    const probe = await renderPage(doc, pageIndex, 72)
     const scale = longEdge / Math.max(probe.width, probe.height)
     probe.canvas.width = 0
     probe.canvas.height = 0
 
-    const rendered = await renderPage(doc, i, Math.max(72, Math.round(72 * scale)))
+    const rendered = await renderPage(doc, pageIndex, Math.max(72, Math.round(72 * scale)))
+    try {
+      return await toBase64Png(rendered.canvas)
+    } finally {
+      rendered.canvas.width = 0
+      rendered.canvas.height = 0
+    }
+  }
+
+  // Descriptors only: no page is rendered until the runner asks for it. Doing
+  // this eagerly would hold the whole book's images at once (~1 GB for 300
+  // pages) and would also make the user wait for every page to render before
+  // the first request went out.
+  const sources: PageSource[] = []
+  for (let i = 0; i < total; i++) {
     sources.push({
       pageIndex: i,
-      imageBase64: await toBase64Png(rendered.canvas),
+      image: () => renderOne(i),
       ocrText: options.pageText[i] ?? '',
       ocrWords: options.ocrWordsByPage.get(i) ?? []
     })
-    rendered.canvas.width = 0
-    rendered.canvas.height = 0
   }
 
   return runTranscription(sources, {

@@ -9,6 +9,8 @@ export {
   bookWordCount,
   seamCount,
   stripSoftHyphens,
+  footnoteMarkerPattern,
+  stripLeadingMarker,
   type BookDocument,
   type BookBlock,
   type Footnote,

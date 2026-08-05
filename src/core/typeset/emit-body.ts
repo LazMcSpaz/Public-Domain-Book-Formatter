@@ -10,6 +10,7 @@
  *
  * Pure: string in, string out.
  */
+import { footnoteMarkerPattern } from '@core/assemble'
 import type { BookBlock, BookDocument, Footnote } from '@core/assemble'
 import { escapeLatex } from './escape'
 
@@ -28,17 +29,16 @@ export interface EmitOptions {
   dropCap?: boolean
 }
 
-/** Escape a marker for use inside a regular expression. */
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
 /**
  * Replace each footnote's in-text marker with a real `\footnote{…}`.
  *
  * Only the *first* occurrence of a marker is replaced: the printed marker
  * appears once as a reference, and a bare digit like "1" would otherwise match
  * unrelated numerals later in the paragraph.
+ *
+ * Marker location is shared with orphan detection (`footnoteMarkerPattern`) —
+ * if the two disagreed, a note could be reported as unplaceable and then placed
+ * anyway, or the reverse.
  */
 export function attachFootnotes(
   text: string,
@@ -48,15 +48,8 @@ export function attachFootnotes(
   const used = new Set<string>()
 
   for (const note of footnotes) {
-    const marker = note.originalMarker.trim()
-    if (!marker) continue
-
-    // Digits are matched as standalone tokens so "1" doesn't hit "1662".
-    const pattern = /^\d+$/.test(marker)
-      ? new RegExp(`(?<!\\d)${escapeRegExp(marker)}(?!\\d)`)
-      : new RegExp(escapeRegExp(marker))
-
-    if (!pattern.test(out)) continue
+    const pattern = footnoteMarkerPattern(note.originalMarker)
+    if (!pattern || !pattern.test(out)) continue
     out = out.replace(pattern, `\\footnote{${escapeLatex(note.text)}}`)
     used.add(note.id)
   }

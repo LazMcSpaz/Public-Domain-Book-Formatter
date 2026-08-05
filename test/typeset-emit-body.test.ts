@@ -293,3 +293,33 @@ describe('emitBody — drop caps', () => {
     expect(out).not.toContain('\\lettrine')
   })
 })
+
+describe('emitBody — superscript footnote references', () => {
+  it('attaches a note whose reference mark is superscript in the text', () => {
+    // The shape the live model actually produces.
+    const out = emitBody(
+      assembleBook([
+        page(0, [
+          { kind: 'paragraph', text: 'the subtile from the grosse.¹ Herbes gathered' },
+          { kind: 'footnote', text: 'See Croll, lib. ii.', marker: '1' }
+        ])
+      ])
+    )
+    expect(out).toContain('grosse.\\footnote{See Croll, lib. ii.} Herbes gathered')
+    expect(out).not.toContain('¹')
+  })
+
+  it('places the right note when several superscript marks appear', () => {
+    const out = emitBody(
+      assembleBook([
+        page(0, [
+          { kind: 'paragraph', text: 'first claim¹ and second claim²' },
+          { kind: 'footnote', text: 'Note one.', marker: '1' },
+          { kind: 'footnote', text: 'Note two.', marker: '2' }
+        ])
+      ])
+    )
+    expect(out).toContain('first claim\\footnote{Note one.}')
+    expect(out).toContain('second claim\\footnote{Note two.}')
+  })
+})
