@@ -201,3 +201,49 @@ describe('page roles', () => {
     expect(f.folioCount).toBe(1)
   })
 })
+
+describe('transcribe step questions', () => {
+  const ready = (overrides: Partial<WizardState> = {}): WizardState => ({
+    ...reconDone(),
+    completed: ['intake', 'recon', 'gate-identity'],
+    ...overrides
+  })
+
+  it('asks for an API key only when one is not already stored', () => {
+    const without = stepById('transcribe').questions(ready({ hasApiKey: false }))
+    expect(without.find((q) => q.id === 'apiKey')).toBeDefined()
+
+    const withKey = stepById('transcribe').questions(ready({ hasApiKey: true }))
+    expect(withKey.find((q) => q.id === 'apiKey')).toBeUndefined()
+  })
+
+  it('says plainly where the key is stored', () => {
+    const q = stepById('transcribe')
+      .questions(ready())
+      .find((x) => x.id === 'apiKey')!
+    expect(q.help).toMatch(/only in this browser/i)
+    expect(q.help).toMatch(/never/i)
+  })
+
+  it('offers a model choice and defaults to the highest quality', () => {
+    const q = stepById('transcribe')
+      .questions(ready())
+      .find((x) => x.id === 'model')!
+    expect(q.type).toBe('choice')
+    expect((q as { defaultValue: string }).defaultValue).toBe('claude-opus-5')
+    expect((q as { options: unknown[] }).options).toHaveLength(3)
+  })
+
+  it('invites book context, which measurably helps unusual vocabulary', () => {
+    const q = stepById('transcribe')
+      .questions(ready())
+      .find((x) => x.id === 'bookContext')
+    expect(q).toBeDefined()
+    expect(q!.required).toBeFalsy()
+  })
+
+  it('is not enterable until the identity gate is done', () => {
+    expect(stepById('transcribe').canEnter(reconDone())).toBe(false)
+    expect(stepById('transcribe').canEnter(ready())).toBe(true)
+  })
+})

@@ -41,6 +41,8 @@ export interface WizardState {
   classifications: PageClassification[]
   /** Resolver for a term's word-crop image (object URL). */
   cropFor?: (tokenId: string) => string | undefined
+  /** True when an API key is already stored locally — don't ask again. */
+  hasApiKey: boolean
   /** Answers gathered so far, keyed by step then question id. */
   answers: Record<string, Answers>
   /** Steps the user has completed. */
@@ -63,6 +65,7 @@ export function initialState(): WizardState {
       contributors: []
     },
     classifications: [],
+    hasApiKey: false,
     answers: {},
     completed: []
   }
@@ -213,13 +216,75 @@ const gateIdentity: Step = {
   }
 }
 
+/**
+ * The transcribe step asks for what it needs *before* spending anything: the
+ * key, the model, and an explicit approval of an estimated cost. A whole-book
+ * pass costs real money, so the user approves a number rather than discovering
+ * one afterwards.
+ */
 const transcribe: Step = {
   id: 'transcribe',
   title: 'Transcribing',
   blurb: 'Reading each page against the scan and recovering its structure.',
   isGate: false,
   canEnter: (s) => s.completed.includes('gate-identity'),
-  questions: () => []
+  questions: (s) => {
+    // Once a key is stored the credential question disappears — never ask twice.
+    const qs: Question[] = []
+
+    if (!s.hasApiKey) {
+      qs.push({
+        id: 'apiKey',
+        type: 'text',
+        prompt: 'Your Anthropic API key',
+        help:
+          'Stored only in this browser and sent straight to Anthropic. ' +
+          'It is never uploaded anywhere else and is never saved into the book project.',
+        defaultValue: '',
+        placeholder: 'sk-ant-…',
+        required: true
+      })
+    }
+
+    qs.push({
+      id: 'model',
+      type: 'choice',
+      prompt: 'Which model should read the pages?',
+      help: 'You are paying for this directly. Higher quality costs more per page.',
+      defaultValue: 'claude-opus-5',
+      options: [
+        {
+          value: 'claude-opus-5',
+          label: 'Opus — highest quality',
+          description: 'Best on damaged scans and unusual typography.'
+        },
+        {
+          value: 'claude-sonnet-5',
+          label: 'Sonnet — balanced',
+          description: 'Close to Opus on clean scans, roughly a third of the cost.'
+        },
+        {
+          value: 'claude-haiku-4-5',
+          label: 'Haiku — cheapest',
+          description: 'Fine for clean modern print; weaker on judgment.'
+        }
+      ]
+    })
+
+    qs.push({
+      id: 'bookContext',
+      type: 'text',
+      prompt: 'Anything I should know about this book?',
+      help:
+        'Subject, period, or quirks. A sentence here measurably improves how ' +
+        'unusual words are read.',
+      defaultValue: '',
+      placeholder: 'e.g. A 1662 alchemical treatise; heavy use of Latin terms.',
+      multiline: true
+    })
+
+    return qs
+  }
 }
 
 const gateUncertainties: Step = {

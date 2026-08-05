@@ -58,6 +58,13 @@ if ((await fixButtons.count()) > 0) {
   await shot('04-term-correction')
 }
 
+// Mobile check — the flow has to survive a phone viewport.
+console.log('5. mobile viewport')
+await page.setViewportSize({ width: 390, height: 844 })
+await page.waitForTimeout(400)
+await shot('05-gate-identity-mobile')
+await page.setViewportSize({ width: 1360, height: 900 })
+
 console.log('\nresult:')
 const rows = await page.locator('.terms tbody tr').count()
 const crops = await page.locator('.terms img').count()

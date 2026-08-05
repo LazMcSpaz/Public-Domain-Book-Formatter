@@ -89,81 +89,83 @@ function TermGrid({
           Accept all
         </button>
       </div>
-      <table className="terms">
-        <thead>
-          <tr>
-            <th>From the page</th>
-            <th>Read as</th>
-            <th>Uses</th>
-            <th>Why</th>
-            <th>Verdict</th>
-          </tr>
-        </thead>
-        <tbody>
-          {question.rows.map((row) => {
-            const v = value[row.id] ?? { action: 'accept' }
-            return (
-              <tr key={row.id} className={v.action === 'ignore' ? 'ignored' : undefined}>
-                <td>
-                  {row.cropSrc ? (
-                    <img src={row.cropSrc} alt={`Scan of “${row.reading}”`} />
-                  ) : (
-                    <span className="crop-missing">no crop</span>
-                  )}
-                </td>
-                <td className="reading">
-                  {v.action === 'correct' ? (
-                    <input
-                      className="fix"
-                      value={v.text}
-                      aria-label={`Correction for ${row.reading}`}
-                      onChange={(e) => set(row.id, { action: 'correct', text: e.target.value })}
-                    />
-                  ) : (
-                    row.reading
-                  )}
-                </td>
-                <td className="count">{row.count}×</td>
-                <td>
-                  {row.signals.map((s) => (
-                    <span className="sig" key={s}>
-                      {s.replace(/-/g, ' ')}
-                    </span>
-                  ))}
-                </td>
-                <td>
-                  <div className="verdict">
-                    <button
-                      type="button"
-                      className={v.action === 'accept' ? 'on' : ''}
-                      onClick={() => set(row.id, { action: 'accept' })}
-                      title="This reading is correct"
-                    >
-                      ✓
-                    </button>
-                    <button
-                      type="button"
-                      className={v.action === 'correct' ? 'on' : ''}
-                      onClick={() => set(row.id, { action: 'correct', text: row.reading })}
-                      title="Fix this reading"
-                    >
-                      ✎
-                    </button>
-                    <button
-                      type="button"
-                      className={v.action === 'ignore' ? 'on' : ''}
-                      onClick={() => set(row.id, { action: 'ignore' })}
-                      title="Not a real word — ignore it"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+      <div className="terms-scroll">
+        <table className="terms">
+          <thead>
+            <tr>
+              <th>From the page</th>
+              <th>Read as</th>
+              <th>Uses</th>
+              <th>Why</th>
+              <th>Verdict</th>
+            </tr>
+          </thead>
+          <tbody>
+            {question.rows.map((row) => {
+              const v = value[row.id] ?? { action: 'accept' }
+              return (
+                <tr key={row.id} className={v.action === 'ignore' ? 'ignored' : undefined}>
+                  <td>
+                    {row.cropSrc ? (
+                      <img src={row.cropSrc} alt={`Scan of “${row.reading}”`} />
+                    ) : (
+                      <span className="crop-missing">no crop</span>
+                    )}
+                  </td>
+                  <td className="reading">
+                    {v.action === 'correct' ? (
+                      <input
+                        className="fix"
+                        value={v.text}
+                        aria-label={`Correction for ${row.reading}`}
+                        onChange={(e) => set(row.id, { action: 'correct', text: e.target.value })}
+                      />
+                    ) : (
+                      row.reading
+                    )}
+                  </td>
+                  <td className="count">{row.count}×</td>
+                  <td>
+                    {row.signals.map((s) => (
+                      <span className="sig" key={s}>
+                        {s.replace(/-/g, ' ')}
+                      </span>
+                    ))}
+                  </td>
+                  <td>
+                    <div className="verdict">
+                      <button
+                        type="button"
+                        className={v.action === 'accept' ? 'on' : ''}
+                        onClick={() => set(row.id, { action: 'accept' })}
+                        title="This reading is correct"
+                      >
+                        ✓
+                      </button>
+                      <button
+                        type="button"
+                        className={v.action === 'correct' ? 'on' : ''}
+                        onClick={() => set(row.id, { action: 'correct', text: row.reading })}
+                        title="Fix this reading"
+                      >
+                        ✎
+                      </button>
+                      <button
+                        type="button"
+                        className={v.action === 'ignore' ? 'on' : ''}
+                        onClick={() => set(row.id, { action: 'ignore' })}
+                        title="Not a real word — ignore it"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </>
   )
 }

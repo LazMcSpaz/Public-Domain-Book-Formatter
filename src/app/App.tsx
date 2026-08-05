@@ -23,6 +23,15 @@ import {
   type ReconResult
 } from '../platform/browser/recon'
 import { QuestionView } from './QuestionView'
+import {
+  estimateCost,
+  formatEstimate,
+  mergeMetadata,
+  type RunProgress,
+  type RunResult
+} from '@core/transcribe'
+import { runBrowserTranscription } from '../platform/browser/transcribe-run'
+import { loadApiKey, saveApiKey, loadPrefs, savePrefs } from '../platform/browser/settings'
 
 export function App(): JSX.Element {
   const [state, setState] = useState<WizardState>(initialState)
@@ -31,6 +40,11 @@ export function App(): JSX.Element {
   const [dragOver, setDragOver] = useState(false)
   const reconRef = useRef<ReconResult | null>(null)
   const fileInput = useRef<HTMLInputElement>(null)
+  const fileDataRef = useRef<ArrayBuffer | null>(null)
+  const abortRef = useRef<AbortController | null>(null)
+  const transcriptionRef = useRef<RunResult | null>(null)
+  const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
+  const [pendingCost, setPendingCost] = useState<string | null>(null)
 
   const step = activeStep(state)
   const questions = useMemo(() => step.questions(state), [step, state])
@@ -65,6 +79,7 @@ export function App(): JSX.Element {
 
     try {
       const data = await file.arrayBuffer()
+      fileDataRef.current = data
       const result = await runRecon(data, {
         assets: {
           workerPath: '/tesseract/worker.min.js',
@@ -84,6 +99,7 @@ export function App(): JSX.Element {
         lexicon: result.lexicon,
         classifications: [{ pageIndex: 0, role: 'title-page', selfReportedConfidence: 0 }],
         cropFor: (tokenId: string) => result.crops.get(tokenId),
+        hasApiKey: loadApiKey().length > 0,
         completed: ['intake', 'recon']
       }))
     } catch (err) {
@@ -103,14 +119,107 @@ export function App(): JSX.Element {
     [startRecon]
   )
 
+  const complete = useCallback(
+    (extra: Partial<WizardState> = {}) => {
+      setState((s) => ({
+        ...s,
+        ...extra,
+        answers: { ...s.answers, [step.id]: currentAnswers },
+        completed: [...s.completed, step.id]
+      }))
+      setAnswers({})
+    },
+    [step.id, currentAnswers]
+  )
+
+  /** Run the paid pass. Only reached after the user approves the estimate. */
+  const startTranscription = useCallback(async () => {
+    const recon = reconRef.current
+    const data = fileDataRef.current
+    if (!recon || !data) return
+
+    const identity = state.answers['gate-identity'] ?? {}
+    const key = (currentAnswers['apiKey'] as string) || loadApiKey()
+    if (!key) {
+      setError('An API key is needed to transcribe.')
+      return
+    }
+    saveApiKey(key)
+
+    const prefs = loadPrefs()
+    const modelId = (currentAnswers['model'] as string) ?? prefs.modelId
+    const bookContext = (currentAnswers['bookContext'] as string) ?? ''
+    savePrefs({ ...prefs, modelId, bookContext })
+
+    setPendingCost(null)
+    setError(null)
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    // Group OCR words by page for the verification cross-check.
+    const wordsByPage = new Map<number, typeof recon.words>()
+    for (const w of recon.words) {
+      const list = wordsByPage.get(w.pageIndex) ?? []
+      list.push(w)
+      wordsByPage.set(w.pageIndex, list)
+    }
+
+    try {
+      const result = await runBrowserTranscription({
+        fileData: data,
+        ocrWordsByPage: wordsByPage,
+        pageText: recon.pageText,
+        client: { apiKey: key, modelId, effort: 'medium' },
+        lexicon: state.lexicon,
+        orthography: (identity['orthography'] as 'preserve' | 'modernize') ?? 'preserve',
+        normalizeLongS: identity['longS'] === true,
+        bookContext,
+        imageLongEdge: prefs.imageLongEdge,
+        onProgress: setRunProgress,
+        signal: controller.signal
+      })
+
+      // Metadata the model read off the front matter now fills the identity
+      // fields that started empty.
+      const meta = mergeMetadata(result.transcriptions)
+      transcriptionRef.current = result
+      complete({
+        metadata: {
+          ...state.metadata,
+          title: meta['title'] ?? state.metadata.title,
+          author: meta['author'] ?? state.metadata.author,
+          originalYear: meta['originalYear'] ?? state.metadata.originalYear,
+          originalPublisher: meta['originalPublisher'] ?? state.metadata.originalPublisher,
+          originalPlace: meta['originalPlace'] ?? state.metadata.originalPlace
+        },
+        classifications: result.transcriptions.map((t) => ({
+          pageIndex: t.pageIndex,
+          role: t.role,
+          selfReportedConfidence: 0,
+          furniture: t.furniture
+        }))
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setRunProgress(null)
+      abortRef.current = null
+    }
+  }, [state, currentAnswers, complete])
+
+  /** Leaving a step: transcription needs cost approval first; gates just advance. */
   const advance = useCallback(() => {
-    setState((s) => ({
-      ...s,
-      answers: { ...s.answers, [step.id]: currentAnswers },
-      completed: [...s.completed, step.id]
-    }))
-    setAnswers({})
-  }, [step.id, currentAnswers])
+    if (step.id === 'transcribe') {
+      const estimate = estimateCost({
+        pageCount: state.pageCount,
+        modelId: (currentAnswers['model'] as string) ?? 'claude-opus-5',
+        imageLongEdge: loadPrefs().imageLongEdge
+      })
+      setPendingCost(formatEstimate(estimate))
+      return
+    }
+    complete()
+  }, [step.id, state.pageCount, currentAnswers, complete])
 
   return (
     <div className="shell">
@@ -199,8 +308,50 @@ export function App(): JSX.Element {
           </div>
         ) : null}
 
+        {/* --- cost approval before any spend --- */}
+        {pendingCost ? (
+          <div className="q">
+            <span className="prompt">Ready to transcribe {state.pageCount} pages</span>
+            <div className="help">
+              This is the only step that costs money. Estimated cost: <b>{pendingCost}</b>. You are
+              billed directly by Anthropic for your own API key.
+            </div>
+            <div className="actions">
+              <button type="button" className="primary" onClick={() => void startTranscription()}>
+                Start — {pendingCost}
+              </button>
+              <button type="button" className="ghost" onClick={() => setPendingCost(null)}>
+                Back
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* --- paid run in progress --- */}
+        {runProgress ? (
+          <div className="progress">
+            <strong>
+              Transcribing page {runProgress.page} of {runProgress.total}
+            </strong>
+            <div className="bar">
+              <i
+                style={{ width: `${(runProgress.page / Math.max(1, runProgress.total)) * 100}%` }}
+              />
+            </div>
+            <div className="meta">
+              {runProgress.usage.outputTokens.toLocaleString()} tokens written
+              {runProgress.failed > 0 ? ` · ${runProgress.failed} page(s) failed` : null}
+            </div>
+            <div className="actions">
+              <button type="button" className="ghost" onClick={() => abortRef.current?.abort()}>
+                Stop — keep what's done
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {/* --- gates --- */}
-        {!progressInfo && questions.length > 0 ? (
+        {!progressInfo && !runProgress && !pendingCost && questions.length > 0 ? (
           <>
             {questions.map((q) => (
               <QuestionView
@@ -218,7 +369,9 @@ export function App(): JSX.Element {
                 disabled={missing.length > 0}
                 onClick={advance}
               >
-                Looks right — continue
+                {step.id === 'transcribe'
+                  ? 'Continue — show me the cost'
+                  : 'Looks right — continue'}
               </button>
               {missing.length > 0 ? (
                 <span className="hint">Fill in: {missing.join(', ')}</span>
@@ -228,7 +381,11 @@ export function App(): JSX.Element {
         ) : null}
 
         {/* --- stages with nothing to ask yet --- */}
-        {!progressInfo && questions.length === 0 && step.id !== 'intake' ? (
+        {!progressInfo &&
+        !runProgress &&
+        !pendingCost &&
+        questions.length === 0 &&
+        step.id !== 'intake' ? (
           <p className="hint">
             Not built yet — this is where {step.title.toLowerCase()} will happen.
           </p>

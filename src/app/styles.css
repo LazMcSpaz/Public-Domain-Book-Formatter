@@ -394,3 +394,127 @@ button.ghost {
   color: var(--muted);
   font-size: 0.85rem;
 }
+
+/* ---------- narrow screens ----------
+   The flow has to work on a phone: the rail becomes a horizontal strip, the
+   term grid drops the columns that don't earn their width, and the word crop
+   (the evidence — the whole point of the grid) is what survives. */
+@media (max-width: 860px) {
+  .shell {
+    flex-direction: column;
+  }
+
+  .rail {
+    width: 100%;
+    /* A flex item defaults to min-width:auto, which lets the wide step strip
+       push the whole page sideways. This is what actually contains it. */
+    min-width: 0;
+    max-width: 100%;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    padding: 14px 16px;
+  }
+  .rail h1 {
+    margin-bottom: 12px;
+  }
+  .rail ol {
+    display: flex;
+    gap: 14px;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .rail li {
+    padding: 0;
+    white-space: nowrap;
+    font-size: 0.82rem;
+  }
+  /* The "review" chip doubles each row's width; the rail is a map here, not a legend. */
+  .rail li.gate .label::after {
+    content: none;
+  }
+
+  .main {
+    padding: 22px 16px;
+    max-width: none;
+  }
+  .step-head h2 {
+    font-size: 1.3rem;
+  }
+
+  .q {
+    padding: 16px;
+  }
+  /* Stack the evidence above the field instead of squeezing both. */
+  .q-row {
+    flex-direction: column-reverse;
+    gap: 12px;
+  }
+  .q-evidence img {
+    max-width: 130px;
+  }
+
+  .drop {
+    padding: 40px 18px;
+  }
+
+  .terms {
+    font-size: 0.85rem;
+  }
+  /* Uses + Why are context, not decisions — drop them before the crop or verdict. */
+  .terms th:nth-child(3),
+  .terms td:nth-child(3),
+  .terms th:nth-child(4),
+  .terms td:nth-child(4) {
+    display: none;
+  }
+  .terms td {
+    padding: 9px 6px;
+  }
+  /* Comfortable tap targets. */
+  .terms .verdict button {
+    padding: 7px 11px;
+    font-size: 0.85rem;
+  }
+  .terms input.fix {
+    width: 100%;
+    min-width: 0;
+    padding: 6px;
+  }
+
+  .actions {
+    flex-wrap: wrap;
+  }
+  button.primary {
+    width: 100%;
+    padding: 14px 20px;
+  }
+}
+
+@media (max-width: 480px) {
+  /* Signals are the first thing to go; the pixels and the verdict are the job. */
+  .terms th:nth-child(2),
+  .terms td:nth-child(2) {
+    font-size: 0.95rem;
+  }
+  .grid-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .grid-head .accept-all {
+    width: 100%;
+    padding: 9px;
+  }
+}
+
+/* A wide term grid scrolls inside its own card — the page body must never
+   scroll sideways. (Appended rather than inlined above so the rule can't be
+   lost to a formatting reflow of the surrounding block.) */
+.terms-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.terms img {
+  max-width: 100%;
+}
