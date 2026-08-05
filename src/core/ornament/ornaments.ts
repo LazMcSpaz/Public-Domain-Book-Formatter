@@ -11,7 +11,6 @@
  * have in the build directory. No I/O, no conversion — that is the orchestrator's
  * job (see `@tooling/export`).
  */
-import * as path from 'node:path'
 import type { OrnamentChoices, OrnamentRef } from '@core/model'
 import manifest from '../../../resources/ornaments/manifest.json'
 
@@ -36,8 +35,9 @@ export interface ResolvedOrnamentPaths {
  * appended-after-replace too, so the path is always a build-dir PDF.
  */
 function toPdfPath(file: string, pdfDir: string): string {
-  const base = path.basename(file).replace(/\.svg$/i, '') + '.pdf'
-  return path.join(pdfDir, base)
+  // Plain URL-style joining: ornaments are app assets, not filesystem paths.
+  const base = (file.split('/').pop() ?? file).replace(/\.svg$/i, '') + '.pdf'
+  return `${pdfDir.replace(/\/$/, '')}/${base}`
 }
 
 /**

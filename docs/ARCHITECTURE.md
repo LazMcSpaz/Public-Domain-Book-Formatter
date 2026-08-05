@@ -1,74 +1,78 @@
 # Architecture
 
-How the Public-Domain Book Reprint Tool is put together, and what is / isn't
-verifiable without the system toolchain. See [`SPEC.md`](../SPEC.md) for the
-product design and [`CLAUDE.md`](../CLAUDE.md) for working conventions.
+Browser-only. React + TypeScript + Vite, no server, no Electron.
 
-## Process model (Electron)
+## The flow
 
 ```
-┌─────────────── main process (Node) ───────────────┐    ┌──── renderer (React) ────┐
-│ src/main         window, lifecycle, IPC handlers   │    │ src/renderer             │
-│ src/main/export  export orchestration entry points │◀──▶│  store/  ReviewContext   │
-│ src/main/profile-store  userData style profiles    │IPC │  components/  the UI      │
-│ src/main/asset-access   local-asset:// + path guard│    │  hooks/ utils/           │
-└────────────────────────────────────────────────────┘    └──────────────────────────┘
-                 ▲ typed bridge (src/preload) exposes window.api
-        contract: src/shared/ipc-types.ts  +  src/core/model/types.ts
+Open PDF
+  │
+  ├─ RECON  (free, local, no API cost)
+  │    PDF.js render @300dpi ─┐
+  │    Tesseract.js OCR       ├─ one page at a time, released after use
+  │    word crops             ─┘
+  │    lexicon harvest (book-wide, frequency-driven)
+  │
+  ├─ GATE 1 ▸ confirm the book        ← identity + term review (built)
+  │
+  ├─ TRANSCRIBE  (vision model pass — not built yet)
+  │    per page: role + clean text + structure tags + uncertain spans
+  │
+  ├─ GATE 2 ▸ check uncertain spots   ← where model & OCR disagree
+  ├─ GATE 3 ▸ confirm structure       ← chapters, footnotes, images
+  ├─ DESIGN  ▸ interview → preview
+  └─ EXPORT  ▸ LaTeX → PDF → KDP validation
 ```
 
-The renderer is sandboxed (contextIsolation on, nodeIntegration off). It only
-touches `window.api`. Page images are served via a path-validated
-`local-asset://` protocol; pixel crops come through `getPageImage` (base64).
+Gates are the only stops. Everything between them runs unattended.
 
-## Layers
+## Module map
 
-| Layer         | Path                                        | Responsibility                                                     | Electron deps? |
-| ------------- | ------------------------------------------- | ------------------------------------------------------------------ | -------------- |
-| Domain model  | `src/core/model`                            | Types + the **CoordinateMap** backbone (source↔output index)       | none           |
-| hOCR          | `src/core/hocr`                             | Parse Tesseract hOCR → word tokens (bbox + confidence)             | none           |
-| Project       | `src/core/project`                          | Versioned `ProjectFile`, atomic save/load, migration               | none (node fs) |
-| Structure     | `src/core/structure`                        | Heading detection, TOC builder, footnote linking                   | none           |
-| Image algos   | `src/core/image`                            | Region detection (OCR-gap heuristic), DPI math                     | none           |
-| Style/typeset | `src/core/style`, `src/core/typeset`        | Profiles, LaTeX document builder, KDP validation                   | none           |
-| Ornaments     | `src/core/ornament` + `resources/ornaments` | Starter SVG library, ornament resolution                           | none           |
-| Tooling       | `src/tooling`                               | Binary wrappers, dependency detector, pipeline, export assembler   | node (spawn)   |
-| Pipeline      | `src/pipeline`                              | Staged engine: extract→ocr→image-detect→cleanup→structure→markdown | node           |
-| Shell         | `src/main`, `src/preload`                   | Window, IPC, protocol, profile store, export                       | electron       |
-| UI            | `src/renderer`                              | React review instrument, image editor, style/export screens        | renderer       |
+| Area           | Path                   | Contains                                          | Browser APIs? |
+| -------------- | ---------------------- | ------------------------------------------------- | ------------- |
+| Domain model   | `src/core/model`       | Coordinate map, flags, project types              | no            |
+| hOCR           | `src/core/hocr`        | hOCR parsing → tokens + boxes                     | no            |
+| **Lexicon**    | `src/core/lexicon`     | Term harvesting, variant clustering, prompt block | no            |
+| **Page roles** | `src/core/pages`       | Roles, dispositions, front-matter metadata        | no            |
+| **Wizard**     | `src/core/wizard`      | Question contract, step machine                   | no            |
+| Structure      | `src/core/structure`   | Headings, footnotes, TOC, body assembly           | no            |
+| Image          | `src/core/image`       | Region detection, DPI math, op engine             | no            |
+| Typeset        | `src/core/typeset`     | LaTeX document builder, KDP validation            | no            |
+| Style          | `src/core/style`       | Profiles, resolution                              | no            |
+| Ornament       | `src/core/ornament`    | SVG ornament library                              | no            |
+| **Platform**   | `src/platform/browser` | PDF.js, Tesseract.js, crops, recon runner         | **yes**       |
+| **App**        | `src/app`              | Wizard shell, generic question renderer           | **yes**       |
 
-`src/core` and the pure parts of `src/tooling` are deliberately framework-free so
-they're unit-testable in Node with no binaries and no DOM.
+The `core` / `platform` split is the load-bearing boundary: `core` has no DOM and
+no Node, so every rule in the flow is unit-testable without a browser.
 
-## Key data flow
+## Why OCR is still here
 
-1. **Import**: `runPipeline` (`src/pipeline/pipeline.ts`) renders pages, OCRs them
-   (hOCR → words), detects image regions, cleans text, detects headings, and
-   assembles the Markdown intermediate — persisting a `ProjectFile`.
-2. **Review**: the renderer builds a `CoordinateMap` from the persisted entries;
-   panes sync by shared `data-token-id`; edits/tags/flags update the store and
-   re-save.
-3. **Export**: `assembleAndExport` (`src/tooling/export/assemble.ts`) →
-   Pandoc body fragment → `buildLatexDocument` (`src/core/typeset`) → ornament
-   SVG→PDF → XeLaTeX → parse page count + warnings → `validateKdp`.
+Under the vision-pass design the model reads the page, so OCR is no longer the
+source of truth. It stays for two reasons that a language model can't provide:
 
-## Verification matrix
+1. **Coordinate map.** Bounding boxes anchor every word to its pixels — the
+   backbone for word crops, hover-sync, and image placement.
+2. **Independent witness.** Tesseract is not a language model, so it has no
+   shared blind spots with the vision pass. Where they disagree is real evidence;
+   a model's confidence in its own output is not.
 
-| Concern                                                                                | How it's verified here                                      | Needs a real machine for                         |
-| -------------------------------------------------------------------------------------- | ----------------------------------------------------------- | ------------------------------------------------ |
-| Domain logic, parsing, persistence, structure, image ops, LaTeX generation, validation | **Vitest unit tests** (228) + generated-output assertions   | —                                                |
-| External tools (Tesseract/Pandoc/XeLaTeX/pdftoppm/rsvg)                                | Wrappers tested via **mock `CommandRunner`** (argv + order) | actually running OCR/typeset (install the tools) |
-| Type safety                                                                            | `npm run typecheck` (whole tree)                            | —                                                |
-| Bundling                                                                               | `npm run build` (electron-vite)                             | —                                                |
-| App UI behavior                                                                        | not automated (no display)                                  | manual run / future Playwright-electron          |
-| Windows installer                                                                      | `electron-builder.yml` config only                          | Windows/CI runner with the Electron binary       |
+## Verification
 
-## Extending safely
+| What         | How                                                                                    |
+| ------------ | -------------------------------------------------------------------------------------- |
+| Domain logic | `npm test` — 143 tests, pure, no browser                                               |
+| Types        | `npm run typecheck`                                                                    |
+| UI           | `node scripts/screenshot-flow.mjs` → real Chromium, screenshots per screen             |
+| Test fixture | `node scripts/make-test-book.mjs` → 8-page mock scan with recurring archaic vocabulary |
 
-- Add a pipeline stage: implement the `Stage` contract in `src/pipeline/stages`,
-  insert into `DEFAULT_STAGES`, keep the output-offset convention.
-- Change `ProjectFile`: bump `CURRENT_SCHEMA_VERSION` + extend `migrate()`.
-- Add an IPC method: extend `IpcChannel` + `BridgeApi` (shared), the preload
-  bridge, and a main handler — all three or it won't type-check.
-- Add an image op: add the kind to `ImageEditOpKind`, implement it in the engine
-  `apply-ops`, expose a constructor in `engine/ops.ts`.
+## Known gaps
+
+- **Typesetting in the browser is unproven.** SwiftLaTeX (XeTeX/WASM) is the
+  candidate; the sandbox blocks its CDN so it hasn't been tested. The app builds
+  the LaTeX document regardless — only the final compile is affected, and it is
+  deliberately isolated as a swappable step.
+- **Project storage** is not implemented for the browser yet (OPFS/IndexedDB).
+  The schema and migrations exist in `src/core/project`.
+- **Metadata extraction** (title/author off the title page) needs the vision
+  pass; until then Gate 1's identity fields start empty.

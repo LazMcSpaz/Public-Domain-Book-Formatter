@@ -1,7 +1,11 @@
-import { defineConfig } from 'vitest/config'
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
 import { resolve } from 'node:path'
 
 export default defineConfig({
+  root: 'src/app',
+  publicDir: resolve(__dirname, 'public'),
+  plugins: [react()],
   resolve: {
     alias: {
       '@core': resolve(__dirname, 'src/core'),
@@ -9,5 +13,6 @@ export default defineConfig({
       '@platform': resolve(__dirname, 'src/platform')
     }
   },
-  test: { include: ['test/**/*.test.ts'], environment: 'node' }
+  build: { outDir: resolve(__dirname, 'dist'), emptyOutDir: true },
+  server: { port: 5173 }
 })
