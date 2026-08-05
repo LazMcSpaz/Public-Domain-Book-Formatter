@@ -40,6 +40,7 @@ Gates are the only stops. Everything between them runs unattended.
 | Typeset        | `src/core/typeset`     | LaTeX document + body emitter, KDP validation     | no            |
 | Style          | `src/core/style`       | Profiles, resolution                              | no            |
 | **Design**     | `src/core/design`      | Interview answers → a complete style profile      | no            |
+| **Export**     | `src/core/export`      | Book + style + edition → LaTeX; the TeX seam      | no            |
 | Ornament       | `src/core/ornament`    | SVG ornament library                              | no            |
 | **Platform**   | `src/platform/browser` | PDF.js, Tesseract.js, crops, recon runner         | **yes**       |
 | **App**        | `src/app`              | Wizard shell, generic question renderer           | **yes**       |
@@ -62,7 +63,7 @@ source of truth. It stays for two reasons that a language model can't provide:
 
 | What         | How                                                                                     |
 | ------------ | --------------------------------------------------------------------------------------- |
-| Domain logic | `npm test` — 311 tests, pure, no browser                                                |
+| Domain logic | `npm test` — 355 tests, pure, no browser                                                |
 | Types        | `npm run typecheck`                                                                     |
 | UI           | `node scripts/screenshot-flow.mjs` → real Chromium, screenshots per screen              |
 | Later gates  | `#preview` in dev → `src/app/DevPreview.tsx`, so gates behind the paid run stay visible |
@@ -80,6 +81,7 @@ source of truth. It stays for two reasons that a language model can't provide:
   client, runner, verification, and cost estimation are wired into the wizard
   and tested against a mock transport, but the real request shape is unverified
   until a key is available.
-- **The export step is the last one unbuilt.** Everything it consumes exists —
-  the assembled document, the body emitter, and the style profile the design
-  interview produces.
+- **No PDF is produced yet.** `buildExport` emits complete XeLaTeX source and
+  the export screen hands it to the user; `TexEngine` is the seam where a
+  browser TeX would slot in, and until one does the app says so rather than
+  pretending. The `.tex` compiles anywhere XeLaTeX runs.

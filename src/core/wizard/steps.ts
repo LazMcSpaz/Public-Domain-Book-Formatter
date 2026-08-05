@@ -564,13 +564,78 @@ const design: Step = {
   }
 }
 
+/**
+ * The last gate. Everything else was recovered from the book; these are the
+ * facts about *this edition* that only its publisher knows, and they all land
+ * on the copyright page.
+ */
 const exportStep: Step = {
   id: 'export',
-  title: 'Export',
-  blurb: 'Build the print-ready interior PDF and check it against KDP’s rules.',
-  isGate: false,
+  title: 'Publish the edition',
+  blurb: 'The last few details, then the print-ready interior.',
+  isGate: true,
   canEnter: (s) => s.completed.includes('design'),
-  questions: () => []
+  questions: (s) => {
+    const identity = s.answers['gate-identity'] ?? {}
+    const author = (identity['author'] as string) ?? s.metadata.author ?? ''
+    const originalYear = (identity['originalYear'] as string) ?? s.metadata.originalYear ?? null
+    const thisYear = String(new Date().getFullYear())
+
+    return [
+      {
+        id: 'imprint',
+        type: 'text',
+        prompt: 'Who is publishing this edition?',
+        help:
+          'Your imprint or your own name — not the original publisher. It appears on ' +
+          'the copyright page.',
+        defaultValue: '',
+        placeholder: 'e.g. Blackthorn Press'
+      },
+      {
+        id: 'copyrightHolder',
+        type: 'text',
+        prompt: 'Who holds the copyright in this edition?',
+        help:
+          'The original text is public domain, so this covers only your new typesetting, ' +
+          'notes, and design.',
+        defaultValue: '',
+        placeholder: author ? `e.g. your name (the author was ${author})` : 'e.g. your name'
+      },
+      {
+        id: 'editionDate',
+        type: 'text',
+        prompt: 'Publication year of this edition',
+        defaultValue: thisYear,
+        placeholder: thisYear
+      },
+      {
+        id: 'editionStatement',
+        type: 'text',
+        prompt: 'Edition statement',
+        help: 'A single line describing this printing.',
+        defaultValue: originalYear ? `A new edition of the ${originalYear} original.` : '',
+        placeholder: 'e.g. First modern edition.'
+      },
+      {
+        id: 'isbn',
+        type: 'text',
+        prompt: 'ISBN, if you have one',
+        help: 'Leave blank to use the free ISBN KDP assigns at publication.',
+        defaultValue: '',
+        placeholder: '978-…'
+      },
+      {
+        id: 'publicDomainNotice',
+        type: 'confirm',
+        prompt: 'State on the copyright page that the original work is public domain?',
+        help:
+          'Recommended. It is accurate, it tells readers what they are buying, and it ' +
+          'makes clear that your claim covers only this edition.',
+        defaultValue: true
+      }
+    ]
+  }
 }
 
 export const STEPS: readonly Step[] = [

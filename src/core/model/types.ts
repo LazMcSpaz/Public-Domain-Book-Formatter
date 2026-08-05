@@ -355,7 +355,12 @@ export interface FrontMatterFields {
 // KDP export validation (SPEC §10)
 // ---------------------------------------------------------------------------
 
-export type ValidationLevel = 'ok' | 'warn' | 'fail'
+/**
+ * `pending` is not a soft warning — it means the check has not been run yet
+ * (typically because the book has not been typeset). Reporting it as `ok` would
+ * be a green tick nothing earned, and as `warn` would cry wolf.
+ */
+export type ValidationLevel = 'ok' | 'warn' | 'fail' | 'pending'
 
 export interface ValidationCheck {
   id: string

@@ -13,7 +13,9 @@ import { useMemo, useState } from 'react'
 import { STEPS, defaultAnswers, initialState, type Answers, type StepId } from '@core/wizard'
 import { assembleBook } from '@core/assemble'
 import { describeProfile, profileFromAnswers, type DesignAnswers } from '@core/design'
+import { buildExport, editionFromAnswers } from '@core/export'
 import { QuestionView } from './QuestionView'
+import { ExportResult } from './ExportResult'
 
 /** A book far enough along that every gate has something real to show. */
 function sampleState(stepId: StepId) {
@@ -140,6 +142,29 @@ export function DevPreview(): JSX.Element {
             <span className="summary-label">Your edition will be set as</span>
             <b>{summary}</b>
           </div>
+        ) : null}
+
+        {/* The export gate's answers produce a real build, so the screen after
+            it can be seen without a paid transcription run first. */}
+        {stepId === 'export' ? (
+          <ExportResult
+            result={buildExport({
+              document: state.document!,
+              profile: profileFromAnswers({
+                kind: 'novel',
+                period: 'early-modern',
+                chapterOpener: 'drop-cap',
+                runningHeads: 'author-title'
+              }),
+              edition: editionFromAnswers(
+                { title: 'The Alchemist His Practise', author: 'Anonymous', originalYear: '1662' },
+                current as Record<string, unknown>
+              ),
+              estimatedPageCount: 240
+            })}
+            pdf={null}
+            texNote="No TeX engine is available here, so the PDF can’t be built in this browser. The .tex file below is complete — compile it with XeLaTeX."
+          />
         ) : null}
       </main>
     </div>

@@ -88,18 +88,28 @@ await page.waitForTimeout(200)
 const after = await summary()
 await shot('07-gate-design-answered')
 
+console.log('7. the finished edition')
+await page.locator('.rail li', { hasText: 'Publish the edition' }).click()
+await page.waitForSelector('.result', { timeout: 20000 })
+await shot('09-export')
+const checks = await page.locator('.checks li').count()
+const pending = await page.locator('.checks li.pending').count()
+
 await page.setViewportSize({ width: 390, height: 844 })
 await page.waitForTimeout(400)
 const overflow = await page.evaluate(() => document.body.scrollWidth - window.innerWidth)
-await shot('08-gate-design-mobile')
+await shot('10-export-mobile')
 
 console.log('\nresult:')
 console.log(`  term rows: ${rows}`)
 console.log(`  word crops rendered: ${crops}`)
 console.log(`  design summary: ${after}`)
 console.log(`  summary responds to answers: ${before !== after}`)
+console.log(`  KDP checks shown: ${checks} (${pending} pending, pre-typeset)`)
 console.log(`  mobile horizontal overflow: ${overflow}px`)
 console.log(`  page errors: ${errors.length ? errors.join(' | ') : 'none'}`)
 
 await browser.close()
-process.exit(errors.length === 0 && rows > 0 && before !== after && overflow <= 0 ? 0 : 1)
+process.exit(
+  errors.length === 0 && rows > 0 && before !== after && checks > 0 && overflow <= 0 ? 0 : 1
+)

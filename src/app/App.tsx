@@ -34,6 +34,14 @@ import { assembleBook } from '@core/assemble'
 import { runBrowserTranscription } from '../platform/browser/transcribe-run'
 import { loadApiKey, saveApiKey, loadPrefs, savePrefs } from '../platform/browser/settings'
 import { profileFromAnswers, describeProfile, type DesignAnswers } from '@core/design'
+import {
+  buildExport,
+  editionFromAnswers,
+  noTexEngine,
+  tryCompile,
+  type BuildExportResult
+} from '@core/export'
+import { ExportResult } from './ExportResult'
 
 export function App(): JSX.Element {
   const [state, setState] = useState<WizardState>(initialState)
@@ -47,6 +55,9 @@ export function App(): JSX.Element {
   const transcriptionRef = useRef<RunResult | null>(null)
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
   const [pendingCost, setPendingCost] = useState<string | null>(null)
+  const [exported, setExported] = useState<BuildExportResult | null>(null)
+  const [pdf, setPdf] = useState<{ bytes: Uint8Array; pageCount: number } | null>(null)
+  const [texNote, setTexNote] = useState<string | null>(null)
 
   const step = activeStep(state)
   const [answers, setAnswers] = useState<Answers>({})
@@ -101,6 +112,11 @@ export function App(): JSX.Element {
   const startRecon = useCallback(async (file: File) => {
     setError(null)
     setAnswers({})
+    // A new book starts from nothing — leaving the previous edition's export on
+    // screen would let the user download the wrong book.
+    setExported(null)
+    setPdf(null)
+    setTexNote(null)
     if (reconRef.current) releaseRecon(reconRef.current)
     reconRef.current = null
 
@@ -254,8 +270,65 @@ export function App(): JSX.Element {
     }
   }, [state, currentAnswers, complete])
 
+  /**
+   * Build the edition. The LaTeX source is produced locally and always
+   * succeeds; the PDF depends on a TeX engine being available, and when one
+   * isn't the `.tex` is still a real deliverable rather than a dead end.
+   */
+  const runExport = useCallback(async () => {
+    const doc = state.document
+    if (!doc) return
+    setError(null)
+
+    const design = state.answers['design'] ?? {}
+    const profile = profileFromAnswers(
+      {
+        kind: design['kind'],
+        period: design['period'],
+        chapterOpener: design['chapterOpener'],
+        runningHeads: design['runningHeads']
+      } as unknown as DesignAnswers,
+      design['font'] as string
+    )
+
+    const input = {
+      document: doc,
+      profile,
+      edition: editionFromAnswers(state.answers['gate-identity'] ?? {}, currentAnswers),
+      // The true count comes from the TeX run; until then the source page count
+      // is the honest stand-in for the gutter check.
+      estimatedPageCount: state.pageCount
+    }
+    const result = buildExport(input)
+    setExported(result)
+
+    const outcome = await tryCompile(noTexEngine, { tex: result.tex })
+    if (outcome.ok) {
+      setPdf({ bytes: outcome.result.pdf, pageCount: outcome.result.pageCount })
+      setTexNote(null)
+      // Re-report now that the estimates are real numbers.
+      setExported(
+        buildExport({
+          ...input,
+          compiled: {
+            pageCount: outcome.result.pageCount,
+            warnings: outcome.result.warnings
+          }
+        })
+      )
+    } else {
+      setPdf(null)
+      setTexNote(outcome.reason)
+    }
+    complete()
+  }, [state, currentAnswers, complete])
+
   /** Leaving a step: transcription needs cost approval first; gates just advance. */
   const advance = useCallback(() => {
+    if (step.id === 'export') {
+      void runExport()
+      return
+    }
     if (step.id === 'transcribe') {
       const estimate = estimateCost({
         pageCount: state.pageCount,
@@ -266,7 +339,7 @@ export function App(): JSX.Element {
       return
     }
     complete()
-  }, [step.id, state.pageCount, currentAnswers, complete])
+  }, [step.id, state.pageCount, currentAnswers, complete, runExport])
 
   return (
     <div className="shell">
@@ -397,8 +470,11 @@ export function App(): JSX.Element {
           </div>
         ) : null}
 
+        {/* --- the finished edition --- */}
+        {exported ? <ExportResult result={exported} pdf={pdf} texNote={texNote} /> : null}
+
         {/* --- gates --- */}
-        {!progressInfo && !runProgress && !pendingCost && questions.length > 0 ? (
+        {!exported && !progressInfo && !runProgress && !pendingCost && questions.length > 0 ? (
           <>
             {questions.map((q) => (
               <QuestionView
@@ -424,7 +500,9 @@ export function App(): JSX.Element {
               >
                 {step.id === 'transcribe'
                   ? 'Continue — show me the cost'
-                  : 'Looks right — continue'}
+                  : step.id === 'export'
+                    ? 'Build the interior'
+                    : 'Looks right — continue'}
               </button>
               {missing.length > 0 ? (
                 <span className="hint">Fill in: {missing.join(', ')}</span>
@@ -434,7 +512,8 @@ export function App(): JSX.Element {
         ) : null}
 
         {/* --- stages with nothing to ask yet --- */}
-        {!progressInfo &&
+        {!exported &&
+        !progressInfo &&
         !runProgress &&
         !pendingCost &&
         questions.length === 0 &&

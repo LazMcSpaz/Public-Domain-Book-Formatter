@@ -10,7 +10,7 @@ import {
 } from '@core/design'
 import { BUILTIN_ORNAMENTS, findOrnament } from '@core/ornament'
 import { normalizeStyleProfile } from '@core/style'
-import { parseTrimSize } from '@core/typeset'
+import { parseTrimSize, validateKdp } from '@core/typeset'
 
 const base: DesignAnswers = {
   kind: 'novel',
@@ -190,5 +190,29 @@ describe('describeProfile — chapter openers', () => {
     expect(describeProfile(profileFromAnswers(answers({ chapterOpener: 'drop-cap' })))).toContain(
       'drop capitals'
     )
+  })
+})
+
+describe('profileFromAnswers — KDP fitness', () => {
+  it('leaves enough inside margin for the spine at any book length', () => {
+    // The interview never asks about page count, so its margins have to clear
+    // KDP's heaviest gutter requirement by construction rather than by luck.
+    for (const kind of ['novel', 'poetry', 'illustrated', 'reference'] as const) {
+      const profile = profileFromAnswers(answers({ kind }))
+      const report = validateKdp({ profile, pageCount: 900, warnings: [] })
+      const gutter = report.checks.find((c) => c.id === 'gutter')!
+      expect(gutter.level, `${kind}: ${gutter.detail}`).toBe('ok')
+    }
+  })
+
+  it('picks trim sizes KDP actually offers', () => {
+    for (const kind of ['novel', 'poetry', 'illustrated', 'reference'] as const) {
+      const report = validateKdp({
+        profile: profileFromAnswers(answers({ kind })),
+        pageCount: 200,
+        warnings: []
+      })
+      expect(report.checks.find((c) => c.id === 'trim-size')!.level).toBe('ok')
+    }
   })
 })

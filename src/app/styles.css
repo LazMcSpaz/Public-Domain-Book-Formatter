@@ -380,6 +380,65 @@ body {
   overflow-wrap: anywhere;
 }
 
+/* ---------- the finished edition ---------- */
+.notes {
+  margin: 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 0.88rem;
+  line-height: 1.6;
+}
+.checks {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.checks li {
+  display: grid;
+  /* The level chip is fixed-width so the labels line up into a column. */
+  grid-template-columns: 54px minmax(0, 1fr);
+  gap: 4px 12px;
+  font-size: 0.88rem;
+}
+.checks .level {
+  grid-row: span 2;
+  align-self: start;
+  text-align: center;
+  text-transform: uppercase;
+  font-size: 0.65rem;
+  letter-spacing: 0.06em;
+  padding: 3px 0;
+  border-radius: 4px;
+  background: #e6e2d8;
+  color: #5c5546;
+}
+.checks li.ok .level {
+  background: #dfe8db;
+  color: #3f5c37;
+}
+.checks li.warn .level {
+  background: #f2e6cd;
+  color: #7a5b1e;
+}
+.checks li.pending .level {
+  background: #e4e6ea;
+  color: #4d5560;
+}
+.checks li.fail .level {
+  background: #f0dad6;
+  color: #8c2f22;
+}
+.checks .check-label {
+  font-weight: 600;
+}
+.checks .check-detail {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
 /* ---------- footer actions ---------- */
 .actions {
   display: flex;

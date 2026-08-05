@@ -26,6 +26,13 @@ export interface ValidateKdpInput {
   warnings: string[]
   /** Whether fonts are embedded in the output PDF (XeLaTeX embeds by default). */
   fontsEmbedded?: boolean
+  /**
+   * Whether a TeX run has actually happened. Before it has, the page count is
+   * an estimate from the source and no layout warnings exist yet — so those two
+   * checks report what they really are rather than a green tick the run hasn't
+   * earned. Defaults to true.
+   */
+  compiled?: boolean
 }
 
 /** KDP's recommended minimum target DPI for printed images. */
@@ -131,26 +138,35 @@ export function validateKdp(input: ValidateKdpInput): KdpValidationReport {
     checks.push({ id: 'image-dpi', label: 'Image DPI', level, detail })
   }
 
+  const compiled = input.compiled ?? true
+
   // 5. Surfaced LaTeX warnings (overfull boxes / bad breaks).
   {
     const count = input.warnings.length
     checks.push({
       id: 'latex-warnings',
       label: 'Typesetting warnings',
-      level: count > 0 ? 'warn' : 'ok',
-      detail:
-        count > 0
+      level: !compiled ? 'pending' : count > 0 ? 'warn' : 'ok',
+      detail: !compiled
+        ? 'Not checked yet — these only exist once the book has been typeset.'
+        : count > 0
           ? `${count} overfull-box / bad-break warning(s) to resolve or acknowledge.`
           : 'No overfull boxes or bad breaks reported.'
     })
   }
 
   // 6. Final page count — reported prominently as a check (never a failure).
+  // Before a TeX run this is the *source* page count, which is a rough guide
+  // and emphatically not the spine width; saying otherwise would send the user
+  // to print with a cover that doesn't fit.
   checks.push({
     id: 'page-count',
-    label: 'Final page count',
-    level: 'ok',
-    detail: `Final interior page count: ${input.pageCount} pages (use for cover spine width).`
+    label: compiled ? 'Final page count' : 'Page count (estimated)',
+    level: compiled ? 'ok' : 'pending',
+    detail: compiled
+      ? `Final interior page count: ${input.pageCount} pages (use for cover spine width).`
+      : `Roughly ${input.pageCount} pages, based on the scan. Typeset the book before ` +
+        'sizing the cover spine — the real count will differ.'
   })
 
   const ready = !checks.some((c) => c.level === 'fail')

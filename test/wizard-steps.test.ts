@@ -17,6 +17,7 @@ import { assembleBook } from '@core/assemble'
 import type { TranscribedBlock } from '@core/transcribe'
 import type { PageRole } from '@core/pages'
 import { BODY_FONTS, profileFromAnswers } from '@core/design'
+import { editionFromAnswers } from '@core/export'
 
 function entry(term: string, count: number, extra: Partial<LexiconEntry> = {}): LexiconEntry {
   return {
@@ -515,5 +516,84 @@ describe('design step', () => {
   it('does not open before the structure gate is done', () => {
     const state = { ...initialState(), completed: ['intake', 'recon'] as StepId[] }
     expect(stepById('design').canEnter(state)).toBe(false)
+  })
+})
+
+describe('export step', () => {
+  const readyForExport = (): WizardState => ({
+    ...initialState(),
+    pageCount: 240,
+    metadata: { ...initialState().metadata, author: 'Anonymous' },
+    answers: {
+      'gate-identity': { title: 'The Alchemist', author: 'Anonymous', originalYear: '1662' }
+    },
+    completed: [
+      'intake',
+      'recon',
+      'gate-identity',
+      'transcribe',
+      'gate-uncertainties',
+      'gate-structure',
+      'design'
+    ]
+  })
+
+  it('is where the flow lands once the design is chosen', () => {
+    expect(activeStep(readyForExport()).id).toBe('export')
+  })
+
+  it('asks only for details the book itself cannot supply', () => {
+    const ids = stepById('export')
+      .questions(readyForExport())
+      .map((q) => q.id)
+    expect(ids).toEqual([
+      'imprint',
+      'copyrightHolder',
+      'editionDate',
+      'editionStatement',
+      'isbn',
+      'publicDomainNotice'
+    ])
+  })
+
+  it('nothing is required — a reprint with no imprint or ISBN is legitimate', () => {
+    const qs = stepById('export').questions(readyForExport())
+    expect(missingRequired(qs, defaultAnswers(qs))).toEqual([])
+  })
+
+  it('defaults the edition statement from the original year it already knows', () => {
+    const q = stepById('export')
+      .questions(readyForExport())
+      .find((x) => x.id === 'editionStatement')!
+    expect((q as { defaultValue: string }).defaultValue).toContain('1662')
+  })
+
+  it('leaves the edition statement blank when the original year is unknown', () => {
+    const state = { ...readyForExport(), answers: { 'gate-identity': { title: 'Untitled' } } }
+    const q = stepById('export')
+      .questions(state)
+      .find((x) => x.id === 'editionStatement')!
+    expect((q as { defaultValue: string }).defaultValue).toBe('')
+  })
+
+  it('offers the public-domain statement, on by default', () => {
+    const q = stepById('export')
+      .questions(readyForExport())
+      .find((x) => x.id === 'publicDomainNotice')!
+    expect((q as { defaultValue: boolean }).defaultValue).toBe(true)
+  })
+
+  it('turns its own defaults into a buildable edition', () => {
+    const state = readyForExport()
+    const qs = stepById('export').questions(state)
+    const edition = editionFromAnswers(state.answers['gate-identity']!, defaultAnswers(qs))
+    expect(edition.title).toBe('The Alchemist')
+    expect(edition.notices[0]).toContain('1662')
+    expect(edition.editionDate).toBe(String(new Date().getFullYear()))
+  })
+
+  it('does not open before the design is chosen', () => {
+    const state = { ...initialState(), completed: ['intake', 'recon'] as StepId[] }
+    expect(stepById('export').canEnter(state)).toBe(false)
   })
 })
