@@ -28,12 +28,16 @@ import {
   formatEstimate,
   mergeMetadata,
   validateApiKey,
+  verifyPage,
+  type PageTranscription,
   type RunProgress,
   type RunResult
 } from '@core/transcribe'
 import { assembleBook } from '@core/assemble'
 import { runBrowserTranscription } from '../platform/browser/transcribe-run'
 import { loadApiKey, saveApiKey, loadPrefs, savePrefs } from '../platform/browser/settings'
+import { loadRun, loadRunSummary, saveRun } from '../platform/browser/run-store'
+import { createSavedRun, fileKey } from '@core/project'
 import { profileFromAnswers, describeProfile, type DesignAnswers } from '@core/design'
 import { buildExport, editionFromAnswers, type BuildExportResult } from '@core/export'
 import { renderInterior } from '../platform/browser/interior'
@@ -50,6 +54,8 @@ export function App(): JSX.Element {
   // The File, not its bytes: pdf.js detaches any ArrayBuffer it is given, and
   // holding the whole book in the heap between phases is needless besides.
   const fileDataRef = useRef<File | null>(null)
+  // Identifies the open file, so a paid run can be found again on a later visit.
+  const fileKeyRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const transcriptionRef = useRef<RunResult | null>(null)
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
@@ -143,11 +149,17 @@ export function App(): JSX.Element {
 
     try {
       fileDataRef.current = file
+      fileKeyRef.current = fileKey(file)
       // Asset paths come from the platform default, which resolves them
       // against the app's base URL. Repeating them here once meant they were
       // root-absolute and 404'd on any deploy below the domain root.
       const result = await runRecon(file, { onProgress: setProgress })
       reconRef.current = result
+
+      // Has this exact file already been paid for? Looked up after the free
+      // pass rather than before it, because the crops and thumbnails it
+      // produces are what make a resumed session complete rather than partial.
+      const saved = await loadRunSummary(fileKeyRef.current)
 
       // Placeholder classification until the vision pass lands: page 0 is
       // treated as the title page so the identity gate has evidence to show.
@@ -159,6 +171,7 @@ export function App(): JSX.Element {
         classifications: [{ pageIndex: 0, role: 'title-page', selfReportedConfidence: 0 }],
         cropFor: (tokenId: string) => result.crops.get(tokenId),
         hasApiKey: loadApiKey().length > 0,
+        savedRun: saved,
         completed: ['intake', 'recon']
       }))
     } catch (err) {
@@ -189,6 +202,159 @@ export function App(): JSX.Element {
       setAnswers({})
     },
     [step.id, currentAnswers]
+  )
+
+  /**
+   * Everything the wizard derives from a set of transcriptions.
+   *
+   * Shared by the paid run and by restoring a saved one, and that is the point:
+   * if the two built state differently, a resumed session would quietly be a
+   * different book from a freshly-read one. The verification findings are
+   * *recomputed* rather than stored, because they are a pure cross-check
+   * against OCR that costs nothing — storing them would only create a second
+   * copy that could disagree with the scan in front of us.
+   */
+  const stateFromTranscriptions = useCallback(
+    (
+      transcriptions: readonly PageTranscription[],
+      failures: readonly { pageIndex: number }[]
+    ): Partial<WizardState> => {
+      const recon = reconRef.current
+      const wordsByPage = new Map<number, { text: string; confidence: number }[]>()
+      for (const w of recon?.words ?? []) {
+        const list = wordsByPage.get(w.pageIndex) ?? []
+        list.push(w)
+        wordsByPage.set(w.pageIndex, list)
+      }
+
+      const meta = mergeMetadata(transcriptions)
+      return {
+        metadata: {
+          ...state.metadata,
+          title: meta['title'] ?? state.metadata.title,
+          author: meta['author'] ?? state.metadata.author,
+          originalYear: meta['originalYear'] ?? state.metadata.originalYear,
+          originalPublisher: meta['originalPublisher'] ?? state.metadata.originalPublisher,
+          originalPlace: meta['originalPlace'] ?? state.metadata.originalPlace
+        },
+        classifications: transcriptions.map((t) => ({
+          pageIndex: t.pageIndex,
+          role: t.role,
+          selfReportedConfidence: 0,
+          furniture: t.furniture
+        })),
+        findings: transcriptions.flatMap((t) => verifyPage(t, wordsByPage.get(t.pageIndex) ?? [])),
+        uncertainties: transcriptions.flatMap((t) =>
+          t.uncertain.map((u) => ({
+            pageIndex: t.pageIndex,
+            text: u.text,
+            alternatives: u.alternatives,
+            reason: u.reason
+          }))
+        ),
+        failedPages: failures.map((f) => f.pageIndex),
+        // Assemble immediately: seam repair and footnote linking are pure and
+        // fast, and Gate 3 needs the finished document to describe its shape.
+        document: assembleBook(transcriptions)
+      }
+    },
+    [state.metadata]
+  )
+
+  /**
+   * Use a transcription this file was already paid for.
+   *
+   * Everything else about the session was rebuilt for free on the way here —
+   * the page images, the word crops, the lexicon — so this is a complete
+   * resumption rather than a degraded one. The identity answers travel with the
+   * run because they shaped it: the orthography choice and the long-s decision
+   * went into the prompt, and letting the user change them now would be
+   * offering a setting that cannot take effect on text already written.
+   */
+  const useSavedRun = useCallback(async () => {
+    const key = fileKeyRef.current
+    if (!key) return
+    setError(null)
+
+    const saved = await loadRun(key)
+    if (!saved) {
+      setError('That saved transcription could not be read. It will have to be read again.')
+      return
+    }
+
+    transcriptionRef.current = {
+      transcriptions: saved.transcriptions,
+      findings: [],
+      failures: saved.failures,
+      usage: saved.usage,
+      cancelled: false
+    }
+
+    // Stored answers are untrusted input, so only the shapes an answer can
+    // legitimately hold are let back in.
+    const restored: Answers = {}
+    for (const [id, value] of Object.entries(saved.identityAnswers)) {
+      if (
+        typeof value === 'string' ||
+        typeof value === 'boolean' ||
+        (Array.isArray(value) && value.every((v) => typeof v === 'string'))
+      ) {
+        restored[id] = value as AnswerValue
+      }
+    }
+
+    setState((s) => ({
+      ...s,
+      answers: {
+        ...s.answers,
+        'gate-identity': { ...(s.answers['gate-identity'] ?? {}), ...restored }
+      }
+    }))
+    complete(stateFromTranscriptions(saved.transcriptions, saved.failures))
+  }, [complete, stateFromTranscriptions])
+
+  /**
+   * Keep a finished run, and say so if it could not be kept.
+   *
+   * A cancelled run is still worth storing — the user paid for the pages it did
+   * read — but it must not overwrite a *longer* run that is already there,
+   * which is what stopping a re-read halfway through would otherwise do.
+   */
+  const persistRun = useCallback(
+    async (
+      result: RunResult,
+      identityAnswers: Record<string, unknown>,
+      modelId: string
+    ): Promise<void> => {
+      const key = fileKeyRef.current
+      const file = fileDataRef.current
+      if (!key || !file || result.transcriptions.length === 0) return
+
+      if (result.cancelled) {
+        const existing = await loadRunSummary(key)
+        if (existing && existing.pageCount >= result.transcriptions.length) return
+      }
+
+      const stored = await saveRun(
+        createSavedRun({
+          key,
+          fileName: file.name,
+          pageCount: result.transcriptions.length,
+          transcriptions: result.transcriptions,
+          failures: result.failures,
+          usage: result.usage,
+          modelId,
+          identityAnswers
+        })
+      )
+      if (!stored) {
+        setError(
+          'The transcription could not be saved in this browser, so closing the tab ' +
+            'will lose it. Finish the book in this session, or free up storage and try again.'
+        )
+      }
+    },
+    []
   )
 
   /** Run the paid pass. Only reached after the user approves the estimate. */
@@ -247,39 +413,14 @@ export function App(): JSX.Element {
         signal: controller.signal
       })
 
-      // Metadata the model read off the front matter now fills the identity
-      // fields that started empty.
-      const meta = mergeMetadata(result.transcriptions)
       transcriptionRef.current = result
-      complete({
-        metadata: {
-          ...state.metadata,
-          title: meta['title'] ?? state.metadata.title,
-          author: meta['author'] ?? state.metadata.author,
-          originalYear: meta['originalYear'] ?? state.metadata.originalYear,
-          originalPublisher: meta['originalPublisher'] ?? state.metadata.originalPublisher,
-          originalPlace: meta['originalPlace'] ?? state.metadata.originalPlace
-        },
-        classifications: result.transcriptions.map((t) => ({
-          pageIndex: t.pageIndex,
-          role: t.role,
-          selfReportedConfidence: 0,
-          furniture: t.furniture
-        })),
-        findings: result.findings,
-        uncertainties: result.transcriptions.flatMap((t) =>
-          t.uncertain.map((u) => ({
-            pageIndex: t.pageIndex,
-            text: u.text,
-            alternatives: u.alternatives,
-            reason: u.reason
-          }))
-        ),
-        failedPages: result.failures.map((f) => f.pageIndex),
-        // Assemble immediately: seam repair and footnote linking are pure and
-        // fast, and Gate 3 needs the finished document to describe its shape.
-        document: assembleBook(result.transcriptions)
-      })
+
+      // Store it before anything else can go wrong. This is the only step in
+      // the app the user cannot repeat for free, and a refresh, a crash or a
+      // closed tab between here and the export used to lose all of it.
+      await persistRun(result, state.answers['gate-identity'] ?? {}, modelId)
+
+      complete(stateFromTranscriptions(result.transcriptions, result.failures))
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -458,6 +599,11 @@ export function App(): JSX.Element {
       return
     }
     if (step.id === 'transcribe') {
+      // Already paid for, and the user said to use it: nothing to approve.
+      if (state.savedRun && (currentAnswers['useSavedRun'] ?? 'use') === 'use') {
+        void useSavedRun()
+        return
+      }
       const estimate = estimateCost({
         pageCount: state.pageCount,
         modelId: (currentAnswers['model'] as string) ?? 'claude-opus-5',
@@ -467,7 +613,16 @@ export function App(): JSX.Element {
       return
     }
     complete()
-  }, [step.id, state.pageCount, currentAnswers, complete, runExport, finishUncertainties])
+  }, [
+    step.id,
+    state.pageCount,
+    state.savedRun,
+    currentAnswers,
+    complete,
+    runExport,
+    finishUncertainties,
+    useSavedRun
+  ])
 
   return (
     <div className="shell">
@@ -651,7 +806,9 @@ export function App(): JSX.Element {
                 onClick={advance}
               >
                 {step.id === 'transcribe'
-                  ? 'Continue — show me the cost'
+                  ? state.savedRun && (currentAnswers['useSavedRun'] ?? 'use') === 'use'
+                    ? 'Use it — continue'
+                    : 'Continue — show me the cost'
                   : step.id === 'export'
                     ? 'Build the interior'
                     : 'Looks right — continue'}

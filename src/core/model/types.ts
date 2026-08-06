@@ -390,9 +390,14 @@ export interface ExportResult {
 // ---------------------------------------------------------------------------
 
 /**
- * The full serializable state of a book project. Persisted as a manifest
- * (`project.json`) alongside an assets directory (page images, etc.).
- * `schemaVersion` drives migration on load.
+ * The desktop application's `project.json` — **superseded and unused.**
+ *
+ * It describes a directory of extracted page images, a Markdown intermediate
+ * and a coordinate map, none of which the browser app produces. What is saved
+ * now is the one expensive thing, the transcription: see `SavedRun` in
+ * `@core/project`. This shape is retained only because SPEC §9 describes it and
+ * several of its members (structural tags, find-replace rules, image edits)
+ * belong to features still on the list.
  */
 export interface ProjectFile {
   schemaVersion: number

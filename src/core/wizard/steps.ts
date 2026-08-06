@@ -15,6 +15,7 @@ import type { LexiconEntry } from '@core/lexicon'
 import type { BookMetadata, PageClassification } from '@core/pages'
 import { isFrontMatter } from '@core/pages'
 import type { VerificationFinding } from '@core/transcribe'
+import { describeAge, type SavedRunSummary } from '@core/project'
 import type { BookDocument } from '@core/assemble'
 import { BODY_FONTS, fontForPeriod, trimForKind, type PeriodFeel } from '@core/design'
 import { bookWordCount, seamCount } from '@core/assemble'
@@ -47,6 +48,12 @@ export interface WizardState {
   cropFor?: (tokenId: string) => string | undefined
   /** True when an API key is already stored locally — don't ask again. */
   hasApiKey: boolean
+  /**
+   * A transcription of *this* file that was paid for on an earlier visit, if
+   * there is one. Its presence changes the transcribe step from "approve this
+   * cost" to "you have already paid for this — use it?".
+   */
+  savedRun: SavedRunSummary | null
   /** Deterministic findings from verification, most severe first. */
   findings: VerificationFinding[]
   /** Spans the model itself reported as unreadable, per page. */
@@ -78,6 +85,7 @@ export function initialState(): WizardState {
     },
     classifications: [],
     hasApiKey: false,
+    savedRun: null,
     findings: [],
     uncertainties: [],
     failedPages: [],
@@ -265,6 +273,43 @@ const transcribe: Step = {
   questions: (s) => {
     // Once a key is stored the credential question disappears — never ask twice.
     const qs: Question[] = []
+
+    // The user has already paid to have this exact file read. Asking them to
+    // approve the cost again — or worse, spending it silently — would be the
+    // app forgetting something they cannot get back for free. Everything else
+    // in the flow is regenerated from the scan on the way here, so accepting
+    // this is a complete resumption, not a degraded one.
+    if (s.savedRun) {
+      const run = s.savedRun
+      const failed =
+        run.failedPages > 0 ? ` ${run.failedPages} page(s) failed and stayed unread.` : ''
+      qs.push({
+        id: 'useSavedRun',
+        type: 'choice',
+        prompt: 'You have already had this book read.',
+        help:
+          `${run.pageCount} page(s), transcribed ${describeAge(run.savedAt)} by ` +
+          `${run.modelId}.${failed} Reading it again would cost the same as the first time.`,
+        defaultValue: 'use',
+        options: [
+          {
+            value: 'use',
+            label: 'Use what I already paid for',
+            description: 'Free, and immediate.'
+          },
+          {
+            value: 'again',
+            label: 'Read it again',
+            description: 'Only worth it if the first reading went badly.'
+          }
+        ]
+      })
+
+      // The rest of this gate is about *spending*, so it has nothing to ask
+      // unless the user chooses to spend again.
+      const answers = s.answers['transcribe'] ?? {}
+      if ((answers['useSavedRun'] ?? 'use') === 'use') return qs
+    }
 
     if (!s.hasApiKey) {
       qs.push({

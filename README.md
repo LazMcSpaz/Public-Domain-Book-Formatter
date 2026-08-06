@@ -98,15 +98,17 @@ footnotes set at the foot of the page they belong to, and a table of contents
 carrying measured page numbers. The KDP report's page count and typesetting
 warnings are measured rather than estimated.
 
+The one step that costs money — the vision pass — is saved against the file it
+read, so reopening the same book offers the transcription back instead of
+charging for it again. Everything else is regenerated from the scan, free, so a
+resumed session is complete rather than degraded.
+
 **Not built yet**, with the honest reasons in
 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md):
 
 - **Illustrations.** The layout engine has no image support, so an illustrated
   book cannot place its plates. `src/core/image` holds region detection, DPI
   maths and a non-destructive op engine, but nothing calls them yet.
-- **Save and resume.** A refresh loses a paid transcription run. The project
-  schema and migrations exist in `src/core/project`; the browser storage
-  adapter does not.
 - **Ornaments in the PDF.** The design gate offers a chapter-opener ornament and
   the PDF path ignores it.
 - **Real small capitals**, and the ligatures that pdf-lib's embedder cannot

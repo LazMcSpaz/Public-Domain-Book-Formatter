@@ -7,7 +7,7 @@
  * Usage: node scripts/screenshot-flow.mjs [outDir]
  */
 import { chromium } from 'playwright'
-import { mkdir } from 'node:fs/promises'
+import { mkdir, stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 const OUT = process.argv[2] ?? 'screenshots'
@@ -70,6 +70,81 @@ if (!reopen.ok)
   throw new Error(`Reopening the PDF failed: ${reopen.error ?? 'page count mismatch'}`)
 console.log('  → openPdf is re-entrant on the same file')
 
+// The saved-run store is the only thing standing between a paid transcription
+// and a closed tab, and IndexedDB exists in no unit test — so it is exercised
+// here, against the real thing.
+console.log('2c. the saved-run store')
+const store = await page.evaluate(async (repo) => {
+  const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+  const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+
+  const make = (key, pages, savedAt) =>
+    project.createSavedRun({
+      key,
+      fileName: `${key}.pdf`,
+      pageCount: pages,
+      transcriptions: Array.from({ length: pages }, (_, i) => ({
+        pageIndex: i,
+        role: 'body',
+        blocks: [{ kind: 'paragraph', text: `Page ${i}` }],
+        uncertain: [],
+        furniture: {}
+      })),
+      failures: [],
+      usage: { inputTokens: 1, outputTokens: 2, cacheReadTokens: 0 },
+      modelId: 'claude-opus-5',
+      identityAnswers: { orthography: 'preserve' },
+      savedAt
+    })
+
+  try {
+    // A run survives a round-trip through storage with its pages intact.
+    const saved = await runStore.saveRun(make('probe', 3, new Date().toISOString()))
+    const back = await runStore.loadRun('probe')
+    const roundTrip =
+      saved && back !== null && back.transcriptions.length === 3 && back.modelId === 'claude-opus-5'
+
+    // The store is capped, and evicts by age rather than at random.
+    for (let i = 0; i < 12; i++) {
+      await runStore.saveRun(make(`evict-${i}`, 1, new Date(2020, 0, i + 1).toISOString()))
+    }
+    const listed = await runStore.listRuns()
+    const capped = listed.length <= 10
+    const keptNewest = listed.some((r) => r.key === 'evict-11')
+    const droppedOldest = !listed.some((r) => r.key === 'evict-0')
+
+    // A record this version cannot read is discarded, not offered forever.
+    await new Promise((resolve) => {
+      const req = indexedDB.open('pdbf', 1)
+      req.onsuccess = () => {
+        const db = req.result
+        const tx = db.transaction('runs', 'readwrite')
+        tx.objectStore('runs').put({ key: 'stale', schemaVersion: 4, savedAt: 'x' })
+        tx.oncomplete = () => {
+          db.close()
+          resolve()
+        }
+      }
+    })
+    const stale = await runStore.loadRun('stale')
+    const staleDropped = stale === null && (await runStore.loadRun('stale')) === null
+
+    for (const key of ['probe', ...Array.from({ length: 12 }, (_, i) => `evict-${i}`)]) {
+      await runStore.deleteRun(key)
+    }
+
+    return { roundTrip, capped, keptNewest, droppedOldest, staleDropped }
+  } catch (e) {
+    return { error: String(e.message) }
+  }
+}, REPO)
+
+if (store.error) throw new Error(`Saved-run store failed: ${store.error}`)
+for (const [check, ok] of Object.entries(store)) {
+  if (!ok) throw new Error(`Saved-run store failed: ${check}`)
+}
+console.log('  → runs round-trip, the store is capped and evicts oldest, stale records are dropped')
+
 console.log('3. waiting for gate 1')
 await page.waitForSelector('.terms', { timeout: 180000 })
 await shot('03-gate-identity')
@@ -90,6 +165,88 @@ await page.setViewportSize({ width: 1360, height: 900 })
 
 const rows = await page.locator('.terms tbody tr').count()
 const crops = await page.locator('.terms img').count()
+
+// The one step in this app that costs money is the one worth not repeating.
+// A run stored under this file's key should be *offered* rather than silently
+// used or silently ignored, and choosing it should skip every question that
+// exists only to approve a charge.
+console.log('5b. a paid run is offered back, not re-spent')
+const bookPath = resolve(REPO, 'public/test-book.pdf')
+const bookStat = await stat(bookPath)
+
+// The key comes from the app's own `fileKey`, never from a copy of its format
+// here — a harness that reimplements the thing it is testing passes when the
+// two drift apart, which is exactly what happened the first time this was
+// written. Playwright preserves the file's real modification time when it is
+// given a path, so the key it produces on load matches this one.
+const savedKey = await page.evaluate(
+  async ([repo, meta]) => {
+    const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+    return project.fileKey(meta)
+  },
+  [REPO, { name: 'test-book.pdf', size: bookStat.size, lastModified: Math.floor(bookStat.mtimeMs) }]
+)
+
+const seeded = await page.evaluate(
+  async ([repo, key]) => {
+    const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+    const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+    await runStore.deleteRun(key)
+    return runStore.saveRun(
+      project.createSavedRun({
+        key,
+        fileName: 'test-book.pdf',
+        pageCount: 8,
+        transcriptions: Array.from({ length: 8 }, (_, i) => ({
+          pageIndex: i,
+          role: i === 0 ? 'title-page' : 'body',
+          blocks: [{ kind: 'paragraph', text: `Restored page ${i + 1}.` }],
+          uncertain: [],
+          furniture: {}
+        })),
+        failures: [],
+        usage: { inputTokens: 1000, outputTokens: 2000, cacheReadTokens: 0 },
+        modelId: 'claude-opus-5',
+        identityAnswers: { orthography: 'preserve' }
+      })
+    )
+  },
+  [REPO, savedKey]
+)
+if (!seeded) throw new Error('Could not seed a saved run')
+
+// Loaded from the path rather than a buffer: Playwright keeps the file's real
+// modification time that way, which is what the key is built from.
+await page.setInputFiles('input[type=file]', bookPath)
+await page.waitForSelector('.terms', { timeout: 180000 })
+
+// Title and author are required at this gate — the scan's own front matter has
+// not been read yet, so nothing has filled them in.
+const fill = (question, value) =>
+  page.locator('.q').filter({ hasText: question }).locator('input[type=text]').fill(value)
+await fill('Book title', 'The Alchemist His Practise')
+await fill('Author', 'Anonymous')
+
+await page.locator('button.primary', { hasText: 'Looks right' }).click()
+await page.waitForSelector('.q', { timeout: 20000 })
+
+const offered = await page.locator('.q').filter({ hasText: 'already had this book read' }).count()
+const askedForKey = await page.locator('.q').filter({ hasText: 'API key' }).count()
+await shot('08b-saved-run-offered')
+
+// Taking the offer must reach the next gate without a cost approval appearing.
+await page.locator('.actions button.primary').first().click()
+await page.waitForTimeout(2000)
+const resumedTo = await page.locator('.rail li.active .label').innerText()
+const chargedAgain = await page.locator('.cost').count()
+
+await page.evaluate(
+  async ([repo, key]) => {
+    const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+    await runStore.deleteRun(key)
+  },
+  [REPO, savedKey]
+)
 
 // The gates after this one sit behind a paid transcription run, so they are
 // shot through the dev-only preview instead (see src/app/DevPreview.tsx) —
@@ -182,6 +339,9 @@ console.log(`  term rows: ${rows}`)
 console.log(`  word crops rendered: ${crops}`)
 console.log(`  design summary: ${after}`)
 console.log(`  summary responds to answers: ${before !== after}`)
+console.log(`  saved run offered: ${offered === 1}`)
+console.log(`  no key asked for when reusing it: ${askedForKey === 0}`)
+console.log(`  resumed to: ${resumedTo} (cost prompts: ${chargedAgain})`)
 console.log(`  preview pages rendered: ${leaves}`)
 console.log(`  preview responds to answers: ${pagesBefore !== pagesAfter}`)
 console.log(`  design gate mobile overflow: ${previewOverflow}px`)
@@ -195,6 +355,9 @@ process.exit(
   errors.length === 0 &&
     rows > 0 &&
     before !== after &&
+    offered === 1 &&
+    askedForKey === 0 &&
+    chargedAgain === 0 &&
     leaves > 0 &&
     pagesBefore !== pagesAfter &&
     /\d+ pages/.test(download) &&

@@ -102,8 +102,14 @@ Path aliases: `@core`, `@platform` (defined in `tsconfig.json`,
   time. Never accumulate page canvases.
 - **Object URLs must be revoked.** Crops and thumbnails leak otherwise — see
   `releaseRecon`.
-- **Project file is versioned**: bump `CURRENT_SCHEMA_VERSION` and extend
-  `migrate()` in `src/core/project/project-file.ts` on any shape change.
+- **Only the paid step is persisted.** Everything else — rendering, OCR, the
+  lexicon, assembly, layout — is free and repeatable, so the saved unit is the
+  transcription, keyed to the file it came from (`src/core/project`). Reopening
+  a book redoes the free half and _offers_ the paid half back as a question.
+  Bump `CURRENT_SCHEMA_VERSION` and extend `migrateSavedRun()` in
+  `src/core/project/saved-run.ts` on any shape change; it throws rather than
+  returning a partial run, because a half-restored transcription looks like a
+  book that was read and prints with holes in it.
 
 ### Pinned dependencies (deliberate)
 
@@ -158,7 +164,10 @@ in `screenshots/`. Don't ship UI blind.
   falls on, renumbered straight through the book, with the space reserved as
   lines are placed — and a **table of contents with measured page numbers**,
   laid out twice so the second pass cannot invalidate the first.
+- **Also done**: **save and resume.** A finished transcription is stored in
+  IndexedDB against the file's identity, so a refresh, a crash or a closed tab
+  no longer costs the user the one thing they paid for.
 - **Next**: illustrations (the page model has no image item, so an illustrated
-  book cannot place its plates), save/resume (a refresh loses a paid run), and
-  ornaments in the PDF. Then delete the LaTeX path.
+  book cannot place its plates), and ornaments in the PDF. Then delete the
+  LaTeX path.
   See [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md).

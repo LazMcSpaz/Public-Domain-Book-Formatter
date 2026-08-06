@@ -63,6 +63,11 @@ It drives the wizard in headless Chromium against a generated 8-page test book
 - the page preview rendered, and its **pixels** changed when a style answer
   changed (the image `src` is an object URL that changes on every regeneration
   whether or not anything moved, so it proves nothing);
+- a transcription seeded into IndexedDB under the book's key is **offered back**
+  at the transcribe gate rather than silently reused or silently ignored, taking
+  it asks for no API key and raises no cost prompt, and it lands on the next
+  gate — the store itself is round-tripped, capped, and checked for evicting the
+  oldest and discarding records it cannot read;
 - the export offered a PDF with a page count;
 - no KDP check is still reporting `pending`;
 - neither the design gate nor the export screen scrolls sideways at 390px.
@@ -108,5 +113,11 @@ money. Budget one short book.
   `public/fonts/junicode/README.md`.
 - **Illustrations** are not laid out at all yet, so an illustrated book comes
   back as text only.
-- **Nothing is saved.** A refresh loses a completed transcription run, which is
-  the expensive thing to lose. Do not reload the tab mid-book.
+- **Resuming across browsers or machines.** The transcription is saved in _this_
+  browser's IndexedDB. Another browser, another machine, or a cleared site
+  storage means reading — and paying for — the book again.
+
+After the run finishes, reload the tab and re-open the same PDF. The free pass
+runs again and the transcribe gate should offer the run back rather than asking
+for a key. That is the one path worth checking by hand, because it is the one
+that protects the money.

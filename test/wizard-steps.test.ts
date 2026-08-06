@@ -215,6 +215,16 @@ describe('transcribe step questions', () => {
     ...overrides
   })
 
+  const savedRun = {
+    key: 'alchemist.pdf 1024 99',
+    fileName: 'alchemist.pdf',
+    savedAt: new Date().toISOString(),
+    pageCount: 312,
+    failedPages: 0,
+    modelId: 'claude-opus-5',
+    usage: { inputTokens: 1, outputTokens: 2, cacheReadTokens: 0 }
+  }
+
   it('asks for an API key only when one is not already stored', () => {
     const without = stepById('transcribe').questions(ready({ hasApiKey: false }))
     expect(without.find((q) => q.id === 'apiKey')).toBeDefined()
@@ -238,6 +248,45 @@ describe('transcribe step questions', () => {
     expect(q.type).toBe('choice')
     expect((q as { defaultValue: string }).defaultValue).toBe('claude-opus-5')
     expect((q as { options: unknown[] }).options).toHaveLength(3)
+  })
+
+  it('offers a transcription this file was already paid for', () => {
+    const q = stepById('transcribe')
+      .questions(ready({ savedRun }))
+      .find((x) => x.id === 'useSavedRun')!
+    expect(q).toBeDefined()
+    expect((q as { defaultValue: string }).defaultValue).toBe('use')
+    // The evidence for the recommendation: how much, how old, and by what.
+    expect(q.help).toContain('312')
+    expect(q.help).toMatch(/claude-opus-5/)
+  })
+
+  it('asks nothing about spending when the saved run is being used', () => {
+    // Every other question at this gate exists to approve a charge. With
+    // nothing to charge for, asking them would be asking for no reason.
+    const qs = stepById('transcribe').questions(
+      ready({ savedRun, hasApiKey: false, answers: { transcribe: { useSavedRun: 'use' } } })
+    )
+    expect(qs.map((q) => q.id)).toEqual(['useSavedRun'])
+  })
+
+  it('asks the spending questions again when the user chooses to re-read', () => {
+    const qs = stepById('transcribe').questions(
+      ready({ savedRun, hasApiKey: false, answers: { transcribe: { useSavedRun: 'again' } } })
+    )
+    expect(qs.map((q) => q.id)).toEqual(['useSavedRun', 'apiKey', 'model', 'bookContext'])
+  })
+
+  it('says how many pages went unread, rather than implying a clean run', () => {
+    const q = stepById('transcribe')
+      .questions(ready({ savedRun: { ...savedRun, failedPages: 4 } }))
+      .find((x) => x.id === 'useSavedRun')!
+    expect(q.help).toMatch(/4 page\(s\) failed/)
+  })
+
+  it('asks nothing about a saved run when there is none', () => {
+    const qs = stepById('transcribe').questions(ready())
+    expect(qs.find((q) => q.id === 'useSavedRun')).toBeUndefined()
   })
 
   it('invites book context, which measurably helps unusual vocabulary', () => {
