@@ -370,6 +370,71 @@ await page.waitForTimeout(300)
 const sectionsWritten = await page.locator('.proof-section').count()
 await shot('05c2d-proof-introduction')
 
+// The image-editing mode: SPEC §6's "real instrument". The controls have to
+// reach the pixels that get embedded, or they are decoration.
+const editors = await page.locator('.editor').count()
+const beforeDpi = await page
+  .locator('.editor-hint')
+  .first()
+  .innerText()
+  .catch(() => '')
+
+// Levels and a threshold on the first picture, which is the pair that rescues
+// an engraving printed on foxed paper.
+const blackPoint = page.locator('.editor-controls label', { hasText: 'Black point' })
+await blackPoint.locator('input[type=range]').fill('60')
+await page
+  .locator('.editor-toggles label', { hasText: 'Pure black and white' })
+  .locator('input')
+  .first()
+  .check()
+await page.waitForTimeout(1200)
+const retouchedPicture = await page.locator('.editor-reset').count()
+await shot('05c2e-image-editing')
+
+// A picture cut from the scan is edited on the leaf it came from — which is
+// also the case that matters, since the detector's crop is a first guess.
+await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
+await page.waitForTimeout(400)
+await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
+await page.waitForTimeout(400)
+await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
+await page.waitForTimeout(400)
+await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
+await page.waitForTimeout(1500)
+
+const cutEditor = await page.locator('.proof-picture .editor').count()
+const cutHintBefore = await page
+  .locator('.proof-picture .editor-hint')
+  .first()
+  .innerText()
+  .catch(() => '')
+
+// Crop it by dragging across the middle of the preview, and check the book's
+// share of pixels actually falls.
+const canvas = page.locator('.proof-picture .editor-canvas').first()
+const box = await canvas.boundingBox()
+let cutHintAfter = cutHintBefore
+if (box) {
+  await page.mouse.move(box.x + box.width * 0.25, box.y + box.height * 0.25)
+  await page.mouse.down()
+  await page.mouse.move(box.x + box.width * 0.75, box.y + box.height * 0.75, { steps: 8 })
+  await page.mouse.up()
+  await page.waitForTimeout(1500)
+  cutHintAfter = await page
+    .locator('.proof-picture .editor-hint')
+    .first()
+    .innerText()
+    .catch(() => '')
+}
+await shot('05c2f-image-crop')
+
+const pixelsOf = (hint) => {
+  const m = /(\d+)×(\d+)/.exec(hint.replace(/\s+/g, ' '))
+  return m ? Number(m[1]) * Number(m[2]) : 0
+}
+const cropShrankIt = pixelsOf(cutHintAfter) > 0 && pixelsOf(cutHintAfter) < pixelsOf(cutHintBefore)
+
 // The phone viewport: the scan stacks above the text rather than beside it.
 await page.setViewportSize({ width: 390, height: 844 })
 await page.waitForTimeout(400)
@@ -572,6 +637,11 @@ console.log(`  after correcting one: ${correctedCount.replace(/\s+/g, ' ')}`)
 console.log(`  editor's notes attached: ${annotations}`)
 console.log(`  pictures the editor added: ${suppliedPictures} (previewed: ${suppliedPreview})`)
 console.log(`  divisions written: ${sectionsWritten}`)
+console.log(`  image editors offered: ${editors} (${beforeDpi.replace(/\s+/g, ' ')})`)
+console.log(`  retouching applied: ${retouchedPicture > 0}`)
+console.log(`  editor on a scan-cut picture: ${cutEditor > 0}`)
+console.log(`  dragging a crop shrinks what the book gets: ${cropShrankIt}`)
+console.log(`    ${cutHintBefore.replace(/\s+/g, ' ')} -> ${cutHintAfter.replace(/\s+/g, ' ')}`)
 console.log(`  the introduction reaches the contents: ${contentsNote.replace(/\s+/g, ' ')}`)
 console.log(`  the note is set at the foot of a page: ${noteNote.replace(/\s+/g, ' ')}`)
 console.log(`  proof sheet mobile overflow: ${proofOverflow}px`)
@@ -608,6 +678,10 @@ process.exit(
     annotations === 1 &&
     suppliedPictures === 1 &&
     sectionsWritten === 1 &&
+    editors > 0 &&
+    retouchedPicture > 0 &&
+    cutEditor > 0 &&
+    cropShrankIt &&
     // A book whose only heading is the editor's own still gets a contents page.
     /1 heading\(s\), 1 of them yours/.test(contentsNote) &&
     suppliedPreview === 1 &&

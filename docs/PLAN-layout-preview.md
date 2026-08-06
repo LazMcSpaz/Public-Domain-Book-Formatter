@@ -279,10 +279,19 @@ Each step leaves the app working.
     page. And crops are never upsampled — the effective DPI the KDP check
     reports is the resolution the book will really print at.
 
-11. **The image-editing mode** of SPEC §6 — crop, straighten, levels, despeckle,
-    background removal, non-destructive over the original pixels.
-    `src/core/image/engine` is that machinery, written and unwired. This is the
-    only remaining item.
+11. ~~**The image-editing mode** of SPEC §6 — crop, straighten, levels,
+    despeckle, background removal, non-destructive over the original pixels.
+    `src/core/image/engine` is that machinery, written and unwired.~~ **Done**,
+    apart from background removal, which the spec itself calls best-effort and
+    which needs manual touch-up of the selection to be honest.
+
+    The engine turned out to need one addition: `sizeAfterOps`, so the core can
+    know how big a retouched picture is without holding its pixels. The DPI
+    check divides source pixels by printed inches, and a crop that halves a
+    picture halves what the book prints with — a retouch that did not move that
+    number would make the one honest check in the report lie.
+
+    Everything in this plan is now built.
 
 ## Decisions taken
 

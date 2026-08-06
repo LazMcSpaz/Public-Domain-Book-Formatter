@@ -24,6 +24,7 @@
  */
 import { BLOCK_KINDS, type PageTranscription } from '@core/transcribe'
 import type { BookEdit } from '@core/edits'
+import type { ImageEditOp } from '@core/model'
 
 /**
  * Current schema version. Bump and extend `migrateSavedRun` on any shape change.
@@ -332,6 +333,21 @@ function parseEdits(raw: unknown): BookEdit[] {
             sourceHeight: value['sourceHeight'],
             ...(typeof caption === 'string' ? { caption } : {})
           })
+        }
+        break
+      }
+      case 'retouch': {
+        const illustrationId = str(value['illustrationId'], '')
+        const ops = value['ops']
+        if (illustrationId && Array.isArray(ops)) {
+          // Each op is checked for the shape the engine reads, and anything
+          // else is dropped — an op with no `op` would reach `applyOne`'s
+          // switch and silently do nothing, which is worse than not being there.
+          const clean = ops.filter(
+            (o): o is ImageEditOp =>
+              isObject(o) && typeof o['op'] === 'string' && isObject(o['params'])
+          )
+          if (clean.length > 0) out.push({ kind: 'retouch', illustrationId, ops: clean })
         }
         break
       }

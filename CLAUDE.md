@@ -207,6 +207,14 @@ in `screenshots/`. Don't ship UI blind.
   render resolution, set to the measure (or given a leaf of their own), with the
   caption pulled out of the text flow and put under the picture. The KDP
   image-DPI check is measured from the placed size.
-- **Next**: the image-editing mode of SPEC §6 — crop, straighten, levels,
-  despeckle, background removal. `src/core/image/engine` is written and unwired.
-  See [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md).
+- **Also done**: **the image-editing mode** of SPEC §6 — crop by dragging,
+  straighten, brightness, contrast, levels, despeckle, grey and threshold, on
+  pictures cut from the scan and supplied alike. `src/core/image/engine` is
+  wired at last. Non-destructive: the stack is re-applied over the original
+  pixels every time, and the core resolves only the _size_ it leaves, through
+  `sizeAfterOps`, because the DPI check divides by it. Background removal is
+  deliberately not offered — the spec calls it best-effort, and without manual
+  touch-up of the selection it is a magic button that eats part of the picture.
+- **Next**: nothing from the layout plan. See
+  [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) for what was
+  built and why.

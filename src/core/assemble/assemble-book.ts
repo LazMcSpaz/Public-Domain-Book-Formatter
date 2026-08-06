@@ -14,6 +14,7 @@
  *
  * Pure: no I/O, no model calls.
  */
+import type { ImageEditOp } from '@core/model'
 import { dispositionFor, type PageRole } from '@core/pages'
 import type { PageTranscription, TranscribedBlock } from '@core/transcribe'
 
@@ -124,6 +125,16 @@ export interface Illustration extends IllustrationSource {
   anchorAfterBlockId?: string | null
   /** Defaults to `scan`. A supplied picture has no source leaf to fall back on. */
   origin?: IllustrationOrigin
+  /**
+   * Retouching to apply over the original pixels before embedding — crop,
+   * straighten, levels and the rest of SPEC §6.
+   *
+   * Never applied to the stored pixels, only carried beside them, so the
+   * original survives every edit and any of them can be undone. `sourceWidth`
+   * and `sourceHeight` already account for the ops that change the size,
+   * because the DPI check divides by them.
+   */
+  edits?: ImageEditOp[]
 }
 
 /**

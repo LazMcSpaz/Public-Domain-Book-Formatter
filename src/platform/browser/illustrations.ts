@@ -18,8 +18,8 @@
  *
  * Browser-only: pdf.js and canvas.
  */
-import { detectRegions } from '@core/image'
-import type { ImageRegion } from '@core/model'
+import { applyOps, detectRegions, type RasterImage } from '@core/image'
+import type { ImageEditOp, ImageRegion } from '@core/model'
 import type { IllustrationSource } from '@core/assemble'
 import { cropToObjectUrl, cropToPngBytes, inkProfile, openPdf, renderPage } from './pdf'
 
@@ -266,6 +266,89 @@ export async function readSuppliedImage(file: Blob): Promise<SuppliedImage> {
     if (!blob) throw new Error('Could not encode the picture')
 
     return { bytes: new Uint8Array(await blob.arrayBuffer()), width, height }
+  } finally {
+    bitmap.close()
+  }
+}
+
+/**
+ * Apply an op stack to a picture's pixels.
+ *
+ * Always run over the **original** bytes, never over the last result. That is
+ * what makes the stack non-destructive in the sense SPEC §6 means: a slider can
+ * be dragged back, an op removed from the middle, the order changed, and the
+ * answer is re-derived rather than accumulated — so nothing is ever lost by
+ * having edited, and nothing compounds by editing twice.
+ *
+ * The size it returns is the truth about how many pixels the book will have to
+ * print with. `sizeAfterOps` predicts the same number without pixels, for the
+ * document's DPI check, and `test/image-ops.test.ts` holds the two together.
+ */
+export async function retouchPng(
+  bytes: Uint8Array,
+  ops: readonly ImageEditOp[]
+): Promise<SuppliedImage> {
+  if (ops.length === 0) {
+    const size = await measurePng(bytes)
+    return { bytes, ...size }
+  }
+
+  const bitmap = await createImageBitmap(new Blob([bytes as BlobPart], { type: 'image/png' }))
+  let source: RasterImage
+  try {
+    const read = document.createElement('canvas')
+    read.width = bitmap.width
+    read.height = bitmap.height
+    const readCtx = read.getContext('2d', { willReadFrequently: true })
+    if (!readCtx) throw new Error('Could not acquire a 2D canvas context')
+    readCtx.drawImage(bitmap, 0, 0)
+    const data = readCtx.getImageData(0, 0, bitmap.width, bitmap.height)
+    source = { width: data.width, height: data.height, data: data.data }
+    read.width = 0
+    read.height = 0
+  } finally {
+    bitmap.close()
+  }
+
+  const result = applyOps(source, ops)
+  if (result.width <= 0 || result.height <= 0) {
+    throw new Error('Those edits leave nothing of the picture')
+  }
+
+  const out = document.createElement('canvas')
+  out.width = result.width
+  out.height = result.height
+  const outCtx = out.getContext('2d')
+  if (!outCtx) throw new Error('Could not acquire a 2D canvas context')
+  // Paper first: an op that clears pixels to transparent — background removal —
+  // would otherwise print as black wherever it worked.
+  outCtx.fillStyle = '#ffffff'
+  outCtx.fillRect(0, 0, result.width, result.height)
+  // A fresh clamped array: the engine's buffer may be a view, and `ImageData`
+  // wants one it owns.
+  outCtx.putImageData(
+    new ImageData(new Uint8ClampedArray(result.data), result.width, result.height),
+    0,
+    0
+  )
+
+  const blob = await new Promise<Blob | null>((resolve) => out.toBlob(resolve, 'image/png'))
+  out.width = 0
+  out.height = 0
+  if (!blob) throw new Error('Could not encode the retouched picture')
+
+  return {
+    bytes: new Uint8Array(await blob.arrayBuffer()),
+    width: result.width,
+    height: result.height
+  }
+}
+
+/** The pixel size of a PNG, without decoding it into a canvas we then discard. */
+async function measurePng(bytes: Uint8Array): Promise<{ width: number; height: number }> {
+  const bitmap = await createImageBitmap(new Blob([bytes as BlobPart], { type: 'image/png' }))
+  try {
+    return { width: bitmap.width, height: bitmap.height }
   } finally {
     bitmap.close()
   }

@@ -4,7 +4,7 @@
  * The app interviews the user: it runs what it can on its own, and stops only
  * at gates where human judgment matters, asking with the evidence attached.
  */
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   STEPS,
   activeStep,
@@ -42,11 +42,16 @@ import { profileFromAnswers, describeProfile, type DesignAnswers } from '@core/d
 import { buildExport, editionFromAnswers, type BuildExportResult } from '@core/export'
 import { applyEdits, type BookEdit } from '@core/edits'
 import { renderInterior } from '../platform/browser/interior'
-import { cropIllustrations, readSuppliedImage } from '../platform/browser/illustrations'
+import { cropIllustrations, readSuppliedImage, retouchPng } from '../platform/browser/illustrations'
 import { renderPageToObjectUrl } from '../platform/browser/pdf'
 import { ExportResult } from './ExportResult'
 import { PreviewPane } from './PreviewPane'
 import { ProofSheet } from './ProofSheet'
+
+/** A cache key that changes whenever the stack that produced the pixels does. */
+function retouchKey(id: string, ops: readonly unknown[]): string {
+  return `${id}:${JSON.stringify(ops)}`
+}
 
 export function App(): JSX.Element {
   const [state, setState] = useState<WizardState>(initialState)
@@ -90,11 +95,6 @@ export function App(): JSX.Element {
    * relabel them and break a paragraph that legitimately runs across a plate.
    */
   const excludedPagesRef = useRef<number[]>([])
-  /**
-   * Preview URLs for the pictures the editor supplied, so the proof sheet can
-   * show one back. Kept beside the bytes and revoked when a new book is opened.
-   */
-  const imagePreviewsRef = useRef<Map<string, string>>(new Map())
   /**
    * Pages the user already looked at and accepted at the uncertainty gate.
    *
@@ -187,7 +187,7 @@ export function App(): JSX.Element {
    * is no incremental update to get wrong.
    */
   /** Every picture in the book, whichever half of it each came from. */
-  const allImageBytes = useCallback(
+  const originalImageBytes = useCallback(
     (): Map<string, Uint8Array> => new Map([...cropBytesRef.current, ...suppliedBytesRef.current]),
     []
   )
@@ -196,6 +196,127 @@ export function App(): JSX.Element {
     () => (state.document ? applyEdits(state.document, edits) : null),
     [state.document, edits]
   )
+
+  /**
+   * Retouched pixels, keyed by the picture *and* the exact stack that made them.
+   *
+   * Keyed by the stack because the ops are re-applied over the original every
+   * time: an entry is only valid for the stack it came from, and a slider
+   * dragged back to where it was should hit the cache rather than re-render.
+   */
+  const retouchedRef = useRef<Map<string, Uint8Array>>(new Map())
+  const [retouchTick, setRetouchTick] = useState(0)
+
+  /** What the writer and the preview draw: retouched pixels where there are any. */
+  const drawableImageBytes = useCallback((): Map<string, Uint8Array> => {
+    const out = originalImageBytes()
+    for (const illustration of correctedDocument?.illustrations ?? []) {
+      if (!illustration.edits?.length) continue
+      const cached = retouchedRef.current.get(retouchKey(illustration.id, illustration.edits))
+      if (cached) out.set(illustration.id, cached)
+    }
+    return out
+    // `retouchTick` is the dependency that matters: it changes when a retouch
+    // finishes, which is what makes the preview redraw with the new pixels.
+  }, [originalImageBytes, correctedDocument, retouchTick])
+
+  /**
+   * A preview URL for a picture as it currently stands.
+   *
+   * Minted from whatever bytes will actually be drawn, so the editor shows its
+   * own work rather than the pixels it started from. Object URLs are cached per
+   * byte array and revoked when the book is closed.
+   */
+  const previewUrlsRef = useRef<Map<Uint8Array, string>>(new Map())
+  const previewOf = useCallback(
+    (id: string): string | undefined => {
+      const bytes = drawableImageBytes().get(id)
+      if (!bytes) return undefined
+      const existing = previewUrlsRef.current.get(bytes)
+      if (existing) return existing
+      const url = URL.createObjectURL(new Blob([bytes as BlobPart], { type: 'image/png' }))
+      previewUrlsRef.current.set(bytes, url)
+      return url
+    },
+    // Re-created when new pixels land, so React re-renders the img with them.
+    [drawableImageBytes]
+  )
+
+  /**
+   * Keep the retouched pixels in step with the op stacks.
+   *
+   * Driven off the document rather than off the sliders, so it covers a stack
+   * restored from a saved run as well as one being dragged right now.
+   */
+  useEffect(() => {
+    const wanted = (correctedDocument?.illustrations ?? []).filter((i) => i.edits?.length)
+    if (wanted.length === 0) return
+
+    let cancelled = false
+    // Debounced: a slider emits an op per pixel of travel, and each one is a
+    // full decode, filter and re-encode of the picture.
+    const timer = setTimeout(() => {
+      void (async () => {
+        let produced = false
+        for (const illustration of wanted) {
+          const ops = illustration.edits ?? []
+          const key = retouchKey(illustration.id, ops)
+          if (retouchedRef.current.has(key)) continue
+          const original = originalImageBytes().get(illustration.id)
+          if (!original) continue
+          try {
+            const result = await retouchPng(original, ops)
+            if (cancelled) return
+            retouchedRef.current.set(key, result.bytes)
+            produced = true
+          } catch {
+            // The original still draws, so a failed retouch costs the edit
+            // rather than the picture.
+          }
+        }
+        if (produced && !cancelled) setRetouchTick((n) => n + 1)
+      })()
+    }, 200)
+
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
+  }, [correctedDocument, originalImageBytes])
+
+  /**
+   * Every picture that can be retouched, with both sizes it has.
+   *
+   * The *original* size comes from before any edits — a crop is measured
+   * against it, because the stack is re-applied from the original every time
+   * and a second drag replaces the first rather than cropping the crop. The
+   * current size comes from after them, and is what the book prints with.
+   */
+  const retouchablePictures = useMemo(() => {
+    const originals = new Map<string, { width: number; height: number }>()
+    for (const i of state.document?.illustrations ?? []) {
+      originals.set(i.id, { width: i.sourceWidth, height: i.sourceHeight })
+    }
+    for (const edit of edits) {
+      if (edit.kind === 'image') {
+        originals.set(edit.imageId, { width: edit.sourceWidth, height: edit.sourceHeight })
+      }
+    }
+
+    return (correctedDocument?.illustrations ?? []).map((i) => {
+      const original = originals.get(i.id) ?? { width: i.sourceWidth, height: i.sourceHeight }
+      return {
+        id: i.id,
+        sourceWidth: original.width,
+        sourceHeight: original.height,
+        currentWidth: i.sourceWidth,
+        currentHeight: i.sourceHeight,
+        // A supplied picture has no leaf, so it is edited where it was added
+        // rather than on a page of the scan.
+        pageIndex: i.origin === 'supplied' ? null : i.pageIndex
+      }
+    })
+  }, [state.document, correctedDocument, edits])
 
   /** The proof step has no questions, so the shell renders its sheet instead. */
   const isProofing = step.id === 'proof' && state.document !== null
@@ -235,10 +356,6 @@ export function App(): JSX.Element {
         // removed; a reused one would overwrite bytes still referenced.
         const imageId = `img${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`
         suppliedBytesRef.current = new Map(suppliedBytesRef.current).set(imageId, decoded.bytes)
-        imagePreviewsRef.current.set(
-          imageId,
-          URL.createObjectURL(new Blob([decoded.bytes as BlobPart], { type: 'image/png' }))
-        )
         return { imageId, sourceWidth: decoded.width, sourceHeight: decoded.height }
       } catch (err) {
         setError(
@@ -268,10 +385,11 @@ export function App(): JSX.Element {
     setBuildNote(null)
     if (reconRef.current) releaseRecon(reconRef.current)
     reconRef.current = null
-    for (const url of imagePreviewsRef.current.values()) URL.revokeObjectURL(url)
-    imagePreviewsRef.current = new Map()
+    for (const url of previewUrlsRef.current.values()) URL.revokeObjectURL(url)
+    previewUrlsRef.current = new Map()
     cropBytesRef.current = new Map()
     suppliedBytesRef.current = new Map()
+    retouchedRef.current = new Map()
     excludedPagesRef.current = []
     reviewedPagesRef.current = []
     setEdits([])
@@ -453,13 +571,7 @@ export function App(): JSX.Element {
     // And the pixels of any pictures the editor supplied, which are the one
     // part of an illustration that cannot be re-derived from the scan.
     const restoredImages = new Map(suppliedBytesRef.current)
-    for (const image of saved.images) {
-      restoredImages.set(image.id, image.bytes)
-      imagePreviewsRef.current.set(
-        image.id,
-        URL.createObjectURL(new Blob([image.bytes as BlobPart], { type: 'image/png' }))
-      )
-    }
+    for (const image of saved.images) restoredImages.set(image.id, image.bytes)
     suppliedBytesRef.current = restoredImages
 
     setState((s) => ({
@@ -638,7 +750,7 @@ export function App(): JSX.Element {
         edition: { ...edition, notices: edition.notices },
         onProgress: (done, total) => setBuildProgress({ done, total }),
         orphanNotes: input.omitOrphanFootnotes ? 'omit' : 'collect',
-        images: allImageBytes()
+        images: drawableImageBytes()
       })
       setPdf({ bytes: interior.bytes, pageCount: interior.pageCount })
       setBuildNote(null)
@@ -1050,7 +1162,8 @@ export function App(): JSX.Element {
               resolveScan={(pageIndex) => reconRef.current?.thumbnails.get(pageIndex)}
               loadScan={loadProofScan}
               addImage={addSuppliedImage}
-              imagePreview={(imageId) => imagePreviewsRef.current.get(imageId)}
+              imagePreview={previewOf}
+              pictures={retouchablePictures}
               findings={state.findings}
               uncertainties={state.uncertainties}
               reviewedPages={reviewedPagesRef.current}
@@ -1086,7 +1199,7 @@ export function App(): JSX.Element {
                 book={correctedDocument}
                 profile={designProfile}
                 edition={previewEdition}
-                images={allImageBytes()}
+                images={drawableImageBytes()}
               />
             ) : null}
             <div className="actions">

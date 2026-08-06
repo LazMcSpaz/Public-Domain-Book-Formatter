@@ -376,3 +376,53 @@ export function applyOps(source: RasterImage, ops: readonly ImageEditOp[]): Rast
   }
   return img
 }
+
+/**
+ * The size an op stack leaves an image at, without touching a pixel.
+ *
+ * The effective-DPI check divides an illustration's source pixels by the inches
+ * it prints at, so retouching has to move that number: a crop that halves a
+ * picture halves its resolution too. But the core has no pixels — they live in
+ * the platform — and the document that carries `sourceWidth` is built here.
+ *
+ * Only three ops change the size, and all three change it by arithmetic rather
+ * than by sampling, so the answer is exact. It is duplicated logic all the same,
+ * which is why `test/image-ops.test.ts` asserts this agrees with `applyOps` on
+ * every op rather than trusting that it does.
+ */
+export function sizeAfterOps(
+  width: number,
+  height: number,
+  ops: readonly ImageEditOp[]
+): { width: number; height: number } {
+  let w = Math.max(0, Math.floor(width))
+  let h = Math.max(0, Math.floor(height))
+
+  for (const op of ops) {
+    if (op.op === 'crop') {
+      // Mirrors `crop`'s clamping exactly: an offset past the edge leaves
+      // nothing, and a width past the edge is trimmed rather than refused.
+      const x = Math.max(0, Math.min(w, Math.round(num(op.params, 'x', 0))))
+      const y = Math.max(0, Math.min(h, Math.round(num(op.params, 'y', 0))))
+      w = Math.max(0, Math.min(w - x, Math.round(num(op.params, 'width', w))))
+      h = Math.max(0, Math.min(h - y, Math.round(num(op.params, 'height', h))))
+      continue
+    }
+
+    if (op.op === 'rotate' || op.op === 'straighten') {
+      const degrees = num(op.params, 'degrees', 0)
+      const norm = ((degrees % 360) + 360) % 360
+      // A quarter turn swaps the axes; any other angle spins inside the same
+      // canvas, which is what makes a straighten lossy at the corners and
+      // leaves the size alone.
+      if (norm === 90 || norm === 270) {
+        const swap = w
+        w = h
+        h = swap
+      }
+      continue
+    }
+  }
+
+  return { width: w, height: h }
+}

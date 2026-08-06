@@ -3,6 +3,10 @@ name: CI
 on:
   push:
   pull_request:
+  # A manual trigger, so there is a way to run the checks when a push has not
+  # produced a run — which is not hypothetical: an Actions outage left this
+  # repository creating no runs at all, with no button to fall back on.
+  workflow_dispatch:
 
 jobs:
   verify:

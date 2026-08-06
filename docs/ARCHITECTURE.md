@@ -244,6 +244,21 @@ OCR word boxes ──► detectRegions ──► rectangles with no *text* in th
   is still a place when the block is renamed or absorbed, and without the
   migration ordinary editing would silently unpin every picture that followed
   the paragraph being edited.
+- **Retouching is an op stack, never a write.** SPEC §6's editing mode — crop,
+  straighten, brightness, contrast, levels, despeckle, grey, threshold — appends
+  to `Illustration.edits`, which the platform re-applies over the _original_
+  bytes every time it changes. So any control can be dragged back, an op removed
+  from the middle, the order changed, and nothing compounds or is lost. A crop is
+  always measured against the original for the same reason: a second drag
+  replaces the first rather than cropping the crop.
+- **The core resolves only the _size_ of a retouch**, through `sizeAfterOps` —
+  because the DPI check divides source pixels by printed inches, and a crop that
+  halves a picture halves what the book has to print with. That is duplicated
+  logic (the pixels live in the platform), so `test/image-ops.test.ts` asserts it
+  agrees with `applyOps` on every op rather than trusting that it has.
+- **Background removal is left out.** The spec calls it best-effort and it is;
+  offering it without the manual touch-up of the selection that would make it
+  honest is offering a magic button that quietly eats part of the picture.
 - **A picture that could not be set is reported**, exactly as a note is —
   `imagesDropped` on the book, `missingImages` from the writer, both on the
   export screen. Nothing is drawn in its place: a grey placeholder in a book for

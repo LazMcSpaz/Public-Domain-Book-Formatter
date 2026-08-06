@@ -9,6 +9,8 @@ import {
 } from '@core/edits'
 import { assembleBook, type BookDocument } from '@core/assemble'
 import { anchorIllustrations, prepareFootnotes } from '@core/layout'
+import { brightness, crop, grayscale, levels, rotate } from '@core/image'
+import type { ImageEditOp } from '@core/model'
 import type { PageTranscription, TranscribedBlock } from '@core/transcribe'
 
 function page(pageIndex: number, blocks: TranscribedBlock[]): PageTranscription {
@@ -732,5 +734,72 @@ describe('applyEdits — a division the editor wrote', () => {
       ['a', 'front'],
       ['b', 'back']
     ])
+  })
+})
+
+describe('applyEdits — retouching a picture', () => {
+  const illustrated = () =>
+    assembleBook([page(0, [{ kind: 'paragraph', text: 'Text.' }])], {
+      illustrations: [{ id: 'cut1', pageIndex: 0, sourceWidth: 1200, sourceHeight: 900 }]
+    })
+
+  const retouched = (ops: ImageEditOp[]) =>
+    applyEdits(illustrated(), [{ kind: 'retouch', illustrationId: 'cut1', ops }])
+
+  it('carries the op stack beside the picture rather than applying it', () => {
+    // Nothing here touches pixels — the platform re-applies the stack over the
+    // original every time, which is what makes any of it undoable.
+    const ops = [levels({ black: 30, white: 220, gamma: 1 })]
+    expect(retouched(ops).illustrations[0]!.edits).toEqual(ops)
+  })
+
+  it('moves the source size, because a crop moves the resolution', () => {
+    // This is the whole reason the core knows about retouching at all: the DPI
+    // check divides source pixels by printed inches, and a crop that halves a
+    // picture halves what it has to print with.
+    const doc = retouched([crop({ x: 100, y: 50, width: 600, height: 400 })])
+    expect(doc.illustrations[0]).toMatchObject({ sourceWidth: 600, sourceHeight: 400 })
+  })
+
+  it('swaps the axes on a quarter turn', () => {
+    const doc = retouched([rotate(90)])
+    expect(doc.illustrations[0]).toMatchObject({ sourceWidth: 900, sourceHeight: 1200 })
+  })
+
+  it('leaves the size alone for the tone tools', () => {
+    const doc = retouched([grayscale(), levels({ black: 10, white: 240, gamma: 1 })])
+    expect(doc.illustrations[0]).toMatchObject({ sourceWidth: 1200, sourceHeight: 900 })
+  })
+
+  it('refuses a stack that would leave nothing of the picture', () => {
+    // A crop dragged to zero would otherwise remove the picture from the book
+    // without ever saying it had.
+    const doc = retouched([crop({ x: 0, y: 0, width: 0, height: 0 })])
+    expect(doc.illustrations[0]!.edits).toBeUndefined()
+    expect(doc.illustrations[0]).toMatchObject({ sourceWidth: 1200, sourceHeight: 900 })
+  })
+
+  it('replaces the stack as a slider moves rather than piling them up', () => {
+    const doc = applyEdits(illustrated(), [
+      { kind: 'retouch', illustrationId: 'cut1', ops: [brightness(10)] },
+      { kind: 'retouch', illustrationId: 'cut1', ops: [brightness(25)] }
+    ])
+    expect(doc.illustrations[0]!.edits).toEqual([brightness(25)])
+  })
+
+  it('retouches a picture the editor supplied, not only one cut from a scan', () => {
+    const doc = applyEdits(book(), [
+      { kind: 'image', imageId: 'img1', afterBlockId: 'p0b1', sourceWidth: 800, sourceHeight: 600 },
+      {
+        kind: 'retouch',
+        illustrationId: 'img1',
+        ops: [crop({ x: 0, y: 0, width: 400, height: 300 })]
+      }
+    ])
+    expect(doc.illustrations[0]).toMatchObject({ sourceWidth: 400, sourceHeight: 300 })
+  })
+
+  it('leaves a picture nobody retouched completely alone', () => {
+    expect(applyEdits(illustrated(), []).illustrations[0]!.edits).toBeUndefined()
   })
 })

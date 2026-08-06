@@ -108,8 +108,9 @@ footnotes set at the foot of the page they belong to, chapter ornaments, a
 collected endnotes section for notes whose reference mark was never found,
 illustrations cut out of the scan and set with their captions, a proofing step
 that puts each leaf beside its scan so a misreading can actually be fixed,
-annotations, pictures and an introduction of your own, and a table of contents
-carrying measured page numbers. The KDP report's page count and typesetting
+annotations, pictures and an introduction of your own, non-destructive
+retouching of every illustration, and a table of contents carrying measured page
+numbers. The KDP report's page count and typesetting
 warnings are measured rather than estimated.
 
 The one step that costs money — the vision pass — is saved against the file it

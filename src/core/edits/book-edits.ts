@@ -28,8 +28,10 @@
  *
  * Pure: array and string work. No DOM, no I/O.
  */
+import type { ImageEditOp } from '@core/model'
+import { sizeAfterOps } from '@core/image'
 import type { BlockKind } from '@core/transcribe'
-import type { BookBlock, BookDocument } from '@core/assemble'
+import type { BookBlock, BookDocument, Illustration } from '@core/assemble'
 
 /**
  * One correction, naming the block it applies to.
@@ -99,6 +101,20 @@ export type BookEdit =
    * blank lines, which is the convention prose already uses and so is not a
    * markup language anyone has to learn.
    */
+  /**
+   * Retouching for one picture — crop, straighten, levels, and the rest.
+   *
+   * The ops are held here rather than applied, so the original pixels are never
+   * written over: SPEC §6's rule, and the same one this whole module follows.
+   * The stack is re-applied over the original every time, so any of it can be
+   * undone and the order can be changed.
+   *
+   * Only the *size* is resolved in the core, by `sizeAfterOps` — because the
+   * effective-DPI check divides source pixels by printed inches, and a crop
+   * that halves a picture halves its resolution. The pixels themselves are the
+   * platform's business.
+   */
+  | { kind: 'retouch'; illustrationId: string; ops: ImageEditOp[] }
   | {
       kind: 'section'
       sectionId: string
@@ -135,6 +151,8 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   const supplied = new Map<string, BookEdit & { kind: 'image' }>()
   /** Divisions the editor wrote, keyed so editing one replaces it. */
   const sections = new Map<string, BookEdit & { kind: 'section' }>()
+  /** Retouching per picture, keyed so adjusting a slider replaces the stack. */
+  const retouched = new Map<string, ImageEditOp[]>()
   // Illustration anchors are held as an override map and folded in at the end,
   // so a picture re-anchored to a block that a later edit drops falls back to
   // where the engine would have put it rather than vanishing.
@@ -172,6 +190,11 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
 
     if (edit.kind === 'section') {
       sections.set(edit.sectionId, edit)
+      continue
+    }
+
+    if (edit.kind === 'retouch') {
+      retouched.set(edit.illustrationId, edit.ops)
       continue
     }
 
@@ -288,15 +311,18 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
       anchorAfterBlockId: image.afterBlockId,
       origin: 'supplied' as const
     }))
+    .map((illustration) => withRetouching(illustration, retouched.get(illustration.id)))
 
-  const illustrations = doc.illustrations.map((illustration) => {
-    if (!anchors.has(illustration.id)) return illustration
-    const after = anchors.get(illustration.id) ?? null
-    // An anchor pointing at a block that is gone is dropped rather than
-    // honoured, which returns the picture to the engine's own placement.
-    if (after !== null && !byId.has(after)) return illustration
-    return { ...illustration, anchorAfterBlockId: after }
-  })
+  const illustrations = doc.illustrations
+    .map((illustration) => {
+      if (!anchors.has(illustration.id)) return illustration
+      const after = anchors.get(illustration.id) ?? null
+      // An anchor pointing at a block that is gone is dropped rather than
+      // honoured, which returns the picture to the engine's own placement.
+      if (after !== null && !byId.has(after)) return illustration
+      return { ...illustration, anchorAfterBlockId: after }
+    })
+    .map((illustration) => withRetouching(illustration, retouched.get(illustration.id)))
 
   return {
     ...doc,
@@ -319,6 +345,22 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
     // engine re-runs instead of mutating.
     chapters: chaptersOf(blocks)
   }
+}
+
+/**
+ * A picture with its op stack, and with the size that stack leaves it at.
+ *
+ * The size is the point. Everything else about retouching happens to pixels the
+ * core never sees, but a crop changes how many pixels are spread over the same
+ * printed inches — and that is the number the KDP check reports.
+ */
+function withRetouching(illustration: Illustration, ops: ImageEditOp[] | undefined): Illustration {
+  if (!ops || ops.length === 0) return illustration
+  const size = sizeAfterOps(illustration.sourceWidth, illustration.sourceHeight, ops)
+  // An op stack that leaves nothing is not applied: a crop dragged to zero
+  // would otherwise remove the picture without saying so.
+  if (size.width <= 0 || size.height <= 0) return illustration
+  return { ...illustration, edits: ops, sourceWidth: size.width, sourceHeight: size.height }
 }
 
 /**
@@ -364,7 +406,14 @@ function chaptersOf(blocks: readonly BookBlock[]): BookDocument['chapters'] {
  * else that was written before it existed.
  */
 export function blockOf(edit: BookEdit): string | null {
-  if (edit.kind === 'anchor' || edit.kind === 'image' || edit.kind === 'section') return null
+  if (
+    edit.kind === 'anchor' ||
+    edit.kind === 'image' ||
+    edit.kind === 'section' ||
+    edit.kind === 'retouch'
+  ) {
+    return null
+  }
   return edit.blockId
 }
 
@@ -376,6 +425,7 @@ export function countEdited(edits: readonly BookEdit[]): number {
     else if (edit.kind === 'note') touched.add(edit.noteId)
     else if (edit.kind === 'image') touched.add(edit.imageId)
     else if (edit.kind === 'section') touched.add(edit.sectionId)
+    else if (edit.kind === 'retouch') touched.add(edit.illustrationId)
     else touched.add(edit.blockId)
   }
   return touched.size
@@ -396,7 +446,8 @@ export function withEdit(edits: readonly BookEdit[], edit: BookEdit): BookEdit[]
     edit.kind === 'anchor' ||
     edit.kind === 'note' ||
     edit.kind === 'image' ||
-    edit.kind === 'section'
+    edit.kind === 'section' ||
+    edit.kind === 'retouch'
   if (!collapsible) return [...edits, edit]
 
   const target = targetOf(edit)
@@ -416,5 +467,6 @@ function targetOf(edit: BookEdit): string {
   if (edit.kind === 'note') return edit.noteId
   if (edit.kind === 'image') return edit.imageId
   if (edit.kind === 'section') return edit.sectionId
+  if (edit.kind === 'retouch') return edit.illustrationId
   return edit.blockId
 }

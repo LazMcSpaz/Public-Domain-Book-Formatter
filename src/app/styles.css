@@ -988,3 +988,95 @@ button.ghost {
   border-radius: 4px;
   resize: vertical;
 }
+
+/* --- the image-editing mode (SPEC §6) --------------------------------------
+   Nothing here writes pixels: every control appends to an op stack that is
+   re-applied over the original, so any of it can be dragged back. */
+.editor {
+  margin-top: 8px;
+}
+.editor-canvas {
+  position: relative;
+  display: block;
+  max-width: 320px;
+  margin: 0 auto;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  cursor: crosshair;
+  touch-action: none;
+  user-select: none;
+}
+.editor-canvas img {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+}
+.editor-crop {
+  position: absolute;
+  border: 1.5px dashed var(--accent);
+  background: rgba(138, 90, 43, 0.14);
+  pointer-events: none;
+}
+.editor-hint {
+  margin: 6px 0 8px;
+  font-size: 0.75rem;
+  color: var(--muted);
+  text-align: center;
+}
+.editor-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 4px 14px;
+}
+.editor-controls label,
+.editor-threshold {
+  display: grid;
+  grid-template-columns: 6.5rem 1fr 2.6rem;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.editor-controls input[type='range'],
+.editor-threshold input[type='range'] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+.editor-controls span,
+.editor-threshold span {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.editor-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin-top: 8px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.editor-toggles > label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.editor-toggles .editor-threshold {
+  grid-template-columns: 3rem 6rem 2.4rem;
+}
+.editor-reset {
+  margin-top: 8px;
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+}
+.editor-reset:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}

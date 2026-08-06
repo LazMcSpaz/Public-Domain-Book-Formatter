@@ -15,6 +15,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { BookDocument } from '@core/assemble'
 import type { BlockKind, VerificationFinding } from '@core/transcribe'
+import { ImageEditor } from './ImageEditor'
+import type { ImageEditOp } from '@core/model'
 import {
   blockOf,
   countEdited,
@@ -52,8 +54,24 @@ export interface ProofSheetProps {
     file: File,
     afterBlockId: string
   ) => Promise<{ imageId: string; sourceWidth: number; sourceHeight: number } | null>
-  /** A preview URL for a supplied picture, by id. */
+  /** A preview URL for a picture as it currently stands, retouched and all. */
   imagePreview?: (imageId: string) => string | undefined
+  /**
+   * Every picture in the book that can be retouched, cut from the scan or
+   * supplied — the editing mode applies to both, since a crop out of a scan is
+   * exactly the thing most likely to need straightening.
+   */
+  pictures?: {
+    id: string
+    /** Pixel size before any retouching — what a crop is measured against. */
+    sourceWidth: number
+    sourceHeight: number
+    /** Pixel size after it — what the book will actually print with. */
+    currentWidth: number
+    currentHeight: number
+    /** The leaf it was cut from, or null for one the editor supplied. */
+    pageIndex: number | null
+  }[]
   findings?: VerificationFinding[]
   uncertainties?: { pageIndex: number; text: string }[]
   reviewedPages?: number[]
@@ -93,6 +111,7 @@ export function ProofSheet({
   loadScan,
   addImage,
   imagePreview,
+  pictures,
   findings,
   uncertainties,
   reviewedPages
@@ -213,6 +232,25 @@ export function ProofSheet({
 
   const removeImage = (imageId: string): void =>
     onChange(edits.filter((e) => e.kind !== 'image' || e.imageId !== imageId))
+
+  /** The op stack currently on each picture. */
+  const opsById = useMemo(() => {
+    const out = new Map<string, ImageEditOp[]>()
+    for (const edit of edits) if (edit.kind === 'retouch') out.set(edit.illustrationId, edit.ops)
+    return out
+  }, [edits])
+
+  const setOps = (illustrationId: string, ops: ImageEditOp[]): void =>
+    onChange(
+      ops.length === 0
+        ? edits.filter((e) => e.kind !== 'retouch' || e.illustrationId !== illustrationId)
+        : withEdit(edits, { kind: 'retouch', illustrationId, ops })
+    )
+
+  /** Pictures cut from the leaf on screen, so they can be retouched from here. */
+  const picturesOnLeaf = (pageIndex: number) =>
+    (pictures ?? []).filter((p) => p.pageIndex === pageIndex)
+  const pictureById = (id: string) => (pictures ?? []).find((p) => p.id === id)
 
   /** The divisions the editor has written, in the order they will be set. */
   const sections = useMemo(
@@ -434,13 +472,23 @@ export function ProofSheet({
                           Remove picture
                         </button>
                       </span>
-                      {preview ? <img src={preview} alt="The picture you added" /> : null}
                       <input
                         type="text"
                         value={image.caption ?? ''}
                         placeholder="Caption (optional) — set under the picture"
                         aria-label="Caption for your picture"
                         onChange={(e) => push({ ...image, caption: e.target.value })}
+                      />
+                      <ImageEditor
+                        previewUrl={preview}
+                        sourceWidth={image.sourceWidth}
+                        sourceHeight={image.sourceHeight}
+                        currentWidth={pictureById(image.imageId)?.currentWidth ?? image.sourceWidth}
+                        currentHeight={
+                          pictureById(image.imageId)?.currentHeight ?? image.sourceHeight
+                        }
+                        ops={opsById.get(image.imageId) ?? []}
+                        onChange={(ops) => setOps(image.imageId, ops)}
                       />
                     </div>
                   )
@@ -470,11 +518,22 @@ export function ProofSheet({
             )
           })}
 
-          {page.illustrationIds.length > 0 ? (
-            <p className="proof-note">
-              {page.illustrationIds.length} illustration(s) were cut from this leaf.
-            </p>
-          ) : null}
+          {picturesOnLeaf(page.pageIndex).map((picture) => (
+            <div key={picture.id} className="proof-picture">
+              <span className="proof-annotation-bar">
+                <span className="proof-annotation-label">Cut from this leaf</span>
+              </span>
+              <ImageEditor
+                previewUrl={imagePreview?.(picture.id)}
+                sourceWidth={picture.sourceWidth}
+                sourceHeight={picture.sourceHeight}
+                currentWidth={picture.currentWidth}
+                currentHeight={picture.currentHeight}
+                ops={opsById.get(picture.id) ?? []}
+                onChange={(ops) => setOps(picture.id, ops)}
+              />
+            </div>
+          ))}
         </div>
       </div>
 
