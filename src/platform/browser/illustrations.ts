@@ -208,6 +208,69 @@ export async function detectIllustrations(
   return candidates
 }
 
+/**
+ * The longest edge a supplied picture is kept at, in pixels.
+ *
+ * Not a quality decision — a resolution one. The most a book page can use is
+ * roughly its trim in inches times 300 DPI, which for the largest KDP trim is
+ * about 2550px across. Anything beyond that is pixels the printer will throw
+ * away, carried in the PDF and in the saved run for the whole session. A phone
+ * photograph is routinely three times this.
+ *
+ * Nothing is ever scaled *up* to reach it: that would invent resolution, and
+ * the DPI check exists to report exactly the resolution the picture has.
+ */
+const SUPPLIED_MAX_EDGE = 2600
+
+/** A picture the editor supplied, decoded and ready to embed. */
+export interface SuppliedImage {
+  bytes: Uint8Array
+  width: number
+  height: number
+}
+
+/**
+ * Decode a file the editor picked into PNG bytes the writer can embed.
+ *
+ * Goes through a canvas rather than passing the file's own bytes along, for
+ * two reasons: pdf-lib embeds PNG and JPEG only, so a GIF or a WebP would have
+ * to be refused otherwise; and a photograph straight off a phone is far larger
+ * than any book page can use, which would bloat both the PDF and the saved run
+ * to no visible effect.
+ *
+ * PNG out, as for the crops — these are often line art or plates, where JPEG's
+ * ringing around every edge is the artefact that shows up in print.
+ */
+export async function readSuppliedImage(file: Blob): Promise<SuppliedImage> {
+  const bitmap = await createImageBitmap(file)
+  try {
+    // Only ever shrinks. Enlarging would be inventing pixels the file never
+    // had, and would talk the DPI check out of a warning it should give.
+    const scale = Math.min(1, SUPPLIED_MAX_EDGE / Math.max(bitmap.width, bitmap.height))
+    const width = Math.max(1, Math.round(bitmap.width * scale))
+    const height = Math.max(1, Math.round(bitmap.height * scale))
+
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    const ctx = canvas.getContext('2d')
+    if (!ctx) throw new Error('Could not acquire a 2D canvas context')
+    // A transparent PNG would print as black on some RIPs; a book page is paper.
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, width, height)
+    ctx.drawImage(bitmap, 0, 0, width, height)
+
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
+    canvas.width = 0
+    canvas.height = 0
+    if (!blob) throw new Error('Could not encode the picture')
+
+    return { bytes: new Uint8Array(await blob.arrayBuffer()), width, height }
+  } finally {
+    bitmap.close()
+  }
+}
+
 export interface CroppedIllustrations {
   /** PNG bytes per region id, to hand to the PDF writer. */
   bytes: Map<string, Uint8Array>

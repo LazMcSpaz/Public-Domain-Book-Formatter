@@ -73,6 +73,23 @@ export type BookEdit =
    * `at` is a character offset into the block's *current* text, as `split`'s is.
    */
   | { kind: 'note'; noteId: string; blockId: string; at: number; text: string }
+  /**
+   * A picture the *editor* supplied — a portrait, a map, a photograph of the
+   * binding — placed after a block of the editor's choosing.
+   *
+   * It carries the pixel dimensions rather than the pixels, for the same reason
+   * `ImageItem` does: the bytes travel beside the document, keyed by id. Unlike
+   * a picture cut out of the scan this one has no source leaf, so `afterBlockId`
+   * is the only thing that says where it goes.
+   */
+  | {
+      kind: 'image'
+      imageId: string
+      afterBlockId: string | null
+      sourceWidth: number
+      sourceHeight: number
+      caption?: string
+    }
 
 /** How a split block's halves are named, so the ids stay deterministic. */
 const splitId = (id: string, half: number): string => `${id}/${half}`
@@ -98,10 +115,26 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   // Notes the editor wrote, keyed so a later edit to the same one replaces it
   // rather than adding a second note at the same spot.
   const authored = new Map<string, BookEdit & { kind: 'note' }>()
+  /** Pictures the editor added, keyed so re-captioning one replaces it. */
+  const supplied = new Map<string, BookEdit & { kind: 'image' }>()
   // Illustration anchors are held as an override map and folded in at the end,
   // so a picture re-anchored to a block that a later edit drops falls back to
   // where the engine would have put it rather than vanishing.
   const anchors = new Map<string, string | null>()
+
+  /**
+   * Follow an anchor when the block it names stops existing under that name.
+   *
+   * A split renames a block and a merge removes one, and in both cases "after
+   * that block" is still a meaningful place — just a differently-named one.
+   * Without this, ordinary editing would silently unpin pictures.
+   */
+  const rename = (from: string, to: string): void => {
+    for (const [id, after] of anchors) if (after === from) anchors.set(id, to)
+    for (const [id, image] of supplied) {
+      if (image.afterBlockId === from) supplied.set(id, { ...image, afterBlockId: to })
+    }
+  }
 
   for (const edit of edits) {
     if (edit.kind === 'anchor') {
@@ -111,6 +144,11 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
 
     if (edit.kind === 'note') {
       authored.set(edit.noteId, edit)
+      continue
+    }
+
+    if (edit.kind === 'image') {
+      supplied.set(edit.imageId, edit)
       continue
     }
 
@@ -160,6 +198,10 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
           text: second,
           continuesPrevious: false
         })
+        // Anything pinned *after* this block belongs after the whole of it,
+        // which is now its second half. Without this, splitting a paragraph
+        // would quietly unpin every picture that followed it.
+        rename(block.id, splitId(block.id, 2))
         break
       }
 
@@ -174,6 +216,9 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
           ),
           ...(next.continuesNext === undefined ? {} : { continuesNext: next.continuesNext })
         })
+        // The block that was absorbed no longer exists, but "after it" is still
+        // a place — it is after the block that absorbed it.
+        rename(next.id, block.id)
         break
       }
     }
@@ -206,6 +251,21 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
       anchor: { blockId: note.blockId, at: note.at }
     })
   }
+  const suppliedIllustrations = [...supplied.values()]
+    .filter((image) => image.afterBlockId === null || byId.has(image.afterBlockId))
+    .map((image) => ({
+      id: image.imageId,
+      // A supplied picture has no source leaf. The field is kept at -1 rather
+      // than made nullable so nothing downstream has to special-case it; the
+      // `origin` below is what actually says not to trust it.
+      pageIndex: -1,
+      sourceWidth: image.sourceWidth,
+      sourceHeight: image.sourceHeight,
+      caption: image.caption?.trim() ? image.caption.trim() : null,
+      anchorAfterBlockId: image.afterBlockId,
+      origin: 'supplied' as const
+    }))
+
   const illustrations = doc.illustrations.map((illustration) => {
     if (!anchors.has(illustration.id)) return illustration
     const after = anchors.get(illustration.id) ?? null
@@ -219,7 +279,7 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
     ...doc,
     blocks,
     footnotes,
-    illustrations,
+    illustrations: [...illustrations, ...suppliedIllustrations],
     // Chapters are derived from the blocks, so retyping a paragraph into a
     // heading has to be able to add one — and dropping a heading has to be able
     // to remove one. Recomputed rather than patched, for the same reason the
@@ -241,12 +301,25 @@ function chaptersOf(blocks: readonly BookBlock[]): BookDocument['chapters'] {
     }))
 }
 
+/**
+ * The block an edit is attached to, or null when it is attached to none.
+ *
+ * Exists so callers do not each grow their own `kind === 'a' || kind === 'b'`
+ * disjunction — which is how adding a kind silently breaks a filter somewhere
+ * else that was written before it existed.
+ */
+export function blockOf(edit: BookEdit): string | null {
+  if (edit.kind === 'anchor' || edit.kind === 'image') return null
+  return edit.blockId
+}
+
 /** How many blocks an edit list actually changes, for telling the user. */
 export function countEdited(edits: readonly BookEdit[]): number {
   const touched = new Set<string>()
   for (const edit of edits) {
     if (edit.kind === 'anchor') touched.add(edit.illustrationId)
     else if (edit.kind === 'note') touched.add(edit.noteId)
+    else if (edit.kind === 'image') touched.add(edit.imageId)
     else touched.add(edit.blockId)
   }
   return touched.size
@@ -262,7 +335,11 @@ export function countEdited(edits: readonly BookEdit[]): number {
  */
 export function withEdit(edits: readonly BookEdit[], edit: BookEdit): BookEdit[] {
   const collapsible =
-    edit.kind === 'text' || edit.kind === 'retype' || edit.kind === 'anchor' || edit.kind === 'note'
+    edit.kind === 'text' ||
+    edit.kind === 'retype' ||
+    edit.kind === 'anchor' ||
+    edit.kind === 'note' ||
+    edit.kind === 'image'
   if (!collapsible) return [...edits, edit]
 
   const target = targetOf(edit)
@@ -280,5 +357,6 @@ export function withEdit(edits: readonly BookEdit[], edit: BookEdit): BookEdit[]
 function targetOf(edit: BookEdit): string {
   if (edit.kind === 'anchor') return edit.illustrationId
   if (edit.kind === 'note') return edit.noteId
+  if (edit.kind === 'image') return edit.imageId
   return edit.blockId
 }

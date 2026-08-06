@@ -210,12 +210,28 @@ export function buildExport(input: BuildExportInput): BuildExportResult {
     const placed = input.typeset.imagesPlaced ?? []
     const dropped = input.typeset.imagesDropped ?? []
     if (placed.length > 0) {
-      const captioned = document.illustrations.filter((i) => i.caption !== null).length
-      const plural = placed.length === 1 ? 'illustration was' : 'illustrations were'
-      notes.push(
-        `${placed.length} ${plural} set into the book` +
-          (captioned > 0 ? `, ${captioned} with the caption it was printed under.` : '.')
-      )
+      // Counted by where each came from. Saying a picture the editor supplied
+      // carries "the caption it was printed under" would be describing a scan
+      // that never existed — a small lie, and the kind this report exists not
+      // to tell.
+      const byId = new Map(document.illustrations.map((i) => [i.id, i]))
+      const own = placed.filter((p) => byId.get(p.id)?.origin === 'supplied').length
+      const cut = placed.length - own
+      const captioned = placed.filter(
+        (p) => byId.get(p.id)?.origin !== 'supplied' && byId.get(p.id)?.caption !== null
+      ).length
+
+      const parts: string[] = []
+      if (cut > 0) {
+        parts.push(
+          `${cut} cut from the scan` +
+            (captioned > 0 ? ` (${captioned} with the caption it was printed under)` : '')
+        )
+      }
+      if (own > 0) parts.push(`${own} of your own`)
+
+      const plural = placed.length === 1 ? 'illustration' : 'illustrations'
+      notes.push(`${placed.length} ${plural} set into the book: ${parts.join(', ')}.`)
     }
     if (dropped.length > 0) {
       notes.push(

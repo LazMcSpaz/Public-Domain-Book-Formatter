@@ -5,7 +5,7 @@
  * are re-applied every time the book is assembled, the same way the image op
  * stack is re-applied over the original pixels.
  */
-export { applyEdits, countEdited, withEdit, type BookEdit } from './book-edits'
+export { applyEdits, blockOf, countEdited, withEdit, type BookEdit } from './book-edits'
 export {
   proofSheet,
   nextFlaggedPage,

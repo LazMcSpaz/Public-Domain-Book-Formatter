@@ -155,6 +155,51 @@ describe('migrateSavedRun — the corrections that came with v6', () => {
   it('reads back a run that never had corrections as having none', () => {
     expect(migrateSavedRun(JSON.parse(JSON.stringify(run()))).edits).toEqual([])
   })
+
+  it('keeps the pixels of a picture the editor supplied', () => {
+    // The one part of an illustration that cannot be re-derived: a crop is cut
+    // out of the scan again for free, but a portrait off someone's disk is
+    // gone with the tab.
+    const original = run({ images: new Map([['img1', new Uint8Array([1, 2, 3, 4])]]) })
+    const restored = migrateSavedRun(original)
+    expect(restored.images).toEqual([{ id: 'img1', bytes: new Uint8Array([1, 2, 3, 4]) }])
+  })
+
+  it('reads bytes back through a structured clone, which is how they are stored', () => {
+    const raw = { ...run(), images: [{ id: 'img1', bytes: new Uint8Array([9, 8]) }] }
+    expect(migrateSavedRun(structuredClone(raw)).images[0]!.bytes).toEqual(new Uint8Array([9, 8]))
+  })
+
+  it('drops a picture entry with no pixels rather than the whole run', () => {
+    const raw = JSON.parse(JSON.stringify(run())) as Record<string, unknown>
+    raw['images'] = [{ id: 'ok', bytes: [1, 2] }, { id: 'nobytes' }, { bytes: [3] }, null]
+    expect(migrateSavedRun(raw).images).toEqual([{ id: 'ok', bytes: new Uint8Array([1, 2]) }])
+  })
+
+  it('upgrades a v6 run, which simply has no supplied pictures yet', () => {
+    const v6 = JSON.parse(JSON.stringify(run())) as Record<string, unknown>
+    v6['schemaVersion'] = 6
+    delete v6['images']
+    const restored = migrateSavedRun(v6)
+    expect(restored.schemaVersion).toBe(CURRENT_SCHEMA_VERSION)
+    expect(restored.images).toEqual([])
+  })
+
+  it('keeps an image edit through the round trip', () => {
+    const original = run({
+      edits: [
+        {
+          kind: 'image',
+          imageId: 'img1',
+          afterBlockId: 'p0b1',
+          sourceWidth: 1600,
+          sourceHeight: 1200,
+          caption: 'The author.'
+        }
+      ]
+    })
+    expect(migrateSavedRun(JSON.parse(JSON.stringify(original))).edits).toEqual(original.edits)
+  })
 })
 
 describe('summarize', () => {

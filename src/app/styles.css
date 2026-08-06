@@ -898,3 +898,49 @@ button.ghost {
   gap: 6px;
   flex-wrap: wrap;
 }
+
+/* A picture the editor added, alongside the note styling — both are the
+   editor's own, and both sit under the passage they belong to. */
+.proof-picture {
+  margin: 8px 0 0 24px;
+  padding: 8px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 0 4px 4px 0;
+}
+.proof-picture img {
+  display: block;
+  max-width: 100%;
+  max-height: 180px;
+  margin: 0 auto 6px;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 3px;
+}
+.proof-picture input[type='text'] {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 5px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+/* The file input is a button: a bare one reads as a form field and is the
+   wrong shape beside the other actions. */
+.proof-add-image {
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+}
+.proof-add-image:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.proof-add-image input[type='file'] {
+  display: none;
+}

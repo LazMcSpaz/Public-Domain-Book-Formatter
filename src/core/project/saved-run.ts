@@ -33,12 +33,13 @@ import type { BookEdit } from '@core/edits'
  * image edits, none of which the browser app produces. Nothing ever wrote one
  * from a browser, so this does not migrate them; it recognises them and says so.
  *
- * v5 → v6 added the proofreading corrections. A v5 run is not damaged by the
- * change — it is a complete transcription that simply has no corrections on it
- * yet — so it upgrades in place rather than being refused. That distinction is
- * the whole reason a migration exists instead of a version check.
+ * v5 → v6 added the proofreading corrections, and v6 → v7 the pixels of any
+ * pictures the editor supplied. Neither damages an older run — each is a
+ * complete transcription that simply has none of the newer thing on it yet — so
+ * both upgrade in place rather than being refused. That distinction is the
+ * whole reason a migration exists instead of a version check.
  */
-export const CURRENT_SCHEMA_VERSION = 6
+export const CURRENT_SCHEMA_VERSION = 7
 
 /** A page the model could not read at all. Mirrors the runner's `PageFailure`. */
 export interface SavedFailure {
@@ -85,6 +86,16 @@ export interface SavedRun {
    * its scan is an hour, and a refresh must not cost it.
    */
   edits: BookEdit[]
+  /**
+   * Pixels for the pictures the editor supplied, by illustration id.
+   *
+   * Unlike everything else about an illustration, these cannot be re-derived
+   * from anything the app has: a crop can be cut out of the scan again, but a
+   * portrait the editor chose off their own disk is gone with the tab. Stored
+   * as bytes because IndexedDB clones a `Uint8Array` natively, and bounded at
+   * decode time so a phone photograph does not fill the store on its own.
+   */
+  images: { id: string; bytes: Uint8Array }[]
 }
 
 /** The facts the resume question needs, without loading the whole run. */
@@ -150,6 +161,7 @@ export function createSavedRun(init: {
   modelId: string
   identityAnswers: Record<string, unknown>
   edits?: readonly BookEdit[]
+  images?: ReadonlyMap<string, Uint8Array>
   savedAt?: string
 }): SavedRun {
   return {
@@ -163,7 +175,8 @@ export function createSavedRun(init: {
     usage: init.usage,
     modelId: init.modelId,
     identityAnswers: init.identityAnswers,
-    edits: [...(init.edits ?? [])]
+    edits: [...(init.edits ?? [])],
+    images: [...(init.images ?? new Map())].map(([id, bytes]) => ({ id, bytes }))
   }
 }
 
@@ -225,8 +238,31 @@ export function migrateSavedRun(raw: unknown): SavedRun {
     },
     modelId: str(raw['modelId'], 'unknown'),
     identityAnswers: isObject(raw['identityAnswers']) ? raw['identityAnswers'] : {},
-    edits: parseEdits(raw['edits'])
+    edits: parseEdits(raw['edits']),
+    images: parseImages(raw['images'])
   }
+}
+
+/**
+ * Read back supplied pictures, keeping only entries that still have pixels.
+ *
+ * Same rule as the edit list: a malformed entry is dropped rather than thrown
+ * on. A picture whose bytes are gone is reported by the writer as missing, and
+ * the export screen says so — which is a far better outcome than refusing to
+ * restore a transcription over one bad record.
+ */
+function parseImages(raw: unknown): { id: string; bytes: Uint8Array }[] {
+  if (!Array.isArray(raw)) return []
+  const out: { id: string; bytes: Uint8Array }[] = []
+  for (const value of raw) {
+    if (!isObject(value)) continue
+    const id = str(value['id'], '')
+    const bytes = value['bytes']
+    if (!id) continue
+    if (bytes instanceof Uint8Array) out.push({ id, bytes })
+    else if (Array.isArray(bytes)) out.push({ id, bytes: Uint8Array.from(bytes as number[]) })
+  }
+  return out
 }
 
 /**
@@ -278,6 +314,27 @@ function parseEdits(raw: unknown): BookEdit[] {
       case 'merge':
         if (blockId) out.push({ kind: 'merge', blockId })
         break
+      case 'image': {
+        const imageId = str(value['imageId'], '')
+        const after = value['afterBlockId']
+        if (
+          imageId &&
+          (after === null || typeof after === 'string') &&
+          typeof value['sourceWidth'] === 'number' &&
+          typeof value['sourceHeight'] === 'number'
+        ) {
+          const caption = value['caption']
+          out.push({
+            kind: 'image',
+            imageId,
+            afterBlockId: after,
+            sourceWidth: value['sourceWidth'],
+            sourceHeight: value['sourceHeight'],
+            ...(typeof caption === 'string' ? { caption } : {})
+          })
+        }
+        break
+      }
       case 'note': {
         const noteId = str(value['noteId'], '')
         if (

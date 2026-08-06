@@ -296,8 +296,50 @@ describe('buildExport — the account it gives of the pictures', () => {
         { id: 'fig2', pageIndex: 9, dpi: 380 }
       ]
     })
-    expect(notes.join(' ')).toContain('2 illustrations were set into the book')
-    expect(notes.join(' ')).toContain('1 with the caption')
+    expect(notes.join(' ')).toContain('2 illustrations set into the book')
+    expect(notes.join(' ')).toContain('2 cut from the scan')
+    expect(notes.join(' ')).toContain('1 with the caption it was printed under')
+  })
+
+  it('does not say a picture the editor supplied carries a printed caption', () => {
+    // It was never printed anywhere. Counting it with the scanned ones would be
+    // describing a scan that does not exist.
+    const doc = illustrated()
+    const withOwn = {
+      ...doc,
+      illustrations: [
+        ...doc.illustrations,
+        {
+          id: 'mine',
+          pageIndex: -1,
+          sourceWidth: 1000,
+          sourceHeight: 800,
+          caption: 'The author, from life.',
+          origin: 'supplied' as const
+        }
+      ]
+    }
+    const { notes } = buildExport({
+      document: withOwn,
+      profile: defaultStyleProfile(),
+      edition: edition(),
+      estimatedPageCount: 100,
+      typeset: {
+        pageCount: 40,
+        warnings: [],
+        imagesPlaced: [
+          { id: 'fig1', pageIndex: 4, dpi: 420 },
+          { id: 'fig2', pageIndex: 9, dpi: 380 },
+          { id: 'mine', pageIndex: 12, dpi: 350 }
+        ]
+      }
+    })
+    const text = notes.join(' ')
+    expect(text).toContain('3 illustrations set into the book')
+    expect(text).toContain('2 cut from the scan')
+    expect(text).toContain('1 of your own')
+    // The one caption counted as printed is the scan's, not the editor's.
+    expect(text).toContain('1 with the caption it was printed under')
   })
 
   it('never lets one go missing quietly', () => {

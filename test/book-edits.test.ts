@@ -529,3 +529,134 @@ describe('applyEdits — notes the editor wrote', () => {
     ).toBe(2)
   })
 })
+
+describe('applyEdits — pictures the editor supplied', () => {
+  const withPicture = (over: Partial<{ afterBlockId: string | null; caption: string }> = {}) =>
+    applyEdits(book(), [
+      {
+        kind: 'image',
+        imageId: 'img1',
+        afterBlockId: over.afterBlockId === undefined ? 'p0b1' : over.afterBlockId,
+        sourceWidth: 1600,
+        sourceHeight: 1200,
+        ...(over.caption === undefined ? {} : { caption: over.caption })
+      }
+    ])
+
+  const anchorOf = (doc: BookDocument, id: string): number =>
+    [...anchorIllustrations(doc.blocks, doc.illustrations).entries()].find(([, list]) =>
+      list.some((i) => i.id === id)
+    )![0]
+
+  it('adds a picture the scan never had', () => {
+    const doc = withPicture()
+    expect(doc.illustrations).toHaveLength(1)
+    expect(doc.illustrations[0]).toMatchObject({
+      id: 'img1',
+      origin: 'supplied',
+      sourceWidth: 1600,
+      sourceHeight: 1200
+    })
+  })
+
+  it('puts it after the block the editor chose', () => {
+    expect(anchorOf(withPicture(), 'img1')).toBe(1)
+  })
+
+  it('accepts the front of the book as a place, for a frontispiece', () => {
+    expect(anchorOf(withPicture({ afterBlockId: null }), 'img1')).toBe(-1)
+  })
+
+  it('carries a caption when one was given, and none when not', () => {
+    expect(withPicture({ caption: 'The author, 1662.' }).illustrations[0]!.caption).toBe(
+      'The author, 1662.'
+    )
+    expect(withPicture({ caption: '   ' }).illustrations[0]!.caption).toBeNull()
+    expect(withPicture().illustrations[0]!.caption).toBeNull()
+  })
+
+  it('leaves the book’s own pictures alone', () => {
+    const doc = assembleBook([page(0, [{ kind: 'paragraph', text: 'Text.' }])], {
+      illustrations: [{ id: 'cut1', pageIndex: 0, sourceWidth: 100, sourceHeight: 100 }]
+    })
+    const both = applyEdits(doc, [
+      { kind: 'image', imageId: 'img1', afterBlockId: 'p0b0', sourceWidth: 10, sourceHeight: 10 }
+    ])
+    expect(both.illustrations.map((i) => i.id)).toEqual(['cut1', 'img1'])
+    expect(both.illustrations[0]!.origin).toBeUndefined()
+  })
+
+  it('goes when the block it was placed after goes', () => {
+    const doc = applyEdits(book(), [
+      { kind: 'image', imageId: 'img1', afterBlockId: 'p0b1', sourceWidth: 10, sourceHeight: 10 },
+      { kind: 'drop', blockId: 'p0b1' }
+    ])
+    expect(doc.illustrations).toEqual([])
+  })
+
+  it('is measured for resolution like any other picture', () => {
+    // The DPI check divides these pixels by the printed inches, and does not
+    // care that nobody scanned them.
+    const doc = withPicture()
+    expect(doc.illustrations[0]!.sourceWidth).toBe(1600)
+  })
+})
+
+describe('applyEdits — an anchor outliving the block it names', () => {
+  const illustrated = () =>
+    assembleBook([page(0, [{ kind: 'paragraph', text: 'First half. Second half.' }])], {
+      illustrations: [{ id: 'cut1', pageIndex: 0, sourceWidth: 10, sourceHeight: 10 }]
+    })
+
+  const anchorOf = (doc: BookDocument, id: string): number =>
+    [...anchorIllustrations(doc.blocks, doc.illustrations).entries()].find(([, list]) =>
+      list.some((i) => i.id === id)
+    )![0]
+
+  it('follows a split to the second half — after the block is after all of it', () => {
+    // Without this, splitting a paragraph would quietly unpin every picture
+    // that followed it, which is ordinary editing breaking placement.
+    const doc = applyEdits(illustrated(), [
+      { kind: 'anchor', illustrationId: 'cut1', afterBlockId: 'p0b0' },
+      { kind: 'split', blockId: 'p0b0', at: 12 }
+    ])
+    expect(ids(doc)).toEqual(['p0b0/1', 'p0b0/2'])
+    expect(anchorOf(doc, 'cut1')).toBe(1)
+  })
+
+  it('follows a merge to the block that absorbed it', () => {
+    const doc = assembleBook([
+      page(0, [
+        { kind: 'paragraph', text: 'One.' },
+        { kind: 'paragraph', text: 'Two.' }
+      ])
+    ])
+    const moved = applyEdits(doc, [
+      { kind: 'image', imageId: 'img1', afterBlockId: 'p0b1', sourceWidth: 10, sourceHeight: 10 },
+      { kind: 'merge', blockId: 'p0b0' }
+    ])
+    expect(texts(moved)).toEqual(['One. Two.'])
+    expect(anchorOf(moved, 'img1')).toBe(0)
+  })
+
+  it('sends a supplied picture to the end when its anchor is truly gone', () => {
+    // It stays in the book, somewhere predictable — rather than being lost, or
+    // landing at the front where it would read as a frontispiece.
+    const doc = assembleBook([
+      page(0, [
+        { kind: 'paragraph', text: 'One.' },
+        { kind: 'paragraph', text: 'Two.' }
+      ])
+    ])
+    const orphaned = applyEdits(doc, [
+      { kind: 'image', imageId: 'img1', afterBlockId: 'p0b0', sourceWidth: 10, sourceHeight: 10 }
+    ])
+    // Re-anchor onto a block that does not exist at all, as a stale saved edit
+    // would after the page it named was removed.
+    const stale = {
+      ...orphaned,
+      illustrations: orphaned.illustrations.map((i) => ({ ...i, anchorAfterBlockId: 'gone' }))
+    }
+    expect(anchorOf(stale, 'img1')).toBe(stale.blocks.length - 1)
+  })
+})

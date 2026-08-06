@@ -42,7 +42,7 @@ import { profileFromAnswers, describeProfile, type DesignAnswers } from '@core/d
 import { buildExport, editionFromAnswers, type BuildExportResult } from '@core/export'
 import { applyEdits, type BookEdit } from '@core/edits'
 import { renderInterior } from '../platform/browser/interior'
-import { cropIllustrations } from '../platform/browser/illustrations'
+import { cropIllustrations, readSuppliedImage } from '../platform/browser/illustrations'
 import { renderPageToObjectUrl } from '../platform/browser/pdf'
 import { ExportResult } from './ExportResult'
 import { PreviewPane } from './PreviewPane'
@@ -61,10 +61,24 @@ export function App(): JSX.Element {
   // Identifies the open file, so a paid run can be found again on a later visit.
   const fileKeyRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
-  // PNG bytes for the illustrations the user kept, cut once at the structure
-  // gate. Held in a ref rather than in state: they are megabytes of pixels, and
-  // nothing renders from them directly — the PDF writer looks them up by id.
-  const imagesRef = useRef<Map<string, Uint8Array>>(new Map())
+  /**
+   * PNG bytes for the illustrations cut out of the scan at the structure gate.
+   *
+   * Held in a ref rather than in state: they are megabytes of pixels, and
+   * nothing renders from them directly — the PDF writer looks them up by id.
+   * Kept apart from the editor's own pictures below because the two have
+   * different lifetimes: these are re-cut from the scan for free, so they are
+   * never saved and are rebuilt whenever the accepted set changes.
+   */
+  const cropBytesRef = useRef<Map<string, Uint8Array>>(new Map())
+  /**
+   * PNG bytes for pictures the *editor* supplied.
+   *
+   * These cannot be re-derived from anything the app holds — a portrait chosen
+   * off someone's disk is gone with the tab — so they are saved with the run,
+   * and rebuilding the crops must never take them with it.
+   */
+  const suppliedBytesRef = useRef<Map<string, Uint8Array>>(new Map())
   /**
    * Pages the *user* chose to leave out at the review gate.
    *
@@ -76,6 +90,11 @@ export function App(): JSX.Element {
    * relabel them and break a paragraph that legitimately runs across a plate.
    */
   const excludedPagesRef = useRef<number[]>([])
+  /**
+   * Preview URLs for the pictures the editor supplied, so the proof sheet can
+   * show one back. Kept beside the bytes and revoked when a new book is opened.
+   */
+  const imagePreviewsRef = useRef<Map<string, string>>(new Map())
   /**
    * Pages the user already looked at and accepted at the uncertainty gate.
    *
@@ -167,6 +186,12 @@ export function App(): JSX.Element {
    * and laying out again is the whole of "the preview reflects my fix" — there
    * is no incremental update to get wrong.
    */
+  /** Every picture in the book, whichever half of it each came from. */
+  const allImageBytes = useCallback(
+    (): Map<string, Uint8Array> => new Map([...cropBytesRef.current, ...suppliedBytesRef.current]),
+    []
+  )
+
   const correctedDocument = useMemo(
     () => (state.document ? applyEdits(state.document, edits) : null),
     [state.document, edits]
@@ -194,6 +219,39 @@ export function App(): JSX.Element {
     }
   }, [])
 
+  /**
+   * Take a picture the editor picked into the book.
+   *
+   * The bytes go beside the document keyed by id — the same channel the crops
+   * cut out of the scan use — and only the id and pixel size reach the core.
+   */
+  const addSuppliedImage = useCallback(
+    async (
+      file: File
+    ): Promise<{ imageId: string; sourceWidth: number; sourceHeight: number } | null> => {
+      try {
+        const decoded = await readSuppliedImage(file)
+        // Minted from the clock so an id is never reused after a picture is
+        // removed; a reused one would overwrite bytes still referenced.
+        const imageId = `img${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`
+        suppliedBytesRef.current = new Map(suppliedBytesRef.current).set(imageId, decoded.bytes)
+        imagePreviewsRef.current.set(
+          imageId,
+          URL.createObjectURL(new Blob([decoded.bytes as BlobPart], { type: 'image/png' }))
+        )
+        return { imageId, sourceWidth: decoded.width, sourceHeight: decoded.height }
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? `That picture could not be read: ${err.message}`
+            : 'That picture could not be read.'
+        )
+        return null
+      }
+    },
+    []
+  )
+
   const resolveEvidence = useCallback((src: string): string | undefined => {
     const m = /^page:(\d+)$/.exec(src)
     if (m) return reconRef.current?.thumbnails.get(Number(m[1]))
@@ -210,7 +268,10 @@ export function App(): JSX.Element {
     setBuildNote(null)
     if (reconRef.current) releaseRecon(reconRef.current)
     reconRef.current = null
-    imagesRef.current = new Map()
+    for (const url of imagePreviewsRef.current.values()) URL.revokeObjectURL(url)
+    imagePreviewsRef.current = new Map()
+    cropBytesRef.current = new Map()
+    suppliedBytesRef.current = new Map()
     excludedPagesRef.current = []
     reviewedPagesRef.current = []
     setEdits([])
@@ -389,6 +450,17 @@ export function App(): JSX.Element {
     // that cannot be regenerated from the scan: an hour spent reading a book
     // against its scan is an hour, and a refresh must not cost it.
     setEdits(saved.edits)
+    // And the pixels of any pictures the editor supplied, which are the one
+    // part of an illustration that cannot be re-derived from the scan.
+    const restoredImages = new Map(suppliedBytesRef.current)
+    for (const image of saved.images) {
+      restoredImages.set(image.id, image.bytes)
+      imagePreviewsRef.current.set(
+        image.id,
+        URL.createObjectURL(new Blob([image.bytes as BlobPart], { type: 'image/png' }))
+      )
+    }
+    suppliedBytesRef.current = restoredImages
 
     setState((s) => ({
       ...s,
@@ -412,7 +484,8 @@ export function App(): JSX.Element {
       result: RunResult,
       identityAnswers: Record<string, unknown>,
       modelId: string,
-      corrections: readonly BookEdit[] = []
+      corrections: readonly BookEdit[] = [],
+      images: ReadonlyMap<string, Uint8Array> = new Map()
     ): Promise<void> => {
       const key = fileKeyRef.current
       const file = fileDataRef.current
@@ -433,7 +506,8 @@ export function App(): JSX.Element {
           usage: result.usage,
           modelId,
           identityAnswers,
-          edits: corrections
+          edits: corrections,
+          images
         })
       )
       if (!stored) {
@@ -564,7 +638,7 @@ export function App(): JSX.Element {
         edition: { ...edition, notices: edition.notices },
         onProgress: (done, total) => setBuildProgress({ done, total }),
         orphanNotes: input.omitOrphanFootnotes ? 'omit' : 'collect',
-        images: imagesRef.current
+        images: allImageBytes()
       })
       setPdf({ bytes: interior.bytes, pageCount: interior.pageCount })
       setBuildNote(null)
@@ -716,7 +790,7 @@ export function App(): JSX.Element {
     // Nothing kept: skip the render entirely rather than opening the PDF to
     // crop nothing out of it.
     if (regions.length === 0) {
-      imagesRef.current = new Map()
+      cropBytesRef.current = new Map()
       complete()
       return
     }
@@ -726,7 +800,7 @@ export function App(): JSX.Element {
       const cropped = await cropIllustrations(file, regions, {
         onProgress: (done, total) => setBuildProgress({ done, total })
       })
-      imagesRef.current = cropped.bytes
+      cropBytesRef.current = cropped.bytes
       if (cropped.failed.length > 0) {
         setError(
           `${cropped.failed.length} illustration(s) could not be cut out of the scan and ` +
@@ -743,7 +817,7 @@ export function App(): JSX.Element {
       setError(err instanceof Error ? err.message : String(err))
       // The book is still publishable without its pictures, so this does not
       // strand the user at the gate — it says what was lost and moves on.
-      imagesRef.current = new Map()
+      cropBytesRef.current = new Map()
       complete()
     } finally {
       setBuildProgress(null)
@@ -975,6 +1049,8 @@ export function App(): JSX.Element {
               onChange={setEdits}
               resolveScan={(pageIndex) => reconRef.current?.thumbnails.get(pageIndex)}
               loadScan={loadProofScan}
+              addImage={addSuppliedImage}
+              imagePreview={(imageId) => imagePreviewsRef.current.get(imageId)}
               findings={state.findings}
               uncertainties={state.uncertainties}
               reviewedPages={reviewedPagesRef.current}
@@ -1010,7 +1086,7 @@ export function App(): JSX.Element {
                 book={correctedDocument}
                 profile={designProfile}
                 edition={previewEdition}
-                images={imagesRef.current}
+                images={allImageBytes()}
               />
             ) : null}
             <div className="actions">

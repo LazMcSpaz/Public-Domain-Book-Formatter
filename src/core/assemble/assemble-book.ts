@@ -94,6 +94,15 @@ export interface IllustrationSource {
   sourceHeight: number
 }
 
+/**
+ * Where a picture came from.
+ *
+ * `scan` was cut out of the book being reprinted, and knows which leaf it was
+ * printed on — which is what lets the engine place it without being told.
+ * `supplied` is the editor's own, has no leaf, and so must be told.
+ */
+export type IllustrationOrigin = 'scan' | 'supplied'
+
 /** An illustration in the assembled book, with the caption it was printed under. */
 export interface Illustration extends IllustrationSource {
   /**
@@ -111,6 +120,8 @@ export interface Illustration extends IllustrationSource {
    * has to be distinguishable from not having answered.
    */
   anchorAfterBlockId?: string | null
+  /** Defaults to `scan`. A supplied picture has no source leaf to fall back on. */
+  origin?: IllustrationOrigin
 }
 
 export interface BookDocument {

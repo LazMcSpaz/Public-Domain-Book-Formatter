@@ -220,6 +220,17 @@ OCR word boxes ──► detectRegions ──► rectangles with no *text* in th
   the renderer resolves it. Ornaments carry their art because art is path data,
   and pictures cannot: megabytes of decoded bitmap in a `LaidOutPage` would drag
   the DOM into `src/core` and hold a whole book of them at once.
+- **A picture can also come from the editor**, not only from the scan. Such a
+  picture has no source leaf, so `anchorAfterBlockId` is the only thing that
+  places it and `origin: 'supplied'` is what stops the page rule being used as a
+  fallback for a page it never had. It is decoded through a canvas — which both
+  accepts any format the browser reads and bounds a phone photograph to what a
+  book page can print — and its bytes are saved with the run, because unlike a
+  crop they cannot be cut out of the scan again.
+- **Anchors follow their block through a split or a merge.** "After that block"
+  is still a place when the block is renamed or absorbed, and without the
+  migration ordinary editing would silently unpin every picture that followed
+  the paragraph being edited.
 - **A picture that could not be set is reported**, exactly as a note is —
   `imagesDropped` on the book, `missingImages` from the writer, both on the
   export screen. Nothing is drawn in its place: a grey placeholder in a book for

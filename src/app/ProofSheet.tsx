@@ -16,6 +16,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import type { BookDocument } from '@core/assemble'
 import type { BlockKind, VerificationFinding } from '@core/transcribe'
 import {
+  blockOf,
   countEdited,
   nextFlaggedPage,
   proofSheet,
@@ -42,6 +43,17 @@ export interface ProofSheetProps {
    * The URL it returns is revoked here when the user moves on.
    */
   loadScan?: (pageIndex: number) => Promise<string | undefined>
+  /**
+   * Take a picture the editor picked and make it part of the book: decode it,
+   * keep its bytes for the writer, and hand back the id and pixel size the
+   * document needs. Returns null when the file could not be read.
+   */
+  addImage?: (
+    file: File,
+    afterBlockId: string
+  ) => Promise<{ imageId: string; sourceWidth: number; sourceHeight: number } | null>
+  /** A preview URL for a supplied picture, by id. */
+  imagePreview?: (imageId: string) => string | undefined
   findings?: VerificationFinding[]
   uncertainties?: { pageIndex: number; text: string }[]
   reviewedPages?: number[]
@@ -79,6 +91,8 @@ export function ProofSheet({
   onChange,
   resolveScan,
   loadScan,
+  addImage,
+  imagePreview,
   findings,
   uncertainties,
   reviewedPages
@@ -178,10 +192,27 @@ export function ProofSheet({
   }, [edits])
 
   const push = (edit: BookEdit): void => onChange(withEdit(edits, edit))
+  // Notes survive an undo of the block's corrections: they are the editor's own
+  // writing, not a correction to be reverted.
   const undo = (blockId: string): void =>
-    onChange(edits.filter((e) => e.kind === 'anchor' || e.kind === 'note' || e.blockId !== blockId))
+    onChange(edits.filter((e) => e.kind === 'note' || blockOf(e) !== blockId))
   const removeNote = (noteId: string): void =>
     onChange(edits.filter((e) => e.kind !== 'note' || e.noteId !== noteId))
+
+  /** Pictures the editor added, grouped by the block they follow. */
+  const imagesByBlock = useMemo(() => {
+    const out = new Map<string, (BookEdit & { kind: 'image' })[]>()
+    for (const edit of edits) {
+      if (edit.kind !== 'image' || edit.afterBlockId === null) continue
+      const list = out.get(edit.afterBlockId) ?? []
+      list.push(edit)
+      out.set(edit.afterBlockId, list)
+    }
+    return out
+  }, [edits])
+
+  const removeImage = (imageId: string): void =>
+    onChange(edits.filter((e) => e.kind !== 'image' || e.imageId !== imageId))
 
   /** The caret in a block's text box, for "put it where I am looking". */
   const caretOf = (el: Element | null): number =>
@@ -258,7 +289,7 @@ export function ProofSheet({
             const text = currentText.get(block.id) ?? block.text
             const kind = currentKind.get(block.id) ?? block.kind
             const isDropped = dropped.has(block.id)
-            const edited = edits.some((e) => e.kind !== 'anchor' && e.blockId === block.id)
+            const edited = edits.some((e) => blockOf(e) === block.id)
 
             return (
               <div key={block.id} className={`proof-block${isDropped ? ' dropped' : ''}`}>
@@ -337,6 +368,28 @@ export function ProofSheet({
                   >
                     Split at the cursor
                   </button>
+                  {addImage ? (
+                    <label className="proof-add-image">
+                      Add a picture after this
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0]
+                          // Cleared so picking the same file twice still fires.
+                          e.target.value = ''
+                          if (!file) return
+                          void addImage(file, block.id).then((added) => {
+                            if (added)
+                              onChange([
+                                ...edits,
+                                { kind: 'image', ...added, afterBlockId: block.id }
+                              ])
+                          })
+                        }}
+                      />
+                    </label>
+                  ) : null}
                   <button
                     type="button"
                     title="Attach a note of your own at the cursor"
@@ -360,6 +413,30 @@ export function ProofSheet({
                     Add a note here
                   </button>
                 </div>
+
+                {(imagesByBlock.get(block.id) ?? []).map((image) => {
+                  const preview = imagePreview?.(image.imageId)
+                  return (
+                    <div key={image.imageId} className="proof-picture">
+                      <span className="proof-annotation-bar">
+                        <span className="proof-annotation-label">
+                          Your picture — {image.sourceWidth}×{image.sourceHeight} pixels
+                        </span>
+                        <button type="button" onClick={() => removeImage(image.imageId)}>
+                          Remove picture
+                        </button>
+                      </span>
+                      {preview ? <img src={preview} alt="The picture you added" /> : null}
+                      <input
+                        type="text"
+                        value={image.caption ?? ''}
+                        placeholder="Caption (optional) — set under the picture"
+                        aria-label="Caption for your picture"
+                        onChange={(e) => push({ ...image, caption: e.target.value })}
+                      />
+                    </div>
+                  )
+                })}
 
                 {(notesByBlock.get(block.id) ?? []).map((note) => (
                   <div key={note.noteId} className="proof-annotation">

@@ -9,6 +9,53 @@
 import { chromium } from 'playwright'
 import { mkdir, stat } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { deflateSync } from 'node:zlib'
+
+/**
+ * A real PNG, written here rather than checked in as a fixture.
+ *
+ * The picture has to *decode* — the point of the assertion is that a file the
+ * editor picks goes through `createImageBitmap`, a canvas and pdf-lib and comes
+ * out in the book, and a malformed byte string would only test the error path.
+ */
+function grayscalePng(width, height) {
+  const table = Array.from({ length: 256 }, (_, n) => {
+    let c = n
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+    return c >>> 0
+  })
+  const crc = (buf) => {
+    let c = 0xffffffff
+    for (const byte of buf) c = table[(c ^ byte) & 0xff] ^ (c >>> 8)
+    return (c ^ 0xffffffff) >>> 0
+  }
+  const chunk = (type, data) => {
+    const head = Buffer.alloc(4)
+    head.writeUInt32BE(data.length)
+    const body = Buffer.concat([Buffer.from(type, 'latin1'), data])
+    const tail = Buffer.alloc(4)
+    tail.writeUInt32BE(crc(body))
+    return Buffer.concat([head, body, tail])
+  }
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(width, 0)
+  ihdr.writeUInt32BE(height, 4)
+  ihdr[8] = 8
+  ihdr[9] = 0
+  const raw = Buffer.alloc((width + 1) * height)
+  for (let y = 0; y < height; y++) {
+    raw[y * (width + 1)] = 0
+    for (let x = 0; x < width; x++) {
+      raw[y * (width + 1) + 1 + x] = (x + y) % 16 < 8 ? 0 : 255
+    }
+  }
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', ihdr),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0))
+  ])
+}
 
 const OUT = process.argv[2] ?? 'screenshots'
 const URL_BASE = process.env.APP_URL ?? 'http://localhost:5173'
@@ -294,6 +341,21 @@ await page.waitForTimeout(300)
 const annotations = await page.locator('.proof-annotation').count()
 await shot('05c2b-proof-note')
 
+// A picture of the editor's own — the other differentiation route, and the one
+// the app could not do at all before: every image came out of the scan.
+const png = grayscalePng(64, 48)
+await page.locator('.proof-add-image input[type=file]').first().setInputFiles({
+  name: 'portrait.png',
+  mimeType: 'image/png',
+  buffer: png
+})
+await page.waitForTimeout(600)
+await page.locator('.proof-picture input[type=text]').first().fill('The author, from life.')
+await page.waitForTimeout(300)
+const suppliedPictures = await page.locator('.proof-picture').count()
+const suppliedPreview = await page.locator('.proof-picture img').count()
+await shot('05c2c-proof-added-picture')
+
 // The phone viewport: the scan stacks above the text rather than beside it.
 await page.setViewportSize({ width: 390, height: 844 })
 await page.waitForTimeout(400)
@@ -488,6 +550,7 @@ console.log(`  advanced past the structure gate to: ${afterStructure}`)
 console.log(`  proof sheet: ${proofBoxes} editable block(s), ${proofScan} scan(s) beside them`)
 console.log(`  after correcting one: ${correctedCount.replace(/\s+/g, ' ')}`)
 console.log(`  editor's notes attached: ${annotations}`)
+console.log(`  pictures the editor added: ${suppliedPictures} (previewed: ${suppliedPreview})`)
 console.log(`  the note is set at the foot of a page: ${noteNote.replace(/\s+/g, ' ')}`)
 console.log(`  proof sheet mobile overflow: ${proofOverflow}px`)
 console.log(`  export blocked until the title is given: ${blockedWithoutTitle}`)
@@ -521,6 +584,10 @@ process.exit(
     proofScan === 1 &&
     /1 corrected/.test(correctedCount) &&
     annotations === 1 &&
+    suppliedPictures === 1 &&
+    suppliedPreview === 1 &&
+    // Three pictures now reach the book: two cut from the scan, one supplied.
+    /3 illustrations set into the book/.test(illustrationNote) &&
     // The export screen reports what the engine actually placed, so this is
     // the authored note reaching the book rather than reaching a form.
     /1 footnote\(s\) were set at the foot/.test(noteNote) &&

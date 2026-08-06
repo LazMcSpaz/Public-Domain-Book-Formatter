@@ -47,9 +47,14 @@ export function anchorIllustrations(
         illustration.anchorAfterBlockId === null
           ? -1
           : blocks.findIndex((b) => b.id === illustration.anchorAfterBlockId)
-      // A block that is no longer in the book falls back to the page rule
-      // rather than silently pinning the picture to the front.
-      if (after < 0 && illustration.anchorAfterBlockId !== null) after = byPage(illustration)
+      // The block it was pinned to is gone. A scanned picture falls back to the
+      // page rule, which still knows where it was printed. A supplied one has
+      // no such fact behind it, so it goes to the end of the body: still in the
+      // book, somewhere predictable, rather than silently lost or landing at
+      // the front where it would read as a frontispiece nobody asked for.
+      if (after < 0 && illustration.anchorAfterBlockId !== null) {
+        after = illustration.origin === 'supplied' ? blocks.length - 1 : byPage(illustration)
+      }
     } else {
       after = byPage(illustration)
     }
