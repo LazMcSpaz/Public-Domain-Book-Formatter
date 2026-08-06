@@ -345,7 +345,9 @@ export function App(): JSX.Element {
             warnings: interior.warnings.map(
               (w) =>
                 `Page ${w.pageIndex + 1}: a line runs past the margin — “${w.text.slice(0, 60)}”`
-            )
+            ),
+            notesPlaced: interior.notesPlaced,
+            notesDropped: interior.notesDropped
           }
         })
       )

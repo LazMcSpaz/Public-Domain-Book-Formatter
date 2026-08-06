@@ -1,152 +1,112 @@
 # Testing Guide
 
-Two layers: **automated checks** (run anywhere, no system tools) and a
-**manual end-to-end pass** (needs a real machine with a display and the OCR/
-typesetting toolchain). See [`docs/ARCHITECTURE.md`](./ARCHITECTURE.md) for what
-each layer actually exercises.
+Three layers, in the order you should reach for them:
+
+1. **Automated checks** — pure logic, no browser, no network, no spend. This is
+   what CI runs and what a change has to pass.
+2. **The browser harness** — drives the real app in real Chromium and
+   screenshots every screen. UI work is verified here, not shipped blind.
+3. **A manual paid pass** — the one thing neither of the above can do, because
+   it costs money: a whole book through the vision model.
 
 ---
 
-## 1. Automated checks (any machine, no system tools)
+## 1. Automated checks
 
 ```bash
-npm install            # add ELECTRON_SKIP_BINARY_DOWNLOAD=1 if the Electron CDN is blocked
+npm install
 npm run format:check   # prettier
-npm run lint           # eslint
-npm run typecheck      # tsc --noEmit, whole tree
-npm test               # vitest — 228 tests
-npm run build          # electron-vite bundles main/preload/renderer
+npm run lint           # eslint, whole repo
+npm run typecheck      # tsc --noEmit
+npm test               # vitest
+npm run build          # typecheck + vite build → dist/
 ```
 
-All five should pass. This is exactly what CI runs
-(`.github/workflows/ci.yml`). If you only run one thing, run `npm test`.
+All five should pass; this is exactly what `.github/workflows/ci.yml` runs. If
+you only run one thing, run `npm test`.
+
+**No API key is needed and nothing is spent.** The vision pass is exercised
+through a mock transport, so the schema, the prompt, the runner, the retry
+behaviour, the verification and the cost arithmetic are all covered without a
+single real request.
+
+### What the suite actually proves
+
+| Area               | Covered by                                                                                                                                                                                                                                                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| The whole flow     | `wizard-steps` — the step machine and every gate's questions, with no DOM                                                                                                                                                                                                                                           |
+| Reading the scan   | `hocr`, `coordinate-map`, `lexicon-build`                                                                                                                                                                                                                                                                           |
+| The model pass     | `transcribe`, `transcribe-runner` — mocked transport, real schema and parsing                                                                                                                                                                                                                                       |
+| Stitching the book | `assemble-book` — page seams, hyphen healing, footnote linking, front-matter dispositions                                                                                                                                                                                                                           |
+| **Layout**         | `layout-break-lines`, `layout-paginate`, `layout-footnotes` — a fixed-width fake measurer, so every break is exact integer arithmetic about the engine rather than a fact about EB Garamond                                                                                                                         |
+| **The real PDF**   | `layout-pdf` — generates a file, reopens it with **pdf.js** (a different library from the one that wrote it), and asserts the MediaBox is exactly the trim, the font program is embedded, the folios are drawn, the footnotes and the contents page are present, and the page count is the one the engine predicted |
+
+That last assertion is the one that earns its keep. Everything else can pass
+while the measurer and the embedder quietly disagree about how wide a word is;
+when they do, the lines break differently and the page count moves.
 
 ---
 
-## 2. Manual end-to-end pass (real machine)
-
-This is the part that can't be done in the sandbox. You need the system tools
-the app orchestrates.
-
-### 2a. Install the toolchain
-
-| Tool                           | Purpose           | macOS (brew)                        | Debian/Ubuntu (apt)                 | Windows             |
-| ------------------------------ | ----------------- | ----------------------------------- | ----------------------------------- | ------------------- |
-| **Node 22**                    | run/build the app | `brew install node@22`              | nodesource                          | nodejs.org / winget |
-| **Tesseract** + `eng` data     | OCR               | `brew install tesseract`            | `tesseract-ocr`                     | choco/scoop         |
-| **Poppler** (pdftoppm/pdfinfo) | page extraction   | `brew install poppler`              | `poppler-utils`                     | choco/scoop         |
-| **Pandoc**                     | Markdown → LaTeX  | `brew install pandoc`               | `pandoc`                            | choco/scoop         |
-| **TeX Live** + **XeLaTeX**     | typesetting       | `brew install --cask mactex-no-gui` | `texlive-xetex texlive-fonts-extra` | install-tl          |
-| **librsvg** (`rsvg-convert`)   | ornament SVG→PDF  | `brew install librsvg`              | `librsvg2-bin`                      | choco/scoop         |
-| **OCRmyPDF** _(optional)_      | deskew/preprocess | `brew install ocrmypdf`             | `ocrmypdf`                          | pip                 |
-
-Fonts: the shipped default profiles use **EB Garamond** and **Linux Libertine**.
-Install them (or pick installed fonts in the Design tab) so XeLaTeX can embed
-them. macOS: `brew install --cask font-eb-garamond`; Linux:
-`fonts-ebgaramond fonts-linuxlibertine`.
-
-Confirm everything resolves:
+## 2. The browser harness
 
 ```bash
-tesseract --version && pdftoppm -v && pandoc -v && xelatex --version && rsvg-convert --version
+npm run dev                        # in one shell
+node scripts/screenshot-flow.mjs   # in another
 ```
 
-### 2b. Get a sample input
+It drives the wizard in headless Chromium against a generated 8-page test book
+(`node scripts/make-test-book.mjs`), writes a screenshot per screen into
+`screenshots/`, and **fails the run** if any of these is not true:
 
-Any public-domain scanned PDF works. Good sources: Internet Archive
-(archive.org "PDF" download of a scanned old book) or a Google-Books/HathiTrust
-public-domain scan. Pick something short (20–60 pages) with at least one
-illustration and clear chapter headings so every feature gets exercised.
+- the term grid rendered rows with real word crops beside them;
+- the design summary changed when a design answer changed;
+- the page preview rendered, and its **pixels** changed when a style answer
+  changed (the image `src` is an object URL that changes on every regeneration
+  whether or not anything moved, so it proves nothing);
+- the export offered a PDF with a page count;
+- no KDP check is still reporting `pending`;
+- neither the design gate nor the export screen scrolls sideways at 390px.
 
-### 2c. Launch
+Look at the PNGs. The check is a floor, not a substitute for seeing it.
 
-```bash
-npm install          # if not already
-npm run dev          # launches the Electron app
-```
-
-On first run, if any **required** tool is missing the **Setup Wizard** appears
-(Tesseract / Poppler / Pandoc / XeLaTeX status). Install what's flagged, hit
-"Re-check", then "Continue".
-
-### 2d. Walk the flow and verify
-
-1. **Import** — "Import PDF…", pick your sample. The Loading view shows pipeline
-   stages (extract → ocr → image-detect → cleanup → structure → markdown).
-   - ✅ Completes without error and lands in the Review view.
-   - A `<name>.bookproj` directory is created next to the PDF (manifest + assets).
-
-2. **Review (read + sync)** — the source scan (left) and formatted text (right).
-   - ✅ Hovering a word highlights its counterpart on the other side.
-   - ✅ Scrolling one pane tracks the other.
-   - ✅ Toggle "confidence tint" — low-confidence OCR words tint; off by default.
-   - ✅ Hovering a flagged/low-confidence word shows the cropped source pixels.
-   - ✅ "Next flag" jumps through flags; the Flag panel shows real OCR numbers vs
-     labeled heuristics (no fake percentages).
-
-3. **Edit + find/replace** — fix a word inline in the right pane; add a
-   find-replace rule and "Apply all"; run "Scan suspicious characters".
-   - ✅ Edits stick; Save (or Ctrl+S) persists; reopening the project restores them.
-
-4. **Tagging** — select a passage, right-click, assign a type (try **heading**,
-   **blockquote**, and a **footnote**: select the note, then its in-text ref).
-   - ✅ Tag decorations appear; the Structure panel lists tags.
-   - ✅ Confirm a heading → it appears in the live TOC preview.
-
-5. **Images** — find an auto-detected region on a page (dashed marker).
-   - ✅ Accept it → "Edit image…" opens the editor.
-   - ✅ Crop (drag on the image or numeric), rotate/straighten, levels/curves/
-     threshold/grayscale/despeckle, and best-effort background removal all update
-     the live preview.
-   - ✅ The DPI badge warns when the placed image is under 300 DPI.
-   - ✅ Save → reopen → edits are preserved (non-destructive; original re-derived).
-
-6. **Design (style/profile)** — Design tab: set trim size, margins, fonts,
-   running heads, page numbers, ornaments. "Save as profile", then "Apply to
-   book". Reopen a _different_ project and confirm the saved profile is available
-   (profiles live in the app's userData dir, reusable across books).
-
-7. **Front matter** — fill title/author + ISBN/edition/imprint/copyright.
-
-8. **Export (the payoff)** — Export tab → "Export KDP PDF".
-   - ✅ Produces a PDF in `<bookproj>/build/book.pdf`.
-   - ✅ The validation report shows font/trim/gutter/DPI checks and the **final
-     page count** (you need it for the cover spine).
-   - ✅ Open the PDF: correct trim size, embedded fonts, running heads flipping
-     verso/recto, a generated TOC with edition page numbers, ornaments placed,
-     front matter present.
-
-### 2e. The real proof
-
-Even a perfect digital file needs a physical KDP proof (gutter swallow, tight
-margins, light fonts, muddy images only show on paper). Upload `book.pdf` as a
-KDP interior and order one proof. The DPI warnings + validation reduce proof
-cycles but don't eliminate them (SPEC §10).
+Gates that sit behind the paid transcription run are reachable in development at
+`#preview` (`src/app/DevPreview.tsx`), so looking at them costs nothing.
 
 ---
 
-## 3. Packaging the Windows installer
+## 3. The manual paid pass
 
-Not buildable on Linux/macOS. On a Windows runner (or the CI `package-windows`
-job, triggered by a `v*` tag or manual dispatch):
+Only this can tell you whether the app works on a real book, and it spends real
+money. Budget one short book.
 
-```powershell
-pwsh scripts/fetch-win-tools.ps1   # downloads the bundled tools into resources/bin/win
-npm run dist:win                   # electron-vite build + electron-builder NSIS → release/*.exe
-```
+1. Get a scanned public-domain PDF — the Internet Archive is the easiest source.
+   Pick something short (20–60 pages) with clear chapter headings and at least a
+   few footnotes, so the interesting paths are exercised.
+2. `npm run dev`, drop the PDF in, and let recon finish. This part is free.
+3. At the transcription gate, enter an Anthropic API key. The key is stored in
+   this browser only and is sent straight to the API — there is no server to
+   proxy it. **Approve the cost estimate before it runs**; the estimate errs
+   high on purpose.
+4. Walk the gates, then check the exported PDF against the scan:
+   - every chapter starts on a right-hand page;
+   - the running heads name the right chapter, and the folios run correctly;
+   - **footnotes sit at the foot of the page their reference is on**, renumbered
+     straight through the book;
+   - **the contents page numbers match the pages the chapters actually open on**;
+   - no line runs past the margin — the export screen reports these, so check it
+     agrees with what you can see;
+   - the page count on the export screen matches the PDF, because that number is
+     what a cover spine is sized from.
+5. **Print a proof.** Gutter swallow, tight margins, and light faces at print
+   size only show on paper. The app reduces proof cycles; it cannot remove them
+   (SPEC §10).
 
-The installer now bundles the **app + the system tools** (Tesseract, Poppler,
-Pandoc, TinyTeX) so end users install nothing else — see
-[`docs/INSTALL.md`](./INSTALL.md) for the end-user flow and how bundling works.
-The `fetch-win-tools.ps1` URLs/versions are pinned and may need bumping; that
-script can only be validated on a real Windows runner.
+### What a manual pass still cannot check here
 
----
-
-## Known limits (by design, this build)
-
-- No automated UI tests (no headless display here); §2 is manual.
-- Curves/crop are in the image editor; advanced masking for background removal is
-  best-effort, as labeled.
-- Pandoc receives the body via a temp file; very large books haven't been
-  performance-tuned.
+- **Junicode** is not installed by `npm install` and is not committed. Selecting
+  it falls back to EB Garamond, and the preview says so. See
+  `public/fonts/junicode/README.md`.
+- **Illustrations** are not laid out at all yet, so an illustrated book comes
+  back as text only.
+- **Nothing is saved.** A refresh loses a completed transcription run, which is
+  the expensive thing to lose. Do not reload the tab mid-book.

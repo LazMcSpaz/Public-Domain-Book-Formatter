@@ -10,7 +10,12 @@
  */
 import type { BookDocument } from '@core/assemble'
 import type { StyleProfile } from '@core/model'
-import { englishHyphenator, layout, type LayoutEdition, type LayoutWarning } from '@core/layout'
+import {
+  englishHyphenator,
+  layoutWithToc,
+  type LayoutEdition,
+  type LayoutWarning
+} from '@core/layout'
 import { fontTableFor } from './fonts'
 import { renderPdf } from './pdf-out'
 
@@ -22,8 +27,12 @@ export interface Interior {
   embeddedFamilies: string[]
   /** Lines that would not fit their measure. */
   warnings: LayoutWarning[]
-  /** Where each chapter opens, ready for a TOC with measured page numbers. */
+  /** Where each chapter opens, and the folio the contents page printed for it. */
   chapterPages: { title: string; level: number; pageIndex: number }[]
+  /** How many footnotes were set at the foot of a page. */
+  notesPlaced: number
+  /** Notes that could not be set, and why — never dropped silently. */
+  notesDropped: { id: string; reason: string }[]
   /** Families asked for but unavailable, mapped to what was used instead. */
   substitutions: [string, string][]
 }
@@ -41,7 +50,12 @@ export async function renderInterior(
 ): Promise<Interior> {
   const fonts = await fontTableFor([profile.bodyFont, profile.headingFont])
 
-  const book = layout(doc, profile, fonts, {
+  // Two passes, so the contents page carries measured page numbers rather than
+  // the original edition's — which describe a pagination this book no longer
+  // has, and are the reason the scanned contents was discarded in the first
+  // place. See `layoutWithToc` for why the second pass cannot invalidate the
+  // first.
+  const book = layoutWithToc(doc, profile, fonts, {
     edition: options.edition,
     hyphenate: englishHyphenator()
   })
@@ -67,6 +81,8 @@ export async function renderInterior(
     embeddedFamilies: pdf.embeddedFamilies,
     warnings: book.warnings,
     chapterPages: book.chapterPages,
+    notesPlaced: book.notesPlaced,
+    notesDropped: book.notesDropped,
     substitutions: [...fonts.substitutions.entries()]
   }
 }

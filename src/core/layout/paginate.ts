@@ -22,7 +22,8 @@
  */
 import type { StyleProfile } from '@core/model'
 import type { BookBlock, BookDocument } from '@core/assemble'
-import { breakParagraph, type Alignment, type BrokenLine } from './break-lines'
+import { breakParagraph, type Alignment, type Attachment, type BrokenLine } from './break-lines'
+import { prepareFootnotes, type NoteReference, type PreparedNote } from './footnotes'
 import {
   bottomFolioBaseline,
   frameFor,
@@ -68,6 +69,21 @@ export interface LayoutOptions {
    * change would make the gate unusable.
    */
   maxBodyPages?: number
+  /**
+   * Contents entries to set in the front matter. Omit for no contents page.
+   *
+   * The folios are supplied by the caller because they only exist after a
+   * layout has been run — see `layoutWithToc`, which runs this function twice.
+   */
+  toc?: readonly TocLine[]
+}
+
+/** One line of the table of contents. */
+export interface TocLine {
+  title: string
+  level: number
+  /** The printed folio, or null on the first pass when it isn't known yet. */
+  folio: string | null
 }
 
 /** How far a chapter title sinks from the top of its page, in line slots. */
@@ -80,6 +96,23 @@ const DROP_CAP_LINES = 3
 const INDENT_EMS = 1.2
 /** Gap between a drop capital and the text beside it, as a fraction of its size. */
 const DROP_CAP_GAP_RATIO = 0.06
+
+/** Footnotes are set smaller than the body, as a fraction of the body size. */
+const NOTE_SIZE_RATIO = 0.82
+/** Baseline-to-baseline within a note, as a fraction of the note size. */
+const NOTE_LEADING_RATIO = 1.22
+/** The separator rule's length, as a fraction of the measure. */
+const NOTE_RULE_WIDTH_RATIO = 0.28
+const NOTE_RULE_THICKNESS = 0.5
+/** Space between the last body line and the separator rule, in body leadings. */
+const NOTE_RULE_GAP_ABOVE = 0.7
+/** Space between the rule and the first note line, in note sizes. */
+const NOTE_RULE_GAP_BELOW = 0.9
+/** A reference mark's size and lift, as fractions of the text it sits in. */
+const MARK_SIZE_RATIO = 0.62
+const MARK_RISE_RATIO = 0.33
+/** Gap between a note's mark and its text, as a fraction of the note size. */
+const NOTE_HANG_GAP_RATIO = 0.35
 
 /**
  * A block turned into placeable lines, with the rules about where it may break.
@@ -106,6 +139,14 @@ interface FlowLine {
   decorations?: TextRun[]
   /** The line does not fit its measure; reported once its page is known. */
   overfull?: boolean
+  /** Notes referenced by this line, which must be set at the foot of its page. */
+  noteIds?: string[]
+}
+
+/** A footnote broken to the measure, ready to be set at the foot of a page. */
+interface NoteBlock {
+  id: string
+  lines: FlowLine[]
 }
 
 /** Bookkeeping while a page is being filled. */
@@ -121,6 +162,8 @@ interface PageBuilder {
   suppressRunningHead: boolean
   /** Display pages (half-title, title, copyright) carry no folio. */
   suppressFolio: boolean
+  /** Notes referenced from this page, in the order they are referenced. */
+  noteIds: string[]
 }
 
 function roman(n: number): string {
@@ -235,22 +278,89 @@ function blockStyle(block: BookBlock, profile: StyleProfile): BlockStyle {
   }
 }
 
-/** Turn broken lines into flow lines at a given font, offset into the measure. */
+/**
+ * Turn broken lines into flow lines at a given font, offset into the measure.
+ *
+ * A word carrying its own size is an attachment — a footnote's reference mark —
+ * and keeps it, along with its lift off the baseline. `markToNote` maps those
+ * marks back to the notes they refer to, which is how a line learns which notes
+ * have to be set at the foot of whatever page it lands on. Keying off the
+ * *attachment* rather than its host word matters: a hyphenated host straddles
+ * two lines, and only the one carrying the mark owns the note.
+ */
 function toFlowLines(
   broken: BrokenLine[],
   font: FontRef,
   sizePt: number,
-  leftOffsets: number[]
+  leftOffsets: number[],
+  markToNote?: ReadonlyMap<string, string>
 ): FlowLine[] {
-  return broken.map((line, i) => ({
-    runs: line.words.map((w) => ({
-      text: w.text,
-      font,
-      sizePt,
-      xPt: w.xPt + (leftOffsets[Math.min(i, leftOffsets.length - 1)] ?? 0)
-    })),
-    ...(line.overfull ? { overfull: true } : {})
-  }))
+  return broken.map((line, i) => {
+    const offset = leftOffsets[Math.min(i, leftOffsets.length - 1)] ?? 0
+    const noteIds: string[] = []
+
+    const runs = line.words.map((w) => {
+      if (w.sizePt !== undefined && markToNote) {
+        const noteId = markToNote.get(w.text)
+        if (noteId !== undefined && !noteIds.includes(noteId)) noteIds.push(noteId)
+      }
+      return {
+        text: w.text,
+        font,
+        sizePt: w.sizePt ?? sizePt,
+        xPt: w.xPt + offset,
+        ...(w.risePt ? { risePt: w.risePt } : {})
+      }
+    })
+
+    return {
+      runs,
+      ...(line.overfull ? { overfull: true } : {}),
+      ...(noteIds.length > 0 ? { noteIds } : {})
+    }
+  })
+}
+
+/**
+ * Break one footnote to the measure.
+ *
+ * Set with a hanging indent: the mark sits at the left edge and every line of
+ * the note is indented past it, so a run of notes lines up down the page and
+ * the marks are scannable. The mark is a decoration rather than a word because
+ * it is outside the text's measure entirely.
+ */
+function breakNote(note: PreparedNote, ctx: BuildContext): NoteBlock {
+  const font: FontRef = { family: ctx.profile.bodyFont, style: 'regular' }
+  const sizePt = ctx.profile.bodyFontSize * NOTE_SIZE_RATIO
+  const markSize = sizePt * MARK_SIZE_RATIO
+  const hang = ctx.measurer.widthOf(note.mark, font, markSize) + sizePt * NOTE_HANG_GAP_RATIO
+
+  const broken = breakParagraph(note.text, {
+    font,
+    sizePt,
+    measurer: ctx.measurer,
+    lineWidths: Math.max(1, ctx.measureWidth - hang),
+    alignment: 'left',
+    ...(ctx.hyphenate ? { hyphenate: ctx.hyphenate } : {})
+  })
+
+  const lines = toFlowLines(broken, font, sizePt, [hang])
+  const first = lines[0]
+  if (first) {
+    first.decorations = [
+      { text: note.mark, font, sizePt: markSize, xPt: 0, risePt: sizePt * MARK_RISE_RATIO }
+    ]
+  } else {
+    // A note with no text still has to appear, or it vanishes without a word.
+    lines.push({
+      runs: [],
+      decorations: [
+        { text: note.mark, font, sizePt: markSize, xPt: 0, risePt: sizePt * MARK_RISE_RATIO }
+      ]
+    })
+  }
+
+  return { id: note.id, lines }
 }
 
 interface BuildContext {
@@ -269,11 +379,16 @@ interface BuildContext {
  * whole reason the plan calls drop caps "line-box arithmetic" rather than a
  * decoration.
  */
-function buildFlowable(
-  block: BookBlock,
-  ctx: BuildContext,
-  opts: { suppressFirstIndent: boolean; dropCap: boolean }
-): Flowable {
+interface FlowableOptions {
+  suppressFirstIndent: boolean
+  dropCap: boolean
+  /** The block's text with reference marks already renumbered, if it has any. */
+  text?: string
+  /** Footnote references found in that text. */
+  references?: readonly NoteReference[]
+}
+
+function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOptions): Flowable {
   const style = blockStyle(block, ctx.profile)
   const sizePt = ctx.profile.bodyFontSize * style.scale
   const family = block.kind === 'heading' ? ctx.profile.headingFont : ctx.profile.bodyFont
@@ -290,10 +405,24 @@ function buildFlowable(
   // small-capped is set in ordinary capitals instead. Real `smcp` needs
   // glyph-level drawing, and a synthesised version — scaled capitals — is the
   // tell of a cheap reprint. Better to not offer the look than to fake it.
+  const source = opts.text ?? block.text
   const text =
     block.kind === 'heading' && ctx.profile.headingStyle.smallCaps
-      ? block.text.toLocaleUpperCase()
-      : block.text
+      ? source.toLocaleUpperCase()
+      : source
+
+  // Reference marks ride on the end of the word they follow, set smaller and
+  // lifted. They are given to the breaker rather than concatenated into the
+  // text because they occupy width — a line breaker that did not know about
+  // them would set every line carrying one fractionally too long.
+  const references = opts.references ?? []
+  const attachments: Attachment[] = references.map((ref) => ({
+    wordIndex: ref.wordIndex,
+    text: ref.mark,
+    sizePt: sizePt * MARK_SIZE_RATIO,
+    risePt: sizePt * MARK_RISE_RATIO
+  }))
+  const markToNote = new Map(references.map((ref) => [ref.mark, ref.noteId]))
 
   const dropCap = opts.dropCap && block.kind === 'paragraph' && text.trim().length > 0
   if (!dropCap) {
@@ -304,12 +433,13 @@ function buildFlowable(
       lineWidths: measure,
       alignment: style.alignment,
       firstLineIndentPt: firstIndent,
+      ...(attachments.length > 0 ? { attachments } : {}),
       ...(block.kind === 'paragraph' || block.kind === 'blockquote'
         ? { hyphenate: ctx.hyphenate }
         : {})
     })
     return {
-      lines: toFlowLines(broken, font, sizePt, [indentLeft]),
+      lines: toFlowLines(broken, font, sizePt, [indentLeft], markToNote),
       spaceBefore: style.spaceBefore,
       spaceAfter: style.spaceAfter,
       startsChapter: isChapter,
@@ -320,7 +450,10 @@ function buildFlowable(
     }
   }
 
-  return buildDropCapFlowable(text, font, sizePt, indentLeft, measure, ctx, style)
+  return buildDropCapFlowable(text, font, sizePt, indentLeft, measure, ctx, style, {
+    attachments,
+    markToNote
+  })
 }
 
 /**
@@ -338,10 +471,20 @@ function buildDropCapFlowable(
   indentLeft: number,
   measure: number,
   ctx: BuildContext,
-  style: BlockStyle
+  style: BlockStyle,
+  notes: { attachments: readonly Attachment[]; markToNote: ReadonlyMap<string, string> }
 ): Flowable {
   const initial = [...text.trim()][0] ?? ''
   const rest = text.trim().slice(initial.length).replace(/^\s+/u, '')
+
+  // The initial is lifted out of the text, so when it *was* the whole first
+  // word every later word shifts down one — and a reference mark's word index
+  // has to shift with it, or the note attaches to the wrong word.
+  const countWords = (t: string): number => t.split(/\s+/u).filter((w) => w.length > 0).length
+  const shift = countWords(text.trim()) - countWords(rest)
+  const attachments = notes.attachments
+    .map((a) => ({ ...a, wordIndex: a.wordIndex - shift }))
+    .filter((a) => a.wordIndex >= 0)
 
   const build = (depth: number): { lines: FlowLine[]; capSize: number; capWidth: number } => {
     // A capital's height is roughly 0.7em in a book face, so an initial that
@@ -358,10 +501,15 @@ function buildDropCapFlowable(
       measurer: ctx.measurer,
       lineWidths: widths,
       alignment: style.alignment,
+      ...(attachments.length > 0 ? { attachments } : {}),
       ...(ctx.hyphenate ? { hyphenate: ctx.hyphenate } : {})
     })
     const offsets = [...Array.from({ length: depth }, () => indentLeft + capWidth), indentLeft]
-    return { lines: toFlowLines(broken, font, sizePt, offsets), capSize, capWidth }
+    return {
+      lines: toFlowLines(broken, font, sizePt, offsets, notes.markToNote),
+      capSize,
+      capWidth
+    }
   }
 
   // Ask for three lines; if the paragraph turns out shorter, ask again at the
@@ -439,6 +587,51 @@ export function layout(
   const chapterPages: LaidOutBook['chapterPages'] = []
   const warnings: LayoutWarning[] = []
 
+  // --- footnote geometry ---------------------------------------------------
+  //
+  // A note block hangs off the bottom of the text frame: a separator rule, then
+  // the notes. Everything below is a function of how many *note lines* a page
+  // carries, so the flow can ask "how much body still fits?" before committing
+  // a line whose reference would pull a new note onto the page.
+  const noteSize = profile.bodyFontSize * NOTE_SIZE_RATIO
+  const noteLeading = noteSize * NOTE_LEADING_RATIO
+  const noteMetrics = measurer.metrics({ family: profile.bodyFont, style: 'regular' }, noteSize)
+  const ruleGapAbove = leading * NOTE_RULE_GAP_ABOVE
+  const ruleGapBelow = noteSize * NOTE_RULE_GAP_BELOW
+  const frameBottom = rectoFrame.yPt + rectoFrame.heightPt
+  const firstBaseline = rectoFrame.yPt + ascent
+
+  /** Height of the note block, rule included, for a given number of note lines. */
+  function noteBlockHeight(noteLines: number): number {
+    if (noteLines <= 0) return 0
+    return (
+      NOTE_RULE_THICKNESS +
+      ruleGapBelow +
+      noteMetrics.ascent +
+      (noteLines - 1) * noteLeading +
+      noteMetrics.descent
+    )
+  }
+
+  /** Where the separator rule sits when a page carries this many note lines. */
+  function noteRuleY(noteLines: number): number {
+    return frameBottom - noteBlockHeight(noteLines)
+  }
+
+  /**
+   * How many body slots a page has left once its notes are accounted for.
+   *
+   * Monotone decreasing in `noteLines`, which is what makes the greedy
+   * reservation in the flow below terminate: adding a note can only ever
+   * shrink the body, never grow it.
+   */
+  function bodySlotsFor(noteLines: number): number {
+    if (noteLines <= 0) return slotsPerPage
+    const limit = noteRuleY(noteLines) - ruleGapAbove
+    const slots = Math.floor((limit - firstBaseline) / leading) + 1
+    return Math.max(0, Math.min(slotsPerPage, slots))
+  }
+
   const frameFrom = (side: PageSide): PageFrame => (side === 'recto' ? rectoFrame : versoFrame)
 
   function newPage(section: PageSection, opts?: Partial<PageBuilder>): PageBuilder {
@@ -457,6 +650,7 @@ export function layout(
       frame: frameFrom(side),
       lines: [],
       chapterTitle: previous?.chapterTitle ?? null,
+      noteIds: [],
       suppressRunningHead: false,
       suppressFolio: false,
       ...opts
@@ -480,23 +674,44 @@ export function layout(
     flow.lines.forEach((line, i) => page.lines.push({ slot: start + i, line }))
   }
 
+  // The contents comes last in the front matter, after any dedication, and
+  // opens on a recto as a display page does.
+  if (options.toc && options.toc.length > 0) {
+    buildContents(pages, newPage, profile, options.toc, ctx, slotsPerPage)
+  }
+
   // The body opens on a recto, so a lone verso here becomes a blank leaf.
   if (pages.length % 2 === 1) newPage('front').suppressFolio = true
   const frontMatterPageCount = pages.length
 
   // --- body ---------------------------------------------------------------
 
+  // Reference marks are located and renumbered before anything is broken,
+  // because a mark occupies width and so is a line-breaking input.
+  const prepared = prepareFootnotes(doc.blocks, doc.footnotes)
+
+  // Every note broken to the measure once. A note's line count does not depend
+  // on which page it lands on, so this is computed here and only looked up
+  // during the flow.
+  const noteBlocks = new Map<string, NoteBlock>()
+  for (const note of prepared.notes.values()) {
+    noteBlocks.set(note.id, breakNote(note, ctx))
+  }
+  const noteLinesOf = (id: string): number => noteBlocks.get(id)?.lines.length ?? 0
+
   const flowables: Flowable[] = []
   doc.blocks.forEach((block, i) => {
     const previous = doc.blocks[i - 1]
     const afterHeading = previous?.kind === 'heading'
     const afterChapterHeading = afterHeading && (previous?.level ?? 1) === 1
+    const prep = prepared.blocks[i]
     flowables.push(
       buildFlowable(block, ctx, {
         // A paragraph directly under a heading is set flush: there is no
         // preceding paragraph for an indent to distinguish it from.
         suppressFirstIndent: afterHeading,
-        dropCap: profile.dropCap && afterChapterHeading
+        dropCap: profile.dropCap && afterChapterHeading,
+        ...(prep ? { text: prep.text, references: prep.references } : {})
       })
     )
   })
@@ -549,10 +764,14 @@ export function layout(
     // that was current when the heading was *reached* is often the wrong one.
     let headingRecorded = false
     while (placed < flow.lines.length) {
-      let available = slotsPerPage - slot
+      // A page is always open here: the block above opened one if there wasn't.
+      const pageNoteLines = current().noteIds.reduce((n, id) => n + noteLinesOf(id), 0)
+      let bodySlots = bodySlotsFor(pageNoteLines)
+      let available = bodySlots - slot
       if (available <= 0) {
         if (bodyPageCount() >= maxBodyPages) break
         openBodyPage(false)
+        bodySlots = slotsPerPage
         available = slotsPerPage
       }
 
@@ -567,15 +786,44 @@ export function layout(
       }
 
       // A heading with nothing under it is stranded; move it with its text.
-      if (flow.keepWithNext && take === remaining && slotsPerPage - slot - take < 1) {
+      if (flow.keepWithNext && take === remaining && bodySlots - slot - take < 1) {
         take = 0
       }
+
+      // Reserve for the notes these lines would pull onto the page.
+      //
+      // Greedy and forward-only: a line whose reference brings a new note
+      // shrinks the body area *before* the line is placed, and if it no longer
+      // fits, that line and everything after it move to the next page. Because
+      // the reservation only ever shrinks the body, this settles in one pass —
+      // there is nothing to re-flow, which is why the second pass the plan
+      // budgeted for turned out not to be needed.
+      const beforeNotes = take
+      const claimed = new Set(current().noteIds)
+      let claimedLines = pageNoteLines
+      let allowed = 0
+      for (let k = 0; k < take; k++) {
+        const ids = flow.lines[placed + k]!.noteIds ?? []
+        const fresh = ids.filter((id) => !claimed.has(id) && noteBlocks.has(id))
+        const lines = claimedLines + fresh.reduce((n, id) => n + noteLinesOf(id), 0)
+        if (slot + k + 1 > bodySlotsFor(lines)) break
+        for (const id of fresh) claimed.add(id)
+        claimedLines = lines
+        allowed = k + 1
+      }
+      const noteLimited = allowed === 0 && beforeNotes > 0
+      take = Math.min(take, allowed)
 
       if (take <= 0) {
         // Never push an item off a page it is the only occupant of — that
         // loops forever and would emit blank pages in the middle of a chapter.
         if (current().lines.length === 0 && slot === 0) {
-          take = Math.min(available, remaining)
+          // When it was the notes that blocked it, take a single line: the note
+          // is longer than the page it belongs to, so something has to give,
+          // and one line plus an over-long note beats an infinite loop. The
+          // drawing code keeps the note below the text either way, and the
+          // warning tells the user which page to look at.
+          take = noteLimited ? 1 : Math.min(available, remaining)
         } else {
           if (bodyPageCount() >= maxBodyPages) break
           openBodyPage(false)
@@ -587,6 +835,16 @@ export function layout(
         const line = flow.lines[placed + k]!
         if (current().kind === 'blank') current().kind = 'body'
         current().lines.push({ slot: slot + k, line })
+
+        // The notes this line refers to now belong to this page. Committed
+        // here, from the lines actually placed, rather than from the trial
+        // above — a line the clamp rejected must not leave its note behind.
+        for (const id of line.noteIds ?? []) {
+          if (noteBlocks.has(id) && !current().noteIds.includes(id)) {
+            current().noteIds.push(id)
+          }
+        }
+
         // Reported here rather than at breaking time: a warning is only useful
         // if it says which page to look at, and that isn't known until now.
         if (line.overfull) {
@@ -595,6 +853,13 @@ export function layout(
             text: line.runs.map((r) => r.text).join(' ')
           })
         }
+      }
+
+      if (noteLimited) {
+        warnings.push({
+          pageIndex: current().index,
+          text: 'a footnote is longer than the page it belongs to'
+        })
       }
 
       if (flow.chapter && !headingRecorded) {
@@ -620,15 +885,74 @@ export function layout(
 
   // --- page furniture and finishing --------------------------------------
 
+  /**
+   * Set a page's footnotes at the foot of its text frame.
+   *
+   * The rule normally hangs off the bottom of the frame, so the notes sit on
+   * the baseline the body would have ended on. The clamp is what makes that
+   * safe: on a page whose note is taller than the space reserved for it — the
+   * degenerate case the flow warns about — the rule drops to just below the
+   * last body line instead, so notes overflow the bottom margin rather than
+   * printing on top of the text.
+   */
+  function drawNotes(page: PageBuilder, items: PageItem[]): void {
+    if (page.noteIds.length === 0) return
+
+    const blocks = page.noteIds.map((id) => noteBlocks.get(id)).filter((b): b is NoteBlock => !!b)
+    const noteLines = blocks.reduce((n, b) => n + b.lines.length, 0)
+    if (noteLines === 0) return
+
+    const lastBodySlot = page.lines.reduce((max, l) => Math.max(max, l.slot), -1)
+    const lastBodyBaseline =
+      lastBodySlot < 0 ? firstBaseline - leading : firstBaseline + lastBodySlot * leading
+
+    const ruleY = Math.max(noteRuleY(noteLines), lastBodyBaseline + ruleGapAbove)
+
+    items.push({
+      kind: 'rule',
+      xPt: page.frame.xPt,
+      yPt: ruleY,
+      widthPt: page.frame.widthPt * NOTE_RULE_WIDTH_RATIO,
+      thicknessPt: NOTE_RULE_THICKNESS
+    })
+
+    let baseline = ruleY + NOTE_RULE_THICKNESS + ruleGapBelow + noteMetrics.ascent
+    for (const block of blocks) {
+      for (const line of block.lines) {
+        const runs = runsAt(line, page.frame.xPt)
+        if (runs.length > 0) items.push({ kind: 'line', baselinePt: baseline, runs })
+        baseline += noteLeading
+      }
+    }
+  }
+
   const trim = trimToPoints(profile.trimSize)
   const laidOut: LaidOutPage[] = pages.map((p) =>
     finishPage(p, profile, options.edition, measurer, {
       leading,
       ascent,
       frontMatterPageCount,
-      trim
+      trim,
+      drawNotes
     })
   )
+
+  // Every note that found a reference was placed, because a page is only ever
+  // closed once the lines referencing its notes have been set. Anything left
+  // over never had a reference to attach to, and is reported rather than lost.
+  const placedIds = new Set(pages.flatMap((p) => p.noteIds))
+  const notesDropped = [
+    ...prepared.orphans.map((note) => ({
+      id: note.id,
+      reason: 'no reference mark for this note was found in the text'
+    })),
+    ...[...prepared.notes.values()]
+      .filter((note) => !placedIds.has(note.id))
+      .map((note) => ({
+        id: note.id,
+        reason: 'its reference falls on a page that was not laid out'
+      }))
+  ]
 
   return {
     pages: laidOut,
@@ -636,7 +960,9 @@ export function layout(
     heightPt: trim.heightPt,
     chapterPages,
     fontsUsed: collectFonts(laidOut),
-    warnings
+    warnings,
+    notesPlaced: placedIds.size,
+    notesDropped
   }
 }
 
@@ -645,6 +971,8 @@ interface FinishContext {
   ascent: number
   frontMatterPageCount: number
   trim: { widthPt: number; heightPt: number }
+  /** Draws the footnotes a page claimed. Returns nothing when it has none. */
+  drawNotes: (page: PageBuilder, items: PageItem[]) => void
 }
 
 /** Turn a filled page into an immutable laid-out page, adding head and folio. */
@@ -660,12 +988,11 @@ function finishPage(
 
   for (const { slot, line } of page.lines) {
     const baseline = frame.yPt + ctx.ascent + slot * ctx.leading
-    const runs: TextRun[] = [
-      ...(line.decorations ?? []).map((d) => ({ ...d, xPt: d.xPt + frame.xPt })),
-      ...line.runs.map((r) => ({ ...r, xPt: r.xPt + frame.xPt }))
-    ]
+    const runs = runsAt(line, frame.xPt)
     if (runs.length > 0) items.push({ kind: 'line', baselinePt: baseline, runs })
   }
+
+  ctx.drawNotes(page, items)
 
   const folio = folioFor(page, ctx.frontMatterPageCount)
 
@@ -718,6 +1045,14 @@ function folioFor(page: PageBuilder, frontMatterPageCount: number): string | nul
     : String(page.index - frontMatterPageCount + 1)
 }
 
+/** A flow line's runs, moved from frame-relative to page-absolute. */
+function runsAt(line: FlowLine, frameX: number): TextRun[] {
+  return [
+    ...(line.decorations ?? []).map((d) => ({ ...d, xPt: d.xPt + frameX })),
+    ...line.runs.map((r) => ({ ...r, xPt: r.xPt + frameX }))
+  ]
+}
+
 /** A single centred or outer-aligned line of page furniture. */
 function furnitureLine(
   text: string,
@@ -748,6 +1083,123 @@ function furnitureLine(
     baselinePt: opts.baseline,
     runs: [{ text, font, sizePt, xPt: Math.round(x * 1000) / 1000 }]
   }
+}
+
+/**
+ * Set the table of contents.
+ *
+ * The folio sits in a column of fixed width at the right of the measure, and
+ * the title is broken to what is left. That is not a cosmetic choice: it is
+ * what makes the two-pass layout converge. If the number could push a title
+ * onto another line, adding the real page numbers in the second pass could
+ * lengthen the contents, which would shift every page it was numbering — the
+ * classic way a two-pass table of contents fails to settle. With the column
+ * fixed, the line count is decided by the titles alone, which are known before
+ * any layout has been run at all.
+ */
+function buildContents(
+  pages: PageBuilder[],
+  newPage: (section: PageSection, opts?: Partial<PageBuilder>) => PageBuilder,
+  profile: StyleProfile,
+  toc: readonly TocLine[],
+  ctx: BuildContext,
+  slotsPerPage: number
+): void {
+  const body: FontRef = { family: profile.bodyFont, style: 'regular' }
+  const heading: FontRef = { family: profile.headingFont, style: 'regular' }
+  const sizePt = profile.bodyFontSize
+
+  // Wide enough for four digits and a little air — more than any interior KDP
+  // will print, so the column never has to grow.
+  const folioColumn = ctx.measurer.widthOf('8888', body, sizePt) + sizePt * 0.5
+
+  if (pages.length % 2 === 1) {
+    const blank = newPage('front')
+    blank.suppressFolio = true
+    blank.suppressRunningHead = true
+  }
+
+  let page = newPage('front')
+  page.kind = 'contents'
+  page.suppressRunningHead = true
+  page.suppressFolio = true
+
+  let slot = CHAPTER_SINK_SLOTS
+
+  // The heading, set like a chapter title so the contents reads as part of the
+  // same book rather than as an appendage.
+  const titleText = profile.headingStyle.smallCaps ? 'CONTENTS' : 'Contents'
+  const titleSize = sizePt * profile.headingStyle.scale
+  for (const line of breakParagraph(titleText, {
+    font: heading,
+    sizePt: titleSize,
+    measurer: ctx.measurer,
+    lineWidths: ctx.measureWidth,
+    alignment: profile.headingStyle.centered ? 'center' : 'left'
+  })) {
+    page.lines.push({
+      slot,
+      line: {
+        runs: line.words.map((w) => ({
+          text: w.text,
+          font: heading,
+          sizePt: titleSize,
+          xPt: w.xPt
+        }))
+      }
+    })
+    slot += 1
+  }
+  slot += CHAPTER_GAP_SLOTS
+
+  toc.forEach((entry, i) => {
+    const indent = Math.max(0, entry.level - 1) * sizePt
+    // A title that wraps hangs its continuation, so the eye can tell a second
+    // line of one entry from the first line of the next.
+    const hang = sizePt
+    const measure = Math.max(1, ctx.measureWidth - folioColumn - indent)
+
+    const broken = breakParagraph(entry.title, {
+      font: body,
+      sizePt,
+      measurer: ctx.measurer,
+      lineWidths: [measure, Math.max(1, measure - hang)],
+      alignment: 'left'
+    })
+    if (broken.length === 0) return
+
+    // A blank line before each top-level entry after the first, so chapters
+    // group visibly when there are sub-headings between them.
+    const gapBefore = i > 0 && entry.level === 1 ? 1 : 0
+    if (slot + gapBefore + broken.length > slotsPerPage) {
+      page = newPage('front')
+      page.kind = 'contents'
+      page.suppressRunningHead = true
+      page.suppressFolio = true
+      slot = 0
+    } else {
+      slot += gapBefore
+    }
+
+    broken.forEach((line, lineIndex) => {
+      const runs: TextRun[] = line.words.map((w) => ({
+        text: w.text,
+        font: body,
+        sizePt,
+        xPt: w.xPt + indent + (lineIndex === 0 ? 0 : hang)
+      }))
+
+      // The number aligns with the entry's *last* line, which is where a reader
+      // looks for it when a title has wrapped.
+      if (lineIndex === broken.length - 1 && entry.folio) {
+        const width = ctx.measurer.widthOf(entry.folio, body, sizePt)
+        runs.push({ text: entry.folio, font: body, sizePt, xPt: ctx.measureWidth - width })
+      }
+
+      page.lines.push({ slot: slot + lineIndex, line: { runs } })
+    })
+    slot += broken.length
+  })
 }
 
 /** Front matter: half-title, title page, copyright page — replaced, not scanned. */

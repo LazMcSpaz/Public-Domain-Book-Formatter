@@ -47,6 +47,42 @@ export interface PlacedWord {
   text: string
   /** Offset from the left edge of the *measure*, not of the page. */
   xPt: number
+  /** Set only for an attachment: its own size, not the paragraph's. */
+  sizePt?: number
+  /** Set only for an attachment: baseline offset, positive = raised. */
+  risePt?: number
+  /**
+   * Index of the source word this came from, counting whitespace-separated
+   * words in the paragraph's text. Attachments carry the index of their host.
+   * This is how a footnote's reference mark is traced to the line it landed
+   * on — string-matching the rendered line would be guesswork, and a marker
+   * that is a bare digit is exactly the case guesswork gets wrong.
+   */
+  sourceIndex: number
+}
+
+/**
+ * A short span glued to the end of a word and set differently from it — a
+ * footnote's reference mark, and nothing else so far.
+ *
+ * It has to be modelled here rather than concatenated into the word, for two
+ * reasons that pull in the same direction. It is drawn at its own size and
+ * raised off the baseline, so it cannot share a run with its host; and it
+ * occupies width, so a line breaker that did not know about it would set lines
+ * fractionally too long.
+ *
+ * Synthesising the mark this way — rather than using the Unicode superscript
+ * digits — is not fussiness. IM FELL English, the face this app recommends for
+ * 17th-century books, carries ¹²³ and none of ⁰⁴⁵⁶⁷⁸⁹, so any note past the
+ * third would have drawn as a missing glyph in the most likely configuration.
+ */
+export interface Attachment {
+  /** Index of the whitespace-separated word this rides on the end of. */
+  wordIndex: number
+  text: string
+  sizePt: number
+  /** Baseline offset, positive = raised. */
+  risePt: number
 }
 
 export interface BrokenLine {
@@ -81,6 +117,8 @@ export interface BreakParagraphOptions {
   firstLineIndentPt?: number
   /** Splits a word into hyphenatable pieces. Omit to disable hyphenation. */
   hyphenate?: (word: string) => string[]
+  /** Spans set differently from the paragraph, glued to the end of a word. */
+  attachments?: readonly Attachment[]
 }
 
 /**
@@ -113,14 +151,19 @@ const PARAGRAPH_FILL_STRETCH = 1e6
 interface TextBox extends Box {
   type: 'box'
   text: string
+  /** Which whitespace-separated source word this box belongs to. -1 = none. */
+  source: number
+  /** Present on an attachment box, which never merges with its neighbours. */
+  sizePt?: number
+  risePt?: number
 }
 
 function isTextBox(item: InputItem): item is TextBox {
   return item.type === 'box'
 }
 
-function box(text: string, width: number): TextBox {
-  return { type: 'box', width, text }
+function box(text: string, width: number, source: number): TextBox {
+  return { type: 'box', width, text, source }
 }
 
 function glue(width: number, stretch: number, shrink: number): Glue {
@@ -187,23 +230,45 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
   if (indent > 0) {
     // An indent is an empty box, exactly as TeX models `\parindent`. Making it
     // a box rather than glue matters: glue could be stretched or broken at.
-    items.push(box('', indent))
+    items.push(box('', indent, -1))
   }
 
   const words = text.split(/\s+/u).filter((w) => w.length > 0)
+
+  // Grouped so a word carrying two marks gets both, in order.
+  const attachments = new Map<number, Attachment[]>()
+  for (const attachment of options.attachments ?? []) {
+    const list = attachments.get(attachment.wordIndex)
+    if (list) list.push(attachment)
+    else attachments.set(attachment.wordIndex, [attachment])
+  }
 
   words.forEach((word, i) => {
     if (i > 0) items.push(glue(spaceWidth, stretch, shrink))
 
     const pieces = hyphenate ? hyphenate(word) : [word]
     if (pieces.length <= 1) {
-      items.push(box(word, width(word)))
-      return
+      items.push(box(word, width(word), i))
+    } else {
+      pieces.forEach((piece, p) => {
+        if (p > 0) items.push(penalty(hyphenWidth, HYPHEN_PENALTY, true))
+        items.push(box(piece, width(piece), i))
+      })
     }
-    pieces.forEach((piece, p) => {
-      if (p > 0) items.push(penalty(hyphenWidth, HYPHEN_PENALTY, true))
-      items.push(box(piece, width(piece)))
-    })
+
+    // Attached after the word's last piece and with no glue between, so a mark
+    // can never be separated from the word it refers to.
+    for (const attachment of attachments.get(i) ?? []) {
+      const mark: TextBox = {
+        type: 'box',
+        width: measurer.widthOf(attachment.text, font, attachment.sizePt),
+        text: attachment.text,
+        source: i,
+        sizePt: attachment.sizePt,
+        risePt: attachment.risePt
+      }
+      items.push(mark)
+    }
   })
 
   // The standard paragraph ending: glue that can absorb any amount of slack, so
@@ -279,28 +344,39 @@ export function breakParagraph(text: string, options: BreakParagraphOptions): Br
     // When the break isn't taken there, those boxes are one word again and must
     // be re-joined — otherwise "example" would be drawn as three abutting runs,
     // which is both wasteful and a chance for rounding to open a seam mid-word.
-    let adjacent = false
+    // An attachment is the exception: it abuts its host but is set at another
+    // size, so merging the two would draw the mark as body text.
+    let mergeable = false
 
     for (let j = start; j < end; j++) {
       const item = items[j]!
       if (isTextBox(item)) {
+        const isAttachment = item.sizePt !== undefined
         const last = words[words.length - 1]
         if (item.text.length === 0) {
           // A paragraph indent: width but nothing to draw.
-        } else if (adjacent && last) {
+        } else if (mergeable && last && !isAttachment && last.sizePt === undefined) {
           last.text += item.text
+        } else if (isAttachment) {
+          words.push({
+            text: item.text,
+            xPt: round(x),
+            sourceIndex: item.source,
+            sizePt: item.sizePt!,
+            risePt: item.risePt ?? 0
+          })
         } else {
-          words.push({ text: item.text, xPt: round(x) })
+          words.push({ text: item.text, xPt: round(x), sourceIndex: item.source })
         }
         x += item.width
-        adjacent = true
+        mergeable = !isAttachment
       } else if (item.type === 'glue') {
         x += item.width + (ratio >= 0 ? ratio * item.stretch : ratio * item.shrink)
-        adjacent = false
+        mergeable = false
       }
       // A penalty inside a line contributes nothing: its width is the hyphen,
       // which is only drawn when the break is actually taken there. It leaves
-      // `adjacent` alone, because the pieces either side of it are one word.
+      // `mergeable` alone, because the pieces either side of it are one word.
     }
 
     // A break taken *at* a flagged penalty is a hyphenated word: draw the mark.
@@ -312,8 +388,8 @@ export function breakParagraph(text: string, options: BreakParagraphOptions): Br
       breakItem.cost < MAX_COST
     if (hyphenated) {
       const last = words[words.length - 1]
-      if (adjacent && last) last.text += '-'
-      else words.push({ text: '-', xPt: round(x) })
+      if (mergeable && last && last.sizePt === undefined) last.text += '-'
+      else words.push({ text: '-', xPt: round(x), sourceIndex: last?.sourceIndex ?? -1 })
       x += breakItem.width
     }
 

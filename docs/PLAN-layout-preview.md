@@ -1,6 +1,6 @@
 # Plan: real page layout, live preview, and a PDF that isn't a `.tex`
 
-Status: **steps 1–5 built and verified; 6–8 remain.** Written for a fresh
+Status: **steps 1–7 built and verified; step 8 remains.** Written for a fresh
 session to pick up, then revised twice — once after checking what exists on npm,
 and again after building it, which contradicted two of the decisions below. Both
 corrections are recorded in "What building it changed", at the end.
@@ -232,12 +232,21 @@ Each step leaves the app working.
    (an initial spanning N lines, with those N lines indented), not LaTeX
    macros.~~ **Drop caps done**, exactly as line-box arithmetic. Ornaments are
    not drawn yet; `RuleShape` exists in the page model for them.
-6. Footnotes (the reserve-and-re-flow loop).
-7. TOC with measured page numbers (the second pass). `LaidOutBook.chapterPages`
-   already reports where every chapter opened, so the collecting half is done.
+6. ~~Footnotes (the reserve-and-re-flow loop).~~ **Done — and the re-flow was
+   not needed.** Reserving as lines are placed only ever shrinks the body, so a
+   line whose reference pulls in a new note either fits or moves to the next
+   page; a single forward pass settles it. See "What building it changed".
+7. ~~TOC with measured page numbers (the second pass).~~ **Done**, in two passes
+   that provably converge — the folio sits in a fixed-width column, so the
+   contents' length is decided by the titles and cannot move when the numbers
+   are filled in.
 8. Delete the LaTeX path. ~~Turn the two `pending` KDP checks into real ones.~~
    **The KDP half is done**: the page count is measured, and the layout engine
    reports overfull lines, so both checks now report the truth.
+
+   The `.tex` should not go until the PDF path is a superset of it. One gap is
+   left: the LaTeX emitter collected notes with no reference mark at the end of
+   the book, and the PDF path reports them on the export screen instead.
 
 ## Decisions taken
 
@@ -315,6 +324,23 @@ this whole design exists to prevent.
 This is worth revisiting. A patched or forked embedder that writes widths for
 every glyph actually laid out would give back real `fi` and `fl`, which a book
 face is drawn to use.
+
+### Footnote marks cannot be Unicode superscripts
+
+The obvious way to set a reference mark is the Unicode superscript digits, which
+need no special drawing at all. **IM FELL English carries ¹²³ and none of
+⁰⁴⁵⁶⁷⁸⁹** — and it is the face this app _recommends_ for 17th-century books, so
+any note past the third would have drawn as a missing glyph in the single most
+likely configuration. Every other bundled face has all ten, which is exactly how
+this would have shipped unnoticed.
+
+So marks are synthesised: a smaller glyph lifted off the baseline. That needs
+the line breaker to carry a span set differently from the text around it
+(`Attachment`), because the mark occupies width and a breaker that did not know
+about it would set every line carrying one fractionally too long.
+
+The same mechanism is what small capitals would need, if they are ever done
+properly.
 
 ### Two smaller things
 

@@ -16,10 +16,17 @@ import { readFileSync } from 'node:fs'
 import { inflateSync } from 'node:zlib'
 import fontkit from '@pdf-lib/fontkit'
 import type { TypeFeatures } from '@pdf-lib/fontkit'
-import { englishHyphenator, layout, type FontRef, type LayoutEdition } from '@core/layout'
+import {
+  englishHyphenator,
+  layout,
+  layoutWithToc,
+  type FontRef,
+  type LayoutEdition
+} from '@core/layout'
 import { defaultStyleProfile } from '@core/style'
 import { renderPdf } from '@platform/browser/pdf-out'
 import type { FontTable } from '@platform/browser/fonts'
+import { assembleBook } from '@core/assemble'
 import type { BookBlock, BookDocument } from '@core/assemble'
 
 /** Must match `LAYOUT_FEATURES` in the browser font table — see that file. */
@@ -236,5 +243,96 @@ describe('renderPdf — the real output', () => {
     const a = await build()
     const b = await build()
     expect(b.pdf.pageCount).toBe(a.pdf.pageCount)
+  })
+})
+
+describe('renderPdf — footnotes and the contents page reach the file', () => {
+  /**
+   * The whole point of this suite. Both of these used to be *silently* absent
+   * from the PDF while present in the LaTeX: the page count was right, the
+   * text extracted cleanly, and every KDP check passed. Only the printed book
+   * was missing its notes.
+   */
+  async function buildScholarly() {
+    const fonts = diskFontTable()
+    const doc = assembleBook([
+      {
+        pageIndex: 0,
+        role: 'body',
+        uncertain: [],
+        furniture: {},
+        blocks: [
+          { kind: 'heading', text: 'Of the Air', level: 1 },
+          { kind: 'paragraph', text: `${PROSE}A first observation.1 ${PROSE}` },
+          { kind: 'footnote', text: 'See Croll, Basilica Chymica, lib. ii.', marker: '1' }
+        ]
+      },
+      {
+        pageIndex: 1,
+        role: 'body',
+        uncertain: [],
+        furniture: {},
+        blocks: [
+          { kind: 'heading', text: 'Of Fire', level: 1 },
+          { kind: 'paragraph', text: `${PROSE}A second observation.1 ${PROSE}` },
+          { kind: 'footnote', text: 'Boyle disputes this at length.', marker: '1' }
+        ]
+      }
+    ])
+    const book = layoutWithToc(doc, defaultStyleProfile(), fonts, {
+      edition: EDITION,
+      hyphenate: englishHyphenator()
+    })
+    const pdf = await renderPdf(book, fonts, { title: EDITION.title })
+    return { book, pdf }
+  }
+
+  it('sets both notes, on the pages their references landed on', async () => {
+    const { book, pdf } = await buildScholarly()
+    expect(book.notesPlaced).toBe(2)
+    expect(book.notesDropped).toEqual([])
+
+    const reopened = await reopen(pdf.bytes)
+    const pageWith = async (needle: string): Promise<number> => {
+      for (let i = 0; i < reopened.numPages; i++) {
+        if ((await textOfPage(reopened, i)).includes(needle)) return i
+      }
+      return -1
+    }
+
+    expect(await pageWith('Basilica Chymica')).toBe(await pageWith('A first observation'))
+    expect(await pageWith('Boyle disputes')).toBe(await pageWith('A second observation'))
+    await reopened.destroy()
+  })
+
+  it('renumbers the marks through the book — both notes were printed "1"', async () => {
+    const { pdf } = await buildScholarly()
+    const reopened = await reopen(pdf.bytes)
+    const second = await textOfPage(
+      reopened,
+      await (async () => {
+        for (let i = 0; i < reopened.numPages; i++) {
+          if ((await textOfPage(reopened, i)).includes('Boyle disputes')) return i
+        }
+        return 0
+      })()
+    )
+    // The second note is "2" in this edition, whatever the printer called it.
+    expect(second).toMatch(/2 Boyle disputes/)
+    await reopened.destroy()
+  })
+
+  it('sets a contents page carrying the folios the chapters open on', async () => {
+    const { book, pdf } = await buildScholarly()
+    const contents = book.pages.find((p) => p.kind === 'contents')!
+    const reopened = await reopen(pdf.bytes)
+    const text = await textOfPage(reopened, contents.index)
+
+    expect(text).toContain('CONTENTS')
+    for (const chapter of book.chapterPages) {
+      expect(text).toContain(chapter.title)
+      expect(text).toContain(book.pages[chapter.pageIndex]!.folio!)
+    }
+    await reopened.destroy()
   })
 })

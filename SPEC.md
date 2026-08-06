@@ -1,8 +1,35 @@
 # Public-Domain Book Reprint Tool — Project Spec
 
+> ## Read this first: parts of this document are superseded
+>
+> This is the **original** design, written before the app was rebuilt to run in
+> the browser. It is kept because its _goals_, its philosophy, and its honest
+> account of the labour involved (§1, §4's trust tiers, §7, §10, §11) still
+> describe what is being built. Its _architecture_ does not.
+>
+> What changed, and where the current description lives:
+>
+> | This spec says                                   | Actually                                                                                                                                           |
+> | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+> | Electron desktop app, Windows install wizard     | A browser app. No shell, no installer, no system dependencies.                                                                                     |
+> | Tesseract / OCRmyPDF / pdftoppm binaries         | `tesseract.js` and PDF.js, in the tab.                                                                                                             |
+> | Pandoc → Markdown → XeLaTeX → PDF                | A layout engine in `src/core/layout` and pdf-lib. No TeX anywhere.                                                                                 |
+> | Cleanup heuristics over OCR text (§3)            | A vision model reads the page against the scan and returns typed structure. OCR stays as the independent witness and the source of bounding boxes. |
+> | Review as a side-by-side reading instrument (§4) | An interview: the app runs unattended and stops at gates, with the evidence attached. The side-by-side instrument was not built.                   |
+>
+> **Current, accurate documents:** [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
+> for the flow and module map, [`README.md`](./README.md) for what works today
+> and what does not, [`CLAUDE.md`](./CLAUDE.md) for the conventions.
+>
+> §12's build sequence and §13's settled decisions are both superseded; see the
+> notes at each.
+
 A Windows desktop application that turns public-domain book PDFs (including old scans) into print-ready KDP interiors. The tool automates the bulk of OCR, cleanup, and typesetting, then gives the user a comfortable review surface to bring output to publishable quality.
 
 **Design philosophy:** Automate the easy 80%. Make the human override of the hard 20% fast, pleasant, and non-destructive. Never dress up a heuristic as if it were a guarantee.
+
+_(The philosophy above is unchanged and still governs. The application shell
+described below is not what was built.)_
 
 ---
 
@@ -27,6 +54,11 @@ A Windows desktop application that turns public-domain book PDFs (including old 
 ---
 
 ## 2. Architecture Overview
+
+> **Superseded in full.** No Electron, no installer, no system binaries. The
+> browser does all of it. The one part of this section that survived intact is
+> the hOCR coordinate mapping below, which is still the backbone and still
+> exists at `src/core/model/coordinate-map.ts`.
 
 ### Application shell
 
@@ -239,6 +271,12 @@ OCR and formatting _feel_ hard but are largely tool-solved. The labor that actua
 
 ## 12. Build Sequence
 
+> **Superseded.** This sequence was written for the Electron design. The browser
+> app was built in a different order and several items here were dropped rather
+> than deferred — the side-by-side review instrument (P2), the image editor
+> (P3 #14) and the Windows installer (P4 #21) do not exist and are not currently
+> planned. [`README.md`](./README.md) lists what is built and what is missing.
+
 Tiered so the highest-value, foundational pieces come first.
 
 ### Phase 1 — Core pipeline (prove the engine)
@@ -282,10 +320,19 @@ Tiered so the highest-value, foundational pieces come first.
 
 ---
 
-## 13. Open Decisions (settled)
+## 13. Open Decisions (settled — and two since reversed)
 
-- **Electron** over native Windows — confirmed (rich linked-pane UI).
-- **XeLaTeX** over plain LaTeX — confirmed (any system font).
-- **Output:** clean reflowable text, not preserved page images — confirmed.
-- **Target:** KDP print-on-demand interior — confirmed.
-- **Covers & PD verification:** out of scope — confirmed.
+- ~~**Electron** over native Windows~~ — **reversed.** The app runs in a browser.
+  Nothing in the flow needed a desktop shell, and dropping it removed the
+  install wizard, the system-dependency detection, and three system binaries
+  from the project at once.
+- ~~**XeLaTeX** over plain LaTeX~~ — **reversed.** There is no TeX. Running one
+  in the browser was the last unproven piece of the pipeline, so the app lays
+  the book out itself and pdf-lib writes the file. The `.tex` emitter survives
+  as a secondary download while the PDF path earns trust, and is scheduled for
+  deletion. See [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md).
+- **Output:** clean reflowable text, not preserved page images — confirmed, and
+  still true.
+- **Target:** KDP print-on-demand interior — confirmed, and still true.
+- **Covers & PD verification:** out of scope — confirmed, and still true. The
+  final page count is reported, and is now measured rather than estimated.

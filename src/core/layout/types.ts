@@ -46,6 +46,15 @@ export interface TextRun {
   sizePt: number
   /** Distance from the left edge of the page to the run's origin. */
   xPt: number
+  /**
+   * Baseline offset for this run alone, positive = raised off the line.
+   *
+   * Only a footnote's reference mark uses it. A synthesised superscript — a
+   * smaller glyph lifted off the baseline — is how a superscript is set when
+   * the face has no dedicated one, and several of the faces here do not: IM
+   * FELL English carries ¹²³ and none of ⁰⁴⁵⁶⁷⁸⁹.
+   */
+  risePt?: number
 }
 
 /** A horizontal rule — used for ornament fallbacks and page furniture. */
@@ -89,7 +98,7 @@ export interface PageFrame {
  * design questions, and a blank leaf is never mistaken for a failed render.
  */
 export type PageKind =
-  'half-title' | 'title' | 'copyright' | 'aside' | 'blank' | 'chapter-opener' | 'body'
+  'half-title' | 'title' | 'copyright' | 'contents' | 'aside' | 'blank' | 'chapter-opener' | 'body'
 
 /** Which side of the spread a page falls on. Recto is the right-hand page. */
 export type PageSide = 'recto' | 'verso'
@@ -134,6 +143,13 @@ export interface LaidOutBook {
   fontsUsed: FontRef[]
   /** Lines that would not fit their measure. Empty is the good case, and real. */
   warnings: LayoutWarning[]
+  /** How many footnotes were set at the foot of a page. */
+  notesPlaced: number
+  /**
+   * Notes that were not set, and why. A note dropped without a word is the
+   * failure this whole reporting path exists to prevent.
+   */
+  notesDropped: { id: string; reason: string }[]
 }
 
 /**

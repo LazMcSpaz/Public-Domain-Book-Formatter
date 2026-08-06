@@ -84,7 +84,11 @@ Path aliases: `@core`, `@platform` (defined in `tsconfig.json`,
   pass, and it supplies the bounding boxes the coordinate map needs.
 - **Front matter is replaced, not transcribed.** The original title/copyright
   pages are _sources of metadata_; the scanned TOC and index carry the original
-  edition's pagination and are discarded and regenerated (`src/core/pages`).
+  edition's pagination and are discarded. The contents page is regenerated with
+  numbers this edition actually prints (`src/core/pages`, `src/core/layout/toc`).
+- **A note that cannot be placed is reported, never dropped.** `notesDropped`
+  travels from the engine to the export screen. Silence here is the worst
+  possible failure: the reader finds the missing footnote once it is printed.
 - **The preview is the PDF.** The design gate lays the book out, writes real PDF
   bytes and renders _those_ with pdf.js. Never add a second renderer that
   approximates the page — one renderer is what makes the gate's approval mean
@@ -150,6 +154,11 @@ in `screenshots/`. Don't ship UI blind.
 - **The open TeX question is closed.** No browser TeX is needed: the app lays
   the book out itself and pdf-lib writes the file. The `.tex` download survives
   as a secondary path during the transition.
-- **Next**: footnotes (reserve space, re-flow once), then a table of contents
-  with measured page numbers (lay out, collect, insert, lay out again), then
-  deleting the LaTeX path. See [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md).
+- **Also done**: **footnotes** — set at the foot of the page their reference
+  falls on, renumbered straight through the book, with the space reserved as
+  lines are placed — and a **table of contents with measured page numbers**,
+  laid out twice so the second pass cannot invalidate the first.
+- **Next**: illustrations (the page model has no image item, so an illustrated
+  book cannot place its plates), save/resume (a refresh loses a paid run), and
+  ornaments in the PDF. Then delete the LaTeX path.
+  See [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md).

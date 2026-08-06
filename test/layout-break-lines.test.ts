@@ -56,7 +56,7 @@ describe('itemsFromText — the boxes, glue and penalties Knuth–Plass consumes
   it('models a first-line indent as an empty box, not as glue', () => {
     // Glue could be stretched or broken at; an indent must be neither.
     const items = itemsFromText('aa bb', options({ firstLineIndentPt: 3 }))
-    expect(items[0]).toEqual({ type: 'box', width: 3, text: '' })
+    expect(items[0]).toEqual({ type: 'box', width: 3, text: '', source: -1 })
   })
 
   it('keeps spaces rigid when the paragraph is set ragged', () => {

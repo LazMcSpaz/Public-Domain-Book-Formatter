@@ -139,8 +139,9 @@ function drawPage(
         x: run.xPt,
         // The engine measures baselines down from the top of the page; PDF
         // measures up from the bottom. This subtraction is the only place the
-        // two conventions meet.
-        y: page.heightPt - item.baselinePt,
+        // two conventions meet. A raised run — a footnote mark — moves *up*
+        // the page, which is a larger y once the axis has been flipped.
+        y: page.heightPt - item.baselinePt + (run.risePt ?? 0),
         size: run.sizePt,
         font: embedded.get(keyOf(run.font)) ?? fallback
       })

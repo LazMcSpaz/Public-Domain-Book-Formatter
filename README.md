@@ -1,74 +1,125 @@
 # Public-Domain Book Reprint Tool
 
-A Windows desktop application that turns public-domain book PDFs (including old
-scans) into print-ready [KDP](https://kdp.amazon.com/) interiors. It automates
-the bulk of OCR, cleanup, and typesetting, then provides a comfortable
-side-by-side review surface to bring output to publishable quality.
+A **browser** app that turns public-domain book PDFs — usually old scans — into
+print-ready [KDP](https://kdp.amazon.com/) interiors. It renders and OCRs the
+pages locally, harvests the book's own vocabulary, then runs a vision-grounded
+model pass that reads each page against the scan and recovers its structure.
+Finally it lays the book out itself and writes the PDF.
 
-See [`SPEC.md`](./SPEC.md) for the full design.
+Everything runs client-side. There is no server, no Electron shell, and no
+system toolchain to install: open the page, drop in a PDF.
 
-> **Status:** all four SPEC §12 phases are in place —
-> **P1** core pipeline + the hOCR coordinate-mapping backbone;
-> **P2** the side-by-side review instrument (linked panes, hover/scroll-sync,
-> inline editing, confidence tinting, flag review, find-replace);
-> **P3** structure & images (right-click semantic tagging, auto TOC,
-> image-region detection, the non-destructive image editor + curve editor &
-> drag-crop, DPI awareness);
-> **P4** polish & packaging (two-level style/profile system, templated
-> front/back matter, ornament layer + SVG→PDF, fancyhdr running heads, the
-> LaTeX document builder, KDP export validation + final page-count report, and
-> the Windows install wizard / first-run dependency bootstrapper).
->
-> Live OCR/typesetting and the Windows installer build require the system
-> toolchain (Tesseract, Pandoc, TeX Live) on a real machine; the codebase is
-> unit-tested against fixtures and generated-output assertions here.
+- [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md) — the flow and the module map.
+- [`CLAUDE.md`](./CLAUDE.md) — the conventions that matter when changing it.
+- [`SPEC.md`](./SPEC.md) — the original design. Read the note at its head first:
+  it predates the browser rewrite and several of its decisions were reversed.
 
-## Architecture
+## The design idea
+
+**The app interviews the user; it never makes them go find a setting.** Every
+option starts life as a question asked at the moment it becomes relevant, with a
+recommended answer pre-selected and the _evidence_ for it attached — a word crop,
+a page thumbnail, a rendered page. Nobody should need to understand the
+program's structure to use it.
+
+```
+Open PDF
+  │
+  ├─ RECON  (free, local, no API cost)
+  │    render, OCR, word crops, book-wide lexicon
+  │
+  ├─ GATE 1 ▸ confirm the book        ← identity + term review
+  │
+  ├─ TRANSCRIBE  (vision model pass, paid, cost approved first)
+  │
+  ├─ GATE 2 ▸ check uncertain spots   ← where model and OCR disagree
+  ├─ GATE 3 ▸ confirm structure       ← chapters, footnotes
+  ├─ DESIGN  ▸ interview → layout → real pages, live
+  └─ EXPORT  ▸ layout → PDF → KDP validation
+```
+
+Gates are the only stops. Everything between them runs unattended.
+
+**The preview is the PDF.** The design gate does not approximate the finished
+page in CSS: it lays the book out, writes real PDF bytes, and renders _those_
+with pdf.js. One renderer, so what you approve and what you get cannot drift.
+
+## Running it
+
+```bash
+npm install
+npm run dev          # vite dev server on :5173
+npm run typecheck
+npm test             # the gating check — pure logic, no browser needed
+npm run lint
+npm run format:check
+npm run build        # typecheck + vite build → dist/
+
+node scripts/make-test-book.mjs      # regenerate the 8-page test fixture
+node scripts/screenshot-flow.mjs     # drive the wizard in real Chromium
+```
+
+The transcription pass needs an Anthropic API key, which the app asks for and
+stores locally. The key is the user's, is sent straight to the API, and never
+touches a server — there isn't one. The test suite needs no key and spends
+nothing: the model transport is mocked.
+
+## Layout
 
 ```
 src/
-  shared/     Types shared across processes (the IPC contract)
-  main/       Electron main process (window, lifecycle, IPC handlers)
-  preload/    contextBridge API exposed to the renderer
-  renderer/   React UI: the side-by-side review instrument (panes, store, hooks)
-  core/       Domain engine — no Electron/Node-UI deps
-    model/    The backbone: hOCR coordinate mapping, document model, honest flags
-    project/  Versioned project file + atomic save/load (save/resume)
-    hocr/     hOCR/TSV parsing into per-word tokens with bbox + confidence
-  tooling/    External tool integration (Tesseract, OCRmyPDF, Pandoc, XeLaTeX)
-    deps/     Locate + version-check system binaries (install-wizard foundation)
-    wrappers/ Per-binary wrappers over a cancellable spawn helper
-  pipeline/   Stage runner: extract → OCR → image-detect → cleanup → structure → markdown
-test/         Vitest unit tests + fixtures
+  core/       Pure domain logic — no DOM, no Node. Where the tests live.
+    model/      Coordinate map, honest flags, project types
+    hocr/       hOCR parsing → tokens with bounding boxes and confidence
+    lexicon/    Term harvesting from the book's own vocabulary
+    pages/      Page roles and what to do with each
+    wizard/     The question contract and the step machine
+    transcribe/ Vision-pass schema, prompt, client, runner, verification, cost
+    assemble/   Per-page transcriptions → one book (seams, hyphens, notes)
+    design/     Five interview answers → a complete style profile
+    layout/     Frames, Knuth–Plass line breaking, pagination, footnotes, TOC
+    typeset/    LaTeX emitter and KDP validation
+  platform/
+    browser/    The only place browser APIs appear: PDF.js, Tesseract.js,
+                fonts, the pdf-lib writer, the page preview
+  app/        The React wizard shell and the generic question renderer
+test/         Vitest — pure, no browser
 ```
 
-The single most important internal structure is the **hOCR coordinate map**
-(`src/core/model/coordinate-map.ts`): every OCR'd word keeps its source-image
-bounding box, its position in the formatted output, and its true OCR confidence.
-This powers hover-sync, scroll-sync, click-to-jump, confidence tinting, and
-source-image-on-hover.
+The `core` / `platform` split is the load-bearing boundary: `core` has no DOM
+and no Node, so every rule in the flow is unit-testable without a browser.
 
-## Toolchain
+## Where it stands
 
-The app shell is **Electron + TypeScript**, built with
-[`electron-vite`](https://electron-vite.org/) and tested with
-[Vitest](https://vitest.dev/).
+**Working end to end**: the local pipeline, the lexicon, all three review gates,
+the vision pass, assembly, the design interview with a live page preview, and a
+print-ready PDF with front matter, running heads, folios, drop capitals,
+footnotes set at the foot of the page they belong to, and a table of contents
+carrying measured page numbers. The KDP report's page count and typesetting
+warnings are measured rather than estimated.
 
-It orchestrates mature external tools (installed at the system level, verified by
-the dependency detector): **Tesseract** / **OCRmyPDF** for OCR, **pdftoppm** for
-page extraction, **Pandoc** + **XeLaTeX** for typesetting. These are not bundled
-as packages; the eventual Windows install wizard installs/verifies them.
+**Not built yet**, with the honest reasons in
+[`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md):
 
-## Development
+- **Illustrations.** The layout engine has no image support, so an illustrated
+  book cannot place its plates. `src/core/image` holds region detection, DPI
+  maths and a non-destructive op engine, but nothing calls them yet.
+- **Save and resume.** A refresh loses a paid transcription run. The project
+  schema and migrations exist in `src/core/project`; the browser storage
+  adapter does not.
+- **Ornaments in the PDF.** The design gate offers a chapter-opener ornament and
+  the PDF path ignores it.
+- **Real small capitals**, and the ligatures that pdf-lib's embedder cannot
+  write widths for.
 
-```bash
-npm install        # install JS dependencies
-npm run dev        # launch the app in development
-npm run typecheck  # type-check the whole tree
-npm test           # run the unit test suite
-npm run build      # build main/preload/renderer bundles
-```
+## The one manual step
 
-> The OCR/typesetting system binaries are not required to run the test suite —
-> the engine is unit-tested against fixtures, and the dependency detector
-> reports missing tools rather than failing.
+Junicode is not on npm — it is not a Google font — so it is not installed by
+`npm install`. Until the files are dropped into `public/fonts/junicode/`,
+choosing it falls back to EB Garamond and the preview says so. See the README
+in that directory.
+
+## Licence
+
+MIT. The shipped typefaces are open-licensed (OFL), which is what makes it legal
+to embed them in a book you sell.

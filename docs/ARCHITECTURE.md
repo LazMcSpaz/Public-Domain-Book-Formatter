@@ -36,7 +36,7 @@ Gates are the only stops. Everything between them runs unattended.
 | **Page roles** | `src/core/pages`       | Roles, dispositions, front-matter metadata        | no            |
 | **Wizard**     | `src/core/wizard`      | Question contract, step machine                   | no            |
 | Image          | `src/core/image`       | Region detection, DPI math, op engine             | no            |
-| **Layout**     | `src/core/layout`      | Frames, Knuth–Plass line breaking, pagination     | no            |
+| **Layout**     | `src/core/layout`      | Frames, line breaking, pagination, notes, TOC     | no            |
 | Typeset        | `src/core/typeset`     | LaTeX document + body emitter, KDP validation     | no            |
 | Style          | `src/core/style`       | Profiles, resolution                              | no            |
 | **Design**     | `src/core/design`      | Interview answers → a complete style profile      | no            |
@@ -67,11 +67,24 @@ bytes with pdf.js, the same library the app already uses to read scans. One
 renderer means preview and output cannot drift, which is the only property that
 makes a design gate worth stopping at.
 
-`layout()` is a pure function of its inputs, and deliberately so: the two
-circular problems still ahead — a footnote whose height moves its own reference,
-and a table of contents whose page numbers only exist after layout — are then
-solved by running it again with different inputs rather than by threading
-mutable state through the flow.
+`layout()` is a pure function of its inputs, and deliberately so. Both of the
+circular problems the design anticipated are solved by that property:
+
+- **Footnotes.** A note's height shrinks the body area on its page, which moves
+  the line carrying its reference, which changes which notes are on the page.
+  Resolved by reserving space _as lines are placed_: a line whose reference
+  pulls in a new note shrinks the body before the line is committed, and moves
+  to the next page if it no longer fits. The reservation only ever shrinks the
+  body, so this settles in a single forward pass — the re-flow the plan
+  budgeted for turned out not to be needed.
+- **The table of contents.** Its page numbers only exist after a layout, and
+  inserting the pages that carry them moves everything they refer to. Resolved
+  by making the contents' _length_ independent of the numbers: the folio sits in
+  a fixed-width column, so the line count is decided by the titles, which are
+  known before any layout has run. Pass one lays out with the column blank and
+  so already has the right page count; pass two fills the measured numbers in
+  and cannot change the pagination. See `layoutWithToc`, which checks that
+  invariant rather than assuming it.
 
 Text measurement enters through an injectable `TextMeasurer`. The browser
 supplies one backed by fontkit — _the same call pdf-lib makes to encode text_ —
@@ -94,7 +107,7 @@ source of truth. It stays for two reasons that a language model can't provide:
 
 | What         | How                                                                                     |
 | ------------ | --------------------------------------------------------------------------------------- |
-| Domain logic | `npm test` — 378 tests, pure, no browser                                                |
+| Domain logic | `npm test` — pure, no browser, no API key, nothing spent                                |
 | Types        | `npm run typecheck`                                                                     |
 | UI           | `node scripts/screenshot-flow.mjs` → real Chromium, screenshots per screen              |
 | Later gates  | `#preview` in dev → `src/app/DevPreview.tsx`, so gates behind the paid run stay visible |
@@ -102,17 +115,25 @@ source of truth. It stays for two reasons that a language model can't provide:
 
 ## Known gaps
 
-- **Project storage** is not implemented for the browser yet (OPFS/IndexedDB).
-  The schema and migrations exist in `src/core/project`.
 - **The live API has been exercised once, not at book scale.** The request
   shape, all three offered model IDs, metadata extraction, and uncertainty
   reporting were verified against real calls; a whole-book run has not been
   done. Cost estimation was calibrated against real usage and errs high, as
   intended.
-- **Footnotes and the table of contents are not laid out yet.** Both are
-  circular — a note's height moves the reference that placed it; inserting TOC
-  pages shifts the numbers on them — and both are solved by running `layout()`
-  a second time. The engine is shaped for that; the second pass isn't written.
+- **Illustrations are not laid out at all.** The page model has no image item,
+  so a scanned book's plates do not reach the PDF. `src/core/image` holds
+  region detection, DPI maths and a non-destructive op engine, and nothing
+  imports any of it yet — which also makes the design interview's "heavily
+  illustrated" answer a trim size and nothing more.
+- **Nothing is persisted.** A refresh loses a paid transcription run. The
+  project schema and migrations exist in `src/core/project`; the browser
+  storage adapter (OPFS/IndexedDB) does not, and nothing imports that module.
+- **Ornaments never reach the PDF.** The design gate offers a chapter-opener
+  ornament, `RuleShape` exists in the page model, and only the LaTeX path reads
+  `profile.ornaments` — so "plain" and "ornamented" currently print the same.
+- **Endnotes are not collected.** A note whose reference mark is nowhere in the
+  body cannot be set at the foot of a page. The LaTeX path gathered those at the
+  end of the book; the PDF path reports them on the export screen instead.
 - **Small capitals are not real.** `headingStyle.smallCaps` sets ordinary
   capitals. The fonts do carry `smcp`, but drawing it needs glyph-level output
   rather than `drawText`, and synthesising it by scaling capitals — what cheap

@@ -1,0 +1,77 @@
+/**
+ * A table of contents with page numbers that are measured, not guessed.
+ *
+ * The original edition's contents page was discarded on purpose — its page
+ * numbers describe a pagination this book no longer has. Regenerating it means
+ * solving a circle: the numbers only exist once the book has been laid out, and
+ * inserting the pages that carry them moves everything they refer to.
+ *
+ * The circle is cut by making the contents' *length* independent of the numbers:
+ *
+ *   Pass 1  every entry, with the folio column left blank. The contents is
+ *           therefore already the right number of pages, so the body falls
+ *           exactly where it finally will, and `chapterPages` is the truth.
+ *   Pass 2  the same entries, with the measured folios filled in. Same titles,
+ *           same levels, same count, and the folio sits in a fixed-width column
+ *           — so the layout is identical apart from the numbers now being on it.
+ *
+ * Two passes, and the second cannot invalidate the first. That property comes
+ * from `buildContents` reserving the folio column whether or not it has a
+ * number to put in it; the guard here is a check on it, not a hope.
+ *
+ * Pure: `layout()` is a pure function of its inputs, which is what makes
+ * "run it again" a legitimate way to solve this at all.
+ */
+import type { StyleProfile } from '@core/model'
+import type { BookDocument } from '@core/assemble'
+import { layout, type LayoutOptions, type TocLine } from './paginate'
+import type { TextMeasurer } from './measure'
+import type { LaidOutBook } from './types'
+
+/**
+ * Lay the book out with a contents page whose numbers are real.
+ *
+ * Falls back to a single pass when there is nothing to list, or when the caller
+ * only wants a sample: a contents page built from four pages of a four-hundred
+ * page book would be worse than none, and the design preview is the only caller
+ * that asks for a sample.
+ */
+export function layoutWithToc(
+  doc: BookDocument,
+  profile: StyleProfile,
+  measurer: TextMeasurer,
+  options: LayoutOptions
+): LaidOutBook {
+  if (doc.chapters.length === 0 || options.maxBodyPages !== undefined) {
+    return layout(doc, profile, measurer, options)
+  }
+
+  // Entries come from the document, not from the first pass's `chapterPages`,
+  // so the two passes are laying out provably the same list. Only the folios
+  // differ between them.
+  const entries: TocLine[] = doc.chapters.map((chapter) => ({
+    title: chapter.title,
+    level: chapter.level,
+    folio: null
+  }))
+
+  const first = layout(doc, profile, measurer, { ...options, toc: entries })
+
+  const numbered: TocLine[] = entries.map((entry, i) => {
+    const found = first.chapterPages[i]
+    const folio = found ? (first.pages[found.pageIndex]?.folio ?? null) : null
+    return { ...entry, folio }
+  })
+
+  const second = layout(doc, profile, measurer, { ...options, toc: numbered })
+
+  // If filling the numbers in changed the pagination, the contents is now
+  // describing a book that no longer exists. It cannot happen while the folio
+  // column is fixed — but a silently wrong contents page is exactly the kind of
+  // error a reader would trust, so the invariant is checked rather than assumed.
+  if (second.pages.length !== first.pages.length) {
+    return first
+  }
+
+  return second
+}

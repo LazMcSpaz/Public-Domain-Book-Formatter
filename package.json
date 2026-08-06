@@ -1,7 +1,7 @@
 {
   "name": "public-domain-book-formatter",
   "version": "0.1.0",
-  "description": "Windows desktop app that turns public-domain book PDFs into print-ready KDP interiors.",
+  "description": "Browser app that turns public-domain book PDFs into print-ready KDP interiors.",
   "author": {
     "name": "Public-Domain Book Reprint Tool"
   },
@@ -22,9 +22,6 @@
     "@types/react": "^18.3.31",
     "@types/react-dom": "^18.3.7",
     "@vitejs/plugin-react": "^4.7.0",
-    "electron": "^33.2.0",
-    "electron-builder": "^25.1.8",
-    "electron-vite": "^2.3.0",
     "eslint": "^9.39.4",
     "eslint-config-prettier": "^9.1.2",
     "eslint-plugin-react-hooks": "^5.2.0",

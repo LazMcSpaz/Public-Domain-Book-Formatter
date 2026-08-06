@@ -52,8 +52,17 @@ export interface BuildExportInput {
    * Results of an actual layout run, once there has been one. Supplying this is
    * what turns the estimated page count and the un-run layout checks into real
    * ones — the report is otherwise explicit that it is pre-typeset.
+   *
+   * `notesPlaced` and `notesDropped` come from the same run. They are reported
+   * rather than assumed because the interior is the deliverable now: a book
+   * that quietly lost two hundred footnotes would pass every other check here.
    */
-  typeset?: { pageCount: number; warnings: string[] }
+  typeset?: {
+    pageCount: number
+    warnings: string[]
+    notesPlaced?: number
+    notesDropped?: { id: string; reason: string }[]
+  }
   /**
    * What to do with notes whose reference mark was never found — the answer to
    * the structure gate's question. Dropping them is the default because a note
@@ -208,16 +217,40 @@ export function buildExport(input: BuildExportInput): BuildExportResult {
   })
 
   const notes: string[] = []
+
   if (document.chapters.length === 0) {
-    notes.push('No chapters were detected, so the book will have no table of contents.')
-  }
-  const orphans = document.footnotes.filter((f) => f.orphaned)
-  if (orphans.length > 0) {
+    notes.push('No chapters were detected, so the book has no table of contents.')
+  } else if (input.typeset) {
     notes.push(
-      (input.omitOrphanFootnotes ?? true)
-        ? `${orphans.length} footnote(s) had no reference mark and were left out.`
-        : `${orphans.length} footnote(s) had no reference mark and were collected at the end.`
+      `The table of contents lists ${document.chapters.length} heading(s), with the ` +
+        'page numbers this edition actually prints.'
     )
+  }
+
+  // What happened to the notes, in the book that was built. Silence here would
+  // be the worst possible reporting: a reader only finds a missing footnote
+  // once the book is printed.
+  if (document.footnotes.length > 0 && input.typeset) {
+    const placed = input.typeset.notesPlaced ?? 0
+    const dropped = input.typeset.notesDropped ?? []
+    if (placed > 0) {
+      notes.push(`${placed} footnote(s) were set at the foot of the page they belong to.`)
+    }
+    if (dropped.length > 0) {
+      notes.push(
+        `${dropped.length} footnote(s) could not be placed — ${dropped[0]!.reason}. ` +
+          'They are in the source text but not in the PDF.'
+      )
+    }
+  } else {
+    const orphans = document.footnotes.filter((f) => f.orphaned)
+    if (orphans.length > 0) {
+      notes.push(
+        (input.omitOrphanFootnotes ?? true)
+          ? `${orphans.length} footnote(s) had no reference mark and were left out.`
+          : `${orphans.length} footnote(s) had no reference mark and were collected at the end.`
+      )
+    }
   }
   if (document.skipped.length > 0) {
     notes.push(`${document.skipped.length} page(s) were deliberately not transcribed.`)

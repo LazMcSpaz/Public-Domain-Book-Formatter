@@ -220,7 +220,9 @@ export function DevPreview(): JSX.Element {
                       pageCount: interior.pageCount,
                       warnings: interior.warnings.map(
                         (w) => `Page ${w.pageIndex + 1}: a line runs past the margin`
-                      )
+                      ),
+                      notesPlaced: interior.notesPlaced,
+                      notesDropped: interior.notesDropped
                     }
                   }
                 : {})
