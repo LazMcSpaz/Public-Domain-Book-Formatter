@@ -22,17 +22,17 @@ export interface ValidateKdpInput {
   pageCount: number
   /** Placed images and their effective DPI at print size (null = unknown). */
   images?: { effectiveDpi: number | null }[]
-  /** Surfaced XeLaTeX quality warnings (overfull boxes / bad breaks). */
+  /** Surfaced layout warnings (lines that would not fit their measure). */
   warnings: string[]
-  /** Whether fonts are embedded in the output PDF (XeLaTeX embeds by default). */
+  /** Whether fonts are embedded in the output PDF. */
   fontsEmbedded?: boolean
   /**
-   * Whether a TeX run has actually happened. Before it has, the page count is
-   * an estimate from the source and no layout warnings exist yet — so those two
-   * checks report what they really are rather than a green tick the run hasn't
+   * Whether the book has actually been laid out. Before it has, the page count
+   * is an estimate from the scan and no layout warnings exist yet — so those two
+   * checks report what they really are rather than a green tick nothing has
    * earned. Defaults to true.
    */
-  compiled?: boolean
+  typeset?: boolean
 }
 
 /** KDP's recommended minimum target DPI for printed images. */
@@ -83,7 +83,7 @@ export function validateKdp(input: ValidateKdpInput): KdpValidationReport {
       label: 'Embedded fonts',
       level: embedded ? 'ok' : 'warn',
       detail: embedded
-        ? 'All fonts are embedded (XeLaTeX embeds by default).'
+        ? 'The typeface is embedded in the PDF, so the book sets the same everywhere.'
         : 'Fonts may not be fully embedded — KDP requires embedded fonts.'
     })
   }
@@ -138,32 +138,32 @@ export function validateKdp(input: ValidateKdpInput): KdpValidationReport {
     checks.push({ id: 'image-dpi', label: 'Image DPI', level, detail })
   }
 
-  const compiled = input.compiled ?? true
+  const typeset = input.typeset ?? true
 
-  // 5. Surfaced LaTeX warnings (overfull boxes / bad breaks).
+  // 5. Surfaced layout warnings (lines that would not fit their measure).
   {
     const count = input.warnings.length
     checks.push({
       id: 'latex-warnings',
       label: 'Typesetting warnings',
-      level: !compiled ? 'pending' : count > 0 ? 'warn' : 'ok',
-      detail: !compiled
+      level: !typeset ? 'pending' : count > 0 ? 'warn' : 'ok',
+      detail: !typeset
         ? 'Not checked yet — these only exist once the book has been typeset.'
         : count > 0
-          ? `${count} overfull-box / bad-break warning(s) to resolve or acknowledge.`
-          : 'No overfull boxes or bad breaks reported.'
+          ? `${count} line(s) run past the margin and need resolving or acknowledging.`
+          : 'Every line fits its measure.'
     })
   }
 
   // 6. Final page count — reported prominently as a check (never a failure).
-  // Before a TeX run this is the *source* page count, which is a rough guide
-  // and emphatically not the spine width; saying otherwise would send the user
-  // to print with a cover that doesn't fit.
+  // Before the book is laid out this is the *scan's* page count, which is a
+  // rough guide and emphatically not the spine width; saying otherwise would
+  // send the user to print with a cover that doesn't fit.
   checks.push({
     id: 'page-count',
-    label: compiled ? 'Final page count' : 'Page count (estimated)',
-    level: compiled ? 'ok' : 'pending',
-    detail: compiled
+    label: typeset ? 'Final page count' : 'Page count (estimated)',
+    level: typeset ? 'ok' : 'pending',
+    detail: typeset
       ? `Final interior page count: ${input.pageCount} pages (use for cover spine width).`
       : `Roughly ${input.pageCount} pages, based on the scan. Typeset the book before ` +
         'sizing the cover spine — the real count will differ.'

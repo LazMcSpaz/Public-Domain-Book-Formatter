@@ -105,15 +105,69 @@ const summary = () => page.locator('.summary b').innerText()
 const before = await summary()
 const pick = (question, label) =>
   page.locator('.q').filter({ hasText: question }).locator('label', { hasText: label }).click()
+
+// The preview is the PDF: these are real pages rendered from the bytes the
+// export will produce. Waiting for one proves the whole path — fonts fetched,
+// book laid out, PDF written, pdf.js rasterized it — inside a real browser,
+// which is the part the unit tests cannot reach.
+console.log('6b. the page preview')
+await page.waitForSelector('.leaf img', { timeout: 60000 })
+const leaves = await page.locator('.leaf img').count()
+
+/**
+ * A cheap fingerprint of the first previewed page.
+ *
+ * Comparing the image *src* would prove nothing: every regeneration mints a
+ * new object URL whether or not a single pixel moved. Sampling the pixels is
+ * what actually shows the preview responding to the answer.
+ */
+const previewFingerprint = () =>
+  page.evaluate(async () => {
+    const img = document.querySelector('.leaf img')
+    if (!img) return 'none'
+    await img.decode()
+    const canvas = document.createElement('canvas')
+    canvas.width = 120
+    canvas.height = 180
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height)
+    const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height)
+    let hash = 0
+    for (let i = 0; i < data.length; i += 4) hash = (hash * 31 + data[i]) >>> 0
+    return String(hash)
+  })
+
+const pagesBefore = await previewFingerprint()
+await shot('06b-gate-design-preview')
+
 await pick('What kind of book', 'Poetry')
 await pick('How should chapters open', 'Drop capital')
 await page.waitForTimeout(200)
 const after = await summary()
+
+// Regenerating means laying the book out again and rendering a fresh PDF.
+await page.waitForTimeout(3000)
+const pagesAfter = await previewFingerprint()
 await shot('07-gate-design-answered')
+
+// The preview is the widest thing in the app — a row of full page images. It
+// has to scroll inside its own card, because a gate the user has to pan
+// sideways to answer is a gate that fails on a phone.
+console.log('6c. the preview on a phone')
+await page.setViewportSize({ width: 390, height: 844 })
+await page.waitForTimeout(500)
+const previewOverflow = await page.evaluate(() => document.body.scrollWidth - window.innerWidth)
+await shot('08-gate-design-mobile')
+await page.setViewportSize({ width: 1360, height: 900 })
+await page.waitForTimeout(300)
 
 console.log('7. the finished edition')
 await page.locator('.rail li', { hasText: 'Publish the edition' }).click()
 await page.waitForSelector('.result', { timeout: 20000 })
+// The interior is built here, not handed to an external TeX engine, so the
+// download and the page count are real and worth waiting for.
+await page.waitForSelector('.result button.primary', { timeout: 60000 })
+const download = await page.locator('.result button.primary').first().innerText()
 await shot('09-export')
 const checks = await page.locator('.checks li').count()
 const pending = await page.locator('.checks li.pending').count()
@@ -128,11 +182,26 @@ console.log(`  term rows: ${rows}`)
 console.log(`  word crops rendered: ${crops}`)
 console.log(`  design summary: ${after}`)
 console.log(`  summary responds to answers: ${before !== after}`)
-console.log(`  KDP checks shown: ${checks} (${pending} pending, pre-typeset)`)
+console.log(`  preview pages rendered: ${leaves}`)
+console.log(`  preview responds to answers: ${pagesBefore !== pagesAfter}`)
+console.log(`  design gate mobile overflow: ${previewOverflow}px`)
+console.log(`  export offers: ${download}`)
+console.log(`  KDP checks shown: ${checks} (${pending} pending)`)
 console.log(`  mobile horizontal overflow: ${overflow}px`)
 console.log(`  page errors: ${errors.length ? errors.join(' | ') : 'none'}`)
 
 await browser.close()
 process.exit(
-  errors.length === 0 && rows > 0 && before !== after && checks > 0 && overflow <= 0 ? 0 : 1
+  errors.length === 0 &&
+    rows > 0 &&
+    before !== after &&
+    leaves > 0 &&
+    pagesBefore !== pagesAfter &&
+    /\d+ pages/.test(download) &&
+    previewOverflow <= 0 &&
+    checks > 0 &&
+    pending === 0 &&
+    overflow <= 0
+    ? 0
+    : 1
 )

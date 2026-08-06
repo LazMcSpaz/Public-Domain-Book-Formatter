@@ -82,6 +82,15 @@ export interface PageFrame {
   heightPt: number
 }
 
+/**
+ * What a page *is*. Set by the engine, which knows — it built the front matter
+ * and it decided where the chapters open. Downstream this saves everyone else
+ * guessing from the contents: the preview shows the pages that answer the
+ * design questions, and a blank leaf is never mistaken for a failed render.
+ */
+export type PageKind =
+  'half-title' | 'title' | 'copyright' | 'aside' | 'blank' | 'chapter-opener' | 'body'
+
 /** Which side of the spread a page falls on. Recto is the right-hand page. */
 export type PageSide = 'recto' | 'verso'
 
@@ -99,6 +108,7 @@ export interface LaidOutPage {
   heightPt: number
   side: PageSide
   section: PageSection
+  kind: PageKind
   /** The text-block rectangle used, kept for diagnostics and preview overlays. */
   frame: PageFrame
   items: PageItem[]
@@ -122,4 +132,20 @@ export interface LaidOutBook {
   chapterPages: { title: string; level: number; pageIndex: number }[]
   /** Fonts actually used, so an embedder knows what to subset. */
   fontsUsed: FontRef[]
+  /** Lines that would not fit their measure. Empty is the good case, and real. */
+  warnings: LayoutWarning[]
+}
+
+/**
+ * A line the engine could not set within its measure — TeX's "overfull hbox".
+ *
+ * Reported rather than silently accepted: something is physically sticking past
+ * the margin, usually an unbreakable word, and the user is the only one who can
+ * decide whether it matters. This is what turns the export screen's
+ * "typesetting warnings" check from a pending box into a real one.
+ */
+export interface LayoutWarning {
+  pageIndex: number
+  /** The offending line, so the user can find it in the book. */
+  text: string
 }

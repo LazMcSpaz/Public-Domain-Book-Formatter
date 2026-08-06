@@ -18,16 +18,28 @@
 import * as pdfjs from 'pdfjs-dist'
 import type { BookDocument } from '@core/assemble'
 import type { StyleProfile } from '@core/model'
-import { englishHyphenator, layout, type LayoutEdition } from '@core/layout'
-import { loadFonts, type FontTable } from './fonts'
+import { englishHyphenator, layout, type LaidOutPage, type LayoutEdition } from '@core/layout'
+import { fontTableFor } from './fonts'
 import { openPdf } from './pdf'
 import { renderPdf } from './pdf-out'
 
 /** Body pages laid out for the preview. Two spreads is enough to judge a style. */
 const PREVIEW_BODY_PAGES = 4
 
+/**
+ * Which pages the preview shows.
+ *
+ * Not simply "the first four". A real book opens with a half-title, a blank, a
+ * title page and a copyright page — so the first four leaves of the finished
+ * PDF are mostly white space, and none of them answers the questions this gate
+ * asks. Every one of those questions (typeface, chapter opening, running heads,
+ * measure) is settled on a *body* page, with the title page the one piece of
+ * front matter worth seeing because the heading face is largest there.
+ */
+const PREVIEW_KINDS: ReadonlySet<string> = new Set(['title', 'chapter-opener', 'body'])
+
 export interface PreviewPage {
-  /** Zero-based index in the sample, not in the finished book. */
+  /** Zero-based index in the finished book, not in the shown sample. */
   index: number
   /** A PNG object URL. **The caller must revoke it** — see `releasePreview`. */
   url: string
@@ -49,19 +61,6 @@ export interface PreviewOptions {
   /** Pixels per point. 2 is comfortably sharp on a high-DPI display. */
   scale?: number
   signal?: AbortSignal
-}
-
-/** Font tables are keyed by family set and reused across preview regenerations. */
-const fontTables = new Map<string, Promise<FontTable>>()
-
-function fontTableFor(families: string[]): Promise<FontTable> {
-  const key = [...new Set(families)].sort().join('|')
-  let pending = fontTables.get(key)
-  if (!pending) {
-    pending = loadFonts(families)
-    fontTables.set(key, pending)
-  }
-  return pending
 }
 
 class Cancelled extends Error {}
@@ -98,12 +97,8 @@ export async function renderPreview(
   })
   checkCancelled(options.signal)
 
-  const pages = await rasterize(
-    bytes,
-    options.scale ?? 2,
-    book.pages.map((p) => p.folio),
-    options.signal
-  )
+  const shown = book.pages.filter((p) => PREVIEW_KINDS.has(p.kind))
+  const pages = await rasterize(bytes, options.scale ?? 2, shown, options.signal)
 
   return {
     pages,
@@ -111,11 +106,11 @@ export async function renderPreview(
   }
 }
 
-/** Render every page of a PDF to a PNG object URL. */
+/** Render the chosen pages of a PDF to PNG object URLs. */
 async function rasterize(
   bytes: Uint8Array,
   scale: number,
-  folios: (string | null)[],
+  shown: readonly LaidOutPage[],
   signal: AbortSignal | undefined
 ): Promise<PreviewPage[]> {
   // pdf.js detaches the buffer it is given, and these bytes are ours alone at
@@ -124,9 +119,9 @@ async function rasterize(
   const out: PreviewPage[] = []
 
   try {
-    for (let i = 0; i < pdf.numPages; i++) {
+    for (const source of shown) {
       checkCancelled(signal)
-      const page = await pdf.getPage(i + 1)
+      const page = await pdf.getPage(source.index + 1)
       const viewport = page.getViewport({ scale })
 
       const canvas = document.createElement('canvas')
@@ -144,13 +139,12 @@ async function rasterize(
       if (!blob) throw new Error('Could not encode preview page')
 
       out.push({
-        index: i,
+        index: source.index,
         url: URL.createObjectURL(blob),
         widthPx: canvas.width,
         heightPx: canvas.height,
-        // Page 0 is a recto, and sides alternate from there.
-        recto: i % 2 === 0,
-        folio: folios[i] ?? null
+        recto: source.side === 'recto',
+        folio: source.folio
       })
     }
   } catch (error) {

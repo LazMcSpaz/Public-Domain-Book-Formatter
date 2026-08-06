@@ -54,13 +54,16 @@ Practical rules:
 
 - `src/core` — **pure domain logic, no DOM and no Node.** Coordinate map, hOCR
   parsing, lexicon harvesting, page roles, the wizard step machine, assembly,
-  design-by-interview, image algorithms, the LaTeX body emitter and document
+  design-by-interview, image algorithms, **the layout engine** (frames,
+  Knuth–Plass line breaking, pagination), the LaTeX body emitter and document
   builder, the export seam, style system. This is where the tests live.
 - `src/platform/browser` — the only place browser APIs appear: PDF.js rendering,
-  Tesseract.js OCR, canvas crops, the recon runner.
+  Tesseract.js OCR, canvas crops, the recon runner, font loading, the pdf-lib
+  writer, and the page preview.
 - `src/app` — the React wizard shell (`App.tsx`), the generic question renderer
-  (`QuestionView.tsx`), the export screen, and a dev-only `#preview` route for
-  looking at gates that sit behind the paid run.
+  (`QuestionView.tsx`), the live page preview (`PreviewPane.tsx`), the export
+  screen, and a dev-only `#preview` route for looking at gates that sit behind
+  the paid run.
 
 Path aliases: `@core`, `@platform` (defined in `tsconfig.json`,
 `vite.config.ts`, and `vitest.config.ts` — update all three together).
@@ -82,6 +85,14 @@ Path aliases: `@core`, `@platform` (defined in `tsconfig.json`,
 - **Front matter is replaced, not transcribed.** The original title/copyright
   pages are _sources of metadata_; the scanned TOC and index carry the original
   edition's pagination and are discarded and regenerated (`src/core/pages`).
+- **The preview is the PDF.** The design gate lays the book out, writes real PDF
+  bytes and renders _those_ with pdf.js. Never add a second renderer that
+  approximates the page — one renderer is what makes the gate's approval mean
+  something. `layout()` is a pure function of its inputs, so the footnote
+  re-flow and the two-pass TOC are "run it again", not mutable state.
+- **Measure with the engine that draws.** The `TextMeasurer` sums the advances
+  of the glyphs `fontkit.layout()` returns, which is the same call pdf-lib makes
+  to encode text. Measuring with anything else is how WYSIWYG breaks.
 - **Memory discipline.** A 300-DPI page is ~19 MB of pixels; a 300-page book held
   at once would be ~5.8 GB. Recon renders, consumes, and releases one page at a
   time. Never accumulate page canvases.
@@ -98,6 +109,18 @@ Path aliases: `@core`, `@platform` (defined in `tsconfig.json`,
   **default** export.
 - **Tesseract assets are vendored** into `public/tesseract/` (worker, WASM core,
   language data) rather than fetched from a CDN, so the app works offline.
+- **Book faces come from `@expo-google-fonts/*`, not `@fontsource/*`** —
+  fontsource ships only WOFF/WOFF2, which pdf-lib cannot embed.
+- **`pdf-lib` fonts are embedded whole, with ligatures off.** Both are forced,
+  and both fail silently if reverted: `{ subset: true }` corrupts the outlines
+  of EB Garamond, Cardo and IM FELL English, and the whole-font embedder writes
+  no width for a ligature glyph. The reasoning and the evidence are in
+  `src/platform/browser/pdf-out.ts` and `fonts.ts` — read them before changing
+  either, because nothing in the test suite short of looking at a rendered page
+  catches the first one.
+- **Junicode is vendored by hand** into `public/fonts/junicode/` (see the README
+  there). It is not on npm and is loaded on demand; until it is present the app
+  substitutes EB Garamond and says so.
 
 ## Verifying UI work
 
@@ -116,10 +139,17 @@ in `screenshots/`. Don't ship UI blind.
   progress, cancel), assembly stitches pages into a book document (seam repair,
   hyphen healing, footnote linking, front-matter dispositions), and Gate 2
   surfaces flagged pages with the scan beside each.
-- **Also done**: Gate 3 (structure confirmation) and the LaTeX body emitter,
-  which replaces Pandoc — the vision pass hands us typed structure, so a general
-  Markdown converter would only lose information and add a dependency.
-- **Next**: design-by-interview, then typesetting/export (the open TeX question).
-- **Open question**: TeX in the browser. SwiftLaTeX (XeTeX/WASM) is the candidate
-  but is untested here because the sandbox blocks its CDN. The app produces the
-  LaTeX document either way; only the final compile step is affected.
+- **Also done**: Gate 3 (structure confirmation) and the LaTeX body emitter.
+- **Also done**: design-by-interview, and **the layout engine** — Knuth–Plass
+  line breaking with Liang hyphenation, baseline-grid pagination with widow and
+  orphan control, front matter, running heads, folios, recto chapter openings
+  and drop capitals. The design gate now shows **real pages from the finished
+  PDF**, and the export downloads that PDF. Because the page count and the
+  layout warnings are measured, both KDP checks that used to report `pending`
+  now report the truth.
+- **The open TeX question is closed.** No browser TeX is needed: the app lays
+  the book out itself and pdf-lib writes the file. The `.tex` download survives
+  as a secondary path during the transition.
+- **Next**: footnotes (reserve space, re-flow once), then a table of contents
+  with measured page numbers (lay out, collect, insert, lay out again), then
+  deleting the LaTeX path. See [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md).

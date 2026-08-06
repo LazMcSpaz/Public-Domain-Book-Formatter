@@ -1,7 +1,9 @@
 # Plan: real page layout, live preview, and a PDF that isn't a `.tex`
 
-Status: **planned, not started.** Written for a fresh session to pick up.
-Revised after checking what actually exists on npm — three findings changed it.
+Status: **steps 1–5 built and verified; 6–8 remain.** Written for a fresh
+session to pick up, then revised twice — once after checking what exists on npm,
+and again after building it, which contradicted two of the decisions below. Both
+corrections are recorded in "What building it changed", at the end.
 
 ## Why
 
@@ -216,17 +218,26 @@ estimated, and the two `pending` checks become real.
 
 Each step leaves the app working.
 
-1. Fonts + fontkit measurer. Proof: one page of real text as a downloadable PDF
-   whose MediaBox is exactly 6×9in.
-2. `tex-linebreak` + hyphenation over body prose; pagination. Export switches to
-   PDF.
-3. Preview pane at the design gate (sample pages).
-4. Front matter, running heads, folios.
-5. Chapter openers, drop caps, ornaments — these become line-box arithmetic
-   (an initial spanning N lines, with those N lines indented), not LaTeX macros.
+1. ~~Fonts + fontkit measurer. Proof: one page of real text as a downloadable
+   PDF whose MediaBox is exactly 6×9in.~~ **Done** — asserted in
+   `test/layout-pdf.test.ts` by reopening the output with pdf.js.
+2. ~~`tex-linebreak` + hyphenation over body prose; pagination. Export switches
+   to PDF.~~ **Done.**
+3. ~~Preview pane at the design gate (sample pages).~~ **Done** — and it shows
+   the title page, the chapter opener and the body pages rather than the first
+   four leaves, which in a real book are mostly half-title and blanks and answer
+   none of the gate's questions.
+4. ~~Front matter, running heads, folios.~~ **Done.**
+5. ~~Chapter openers, drop caps, ornaments — these become line-box arithmetic
+   (an initial spanning N lines, with those N lines indented), not LaTeX
+   macros.~~ **Drop caps done**, exactly as line-box arithmetic. Ornaments are
+   not drawn yet; `RuleShape` exists in the page model for them.
 6. Footnotes (the reserve-and-re-flow loop).
-7. TOC with measured page numbers (the second pass).
-8. Delete the LaTeX path; turn the two `pending` KDP checks into real ones.
+7. TOC with measured page numbers (the second pass). `LaidOutBook.chapterPages`
+   already reports where every chapter opened, so the collecting half is done.
+8. Delete the LaTeX path. ~~Turn the two `pending` KDP checks into real ones.~~
+   **The KDP half is done**: the page count is measured, and the layout engine
+   reports overfull lines, so both checks now report the truth.
 
 ## Decisions taken
 
@@ -262,10 +273,67 @@ load it on demand when the user actually selects it, rather than bundling it
 with the rest — the other six stay eagerly loaded, so switching between them
 remains instant.
 
+## What building it changed
+
+Two of the decisions above were wrong, and only rendering the output caught
+them. Both are documented at the code, with the evidence.
+
+### Fonts must be embedded whole, not subset
+
+"Embed with `{ subset: true }`: it keeps the export small" was a mistake.
+pdf-lib 1.17.1's subsetter silently corrupts the `glyf`/`loca` tables of three
+of the six faces this app offers. Rendered side by side against an unsubset
+embed of the same text:
+
+| Face                                         | Subset               |
+| -------------------------------------------- | -------------------- |
+| EB Garamond, Cardo, IM FELL English          | most letters missing |
+| Libre Baskerville, Libre Caslon, Crimson Pro | correct              |
+
+What makes this the worst kind of bug is where it _isn't_ visible: the page
+count is right, `getTextContent` extracts the text perfectly (the `ToUnicode`
+map survives), and every KDP check passes. Only the printed page is wrong. The
+cost of embedding whole is about 900 KB for a regular/italic pair.
+
+Subsetting only the faces that survive it was rejected: correctness would then
+depend on which typeface the user picked, and a font update could move a face
+from one column to the other without anything failing loudly.
+
+### Ligatures have to be off
+
+The whole-font embedder builds its width array by walking the font's _character
+set_ and taking the glyph for each code point. A ligature glyph — `f_i` —
+answers to no single code point, so no width is ever written for it and the
+reader falls back to a full em. On the page that is a hole after every "fi" and
+every following word shoved right: `his fi ndingsto the assembled`.
+
+So `LAYOUT_FEATURES` in `fonts.ts` turns `liga`/`dlig`/`hlig`/`clig`/`rlig` off,
+and the same constant is passed to `embedFont`. It must be shared: the measurer
+and the embedder disagreeing about the width of a word is precisely the drift
+this whole design exists to prevent.
+
+This is worth revisiting. A patched or forked embedder that writes widths for
+every glyph actually laid out would give back real `fi` and `fl`, which a book
+face is drawn to use.
+
+### Two smaller things
+
+- `breakLines` reads `lineLengths[i]` per line and does **not** clamp. Handing
+  it the ergonomic four-entry array a drop cap wants (`[narrow, narrow, narrow,
+full]`) made every paragraph past the fourth line vanish _silently_.
+  `padLineWidths` now extends any array to the item count, which is a hard upper
+  bound on the number of lines.
+- Junicode could not be vendored: this sandbox cannot reach GitHub. It loads on
+  demand from `public/fonts/junicode/`, substitutes EB Garamond when absent, and
+  says so in the preview rather than quietly showing a different typeface. The
+  manual step is written up in `public/fonts/junicode/README.md`.
+
 ## Open questions for the next session
 
 - **Memory on a 300-page export.** A text-only PDF is small, but pdf-lib builds
-  in memory and images land later. Keep the page loop streaming-friendly.
+  in memory and images land later. The page loop yields to the event loop
+  between pages and reports progress, but it has only been run on short books.
+- **Ligatures**, as above.
 
 ## Context worth carrying over
 

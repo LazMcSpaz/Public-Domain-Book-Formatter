@@ -9,13 +9,26 @@
  * Mounted only under `import.meta.env.DEV` (see main.tsx) — it is tree-shaken
  * out of the production bundle, and it never touches the API.
  */
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { STEPS, defaultAnswers, initialState, type Answers, type StepId } from '@core/wizard'
 import { assembleBook } from '@core/assemble'
 import { describeProfile, profileFromAnswers, type DesignAnswers } from '@core/design'
 import { buildExport, editionFromAnswers } from '@core/export'
 import { QuestionView } from './QuestionView'
 import { ExportResult } from './ExportResult'
+import { PreviewPane } from './PreviewPane'
+import { renderInterior, type Interior } from '../platform/browser/interior'
+
+/**
+ * Enough prose that a laid-out page looks like a page. A three-sentence
+ * fixture made the design gate's preview technically correct and useless to
+ * look at — the whole point of that pane is judging how a *full* measure sets.
+ */
+const SAMPLE_PROSE = [
+  'The alembick being set upon a gentle fire, and the matter therein digested by the space of fourty dayes, there ariseth a vapour of a whitish colour, which the ancients have named the Flying Eagle. This must be received into a clean receiver, well luted at the joynts, lest the spirit escape and the whole labour be lost.',
+  'I have observed that the fire ought not at any time to be encreased suddenly, for the vessell will crack, and I have lost by this meanes three severall preparations, whereof the last was of no small charge. Let the operator therefore be patient, and governe his fire as a nurse governeth her childe.',
+  'Concerning the choice of simples, those gathered under a waxing moone are held of greater vertue than such as be gathered otherwise, though I confesse I have not found the difference so notable as some writers pretend. Notwithstanding I follow the custome, for it costeth nothing to observe it.'
+].join(' ')
 
 /** A book far enough along that every gate has something real to show. */
 function sampleState(stepId: StepId) {
@@ -32,7 +45,8 @@ function sampleState(stepId: StepId) {
       role: 'body',
       blocks: [
         { kind: 'heading', text: 'Chapter I. Of the Vessel', level: 1 },
-        { kind: 'paragraph', text: 'The alembick being set upon a gentle fire.1' },
+        { kind: 'paragraph', text: `${SAMPLE_PROSE} The alembick being set upon a gentle fire.1` },
+        { kind: 'paragraph', text: SAMPLE_PROSE },
         { kind: 'footnote', text: 'See Croll, Basilica Chymica, lib. ii.', marker: '1' }
       ],
       uncertain: [],
@@ -43,7 +57,8 @@ function sampleState(stepId: StepId) {
       role: 'body',
       blocks: [
         { kind: 'heading', text: 'Chapter II. Of Simples', level: 1 },
-        { kind: 'paragraph', text: 'Herbes gathered under a waxing moone.' }
+        { kind: 'paragraph', text: `Herbes gathered under a waxing moone. ${SAMPLE_PROSE}` },
+        { kind: 'paragraph', text: SAMPLE_PROSE }
       ],
       uncertain: [],
       furniture: {}
@@ -82,10 +97,10 @@ export function DevPreview(): JSX.Element {
     [questions, answers]
   )
 
-  const summary =
-    stepId === 'design'
-      ? describeProfile(
-          profileFromAnswers(
+  const designProfile = useMemo(
+    () =>
+      stepId === 'design'
+        ? profileFromAnswers(
             {
               kind: current['kind'],
               period: current['period'],
@@ -94,8 +109,47 @@ export function DevPreview(): JSX.Element {
             } as unknown as DesignAnswers,
             current['font'] as string
           )
-        )
-      : null
+        : null,
+    [stepId, current]
+  )
+
+  const summary = designProfile ? describeProfile(designProfile) : null
+
+  const edition = useMemo(() => ({ title: 'The Alchemist His Practise', author: 'Anonymous' }), [])
+
+  /** The style the export screen is previewed with. Fixed, not interviewed. */
+  const exportProfile = useMemo(
+    () =>
+      profileFromAnswers({
+        kind: 'novel',
+        period: 'early-modern',
+        chapterOpener: 'drop-cap',
+        runningHeads: 'author-title'
+      }),
+    []
+  )
+
+  // The export gate builds a real interior here too, so this screen exercises
+  // the same path the paid flow does rather than a mock of it — including the
+  // measured page count and layout warnings the KDP checks report on.
+  const [interior, setInterior] = useState<Interior | null>(null)
+  useEffect(() => {
+    if (stepId !== 'export' || !state.document) {
+      setInterior(null)
+      return
+    }
+    let live = true
+    void renderInterior(state.document, exportProfile, { edition })
+      .then((built) => {
+        if (live) setInterior(built)
+      })
+      .catch(() => {
+        if (live) setInterior(null)
+      })
+    return () => {
+      live = false
+    }
+  }, [stepId, state.document, exportProfile, edition])
 
   return (
     <div className="shell">
@@ -144,26 +198,35 @@ export function DevPreview(): JSX.Element {
           </div>
         ) : null}
 
+        {designProfile ? (
+          <PreviewPane book={state.document} profile={designProfile} edition={edition} />
+        ) : null}
+
         {/* The export gate's answers produce a real build, so the screen after
             it can be seen without a paid transcription run first. */}
         {stepId === 'export' ? (
           <ExportResult
             result={buildExport({
               document: state.document!,
-              profile: profileFromAnswers({
-                kind: 'novel',
-                period: 'early-modern',
-                chapterOpener: 'drop-cap',
-                runningHeads: 'author-title'
-              }),
+              profile: exportProfile,
               edition: editionFromAnswers(
                 { title: 'The Alchemist His Practise', author: 'Anonymous', originalYear: '1662' },
                 current as Record<string, unknown>
               ),
-              estimatedPageCount: 240
+              estimatedPageCount: 240,
+              ...(interior
+                ? {
+                    typeset: {
+                      pageCount: interior.pageCount,
+                      warnings: interior.warnings.map(
+                        (w) => `Page ${w.pageIndex + 1}: a line runs past the margin`
+                      )
+                    }
+                  }
+                : {})
             })}
-            pdf={null}
-            texNote="No TeX engine is available here, so the PDF can’t be built in this browser. The .tex file below is complete — compile it with XeLaTeX."
+            pdf={interior ? { bytes: interior.bytes, pageCount: interior.pageCount } : null}
+            note={interior ? null : 'Building the interior…'}
           />
         ) : null}
       </main>

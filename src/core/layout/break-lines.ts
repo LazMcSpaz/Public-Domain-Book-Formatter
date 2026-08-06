@@ -57,6 +57,13 @@ export interface BrokenLine {
   hyphenated: boolean
   /** The measure this line was set to — varies when `lineWidths` is an array. */
   widthPt: number
+  /**
+   * True when the line's content will not fit its measure even with every
+   * space squeezed as far as it may go. This is TeX's "overfull hbox", and it
+   * is the one line-quality complaint worth reporting: it means something —
+   * usually an unbreakable word — physically sticks past the margin.
+   */
+  overfull: boolean
 }
 
 export interface BreakParagraphOptions {
@@ -257,6 +264,15 @@ export function breakParagraph(text: string, options: BreakParagraphOptions): Br
         ? rawRatio
         : 0
 
+    // A ratio below -1 means the line needed more shrink than its glue had.
+    // A non-finite negative one means it had no shrink at all to give — which
+    // is every ragged line, so those only count when there is genuinely no
+    // room. The last line is exempt: its free-stretching fill glue makes the
+    // ratio meaningless there.
+    const lastLine = i === breakpoints.length - 2
+    const overfull =
+      !lastLine && typeof rawRatio === 'number' && (rawRatio < -1 || rawRatio === -Infinity)
+
     const words: PlacedWord[] = []
     let x = 0
     // Hyphenation splits a word into several boxes with a penalty between them.
@@ -308,7 +324,7 @@ export function breakParagraph(text: string, options: BreakParagraphOptions): Br
       for (const w of words) w.xPt = round(w.xPt + offset)
     }
 
-    lines.push({ words, index: lines.length, hyphenated, widthPt: measure })
+    lines.push({ words, index: lines.length, hyphenated, widthPt: measure, overfull })
   }
 
   return lines

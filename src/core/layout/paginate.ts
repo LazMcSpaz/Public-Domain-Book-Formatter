@@ -35,6 +35,8 @@ import type { TextMeasurer } from './measure'
 import type {
   FontRef,
   LaidOutBook,
+  LayoutWarning,
+  PageKind,
   LaidOutPage,
   PageFrame,
   PageItem,
@@ -102,6 +104,8 @@ interface FlowLine {
   runs: TextRun[]
   /** Extra runs drawn with this line but not part of its text (a drop capital). */
   decorations?: TextRun[]
+  /** The line does not fit its measure; reported once its page is known. */
+  overfull?: boolean
 }
 
 /** Bookkeeping while a page is being filled. */
@@ -109,6 +113,7 @@ interface PageBuilder {
   index: number
   side: PageSide
   section: PageSection
+  kind: PageKind
   frame: PageFrame
   lines: { slot: number; line: FlowLine }[]
   chapterTitle: string | null
@@ -243,7 +248,8 @@ function toFlowLines(
       font,
       sizePt,
       xPt: w.xPt + (leftOffsets[Math.min(i, leftOffsets.length - 1)] ?? 0)
-    }))
+    })),
+    ...(line.overfull ? { overfull: true } : {})
   }))
 }
 
@@ -431,6 +437,7 @@ export function layout(
 
   const pages: PageBuilder[] = []
   const chapterPages: LaidOutBook['chapterPages'] = []
+  const warnings: LayoutWarning[] = []
 
   const frameFrom = (side: PageSide): PageFrame => (side === 'recto' ? rectoFrame : versoFrame)
 
@@ -444,6 +451,9 @@ export function layout(
       index,
       side,
       section,
+      // Overridden by `opts` wherever the caller knows better; a page nobody
+      // claims is a blank leaf until something is put on it.
+      kind: 'blank',
       frame: frameFrom(side),
       lines: [],
       chapterTitle: previous?.chapterTitle ?? null,
@@ -463,6 +473,7 @@ export function layout(
   // before the body, each on its own page, as they are in a printed book.
   for (const aside of doc.asides) {
     const page = newPage('front')
+    page.kind = 'aside'
     page.suppressRunningHead = true
     const flow = buildFlowable(aside, ctx, { suppressFirstIndent: true, dropCap: false })
     const start = Math.floor(slotsPerPage / 3)
@@ -523,6 +534,7 @@ export function layout(
       openBodyPage(flow.startsChapter)
       if (flow.startsChapter) {
         current().suppressRunningHead = true
+        current().kind = 'chapter-opener'
         slot = CHAPTER_SINK_SLOTS
       }
     }
@@ -572,7 +584,17 @@ export function layout(
       }
 
       for (let k = 0; k < take; k++) {
-        current().lines.push({ slot: slot + k, line: flow.lines[placed + k]! })
+        const line = flow.lines[placed + k]!
+        if (current().kind === 'blank') current().kind = 'body'
+        current().lines.push({ slot: slot + k, line })
+        // Reported here rather than at breaking time: a warning is only useful
+        // if it says which page to look at, and that isn't known until now.
+        if (line.overfull) {
+          warnings.push({
+            pageIndex: current().index,
+            text: line.runs.map((r) => r.text).join(' ')
+          })
+        }
       }
 
       if (flow.chapter && !headingRecorded) {
@@ -613,7 +635,8 @@ export function layout(
     widthPt: trim.widthPt,
     heightPt: trim.heightPt,
     chapterPages,
-    fontsUsed: collectFonts(laidOut)
+    fontsUsed: collectFonts(laidOut),
+    warnings
   }
 }
 
@@ -679,6 +702,7 @@ function finishPage(
     heightPt: ctx.trim.heightPt,
     side: page.side,
     section: page.section,
+    kind: page.kind,
     frame,
     items,
     folio,
@@ -773,6 +797,7 @@ function buildFrontMatter(
 
   if (profile.frontMatter.halfTitle) {
     const page = newPage('front')
+    page.kind = 'half-title'
     page.suppressFolio = true
     page.suppressRunningHead = true
     centred(page, Math.floor(slotsPerPage / 3), [
@@ -791,6 +816,7 @@ function buildFrontMatter(
       blank.suppressRunningHead = true
     }
     const page = newPage('front')
+    page.kind = 'title'
     page.suppressFolio = true
     page.suppressRunningHead = true
     centred(page, Math.floor(slotsPerPage / 4), [
@@ -817,6 +843,7 @@ function buildFrontMatter(
       blank.suppressRunningHead = true
     }
     const page = newPage('front')
+    page.kind = 'copyright'
     page.suppressFolio = true
     page.suppressRunningHead = true
 

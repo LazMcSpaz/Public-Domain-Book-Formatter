@@ -5,9 +5,14 @@
  * gate preview — and a screen this far down the flow is the easiest one to let
  * silently rot.
  *
- * The PDF is optional on purpose: browser TeX is the one unproven piece, and
- * when it isn't there the `.tex` is still a complete deliverable, not a
- * consolation prize.
+ * The PDF is the deliverable: the layout engine set these pages and pdf-lib
+ * wrote them, both in this tab, so there is nothing left for the user to run.
+ * The `.tex` stays as a secondary download during the transition, for anyone
+ * who would rather typeset it themselves — it is on its way out, but a working
+ * path out of the app should never disappear before its replacement is trusted.
+ *
+ * `note` is the honest failure path: if the interior could not be built, say
+ * why and leave the `.tex` as the way forward rather than showing nothing.
  */
 import type { BuildExportResult } from '@core/export'
 import { downloadPdf, downloadText } from '../platform/browser/download'
@@ -16,17 +21,17 @@ export interface ExportResultProps {
   result: BuildExportResult
   pdf: { bytes: Uint8Array; pageCount: number } | null
   /** Why there's no PDF, when there isn't one. */
-  texNote: string | null
+  note: string | null
 }
 
-export function ExportResult({ result, pdf, texNote }: ExportResultProps): JSX.Element {
+export function ExportResult({ result, pdf, note }: ExportResultProps): JSX.Element {
   return (
     <div className="result">
       <div className="q">
         <span className="prompt">
           {pdf ? 'Your interior is ready' : 'Your typeset source is ready'}
         </span>
-        {texNote ? <div className="help">{texNote}</div> : null}
+        {note ? <div className="help">{note}</div> : null}
         <div className="actions">
           {pdf ? (
             <button
@@ -42,7 +47,7 @@ export function ExportResult({ result, pdf, texNote }: ExportResultProps): JSX.E
             className={pdf ? 'ghost' : 'primary'}
             onClick={() => downloadText(result.tex, result.fileName, 'application/x-tex')}
           >
-            Download {result.fileName}
+            {pdf ? 'Or the LaTeX source' : `Download ${result.fileName}`}
           </button>
         </div>
       </div>

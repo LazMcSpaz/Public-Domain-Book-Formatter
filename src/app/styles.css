@@ -602,3 +602,66 @@ button.ghost {
 .terms img {
   max-width: 100%;
 }
+
+/* ---------- the design gate's page preview ---------- */
+.preview {
+  margin-top: 22px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+}
+.preview-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.preview-busy {
+  color: var(--muted);
+  font-size: 0.78rem;
+  font-style: italic;
+}
+
+/* Spreads scroll inside their own card; the page body never scrolls sideways. */
+.spreads {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 6px;
+  transition: opacity 140ms ease;
+}
+/* The previous pages stay visible while the next ones are set — a pane that
+   blanks on every answer loses the comparison the user was making. */
+.spreads.stale {
+  opacity: 0.55;
+}
+.leaf {
+  margin: 0;
+  flex: 0 0 auto;
+}
+.leaf img {
+  display: block;
+  height: 420px;
+  width: auto;
+  background: #fff;
+  /* A printed leaf has a spine side; the shadow falls away from it. */
+  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.16);
+}
+.leaf.recto img {
+  border-left: 1px solid var(--line);
+}
+.leaf.verso img {
+  border-right: 1px solid var(--line);
+}
+.preview .help {
+  margin-top: 10px;
+}
+
+@media (max-width: 720px) {
+  .leaf img {
+    height: 240px;
+  }
+}

@@ -312,13 +312,13 @@ describe('buildExport — honesty about what has not happened yet', () => {
     expect(warnings.detail).toContain('Not checked yet')
   })
 
-  it('reports real numbers once a TeX run has produced them', () => {
+  it('reports real numbers once the book has actually been laid out', () => {
     const result = buildExport({
       document: sampleDoc(),
       profile: defaultStyleProfile(),
       edition: edition(),
       estimatedPageCount: 180,
-      compiled: { pageCount: 312, warnings: ['Overfull \\hbox in paragraph at lines 88--90'] }
+      typeset: { pageCount: 312, warnings: ['Overfull \\hbox in paragraph at lines 88--90'] }
     })
     const pageCount = result.validation.checks.find((c) => c.id === 'page-count')!
     expect(pageCount.level).toBe('ok')
@@ -327,7 +327,7 @@ describe('buildExport — honesty about what has not happened yet', () => {
 
     const warnings = result.validation.checks.find((c) => c.id === 'latex-warnings')!
     expect(warnings.level).toBe('warn')
-    expect(warnings.detail).toContain('1 overfull-box')
+    expect(warnings.detail).toContain('1 line(s)')
   })
 
   it('is still "ready" pre-compile — an unmeasured count is a caveat, not a failure', () => {

@@ -299,6 +299,52 @@ describe('layout — the properties later work depends on', () => {
   })
 })
 
+describe('layout — what a page is', () => {
+  it('labels front matter, blanks, chapter openers and body pages', () => {
+    const book = run(
+      doc(
+        [block('heading', 'Of the Air', 1), block('paragraph', PROSE)],
+        [block('epigraph', 'For my father.')]
+      )
+    )
+    const kinds = book.pages.map((p) => p.kind)
+    expect(kinds).toContain('half-title')
+    expect(kinds).toContain('title')
+    expect(kinds).toContain('copyright')
+    expect(kinds).toContain('aside')
+    expect(kinds).toContain('blank')
+    expect(kinds).toContain('chapter-opener')
+
+    // A blank leaf carries nothing, and is a blank *because* of that.
+    for (const page of book.pages.filter((p) => p.kind === 'blank')) {
+      expect(lines(page)).toHaveLength(0)
+    }
+  })
+
+  it('marks the chapter opener as the page the chapter starts on', () => {
+    const book = run(doc([block('heading', 'Of the Air', 1), block('paragraph', PROSE)]))
+    expect(book.pages[book.chapterPages[0]!.pageIndex]!.kind).toBe('chapter-opener')
+  })
+})
+
+describe('layout — warnings', () => {
+  it('says nothing when every line fits', () => {
+    const book = run(doc([block('heading', 'Of the Air', 1), block('paragraph', PROSE)]))
+    expect(book.warnings).toEqual([])
+  })
+
+  it('reports a line that runs past the margin, and which page it is on', () => {
+    // A single word far wider than the measure cannot be broken or squeezed —
+    // TeX's overfull hbox, and the one line-quality complaint worth surfacing.
+    const monster = 'a'.repeat(400)
+    const book = run(doc([block('paragraph', `Short opening. ${monster} And after.`)]))
+    expect(book.warnings.length).toBeGreaterThan(0)
+    const warning = book.warnings[0]!
+    expect(warning.text).toContain('aaaa')
+    expect(book.pages[warning.pageIndex]!.section).toBe('body')
+  })
+})
+
 describe('layout — drop capitals', () => {
   it('sets an initial spanning three lines, at the left edge of the measure', () => {
     const book = run(doc([block('heading', 'Of the Air', 1), block('paragraph', PROSE)]), {

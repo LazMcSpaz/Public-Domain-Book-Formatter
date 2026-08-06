@@ -111,6 +111,7 @@ export interface FontTable extends TextMeasurer {
 }
 
 const cache = new Map<string, Promise<LoadedFace | null>>()
+const tables = new Map<string, Promise<FontTable>>()
 
 async function fetchFace(url: string): Promise<LoadedFace | null> {
   try {
@@ -141,6 +142,24 @@ function loadFace(family: string, style: FontStyle): Promise<LoadedFace | null> 
     const url = urlFor(family, style)
     pending = url === null ? Promise.resolve(null) : fetchFace(url)
     cache.set(key, pending)
+  }
+  return pending
+}
+
+/**
+ * The font table for a set of families, built once and shared.
+ *
+ * The design gate rebuilds its preview on every answer, and the export builds
+ * the same book again at the end; all of them want the same faces. Keying the
+ * table by its family set means the TTFs are parsed once per session rather
+ * than once per radio button.
+ */
+export function fontTableFor(families: readonly string[]): Promise<FontTable> {
+  const key = [...new Set(families)].sort().join('|')
+  let pending = tables.get(key)
+  if (!pending) {
+    pending = loadFonts(families)
+    tables.set(key, pending)
   }
   return pending
 }

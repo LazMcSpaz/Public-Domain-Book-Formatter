@@ -44,16 +44,16 @@ export interface BuildExportInput {
   ornamentDir?: string
   /**
    * Estimated final page count, used only for the KDP gutter check. The true
-   * count is known after the TeX run; until then the source page count is the
-   * honest stand-in.
+   * count is known once the book has been laid out; until then the scan's page
+   * count is the honest stand-in.
    */
   estimatedPageCount: number
   /**
-   * Results of an actual TeX run, once there has been one. Supplying this is
+   * Results of an actual layout run, once there has been one. Supplying this is
    * what turns the estimated page count and the un-run layout checks into real
    * ones — the report is otherwise explicit that it is pre-typeset.
    */
-  compiled?: { pageCount: number; warnings: string[] }
+  typeset?: { pageCount: number; warnings: string[] }
   /**
    * What to do with notes whose reference mark was never found — the answer to
    * the structure gate's question. Dropping them is the default because a note
@@ -197,14 +197,14 @@ export function buildExport(input: BuildExportInput): BuildExportResult {
       : {})
   })
 
-  // Before a TeX run the page count is the scan's and there are no layout
-  // warnings — `compiled: false` makes the report say that, instead of ticking
+  // Before a layout run the page count is the scan's and there are no layout
+  // warnings — `typeset: false` makes the report say that, instead of ticking
   // two boxes it hasn't earned.
   const validation = validateKdp({
     profile,
-    pageCount: input.compiled?.pageCount ?? input.estimatedPageCount,
-    warnings: input.compiled?.warnings ?? [],
-    compiled: input.compiled !== undefined
+    pageCount: input.typeset?.pageCount ?? input.estimatedPageCount,
+    warnings: input.typeset?.warnings ?? [],
+    typeset: input.typeset !== undefined
   })
 
   const notes: string[] = []

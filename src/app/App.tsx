@@ -35,14 +35,10 @@ import { assembleBook } from '@core/assemble'
 import { runBrowserTranscription } from '../platform/browser/transcribe-run'
 import { loadApiKey, saveApiKey, loadPrefs, savePrefs } from '../platform/browser/settings'
 import { profileFromAnswers, describeProfile, type DesignAnswers } from '@core/design'
-import {
-  buildExport,
-  editionFromAnswers,
-  noTexEngine,
-  tryCompile,
-  type BuildExportResult
-} from '@core/export'
+import { buildExport, editionFromAnswers, type BuildExportResult } from '@core/export'
+import { renderInterior } from '../platform/browser/interior'
 import { ExportResult } from './ExportResult'
+import { PreviewPane } from './PreviewPane'
 
 export function App(): JSX.Element {
   const [state, setState] = useState<WizardState>(initialState)
@@ -60,7 +56,8 @@ export function App(): JSX.Element {
   const [pendingCost, setPendingCost] = useState<string | null>(null)
   const [exported, setExported] = useState<BuildExportResult | null>(null)
   const [pdf, setPdf] = useState<{ bytes: Uint8Array; pageCount: number } | null>(null)
-  const [texNote, setTexNote] = useState<string | null>(null)
+  const [buildNote, setBuildNote] = useState<string | null>(null)
+  const [buildProgress, setBuildProgress] = useState<{ done: number; total: number } | null>(null)
 
   const step = activeStep(state)
   const [answers, setAnswers] = useState<Answers>({})
@@ -87,24 +84,38 @@ export function App(): JSX.Element {
 
   const missing = missingRequired(questions, currentAnswers)
 
-  // The design gate answers questions about the *book*; this is the typography
-  // they add up to, shown live so the consequence of an answer is visible
-  // before it is committed.
-  const designSummary = useMemo(() => {
+  // The design gate answers questions about the *book*; this is the style they
+  // add up to. Built live, because both the one-line summary and the page
+  // preview below it show the consequence of an answer before it is committed.
+  const designProfile = useMemo(() => {
     if (step.id !== 'design') return null
     const a = currentAnswers as Record<string, unknown>
-    return describeProfile(
-      profileFromAnswers(
-        {
-          kind: a['kind'],
-          period: a['period'],
-          chapterOpener: a['chapterOpener'],
-          runningHeads: a['runningHeads']
-        } as DesignAnswers,
-        a['font'] as string
-      )
+    return profileFromAnswers(
+      {
+        kind: a['kind'],
+        period: a['period'],
+        chapterOpener: a['chapterOpener'],
+        runningHeads: a['runningHeads']
+      } as DesignAnswers,
+      a['font'] as string
     )
   }, [step.id, currentAnswers])
+
+  const designSummary = designProfile ? describeProfile(designProfile) : null
+
+  /**
+   * The edition facts the preview's front matter needs. Only the identity gate
+   * has been answered by this point — the copyright-page details come later, at
+   * the export gate — so the preview shows the title page and leaves the
+   * copyright page with what it has.
+   */
+  const previewEdition = useMemo(() => {
+    const identity = (state.answers['gate-identity'] ?? {}) as Record<string, unknown>
+    return {
+      title: (identity['title'] as string) || state.metadata.title || 'Untitled',
+      author: (identity['author'] as string) || state.metadata.author || ''
+    }
+  }, [state.answers, state.metadata])
 
   const resolveEvidence = useCallback((src: string): string | undefined => {
     const m = /^page:(\d+)$/.exec(src)
@@ -119,7 +130,7 @@ export function App(): JSX.Element {
     // screen would let the user download the wrong book.
     setExported(null)
     setPdf(null)
-    setTexNote(null)
+    setBuildNote(null)
     if (reconRef.current) releaseRecon(reconRef.current)
     reconRef.current = null
 
@@ -278,9 +289,16 @@ export function App(): JSX.Element {
   }, [state, currentAnswers, complete])
 
   /**
-   * Build the edition. The LaTeX source is produced locally and always
-   * succeeds; the PDF depends on a TeX engine being available, and when one
-   * isn't the `.tex` is still a real deliverable rather than a dead end.
+   * Build the edition.
+   *
+   * The PDF is the deliverable now, and it is produced here rather than handed
+   * to a TeX engine that may not exist — the layout engine laid these pages out
+   * and pdf-lib wrote them, both in this tab. Which means the page count and the
+   * layout warnings are *measured*, so the two KDP checks that used to report
+   * `pending` can report the truth.
+   *
+   * The `.tex` stays as a secondary download during the transition, so there is
+   * always a working path out for anyone who wants to typeset it themselves.
    */
   const runExport = useCallback(async () => {
     const doc = state.document
@@ -298,36 +316,48 @@ export function App(): JSX.Element {
       design['font'] as string
     )
 
+    const edition = editionFromAnswers(state.answers['gate-identity'] ?? {}, currentAnswers)
     const input = {
       document: doc,
       profile,
-      edition: editionFromAnswers(state.answers['gate-identity'] ?? {}, currentAnswers),
-      // The true count comes from the TeX run; until then the source page count
-      // is the honest stand-in for the gutter check.
+      edition,
+      // Replaced below by the measured count; this only stands in if the
+      // interior cannot be built at all.
       estimatedPageCount: state.pageCount,
       // The structure gate asked what to do with notes that couldn't be placed.
       omitOrphanFootnotes: (state.answers['gate-structure'] ?? {})['orphanNotes'] === 'omit'
     }
-    const result = buildExport(input)
-    setExported(result)
+    setExported(buildExport(input))
 
-    const outcome = await tryCompile(noTexEngine, { tex: result.tex })
-    if (outcome.ok) {
-      setPdf({ bytes: outcome.result.pdf, pageCount: outcome.result.pageCount })
-      setTexNote(null)
+    try {
+      const interior = await renderInterior(doc, profile, {
+        edition: { ...edition, notices: edition.notices },
+        onProgress: (done, total) => setBuildProgress({ done, total })
+      })
+      setPdf({ bytes: interior.bytes, pageCount: interior.pageCount })
+      setBuildNote(null)
       // Re-report now that the estimates are real numbers.
       setExported(
         buildExport({
           ...input,
-          compiled: {
-            pageCount: outcome.result.pageCount,
-            warnings: outcome.result.warnings
+          typeset: {
+            pageCount: interior.pageCount,
+            warnings: interior.warnings.map(
+              (w) =>
+                `Page ${w.pageIndex + 1}: a line runs past the margin — “${w.text.slice(0, 60)}”`
+            )
           }
         })
       )
-    } else {
+    } catch (cause) {
       setPdf(null)
-      setTexNote(outcome.reason)
+      setBuildNote(
+        cause instanceof Error
+          ? `The interior could not be built: ${cause.message}`
+          : 'The interior could not be built.'
+      )
+    } finally {
+      setBuildProgress(null)
     }
     complete()
   }, [state, currentAnswers, complete])
@@ -569,8 +599,26 @@ export function App(): JSX.Element {
           </div>
         ) : null}
 
+        {/* --- writing the interior --- */}
+        {buildProgress ? (
+          <div className="progress">
+            <strong>
+              Setting page {buildProgress.done} of {buildProgress.total}
+            </strong>
+            <div className="bar">
+              <i
+                style={{
+                  width: `${(buildProgress.done / Math.max(1, buildProgress.total)) * 100}%`
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
+
         {/* --- the finished edition --- */}
-        {exported ? <ExportResult result={exported} pdf={pdf} texNote={texNote} /> : null}
+        {exported && !buildProgress ? (
+          <ExportResult result={exported} pdf={pdf} note={buildNote} />
+        ) : null}
 
         {/* --- gates --- */}
         {!exported && !progressInfo && !runProgress && !pendingCost && questions.length > 0 ? (
@@ -589,6 +637,9 @@ export function App(): JSX.Element {
                 <span className="summary-label">Your edition will be set as</span>
                 <b>{designSummary}</b>
               </div>
+            ) : null}
+            {designProfile ? (
+              <PreviewPane book={state.document} profile={designProfile} edition={previewEdition} />
             ) : null}
             <div className="actions">
               <button
