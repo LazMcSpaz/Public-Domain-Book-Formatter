@@ -21,6 +21,7 @@ Open PDF
   │
   ├─ GATE 2 ▸ check uncertain spots   ← where model & OCR disagree
   ├─ GATE 3 ▸ confirm structure       ← chapters, footnotes, illustrations
+  ├─ PROOF   ▸ each leaf beside its scan ← fix what was read wrong
   ├─ DESIGN  ▸ interview → layout → real pages, live
   └─ EXPORT  ▸ confirm title/author (prefilled) → PDF → KDP validation
 ```
@@ -36,6 +37,7 @@ Gates are the only stops. Everything between them runs unattended.
 | **Lexicon**    | `src/core/lexicon`     | Term harvesting, variant clustering, prompt block | no            |
 | **Page roles** | `src/core/pages`       | Roles, dispositions, front-matter metadata        | no            |
 | **Wizard**     | `src/core/wizard`      | Question contract, step machine                   | no            |
+| **Edits**      | `src/core/edits`       | Corrections as a list, applied over the book      | no            |
 | **Image**      | `src/core/image`       | Region detection, DPI math, op engine             | no            |
 | **Layout**     | `src/core/layout`      | Frames, line breaking, pagination, notes, TOC     | no            |
 | Typeset        | `src/core/typeset`     | KDP validation                                    | no            |
@@ -110,6 +112,50 @@ gate is not merely later: it is the first moment the app has something to offer.
 Gate 1 keeps what it can genuinely ask at that point — how the original spelling
 should be handled, and the harvested vocabulary, both of which shape the paid
 pass that follows and neither of which the app could decide alone.
+
+## Correcting what was read
+
+The vision pass misreads words, and no cross-check can catch all of it. OCR
+disagreeing is a _hint_; a page both witnesses read the same wrong way raises no
+flag at all. Structure is worse — whether a line is a heading or a paragraph is
+a judgment, and only a person looking at the leaf can settle it.
+
+Before `src/core/edits` the app had no answer. The term grid at Gate 1 feeds
+vocabulary into the _prompt_; it edits nothing. Gate 2 offers to re-read a page,
+which costs money and may return the same reading. A book could be exported with
+a wrong word in it and there was nothing to be done about that word.
+
+- **Corrections are a list, not edited text.** Exactly the shape of the image op
+  stack, for exactly the same reason: the transcription is the one artifact the
+  user paid for, so it stays pristine and `applyEdits` is re-run over it. That
+  buys undo, and it means removing a page or accepting a different picture
+  re-derives the book with every correction still on it.
+- **A block's id names its origin, not its position.** `p{page}b{index}` of the
+  transcribed block that started it. An id counted off the _output_ would slide
+  out from under every existing edit the moment a page was excluded or a caption
+  left the flow. A block joined across a seam keeps the id of its first half.
+- **The unit is the source leaf.** Not the finished page — this edition
+  repaginates, so a finished page corresponds to nothing the user can hold the
+  scan against — and not the whole book, which on 300 pages would be thousands
+  of text boxes in the DOM. The leaf is also just how proofreading is done.
+- **The leaf is rendered on demand at a readable size.** Recon's ~200px
+  thumbnails are right for a page rail and useless for comparing words; keeping
+  legible renders of every leaf would be hundreds of megabytes. So one is
+  rendered when the user opens it and revoked when they move on — the same
+  render-consume-release discipline as everything else that touches pixels.
+- **Content is correctable; presentation is not.** Fix a word, retype a block,
+  drop it, split it, join it, move a picture. There is deliberately no "indent
+  this paragraph" or "break the line here": in a book that reflows to whatever
+  measure the design gate settles on, those are not corrections but damage that
+  survives until someone notices the page looks typed rather than set. A
+  paragraph that needs different treatment gets a different _kind_, which the
+  style system then sets consistently everywhere.
+- **The step leads with what was flagged but lists every leaf.** The flagged
+  ones are where the app has an opinion; the unflagged ones are where this
+  feature earns its existence.
+- **Corrections are saved with the run** (schema v6). They are the other thing
+  here that cannot be regenerated for free: everything else is re-derived from
+  the scan, but an hour spent reading a book against its scan is an hour.
 
 ## Illustrations
 

@@ -28,6 +28,7 @@ export type StepId =
   | 'transcribe'
   | 'gate-uncertainties'
   | 'gate-structure'
+  | 'proof'
   | 'design'
   | 'export'
 
@@ -557,6 +558,35 @@ const gateStructure: Step = {
 }
 
 /**
+ * Proofreading, which is a workbench rather than a question.
+ *
+ * Every other stop in this flow asks something the app has a recommendation
+ * for. This one cannot: a misreading is not a decision with a default, and the
+ * app has already contributed everything it can — the cross-checks that flag a
+ * page are exactly the ones Gate 2 has been over. What is left is the case
+ * those checks cannot reach, where the model and OCR read the same word the
+ * same wrong way, and only a person with the scan in front of them will see it.
+ *
+ * So the step carries no `Question[]`. The shell renders the sheet instead, the
+ * same concession SPEC §6 makes for images when it calls the editing mode "the
+ * real instrument". The decisions that *are* logic — what is on each leaf, and
+ * which leaves to offer first — live in `@core/edits` and are tested there.
+ *
+ * It sits after the structure gate and before the design gate on purpose. The
+ * text has to be right before it is worth choosing a typeface for, and every
+ * correction re-lays the book out for free, so the page count the design gate
+ * previews is the corrected book's.
+ */
+const proof: Step = {
+  id: 'proof',
+  title: 'Read it through',
+  blurb: 'Your book beside the scan it came from. Fix anything that was read wrong.',
+  isGate: true,
+  canEnter: (s) => s.completed.includes('gate-structure') && s.document !== null,
+  questions: () => []
+}
+
+/**
  * Design by interview. Five questions about the *book* produce a complete
  * style — the alternative is a panel of forty fields that assumes the user
  * already knows what a gutter is. The detailed controls remain available
@@ -567,7 +597,7 @@ const design: Step = {
   title: 'Design the edition',
   blurb: 'A few questions about the book, and I’ll set the rest.',
   isGate: true,
-  canEnter: (s) => s.completed.includes('gate-structure'),
+  canEnter: (s) => s.completed.includes('proof'),
   questions: (s) => {
     // The period answer picks the typeface, so it is read back here to
     // pre-select the matching font rather than making the user match them.
@@ -790,6 +820,7 @@ export const STEPS: readonly Step[] = [
   transcribe,
   gateUncertainties,
   gateStructure,
+  proof,
   design,
   exportStep
 ]

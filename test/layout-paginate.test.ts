@@ -29,8 +29,15 @@ const EDITION: LayoutEdition = {
   notices: ['The original work is in the public domain.']
 }
 
+let blockId = 0
 function block(kind: BookBlock['kind'], text: string, level?: number): BookBlock {
-  return { kind, text, sourcePages: [0], ...(level === undefined ? {} : { level }) }
+  return {
+    id: `p0b${blockId++}`,
+    kind,
+    text,
+    sourcePages: [0],
+    ...(level === undefined ? {} : { level })
+  }
 }
 
 /** Enough prose to fill roughly a page and a half at the default style. */

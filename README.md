@@ -34,6 +34,7 @@ Open PDF
   │
   ├─ GATE 2 ▸ check uncertain spots   ← where model and OCR disagree
   ├─ GATE 3 ▸ confirm structure       ← chapters, footnotes, illustrations
+  ├─ PROOF   ▸ each leaf beside its scan ← fix what was read wrong
   ├─ DESIGN  ▸ interview → layout → real pages, live
   └─ EXPORT  ▸ confirm the title page → PDF → KDP validation
 ```
@@ -80,6 +81,7 @@ src/
     lexicon/    Term harvesting from the book's own vocabulary
     pages/      Page roles and what to do with each
     wizard/     The question contract and the step machine
+    edits/      Corrections as a list, applied over the assembled book
     transcribe/ Vision-pass schema, prompt, client, runner, verification, cost
     assemble/   Per-page transcriptions → one book (seams, hyphens, notes)
     design/     Five interview answers → a complete style profile
@@ -104,8 +106,9 @@ the vision pass, assembly, the design interview with a live page preview, and a
 print-ready PDF with front matter, running heads, folios, drop capitals,
 footnotes set at the foot of the page they belong to, chapter ornaments, a
 collected endnotes section for notes whose reference mark was never found,
-illustrations cut out of the scan and set with their captions, and a table of
-contents carrying measured page numbers. The KDP report's page count and typesetting
+illustrations cut out of the scan and set with their captions, a proofing step
+that puts each leaf beside its scan so a misreading can actually be fixed, and a
+table of contents carrying measured page numbers. The KDP report's page count and typesetting
 warnings are measured rather than estimated.
 
 The one step that costs money — the vision pass — is saved against the file it

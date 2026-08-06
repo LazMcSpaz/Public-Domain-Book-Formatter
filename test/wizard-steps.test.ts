@@ -171,6 +171,7 @@ describe('answers', () => {
         'transcribe',
         'gate-uncertainties',
         'gate-structure',
+        'proof',
         'design'
       ] as StepId[]
     }
@@ -569,8 +570,8 @@ describe('gate 3 — structure', () => {
   })
 })
 
-describe('design step', () => {
-  const readyForDesign = (answers: Record<string, Record<string, unknown>> = {}): WizardState => ({
+describe('the proof step', () => {
+  const afterStructure = (document: WizardState['document']): WizardState => ({
     ...initialState(),
     completed: [
       'intake',
@@ -580,10 +581,59 @@ describe('design step', () => {
       'gate-uncertainties',
       'gate-structure'
     ],
+    document
+  })
+
+  const doc = () =>
+    assembleBook([
+      {
+        pageIndex: 0,
+        role: 'body',
+        uncertain: [],
+        furniture: {},
+        blocks: [{ kind: 'paragraph', text: 'The chirurgeon examined the specimen.' }]
+      }
+    ])
+
+  it('is where the flow lands once the structure is confirmed', () => {
+    expect(activeStep(afterStructure(doc())).id).toBe('proof')
+  })
+
+  it('asks nothing — proofreading is a workbench, not a question', () => {
+    // Every other stop has a recommendation to offer. A misreading does not:
+    // the cross-checks that could flag one have already been over the book at
+    // Gate 2, and what is left is what they cannot see.
+    expect(stepById('proof').questions(afterStructure(doc()))).toEqual([])
+  })
+
+  it('does not open before there is a book to read', () => {
+    expect(stepById('proof').canEnter(afterStructure(null))).toBe(false)
+    expect(stepById('proof').canEnter(afterStructure(doc()))).toBe(true)
+  })
+
+  it('comes before the design gate, so the text is right before it is dressed', () => {
+    const ids = STEPS.map((s) => s.id)
+    expect(ids.indexOf('proof')).toBeGreaterThan(ids.indexOf('gate-structure'))
+    expect(ids.indexOf('proof')).toBeLessThan(ids.indexOf('design'))
+  })
+})
+
+describe('design step', () => {
+  const readyForDesign = (answers: Record<string, Record<string, unknown>> = {}): WizardState => ({
+    ...initialState(),
+    completed: [
+      'intake',
+      'recon',
+      'gate-identity',
+      'transcribe',
+      'gate-uncertainties',
+      'gate-structure',
+      'proof'
+    ],
     answers: answers as WizardState['answers']
   })
 
-  it('is where the flow lands once the structure is confirmed', () => {
+  it('is where the flow lands once the text has been read through', () => {
     expect(activeStep(readyForDesign()).id).toBe('design')
   })
 
@@ -659,6 +709,7 @@ describe('export step', () => {
       'transcribe',
       'gate-uncertainties',
       'gate-structure',
+      'proof',
       'design'
     ],
     ...overrides

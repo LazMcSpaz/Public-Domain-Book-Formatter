@@ -254,6 +254,40 @@ export function inkProfile(
   return { fraction: inked / luminance.length, bounds }
 }
 
+/**
+ * Render one page to an object URL big enough to *read*.
+ *
+ * The thumbnails recon keeps are ~200px wide, which is right for picking a page
+ * out of a rail and useless for proofreading against — the whole point of the
+ * proof sheet is comparing words, and at that size there are no words. Storing
+ * legible renders for every page instead is not an option either: a 300-page
+ * book at this size would be well over a hundred megabytes held for the session.
+ *
+ * So it is rendered on demand, one leaf at a time, and released when the user
+ * moves on — the same discipline recon follows for the same reason.
+ *
+ * **The caller must revoke the URL** when it is no longer displayed.
+ */
+export async function renderPageToObjectUrl(
+  source: Blob,
+  pageIndex: number,
+  dpi = 140
+): Promise<string> {
+  const doc = await openPdf(source)
+  try {
+    const rendered = await renderPage(doc, pageIndex, dpi)
+    const blob = await new Promise<Blob | null>((resolve) =>
+      rendered.canvas.toBlob(resolve, 'image/png')
+    )
+    rendered.canvas.width = 0
+    rendered.canvas.height = 0
+    if (!blob) throw new Error('Could not encode the page')
+    return URL.createObjectURL(blob)
+  } finally {
+    await doc.destroy()
+  }
+}
+
 /** Downscale a page to a thumbnail object URL (front-matter review, page rail). */
 export async function thumbnailToObjectUrl(
   source: HTMLCanvasElement,

@@ -19,6 +19,20 @@ import type { PageTranscription, TranscribedBlock } from '@core/transcribe'
 
 /** A block in the assembled book, with provenance back to its source page. */
 export interface BookBlock extends TranscribedBlock {
+  /**
+   * Stable identity, so a correction can name what it corrects.
+   *
+   * Derived from the *transcribed* block that started this one —
+   * `p{pageIndex}b{blockIndex}` — rather than from its position in the output.
+   * That distinction is the whole point: the output is re-derived whenever the
+   * user removes a page or accepts a different set of illustrations, and an id
+   * counted off the output would slide out from under every edit already made.
+   * The input never moves; it is the thing that was paid for.
+   *
+   * A block joined across a page seam keeps the id of its first half, because
+   * that is where it begins to be this paragraph.
+   */
+  id: string
   /** Pages this block's text came from (more than one when a seam was joined). */
   sourcePages: number[]
 }
@@ -68,6 +82,15 @@ export interface Illustration extends IllustrationSource {
    * picture it describes, is worse than no caption at all.
    */
   caption: string | null
+  /**
+   * The block this picture should follow, when the user has said where it goes.
+   *
+   * Absent means "wherever the engine decides", which is after the last text
+   * that shared the picture's page — the most the scan itself can tell us. A
+   * null value means the very front of the body, which is a real answer and so
+   * has to be distinguishable from not having answered.
+   */
+  anchorAfterBlockId?: string | null
 }
 
 export interface BookDocument {
@@ -221,7 +244,7 @@ export function assembleBook(
     const pictures = byPage.get(page.pageIndex) ?? []
     let nextPicture = 0
 
-    for (const block of page.blocks) {
+    for (const [blockIndex, block] of page.blocks.entries()) {
       if (block.kind === 'caption' && nextPicture < pictures.length) {
         const picture = pictures[nextPicture++]!
         illustrations.push({ ...picture, caption: stripSoftHyphens(block.text.trim()) })
@@ -255,6 +278,7 @@ export function assembleBook(
 
       target.push({
         ...block,
+        id: `p${page.pageIndex}b${blockIndex}`,
         text: stripSoftHyphens(block.text),
         sourcePages: [page.pageIndex]
       })

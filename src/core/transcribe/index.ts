@@ -3,6 +3,7 @@
  * verify the result against evidence rather than against the model's opinion.
  */
 export {
+  BLOCK_KINDS,
   PAGE_SCHEMA,
   parsePageTranscription,
   transcriptionText,

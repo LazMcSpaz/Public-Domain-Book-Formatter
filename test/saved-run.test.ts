@@ -93,6 +93,70 @@ describe('migrateSavedRun', () => {
   })
 })
 
+describe('migrateSavedRun — the corrections that came with v6', () => {
+  it('keeps an edit list through the round trip it is stored by', () => {
+    const original = run({
+      edits: [
+        { kind: 'text', blockId: 'p0b1', text: 'The chirurgeon.' },
+        { kind: 'retype', blockId: 'p0b0', blockKind: 'heading', level: 1 },
+        { kind: 'anchor', illustrationId: 'i1', afterBlockId: null }
+      ]
+    })
+    expect(migrateSavedRun(JSON.parse(JSON.stringify(original))).edits).toEqual(original.edits)
+  })
+
+  it('upgrades a v5 run rather than refusing it', () => {
+    // A run saved before the proof step existed is not damaged by the change —
+    // it is a complete transcription that simply has no corrections on it. This
+    // is the whole reason there is a migration and not a version check.
+    const v5 = JSON.parse(JSON.stringify(run())) as Record<string, unknown>
+    v5['schemaVersion'] = 5
+    delete v5['edits']
+
+    const restored = migrateSavedRun(v5)
+    expect(restored.schemaVersion).toBe(CURRENT_SCHEMA_VERSION)
+    expect(restored.edits).toEqual([])
+    expect(restored.transcriptions).toHaveLength(2)
+  })
+
+  it('still refuses the desktop application’s versions, which hold no transcription', () => {
+    const v4 = JSON.parse(JSON.stringify(run())) as Record<string, unknown>
+    v4['schemaVersion'] = 4
+    expect(() => migrateSavedRun(v4)).toThrow(/desktop application/)
+  })
+
+  it('drops a malformed correction instead of the whole run', () => {
+    // Untrusted input: anything in IndexedDB can have been written by an older
+    // build or corrupted. Losing one correction costs one correction; refusing
+    // the run would cost the thing the user paid for.
+    const raw = JSON.parse(JSON.stringify(run())) as Record<string, unknown>
+    raw['edits'] = [
+      { kind: 'text', blockId: 'p0b1', text: 'Good.' },
+      { kind: 'text', blockId: 'p0b2' },
+      { kind: 'nonsense', blockId: 'p0b3' },
+      { kind: 'retype', blockId: 'p0b4', blockKind: 'not-a-kind' },
+      { kind: 'split', blockId: 'p0b5', at: 'halfway' },
+      null,
+      'a string'
+    ]
+    expect(migrateSavedRun(raw).edits).toEqual([{ kind: 'text', blockId: 'p0b1', text: 'Good.' }])
+  })
+
+  it('accepts an anchor to the front of the book, which is a real answer', () => {
+    const raw = JSON.parse(JSON.stringify(run())) as Record<string, unknown>
+    raw['edits'] = [
+      { kind: 'anchor', illustrationId: 'i1', afterBlockId: null },
+      { kind: 'anchor', illustrationId: 'i2', afterBlockId: 'p0b0' },
+      { kind: 'anchor', illustrationId: 'i3', afterBlockId: 42 }
+    ]
+    expect(migrateSavedRun(raw).edits).toHaveLength(2)
+  })
+
+  it('reads back a run that never had corrections as having none', () => {
+    expect(migrateSavedRun(JSON.parse(JSON.stringify(run()))).edits).toEqual([])
+  })
+})
+
 describe('summarize', () => {
   it('carries what the resume question needs to ask honestly', () => {
     const s = summarize(run({ failures: [{ pageIndex: 3, message: 'timed out' }] }))

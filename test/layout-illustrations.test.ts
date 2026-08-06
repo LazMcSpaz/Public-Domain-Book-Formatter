@@ -56,7 +56,12 @@ const allImages = (b: LaidOutBook): ImageItem[] => b.pages.flatMap(images)
 
 describe('anchorIllustrations — where a picture goes in the reading order', () => {
   const blocks = (pages: number[][]) =>
-    pages.map((sourcePages) => ({ kind: 'paragraph' as const, text: 'x', sourcePages }))
+    pages.map((sourcePages, i) => ({
+      id: `p${sourcePages[0]}b${i}`,
+      kind: 'paragraph' as const,
+      text: 'x',
+      sourcePages
+    }))
 
   const illustration = (id: string, pageIndex: number) => ({
     id,

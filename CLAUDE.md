@@ -54,6 +54,12 @@ Practical rules:
   where they were three empty boxes and a trip out of the browser.
 - **Show the pixels.** Never ask "is this word right?" without the scan beside it.
 - **Answer once, apply everywhere.** Confirming a term fixes it book-wide.
+- **Correct content, never presentation.** The proof step fixes what the page
+  _says_ and what a block _is_. It deliberately offers no per-paragraph indent
+  and no manual line break: the book reflows to whatever measure the design gate
+  settles on, so those are not corrections but damage. A paragraph needing
+  different treatment gets a different kind, which the style system then applies
+  consistently.
 
 ## Architecture in one breath
 
@@ -185,6 +191,11 @@ in `screenshots/`. Don't ship UI blind.
   placed by the engine and drawn with `drawSvgPath`), **collected endnotes** for
   notes whose reference mark is nowhere in the body, and moving the title,
   author and year questions to the export gate where they arrive prefilled.
+- **Also done**: **proofreading** (`src/core/edits`) — each source leaf beside a
+  readable render of its scan, with the text editable, blocks retypeable and
+  pictures re-anchorable. Corrections are a _list_ applied over the pristine
+  transcription, exactly like the image op stack, and are saved with the run
+  (schema v6). Before this there was no way to fix a single wrong word.
 - **Also done**: **illustrations** — detected from the OCR word boxes and an ink
   test on the pixels, reviewed one by one at Gate 3, cut out of the scan at
   render resolution, set to the measure (or given a leaf of their own), with the

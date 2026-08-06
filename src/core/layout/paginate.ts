@@ -923,15 +923,23 @@ export function layout(
   const collected = options.orphanNotes === 'collect' ? prepared.orphans : []
   if (collected.length > 0) {
     flowables.push(
-      buildFlowable({ kind: 'heading', level: 1, text: ENDNOTES_TITLE, sourcePages: [] }, ctx, {
-        suppressFirstIndent: true,
-        dropCap: false
-      })
+      buildFlowable(
+        // Synthesised by the engine rather than read off a page, so its id
+        // names what it is instead of where it came from. Nothing can correct
+        // it — there is no scan behind it to correct it against.
+        { id: 'endnotes', kind: 'heading', level: 1, text: ENDNOTES_TITLE, sourcePages: [] },
+        ctx,
+        {
+          suppressFirstIndent: true,
+          dropCap: false
+        }
+      )
     )
     for (const note of collected) {
       flowables.push(
         buildFlowable(
           {
+            id: `endnote-${note.id}`,
             kind: 'paragraph',
             text: `${note.originalMarker} ${note.text}`.trim(),
             sourcePages: []

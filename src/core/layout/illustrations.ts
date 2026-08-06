@@ -38,13 +38,35 @@ export function anchorIllustrations(
   const anchored = new Map<number, Illustration[]>()
   for (const illustration of illustrations) {
     let after = -1
-    for (let i = 0; i < blocks.length; i++) {
-      if (lastPage[i]! <= illustration.pageIndex) after = i
-      else break
+
+    if (illustration.anchorAfterBlockId !== undefined) {
+      // The user has said where it goes, which beats anything inferred from the
+      // page it happened to be printed on. `null` is an answer — the front of
+      // the body — so this branch is chosen on the key being *present*.
+      after =
+        illustration.anchorAfterBlockId === null
+          ? -1
+          : blocks.findIndex((b) => b.id === illustration.anchorAfterBlockId)
+      // A block that is no longer in the book falls back to the page rule
+      // rather than silently pinning the picture to the front.
+      if (after < 0 && illustration.anchorAfterBlockId !== null) after = byPage(illustration)
+    } else {
+      after = byPage(illustration)
     }
+
     const list = anchored.get(after) ?? []
     list.push(illustration)
     anchored.set(after, list)
   }
   return anchored
+
+  /** The engine's own rule: after the last text that shared the picture's page. */
+  function byPage(illustration: Illustration): number {
+    let after = -1
+    for (let i = 0; i < blocks.length; i++) {
+      if (lastPage[i]! <= illustration.pageIndex) after = i
+      else break
+    }
+    return after
+  }
 }

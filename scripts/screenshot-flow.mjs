@@ -267,6 +267,35 @@ await page.locator('.actions button.primary').first().click()
 await page.waitForTimeout(4000)
 const afterStructure = await page.locator('.rail li.active .label').innerText()
 
+// --- proofreading -----------------------------------------------------------
+// The one step with no questions: the scan on one side, what was read off it on
+// the other. This is also the only place a wrong word can be fixed at all.
+console.log('5c2. the proof sheet')
+await page.waitForSelector('.proof', { timeout: 60000 })
+await shot('05c2-proof-sheet')
+
+const proofBoxes = await page.locator('.proof-block textarea').count()
+const proofScan = await page.locator('.proof-scan img').count()
+
+// Correcting a word must reach the finished PDF, which is the whole point.
+const firstBox = page.locator('.proof-block textarea').first()
+await firstBox.fill('The chirurgeon examined the specimen with extraordinary care.')
+await page.waitForTimeout(300)
+const correctedCount = await page.locator('.proof-where small').innerText()
+
+// The phone viewport: the scan stacks above the text rather than beside it.
+await page.setViewportSize({ width: 390, height: 844 })
+await page.waitForTimeout(400)
+await shot('05c3-proof-sheet-mobile')
+const proofOverflow = await page.evaluate(
+  () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+)
+await page.setViewportSize({ width: 1360, height: 900 })
+await page.waitForTimeout(300)
+
+await page.locator('.actions button.primary').first().click()
+await page.waitForTimeout(1500)
+
 // The design gate now previews the *real* book, pictures and all. This is the
 // end of the path: detected from the OCR boxes, judged by the pixels, reviewed,
 // cropped, laid out, embedded, and rasterized back — so a leaf here with a
@@ -439,6 +468,9 @@ console.log(`  no key asked for when reusing it: ${askedForKey === 0}`)
 console.log(`  resumed to: ${resumedTo} (cost prompts: ${chargedAgain})`)
 console.log(`  illustration candidates: ${foundIllustrations} (crops shown: ${illustrationCrops})`)
 console.log(`  advanced past the structure gate to: ${afterStructure}`)
+console.log(`  proof sheet: ${proofBoxes} editable block(s), ${proofScan} scan(s) beside them`)
+console.log(`  after correcting one: ${correctedCount.replace(/\s+/g, ' ')}`)
+console.log(`  proof sheet mobile overflow: ${proofOverflow}px`)
 console.log(`  export blocked until the title is given: ${blockedWithoutTitle}`)
 console.log(`  image DPI check: ${imageCheck.replace(/\s+/g, ' ')}`)
 console.log(`  export note: ${illustrationNote.replace(/\s+/g, ' ')}`)
@@ -466,6 +498,10 @@ process.exit(
     foundIllustrations === 2 &&
     illustrationCrops === foundIllustrations &&
     plateFound &&
+    proofBoxes > 0 &&
+    proofScan === 1 &&
+    /1 corrected/.test(correctedCount) &&
+    proofOverflow <= 0 &&
     // A real answer, not the "no placed images to check" it gave before.
     blockedWithoutTitle &&
     /DPI/.test(imageCheck) &&

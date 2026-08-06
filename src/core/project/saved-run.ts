@@ -22,7 +22,8 @@
  *
  * Pure: types, versioning and migration. The store is in the platform layer.
  */
-import type { PageTranscription } from '@core/transcribe'
+import { BLOCK_KINDS, type PageTranscription } from '@core/transcribe'
+import type { BookEdit } from '@core/edits'
 
 /**
  * Current schema version. Bump and extend `migrateSavedRun` on any shape change.
@@ -30,9 +31,14 @@ import type { PageTranscription } from '@core/transcribe'
  * Versions 1–4 were the desktop application's `project.json` — a manifest of
  * page images, a Markdown intermediate, a coordinate map and non-destructive
  * image edits, none of which the browser app produces. Nothing ever wrote one
- * from a browser, so v5 does not migrate them; it recognises them and says so.
+ * from a browser, so this does not migrate them; it recognises them and says so.
+ *
+ * v5 → v6 added the proofreading corrections. A v5 run is not damaged by the
+ * change — it is a complete transcription that simply has no corrections on it
+ * yet — so it upgrades in place rather than being refused. That distinction is
+ * the whole reason a migration exists instead of a version check.
  */
-export const CURRENT_SCHEMA_VERSION = 5
+export const CURRENT_SCHEMA_VERSION = 6
 
 /** A page the model could not read at all. Mirrors the runner's `PageFailure`. */
 export interface SavedFailure {
@@ -69,6 +75,16 @@ export interface SavedRun {
    * effect on text the model has already produced.
    */
   identityAnswers: Record<string, unknown>
+  /**
+   * Corrections made at the proof step.
+   *
+   * Stored for the same reason the transcription is: they are the other thing
+   * in this app the user cannot get back for free. Everything else — the
+   * render, the OCR, the lexicon, the assembly, the layout — is regenerated
+   * from the scan on the way back in, but an hour spent reading a book against
+   * its scan is an hour, and a refresh must not cost it.
+   */
+  edits: BookEdit[]
 }
 
 /** The facts the resume question needs, without loading the whole run. */
@@ -133,6 +149,7 @@ export function createSavedRun(init: {
   usage: SavedUsage
   modelId: string
   identityAnswers: Record<string, unknown>
+  edits?: readonly BookEdit[]
   savedAt?: string
 }): SavedRun {
   return {
@@ -145,7 +162,8 @@ export function createSavedRun(init: {
     failures: [...init.failures],
     usage: init.usage,
     modelId: init.modelId,
-    identityAnswers: init.identityAnswers
+    identityAnswers: init.identityAnswers,
+    edits: [...(init.edits ?? [])]
   }
 }
 
@@ -169,7 +187,11 @@ export function migrateSavedRun(raw: unknown): SavedRun {
         `(${CURRENT_SCHEMA_VERSION}). Update the app, or transcribe the book again.`
     )
   }
-  if (version < CURRENT_SCHEMA_VERSION) {
+  // v1–4 came from the desktop application and hold page images and a Markdown
+  // intermediate rather than a transcription — there is genuinely nothing in
+  // one to restore. v5 is a browser run that predates the proof step, which is
+  // a complete transcription with no corrections on it, so it upgrades.
+  if (version < 5) {
     throw new Error(
       `Saved transcription is version ${version}, which the desktop application wrote. ` +
         'It holds page images and a Markdown intermediate rather than a transcription, ' +
@@ -202,8 +224,71 @@ export function migrateSavedRun(raw: unknown): SavedRun {
       cacheReadTokens: num(rawUsage['cacheReadTokens'], 0)
     },
     modelId: str(raw['modelId'], 'unknown'),
-    identityAnswers: isObject(raw['identityAnswers']) ? raw['identityAnswers'] : {}
+    identityAnswers: isObject(raw['identityAnswers']) ? raw['identityAnswers'] : {},
+    edits: parseEdits(raw['edits'])
   }
+}
+
+/**
+ * Read back an edit list from storage, keeping only what is well-formed.
+ *
+ * This is untrusted input — anything in IndexedDB can have been written by an
+ * older build, or corrupted, or edited by hand. A malformed record is dropped
+ * rather than thrown on, which is the opposite of how the transcription itself
+ * is handled, and deliberately so: losing one correction costs the user one
+ * correction, where refusing the whole run would cost them the thing they paid
+ * for over a typo in a field they cannot see.
+ */
+function parseEdits(raw: unknown): BookEdit[] {
+  if (!Array.isArray(raw)) return []
+  const out: BookEdit[] = []
+  for (const value of raw) {
+    if (!isObject(value)) continue
+    const blockId = str(value['blockId'], '')
+    switch (value['kind']) {
+      case 'text':
+        if (blockId && typeof value['text'] === 'string') {
+          out.push({ kind: 'text', blockId, text: value['text'] })
+        }
+        break
+      case 'retype': {
+        // Checked against the real list rather than merely being a string: an
+        // unknown kind would reach the layout engine's style table and be set
+        // as whatever its fallback happens to be.
+        const blockKind = BLOCK_KINDS.find((k) => k === value['blockKind'])
+        if (blockId && blockKind) {
+          const level = value['level']
+          out.push({
+            kind: 'retype',
+            blockId,
+            blockKind,
+            ...(typeof level === 'number' ? { level } : {})
+          })
+        }
+        break
+      }
+      case 'drop':
+        if (blockId) out.push({ kind: 'drop', blockId })
+        break
+      case 'split':
+        if (blockId && typeof value['at'] === 'number') {
+          out.push({ kind: 'split', blockId, at: value['at'] })
+        }
+        break
+      case 'merge':
+        if (blockId) out.push({ kind: 'merge', blockId })
+        break
+      case 'anchor': {
+        const illustrationId = str(value['illustrationId'], '')
+        const after = value['afterBlockId']
+        if (illustrationId && (after === null || typeof after === 'string')) {
+          out.push({ kind: 'anchor', illustrationId, afterBlockId: after })
+        }
+        break
+      }
+    }
+  }
+  return out
 }
 
 /** "3 days ago" — plain enough to be read at a glance in the resume offer. */

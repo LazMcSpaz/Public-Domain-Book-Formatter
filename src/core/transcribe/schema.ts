@@ -104,7 +104,14 @@ const PAGE_ROLES: readonly PageRole[] = [
   'unknown'
 ]
 
-const BLOCK_KINDS: readonly BlockKind[] = [
+/**
+ * Every block kind, as data.
+ *
+ * Exported because the JSON schema is no longer the only thing that has to
+ * know: a correction read back from storage names a kind, and validating it
+ * against a second hand-written list is how the two drift apart.
+ */
+export const BLOCK_KINDS: readonly BlockKind[] = [
   'paragraph',
   'heading',
   'blockquote',
