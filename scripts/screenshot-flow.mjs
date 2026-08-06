@@ -196,11 +196,19 @@ const seeded = await page.evaluate(
       project.createSavedRun({
         key,
         fileName: 'test-book.pdf',
-        pageCount: 8,
-        transcriptions: Array.from({ length: 8 }, (_, i) => ({
+        pageCount: 9,
+        transcriptions: Array.from({ length: 9 }, (_, i) => ({
           pageIndex: i,
           role: i === 0 ? 'title-page' : 'body',
-          blocks: [{ kind: 'paragraph', text: `Restored page ${i + 1}.` }],
+          blocks: [
+            { kind: 'paragraph', text: `Restored page ${i + 1}.` },
+            // The fixture prints a figure with a caption on this leaf. The
+            // caption has to be in the transcription for assembly to have
+            // anything to take out of the flow and give to the picture.
+            ...(i === 5
+              ? [{ kind: 'caption', text: 'Fig. 1. The alembick and its receiver.' }]
+              : [])
+          ],
           uncertain: [],
           furniture: {}
         })),
@@ -239,6 +247,122 @@ await page.locator('.actions button.primary').first().click()
 await page.waitForTimeout(2000)
 const resumedTo = await page.locator('.rail li.active .label').innerText()
 const chargedAgain = await page.locator('.cost').count()
+
+// --- the illustration review ------------------------------------------------
+// The fixture prints an alembick in the text of one leaf and a full-page plate
+// on another, so recon should have found two candidates and no others: the
+// eight pages of plain text must produce nothing, or the gate is unusable.
+console.log('5c. illustrations found in the scan')
+await page.locator('.actions button.primary').first().click()
+await page.waitForTimeout(1500)
+
+const illustrationQuestion = page.locator('.q').filter({ hasText: 'illustrations' })
+const foundIllustrations = await illustrationQuestion.locator('.opt').count()
+const illustrationCrops = await illustrationQuestion.locator('img').count()
+await shot('05c-gate-structure-illustrations')
+
+// Continuing cuts the accepted regions out of the scan, which is the step that
+// re-renders those pages — so reaching the next gate at all proves the crop ran.
+await page.locator('.actions button.primary').first().click()
+await page.waitForTimeout(4000)
+const afterStructure = await page.locator('.rail li.active .label').innerText()
+
+// --- proofreading -----------------------------------------------------------
+// The one step with no questions: the scan on one side, what was read off it on
+// the other. This is also the only place a wrong word can be fixed at all.
+console.log('5c2. the proof sheet')
+await page.waitForSelector('.proof', { timeout: 60000 })
+await shot('05c2-proof-sheet')
+
+const proofBoxes = await page.locator('.proof-block textarea').count()
+const proofScan = await page.locator('.proof-scan img').count()
+
+// Correcting a word must reach the finished PDF, which is the whole point.
+const firstBox = page.locator('.proof-block textarea').first()
+await firstBox.fill('The chirurgeon examined the specimen with extraordinary care.')
+await page.waitForTimeout(300)
+const correctedCount = await page.locator('.proof-where small').innerText()
+
+// The phone viewport: the scan stacks above the text rather than beside it.
+await page.setViewportSize({ width: 390, height: 844 })
+await page.waitForTimeout(400)
+await shot('05c3-proof-sheet-mobile')
+const proofOverflow = await page.evaluate(
+  () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+)
+await page.setViewportSize({ width: 1360, height: 900 })
+await page.waitForTimeout(300)
+
+await page.locator('.actions button.primary').first().click()
+await page.waitForTimeout(1500)
+
+// The design gate now previews the *real* book, pictures and all. This is the
+// end of the path: detected from the OCR boxes, judged by the pixels, reviewed,
+// cropped, laid out, embedded, and rasterized back — so a leaf here with a
+// picture on it means every one of those steps worked.
+console.log('5d. the pictures reach the page')
+await page.waitForSelector('.leaf img', { timeout: 120000 })
+await page.waitForTimeout(1500)
+await shot('05d-design-preview-with-plate')
+
+// Is any previewed leaf mostly picture? A plate is a page given over to one
+// illustration, so it is far darker than a page of type — which is a check on
+// the pixels rather than on the app's own account of itself.
+const leafInk = await page.evaluate(async () => {
+  const out = []
+  for (const img of document.querySelectorAll('.leaf img')) {
+    const c = document.createElement('canvas')
+    c.width = 60
+    c.height = 90
+    const ctx = c.getContext('2d')
+    if (!ctx) continue
+    ctx.drawImage(img, 0, 0, c.width, c.height)
+    const { data } = ctx.getImageData(0, 0, c.width, c.height)
+    let dark = 0
+    for (let i = 0; i < data.length; i += 4) if (data[i] < 128) dark++
+    out.push(dark / (c.width * c.height))
+  }
+  return out
+})
+
+// A previewed page of type is around a per cent of ink at this scale; a leaf
+// carrying a picture is several times that. The gap is wide enough that the
+// threshold does not need to be precise — but it is printed below either way,
+// so a change in it is visible rather than a silent pass.
+const plateFound = leafInk.some((ink) => ink > 0.04)
+
+// --- the export report, on a book that really has pictures in it -----------
+// The image-DPI check used to say "No placed images to check" because nothing
+// ever placed one. Now it has a measured answer, and this is where that shows.
+console.log('5e. the export report accounts for the pictures')
+await page.locator('.actions button.primary').first().click()
+await page.waitForTimeout(1000)
+
+// The seeded transcription carries no front-matter metadata, so the export
+// gate's first two fields come up empty — and it refuses to build, which is the
+// point of their being required. A real run arrives here prefilled.
+const fill = (question, value) =>
+  page.locator('.q').filter({ hasText: question }).locator('input[type=text]').fill(value)
+const blockedWithoutTitle = await page.locator('.actions button.primary').isDisabled()
+await fill('Book title', 'The Alchemist His Practise')
+await fill('Author', 'Anonymous')
+
+await page.locator('.actions button.primary').first().click()
+await page.waitForSelector('.checks', { timeout: 120000 })
+await page.waitForTimeout(1500)
+await shot('05e-export-with-illustrations')
+
+const imageCheck = await page
+  .locator('.checks li')
+  .filter({ hasText: 'Image DPI' })
+  .innerText()
+  .catch(() => '')
+const illustrationNote = await page
+  .locator('.notes li')
+  .filter({ hasText: 'illustration' })
+  .first()
+  .innerText()
+  .catch(() => '')
 
 await page.evaluate(
   async ([repo, key]) => {
@@ -342,6 +466,18 @@ console.log(`  summary responds to answers: ${before !== after}`)
 console.log(`  saved run offered: ${offered === 1}`)
 console.log(`  no key asked for when reusing it: ${askedForKey === 0}`)
 console.log(`  resumed to: ${resumedTo} (cost prompts: ${chargedAgain})`)
+console.log(`  illustration candidates: ${foundIllustrations} (crops shown: ${illustrationCrops})`)
+console.log(`  advanced past the structure gate to: ${afterStructure}`)
+console.log(`  proof sheet: ${proofBoxes} editable block(s), ${proofScan} scan(s) beside them`)
+console.log(`  after correcting one: ${correctedCount.replace(/\s+/g, ' ')}`)
+console.log(`  proof sheet mobile overflow: ${proofOverflow}px`)
+console.log(`  export blocked until the title is given: ${blockedWithoutTitle}`)
+console.log(`  image DPI check: ${imageCheck.replace(/\s+/g, ' ')}`)
+console.log(`  export note: ${illustrationNote.replace(/\s+/g, ' ')}`)
+console.log(
+  `  a plate is previewed from the real PDF: ${plateFound}` +
+    ` (leaf ink: ${leafInk.map((i) => `${(i * 100).toFixed(1)}%`).join(', ')})`
+)
 console.log(`  preview pages rendered: ${leaves}`)
 console.log(`  preview responds to answers: ${pagesBefore !== pagesAfter}`)
 console.log(`  design gate mobile overflow: ${previewOverflow}px`)
@@ -358,6 +494,19 @@ process.exit(
     offered === 1 &&
     askedForKey === 0 &&
     chargedAgain === 0 &&
+    // The two the fixture prints, and nothing from the eight pages of text.
+    foundIllustrations === 2 &&
+    illustrationCrops === foundIllustrations &&
+    plateFound &&
+    proofBoxes > 0 &&
+    proofScan === 1 &&
+    /1 corrected/.test(correctedCount) &&
+    proofOverflow <= 0 &&
+    // A real answer, not the "no placed images to check" it gave before.
+    blockedWithoutTitle &&
+    /DPI/.test(imageCheck) &&
+    !/No placed images/.test(imageCheck) &&
+    /illustration/.test(illustrationNote) &&
     leaves > 0 &&
     pagesBefore !== pagesAfter &&
     /\d+ pages/.test(download) &&

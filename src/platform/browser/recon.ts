@@ -11,6 +11,7 @@
  */
 import { buildLexicon, type LexiconEntry, type LexiconToken } from '@core/lexicon'
 import { openPdf, renderPage, cropToObjectUrl, thumbnailToObjectUrl } from './pdf'
+import { detectIllustrations, type RegionCandidate } from './illustrations'
 import { OcrEngine, type OcrWord, type OcrAssetPaths } from './ocr'
 
 export interface ReconProgress {
@@ -28,6 +29,15 @@ export interface ReconResult {
   crops: Map<string, string>
   /** pageIndex → object URL of a page thumbnail (front-matter review). */
   thumbnails: Map<number, string>
+  /**
+   * Candidate illustrations, in page order, each with a crop to judge it by.
+   *
+   * Found here rather than later because the page is already rendered: the
+   * detector reads the OCR word boxes that were just produced, so this costs
+   * nothing beyond the ink test. They are candidates, not decisions — every one
+   * is reviewed at the structure gate (SPEC §6, low trust).
+   */
+  illustrations: RegionCandidate[]
   /** Full OCR text per page, used later as the model's cross-check witness. */
   pageText: string[]
 }
@@ -58,6 +68,7 @@ export async function runRecon(
   const words: OcrWord[] = []
   const pageText: string[] = []
   const thumbnails = new Map<number, string>()
+  const illustrations: RegionCandidate[] = []
   // Word boxes are kept (tiny) so crops can be re-rendered on demand; the page
   // canvases themselves are not retained.
   const boxesByPage = new Map<number, OcrWord[]>()
@@ -81,6 +92,10 @@ export async function runRecon(
       // the evidence. Thumbnails are small (~200px wide) so a whole book of
       // them is cheap compared with holding page canvases.
       thumbnails.set(i, await thumbnailToObjectUrl(rendered.canvas))
+
+      // While the page is still in hand. Doing this later would mean rendering
+      // every page a second time to find out most of them have no pictures.
+      illustrations.push(...(await detectIllustrations(rendered.canvas, i, result.words)))
 
       onProgress?.({ page: i + 1, total, phase: 'ocr', meanConfidence: result.meanConfidence })
 
@@ -126,7 +141,7 @@ export async function runRecon(
     }
 
     onProgress?.({ page: total, total, phase: 'done' })
-    return { pageCount: doc.numPages, words, lexicon, crops, thumbnails, pageText }
+    return { pageCount: doc.numPages, words, lexicon, crops, thumbnails, illustrations, pageText }
   } finally {
     await engine.dispose()
   }
@@ -136,4 +151,5 @@ export async function runRecon(
 export function releaseRecon(result: ReconResult): void {
   for (const url of result.crops.values()) URL.revokeObjectURL(url)
   for (const url of result.thumbnails.values()) URL.revokeObjectURL(url)
+  for (const c of result.illustrations) URL.revokeObjectURL(c.previewUrl)
 }

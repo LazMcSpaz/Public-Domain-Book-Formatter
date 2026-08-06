@@ -19,6 +19,20 @@ import type { PageTranscription, TranscribedBlock } from '@core/transcribe'
 
 /** A block in the assembled book, with provenance back to its source page. */
 export interface BookBlock extends TranscribedBlock {
+  /**
+   * Stable identity, so a correction can name what it corrects.
+   *
+   * Derived from the *transcribed* block that started this one —
+   * `p{pageIndex}b{blockIndex}` — rather than from its position in the output.
+   * That distinction is the whole point: the output is re-derived whenever the
+   * user removes a page or accepts a different set of illustrations, and an id
+   * counted off the output would slide out from under every edit already made.
+   * The input never moves; it is the thing that was paid for.
+   *
+   * A block joined across a page seam keeps the id of its first half, because
+   * that is where it begins to be this paragraph.
+   */
+  id: string
   /** Pages this block's text came from (more than one when a seam was joined). */
   sourcePages: number[]
 }
@@ -43,6 +57,42 @@ export interface ChapterEntry {
   sourcePage: number
 }
 
+/**
+ * A region of a source page that the user confirmed is an illustration.
+ *
+ * This is what the *platform* hands in: it has already cropped the pixels, so
+ * the size here is the size of the crop that will be embedded, not of the
+ * region on the scan. That distinction is the whole point — the DPI check
+ * divides these pixels by the printed inches, and dividing by anything else
+ * would report a resolution the book does not have.
+ */
+export interface IllustrationSource {
+  id: string
+  /** Source page the pixels were cropped from. */
+  pageIndex: number
+  sourceWidth: number
+  sourceHeight: number
+}
+
+/** An illustration in the assembled book, with the caption it was printed under. */
+export interface Illustration extends IllustrationSource {
+  /**
+   * The caption as the original printed it, or null. Taken out of the body
+   * flow: a caption typeset as an ordinary paragraph, several pages from the
+   * picture it describes, is worse than no caption at all.
+   */
+  caption: string | null
+  /**
+   * The block this picture should follow, when the user has said where it goes.
+   *
+   * Absent means "wherever the engine decides", which is after the last text
+   * that shared the picture's page — the most the scan itself can tell us. A
+   * null value means the very front of the body, which is a real answer and so
+   * has to be distinguishable from not having answered.
+   */
+  anchorAfterBlockId?: string | null
+}
+
 export interface BookDocument {
   /** Body blocks in reading order, seams repaired. */
   blocks: BookBlock[]
@@ -52,6 +102,8 @@ export interface BookDocument {
   chapters: ChapterEntry[]
   /** Content set apart from the main flow (dedication, epigraph, colophon). */
   asides: BookBlock[]
+  /** Confirmed illustrations, in source-page order, with their captions. */
+  illustrations: Illustration[]
   /** Pages deliberately not transcribed, and why. */
   skipped: { pageIndex: number; role: PageRole; reason: string }[]
 }
@@ -109,6 +161,14 @@ interface AssembleOptions {
    * account for every page of the scan.
    */
   excludePages?: readonly number[]
+  /**
+   * Illustrations the user confirmed at the structure gate, already cropped.
+   *
+   * They arrive here rather than being discovered here because finding them is
+   * pixel work: `detectRegions` reads the OCR word boxes, which is deliberately
+   * a *different* witness from the model that read the text.
+   */
+  illustrations?: readonly IllustrationSource[]
 }
 
 export function assembleBook(
@@ -125,6 +185,16 @@ export function assembleBook(
   const ordered = [...transcriptions].sort((a, b) => a.pageIndex - b.pageIndex)
 
   const excluded = new Set(options.excludePages ?? [])
+
+  // Illustrations grouped by the page they were cropped from, so a caption can
+  // be matched to a picture while that page is being walked.
+  const byPage = new Map<number, IllustrationSource[]>()
+  for (const source of options.illustrations ?? []) {
+    const list = byPage.get(source.pageIndex) ?? []
+    list.push(source)
+    byPage.set(source.pageIndex, list)
+  }
+  const illustrations: Illustration[] = []
   // Set when real text has been dropped between two pages, so the first block
   // of the next page is not stitched onto the last block of the previous one.
   let seamBroken = false
@@ -167,7 +237,20 @@ export function assembleBook(
 
     const target = disposition === 'transcribe-aside' ? asides : blocks
 
-    for (const block of page.blocks) {
+    // Captions are consumed by the pictures on this page, in the order both
+    // appear. A page with more captions than pictures leaves the extras in the
+    // flow, where they read as short paragraphs — wrong, but visible, which
+    // beats deleting a line of the book on a guess.
+    const pictures = byPage.get(page.pageIndex) ?? []
+    let nextPicture = 0
+
+    for (const [blockIndex, block] of page.blocks.entries()) {
+      if (block.kind === 'caption' && nextPicture < pictures.length) {
+        const picture = pictures[nextPicture++]!
+        illustrations.push({ ...picture, caption: stripSoftHyphens(block.text.trim()) })
+        continue
+      }
+
       // Footnotes leave the body flow entirely and are re-attached at typeset time.
       if (block.kind === 'footnote') {
         const marker = block.marker ?? '*'
@@ -195,9 +278,16 @@ export function assembleBook(
 
       target.push({
         ...block,
+        id: `p${page.pageIndex}b${blockIndex}`,
         text: stripSoftHyphens(block.text),
         sourcePages: [page.pageIndex]
       })
+    }
+
+    // Pictures this page never printed a caption for. Uncaptioned is normal in
+    // old books — plates often carry nothing but the plate.
+    for (let n = nextPicture; n < pictures.length; n++) {
+      illustrations.push({ ...pictures[n]!, caption: null })
     }
   }
 
@@ -213,7 +303,12 @@ export function assembleBook(
       sourcePage: b.sourcePages[0] ?? 0
     }))
 
-  return { blocks, footnotes, chapters, asides, skipped }
+  // A picture on a page that was dropped goes with it: its pixels came from a
+  // leaf the user removed, and embedding them would put back the one thing they
+  // asked to take out.
+  illustrations.sort((a, b) => a.pageIndex - b.pageIndex || a.id.localeCompare(b.id))
+
+  return { blocks, footnotes, chapters, asides, illustrations, skipped }
 }
 
 /**

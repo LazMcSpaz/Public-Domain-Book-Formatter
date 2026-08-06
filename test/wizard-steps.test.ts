@@ -171,6 +171,7 @@ describe('answers', () => {
         'transcribe',
         'gate-uncertainties',
         'gate-structure',
+        'proof',
         'design'
       ] as StepId[]
     }
@@ -399,6 +400,70 @@ describe('gate 2 — uncertain spots', () => {
   })
 })
 
+describe('gate 3 — reviewing the illustrations', () => {
+  const candidate = (id: string, pageIndex: number, ink = 0.4) => ({
+    id,
+    pageIndex,
+    bbox: { x0: 100, y0: 200, x1: 748, y1: 811 },
+    previewUrl: `blob:crop/${id}`,
+    ink
+  })
+
+  const withCandidates = (candidates: ReturnType<typeof candidate>[]): WizardState => ({
+    ...reconDone(),
+    completed: ['intake', 'recon', 'gate-identity', 'transcribe', 'gate-uncertainties'],
+    document: assembleBook([
+      {
+        pageIndex: 0,
+        role: 'body',
+        uncertain: [],
+        furniture: {},
+        blocks: [{ kind: 'paragraph', text: 'The alembick being set upon a gentle fire.' }]
+      }
+    ]),
+    illustrationCandidates: candidates
+  })
+
+  const question = (state: WizardState) =>
+    stepById('gate-structure')
+      .questions(state)
+      .find((q) => q.id === 'illustrations')
+
+  it('asks about every candidate in one batch, not one prompt per figure', () => {
+    const q = question(withCandidates([candidate('a', 3), candidate('b', 8)]))!
+    expect(q.type).toBe('multi-choice')
+    expect((q as { options: unknown[] }).options).toHaveLength(2)
+  })
+
+  it('shows the pixels of each one — the gate is unanswerable without them', () => {
+    const q = question(withCandidates([candidate('a', 3)]))!
+    const option = (q as { options: { evidence?: { kind: string; src: string }[] }[] }).options[0]!
+    expect(option.evidence?.[0]).toMatchObject({ kind: 'image', src: 'blob:crop/a' })
+  })
+
+  it('starts with everything kept, so the recommended answer is an answer', () => {
+    const q = question(withCandidates([candidate('a', 3), candidate('b', 8)]))!
+    expect((q as { defaultValue: string[] }).defaultValue).toEqual(['a', 'b'])
+  })
+
+  it('orders them by page, so the list reads like the book', () => {
+    const q = question(withCandidates([candidate('z', 9), candidate('a', 2)]))!
+    expect((q as { defaultValue: string[] }).defaultValue).toEqual(['a', 'z'])
+  })
+
+  it('says how big each will be and how strong the guess is', () => {
+    const q = question(withCandidates([candidate('a', 3, 0.38)]))!
+    const option = (q as { options: { label: string; description?: string }[] }).options[0]!
+    expect(option.label).toBe('Page 4')
+    expect(option.description).toContain('648×611')
+    expect(option.description).toContain('38%')
+  })
+
+  it('asks nothing when the scan had no pictures in it', () => {
+    expect(question(withCandidates([]))).toBeUndefined()
+  })
+})
+
 describe('gate 3 — structure', () => {
   const withDoc = (blocks: Parameters<typeof assembleBook>[0]): WizardState => ({
     ...reconDone(),
@@ -505,8 +570,8 @@ describe('gate 3 — structure', () => {
   })
 })
 
-describe('design step', () => {
-  const readyForDesign = (answers: Record<string, Record<string, unknown>> = {}): WizardState => ({
+describe('the proof step', () => {
+  const afterStructure = (document: WizardState['document']): WizardState => ({
     ...initialState(),
     completed: [
       'intake',
@@ -516,10 +581,59 @@ describe('design step', () => {
       'gate-uncertainties',
       'gate-structure'
     ],
+    document
+  })
+
+  const doc = () =>
+    assembleBook([
+      {
+        pageIndex: 0,
+        role: 'body',
+        uncertain: [],
+        furniture: {},
+        blocks: [{ kind: 'paragraph', text: 'The chirurgeon examined the specimen.' }]
+      }
+    ])
+
+  it('is where the flow lands once the structure is confirmed', () => {
+    expect(activeStep(afterStructure(doc())).id).toBe('proof')
+  })
+
+  it('asks nothing — proofreading is a workbench, not a question', () => {
+    // Every other stop has a recommendation to offer. A misreading does not:
+    // the cross-checks that could flag one have already been over the book at
+    // Gate 2, and what is left is what they cannot see.
+    expect(stepById('proof').questions(afterStructure(doc()))).toEqual([])
+  })
+
+  it('does not open before there is a book to read', () => {
+    expect(stepById('proof').canEnter(afterStructure(null))).toBe(false)
+    expect(stepById('proof').canEnter(afterStructure(doc()))).toBe(true)
+  })
+
+  it('comes before the design gate, so the text is right before it is dressed', () => {
+    const ids = STEPS.map((s) => s.id)
+    expect(ids.indexOf('proof')).toBeGreaterThan(ids.indexOf('gate-structure'))
+    expect(ids.indexOf('proof')).toBeLessThan(ids.indexOf('design'))
+  })
+})
+
+describe('design step', () => {
+  const readyForDesign = (answers: Record<string, Record<string, unknown>> = {}): WizardState => ({
+    ...initialState(),
+    completed: [
+      'intake',
+      'recon',
+      'gate-identity',
+      'transcribe',
+      'gate-uncertainties',
+      'gate-structure',
+      'proof'
+    ],
     answers: answers as WizardState['answers']
   })
 
-  it('is where the flow lands once the structure is confirmed', () => {
+  it('is where the flow lands once the text has been read through', () => {
     expect(activeStep(readyForDesign()).id).toBe('design')
   })
 
@@ -595,6 +709,7 @@ describe('export step', () => {
       'transcribe',
       'gate-uncertainties',
       'gate-structure',
+      'proof',
       'design'
     ],
     ...overrides

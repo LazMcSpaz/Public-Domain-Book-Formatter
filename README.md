@@ -26,14 +26,15 @@ program's structure to use it.
 Open PDF
   │
   ├─ RECON  (free, local, no API cost)
-  │    render, OCR, word crops, book-wide lexicon
+  │    render, OCR, word crops, book-wide lexicon, illustration candidates
   │
   ├─ GATE 1 ▸ confirm how to read it  ← orthography + term review
   │
   ├─ TRANSCRIBE  (vision model pass, paid, cost approved first)
   │
   ├─ GATE 2 ▸ check uncertain spots   ← where model and OCR disagree
-  ├─ GATE 3 ▸ confirm structure       ← chapters, footnotes
+  ├─ GATE 3 ▸ confirm structure       ← chapters, footnotes, illustrations
+  ├─ PROOF   ▸ each leaf beside its scan ← fix what was read wrong
   ├─ DESIGN  ▸ interview → layout → real pages, live
   └─ EXPORT  ▸ confirm the title page → PDF → KDP validation
 ```
@@ -80,6 +81,7 @@ src/
     lexicon/    Term harvesting from the book's own vocabulary
     pages/      Page roles and what to do with each
     wizard/     The question contract and the step machine
+    edits/      Corrections as a list, applied over the assembled book
     transcribe/ Vision-pass schema, prompt, client, runner, verification, cost
     assemble/   Per-page transcriptions → one book (seams, hyphens, notes)
     design/     Five interview answers → a complete style profile
@@ -103,7 +105,9 @@ and no Node, so every rule in the flow is unit-testable without a browser.
 the vision pass, assembly, the design interview with a live page preview, and a
 print-ready PDF with front matter, running heads, folios, drop capitals,
 footnotes set at the foot of the page they belong to, chapter ornaments, a
-collected endnotes section for notes whose reference mark was never found, and a
+collected endnotes section for notes whose reference mark was never found,
+illustrations cut out of the scan and set with their captions, a proofing step
+that puts each leaf beside its scan so a misreading can actually be fixed, and a
 table of contents carrying measured page numbers. The KDP report's page count and typesetting
 warnings are measured rather than estimated.
 
@@ -115,9 +119,10 @@ resumed session is complete rather than degraded.
 **Not built yet**, with the honest reasons in
 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md):
 
-- **Illustrations.** The layout engine has no image support, so an illustrated
-  book cannot place its plates. `src/core/image` holds region detection, DPI
-  maths and a non-destructive op engine, but nothing calls them yet.
+- **An image-editing mode.** Illustrations are found, reviewed, cut and placed,
+  but not _retouched_: no crop, straighten, levels or despeckle. The engine for
+  all of that is written (`src/core/image/engine`) and not yet wired to a UI, so
+  a crooked or foxed scan comes through crooked and foxed.
 - **Real small capitals**, and the ligatures that pdf-lib's embedder cannot
   write widths for.
 

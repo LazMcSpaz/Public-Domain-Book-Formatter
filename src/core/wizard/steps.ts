@@ -28,8 +28,31 @@ export type StepId =
   | 'transcribe'
   | 'gate-uncertainties'
   | 'gate-structure'
+  | 'proof'
   | 'design'
   | 'export'
+
+/**
+ * A region the recon pass believes is a picture, described for review.
+ *
+ * Kept free of pixels and of platform types on purpose: the step machine only
+ * needs to know a candidate exists, where it is, and where its crop can be
+ * found, which is what lets the whole gate be tested with no canvas.
+ */
+export interface IllustrationCandidate {
+  id: string
+  pageIndex: number
+  /**
+   * The region on the rendered page, in source pixels. Plain numbers, so
+   * carrying it here costs the core nothing — and it is what the crop is taken
+   * from once the user has said yes, so the answer would be unusable without it.
+   */
+  bbox: { x0: number; y0: number; x1: number; y1: number }
+  /** Object URL of the region's pixels — the evidence the question shows. */
+  previewUrl: string
+  /** Fraction of the region that is ink; how strong the guess is. */
+  ink: number
+}
 
 /** Everything the wizard knows about the book so far. */
 export interface WizardState {
@@ -60,6 +83,11 @@ export interface WizardState {
   uncertainties: { pageIndex: number; text: string; alternatives: string[]; reason: string }[]
   /** Pages that failed transcription entirely. */
   failedPages: number[]
+  /**
+   * Illustrations the recon pass thinks it found, each with a crop to judge it
+   * by. Candidates, not decisions — the structure gate asks about every one.
+   */
+  illustrationCandidates: IllustrationCandidate[]
   /** The assembled book, once transcription and assembly have run. */
   document: BookDocument | null
   /** Answers gathered so far, keyed by step then question id. */
@@ -89,6 +117,7 @@ export function initialState(): WizardState {
     findings: [],
     uncertainties: [],
     failedPages: [],
+    illustrationCandidates: [],
     document: null,
     answers: {},
     completed: []
@@ -450,6 +479,44 @@ const gateStructure: Step = {
       ]
     })
 
+    // Illustrations. Detection is explicitly a first guess (SPEC §6), so every
+    // candidate is shown with its own pixels and the user unticks the ones that
+    // are not pictures — a batch of checkboxes rather than a prompt per figure.
+    //
+    // Everything is ticked to begin with. The alternative — recommending
+    // nothing and making the user find the real ones — would be the app
+    // refusing to answer a question it has already done the work for.
+    if (s.illustrationCandidates.length > 0) {
+      const candidates = [...s.illustrationCandidates].sort(
+        (a, b) => a.pageIndex - b.pageIndex || a.id.localeCompare(b.id)
+      )
+      qs.push({
+        id: 'illustrations',
+        type: 'multi-choice',
+        prompt: `Which of these ${candidates.length} are illustrations?`,
+        help:
+          'Found by looking for inked areas the text flows around, which also ' +
+          'catches the odd decorated initial or heavy rule. Untick anything that ' +
+          'is not a picture; what you keep is cut out of the scan at full ' +
+          'resolution and set into the book near the text it was printed with.',
+        defaultValue: candidates.map((c) => c.id),
+        options: candidates.map((c) => ({
+          value: c.id,
+          label: `Page ${c.pageIndex + 1}`,
+          description:
+            `${Math.round(c.bbox.x1 - c.bbox.x0)}×${Math.round(c.bbox.y1 - c.bbox.y0)} pixels` +
+            ` · ${Math.round(c.ink * 100)}% inked`,
+          evidence: [
+            {
+              kind: 'image' as const,
+              src: c.previewUrl,
+              alt: `Candidate illustration on page ${c.pageIndex + 1}`
+            }
+          ]
+        }))
+      })
+    }
+
     // Orphaned notes can't be placed automatically; ask rather than guess.
     const orphans = doc.footnotes.filter((f) => f.orphaned)
     if (orphans.length > 0) {
@@ -491,6 +558,35 @@ const gateStructure: Step = {
 }
 
 /**
+ * Proofreading, which is a workbench rather than a question.
+ *
+ * Every other stop in this flow asks something the app has a recommendation
+ * for. This one cannot: a misreading is not a decision with a default, and the
+ * app has already contributed everything it can — the cross-checks that flag a
+ * page are exactly the ones Gate 2 has been over. What is left is the case
+ * those checks cannot reach, where the model and OCR read the same word the
+ * same wrong way, and only a person with the scan in front of them will see it.
+ *
+ * So the step carries no `Question[]`. The shell renders the sheet instead, the
+ * same concession SPEC §6 makes for images when it calls the editing mode "the
+ * real instrument". The decisions that *are* logic — what is on each leaf, and
+ * which leaves to offer first — live in `@core/edits` and are tested there.
+ *
+ * It sits after the structure gate and before the design gate on purpose. The
+ * text has to be right before it is worth choosing a typeface for, and every
+ * correction re-lays the book out for free, so the page count the design gate
+ * previews is the corrected book's.
+ */
+const proof: Step = {
+  id: 'proof',
+  title: 'Read it through',
+  blurb: 'Your book beside the scan it came from. Fix anything that was read wrong.',
+  isGate: true,
+  canEnter: (s) => s.completed.includes('gate-structure') && s.document !== null,
+  questions: () => []
+}
+
+/**
  * Design by interview. Five questions about the *book* produce a complete
  * style — the alternative is a panel of forty fields that assumes the user
  * already knows what a gutter is. The detailed controls remain available
@@ -501,7 +597,7 @@ const design: Step = {
   title: 'Design the edition',
   blurb: 'A few questions about the book, and I’ll set the rest.',
   isGate: true,
-  canEnter: (s) => s.completed.includes('gate-structure'),
+  canEnter: (s) => s.completed.includes('proof'),
   questions: (s) => {
     // The period answer picks the typeface, so it is read back here to
     // pre-select the matching font rather than making the user match them.
@@ -724,6 +820,7 @@ export const STEPS: readonly Step[] = [
   transcribe,
   gateUncertainties,
   gateStructure,
+  proof,
   design,
   exportStep
 ]

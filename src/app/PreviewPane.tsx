@@ -31,12 +31,22 @@ export interface PreviewPaneProps {
   book: BookDocument | null
   profile: StyleProfile
   edition: LayoutEdition
+  /**
+   * PNG bytes per illustration id. Without them a plate previews as a blank
+   * leaf, which would be the design gate showing something the export does not.
+   */
+  images?: ReadonlyMap<string, Uint8Array>
 }
 
 /** Long enough to swallow a run of clicks, short enough to feel immediate. */
 const DEBOUNCE_MS = 250
 
-export function PreviewPane({ book, profile, edition }: PreviewPaneProps): JSX.Element | null {
+export function PreviewPane({
+  book,
+  profile,
+  edition,
+  images
+}: PreviewPaneProps): JSX.Element | null {
   const [preview, setPreview] = useState<PreviewResult | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -47,25 +57,32 @@ export function PreviewPane({ book, profile, edition }: PreviewPaneProps): JSX.E
   const bookKey = book?.blocks.length ?? -1
   const styleKey = JSON.stringify(profile)
   const editionKey = [edition.title, edition.author].join('\u0000')
+  // Pictures arriving (or being unticked) changes the pages, so it has to be a
+  // reason to redraw — otherwise the plate keeps the look it had before.
+  const imageKey = images?.size ?? 0
 
   // The inputs, reachable from the effect without being dependencies of it:
   // the keys above decide *when* to run, these supply the values to run with.
-  const inputs = useRef({ book, profile, edition })
-  inputs.current = { book, profile, edition }
+  const inputs = useRef({ book, profile, edition, images })
+  inputs.current = { book, profile, edition, images }
 
   // Held in a ref so the cleanup that revokes the object URLs sees the pages
   // that are actually on screen, not the ones captured when the effect ran.
   const current = useRef<PreviewResult | null>(null)
 
   useEffect(() => {
-    const { book: doc, profile: style, edition: details } = inputs.current
+    const { book: doc, profile: style, edition: details, images: pixels } = inputs.current
     if (!doc) return
 
     const controller = new AbortController()
     const timer = setTimeout(() => {
       setBusy(true)
       setError(null)
-      renderPreview(doc, style, { edition: details, signal: controller.signal })
+      renderPreview(doc, style, {
+        edition: details,
+        signal: controller.signal,
+        ...(pixels ? { images: pixels } : {})
+      })
         .then((next) => {
           // A preview that finished after its answer was superseded is waste,
           // and its pages are object URLs — dropping the reference would leak.
@@ -90,7 +107,7 @@ export function PreviewPane({ book, profile, edition }: PreviewPaneProps): JSX.E
       clearTimeout(timer)
       controller.abort()
     }
-  }, [bookKey, styleKey, editionKey])
+  }, [bookKey, styleKey, editionKey, imageKey])
 
   // The pages outlive this component only as object URLs, so unmounting has to
   // revoke them or a session's worth of previews stays resident.

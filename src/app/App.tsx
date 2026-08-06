@@ -40,9 +40,13 @@ import { loadRun, loadRunSummary, saveRun } from '../platform/browser/run-store'
 import { createSavedRun, fileKey } from '@core/project'
 import { profileFromAnswers, describeProfile, type DesignAnswers } from '@core/design'
 import { buildExport, editionFromAnswers, type BuildExportResult } from '@core/export'
+import { applyEdits, type BookEdit } from '@core/edits'
 import { renderInterior } from '../platform/browser/interior'
+import { cropIllustrations } from '../platform/browser/illustrations'
+import { renderPageToObjectUrl } from '../platform/browser/pdf'
 import { ExportResult } from './ExportResult'
 import { PreviewPane } from './PreviewPane'
+import { ProofSheet } from './ProofSheet'
 
 export function App(): JSX.Element {
   const [state, setState] = useState<WizardState>(initialState)
@@ -57,6 +61,28 @@ export function App(): JSX.Element {
   // Identifies the open file, so a paid run can be found again on a later visit.
   const fileKeyRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  // PNG bytes for the illustrations the user kept, cut once at the structure
+  // gate. Held in a ref rather than in state: they are megabytes of pixels, and
+  // nothing renders from them directly — the PDF writer looks them up by id.
+  const imagesRef = useRef<Map<string, Uint8Array>>(new Map())
+  /**
+   * Pages the *user* chose to leave out at the review gate.
+   *
+   * Kept because the structure gate assembles the book a second time, to fold
+   * in the illustrations, and that assembly has to make the same exclusions as
+   * the first. It cannot be recovered from `document.skipped`: that list also
+   * holds every page dropped by its *disposition* — the title page, the scanned
+   * contents, the blanks — and handing those back as exclusions would both
+   * relabel them and break a paragraph that legitimately runs across a plate.
+   */
+  const excludedPagesRef = useRef<number[]>([])
+  /**
+   * Pages the user already looked at and accepted at the uncertainty gate.
+   *
+   * The proof sheet leads with what the cross-checks flagged, and re-flagging a
+   * page someone has just been over is how a proofing pass stops being read.
+   */
+  const reviewedPagesRef = useRef<number[]>([])
   const transcriptionRef = useRef<RunResult | null>(null)
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
   const [pendingCost, setPendingCost] = useState<string | null>(null)
@@ -64,6 +90,14 @@ export function App(): JSX.Element {
   const [pdf, setPdf] = useState<{ bytes: Uint8Array; pageCount: number } | null>(null)
   const [buildNote, setBuildNote] = useState<string | null>(null)
   const [buildProgress, setBuildProgress] = useState<{ done: number; total: number } | null>(null)
+  /**
+   * Corrections made at the proof step.
+   *
+   * Held apart from the document rather than written into it, so the paid
+   * transcription stays the transcription and every correction can be undone.
+   * Everything downstream reads `correctedDocument`, never `state.document`.
+   */
+  const [edits, setEdits] = useState<BookEdit[]>([])
 
   const step = activeStep(state)
   const [answers, setAnswers] = useState<Answers>({})
@@ -126,6 +160,40 @@ export function App(): JSX.Element {
     [state.metadata]
   )
 
+  /**
+   * The book as it stands *after* the user's corrections.
+   *
+   * `layout()` is a pure function of its inputs, so re-applying the edit list
+   * and laying out again is the whole of "the preview reflects my fix" — there
+   * is no incremental update to get wrong.
+   */
+  const correctedDocument = useMemo(
+    () => (state.document ? applyEdits(state.document, edits) : null),
+    [state.document, edits]
+  )
+
+  /** The proof step has no questions, so the shell renders its sheet instead. */
+  const isProofing = step.id === 'proof' && state.document !== null
+
+  /**
+   * A readable render of one leaf, for the proof sheet.
+   *
+   * `useCallback` with no dependencies on purpose: the sheet re-runs its loader
+   * whenever this identity changes, so an inline arrow here would re-render the
+   * page on every keystroke. The file is read from a ref for the same reason.
+   */
+  const loadProofScan = useCallback(async (pageIndex: number): Promise<string | undefined> => {
+    const file = fileDataRef.current
+    if (!file) return undefined
+    try {
+      return await renderPageToObjectUrl(file, pageIndex)
+    } catch {
+      // The thumbnail is still shown, so a failed render costs sharpness
+      // rather than the page.
+      return undefined
+    }
+  }, [])
+
   const resolveEvidence = useCallback((src: string): string | undefined => {
     const m = /^page:(\d+)$/.exec(src)
     if (m) return reconRef.current?.thumbnails.get(Number(m[1]))
@@ -142,6 +210,10 @@ export function App(): JSX.Element {
     setBuildNote(null)
     if (reconRef.current) releaseRecon(reconRef.current)
     reconRef.current = null
+    imagesRef.current = new Map()
+    excludedPagesRef.current = []
+    reviewedPagesRef.current = []
+    setEdits([])
 
     setState((s) => ({
       ...s,
@@ -173,6 +245,13 @@ export function App(): JSX.Element {
         lexicon: result.lexicon,
         classifications: [{ pageIndex: 0, role: 'title-page', selfReportedConfidence: 0 }],
         cropFor: (tokenId: string) => result.crops.get(tokenId),
+        illustrationCandidates: result.illustrations.map((c) => ({
+          id: c.region.id,
+          pageIndex: c.region.pageIndex,
+          bbox: c.region.bbox,
+          previewUrl: c.previewUrl,
+          ink: c.ink
+        })),
         hasApiKey: loadApiKey().length > 0,
         savedRun: saved,
         completed: ['intake', 'recon']
@@ -306,6 +385,11 @@ export function App(): JSX.Element {
       }
     }
 
+    // The corrections come back with the run. They are the other thing here
+    // that cannot be regenerated from the scan: an hour spent reading a book
+    // against its scan is an hour, and a refresh must not cost it.
+    setEdits(saved.edits)
+
     setState((s) => ({
       ...s,
       answers: {
@@ -327,7 +411,8 @@ export function App(): JSX.Element {
     async (
       result: RunResult,
       identityAnswers: Record<string, unknown>,
-      modelId: string
+      modelId: string,
+      corrections: readonly BookEdit[] = []
     ): Promise<void> => {
       const key = fileKeyRef.current
       const file = fileDataRef.current
@@ -347,7 +432,8 @@ export function App(): JSX.Element {
           failures: result.failures,
           usage: result.usage,
           modelId,
-          identityAnswers
+          identityAnswers,
+          edits: corrections
         })
       )
       if (!stored) {
@@ -445,7 +531,7 @@ export function App(): JSX.Element {
    * always a working path out for anyone who wants to typeset it themselves.
    */
   const runExport = useCallback(async () => {
-    const doc = state.document
+    const doc = correctedDocument
     if (!doc) return
     setError(null)
 
@@ -477,7 +563,8 @@ export function App(): JSX.Element {
       const interior = await renderInterior(doc, profile, {
         edition: { ...edition, notices: edition.notices },
         onProgress: (done, total) => setBuildProgress({ done, total }),
-        orphanNotes: input.omitOrphanFootnotes ? 'omit' : 'collect'
+        orphanNotes: input.omitOrphanFootnotes ? 'omit' : 'collect',
+        images: imagesRef.current
       })
       setPdf({ bytes: interior.bytes, pageCount: interior.pageCount })
       setBuildNote(null)
@@ -493,7 +580,9 @@ export function App(): JSX.Element {
             ),
             notesPlaced: interior.notesPlaced,
             notesCollected: interior.notesCollected,
-            notesDropped: interior.notesDropped
+            notesDropped: interior.notesDropped,
+            imagesPlaced: interior.imagesPlaced,
+            imagesDropped: interior.imagesDropped
           }
         })
       )
@@ -587,11 +676,96 @@ export function App(): JSX.Element {
       }
     }
 
+    // Remembered for the structure gate, which assembles the book again once
+    // the illustrations are cut and must make the same exclusions.
+    excludedPagesRef.current = skip
+    // And for the proof sheet, which must not send the user back over a page
+    // they have just been through here.
+    reviewedPagesRef.current = Object.entries(currentAnswers)
+      .filter(([key, value]) => /^page-\d+$/.test(key) && value === 'accept')
+      .map(([key]) => Number(key.slice(5)))
+
     complete({
       findings,
       document: assembleBook(transcriptions, { excludePages: skip })
     })
   }, [state, currentAnswers, complete])
+
+  /**
+   * Leaving the structure gate: cut out the pictures the user kept.
+   *
+   * This is where the pixels are finally taken, rather than during recon,
+   * because only now is it known which regions are wanted — cropping every
+   * candidate at full resolution would spend memory on guesses the user is
+   * about to reject. The document is then reassembled with them, which also
+   * pulls each caption out of the text flow and onto its picture.
+   */
+  const finishStructure = useCallback(async () => {
+    const run = transcriptionRef.current
+    const file = fileDataRef.current
+    if (!run || !file) {
+      complete()
+      return
+    }
+
+    const kept = new Set((currentAnswers['illustrations'] as string[] | undefined) ?? [])
+    const regions = state.illustrationCandidates
+      .filter((c) => kept.has(c.id))
+      .map((c) => ({ id: c.id, pageIndex: c.pageIndex, bbox: c.bbox, accepted: true as const }))
+
+    // Nothing kept: skip the render entirely rather than opening the PDF to
+    // crop nothing out of it.
+    if (regions.length === 0) {
+      imagesRef.current = new Map()
+      complete()
+      return
+    }
+
+    setError(null)
+    try {
+      const cropped = await cropIllustrations(file, regions, {
+        onProgress: (done, total) => setBuildProgress({ done, total })
+      })
+      imagesRef.current = cropped.bytes
+      if (cropped.failed.length > 0) {
+        setError(
+          `${cropped.failed.length} illustration(s) could not be cut out of the scan and ` +
+            'will be left out of the book.'
+        )
+      }
+      complete({
+        document: assembleBook(run.transcriptions, {
+          excludePages: excludedPagesRef.current,
+          illustrations: cropped.sources
+        })
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      // The book is still publishable without its pictures, so this does not
+      // strand the user at the gate — it says what was lost and moves on.
+      imagesRef.current = new Map()
+      complete()
+    } finally {
+      setBuildProgress(null)
+    }
+  }, [state, currentAnswers, complete])
+
+  /**
+   * Leaving the proof step: keep the corrections with the run they correct.
+   *
+   * Saved here rather than on every keystroke — a write per character would
+   * hammer IndexedDB for no benefit, and the corrections are only worth
+   * anything once the user has finished with the page. A failed write is
+   * reported rather than swallowed: the user has just spent real time, and
+   * silently losing it on the next refresh is the worst available outcome.
+   */
+  const finishProof = useCallback(async () => {
+    const run = transcriptionRef.current
+    if (run && edits.length > 0) {
+      await persistRun(run, state.answers['gate-identity'] ?? {}, loadPrefs().modelId, edits)
+    }
+    complete()
+  }, [edits, state.answers, persistRun, complete])
 
   /** Leaving a step: transcription needs cost approval first; gates just advance. */
   const advance = useCallback(() => {
@@ -601,6 +775,14 @@ export function App(): JSX.Element {
     }
     if (step.id === 'gate-uncertainties') {
       void finishUncertainties()
+      return
+    }
+    if (step.id === 'gate-structure') {
+      void finishStructure()
+      return
+    }
+    if (step.id === 'proof') {
+      void finishProof()
       return
     }
     if (step.id === 'transcribe') {
@@ -626,6 +808,8 @@ export function App(): JSX.Element {
     complete,
     runExport,
     finishUncertainties,
+    finishStructure,
+    finishProof,
     useSavedRun
   ])
 
@@ -782,6 +966,27 @@ export function App(): JSX.Element {
           <ExportResult result={exported} pdf={pdf} note={buildNote} />
         ) : null}
 
+        {/* --- proofreading, which is a workbench rather than a set of questions --- */}
+        {!exported && !progressInfo && !runProgress && !pendingCost && isProofing ? (
+          <>
+            <ProofSheet
+              document={state.document!}
+              edits={edits}
+              onChange={setEdits}
+              resolveScan={(pageIndex) => reconRef.current?.thumbnails.get(pageIndex)}
+              loadScan={loadProofScan}
+              findings={state.findings}
+              uncertainties={state.uncertainties}
+              reviewedPages={reviewedPagesRef.current}
+            />
+            <div className="actions">
+              <button type="button" className="primary" onClick={advance}>
+                Looks right — continue
+              </button>
+            </div>
+          </>
+        ) : null}
+
         {/* --- gates --- */}
         {!exported && !progressInfo && !runProgress && !pendingCost && questions.length > 0 ? (
           <>
@@ -801,7 +1006,12 @@ export function App(): JSX.Element {
               </div>
             ) : null}
             {designProfile ? (
-              <PreviewPane book={state.document} profile={designProfile} edition={previewEdition} />
+              <PreviewPane
+                book={correctedDocument}
+                profile={designProfile}
+                edition={previewEdition}
+                images={imagesRef.current}
+              />
             ) : null}
             <div className="actions">
               <button
@@ -831,6 +1041,7 @@ export function App(): JSX.Element {
         !runProgress &&
         !pendingCost &&
         questions.length === 0 &&
+        !isProofing &&
         step.id !== 'intake' ? (
           <div className="actions">
             <button type="button" className="primary" onClick={() => fileInput.current?.click()}>

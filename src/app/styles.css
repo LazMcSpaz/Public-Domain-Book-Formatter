@@ -665,3 +665,188 @@ button.ghost {
     height: 240px;
   }
 }
+
+/* --- the proofing workbench ------------------------------------------------
+   The scan on one side and what was read off it on the other. Deliberately a
+   *source* leaf rather than a finished page: this edition repaginates, so a
+   finished page corresponds to nothing the user can hold the scan against. */
+.proof {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  overflow: hidden;
+}
+.proof.empty {
+  padding: 20px;
+  color: var(--muted);
+}
+.proof-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--accent-soft);
+}
+.proof-bar button {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #fff;
+  cursor: pointer;
+}
+.proof-bar button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.proof-bar .proof-flagged {
+  margin-left: auto;
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.proof-where {
+  display: flex;
+  flex-direction: column;
+  font-weight: 600;
+  line-height: 1.2;
+}
+.proof-where small {
+  font-weight: 400;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+.proof-flags {
+  margin: 0;
+  padding: 8px 12px 8px 30px;
+  border-bottom: 1px solid var(--line);
+  color: var(--accent);
+  font-size: 0.85rem;
+}
+.proof-body {
+  display: grid;
+  grid-template-columns: minmax(180px, 34%) 1fr;
+  gap: 16px;
+  padding: 14px;
+  align-items: start;
+}
+.proof-scan {
+  margin: 0;
+  position: sticky;
+  top: 12px;
+}
+.proof-scan img {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 3px;
+}
+.proof-scan figcaption {
+  margin-top: 6px;
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-align: center;
+}
+.proof-blocks {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+}
+.proof-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.proof-block {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 8px;
+}
+/* A removed block stays visible rather than vanishing: seeing what was taken
+   out is the only way to notice taking out the wrong thing. */
+.proof-block.dropped {
+  opacity: 0.45;
+}
+.proof-block.dropped textarea {
+  text-decoration: line-through;
+}
+.proof-block-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.proof-block-bar select {
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 3px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+}
+.proof-seam {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-style: italic;
+}
+.proof-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+.proof-actions button,
+.proof-split button {
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+}
+.proof-actions button:hover,
+.proof-split button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.proof-block textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  resize: vertical;
+}
+.proof-block textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+.proof-split {
+  margin-top: 6px;
+}
+
+@media (max-width: 720px) {
+  /* The scan goes above the text rather than beside it: at this width a
+     side-by-side column is too narrow to read either in. */
+  .proof-body {
+    grid-template-columns: 1fr;
+  }
+  .proof-scan {
+    position: static;
+    max-width: 300px;
+    margin: 0 auto;
+  }
+  .proof-bar {
+    flex-wrap: wrap;
+  }
+  .proof-bar .proof-flagged {
+    margin-left: 0;
+  }
+}
