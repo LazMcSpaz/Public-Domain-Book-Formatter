@@ -150,6 +150,16 @@ a wrong word in it and there was nothing to be done about that word.
   survives until someone notices the page looks typed rather than set. A
   paragraph that needs different treatment gets a different _kind_, which the
   style system then sets consistently everywhere.
+- **The one addition that is not a correction: the editor's own notes.** A
+  public-domain reprint needs something of its editor's in it to be worth
+  publishing, and an annotation is the cheapest honest way to add one. A note
+  written at the proof step becomes a `Footnote` like any other, so it is
+  placed, renumbered straight through with the book's own notes, and collected
+  as an endnote if it cannot be placed — none of that machinery knows or cares
+  who wrote it. It is located by an explicit `anchor` (block + character offset)
+  rather than by splicing a marker into the text: a marker would show up in the
+  proof sheet's edit box, where it reads as a typo and one backspace would
+  silently orphan the note.
 - **The step leads with what was flagged but lists every leaf.** The flagged
   ones are where the app has an opinion; the unflagged ones are where this
   feature earns its existence.

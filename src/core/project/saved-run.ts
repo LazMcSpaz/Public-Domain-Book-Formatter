@@ -278,6 +278,18 @@ function parseEdits(raw: unknown): BookEdit[] {
       case 'merge':
         if (blockId) out.push({ kind: 'merge', blockId })
         break
+      case 'note': {
+        const noteId = str(value['noteId'], '')
+        if (
+          noteId &&
+          blockId &&
+          typeof value['at'] === 'number' &&
+          typeof value['text'] === 'string'
+        ) {
+          out.push({ kind: 'note', noteId, blockId, at: value['at'], text: value['text'] })
+        }
+        break
+      }
       case 'anchor': {
         const illustrationId = str(value['illustrationId'], '')
         const after = value['afterBlockId']

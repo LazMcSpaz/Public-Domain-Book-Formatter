@@ -196,6 +196,12 @@ in `screenshots/`. Don't ship UI blind.
   pictures re-anchorable. Corrections are a _list_ applied over the pristine
   transcription, exactly like the image op stack, and are saved with the run
   (schema v6). Before this there was no way to fix a single wrong word.
+- **Also done**: **the editor's own notes**, written at the proof step and set
+  by the existing footnote machinery — placed, renumbered through the book, and
+  collected as endnotes when they cannot be placed. Located by an explicit
+  anchor rather than by splicing a marker into the text. This is the first thing
+  the app can _add_ to a book rather than recover from it, which is what a
+  public-domain reprint needs to be publishable.
 - **Also done**: **illustrations** — detected from the OCR word boxes and an ink
   test on the pixels, reviewed one by one at Gate 3, cut out of the scan at
   render resolution, set to the measure (or given a leaf of their own), with the

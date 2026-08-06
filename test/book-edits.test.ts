@@ -8,7 +8,7 @@ import {
   type BookEdit
 } from '@core/edits'
 import { assembleBook, type BookDocument } from '@core/assemble'
-import { anchorIllustrations } from '@core/layout'
+import { anchorIllustrations, prepareFootnotes } from '@core/layout'
 import type { PageTranscription, TranscribedBlock } from '@core/transcribe'
 
 function page(pageIndex: number, blocks: TranscribedBlock[]): PageTranscription {
@@ -385,5 +385,147 @@ describe('nextFlaggedPage — working through what was flagged', () => {
 
   it('says so when nothing is flagged', () => {
     expect(nextFlaggedPage(pages([]), 0)).toBeNull()
+  })
+})
+
+describe('applyEdits — notes the editor wrote', () => {
+  const noted = (over: Partial<{ at: number; text: string }> = {}) =>
+    applyEdits(book(), [
+      {
+        kind: 'note',
+        noteId: 'ed1',
+        blockId: 'p0b1',
+        at: over.at ?? 36,
+        text: over.text ?? 'Paracelsus, whom the author follows throughout.'
+      }
+    ])
+
+  it('adds a note to the book without touching the text it hangs off', () => {
+    const doc = noted()
+    expect(doc.footnotes).toHaveLength(1)
+    expect(doc.footnotes[0]!.text).toBe('Paracelsus, whom the author follows throughout.')
+    // No marker character is spliced into the text: it would show up in the
+    // proof sheet's edit box, where one backspace would orphan the note.
+    expect(texts(doc)[1]).toBe('The chirnrgeon examined the specimen.')
+  })
+
+  it('carries no printed marker, because nobody printed it', () => {
+    const note = noted().footnotes[0]!
+    expect(note.originalMarker).toBe('')
+    expect(note.orphaned).toBe(false)
+    expect(note.anchor).toEqual({ blockId: 'p0b1', at: 36 })
+  })
+
+  it('is placed by the same machinery as a note off the page', () => {
+    // The whole reason this shape was chosen: `prepareFootnotes` locates it,
+    // numbers it in reading order and hands it on, with no idea who wrote it.
+    const prepared = prepareFootnotes(noted().blocks, noted().footnotes)
+    expect(prepared.orphans).toEqual([])
+    expect([...prepared.notes.values()][0]).toMatchObject({ id: 'ed1', mark: '1' })
+  })
+
+  it('attaches to the word before the point it was written at', () => {
+    const doc = noted({ at: 17 }) // "The chirnrgeon ex|amined"
+    const prepared = prepareFootnotes(doc.blocks, doc.footnotes)
+    expect(prepared.blocks[1]!.references[0]!.wordIndex).toBe(2)
+  })
+
+  it('numbers straight through with the book’s own notes, in reading order', () => {
+    const doc = assembleBook([
+      page(0, [
+        { kind: 'paragraph', text: 'First para with a mark.1 And more after it.' },
+        { kind: 'footnote', text: 'The printer’s note.', marker: '1' }
+      ])
+    ])
+    // Written *before* the printed marker, so the editor's note is read first
+    // and takes "1" — the original's numbering is not preserved, by design.
+    const withNote = applyEdits(doc, [
+      { kind: 'note', noteId: 'ed1', blockId: 'p0b0', at: 5, text: 'An editorial gloss.' }
+    ])
+    const prepared = prepareFootnotes(withNote.blocks, withNote.footnotes)
+    expect([...prepared.notes.values()].map((n) => [n.mark, n.text])).toEqual([
+      ['1', 'An editorial gloss.'],
+      ['2', 'The printer’s note.']
+    ])
+  })
+
+  it('leaves the block’s text alone even where a printed marker is stripped', () => {
+    const doc = assembleBook([
+      page(0, [
+        { kind: 'paragraph', text: 'A mark here.1 Then more.' },
+        { kind: 'footnote', text: 'Printed.', marker: '1' }
+      ])
+    ])
+    const withNote = applyEdits(doc, [
+      { kind: 'note', noteId: 'ed1', blockId: 'p0b0', at: 24, text: 'Mine.' }
+    ])
+    const prepared = prepareFootnotes(withNote.blocks, withNote.footnotes)
+    expect(prepared.blocks[0]!.text).toBe('A mark here. Then more.')
+    expect(prepared.blocks[0]!.references).toHaveLength(2)
+  })
+
+  it('replaces an earlier draft of the same note rather than adding a second', () => {
+    const doc = applyEdits(book(), [
+      { kind: 'note', noteId: 'ed1', blockId: 'p0b1', at: 5, text: 'First draft.' },
+      { kind: 'note', noteId: 'ed1', blockId: 'p0b1', at: 5, text: 'Second draft.' }
+    ])
+    expect(doc.footnotes).toHaveLength(1)
+    expect(doc.footnotes[0]!.text).toBe('Second draft.')
+  })
+
+  it('keeps two notes on one paragraph as two notes', () => {
+    // Keying them by the block would make writing the second erase the first.
+    let edits = withEdit([], {
+      kind: 'note',
+      noteId: 'ed1',
+      blockId: 'p0b1',
+      at: 5,
+      text: 'One.'
+    })
+    edits = withEdit(edits, {
+      kind: 'note',
+      noteId: 'ed2',
+      blockId: 'p0b1',
+      at: 20,
+      text: 'Two.'
+    })
+    expect(applyEdits(book(), edits).footnotes).toHaveLength(2)
+  })
+
+  it('drops an empty note instead of setting a blank one at the foot of a page', () => {
+    expect(noted({ text: '   ' }).footnotes).toEqual([])
+  })
+
+  it('leaves out a note whose block is gone, rather than orphaning it', () => {
+    // Unlike a scanned note, nothing is lost: the editor still has what they
+    // wrote, and a note reported as unplaceable would only be noise.
+    const doc = applyEdits(book(), [
+      { kind: 'note', noteId: 'ed1', blockId: 'p0b1', at: 5, text: 'A gloss.' },
+      { kind: 'drop', blockId: 'p0b1' }
+    ])
+    expect(doc.footnotes).toEqual([])
+  })
+
+  it('does not disturb the book’s own notes', () => {
+    const doc = assembleBook([
+      page(0, [
+        { kind: 'paragraph', text: 'Text with a mark.1' },
+        { kind: 'footnote', text: 'The printer’s.', marker: '1' }
+      ])
+    ])
+    expect(applyEdits(doc, []).footnotes).toHaveLength(1)
+    const withNote = applyEdits(doc, [
+      { kind: 'note', noteId: 'ed1', blockId: 'p0b0', at: 4, text: 'Mine.' }
+    ])
+    expect(withNote.footnotes.map((f) => f.text)).toEqual(['The printer’s.', 'Mine.'])
+  })
+
+  it('counts a note as one thing changed, whatever it hangs off', () => {
+    expect(
+      countEdited([
+        { kind: 'note', noteId: 'ed1', blockId: 'p0b1', at: 5, text: 'a' },
+        { kind: 'note', noteId: 'ed2', blockId: 'p0b1', at: 9, text: 'b' }
+      ])
+    ).toBe(2)
   })
 })

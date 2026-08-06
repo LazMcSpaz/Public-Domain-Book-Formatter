@@ -283,6 +283,17 @@ await firstBox.fill('The chirurgeon examined the specimen with extraordinary car
 await page.waitForTimeout(300)
 const correctedCount = await page.locator('.proof-where small').innerText()
 
+// An editor's note — the differentiation route that costs nothing but writing.
+// It has to reach the foot of the printed page, or it is decoration.
+await page.locator('.proof-split button', { hasText: 'Add a note here' }).first().click()
+await page
+  .locator('.proof-annotation textarea')
+  .first()
+  .fill('Paracelsus, whom the author follows throughout this chapter.')
+await page.waitForTimeout(300)
+const annotations = await page.locator('.proof-annotation').count()
+await shot('05c2b-proof-note')
+
 // The phone viewport: the scan stacks above the text rather than beside it.
 await page.setViewportSize({ width: 390, height: 844 })
 await page.waitForTimeout(400)
@@ -360,6 +371,12 @@ const imageCheck = await page
 const illustrationNote = await page
   .locator('.notes li')
   .filter({ hasText: 'illustration' })
+  .first()
+  .innerText()
+  .catch(() => '')
+const noteNote = await page
+  .locator('.notes li')
+  .filter({ hasText: 'footnote' })
   .first()
   .innerText()
   .catch(() => '')
@@ -470,6 +487,8 @@ console.log(`  illustration candidates: ${foundIllustrations} (crops shown: ${il
 console.log(`  advanced past the structure gate to: ${afterStructure}`)
 console.log(`  proof sheet: ${proofBoxes} editable block(s), ${proofScan} scan(s) beside them`)
 console.log(`  after correcting one: ${correctedCount.replace(/\s+/g, ' ')}`)
+console.log(`  editor's notes attached: ${annotations}`)
+console.log(`  the note is set at the foot of a page: ${noteNote.replace(/\s+/g, ' ')}`)
 console.log(`  proof sheet mobile overflow: ${proofOverflow}px`)
 console.log(`  export blocked until the title is given: ${blockedWithoutTitle}`)
 console.log(`  image DPI check: ${imageCheck.replace(/\s+/g, ' ')}`)
@@ -501,6 +520,10 @@ process.exit(
     proofBoxes > 0 &&
     proofScan === 1 &&
     /1 corrected/.test(correctedCount) &&
+    annotations === 1 &&
+    // The export screen reports what the engine actually placed, so this is
+    // the authored note reaching the book rather than reaching a form.
+    /1 footnote\(s\) were set at the foot/.test(noteNote) &&
     proofOverflow <= 0 &&
     // A real answer, not the "no placed images to check" it gave before.
     blockedWithoutTitle &&

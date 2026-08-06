@@ -61,6 +61,18 @@ export type BookEdit =
    * follow, or null to put it at the very front of the body.
    */
   | { kind: 'anchor'; illustrationId: string; afterBlockId: string | null }
+  /**
+   * A note the *editor* wrote, attached to a point in a block.
+   *
+   * The one addition here that is not a correction. It is also the reason this
+   * module can offer one at all: a reprint of a public-domain work has to carry
+   * something of its editor's to be worth publishing, and an annotation is the
+   * cheapest honest way to add it — the footnote machinery already places,
+   * renumbers and collects notes, and does not care who wrote them.
+   *
+   * `at` is a character offset into the block's *current* text, as `split`'s is.
+   */
+  | { kind: 'note'; noteId: string; blockId: string; at: number; text: string }
 
 /** How a split block's halves are named, so the ids stay deterministic. */
 const splitId = (id: string, half: number): string => `${id}/${half}`
@@ -83,6 +95,9 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   if (edits.length === 0) return doc
 
   let blocks: BookBlock[] = doc.blocks.map((b) => ({ ...b, sourcePages: [...b.sourcePages] }))
+  // Notes the editor wrote, keyed so a later edit to the same one replaces it
+  // rather than adding a second note at the same spot.
+  const authored = new Map<string, BookEdit & { kind: 'note' }>()
   // Illustration anchors are held as an override map and folded in at the end,
   // so a picture re-anchored to a block that a later edit drops falls back to
   // where the engine would have put it rather than vanishing.
@@ -91,6 +106,11 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   for (const edit of edits) {
     if (edit.kind === 'anchor') {
       anchors.set(edit.illustrationId, edit.afterBlockId)
+      continue
+    }
+
+    if (edit.kind === 'note') {
+      authored.set(edit.noteId, edit)
       continue
     }
 
@@ -165,6 +185,27 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   blocks = blocks.filter((b) => b.text.trim().length > 0)
 
   const byId = new Set(blocks.map((b) => b.id))
+
+  // Authored notes join the book's own. A note whose block is gone — dropped,
+  // or merged away, or on a page the user later removed — is left out rather
+  // than kept as an orphan: unlike a scanned note, nothing was lost by dropping
+  // it, because the editor still has what they wrote and can put it back.
+  const blockById = new Map(blocks.map((b) => [b.id, b]))
+  const footnotes = [...doc.footnotes]
+  for (const note of authored.values()) {
+    const block = blockById.get(note.blockId)
+    if (!block || note.text.trim().length === 0) continue
+    footnotes.push({
+      id: note.noteId,
+      // No printed marker: this note was never on the page. `anchor` is what
+      // locates it, and an empty marker is what keeps the regex search off it.
+      originalMarker: '',
+      text: note.text.trim(),
+      pageIndex: block.sourcePages[0] ?? 0,
+      orphaned: false,
+      anchor: { blockId: note.blockId, at: note.at }
+    })
+  }
   const illustrations = doc.illustrations.map((illustration) => {
     if (!anchors.has(illustration.id)) return illustration
     const after = anchors.get(illustration.id) ?? null
@@ -177,6 +218,7 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   return {
     ...doc,
     blocks,
+    footnotes,
     illustrations,
     // Chapters are derived from the blocks, so retyping a paragraph into a
     // heading has to be able to add one — and dropping a heading has to be able
@@ -203,7 +245,9 @@ function chaptersOf(blocks: readonly BookBlock[]): BookDocument['chapters'] {
 export function countEdited(edits: readonly BookEdit[]): number {
   const touched = new Set<string>()
   for (const edit of edits) {
-    touched.add(edit.kind === 'anchor' ? edit.illustrationId : edit.blockId)
+    if (edit.kind === 'anchor') touched.add(edit.illustrationId)
+    else if (edit.kind === 'note') touched.add(edit.noteId)
+    else touched.add(edit.blockId)
   }
   return touched.size
 }
@@ -217,14 +261,24 @@ export function countEdited(edits: readonly BookEdit[]): number {
  * paragraph are two different corrections.
  */
 export function withEdit(edits: readonly BookEdit[], edit: BookEdit): BookEdit[] {
-  const collapsible = edit.kind === 'text' || edit.kind === 'retype' || edit.kind === 'anchor'
+  const collapsible =
+    edit.kind === 'text' || edit.kind === 'retype' || edit.kind === 'anchor' || edit.kind === 'note'
   if (!collapsible) return [...edits, edit]
 
-  const target = edit.kind === 'anchor' ? edit.illustrationId : edit.blockId
-  const kept = edits.filter((e) => {
-    if (e.kind !== edit.kind) return true
-    const other = e.kind === 'anchor' ? e.illustrationId : e.blockId
-    return other !== target
-  })
+  const target = targetOf(edit)
+  const kept = edits.filter((e) => e.kind !== edit.kind || targetOf(e) !== target)
   return [...kept, edit]
+}
+
+/**
+ * What an edit is *about* — the thing two edits must share to collapse.
+ *
+ * A note is keyed by the note, not by the block it hangs off: two annotations
+ * on one paragraph are two annotations, and keying them by the block would make
+ * writing the second one erase the first.
+ */
+function targetOf(edit: BookEdit): string {
+  if (edit.kind === 'anchor') return edit.illustrationId
+  if (edit.kind === 'note') return edit.noteId
+  return edit.blockId
 }

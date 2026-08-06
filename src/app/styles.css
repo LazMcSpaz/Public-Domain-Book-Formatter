@@ -850,3 +850,51 @@ button.ghost {
     margin-left: 0;
   }
 }
+
+/* An editor's note — visibly the editor's, not the book's. Indented under the
+   passage it hangs off, so the relationship is the layout rather than a label. */
+.proof-annotation {
+  margin: 8px 0 0 24px;
+  padding: 8px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  border-radius: 0 4px 4px 0;
+}
+.proof-annotation-bar {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 5px;
+}
+.proof-annotation-label {
+  font-size: 0.75rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+.proof-annotation-bar button {
+  margin-left: auto;
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 2px 7px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+}
+.proof-annotation textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 0.88rem;
+  line-height: 1.45;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  resize: vertical;
+}
+.proof-split {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}

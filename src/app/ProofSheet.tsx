@@ -47,6 +47,13 @@ export interface ProofSheetProps {
   reviewedPages?: number[]
 }
 
+/** The last few words before a point, so a note can say what it is attached to. */
+function snippet(text: string, at: number): string {
+  const before = text.slice(0, Math.max(0, Math.min(text.length, at))).trimEnd()
+  const words = before.split(/\s+/u).filter(Boolean).slice(-4).join(' ')
+  return words.length > 0 ? `…${words}` : 'the start'
+}
+
 /**
  * The kinds a block can be retyped to.
  *
@@ -157,9 +164,28 @@ export function ProofSheet({
     []
   )
 
+  // The editor's own notes, grouped by the block they hang off.
+  const notesByBlock = useMemo(() => {
+    const out = new Map<string, (BookEdit & { kind: 'note' })[]>()
+    for (const edit of edits) {
+      if (edit.kind !== 'note') continue
+      const list = out.get(edit.blockId) ?? []
+      list.push(edit)
+      out.set(edit.blockId, list)
+    }
+    for (const list of out.values()) list.sort((a, b) => a.at - b.at)
+    return out
+  }, [edits])
+
   const push = (edit: BookEdit): void => onChange(withEdit(edits, edit))
   const undo = (blockId: string): void =>
-    onChange(edits.filter((e) => e.kind === 'anchor' || e.blockId !== blockId))
+    onChange(edits.filter((e) => e.kind === 'anchor' || e.kind === 'note' || e.blockId !== blockId))
+  const removeNote = (noteId: string): void =>
+    onChange(edits.filter((e) => e.kind !== 'note' || e.noteId !== noteId))
+
+  /** The caret in a block's text box, for "put it where I am looking". */
+  const caretOf = (el: Element | null): number =>
+    Number(el?.closest('.proof-block')?.querySelector('textarea')?.dataset['caret'] ?? '0')
 
   if (!page) {
     return <div className="proof empty">There is no text to proofread.</div>
@@ -303,10 +329,7 @@ export function ProofSheet({
                   <button
                     type="button"
                     onClick={(e) => {
-                      const area = e.currentTarget
-                        .closest('.proof-block')
-                        ?.querySelector('textarea')
-                      const caret = Number(area?.dataset['caret'] ?? '0')
+                      const caret = caretOf(e.currentTarget)
                       if (caret > 0) {
                         onChange([...edits, { kind: 'split', blockId: block.id, at: caret }])
                       }
@@ -314,7 +337,50 @@ export function ProofSheet({
                   >
                     Split at the cursor
                   </button>
+                  <button
+                    type="button"
+                    title="Attach a note of your own at the cursor"
+                    onClick={(e) => {
+                      const at = caretOf(e.currentTarget) || text.length
+                      onChange([
+                        ...edits,
+                        {
+                          kind: 'note',
+                          // Minted from the clock rather than counted, so an id
+                          // is never reused after a note is removed — a reused
+                          // one would silently overwrite a note in the saved list.
+                          noteId: `ed${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`,
+                          blockId: block.id,
+                          at,
+                          text: ''
+                        }
+                      ])
+                    }}
+                  >
+                    Add a note here
+                  </button>
                 </div>
+
+                {(notesByBlock.get(block.id) ?? []).map((note) => (
+                  <div key={note.noteId} className="proof-annotation">
+                    <span className="proof-annotation-bar">
+                      <span className="proof-annotation-label">
+                        Your note, after “{snippet(text, note.at)}”
+                      </span>
+                      <button type="button" onClick={() => removeNote(note.noteId)}>
+                        Remove note
+                      </button>
+                    </span>
+                    <textarea
+                      value={note.text}
+                      spellCheck
+                      rows={2}
+                      placeholder="Your note — it is set at the foot of the page this falls on."
+                      aria-label="Your note"
+                      onChange={(e) => push({ ...note, text: e.target.value })}
+                    />
+                  </div>
+                ))}
               </div>
             )
           })}

@@ -109,7 +109,7 @@ class WordCounter {
  * assembly happened to collect it in.
  */
 export function prepareFootnotes(
-  blocks: readonly { text: string }[],
+  blocks: readonly { id: string; text: string }[],
   footnotes: readonly Footnote[]
 ): PreparedFootnotes {
   // Every note is searched for, including the ones assembly already flagged as
@@ -128,13 +128,26 @@ export function prepareFootnotes(
     // appear on the page rather than the order the notes were collected.
     const hits: { start: number; end: number; noteId: string }[] = []
     for (const note of remaining.values()) {
+      // A note the editor wrote carries its position instead of a printed
+      // marker. Its hit is zero-width: there is nothing in the text to strip,
+      // only a place in it to refer from. That is the whole of the difference,
+      // which is why the rest of this loop needs no idea which kind it has.
+      if (note.anchor) {
+        if (note.anchor.blockId !== block.id) continue
+        const at = Math.max(0, Math.min(source.length, note.anchor.at))
+        hits.push({ start: at, end: at, noteId: note.id })
+        continue
+      }
+
       const pattern = footnoteMarkerPattern(note.originalMarker)
       if (!pattern) continue
       const match = pattern.exec(source)
       if (match)
         hits.push({ start: match.index, end: match.index + match[0].length, noteId: note.id })
     }
-    hits.sort((a, b) => a.start - b.start)
+    // Ties go to the zero-width hit, so a note written at the exact spot a
+    // printed marker sits refers to the word before it rather than to the mark.
+    hits.sort((a, b) => a.start - b.start || a.end - a.start - (b.end - b.start))
 
     if (hits.length === 0) {
       prepared.push({ text: source, references: [] })

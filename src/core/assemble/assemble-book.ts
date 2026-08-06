@@ -40,13 +40,33 @@ export interface BookBlock extends TranscribedBlock {
 export interface Footnote {
   /** Sequential id used for the reference mark in the body. */
   id: string
-  /** The marker as printed in the original (e.g. "1", "*", "†"). */
+  /**
+   * The marker as printed in the original (e.g. "1", "*", "†").
+   *
+   * Empty for a note nobody printed — one the *editor* wrote. Such a note is
+   * found by its `anchor` instead, which is why an empty marker is a legitimate
+   * value here rather than a missing one.
+   */
   originalMarker: string
   text: string
   /** Page the note was printed on. */
   pageIndex: number
   /** True when no body text referenced this marker. */
   orphaned: boolean
+  /**
+   * Where the editor put this note, for one they wrote themselves.
+   *
+   * A scanned note is located by finding its printed marker in the text. A new
+   * one has no printed marker to find, so it carries its position directly:
+   * `at` is a character offset into the block's text, and the note attaches to
+   * the word before it, exactly as a printed marker would.
+   *
+   * Deliberately *not* done by inserting a marker character into the text. That
+   * would work — the note would then be indistinguishable from a scanned one —
+   * but the marker would show up in the proof sheet's edit box, where it reads
+   * as a typo and one backspace would silently orphan the note.
+   */
+  anchor?: { blockId: string; at: number }
 }
 
 export interface ChapterEntry {
