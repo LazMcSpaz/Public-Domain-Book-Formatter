@@ -36,7 +36,14 @@ const PREVIEW_BODY_PAGES = 4
  * measure) is settled on a *body* page, with the title page the one piece of
  * front matter worth seeing because the heading face is largest there.
  */
-const PREVIEW_KINDS: ReadonlySet<string> = new Set(['title', 'chapter-opener', 'body'])
+const PREVIEW_KINDS: ReadonlySet<string> = new Set([
+  'title',
+  'chapter-opener',
+  'body',
+  // A plate answers design questions no page of text can — how a picture sits
+  // against this measure, and whether it is going to print big enough.
+  'plate'
+])
 
 export interface PreviewPage {
   /** Zero-based index in the finished book, not in the shown sample. */
@@ -60,6 +67,8 @@ export interface PreviewOptions {
   edition: LayoutEdition
   /** Pixels per point. 2 is comfortably sharp on a high-DPI display. */
   scale?: number
+  /** PNG bytes per illustration id. Without them a plate previews empty. */
+  images?: ReadonlyMap<string, Uint8Array>
   signal?: AbortSignal
 }
 
@@ -93,7 +102,8 @@ export async function renderPreview(
 
   const { bytes } = await renderPdf(book, fonts, {
     title: options.edition.title,
-    author: options.edition.author
+    author: options.edition.author,
+    ...(options.images ? { images: options.images } : {})
   })
   checkCancelled(options.signal)
 

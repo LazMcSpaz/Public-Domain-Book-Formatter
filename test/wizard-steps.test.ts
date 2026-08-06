@@ -399,6 +399,70 @@ describe('gate 2 — uncertain spots', () => {
   })
 })
 
+describe('gate 3 — reviewing the illustrations', () => {
+  const candidate = (id: string, pageIndex: number, ink = 0.4) => ({
+    id,
+    pageIndex,
+    bbox: { x0: 100, y0: 200, x1: 748, y1: 811 },
+    previewUrl: `blob:crop/${id}`,
+    ink
+  })
+
+  const withCandidates = (candidates: ReturnType<typeof candidate>[]): WizardState => ({
+    ...reconDone(),
+    completed: ['intake', 'recon', 'gate-identity', 'transcribe', 'gate-uncertainties'],
+    document: assembleBook([
+      {
+        pageIndex: 0,
+        role: 'body',
+        uncertain: [],
+        furniture: {},
+        blocks: [{ kind: 'paragraph', text: 'The alembick being set upon a gentle fire.' }]
+      }
+    ]),
+    illustrationCandidates: candidates
+  })
+
+  const question = (state: WizardState) =>
+    stepById('gate-structure')
+      .questions(state)
+      .find((q) => q.id === 'illustrations')
+
+  it('asks about every candidate in one batch, not one prompt per figure', () => {
+    const q = question(withCandidates([candidate('a', 3), candidate('b', 8)]))!
+    expect(q.type).toBe('multi-choice')
+    expect((q as { options: unknown[] }).options).toHaveLength(2)
+  })
+
+  it('shows the pixels of each one — the gate is unanswerable without them', () => {
+    const q = question(withCandidates([candidate('a', 3)]))!
+    const option = (q as { options: { evidence?: { kind: string; src: string }[] }[] }).options[0]!
+    expect(option.evidence?.[0]).toMatchObject({ kind: 'image', src: 'blob:crop/a' })
+  })
+
+  it('starts with everything kept, so the recommended answer is an answer', () => {
+    const q = question(withCandidates([candidate('a', 3), candidate('b', 8)]))!
+    expect((q as { defaultValue: string[] }).defaultValue).toEqual(['a', 'b'])
+  })
+
+  it('orders them by page, so the list reads like the book', () => {
+    const q = question(withCandidates([candidate('z', 9), candidate('a', 2)]))!
+    expect((q as { defaultValue: string[] }).defaultValue).toEqual(['a', 'z'])
+  })
+
+  it('says how big each will be and how strong the guess is', () => {
+    const q = question(withCandidates([candidate('a', 3, 0.38)]))!
+    const option = (q as { options: { label: string; description?: string }[] }).options[0]!
+    expect(option.label).toBe('Page 4')
+    expect(option.description).toContain('648×611')
+    expect(option.description).toContain('38%')
+  })
+
+  it('asks nothing when the scan had no pictures in it', () => {
+    expect(question(withCandidates([]))).toBeUndefined()
+  })
+})
+
 describe('gate 3 — structure', () => {
   const withDoc = (blocks: Parameters<typeof assembleBook>[0]): WizardState => ({
     ...reconDone(),

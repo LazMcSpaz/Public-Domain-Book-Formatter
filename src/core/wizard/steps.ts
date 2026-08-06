@@ -31,6 +31,28 @@ export type StepId =
   | 'design'
   | 'export'
 
+/**
+ * A region the recon pass believes is a picture, described for review.
+ *
+ * Kept free of pixels and of platform types on purpose: the step machine only
+ * needs to know a candidate exists, where it is, and where its crop can be
+ * found, which is what lets the whole gate be tested with no canvas.
+ */
+export interface IllustrationCandidate {
+  id: string
+  pageIndex: number
+  /**
+   * The region on the rendered page, in source pixels. Plain numbers, so
+   * carrying it here costs the core nothing — and it is what the crop is taken
+   * from once the user has said yes, so the answer would be unusable without it.
+   */
+  bbox: { x0: number; y0: number; x1: number; y1: number }
+  /** Object URL of the region's pixels — the evidence the question shows. */
+  previewUrl: string
+  /** Fraction of the region that is ink; how strong the guess is. */
+  ink: number
+}
+
 /** Everything the wizard knows about the book so far. */
 export interface WizardState {
   /** Source file name, once a PDF is loaded. */
@@ -60,6 +82,11 @@ export interface WizardState {
   uncertainties: { pageIndex: number; text: string; alternatives: string[]; reason: string }[]
   /** Pages that failed transcription entirely. */
   failedPages: number[]
+  /**
+   * Illustrations the recon pass thinks it found, each with a crop to judge it
+   * by. Candidates, not decisions — the structure gate asks about every one.
+   */
+  illustrationCandidates: IllustrationCandidate[]
   /** The assembled book, once transcription and assembly have run. */
   document: BookDocument | null
   /** Answers gathered so far, keyed by step then question id. */
@@ -89,6 +116,7 @@ export function initialState(): WizardState {
     findings: [],
     uncertainties: [],
     failedPages: [],
+    illustrationCandidates: [],
     document: null,
     answers: {},
     completed: []
@@ -449,6 +477,44 @@ const gateStructure: Step = {
         }
       ]
     })
+
+    // Illustrations. Detection is explicitly a first guess (SPEC §6), so every
+    // candidate is shown with its own pixels and the user unticks the ones that
+    // are not pictures — a batch of checkboxes rather than a prompt per figure.
+    //
+    // Everything is ticked to begin with. The alternative — recommending
+    // nothing and making the user find the real ones — would be the app
+    // refusing to answer a question it has already done the work for.
+    if (s.illustrationCandidates.length > 0) {
+      const candidates = [...s.illustrationCandidates].sort(
+        (a, b) => a.pageIndex - b.pageIndex || a.id.localeCompare(b.id)
+      )
+      qs.push({
+        id: 'illustrations',
+        type: 'multi-choice',
+        prompt: `Which of these ${candidates.length} are illustrations?`,
+        help:
+          'Found by looking for inked areas the text flows around, which also ' +
+          'catches the odd decorated initial or heavy rule. Untick anything that ' +
+          'is not a picture; what you keep is cut out of the scan at full ' +
+          'resolution and set into the book near the text it was printed with.',
+        defaultValue: candidates.map((c) => c.id),
+        options: candidates.map((c) => ({
+          value: c.id,
+          label: `Page ${c.pageIndex + 1}`,
+          description:
+            `${Math.round(c.bbox.x1 - c.bbox.x0)}×${Math.round(c.bbox.y1 - c.bbox.y0)} pixels` +
+            ` · ${Math.round(c.ink * 100)}% inked`,
+          evidence: [
+            {
+              kind: 'image' as const,
+              src: c.previewUrl,
+              alt: `Candidate illustration on page ${c.pageIndex + 1}`
+            }
+          ]
+        }))
+      })
+    }
 
     // Orphaned notes can't be placed automatically; ask rather than guess.
     const orphans = doc.footnotes.filter((f) => f.orphaned)

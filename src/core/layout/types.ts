@@ -76,6 +76,29 @@ export interface OrnamentItem {
   art: OrnamentArt
 }
 
+/**
+ * An illustration, placed and scaled but not yet drawn.
+ *
+ * Unlike an ornament, this carries an **id rather than the art**. The
+ * difference is not an inconsistency: an ornament is a few hundred bytes of
+ * path data that the core can hold and a test can assert on, where an
+ * illustration is megabytes of scanned pixels that arrive from a canvas. Those
+ * would drag the DOM into `src/core`, make a `LaidOutPage` unserializable, and
+ * hold a whole book of decoded bitmaps in memory at once — which is the memory
+ * rule this codebase is built around. So the renderer resolves the id against
+ * the crops it made, and the engine reasons about nothing but the rectangle.
+ */
+export interface ImageItem {
+  kind: 'image'
+  /** Matches `Illustration.id`; the renderer looks the pixels up by it. */
+  id: string
+  /** Top-left of the placed image, in page coordinates (y downward). */
+  xPt: number
+  yPt: number
+  widthPt: number
+  heightPt: number
+}
+
 /** A horizontal rule — the footnote separator, and page furniture. */
 export interface RuleShape {
   kind: 'rule'
@@ -94,7 +117,7 @@ export interface PositionedLine {
 }
 
 /** Everything that can appear on a page. Extended, not replaced, by later work. */
-export type PageItem = PositionedLine | RuleShape | OrnamentItem
+export type PageItem = PositionedLine | RuleShape | OrnamentItem | ImageItem
 
 /**
  * The rectangle body text flows inside, in page coordinates.
@@ -117,7 +140,16 @@ export interface PageFrame {
  * design questions, and a blank leaf is never mistaken for a failed render.
  */
 export type PageKind =
-  'half-title' | 'title' | 'copyright' | 'contents' | 'aside' | 'blank' | 'chapter-opener' | 'body'
+  | 'half-title'
+  | 'title'
+  | 'copyright'
+  | 'contents'
+  | 'aside'
+  | 'blank'
+  | 'chapter-opener'
+  | 'body'
+  /** A page given over to one illustration, as a printed plate is. */
+  | 'plate'
 
 /** Which side of the spread a page falls on. Recto is the right-hand page. */
 export type PageSide = 'recto' | 'verso'
@@ -174,6 +206,28 @@ export interface LaidOutBook {
    * failure this whole reporting path exists to prevent.
    */
   notesDropped: { id: string; reason: string }[]
+  /** Illustrations set into the book, with the resolution each one got. */
+  imagesPlaced: PlacedImage[]
+  /** Illustrations that could not be set, and why. Same rule as the notes. */
+  imagesDropped: { id: string; reason: string }[]
+}
+
+/**
+ * An illustration as it ended up on the page — the record the KDP check reads.
+ *
+ * `dpi` is the number that matters and the reason this is reported at all: a
+ * scan looks fine on screen at any size, and only the ratio of its source
+ * pixels to its *printed* inches says whether it will come out muddy. That
+ * ratio does not exist until the engine has decided how big to set it, so it is
+ * measured here rather than guessed earlier.
+ */
+export interface PlacedImage {
+  id: string
+  pageIndex: number
+  widthPt: number
+  heightPt: number
+  /** Effective resolution at the placed size. KDP wants 300. */
+  dpi: number
 }
 
 /**

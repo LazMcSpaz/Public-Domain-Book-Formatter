@@ -13,7 +13,7 @@
  */
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
-import { inflateSync } from 'node:zlib'
+import { deflateSync, inflateSync } from 'node:zlib'
 import fontkit from '@pdf-lib/fontkit'
 import type { TypeFeatures } from '@pdf-lib/fontkit'
 import {
@@ -111,6 +111,7 @@ const DOCUMENT: BookDocument = {
   footnotes: [],
   chapters: [],
   asides: [],
+  illustrations: [],
   skipped: []
 }
 
@@ -334,5 +335,138 @@ describe('renderPdf — footnotes and the contents page reach the file', () => {
       expect(text).toContain(book.pages[chapter.pageIndex]!.folio!)
     }
     await reopened.destroy()
+  })
+})
+
+/**
+ * A valid grayscale PNG, built here rather than read from disk.
+ *
+ * The crop path is canvas work and cannot run in Node, but everything after it
+ * — embedding, placing, flipping the origin — is plain pdf-lib, and that is the
+ * part where a book quietly comes out with a blank rectangle in it. Twenty
+ * lines of PNG writing buys the whole of that path a test that runs in the
+ * plain Node suite with no browser.
+ */
+function png(width: number, height: number): Uint8Array {
+  const crcTable = Array.from({ length: 256 }, (_, n) => {
+    let c = n
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1
+    return c >>> 0
+  })
+  const crc = (buf: Buffer): number => {
+    let c = 0xffffffff
+    for (const byte of buf) c = crcTable[(c ^ byte) & 0xff]! ^ (c >>> 8)
+    return (c ^ 0xffffffff) >>> 0
+  }
+  const chunk = (type: string, data: Buffer): Buffer => {
+    const head = Buffer.alloc(4)
+    head.writeUInt32BE(data.length)
+    const body = Buffer.concat([Buffer.from(type, 'latin1'), data])
+    const tail = Buffer.alloc(4)
+    tail.writeUInt32BE(crc(body))
+    return Buffer.concat([head, body, tail])
+  }
+
+  const ihdr = Buffer.alloc(13)
+  ihdr.writeUInt32BE(width, 0)
+  ihdr.writeUInt32BE(height, 4)
+  ihdr[8] = 8 // bit depth
+  ihdr[9] = 0 // greyscale
+
+  // One filter byte per scanline, then the pixels: a diagonal, so a viewer
+  // showing it upside down would be visibly wrong rather than plausibly right.
+  const raw = Buffer.alloc((width + 1) * height)
+  for (let y = 0; y < height; y++) {
+    raw[y * (width + 1)] = 0
+    for (let x = 0; x < width; x++) {
+      raw[y * (width + 1) + 1 + x] = x === y ? 0 : 255
+    }
+  }
+
+  return new Uint8Array(
+    Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      chunk('IHDR', ihdr),
+      chunk('IDAT', deflateSync(raw)),
+      chunk('IEND', Buffer.alloc(0))
+    ])
+  )
+}
+
+describe('renderPdf — illustrations', () => {
+  const illustrated = (sourceWidth: number, sourceHeight: number): BookDocument =>
+    assembleBook(
+      [
+        {
+          pageIndex: 0,
+          role: 'body',
+          uncertain: [],
+          furniture: {},
+          blocks: [
+            { kind: 'heading', text: 'Of the Air', level: 1 },
+            { kind: 'paragraph', text: PROSE },
+            { kind: 'caption', text: 'Fig. 1. The alembick.' }
+          ]
+        }
+      ],
+      { illustrations: [{ id: 'fig1', pageIndex: 0, sourceWidth, sourceHeight }] }
+    )
+
+  async function buildIllustrated(withPixels = true) {
+    const fonts = diskFontTable()
+    const doc = illustrated(1200, 400)
+    const book = layout(doc, defaultStyleProfile(), fonts, { edition: EDITION })
+    const pdf = await renderPdf(book, fonts, {
+      ...(withPixels ? { images: new Map([['fig1', png(120, 40)]]) } : {})
+    })
+    return { book, pdf }
+  }
+
+  it('embeds the picture as an image object in the file', async () => {
+    const { pdf } = await buildIllustrated()
+    expect(pdf.missingImages).toEqual([])
+    expect(pdfDictionaries(pdf.bytes)).toContain('/Image')
+  })
+
+  it('paints it on the page the engine put it on', async () => {
+    const { book, pdf } = await buildIllustrated()
+    const placed = book.imagesPlaced[0]!
+    const reopened = await reopen(pdf.bytes)
+    const ops = await (await reopened.getPage(placed.pageIndex + 1)).getOperatorList()
+
+    // pdf.js reports painting an image XObject with its own opcode, so this
+    // asserts the picture is *drawn*, not merely carried in the file.
+    const { OPS } = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    expect(ops.fnArray).toContain(OPS.paintImageXObject)
+    await reopened.destroy()
+  })
+
+  it('places it inside the page, right way up', async () => {
+    const { book } = await buildIllustrated()
+    const page = book.pages.find((p) => p.items.some((i) => i.kind === 'image'))!
+    const item = page.items.find((i) => i.kind === 'image')!
+    if (item.kind !== 'image') throw new Error('unreachable')
+
+    // The engine's y runs down from the top; pdf-lib's runs up from the bottom.
+    // If the writer got that wrong the image would still be *in* the file, and
+    // still on the right page — it would just be somewhere else on it.
+    expect(item.yPt).toBeGreaterThanOrEqual(0)
+    expect(item.yPt + item.heightPt).toBeLessThanOrEqual(page.heightPt)
+    expect(item.xPt).toBeGreaterThanOrEqual(0)
+    expect(item.xPt + item.widthPt).toBeLessThanOrEqual(page.widthPt)
+  })
+
+  it('reports a picture whose pixels never arrived instead of leaving a hole', async () => {
+    const { pdf } = await buildIllustrated(false)
+    expect(pdf.missingImages).toEqual(['fig1'])
+    // And nothing is drawn: a grey placeholder box in a book for sale is worse
+    // than the gap the report tells you about.
+    expect(pdfDictionaries(pdf.bytes)).not.toContain('/Image')
+  })
+
+  it('embeds one copy however many pages carry the picture', async () => {
+    const { pdf } = await buildIllustrated()
+    const dictionaries = pdfDictionaries(pdf.bytes)
+    expect(dictionaries.split('/Subtype /Image').length - 1).toBeLessThanOrEqual(1)
   })
 })

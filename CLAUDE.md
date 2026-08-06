@@ -60,9 +60,9 @@ Practical rules:
 - `src/core` — **pure domain logic, no DOM and no Node.** Coordinate map, hOCR
   parsing, lexicon harvesting, page roles, the wizard step machine, assembly,
   design-by-interview, image algorithms, **the layout engine** (frames,
-  Knuth–Plass line breaking, pagination, footnotes, ornaments, the TOC), the
-  ornament library, the edition/export report, style system. This is where the
-  tests live.
+  Knuth–Plass line breaking, pagination, footnotes, illustrations, ornaments,
+  the TOC), the ornament library, the edition/export report, style system. This
+  is where the tests live.
 - `src/platform/browser` — the only place browser APIs appear: PDF.js rendering,
   Tesseract.js OCR, canvas crops, the recon runner, font loading, the pdf-lib
   writer, and the page preview.
@@ -95,6 +95,14 @@ Path aliases: `@core`, `@platform` (defined in `tsconfig.json`,
 - **A note that cannot be placed is reported, never dropped.** `notesDropped`
   travels from the engine to the export screen. Silence here is the worst
   possible failure: the reader finds the missing footnote once it is printed.
+  `imagesDropped` and `missingImages` are the same rule for pictures, and
+  nothing is drawn in place of one — a grey placeholder box in a book for sale
+  is worse than a gap the user was told about.
+- **Never invent resolution.** Illustration crops are taken at the DPI the page
+  renders at and placed at exactly that pixel size. Rendering a page larger to
+  make the DPI number look better only interpolates pixels the scan never had:
+  the print is no sharper and the KDP check that would have warned the user has
+  been argued out of its warning. See `src/platform/browser/illustrations.ts`.
 - **The preview is the PDF.** The design gate lays the book out, writes real PDF
   bytes and renders _those_ with pdf.js. Never add a second renderer that
   approximates the page — one renderer is what makes the gate's approval mean
@@ -177,6 +185,11 @@ in `screenshots/`. Don't ship UI blind.
   placed by the engine and drawn with `drawSvgPath`), **collected endnotes** for
   notes whose reference mark is nowhere in the body, and moving the title,
   author and year questions to the export gate where they arrive prefilled.
-- **Next**: illustrations — the page model has no image item, so an illustrated
-  book cannot place its plates. Deferred until there is a real illustrated PDF
-  to work against. See [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md).
+- **Also done**: **illustrations** — detected from the OCR word boxes and an ink
+  test on the pixels, reviewed one by one at Gate 3, cut out of the scan at
+  render resolution, set to the measure (or given a leaf of their own), with the
+  caption pulled out of the text flow and put under the picture. The KDP
+  image-DPI check is measured from the placed size.
+- **Next**: the image-editing mode of SPEC §6 — crop, straighten, levels,
+  despeckle, background removal. `src/core/image/engine` is written and unwired.
+  See [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md).

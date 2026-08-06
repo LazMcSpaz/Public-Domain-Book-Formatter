@@ -41,6 +41,7 @@ import { createSavedRun, fileKey } from '@core/project'
 import { profileFromAnswers, describeProfile, type DesignAnswers } from '@core/design'
 import { buildExport, editionFromAnswers, type BuildExportResult } from '@core/export'
 import { renderInterior } from '../platform/browser/interior'
+import { cropIllustrations } from '../platform/browser/illustrations'
 import { ExportResult } from './ExportResult'
 import { PreviewPane } from './PreviewPane'
 
@@ -57,6 +58,10 @@ export function App(): JSX.Element {
   // Identifies the open file, so a paid run can be found again on a later visit.
   const fileKeyRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  // PNG bytes for the illustrations the user kept, cut once at the structure
+  // gate. Held in a ref rather than in state: they are megabytes of pixels, and
+  // nothing renders from them directly — the PDF writer looks them up by id.
+  const imagesRef = useRef<Map<string, Uint8Array>>(new Map())
   const transcriptionRef = useRef<RunResult | null>(null)
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
   const [pendingCost, setPendingCost] = useState<string | null>(null)
@@ -142,6 +147,7 @@ export function App(): JSX.Element {
     setBuildNote(null)
     if (reconRef.current) releaseRecon(reconRef.current)
     reconRef.current = null
+    imagesRef.current = new Map()
 
     setState((s) => ({
       ...s,
@@ -173,6 +179,13 @@ export function App(): JSX.Element {
         lexicon: result.lexicon,
         classifications: [{ pageIndex: 0, role: 'title-page', selfReportedConfidence: 0 }],
         cropFor: (tokenId: string) => result.crops.get(tokenId),
+        illustrationCandidates: result.illustrations.map((c) => ({
+          id: c.region.id,
+          pageIndex: c.region.pageIndex,
+          bbox: c.region.bbox,
+          previewUrl: c.previewUrl,
+          ink: c.ink
+        })),
         hasApiKey: loadApiKey().length > 0,
         savedRun: saved,
         completed: ['intake', 'recon']
@@ -477,7 +490,8 @@ export function App(): JSX.Element {
       const interior = await renderInterior(doc, profile, {
         edition: { ...edition, notices: edition.notices },
         onProgress: (done, total) => setBuildProgress({ done, total }),
-        orphanNotes: input.omitOrphanFootnotes ? 'omit' : 'collect'
+        orphanNotes: input.omitOrphanFootnotes ? 'omit' : 'collect',
+        images: imagesRef.current
       })
       setPdf({ bytes: interior.bytes, pageCount: interior.pageCount })
       setBuildNote(null)
@@ -493,7 +507,9 @@ export function App(): JSX.Element {
             ),
             notesPlaced: interior.notesPlaced,
             notesCollected: interior.notesCollected,
-            notesDropped: interior.notesDropped
+            notesDropped: interior.notesDropped,
+            imagesPlaced: interior.imagesPlaced,
+            imagesDropped: interior.imagesDropped
           }
         })
       )
@@ -593,6 +609,66 @@ export function App(): JSX.Element {
     })
   }, [state, currentAnswers, complete])
 
+  /**
+   * Leaving the structure gate: cut out the pictures the user kept.
+   *
+   * This is where the pixels are finally taken, rather than during recon,
+   * because only now is it known which regions are wanted — cropping every
+   * candidate at full resolution would spend memory on guesses the user is
+   * about to reject. The document is then reassembled with them, which also
+   * pulls each caption out of the text flow and onto its picture.
+   */
+  const finishStructure = useCallback(async () => {
+    const run = transcriptionRef.current
+    const file = fileDataRef.current
+    if (!run || !file) {
+      complete()
+      return
+    }
+
+    const kept = new Set((currentAnswers['illustrations'] as string[] | undefined) ?? [])
+    const regions = state.illustrationCandidates
+      .filter((c) => kept.has(c.id))
+      .map((c) => ({ id: c.id, pageIndex: c.pageIndex, bbox: c.bbox, accepted: true as const }))
+
+    // Nothing kept: skip the render entirely rather than opening the PDF to
+    // crop nothing out of it.
+    if (regions.length === 0) {
+      imagesRef.current = new Map()
+      complete()
+      return
+    }
+
+    setError(null)
+    try {
+      const cropped = await cropIllustrations(file, regions, {
+        onProgress: (done, total) => setBuildProgress({ done, total })
+      })
+      imagesRef.current = cropped.bytes
+      if (cropped.failed.length > 0) {
+        setError(
+          `${cropped.failed.length} illustration(s) could not be cut out of the scan and ` +
+            'will be left out of the book.'
+        )
+      }
+      const skip = state.document?.skipped.map((s) => s.pageIndex) ?? []
+      complete({
+        document: assembleBook(run.transcriptions, {
+          excludePages: skip,
+          illustrations: cropped.sources
+        })
+      })
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      // The book is still publishable without its pictures, so this does not
+      // strand the user at the gate — it says what was lost and moves on.
+      imagesRef.current = new Map()
+      complete()
+    } finally {
+      setBuildProgress(null)
+    }
+  }, [state, currentAnswers, complete])
+
   /** Leaving a step: transcription needs cost approval first; gates just advance. */
   const advance = useCallback(() => {
     if (step.id === 'export') {
@@ -601,6 +677,10 @@ export function App(): JSX.Element {
     }
     if (step.id === 'gate-uncertainties') {
       void finishUncertainties()
+      return
+    }
+    if (step.id === 'gate-structure') {
+      void finishStructure()
       return
     }
     if (step.id === 'transcribe') {
@@ -801,7 +881,12 @@ export function App(): JSX.Element {
               </div>
             ) : null}
             {designProfile ? (
-              <PreviewPane book={state.document} profile={designProfile} edition={previewEdition} />
+              <PreviewPane
+                book={state.document}
+                profile={designProfile}
+                edition={previewEdition}
+                images={imagesRef.current}
+              />
             ) : null}
             <div className="actions">
               <button

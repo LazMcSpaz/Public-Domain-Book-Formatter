@@ -22,9 +22,11 @@
  */
 import type { StyleProfile } from '@core/model'
 import { findOrnament, type OrnamentArt } from '@core/ornament'
-import type { BookBlock, BookDocument } from '@core/assemble'
+import type { BookBlock, BookDocument, Illustration } from '@core/assemble'
+import { effectiveDpi } from '@core/image'
 import { breakParagraph, type Alignment, type Attachment, type BrokenLine } from './break-lines'
 import { prepareFootnotes, type NoteReference, type PreparedNote } from './footnotes'
+import { anchorIllustrations } from './illustrations'
 import {
   bottomFolioBaseline,
   frameFor,
@@ -34,18 +36,20 @@ import {
   trimToPoints
 } from './frames'
 import type { TextMeasurer } from './measure'
-import type {
-  FontRef,
-  LaidOutBook,
-  LayoutWarning,
-  PageKind,
-  LaidOutPage,
-  PageFrame,
-  PageItem,
-  PageSection,
-  PageSide,
-  PositionedLine,
-  TextRun
+import {
+  PT_PER_INCH,
+  type FontRef,
+  type LaidOutBook,
+  type LayoutWarning,
+  type PageKind,
+  type LaidOutPage,
+  type PageFrame,
+  type PageItem,
+  type PageSection,
+  type PageSide,
+  type PlacedImage,
+  type PositionedLine,
+  type TextRun
 } from './types'
 
 /** The edition facts the page furniture needs. */
@@ -137,6 +141,22 @@ const NOTE_HANG_GAP_RATIO = 0.35
  */
 const ORNAMENT_WIDTH_RATIO = 0.45
 
+/** A caption is set smaller than the body, and in italic, as captions are. */
+const CAPTION_SIZE_RATIO = 0.85
+/** Blank slots between an illustration and the caption under it. */
+const CAPTION_GAP_SLOTS = 1
+/** Blank slots above and below an illustration set in the text flow. */
+const IMAGE_SPACE_SLOTS = 1
+/**
+ * How tall an illustration may be before it stops sharing a page.
+ *
+ * Past roughly three-fifths of the frame, whatever text fits around it is a
+ * stub — two or three lines stranded above a picture, which reads worse than
+ * the picture having the leaf to itself. Old books made the same call and
+ * called the result a plate.
+ */
+const PLATE_HEIGHT_RATIO = 0.62
+
 /**
  * A block turned into placeable lines, with the rules about where it may break.
  * Line x offsets are relative to the *frame*, not the page, because the frame
@@ -154,6 +174,23 @@ interface Flowable {
   keepWithNext: boolean
   /** Apply widow and orphan control when this item is split across pages. */
   orphanControl: boolean
+  /**
+   * Never split across pages — move the whole thing rather than part of it.
+   *
+   * A paragraph broken over a page break is normal typesetting; a picture
+   * broken over one is not a picture. This is what an illustration and its
+   * caption travel on.
+   */
+  unbreakable?: boolean
+  /** Take a page of its own, as a printed plate does. */
+  ownPage?: boolean
+  /**
+   * How tall the *drawn* content is, in points, for an item that takes its own
+   * page. Slots are whole and a picture's height is not, so centring by slot
+   * count alone leaves it visibly high on the leaf; this is the real height to
+   * centre against.
+   */
+  contentHeightPt?: number
 }
 
 interface FlowLine {
@@ -170,6 +207,12 @@ interface FlowLine {
    * title it belongs to rather than being stranded by itself.
    */
   ornament?: { art: OrnamentArt; widthPt: number }
+  /**
+   * An illustration drawn at this slot. Like the ornament it flows through the
+   * slot machinery, which is what keeps the text below it from being set on top
+   * of it — the engine never draws over anything, it only runs out of slots.
+   */
+  image?: { id: string; widthPt: number; heightPt: number }
 }
 
 /** A footnote broken to the measure, ready to be set at the foot of a page. */
@@ -363,6 +406,101 @@ function ornamentLines(art: OrnamentArt, ctx: BuildContext): FlowLine[] {
   return Array.from({ length: slots }, (_, i) =>
     i === 0 ? { runs: [], ornament: { art, widthPt } } : { runs: [] }
   )
+}
+
+/**
+ * An illustration and its caption, as one thing that cannot be taken apart.
+ *
+ * Sizing is entirely determined here, and deliberately so: the placed size is
+ * what decides the effective resolution, so the number the KDP check reports
+ * has to come from the same arithmetic that drew the box, not from a second
+ * opinion about it.
+ *
+ * Three rules, in order:
+ *   1. Set it to the full measure. A reprint's illustrations should line up
+ *      with its text block, not float at whatever size the scanner gave them.
+ *   2. If that makes it taller than the space available, scale it down until it
+ *      fits. Width follows, so nothing is ever distorted.
+ *   3. If it is still tall enough that the text around it would be a stub, give
+ *      it a page of its own.
+ */
+function buildIllustrationFlowable(
+  illustration: Illustration,
+  ctx: BuildContext,
+  slotsPerPage: number
+): Flowable {
+  const font: FontRef = { family: ctx.profile.bodyFont, style: 'italic' }
+  const sizePt = ctx.profile.bodyFontSize * CAPTION_SIZE_RATIO
+
+  const captionText = illustration.caption?.trim() ?? ''
+  const captionLines =
+    captionText.length > 0
+      ? toFlowLines(
+          breakParagraph(captionText, {
+            font,
+            sizePt,
+            measurer: ctx.measurer,
+            lineWidths: ctx.measureWidth,
+            alignment: 'center'
+          }),
+          font,
+          sizePt,
+          [0]
+        )
+      : []
+
+  // Slots the caption will need, so the picture is sized against the space that
+  // is actually left for it rather than the whole frame.
+  const captionSlots = captionLines.length > 0 ? captionLines.length + CAPTION_GAP_SLOTS : 0
+
+  const ratio =
+    illustration.sourceWidth > 0 && illustration.sourceHeight > 0
+      ? illustration.sourceHeight / illustration.sourceWidth
+      : 1
+
+  let widthPt = ctx.measureWidth
+  let heightPt = widthPt * ratio
+
+  // Decided from the natural height, before any clamping: whether this is a
+  // plate must not depend on the ceiling that is about to be derived from it.
+  const isPlate = heightPt > slotsPerPage * ctx.leading * PLATE_HEIGHT_RATIO
+
+  // The ceiling is counted in *slots*, not points, because slots are what the
+  // page actually has. Sizing against the frame's height in points and then
+  // rounding up to slots can ask for one more slot than exists, and an
+  // unbreakable flowable that cannot fit on an empty page has nowhere to go.
+  //
+  // A plate keeps a slot of air besides: a picture ruled off exactly at the
+  // last baseline of the text block looks cramped against a leaf that is
+  // otherwise all margin, and the slack is what lets it be centred at all.
+  const maxSlots = Math.max(1, slotsPerPage - captionSlots - (isPlate ? 1 : 0))
+  const maxHeight = maxSlots * ctx.leading
+  if (heightPt > maxHeight) {
+    widthPt = maxHeight / ratio
+    heightPt = maxHeight
+  }
+
+  const slots = Math.max(1, Math.ceil(heightPt / ctx.leading))
+  const lines: FlowLine[] = Array.from({ length: slots }, (_, i) =>
+    i === 0 ? { runs: [], image: { id: illustration.id, widthPt, heightPt } } : { runs: [] }
+  )
+  if (captionLines.length > 0) {
+    for (let i = 0; i < CAPTION_GAP_SLOTS; i++) lines.push({ runs: [] })
+    lines.push(...captionLines)
+  }
+
+  return {
+    lines,
+    spaceBefore: IMAGE_SPACE_SLOTS,
+    spaceAfter: IMAGE_SPACE_SLOTS,
+    startsChapter: false,
+    chapter: null,
+    keepWithNext: false,
+    orphanControl: false,
+    unbreakable: true,
+    ownPage: isPlate,
+    contentHeightPt: heightPt + captionSlots * ctx.leading
+  }
 }
 
 /**
@@ -748,7 +886,19 @@ export function layout(
   }
   const noteLinesOf = (id: string): number => noteBlocks.get(id)?.lines.length ?? 0
 
+  // Where each picture falls in the reading order. Computed before anything is
+  // broken so an illustration is a flowable like any other from here on, and
+  // the placement loop needs to know nothing about pictures at all.
+  const anchored = anchorIllustrations(doc.blocks, doc.illustrations)
+
   const flowables: Flowable[] = []
+  const pushIllustrationsAfter = (blockIndex: number): void => {
+    for (const illustration of anchored.get(blockIndex) ?? []) {
+      flowables.push(buildIllustrationFlowable(illustration, ctx, slotsPerPage))
+    }
+  }
+
+  pushIllustrationsAfter(-1)
   doc.blocks.forEach((block, i) => {
     const previous = doc.blocks[i - 1]
     const afterHeading = previous?.kind === 'heading'
@@ -763,6 +913,7 @@ export function layout(
         ...(prep ? { text: prep.text, references: prep.references } : {})
       })
     )
+    pushIllustrationsAfter(i)
   })
 
   // Notes with no reference mark cannot go at the foot of any page. When the
@@ -820,7 +971,13 @@ export function layout(
   for (let i = 0; i < flowables.length; i++) {
     const flow = flowables[i]!
 
-    if (flow.startsChapter || page === null) {
+    // A plate takes a leaf of its own, so it only needs a fresh page when the
+    // current one has been written on. Asking for one unconditionally would
+    // leave a blank page in front of every plate that happened to fall at a
+    // page break already.
+    const needsOwnPage = flow.ownPage === true && page !== null && current().lines.length > 0
+
+    if (flow.startsChapter || needsOwnPage || page === null) {
       if (bodyPageCount() >= maxBodyPages) break
       openBodyPage(flow.startsChapter)
       if (flow.startsChapter) {
@@ -833,6 +990,27 @@ export function layout(
     // Space before collapses at the top of a page — leading white at the head
     // of a page is a hole, not a separation.
     if (slot > 0) slot += flow.spaceBefore
+
+    if (flow.ownPage) {
+      current().kind = 'plate'
+      // A running head over a full-page plate labels the picture with the
+      // chapter's name, which is furniture where there is no text to furnish.
+      current().suppressRunningHead = true
+      // Centred on the leaf, so the picture sits in it rather than hanging from
+      // the top. Rounded to a whole slot so it stays on the baseline grid, and
+      // measured against the drawn height rather than the slot count — a
+      // picture's height is not a whole number of slots, and centring by slots
+      // alone leaves it visibly high.
+      //
+      // This *replaces* the sink rather than adding to it, and comes after the
+      // space-before line for that reason: the separation an illustration asks
+      // for in the text flow is already provided by the leaf being its own.
+      const content = flow.contentHeightPt ?? flow.lines.length * leading
+      const sink = Math.round((rectoFrame.heightPt - content) / 2 / leading)
+      // Clamped so centring can never push the last slot off the page: the
+      // sizing above only guarantees the item *fits*, not that it fits twice.
+      slot = Math.max(0, Math.min(sink, slotsPerPage - flow.lines.length))
+    }
 
     let placed = 0
     // Which page a heading opens on is only known once its first line is
@@ -863,6 +1041,14 @@ export function layout(
 
       // A heading with nothing under it is stranded; move it with its text.
       if (flow.keepWithNext && take === remaining && bodySlots - slot - take < 1) {
+        take = 0
+      }
+
+      // An illustration is not a paragraph: half of one on each side of a page
+      // break is not a picture. Take all of it or none of it, and let the
+      // "never push an item off a page it is alone on" clamp below handle the
+      // one case where none of it will ever fit.
+      if (flow.unbreakable && take < remaining) {
         take = 0
       }
 
@@ -1033,6 +1219,38 @@ export function layout(
       }))
   ]
 
+  // What each picture was actually set at — read back off the finished pages
+  // rather than from the sizing arithmetic, so the reported resolution is the
+  // resolution of the box that will be drawn and not of the one intended.
+  const sizeById = new Map(
+    doc.illustrations.map((i) => [i.id, { w: i.sourceWidth, h: i.sourceHeight }])
+  )
+  const imagesPlaced: PlacedImage[] = []
+  for (const page of laidOut) {
+    for (const item of page.items) {
+      if (item.kind !== 'image') continue
+      const source = sizeById.get(item.id)
+      imagesPlaced.push({
+        id: item.id,
+        pageIndex: page.index,
+        widthPt: item.widthPt,
+        heightPt: item.heightPt,
+        // Along the wider of the two axes the image is scaled by the same
+        // factor, so either gives the same answer; width is used because a
+        // crop's width is the dimension the measure fixes.
+        dpi: source ? effectiveDpi(source.w, item.widthPt / PT_PER_INCH) : 0
+      })
+    }
+  }
+
+  const placedImageIds = new Set(imagesPlaced.map((i) => i.id))
+  const imagesDropped = doc.illustrations
+    .filter((i) => !placedImageIds.has(i.id))
+    .map((i) => ({
+      id: i.id,
+      reason: 'it falls after the last page that was laid out'
+    }))
+
   return {
     pages: laidOut,
     widthPt: trim.widthPt,
@@ -1042,7 +1260,9 @@ export function layout(
     warnings,
     notesPlaced: placedIds.size,
     notesCollected: collected.length,
-    notesDropped
+    notesDropped,
+    imagesPlaced,
+    imagesDropped
   }
 }
 
@@ -1070,6 +1290,20 @@ function finishPage(
     const baseline = frame.yPt + ctx.ascent + slot * ctx.leading
     const runs = runsAt(line, frame.xPt)
     if (runs.length > 0) items.push({ kind: 'line', baselinePt: baseline, runs })
+
+    if (line.image) {
+      const { id, widthPt, heightPt } = line.image
+      items.push({
+        kind: 'image',
+        id,
+        // Centred in the measure and hung from the top of its slot, like the
+        // ornament: a picture has no baseline to sit on either.
+        xPt: frame.xPt + (frame.widthPt - widthPt) / 2,
+        yPt: frame.yPt + slot * ctx.leading,
+        widthPt,
+        heightPt
+      })
+    }
 
     if (line.ornament) {
       const { art, widthPt } = line.ornament

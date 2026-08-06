@@ -224,3 +224,109 @@ describe('buildExport — the structure gate’s footnote choice', () => {
     expect(buildWith(true).notes.join(' ')).toContain('left out')
   })
 })
+
+describe('buildExport — the account it gives of the pictures', () => {
+  const illustrated = () =>
+    assembleBook(
+      [
+        page(0, [
+          { kind: 'paragraph', text: 'The alembick being set upon a gentle fire.' },
+          { kind: 'caption', text: 'Fig. 1. The alembick.' }
+        ])
+      ],
+      {
+        illustrations: [
+          { id: 'fig1', pageIndex: 0, sourceWidth: 1200, sourceHeight: 800 },
+          { id: 'fig2', pageIndex: 0, sourceWidth: 600, sourceHeight: 400 }
+        ]
+      }
+    )
+
+  const report = (typeset: Parameters<typeof buildExport>[0]['typeset']) =>
+    buildExport({
+      document: illustrated(),
+      profile: defaultStyleProfile(),
+      edition: edition(),
+      estimatedPageCount: 100,
+      ...(typeset ? { typeset } : {})
+    })
+
+  const imageCheck = (result: ReturnType<typeof report>) =>
+    result.validation.checks.find((c) => c.id === 'image-dpi')!
+
+  it('measures the DPI of what was placed rather than reporting nothing to check', () => {
+    // The whole point of this check. It read "No placed images to check" for as
+    // long as nothing could place one, which looked like a pass.
+    const check = imageCheck(
+      report({
+        pageCount: 40,
+        warnings: [],
+        imagesPlaced: [
+          { id: 'fig1', pageIndex: 4, dpi: 420 },
+          { id: 'fig2', pageIndex: 9, dpi: 380 }
+        ]
+      })
+    )
+    expect(check.level).toBe('ok')
+    expect(check.detail).toContain('300 DPI')
+    expect(check.detail).not.toContain('No placed images')
+  })
+
+  it('warns about a picture scaled past what its scan supports', () => {
+    const check = imageCheck(
+      report({
+        pageCount: 40,
+        warnings: [],
+        imagesPlaced: [
+          { id: 'fig1', pageIndex: 4, dpi: 420 },
+          { id: 'fig2', pageIndex: 9, dpi: 147 }
+        ]
+      })
+    )
+    expect(check.level).toBe('warn')
+    expect(check.detail).toContain('1 image(s)')
+  })
+
+  it('says how many were set, and how many carried their caption', () => {
+    const { notes } = report({
+      pageCount: 40,
+      warnings: [],
+      imagesPlaced: [
+        { id: 'fig1', pageIndex: 4, dpi: 420 },
+        { id: 'fig2', pageIndex: 9, dpi: 380 }
+      ]
+    })
+    expect(notes.join(' ')).toContain('2 illustrations were set into the book')
+    expect(notes.join(' ')).toContain('1 with the caption')
+  })
+
+  it('never lets one go missing quietly', () => {
+    const { notes } = report({
+      pageCount: 40,
+      warnings: [],
+      imagesPlaced: [{ id: 'fig1', pageIndex: 4, dpi: 420 }],
+      imagesDropped: [{ id: 'fig2', reason: 'its pixels could not be cut out of the scan' }]
+    })
+    expect(notes.join(' ')).toContain('1 illustration(s) could not be set')
+    expect(notes.join(' ')).toContain('could not be cut out of the scan')
+  })
+
+  it('says nothing about pictures before the book has been laid out', () => {
+    // Where they land, and so what resolution they get, is not known yet —
+    // and a count of what "will" be set is a promise this cannot make.
+    const { notes } = report(undefined)
+    expect(notes.join(' ')).not.toContain('illustration')
+    expect(imageCheck(report(undefined)).detail).toContain('No placed images')
+  })
+
+  it('says nothing at all for a book with no pictures', () => {
+    const { notes } = buildExport({
+      document: sampleDoc(),
+      profile: defaultStyleProfile(),
+      edition: edition(),
+      estimatedPageCount: 100,
+      typeset: { pageCount: 40, warnings: [] }
+    })
+    expect(notes.join(' ')).not.toContain('illustration')
+  })
+})

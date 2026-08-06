@@ -236,7 +236,13 @@ export function QuestionView({ question, value, onChange, resolveEvidence }: Pro
                     )
                   }
                 />
-                <span className="t">{o.label}</span>
+                <span>
+                  <span className="t">{o.label}</span>
+                  {o.description ? <span className="d"> — {o.description}</span> : null}
+                  {/* Evidence per option, not per question: "is this an
+                      illustration?" cannot be answered without seeing that one. */}
+                  <EvidenceView items={o.evidence} resolve={resolveEvidence} />
+                </span>
               </label>
             ))}
           </div>

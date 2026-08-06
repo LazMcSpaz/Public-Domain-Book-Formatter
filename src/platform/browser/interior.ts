@@ -14,7 +14,8 @@ import {
   englishHyphenator,
   layoutWithToc,
   type LayoutEdition,
-  type LayoutWarning
+  type LayoutWarning,
+  type PlacedImage
 } from '@core/layout'
 import { fontTableFor } from './fonts'
 import { renderPdf } from './pdf-out'
@@ -35,6 +36,10 @@ export interface Interior {
   notesCollected: number
   /** Notes that could not be set, and why — never dropped silently. */
   notesDropped: { id: string; reason: string }[]
+  /** Illustrations set into the book, with the resolution each one got. */
+  imagesPlaced: PlacedImage[]
+  /** Illustrations that never reached the page, and why. Same rule as notes. */
+  imagesDropped: { id: string; reason: string }[]
   /** Families asked for but unavailable, mapped to what was used instead. */
   substitutions: [string, string][]
 }
@@ -48,6 +53,15 @@ export interface InteriorOptions {
    * gate's answer. Default `omit`.
    */
   orphanNotes?: 'omit' | 'collect'
+  /**
+   * PNG bytes for each illustration in the document, keyed by its id.
+   *
+   * Separate from the document because the document is pure data and these are
+   * megabytes of pixels; see the note on `ImageItem`. A document with
+   * illustrations and no bytes lays out with the space reserved and reports
+   * every one as missing, which is the honest failure — not a silent gap.
+   */
+  images?: ReadonlyMap<string, Uint8Array>
 }
 
 export async function renderInterior(
@@ -71,6 +85,7 @@ export async function renderInterior(
   const pdf = await renderPdf(book, fonts, {
     title: options.edition.title,
     author: options.edition.author,
+    ...(options.images ? { images: options.images } : {}),
     ...(options.onProgress
       ? {
           onPage: (done, total) => {
@@ -92,6 +107,16 @@ export async function renderInterior(
     notesPlaced: book.notesPlaced,
     notesCollected: book.notesCollected,
     notesDropped: book.notesDropped,
+    imagesPlaced: book.imagesPlaced,
+    // An illustration the engine placed but whose pixels never arrived is
+    // reported here rather than left as a blank rectangle in the book.
+    imagesDropped: [
+      ...book.imagesDropped,
+      ...pdf.missingImages.map((id) => ({
+        id,
+        reason: 'its pixels could not be cut out of the scan'
+      }))
+    ],
     substitutions: [...fonts.substitutions.entries()]
   }
 }

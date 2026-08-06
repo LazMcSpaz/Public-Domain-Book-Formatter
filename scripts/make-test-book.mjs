@@ -9,7 +9,7 @@
  *
  * Usage: node scripts/make-test-book.mjs [outPath]
  */
-import { PDFDocument, StandardFonts } from 'pdf-lib'
+import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import { writeFileSync } from 'node:fs'
 
 const OUT = process.argv[2] ?? 'public/test-book.pdf'
@@ -94,6 +94,66 @@ const paragraphs = [
   ]
 ]
 
+/**
+ * An engraving of an alembick, drawn as solid shapes.
+ *
+ * Solid on purpose. Region detection finds rectangles the *text* flows around,
+ * and then asks the pixels whether there is actually ink in one — so a figure
+ * drawn in hairlines would be found and then correctly rejected as blank paper,
+ * and the fixture would be testing the rejection rather than the placement.
+ * Real engravings of this period are dense with hatching, so filled shapes are
+ * also the more faithful thing to draw.
+ *
+ * @param page   the page to draw on
+ * @param cx     centre of the figure, in PDF points from the left
+ * @param bottom the figure's base, in points from the foot of the page
+ * @param scale  1 is about 150pt tall
+ */
+function drawAlembick(page, cx, bottom, scale = 1) {
+  const s = (n) => n * scale
+  const black = rgb(0, 0, 0)
+
+  // The cucurbit: a round-bottomed vessel.
+  page.drawEllipse({ x: cx, y: bottom + s(46), xScale: s(46), yScale: s(40), color: black })
+  // Its neck, rising to the head.
+  page.drawRectangle({
+    x: cx - s(11),
+    y: bottom + s(80),
+    width: s(22),
+    height: s(40),
+    color: black
+  })
+  // The head, and the beak that runs off to the receiver.
+  page.drawEllipse({ x: cx, y: bottom + s(126), xScale: s(26), yScale: s(18), color: black })
+  // `drawSvgPath` anchors at a point in PDF coordinates (up from the foot of
+  // the page) and then runs the path's own y *downward* from it — so the anchor
+  // is the head's height, not the page height minus it.
+  page.drawSvgPath(
+    `M 0 0 C ${s(30)} ${s(4)} ${s(52)} ${s(20)} ${s(64)} ${s(46)} L ${s(58)} ${s(52)} ` +
+      `C ${s(46)} ${s(28)} ${s(26)} ${s(14)} 0 ${s(10)} Z`,
+    { x: cx + s(20), y: bottom + s(126), color: black }
+  )
+  // The receiver it drips into.
+  page.drawEllipse({ x: cx + s(96), y: bottom + s(24), xScale: s(24), yScale: s(22), color: black })
+  // The furnace beneath, and its hatched shadow.
+  page.drawRectangle({
+    x: cx - s(56),
+    y: bottom - s(4),
+    width: s(112),
+    height: s(12),
+    color: black
+  })
+  for (let i = 0; i < 7; i++) {
+    page.drawRectangle({
+      x: cx - s(52) + i * s(16),
+      y: bottom - s(22),
+      width: s(6),
+      height: s(16),
+      color: black
+    })
+  }
+}
+
 let folio = 1
 for (const [i, para] of paragraphs.entries()) {
   const page = newPage()
@@ -116,9 +176,24 @@ for (const [i, para] of paragraphs.entries()) {
     write(page, '* See the Basilica Chymica of Croll, lib. ii, cap. vii.', 115, { size: 9 })
   }
 
+  // A figure set into the text, with the caption the original printed under it.
+  // Text above and below, so the detector has a rectangle to find between them.
+  if (i === 3) {
+    drawAlembick(page, 216, 250, 0.85)
+    write(page, 'Fig. 1. The alembick and its receiver.', 210, { size: 9, font: italic, x: 118 })
+  }
+
   write(page, String(36 + folio), 72, { size: 10, x: 210 })
   folio++
 }
+
+// --- a full-page plate ------------------------------------------------------
+// Nothing on the leaf but the picture, which is how plates were bound in. It
+// exercises a different path entirely: no words at all, so the detector offers
+// the whole page, and the engine gives it a leaf of its own.
+const plate = newPage()
+drawAlembick(plate, 216, 300, 1.5)
+write(plate, 'PLATE I', 200, { size: 11, x: 190 })
 
 const bytes = await doc.save()
 writeFileSync(OUT, bytes)

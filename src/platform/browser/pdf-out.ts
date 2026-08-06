@@ -13,7 +13,7 @@
  *
  * Browser-only: pdf-lib and fontkit.
  */
-import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib'
+import { PDFDocument, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit'
 import type { FontRef, LaidOutBook, LaidOutPage } from '@core/layout'
 import { LAYOUT_FEATURES, type FontTable } from './fonts'
@@ -23,6 +23,8 @@ export interface PdfResult {
   pageCount: number
   /** Families that were embedded, for the KDP "fonts embedded" check. */
   embeddedFamilies: string[]
+  /** Illustrations the engine placed but whose pixels never arrived. */
+  missingImages: string[]
 }
 
 export interface RenderPdfOptions {
@@ -30,6 +32,15 @@ export interface RenderPdfOptions {
   author?: string
   /** Called after each page, so a long export can show progress and yield. */
   onPage?: (done: number, total: number) => void | Promise<void>
+  /**
+   * PNG bytes for each placed illustration, keyed by `ImageItem.id`.
+   *
+   * The engine deliberately carries only the id — see the note on `ImageItem` —
+   * so this is where pixels and geometry meet. An id with no entry is reported
+   * rather than drawn as a blank: a picture that silently failed to embed
+   * leaves a hole in the book that nobody sees until it is printed.
+   */
+  images?: ReadonlyMap<string, Uint8Array>
 }
 
 function keyOf(font: FontRef): string {
@@ -100,15 +111,34 @@ export async function renderPdf(
 
   const fallback = embedded.values().next().value ?? (await doc.embedFont('Times-Roman'))
 
+  // Each illustration is embedded once even if it were placed twice — pdf-lib
+  // writes one XObject per `embedPng`, and a book of plates embedded per
+  // appearance is a book that carries its own pixels twice.
+  const images = new Map<string, PDFImage>()
+  const missingImages: string[] = []
+  const supplied = options.images
   for (const page of book.pages) {
-    drawPage(doc, page, embedded, fallback)
+    for (const item of page.items) {
+      if (item.kind !== 'image' || images.has(item.id)) continue
+      const bytes = supplied?.get(item.id)
+      if (!bytes) {
+        if (!missingImages.includes(item.id)) missingImages.push(item.id)
+        continue
+      }
+      images.set(item.id, await doc.embedPng(bytes.slice()))
+    }
+  }
+
+  for (const page of book.pages) {
+    drawPage(doc, page, embedded, fallback, images)
     if (options.onPage) await options.onPage(page.index + 1, book.pages.length)
   }
 
   return {
     bytes: await doc.save(),
     pageCount: book.pages.length,
-    embeddedFamilies: [...embeddedFamilies]
+    embeddedFamilies: [...embeddedFamilies],
+    missingImages
   }
 }
 
@@ -116,13 +146,32 @@ function drawPage(
   doc: PDFDocument,
   page: LaidOutPage,
   embedded: Map<string, PDFFont>,
-  fallback: PDFFont
+  fallback: PDFFont,
+  images: Map<string, PDFImage>
 ): void {
   // The MediaBox *is* the trim. KDP takes a trimmed interior with no crop
   // marks and no bleed box, so the page is exactly the finished leaf.
   const pdfPage: PDFPage = doc.addPage([page.widthPt, page.heightPt])
 
   for (const item of page.items) {
+    if (item.kind === 'image') {
+      const image = images.get(item.id)
+      // No pixels: draw nothing at all rather than a placeholder. A grey box in
+      // a book for sale is worse than a gap, and `missingImages` is what tells
+      // the user about it.
+      if (!image) continue
+      pdfPage.drawImage(image, {
+        x: item.xPt,
+        // The engine anchors an image by its top-left corner with y running
+        // down; pdf-lib places one by its bottom-left with y running up. Both
+        // conversions happen in this one expression.
+        y: page.heightPt - item.yPt - item.heightPt,
+        width: item.widthPt,
+        height: item.heightPt
+      })
+      continue
+    }
+
     if (item.kind === 'ornament') {
       // pdf-lib draws a path from an anchor with SVG's own downward y, which is
       // the engine's convention too — so only the page flip is needed here.

@@ -40,7 +40,7 @@ const PROSE =
   )
 
 function doc(blocks: BookBlock[], asides: BookBlock[] = []): BookDocument {
-  return { blocks, footnotes: [], chapters: [], asides, skipped: [] }
+  return { blocks, footnotes: [], chapters: [], asides, illustrations: [], skipped: [] }
 }
 
 function run(document: BookDocument, over: Partial<StyleProfile> = {}) {

@@ -12,6 +12,7 @@ Open PDF
   │    Tesseract.js OCR       ├─ one page at a time, released after use
   │    word crops             ─┘
   │    lexicon harvest (book-wide, frequency-driven)
+  │    illustration candidates (OCR boxes + an ink test on the pixels)
   │
   ├─ GATE 1 ▸ confirm how to read it  ← orthography + term review
   │
@@ -19,7 +20,7 @@ Open PDF
   │    per page: role + clean text + structure tags + uncertain spans
   │
   ├─ GATE 2 ▸ check uncertain spots   ← where model & OCR disagree
-  ├─ GATE 3 ▸ confirm structure       ← chapters, footnotes, images
+  ├─ GATE 3 ▸ confirm structure       ← chapters, footnotes, illustrations
   ├─ DESIGN  ▸ interview → layout → real pages, live
   └─ EXPORT  ▸ confirm title/author (prefilled) → PDF → KDP validation
 ```
@@ -35,7 +36,7 @@ Gates are the only stops. Everything between them runs unattended.
 | **Lexicon**    | `src/core/lexicon`     | Term harvesting, variant clustering, prompt block | no            |
 | **Page roles** | `src/core/pages`       | Roles, dispositions, front-matter metadata        | no            |
 | **Wizard**     | `src/core/wizard`      | Question contract, step machine                   | no            |
-| Image          | `src/core/image`       | Region detection, DPI math, op engine             | no            |
+| **Image**      | `src/core/image`       | Region detection, DPI math, op engine             | no            |
 | **Layout**     | `src/core/layout`      | Frames, line breaking, pagination, notes, TOC     | no            |
 | Typeset        | `src/core/typeset`     | KDP validation                                    | no            |
 | Style          | `src/core/style`       | Profiles, resolution                              | no            |
@@ -110,6 +111,64 @@ Gate 1 keeps what it can genuinely ask at that point — how the original spelli
 should be handled, and the harvested vocabulary, both of which shape the paid
 pass that follows and neither of which the app could decide alone.
 
+## Illustrations
+
+A picture has to answer three questions that text does not: where it is on the
+scan, whether it is a picture at all, and how big it may be printed. Each is
+answered by a different witness, and none of them is the vision model.
+
+```
+OCR word boxes ──► detectRegions ──► rectangles with no *text* in them
+                                          │
+       page pixels ──► inkProfile ──► is there ink? where exactly?
+                                          │
+                                   candidates, tightened to their ink
+                                          │
+                              GATE 3 ▸ the user unticks the wrong ones
+                                          │
+                        crop at 300 DPI ──► PNG bytes ──► pdf-lib
+                                          │
+                              layout() sizes it ──► effective DPI ──► KDP
+```
+
+- **Detection is deliberately not the model's job.** `detectRegions` reads the
+  OCR bounding boxes, which is the one witness in the pipeline that is not a
+  language model. It finds maximal rectangles the _text_ flows around — which
+  includes every margin, sink and short last page, so the pixels are asked
+  next: `inkProfile` measures ink against the region's **own** paper tone,
+  which is what makes one threshold work across cream, grey and foxed scans.
+- **Then the box is pulled in to the ink.** A maximal empty rectangle reaches
+  out to the margins; the picture inside it may be a third of that. Cropping the
+  rectangle would set a small drawing in a large white box and then scale the
+  box to the measure — spending the printed inches on paper. Tightening also
+  makes the duplicate rectangles over one gap converge, so they can be deduped.
+- **Every candidate is reviewed** (SPEC §6 calls detection low-trust, and it
+  is). Gate 3 shows each crop with its size and ink fraction, all ticked; the
+  user unticks what is not a picture. Only then are the accepted regions cut,
+  so memory is never spent on a guess the user is about to reject.
+- **Resolution is never invented.** Crops are taken at the DPI the page renders
+  at and handed on at exactly that size. Rendering larger to make the DPI number
+  look better would interpolate pixels the scan never had — the print would be
+  no sharper, and the one check that would have warned the user would have been
+  talked out of it. A low number is information.
+- **The engine sizes, and therefore measures.** An illustration is set to the
+  measure, scaled down if it will not fit, and given a leaf of its own once it
+  is tall enough that the text around it would be a stub. Effective DPI is
+  source pixels over _printed_ inches, so it does not exist until that decision
+  is made — which is why the KDP check reads it off the finished pages.
+- **Placement is as honest as its evidence.** The scan says only which page a
+  picture was on, so it goes after the last text that shared that page. Inferring
+  a position within the page would be guessing, and a picture confidently dropped
+  into the wrong paragraph is harder to spot than one sitting a paragraph late.
+- **Pixels travel beside the page model, not in it.** `ImageItem` carries an id;
+  the renderer resolves it. Ornaments carry their art because art is path data,
+  and pictures cannot: megabytes of decoded bitmap in a `LaidOutPage` would drag
+  the DOM into `src/core` and hold a whole book of them at once.
+- **A picture that could not be set is reported**, exactly as a note is —
+  `imagesDropped` on the book, `missingImages` from the writer, both on the
+  export screen. Nothing is drawn in its place: a grey placeholder in a book for
+  sale is worse than a gap someone was told about.
+
 ## Ornaments and endnotes
 
 - **Ornaments are vector data, not files.** `src/core/ornament` holds path data
@@ -174,11 +233,11 @@ source of truth. It stays for two reasons that a language model can't provide:
   reporting were verified against real calls; a whole-book run has not been
   done. Cost estimation was calibrated against real usage and errs high, as
   intended.
-- **Illustrations are not laid out at all.** The page model has no image item,
-  so a scanned book's plates do not reach the PDF. `src/core/image` holds
-  region detection, DPI maths and a non-destructive op engine, and nothing
-  imports any of it yet — which also makes the design interview's "heavily
-  illustrated" answer a trim size and nothing more.
+- **There is no image-editing mode.** SPEC §6 describes one — crop, straighten,
+  levels, despeckle, background removal, all non-destructive over the original
+  pixels. `src/core/image/engine` is that machinery, written and unwired: the
+  illustration path places what it finds, and cannot yet retouch it. A foxed or
+  crooked scan comes through foxed and crooked.
 - **Small capitals are not real.** `headingStyle.smallCaps` sets ordinary
   capitals. The fonts do carry `smcp`, but drawing it needs glyph-level output
   rather than `drawText`, and synthesising it by scaling capitals — what cheap

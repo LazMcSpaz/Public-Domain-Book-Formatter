@@ -259,9 +259,30 @@ Each step leaves the app working.
    go and look. They are asked at the export gate now, prefilled from what the
    vision pass read, with the scan of the title page beside them. **Done.**
 
-10. **Illustrations.** The page model still has no image item, so an illustrated
-    book cannot place its plates. Deferred until there is a real illustrated PDF
-    to work against — the only remaining item.
+10. ~~**Illustrations.** The page model has no image item, so an illustrated
+    book cannot place its plates.~~ **Done**, and without waiting for a
+    user-supplied PDF: `scripts/make-test-book.mjs` now prints an engraving into
+    the text of one leaf and a full-page plate on another, so the whole path is
+    exercised in Chromium by `scripts/screenshot-flow.mjs`.
+
+    The shape it took: detection reads the **OCR word boxes**, not the model —
+    keeping the independent witness independent — and then asks the pixels
+    whether a text-free rectangle actually has ink in it, measured against the
+    region's own paper tone so one threshold survives cream, grey and foxed
+    scans. Each candidate is tightened to its ink, which both makes the crop the
+    picture and collapses the several maximal rectangles that describe one gap.
+    Gate 3 shows every crop and the user unticks the wrong ones; only then are
+    the accepted regions cut, so no memory is spent on rejected guesses.
+
+    Placement is as honest as its evidence: the scan says which _page_ a picture
+    was on and nothing finer, so it goes after the last text that shared that
+    page. And crops are never upsampled — the effective DPI the KDP check
+    reports is the resolution the book will really print at.
+
+11. **The image-editing mode** of SPEC §6 — crop, straighten, levels, despeckle,
+    background removal, non-destructive over the original pixels.
+    `src/core/image/engine` is that machinery, written and unwired. This is the
+    only remaining item.
 
 ## Decisions taken
 

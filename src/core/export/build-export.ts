@@ -55,6 +55,16 @@ export interface BuildExportInput {
     notesPlaced?: number
     notesCollected?: number
     notesDropped?: { id: string; reason: string }[]
+    /**
+     * Illustrations as they were actually set, with the resolution each one got.
+     *
+     * The effective DPI only exists once the engine has decided how big to
+     * print a picture, which is why this arrives with the layout rather than
+     * with the document. It is what turns "No placed images to check" into a
+     * real answer.
+     */
+    imagesPlaced?: { id: string; pageIndex: number; dpi: number }[]
+    imagesDropped?: { id: string; reason: string }[]
   }
   /**
    * What to do with notes whose reference mark was never found — the answer to
@@ -144,6 +154,9 @@ export function buildExport(input: BuildExportInput): BuildExportResult {
     profile,
     pageCount: input.typeset?.pageCount ?? input.estimatedPageCount,
     warnings: input.typeset?.warnings ?? [],
+    // Measured, not estimated: `dpi` is the source pixels of the crop over the
+    // inches it will print at, both of which the engine settled.
+    images: (input.typeset?.imagesPlaced ?? []).map((i) => ({ effectiveDpi: i.dpi })),
     typeset: input.typeset !== undefined
   })
 
@@ -187,6 +200,27 @@ export function buildExport(input: BuildExportInput): BuildExportResult {
         (input.omitOrphanFootnotes ?? true)
           ? `${orphans.length} footnote(s) had no reference mark and were left out.`
           : `${orphans.length} footnote(s) had no reference mark and were collected at the end.`
+      )
+    }
+  }
+  // The pictures, on the same terms as the notes: what went in, and what did
+  // not. An illustration that vanished between the gate and the file would
+  // otherwise be found by the reader.
+  if (document.illustrations.length > 0 && input.typeset) {
+    const placed = input.typeset.imagesPlaced ?? []
+    const dropped = input.typeset.imagesDropped ?? []
+    if (placed.length > 0) {
+      const captioned = document.illustrations.filter((i) => i.caption !== null).length
+      const plural = placed.length === 1 ? 'illustration was' : 'illustrations were'
+      notes.push(
+        `${placed.length} ${plural} set into the book` +
+          (captioned > 0 ? `, ${captioned} with the caption it was printed under.` : '.')
+      )
+    }
+    if (dropped.length > 0) {
+      notes.push(
+        `${dropped.length} illustration(s) could not be set — ${dropped[0]!.reason}. ` +
+          'They are not in the PDF.'
       )
     }
   }
