@@ -62,6 +62,17 @@ export function App(): JSX.Element {
   // gate. Held in a ref rather than in state: they are megabytes of pixels, and
   // nothing renders from them directly — the PDF writer looks them up by id.
   const imagesRef = useRef<Map<string, Uint8Array>>(new Map())
+  /**
+   * Pages the *user* chose to leave out at the review gate.
+   *
+   * Kept because the structure gate assembles the book a second time, to fold
+   * in the illustrations, and that assembly has to make the same exclusions as
+   * the first. It cannot be recovered from `document.skipped`: that list also
+   * holds every page dropped by its *disposition* — the title page, the scanned
+   * contents, the blanks — and handing those back as exclusions would both
+   * relabel them and break a paragraph that legitimately runs across a plate.
+   */
+  const excludedPagesRef = useRef<number[]>([])
   const transcriptionRef = useRef<RunResult | null>(null)
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
   const [pendingCost, setPendingCost] = useState<string | null>(null)
@@ -148,6 +159,7 @@ export function App(): JSX.Element {
     if (reconRef.current) releaseRecon(reconRef.current)
     reconRef.current = null
     imagesRef.current = new Map()
+    excludedPagesRef.current = []
 
     setState((s) => ({
       ...s,
@@ -603,6 +615,10 @@ export function App(): JSX.Element {
       }
     }
 
+    // Remembered for the structure gate, which assembles the book again once
+    // the illustrations are cut and must make the same exclusions.
+    excludedPagesRef.current = skip
+
     complete({
       findings,
       document: assembleBook(transcriptions, { excludePages: skip })
@@ -651,10 +667,9 @@ export function App(): JSX.Element {
             'will be left out of the book.'
         )
       }
-      const skip = state.document?.skipped.map((s) => s.pageIndex) ?? []
       complete({
         document: assembleBook(run.transcriptions, {
-          excludePages: skip,
+          excludePages: excludedPagesRef.current,
           illustrations: cropped.sources
         })
       })

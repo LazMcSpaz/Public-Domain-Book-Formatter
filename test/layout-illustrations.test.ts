@@ -141,6 +141,52 @@ describe('assembleBook — captions and pictures', () => {
     expect(doc.blocks.map((b) => b.text)).toEqual(['Fig. 9.'])
   })
 
+  it('adding pictures changes nothing else about the book', () => {
+    // The structure gate assembles the book a *second* time, once the accepted
+    // regions have been cut, so this pass has to be additive. Anything it
+    // changes about the text is a change nobody asked for and nobody sees.
+    const pages = [
+      page(0, [{ kind: 'paragraph', text: 'The alembick being set', continuesNext: true }]),
+      page(1, [
+        { kind: 'paragraph', text: 'upon a gentle fire.', continuesPrevious: true },
+        { kind: 'caption', text: 'Fig. 1.' }
+      ])
+    ]
+    const before = assembleBook(pages)
+    const after = assembleBook(pages, { illustrations: [crop('i1', 1, 800, 600)] })
+
+    // The caption is the one thing that legitimately leaves the flow.
+    expect(before.blocks.map((b) => b.text)).toEqual([
+      'The alembick being set upon a gentle fire.',
+      'Fig. 1.'
+    ])
+    expect(after.blocks.map((b) => b.text)).toEqual(['The alembick being set upon a gentle fire.'])
+    expect(after.skipped).toEqual(before.skipped)
+  })
+
+  it('does not break a paragraph that runs across a discarded page', () => {
+    // The bug this pins: the second assembly once took its exclusions from
+    // `skipped`, which also lists every page dropped by its *disposition*. A
+    // page dropped that way carries no body text, so the paragraph genuinely
+    // does run across it — handing those back as user exclusions severed the
+    // seam and left two half-sentences.
+    const pages = [
+      page(0, [{ kind: 'paragraph', text: 'The alembick being set', continuesNext: true }]),
+      { ...page(1, []), role: 'blank' as const },
+      page(2, [{ kind: 'paragraph', text: 'upon a gentle fire.', continuesPrevious: true }])
+    ]
+    const joined = assembleBook(pages, { illustrations: [crop('i1', 2, 800, 600)] })
+    expect(joined.blocks.map((b) => b.text)).toEqual(['The alembick being set upon a gentle fire.'])
+
+    // Whereas a page the *user* removed does sever it, because real text went
+    // with it and splicing the halves would fabricate a sentence.
+    const severed = assembleBook(pages, { excludePages: [1] })
+    expect(severed.blocks.map((b) => b.text)).toEqual([
+      'The alembick being set',
+      'upon a gentle fire.'
+    ])
+  })
+
   it('drops a picture whose page the user left out', () => {
     // Its pixels came from a leaf that was removed; embedding them would put
     // back the one thing the user asked to take out.
