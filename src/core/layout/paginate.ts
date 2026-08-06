@@ -22,7 +22,7 @@
  */
 import type { StyleProfile } from '@core/model'
 import { findOrnament, type OrnamentArt } from '@core/ornament'
-import type { BookBlock, BookDocument, Illustration } from '@core/assemble'
+import type { BookBlock, BookDocument, BookSection, Illustration } from '@core/assemble'
 import { effectiveDpi } from '@core/image'
 import { breakParagraph, type Alignment, type Attachment, type BrokenLine } from './break-lines'
 import { prepareFootnotes, type NoteReference, type PreparedNote } from './footnotes'
@@ -96,6 +96,8 @@ export interface LayoutOptions {
 
 /** One line of the table of contents. */
 export interface TocLine {
+  /** The heading this entry is, so its folio can be matched back by identity. */
+  id: string
   title: string
   level: number
   /** The printed folio, or null on the first pass when it isn't known yet. */
@@ -169,7 +171,7 @@ interface Flowable {
   spaceAfter: number
   /** Forces a new recto page — a chapter opening. */
   startsChapter: boolean
-  chapter: { title: string; level: number } | null
+  chapter: { id: string; title: string; level: number } | null
   /** Must not be the last thing on a page: a heading needs text under it. */
   keepWithNext: boolean
   /** Apply widow and orphan control when this item is split across pages. */
@@ -184,6 +186,15 @@ interface Flowable {
   unbreakable?: boolean
   /** Take a page of its own, as a printed plate does. */
   ownPage?: boolean
+  /**
+   * Which part of the book the pages this opens belong to.
+   *
+   * Defaults to `body`. Front matter that *flows* — an introduction, a preface
+   * — is placed by the same loop as the body and differs only in this, which is
+   * what gives it roman numerals: `folioFor` switches on the page's section, not
+   * on where the page falls.
+   */
+  pageSection?: PageSection
   /**
    * How tall the *drawn* content is, in points, for an item that takes its own
    * page. Slots are whole and a picture's height is not, so centring by slot
@@ -409,6 +420,40 @@ function ornamentLines(art: OrnamentArt, ctx: BuildContext): FlowLine[] {
 }
 
 /**
+ * A division the editor wrote, as flowables.
+ *
+ * It opens like a chapter — on a recto, sunk down the page, with the running
+ * head suppressed on its first leaf — because that is what a division of a book
+ * looks like, and it is listed in the contents for the same reason. The only
+ * thing that distinguishes front matter from back is `pageSection`, which is
+ * what `folioFor` reads to number it in roman rather than arabic.
+ */
+function sectionFlowables(
+  section: BookSection,
+  ctx: BuildContext,
+  profile: StyleProfile
+): Flowable[] {
+  const pageSection: PageSection = section.placement === 'front' ? 'front' : 'back'
+
+  const title = buildFlowable(
+    { id: `${section.id}-title`, kind: 'heading', level: 1, text: section.title, sourcePages: [] },
+    ctx,
+    { suppressFirstIndent: true, dropCap: false }
+  )
+
+  const body = section.blocks.map((block, i) =>
+    buildFlowable(block, ctx, {
+      // The first paragraph sits directly under the title, so it is set flush:
+      // there is no preceding paragraph for an indent to distinguish it from.
+      suppressFirstIndent: i === 0,
+      dropCap: profile.dropCap && i === 0
+    })
+  )
+
+  return [title, ...body].map((flow) => ({ ...flow, pageSection }))
+}
+
+/**
  * An illustration and its caption, as one thing that cannot be taken apart.
  *
  * Sizing is entirely determined here, and deliberately so: the placed size is
@@ -631,7 +676,9 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
       spaceAfter: style.spaceAfter,
       startsChapter: isChapter,
       chapter:
-        block.kind === 'heading' ? { title: block.text.trim(), level: block.level ?? 1 } : null,
+        block.kind === 'heading'
+          ? { id: block.id, title: block.text.trim(), level: block.level ?? 1 }
+          : null,
       keepWithNext: block.kind === 'heading',
       orphanControl: block.kind === 'paragraph'
     }
@@ -853,12 +900,31 @@ export function layout(
   // Asides — dedication, epigraph, colophon — sit after the copyright page and
   // before the body, each on its own page, as they are in a printed book.
   for (const aside of doc.asides) {
-    const page = newPage('front')
-    page.kind = 'aside'
-    page.suppressRunningHead = true
     const flow = buildFlowable(aside, ctx, { suppressFirstIndent: true, dropCap: false })
-    const start = Math.floor(slotsPerPage / 3)
-    flow.lines.forEach((line, i) => page.lines.push({ slot: start + i, line }))
+
+    // Sunk a third down the leaf, as a dedication is set. The sink is dropped
+    // on any continuation page: it is there to place the first line, not to
+    // indent the rest.
+    let start = Math.floor(slotsPerPage / 3)
+    let placed = 0
+
+    // Carries on to another leaf when it does not fit. Asides are usually two
+    // lines, which is why this went unnoticed — but every line past the frame
+    // was previously placed at a slot the page does not have, and drew below
+    // the text block and off the bottom of the paper.
+    while (placed < flow.lines.length) {
+      const page = newPage('front')
+      page.kind = 'aside'
+      page.suppressRunningHead = true
+
+      const room = Math.max(1, slotsPerPage - start)
+      const take = Math.min(room, flow.lines.length - placed)
+      for (let i = 0; i < take; i++) {
+        page.lines.push({ slot: start + i, line: flow.lines[placed + i]! })
+      }
+      placed += take
+      start = 0
+    }
   }
 
   // The contents comes last in the front matter, after any dedication, and
@@ -869,7 +935,16 @@ export function layout(
 
   // The body opens on a recto, so a lone verso here becomes a blank leaf.
   if (pages.length % 2 === 1) newPage('front').suppressFolio = true
-  const frontMatterPageCount = pages.length
+
+  /**
+   * Pages built *before* the flow — the display leaves and the contents.
+   *
+   * Distinct from the count of front-matter pages, which is only known after
+   * the flow has run because an introduction flows through the same loop as the
+   * body. This one exists for the preview's page cap, which is about how much
+   * work to do rather than about numbering.
+   */
+  const displayPageCount = pages.length
 
   // --- body ---------------------------------------------------------------
 
@@ -892,6 +967,20 @@ export function layout(
   const anchored = anchorIllustrations(doc.blocks, doc.illustrations)
 
   const flowables: Flowable[] = []
+
+  // Front matter the editor wrote — an introduction, a preface — comes first,
+  // so every page it opens precedes every body page and the arabic numbering
+  // that follows still starts at one.
+  //
+  // Skipped entirely for a sample: the design preview asks for a few body pages
+  // and a four-page introduction in front of them would answer none of the
+  // questions that gate exists to ask.
+  if (options.maxBodyPages === undefined) {
+    for (const section of doc.sections.filter((x) => x.placement === 'front')) {
+      flowables.push(...sectionFlowables(section, ctx, profile))
+    }
+  }
+
   const pushIllustrationsAfter = (blockIndex: number): void => {
     for (const illustration of anchored.get(blockIndex) ?? []) {
       flowables.push(buildIllustrationFlowable(illustration, ctx, slotsPerPage))
@@ -915,6 +1004,14 @@ export function layout(
     )
     pushIllustrationsAfter(i)
   })
+
+  // Back matter the editor wrote, after the body and before the collected
+  // notes — an afterword belongs with the book, an apparatus after it.
+  if (options.maxBodyPages === undefined) {
+    for (const section of doc.sections.filter((x) => x.placement === 'back')) {
+      flowables.push(...sectionFlowables(section, ctx, profile))
+    }
+  }
 
   // Notes with no reference mark cannot go at the foot of any page. When the
   // structure gate asked for them to be kept, they become a short back-matter
@@ -955,14 +1052,20 @@ export function layout(
   let slot = 0
   const maxBodyPages = options.maxBodyPages ?? Infinity
 
-  const bodyPageCount = (): number => pages.length - frontMatterPageCount
+  const bodyPageCount = (): number => pages.length - displayPageCount
+
+  let flowSection: PageSection = 'body'
 
   function openBodyPage(forceRecto: boolean): void {
     if (forceRecto && pages.length % 2 === 1) {
-      const blank = newPage('body')
+      // The blank verso belongs to what it *closes*, not to what follows it.
+      // Marking it with the incoming section would make the last leaf of the
+      // front matter a body page, and the body's arabic numbering would then
+      // start at two.
+      const blank = newPage(pages[pages.length - 1]?.section ?? flowSection)
       blank.suppressRunningHead = true
     }
-    page = newPage('body')
+    page = newPage(flowSection)
     slot = 0
   }
 
@@ -978,6 +1081,7 @@ export function layout(
 
   for (let i = 0; i < flowables.length; i++) {
     const flow = flowables[i]!
+    flowSection = flow.pageSection ?? 'body'
 
     // A plate takes a leaf of its own, so it only needs a fresh page when the
     // current one has been written on. Asking for one unconditionally would
@@ -1135,6 +1239,7 @@ export function layout(
       if (flow.chapter && !headingRecorded) {
         headingRecorded = true
         chapterPages.push({
+          id: flow.chapter.id,
           title: flow.chapter.title,
           level: flow.chapter.level,
           pageIndex: current().index
@@ -1197,6 +1302,17 @@ export function layout(
   }
 
   const trim = trimToPoints(profile.trimSize)
+
+  /**
+   * How many leaves are front matter, counted from the pages themselves.
+   *
+   * Read off `page.section` rather than captured before the flow, because front
+   * matter that flows — an introduction — is produced by the same loop as the
+   * body and so is not countable in advance. Every front page precedes every
+   * body page, so a count is all the arabic numbering needs.
+   */
+  const frontMatterPageCount = pages.filter((p) => p.section === 'front').length
+
   const laidOut: LaidOutPage[] = pages.map((p) =>
     finishPage(p, profile, options.edition, measurer, {
       leading,

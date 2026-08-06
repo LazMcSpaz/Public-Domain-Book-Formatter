@@ -15,6 +15,7 @@ export {
   type BookBlock,
   type Footnote,
   type ChapterEntry,
+  type BookSection,
   type Illustration,
   type IllustrationSource
 } from './assemble-book'

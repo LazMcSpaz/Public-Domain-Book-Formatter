@@ -70,6 +70,8 @@ export interface Footnote {
 }
 
 export interface ChapterEntry {
+  /** The id of the block this heading is, so the contents can match on it. */
+  id: string
   title: string
   level: number
   /** Index into `blocks` where the chapter starts. */
@@ -124,6 +126,26 @@ export interface Illustration extends IllustrationSource {
   origin?: IllustrationOrigin
 }
 
+/**
+ * Something the *editor* wrote that is a division of the book, not a paragraph
+ * of it — an introduction, a translator's note, an afterword, an appendix.
+ *
+ * A section is not a block and cannot be modelled as one. It flows over as many
+ * pages as it needs, it carries its own title in the contents, and where it sits
+ * decides how it is numbered: front matter is roman and comes before the body,
+ * back matter is arabic and continues after it.
+ *
+ * This is the third thing the app can *add* to a book rather than recover from
+ * one, and the only one long enough to be the differentiating content a
+ * public-domain reprint needs.
+ */
+export interface BookSection {
+  id: string
+  placement: 'front' | 'back'
+  title: string
+  blocks: BookBlock[]
+}
+
 export interface BookDocument {
   /** Body blocks in reading order, seams repaired. */
   blocks: BookBlock[]
@@ -135,6 +157,8 @@ export interface BookDocument {
   asides: BookBlock[]
   /** Confirmed illustrations, in source-page order, with their captions. */
   illustrations: Illustration[]
+  /** Divisions the editor wrote: an introduction, an afterword, an appendix. */
+  sections: BookSection[]
   /** Pages deliberately not transcribed, and why. */
   skipped: { pageIndex: number; role: PageRole; reason: string }[]
 }
@@ -328,6 +352,7 @@ export function assembleBook(
     .map((b, i) => ({ b, i }))
     .filter(({ b }) => b.kind === 'heading')
     .map(({ b, i }) => ({
+      id: b.id,
       title: b.text.trim(),
       level: b.level ?? 1,
       blockIndex: i,
@@ -339,7 +364,8 @@ export function assembleBook(
   // asked to take out.
   illustrations.sort((a, b) => a.pageIndex - b.pageIndex || a.id.localeCompare(b.id))
 
-  return { blocks, footnotes, chapters, asides, illustrations, skipped }
+  // Nothing the scan contains is a section: they are written, never read.
+  return { blocks, footnotes, chapters, asides, illustrations, sections: [], skipped }
 }
 
 /**

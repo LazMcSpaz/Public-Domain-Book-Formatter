@@ -44,25 +44,40 @@ export function layoutWithToc(
   options: LayoutOptions
 ): LaidOutBook {
   if (options.maxBodyPages !== undefined) return layout(doc, profile, measurer, options)
-  if (doc.chapters.length === 0 && options.orphanNotes !== 'collect') {
+  if (doc.chapters.length === 0 && doc.sections.length === 0 && options.orphanNotes !== 'collect') {
     return layout(doc, profile, measurer, options)
   }
 
   // Entries come from the document, not from the first pass's `chapterPages`,
   // so the two passes are laying out provably the same list. Only the folios
   // differ between them.
-  const entries: TocLine[] = doc.chapters.map((chapter) => ({
-    title: chapter.title,
-    level: chapter.level,
-    folio: null
-  }))
+  //
+  // In the order the engine will record them: front matter the editor wrote,
+  // then the book's own chapters, then back matter. Each carries the id of the
+  // heading it is, because the folios are matched back by *identity* — pairing
+  // by array position would hand every chapter the wrong number the moment an
+  // introduction was added in front of them.
+  const front = doc.sections.filter((x) => x.placement === 'front')
+  const back = doc.sections.filter((x) => x.placement === 'back')
+
+  const entries: TocLine[] = [
+    ...front.map((section) => ({ id: `${section.id}-title`, title: section.title })),
+    ...doc.chapters.map((chapter) => ({
+      id: chapter.id,
+      title: chapter.title,
+      level: chapter.level
+    })),
+    ...back.map((section) => ({ id: `${section.id}-title`, title: section.title }))
+  ].map((entry) => ({ level: 1, ...entry, folio: null }))
 
   // A collected-endnotes section is a chapter as far as the contents is
   // concerned, and whether there will be one is decided by the document and the
   // option alone — never by a layout — so both passes agree about it.
   if (options.orphanNotes === 'collect') {
     const { orphans } = prepareFootnotes(doc.blocks, doc.footnotes)
-    if (orphans.length > 0) entries.push({ title: ENDNOTES_TITLE, level: 1, folio: null })
+    if (orphans.length > 0) {
+      entries.push({ id: 'endnotes', title: ENDNOTES_TITLE, level: 1, folio: null })
+    }
   }
 
   // Nothing to list after all: a book with no chapters whose notes all found
@@ -71,9 +86,10 @@ export function layoutWithToc(
 
   const first = layout(doc, profile, measurer, { ...options, toc: entries })
 
-  const numbered: TocLine[] = entries.map((entry, i) => {
-    const found = first.chapterPages[i]
-    const folio = found ? (first.pages[found.pageIndex]?.folio ?? null) : null
+  const placed = new Map(first.chapterPages.map((c) => [c.id, c.pageIndex]))
+  const numbered: TocLine[] = entries.map((entry) => {
+    const pageIndex = placed.get(entry.id)
+    const folio = pageIndex === undefined ? null : (first.pages[pageIndex]?.folio ?? null)
     return { ...entry, folio }
   })
 

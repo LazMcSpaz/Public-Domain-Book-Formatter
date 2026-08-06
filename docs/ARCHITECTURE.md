@@ -160,6 +160,19 @@ a wrong word in it and there was nothing to be done about that word.
   rather than by splicing a marker into the text: a marker would show up in the
   proof sheet's edit box, where it reads as a typo and one backspace would
   silently orphan the note.
+- **Divisions the editor wrote are the third addition, and the only one that is
+  not a block.** An introduction or an afterword flows over as many leaves as it
+  needs, carries its title into the contents, and is numbered by where it sits —
+  roman in front matter, arabic at the back. It flows through the _same_ loop as
+  the body and differs only in the `pageSection` its flowables open pages with,
+  which is what `folioFor` reads. The count of front-matter pages is therefore
+  read off `page.section` after the flow rather than captured before it. Its
+  prose is split into paragraphs on blank lines: the convention prose already
+  uses, so there is no markup language to learn.
+- **Contents entries are matched to pages by id, not by array position.** They
+  used to be paired by index, which worked only while the entries were exactly
+  the book's own chapters; a single authored introduction in front of them would
+  have handed every chapter the wrong folio.
 - **The step leads with what was flagged but lists every leaf.** The flagged
   ones are where the app has an opinion; the unflagged ones are where this
   feature earns its existence.

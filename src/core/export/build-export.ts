@@ -162,12 +162,18 @@ export function buildExport(input: BuildExportInput): BuildExportResult {
 
   const notes: string[] = []
 
-  if (document.chapters.length === 0) {
+  // Divisions the editor wrote are listed alongside the book's own chapters, so
+  // a book with an introduction and no chapters still has a contents page —
+  // counting only `chapters` here would tell the user it had none.
+  const listed = document.chapters.length + document.sections.length
+  if (listed === 0) {
     notes.push('No chapters were detected, so the book has no table of contents.')
   } else if (input.typeset) {
+    const own = document.sections.length
     notes.push(
-      `The table of contents lists ${document.chapters.length} heading(s), with the ` +
-        'page numbers this edition actually prints.'
+      `The table of contents lists ${listed} heading(s)` +
+        (own > 0 ? `, ${own} of them yours,` : ',') +
+        ' with the page numbers this edition actually prints.'
     )
   }
 

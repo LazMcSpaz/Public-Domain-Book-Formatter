@@ -356,6 +356,20 @@ const suppliedPictures = await page.locator('.proof-picture').count()
 const suppliedPreview = await page.locator('.proof-picture img').count()
 await shot('05c2c-proof-added-picture')
 
+// An introduction — the differentiation route that is actually *writing*, and
+// the one that needed a real change to the engine: a section is not a block.
+await page.locator('.proof-sections-bar button', { hasText: 'Add an introduction' }).click()
+await page
+  .locator('.proof-section textarea')
+  .first()
+  .fill(
+    'The author of this treatise is unknown to us.\n\n' +
+      'What follows is a reprint of the 1662 text, set afresh for this edition.'
+  )
+await page.waitForTimeout(300)
+const sectionsWritten = await page.locator('.proof-section').count()
+await shot('05c2d-proof-introduction')
+
 // The phone viewport: the scan stacks above the text rather than beside it.
 await page.setViewportSize({ width: 390, height: 844 })
 await page.waitForTimeout(400)
@@ -439,6 +453,12 @@ const illustrationNote = await page
 const noteNote = await page
   .locator('.notes li')
   .filter({ hasText: 'footnote' })
+  .first()
+  .innerText()
+  .catch(() => '')
+const contentsNote = await page
+  .locator('.notes li')
+  .filter({ hasText: 'contents' })
   .first()
   .innerText()
   .catch(() => '')
@@ -551,6 +571,8 @@ console.log(`  proof sheet: ${proofBoxes} editable block(s), ${proofScan} scan(s
 console.log(`  after correcting one: ${correctedCount.replace(/\s+/g, ' ')}`)
 console.log(`  editor's notes attached: ${annotations}`)
 console.log(`  pictures the editor added: ${suppliedPictures} (previewed: ${suppliedPreview})`)
+console.log(`  divisions written: ${sectionsWritten}`)
+console.log(`  the introduction reaches the contents: ${contentsNote.replace(/\s+/g, ' ')}`)
 console.log(`  the note is set at the foot of a page: ${noteNote.replace(/\s+/g, ' ')}`)
 console.log(`  proof sheet mobile overflow: ${proofOverflow}px`)
 console.log(`  export blocked until the title is given: ${blockedWithoutTitle}`)
@@ -585,6 +607,9 @@ process.exit(
     /1 corrected/.test(correctedCount) &&
     annotations === 1 &&
     suppliedPictures === 1 &&
+    sectionsWritten === 1 &&
+    // A book whose only heading is the editor's own still gets a contents page.
+    /1 heading\(s\), 1 of them yours/.test(contentsNote) &&
     suppliedPreview === 1 &&
     // Three pictures now reach the book: two cut from the scan, one supplied.
     /3 illustrations set into the book/.test(illustrationNote) &&

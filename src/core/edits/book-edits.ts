@@ -90,6 +90,22 @@ export type BookEdit =
       sourceHeight: number
       caption?: string
     }
+  /**
+   * A division the editor wrote — an introduction, an afterword, an appendix.
+   *
+   * The whole section travels in one record rather than as a block each. That
+   * matches how one is written (as a piece, not as a list of paragraphs) and it
+   * means removing it is removing one thing. `text` is split into paragraphs on
+   * blank lines, which is the convention prose already uses and so is not a
+   * markup language anyone has to learn.
+   */
+  | {
+      kind: 'section'
+      sectionId: string
+      placement: 'front' | 'back'
+      title: string
+      text: string
+    }
 
 /** How a split block's halves are named, so the ids stay deterministic. */
 const splitId = (id: string, half: number): string => `${id}/${half}`
@@ -117,6 +133,8 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   const authored = new Map<string, BookEdit & { kind: 'note' }>()
   /** Pictures the editor added, keyed so re-captioning one replaces it. */
   const supplied = new Map<string, BookEdit & { kind: 'image' }>()
+  /** Divisions the editor wrote, keyed so editing one replaces it. */
+  const sections = new Map<string, BookEdit & { kind: 'section' }>()
   // Illustration anchors are held as an override map and folded in at the end,
   // so a picture re-anchored to a block that a later edit drops falls back to
   // where the engine would have put it rather than vanishing.
@@ -149,6 +167,11 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
 
     if (edit.kind === 'image') {
       supplied.set(edit.imageId, edit)
+      continue
+    }
+
+    if (edit.kind === 'section') {
+      sections.set(edit.sectionId, edit)
       continue
     }
 
@@ -278,6 +301,16 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   return {
     ...doc,
     blocks,
+    sections: [...sections.values()]
+      // A section with no prose is not a section. Its title alone would print
+      // as a division of the book with nothing in it.
+      .map((section) => ({
+        id: section.sectionId,
+        placement: section.placement,
+        title: section.title.trim() || 'Introduction',
+        blocks: paragraphsOf(section.text, section.sectionId)
+      }))
+      .filter((section) => section.blocks.length > 0),
     footnotes,
     illustrations: [...illustrations, ...suppliedIllustrations],
     // Chapters are derived from the blocks, so retyping a paragraph into a
@@ -288,12 +321,34 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   }
 }
 
+/**
+ * Prose split into paragraphs on blank lines.
+ *
+ * The convention prose already uses, so nobody has to learn a markup language
+ * to write an introduction — and a single run of text with no paragraph breaks
+ * is a wall, which is what a plain textarea would otherwise produce.
+ */
+function paragraphsOf(text: string, sectionId: string): BookBlock[] {
+  return text
+    .split(/\n\s*\n/u)
+    .map((part) => part.replace(/\s+/gu, ' ').trim())
+    .filter((part) => part.length > 0)
+    .map((part, i) => ({
+      id: `${sectionId}/b${i}`,
+      kind: 'paragraph' as const,
+      text: part,
+      // Written, not read: there is no leaf behind it to point at.
+      sourcePages: []
+    }))
+}
+
 /** Chapter entries, derived from whatever the blocks now are. */
 function chaptersOf(blocks: readonly BookBlock[]): BookDocument['chapters'] {
   return blocks
     .map((b, i) => ({ b, i }))
     .filter(({ b }) => b.kind === 'heading')
     .map(({ b, i }) => ({
+      id: b.id,
       title: b.text.trim(),
       level: b.level ?? 1,
       blockIndex: i,
@@ -309,7 +364,7 @@ function chaptersOf(blocks: readonly BookBlock[]): BookDocument['chapters'] {
  * else that was written before it existed.
  */
 export function blockOf(edit: BookEdit): string | null {
-  if (edit.kind === 'anchor' || edit.kind === 'image') return null
+  if (edit.kind === 'anchor' || edit.kind === 'image' || edit.kind === 'section') return null
   return edit.blockId
 }
 
@@ -320,6 +375,7 @@ export function countEdited(edits: readonly BookEdit[]): number {
     if (edit.kind === 'anchor') touched.add(edit.illustrationId)
     else if (edit.kind === 'note') touched.add(edit.noteId)
     else if (edit.kind === 'image') touched.add(edit.imageId)
+    else if (edit.kind === 'section') touched.add(edit.sectionId)
     else touched.add(edit.blockId)
   }
   return touched.size
@@ -339,7 +395,8 @@ export function withEdit(edits: readonly BookEdit[], edit: BookEdit): BookEdit[]
     edit.kind === 'retype' ||
     edit.kind === 'anchor' ||
     edit.kind === 'note' ||
-    edit.kind === 'image'
+    edit.kind === 'image' ||
+    edit.kind === 'section'
   if (!collapsible) return [...edits, edit]
 
   const target = targetOf(edit)
@@ -358,5 +415,6 @@ function targetOf(edit: BookEdit): string {
   if (edit.kind === 'anchor') return edit.illustrationId
   if (edit.kind === 'note') return edit.noteId
   if (edit.kind === 'image') return edit.imageId
+  if (edit.kind === 'section') return edit.sectionId
   return edit.blockId
 }

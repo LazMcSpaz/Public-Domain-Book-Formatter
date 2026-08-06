@@ -188,8 +188,16 @@ export interface LaidOutBook {
   /** Trim dimensions, so a renderer needn't re-parse the trim token. */
   widthPt: number
   heightPt: number
-  /** Where each chapter opens, for a TOC with measured page numbers. */
-  chapterPages: { title: string; level: number; pageIndex: number }[]
+  /**
+   * Where each heading opens, for a contents page with measured numbers.
+   *
+   * Carries the id it came from so the contents can match on identity rather
+   * than on position: sections the editor wrote are recorded here too, at the
+   * front and at the back, and a contents that paired entries to pages by array
+   * index would silently hand every chapter the wrong folio the moment an
+   * introduction was added.
+   */
+  chapterPages: { id: string; title: string; level: number; pageIndex: number }[]
   /** Fonts actually used, so an embedder knows what to subset. */
   fontsUsed: FontRef[]
   /** Lines that would not fit their measure. Empty is the good case, and real. */

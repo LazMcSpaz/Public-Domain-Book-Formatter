@@ -335,6 +335,25 @@ function parseEdits(raw: unknown): BookEdit[] {
         }
         break
       }
+      case 'section': {
+        const sectionId = str(value['sectionId'], '')
+        const placement = value['placement']
+        if (
+          sectionId &&
+          (placement === 'front' || placement === 'back') &&
+          typeof value['title'] === 'string' &&
+          typeof value['text'] === 'string'
+        ) {
+          out.push({
+            kind: 'section',
+            sectionId,
+            placement,
+            title: value['title'],
+            text: value['text']
+          })
+        }
+        break
+      }
       case 'note': {
         const noteId = str(value['noteId'], '')
         if (

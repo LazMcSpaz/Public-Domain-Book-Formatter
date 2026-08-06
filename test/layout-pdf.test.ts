@@ -119,6 +119,7 @@ const DOCUMENT: BookDocument = {
   chapters: [],
   asides: [],
   illustrations: [],
+  sections: [],
   skipped: []
 }
 

@@ -214,6 +214,14 @@ export function ProofSheet({
   const removeImage = (imageId: string): void =>
     onChange(edits.filter((e) => e.kind !== 'image' || e.imageId !== imageId))
 
+  /** The divisions the editor has written, in the order they will be set. */
+  const sections = useMemo(
+    () => edits.filter((e): e is BookEdit & { kind: 'section' } => e.kind === 'section'),
+    [edits]
+  )
+  const removeSection = (sectionId: string): void =>
+    onChange(edits.filter((e) => e.kind !== 'section' || e.sectionId !== sectionId))
+
   /** The caret in a block's text box, for "put it where I am looking". */
   const caretOf = (el: Element | null): number =>
     Number(el?.closest('.proof-block')?.querySelector('textarea')?.dataset['caret'] ?? '0')
@@ -469,6 +477,74 @@ export function ProofSheet({
           ) : null}
         </div>
       </div>
+
+      {/* Divisions belong to the book rather than to any one leaf, so they sit
+          below the sheet and stay put as the user pages through it. */}
+      <div className="proof-sections">
+        <div className="proof-sections-bar">
+          <span className="proof-annotation-label">Writing of your own</span>
+          <span className="proof-actions">
+            <button type="button" onClick={() => onChange([...edits, newSection('front')])}>
+              Add an introduction
+            </button>
+            <button type="button" onClick={() => onChange([...edits, newSection('back')])}>
+              Add an afterword
+            </button>
+          </span>
+        </div>
+
+        {sections.length === 0 ? (
+          <p className="proof-note">
+            An introduction or an afterword of your own is set as a division of the book, listed in
+            the contents — and is what makes a public-domain reprint yours.
+          </p>
+        ) : null}
+
+        {sections.map((section) => (
+          <div key={section.sectionId} className="proof-section">
+            <div className="proof-block-bar">
+              <input
+                type="text"
+                className="proof-section-title"
+                value={section.title}
+                aria-label="Title of this division"
+                onChange={(e) => push({ ...section, title: e.target.value })}
+              />
+              <span className="proof-seam">
+                {section.placement === 'front' ? 'before the book' : 'after the book'}
+              </span>
+              <span className="proof-actions">
+                <button type="button" onClick={() => removeSection(section.sectionId)}>
+                  Remove
+                </button>
+              </span>
+            </div>
+            <textarea
+              value={section.text}
+              spellCheck
+              rows={8}
+              placeholder={
+                'Write here. Leave a blank line between paragraphs — the book is set from ' +
+                'them, so there is no formatting to learn.'
+              }
+              aria-label={`Text of ${section.title}`}
+              onChange={(e) => push({ ...section, text: e.target.value })}
+            />
+          </div>
+        ))}
+      </div>
     </div>
   )
+}
+
+/** A fresh division, named so the editor can see what it will be called. */
+function newSection(placement: 'front' | 'back'): BookEdit {
+  return {
+    kind: 'section',
+    // Minted from the clock so an id is never reused after one is removed.
+    sectionId: `sec${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`,
+    placement,
+    title: placement === 'front' ? 'Introduction' : 'Afterword',
+    text: ''
+  }
 }

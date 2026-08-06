@@ -225,6 +225,46 @@ describe('buildExport — the structure gate’s footnote choice', () => {
   })
 })
 
+describe('buildExport — a book whose only heading is the editor’s own', () => {
+  it('still has a table of contents, and says whose headings are in it', () => {
+    // Counting only the book's own chapters said "no table of contents" for a
+    // book that demonstrably had one, because the engine lists sections too.
+    const doc = assembleBook([page(0, [{ kind: 'paragraph', text: 'Plain prose.' }])])
+    const withIntro = {
+      ...doc,
+      sections: [
+        {
+          id: 'intro',
+          placement: 'front' as const,
+          title: 'Introduction',
+          blocks: [{ id: 'intro/b0', kind: 'paragraph' as const, text: 'Mine.', sourcePages: [] }]
+        }
+      ]
+    }
+    const { notes } = buildExport({
+      document: withIntro,
+      profile: defaultStyleProfile(),
+      edition: edition(),
+      estimatedPageCount: 100,
+      typeset: { pageCount: 40, warnings: [] }
+    })
+    const text = notes.join(' ')
+    expect(text).not.toContain('no table of contents')
+    expect(text).toContain('1 heading(s), 1 of them yours')
+  })
+
+  it('still says there is none when there is nothing to list', () => {
+    const { notes } = buildExport({
+      document: assembleBook([page(0, [{ kind: 'paragraph', text: 'Plain prose.' }])]),
+      profile: defaultStyleProfile(),
+      edition: edition(),
+      estimatedPageCount: 100,
+      typeset: { pageCount: 40, warnings: [] }
+    })
+    expect(notes.join(' ')).toContain('no table of contents')
+  })
+})
+
 describe('buildExport — the account it gives of the pictures', () => {
   const illustrated = () =>
     assembleBook(

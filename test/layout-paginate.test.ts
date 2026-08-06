@@ -47,7 +47,15 @@ const PROSE =
   )
 
 function doc(blocks: BookBlock[], asides: BookBlock[] = []): BookDocument {
-  return { blocks, footnotes: [], chapters: [], asides, illustrations: [], skipped: [] }
+  return {
+    blocks,
+    footnotes: [],
+    chapters: [],
+    asides,
+    illustrations: [],
+    sections: [],
+    skipped: []
+  }
 }
 
 function run(document: BookDocument, over: Partial<StyleProfile> = {}) {
@@ -484,5 +492,123 @@ describe('layout — chapter ornaments', () => {
 
   it('leaves a plain opener plain', () => {
     expect(ornamented(null).pages.flatMap(ornaments)).toHaveLength(0)
+  })
+})
+
+describe('layout — divisions the editor wrote', () => {
+  const PROSE_LONG = 'The author of this treatise is wholly unknown to us today. '.repeat(80)
+
+  const withSection = (placement: 'front' | 'back', text = PROSE_LONG): BookDocument => ({
+    ...doc([
+      block('heading', 'Of the Air', 1),
+      block('paragraph', PROSE),
+      block('heading', 'Of Fire', 1),
+      block('paragraph', PROSE)
+    ]),
+    sections: [
+      {
+        id: 'intro',
+        placement,
+        title: placement === 'front' ? 'Introduction' : 'Afterword',
+        blocks: text.split(/\n\s*\n/).map((t, i) => ({
+          id: `intro/b${i}`,
+          kind: 'paragraph' as const,
+          text: t,
+          sourcePages: []
+        }))
+      }
+    ]
+  })
+
+  const pagesOf = (book: LaidOutBook, needle: string) =>
+    book.pages.filter((p) => textOf(p).includes(needle))
+
+  it('sets an introduction in the front matter, in roman numerals', () => {
+    const book = run(withSection('front'))
+    const intro = pagesOf(book, 'wholly unknown')
+    expect(intro.length).toBeGreaterThan(0)
+    for (const page of intro) {
+      expect(page.section).toBe('front')
+      if (page.folio !== null) expect(page.folio).toMatch(/^[ivxlcdm]+$/)
+    }
+  })
+
+  it('still numbers the body from one, after however many front pages', () => {
+    // The count of front matter is read off the pages rather than captured
+    // before the flow, precisely so an introduction cannot shift this.
+    const book = run(withSection('front'))
+    // The first *printed* body leaf. A blank verso may precede it, and belongs
+    // to the front matter it closes rather than to the body it opens.
+    expect(book.pages.find((p) => p.section === 'body' && p.folio !== null)!.folio).toBe('1')
+  })
+
+  it('puts the introduction before the body, not among it', () => {
+    const book = run(withSection('front'))
+    const lastIntro = Math.max(...pagesOf(book, 'wholly unknown').map((p) => p.index))
+    const firstBody = book.pages.find((p) => p.section === 'body')!.index
+    expect(lastIntro).toBeLessThan(firstBody)
+  })
+
+  it('flows over as many leaves as it needs — a section is not one page', () => {
+    expect(pagesOf(run(withSection('front')), 'wholly unknown').length).toBeGreaterThan(1)
+  })
+
+  it('sets an afterword after the body, and keeps arabic numbering running', () => {
+    const book = run(withSection('back'))
+    const after = pagesOf(book, 'wholly unknown')
+    const lastBody = Math.max(...book.pages.filter((p) => p.section === 'body').map((p) => p.index))
+    expect(Math.min(...after.map((p) => p.index))).toBeGreaterThan(lastBody)
+    for (const page of after) {
+      if (page.folio !== null) expect(page.folio).toMatch(/^\d+$/)
+    }
+  })
+
+  it('opens on a recto with its title, as a division of a book does', () => {
+    const book = run(withSection('front'))
+    const opener = book.pages.find((p) => textOf(p).includes('INTRODUCTION'))!
+    expect(opener.side).toBe('recto')
+  })
+
+  it('is left out of a sample, which is asking about body pages', () => {
+    const book = layout(withSection('front'), defaultStyleProfile(), measurer, {
+      edition: EDITION,
+      maxBodyPages: 2
+    })
+    expect(pagesOf(book, 'wholly unknown')).toEqual([])
+  })
+
+  it('changes nothing about a book that has no sections', () => {
+    expect(JSON.stringify(run(doc([block('paragraph', PROSE)])))).toBe(
+      JSON.stringify(run(doc([block('paragraph', PROSE)])))
+    )
+  })
+})
+
+describe('layout — an aside longer than its page', () => {
+  it('carries on to another leaf instead of drawing off the bottom', () => {
+    // Every line past the frame used to be placed at a slot the page does not
+    // have, and drew below the text block and off the paper. Dedications are
+    // two lines, which is why it went unnoticed — but any authored front matter
+    // lands in the same code.
+    const long = 'A dedication of quite unreasonable length, to everyone concerned. '.repeat(60)
+    const book = run(doc([block('paragraph', PROSE)], [block('epigraph', long)]))
+    const asides = book.pages.filter((p) => p.kind === 'aside')
+
+    expect(asides.length).toBeGreaterThan(1)
+    for (const page of asides) {
+      // The aside's own text, not the folio — page furniture legitimately sits
+      // below the text frame.
+      const text = lines(page).filter((l) => l.runs.some((r) => r.text.includes('dedication')))
+      for (const line of text) {
+        expect(line.baselinePt).toBeLessThanOrEqual(page.frame.yPt + page.frame.heightPt + 1)
+      }
+    }
+  })
+
+  it('still sets a short aside on one leaf, sunk down the page', () => {
+    const book = run(doc([block('paragraph', PROSE)], [block('epigraph', 'For my father.')]))
+    const asides = book.pages.filter((p) => p.kind === 'aside')
+    expect(asides).toHaveLength(1)
+    expect(lines(asides[0]!)[0]!.baselinePt).toBeGreaterThan(asides[0]!.frame.yPt + 50)
   })
 })

@@ -660,3 +660,77 @@ describe('applyEdits — an anchor outliving the block it names', () => {
     expect(anchorOf(stale, 'img1')).toBe(stale.blocks.length - 1)
   })
 })
+
+describe('applyEdits — a division the editor wrote', () => {
+  const introduced = (
+    over: Partial<{ placement: 'front' | 'back'; title: string; text: string }> = {}
+  ) =>
+    applyEdits(book(), [
+      {
+        kind: 'section',
+        sectionId: 'intro',
+        placement: over.placement ?? 'front',
+        title: over.title ?? 'Introduction',
+        text:
+          over.text ??
+          'The author of this treatise is unknown.\n\nWhat follows is a reprint of the 1662 text.'
+      }
+    ])
+
+  it('adds a section the scan never contained', () => {
+    const doc = introduced()
+    expect(doc.sections).toHaveLength(1)
+    expect(doc.sections[0]!.title).toBe('Introduction')
+    expect(doc.sections[0]!.placement).toBe('front')
+  })
+
+  it('splits prose into paragraphs on blank lines', () => {
+    // The convention prose already uses, so nobody has to learn a markup
+    // language — and a single unbroken run would set as a wall of text.
+    expect(introduced().sections[0]!.blocks.map((b) => b.text)).toEqual([
+      'The author of this treatise is unknown.',
+      'What follows is a reprint of the 1662 text.'
+    ])
+  })
+
+  it('folds the newlines inside a paragraph, which are wrapping not structure', () => {
+    const doc = introduced({ text: 'One sentence\nwrapped by the box.\n\nA second.' })
+    expect(doc.sections[0]!.blocks.map((b) => b.text)).toEqual([
+      'One sentence wrapped by the box.',
+      'A second.'
+    ])
+  })
+
+  it('leaves the book’s own text completely alone', () => {
+    expect(texts(introduced())).toEqual(texts(book()))
+  })
+
+  it('drops a section with a title and no prose', () => {
+    // Its title alone would print as a division of the book with nothing in it.
+    expect(introduced({ text: '   \n\n  ' }).sections).toEqual([])
+  })
+
+  it('names an untitled section rather than printing a blank heading', () => {
+    expect(introduced({ title: '  ' }).sections[0]!.title).toBe('Introduction')
+  })
+
+  it('replaces an earlier draft rather than adding a second section', () => {
+    const doc = applyEdits(book(), [
+      { kind: 'section', sectionId: 'intro', placement: 'front', title: 'Intro', text: 'First.' },
+      { kind: 'section', sectionId: 'intro', placement: 'front', title: 'Intro', text: 'Second.' }
+    ])
+    expect(doc.sections).toHaveLength(1)
+    expect(doc.sections[0]!.blocks[0]!.text).toBe('Second.')
+  })
+
+  it('keeps a front and a back section apart', () => {
+    const doc = applyEdits(book(), [
+      { kind: 'section', sectionId: 'a', placement: 'front', title: 'Introduction', text: 'One.' },
+      { kind: 'section', sectionId: 'b', placement: 'back', title: 'Afterword', text: 'Two.' }
+    ])
+    expect(doc.sections.map((x) => [x.id, x.placement])).toEqual([
+      ['a', 'front'],
+      ['b', 'back']
+    ])
+  })
+})
