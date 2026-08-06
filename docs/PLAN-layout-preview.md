@@ -1,6 +1,7 @@
 # Plan: real page layout, live preview, and a PDF that isn't a `.tex`
 
 Status: **planned, not started.** Written for a fresh session to pick up.
+Revised after checking what actually exists on npm — three findings changed it.
 
 ## Why
 
@@ -15,7 +16,7 @@ Nothing between them ever renders a page. So the gate can't be judged and the
 output can't be used. Both are the same missing piece: **there is no layout
 engine.**
 
-## The idea
+## The idea (unchanged, and it survived scrutiny)
 
 One layout pass owns everything.
 
@@ -30,36 +31,108 @@ BookDocument + StyleProfile
                                    preview: pdf.js → canvas        download
 ```
 
-**The preview is the PDF.** Not a CSS approximation of it — the actual bytes,
-rendered by pdf.js, which this app already uses for reading scans. There is no
-second renderer, so preview and output cannot drift. That is the whole point.
+**The preview is the PDF.** Not a CSS approximation — the actual bytes,
+rendered by pdf.js, which this app already uses to read scans. One renderer, so
+preview and output cannot drift.
 
-For speed the preview lays out a _sample_ (title page, a chapter opening, a
-dense body spread) into a ~4-page PDF on every style change. The export runs
-the identical code over the whole book.
+The alternative considered and rejected again: render the preview to canvas
+directly and skip the PDF round-trip. Faster, but it reintroduces a second
+renderer and with it the possibility that what you approve isn't what ships.
+The round-trip is the feature.
 
-## Decisions already made
+## What changed after checking npm
 
-- **Own paginator → pdf-lib.** Not browser Print-to-PDF: on iPad Safari the
-  print sheet controls paper size and margins, so exact trim and font embedding
-  — the two things KDP actually checks — aren't guaranteed.
-- **Bundle all seven faces** up front so switching typefaces in the preview is
-  instant.
-- **Stays in the browser.** No server, no CDN at runtime.
+### 1. Don't write the line breaker — TeX's algorithm is on npm
 
-## Blocker to resolve first
+`tex-linebreak` (0.9.0, zero dependencies) is a Knuth–Plass implementation.
+`hypher` (0.2.5) + `hyphenation.en-us` (0.2.1, 44 KB) are Liang's patterns —
+the same ones TeX uses.
 
-**Junicode is not on npm.** The other six are (`@fontsource/*` v5.3.0:
-`eb-garamond`, `libre-baskerville`, `libre-caslon-text`, `crimson-pro`,
-`cardo`, `im-fell-english`). Junicode is the one face chosen for archaic
-glyphs and long-s, so it matters for exactly the books this tool targets.
+This deletes two of the four worries outright. v1 of this plan had "greedy line
+breaking, Knuth–Plass as a distant upgrade" and "budget for hyphenation." Both
+are now a dependency choice made on day one, at TeX quality.
 
-Options, in order of preference:
+The one consequence to absorb up front: Knuth–Plass consumes text as a stream
+of **boxes, glue and penalties**, not "words and widths." `break-lines.ts` must
+be built around that shape from the start — retrofitting it later means
+rewriting the module.
 
-1. Vendor the `.ttf` from the Junicode GitHub release into `public/fonts/`
-   (OFL permits redistribution; keep `OFL.txt` beside it).
-2. Replace it with another OFL face with wide archaic coverage.
-3. Drop to six and say so in the interview copy.
+### 2. `@fontsource` is the wrong font source and would have blocked step 1
+
+`@fontsource/*` ships **only WOFF and WOFF2** — verified, zero `.ttf`/`.otf` in
+the package. pdf-lib + fontkit cannot embed those, so the whole export path
+would have died on the first font.
+
+Use **`@expo-google-fonts/*`**, which ships real `.ttf`. All six of the Google
+families are there. Measured, regular + italic:
+
+| Family            |        Size |
+| ----------------- | ----------: |
+| EB Garamond       |       912 K |
+| Cardo             |       636 K |
+| IM FELL English   |       384 K |
+| Libre Baskerville |       232 K |
+| Crimson Pro       |       216 K |
+| Libre Caslon Text |       192 K |
+| **six families**  | **~2.5 MB** |
+
+That is far cheaper than feared, so bundling all of them is comfortably the
+right call. Still load them **in the background after first paint** rather than
+blocking it — this app already asks for ~23 MB of OCR assets on first use.
+
+**Junicode is on neither registry** (it isn't a Google font). Vendor the `.ttf`
+from its GitHub release into `public/fonts/` with `OFL.txt` beside it. It is
+the one face chosen for archaic glyphs, so it is worth the manual step.
+
+### 3. Small caps are real, and better than v1 assumed
+
+v1 said small caps "cannot be faked — drop them where the family lacks an SC
+face." Wrong on the facts: EB Garamond's TTF advertises `smcp`, `c2sc` and
+`hist` (historical forms). Verified glyph coverage on the same file:
+
+```
+long-s ſ  YES     æ  YES     œ  YES     †  YES     —  YES     ¹  YES     ﬅ  YES
+```
+
+So the archaic characters these books need are present, and real small caps
+exist. The catch is on the drawing side: **pdf-lib's `drawText` applies only
+default OpenType features**, so `smcp` needs fontkit's `layout(text, ['smcp'])`
+and drawing the resulting **glyph IDs** rather than a string. That is a
+known-cost decision, not a blocker — see the open question at the end.
+
+## The four concerns, triaged
+
+The question was whether to work through them before continuing. Two are
+**decisions**, now made at no cost. Two are **constraints on the API shape** —
+they do not need building first, but `paginate.ts` must be _shaped_ for them or
+it gets rewritten later.
+
+| Concern          | Verdict                                                                                                          |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Line quality     | **Decided.** `tex-linebreak`. Model text as boxes/glue/penalties from the start.                                 |
+| Hyphenation      | **Decided.** `hypher` + `hyphenation.en-us`, wired in as penalties.                                              |
+| Footnotes        | **Constraint.** Build later — but make pagination re-runnable against a constraint, never a single forward pass. |
+| TOC page numbers | **Constraint.** Build later — but keep `layout()` a pure function of its inputs so it can simply be run twice.   |
+
+Concretely, the constraint both circular problems impose is the same one:
+
+```ts
+// Pure, re-runnable, no hidden state. Both the footnote re-flow and the
+// two-pass TOC are then just "call it again with different inputs".
+export function layout(doc: BookDocument, style: StyleProfile, m: TextMeasurer): LaidOutPage[]
+```
+
+Footnotes are circular because a note's height reduces the space for body
+lines, which moves the reference, which changes the notes on the page. Reserve
+space as lines are placed, then re-flow once; if two passes don't converge,
+push the note to the next page. Endnotes are the honest fallback.
+
+The TOC is circular because page numbers exist only after layout, and inserting
+TOC pages shifts them. Lay out, collect chapter pages, insert, lay out again.
+Two iterations is standard and enough.
+
+**So: no, don't stop and build all four.** The two decisions are made above. The
+two constraints cost nothing today and everything if ignored.
 
 ## Modules
 
@@ -67,13 +140,13 @@ Follows the existing `core` (pure) / `platform` (browser) split.
 
 ### `src/core/layout/` — pure, no DOM
 
-| File             | Contains                                                             |
-| ---------------- | -------------------------------------------------------------------- |
-| `types.ts`       | `LaidOutPage`, `PositionedLine`, `TextRun`, `PageFrame`              |
-| `measure.ts`     | `TextMeasurer` interface — injectable, so tests need no fonts        |
-| `frames.ts`      | trim + margins + gutter → text-block rect, mirrored for verso/recto  |
-| `break-lines.ts` | line breaking + justification                                        |
-| `paginate.ts`    | flow blocks into frames; running heads, folios, widow/orphan control |
+| File             | Contains                                                                     |
+| ---------------- | ---------------------------------------------------------------------------- |
+| `types.ts`       | `LaidOutPage`, `PositionedLine`, `TextRun`, `PageFrame`                      |
+| `measure.ts`     | `TextMeasurer` interface — injectable, so tests need no fonts                |
+| `frames.ts`      | trim + margins + gutter → text-block rect, mirrored for verso/recto          |
+| `break-lines.ts` | boxes/glue/penalties → `tex-linebreak` → justified lines                     |
+| `paginate.ts`    | flow blocks into frames; running heads, folios, widows/orphans, recto starts |
 
 `TextMeasurer` is the seam that keeps the core pure:
 
@@ -84,23 +157,25 @@ export interface TextMeasurer {
 }
 ```
 
-Tests inject a fake with fixed-width glyphs, so line and page breaks are exact
-integers and assertions are deterministic.
+Tests inject a fake with fixed-width glyphs, so breaks are exact integers and
+assertions are deterministic.
 
 ### `src/platform/browser/`
 
-| File         | Contains                                                                                          |
-| ------------ | ------------------------------------------------------------------------------------------------- |
-| `fonts.ts`   | load font bytes once; expose a fontkit-backed `TextMeasurer` **and** the same bytes for embedding |
-| `pdf-out.ts` | `LaidOutPage[]` → pdf-lib document → `Uint8Array`                                                 |
-| `preview.ts` | sample pages → small PDF → pdf.js → canvas                                                        |
+| File         | Contains                                                                                  |
+| ------------ | ----------------------------------------------------------------------------------------- |
+| `fonts.ts`   | load TTF bytes once; expose a fontkit `TextMeasurer` **and** the same bytes for embedding |
+| `pdf-out.ts` | `LaidOutPage[]` → pdf-lib document → `Uint8Array`                                         |
+| `preview.ts` | sample pages → small PDF → pdf.js → canvas                                                |
 
-One font file serves both measurement and embedding. That single fact is what
-makes the preview trustworthy — measuring with one source and embedding another
-is how WYSIWYG breaks.
+Measure with fontkit's `layout()` — **the same call pdf-lib uses internally to
+encode text.** Kerning and ligatures are then identical by construction, which
+is what makes the preview trustworthy. Measuring with one engine and drawing
+with another is exactly how WYSIWYG breaks.
 
-`pdf-lib` needs `@pdf-lib/fontkit` (v1.1.1, available) and
-`pdfDoc.registerFontkit(fontkit)` before `embedFont` will take a custom face.
+pdf-lib needs `@pdf-lib/fontkit` and `registerFontkit()` before `embedFont`
+will take a custom face. Embed with `{ subset: true }`: it keeps the export
+small and makes the 4-page preview fast, since a sample touches few glyphs.
 `pdf-lib` is currently a **dev** dependency; promote it.
 
 ### `src/app/`
@@ -108,67 +183,61 @@ is how WYSIWYG breaks.
 - `PreviewPane.tsx` — page spreads, live, at the design gate.
 - Design step gains the preview; export step downloads a real PDF.
 
-## The hard parts (do not discover these late)
-
-- **Footnotes are circular.** A note's height reduces the space for body lines,
-  which changes where the reference lands, which changes the notes on the page.
-  Plan: reserve space as lines are placed, then one re-flow pass; if it doesn't
-  converge in two passes, push the note to the next page. Endnotes are the
-  honest fallback.
-- **The TOC needs two passes.** Real page numbers are only known after layout,
-  and inserting TOC pages shifts them. Lay out, collect chapter pages, insert,
-  lay out again. Two iterations is standard and enough.
-- **Greedy line breaking is visibly worse than TeX.** Start greedy, measure the
-  result, and treat Knuth–Plass as the upgrade path — not a prerequisite.
-- **Without hyphenation, justified text on a 5.5in measure gets rivers.** TeX's
-  `en-us` Liang patterns are small and public domain; budget for them.
-- **Small caps.** Most of these families ship no true SC face. Synthesising by
-  scaling capitals looks cheap. Either use the real SC variants where they exist
-  (EB Garamond has one) or drop small caps for families that lack it — do not
-  fake it silently.
-- **Drop caps and ornaments now need real geometry**, not LaTeX macros. The
-  `\lettrine` and `\chapterornament` logic in `emit-body.ts` becomes line-box
-  arithmetic: an initial spanning N lines, with the first N lines indented.
-- **Memory.** A text-only 300-page PDF is small, but `pdf-lib` builds in memory
-  and images will land later. Keep the page loop streaming-friendly.
+Regenerate the preview only when the style actually changes, and debounce it.
+Radio buttons, not keystrokes, so a few hundred milliseconds is fine.
 
 ## What this retires
 
 Once the PDF path is trusted:
 
 - `src/core/typeset/latex-document.ts`, `emit-body.ts`, `escape.ts`
-- `src/core/export/tex-engine.ts` — the `TexEngine` seam exists only because
-  there was no way to make a PDF. There will be.
-- The `.tex` download
+- `src/core/export/tex-engine.ts` — that seam exists only because there was no
+  way to make a PDF. There will be.
+- The `.tex` download.
 
-Keep `.tex` as a secondary "advanced" download during the transition so there
-is always a working path out, then delete it. Do not delete
-`kdp-validate.ts` — it gets _better_, because after real layout the page count
-is measured rather than estimated, and the two `pending` checks become real.
+Keep `.tex` as a secondary "advanced" download during the transition so there is
+always a working path out, then delete it. **Do not delete `kdp-validate.ts`** —
+it gets _better_: after real layout the page count is measured rather than
+estimated, and the two `pending` checks become real.
 
 ## Testing
 
-- **Pure layout**: fake measurer, deterministic assertions on line breaks, page
+- **Pure layout**: fake measurer; deterministic assertions on line breaks, page
   breaks, widow/orphan handling, recto chapter starts.
 - **Real output**: generate a PDF, reopen it with pdf.js, assert the MediaBox is
-  exactly the trim (6×9in = 432×648pt), fonts are embedded, page count matches
-  what layout predicted.
+  exactly the trim (6×9in = 432×648pt), fonts are embedded, and the page count
+  matches what layout predicted. That last assertion is the one that catches
+  measurement drift.
 - **Browser harness**: extend `scripts/screenshot-flow.mjs` to screenshot the
-  preview pane and assert it changes when a style answer changes — the same
-  check already used for the design summary.
+  preview and assert it changes when a style answer changes — the same check
+  already used for the design summary.
 
 ## Sequence
 
 Each step leaves the app working.
 
-1. Fonts + fontkit measurer. Proof: one page of real text as a downloadable PDF.
-2. Line breaking + pagination for body prose. Export switches to PDF.
+1. Fonts + fontkit measurer. Proof: one page of real text as a downloadable PDF
+   whose MediaBox is exactly 6×9in.
+2. `tex-linebreak` + hyphenation over body prose; pagination. Export switches to
+   PDF.
 3. Preview pane at the design gate (sample pages).
 4. Front matter, running heads, folios.
-5. Chapter openers, drop caps, ornaments.
-6. Footnotes.
-7. TOC with measured page numbers.
+5. Chapter openers, drop caps, ornaments — these become line-box arithmetic
+   (an initial spanning N lines, with those N lines indented), not LaTeX macros.
+6. Footnotes (the reserve-and-re-flow loop).
+7. TOC with measured page numbers (the second pass).
 8. Delete the LaTeX path; turn the two `pending` KDP checks into real ones.
+
+## Open questions for the next session
+
+- **Small caps rendering path.** Real `smcp` requires drawing glyph IDs from
+  `fontkit.layout(text, ['smcp'])` instead of `drawText`. Worth it for period
+  running heads and chapter titles, but it is a distinctly lower-level drawing
+  path. Decide in step 1, because it shapes `pdf-out.ts`.
+- **Junicode.** Vendor from GitHub, substitute another OFL face with archaic
+  coverage, or ship six and adjust the interview copy.
+- **Memory on a 300-page export.** A text-only PDF is small, but pdf-lib builds
+  in memory and images land later. Keep the page loop streaming-friendly.
 
 ## Context worth carrying over
 
@@ -177,8 +246,8 @@ Each step leaves the app working.
 - `StyleProfile` (`src/core/model/types.ts`) already carries trim, margins,
   gutter, fonts, `headingStyle`, `runningHeads`, `dropCap`, `ornaments`.
 - `profileFromAnswers()` (`src/core/design`) turns the five interview answers
-  into that profile — the preview should render from its live output, exactly
-  as the summary line does today.
+  into that profile — the preview should render from its live output, exactly as
+  the summary line does today.
 - Path aliases are `@core` and `@platform`, defined in `tsconfig.json`,
   `vite.config.ts` and `vitest.config.ts` — update all three together.
 - CI runs `eslint .`, not `eslint src test`. Run `npm run lint`.
