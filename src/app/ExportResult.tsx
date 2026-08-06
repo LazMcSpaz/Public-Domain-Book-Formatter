@@ -5,17 +5,16 @@
  * gate preview — and a screen this far down the flow is the easiest one to let
  * silently rot.
  *
- * The PDF is the deliverable: the layout engine set these pages and pdf-lib
- * wrote them, both in this tab, so there is nothing left for the user to run.
- * The `.tex` stays as a secondary download during the transition, for anyone
- * who would rather typeset it themselves — it is on its way out, but a working
- * path out of the app should never disappear before its replacement is trusted.
+ * The PDF is the whole deliverable: the layout engine set these pages and
+ * pdf-lib wrote them, both in this tab, so there is nothing left for the user
+ * to run and nothing else to download.
  *
- * `note` is the honest failure path: if the interior could not be built, say
- * why and leave the `.tex` as the way forward rather than showing nothing.
+ * `note` is the honest failure path. When the interior could not be built there
+ * is now no fallback to offer, so saying exactly what went wrong is the only
+ * useful thing this screen can do.
  */
 import type { BuildExportResult } from '@core/export'
-import { downloadPdf, downloadText } from '../platform/browser/download'
+import { downloadPdf } from '../platform/browser/download'
 
 export interface ExportResultProps {
   result: BuildExportResult
@@ -29,27 +28,20 @@ export function ExportResult({ result, pdf, note }: ExportResultProps): JSX.Elem
     <div className="result">
       <div className="q">
         <span className="prompt">
-          {pdf ? 'Your interior is ready' : 'Your typeset source is ready'}
+          {pdf ? 'Your interior is ready' : 'The interior could not be built'}
         </span>
         {note ? <div className="help">{note}</div> : null}
-        <div className="actions">
-          {pdf ? (
+        {pdf ? (
+          <div className="actions">
             <button
               type="button"
               className="primary"
-              onClick={() => downloadPdf(pdf.bytes, result.fileName.replace(/\.tex$/, '.pdf'))}
+              onClick={() => downloadPdf(pdf.bytes, result.fileName)}
             >
               Download the PDF — {pdf.pageCount} pages
             </button>
-          ) : null}
-          <button
-            type="button"
-            className={pdf ? 'ghost' : 'primary'}
-            onClick={() => downloadText(result.tex, result.fileName, 'application/x-tex')}
-          >
-            {pdf ? 'Or the LaTeX source' : `Download ${result.fileName}`}
-          </button>
-        </div>
+          </div>
+        ) : null}
       </div>
 
       {result.notes.length > 0 ? (
@@ -67,7 +59,7 @@ export function ExportResult({ result, pdf, note }: ExportResultProps): JSX.Elem
         <span className="prompt">Checked against KDP’s rules</span>
         <div className="help">
           Your cover needs the final page count for its spine
-          {pdf ? `: ${pdf.pageCount} pages.` : ', which the typeset PDF will tell you.'}
+          {pdf ? `: ${pdf.pageCount} pages.` : ', which the interior would have told you.'}
         </div>
         <ul className="checks">
           {result.validation.checks.map((check) => (

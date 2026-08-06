@@ -21,6 +21,7 @@
  * Pure: no DOM, no I/O. Text measurement arrives through `TextMeasurer`.
  */
 import type { StyleProfile } from '@core/model'
+import { findOrnament, type OrnamentArt } from '@core/ornament'
 import type { BookBlock, BookDocument } from '@core/assemble'
 import { breakParagraph, type Alignment, type Attachment, type BrokenLine } from './break-lines'
 import { prepareFootnotes, type NoteReference, type PreparedNote } from './footnotes'
@@ -70,6 +71,17 @@ export interface LayoutOptions {
    */
   maxBodyPages?: number
   /**
+   * What to do with a note whose reference mark is nowhere in the body.
+   *
+   * `omit` leaves it out — it cannot be set at the foot of a page, because
+   * there is no page to attach it to. `collect` gathers them into a short
+   * back-matter section instead, which is the structure gate's other answer and
+   * the only way the author's words survive at all.
+   *
+   * Either way they are reported. Default `omit`.
+   */
+  orphanNotes?: 'omit' | 'collect'
+  /**
    * Contents entries to set in the front matter. Omit for no contents page.
    *
    * The folios are supplied by the caller because they only exist after a
@@ -85,6 +97,9 @@ export interface TocLine {
   /** The printed folio, or null on the first pass when it isn't known yet. */
   folio: string | null
 }
+
+/** The heading over collected endnotes, and the contents entry for them. */
+export const ENDNOTES_TITLE = 'Notes'
 
 /** How far a chapter title sinks from the top of its page, in line slots. */
 const CHAPTER_SINK_SLOTS = 4
@@ -115,6 +130,14 @@ const MARK_RISE_RATIO = 0.33
 const NOTE_HANG_GAP_RATIO = 0.35
 
 /**
+ * How wide a chapter ornament is set, as a fraction of the measure.
+ *
+ * Under half: a flourish that runs the full width of the text block competes
+ * with the title above it instead of sitting under it.
+ */
+const ORNAMENT_WIDTH_RATIO = 0.45
+
+/**
  * A block turned into placeable lines, with the rules about where it may break.
  * Line x offsets are relative to the *frame*, not the page, because the frame
  * moves between verso and recto and the breaking does not.
@@ -141,6 +164,12 @@ interface FlowLine {
   overfull?: boolean
   /** Notes referenced by this line, which must be set at the foot of its page. */
   noteIds?: string[]
+  /**
+   * A flourish drawn at this slot instead of text. It flows through the slot
+   * machinery like any other line, so it is carried to the next page with the
+   * title it belongs to rather than being stranded by itself.
+   */
+  ornament?: { art: OrnamentArt; widthPt: number }
 }
 
 /** A footnote broken to the measure, ready to be set at the foot of a page. */
@@ -322,6 +351,21 @@ function toFlowLines(
 }
 
 /**
+ * The slots a chapter ornament occupies, the first carrying the art.
+ *
+ * Empty lines after it draw nothing but hold their slots, which is what keeps
+ * the ornament from overlapping the text that follows.
+ */
+function ornamentLines(art: OrnamentArt, ctx: BuildContext): FlowLine[] {
+  const widthPt = ctx.measureWidth * ORNAMENT_WIDTH_RATIO
+  const heightPt = (art.height / art.width) * widthPt
+  const slots = Math.max(1, Math.ceil(heightPt / ctx.leading))
+  return Array.from({ length: slots }, (_, i) =>
+    i === 0 ? { runs: [], ornament: { art, widthPt } } : { runs: [] }
+  )
+}
+
+/**
  * Break one footnote to the measure.
  *
  * Set with a hanging indent: the mark sits at the left edge and every line of
@@ -438,8 +482,13 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
         ? { hyphenate: ctx.hyphenate }
         : {})
     })
+    // A chapter opener may carry a flourish under its title. It belongs to the
+    // heading's own lines so the two can never be separated by a page break.
+    const flourish = isChapter ? findOrnament(ctx.profile.ornaments.chapterOpener) : null
+    const lines = toFlowLines(broken, font, sizePt, [indentLeft], markToNote)
+
     return {
-      lines: toFlowLines(broken, font, sizePt, [indentLeft], markToNote),
+      lines: flourish ? [...lines, ...ornamentLines(flourish, ctx)] : lines,
       spaceBefore: style.spaceBefore,
       spaceAfter: style.spaceAfter,
       startsChapter: isChapter,
@@ -716,6 +765,33 @@ export function layout(
     )
   })
 
+  // Notes with no reference mark cannot go at the foot of any page. When the
+  // structure gate asked for them to be kept, they become a short back-matter
+  // section: the author's words survive, visibly set apart from the notes that
+  // *were* placed, rather than dropped or guessed at a position.
+  const collected = options.orphanNotes === 'collect' ? prepared.orphans : []
+  if (collected.length > 0) {
+    flowables.push(
+      buildFlowable({ kind: 'heading', level: 1, text: ENDNOTES_TITLE, sourcePages: [] }, ctx, {
+        suppressFirstIndent: true,
+        dropCap: false
+      })
+    )
+    for (const note of collected) {
+      flowables.push(
+        buildFlowable(
+          {
+            kind: 'paragraph',
+            text: `${note.originalMarker} ${note.text}`.trim(),
+            sourcePages: []
+          },
+          ctx,
+          { suppressFirstIndent: true, dropCap: false }
+        )
+      )
+    }
+  }
+
   let page: PageBuilder | null = null
   let slot = 0
   const maxBodyPages = options.maxBodyPages ?? Infinity
@@ -941,11 +1017,14 @@ export function layout(
   // closed once the lines referencing its notes have been set. Anything left
   // over never had a reference to attach to, and is reported rather than lost.
   const placedIds = new Set(pages.flatMap((p) => p.noteIds))
+  const collectedIds = new Set(collected.map((note) => note.id))
   const notesDropped = [
-    ...prepared.orphans.map((note) => ({
-      id: note.id,
-      reason: 'no reference mark for this note was found in the text'
-    })),
+    ...prepared.orphans
+      .filter((note) => !collectedIds.has(note.id))
+      .map((note) => ({
+        id: note.id,
+        reason: 'no reference mark for this note was found in the text'
+      })),
     ...[...prepared.notes.values()]
       .filter((note) => !placedIds.has(note.id))
       .map((note) => ({
@@ -962,6 +1041,7 @@ export function layout(
     fontsUsed: collectFonts(laidOut),
     warnings,
     notesPlaced: placedIds.size,
+    notesCollected: collected.length,
     notesDropped
   }
 }
@@ -990,6 +1070,19 @@ function finishPage(
     const baseline = frame.yPt + ctx.ascent + slot * ctx.leading
     const runs = runsAt(line, frame.xPt)
     if (runs.length > 0) items.push({ kind: 'line', baselinePt: baseline, runs })
+
+    if (line.ornament) {
+      const { art, widthPt } = line.ornament
+      items.push({
+        kind: 'ornament',
+        // Centred in the measure, and hung from the top of its slot rather
+        // than a baseline — it has no baseline to sit on.
+        xPt: frame.xPt + (frame.widthPt - widthPt) / 2,
+        yPt: frame.yPt + slot * ctx.leading,
+        scale: widthPt / art.width,
+        art
+      })
+    }
   }
 
   ctx.drawNotes(page, items)

@@ -31,6 +31,8 @@ export interface Interior {
   chapterPages: { title: string; level: number; pageIndex: number }[]
   /** How many footnotes were set at the foot of a page. */
   notesPlaced: number
+  /** Notes gathered into a back-matter section for want of a reference mark. */
+  notesCollected: number
   /** Notes that could not be set, and why — never dropped silently. */
   notesDropped: { id: string; reason: string }[]
   /** Families asked for but unavailable, mapped to what was used instead. */
@@ -41,6 +43,11 @@ export interface InteriorOptions {
   edition: LayoutEdition
   /** Called as pages are written, so a long book can show progress. */
   onProgress?: (done: number, total: number) => void
+  /**
+   * What to do with a note whose reference mark was never found — the structure
+   * gate's answer. Default `omit`.
+   */
+  orphanNotes?: 'omit' | 'collect'
 }
 
 export async function renderInterior(
@@ -57,7 +64,8 @@ export async function renderInterior(
   // first.
   const book = layoutWithToc(doc, profile, fonts, {
     edition: options.edition,
-    hyphenate: englishHyphenator()
+    hyphenate: englishHyphenator(),
+    orphanNotes: options.orphanNotes ?? 'omit'
   })
 
   const pdf = await renderPdf(book, fonts, {
@@ -82,6 +90,7 @@ export async function renderInterior(
     warnings: book.warnings,
     chapterPages: book.chapterPages,
     notesPlaced: book.notesPlaced,
+    notesCollected: book.notesCollected,
     notesDropped: book.notesDropped,
     substitutions: [...fonts.substitutions.entries()]
   }

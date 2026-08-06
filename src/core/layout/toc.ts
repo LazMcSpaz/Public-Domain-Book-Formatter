@@ -24,7 +24,8 @@
  */
 import type { StyleProfile } from '@core/model'
 import type { BookDocument } from '@core/assemble'
-import { layout, type LayoutOptions, type TocLine } from './paginate'
+import { ENDNOTES_TITLE, layout, type LayoutOptions, type TocLine } from './paginate'
+import { prepareFootnotes } from './footnotes'
 import type { TextMeasurer } from './measure'
 import type { LaidOutBook } from './types'
 
@@ -42,7 +43,8 @@ export function layoutWithToc(
   measurer: TextMeasurer,
   options: LayoutOptions
 ): LaidOutBook {
-  if (doc.chapters.length === 0 || options.maxBodyPages !== undefined) {
+  if (options.maxBodyPages !== undefined) return layout(doc, profile, measurer, options)
+  if (doc.chapters.length === 0 && options.orphanNotes !== 'collect') {
     return layout(doc, profile, measurer, options)
   }
 
@@ -54,6 +56,18 @@ export function layoutWithToc(
     level: chapter.level,
     folio: null
   }))
+
+  // A collected-endnotes section is a chapter as far as the contents is
+  // concerned, and whether there will be one is decided by the document and the
+  // option alone — never by a layout — so both passes agree about it.
+  if (options.orphanNotes === 'collect') {
+    const { orphans } = prepareFootnotes(doc.blocks, doc.footnotes)
+    if (orphans.length > 0) entries.push({ title: ENDNOTES_TITLE, level: 1, folio: null })
+  }
+
+  // Nothing to list after all: a book with no chapters whose notes all found
+  // their references. One pass, and no contents page.
+  if (entries.length === 0) return layout(doc, profile, measurer, options)
 
   const first = layout(doc, profile, measurer, { ...options, toc: entries })
 

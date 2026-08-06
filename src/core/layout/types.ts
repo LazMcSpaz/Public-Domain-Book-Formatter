@@ -16,6 +16,8 @@
  * Pure types — no logic, no DOM.
  */
 
+import type { OrnamentArt } from '@core/ornament'
+
 /** Points per inch. The one conversion constant in the layout engine. */
 export const PT_PER_INCH = 72
 
@@ -57,7 +59,24 @@ export interface TextRun {
   risePt?: number
 }
 
-/** A horizontal rule — used for ornament fallbacks and page furniture. */
+/**
+ * A printer's flourish, placed and scaled but not yet drawn.
+ *
+ * The art travels with the item rather than an id, so a renderer needs no
+ * lookup table — the same property that lets a `LaidOutPage` be drawn by
+ * anything holding a font table and nothing else.
+ */
+export interface OrnamentItem {
+  kind: 'ornament'
+  /** Top-left of the ornament's box, in page coordinates (y downward). */
+  xPt: number
+  yPt: number
+  /** Multiplier from the art's own coordinates to points. */
+  scale: number
+  art: OrnamentArt
+}
+
+/** A horizontal rule — the footnote separator, and page furniture. */
 export interface RuleShape {
   kind: 'rule'
   xPt: number
@@ -75,7 +94,7 @@ export interface PositionedLine {
 }
 
 /** Everything that can appear on a page. Extended, not replaced, by later work. */
-export type PageItem = PositionedLine | RuleShape
+export type PageItem = PositionedLine | RuleShape | OrnamentItem
 
 /**
  * The rectangle body text flows inside, in page coordinates.
@@ -145,6 +164,11 @@ export interface LaidOutBook {
   warnings: LayoutWarning[]
   /** How many footnotes were set at the foot of a page. */
   notesPlaced: number
+  /**
+   * Notes gathered into a back-matter section because no reference mark for
+   * them was found. In the book, just not at the foot of a page.
+   */
+  notesCollected: number
   /**
    * Notes that were not set, and why. A note dropped without a word is the
    * failure this whole reporting path exists to prevent.

@@ -10,7 +10,8 @@ import {
 } from '@core/design'
 import { BUILTIN_ORNAMENTS, findOrnament } from '@core/ornament'
 import { normalizeStyleProfile } from '@core/style'
-import { parseTrimSize, validateKdp } from '@core/typeset'
+import { validateKdp } from '@core/typeset'
+import { trimToPoints, PT_PER_INCH } from '@core/layout'
 
 const base: DesignAnswers = {
   kind: 'novel',
@@ -57,7 +58,8 @@ describe('trim sizes', () => {
 
   it('produces trims the typesetter can actually parse', () => {
     for (const kind of ['novel', 'nonfiction', 'poetry', 'illustrated', 'reference'] as const) {
-      const parsed = parseTrimSize(trimForKind(kind))
+      const pt = trimToPoints(trimForKind(kind))
+      const parsed = { widthIn: pt.widthPt / PT_PER_INCH, heightIn: pt.heightPt / PT_PER_INCH }
       expect(parsed.widthIn).toBeGreaterThan(0)
       expect(parsed.heightIn).toBeGreaterThan(parsed.widthIn)
     }

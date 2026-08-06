@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  ENDNOTES_TITLE,
   fixedWidthMeasurer,
   layout,
   layoutWithToc,
@@ -200,6 +201,107 @@ describe('layout — footnotes', () => {
     const book = run(monster)
     expect(book.pages.length).toBeGreaterThan(0)
     expect(book.warnings.some((w) => w.text.includes('longer than the page'))).toBe(true)
+  })
+})
+
+describe('layout — notes with no reference mark', () => {
+  const stranded = build([
+    page(0, [
+      { kind: 'heading', text: 'Of the Air', level: 1 },
+      { kind: 'paragraph', text: `${PROSE.repeat(3)}A first observation.1 ${PROSE.repeat(2)}` },
+      { kind: 'footnote', text: 'See Croll, Basilica Chymica, lib. ii.', marker: '1' },
+      { kind: 'footnote', text: 'Concerning the weight of the aire.', marker: '9' }
+    ])
+  ])
+
+  const collect = (): LaidOutBook =>
+    layout(stranded, defaultStyleProfile(), measurer, {
+      edition: EDITION,
+      orphanNotes: 'collect'
+    })
+
+  it('sets them as a back-matter section rather than dropping them', () => {
+    const book = collect()
+    expect(book.notesCollected).toBe(1)
+    expect(book.notesDropped).toEqual([])
+    expect(bookText(book)).toContain('Concerning the weight of the aire.')
+  })
+
+  it('heads the section, so a reader can see what those paragraphs are', () => {
+    const text = bookText(collect())
+    expect(text.toUpperCase()).toContain(ENDNOTES_TITLE.toUpperCase())
+  })
+
+  it('keeps the note’s own printed marker — the only clue to where it belonged', () => {
+    // Renumbering would be a lie: nothing in the text points at this note, so
+    // the "9" the original printer set is all the placement information there is.
+    expect(bookText(collect())).toContain('9 Concerning')
+  })
+
+  it('leaves the notes that *were* placed at the foot of their page', () => {
+    const book = collect()
+    expect(book.notesPlaced).toBe(1)
+    const foot = book.pages.find((p) => textOf(p).includes('Basilica'))!
+    // Same page as the reference, not swept into the back matter.
+    expect(textOf(foot)).toContain('A first observation.')
+  })
+
+  it('reports them as dropped when the user asked for them to be left out', () => {
+    // The gate's other answer. They must not appear in the book — and must not
+    // disappear from the report either, which is the failure that matters.
+    const book = layout(stranded, defaultStyleProfile(), measurer, {
+      edition: EDITION,
+      orphanNotes: 'omit'
+    })
+    expect(book.notesCollected).toBe(0)
+    expect(bookText(book)).not.toContain('weight of the aire')
+    expect(book.notesDropped).toHaveLength(1)
+    expect(book.notesDropped[0]!.reason).toContain('no reference mark')
+  })
+
+  it('adds nothing when every note found its reference', () => {
+    const clean = build([
+      page(0, [
+        { kind: 'paragraph', text: `${PROSE}An observation.1 ${PROSE}` },
+        { kind: 'footnote', text: 'See Croll.', marker: '1' }
+      ])
+    ])
+    const book = layout(clean, defaultStyleProfile(), measurer, {
+      edition: EDITION,
+      orphanNotes: 'collect'
+    })
+    expect(book.notesCollected).toBe(0)
+    expect(bookText(book)).not.toContain(ENDNOTES_TITLE.toUpperCase())
+  })
+
+  it('lists the collected section in the contents, with a measured number', () => {
+    const book = layoutWithToc(stranded, defaultStyleProfile(), measurer, {
+      edition: EDITION,
+      orphanNotes: 'collect'
+    })
+    const contents = book.pages.find((p) => p.kind === 'contents')!
+    expect(textOf(contents).toUpperCase()).toContain(ENDNOTES_TITLE.toUpperCase())
+
+    // The entry has to carry a folio, or it is an index entry with no index.
+    const heading = book.chapterPages.find((c) => c.title === ENDNOTES_TITLE)!
+    expect(book.pages[heading.pageIndex]!.folio).not.toBeNull()
+  })
+
+  it('gives a book with nothing but stranded notes a contents page anyway', () => {
+    // No chapters, so the single-pass shortcut would otherwise skip the
+    // contents — and the one section this book has would go unlisted.
+    const noChapters = build([
+      page(0, [
+        { kind: 'paragraph', text: PROSE.repeat(3) },
+        { kind: 'footnote', text: 'Nowhere referenced.', marker: '4' }
+      ])
+    ])
+    const book = layoutWithToc(noChapters, defaultStyleProfile(), measurer, {
+      edition: EDITION,
+      orphanNotes: 'collect'
+    })
+    expect(book.pages.some((p) => p.kind === 'contents')).toBe(true)
+    expect(book.notesCollected).toBe(1)
   })
 })
 

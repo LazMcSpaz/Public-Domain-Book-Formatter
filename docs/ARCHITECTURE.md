@@ -13,7 +13,7 @@ Open PDF
   │    word crops             ─┘
   │    lexicon harvest (book-wide, frequency-driven)
   │
-  ├─ GATE 1 ▸ confirm the book        ← identity + term review (built)
+  ├─ GATE 1 ▸ confirm how to read it  ← orthography + term review
   │
   ├─ TRANSCRIBE  (vision model pass)
   │    per page: role + clean text + structure tags + uncertain spans
@@ -21,7 +21,7 @@ Open PDF
   ├─ GATE 2 ▸ check uncertain spots   ← where model & OCR disagree
   ├─ GATE 3 ▸ confirm structure       ← chapters, footnotes, images
   ├─ DESIGN  ▸ interview → layout → real pages, live
-  └─ EXPORT  ▸ layout → PDF → KDP validation
+  └─ EXPORT  ▸ confirm title/author (prefilled) → PDF → KDP validation
 ```
 
 Gates are the only stops. Everything between them runs unattended.
@@ -37,11 +37,11 @@ Gates are the only stops. Everything between them runs unattended.
 | **Wizard**     | `src/core/wizard`      | Question contract, step machine                   | no            |
 | Image          | `src/core/image`       | Region detection, DPI math, op engine             | no            |
 | **Layout**     | `src/core/layout`      | Frames, line breaking, pagination, notes, TOC     | no            |
-| Typeset        | `src/core/typeset`     | LaTeX document + body emitter, KDP validation     | no            |
+| Typeset        | `src/core/typeset`     | KDP validation                                    | no            |
 | Style          | `src/core/style`       | Profiles, resolution                              | no            |
 | **Design**     | `src/core/design`      | Interview answers → a complete style profile      | no            |
-| **Export**     | `src/core/export`      | Book + style + edition → LaTeX; the TeX seam      | no            |
-| Ornament       | `src/core/ornament`    | SVG ornament library                              | no            |
+| **Export**     | `src/core/export`      | Edition details, file naming, the honest report   | no            |
+| Ornament       | `src/core/ornament`    | Vector ornament library (paths, no files)         | no            |
 | **Platform**   | `src/platform/browser` | PDF.js, Tesseract.js, fonts, PDF writer, preview  | **yes**       |
 | **App**        | `src/app`              | Wizard shell, question renderer, page preview     | **yes**       |
 
@@ -91,6 +91,40 @@ supplies one backed by fontkit — _the same call pdf-lib makes to encode text_ 
 so what the engine measures and what the PDF draws agree by construction. Tests
 inject a fixed-width fake, so line breaks are exact integers and no font is
 needed to assert on them.
+
+## Never ask what the app can find out
+
+A question is asked at the point where the app can _help_ answer it, not at the
+point where the answer is first mentioned. The title, the author and the year of
+the original used to be Gate 1's first three fields — asked before anything had
+read the title page, so all three came up blank and the user had to go and open
+the PDF somewhere else to fill them in. On a phone that means leaving the
+browser.
+
+They are asked at the export gate now. By then the vision pass has read the
+original front matter, so the boxes arrive already filled with what it found,
+with the scan of the title page beside them, and confirming is a glance. The
+gate is not merely later: it is the first moment the app has something to offer.
+
+Gate 1 keeps what it can genuinely ask at that point — how the original spelling
+should be handled, and the harvested vocabulary, both of which shape the paid
+pass that follows and neither of which the app could decide alone.
+
+## Ornaments and endnotes
+
+- **Ornaments are vector data, not files.** `src/core/ornament` holds path data
+  in each ornament's own coordinates; `layout()` places one under a chapter
+  title as an `OrnamentItem` carrying the art itself, and `pdf-out` draws it with
+  `drawSvgPath`. The item claims whole baseline slots, so the text under it moves
+  down rather than being overprinted. A profile naming an ornament that no longer
+  exists lays out without one — a missing flourish must never cost a chapter.
+- **Endnotes are the honest home for a note with no reference.** A note whose
+  marker appears nowhere in the body cannot be set at the foot of any page. The
+  structure gate asks; `orphanNotes: 'collect'` appends a short "Notes" section
+  after the body, keeping each note's _original_ printed marker — renumbering it
+  would invent a placement nothing in the text supports — and lists that section
+  in the contents. The other answer drops them, and `notesDropped` says so on the
+  export screen. What must never happen is silence.
 
 ## What is saved, and what is not
 
@@ -145,19 +179,9 @@ source of truth. It stays for two reasons that a language model can't provide:
   region detection, DPI maths and a non-destructive op engine, and nothing
   imports any of it yet — which also makes the design interview's "heavily
   illustrated" answer a trim size and nothing more.
-- **Ornaments never reach the PDF.** The design gate offers a chapter-opener
-  ornament, `RuleShape` exists in the page model, and only the LaTeX path reads
-  `profile.ornaments` — so "plain" and "ornamented" currently print the same.
-- **Endnotes are not collected.** A note whose reference mark is nowhere in the
-  body cannot be set at the foot of a page. The LaTeX path gathered those at the
-  end of the book; the PDF path reports them on the export screen instead.
 - **Small capitals are not real.** `headingStyle.smallCaps` sets ordinary
   capitals. The fonts do carry `smcp`, but drawing it needs glyph-level output
   rather than `drawText`, and synthesising it by scaling capitals — what cheap
   reprints do — is worse than not offering it.
 - **Ligatures are switched off**, because pdf-lib writes no width for a glyph
   that answers to no code point. See `src/platform/browser/fonts.ts`.
-- **The LaTeX path is still present.** `buildExport` still emits XeLaTeX source
-  and the export screen offers it as a secondary download. It is scheduled for
-  deletion once the PDF path has been used on real books; a working way out of
-  the app should not disappear before its replacement is trusted.

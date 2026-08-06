@@ -102,19 +102,16 @@ describe('step ordering', () => {
 })
 
 describe('gate 1 questions', () => {
-  it('pre-fills identity from what was read off the title page', () => {
-    const qs = stepById('gate-identity').questions(reconDone())
-    const title = qs.find((q) => q.id === 'title')
-    expect(title?.type).toBe('text')
-    expect((title as { defaultValue: string }).defaultValue).toBe('The Alchemist His Practise')
-    expect(qs.find((q) => q.id === 'author')).toBeDefined()
-    expect(qs.find((q) => q.id === 'originalYear')).toBeDefined()
-  })
-
-  it('attaches the title-page image as evidence', () => {
-    const qs = stepById('gate-identity').questions(reconDone())
-    const title = qs.find((q) => q.id === 'title')!
-    expect(title.evidence?.[0]).toMatchObject({ kind: 'image', src: 'page:0' })
+  // Gate 1 runs before anything has *read* the title page, so asking for the
+  // title here would be asking the user to go and open the PDF themselves.
+  // Those three questions live at the export gate now, prefilled.
+  it('does not ask for facts it cannot yet prefill', () => {
+    const ids = stepById('gate-identity')
+      .questions(reconDone())
+      .map((q) => q.id)
+    expect(ids).not.toContain('title')
+    expect(ids).not.toContain('author')
+    expect(ids).not.toContain('originalYear')
   })
 
   it('defaults orthography to preserve (a reprint, not an edit)', () => {
@@ -159,15 +156,25 @@ describe('answers', () => {
     const qs = stepById('gate-identity').questions(reconDone())
     const a = defaultAnswers(qs)
     expect(a['orthography']).toBe('preserve')
-    expect(a['title']).toBe('The Alchemist His Practise')
     // Every term defaults to accepted; the user overrides the wrong ones.
     expect(a['terms']).toMatchObject({ chirurgeon: { action: 'accept' } })
   })
 
   it('reports required questions left blank', () => {
-    const qs = stepById('gate-identity').questions(
-      reconDone({ metadata: { ...reconDone().metadata, title: null, author: null } })
-    )
+    const state = {
+      ...reconDone(),
+      metadata: { ...reconDone().metadata, title: null, author: null },
+      completed: [
+        'intake',
+        'recon',
+        'gate-identity',
+        'transcribe',
+        'gate-uncertainties',
+        'gate-structure',
+        'design'
+      ] as StepId[]
+    }
+    const qs = stepById('export').questions(state)
     const missing = missingRequired(qs, defaultAnswers(qs))
     expect(missing).toContain('title')
     expect(missing).toContain('author')
@@ -569,13 +576,18 @@ describe('design step', () => {
 })
 
 describe('export step', () => {
-  const readyForExport = (): WizardState => ({
+  const readyForExport = (overrides: Partial<WizardState> = {}): WizardState => ({
     ...initialState(),
     pageCount: 240,
-    metadata: { ...initialState().metadata, author: 'Anonymous' },
-    answers: {
-      'gate-identity': { title: 'The Alchemist', author: 'Anonymous', originalYear: '1662' }
+    // What the vision pass read off the original front matter. The export gate
+    // offers this back for correction rather than asking for it cold.
+    metadata: {
+      ...initialState().metadata,
+      title: 'The Alchemist',
+      author: 'Anonymous',
+      originalYear: '1662'
     },
+    classifications: [{ pageIndex: 0, role: 'title-page', selfReportedConfidence: 0.95 }],
     completed: [
       'intake',
       'recon',
@@ -584,18 +596,22 @@ describe('export step', () => {
       'gate-uncertainties',
       'gate-structure',
       'design'
-    ]
+    ],
+    ...overrides
   })
 
   it('is where the flow lands once the design is chosen', () => {
     expect(activeStep(readyForExport()).id).toBe('export')
   })
 
-  it('asks only for details the book itself cannot supply', () => {
+  it('asks for the book’s identity and this edition’s details, in that order', () => {
     const ids = stepById('export')
       .questions(readyForExport())
       .map((q) => q.id)
     expect(ids).toEqual([
+      'title',
+      'author',
+      'originalYear',
       'imprint',
       'copyrightHolder',
       'editionDate',
@@ -605,9 +621,37 @@ describe('export step', () => {
     ])
   })
 
-  it('nothing is required — a reprint with no imprint or ISBN is legitimate', () => {
+  it('pre-fills identity from what the pass read off the title page', () => {
     const qs = stepById('export').questions(readyForExport())
+    const byId = (id: string) => qs.find((q) => q.id === id) as { defaultValue: string }
+    expect(byId('title').defaultValue).toBe('The Alchemist')
+    expect(byId('author').defaultValue).toBe('Anonymous')
+    expect(byId('originalYear').defaultValue).toBe('1662')
+  })
+
+  it('shows the scan of the title page beside the title it read there', () => {
+    const qs = stepById('export').questions(readyForExport())
+    const title = qs.find((q) => q.id === 'title')!
+    expect(title.evidence?.[0]).toMatchObject({ kind: 'image', src: 'page:0' })
+  })
+
+  it('asks for the title with no evidence rather than not at all', () => {
+    // A book whose title page was never classified still needs a title; the
+    // question just arrives without a picture to check it against.
+    const qs = stepById('export').questions(readyForExport({ classifications: [] }))
+    const title = qs.find((q) => q.id === 'title')!
+    expect(title.evidence).toBeUndefined()
+  })
+
+  it('requires only the two facts a book cannot be published without', () => {
+    const qs = stepById('export').questions(readyForExport())
+    // Prefilled, so answering is a glance — but a book with no title is not
+    // publishable, and an empty reading has to be caught here.
     expect(missingRequired(qs, defaultAnswers(qs))).toEqual([])
+    expect(missingRequired(qs, { ...defaultAnswers(qs), title: '', author: '' })).toEqual([
+      'title',
+      'author'
+    ])
   })
 
   it('defaults the edition statement from the original year it already knows', () => {
@@ -617,8 +661,18 @@ describe('export step', () => {
     expect((q as { defaultValue: string }).defaultValue).toContain('1662')
   })
 
+  it('follows a year the user corrects on this very screen', () => {
+    const state = readyForExport({ answers: { export: { originalYear: '1651' } } })
+    const q = stepById('export')
+      .questions(state)
+      .find((x) => x.id === 'editionStatement')!
+    expect((q as { defaultValue: string }).defaultValue).toContain('1651')
+  })
+
   it('leaves the edition statement blank when the original year is unknown', () => {
-    const state = { ...readyForExport(), answers: { 'gate-identity': { title: 'Untitled' } } }
+    const state = readyForExport({
+      metadata: { ...initialState().metadata, title: 'Untitled' }
+    })
     const q = stepById('export')
       .questions(state)
       .find((x) => x.id === 'editionStatement')!
@@ -633,10 +687,10 @@ describe('export step', () => {
   })
 
   it('turns its own defaults into a buildable edition', () => {
-    const state = readyForExport()
-    const qs = stepById('export').questions(state)
-    const edition = editionFromAnswers(state.answers['gate-identity']!, defaultAnswers(qs))
+    const qs = stepById('export').questions(readyForExport())
+    const edition = editionFromAnswers(defaultAnswers(qs))
     expect(edition.title).toBe('The Alchemist')
+    expect(edition.author).toBe('Anonymous')
     expect(edition.notices[0]).toContain('1662')
     expect(edition.editionDate).toBe(String(new Date().getFullYear()))
   })

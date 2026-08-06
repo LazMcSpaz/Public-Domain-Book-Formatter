@@ -1,26 +1,20 @@
 /**
- * Assemble the finished LaTeX source for a book.
+ * The edition facts, and an honest account of what came out.
  *
- * This is the join between everything upstream — the assembled document, the
- * style the design interview produced, and the edition details the user gave —
- * and the typesetter. It is deliberately pure: it returns a string, so the
- * whole export can be asserted in tests without a TeX installation, which is
- * the only part of the pipeline that cannot run here.
+ * This used to assemble XeLaTeX source. It doesn't any more: the app lays the
+ * book out itself and pdf-lib writes the file, so the only things left for this
+ * module to do are the ones that were never about TeX — folding the gates'
+ * answers into a set of edition details, naming the file, and reporting what
+ * the interior actually contains against what the book had in it.
  *
- * The compile itself lives behind `TexEngine` (see ./tex-engine), so a browser
- * TeX that turns out not to work can be swapped without touching any of this.
+ * That last part is the point. The interior is the deliverable now, so a book
+ * that quietly lost its footnotes would otherwise pass every check here.
+ *
+ * Pure: no I/O, no rendering.
  */
-import type {
-  FrontMatterFields,
-  KdpValidationReport,
-  PerBookConfig,
-  StyleProfile,
-  TocEntry
-} from '@core/model'
+import type { KdpValidationReport, StyleProfile } from '@core/model'
 import type { BookDocument } from '@core/assemble'
-import { emitAsides, emitBody, tocFromDocument, validateKdp } from '@core/typeset'
-import { resolveOrnamentPaths, BUILTIN_ORNAMENTS } from '@core/ornament'
-import { buildLatexDocument } from '@core/typeset'
+import { validateKdp } from '@core/typeset'
 
 /** The edition details only the user can supply. */
 export interface EditionDetails {
@@ -40,8 +34,6 @@ export interface BuildExportInput {
   document: BookDocument
   profile: StyleProfile
   edition: EditionDetails
-  /** Directory the converted ornament PDFs will sit in at compile time. */
-  ornamentDir?: string
   /**
    * Estimated final page count, used only for the KDP gutter check. The true
    * count is known once the book has been laid out; until then the scan's page
@@ -61,6 +53,7 @@ export interface BuildExportInput {
     pageCount: number
     warnings: string[]
     notesPlaced?: number
+    notesCollected?: number
     notesDropped?: { id: string; reason: string }[]
   }
   /**
@@ -72,8 +65,6 @@ export interface BuildExportInput {
 }
 
 export interface BuildExportResult {
-  /** Complete, compilable XeLaTeX source. */
-  tex: string
   /** A safe file name derived from the title. */
   fileName: string
   /** What the KDP checks say about the style, before the PDF exists. */
@@ -108,20 +99,6 @@ export function safeFileName(title: string, extension: string): string {
   return `${stem}.${extension}`
 }
 
-/**
- * TOC entries for the document. `outputOffset` is carried through the type but
- * is meaningless here — the native `\tableofcontents` resolves real page
- * numbers during the TeX run, so nothing downstream reads these two fields.
- */
-function tocEntries(document: BookDocument): TocEntry[] {
-  return tocFromDocument(document).map((c) => ({
-    title: c.title,
-    level: c.level,
-    outputOffset: 0,
-    pageNumber: null
-  }))
-}
-
 /** Empty strings mean "not given" for these fields, not "given as blank". */
 function trimmedOrNull(value: unknown): string | null {
   const text = typeof value === 'string' ? value.trim() : ''
@@ -129,23 +106,25 @@ function trimmedOrNull(value: unknown): string | null {
 }
 
 /**
- * Fold the identity gate's answers and the export gate's answers into the
- * edition details. Kept here rather than in the wizard so the mapping lives
- * next to the thing that consumes it.
+ * Fold the export gate's answers into the edition details. Kept here rather
+ * than in the wizard so the mapping lives next to the thing that consumes it.
+ *
+ * Every field it reads comes from one gate. That is not a coincidence: the
+ * title, the author and the original year used to be asked at Gate 1, before
+ * anything had read the title page, so the user had to go and find them. They
+ * are asked at the export gate now, prefilled from what the vision pass read,
+ * which puts all of the copyright page's facts in one place.
  */
-export function editionFromAnswers(
-  identity: Record<string, unknown>,
-  exportAnswers: Record<string, unknown>
-): EditionDetails {
-  const originalYear = trimmedOrNull(identity['originalYear'])
+export function editionFromAnswers(exportAnswers: Record<string, unknown>): EditionDetails {
+  const originalYear = trimmedOrNull(exportAnswers['originalYear'])
   const notices: string[] = []
   if (exportAnswers['publicDomainNotice'] !== false) {
     notices.push(publicDomainNotice(originalYear))
   }
 
   return {
-    title: trimmedOrNull(identity['title']) ?? 'Untitled',
-    author: trimmedOrNull(identity['author']) ?? '',
+    title: trimmedOrNull(exportAnswers['title']) ?? 'Untitled',
+    author: trimmedOrNull(exportAnswers['author']) ?? '',
     imprint: trimmedOrNull(exportAnswers['imprint']),
     copyrightHolder: trimmedOrNull(exportAnswers['copyrightHolder']),
     isbn: trimmedOrNull(exportAnswers['isbn']),
@@ -157,54 +136,6 @@ export function editionFromAnswers(
 
 export function buildExport(input: BuildExportInput): BuildExportResult {
   const { document, profile, edition } = input
-
-  const config: PerBookConfig = {
-    title: edition.title,
-    author: edition.author,
-    isbn: edition.isbn,
-    editionDate: edition.editionDate,
-    trimSize: profile.trimSize
-  }
-
-  const frontMatter: FrontMatterFields = {
-    isbn: edition.isbn,
-    publicationDate: edition.editionDate,
-    editionStatement: edition.editionStatement,
-    imprint: edition.imprint,
-    copyrightHolder: edition.copyrightHolder,
-    notices: edition.notices
-  }
-
-  // Asides (dedication, epigraph) belong in the front matter, ahead of the
-  // body, which is why they are emitted separately and joined here.
-  const asides = emitAsides(document)
-  const body = emitBody(document, {
-    dropCap: profile.dropCap,
-    chapterOrnament: profile.ornaments.chapterOpener !== null,
-    omitOrphanFootnotes: input.omitOrphanFootnotes
-  })
-  const bodyLatex = asides ? `${asides}\n\n${body}` : body
-
-  const tex = buildLatexDocument({
-    profile,
-    config,
-    frontMatter,
-    toc: tocEntries(document),
-    bodyLatex,
-    // Only reference ornament *files* when a caller says where they will be.
-    // The default export hands over a lone `.tex`, so pointing it at converted
-    // PDFs nobody has produced would just make the document fail to compile;
-    // `buildLatexDocument` draws the ornament typographically instead.
-    ...(input.ornamentDir
-      ? {
-          ornamentPaths: resolveOrnamentPaths(
-            profile.ornaments,
-            BUILTIN_ORNAMENTS,
-            input.ornamentDir
-          )
-        }
-      : {})
-  })
 
   // Before a layout run the page count is the scan's and there are no layout
   // warnings — `typeset: false` makes the report say that, instead of ticking
@@ -232,14 +163,21 @@ export function buildExport(input: BuildExportInput): BuildExportResult {
   // once the book is printed.
   if (document.footnotes.length > 0 && input.typeset) {
     const placed = input.typeset.notesPlaced ?? 0
+    const collected = input.typeset.notesCollected ?? 0
     const dropped = input.typeset.notesDropped ?? []
     if (placed > 0) {
       notes.push(`${placed} footnote(s) were set at the foot of the page they belong to.`)
     }
+    if (collected > 0) {
+      notes.push(
+        `${collected} footnote(s) had no reference mark and were collected at the end of ` +
+          'the book, where you can place them by hand.'
+      )
+    }
     if (dropped.length > 0) {
       notes.push(
         `${dropped.length} footnote(s) could not be placed — ${dropped[0]!.reason}. ` +
-          'They are in the source text but not in the PDF.'
+          'They are in the transcription but not in the PDF.'
       )
     }
   } else {
@@ -260,8 +198,7 @@ export function buildExport(input: BuildExportInput): BuildExportResult {
   }
 
   return {
-    tex,
-    fileName: safeFileName(edition.title, 'tex'),
+    fileName: safeFileName(edition.title, 'pdf'),
     validation,
     notes
   }

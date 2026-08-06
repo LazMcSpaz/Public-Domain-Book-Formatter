@@ -197,10 +197,10 @@ Once the PDF path is trusted:
   way to make a PDF. There will be.
 - The `.tex` download.
 
-Keep `.tex` as a secondary "advanced" download during the transition so there is
-always a working path out, then delete it. **Do not delete `kdp-validate.ts`** —
-it gets _better_: after real layout the page count is measured rather than
-estimated, and the two `pending` checks become real.
+**Done** — all of it is gone, along with `resources/` and the Windows toolchain
+script that only existed to feed XeLaTeX. `kdp-validate.ts` stayed, and got
+_better_: after real layout the page count is measured rather than estimated,
+and the two `pending` checks report the truth.
 
 ## Testing
 
@@ -230,8 +230,11 @@ Each step leaves the app working.
 4. ~~Front matter, running heads, folios.~~ **Done.**
 5. ~~Chapter openers, drop caps, ornaments — these become line-box arithmetic
    (an initial spanning N lines, with those N lines indented), not LaTeX
-   macros.~~ **Drop caps done**, exactly as line-box arithmetic. Ornaments are
-   not drawn yet; `RuleShape` exists in the page model for them.
+   macros.~~ **Done**, exactly as line-box arithmetic — including the ornaments,
+   which claim whole baseline slots so the text below moves down rather than
+   being overprinted. The `.svg` files under `resources/` became vector path
+   data in `src/core/ornament`: one source, drawn by `drawSvgPath`, with nothing
+   on disk that can disagree with it.
 6. ~~Footnotes (the reserve-and-re-flow loop).~~ **Done — and the re-flow was
    not needed.** Reserving as lines are placed only ever shrinks the body, so a
    line whose reference pulls in a new note either fits or moves to the next
@@ -240,13 +243,25 @@ Each step leaves the app working.
    that provably converge — the folio sits in a fixed-width column, so the
    contents' length is decided by the titles and cannot move when the numbers
    are filled in.
-8. Delete the LaTeX path. ~~Turn the two `pending` KDP checks into real ones.~~
-   **The KDP half is done**: the page count is measured, and the layout engine
-   reports overfull lines, so both checks now report the truth.
+8. ~~Delete the LaTeX path. Turn the two `pending` KDP checks into real ones.~~
+   **Done.** The page count is measured and the engine reports overfull lines,
+   so both checks report the truth.
 
-   The `.tex` should not go until the PDF path is a superset of it. One gap is
-   left: the LaTeX emitter collected notes with no reference mark at the end of
-   the book, and the PDF path reports them on the export screen instead.
+   The `.tex` was held back until the PDF path was a superset of it. The last
+   gap — the LaTeX emitter collected notes with no reference mark at the end of
+   the book — is closed: `orphanNotes: 'collect'` appends a "Notes" section after
+   the body, listed in the contents, each note keeping its original printed
+   marker. Then the whole path went.
+
+9. **Move the identity questions to where they can be answered.** Gate 1 asked
+   for the title, the author and the year before anything had read the title
+   page, so all three came up blank — on a phone, a trip out of the browser to
+   go and look. They are asked at the export gate now, prefilled from what the
+   vision pass read, with the scan of the title page beside them. **Done.**
+
+10. **Illustrations.** The page model still has no image item, so an illustrated
+    book cannot place its plates. Deferred until there is a real illustrated PDF
+    to work against — the only remaining item.
 
 ## Decisions taken
 

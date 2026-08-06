@@ -220,12 +220,12 @@ if (!seeded) throw new Error('Could not seed a saved run')
 await page.setInputFiles('input[type=file]', bookPath)
 await page.waitForSelector('.terms', { timeout: 180000 })
 
-// Title and author are required at this gate — the scan's own front matter has
-// not been read yet, so nothing has filled them in.
-const fill = (question, value) =>
-  page.locator('.q').filter({ hasText: question }).locator('input[type=text]').fill(value)
-await fill('Book title', 'The Alchemist His Practise')
-await fill('Author', 'Anonymous')
+// Nothing to fill in here. This gate asks how the book's own language should be
+// read, and every question arrives with a recommended answer — the title, the
+// author and the year are asked at the export gate, where the pass has read
+// them off the title page and the boxes come up already filled.
+const identityAsks = await page.locator('.q').filter({ hasText: 'Book title' }).count()
+if (identityAsks > 0) throw new Error('Gate 1 is asking for the title again')
 
 await page.locator('button.primary', { hasText: 'Looks right' }).click()
 await page.waitForSelector('.q', { timeout: 20000 })

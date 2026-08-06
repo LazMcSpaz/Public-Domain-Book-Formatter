@@ -1,7 +1,8 @@
-/** Public surface of the ornament model (SPEC §8). */
+/** The shipped ornament library (SPEC §8), as vector data. */
 export {
   BUILTIN_ORNAMENTS,
   findOrnament,
-  resolveOrnamentPaths,
-  type ResolvedOrnamentPaths
+  type OrnamentArt,
+  type OrnamentKind,
+  type OrnamentShape
 } from './ornaments'

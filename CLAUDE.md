@@ -47,6 +47,11 @@ Practical rules:
   200 prompts.
 - **Never ask what isn't relevant yet** (no chapter-ornament question before we
   know the book has chapters).
+- **Never ask what the app could find out first.** A question belongs at the
+  point where the app can _help_ answer it. The title, author and year are asked
+  at the export gate, after the vision pass has read them off the original title
+  page, so the fields arrive prefilled with the scan beside them — not at Gate 1,
+  where they were three empty boxes and a trip out of the browser.
 - **Show the pixels.** Never ask "is this word right?" without the scan beside it.
 - **Answer once, apply everywhere.** Confirming a term fixes it book-wide.
 
@@ -55,8 +60,9 @@ Practical rules:
 - `src/core` — **pure domain logic, no DOM and no Node.** Coordinate map, hOCR
   parsing, lexicon harvesting, page roles, the wizard step machine, assembly,
   design-by-interview, image algorithms, **the layout engine** (frames,
-  Knuth–Plass line breaking, pagination), the LaTeX body emitter and document
-  builder, the export seam, style system. This is where the tests live.
+  Knuth–Plass line breaking, pagination, footnotes, ornaments, the TOC), the
+  ornament library, the edition/export report, style system. This is where the
+  tests live.
 - `src/platform/browser` — the only place browser APIs appear: PDF.js rendering,
   Tesseract.js OCR, canvas crops, the recon runner, font loading, the pdf-lib
   writer, and the page preview.
@@ -149,7 +155,7 @@ in `screenshots/`. Don't ship UI blind.
   progress, cancel), assembly stitches pages into a book document (seam repair,
   hyphen healing, footnote linking, front-matter dispositions), and Gate 2
   surfaces flagged pages with the scan beside each.
-- **Also done**: Gate 3 (structure confirmation) and the LaTeX body emitter.
+- **Also done**: Gate 3 (structure confirmation).
 - **Also done**: design-by-interview, and **the layout engine** — Knuth–Plass
   line breaking with Liang hyphenation, baseline-grid pagination with widow and
   orphan control, front matter, running heads, folios, recto chapter openings
@@ -157,9 +163,9 @@ in `screenshots/`. Don't ship UI blind.
   PDF**, and the export downloads that PDF. Because the page count and the
   layout warnings are measured, both KDP checks that used to report `pending`
   now report the truth.
-- **The open TeX question is closed.** No browser TeX is needed: the app lays
-  the book out itself and pdf-lib writes the file. The `.tex` download survives
-  as a secondary path during the transition.
+- **The open TeX question is closed, and the LaTeX path is gone.** No browser
+  TeX is needed: the app lays the book out itself and pdf-lib writes the file.
+  `src/core/typeset` is now only the KDP checks.
 - **Also done**: **footnotes** — set at the foot of the page their reference
   falls on, renumbered straight through the book, with the space reserved as
   lines are placed — and a **table of contents with measured page numbers**,
@@ -167,7 +173,10 @@ in `screenshots/`. Don't ship UI blind.
 - **Also done**: **save and resume.** A finished transcription is stored in
   IndexedDB against the file's identity, so a refresh, a crash or a closed tab
   no longer costs the user the one thing they paid for.
-- **Next**: illustrations (the page model has no image item, so an illustrated
-  book cannot place its plates), and ornaments in the PDF. Then delete the
-  LaTeX path.
-  See [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md).
+- **Also done**: **ornaments in the PDF** (vector paths in `src/core/ornament`,
+  placed by the engine and drawn with `drawSvgPath`), **collected endnotes** for
+  notes whose reference mark is nowhere in the body, and moving the title,
+  author and year questions to the export gate where they arrive prefilled.
+- **Next**: illustrations — the page model has no image item, so an illustrated
+  book cannot place its plates. Deferred until there is a real illustrated PDF
+  to work against. See [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md).

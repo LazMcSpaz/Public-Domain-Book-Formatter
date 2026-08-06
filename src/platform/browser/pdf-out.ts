@@ -13,7 +13,7 @@
  *
  * Browser-only: pdf-lib and fontkit.
  */
-import { PDFDocument, type PDFFont, type PDFPage } from 'pdf-lib'
+import { PDFDocument, rgb, type PDFFont, type PDFPage } from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit'
 import type { FontRef, LaidOutBook, LaidOutPage } from '@core/layout'
 import { LAYOUT_FEATURES, type FontTable } from './fonts'
@@ -123,6 +123,23 @@ function drawPage(
   const pdfPage: PDFPage = doc.addPage([page.widthPt, page.heightPt])
 
   for (const item of page.items) {
+    if (item.kind === 'ornament') {
+      // pdf-lib draws a path from an anchor with SVG's own downward y, which is
+      // the engine's convention too — so only the page flip is needed here.
+      const y = page.heightPt - item.yPt
+      for (const shape of item.art.shapes) {
+        pdfPage.drawSvgPath(shape.d, {
+          x: item.xPt,
+          y,
+          scale: item.scale,
+          ...(shape.stroke === undefined
+            ? { color: rgb(0, 0, 0) }
+            : { borderColor: rgb(0, 0, 0), borderWidth: shape.stroke * item.scale })
+        })
+      }
+      continue
+    }
+
     if (item.kind === 'rule') {
       pdfPage.drawRectangle({
         x: item.xPt,

@@ -110,18 +110,21 @@ export function App(): JSX.Element {
   const designSummary = designProfile ? describeProfile(designProfile) : null
 
   /**
-   * The edition facts the preview's front matter needs. Only the identity gate
-   * has been answered by this point — the copyright-page details come later, at
-   * the export gate — so the preview shows the title page and leaves the
-   * copyright page with what it has.
+   * The edition facts the preview's front matter needs.
+   *
+   * The design gate comes before the export gate, so nobody has confirmed the
+   * title yet — the preview shows what the vision pass read off the original
+   * title page, which is the same text the export gate will offer for
+   * correction. The copyright-page details come later and the preview leaves
+   * them alone.
    */
-  const previewEdition = useMemo(() => {
-    const identity = (state.answers['gate-identity'] ?? {}) as Record<string, unknown>
-    return {
-      title: (identity['title'] as string) || state.metadata.title || 'Untitled',
-      author: (identity['author'] as string) || state.metadata.author || ''
-    }
-  }, [state.answers, state.metadata])
+  const previewEdition = useMemo(
+    () => ({
+      title: state.metadata.title || 'Untitled',
+      author: state.metadata.author || ''
+    }),
+    [state.metadata]
+  )
 
   const resolveEvidence = useCallback((src: string): string | undefined => {
     const m = /^page:(\d+)$/.exec(src)
@@ -457,7 +460,7 @@ export function App(): JSX.Element {
       design['font'] as string
     )
 
-    const edition = editionFromAnswers(state.answers['gate-identity'] ?? {}, currentAnswers)
+    const edition = editionFromAnswers(currentAnswers)
     const input = {
       document: doc,
       profile,
@@ -473,7 +476,8 @@ export function App(): JSX.Element {
     try {
       const interior = await renderInterior(doc, profile, {
         edition: { ...edition, notices: edition.notices },
-        onProgress: (done, total) => setBuildProgress({ done, total })
+        onProgress: (done, total) => setBuildProgress({ done, total }),
+        orphanNotes: input.omitOrphanFootnotes ? 'omit' : 'collect'
       })
       setPdf({ bytes: interior.bytes, pageCount: interior.pageCount })
       setBuildNote(null)
@@ -488,6 +492,7 @@ export function App(): JSX.Element {
                 `Page ${w.pageIndex + 1}: a line runs past the margin — “${w.text.slice(0, 60)}”`
             ),
             notesPlaced: interior.notesPlaced,
+            notesCollected: interior.notesCollected,
             notesDropped: interior.notesDropped
           }
         })

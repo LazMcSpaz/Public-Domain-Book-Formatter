@@ -1,6 +1,6 @@
 /**
- * Export: assembled book + style + edition details → compilable LaTeX, and the
- * swappable seam where that becomes a PDF.
+ * Export: the edition details only the user can supply, folded into the book,
+ * plus the honest report about what came out.
  */
 export {
   buildExport,
@@ -11,13 +11,3 @@ export {
   type BuildExportResult,
   type EditionDetails
 } from './build-export'
-export {
-  noTexEngine,
-  tryCompile,
-  parseTexLog,
-  pageCountFromLog,
-  TexCompileError,
-  type TexEngine,
-  type TexCompileInput,
-  type TexCompileResult
-} from './tex-engine'

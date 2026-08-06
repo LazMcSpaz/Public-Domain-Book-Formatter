@@ -3,9 +3,14 @@
  *
  * Honest checks, not pass/fail theater: each surfaces a real concern at an
  * appropriate level. Heavier books need more gutter; images below ~300 effective
- * DPI print muddy; XeLaTeX overfull/bad-break warnings get counted; and the
+ * DPI print muddy; lines that will not fit their measure get counted; and the
  * final interior page count is reported prominently (the user needs it for the
  * externally-made cover spine).
+ *
+ * This is the one module the LaTeX path left behind, and it got *better* for
+ * losing it: the page count and the layout warnings are now measured by the
+ * engine that set the pages, so the two checks that used to report `pending`
+ * report the truth.
  *
  * Pure: derives entirely from its inputs.
  */
@@ -15,7 +20,7 @@ import type {
   ValidationCheck,
   ValidationLevel
 } from '@core/model'
-import { parseTrimSize } from './latex-document'
+import { PT_PER_INCH, trimToPoints } from '@core/layout'
 
 export interface ValidateKdpInput {
   profile: StyleProfile
@@ -90,7 +95,8 @@ export function validateKdp(input: ValidateKdpInput): KdpValidationReport {
 
   // 2. Known/correct trim size.
   {
-    const trim = parseTrimSize(input.profile.trimSize)
+    const points = trimToPoints(input.profile.trimSize)
+    const trim = { widthIn: points.widthPt / PT_PER_INCH, heightIn: points.heightPt / PT_PER_INCH }
     const known = KNOWN_TRIMS.some(([w, h]) => close(trim.widthIn, w) && close(trim.heightIn, h))
     checks.push({
       id: 'trim-size',

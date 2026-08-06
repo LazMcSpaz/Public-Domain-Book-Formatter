@@ -18,10 +18,6 @@ export function downloadBlob(blob: Blob, fileName: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 0)
 }
 
-export function downloadText(text: string, fileName: string, mimeType = 'text/plain'): void {
-  downloadBlob(new Blob([text], { type: `${mimeType};charset=utf-8` }), fileName)
-}
-
 export function downloadPdf(bytes: Uint8Array, fileName: string): void {
   // Copy into a fresh buffer: the caller's view may be onto a larger WASM heap,
   // and a Blob over that would carry the whole thing.

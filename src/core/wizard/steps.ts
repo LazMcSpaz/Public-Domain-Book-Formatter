@@ -129,56 +129,26 @@ const recon: Step = {
 }
 
 /**
- * Gate 1. Two jobs: confirm what the book *is* (from the original title page),
- * and vet the harvested vocabulary — the highest-leverage ten minutes in the
- * whole flow, because a term fixed once is fixed everywhere it occurs.
+ * Gate 1. Decide how the book's own language should be read, and vet the
+ * harvested vocabulary — the highest-leverage ten minutes in the whole flow,
+ * because a term fixed once is fixed everywhere it occurs.
+ *
+ * Deliberately *not* here: the title, the author and the year. Asking for them
+ * at this point means asking a question the app cannot yet help with — the
+ * title page has been rendered but not read, so the field would come up empty
+ * and the user would have to go and open the PDF somewhere else to fill it in.
+ * The vision pass reads the front matter as part of the run they are already
+ * paying for; by the export gate the answers are already sitting in the boxes,
+ * and confirming three prefilled fields is a glance rather than an errand.
  */
 const gateIdentity: Step = {
   id: 'gate-identity',
-  title: 'Confirm the book',
-  blurb: 'Check what I read off the title page, and vet the unusual words I found.',
+  title: 'Confirm how to read it',
+  blurb: 'Decide how the original spelling is handled, and vet the unusual words I found.',
   isGate: true,
   canEnter: (s) => s.pagesProcessed > 0,
   questions: (s) => {
     const qs: Question[] = []
-    const m = s.metadata
-    const titlePage = s.classifications.find((c) => c.role === 'title-page')
-    const titleEvidence = titlePage
-      ? [
-          {
-            kind: 'image' as const,
-            src: `page:${titlePage.pageIndex}`,
-            alt: `Original title page (page ${titlePage.pageIndex + 1})`
-          }
-        ]
-      : undefined
-
-    qs.push({
-      id: 'title',
-      type: 'text',
-      prompt: 'Book title',
-      help: 'Read from the original title page. This becomes your edition’s title.',
-      defaultValue: m.title ?? '',
-      placeholder: 'e.g. The Alchemist His Practise',
-      required: true,
-      evidence: titleEvidence
-    })
-    qs.push({
-      id: 'author',
-      type: 'text',
-      prompt: 'Author',
-      defaultValue: m.author ?? '',
-      placeholder: 'e.g. Anonymous',
-      required: true
-    })
-    qs.push({
-      id: 'originalYear',
-      type: 'text',
-      prompt: 'Year of the original edition',
-      help: 'Used for the “originally published” line on your copyright page.',
-      defaultValue: m.originalYear ?? '',
-      placeholder: 'e.g. 1662'
-    })
 
     // Orthography policy — the single most consequential setting for old books.
     qs.push({
@@ -628,23 +598,69 @@ const design: Step = {
 }
 
 /**
- * The last gate. Everything else was recovered from the book; these are the
- * facts about *this edition* that only its publisher knows, and they all land
- * on the copyright page.
+ * The last gate. Two kinds of fact meet here: what the book *is*, which the
+ * vision pass read off the original front matter and which the user is now
+ * correcting rather than supplying; and the details of *this edition*, which
+ * only its publisher knows. Both land on the title and copyright pages.
+ *
+ * The first three are asked here rather than at Gate 1 because here they can be
+ * answered by looking: the pass has read the title page, so the boxes arrive
+ * filled in, with the scan of that page beside them.
  */
 const exportStep: Step = {
   id: 'export',
   title: 'Publish the edition',
-  blurb: 'The last few details, then the print-ready interior.',
+  blurb: 'Check what I read off the title page, add the last few details, and print.',
   isGate: true,
   canEnter: (s) => s.completed.includes('design'),
   questions: (s) => {
-    const identity = s.answers['gate-identity'] ?? {}
-    const author = (identity['author'] as string) ?? s.metadata.author ?? ''
-    const originalYear = (identity['originalYear'] as string) ?? s.metadata.originalYear ?? null
+    const m = s.metadata
+    // Live, so the copyright-page hints below follow a correction the user is
+    // making on this very screen rather than the reading it replaced.
+    const answered = s.answers['export'] ?? {}
+    const author = (answered['author'] as string) ?? m.author ?? ''
+    const originalYear = (answered['originalYear'] as string) ?? m.originalYear ?? null
     const thisYear = String(new Date().getFullYear())
 
+    const titlePage = s.classifications.find((c) => c.role === 'title-page')
+    const titleEvidence = titlePage
+      ? [
+          {
+            kind: 'image' as const,
+            src: `page:${titlePage.pageIndex}`,
+            alt: `Original title page (page ${titlePage.pageIndex + 1})`
+          }
+        ]
+      : undefined
+
     return [
+      {
+        id: 'title',
+        type: 'text',
+        prompt: 'Book title',
+        help: 'Read off the original title page. This becomes your edition’s title.',
+        defaultValue: m.title ?? '',
+        placeholder: 'e.g. The Alchemist His Practise',
+        required: true,
+        evidence: titleEvidence
+      },
+      {
+        id: 'author',
+        type: 'text',
+        prompt: 'Author',
+        help: 'Also read off the title page. Correct it if the scan misled me.',
+        defaultValue: m.author ?? '',
+        placeholder: 'e.g. Anonymous',
+        required: true
+      },
+      {
+        id: 'originalYear',
+        type: 'text',
+        prompt: 'Year of the original edition',
+        help: 'Used for the “originally published” line on your copyright page.',
+        defaultValue: m.originalYear ?? '',
+        placeholder: 'e.g. 1662'
+      },
       {
         id: 'imprint',
         type: 'text',

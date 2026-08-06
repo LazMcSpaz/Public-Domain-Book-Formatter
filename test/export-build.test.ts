@@ -4,19 +4,12 @@ import {
   editionFromAnswers,
   publicDomainNotice,
   safeFileName,
-  noTexEngine,
-  tryCompile,
-  parseTexLog,
-  pageCountFromLog,
-  TexCompileError,
-  type EditionDetails,
-  type TexEngine
+  type EditionDetails
 } from '@core/export'
 import { assembleBook } from '@core/assemble'
 import type { BookDocument } from '@core/assemble'
 import type { PageTranscription, TranscribedBlock } from '@core/transcribe'
 import type { PageRole } from '@core/pages'
-import { profileFromAnswers } from '@core/design'
 import { defaultStyleProfile } from '@core/style'
 
 function page(
@@ -93,86 +86,38 @@ describe('publicDomainNotice', () => {
 })
 
 describe('editionFromAnswers', () => {
-  it('carries the identity gate’s title and author through', () => {
-    const e = editionFromAnswers({ title: 'The Alchemist', author: 'Anonymous' }, {})
+  it('carries the export gate’s title and author through', () => {
+    const e = editionFromAnswers({ title: 'The Alchemist', author: 'Anonymous' })
     expect(e.title).toBe('The Alchemist')
     expect(e.author).toBe('Anonymous')
   })
 
   it('treats blank fields as absent rather than as empty values', () => {
-    const e = editionFromAnswers({}, { imprint: '   ', isbn: '' })
+    const e = editionFromAnswers({ imprint: '   ', isbn: '' })
     expect(e.imprint).toBeNull()
     expect(e.isbn).toBeNull()
   })
 
   it('never produces an untitled-but-not-labelled book', () => {
-    expect(editionFromAnswers({}, {}).title).toBe('Untitled')
+    expect(editionFromAnswers({}).title).toBe('Untitled')
   })
 
   it('adds the public-domain notice by default', () => {
-    expect(editionFromAnswers({ originalYear: '1662' }, {}).notices[0]).toContain('1662')
+    expect(editionFromAnswers({ originalYear: '1662' }).notices[0]).toContain('1662')
   })
 
   it('omits the notice only when the user declined it', () => {
-    expect(editionFromAnswers({}, { publicDomainNotice: false }).notices).toEqual([])
+    expect(editionFromAnswers({ publicDomainNotice: false }).notices).toEqual([])
   })
 })
 
 describe('buildExport', () => {
-  it('produces a complete, compilable document', () => {
-    const { tex } = build()
-    expect(tex).toContain('\\documentclass')
-    expect(tex).toContain('\\begin{document}')
-    expect(tex).toContain('\\end{document}')
-    expect(tex).toContain('% !TEX program = xelatex')
+  it('names the file after the book, as a PDF', () => {
+    // There is no .tex any more; the interior is the deliverable.
+    expect(build().fileName).toBe('the-alchemist-his-practise.pdf')
   })
 
-  it('includes the body and excludes the original front matter', () => {
-    const { tex } = build()
-    expect(tex).toContain('\\chapter{Chapter I}')
-    expect(tex).toContain('The alembick being set upon a gentle fire.')
-    // The scanned title page is a metadata source, not something to reprint.
-    expect(tex).not.toContain('THE ALCHEMIST\\par')
-  })
-
-  it('puts the edition details on the copyright page', () => {
-    const { tex } = build()
-    expect(tex).toContain('Blackthorn Press')
-    expect(tex).toContain('A. Reprinter')
-    expect(tex).toContain('978-0-00-000000-0')
-    expect(tex).toContain('A new edition of the 1662 original.')
-  })
-
-  it('prints the public-domain notice when one was chosen', () => {
-    const { tex } = build({ notices: [publicDomainNotice('1662')] })
-    expect(tex).toContain('public domain')
-  })
-
-  it('names the file after the book', () => {
-    expect(build().fileName).toBe('the-alchemist-his-practise.tex')
-  })
-
-  it('emits the drop cap only when the style asks for it', () => {
-    const plain = profileFromAnswers({
-      kind: 'novel',
-      period: 'early-modern',
-      chapterOpener: 'plain',
-      runningHeads: 'author-title'
-    })
-    const dropped = profileFromAnswers({
-      kind: 'novel',
-      period: 'early-modern',
-      chapterOpener: 'drop-cap',
-      runningHeads: 'author-title'
-    })
-    expect(build({}, plain).tex).not.toContain('\\lettrine')
-    const withCap = build({}, dropped).tex
-    // The package and the command must appear together or the run fails.
-    expect(withCap).toContain('\\usepackage{lettrine}')
-    expect(withCap).toContain('\\lettrine')
-  })
-
-  it('reports the KDP checks before a PDF exists', () => {
+  it('reports the KDP checks before the book has been laid out', () => {
     const { validation } = build()
     expect(validation.checks.length).toBeGreaterThan(0)
     expect(validation.pageCount).toBe(180)
@@ -210,88 +155,6 @@ describe('buildExport', () => {
       estimatedPageCount: 100
     })
     expect(notes).toEqual([])
-  })
-})
-
-describe('parseTexLog', () => {
-  const log = [
-    'This is XeTeX, Version 3.141592653',
-    'Overfull \\hbox (12.4pt too wide) in paragraph at lines 88--90',
-    'Underfull \\vbox (badness 10000) has occurred while \\output is active',
-    'LaTeX Font Warning: Font shape undefined',
-    'Output written on book.pdf (312 pages, 1204418 bytes).'
-  ].join('\n')
-
-  it('keeps the box warnings that show up as ragged printed pages', () => {
-    const warnings = parseTexLog(log)
-    expect(warnings.some((w) => w.startsWith('Overfull'))).toBe(true)
-    expect(warnings.some((w) => w.startsWith('Underfull'))).toBe(true)
-  })
-
-  it('leaves out the font and file chatter that would bury the signal', () => {
-    expect(parseTexLog(log).some((w) => w.includes('Font Warning'))).toBe(false)
-  })
-
-  it('returns nothing for a clean log', () => {
-    expect(parseTexLog('This is XeTeX.\nOutput written on book.pdf (10 pages).')).toEqual([])
-  })
-
-  it('reads the final page count the cover spine needs', () => {
-    expect(pageCountFromLog(log)).toBe(312)
-    expect(pageCountFromLog('no such line')).toBeNull()
-  })
-})
-
-describe('tryCompile', () => {
-  it('explains rather than throws when no engine is available', async () => {
-    const outcome = await tryCompile(noTexEngine, { tex: '\\documentclass{book}' })
-    expect(outcome.ok).toBe(false)
-    if (!outcome.ok) expect(outcome.reason).toContain('XeLaTeX')
-  })
-
-  it('returns the result when an engine works', async () => {
-    const engine: TexEngine = {
-      name: 'fake',
-      available: async () => true,
-      compile: async () => ({
-        pdf: new Uint8Array([37, 80, 68, 70]),
-        pageCount: 312,
-        warnings: [],
-        log: ''
-      })
-    }
-    const outcome = await tryCompile(engine, { tex: '' })
-    expect(outcome.ok).toBe(true)
-    if (outcome.ok) expect(outcome.result.pageCount).toBe(312)
-  })
-
-  it('surfaces the log with a compile failure, so it can be diagnosed', async () => {
-    const engine: TexEngine = {
-      name: 'fake',
-      available: async () => true,
-      compile: async () => {
-        throw new TexCompileError('Undefined control sequence', '! Undefined control sequence.')
-      }
-    }
-    const outcome = await tryCompile(engine, { tex: '' })
-    expect(outcome.ok).toBe(false)
-    if (!outcome.ok) {
-      expect(outcome.reason).toContain('Undefined control sequence')
-      expect(outcome.log).toContain('!')
-    }
-  })
-
-  it('does not let a non-TeX error escape as an unhandled rejection', async () => {
-    const engine: TexEngine = {
-      name: 'fake',
-      available: async () => true,
-      compile: async () => {
-        throw new Error('out of memory')
-      }
-    }
-    const outcome = await tryCompile(engine, { tex: '' })
-    expect(outcome.ok).toBe(false)
-    if (!outcome.ok) expect(outcome.reason).toBe('out of memory')
   })
 })
 
@@ -353,57 +216,11 @@ describe('buildExport — the structure gate’s footnote choice', () => {
       omitOrphanFootnotes
     })
 
-  it('collects unplaceable notes at the end when the user asked for that', () => {
-    const result = buildWith(false)
-    expect(result.tex).toContain('A stranded note.')
-    expect(result.notes.join(' ')).toContain('collected at the end')
+  it('says the notes were collected at the end when the user asked for that', () => {
+    expect(buildWith(false).notes.join(' ')).toContain('collected at the end')
   })
 
-  it('leaves them out when the user asked for that instead', () => {
-    const result = buildWith(true)
-    expect(result.tex).not.toContain('A stranded note.')
-    expect(result.notes.join(' ')).toContain('left out')
-  })
-})
-
-describe('buildExport — the .tex must compile on its own', () => {
-  const ornamented = () =>
-    profileFromAnswers({
-      kind: 'novel',
-      period: 'early-modern',
-      chapterOpener: 'ornamented',
-      runningHeads: 'author-title'
-    })
-
-  it('references no external file the user was never given', () => {
-    const { tex } = build({}, ornamented())
-    expect(tex).not.toContain('\\includegraphics')
-    expect(tex).not.toContain('.pdf}')
-  })
-
-  it('still renders the ornament the user chose', () => {
-    const withOrnament = build({}, ornamented()).tex
-    const plain = build(
-      {},
-      profileFromAnswers({
-        kind: 'novel',
-        period: 'early-modern',
-        chapterOpener: 'plain',
-        runningHeads: 'author-title'
-      })
-    ).tex
-    expect(withOrnament).toContain('\\newcommand{\\chapterornament}{\\begin{center}\\rule')
-    expect(plain).toContain('\\newcommand{\\chapterornament}{}')
-  })
-
-  it('points at real files when a caller says where they will be', () => {
-    const tex = buildExport({
-      document: sampleDoc(),
-      profile: ornamented(),
-      edition: edition(),
-      estimatedPageCount: 100,
-      ornamentDir: 'orn'
-    }).tex
-    expect(tex).toContain('orn/chapter-flourish.pdf')
+  it('says they were left out when the user asked for that instead', () => {
+    expect(buildWith(true).notes.join(' ')).toContain('left out')
   })
 })

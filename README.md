@@ -28,14 +28,14 @@ Open PDF
   ├─ RECON  (free, local, no API cost)
   │    render, OCR, word crops, book-wide lexicon
   │
-  ├─ GATE 1 ▸ confirm the book        ← identity + term review
+  ├─ GATE 1 ▸ confirm how to read it  ← orthography + term review
   │
   ├─ TRANSCRIBE  (vision model pass, paid, cost approved first)
   │
   ├─ GATE 2 ▸ check uncertain spots   ← where model and OCR disagree
   ├─ GATE 3 ▸ confirm structure       ← chapters, footnotes
   ├─ DESIGN  ▸ interview → layout → real pages, live
-  └─ EXPORT  ▸ layout → PDF → KDP validation
+  └─ EXPORT  ▸ confirm the title page → PDF → KDP validation
 ```
 
 Gates are the only stops. Everything between them runs unattended.
@@ -43,6 +43,12 @@ Gates are the only stops. Everything between them runs unattended.
 **The preview is the PDF.** The design gate does not approximate the finished
 page in CSS: it lays the book out, writes real PDF bytes, and renders _those_
 with pdf.js. One renderer, so what you approve and what you get cannot drift.
+
+**A question waits until the app can help answer it.** The title, the author and
+the year of the original are asked at the _end_, not the start — by then the
+vision pass has read them off the original title page, so the fields arrive
+filled in with the scan beside them. Asked at the start they would have been
+three empty boxes and a trip out of the browser to go and find the answers.
 
 ## Running it
 
@@ -78,7 +84,9 @@ src/
     assemble/   Per-page transcriptions → one book (seams, hyphens, notes)
     design/     Five interview answers → a complete style profile
     layout/     Frames, Knuth–Plass line breaking, pagination, footnotes, TOC
-    typeset/    LaTeX emitter and KDP validation
+    ornament/   The shipped flourishes, as vector paths
+    typeset/    KDP validation
+    export/     Edition details, file naming, the honest report
   platform/
     browser/    The only place browser APIs appear: PDF.js, Tesseract.js,
                 fonts, the pdf-lib writer, the page preview
@@ -94,8 +102,9 @@ and no Node, so every rule in the flow is unit-testable without a browser.
 **Working end to end**: the local pipeline, the lexicon, all three review gates,
 the vision pass, assembly, the design interview with a live page preview, and a
 print-ready PDF with front matter, running heads, folios, drop capitals,
-footnotes set at the foot of the page they belong to, and a table of contents
-carrying measured page numbers. The KDP report's page count and typesetting
+footnotes set at the foot of the page they belong to, chapter ornaments, a
+collected endnotes section for notes whose reference mark was never found, and a
+table of contents carrying measured page numbers. The KDP report's page count and typesetting
 warnings are measured rather than estimated.
 
 The one step that costs money — the vision pass — is saved against the file it
@@ -109,8 +118,6 @@ resumed session is complete rather than degraded.
 - **Illustrations.** The layout engine has no image support, so an illustrated
   book cannot place its plates. `src/core/image` holds region detection, DPI
   maths and a non-destructive op engine, but nothing calls them yet.
-- **Ornaments in the PDF.** The design gate offers a chapter-opener ornament and
-  the PDF path ignores it.
 - **Real small capitals**, and the ligatures that pdf-lib's embedder cannot
   write widths for.
 

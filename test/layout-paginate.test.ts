@@ -6,10 +6,13 @@ import {
   leadingFor,
   linesPerFrame,
   trimToPoints,
+  type LaidOutBook,
   type LaidOutPage,
   type LayoutEdition,
+  type OrnamentItem,
   type PositionedLine
 } from '@core/layout'
+import { BUILTIN_ORNAMENTS } from '@core/ornament'
 import { defaultStyleProfile } from '@core/style'
 import type { StyleProfile } from '@core/model'
 import type { BookBlock, BookDocument } from '@core/assemble'
@@ -51,6 +54,8 @@ const textOf = (page: LaidOutPage): string =>
   lines(page)
     .map((l) => l.runs.map((r) => r.text).join(' '))
     .join(' · ')
+
+const bookText = (book: LaidOutBook): string => book.pages.map(textOf).join(' · ')
 
 describe('frames — trim, margins, gutter', () => {
   it('parses a trim token into points, falling back to 6×9in', () => {
@@ -390,5 +395,87 @@ describe('layout — drop capitals', () => {
     )
     const opener = book.pages[book.chapterPages[0]!.pageIndex]!
     expect(textOf(opener)).toContain('he chirurgeon waited.')
+  })
+})
+
+describe('layout — chapter ornaments', () => {
+  const ORNAMENT = BUILTIN_ORNAMENTS.find((o) => o.kind === 'chapter')!.id
+
+  const chapter = () => doc([block('heading', 'Of the Air', 1), block('paragraph', PROSE)])
+  const ornamented = (id: string | null = ORNAMENT) =>
+    run(chapter(), { ornaments: { ...defaultStyleProfile().ornaments, chapterOpener: id } })
+
+  const ornaments = (page: LaidOutPage): OrnamentItem[] =>
+    page.items.filter((i): i is OrnamentItem => i.kind === 'ornament')
+
+  it('sets one beneath the title, on the chapter opener and nowhere else', () => {
+    const book = ornamented()
+    const openerIndex = book.chapterPages[0]!.pageIndex
+    for (const page of book.pages) {
+      expect(ornaments(page)).toHaveLength(page.index === openerIndex ? 1 : 0)
+    }
+
+    const opener = book.pages[openerIndex]!
+    const title = lines(opener).find((l) => l.runs.some((r) => r.text.includes('OF')))!
+    expect(ornaments(opener)[0]!.yPt).toBeGreaterThan(title.baselinePt)
+  })
+
+  it('carries the art itself, so a renderer needs no lookup table', () => {
+    const book = ornamented()
+    const art = ornaments(book.pages[book.chapterPages[0]!.pageIndex]!)[0]!.art
+    expect(art.id).toBe(ORNAMENT)
+    expect(art.shapes.length).toBeGreaterThan(0)
+  })
+
+  it('centres it in the measure at a scale derived from its own viewBox', () => {
+    const book = ornamented()
+    const opener = book.pages[book.chapterPages[0]!.pageIndex]!
+    const item = ornaments(opener)[0]!
+    const widthPt = item.art.width * item.scale
+
+    // Under half the measure: a full-width flourish competes with the title.
+    expect(widthPt).toBeLessThan(opener.frame.widthPt * 0.5)
+    const left = item.xPt - opener.frame.xPt
+    const right = opener.frame.xPt + opener.frame.widthPt - (item.xPt + widthPt)
+    expect(left).toBeCloseTo(right, 6)
+  })
+
+  it('holds slots for its full height, so the text below is not drawn over it', () => {
+    const book = ornamented()
+    const opener = book.pages[book.chapterPages[0]!.pageIndex]!
+    const item = ornaments(opener)[0]!
+    const bottom = item.yPt + item.art.height * item.scale
+
+    const below = lines(opener)
+      .map((l) => l.baselinePt)
+      .filter((y) => y > item.yPt)
+    expect(below.length).toBeGreaterThan(0)
+    for (const baseline of below) expect(baseline).toBeGreaterThanOrEqual(bottom)
+  })
+
+  it('pushes the text down the page rather than being drawn behind it', () => {
+    const firstBodyBaseline = (book: LaidOutBook): number => {
+      const opener = book.pages[book.chapterPages[0]!.pageIndex]!
+      return lines(opener).find((l) => l.runs.some((r) => r.text.includes('chirurgeon')))!
+        .baselinePt
+    }
+    const gap = firstBodyBaseline(ornamented()) - firstBodyBaseline(ornamented(null))
+    // A whole number of baselines, because the ornament claims grid slots — a
+    // fractional gap would mean the body had come off the baseline grid.
+    const slots = gap / leadingFor(defaultStyleProfile().bodyFontSize)
+    expect(slots).toBeGreaterThan(0)
+    expect(slots).toBeCloseTo(Math.round(slots), 6)
+  })
+
+  it('draws nothing at all when the profile names an ornament that is gone', () => {
+    // A style saved against an older library must still lay the book out; the
+    // flourish is decoration, and losing one is not worth losing the chapter.
+    const book = ornamented('no-such-ornament')
+    expect(book.pages.flatMap(ornaments)).toHaveLength(0)
+    expect(bookText(book)).toContain('chirurgeon')
+  })
+
+  it('leaves a plain opener plain', () => {
+    expect(ornamented(null).pages.flatMap(ornaments)).toHaveLength(0)
   })
 })

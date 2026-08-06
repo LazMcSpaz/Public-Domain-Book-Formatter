@@ -69,12 +69,24 @@ function sampleState(stepId: StepId) {
   const upto = STEPS.findIndex((s) => s.id === stepId)
   const completed = STEPS.slice(0, upto).map((s) => s.id)
 
+  const base = initialState()
   return {
-    ...initialState(),
+    ...base,
     fileName: 'alchemist.pdf',
     pageCount: 3,
     pagesProcessed: 3,
     hasApiKey: true,
+    // What the vision pass would have read off the original front matter. The
+    // export gate prefills its first three questions from this, so without it
+    // that gate would preview as three empty boxes — the very thing moving
+    // them off Gate 1 was meant to get rid of.
+    metadata: {
+      ...base.metadata,
+      title: 'The Alchemist His Practise',
+      author: 'Anonymous',
+      originalYear: '1662'
+    },
+    classifications: [{ pageIndex: 0, role: 'title-page' as const, selfReportedConfidence: 0 }],
     document,
     completed
   }
@@ -209,10 +221,7 @@ export function DevPreview(): JSX.Element {
             result={buildExport({
               document: state.document!,
               profile: exportProfile,
-              edition: editionFromAnswers(
-                { title: 'The Alchemist His Practise', author: 'Anonymous', originalYear: '1662' },
-                current as Record<string, unknown>
-              ),
+              edition: editionFromAnswers(current as Record<string, unknown>),
               estimatedPageCount: 240,
               ...(interior
                 ? {
@@ -222,6 +231,7 @@ export function DevPreview(): JSX.Element {
                         (w) => `Page ${w.pageIndex + 1}: a line runs past the margin`
                       ),
                       notesPlaced: interior.notesPlaced,
+                      notesCollected: interior.notesCollected,
                       notesDropped: interior.notesDropped
                     }
                   }
