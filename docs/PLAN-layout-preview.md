@@ -228,14 +228,42 @@ Each step leaves the app working.
 7. TOC with measured page numbers (the second pass).
 8. Delete the LaTeX path; turn the two `pending` KDP checks into real ones.
 
+## Decisions taken
+
+### Small caps: not in v1, and never faked
+
+Real `smcp` needs glyph-level drawing (`fontkit.layout(text, ['smcp'])` then
+emitting glyph IDs, rather than `drawText`). Ruled out for the first version:
+nice to have, not worth a lower-level drawing path and its spacing risks while
+the rest of the engine is new.
+
+So `headingStyle.smallCaps` renders as ordinary capitals — or italics, if that
+reads better at chapter openings — and the interview copy should stop promising
+small caps until they exist.
+
+**Do not synthesise them by scaling capitals.** That is what cheap reprints do
+and it reads as wrong even to people who cannot say why. Better to not offer the
+look than to offer a poor version of it. Revisit once pagination is trusted; the
+fonts do carry the real feature, so nothing is lost by waiting.
+
+### Junicode: vendored by hand
+
+Being fetched from https://github.com/psb1558/Junicode-font (Releases) and
+dropped into `public/fonts/junicode/` — static Regular + Italic, **not** the
+variable-font build, plus `OFL.txt`, which must travel with it since this repo
+redistributes it publicly.
+
+Filenames are whatever the release ships; read them off the directory rather
+than hard-coding a guess.
+
+**Expect it to be large.** Junicode's whole purpose is enormous glyph coverage
+for medieval scholarship, so it may outweigh the other six combined. If it does,
+load it on demand when the user actually selects it, rather than bundling it
+with the rest — the other six stay eagerly loaded, so switching between them
+remains instant.
+
 ## Open questions for the next session
 
-- **Small caps rendering path.** Real `smcp` requires drawing glyph IDs from
-  `fontkit.layout(text, ['smcp'])` instead of `drawText`. Worth it for period
-  running heads and chapter titles, but it is a distinctly lower-level drawing
-  path. Decide in step 1, because it shapes `pdf-out.ts`.
-- **Junicode.** Vendor from GitHub, substitute another OFL face with archaic
-  coverage, or ship six and adjust the interview copy.
 - **Memory on a 300-page export.** A text-only PDF is small, but pdf-lib builds
   in memory and images land later. Keep the page loop streaming-friendly.
 
