@@ -101,6 +101,13 @@ export type BookEdit =
    * blank lines, which is the convention prose already uses and so is not a
    * markup language anyone has to learn.
    */
+  | {
+      kind: 'section'
+      sectionId: string
+      placement: 'front' | 'back'
+      title: string
+      text: string
+    }
   /**
    * Retouching for one picture — crop, straighten, levels, and the rest.
    *
@@ -115,13 +122,6 @@ export type BookEdit =
    * platform's business.
    */
   | { kind: 'retouch'; illustrationId: string; ops: ImageEditOp[] }
-  | {
-      kind: 'section'
-      sectionId: string
-      placement: 'front' | 'back'
-      title: string
-      text: string
-    }
 
 /** How a split block's halves are named, so the ids stay deterministic. */
 const splitId = (id: string, half: number): string => `${id}/${half}`
