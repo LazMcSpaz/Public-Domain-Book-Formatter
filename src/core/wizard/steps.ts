@@ -303,32 +303,65 @@ const transcribe: Step = {
       const run = s.savedRun
       const failed =
         run.failedPages > 0 ? ` ${run.failedPages} page(s) failed and stayed unread.` : ''
-      qs.push({
-        id: 'useSavedRun',
-        type: 'choice',
-        prompt: 'You have already had this book read.',
-        help:
-          `${run.pageCount} page(s), transcribed ${describeAge(run.savedAt)} by ` +
-          `${run.modelId}.${failed} Reading it again would cost the same as the first time.`,
-        defaultValue: 'use',
-        options: [
-          {
-            value: 'use',
-            label: 'Use what I already paid for',
-            description: 'Free, and immediate.'
-          },
-          {
-            value: 'again',
-            label: 'Read it again',
-            description: 'Only worth it if the first reading went badly.'
-          }
-        ]
-      })
+
+      // A run stopped partway is a different offer from a finished one, and
+      // the difference is money. Finished: use it, free. Partway: the pages
+      // already bought are kept and only the rest are read, so the choice is
+      // between paying for what is left and paying for the whole book again.
+      const remaining = Math.max(0, s.pageCount - run.pageCount)
+      qs.push(
+        run.complete
+          ? {
+              id: 'useSavedRun',
+              type: 'choice',
+              prompt: 'You have already had this book read.',
+              help:
+                `${run.pageCount} page(s), transcribed ${describeAge(run.savedAt)} by ` +
+                `${run.modelId}.${failed} Reading it again would cost the same as the first time.`,
+              defaultValue: 'use',
+              options: [
+                {
+                  value: 'use',
+                  label: 'Use what I already paid for',
+                  description: 'Free, and immediate.'
+                },
+                {
+                  value: 'again',
+                  label: 'Read it again',
+                  description: 'Only worth it if the first reading went badly.'
+                }
+              ]
+            }
+          : {
+              id: 'useSavedRun',
+              type: 'choice',
+              prompt: 'The last reading of this book stopped partway.',
+              help:
+                `${run.pageCount} of ${s.pageCount} page(s) were read ${describeAge(run.savedAt)} ` +
+                `by ${run.modelId}, and are paid for.${failed} ` +
+                'Carrying on reads only the pages that are left.',
+              defaultValue: 'resume',
+              options: [
+                {
+                  value: 'resume',
+                  label: `Carry on from page ${run.pageCount + 1}`,
+                  description: `${remaining} page(s) left to read — you pay only for those.`
+                },
+                {
+                  value: 'again',
+                  label: 'Start the reading over',
+                  description: 'Pays for all the pages again, including the ones already read.'
+                }
+              ]
+            }
+      )
 
       // The rest of this gate is about *spending*, so it has nothing to ask
-      // unless the user chooses to spend again.
+      // when the user is taking a finished run as it stands. Resuming *does*
+      // spend, so it goes on to the model and cost questions.
       const answers = s.answers['transcribe'] ?? {}
-      if ((answers['useSavedRun'] ?? 'use') === 'use') return qs
+      const choice = (answers['useSavedRun'] as string) ?? (run.complete ? 'use' : 'resume')
+      if (run.complete && choice === 'use') return qs
     }
 
     if (!s.hasApiKey) {

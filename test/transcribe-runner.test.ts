@@ -412,3 +412,113 @@ describe('runTranscription — page images are not accumulated', () => {
     expect(renders).toBe(1)
   })
 })
+
+describe('runTranscription — checkpointing, so a dead tab does not cost money', () => {
+  /**
+   * The failure this exists for, reported from a real book: the run was written
+   * to storage only once it had finished, so a tab that died at page 180 of 300
+   * had spent the money and kept nothing. On a phone — where a backgrounded tab
+   * is discarded under memory pressure — that is not a rare case.
+   */
+  const ok = () => jsonResponse(apiReply(goodPage))
+  const pages = (n: number) => Array.from({ length: n }, (_, i) => source(i))
+
+  it('hands over what has been read as it goes, not only at the end', async () => {
+    const seen: number[] = []
+    await runTranscription(
+      pages(12),
+      runOpts(async () => ok(), {
+        checkpointEvery: 5,
+        onCheckpoint: ({ transcriptions }: { transcriptions: readonly unknown[] }) => {
+          seen.push(transcriptions.length)
+        }
+      })
+    )
+    // After 5 and 10, then the remaining 2 on the way out.
+    expect(seen).toEqual([5, 10, 12])
+  })
+
+  it('checkpoints the tail even when the run is cancelled', async () => {
+    // The most valuable checkpoint of all: pages read since the last one are
+    // exactly what a cancel or a crash would otherwise throw away.
+    const controller = new AbortController()
+    const seen: number[] = []
+    let page = 0
+    const result = await runTranscription(
+      pages(10),
+      runOpts(
+        async () => {
+          if (++page === 3) controller.abort()
+          return ok()
+        },
+        {
+          checkpointEvery: 100,
+          signal: controller.signal,
+          onCheckpoint: ({ transcriptions }: { transcriptions: readonly unknown[] }) => {
+            seen.push(transcriptions.length)
+          }
+        }
+      )
+    )
+    expect(result.cancelled).toBe(true)
+    expect(seen).toEqual([3])
+    expect(result.transcriptions).toHaveLength(3)
+  })
+
+  it('reports the spend so far, so a resumed run is not billed twice over', async () => {
+    let last = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 }
+    await runTranscription(
+      pages(5),
+      runOpts(async () => ok(), {
+        checkpointEvery: 5,
+        onCheckpoint: ({ usage }: { usage: typeof last }) => {
+          last = { ...usage }
+        }
+      })
+    )
+    expect(last.outputTokens).toBe(1000)
+  })
+
+  it('carries on reading when a checkpoint cannot be written', async () => {
+    // Storage being full is a reason to warn, never a reason to stop a pass the
+    // user is paying for by the page.
+    const result = await runTranscription(
+      pages(6),
+      runOpts(async () => ok(), {
+        checkpointEvery: 2,
+        onCheckpoint: () => {
+          throw new Error('quota exceeded')
+        }
+      })
+    )
+    expect(result.transcriptions).toHaveLength(6)
+  })
+
+  it('skips pages a checkpoint already paid for', async () => {
+    // The other half: resuming must not re-send a page that is already bought.
+    let requests = 0
+    const done = (
+      await runTranscription(
+        pages(4),
+        runOpts(async () => {
+          requests++
+          return ok()
+        })
+      )
+    ).transcriptions
+
+    requests = 0
+    const result = await runTranscription(
+      pages(6),
+      runOpts(
+        async () => {
+          requests++
+          return ok()
+        },
+        { resumeFrom: done }
+      )
+    )
+    expect(requests).toBe(2)
+    expect(result.transcriptions).toHaveLength(6)
+  })
+})

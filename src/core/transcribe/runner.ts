@@ -50,6 +50,22 @@ export interface RunOptions {
   /** Pages already done from a previous run — skipped and kept. */
   resumeFrom?: readonly PageTranscription[]
   onProgress?: (p: RunProgress) => void
+  /**
+   * Called with everything read so far, so the caller can store it mid-run.
+   *
+   * Without it, a book is only saved once it is entirely finished, and a tab
+   * that dies at page 180 of 300 has spent the money and kept nothing. Awaited,
+   * so a slow write throttles the run rather than piling up behind it — and any
+   * error is the caller's to swallow, because failing to *save* a page is not a
+   * reason to stop *reading* the book.
+   */
+  onCheckpoint?: (progress: {
+    transcriptions: readonly PageTranscription[]
+    failures: readonly PageFailure[]
+    usage: ApiUsage
+  }) => void | Promise<void>
+  /** Pages between checkpoints. Default 5. */
+  checkpointEvery?: number
   signal?: AbortSignal
   /** Injectable sleep, so tests don't actually wait. */
   sleep?: (ms: number) => Promise<void>
@@ -90,6 +106,8 @@ export async function runTranscription(
     maxAttempts = 3,
     retryDelayMs = 1000,
     onProgress,
+    onCheckpoint,
+    checkpointEvery = 5,
     signal,
     sleep = defaultSleep
   } = options
@@ -109,6 +127,21 @@ export async function runTranscription(
   const usage: ApiUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 }
   let previousTail = ''
   let cancelled = false
+  let sinceCheckpoint = 0
+
+  const ordered = (): PageTranscription[] =>
+    [...done.values()].sort((a, b) => a.pageIndex - b.pageIndex)
+
+  const checkpoint = async (): Promise<void> => {
+    if (!onCheckpoint) return
+    sinceCheckpoint = 0
+    try {
+      await onCheckpoint({ transcriptions: ordered(), failures, usage })
+    } catch {
+      // A failed write must not end a run the user is paying for. The caller
+      // reports it; this loop carries on reading.
+    }
+  }
 
   for (const [i, source] of pages.entries()) {
     if (signal?.aborted) {
@@ -172,9 +205,16 @@ export async function runTranscription(
     }
 
     onProgress?.({ page: i + 1, total: pages.length, usage, failed: failures.length })
+
+    sinceCheckpoint += 1
+    if (sinceCheckpoint >= checkpointEvery) await checkpoint()
   }
 
-  const transcriptions = [...done.values()].sort((a, b) => a.pageIndex - b.pageIndex)
+  // The last few pages, and the cancelled case: stopping is exactly when the
+  // pages read since the last checkpoint are most at risk of being lost.
+  if (sinceCheckpoint > 0) await checkpoint()
+
+  const transcriptions = ordered()
 
   // Deterministic verification — evidence, never the model's self-assessment.
   const byIndex = new Map(pages.map((p) => [p.pageIndex, p]))

@@ -800,6 +800,56 @@ await page.waitForTimeout(400)
 const overflow = await page.evaluate(() => document.body.scrollWidth - window.innerWidth)
 await shot('10-export-mobile')
 
+// A run that stopped partway is now a real state, and confusing it with a
+// finished one costs money in one direction and prints a truncated book in the
+// other. Seeded here and driven through the actual gate.
+console.log('5b2. a half-read book offers to carry on, not to be reused')
+await page.evaluate(
+  async ([repo, key]) => {
+    const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+    const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+    await runStore.deleteRun(key)
+    await runStore.saveRun(
+      project.createSavedRun({
+        key,
+        fileName: 'test-book.pdf',
+        pageCount: 4,
+        complete: false,
+        transcriptions: Array.from({ length: 4 }, (_, i) => ({
+          pageIndex: i,
+          role: 'body',
+          blocks: [{ kind: 'paragraph', text: `Half-read page ${i + 1}.` }],
+          uncertain: [],
+          furniture: {}
+        })),
+        failures: [],
+        usage: { inputTokens: 10, outputTokens: 20, cacheReadTokens: 0 },
+        modelId: 'claude-opus-5',
+        identityAnswers: { orthography: 'preserve' }
+      })
+    )
+  },
+  [REPO, savedKey]
+)
+await page.goto(URL_BASE, { waitUntil: 'networkidle' })
+await page.setInputFiles('input[type=file]', bookPath)
+await page.waitForSelector('.terms', { timeout: 180000 })
+await page.locator('button.primary', { hasText: 'Looks right' }).click()
+await page.waitForSelector('.q', { timeout: 20000 })
+const partialPrompt = await page
+  .locator('.q .prompt')
+  .filter({ hasText: 'stopped partway' })
+  .count()
+const carryOn = await page.locator('.opt').filter({ hasText: 'Carry on from page 5' }).count()
+// Carrying on spends money, so the cost questions must still be asked — the
+// finished-run path returns before them and this one must not.
+const stillAsksModel = await page.locator('.q').filter({ hasText: 'read the pages' }).count()
+await shot('08b2-partial-run-offered')
+if (partialPrompt !== 1) throw new Error('A half-read book was not offered as one')
+if (carryOn !== 1) throw new Error('No option to carry on from where it stopped')
+if (stillAsksModel !== 1) throw new Error('Resuming skipped the cost approval')
+console.log('  → offered "Carry on from page 5", and still asked what it would cost')
+
 // The failure this guards against was reported from a real book: a refresh put
 // an empty drop zone in front of someone whose paid run was in the database,
 // with nothing on the screen to say so. `listRuns` had been written for exactly

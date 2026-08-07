@@ -40,7 +40,7 @@ import type { ImageEditOp } from '@core/model'
  * both upgrade in place rather than being refused. That distinction is the
  * whole reason a migration exists instead of a version check.
  */
-export const CURRENT_SCHEMA_VERSION = 7
+export const CURRENT_SCHEMA_VERSION = 8
 
 /** A page the model could not read at all. Mirrors the runner's `PageFailure`. */
 export interface SavedFailure {
@@ -97,12 +97,29 @@ export interface SavedRun {
    * decode time so a phone photograph does not fill the store on its own.
    */
   images: { id: string; bytes: Uint8Array }[]
+  /**
+   * Whether the paid pass reached the end of the book.
+   *
+   * The difference between "this book has been read" and "these pages have been
+   * paid for" — and until v8 the store could not tell them apart, because
+   * nothing was written until the whole run finished. A tab that died at page
+   * 180 of 300 left nothing at all.
+   *
+   * A run is now checkpointed as it goes, so a partial one is the normal
+   * intermediate state rather than a corruption. It resumes *transcription*
+   * from where it stopped; a complete one skips straight past the paid step.
+   * Getting this backwards costs real money in one direction and silently
+   * prints a book missing its last hundred pages in the other.
+   */
+  complete: boolean
 }
 
 /** The facts the resume question needs, without loading the whole run. */
 export interface SavedRunSummary {
   key: string
   fileName: string
+  /** False when the paid pass stopped partway and can be continued. */
+  complete: boolean
   savedAt: string
   pageCount: number
   failedPages: number
@@ -114,6 +131,7 @@ export function summarize(run: SavedRun): SavedRunSummary {
   return {
     key: run.key,
     fileName: run.fileName,
+    complete: run.complete,
     savedAt: run.savedAt,
     pageCount: run.pageCount,
     failedPages: run.failures.length,
@@ -200,6 +218,8 @@ export function createSavedRun(init: {
   edits?: readonly BookEdit[]
   images?: ReadonlyMap<string, Uint8Array>
   savedAt?: string
+  /** Defaults true: a caller that does not say is finishing a book, not checkpointing one. */
+  complete?: boolean
 }): SavedRun {
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -213,7 +233,8 @@ export function createSavedRun(init: {
     modelId: init.modelId,
     identityAnswers: init.identityAnswers,
     edits: [...(init.edits ?? [])],
-    images: [...(init.images ?? new Map())].map(([id, bytes]) => ({ id, bytes }))
+    images: [...(init.images ?? new Map())].map(([id, bytes]) => ({ id, bytes })),
+    complete: init.complete ?? true
   }
 }
 
@@ -276,7 +297,10 @@ export function migrateSavedRun(raw: unknown): SavedRun {
     modelId: str(raw['modelId'], 'unknown'),
     identityAnswers: isObject(raw['identityAnswers']) ? raw['identityAnswers'] : {},
     edits: parseEdits(raw['edits']),
-    images: parseImages(raw['images'])
+    images: parseImages(raw['images']),
+    // Anything written before v8 could only have been written by the old
+    // save-at-the-end path, so it is complete by construction.
+    complete: typeof raw['complete'] === 'boolean' ? raw['complete'] : true
   }
 }
 

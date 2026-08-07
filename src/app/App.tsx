@@ -717,7 +717,8 @@ export function App(): JSX.Element {
       identityAnswers: Record<string, unknown>,
       modelId: string,
       corrections: readonly BookEdit[] = [],
-      images: ReadonlyMap<string, Uint8Array> = new Map()
+      images: ReadonlyMap<string, Uint8Array> = new Map(),
+      complete = true
     ): Promise<void> => {
       const key = fileKeyRef.current
       const file = fileDataRef.current
@@ -739,7 +740,8 @@ export function App(): JSX.Element {
           modelId,
           identityAnswers,
           edits: corrections,
-          images
+          images,
+          complete
         })
       )
       if (!stored) {
@@ -804,6 +806,20 @@ export function App(): JSX.Element {
       wordsByPage.set(w.pageIndex, list)
     }
 
+    // Pages an earlier run already bought, when the user chose to carry on.
+    // Loaded here rather than held in state because it is the whole
+    // transcription, not a summary, and nothing renders from it.
+    const runKey = fileKeyRef.current
+    const resuming =
+      state.savedRun !== null &&
+      !state.savedRun.complete &&
+      (currentAnswers['useSavedRun'] ?? 'resume') === 'resume'
+    const alreadyRead = resuming && runKey ? ((await loadRun(runKey))?.transcriptions ?? []) : []
+
+    // Warned once, not once per checkpoint: a storage failure repeated every
+    // five pages would bury the run's own progress under its own complaint.
+    let warnedAboutStorage = false
+
     try {
       const result = await runBrowserTranscription({
         fileData: data,
@@ -816,6 +832,37 @@ export function App(): JSX.Element {
         bookContext,
         imageLongEdge: prefs.imageLongEdge,
         onProgress: setRunProgress,
+        resumeFrom: alreadyRead,
+        // The whole point: pages are stored as they arrive, so a tab that dies
+        // at page 180 of 300 keeps the 180 that were paid for. Marked
+        // incomplete, because resuming a half-read book and using a finished
+        // one are different offers and confusing them costs money.
+        onCheckpoint: async ({ transcriptions, failures, usage }) => {
+          const file = fileDataRef.current
+          const liveKey = fileKeyRef.current
+          if (!file || !liveKey || transcriptions.length === 0) return
+          const ok = await saveRun(
+            createSavedRun({
+              key: liveKey,
+              fileName: file.name,
+              pageCount: transcriptions.length,
+              transcriptions,
+              failures,
+              usage,
+              modelId,
+              identityAnswers: identity,
+              complete: false
+            })
+          )
+          if (!ok && !warnedAboutStorage) {
+            warnedAboutStorage = true
+            setError(
+              'Pages are being read but cannot be saved as they arrive — this browser ' +
+                'refused the write. If the tab closes before the book finishes, the ' +
+                'reading so far will be lost. Free up storage if you can.'
+            )
+          }
+        },
         signal: controller.signal
       })
 
@@ -824,7 +871,14 @@ export function App(): JSX.Element {
       // Store it before anything else can go wrong. This is the only step in
       // the app the user cannot repeat for free, and a refresh, a crash or a
       // closed tab between here and the export used to lose all of it.
-      await persistRun(result, state.answers['gate-identity'] ?? {}, modelId)
+      await persistRun(
+        result,
+        state.answers['gate-identity'] ?? {},
+        modelId,
+        [],
+        new Map(),
+        !result.cancelled
+      )
 
       complete(stateFromTranscriptions(result.transcriptions, result.failures))
     } catch (err) {
@@ -1162,13 +1216,21 @@ export function App(): JSX.Element {
       return
     }
     if (step.id === 'transcribe') {
-      // Already paid for, and the user said to use it: nothing to approve.
-      if (state.savedRun && (currentAnswers['useSavedRun'] ?? 'use') === 'use') {
+      const saved = state.savedRun
+      // A *finished* run the user said to use: nothing to approve.
+      if (saved?.complete && (currentAnswers['useSavedRun'] ?? 'use') === 'use') {
         void useSavedRun()
         return
       }
+      // Carrying on a half-read book only pays for the pages that are left.
+      // Quoting the whole book here would ask the user to approve a number
+      // they are not going to be charged.
+      const resuming =
+        saved !== null &&
+        !saved.complete &&
+        (currentAnswers['useSavedRun'] ?? 'resume') === 'resume'
       const estimate = estimateCost({
-        pageCount: state.pageCount,
+        pageCount: resuming ? Math.max(1, state.pageCount - saved.pageCount) : state.pageCount,
         modelId: (currentAnswers['model'] as string) ?? 'claude-opus-5',
         imageLongEdge: loadPrefs().imageLongEdge
       })
@@ -1253,6 +1315,7 @@ export function App(): JSX.Element {
                     <li key={run.key}>
                       <strong>{run.fileName}</strong> — {run.pageCount} page
                       {run.pageCount === 1 ? '' : 's'}
+                      {run.complete ? '' : ' read so far, stopped partway'}
                       {run.failedPages > 0 ? `, ${run.failedPages} failed` : ''} ·{' '}
                       {describeAge(run.savedAt)}
                       {reopenable.includes(run.key) ? (

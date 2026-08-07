@@ -11,6 +11,8 @@ import {
   type PageSource,
   type RunResult,
   type RunProgress,
+  type RunOptions,
+  type PageTranscription,
   type ClientConfig
 } from '@core/transcribe'
 import type { LexiconEntry } from '@core/lexicon'
@@ -34,6 +36,10 @@ export interface BrowserRunOptions {
   onlyPages?: readonly number[]
   onProgress?: (p: RunProgress) => void
   signal?: AbortSignal
+  /** Pages a previous run already paid for — skipped, not re-sent. */
+  resumeFrom?: readonly PageTranscription[]
+  /** Called as pages come in, so a stopped run keeps what it bought. */
+  onCheckpoint?: RunOptions['onCheckpoint']
 }
 
 /** Canvas → bare base64 (no data: prefix), which is what the API expects. */
@@ -100,6 +106,8 @@ export async function runBrowserTranscription(options: BrowserRunOptions): Promi
     normalizeLongS: options.normalizeLongS,
     bookContext: options.bookContext,
     onProgress: options.onProgress,
+    onCheckpoint: options.onCheckpoint,
+    resumeFrom: options.resumeFrom,
     signal: options.signal
   })
 }

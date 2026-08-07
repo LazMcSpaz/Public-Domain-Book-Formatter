@@ -229,6 +229,7 @@ describe('transcribe step questions', () => {
     savedAt: new Date().toISOString(),
     pageCount: 312,
     failedPages: 0,
+    complete: true,
     modelId: 'claude-opus-5',
     usage: { inputTokens: 1, outputTokens: 2, cacheReadTokens: 0 }
   }
@@ -863,5 +864,62 @@ describe('gate 1 — never ask about a word without showing it', () => {
 
   it('still lists everything when no crop resolver exists at all (headless)', () => {
     expect(grid(stateWith(4))!.rows).toHaveLength(4)
+  })
+})
+
+describe('the transcribe gate — a run that stopped partway', () => {
+  /**
+   * Before checkpointing there was no such thing: a run was written only once
+   * it had finished, so a tab that died mid-book left nothing. Now a partial
+   * run is the ordinary intermediate state, and telling it from a finished one
+   * is the difference between paying for the pages that are left and paying
+   * for the whole book twice.
+   */
+  const base = (): WizardState => ({
+    ...reconDone(),
+    pageCount: 312,
+    hasApiKey: true,
+    completed: ['intake', 'recon', 'gate-identity']
+  })
+
+  const partial = {
+    key: 'k',
+    fileName: 'alchemist.pdf',
+    savedAt: new Date().toISOString(),
+    pageCount: 200,
+    failedPages: 0,
+    complete: false,
+    modelId: 'claude-opus-5',
+    usage: { inputTokens: 1, outputTokens: 2, cacheReadTokens: 0 }
+  }
+
+  const ask = (state: WizardState) => stepById('transcribe').questions(state)
+
+  it('offers to carry on rather than to reuse', () => {
+    const q = ask({ ...base(), savedRun: partial }).find((x) => x.id === 'useSavedRun')!
+    expect((q as { defaultValue: string }).defaultValue).toBe('resume')
+    expect(q.prompt).toContain('stopped partway')
+  })
+
+  it('says how much is already bought and how much is left', () => {
+    const q = ask({ ...base(), savedRun: partial }).find((x) => x.id === 'useSavedRun')!
+    expect(q.help).toContain('200 of 312')
+    const options = (q as { options: { label: string; description: string }[] }).options
+    expect(options[0]!.label).toContain('page 201')
+    expect(options[0]!.description).toContain('112')
+  })
+
+  it('still asks the spending questions, because carrying on costs money', () => {
+    // The finished-run path returns early here; the partial one must not, or
+    // the user resumes without ever approving a charge.
+    const ids = ask({ ...base(), savedRun: partial }).map((q) => q.id)
+    expect(ids).toEqual(['useSavedRun', 'model', 'bookContext'])
+  })
+
+  it('leaves a finished run alone', () => {
+    const done = { ...partial, complete: true, pageCount: 312 }
+    const q = ask({ ...base(), savedRun: done }).find((x) => x.id === 'useSavedRun')!
+    expect((q as { defaultValue: string }).defaultValue).toBe('use')
+    expect(q.prompt).toContain('already had this book read')
   })
 })
