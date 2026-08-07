@@ -35,7 +35,8 @@ const FEATURES: TypeFeatures = {
   dlig: false,
   hlig: false,
   clig: false,
-  rlig: false
+  rlig: false,
+  calt: false
 }
 
 const FILES: Record<string, string> = {

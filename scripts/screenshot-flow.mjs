@@ -736,6 +736,33 @@ await page.waitForTimeout(3000)
 const pagesAfter = await previewFingerprint()
 await shot('07-gate-design-answered')
 
+// Junicode is the one face this repo ships itself, the only one that is CFF
+// rather than TrueType, and the only one loaded by fetch instead of bundled. So
+// it is the only one whose absence looks exactly like success — the app
+// substitutes EB Garamond and prints a notice nobody reads. Picking it here is
+// the check that it is really there and really embeddable.
+console.log('6d. Junicode, the vendored face')
+await pick('Typeface', 'Junicode')
+await page.waitForTimeout(4000)
+await page.waitForSelector('.leaf img', { timeout: 60000 })
+const junicodeSummary = await summary()
+const substituted = await page.locator('.help').filter({ hasText: 'isn’t installed here' }).count()
+const junicodeInk = await page.evaluate(async () => {
+  const img = document.querySelector('.leaf img')
+  if (!img) return 0
+  await img.decode()
+  const c = document.createElement('canvas')
+  c.width = 120
+  c.height = 180
+  const ctx = c.getContext('2d')
+  ctx.drawImage(img, 0, 0, c.width, c.height)
+  const { data } = ctx.getImageData(0, 0, c.width, c.height)
+  let dark = 0
+  for (let i = 0; i < data.length; i += 4) if (data[i] < 128) dark++
+  return dark / (c.width * c.height)
+})
+await shot('08c-junicode')
+
 // The preview is the widest thing in the app — a row of full page images. It
 // has to scroll inside its own card, because a gate the user has to pan
 // sideways to answer is a gate that fails on a phone.
@@ -804,6 +831,9 @@ console.log(
 console.log(`  preview pages rendered: ${leaves}`)
 console.log(`  preview responds to answers: ${pagesBefore !== pagesAfter}`)
 console.log(`  design gate mobile overflow: ${previewOverflow}px`)
+console.log(`  Junicode loads without substitution: ${substituted === 0}`)
+console.log(`    ${junicodeSummary}`)
+console.log(`    and puts ink on the page: ${(junicodeInk * 100).toFixed(1)}%`)
 console.log(`  export offers: ${download}`)
 console.log(`  KDP checks shown: ${checks} (${pending} pending)`)
 console.log(`  mobile horizontal overflow: ${overflow}px`)

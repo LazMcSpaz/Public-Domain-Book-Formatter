@@ -1,7 +1,7 @@
 /**
  * Fonts: one load, two consumers.
  *
- * The same TTF bytes serve both jobs — fontkit measures with them and pdf-lib
+ * The same font bytes serve both jobs — fontkit measures with them and pdf-lib
  * embeds them — and that is the point. Measuring with one engine and drawing
  * with another is exactly how WYSIWYG breaks, so the measurer here sums the
  * advances of the glyphs `font.layout()` returns, which is *the same call
@@ -43,13 +43,22 @@ const FONT_URLS: Record<string, Record<FontStyle, string>> = {
 /**
  * Junicode is not on npm — it is not a Google font — so it is vendored by hand
  * into `public/fonts/junicode/`. Because it exists for enormous glyph coverage
- * (medieval scholarship), it is far larger than the other six, and it is the
- * only face the user is unlikely to pick. So it loads on demand rather than
- * with the rest, and its absence is reported rather than hidden.
+ * (medieval scholarship: long-s, thorn, eth, yogh, and 5,980 glyphs in all), it
+ * is far larger than the other six, and it is the only face the user is
+ * unlikely to pick. So it loads on demand rather than with the rest, and its
+ * absence is reported rather than hidden.
+ *
+ * **These are OTF/CFF, not TrueType** — the only faces here that are. That is
+ * worth knowing because pdf-lib's whole-font embedder has to write a CFF
+ * FontFile3 rather than a FontFile2, a path nothing else in this app exercises.
+ * It works: the file embeds, pdf.js reads the text back, and `test/fonts-
+ * junicode.test.ts` holds it to that. Do not swap in the variable-font build to
+ * save space — one `.otf` per style is what both fontkit and pdf-lib expect,
+ * and a variable font embeds as whatever single instance the reader guesses.
  */
 const JUNICODE_URLS: Record<FontStyle, string> = {
-  regular: 'fonts/junicode/Junicode.ttf',
-  italic: 'fonts/junicode/Junicode-Italic.ttf'
+  regular: 'fonts/junicode/Junicode-Regular.otf',
+  italic: 'fonts/junicode/Junicode-Italic.otf'
 }
 
 /** The face used when a profile names a family this app cannot embed. */
@@ -71,6 +80,21 @@ export const FALLBACK_FAMILY = 'EB Garamond'
  * these faces. See `pdf-out.ts`. Between "no fi ligature" and "broken words",
  * the typography loses.
  *
+ * `calt` is off for the same reason, and it is not a ligature at all — which is
+ * why it was missed until Junicode arrived. Contextual alternates substitute a
+ * *differently shaped* glyph for the same character in company: Junicode swaps
+ * `f` for `f.rf` before another f, and `i` for `i.lf` after one, so the pair
+ * does not collide. Those alternates are reachable from no code point either,
+ * so they hit the identical wall — "the dif f erence of a gentle f ı" on a
+ * previewed page, which is what sent us looking. fontkit applies `calt` by
+ * default, so it has to be switched off explicitly.
+ *
+ * The other eight faces are unaffected: `calt` changes not one glyph in any of
+ * them. The rule underneath all of this is the real invariant, and
+ * `test/fonts-coverage.test.ts` enforces it directly rather than by naming
+ * features: **no feature may be left on that can produce a glyph no code point
+ * reaches.** Any future face, or any future feature, has to satisfy that.
+ *
  * Whatever is decided here must be used by the measurer *and* the embedder, or
  * the two disagree about how wide a word is — which is why this constant is
  * exported rather than written out twice.
@@ -80,7 +104,8 @@ export const LAYOUT_FEATURES: TypeFeatures = {
   dlig: false,
   hlig: false,
   clig: false,
-  rlig: false
+  rlig: false,
+  calt: false
 }
 
 /** Every family the app can set a book in, in the order the interview offers them. */
@@ -98,7 +123,7 @@ interface LoadedFace {
  * `TextMeasurer` for the layout engine and the raw bytes for the embedder.
  */
 export interface FontTable extends TextMeasurer {
-  /** TTF bytes for a face, for `PDFDocument.embedFont`. Null when unavailable. */
+  /** Font bytes for a face, for `PDFDocument.embedFont`. Null when unavailable. */
   bytesFor(font: FontRef): Uint8Array | null
   /** The family actually used for a request, after any substitution. */
   resolve(family: string): string
