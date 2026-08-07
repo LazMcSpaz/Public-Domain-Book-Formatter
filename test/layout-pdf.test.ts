@@ -56,12 +56,16 @@ function diskFontTable(): FontTable {
   )
   const faceFor = (ref: FontRef) =>
     faces.get(`${ref.family}|${ref.style}`) ?? faces.get('EB Garamond|regular')!
+  const featuresFor = (ref: FontRef): TypeFeatures =>
+    ref.smallCaps ? { ...FEATURES, smcp: true } : FEATURES
 
   return {
     widthOf(text, ref, sizePt) {
       const face = faceFor(ref)
       let units = 0
-      for (const glyph of face.font.layout(text, FEATURES).glyphs) units += glyph.advanceWidth
+      for (const glyph of face.font.layout(text, featuresFor(ref)).glyphs) {
+        units += glyph.advanceWidth
+      }
       return (units / face.font.unitsPerEm) * sizePt
     },
     metrics(ref, sizePt) {
@@ -74,6 +78,8 @@ function diskFontTable(): FontTable {
       }
     },
     bytesFor: (ref) => faceFor(ref).bytes,
+    hasSmallCaps: (family) =>
+      faceFor({ family, style: 'regular' }).font.availableFeatures.includes('smcp'),
     resolve: (family) => family,
     substitutions: new Map()
   }
@@ -191,6 +197,16 @@ describe('renderPdf — the real output', () => {
    * ever empty, the features have been turned off again or the widening is no
    * longer being called, and the only other symptom would be on paper.
    */
+  it('sets a small-capped heading in real small capitals, not scaled ones', async () => {
+    // EB Garamond carries `smcp`, and the default profile asks for it. The
+    // evidence that the feature really engaged is that the run used glyphs no
+    // code point reaches — small-capital glyphs — which is precisely what
+    // `font-widths.ts` had to start writing widths for. Scaled capitals would
+    // produce none, and neither would upper-casing the string.
+    const { pdf } = await build()
+    expect(pdf.ligatureGlyphs.some((n) => /\.(sc|smcp)$|small/i.test(n))).toBe(true)
+  })
+
   it('sets the ligatures the prose calls for, and writes a width for each', async () => {
     const { pdf } = await build()
     expect(pdf.ligatureGlyphs.length).toBeGreaterThan(0)
@@ -257,7 +273,12 @@ describe('renderPdf — the real output', () => {
     const opener = book.chapterPages[0]!.pageIndex
     const text = await textOfPage(reopened, opener)
 
-    expect(text).toContain('OF THE AIR')
+    // "Of the Air", not "OF THE AIR". The heading is printed in the face's real
+    // small capitals, which is an OpenType feature applied to the text as
+    // written — so what a reader copies, a search matches and a screen reader
+    // says aloud is the author's own capitalisation. Upper-casing the string,
+    // which is what this did before, threw that away to fake the look.
+    expect(text).toContain('Of the Air')
     expect(text).toContain('chirurgeon')
     // The drop-cap initial is drawn as its own run; the reader must still be
     // able to recover the opening word.
@@ -365,7 +386,9 @@ describe('renderPdf — footnotes and the contents page reach the file', () => {
     const reopened = await reopen(pdf.bytes)
     const text = await textOfPage(reopened, contents.index)
 
-    expect(text).toContain('CONTENTS')
+    // Printed in small capitals, extracted as written — the contents title
+    // follows the same rule as a chapter heading.
+    expect(text).toContain('Contents')
     for (const chapter of book.chapterPages) {
       expect(text).toContain(chapter.title)
       expect(text).toContain(book.pages[chapter.pageIndex]!.folio!)

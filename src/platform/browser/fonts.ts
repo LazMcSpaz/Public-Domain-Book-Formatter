@@ -209,6 +209,16 @@ export async function loadFonts(families: readonly string[]): Promise<FontTable>
   const resolve = (family: string): string =>
     faces.has(`${family}|regular`) ? family : FALLBACK_FAMILY
 
+  /**
+   * The features a run is laid out with: the shared defaults, plus `smcp` when
+   * the run asked for small capitals *and* the face has them. Asking for a
+   * feature a font does not carry is harmless — fontkit ignores it — but the
+   * engine decides that question up front so the measured width and the drawn
+   * glyphs come from the same answer.
+   */
+  const featuresFor = (ref: FontRef): TypeFeatures =>
+    ref.smallCaps ? { ...LAYOUT_FEATURES, smcp: true } : LAYOUT_FEATURES
+
   const faceFor = (ref: FontRef): LoadedFace | null => {
     const family = resolve(ref.family)
     // A family with no italic — or a synthetic style — falls back to its own
@@ -226,7 +236,7 @@ export async function loadFonts(families: readonly string[]): Promise<FontTable>
       // because it includes kerning adjustments that a plain `Tj` never
       // applies, and using it here would put the preview a few points off the
       // export on every line.
-      const run = face.font.layout(text, LAYOUT_FEATURES)
+      const run = face.font.layout(text, featuresFor(ref))
       let units = 0
       for (const glyph of run.glyphs) units += glyph.advanceWidth
       return (units / face.font.unitsPerEm) * sizePt
@@ -245,6 +255,11 @@ export async function loadFonts(families: readonly string[]): Promise<FontTable>
 
     bytesFor(ref) {
       return faceFor(ref)?.bytes ?? null
+    },
+
+    hasSmallCaps(family) {
+      const face = faces.get(`${resolve(family)}|regular`)
+      return face ? face.font.availableFeatures.includes('smcp') : false
     },
 
     resolve,

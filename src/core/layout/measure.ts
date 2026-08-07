@@ -28,6 +28,17 @@ export interface TextMeasurer {
   /** Advance width of `text` set in `font` at `sizePt`, in points. */
   widthOf(text: string, font: FontRef, sizePt: number): number
   metrics(font: FontRef, sizePt: number): FontMetrics
+  /**
+   * Whether this family carries real small capitals.
+   *
+   * The engine has to ask, because only three of the seven faces offered do —
+   * and one of the four without them is IM FELL English, the face recommended
+   * for exactly the 17th-century books most likely to want the look. Asking
+   * keeps the alternative honest: a face with no `smcp` gets full capitals,
+   * which is a different texture, rather than capitals scaled down, which is a
+   * forgery.
+   */
+  hasSmallCaps(family: string): boolean
 }
 
 /**
@@ -45,7 +56,10 @@ export function fixedWidthMeasurer(emRatio = 0.5): TextMeasurer {
       ascent: sizePt * 0.75,
       descent: sizePt * 0.25,
       lineGap: 0
-    })
+    }),
+    // The fixed-width measurer stands in for a font it does not have, so it
+    // reports the capability the engine's default path assumes: none.
+    hasSmallCaps: () => false
   }
 }
 
@@ -61,7 +75,10 @@ export function cachedMeasurer(inner: TextMeasurer): TextMeasurer {
   const metrics = new Map<string, FontMetrics>()
   return {
     widthOf(text, font, sizePt) {
-      const key = [font.family, font.style, sizePt, text].join('\u0000')
+      // `smallCaps` is part of the key: the same word at the same size is a
+      // different width in small capitals, and leaving it out would serve one
+      // measurement for both.
+      const key = [font.family, font.style, font.smallCaps ? 'sc' : '', sizePt, text].join('\u0000')
       let w = widths.get(key)
       if (w === undefined) {
         w = inner.widthOf(text, font, sizePt)
@@ -77,6 +94,10 @@ export function cachedMeasurer(inner: TextMeasurer): TextMeasurer {
         metrics.set(key, m)
       }
       return m
-    }
+    },
+    // Not cached: it is a lookup in a small table, and caching a capability
+    // behind the same wrapper that caches measurements would invite the two to
+    // be invalidated on different schedules.
+    hasSmallCaps: (family) => inner.hasSmallCaps(family)
   }
 }

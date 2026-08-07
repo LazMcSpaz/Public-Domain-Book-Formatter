@@ -52,7 +52,7 @@ export interface RenderPdfOptions {
 }
 
 function keyOf(font: FontRef): string {
-  return `${font.family}|${font.style}`
+  return `${font.family}|${font.style}|${font.smallCaps ? 'sc' : ''}`
 }
 
 /**
@@ -110,9 +110,14 @@ export async function renderPdf(
     if (!bytes) continue
     // A copy, not the original: the font table shares one buffer across every
     // request for a face, and pdf-lib takes ownership of what it is handed.
+    // A small-capitals run is the same bytes with `smcp` switched on. pdf-lib
+    // applies features per *embedded font*, so the variant is a second embed of
+    // the same face rather than a glyph-level draw path — which is what makes
+    // real small capitals possible here at all. The file carries the face
+    // twice; that is the price, and it is the same price as an italic.
     const font = await doc.embedFont(bytes.slice(), {
       subset: false,
-      features: LAYOUT_FEATURES
+      features: ref.smallCaps ? { ...LAYOUT_FEATURES, smcp: true } : LAYOUT_FEATURES
     })
     embedded.set(keyOf(ref), font)
     embeddedFamilies.add(fonts.resolve(ref.family))

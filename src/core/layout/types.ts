@@ -32,6 +32,19 @@ export interface FontRef {
   /** Family name as it appears in `StyleProfile.bodyFont` (e.g. "EB Garamond"). */
   family: string
   style: FontStyle
+  /**
+   * Set the run in the face's **real** small capitals — its `smcp` glyphs, not
+   * capitals scaled down, which is the tell of a cheap reprint.
+   *
+   * A variant of the same face rather than a separate one: the bytes are
+   * identical and only the OpenType feature differs. That is why this belongs
+   * on the reference and not in the family name — the writer embeds one face
+   * per distinct `FontRef`, so a book using both gets the file twice unless the
+   * key says they are the same bytes.
+   *
+   * Only meaningful where `TextMeasurer.hasSmallCaps` says the face has them.
+   */
+  smallCaps?: boolean
 }
 
 /**

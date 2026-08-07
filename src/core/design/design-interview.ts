@@ -42,6 +42,21 @@ export interface FontChoice {
   /** LaTeX/OpenType family name passed to fontspec. */
   family: string
   note: string
+  /**
+   * Whether the face carries real small capitals (`smcp`).
+   *
+   * Only three of the seven do, and this is said in the note rather than
+   * discovered later, because the interview recommends small-capped headings
+   * for every period but "modern" — and recommends IM FELL, which has none, for
+   * the 17th century. A face without them sets those headings in full capitals:
+   * a different texture, chosen with the fact in view rather than after the
+   * fact. They are never synthesised by scaling capitals down.
+   *
+   * Static rather than measured because the interview runs before any font is
+   * loaded. `TextMeasurer.hasSmallCaps` is what the engine actually acts on, so
+   * a wrong value here misinforms the user without mis-setting the book.
+   */
+  smallCaps: boolean
 }
 
 export const BODY_FONTS: readonly FontChoice[] = [
@@ -49,43 +64,50 @@ export const BODY_FONTS: readonly FontChoice[] = [
     id: 'im-fell',
     label: 'IM FELL English',
     family: 'IM FELL English',
-    note: 'Digitized from actual 17th-century Oxford types. Period-correct, not an imitation.'
+    note: 'Digitized from actual 17th-century Oxford types. Period-correct, not an imitation.',
+    smallCaps: false
   },
   {
     id: 'junicode',
     label: 'Junicode',
     family: 'Junicode',
-    note: 'Built for medievalists — has long-s and extensive archaic glyphs.'
+    note: 'Built for medievalists — has long-s, real small capitals, and extensive archaic glyphs.',
+    smallCaps: true
   },
   {
     id: 'eb-garamond',
     label: 'EB Garamond',
     family: 'EB Garamond',
-    note: 'Claude Garamond revival. Elegant for 16th–18th century works.'
+    note: 'Claude Garamond revival, with real small capitals. Elegant for 16th–18th century works.',
+    smallCaps: true
   },
   {
     id: 'libre-caslon',
     label: 'Libre Caslon',
     family: 'Libre Caslon Text',
-    note: 'The classic English book face; right for 18th–19th century.'
+    note: 'The classic English book face; right for 18th–19th century.',
+    smallCaps: false
   },
   {
     id: 'libre-baskerville',
     label: 'Libre Baskerville',
     family: 'Libre Baskerville',
-    note: 'Transitional, highly legible at book sizes.'
+    note: 'Transitional, highly legible at book sizes.',
+    smallCaps: false
   },
   {
     id: 'crimson',
     label: 'Crimson Pro',
     family: 'Crimson Pro',
-    note: 'Old-style proportions, comfortable for long reading.'
+    note: 'Old-style proportions, comfortable for long reading.',
+    smallCaps: false
   },
   {
     id: 'cardo',
     label: 'Cardo',
     family: 'Cardo',
-    note: 'Built for classicists — Greek, Hebrew, and scholarly apparatus.'
+    note: 'Built for classicists — Greek, Hebrew, scholarly apparatus, and real small capitals.',
+    smallCaps: true
   }
 ]
 

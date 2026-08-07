@@ -619,7 +619,17 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
   const style = blockStyle(block, ctx.profile)
   const sizePt = ctx.profile.bodyFontSize * style.scale
   const family = block.kind === 'heading' ? ctx.profile.headingFont : ctx.profile.bodyFont
-  const font: FontRef = { family, style: style.style }
+  // Headings the style asks to be small-capped are set in the face's *real*
+  // small capitals where it has them. Where it has none — four of the seven
+  // faces offered, including IM FELL English — they are set in ordinary
+  // capitals, which is a different texture and an honest one. What is never
+  // done is synthesising them by scaling capitals down: the strokes come out
+  // too light for the size, and it is the tell of a cheap reprint.
+  const wantsSmallCaps = block.kind === 'heading' && ctx.profile.headingStyle.smallCaps
+  const realSmallCaps = wantsSmallCaps && ctx.measurer.hasSmallCaps(family)
+  const font: FontRef = realSmallCaps
+    ? { family, style: style.style, smallCaps: true }
+    : { family, style: style.style }
 
   const indentLeft = style.indentLeftEms * sizePt
   const indentRight = style.indentRightEms * sizePt
@@ -628,15 +638,11 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
 
   const isChapter = block.kind === 'heading' && (block.level ?? 1) === 1
 
-  // Headings are set in the heading face; a chapter title the style asks to be
-  // small-capped is set in ordinary capitals instead. Real `smcp` needs
-  // glyph-level drawing, and a synthesised version — scaled capitals — is the
-  // tell of a cheap reprint. Better to not offer the look than to fake it.
+  // `smcp` maps *lower case* to small capitals, so the text is handed over as
+  // written; upper-casing it first would defeat the feature and give full caps
+  // in a face that had the real thing.
   const source = opts.text ?? block.text
-  const text =
-    block.kind === 'heading' && ctx.profile.headingStyle.smallCaps
-      ? source.toLocaleUpperCase()
-      : source
+  const text = wantsSmallCaps && !realSmallCaps ? source.toLocaleUpperCase() : source
 
   // Reference marks ride on the end of the word they follow, set smaller and
   // lifted. They are given to the breaker rather than concatenated into the
@@ -1578,11 +1584,16 @@ function buildContents(
   let slot = CHAPTER_SINK_SLOTS
 
   // The heading, set like a chapter title so the contents reads as part of the
-  // same book rather than as an appendage.
-  const titleText = profile.headingStyle.smallCaps ? 'CONTENTS' : 'Contents'
+  // same book rather than as an appendage — and small-capped by the same rule
+  // as one, real glyphs where the face has them and full capitals where it
+  // does not.
+  const scContents =
+    profile.headingStyle.smallCaps && ctx.measurer.hasSmallCaps(profile.headingFont)
+  const titleText = profile.headingStyle.smallCaps && !scContents ? 'CONTENTS' : 'Contents'
+  const titleFont: FontRef = scContents ? { ...heading, smallCaps: true } : heading
   const titleSize = sizePt * profile.headingStyle.scale
   for (const line of breakParagraph(titleText, {
-    font: heading,
+    font: titleFont,
     sizePt: titleSize,
     measurer: ctx.measurer,
     lineWidths: ctx.measureWidth,
@@ -1593,7 +1604,10 @@ function buildContents(
       line: {
         runs: line.words.map((w) => ({
           text: w.text,
-          font: heading,
+          // `titleFont`, not `heading`: measured and drawn must be the same
+          // reference, or the centring is computed for one face and set in
+          // another.
+          font: titleFont,
           sizePt: titleSize,
           xPt: w.xPt
         }))
@@ -1791,7 +1805,7 @@ function collectFonts(pages: readonly LaidOutPage[]): FontRef[] {
     for (const item of page.items) {
       if (item.kind !== 'line') continue
       for (const run of item.runs) {
-        seen.set(`${run.font.family}|${run.font.style}`, run.font)
+        seen.set(`${run.font.family}|${run.font.style}|${run.font.smallCaps ? 'sc' : ''}`, run.font)
       }
     }
   }

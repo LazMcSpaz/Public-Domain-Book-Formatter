@@ -763,6 +763,16 @@ const junicodeInk = await page.evaluate(async () => {
 })
 await shot('08c-junicode')
 
+// Real small capitals, on a face that has them. IM FELL — the interview's
+// recommendation for the 17th century — has none, so this switches to EB
+// Garamond, which is also the honest demonstration that the two faces are
+// treated differently rather than both being upper-cased.
+console.log('6e. small capitals')
+await pick('Typeface', 'EB Garamond')
+await page.waitForTimeout(4000)
+await page.waitForSelector('.leaf img', { timeout: 60000 })
+await shot('08d-small-caps')
+
 // The preview is the widest thing in the app — a row of full page images. It
 // has to scroll inside its own card, because a gate the user has to pan
 // sideways to answer is a gate that fails on a phone.
