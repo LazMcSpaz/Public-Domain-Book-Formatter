@@ -1,9 +1,11 @@
 # Plan: real page layout, live preview, and a PDF that isn't a `.tex`
 
-Status: **steps 1–7 built and verified; step 8 remains.** Written for a fresh
-session to pick up, then revised twice — once after checking what exists on npm,
-and again after building it, which contradicted two of the decisions below. Both
-corrections are recorded in "What building it changed", at the end.
+Status: **closed — every step built and verified.** Written for a fresh session
+to pick up, then revised twice — once after checking what exists on npm, and
+again after building it, which contradicted two of the decisions below. Both
+corrections are recorded in "What building it changed", at the end. Kept as the
+record of why the layout engine is shaped the way it is; what comes next is in
+[`PLAN-next.md`](./PLAN-next.md).
 
 ## Why
 

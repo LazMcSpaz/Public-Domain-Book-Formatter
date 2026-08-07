@@ -215,6 +215,8 @@ in `screenshots/`. Don't ship UI blind.
   `sizeAfterOps`, because the DPI check divides by it. Background removal is
   deliberately not offered — the spec calls it best-effort, and without manual
   touch-up of the selection it is a magic button that eats part of the picture.
-- **Next**: nothing from the layout plan. See
-  [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) for what was
-  built and why.
+- **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — saved style profiles
+  (the book-two problem), real small caps and ligatures, Junicode, and a
+  book-length run against the live API.
+  [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and
+  kept for why the layout engine is shaped the way it is.
