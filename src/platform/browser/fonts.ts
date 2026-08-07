@@ -67,45 +67,34 @@ export const FALLBACK_FAMILY = 'EB Garamond'
 /**
  * The OpenType features used for **both** measuring and drawing.
  *
- * Ligatures are switched off, and that is a deliberate, unhappy trade. pdf-lib
- * builds a simple font's width array by walking the font's *character set* and
- * taking the glyph for each code point (`CustomFontEmbedder`). A ligature glyph
- * — `f_i` — is reachable from no single code point, so it never gets a width
- * written, and the PDF reader falls back to the default (a full em). The result
- * is a gaping hole after every "fi" and every following word shunted right; it
- * is what "his fi ndingsto the assembled" looks like on a printed page.
+ * This was, for a long time, a list of things switched *off*. Ligatures went
+ * first, then Junicode's contextual alternates, both for the same reason:
+ * pdf-lib wrote no width for a glyph no code point reaches, so an `f_i` printed
+ * as a full em of white space — "his fi ndingsto the assembled" — and copied
+ * out as line noise besides. The comment here called it "a deliberate, unhappy
+ * trade" and picked the readable half.
  *
- * The other embedder (`subset: true`) derives widths from the glyphs actually
- * laid out and so gets ligatures right — but corrupts the outlines of half
- * these faces. See `pdf-out.ts`. Between "no fi ligature" and "broken words",
- * the typography loses.
+ * The trade is off. `font-widths.ts` writes the missing widths, so the features
+ * a book face was designed around can be left alone, and the defaults below are
+ * the font's own: ligatures, contextual alternates, kerning and the rest.
  *
- * `calt` is off for the same reason, and it is not a ligature at all — which is
- * why it was missed until Junicode arrived. Contextual alternates substitute a
- * *differently shaped* glyph for the same character in company: Junicode swaps
- * `f` for `f.rf` before another f, and `i` for `i.lf` after one, so the pair
- * does not collide. Those alternates are reachable from no code point either,
- * so they hit the identical wall — "the dif f erence of a gentle f ı" on a
- * previewed page, which is what sent us looking. fontkit applies `calt` by
- * default, so it has to be switched off explicitly.
+ * What stays off is a choice about typography rather than a workaround:
  *
- * The other eight faces are unaffected: `calt` changes not one glyph in any of
- * them. The rule underneath all of this is the real invariant, and
- * `test/fonts-coverage.test.ts` enforces it directly rather than by naming
- * features: **no feature may be left on that can produce a glyph no code point
- * reaches.** Any future face, or any future feature, has to satisfy that.
+ * - `dlig` — discretionary ligatures (ct, st, sp). Handsome on a title page and
+ *   distracting through 300 pages of body text; a face that wants them wants
+ *   them by the editor's decision, not by default.
+ * - `hlig` — historical ligatures, which in most faces means the long-s forms.
+ *   A reprint that has *preserved* its original orthography already carries
+ *   real long-s characters from the scan; synthesising more from modern `s`
+ *   would change what the book says, which the proof step exists to prevent.
  *
  * Whatever is decided here must be used by the measurer *and* the embedder, or
  * the two disagree about how wide a word is — which is why this constant is
  * exported rather than written out twice.
  */
 export const LAYOUT_FEATURES: TypeFeatures = {
-  liga: false,
   dlig: false,
-  hlig: false,
-  clig: false,
-  rlig: false,
-  calt: false
+  hlig: false
 }
 
 /** Every family the app can set a book in, in the order the interview offers them. */

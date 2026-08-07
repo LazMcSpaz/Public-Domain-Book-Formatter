@@ -31,12 +31,8 @@ import type { BookBlock, BookDocument } from '@core/assemble'
 
 /** Must match `LAYOUT_FEATURES` in the browser font table — see that file. */
 const FEATURES: TypeFeatures = {
-  liga: false,
   dlig: false,
-  hlig: false,
-  clig: false,
-  rlig: false,
-  calt: false
+  hlig: false
 }
 
 const FILES: Record<string, string> = {
@@ -185,6 +181,37 @@ async function textOfPage(
 }
 
 describe('renderPdf — the real output', () => {
+  /**
+   * The end-to-end half of `fonts-coverage.test.ts`. That file proves the
+   * widening works on a face; this proves the app's own render path actually
+   * reaches it — that a real book, laid out and written by `renderPdf`, comes
+   * out with the ligatures its prose calls for.
+   *
+   * The prose above says "findings", "specimen" and "office"; if this list is
+   * ever empty, the features have been turned off again or the widening is no
+   * longer being called, and the only other symptom would be on paper.
+   */
+  it('sets the ligatures the prose calls for, and writes a width for each', async () => {
+    const { pdf } = await build()
+    expect(pdf.ligatureGlyphs.length).toBeGreaterThan(0)
+    expect(pdf.ligatureGlyphs.some((n) => n.includes('_'))).toBe(true)
+  })
+
+  it('still copies out as words, ligatures and all', async () => {
+    // A ligature that prints beautifully and extracts as line noise is not a
+    // win: this is what a screen reader reads and what a search matches.
+    const { pdf } = await build()
+    const reopened = await reopen(pdf.bytes)
+    let text = ''
+    for (let i = 1; i <= reopened.numPages; i++) {
+      const content = await (await reopened.getPage(i)).getTextContent()
+      text += content.items.map((item) => ('str' in item ? item.str : '')).join('')
+    }
+    expect(text).toContain('findings')
+    expect(text).toContain('specimen')
+    await reopened.destroy()
+  })
+
   it('produces a page for every page the engine laid out', async () => {
     const { book, pdf } = await build()
     const reopened = await reopen(pdf.bytes)

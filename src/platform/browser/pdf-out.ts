@@ -17,6 +17,7 @@ import { PDFDocument, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf
 import fontkit from '@pdf-lib/fontkit'
 import type { FontRef, LaidOutBook, LaidOutPage } from '@core/layout'
 import { LAYOUT_FEATURES, type FontTable } from './fonts'
+import { verifyWidths, widenWidths } from './font-widths'
 
 export interface PdfResult {
   bytes: Uint8Array
@@ -25,6 +26,13 @@ export interface PdfResult {
   embeddedFamilies: string[]
   /** Illustrations the engine placed but whose pixels never arrived. */
   missingImages: string[]
+  /**
+   * Glyphs the book set that no code point reaches — ligatures and contextual
+   * alternates — each of which needed a width written for it by hand. Reported
+   * because it is the observable evidence that the repair in `font-widths.ts`
+   * did something: an empty list on a book full of "fi" means it did not.
+   */
+  ligatureGlyphs: string[]
 }
 
 export interface RenderPdfOptions {
@@ -75,10 +83,11 @@ function keyOf(font: FontRef): string {
  * correctness depend on which typeface the user picked, and a font update could
  * move a face from one list to the other without anything failing loudly.
  *
- * The whole-font path has a defect of its own — it writes no width for a
- * ligature glyph — which is why `LAYOUT_FEATURES` turns ligatures off. That
- * constant is shared with the measurer so the two cannot disagree; see
- * `fonts.ts` for the full account.
+ * The whole-font path had a defect of its own — it writes no width for a
+ * ligature glyph — and the answer to it used to be turning ligatures off.
+ * `font-widths.ts` repairs the widths instead, and this module calls it below,
+ * after every page is drawn and before the file is saved. The features are back
+ * on; see `fonts.ts` for which and why.
  */
 export async function renderPdf(
   book: LaidOutBook,
@@ -129,13 +138,37 @@ export async function renderPdf(
     }
   }
 
+  // What each face was actually asked to set, gathered as the pages are drawn.
+  const drawn = new Map<PDFFont, string[]>()
   for (const page of book.pages) {
-    drawPage(doc, page, embedded, fallback, images)
+    drawPage(doc, page, embedded, fallback, images, drawn)
     if (options.onPage) await options.onPage(page.index + 1, book.pages.length)
+  }
+
+  // Widen the width array before saving, while the embedders are still lazy.
+  // This is what lets the faces keep their ligatures: see `font-widths.ts`.
+  const ligatureGlyphs: string[] = []
+  for (const [font, texts] of drawn) {
+    for (const glyph of widenWidths(font, texts)) {
+      ligatureGlyphs.push(glyph.name ?? String(glyph.id))
+    }
+  }
+
+  // Then prove it, because the failure this prevents is silent on every check
+  // except the printed page.
+  for (const [font, texts] of drawn) {
+    const missing = verifyWidths(font, texts)
+    if (missing.length > 0) {
+      throw new Error(
+        `${missing.length} glyph(s) would print without a width: ${missing.slice(0, 8).join(', ')}. ` +
+          'The book was not written, because the page would have holes in it.'
+      )
+    }
   }
 
   return {
     bytes: await doc.save(),
+    ligatureGlyphs: [...new Set(ligatureGlyphs)].sort(),
     pageCount: book.pages.length,
     embeddedFamilies: [...embeddedFamilies],
     missingImages
@@ -147,7 +180,8 @@ function drawPage(
   page: LaidOutPage,
   embedded: Map<string, PDFFont>,
   fallback: PDFFont,
-  images: Map<string, PDFImage>
+  images: Map<string, PDFImage>,
+  drawn: Map<PDFFont, string[]>
 ): void {
   // The MediaBox *is* the trim. KDP takes a trimmed interior with no crop
   // marks and no bleed box, so the page is exactly the finished leaf.
@@ -201,6 +235,12 @@ function drawPage(
 
     for (const run of item.runs) {
       if (run.text.length === 0) continue
+      const font = embedded.get(keyOf(run.font)) ?? fallback
+      // Every string the book prints passes through here, and nowhere else.
+      // That is what lets `widenWidths` be complete rather than hopeful.
+      const texts = drawn.get(font)
+      if (texts) texts.push(run.text)
+      else drawn.set(font, [run.text])
       pdfPage.drawText(run.text, {
         x: run.xPt,
         // The engine measures baselines down from the top of the page; PDF
@@ -209,7 +249,7 @@ function drawPage(
         // the page, which is a larger y once the axis has been flipped.
         y: page.heightPt - item.baselinePt + (run.risePt ?? 0),
         size: run.sizePt,
-        font: embedded.get(keyOf(run.font)) ?? fallback
+        font
       })
     }
   }

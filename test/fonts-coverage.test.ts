@@ -1,21 +1,18 @@
 /**
- * The rule the ligature comment in `fonts.ts` is really about, enforced over
- * every face the app can set a book in.
+ * Every glyph the book prints gets a width — the invariant `font-widths.ts`
+ * exists to hold.
  *
- * **No feature may be left on that can produce a glyph no code point reaches.**
+ * The failure it guards against is the worst kind this app has: silent
+ * everywhere except the printed page. pdf-lib writes the PDF's width array from
+ * the glyphs a *code point* reaches, so a ligature or a contextual alternate
+ * gets no width and prints as a full em of white space, mid-word, with
+ * everything after it shoved right. Nothing else catches it — the page count is
+ * right, the KDP checks pass, the file opens.
  *
- * pdf-lib's whole-font embedder builds the PDF's width array by walking the
- * font's *character set* and taking the glyph each code point maps to. A glyph
- * arrived at any other way — an `f_i` ligature, or Junicode's contextual `f.rf`
- * — is in that array nowhere, so the reader falls back to the default width of
- * a full em. On paper that is a gaping hole mid-word and every following word
- * shoved right.
- *
- * This was written down twice as a comment about ligatures and still missed the
- * second cause, because `calt` is not a ligature feature and nothing failed
- * until a face that uses it was added. So the test asserts the *property*
- * rather than a list of feature tags: a new face, or a new feature, has to
- * satisfy it without anyone remembering this file exists.
+ * This was first written the other way round: assert that no such glyph is ever
+ * produced, by keeping the features that make them switched off. That was the
+ * old design and it cost every book its ligatures. Now the glyphs are expected,
+ * and what is asserted is that each one arrives with a width.
  *
  * Faces are read off disk, like `layout-pdf.test.ts`, so this runs in plain
  * Node — `fonts.ts` itself reaches for `fetch` and Vite's `?url` imports.
@@ -23,7 +20,9 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import fontkit from '@pdf-lib/fontkit'
+import { PDFDocument } from 'pdf-lib'
 import { LAYOUT_FEATURES } from '@platform/browser/fonts'
+import { verifyWidths, widenWidths } from '@platform/browser/font-widths'
 
 const G = 'node_modules/@expo-google-fonts'
 
@@ -56,51 +55,92 @@ const PROVOCATION =
   'a fjord of five fifths, ﬁrst ﬂight, ſtill the ſame, ' +
   'Chapter II — “quoth he,” said Æthelred’s wife; 1st ½ Th ct st'
 
-/** Glyphs pdf-lib can write a width for: those some code point maps to. */
-function reachable(font: ReturnType<typeof fontkit.create>): Set<number> {
-  const ids = new Set<number>()
-  for (const codePoint of font.characterSet) {
-    const glyph = font.glyphForCodePoint(codePoint)
-    if (glyph) ids.add(glyph.id)
-  }
-  return ids
+async function embed(path: string) {
+  const doc = await PDFDocument.create()
+  doc.registerFontkit(fontkit)
+  const bytes = new Uint8Array(readFileSync(path))
+  const font = await doc.embedFont(bytes, { subset: false, features: LAYOUT_FEATURES })
+  return { doc, font }
 }
 
-describe('every shipped face, under the features the app actually lays out with', () => {
+describe('every shipped face, under the features the app lays out with', () => {
   for (const [name, path] of Object.entries(FACES)) {
-    it(`${name} produces no glyph pdf-lib cannot write a width for`, () => {
-      const font = fontkit.create(new Uint8Array(readFileSync(path)))
-      const ids = reachable(font)
-
-      const orphans = font
-        .layout(PROVOCATION, LAYOUT_FEATURES)
-        .glyphs.filter((g) => !ids.has(g.id))
-        .map((g) => g.name ?? String(g.id))
-
-      // Named, not counted: the glyph name says which feature to turn off.
-      expect([...new Set(orphans)]).toEqual([])
+    it(`${name} prints no glyph without a width`, async () => {
+      const { font } = await embed(path)
+      widenWidths(font, [PROVOCATION])
+      // Named, not counted: the glyph name says what went unmeasured.
+      expect(verifyWidths(font, [PROVOCATION])).toEqual([])
     })
   }
 })
 
-describe('the test can actually fail', () => {
+describe('the check can actually fail', () => {
   /**
    * A guard on the guard. Every assertion above passes trivially if the
-   * provocation text stopped provoking anything, or if `reachable` quietly
-   * returned every glyph in the font. Turning the features back on has to break
-   * it — otherwise the suite above is decoration.
+   * provocation stopped provoking, or if `verifyWidths` quietly returned
+   * nothing. Skipping the widening has to break it — otherwise the suite above
+   * is decoration.
    */
-  it('catches the orphans when the features are left on', () => {
-    const font = fontkit.create(new Uint8Array(readFileSync(FACES['Junicode|regular']!)))
-    const ids = reachable(font)
-    const orphans = font
-      .layout(PROVOCATION, {})
-      .glyphs.filter((g) => !ids.has(g.id))
-      .map((g) => g.name)
-
-    expect(orphans.length).toBeGreaterThan(0)
+  it('reports the orphans when the widening is skipped', async () => {
+    const { font } = await embed(FACES['Junicode|regular']!)
+    const missing = verifyWidths(font, [PROVOCATION])
+    expect(missing.length).toBeGreaterThan(0)
     // The two that put "the dif f erence" on a previewed page.
-    expect(orphans).toContain('f.rf')
-    expect(orphans).toContain('i.lf')
+    expect(missing).toContain('f.rf')
+    expect(missing).toContain('i.lf')
+  })
+
+  it('finds something to widen on a face with ligatures', async () => {
+    const { font } = await embed(FACES['EB Garamond|regular']!)
+    const added = widenWidths(font, [PROVOCATION]).map((g) => g.name)
+    expect(added.length).toBeGreaterThan(0)
+    expect(added.some((n) => n?.includes('_'))).toBe(true)
+  })
+})
+
+describe('what the reader and the screen reader get', () => {
+  const TEXT = 'difference of a gentle fire, offices affixed'
+
+  /** The width the font itself says that string is, which is the truth. */
+  function trueWidth(path: string, sizePt: number): number {
+    const f = fontkit.create(new Uint8Array(readFileSync(path)))
+    let units = 0
+    for (const g of f.layout(TEXT, LAYOUT_FEATURES).glyphs) units += g.advanceWidth
+    return (units / f.unitsPerEm) * sizePt
+  }
+
+  async function render(path: string, widen: boolean) {
+    const { doc, font } = await embed(path)
+    doc.addPage([600, 200]).drawText(TEXT, { x: 20, y: 100, size: 18, font })
+    if (widen) widenWidths(font, [TEXT])
+    const bytes = await doc.save()
+
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+    const reopened = await pdfjs.getDocument({ data: bytes.slice(), useSystemFonts: false }).promise
+    const items = (await (await reopened.getPage(1)).getTextContent()).items
+    return {
+      text: items.map((i) => ('str' in i ? i.str : '')).join(''),
+      width: items[0] && 'width' in items[0] ? items[0].width : 0
+    }
+  }
+
+  const PATH = FACES['EB Garamond|regular']!
+
+  it('sets the line at the width the font says, not a guess', async () => {
+    const widened = await render(PATH, true)
+    expect(widened.width).toBeCloseTo(trueWidth(PATH, 18), 1)
+  })
+
+  it('was measurably wrong before, so the fix is doing something', async () => {
+    const asIs = await render(PATH, false)
+    // Wider, because each ligature fell back to a full em.
+    expect(asIs.width).toBeGreaterThan(trueWidth(PATH, 18) + 5)
+  })
+
+  it('copies out as words rather than as line noise', async () => {
+    // Not cosmetic: this is what a screen reader reads aloud, what a search
+    // matches, and what KDP's own pipeline extracts. Before the widening the
+    // same page came out "diβerence of a gentle λre".
+    expect((await render(PATH, true)).text).toBe(TEXT)
   })
 })
