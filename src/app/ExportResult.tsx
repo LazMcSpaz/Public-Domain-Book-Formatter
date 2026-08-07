@@ -12,6 +12,11 @@
  * `note` is the honest failure path. When the interior could not be built there
  * is now no fallback to offer, so saying exactly what went wrong is the only
  * useful thing this screen can do.
+ *
+ * `savedNote` is the opposite case and kept separate from it: something went
+ * *right* that changed state the user cannot see — the publisher's details were
+ * written back onto a banked look. Silently updating saved settings is the kind
+ * of helpfulness that becomes a surprise three books later.
  */
 import type { BuildExportResult } from '@core/export'
 import { downloadPdf } from '../platform/browser/download'
@@ -21,9 +26,11 @@ export interface ExportResultProps {
   pdf: { bytes: Uint8Array; pageCount: number } | null
   /** Why there's no PDF, when there isn't one. */
   note: string | null
+  /** What was written back to a banked look, when anything was. */
+  savedNote?: string | null
 }
 
-export function ExportResult({ result, pdf, note }: ExportResultProps): JSX.Element {
+export function ExportResult({ result, pdf, note, savedNote }: ExportResultProps): JSX.Element {
   return (
     <div className="result">
       <div className="q">
@@ -42,6 +49,7 @@ export function ExportResult({ result, pdf, note }: ExportResultProps): JSX.Elem
             </button>
           </div>
         ) : null}
+        {savedNote ? <div className="help">{savedNote}</div> : null}
       </div>
 
       {result.notes.length > 0 ? (

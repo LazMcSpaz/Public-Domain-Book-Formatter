@@ -8,6 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   STEPS,
   activeStep,
+  appliedLook,
   defaultAnswers,
   initialState,
   missingRequired,
@@ -36,9 +37,16 @@ import {
 import { assembleBook } from '@core/assemble'
 import { runBrowserTranscription } from '../platform/browser/transcribe-run'
 import { loadApiKey, saveApiKey, loadPrefs, savePrefs } from '../platform/browser/settings'
-import { loadRun, loadRunSummary, saveRun } from '../platform/browser/run-store'
+import {
+  listProfiles,
+  loadRun,
+  loadRunSummary,
+  saveProfile,
+  saveRun
+} from '../platform/browser/run-store'
+import { newSavedProfile, type SavedStyleProfile } from '@core/style'
 import { createSavedRun, fileKey } from '@core/project'
-import { profileFromAnswers, describeProfile, type DesignAnswers } from '@core/design'
+import { describeProfile } from '@core/design'
 import { buildExport, editionFromAnswers, type BuildExportResult } from '@core/export'
 import { applyEdits, type BookEdit } from '@core/edits'
 import { renderInterior } from '../platform/browser/interior'
@@ -66,6 +74,14 @@ export function App(): JSX.Element {
   // Identifies the open file, so a paid run can be found again on a later visit.
   const fileKeyRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
+  /**
+   * The banked look this session is using — either one the user reused at the
+   * design gate or one they named there and had saved.
+   *
+   * A ref rather than state: nothing renders from it, and it exists so the
+   * export gate can write the imprint details back onto the right profile.
+   */
+  const bankedProfileRef = useRef<SavedStyleProfile | null>(null)
   /**
    * PNG bytes for the illustrations cut out of the scan at the structure gate.
    *
@@ -108,6 +124,12 @@ export function App(): JSX.Element {
   const [exported, setExported] = useState<BuildExportResult | null>(null)
   const [pdf, setPdf] = useState<{ bytes: Uint8Array; pageCount: number } | null>(null)
   const [buildNote, setBuildNote] = useState<string | null>(null)
+  /**
+   * Set when the export writes the publisher's details back onto a banked look.
+   * Shown on the export screen: changing saved state is fine, doing it without
+   * telling the user is not.
+   */
+  const [bankedNote, setBankedNote] = useState<string | null>(null)
   const [buildProgress, setBuildProgress] = useState<{ done: number; total: number } | null>(null)
   /**
    * Corrections made at the proof step.
@@ -148,17 +170,8 @@ export function App(): JSX.Element {
   // preview below it show the consequence of an answer before it is committed.
   const designProfile = useMemo(() => {
     if (step.id !== 'design') return null
-    const a = currentAnswers as Record<string, unknown>
-    return profileFromAnswers(
-      {
-        kind: a['kind'],
-        period: a['period'],
-        chapterOpener: a['chapterOpener'],
-        runningHeads: a['runningHeads']
-      } as DesignAnswers,
-      a['font'] as string
-    )
-  }, [step.id, currentAnswers])
+    return appliedLook(state, currentAnswers).style
+  }, [step.id, state, currentAnswers])
 
   const designSummary = designProfile ? describeProfile(designProfile) : null
 
@@ -397,6 +410,11 @@ export function App(): JSX.Element {
     setState((s) => ({
       ...s,
       ...initialState(),
+      // Banked looks are not book state. `initialState()` exists to forget the
+      // last book, and these belong to the user across all of them — clearing
+      // them here would offer the interview again to someone who banked a look
+      // precisely so they would not be asked twice.
+      styleProfiles: s.styleProfiles,
       fileName: file.name,
       completed: ['intake']
     }))
@@ -451,6 +469,20 @@ export function App(): JSX.Element {
     },
     [startRecon]
   )
+
+  /**
+   * Bring the user's banked looks in at startup (SPEC §7).
+   *
+   * Loaded once, before any book is open, because the design gate reads them
+   * straight out of state — that is what keeps `questions()` a pure function
+   * with no I/O in it.
+   */
+  useEffect(() => {
+    void (async () => {
+      const profiles = await listProfiles()
+      if (profiles.length > 0) setState((s) => ({ ...s, styleProfiles: profiles }))
+    })()
+  }, [])
 
   const complete = useCallback(
     (extra: Partial<WizardState> = {}) => {
@@ -721,18 +753,41 @@ export function App(): JSX.Element {
     if (!doc) return
     setError(null)
 
-    const design = state.answers['design'] ?? {}
-    const profile = profileFromAnswers(
-      {
-        kind: design['kind'],
-        period: design['period'],
-        chapterOpener: design['chapterOpener'],
-        runningHeads: design['runningHeads']
-      } as unknown as DesignAnswers,
-      design['font'] as string
-    )
+    const profile = appliedLook(state).style
 
     const edition = editionFromAnswers(currentAnswers)
+
+    // The publisher's own details belong to the imprint, not to this book, so
+    // they go back onto the banked look — "answer once, apply everywhere" —
+    // and the export screen says so rather than changing saved state silently.
+    const banked = bankedProfileRef.current
+    if (banked) {
+      const imprint = {
+        imprint: edition.imprint ?? '',
+        copyrightHolder: edition.copyrightHolder ?? '',
+        publicDomainNotice: currentAnswers['publicDomainNotice'] !== false
+      }
+      const changed =
+        imprint.imprint !== banked.imprint.imprint ||
+        imprint.copyrightHolder !== banked.imprint.copyrightHolder ||
+        imprint.publicDomainNotice !== banked.imprint.publicDomainNotice
+      if (changed) {
+        const updated = newSavedProfile({
+          id: banked.id,
+          name: banked.name,
+          style: banked.style,
+          imprint
+        })
+        if (await saveProfile(updated)) {
+          bankedProfileRef.current = updated
+          setState((s) => ({
+            ...s,
+            styleProfiles: s.styleProfiles.map((p) => (p.id === updated.id ? updated : p))
+          }))
+          setBankedNote(`Saved to “${updated.name}” for your next book.`)
+        }
+      }
+    }
     const input = {
       document: doc,
       profile,
@@ -953,8 +1008,44 @@ export function App(): JSX.Element {
     complete()
   }, [edits, state.answers, persistRun, complete])
 
+  /**
+   * Leaving the design gate: bank the look if the user named one.
+   *
+   * The imprint fields are still empty at this point — they are asked one gate
+   * later, where the copyright page is being filled in. So the profile is
+   * written now with the style alone and topped up with the publisher's details
+   * when the export runs. That ordering is deliberate: the look is decided here,
+   * beside the preview that justifies it, and asking for a name at the export
+   * gate instead would put the question two screens from the thing it names.
+   */
+  const finishDesign = useCallback(async () => {
+    const name = String(currentAnswers['saveAs'] ?? '').trim()
+    const reused = appliedLook(state, currentAnswers).fromProfileId
+    const existing = reused ? (state.styleProfiles.find((p) => p.id === reused) ?? null) : null
+
+    if (name && !existing) {
+      const profile = newSavedProfile({ name, style: appliedLook(state, currentAnswers).style })
+      const ok = await saveProfile(profile)
+      if (ok) {
+        bankedProfileRef.current = profile
+        setState((s) => ({ ...s, styleProfiles: [profile, ...s.styleProfiles] }))
+      } else {
+        // Storage refused the write. Say so rather than letting the user find
+        // out on book two that the look they named was never there.
+        setError('That look could not be saved — your browser refused the write.')
+      }
+    } else {
+      bankedProfileRef.current = existing
+    }
+    complete()
+  }, [state, currentAnswers, complete])
+
   /** Leaving a step: transcription needs cost approval first; gates just advance. */
   const advance = useCallback(() => {
+    if (step.id === 'design') {
+      void finishDesign()
+      return
+    }
     if (step.id === 'export') {
       void runExport()
       return
@@ -996,6 +1087,7 @@ export function App(): JSX.Element {
     finishUncertainties,
     finishStructure,
     finishProof,
+    finishDesign,
     useSavedRun
   ])
 
@@ -1149,7 +1241,7 @@ export function App(): JSX.Element {
 
         {/* --- the finished edition --- */}
         {exported && !buildProgress ? (
-          <ExportResult result={exported} pdf={pdf} note={buildNote} />
+          <ExportResult result={exported} pdf={pdf} note={buildNote} savedNote={bankedNote} />
         ) : null}
 
         {/* --- proofreading, which is a workbench rather than a set of questions --- */}

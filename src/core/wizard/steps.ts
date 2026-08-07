@@ -17,7 +17,21 @@ import { isFrontMatter } from '@core/pages'
 import type { VerificationFinding } from '@core/transcribe'
 import { describeAge, type SavedRunSummary } from '@core/project'
 import type { BookDocument } from '@core/assemble'
-import { BODY_FONTS, fontForPeriod, trimForKind, type PeriodFeel } from '@core/design'
+import {
+  BODY_FONTS,
+  fontForPeriod,
+  profileFromAnswers,
+  trimForKind,
+  type DesignAnswers,
+  type PeriodFeel
+} from '@core/design'
+import {
+  describeSavedProfile,
+  emptyImprint,
+  type ImprintFields,
+  type SavedStyleProfile
+} from '@core/style'
+import type { StyleProfile } from '@core/model'
 import { bookWordCount, seamCount } from '@core/assemble'
 import type { Answers, Question, TermRow } from './questions'
 
@@ -77,6 +91,12 @@ export interface WizardState {
    * cost" to "you have already paid for this — use it?".
    */
   savedRun: SavedRunSummary | null
+  /**
+   * Looks the user has banked from earlier books (SPEC §7). Whole records, not
+   * summaries, so the design gate can preview one the instant it is chosen —
+   * and so this stays a pure function of state.
+   */
+  styleProfiles: SavedStyleProfile[]
   /** Deterministic findings from verification, most severe first. */
   findings: VerificationFinding[]
   /** Spans the model itself reported as unreadable, per page. */
@@ -114,6 +134,7 @@ export function initialState(): WizardState {
     classifications: [],
     hasApiKey: false,
     savedRun: null,
+    styleProfiles: [],
     findings: [],
     uncertainties: [],
     failedPages: [],
@@ -587,10 +608,23 @@ const proof: Step = {
 }
 
 /**
+ * The `profile` answer meaning "none of the banked looks — interview me".
+ * A sentinel rather than `''` because an empty string is also what an
+ * unanswered question looks like, and the two mean opposite things here.
+ */
+export const FRESH_LOOK = 'fresh'
+
+/**
  * Design by interview. Five questions about the *book* produce a complete
  * style — the alternative is a panel of forty fields that assumes the user
  * already knows what a gutter is. The detailed controls remain available
  * afterwards; they are just never the front door.
+ *
+ * On book two the five questions are the wrong front door as well, because
+ * they were already answered for book one. So when the user has banked a look
+ * (SPEC §7), the gate asks one question instead of five, and the recommended
+ * answer is the most recent look — which is what "setup time drops sharply
+ * after the first volume" has to mean in practice.
  */
 const design: Step = {
   id: 'design',
@@ -606,7 +640,43 @@ const design: Step = {
     const suggested = fontForPeriod(period)
     const kind = (designAnswers['kind'] as string) ?? 'novel'
 
+    const banked = s.styleProfiles
+    const newest = banked[0]
+    const chooseProfile: Question[] = newest
+      ? [
+          {
+            id: 'profile',
+            type: 'choice',
+            prompt: 'Use a look you have already set up?',
+            help:
+              'A banked look brings the trim, the typeface, the margins, the running heads ' +
+              'and the ornaments straight over. Nothing about the book it came from does.',
+            defaultValue: newest.id,
+            options: [
+              ...banked.map((p) => ({
+                value: p.id,
+                label: p.name,
+                description: describeSavedProfile(p)
+              })),
+              {
+                value: FRESH_LOOK,
+                label: 'Start fresh',
+                description: 'Answer the design questions again for this book.'
+              }
+            ]
+          }
+        ]
+      : []
+
+    // Applying a banked look answers everything the five questions ask, so
+    // asking them anyway would be asking what is no longer relevant — and
+    // worse, a look tweaked past what five questions can express would be
+    // silently flattened back to whatever those answers rebuild.
+    const applied = (designAnswers['profile'] as string) ?? (newest ? newest.id : FRESH_LOOK)
+    if (newest && applied !== FRESH_LOOK) return chooseProfile
+
     return [
+      ...chooseProfile,
       {
         id: 'kind',
         type: 'choice',
@@ -688,8 +758,58 @@ const design: Step = {
           },
           { value: 'none', label: 'Nothing', description: 'Page numbers only.' }
         ]
+      },
+      {
+        id: 'saveAs',
+        type: 'text',
+        prompt: 'Save this look to reuse on the next book?',
+        help:
+          'Name it and it will be offered here every time, so a series keeps one look ' +
+          'without being designed twice. Leave blank not to save.',
+        defaultValue: '',
+        placeholder: 'e.g. The Blackthorn Press look'
       }
     ]
+  }
+}
+
+/**
+ * The look the design gate's answers add up to, and the publisher identity that
+ * came with it.
+ *
+ * One place decides this, because three callers need the same answer: the gate's
+ * live preview, the export gate's prefilled imprint fields, and the export
+ * itself. A banked look is used *as banked* rather than rebuilt from the five
+ * answers — a profile hand-tweaked in a later session holds settings no answer
+ * can express, and regenerating would quietly discard them.
+ *
+ * `answers` is passed rather than read from state so the gate can show the
+ * consequence of an answer the user has not committed yet.
+ */
+export function appliedLook(
+  state: WizardState,
+  answers: Answers = state.answers['design'] ?? {}
+): { style: StyleProfile; imprint: ImprintFields; fromProfileId: string | null } {
+  const newest = state.styleProfiles[0]
+  const chosen = (answers['profile'] as string) ?? (newest ? newest.id : FRESH_LOOK)
+  const banked =
+    chosen === FRESH_LOOK ? undefined : state.styleProfiles.find((p) => p.id === chosen)
+
+  if (banked) {
+    return { style: banked.style, imprint: banked.imprint, fromProfileId: banked.id }
+  }
+  return {
+    style: profileFromAnswers(
+      {
+        kind: answers['kind'],
+        period: answers['period'],
+        chapterOpener: answers['chapterOpener'],
+        runningHeads: answers['runningHeads']
+      } as DesignAnswers,
+      answers['font'] as string
+    ),
+    imprint: emptyImprint(),
+    fromProfileId: null
   }
 }
 
@@ -717,6 +837,14 @@ const exportStep: Step = {
     const author = (answered['author'] as string) ?? m.author ?? ''
     const originalYear = (answered['originalYear'] as string) ?? m.originalYear ?? null
     const thisYear = String(new Date().getFullYear())
+
+    // The publisher's own details ride on the banked look (SPEC §7): they are
+    // facts about the imprint, not about this book, so on the second volume
+    // they arrive filled in rather than retyped.
+    const { imprint: banked, fromProfileId } = appliedLook(s)
+    const fromLook = fromProfileId
+      ? ' Filled in from the look you reused — correct it if this one differs.'
+      : ''
 
     const titlePage = s.classifications.find((c) => c.role === 'title-page')
     const titleEvidence = titlePage
@@ -763,8 +891,9 @@ const exportStep: Step = {
         prompt: 'Who is publishing this edition?',
         help:
           'Your imprint or your own name — not the original publisher. It appears on ' +
-          'the copyright page.',
-        defaultValue: '',
+          'the copyright page.' +
+          fromLook,
+        defaultValue: banked.imprint,
         placeholder: 'e.g. Blackthorn Press'
       },
       {
@@ -773,8 +902,9 @@ const exportStep: Step = {
         prompt: 'Who holds the copyright in this edition?',
         help:
           'The original text is public domain, so this covers only your new typesetting, ' +
-          'notes, and design.',
-        defaultValue: '',
+          'notes, and design.' +
+          fromLook,
+        defaultValue: banked.copyrightHolder,
         placeholder: author ? `e.g. your name (the author was ${author})` : 'e.g. your name'
       },
       {
@@ -807,7 +937,7 @@ const exportStep: Step = {
         help:
           'Recommended. It is accurate, it tells readers what they are buying, and it ' +
           'makes clear that your claim covers only this edition.',
-        defaultValue: true
+        defaultValue: banked.publicDomainNotice
       }
     ]
   }

@@ -70,14 +70,6 @@ export interface SourcePage {
   regions: ImageRegion[]
 }
 
-/** The OCR'd source document, before cleanup/typesetting. */
-export interface SourceDocument {
-  /** Absolute or project-relative path to the original PDF. */
-  pdfPath: string
-  pageCount: number
-  pages: SourcePage[]
-}
-
 // ---------------------------------------------------------------------------
 // Coordinate mapping (source <-> formatted output)
 // ---------------------------------------------------------------------------
@@ -153,50 +145,6 @@ export type Flag =
     }
 
 // ---------------------------------------------------------------------------
-// Structural tags (SPEC §5)
-// ---------------------------------------------------------------------------
-
-export type StructuralTagType =
-  'footnote' | 'blockquote' | 'verse' | 'heading' | 'table' | 'epigraph' | 'caption' | 'frontmatter'
-
-export interface StructuralTag {
-  id: string
-  type: StructuralTagType
-  range: OutputRange
-  /** Type-specific payload, e.g. footnote ref mark, heading level. */
-  data?: Record<string, unknown>
-}
-
-/**
- * A probable heading found by structure detection (SPEC §12 #11). Low-trust: the
- * user confirms it in review, which promotes it to a `heading` StructuralTag.
- */
-export interface HeadingCandidate {
-  /** Output range of the heading text in `ProjectFile.markdown`. */
-  range: OutputRange
-  /** Verbatim heading text. */
-  text: string
-  /** Heuristic nesting level (1 = top). */
-  level: number
-  /** Page the heading was found on. */
-  pageIndex: number
-}
-
-/**
- * One auto-generated table-of-contents entry (SPEC §7). Built from confirmed
- * heading tags in document order. The *edition* page number is filled in after
- * typesetting (Phase 4); during review only the output offset is known.
- */
-export interface TocEntry {
-  title: string
-  level: number
-  /** Char offset of the heading in `ProjectFile.markdown`. */
-  outputOffset: number
-  /** Final printed page number, set after typesetting; null until then. */
-  pageNumber: number | null
-}
-
-// ---------------------------------------------------------------------------
 // Non-destructive image edits (SPEC §6)
 // ---------------------------------------------------------------------------
 
@@ -224,17 +172,15 @@ export interface ImageEditOp {
   params: Record<string, number | string | boolean>
 }
 
-/** Edits for one region, always re-derivable from the original pixels. */
-export interface ImageEditDescriptor {
-  regionId: string
-  ops: ImageEditOp[]
-}
-
 // ---------------------------------------------------------------------------
-// Per-book config & review state (SPEC §7, §9)
+// Per-book config (SPEC §7)
 // ---------------------------------------------------------------------------
 
-/** Content-specific, never reused across books (SPEC §7). */
+/**
+ * Content-specific, never reused across books (SPEC §7). The other half of the
+ * two-level separation: everything here is a fact about *this* book, so none of
+ * it may be banked into a `StyleProfile`.
+ */
 export interface PerBookConfig {
   title: string
   author: string
@@ -242,24 +188,6 @@ export interface PerBookConfig {
   editionDate: string | null
   /** Trim size token, e.g. "6x9". */
   trimSize: string
-}
-
-/** A saved find-replace rule applied throughout the book (SPEC §4). */
-export interface FindReplaceRule {
-  id: string
-  find: string
-  replace: string
-  /** Treat `find` as a regular expression. */
-  regex: boolean
-  note?: string
-}
-
-/** Reading-progress persistence — distinct from edit state (SPEC §9). */
-export interface ReadingProgress {
-  /** Page the user last read to. */
-  lastPageIndex: number
-  /** Pages marked "reviewed/approved". */
-  approvedPages: number[]
 }
 
 // ---------------------------------------------------------------------------
@@ -279,17 +207,6 @@ export type RunningHeadMode = 'none' | 'bookTitle' | 'author' | 'chapterTitle' |
 
 /** Where/how page numbers are set. */
 export type PageNumberPosition = 'none' | 'bottomCenter' | 'bottomOuter' | 'topOuter'
-
-/** A reusable ornament (printer's flourish / rule / fleuron), SPEC §8. */
-export interface OrnamentRef {
-  id: string
-  name: string
-  /** `page` = repeats across the book; `chapter` = once per chapter opener; `divider` = section break. */
-  kind: 'page' | 'chapter' | 'divider'
-  source: 'builtin' | 'user'
-  /** Path to the ornament's vector file (SVG source or converted PDF). */
-  file: string
-}
 
 /** Ornament selections for a profile. Any may be null (no ornament). */
 export interface OrnamentChoices {
@@ -340,17 +257,6 @@ export interface StyleProfile {
   }
 }
 
-/** Templated front/back-matter fill-ins, content-specific (SPEC §7). */
-export interface FrontMatterFields {
-  isbn: string | null
-  publicationDate: string | null
-  editionStatement: string | null
-  imprint: string | null
-  copyrightHolder: string | null
-  /** Extra free-text lines for the copyright page. */
-  notices: string[]
-}
-
 // ---------------------------------------------------------------------------
 // KDP export validation (SPEC §10)
 // ---------------------------------------------------------------------------
@@ -383,51 +289,4 @@ export interface ExportResult {
   pdfPath: string | null
   pageCount: number
   validation: KdpValidationReport
-}
-
-// ---------------------------------------------------------------------------
-// Project file (SPEC §9) — the save/resume unit
-// ---------------------------------------------------------------------------
-
-/**
- * The desktop application's `project.json` — **superseded and unused.**
- *
- * It describes a directory of extracted page images, a Markdown intermediate
- * and a coordinate map, none of which the browser app produces. What is saved
- * now is the one expensive thing, the transcription: see `SavedRun` in
- * `@core/project`. This shape is retained only because SPEC §9 describes it and
- * several of its members (structural tags, find-replace rules, image edits)
- * belong to features still on the list.
- */
-export interface ProjectFile {
-  schemaVersion: number
-  source: {
-    pdfPath: string
-    pageCount: number
-  }
-  pages: SourcePage[]
-  /**
-   * The cleaned, formatted output text (Markdown intermediate, SPEC §3). This is
-   * what the review instrument renders in the output pane; every `MappingEntry`'s
-   * `output` range indexes into char offsets of this string.
-   */
-  markdown: string
-  /** Serialized coordinate map. */
-  coordinateMap: MappingEntry[]
-  flags: Flag[]
-  /**
-   * Token ids the user has reviewed and marked "good" (SPEC §4). Their flags are
-   * hidden from the flag list and skipped by jump-to-next-flag, and their
-   * confidence tint is suppressed — so a vetted word stops drawing attention.
-   */
-  resolvedTokenIds: string[]
-  tags: StructuralTag[]
-  imageEdits: ImageEditDescriptor[]
-  config: PerBookConfig
-  findReplace: FindReplaceRule[]
-  readingProgress: ReadingProgress
-  /** Id of the applied saved style profile (SPEC §7); null = shipped default. */
-  styleProfileId: string | null
-  /** Templated front/back-matter content for this book (SPEC §7). */
-  frontMatter: FrontMatterFields
 }
