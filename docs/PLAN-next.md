@@ -1,6 +1,6 @@
 # Plan: what is left
 
-Status: **proposed, nothing built.** Written after
+Status: **Tier 1 built; Tiers 2 and 3 remain.** Written after
 [`PLAN-layout-preview.md`](./PLAN-layout-preview.md) closed — every step in that
 document is now built, verified in Chromium, and on `main`.
 
@@ -20,11 +20,13 @@ end with the reason.
 
 ---
 
-## Tier 1 — the series problem
+## Tier 1 — the series problem — **built**
 
-This is the biggest real gap, and it is the one the user hits on book two.
+This was the biggest real gap, and the one the user hit on book two. All three
+items below are done and verified in Chromium across two books. What building
+it changed is recorded at the end of each.
 
-### 1. Saved style profiles (SPEC §7)
+### 1. Saved style profiles (SPEC §7) — done
 
 Today the design gate interviews the user, produces a `StyleProfile`, and throws
 it away when the tab closes. Book two starts from the shipped defaults and gets
@@ -48,37 +50,49 @@ and at the design gate's accept, one more:
 > "Save this look to reuse on the next book?" · name field, prefilled from the
 > imprint.
 
-**The part that needs care.** A profile must hold only what is content-free.
-`StyleProfile` currently mixes the two: trim size and body face belong to the
-imprint; anything derived from _this_ book's period or structure does not.
+**The part that needed care.** A profile must hold only what is content-free.
 SPEC §7's "two-level separation" is the test — if reusing it on an unrelated
-book would be wrong, it is per-book config and must not be banked. That split
-has to be made in the type, not remembered by convention, or the third book
-inherits the second book's date.
+book would be wrong, it is per-book config and must not be banked.
 
-**Testable in core**: profile ↔ answers round-trip, and the content-free
-assertion (bank a profile from book A, apply to book B, confirm nothing of A's
-content survives).
+**This turned out better than the paragraph above assumed.** `StyleProfile` did
+_not_ mix the two levels: every one of its fourteen fields is already a fact
+about the look, so there was no split to make. The risk is not the current
+shape but the next person's addition to it, so the guard is
+`BANKED_STYLE_KEYS` — a list checked against `StyleProfile`'s own keys, which
+fails the moment a field is added without deciding which level it belongs to.
+A convention would not have caught it; a test does.
 
-### 2. Front-matter templates that carry across books (SPEC §7)
+One more thing the build changed: a banked look is applied **as banked**, never
+rebuilt from the five answers. A profile hand-tweaked in a later session holds
+settings no answer can express, and regenerating would silently flatten them.
 
-The copyright page, the imprint name, the edition statement and the editor's own
-name are re-typed every book at the export gate. Everything except the ISBN and
-the edition date is the same for every volume an imprint publishes. This rides
-along with (1) — same store, same question — and is cheap once (1) exists.
+### 2. Front-matter templates that carry across books (SPEC §7) — done
 
-### 3. Delete the dead scaffolding
+The imprint name and the copyright holder were retyped every book at the export
+gate, though they are the same for every volume an imprint publishes. They now
+ride on the banked look.
 
-`ProjectState` in `src/core/model/types.ts` — and with it `findReplace`,
-`readingProgress`, `tags`, `imageEdits`, `styleProfileId`, `frontMatter` — is
-referenced by **nothing**. It is the Electron-era project-file shape, left
-behind when the browser app was built in a different order. It currently reads
-like an implemented feature to anyone opening the file, and `styleProfileId`
-in particular will actively mislead whoever builds (1).
+**The edition statement did _not_ come along**, contrary to the sentence this
+paragraph used to end with. It names the original's year, so it is per-title;
+the ISBN is per-title and the publication date is per-printing. Banking any of
+the three would have been silently wrong on book two — the exact failure the
+feature exists to prevent.
 
-Either delete it or reduce it to the fields (1) and (2) actually use. I would do
-this _first_, in the same session as (1), so the new persistence is not written
-next to a decoy of itself.
+One ordering wrinkle: the look is named at the design gate, but the publisher's
+details are asked one gate later. So the profile is written at the design gate
+with the style alone and topped up when the export runs — and the export screen
+says so, because changing saved state without telling anyone is how a user finds
+out on book three that something has been following them around.
+
+### 3. Delete the dead scaffolding — done
+
+The type was `ProjectFile`, not `ProjectState` — this plan had the name wrong.
+It and everything reachable only from it came to 141 lines, referenced by
+**nothing**: the Electron-era project-file shape, left behind when the browser
+app was built in a different order. `HeadingCandidate` and `TocEntry` even
+documented themselves in terms of `ProjectFile.markdown`, a field of the type
+they would have outlived. `styleProfileId` would have actively misled whoever
+built (1), which is why this went first.
 
 ---
 
@@ -169,9 +183,23 @@ swallow, light faces at print size and muddy images only show on paper. This is
 the user's task, not the code's, but it belongs on the list because it is the
 last gate before a book is actually for sale.
 
-**Also user-side, and I will not guess at it:** verify KDP's current terms for
-public-domain works and what it requires of differentiated content. My
-recollection of that policy is not a source; read it from Amazon.
+**The differentiation requirement, from KDP's own policy.** A public-domain
+title that is already free in the store may only be published in a
+_differentiated_ version: an original translation, original annotations, or ten
+or more original illustrations — with `(Translated)`, `(Annotated)` or
+`(Illustrated)` in the title field and a bulleted summary of the originality at
+the top of the product description. A linked table of contents, formatting
+improvements and collections are named as _not_ differentiating.
+
+This bears directly on what the app already does. The editor's own notes and
+authored front/back-matter sections (`src/core/edits`) are what makes an edition
+_annotated_; the layout engine, the TOC and the typography are explicitly not
+enough on their own. Illustrations cut from the scan are the original's, not
+original work, so they do not count toward the ten — only pictures the editor
+supplies would. Nothing in the app currently says any of this at the export
+gate, which is a gap worth closing: the KDP report checks trim, gutter, fonts
+and image DPI, and could equally count the editor's annotations and own
+illustrations against the thresholds above.
 
 ---
 
@@ -202,15 +230,14 @@ Recorded so the next session does not re-litigate them.
 
 ## Suggested order
 
-1. **(6) Junicode** — an hour, unblocks a real font choice.
-2. **(7) A real book against the live API** — the only item that can change what
-   follows.
-3. **(3) Delete the dead scaffolding**, then **(1) saved profiles** and
-   **(2) front-matter templates** in one arc.
+1. ~~**(3) dead scaffolding**, then **(1) saved profiles** and **(2) front-matter
+   templates**~~ — done.
+2. **(6) Junicode** — an hour, unblocks a real font choice. In hand.
+3. **(7) A real book against the live API** — the only remaining item that can
+   change what follows, which is why it comes before the craft work.
 4. **(4 + 5) Small caps and ligatures** as a single investigation into a
    glyph-id write path — with a real possibility that the honest outcome is "not
    with this embedder", written down as a finding.
 
-Tier 1 is where the remaining _product_ is. Tier 2 is where the remaining
-_craft_ is. Tier 3 is the only place a surprise is likely to come from, which is
-why it is second.
+Tier 1 was where the remaining _product_ was. Tier 2 is where the remaining
+_craft_ is. Tier 3 is the only place a surprise is likely to come from.
