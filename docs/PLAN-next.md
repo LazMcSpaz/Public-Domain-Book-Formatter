@@ -129,7 +129,7 @@ With widths written, both debts cleared at once:
 - **Ligatures** are back on, along with contextual alternates. `dlig` and
   `hlig` stay off as typography rather than workaround; see `fonts.ts`.
 - **Small capitals** need no glyph-level path at all. pdf-lib applies features
-  per *embedded font*, so a small-caps run is the same bytes embedded again
+  per _embedded font_, so a small-caps run is the same bytes embedded again
   with `smcp` on — the same cost as an italic.
 
 Two things this section got right and they held: never synthesise small

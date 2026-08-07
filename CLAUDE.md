@@ -115,7 +115,7 @@ Path aliases: `@core`, `@platform` (defined in `tsconfig.json`,
   something. `layout()` is a pure function of its inputs, so the footnote
   re-flow and the two-pass TOC are "run it again", not mutable state.
 - **Every glyph the book prints must have a width.** pdf-lib writes `/W` and
-  `ToUnicode` from the glyphs a *code point* reaches, so a ligature, a
+  `ToUnicode` from the glyphs a _code point_ reaches, so a ligature, a
   contextual alternate or a small capital gets neither: a full em of white space
   mid-word, and a page that copies out as line noise. `font-widths.ts` widens
   the list to what the book uses and `renderPdf` **verifies** it, raising rather
@@ -236,7 +236,7 @@ in `screenshots/`. Don't ship UI blind.
   `FontFile3` no other face exercises.
 - **Also done**: **ligatures, contextual alternates and real small capitals.**
   All three were one bug: pdf-lib builds the PDF's width array from the glyphs a
-  *code point* reaches, so anything else printed as a full em of white space and
+  _code point_ reaches, so anything else printed as a full em of white space and
   copied out as line noise. `src/platform/browser/font-widths.ts` widens that
   list to the glyphs the book actually uses, and `renderPdf` verifies rather
   than hopes. Small capitals then needed no glyph-level draw path at all —
