@@ -21,7 +21,14 @@
  *
  * Browser-only.
  */
-import { migrateSavedRun, summarize, type SavedRun, type SavedRunSummary } from '@core/project'
+import {
+  fileKey,
+  keyMatchesFile,
+  migrateSavedRun,
+  summarize,
+  type SavedRun,
+  type SavedRunSummary
+} from '@core/project'
 import { migrateSavedProfile, type SavedStyleProfile } from '@core/style'
 
 const DB_NAME = 'pdbf'
@@ -148,6 +155,38 @@ export async function loadRun(key: string): Promise<SavedRun | null> {
     void deleteRun(key)
     return null
   }
+}
+
+/**
+ * The run for a file the user has just opened, by exact identity if possible
+ * and by name-and-size if not.
+ *
+ * The fallback matters more than it looks. The key carries the file's
+ * modification time, and that changes when a PDF is re-downloaded, restored
+ * from a backup or synced between devices — none of which change the book. A
+ * run stranded that way is unreachable forever while still occupying the store,
+ * and the user is asked to pay a second time for a transcription they already
+ * own.
+ *
+ * Returns the run and the key it was found under, because the caller must go on
+ * saving under *that* key rather than minting a second record for the same book.
+ */
+export async function findRunForFile(file: {
+  name: string
+  size: number
+  lastModified: number
+}): Promise<{ run: SavedRun; key: string } | null> {
+  const exact = fileKey(file)
+  const direct = await loadRun(exact)
+  if (direct) return { run: direct, key: exact }
+
+  const raw = await withStore('readonly', (store) => promisify(store.getAllKeys()))
+  for (const key of raw ?? []) {
+    if (typeof key !== 'string' || !keyMatchesFile(key, file)) continue
+    const run = await loadRun(key)
+    if (run) return { run, key }
+  }
+  return null
 }
 
 /** The summary of a stored run, for the question that offers it. */

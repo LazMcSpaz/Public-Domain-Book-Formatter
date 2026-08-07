@@ -139,6 +139,42 @@ export function fileKey(file: { name: string; size: number; lastModified: number
   return [file.name, file.size, file.lastModified].join('\u0000')
 }
 
+/**
+ * Take a key apart again.
+ *
+ * The key is built from three facts about the file, so it can be read back into
+ * them — which is what lets a run be found when one of the three has moved.
+ * Returns null for anything not shaped like a key.
+ */
+export function parseFileKey(
+  key: string
+): { name: string; size: number; lastModified: number } | null {
+  const parts = key.split('\u0000')
+  if (parts.length !== 3) return null
+  const size = Number(parts[1])
+  const lastModified = Number(parts[2])
+  if (!Number.isFinite(size) || !Number.isFinite(lastModified)) return null
+  return { name: parts[0]!, size, lastModified }
+}
+
+/**
+ * Whether a stored key plausibly belongs to this file, ignoring its timestamp.
+ *
+ * The exact key is tried first everywhere this is used; this is the fallback,
+ * and it exists because the timestamp is the one of the three parts that moves
+ * for reasons that have nothing to do with the book. Re-downloading the same
+ * PDF, restoring it from a backup, or syncing it between devices all change the
+ * modification time and none of them change a byte of the file.
+ *
+ * Name *and* size together, never name alone: two different scans of the same
+ * title share a name constantly, and handing back the wrong book's
+ * transcription would be worse than asking the user to pay again.
+ */
+export function keyMatchesFile(key: string, file: { name: string; size: number }): boolean {
+  const parsed = parseFileKey(key)
+  return parsed !== null && parsed.name === file.name && parsed.size === file.size
+}
+
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
 }

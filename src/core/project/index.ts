@@ -11,6 +11,8 @@ export {
   createSavedRun,
   describeAge,
   fileKey,
+  parseFileKey,
+  keyMatchesFile,
   migrateSavedRun,
   summarize,
   type SavedFailure,

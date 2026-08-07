@@ -38,14 +38,22 @@ import { assembleBook } from '@core/assemble'
 import { runBrowserTranscription } from '../platform/browser/transcribe-run'
 import { loadApiKey, saveApiKey, loadPrefs, savePrefs } from '../platform/browser/settings'
 import {
+  findRunForFile,
   listProfiles,
+  listRuns,
   loadRun,
   loadRunSummary,
   saveProfile,
   saveRun
 } from '../platform/browser/run-store'
 import { newSavedProfile, type SavedStyleProfile } from '@core/style'
-import { createSavedRun, fileKey } from '@core/project'
+import {
+  createSavedRun,
+  describeAge,
+  fileKey,
+  summarize as summarizeRun,
+  type SavedRunSummary
+} from '@core/project'
 import { describeProfile } from '@core/design'
 import { buildExport, editionFromAnswers, type BuildExportResult } from '@core/export'
 import { applyEdits, type BookEdit } from '@core/edits'
@@ -130,6 +138,15 @@ export function App(): JSX.Element {
    * telling the user is not.
    */
   const [bankedNote, setBankedNote] = useState<string | null>(null)
+  /**
+   * Transcriptions already paid for, from any earlier sitting.
+   *
+   * Shown on the intake screen. Without this the app forgets out loud: a
+   * refresh puts an empty drop zone in front of someone whose paid run is
+   * sitting in the database three feet away, and nothing on the screen suggests
+   * otherwise.
+   */
+  const [savedRuns, setSavedRuns] = useState<SavedRunSummary[]>([])
   const [buildProgress, setBuildProgress] = useState<{ done: number; total: number } | null>(null)
   /**
    * Corrections made at the proof step.
@@ -428,10 +445,18 @@ export function App(): JSX.Element {
       const result = await runRecon(file, { onProgress: setProgress })
       reconRef.current = result
 
-      // Has this exact file already been paid for? Looked up after the free
-      // pass rather than before it, because the crops and thumbnails it
-      // produces are what make a resumed session complete rather than partial.
-      const saved = await loadRunSummary(fileKeyRef.current)
+      // Has this book already been paid for? Looked up after the free pass
+      // rather than before it, because the crops and thumbnails it produces are
+      // what make a resumed session complete rather than partial.
+      //
+      // By name and size when the exact identity misses, because the third part
+      // of that identity is the file's modification time — which a re-download,
+      // a backup restore or a sync between devices all change without touching
+      // a byte of the book. The key it was found under is kept, so the run goes
+      // on being saved where it already lives instead of forking in two.
+      const found = await findRunForFile(file)
+      if (found) fileKeyRef.current = found.key
+      const saved = found ? summarizeRun(found.run) : null
 
       // Placeholder classification until the vision pass lands: page 0 is
       // treated as the title page so the identity gate has evidence to show.
@@ -481,6 +506,7 @@ export function App(): JSX.Element {
     void (async () => {
       const profiles = await listProfiles()
       if (profiles.length > 0) setState((s) => ({ ...s, styleProfiles: profiles }))
+      setSavedRuns(await listRuns())
     })()
   }, [])
 
@@ -1141,6 +1167,26 @@ export function App(): JSX.Element {
               <strong>Drop a scanned PDF here</strong>
               <span>or click to choose a file — the whole book, one file</span>
             </div>
+
+            {savedRuns.length > 0 ? (
+              <div className="q">
+                <span className="prompt">Books you have already paid to have read</span>
+                <div className="help">
+                  These transcriptions are saved in this browser. Open the same PDF again and the
+                  reading picks up where it left off — you are not charged twice.
+                </div>
+                <ul className="notes">
+                  {savedRuns.map((run) => (
+                    <li key={run.key}>
+                      <strong>{run.fileName}</strong> — {run.pageCount} page
+                      {run.pageCount === 1 ? '' : 's'}
+                      {run.failedPages > 0 ? `, ${run.failedPages} failed` : ''} ·{' '}
+                      {describeAge(run.savedAt)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
           </>
         ) : null}
 

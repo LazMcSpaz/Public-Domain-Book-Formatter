@@ -4,7 +4,9 @@ import {
   createSavedRun,
   describeAge,
   fileKey,
+  keyMatchesFile,
   migrateSavedRun,
+  parseFileKey,
   summarize
 } from '@core/project'
 import type { PageTranscription } from '@core/transcribe'
@@ -227,5 +229,42 @@ describe('describeAge', () => {
 
   it('does not invent an age it cannot work out', () => {
     expect(describeAge('not a date')).toBe('at some point')
+  })
+})
+
+describe('finding a run when the file has moved but the book has not', () => {
+  /**
+   * The key is name, size and modification time. Only the third moves for
+   * reasons that have nothing to do with the book — re-downloading the PDF,
+   * restoring it from a backup, syncing it between devices. Before the loose
+   * match, any of those stranded a paid transcription in the database forever
+   * and asked the user to buy it again.
+   */
+  const FILE = { name: 'treatise.pdf', size: 12_345, lastModified: 1_700_000_000_000 }
+
+  it('reads a key back into the file it was built from', () => {
+    expect(parseFileKey(fileKey(FILE))).toEqual(FILE)
+  })
+
+  it('refuses anything that is not a key', () => {
+    expect(parseFileKey('treatise.pdf')).toBeNull()
+    expect(parseFileKey('a\u0000notanumber\u00001')).toBeNull()
+  })
+
+  it('matches the same book with a new timestamp', () => {
+    const redownloaded = { ...FILE, lastModified: FILE.lastModified + 86_400_000 }
+    expect(keyMatchesFile(fileKey(FILE), redownloaded)).toBe(true)
+  })
+
+  it('will not hand back a different book that happens to share a name', () => {
+    // Two scans of the same title share a filename constantly. Returning the
+    // wrong book's transcription is worse than asking for payment again, so the
+    // size has to agree too.
+    const otherScan = { ...FILE, size: FILE.size + 1 }
+    expect(keyMatchesFile(fileKey(FILE), otherScan)).toBe(false)
+  })
+
+  it('will not match a different name at the same size', () => {
+    expect(keyMatchesFile(fileKey(FILE), { ...FILE, name: 'other.pdf' })).toBe(false)
   })
 })

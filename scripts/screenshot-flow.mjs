@@ -800,6 +800,53 @@ await page.waitForTimeout(400)
 const overflow = await page.evaluate(() => document.body.scrollWidth - window.innerWidth)
 await shot('10-export-mobile')
 
+// The failure this guards against was reported from a real book: a refresh put
+// an empty drop zone in front of someone whose paid run was in the database,
+// with nothing on the screen to say so. `listRuns` had been written for exactly
+// this and called by nothing.
+console.log('11. a refresh does not look like a fresh start')
+// Seeded first: the store checks above clean up after themselves, so at this
+// point there is genuinely nothing saved and an empty intake would be correct.
+await page.evaluate(async (repo) => {
+  const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+  const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+  await runStore.saveRun(
+    project.createSavedRun({
+      key: project.fileKey({ name: 'a-paid-book.pdf', size: 999, lastModified: 1 }),
+      fileName: 'a-paid-book.pdf',
+      pageCount: 312,
+      transcriptions: [
+        {
+          pageIndex: 0,
+          role: 'body',
+          blocks: [{ kind: 'paragraph', text: 'x' }],
+          uncertain: [],
+          furniture: {}
+        }
+      ],
+      failures: [],
+      usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0 },
+      modelId: 'claude-opus-5',
+      identityAnswers: {}
+    })
+  )
+}, REPO)
+await page.goto(URL_BASE, { waitUntil: 'networkidle' })
+await page.waitForTimeout(1200)
+const runsOnIntake = await page
+  .locator('.q')
+  .filter({ hasText: 'already paid to have read' })
+  .count()
+const namedOnIntake = await page.locator('.notes li').filter({ hasText: '.pdf' }).count()
+await shot('02b-intake-saved-runs')
+if (runsOnIntake !== 1) throw new Error('Intake does not mention the saved runs')
+console.log(`  → intake names ${namedOnIntake} saved transcription(s) after a reload`)
+await page.evaluate(async (repo) => {
+  const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+  const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+  await runStore.deleteRun(project.fileKey({ name: 'a-paid-book.pdf', size: 999, lastModified: 1 }))
+}, REPO)
+
 console.log('\nresult:')
 console.log(`  term rows: ${rows}`)
 console.log(`  word crops rendered: ${crops}`)
