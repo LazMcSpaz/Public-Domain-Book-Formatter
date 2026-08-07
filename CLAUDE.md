@@ -114,6 +114,13 @@ Path aliases: `@core`, `@platform` (defined in `tsconfig.json`,
   approximates the page — one renderer is what makes the gate's approval mean
   something. `layout()` is a pure function of its inputs, so the footnote
   re-flow and the two-pass TOC are "run it again", not mutable state.
+- **Every glyph the book prints must have a width.** pdf-lib writes `/W` and
+  `ToUnicode` from the glyphs a *code point* reaches, so a ligature, a
+  contextual alternate or a small capital gets neither: a full em of white space
+  mid-word, and a page that copies out as line noise. `font-widths.ts` widens
+  the list to what the book uses and `renderPdf` **verifies** it, raising rather
+  than writing a book with holes. That check is only sound because `drawPage` is
+  the single place text is drawn — keep it that way.
 - **Measure with the engine that draws.** The `TextMeasurer` sums the advances
   of the glyphs `fontkit.layout()` returns, which is the same call pdf-lib makes
   to encode text. Measuring with anything else is how WYSIWYG breaks.
@@ -224,8 +231,18 @@ in `screenshots/`. Don't ship UI blind.
   fails a test until someone decides which of SPEC §7's two levels it belongs
   to. This also retired `ProjectFile` and the 141 lines of Electron-era model
   scaffolding reachable only from it.
-- **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — real small caps and
-  ligatures (one investigation, not two), Junicode, and a book-length run
-  against the live API.
+- **Also done**: **Junicode**, vendored into `public/fonts/junicode/` with its
+  licence beside it — the only CFF outlines here, so pdf-lib writes a
+  `FontFile3` no other face exercises.
+- **Also done**: **ligatures, contextual alternates and real small capitals.**
+  All three were one bug: pdf-lib builds the PDF's width array from the glyphs a
+  *code point* reaches, so anything else printed as a full em of white space and
+  copied out as line noise. `src/platform/browser/font-widths.ts` widens that
+  list to the glyphs the book actually uses, and `renderPdf` verifies rather
+  than hopes. Small capitals then needed no glyph-level draw path at all —
+  pdf-lib applies features per embedded font, so a small-caps run is the same
+  bytes embedded again with `smcp` on.
+- **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
+  against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and
   kept for why the layout engine is shaped the way it is.

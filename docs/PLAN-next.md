@@ -1,6 +1,6 @@
 # Plan: what is left
 
-Status: **Tier 1 built; Tiers 2 and 3 remain.** Written after
+Status: **Tiers 1 and 2 built; Tier 3 remains.** Written after
 [`PLAN-layout-preview.md`](./PLAN-layout-preview.md) closed — every step in that
 document is now built, verified in Chromium, and on `main`.
 
@@ -96,58 +96,77 @@ built (1), which is why this went first.
 
 ---
 
-## Tier 2 — the three typographic debts
+## Tier 2 — the three typographic debts — **built**
 
-Each of these is a substitution the code already confesses to in a comment. They
-are what stands between "a clean reprint" and "a book that looks like a real
-edition" — which is what SPEC §8 says this layer exists for.
+All three are done, and the shape of the problem turned out to be different
+from what this section assumed. It is recorded here because the wrong diagnosis
+survived two rounds of being written down as a comment.
 
-### 4. Real small capitals
+### 4 + 5. Small capitals and ligatures — done, and they were one bug
 
-`headingStyle.smallCaps` currently sets **ordinary capitals**. On a period book
-that is the wrong texture — full caps in a running head are shouting where small
-caps are speaking.
+This section predicted the two were one investigation. They were — but not the
+one described. The plan said the job was "a glyph-level draw path beside
+`drawText`", and that pdf-lib could not write glyph ids. It already does:
+`CustomFontEmbedder` encodes Identity-H with `CIDToGIDMap` Identity and writes
+glyph ids in `encodeText`.
 
-`PLAN-layout-preview.md` §"Small caps: not in v1, and never faked" settled the
-rule and it stands: **never synthesise them by scaling capitals.** EB Garamond,
-Cardo, IM FELL and Junicode all carry a real `smcp` feature; the job is to ask
-fontkit to apply it and write the resulting **glyph ids** rather than a string.
-That means a glyph-level draw path beside `drawText`, and it must go through the
-same `TextMeasurer` that already sums `fontkit.layout()` advances — otherwise
-the measure and the draw disagree and WYSIWYG breaks at exactly the place the
-gate's approval is supposed to mean something.
+The defect was one list. pdf-lib builds the glyph set for **both** the `/W`
+width array and the `ToUnicode` map by walking the font's character set:
 
-Risk: this is the same territory as the ligature problem below (pdf-lib writes
-no width for a glyph answering to no code point), so **do 4 and 5 together or
-not at all** — they are one investigation.
+```js
+for (cp of font.characterSet) glyphs.push(font.glyphForCodePoint(cp))
+```
 
-### 5. Ligatures
+A glyph no code point reaches — a ligature, a contextual alternate, a small
+capital — is in neither. Missing from `/W` it prints as a full em of white
+space; missing from `ToUnicode` the page copies out as line noise.
 
-Off, and `src/platform/browser/fonts.ts` explains why: pdf-lib's whole-font
-embedder maps code points to glyphs, and a ligature glyph answers to no code
-point, so it gets no width. The comment calls it "a deliberate, unhappy trade"
-between "no fi ligature" and "broken words", and picks correctly.
+`src/platform/browser/font-widths.ts` widens the list to the glyphs the book
+actually uses, and `renderPdf` verifies afterwards rather than hoping — an
+uncovered glyph raises instead of being handed to someone about to sell a book.
+With widths written, both debts cleared at once:
 
-The fix is the same glyph-id write path as (4). If that path lands, both debts
-clear at once; if it proves impossible against pdf-lib's embedder, both stay,
-and the comment stops being an apology and becomes a finding.
+- **Ligatures** are back on, along with contextual alternates. `dlig` and
+  `hlig` stay off as typography rather than workaround; see `fonts.ts`.
+- **Small capitals** need no glyph-level path at all. pdf-lib applies features
+  per *embedded font*, so a small-caps run is the same bytes embedded again
+  with `smcp` on — the same cost as an italic.
 
-**Do not** attempt this by reviving `{ subset: true }`. That corrupts the
-outlines of EB Garamond, Cardo and IM FELL, nothing in the suite catches it, and
-it is already written down in `pdf-out.ts` as evidence.
+Two things this section got right and they held: never synthesise small
+capitals by scaling, and measure with the engine that draws. The second caught
+two real bugs during the wiring, both silent — a cache key that ignored the
+small-caps variant, and a contents title measured in one face and drawn in
+another.
 
-### 6. Junicode, vendored
+One fact the plan did not have: **only three of the seven faces carry `smcp`**
+— EB Garamond, Cardo and Junicode. IM FELL English, which the interview
+recommends for the 17th century, has none, while the interview asks for
+small-capped headings on every period but modern. A face without them gets full
+capitals, and the typeface question now says which is which, so the choice is
+made with the fact in view.
 
-The design interview offers Junicode; the loader substitutes EB Garamond and
-says so. Junicode is not on npm — it exists for enormous archaic glyph coverage
-(long-s, and the rest of what SPEC §11 lists as the labor that actually fills
-time), which is precisely what a 17th-century reprint needs. This is a
-**download-and-commit task**, not an engineering one: fetch the release, put the
-two faces in `public/fonts/junicode/`, check the licence, remove the
-substitution notice.
+An unlooked-for gain: because `smcp` is applied to the text as written rather
+than to an upper-cased copy, a heading now extracts as "Of the Air" instead of
+"OF THE AIR". That is what a screen reader says aloud and what a search
+matches.
 
-Worth doing early because it is an hour of work and it unblocks the one font
-choice a period book most wants.
+### 6. Junicode, vendored — done
+
+Version 2.226, static OTF, with `OFL.txt` beside it — this repository is
+public, so committing the binaries is redistribution and the licence has to
+travel with them. A test fails if it goes missing.
+
+Two things worth carrying forward. These are the only **CFF** outlines in the
+app, so pdf-lib writes a `FontFile3` rather than the `FontFile2` every other
+face takes — a branch nothing else exercises, now covered end to end. And
+Junicode is what exposed the `calt` half of the width bug: it substitutes
+contextual f-alternates that no code point reaches, which is not a ligature
+feature and so slipped past two comments about ligatures.
+
+The eight unused faces (Bold, SemiBold, their italics, four Cond) are kept
+and documented as unused — `FontStyle` is `regular | italic` and nothing asks
+for a weight. They are ~8 MB of dead weight in `dist/`; deleting them is safe
+and breaks no test.
 
 ---
 
@@ -232,12 +251,12 @@ Recorded so the next session does not re-litigate them.
 
 1. ~~**(3) dead scaffolding**, then **(1) saved profiles** and **(2) front-matter
    templates**~~ — done.
-2. **(6) Junicode** — an hour, unblocks a real font choice. In hand.
-3. **(7) A real book against the live API** — the only remaining item that can
-   change what follows, which is why it comes before the craft work.
-4. **(4 + 5) Small caps and ligatures** as a single investigation into a
-   glyph-id write path — with a real possibility that the honest outcome is "not
-   with this embedder", written down as a finding.
+2. ~~**(6) Junicode**~~ — done.
+3. ~~**(4 + 5) Small caps and ligatures**~~ — done, and the honest outcome was
+   better than the "not with this embedder" this plan braced for.
+4. **(7) A real book against the live API** — all that is left, and the only
+   item that can still change the picture. It needs a key and real spend, so it
+   is the user's to run.
 
-Tier 1 was where the remaining _product_ was. Tier 2 is where the remaining
-_craft_ is. Tier 3 is the only place a surprise is likely to come from.
+Tier 1 was where the remaining _product_ was. Tier 2 was the _craft_. Tier 3 is
+the only place a surprise is still likely to come from.
