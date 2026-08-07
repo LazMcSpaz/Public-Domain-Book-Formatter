@@ -33,13 +33,15 @@ import { migrateSavedProfile, type SavedStyleProfile } from '@core/style'
 
 const DB_NAME = 'pdbf'
 /**
- * v2 added the `profiles` store (banked looks, SPEC §7). The upgrade handler
- * below creates whichever stores are missing rather than switching on the old
- * version, so a database at either version arrives complete.
+ * v2 added the `profiles` store (banked looks, SPEC §7); v3 added `files`, the
+ * source PDF itself. The upgrade handler below creates whichever stores are
+ * missing rather than switching on the old version, so a database at any
+ * version arrives complete.
  */
-const DB_VERSION = 2
+const DB_VERSION = 3
 const STORE = 'runs'
 const PROFILE_STORE = 'profiles'
+const FILE_STORE = 'files'
 
 /**
  * How many books' transcriptions to keep, oldest evicted first.
@@ -72,6 +74,13 @@ function openDb(): Promise<IDBDatabase | null> {
         // Keyed on the profile's own id: a look is not tied to a file the way a
         // run is — that is the entire point of banking one.
         db.createObjectStore(PROFILE_STORE, { keyPath: 'id' })
+      }
+      if (!db.objectStoreNames.contains(FILE_STORE)) {
+        // Keyed by the run's key, so the scan and the transcription of it are
+        // found by the same lookup and evicted by the same decision — but kept
+        // in a *separate* store, because a scan is two orders of magnitude
+        // larger and must never be able to fail the write that saves the run.
+        db.createObjectStore(FILE_STORE, { keyPath: 'key' })
       }
     }
     request.onsuccess = () => resolve(request.result)
@@ -197,6 +206,69 @@ export async function loadRunSummary(key: string): Promise<SavedRunSummary | nul
 
 export async function deleteRun(key: string): Promise<void> {
   await withStore('readwrite', (store) => promisify(store.delete(key)))
+}
+
+// ---------------------------------------------------------------------------
+// The scan itself
+// ---------------------------------------------------------------------------
+
+/**
+ * Keep the source PDF, so reopening a book is a tap rather than an errand.
+ *
+ * Without this, resuming means finding the same file again in a phone's
+ * downloads — and finding the *same* one, since a re-download changes the
+ * modification time. The app knew the book was there and still made the user go
+ * and fetch it.
+ *
+ * Deliberately best-effort and deliberately last. A scan is tens or hundreds of
+ * megabytes where a transcription is one or two, so this is the write that hits
+ * a quota, and it must never be able to take the paid work down with it. The
+ * caller stores the run first and treats a `false` here as a convenience lost,
+ * not as a failure.
+ */
+export async function saveSourceFile(key: string, file: File): Promise<boolean> {
+  try {
+    const bytes = new Uint8Array(await file.arrayBuffer())
+    const ok = await withStore(
+      'readwrite',
+      async (store) => {
+        await promisify(store.put({ key, name: file.name, lastModified: file.lastModified, bytes }))
+        return true
+      },
+      FILE_STORE
+    )
+    return ok === true
+  } catch {
+    return false
+  }
+}
+
+/**
+ * The stored scan for a run, rebuilt as a `File`.
+ *
+ * The name and modification time are stored with the bytes so the rebuilt file
+ * has the same identity it had when it was saved — otherwise `fileKey` would
+ * mint a different key for it and the run it belongs to would be lost by the
+ * act of reopening it.
+ */
+export async function loadSourceFile(key: string): Promise<File | null> {
+  const raw = await withStore('readonly', (store) => promisify(store.get(key)), FILE_STORE)
+  if (!raw || typeof raw !== 'object') return null
+  const record = raw as { name?: unknown; lastModified?: unknown; bytes?: unknown }
+  if (!(record.bytes instanceof Uint8Array)) return null
+  const name = typeof record.name === 'string' ? record.name : 'book.pdf'
+  const lastModified = typeof record.lastModified === 'number' ? record.lastModified : Date.now()
+  return new File([record.bytes as BlobPart], name, { type: 'application/pdf', lastModified })
+}
+
+/** Which runs have their scan stored, so intake only offers what it can open. */
+export async function storedFileKeys(): Promise<string[]> {
+  const keys = await withStore('readonly', (store) => promisify(store.getAllKeys()), FILE_STORE)
+  return (keys ?? []).filter((k): k is string => typeof k === 'string')
+}
+
+export async function deleteSourceFile(key: string): Promise<void> {
+  await withStore('readwrite', (store) => promisify(store.delete(key)), FILE_STORE)
 }
 
 // ---------------------------------------------------------------------------

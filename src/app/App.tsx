@@ -43,8 +43,11 @@ import {
   listRuns,
   loadRun,
   loadRunSummary,
+  loadSourceFile,
   saveProfile,
-  saveRun
+  saveRun,
+  saveSourceFile,
+  storedFileKeys
 } from '../platform/browser/run-store'
 import { newSavedProfile, type SavedStyleProfile } from '@core/style'
 import {
@@ -147,6 +150,19 @@ export function App(): JSX.Element {
    * otherwise.
    */
   const [savedRuns, setSavedRuns] = useState<SavedRunSummary[]>([])
+  /** Keys whose scan is stored too, so the book can be reopened without the picker. */
+  const [reopenable, setReopenable] = useState<string[]>([])
+  /**
+   * Said while the free pass runs, when the book being read has already been
+   * paid for.
+   *
+   * Re-reading a scan looks exactly like reading a new one — same progress bar,
+   * same minutes — so without this the honest reading of the screen is that the
+   * paid work was lost and is being redone. Found before recon starts rather
+   * than after it, because the answer is worth having at the start of the wait
+   * rather than at the end.
+   */
+  const [resumeNote, setResumeNote] = useState<string | null>(null)
   const [buildProgress, setBuildProgress] = useState<{ done: number; total: number } | null>(null)
   /**
    * Corrections made at the proof step.
@@ -413,6 +429,7 @@ export function App(): JSX.Element {
     setExported(null)
     setPdf(null)
     setBuildNote(null)
+    setResumeNote(null)
     if (reconRef.current) releaseRecon(reconRef.current)
     reconRef.current = null
     for (const url of previewUrlsRef.current.values()) URL.revokeObjectURL(url)
@@ -439,6 +456,27 @@ export function App(): JSX.Element {
     try {
       fileDataRef.current = file
       fileKeyRef.current = fileKey(file)
+
+      // Before the free pass, not after: this only reads three fields off the
+      // File, and it is the difference between watching a progress bar in hope
+      // and watching it knowing what is at the end of it.
+      const known = await findRunForFile(file)
+      if (known) {
+        fileKeyRef.current = known.key
+        setResumeNote(
+          `You have already paid to have this book read — ${known.run.pageCount} pages. ` +
+            'Re-reading the scan is free and costs only time; the transcription is waiting ' +
+            'at the end of it.'
+        )
+        // Keep the scan from now on, so the next time is one tap. It was very
+        // likely saved before this was possible, and re-picking the file once
+        // is the only chance to catch up.
+        if (!reopenable.includes(known.key)) {
+          if (await saveSourceFile(known.key, file)) {
+            setReopenable((keys) => [...keys, known.key])
+          }
+        }
+      }
       // Asset paths come from the platform default, which resolves them
       // against the app's base URL. Repeating them here once meant they were
       // root-absolute and 404'd on any deploy below the domain root.
@@ -454,9 +492,7 @@ export function App(): JSX.Element {
       // a backup restore or a sync between devices all change without touching
       // a byte of the book. The key it was found under is kept, so the run goes
       // on being saved where it already lives instead of forking in two.
-      const found = await findRunForFile(file)
-      if (found) fileKeyRef.current = found.key
-      const saved = found ? summarizeRun(found.run) : null
+      const saved = known ? summarizeRun(known.run) : null
 
       // Placeholder classification until the vision pass lands: page 0 is
       // treated as the title page so the identity gate has evidence to show.
@@ -485,6 +521,31 @@ export function App(): JSX.Element {
     }
   }, [])
 
+  /**
+   * Reopen a book from what is already stored, with no file picker.
+   *
+   * The scan is rebuilt as a `File` with the name and modification time it was
+   * saved under, so its identity is unchanged and `startRecon` finds the same
+   * run it belongs to. Reading the scan again is the free half — render and OCR
+   * — and it has to happen, because the crops, the page images and the OCR
+   * cross-check are what make a resumed session a whole one rather than text
+   * with no evidence behind it.
+   */
+  const reopenSaved = useCallback(
+    async (key: string, fileName: string) => {
+      const file = await loadSourceFile(key)
+      if (!file) {
+        setError(
+          `The scan of “${fileName}” is no longer stored, so it has to be chosen again. ` +
+            'The transcription is safe — opening the same PDF will find it.'
+        )
+        return
+      }
+      void startRecon(file)
+    },
+    [startRecon]
+  )
+
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault()
@@ -507,6 +568,7 @@ export function App(): JSX.Element {
       const profiles = await listProfiles()
       if (profiles.length > 0) setState((s) => ({ ...s, styleProfiles: profiles }))
       setSavedRuns(await listRuns())
+      setReopenable(await storedFileKeys())
     })()
   }, [])
 
@@ -685,6 +747,17 @@ export function App(): JSX.Element {
           'The transcription could not be saved in this browser, so closing the tab ' +
             'will lose it. Finish the book in this session, or free up storage and try again.'
         )
+        return
+      }
+
+      // The scan goes in after the run, never with it. It is two orders of
+      // magnitude larger, so it is the write that meets a quota — and losing
+      // the convenience of reopening without the file picker is a very
+      // different thing from losing the transcription. A failure here is
+      // deliberately silent: the book is safe, and the user is told about it at
+      // the moment it matters, on the intake screen.
+      if (await saveSourceFile(key, file)) {
+        setReopenable((keys) => (keys.includes(key) ? keys : [...keys, key]))
       }
     },
     []
@@ -1182,6 +1255,22 @@ export function App(): JSX.Element {
                       {run.pageCount === 1 ? '' : 's'}
                       {run.failedPages > 0 ? `, ${run.failedPages} failed` : ''} ·{' '}
                       {describeAge(run.savedAt)}
+                      {reopenable.includes(run.key) ? (
+                        <div className="actions">
+                          <button
+                            type="button"
+                            className="primary"
+                            onClick={() => void reopenSaved(run.key, run.fileName)}
+                          >
+                            Open this book again
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="help">
+                          The scan itself is not stored for this one — choose the same PDF above and
+                          it will find the transcription.
+                        </div>
+                      )}
                     </li>
                   ))}
                 </ul>
@@ -1206,6 +1295,7 @@ export function App(): JSX.Element {
         {/* --- running stage --- */}
         {progressInfo ? (
           <div className="progress">
+            {resumeNote ? <div className="help">{resumeNote}</div> : null}
             <strong>
               {progressInfo.phase === 'harvesting'
                 ? 'Harvesting this book’s vocabulary…'

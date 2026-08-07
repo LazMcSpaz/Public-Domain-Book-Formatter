@@ -805,6 +805,50 @@ await shot('10-export-mobile')
 // with nothing on the screen to say so. `listRuns` had been written for exactly
 // this and called by nothing.
 console.log('11. a refresh does not look like a fresh start')
+// The scan is kept with the run now, so a reload offers to reopen the book
+// outright. Verified by storing the real fixture and pressing the button, which
+// is the only way to know the rebuilt File keeps the identity its run is under.
+const reopened = await page.evaluate(
+  async ([repo, path]) => {
+    const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+    const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+    const bytes = new Uint8Array(await (await fetch(path)).arrayBuffer())
+    const file = new File([bytes], 'kept-book.pdf', {
+      type: 'application/pdf',
+      lastModified: 12345
+    })
+    const key = project.fileKey(file)
+    await runStore.saveRun(
+      project.createSavedRun({
+        key,
+        fileName: 'kept-book.pdf',
+        pageCount: 9,
+        transcriptions: [
+          {
+            pageIndex: 0,
+            role: 'body',
+            blocks: [{ kind: 'paragraph', text: 'x' }],
+            uncertain: [],
+            furniture: {}
+          }
+        ],
+        failures: [],
+        usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0 },
+        modelId: 'claude-opus-5',
+        identityAnswers: {}
+      })
+    )
+    const stored = await runStore.saveSourceFile(key, file)
+    const back = await runStore.loadSourceFile(key)
+    // The rebuilt file must key to the same run, or reopening loses the book.
+    return { stored, sameKey: back !== null && project.fileKey(back) === key }
+  },
+  [REPO, '/test-book.pdf']
+)
+if (!reopened.stored) throw new Error('The scan could not be stored')
+if (!reopened.sameKey) throw new Error('A reopened scan does not key to its own run')
+console.log('  → the scan round-trips and keeps the identity its run is filed under')
+
 // Seeded first: the store checks above clean up after themselves, so at this
 // point there is genuinely nothing saved and an empty intake would be correct.
 await page.evaluate(async (repo) => {
@@ -841,6 +885,19 @@ const namedOnIntake = await page.locator('.notes li').filter({ hasText: '.pdf' }
 await shot('02b-intake-saved-runs')
 if (runsOnIntake !== 1) throw new Error('Intake does not mention the saved runs')
 console.log(`  → intake names ${namedOnIntake} saved transcription(s) after a reload`)
+
+// And the one that matters: press it, and the book opens with no file picker.
+const reopenBtn = page.locator('.notes button', { hasText: 'Open this book again' })
+const reopenOffered = await reopenBtn.count()
+if (reopenOffered === 0) throw new Error('No way to reopen a book whose scan is stored')
+await reopenBtn.first().click()
+await page.waitForSelector('.progress', { timeout: 30000 })
+const resumeSaid = await page.locator('.progress .help').filter({ hasText: 'already paid' }).count()
+await shot('02c-reopened-from-storage')
+console.log(
+  `  → reopened from storage without the picker; said so during the re-read: ${resumeSaid === 1}`
+)
+if (resumeSaid !== 1) throw new Error('Nothing told the user their paid run was waiting')
 await page.evaluate(async (repo) => {
   const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
   const project = await import(`/@fs${repo}/src/core/project/index.ts`)
