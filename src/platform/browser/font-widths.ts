@@ -61,6 +61,14 @@ interface GlyphCache {
   getValue(): Glyph[] | undefined
   invalidate(): void
 }
+/** What `widenWidths` changed about a face's glyph list. */
+export interface WidenResult {
+  /** Glyphs no code point reaches, added so they get a width. */
+  added: Glyph[]
+  /** Glyphs the font itself cannot measure, left out so the book can be built. */
+  dropped: Glyph[]
+}
+
 interface CustomEmbedder {
   font: FontkitFont
   fontFeatures?: TypeFeatures
@@ -74,27 +82,55 @@ function embedderOf(font: PDFFont): CustomEmbedder | null {
   return embedder as CustomEmbedder
 }
 
+/**
+ * Whether a glyph can be written into the PDF at all.
+ *
+ * Reading the metrics is the test because that is what pdf-lib does to build
+ * the width array, and it is where a malformed font gives way. Crimson Pro
+ * ships a final glyph named `NULL`, mapped from U+0000, whose outline record
+ * runs past the end of its `glyf` table; fontkit raises "Trying to access
+ * beyond buffer length" the moment anything asks how wide it is.
+ *
+ * That one glyph made the whole face unusable — every book set in Crimson Pro
+ * failed at the export gate with a message naming neither the font nor the
+ * glyph. It is not a glyph any book prints, so the right answer is to leave it
+ * out rather than to refuse the book. If a *needed* glyph were ever dropped,
+ * `verifyWidths` raises: dropping is silent only when it is harmless.
+ */
+function isWritable(glyph: Glyph): boolean {
+  try {
+    void glyph.advanceWidth
+    return true
+  } catch {
+    return false
+  }
+}
+
 /** Every glyph some code point maps to — what pdf-lib would have used alone. */
-function reachableGlyphs(font: FontkitFont): Map<number, Glyph> {
+function reachableGlyphs(font: FontkitFont): { byId: Map<number, Glyph>; dropped: Glyph[] } {
   const byId = new Map<number, Glyph>()
+  const dropped: Glyph[] = []
   for (const codePoint of font.characterSet) {
     const glyph = font.glyphForCodePoint(codePoint)
-    if (glyph) byId.set(glyph.id, glyph)
+    if (!glyph) continue
+    if (isWritable(glyph)) byId.set(glyph.id, glyph)
+    else if (!dropped.some((g) => g.id === glyph.id)) dropped.push(glyph)
   }
-  return byId
+  return { byId, dropped }
 }
 
 /**
  * Widen one font's glyph list to cover the text it was actually used to draw.
  *
- * Returns the glyphs added, for the caller's report and for the tests. An empty
- * result is the normal case for a face whose features produced nothing exotic.
+ * Returns what changed, for the caller's report and for the tests: glyphs
+ * `added` because no code point reaches them, and glyphs `dropped` because the
+ * font cannot say how wide they are.
  */
-export function widenWidths(font: PDFFont, texts: Iterable<string>): Glyph[] {
+export function widenWidths(font: PDFFont, texts: Iterable<string>): WidenResult {
   const embedder = embedderOf(font)
-  if (!embedder) return []
+  if (!embedder) return { added: [], dropped: [] }
 
-  const byId = reachableGlyphs(embedder.font)
+  const { byId, dropped } = reachableGlyphs(embedder.font)
   const added: Glyph[] = []
   for (const text of texts) {
     // The same features pdf-lib will encode with, so the glyphs collected here
@@ -103,11 +139,14 @@ export function widenWidths(font: PDFFont, texts: Iterable<string>): Glyph[] {
     // be given different answers.
     for (const glyph of embedder.font.layout(text, embedder.fontFeatures).glyphs) {
       if (byId.has(glyph.id)) continue
+      if (!isWritable(glyph)) continue
       byId.set(glyph.id, glyph)
       added.push(glyph)
     }
   }
-  if (added.length === 0) return []
+  // Both directions count as a change: a face may need nothing added and still
+  // need its broken glyph taken out.
+  if (added.length === 0 && dropped.length === 0) return { added, dropped }
 
   const glyphs = [...byId.values()].sort((a, b) => a.id - b.id)
   embedder.glyphCache = {
@@ -115,7 +154,7 @@ export function widenWidths(font: PDFFont, texts: Iterable<string>): Glyph[] {
     getValue: () => glyphs,
     invalidate() {}
   }
-  return added
+  return { added, dropped }
 }
 
 /**
@@ -134,8 +173,16 @@ export function verifyWidths(font: PDFFont, texts: Iterable<string>): string[] {
   const covered = new Set(embedder.glyphCache.access().map((g) => g.id))
   const missing = new Set<string>()
   for (const text of texts) {
-    for (const glyph of embedder.font.layout(text, embedder.fontFeatures).glyphs) {
-      if (!covered.has(glyph.id)) missing.add(glyph.name ?? String(glyph.id))
+    // Laying out is itself fallible: `layout` positions glyphs, which reads
+    // their advances, so a string that reaches an unmeasurable glyph raises
+    // here rather than returning one. A check that throws is a check that
+    // tells the caller nothing, so the text is named instead.
+    try {
+      for (const glyph of embedder.font.layout(text, embedder.fontFeatures).glyphs) {
+        if (!covered.has(glyph.id)) missing.add(glyph.name ?? String(glyph.id))
+      }
+    } catch {
+      missing.add(`unsettable text: “${text.slice(0, 40)}”`)
     }
   }
   return [...missing]

@@ -92,9 +92,59 @@ describe('the check can actually fail', () => {
 
   it('finds something to widen on a face with ligatures', async () => {
     const { font } = await embed(FACES['EB Garamond|regular']!)
-    const added = widenWidths(font, [PROVOCATION]).map((g) => g.name)
+    const added = widenWidths(font, [PROVOCATION]).added.map((g) => g.name)
     expect(added.length).toBeGreaterThan(0)
     expect(added.some((n) => n?.includes('_'))).toBe(true)
+  })
+})
+
+describe('a font that ships a glyph it cannot measure', () => {
+  /**
+   * Crimson Pro's last glyph is named `NULL`, is mapped from U+0000, and its
+   * outline record runs past the end of the font's own `glyf` table. fontkit
+   * raises "Trying to access beyond buffer length" the moment anything asks how
+   * wide it is — and pdf-lib asks, for every glyph in the width array, when the
+   * file is saved.
+   *
+   * So every book set in Crimson Pro failed at the export gate, with a message
+   * that named neither the font nor the glyph. It was found on a real book, not
+   * by this suite, because nothing here had ever exported in that face.
+   */
+  const CRIMSON = FACES['Crimson Pro|regular']!
+
+  it('is still broken upstream, so the workaround is still needed', () => {
+    // Guards against the workaround outliving its cause: if a later
+    // @expo-google-fonts ships a repaired file, this fails and the skipping
+    // can go.
+    const font = fontkit.create(new Uint8Array(readFileSync(CRIMSON)))
+    const nul = font.glyphForCodePoint(0)
+    expect(nul).toBeDefined()
+    expect(() => nul!.advanceWidth).toThrow()
+  })
+
+  it('leaves the unmeasurable glyph out instead of refusing the book', async () => {
+    const { font } = await embed(CRIMSON)
+    const { dropped } = widenWidths(font, [PROVOCATION])
+    expect(dropped.map((g) => g.name)).toContain('NULL')
+  })
+
+  it('saves a file, which is the whole point', async () => {
+    const { doc, font } = await embed(CRIMSON)
+    doc.addPage([600, 200]).drawText(PROVOCATION.slice(0, 80), { x: 20, y: 100, size: 12, font })
+    widenWidths(font, [PROVOCATION])
+    expect((await doc.save()).length).toBeGreaterThan(1000)
+  })
+
+  it('fails loudly if the book actually contained that character', async () => {
+    // The skip is only safe because nothing prints U+0000. A book that somehow
+    // did would be reported rather than quietly set with a hole — and note the
+    // route: laying the text out is what raises, since positioning a glyph
+    // reads its advance. `verifyWidths` turns that into a message.
+    const { font } = await embed(CRIMSON)
+    widenWidths(font, [PROVOCATION])
+    const missing = verifyWidths(font, ['a\u0000b'])
+    expect(missing).toHaveLength(1)
+    expect(missing[0]).toContain('unsettable text')
   })
 })
 

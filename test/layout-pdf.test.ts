@@ -39,7 +39,13 @@ const FILES: Record<string, string> = {
   'EB Garamond|regular':
     'node_modules/@expo-google-fonts/eb-garamond/400Regular/EBGaramond_400Regular.ttf',
   'EB Garamond|italic':
-    'node_modules/@expo-google-fonts/eb-garamond/400Regular_Italic/EBGaramond_400Regular_Italic.ttf'
+    'node_modules/@expo-google-fonts/eb-garamond/400Regular_Italic/EBGaramond_400Regular_Italic.ttf',
+  // Present because it is the face that broke on a real book — see the
+  // Crimson Pro test at the end of this file.
+  'Crimson Pro|regular':
+    'node_modules/@expo-google-fonts/crimson-pro/400Regular/CrimsonPro_400Regular.ttf',
+  'Crimson Pro|italic':
+    'node_modules/@expo-google-fonts/crimson-pro/400Regular_Italic/CrimsonPro_400Regular_Italic.ttf'
 }
 
 /**
@@ -126,9 +132,14 @@ const DOCUMENT: BookDocument = {
   skipped: []
 }
 
-async function build(trimSize = '6x9') {
+async function build(trimSize = '6x9', bodyFont?: string) {
   const fonts = diskFontTable()
-  const profile = { ...defaultStyleProfile(), trimSize, dropCap: true }
+  const profile = {
+    ...defaultStyleProfile(),
+    trimSize,
+    dropCap: true,
+    ...(bodyFont === undefined ? {} : { bodyFont, headingFont: bodyFont })
+  }
   const book = layout(DOCUMENT, profile, fonts, {
     edition: EDITION,
     hyphenate: englishHyphenator()
@@ -527,5 +538,46 @@ describe('renderPdf — illustrations', () => {
     const { pdf } = await buildIllustrated()
     const dictionaries = pdfDictionaries(pdf.bytes)
     expect(dictionaries.split('/Subtype /Image').length - 1).toBeLessThanOrEqual(1)
+  })
+})
+
+describe('renderPdf — Crimson Pro, the face that broke on a real book', () => {
+  /**
+   * A whole book, laid out and written in Crimson Pro. This is the regression
+   * test for the only failure this app has had in the wild: the export gate
+   * reported "The interior could not be built: Trying to access beyond buffer
+   * length" and produced nothing.
+   *
+   * The cause was not the book. Crimson Pro's last glyph is named `NULL`, is
+   * reachable from U+0000, and its outline record runs past the end of the
+   * font's own `glyf` table. pdf-lib reads the metrics of every glyph in the
+   * width array when it saves, so the file died on a glyph no book prints.
+   *
+   * It went unnoticed because every test and every screenshot run until now
+   * exported in EB Garamond, IM FELL or Junicode. This one exports in the face
+   * that was broken, which is the only way that class of bug gets caught.
+   */
+  it('builds the interior at all', async () => {
+    const { book, pdf } = await build('6x9', 'Crimson Pro')
+    expect(pdf.pageCount).toBe(book.pages.length)
+    expect(pdf.bytes.length).toBeGreaterThan(1000)
+  })
+
+  it('names the glyph it had to leave out rather than hiding it', async () => {
+    const { pdf } = await build('6x9', 'Crimson Pro')
+    expect(pdf.unwritableGlyphs).toContain('NULL')
+  })
+
+  it('still reads back as the book', async () => {
+    const { book, pdf } = await build('6x9', 'Crimson Pro')
+    const reopened = await reopen(pdf.bytes)
+    const text = await textOfPage(reopened, book.chapterPages[0]!.pageIndex)
+    expect(text).toContain('chirurgeon')
+    await reopened.destroy()
+  })
+
+  it('leaves the faces that are not broken alone', async () => {
+    const { pdf } = await build()
+    expect(pdf.unwritableGlyphs).toEqual([])
   })
 })

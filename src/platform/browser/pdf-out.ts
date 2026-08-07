@@ -33,6 +33,15 @@ export interface PdfResult {
    * did something: an empty list on a book full of "fi" means it did not.
    */
   ligatureGlyphs: string[]
+  /**
+   * Glyphs the font itself cannot measure, left out of the width array so the
+   * book could be built at all. Crimson Pro ships one — a `NULL` glyph whose
+   * outline runs past the end of its `glyf` table — and before it was skipped,
+   * every book set in that face died at the export gate. Reported rather than
+   * swallowed: a font this broken is worth knowing about, and if one of these
+   * were ever a glyph the book needed, `renderPdf` raises instead.
+   */
+  unwritableGlyphs: string[]
 }
 
 export interface RenderPdfOptions {
@@ -153,10 +162,11 @@ export async function renderPdf(
   // Widen the width array before saving, while the embedders are still lazy.
   // This is what lets the faces keep their ligatures: see `font-widths.ts`.
   const ligatureGlyphs: string[] = []
+  const unwritableGlyphs: string[] = []
   for (const [font, texts] of drawn) {
-    for (const glyph of widenWidths(font, texts)) {
-      ligatureGlyphs.push(glyph.name ?? String(glyph.id))
-    }
+    const { added, dropped } = widenWidths(font, texts)
+    for (const glyph of added) ligatureGlyphs.push(glyph.name ?? String(glyph.id))
+    for (const glyph of dropped) unwritableGlyphs.push(glyph.name ?? String(glyph.id))
   }
 
   // Then prove it, because the failure this prevents is silent on every check
@@ -171,9 +181,25 @@ export async function renderPdf(
     }
   }
 
+  // Naming the faces costs nothing and is the difference between a lead and a
+  // mystery. The one failure this app has had in the wild surfaced as "Trying
+  // to access beyond buffer length" and nothing else — no font, no glyph, no
+  // page — on a screen whose only other option was to start over.
+  let bytes: Uint8Array
+  try {
+    bytes = await doc.save()
+  } catch (cause) {
+    const families = [...embeddedFamilies].join(', ') || 'none'
+    throw new Error(
+      `The PDF could not be written (fonts in use: ${families}). ` +
+        `${cause instanceof Error ? cause.message : String(cause)}`
+    )
+  }
+
   return {
-    bytes: await doc.save(),
+    bytes,
     ligatureGlyphs: [...new Set(ligatureGlyphs)].sort(),
+    unwritableGlyphs: [...new Set(unwritableGlyphs)].sort(),
     pageCount: book.pages.length,
     embeddedFamilies: [...embeddedFamilies],
     missingImages
