@@ -215,8 +215,17 @@ in `screenshots/`. Don't ship UI blind.
   `sizeAfterOps`, because the DPI check divides by it. Background removal is
   deliberately not offered — the spec calls it best-effort, and without manual
   touch-up of the selection it is a magic button that eats part of the picture.
-- **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — saved style profiles
-  (the book-two problem), real small caps and ligatures, Junicode, and a
-  book-length run against the live API.
+- **Also done**: **saved style profiles** (`src/core/style/saved-profile.ts`) —
+  the book-two problem. A look is banked once and offered at the design gate on
+  every later book, which then asks one question instead of five; the imprint
+  and copyright holder ride along, while the ISBN, edition statement and
+  publication date deliberately do not. What may be banked is enforced by
+  `BANKED_STYLE_KEYS`, not by convention, so adding a field to `StyleProfile`
+  fails a test until someone decides which of SPEC §7's two levels it belongs
+  to. This also retired `ProjectFile` and the 141 lines of Electron-era model
+  scaffolding reachable only from it.
+- **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — real small caps and
+  ligatures (one investigation, not two), Junicode, and a book-length run
+  against the live API.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and
   kept for why the layout engine is shaped the way it is.

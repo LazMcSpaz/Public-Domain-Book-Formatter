@@ -162,7 +162,9 @@ const store = await page.evaluate(async (repo) => {
 
     // A record this version cannot read is discarded, not offered forever.
     await new Promise((resolve) => {
-      const req = indexedDB.open('pdbf', 1)
+      // No version: the store's own schema decides it. Naming a stale version
+      // here raises VersionError and this promise would never settle.
+      const req = indexedDB.open('pdbf')
       req.onsuccess = () => {
         const db = req.result
         const tx = db.transaction('runs', 'readwrite')
@@ -191,6 +193,61 @@ for (const [check, ok] of Object.entries(store)) {
   if (!ok) throw new Error(`Saved-run store failed: ${check}`)
 }
 console.log('  → runs round-trip, the store is capped and evicts oldest, stale records are dropped')
+
+// Banked looks live in the same database as runs but under opposite rules, and
+// the upgrade that added them has to leave the runs alone — which is the one
+// thing no unit test can check, because there is no IndexedDB in vitest.
+console.log('2d. the banked-look store')
+const looks = await page.evaluate(async (repo) => {
+  const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+  const style = await import(`/@fs${repo}/src/core/style/index.ts`)
+
+  try {
+    const first = style.newSavedProfile({
+      name: 'Blackthorn',
+      style: { ...style.defaultStyleProfile(), bodyFont: 'Cardo', bodyFontSize: 12.5 },
+      imprint: { imprint: 'Blackthorn Press', copyrightHolder: 'A. Editor' }
+    })
+    await runStore.saveProfile(first)
+    const back = await runStore.loadProfile(first.id)
+    const roundTrip =
+      back !== null &&
+      back.style.bodyFontSize === 12.5 &&
+      back.imprint.imprint === 'Blackthorn Press'
+
+    // Topping up the imprint must overwrite, not bank a second look.
+    await runStore.saveProfile(
+      style.newSavedProfile({
+        id: first.id,
+        name: first.name,
+        style: first.style,
+        imprint: { ...first.imprint, copyrightHolder: 'Someone Else' }
+      })
+    )
+    const listed = await runStore.listProfiles()
+    const overwrote =
+      listed.filter((p) => p.id === first.id).length === 1 &&
+      listed.find((p) => p.id === first.id).imprint.copyrightHolder === 'Someone Else'
+
+    // The v2 upgrade must not have disturbed the runs store beside it.
+    const runsIntact = Array.isArray(await runStore.listRuns())
+
+    await runStore.deleteProfile(first.id)
+    const deleted = (await runStore.loadProfile(first.id)) === null
+
+    return { roundTrip, overwrote, runsIntact, deleted }
+  } catch (e) {
+    return { error: String(e.message) }
+  }
+}, REPO)
+
+if (looks.error) throw new Error(`Banked-look store failed: ${looks.error}`)
+for (const [check, ok] of Object.entries(looks)) {
+  if (!ok) throw new Error(`Banked-look store failed: ${check}`)
+}
+console.log(
+  '  → looks round-trip, a top-up overwrites rather than duplicating, runs survive the upgrade'
+)
 
 console.log('3. waiting for gate 1')
 await page.waitForSelector('.terms', { timeout: 180000 })
@@ -483,6 +540,17 @@ const leafInk = await page.evaluate(async () => {
 // so a change in it is visible rather than a silent pass.
 const plateFound = leafInk.some((ink) => ink > 0.04)
 
+// Book one banks its look here (SPEC §7). Nothing has been banked yet, so the
+// gate is still the five-question interview — with one extra box at the bottom.
+console.log('5d2. banking the look for the next book')
+const bankedName = 'The Blackthorn Press look'
+const looksOfferedToBookOne = await page.locator('.q').filter({ hasText: 'already set up' }).count()
+await page
+  .locator('.q')
+  .filter({ hasText: 'Save this look' })
+  .locator('input[type=text]')
+  .fill(bankedName)
+
 // --- the export report, on a book that really has pictures in it -----------
 // The image-DPI check used to say "No placed images to check" because nothing
 // ever placed one. Now it has a measured answer, and this is where that shows.
@@ -498,6 +566,16 @@ const fill = (question, value) =>
 const blockedWithoutTitle = await page.locator('.actions button.primary').isDisabled()
 await fill('Book title', 'The Alchemist His Practise')
 await fill('Author', 'Anonymous')
+
+// The publisher's details are asked here, one gate after the look was named.
+// They are facts about the imprint, so they get written back onto it.
+const imprintBlankOnBookOne = await page
+  .locator('.q')
+  .filter({ hasText: 'Who is publishing' })
+  .locator('input[type=text]')
+  .inputValue()
+await fill('Who is publishing', 'Blackthorn Press')
+await fill('Who holds the copyright', 'A. Editor')
 
 await page.locator('.actions button.primary').first().click()
 await page.waitForSelector('.checks', { timeout: 120000 })
@@ -528,10 +606,73 @@ const contentsNote = await page
   .innerText()
   .catch(() => '')
 
+// The publisher's details were just written back onto the banked look, and the
+// screen has to say so — changing saved state silently is how a user discovers
+// on book three that something has been following them around.
+const savedBackNote = await page
+  .locator('.result .help')
+  .filter({ hasText: 'next book' })
+  .first()
+  .innerText()
+  .catch(() => '')
+
+// --- book two ---------------------------------------------------------------
+// The whole feature only exists across two books, so it is verified across two.
+// A full reload is the point: the look has to come back off the disk, not out
+// of a variable this tab still happens to be holding.
+console.log('5f. book two — the look comes back')
+await page.goto(URL_BASE, { waitUntil: 'networkidle' })
+await page.setInputFiles('input[type=file]', bookPath)
+await page.waitForSelector('.terms', { timeout: 180000 })
+
+/** Click the gate's primary button and wait for the rail to land on `label`. */
+const advanceTo = async (label) => {
+  await page.locator('.actions button.primary').first().click()
+  await page.waitForFunction(
+    (want) => document.querySelector('.rail li.active .label')?.textContent?.includes(want),
+    label,
+    { timeout: 120000 }
+  )
+}
+
+await advanceTo('Transcribing')
+await advanceTo('Check the uncertain spots')
+await advanceTo('Confirm the structure')
+await advanceTo('Read it through')
+await advanceTo('Design the edition')
+await page.waitForTimeout(1500)
+await shot('05f-design-gate-book-two')
+
+// One question, not five: everything the interview would ask was answered for
+// book one and banked.
+const bookTwoQuestions = await page.locator('.q .prompt').allInnerTexts()
+const looksOfferedToBookTwo = await page
+  .locator('.q')
+  .filter({ hasText: 'already set up' })
+  .locator('.opt')
+  .filter({ hasText: bankedName })
+  .count()
+
+// And the imprint arrives filled in rather than retyped.
+await advanceTo('Publish the edition')
+await page.waitForTimeout(500)
+const imprintOnBookTwo = await page
+  .locator('.q')
+  .filter({ hasText: 'Who is publishing' })
+  .locator('input[type=text]')
+  .inputValue()
+const isbnOnBookTwo = await page
+  .locator('.q')
+  .filter({ hasText: 'ISBN' })
+  .locator('input[type=text]')
+  .inputValue()
+await shot('05f2-export-gate-book-two')
+
 await page.evaluate(
   async ([repo, key]) => {
     const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
     await runStore.deleteRun(key)
+    for (const p of await runStore.listProfiles()) await runStore.deleteProfile(p.id)
   },
   [REPO, savedKey]
 )
@@ -645,6 +786,14 @@ console.log(`    ${cutHintBefore.replace(/\s+/g, ' ')} -> ${cutHintAfter.replace
 console.log(`  the introduction reaches the contents: ${contentsNote.replace(/\s+/g, ' ')}`)
 console.log(`  the note is set at the foot of a page: ${noteNote.replace(/\s+/g, ' ')}`)
 console.log(`  proof sheet mobile overflow: ${proofOverflow}px`)
+console.log(`  book one was offered no banked look: ${looksOfferedToBookOne === 0}`)
+console.log(`  book one's imprint box started empty: ${imprintBlankOnBookOne === ''}`)
+console.log(`  written back to the look, and said so: ${savedBackNote.replace(/\s+/g, ' ')}`)
+console.log(`  book two is asked: ${bookTwoQuestions.join(' / ')}`)
+console.log(`  and offered the banked look: ${looksOfferedToBookTwo === 1}`)
+console.log(
+  `  book two's imprint arrives as: "${imprintOnBookTwo}" (ISBN stays "${isbnOnBookTwo}")`
+)
 console.log(`  export blocked until the title is given: ${blockedWithoutTitle}`)
 console.log(`  image DPI check: ${imageCheck.replace(/\s+/g, ' ')}`)
 console.log(`  export note: ${illustrationNote.replace(/\s+/g, ' ')}`)

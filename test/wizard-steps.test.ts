@@ -641,7 +641,9 @@ describe('design step', () => {
     const ids = stepById('design')
       .questions(readyForDesign())
       .map((q) => q.id)
-    expect(ids).toEqual(['kind', 'period', 'font', 'chapterOpener', 'runningHeads'])
+    // `saveAs` is the one exception, and it is not a typography setting either:
+    // it offers to bank the answers so book two need not give them again.
+    expect(ids).toEqual(['kind', 'period', 'font', 'chapterOpener', 'runningHeads', 'saveAs'])
   })
 
   it('every question offers a usable default, so nothing is required of the user', () => {

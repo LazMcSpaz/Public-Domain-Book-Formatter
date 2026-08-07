@@ -19,8 +19,10 @@ export {
 } from './questions'
 export {
   STEPS,
+  FRESH_LOOK,
   stepById,
   activeStep,
+  appliedLook,
   progress,
   initialState,
   frontMatterPages,
