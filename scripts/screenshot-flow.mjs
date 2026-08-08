@@ -969,6 +969,79 @@ await page.evaluate(async (repo) => {
   await runStore.deleteRun(project.fileKey({ name: 'a-paid-book.pdf', size: 999, lastModified: 1 }))
 }, REPO)
 
+// --- settings ---------------------------------------------------------------
+// The other half of "design by interview": the detailed controls, the things
+// that could not be undone, and what is taking up room.
+console.log('12. settings')
+await page.evaluate(async (repo) => {
+  const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+  const style = await import(`/@fs${repo}/src/core/style/index.ts`)
+  await runStore.saveProfile(
+    style.newSavedProfile({
+      name: 'A banked look',
+      style: style.defaultStyleProfile(),
+      imprint: { imprint: 'Blackthorn Press' }
+    })
+  )
+}, REPO)
+await page.goto(`${URL_BASE}#settings`, { waitUntil: 'networkidle' })
+await page.waitForSelector('.settings', { timeout: 20000 })
+await page.waitForTimeout(800)
+await shot('11-settings')
+
+const sections = await page.locator('.settings h2').allInnerTexts()
+const storageLine = await page
+  .locator('.settings .help')
+  .filter({ hasText: 'this browser allows' })
+  .first()
+  .innerText()
+  .catch(() => '')
+
+// The API key can be changed and removed — impossible until now, since the
+// gate only ever asked when none was stored. Seeded, then actually removed,
+// because a button that exists is not the same as one that works.
+await page.evaluate(() => localStorage.setItem('pdbf.apiKey', 'sk-ant-secret-0000-abcd'))
+await page.reload({ waitUntil: 'networkidle' })
+await page.waitForSelector('.settings', { timeout: 20000 })
+const maskedKey = await page.locator('.settings code').first().innerText()
+if (maskedKey.includes('secret')) throw new Error('The settings screen printed the key in full')
+await page.locator('button', { hasText: 'Remove key' }).click()
+await page.waitForTimeout(300)
+const keyGone = await page.evaluate(() => localStorage.getItem('pdbf.apiKey') === null)
+if (!keyGone) throw new Error('Removing the key left it in storage')
+const canRemoveKey = true
+
+// Open the style editor and check the fields no question ever reached.
+await page.locator('.settings .notes button', { hasText: 'Edit' }).first().click()
+await page.waitForTimeout(400)
+const styleFields = await page.locator('.q .prompt').allInnerTexts()
+await shot('11b-settings-style')
+
+// Change the gutter — reachable from nothing until now — and save it.
+await page
+  .locator('.q')
+  .filter({ hasText: 'Extra gutter' })
+  .locator('label', { hasText: '0.25 in' })
+  .click()
+await page.locator('button.primary', { hasText: 'Save this look' }).click()
+await page.waitForTimeout(600)
+const savedGutter = await page.evaluate(() => {
+  const raw = localStorage.getItem('pdbf.defaultLook')
+  return raw ? JSON.parse(raw).gutter : null
+})
+if (savedGutter !== 0.25) throw new Error(`The edited gutter did not persist (got ${savedGutter})`)
+console.log(`  → sections: ${sections.join(' · ')}`)
+console.log(`  → ${storageLine.replace(/\s+/g, ' ')}`)
+console.log(`  → key shown as ${maskedKey} and removable: ${canRemoveKey && keyGone}`)
+console.log(
+  `  → style editor offers ${styleFields.length} controls, gutter saved as ${savedGutter}`
+)
+for (const want of ['Extra gutter for binding', 'Page numbers', 'Print a half-title leaf?']) {
+  if (!styleFields.some((f) => f.includes(want))) {
+    throw new Error(`The style editor is missing "${want}"`)
+  }
+}
+
 console.log('\nresult:')
 console.log(`  term rows: ${rows}`)
 console.log(`  word crops rendered: ${crops}`)

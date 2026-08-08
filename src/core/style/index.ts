@@ -13,3 +13,9 @@ export {
   type ImprintFields,
   type SavedStyleProfile
 } from './saved-profile'
+export {
+  NO_ORNAMENT,
+  applyStyleAnswers,
+  styleQuestions,
+  type StyleQuestionOptions
+} from './editable'

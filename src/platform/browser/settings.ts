@@ -14,7 +14,6 @@ export interface AppPrefs {
   modelId: string
   /** Long edge in px for the image sent to the model — the main cost lever. */
   imageLongEdge: number
-  bookContext: string
   /**
    * Whether to keep the scan itself on this device, so a book reopens without
    * the file picker.
@@ -38,7 +37,6 @@ export interface AppPrefs {
 export const DEFAULT_PREFS: AppPrefs = {
   modelId: 'claude-opus-5',
   imageLongEdge: 1568,
-  bookContext: '',
   keepScans: null
 }
 
@@ -83,7 +81,6 @@ export function loadPrefs(): AppPrefs {
         typeof parsed.imageLongEdge === 'number'
           ? parsed.imageLongEdge
           : DEFAULT_PREFS.imageLongEdge,
-      bookContext: typeof parsed.bookContext === 'string' ? parsed.bookContext : '',
       keepScans: typeof parsed.keepScans === 'boolean' ? parsed.keepScans : null
     }
   } catch {

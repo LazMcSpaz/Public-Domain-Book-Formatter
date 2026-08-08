@@ -97,6 +97,14 @@ export interface WizardState {
    */
   keepScans: boolean | null
   /**
+   * The look a fresh book starts from — the shipped defaults, or whatever they
+   * were edited to in Settings. Passed in because it lives in browser storage
+   * and this module stays pure.
+   */
+  defaultLook: StyleProfile | null
+  /** The model the user reached for last, so the gate can offer it again. */
+  defaultModelId: string
+  /**
    * The measured facts the storage question shows: how big this scan is, and
    * how much room this browser will give the app. `quota`/`usage` are null
    * where the browser declines to say, and the question then asks without
@@ -147,6 +155,8 @@ export function initialState(): WizardState {
     hasApiKey: false,
     savedRun: null,
     keepScans: null,
+    defaultLook: null,
+    defaultModelId: 'claude-opus-5',
     storage: null,
     styleProfiles: [],
     findings: [],
@@ -397,7 +407,10 @@ const transcribe: Step = {
       type: 'choice',
       prompt: 'Which model should read the pages?',
       help: 'You are paying for this directly. Higher quality costs more per page.',
-      defaultValue: 'claude-opus-5',
+      // The one you used last, kept in Settings. It was already being saved
+      // after every run and then ignored here, so choosing Sonnet once meant
+      // choosing it again on every book.
+      defaultValue: s.defaultModelId,
       options: [
         {
           value: 'claude-opus-5',
@@ -924,7 +937,8 @@ export function appliedLook(
         chapterOpener: answers['chapterOpener'],
         runningHeads: answers['runningHeads']
       } as DesignAnswers,
-      answers['font'] as string
+      answers['font'] as string,
+      state.defaultLook ?? undefined
     ),
     imprint: emptyImprint(),
     fromProfileId: null

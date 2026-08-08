@@ -69,6 +69,7 @@ import { applyEdits, type BookEdit } from '@core/edits'
 import { renderInterior } from '../platform/browser/interior'
 import { cropIllustrations, readSuppliedImage, retouchPng } from '../platform/browser/illustrations'
 import { renderPageToObjectUrl } from '../platform/browser/pdf'
+import { loadDefaultLook } from './Settings'
 import { ExportResult } from './ExportResult'
 import { PreviewPane } from './PreviewPane'
 import { ProofSheet } from './ProofSheet'
@@ -589,7 +590,13 @@ export function App(): JSX.Element {
       if (profiles.length > 0) setState((s) => ({ ...s, styleProfiles: profiles }))
       setSavedRuns(await listRuns())
       setReopenable(await storedFileKeys())
-      setState((s) => ({ ...s, keepScans: loadPrefs().keepScans }))
+      const prefs = loadPrefs()
+      setState((s) => ({
+        ...s,
+        keepScans: prefs.keepScans,
+        defaultModelId: prefs.modelId,
+        defaultLook: loadDefaultLook()
+      }))
     })()
   }, [])
 
@@ -818,7 +825,11 @@ export function App(): JSX.Element {
     const prefs = loadPrefs()
     const modelId = (currentAnswers['model'] as string) ?? prefs.modelId
     const bookContext = (currentAnswers['bookContext'] as string) ?? ''
-    savePrefs({ ...prefs, modelId, bookContext })
+    // `bookContext` deliberately not stored: it is a fact about *this* book
+    // ("a 1662 alchemical treatise"), so keeping it as a device preference was
+    // a category error. It was written and never read back, so nothing is lost
+    // by dropping it — and restoring it on the next book would have been wrong.
+    savePrefs({ ...prefs, modelId })
 
     const controller = new AbortController()
     abortRef.current = controller
@@ -1072,7 +1083,10 @@ export function App(): JSX.Element {
           lexicon: state.lexicon,
           orthography: (identity['orthography'] as 'preserve' | 'modernize') ?? 'preserve',
           normalizeLongS: identity['longS'] === true,
-          bookContext: prefs.bookContext,
+          // From this book's own answer at the transcribe gate, not from a
+          // device preference — which is where it used to live and where it
+          // never belonged.
+          bookContext: (state.answers['transcribe']?.['bookContext'] as string) ?? '',
           // A page flagged for another look is usually one that was hard to
           // read, so give the model more pixels than the first pass had.
           imageLongEdge: Math.min(2000, Math.round(prefs.imageLongEdge * 1.3)),
@@ -1309,6 +1323,9 @@ export function App(): JSX.Element {
             )
           })}
         </ol>
+        <a className="rail-settings" href="#settings">
+          Settings
+        </a>
       </nav>
 
       <main className="main">

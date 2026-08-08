@@ -1,6 +1,7 @@
 import { StrictMode, Suspense, lazy, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
+import { Settings } from './Settings'
 import './styles.css'
 
 /**
@@ -24,6 +25,12 @@ function Root(): JSX.Element {
     window.addEventListener('hashchange', onHashChange)
     return () => window.removeEventListener('hashchange', onHashChange)
   }, [])
+
+  // Settings ships in production, unlike the preview below — it holds the only
+  // way to change an API key or reclaim storage, so it cannot be a dev tool.
+  if (hash.startsWith('#settings')) {
+    return <Settings onClose={() => (window.location.hash = '')} />
+  }
 
   if (DevPreview && hash.startsWith('#preview')) {
     return (

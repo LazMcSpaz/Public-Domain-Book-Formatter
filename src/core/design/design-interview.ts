@@ -184,8 +184,18 @@ function marginsForKind(kind: BookKind): StyleProfile['margins'] {
  * Build a complete style profile from the interview answers.
  * Everything not asked about is derived, so the result is always coherent.
  */
-export function profileFromAnswers(answers: DesignAnswers, fontId?: string): StyleProfile {
-  const base = defaultStyleProfile()
+export function profileFromAnswers(
+  answers: DesignAnswers,
+  fontId?: string,
+  /**
+   * What the interview builds *on top of* — the shipped defaults unless the
+   * user has edited them in Settings. Everything the five questions do not set
+   * (the gutter, the folio position, the front-matter leaves) comes from here,
+   * which is what makes editing those worth anything.
+   */
+  startingPoint?: StyleProfile
+): StyleProfile {
+  const base = startingPoint ?? defaultStyleProfile()
   const font = fontId ? fontById(fontId) : fontForPeriod(answers.period)
 
   // Verso/recto asymmetry is the convention: the left page carries the wider

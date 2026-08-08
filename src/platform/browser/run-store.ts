@@ -255,10 +255,47 @@ export async function loadSourceFile(key: string): Promise<File | null> {
   const raw = await withStore('readonly', (store) => promisify(store.get(key)), FILE_STORE)
   if (!raw || typeof raw !== 'object') return null
   const record = raw as { name?: unknown; lastModified?: unknown; bytes?: unknown }
-  if (!(record.bytes instanceof Uint8Array)) return null
+  const part = record.bytes
+  // Blob since the size-reading change; Uint8Array in anything written before.
+  if (!(part instanceof Blob) && !(part instanceof Uint8Array)) return null
   const name = typeof record.name === 'string' ? record.name : 'book.pdf'
   const lastModified = typeof record.lastModified === 'number' ? record.lastModified : Date.now()
-  return new File([record.bytes as BlobPart], name, { type: 'application/pdf', lastModified })
+  return new File([part as BlobPart], name, { type: 'application/pdf', lastModified })
+}
+
+/**
+ * What each stored scan takes up, without reading any of them.
+ *
+ * The `size` field is written alongside; where it is missing (a record from
+ * before that change) the Blob's own `.size` answers, and only a Uint8Array
+ * record has to be measured by its length — which is the one case that costs
+ * memory, and the one that ages out.
+ */
+export async function storedFileSizes(): Promise<Map<string, number>> {
+  const raw = await withStore('readonly', (store) => promisify(store.getAll()), FILE_STORE)
+  const sizes = new Map<string, number>()
+  for (const record of raw ?? []) {
+    if (!record || typeof record !== 'object') continue
+    const r = record as { key?: unknown; size?: unknown; bytes?: unknown }
+    if (typeof r.key !== 'string') continue
+    if (typeof r.size === 'number') sizes.set(r.key, r.size)
+    else if (r.bytes instanceof Blob) sizes.set(r.key, r.bytes.size)
+    else if (r.bytes instanceof Uint8Array) sizes.set(r.key, r.bytes.byteLength)
+  }
+  return sizes
+}
+
+/**
+ * Forget every stored scan.
+ *
+ * What "don't keep scans" has to mean to be worth choosing. Without it the
+ * setting was forward-only: someone switching it off on a phone to reclaim
+ * space got none back, which is the single thing they wanted.
+ */
+export async function deleteAllSourceFiles(): Promise<number> {
+  const keys = await storedFileKeys()
+  for (const key of keys) await deleteSourceFile(key)
+  return keys.length
 }
 
 /** Which runs have their scan stored, so intake only offers what it can open. */
