@@ -247,6 +247,32 @@ export interface StyleProfile {
    * with — not exclusive of — a chapter-opener ornament.
    */
   dropCap: boolean
+  /**
+   * First-line indent of a paragraph, in ems of the body size.
+   *
+   * Was a constant in the paginator, which made the most ordinary typographic
+   * preference there is — how far a paragraph steps in — the one thing nobody
+   * could change. Zero gives the block-paragraph look, which wants
+   * `paragraphSpacing` above zero to stay readable.
+   */
+  paragraphIndentEms: number
+  /**
+   * Blank space between paragraphs, in ems. Normally zero in a book: the indent
+   * does the work and spacing as well as an indent reads as a manuscript.
+   */
+  paragraphSpacingEms: number
+  /**
+   * Break words at the margin. On for justified text, where the alternative is
+   * rivers of white space — but a real preference, and some editors will not
+   * have it at any price.
+   */
+  hyphenate: boolean
+  /**
+   * Start every chapter on a right-hand page, inserting a blank verso where
+   * needed. Traditional, and it costs paper: a book of short chapters can gain
+   * thirty leaves this way.
+   */
+  chaptersOpenRecto: boolean
   pageNumber: PageNumberPosition
   ornaments: OrnamentChoices
   /** Front-matter visual toggles. */

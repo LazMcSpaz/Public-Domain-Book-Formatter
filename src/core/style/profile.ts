@@ -120,6 +120,10 @@ export function normalizeStyleProfile(raw: unknown): StyleProfile {
       recto: oneOf(rawRunning['recto'], RUNNING_HEAD_MODES, d.runningHeads.recto)
     },
     dropCap: bool(raw['dropCap'], d.dropCap),
+    paragraphIndentEms: num(raw['paragraphIndentEms'], d.paragraphIndentEms),
+    paragraphSpacingEms: num(raw['paragraphSpacingEms'], d.paragraphSpacingEms),
+    hyphenate: bool(raw['hyphenate'], d.hyphenate),
+    chaptersOpenRecto: bool(raw['chaptersOpenRecto'], d.chaptersOpenRecto),
     pageNumber: oneOf(raw['pageNumber'], PAGE_NUMBER_POSITIONS, d.pageNumber),
     ornaments: {
       chapterOpener:
@@ -152,6 +156,10 @@ export function mergeStyle(base: StyleProfile, patch: Partial<StyleProfile>): St
   if (patch.headingFont !== undefined) next.headingFont = patch.headingFont
   if (patch.pageNumber !== undefined) next.pageNumber = patch.pageNumber
   if (patch.dropCap !== undefined) next.dropCap = patch.dropCap
+  if (patch.paragraphIndentEms !== undefined) next.paragraphIndentEms = patch.paragraphIndentEms
+  if (patch.paragraphSpacingEms !== undefined) next.paragraphSpacingEms = patch.paragraphSpacingEms
+  if (patch.hyphenate !== undefined) next.hyphenate = patch.hyphenate
+  if (patch.chaptersOpenRecto !== undefined) next.chaptersOpenRecto = patch.chaptersOpenRecto
   if (patch.margins !== undefined) next.margins = { ...next.margins, ...patch.margins }
   if (patch.headingStyle !== undefined) {
     next.headingStyle = { ...next.headingStyle, ...patch.headingStyle }

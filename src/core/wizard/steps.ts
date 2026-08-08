@@ -26,6 +26,7 @@ import {
   type PeriodFeel
 } from '@core/design'
 import {
+  applyStyleAnswers,
   describeSavedProfile,
   emptyImprint,
   type ImprintFields,
@@ -105,6 +106,17 @@ export interface WizardState {
   /** The model the user reached for last, so the gate can offer it again. */
   defaultModelId: string
   /**
+   * Per-book tweaks to the look, from "anything you'd change?" at the design
+   * gate.
+   *
+   * Kept apart from the answers that *built* the style rather than folded into
+   * them, for the same reason corrections are kept apart from the
+   * transcription: the five questions and the banked look stay what they were,
+   * and every tweak can be dropped without rebuilding anything. They belong to
+   * this book alone — banking a look is what makes a change travel.
+   */
+  styleOverrides: Answers
+  /**
    * The measured facts the storage question shows: how big this scan is, and
    * how much room this browser will give the app. `quota`/`usage` are null
    * where the browser declines to say, and the question then asks without
@@ -157,6 +169,7 @@ export function initialState(): WizardState {
     keepScans: null,
     defaultLook: null,
     defaultModelId: 'claude-opus-5',
+    styleOverrides: {},
     storage: null,
     styleProfiles: [],
     findings: [],
@@ -927,18 +940,25 @@ export function appliedLook(
     chosen === FRESH_LOOK ? undefined : state.styleProfiles.find((p) => p.id === chosen)
 
   if (banked) {
-    return { style: banked.style, imprint: banked.imprint, fromProfileId: banked.id }
+    return {
+      style: applyStyleAnswers(banked.style, state.styleOverrides),
+      imprint: banked.imprint,
+      fromProfileId: banked.id
+    }
   }
   return {
-    style: profileFromAnswers(
-      {
-        kind: answers['kind'],
-        period: answers['period'],
-        chapterOpener: answers['chapterOpener'],
-        runningHeads: answers['runningHeads']
-      } as DesignAnswers,
-      answers['font'] as string,
-      state.defaultLook ?? undefined
+    style: applyStyleAnswers(
+      profileFromAnswers(
+        {
+          kind: answers['kind'],
+          period: answers['period'],
+          chapterOpener: answers['chapterOpener'],
+          runningHeads: answers['runningHeads']
+        } as DesignAnswers,
+        answers['font'] as string,
+        state.defaultLook ?? undefined
+      ),
+      state.styleOverrides
     ),
     imprint: emptyImprint(),
     fromProfileId: null

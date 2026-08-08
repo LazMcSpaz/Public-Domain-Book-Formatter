@@ -55,7 +55,7 @@ import {
   saveSourceFile,
   storedFileKeys
 } from '../platform/browser/run-store'
-import { newSavedProfile, type SavedStyleProfile } from '@core/style'
+import { newSavedProfile, styleQuestions, type SavedStyleProfile } from '@core/style'
 import {
   createSavedRun,
   describeAge,
@@ -63,7 +63,7 @@ import {
   summarize as summarizeRun,
   type SavedRunSummary
 } from '@core/project'
-import { describeProfile } from '@core/design'
+import { BODY_FONTS, describeProfile } from '@core/design'
 import { buildExport, editionFromAnswers, type BuildExportResult } from '@core/export'
 import { applyEdits, type BookEdit } from '@core/edits'
 import { renderInterior } from '../platform/browser/interior'
@@ -1490,7 +1490,30 @@ export function App(): JSX.Element {
 
         {/* --- the finished edition --- */}
         {exported && !buildProgress ? (
-          <ExportResult result={exported} pdf={pdf} note={buildNote} savedNote={bankedNote} />
+          <>
+            <ExportResult result={exported} pdf={pdf} note={buildNote} savedNote={bankedNote} />
+            <div className="actions">
+              <button
+                type="button"
+                onClick={() => {
+                  // Back to the design gate, which is the only step it is safe
+                  // to re-enter: the look is downstream of everything, so
+                  // changing it re-lays the book out and costs nothing. The
+                  // gates above it decided what the book *says*, and returning
+                  // there would throw away work rather than redo it.
+                  setExported(null)
+                  setPdf(null)
+                  setBuildNote(null)
+                  setState((st) => ({
+                    ...st,
+                    completed: st.completed.filter((id) => id !== 'design' && id !== 'export')
+                  }))
+                }}
+              >
+                Change the design
+              </button>
+            </div>
+          </>
         ) : null}
 
         {/* --- proofreading, which is a workbench rather than a set of questions --- */}
@@ -1534,6 +1557,44 @@ export function App(): JSX.Element {
                 <span className="summary-label">Your edition will be set as</span>
                 <b>{designSummary}</b>
               </div>
+            ) : null}
+            {designProfile ? (
+              <details className="tweaks">
+                <summary>Anything you’d change?</summary>
+                <p className="help">
+                  Every control the questions above set for you, and a few they never touch. These
+                  apply to this book only — bank the look if you want them on the next one.
+                </p>
+                {styleQuestions(designProfile, {
+                  families: BODY_FONTS.map((f) => ({
+                    value: f.family,
+                    label: f.label,
+                    description: f.note
+                  }))
+                }).map((q) => (
+                  <QuestionView
+                    key={q.id}
+                    question={q}
+                    value={state.styleOverrides[q.id]}
+                    onChange={(v: AnswerValue) =>
+                      setState((st) => ({
+                        ...st,
+                        styleOverrides: { ...st.styleOverrides, [q.id]: v }
+                      }))
+                    }
+                  />
+                ))}
+                {Object.keys(state.styleOverrides).length > 0 ? (
+                  <div className="actions">
+                    <button
+                      type="button"
+                      onClick={() => setState((st) => ({ ...st, styleOverrides: {} }))}
+                    >
+                      Undo my changes
+                    </button>
+                  </div>
+                ) : null}
+              </details>
             ) : null}
             {designProfile ? (
               <PreviewPane

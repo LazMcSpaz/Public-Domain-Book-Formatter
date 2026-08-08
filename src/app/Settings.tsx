@@ -72,6 +72,19 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
   const [editing, setEditing] = useState<string | null>(null)
   const [styleAnswers, setStyleAnswers] = useState<Answers>({})
   const [note, setNote] = useState<string | null>(null)
+  /**
+   * A pending destructive action, held until it is confirmed.
+   *
+   * Only the irreversible ones ask. Removing a scan costs a trip to the file
+   * picker and does not, because a confirmation on everything teaches people to
+   * dismiss confirmations — which is how the one that mattered gets clicked
+   * through.
+   */
+  const [pending, setPending] = useState<{
+    prompt: string
+    detail: string
+    run: () => Promise<void>
+  } | null>(null)
 
   const refresh = useCallback(async () => {
     setRuns(await listRuns())
@@ -151,6 +164,33 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
 
       {note ? <p className="help">{note}</p> : null}
 
+      {pending ? (
+        <div className="confirm">
+          <p>
+            <strong>{pending.prompt}</strong>
+          </p>
+          <p className="help">{pending.detail}</p>
+          <div className="actions">
+            <button
+              type="button"
+              className="primary"
+              onClick={() => {
+                void (async () => {
+                  await pending.run()
+                  setPending(null)
+                  await refresh()
+                })()
+              }}
+            >
+              Yes, do it
+            </button>
+            <button type="button" onClick={() => setPending(null)}>
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       {/* --- the style editor, when one is open --------------------------- */}
       {editingProfile ? (
         <section>
@@ -214,13 +254,18 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        void (async () => {
-                          await deleteProfile(p.id)
-                          setNote(`Deleted “${p.name}”.`)
-                          await refresh()
-                        })()
-                      }}
+                      onClick={() =>
+                        setPending({
+                          prompt: `Delete the look “${p.name}”?`,
+                          detail:
+                            'Books already made with it keep their design. Nothing else here ' +
+                            'changes, but the look itself cannot be brought back.',
+                          run: async () => {
+                            await deleteProfile(p.id)
+                            setNote(`Deleted “${p.name}”.`)
+                          }
+                        })
+                      }
                     >
                       Delete
                     </button>
@@ -334,13 +379,18 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
             <div className="actions">
               <button
                 type="button"
-                onClick={() => {
-                  void (async () => {
-                    const n = await deleteAllSourceFiles()
-                    setNote(`Removed ${n} stored scan(s). The transcriptions are untouched.`)
-                    await refresh()
-                  })()
-                }}
+                onClick={() =>
+                  setPending({
+                    prompt: 'Remove every stored scan?',
+                    detail:
+                      'The transcriptions stay — this only frees the space the PDFs take. You ' +
+                      'will be asked to choose the file again when you reopen a book.',
+                    run: async () => {
+                      const n = await deleteAllSourceFiles()
+                      setNote(`Removed ${n} stored scan(s). The transcriptions are untouched.`)
+                    }
+                  })
+                }
               >
                 Remove every stored scan
               </button>
@@ -376,17 +426,20 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
                       ) : null}
                       <button
                         type="button"
-                        onClick={() => {
-                          void (async () => {
-                            await deleteRun(run.key)
-                            await deleteSourceFile(run.key)
-                            setNote(
-                              `Deleted the transcription of “${run.fileName}”. ` +
-                                'Reading it again would cost the same as the first time.'
-                            )
-                            await refresh()
-                          })()
-                        }}
+                        onClick={() =>
+                          setPending({
+                            prompt: `Delete the transcription of “${run.fileName}”?`,
+                            detail:
+                              `${run.pageCount} page(s) that were paid for. This cannot be ` +
+                              'undone, and reading the book again would cost the same as the ' +
+                              'first time. Corrections made at the proof step go with it.',
+                            run: async () => {
+                              await deleteRun(run.key)
+                              await deleteSourceFile(run.key)
+                              setNote(`Deleted the transcription of “${run.fileName}”.`)
+                            }
+                          })
+                        }
                       >
                         Delete the transcription
                       </button>

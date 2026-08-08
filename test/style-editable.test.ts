@@ -138,3 +138,68 @@ describe('the edited default is what a new book starts from', () => {
     expect(built.gutter).toBe(0.32)
   })
 })
+
+describe('the granular knobs, which were constants in the paginator', () => {
+  /**
+   * Three of the most ordinary things anyone would want to change were not
+   * settings at all: the paragraph indent was `const INDENT_EMS = 1.2`,
+   * hyphenation was on whenever a hyphenator was supplied, and every chapter
+   * opened on a right-hand page whether or not the book could spare the paper.
+   */
+  it('offers all three', () => {
+    const editable = ids(defaultStyleProfile())
+    for (const id of [
+      'paragraphIndentEms',
+      'paragraphSpacingEms',
+      'hyphenate',
+      'chaptersOpenRecto'
+    ]) {
+      expect(editable, id).toContain(id)
+    }
+  })
+
+  it('lets the indent be set to none, which is a real choice and not a missing answer', () => {
+    const next = applyStyleAnswers(defaultStyleProfile(), {
+      paragraphIndentEms: '0',
+      paragraphSpacingEms: '0.6'
+    })
+    expect(next.paragraphIndentEms).toBe(0)
+    expect(next.paragraphSpacingEms).toBe(0.6)
+  })
+})
+
+describe('per-book tweaks sit on top of the look, not inside it', () => {
+  /**
+   * The same rule as the proof step's corrections: the thing being edited is
+   * left alone and the edits are a layer over it. So a banked look reused on
+   * three books stays what it was, and dropping a tweak needs nothing rebuilt.
+   */
+  it('changes the book without changing the look it came from', async () => {
+    const { appliedLook, initialState } = await import('@core/wizard')
+    const { newSavedProfile } = await import('@core/style')
+    const banked = newSavedProfile({
+      name: 'Blackthorn',
+      style: { ...defaultStyleProfile(), gutter: 0.13 }
+    })
+    const state = {
+      ...initialState(),
+      styleProfiles: [banked],
+      styleOverrides: { gutter: '0.25', hyphenate: false }
+    }
+
+    const look = appliedLook(state, { profile: banked.id })
+    expect(look.style.gutter).toBe(0.25)
+    expect(look.style.hyphenate).toBe(false)
+    // The banked record itself is untouched — that is the whole point.
+    expect(banked.style.gutter).toBe(0.13)
+    expect(banked.style.hyphenate).toBe(true)
+  })
+
+  it('drops back to the look when the tweaks are cleared', async () => {
+    const { appliedLook, initialState } = await import('@core/wizard')
+    const { newSavedProfile } = await import('@core/style')
+    const banked = newSavedProfile({ name: 'B', style: { ...defaultStyleProfile(), gutter: 0.13 } })
+    const state = { ...initialState(), styleProfiles: [banked], styleOverrides: {} }
+    expect(appliedLook(state, { profile: banked.id }).style.gutter).toBe(0.13)
+  })
+})

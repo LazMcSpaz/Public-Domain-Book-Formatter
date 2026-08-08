@@ -77,6 +77,10 @@ export const BANKED_STYLE_KEYS: readonly (keyof StyleProfile)[] = [
   'headingStyle',
   'runningHeads',
   'dropCap',
+  'paragraphIndentEms',
+  'paragraphSpacingEms',
+  'hyphenate',
+  'chaptersOpenRecto',
   'pageNumber',
   'ornaments',
   'frontMatter'

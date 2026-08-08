@@ -542,6 +542,55 @@ const plateFound = leafInk.some((ink) => ink > 0.04)
 
 // Book one banks its look here (SPEC §7). Nothing has been banked yet, so the
 // gate is still the five-question interview — with one extra box at the bottom.
+// The interview does the bulk of the work; this is the rest of it, on the book
+// in front of you rather than on a saved look. A tweak has to reach the pages —
+// the preview is the PDF, so a changed page here is a changed page in the file.
+// Undone again afterwards, so the rest of this run sees the book it expects.
+console.log('5d3. anything you would change?')
+// Every leaf, not just the first: the first is a near-blank half-title, and a
+// paragraph indent would leave it untouched while changing every page of prose
+// behind it.
+const leafHash = () =>
+  page.evaluate(async () => {
+    let h = 0
+    for (const img of document.querySelectorAll('.leaf img')) {
+      await img.decode()
+      const c = document.createElement('canvas')
+      c.width = 120
+      c.height = 180
+      const ctx = c.getContext('2d')
+      ctx.drawImage(img, 0, 0, c.width, c.height)
+      const { data } = ctx.getImageData(0, 0, c.width, c.height)
+      for (let i = 0; i < data.length; i += 4) h = (h * 31 + data[i]) >>> 0
+    }
+    return String(h)
+  })
+
+await page.locator('.tweaks > summary').click()
+await page.waitForTimeout(300)
+const tweakCount = await page.locator('.tweaks .q').count()
+const beforeTweak = await leafHash()
+// The paragraph indent is the plainest visible change and the one that was a
+// constant in the paginator until now.
+await page
+  .locator('.tweaks .q')
+  .filter({ hasText: 'Paragraph indent' })
+  .locator('label')
+  .filter({ hasText: /^2 em$/ })
+  .click()
+await page.waitForTimeout(5000)
+const afterTweak = await leafHash()
+await shot('05d3-design-tweaks')
+
+await page.locator('.tweaks button', { hasText: 'Undo my changes' }).click()
+await page.waitForTimeout(5000)
+const undoneTweak = await leafHash()
+
+if (tweakCount < 20) throw new Error(`Only ${tweakCount} detailed controls at the design gate`)
+if (beforeTweak === afterTweak) throw new Error('A tweak did not reach the previewed pages')
+if (undoneTweak !== beforeTweak) throw new Error('Undoing the tweaks did not restore the book')
+console.log(`  → ${tweakCount} controls; a change re-set the book and undo put it back`)
+
 console.log('5d2. banking the look for the next book')
 const bankedName = 'The Blackthorn Press look'
 const looksOfferedToBookOne = await page.locator('.q').filter({ hasText: 'already set up' }).count()

@@ -113,8 +113,6 @@ const CHAPTER_SINK_SLOTS = 4
 const CHAPTER_GAP_SLOTS = 2
 /** Lines a drop capital spans. Three is the traditional depth. */
 const DROP_CAP_LINES = 3
-/** Paragraph indent, as a multiple of the body size. One em is the convention. */
-const INDENT_EMS = 1.2
 /** Gap between a drop capital and the text beside it, as a fraction of its size. */
 const DROP_CAP_GAP_RATIO = 0.06
 
@@ -298,9 +296,9 @@ function blockStyle(block: BookBlock, profile: StyleProfile): BlockStyle {
     style: 'regular',
     indentLeftEms: 0,
     indentRightEms: 0,
-    firstLineIndentEms: INDENT_EMS,
+    firstLineIndentEms: profile.paragraphIndentEms,
     spaceBefore: 0,
-    spaceAfter: 0
+    spaceAfter: profile.paragraphSpacingEms
   }
 
   switch (block.kind) {
@@ -820,7 +818,9 @@ export function layout(
     measurer,
     measureWidth: rectoFrame.widthPt,
     leading,
-    ...(options.hyphenate ? { hyphenate: options.hyphenate } : {})
+    // The style has the final say: a hyphenator can be supplied and still
+    // declined, which is what `hyphenate: false` on the profile means.
+    ...(options.hyphenate && profile.hyphenate ? { hyphenate: options.hyphenate } : {})
   }
 
   const pages: PageBuilder[] = []
@@ -1097,7 +1097,10 @@ export function layout(
 
     if (flow.startsChapter || needsOwnPage || page === null) {
       if (bodyPageCount() >= maxBodyPages) break
-      openBodyPage(flow.startsChapter)
+      // A chapter opens on a right-hand page only if the style asks for it.
+      // Traditional, and it costs paper — a book of short chapters can gain
+      // thirty leaves to blank versos.
+      openBodyPage(flow.startsChapter && ctx.profile.chaptersOpenRecto)
       if (flow.startsChapter) {
         current().suppressRunningHead = true
         current().kind = 'chapter-opener'

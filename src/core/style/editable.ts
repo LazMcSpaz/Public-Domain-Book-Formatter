@@ -243,6 +243,42 @@ export function styleQuestions(
       defaultValue: profile.dropCap
     },
     {
+      id: 'chaptersOpenRecto',
+      type: 'confirm',
+      prompt: 'Start every chapter on a right-hand page?',
+      help:
+        'Traditional, and it costs paper — a book of short chapters can gain thirty leaves ' +
+        'to blank left-hand pages.',
+      defaultValue: profile.chaptersOpenRecto
+    },
+    {
+      id: 'paragraphIndentEms',
+      type: 'choice',
+      prompt: 'Paragraph indent',
+      help:
+        'How far the first line of a paragraph steps in. Set it to none and give the ' +
+        'paragraphs some space instead, or the page reads as one block.',
+      defaultValue: String(profile.paragraphIndentEms),
+      options: [{ value: '0', label: 'None' }, ...numberOptions([0.6, 1, 1.2, 1.5, 2], ' em')]
+    },
+    {
+      id: 'paragraphSpacingEms',
+      type: 'choice',
+      prompt: 'Space between paragraphs',
+      help: 'Normally none in a book: the indent does that work, and both together read as a memo.',
+      defaultValue: String(profile.paragraphSpacingEms),
+      options: [{ value: '0', label: 'None' }, ...numberOptions([0.4, 0.6, 1], ' em')]
+    },
+    {
+      id: 'hyphenate',
+      type: 'confirm',
+      prompt: 'Break words at the end of a line?',
+      help:
+        'On, justified text sets evenly. Off, it is honest about the measure and opens ' +
+        'rivers of white space in narrow columns.',
+      defaultValue: profile.hyphenate
+    },
+    {
       id: 'ornamentChapter',
       type: 'choice',
       prompt: 'Chapter-opening ornament',
@@ -341,6 +377,10 @@ export function applyStyleAnswers(profile: StyleProfile, answers: Answers): Styl
       recto: pick(answers, 'runningHeadRecto', profile.runningHeads.recto) as RunningHeadMode
     },
     dropCap: pickBool(answers, 'dropCap', profile.dropCap),
+    chaptersOpenRecto: pickBool(answers, 'chaptersOpenRecto', profile.chaptersOpenRecto),
+    paragraphIndentEms: pickNumber(answers, 'paragraphIndentEms', profile.paragraphIndentEms),
+    paragraphSpacingEms: pickNumber(answers, 'paragraphSpacingEms', profile.paragraphSpacingEms),
+    hyphenate: pickBool(answers, 'hyphenate', profile.hyphenate),
     pageNumber: pick(answers, 'pageNumber', profile.pageNumber) as PageNumberPosition,
     ornaments: {
       chapterOpener: pickOrnament(answers, 'ornamentChapter', profile.ornaments.chapterOpener),

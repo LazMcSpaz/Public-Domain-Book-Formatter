@@ -24,6 +24,10 @@ export const DEFAULT_STYLE_PROFILES: StyleProfile[] = [
     headingStyle: { smallCaps: true, centered: true, scale: 1.6 },
     runningHeads: { verso: 'author', recto: 'chapterTitle' },
     dropCap: false,
+    paragraphIndentEms: 1.2,
+    paragraphSpacingEms: 0,
+    hyphenate: true,
+    chaptersOpenRecto: true,
     pageNumber: 'bottomCenter',
     ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null },
     frontMatter: { titlePage: true, copyrightPage: true, halfTitle: true }
@@ -40,6 +44,10 @@ export const DEFAULT_STYLE_PROFILES: StyleProfile[] = [
     headingStyle: { smallCaps: false, centered: true, scale: 1.4 },
     runningHeads: { verso: 'bookTitle', recto: 'chapterTitle' },
     dropCap: false,
+    paragraphIndentEms: 1.2,
+    paragraphSpacingEms: 0,
+    hyphenate: true,
+    chaptersOpenRecto: true,
     pageNumber: 'bottomOuter',
     ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null },
     frontMatter: { titlePage: true, copyrightPage: true, halfTitle: false }
@@ -56,6 +64,10 @@ export const DEFAULT_STYLE_PROFILES: StyleProfile[] = [
     headingStyle: { smallCaps: true, centered: true, scale: 1.5 },
     runningHeads: { verso: 'author', recto: 'bookTitle' },
     dropCap: false,
+    paragraphIndentEms: 1.2,
+    paragraphSpacingEms: 0,
+    hyphenate: true,
+    chaptersOpenRecto: true,
     pageNumber: 'bottomCenter',
     ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null },
     frontMatter: { titlePage: true, copyrightPage: true, halfTitle: true }

@@ -1139,3 +1139,32 @@ button.ghost {
   font-size: 0.85rem;
   color: var(--muted);
 }
+
+/* A pending destructive action. Deliberately loud: it is the only thing in the
+   app that cannot be undone. */
+.confirm {
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 16px 18px;
+  margin: 16px 0;
+  background: var(--panel);
+}
+.confirm p {
+  margin: 0 0 8px;
+}
+
+/* "Anything you'd change?" at the design gate — closed by default, so the five
+   questions stay the front door. */
+.tweaks {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin: 16px 0;
+}
+.tweaks > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.tweaks[open] > summary {
+  margin-bottom: 8px;
+}
