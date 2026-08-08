@@ -836,6 +836,13 @@ await page.setInputFiles('input[type=file]', bookPath)
 await page.waitForSelector('.terms', { timeout: 180000 })
 await page.locator('button.primary', { hasText: 'Looks right' }).click()
 await page.waitForSelector('.q', { timeout: 20000 })
+// Space is asked beside money, once per device, with this browser's real quota
+// measured rather than guessed. Chromium reports one, so this is the figure a
+// user would actually be shown.
+const storageQ = page.locator('.q').filter({ hasText: 'Keep this book’s scan' })
+const storageAsked = await storageQ.count()
+const storageHelp = storageAsked ? await storageQ.locator('.help').first().innerText() : ''
+
 const partialPrompt = await page
   .locator('.q .prompt')
   .filter({ hasText: 'stopped partway' })
@@ -849,6 +856,14 @@ if (partialPrompt !== 1) throw new Error('A half-read book was not offered as on
 if (carryOn !== 1) throw new Error('No option to carry on from where it stopped')
 if (stillAsksModel !== 1) throw new Error('Resuming skipped the cost approval')
 console.log('  → offered "Carry on from page 5", and still asked what it would cost')
+if (storageAsked !== 1) throw new Error('The storage question was not asked')
+if (!/free for the app/.test(storageHelp)) throw new Error('Storage was asked without figures')
+if (!/transcription is saved either way/.test(storageHelp)) {
+  throw new Error('The storage question does not say the paid work is kept regardless')
+}
+console.log(
+  `  → storage asked with measured figures: ${storageHelp.replace(/\s+/g, ' ').slice(0, 96)}…`
+)
 
 // The failure this guards against was reported from a real book: a refresh put
 // an empty drop zone in front of someone whose paid run was in the database,

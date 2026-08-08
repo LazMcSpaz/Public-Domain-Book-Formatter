@@ -92,6 +92,18 @@ export interface WizardState {
    */
   savedRun: SavedRunSummary | null
   /**
+   * Whether scans are kept on this device. `null` until the user has been
+   * asked. A device-level answer, not a per-book one.
+   */
+  keepScans: boolean | null
+  /**
+   * The measured facts the storage question shows: how big this scan is, and
+   * how much room this browser will give the app. `quota`/`usage` are null
+   * where the browser declines to say, and the question then asks without
+   * figures rather than with invented ones.
+   */
+  storage: { scanBytes: number; quota: number | null; usage: number | null } | null
+  /**
    * Looks the user has banked from earlier books (SPEC §7). Whole records, not
    * summaries, so the design gate can preview one the instant it is chosen —
    * and so this stays a pure function of state.
@@ -134,6 +146,8 @@ export function initialState(): WizardState {
     classifications: [],
     hasApiKey: false,
     savedRun: null,
+    keepScans: null,
+    storage: null,
     styleProfiles: [],
     findings: [],
     uncertainties: [],
@@ -414,6 +428,15 @@ const transcribe: Step = {
       placeholder: 'e.g. A 1662 alchemical treatise; heavy use of Latin terms.',
       multiline: true
     })
+
+    // Last, and after the questions that decide what this run costs in money.
+    // Space is the other resource the gate commits, but it is the smaller
+    // decision and a wrong answer here is reversible — so it does not stand
+    // between the user and the thing they came to approve. Asked once, and
+    // never about the transcription.
+    if (s.keepScans === null) {
+      qs.push(keepScansQuestion(s))
+    }
 
     return qs
   }
@@ -801,6 +824,68 @@ const design: Step = {
           'without being designed twice. Leave blank not to save.',
         defaultValue: '',
         placeholder: 'e.g. The Blackthorn Press look'
+      }
+    ]
+  }
+}
+
+/** Bytes as a person reads them. Mirrors the platform helper, kept pure here. */
+function readableBytes(bytes: number): string {
+  const mb = bytes / (1024 * 1024)
+  if (mb < 1) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  if (mb < 1024) return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`
+  return `${(mb / 1024).toFixed(1)} GB`
+}
+
+/**
+ * "Keep the scan on this device?" — asked once, against measured numbers.
+ *
+ * The user put it best: on a desktop you say yes and never think about it; on a
+ * phone you say no to conserve space. So the app asks rather than deciding, and
+ * shows what it is asking about — this scan's size and the room this browser
+ * will actually give it, which differ by an order of magnitude between those
+ * two devices.
+ *
+ * The recommendation follows the same arithmetic the user would do: yes when
+ * the scan is a small share of what is free, no when it is not. Where the
+ * browser will not report its quota, the question is asked without figures
+ * rather than with invented ones, and recommends keeping — the failure it
+ * avoids (hunting for a file again) is milder than the one it risks.
+ */
+function keepScansQuestion(s: WizardState): Question {
+  const info = s.storage
+  const scan = info ? readableBytes(info.scanBytes) : 'this scan'
+  const free =
+    info && info.quota !== null && info.usage !== null ? Math.max(0, info.quota - info.usage) : null
+
+  // A tenth of what is free is the line: comfortable on a laptop, and on a
+  // phone the point where a few books would start to matter.
+  const roomy = free === null || (info !== null && info.scanBytes * 10 < free)
+
+  const help =
+    free === null
+      ? 'Keeping it means reopening this book with one tap instead of finding the file again. ' +
+        'Your transcription is saved either way — this is only about the scan.'
+      : `The scan is ${scan}; this browser has about ${readableBytes(free)} free for the app. ` +
+        'Keeping it means reopening this book with one tap instead of finding the file again. ' +
+        'Your transcription is saved either way — this is only about the scan.'
+
+  return {
+    id: 'keepScans',
+    type: 'choice',
+    prompt: 'Keep this book’s scan on this device?',
+    help,
+    defaultValue: roomy ? 'keep' : 'discard',
+    options: [
+      {
+        value: 'keep',
+        label: 'Keep it — reopen with one tap',
+        description: info ? `Uses ${scan} here.` : 'Uses space here.'
+      },
+      {
+        value: 'discard',
+        label: 'Don’t keep it — save the space',
+        description: 'You choose the PDF again each time you come back to this book.'
       }
     ]
   }

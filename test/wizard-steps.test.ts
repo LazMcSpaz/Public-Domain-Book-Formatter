@@ -283,7 +283,13 @@ describe('transcribe step questions', () => {
     const qs = stepById('transcribe').questions(
       ready({ savedRun, hasApiKey: false, answers: { transcribe: { useSavedRun: 'again' } } })
     )
-    expect(qs.map((q) => q.id)).toEqual(['useSavedRun', 'apiKey', 'model', 'bookContext'])
+    expect(qs.map((q) => q.id)).toEqual([
+      'useSavedRun',
+      'apiKey',
+      'model',
+      'bookContext',
+      'keepScans'
+    ])
   })
 
   it('says how many pages went unread, rather than implying a clean run', () => {
@@ -913,7 +919,7 @@ describe('the transcribe gate — a run that stopped partway', () => {
     // The finished-run path returns early here; the partial one must not, or
     // the user resumes without ever approving a charge.
     const ids = ask({ ...base(), savedRun: partial }).map((q) => q.id)
-    expect(ids).toEqual(['useSavedRun', 'model', 'bookContext'])
+    expect(ids).toEqual(['useSavedRun', 'model', 'bookContext', 'keepScans'])
   })
 
   it('leaves a finished run alone', () => {
@@ -921,5 +927,79 @@ describe('the transcribe gate — a run that stopped partway', () => {
     const q = ask({ ...base(), savedRun: done }).find((x) => x.id === 'useSavedRun')!
     expect((q as { defaultValue: string }).defaultValue).toBe('use')
     expect(q.prompt).toContain('already had this book read')
+  })
+})
+
+describe('the storage question — asked once, against measured numbers', () => {
+  /**
+   * The user's own framing: "if I'm doing it from the desktop, I can click yes
+   * and not worry about memory. But if I'm doing it from the phone, then I
+   * would click no because I would wanna conserve memory."
+   *
+   * So the app asks rather than deciding — and shows what it is asking about,
+   * because the two devices differ by an order of magnitude and nobody can
+   * guess either figure.
+   */
+  const MB = 1024 * 1024
+  const at = (over: Partial<WizardState> = {}): WizardState => ({
+    ...reconDone(),
+    pageCount: 300,
+    hasApiKey: true,
+    completed: ['intake', 'recon', 'gate-identity'],
+    ...over
+  })
+  const ask = (state: WizardState) => stepById('transcribe').questions(state)
+  const find = (state: WizardState) => ask(state).find((q) => q.id === 'keepScans')
+
+  it('recommends keeping when the scan is a small share of the free space', () => {
+    const q = find(at({ storage: { scanBytes: 40 * MB, quota: 2000 * MB, usage: 100 * MB } }))!
+    expect((q as { defaultValue: string }).defaultValue).toBe('keep')
+    expect(q.help).toContain('40 MB')
+  })
+
+  it('recommends against it when the scan would take a real bite', () => {
+    // The phone case: 180 MB of scan against 400 MB free.
+    const q = find(at({ storage: { scanBytes: 180 * MB, quota: 500 * MB, usage: 100 * MB } }))!
+    expect((q as { defaultValue: string }).defaultValue).toBe('discard')
+  })
+
+  it('asks without figures rather than with invented ones', () => {
+    // Some browsers decline to report a quota. Guessing one would be worse
+    // than asking plainly.
+    const q = find(at({ storage: { scanBytes: 40 * MB, quota: null, usage: null } }))!
+    expect(q.help).not.toMatch(/free for the app/)
+    expect((q as { defaultValue: string }).defaultValue).toBe('keep')
+  })
+
+  it('promises the transcription is kept either way', () => {
+    // The carve-out this whole design rests on: the paid work is never what is
+    // being traded away, and the question has to say so where it is asked.
+    const q = find(at({ storage: { scanBytes: 40 * MB, quota: 2000 * MB, usage: 0 } }))!
+    expect(q.help).toContain('transcription is saved either way')
+  })
+
+  it('is asked once, not per book', () => {
+    expect(find(at({ keepScans: true }))).toBeUndefined()
+    expect(find(at({ keepScans: false }))).toBeUndefined()
+    expect(find(at({ keepScans: null }))).toBeDefined()
+  })
+
+  it('does not interrupt someone reusing a finished run', () => {
+    // That path returns before the spending questions, and space is not being
+    // spent either — the scan is already on the device or it is not.
+    const savedRun = {
+      key: 'k',
+      fileName: 'alchemist.pdf',
+      savedAt: new Date().toISOString(),
+      pageCount: 300,
+      failedPages: 0,
+      complete: true,
+      modelId: 'claude-opus-5',
+      usage: { inputTokens: 1, outputTokens: 2, cacheReadTokens: 0 }
+    }
+    const ids = ask(at({ savedRun, answers: { transcribe: { useSavedRun: 'use' } } })).map(
+      (q) => q.id
+    )
+    expect(ids).toEqual(['useSavedRun'])
   })
 })

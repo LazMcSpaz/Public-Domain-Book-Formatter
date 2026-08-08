@@ -36,7 +36,13 @@ import {
 } from '@core/transcribe'
 import { assembleBook } from '@core/assemble'
 import { runBrowserTranscription } from '../platform/browser/transcribe-run'
-import { loadApiKey, saveApiKey, loadPrefs, savePrefs } from '../platform/browser/settings'
+import {
+  loadApiKey,
+  saveApiKey,
+  loadPrefs,
+  savePrefs,
+  storageEstimate
+} from '../platform/browser/settings'
 import {
   findRunForFile,
   listProfiles,
@@ -457,6 +463,20 @@ export function App(): JSX.Element {
       fileDataRef.current = file
       fileKeyRef.current = fileKey(file)
 
+      // Measured now, so the storage question can show this scan's size against
+      // the room this browser will actually give the app rather than asking the
+      // user to guess at both.
+      void storageEstimate().then((estimate) => {
+        setState((s) => ({
+          ...s,
+          storage: {
+            scanBytes: file.size,
+            quota: estimate?.quota ?? null,
+            usage: estimate?.usage ?? null
+          }
+        }))
+      })
+
       // Before the free pass, not after: this only reads three fields off the
       // File, and it is the difference between watching a progress bar in hope
       // and watching it knowing what is at the end of it.
@@ -471,7 +491,7 @@ export function App(): JSX.Element {
         // Keep the scan from now on, so the next time is one tap. It was very
         // likely saved before this was possible, and re-picking the file once
         // is the only chance to catch up.
-        if (!reopenable.includes(known.key)) {
+        if (loadPrefs().keepScans !== false && !reopenable.includes(known.key)) {
           if (await saveSourceFile(known.key, file)) {
             setReopenable((keys) => [...keys, known.key])
           }
@@ -569,6 +589,7 @@ export function App(): JSX.Element {
       if (profiles.length > 0) setState((s) => ({ ...s, styleProfiles: profiles }))
       setSavedRuns(await listRuns())
       setReopenable(await storedFileKeys())
+      setState((s) => ({ ...s, keepScans: loadPrefs().keepScans }))
     })()
   }, [])
 
@@ -758,7 +779,11 @@ export function App(): JSX.Element {
       // different thing from losing the transcription. A failure here is
       // deliberately silent: the book is safe, and the user is told about it at
       // the moment it matters, on the intake screen.
-      if (await saveSourceFile(key, file)) {
+      // Only when the user asked for it. `null` means they have not been asked
+      // yet — which happens when a finished run is reused and the transcribe
+      // gate never came up — and keeping it then is the harmless default, since
+      // the question is still there to change later.
+      if (loadPrefs().keepScans !== false && (await saveSourceFile(key, file))) {
         setReopenable((keys) => (keys.includes(key) ? keys : [...keys, key]))
       }
     },
@@ -1216,6 +1241,14 @@ export function App(): JSX.Element {
       return
     }
     if (step.id === 'transcribe') {
+      // Remembered on the device, so the question is asked once rather than
+      // per book. Recorded before any branch below returns.
+      if (state.keepScans === null && currentAnswers['keepScans'] !== undefined) {
+        const keep = currentAnswers['keepScans'] === 'keep'
+        savePrefs({ ...loadPrefs(), keepScans: keep })
+        setState((s) => ({ ...s, keepScans: keep }))
+      }
+
       const saved = state.savedRun
       // A *finished* run the user said to use: nothing to approve.
       if (saved?.complete && (currentAnswers['useSavedRun'] ?? 'use') === 'use') {
