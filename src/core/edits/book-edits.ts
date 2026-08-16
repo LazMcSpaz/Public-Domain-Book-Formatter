@@ -30,7 +30,7 @@
  */
 import type { ImageEditOp } from '@core/model'
 import { sizeAfterOps } from '@core/image'
-import { normalizeTable, type BlockKind } from '@core/transcribe'
+import { normalizeMarkup, normalizeTable, type BlockKind } from '@core/transcribe'
 import type { BookBlock, BookDocument, Illustration } from '@core/assemble'
 
 /**
@@ -208,11 +208,19 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
         // correcting a cell in the flattened view has to come back as columns,
         // or the table would print what it was read as rather than what the
         // user just typed.
-        blocks[index] = normalizeTable({
-          ...block,
-          text: edit.text,
-          ...(block.cells ? { cells: undefined } : {})
-        })
+        // And through `normalizeMarkup` because retyped text invalidates the
+        // emphasis, which is word indices into the *old* wording — keeping it
+        // would italicise whichever words now sit at those positions. It also
+        // means `<i>foo</i>` typed by hand in the editor does what it looks
+        // like it does.
+        blocks[index] = normalizeMarkup(
+          normalizeTable({
+            ...block,
+            text: edit.text,
+            ...(block.cells ? { cells: undefined } : {}),
+            ...(block.emphasis ? { emphasis: undefined } : {})
+          })
+        )
         break
 
       case 'retype': {

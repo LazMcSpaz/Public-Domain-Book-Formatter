@@ -9,6 +9,7 @@
  * Pure: types, the JSON schema, and a strict parser. No I/O, no client.
  */
 import type { PageRole } from '@core/pages'
+import { parseInlineMarkup } from './markup'
 
 /** Structural role of a run of text within the page. */
 export type BlockKind =
@@ -53,6 +54,13 @@ export interface TranscribedBlock {
    * from the first row's contents.
    */
   headerRow?: boolean
+  /**
+   * Indices of whitespace-separated words to set in italic.
+   *
+   * Recovered from the inline markup the model emits — see `markup.ts`. Absent
+   * on a block with no emphasis, which is nearly all of them.
+   */
+  emphasis?: number[]
   /** Heading level 1–6, only meaningful when `kind` is 'heading'. */
   level?: number
   /**
@@ -184,6 +192,25 @@ export function parseTableText(text: string): string[][] {
 }
 
 /**
+ * Strip any inline markup from a block, keeping what it meant.
+ *
+ * The same conversion `parsePageTranscription` does, applied to a block that
+ * arrived some other way — a transcription restored from storage that was
+ * saved before this existed, or a correction typed with a tag in it. Idempotent:
+ * text with no tags comes back untouched and keeps whatever emphasis it had.
+ */
+export function normalizeMarkup<T extends TranscribedBlock>(block: T): T {
+  if (!block.text.includes('<')) return block
+  const markup = parseInlineMarkup(block.text)
+  if (markup.text === block.text) return block
+  return {
+    ...block,
+    text: markup.text,
+    ...(markup.emphasis.length > 0 ? { emphasis: markup.emphasis } : {})
+  }
+}
+
+/**
  * Put a block's table structure and its text beyond disagreement.
  *
  * Called on every block that claims to be a table, wherever one can enter the
@@ -307,7 +334,13 @@ export function parsePageTranscription(raw: unknown, pageIndex: number): PageTra
     if (typeof text !== 'string') {
       throw new Error(`Page ${pageIndex + 1}: block ${i} has no text`)
     }
-    const block: TranscribedBlock = { kind: kind as BlockKind, text }
+    // The model emits `<em>`, `<i>` and `<sup>` although nothing asked it to,
+    // because the original prints those words in italic and the schema gave it
+    // no field to say so. Read the tags, keep what they meant, remove them —
+    // left in, they are drawn verbatim and the book prints angle brackets.
+    const markup = parseInlineMarkup(text)
+    const block: TranscribedBlock = { kind: kind as BlockKind, text: markup.text }
+    if (markup.emphasis.length > 0) block.emphasis = markup.emphasis
     const level = b['level']
     if (typeof level === 'number' && Number.isFinite(level)) {
       block.level = Math.min(6, Math.max(1, Math.round(level)))

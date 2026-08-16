@@ -79,6 +79,16 @@ export function buildSystemPrompt(options: PromptOptions): string {
 
   parts.push(
     ``,
+    `EMPHASIS:`,
+    `Where the original sets words in italic — a title, a foreign phrase, a word`,
+    `the author stressed — wrap just those words in <i>…</i>. That is the only`,
+    `markup there is: no <b>, no <span>, no attributes, and nothing that is not`,
+    `italic in the book. A reference mark for a footnote is a bare digit or`,
+    `symbol in the text; do not wrap it.`
+  )
+
+  parts.push(
+    ``,
     `TABLES:`,
     `Matter set in columns — a table of weights, a list of dates against places,`,
     `a schedule of rates — is one "table" block. Put its rows in "cells", each`,

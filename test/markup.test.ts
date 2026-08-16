@@ -1,0 +1,227 @@
+import { describe, it, expect } from 'vitest'
+import {
+  normalizeMarkup,
+  parseInlineMarkup,
+  parsePageTranscription,
+  shiftEmphasis,
+  wordCount,
+  type TranscribedBlock
+} from '@core/transcribe'
+import { assembleBook } from '@core/assemble'
+import { applyEdits } from '@core/edits'
+import {
+  fixedWidthMeasurer,
+  layout,
+  type LaidOutBook,
+  type LaidOutPage,
+  type PositionedLine
+} from '@core/layout'
+import { defaultStyleProfile } from '@core/style'
+import type { BookBlock, BookDocument } from '@core/assemble'
+
+const measurer = fixedWidthMeasurer(0.5)
+
+function doc(blocks: BookBlock[]): BookDocument {
+  return {
+    blocks,
+    footnotes: [],
+    chapters: [],
+    asides: [],
+    illustrations: [],
+    sections: [],
+    skipped: []
+  }
+}
+
+const run = (document: BookDocument): LaidOutBook =>
+  layout(document, defaultStyleProfile(), measurer, {
+    edition: { title: 'A Treatise', author: 'R. Boyle' }
+  })
+
+const lines = (page: LaidOutPage): PositionedLine[] =>
+  page.items.filter((i): i is PositionedLine => i.kind === 'line')
+
+const runsSaying = (book: LaidOutBook, text: string) =>
+  book.pages.flatMap((p) => lines(p).flatMap((l) => l.runs.filter((r) => r.text === text)))
+
+/**
+ * The vision pass was never asked for markup and produced it anyway, because
+ * the original prints those words in italic and the schema gave it no field to
+ * say so. Left alone the tags are drawn verbatim — a finished book printing
+ * angle brackets.
+ */
+describe('inline markup becomes emphasis', () => {
+  it('takes the tags out and remembers which words they covered', () => {
+    const { text, emphasis } = parseInlineMarkup(
+      'and next to nothing of a practical nature—<em>how to project the astral body.</em>'
+    )
+    expect(text).not.toContain('<')
+    expect(text).toContain('how to project the astral body.')
+    // Word 7 is "nature—how": the em dash is not whitespace, so the breaker
+    // treats it as one word and the emphasis takes the whole of it. That is the
+    // word-granularity tradeoff, and this is the case where it shows — the
+    // alternative is threading character ranges through the hyphenator.
+    expect(emphasis).toEqual([7, 8, 9, 10, 11, 12])
+  })
+
+  it('keeps a superscript footnote mark as the bare digit the note machinery looks for', () => {
+    const { text, emphasis } = parseInlineMarkup(
+      'the essential link between the two bodies.<sup>1</sup>'
+    )
+    expect(text).toBe('the essential link between the two bodies.1')
+    expect(emphasis).toEqual([])
+  })
+
+  it('handles the tags a model reaches for interchangeably', () => {
+    expect(
+      parseInlineMarkup('the <i>spontaneous</i> and the <em>experimental</em>').emphasis
+    ).toEqual([1, 4])
+  })
+
+  it('drops markup that means nothing here rather than printing it', () => {
+    const { text } = parseInlineMarkup('a <b>bold</b> <span class="x">claim</span>')
+    expect(text).toBe('a bold claim')
+  })
+
+  it('survives a tag the model never closed', () => {
+    // An unclosed tag emphasises the rest of the block, which is what it asked
+    // for and the least surprising reading of a mistake. It must never leave a
+    // tag in the text.
+    const { text, emphasis } = parseInlineMarkup('plain <i>and then italic to the end')
+    expect(text).toBe('plain and then italic to the end')
+    expect(emphasis).toEqual([1, 2, 3, 4, 5, 6])
+  })
+
+  it('survives a closing tag that was never opened', () => {
+    const { text } = parseInlineMarkup('stray </em> tag')
+    expect(text).toBe('stray  tag')
+  })
+
+  it('allocates nothing for the text that has no markup at all', () => {
+    const plain = 'The alembick being set upon a gentle fire.'
+    expect(parseInlineMarkup(plain).text).toBe(plain)
+    expect(parseInlineMarkup(plain).emphasis).toEqual([])
+  })
+
+  it('converts on the way out of the model', () => {
+    const page = parsePageTranscription(
+      {
+        role: 'body',
+        blocks: [{ kind: 'paragraph', text: 'a <i>foreign</i> phrase' }],
+        uncertain: [],
+        furniture: {}
+      },
+      0
+    )
+    expect(page.blocks[0]!.text).toBe('a foreign phrase')
+    expect(page.blocks[0]!.emphasis).toEqual([1])
+  })
+
+  it('heals a block that was stored before any of this existed', () => {
+    // The point of `normalizeMarkup`: pages already paid for are fixed on the
+    // way back in, so nobody buys the same book twice to stop it printing tags.
+    const healed = normalizeMarkup<TranscribedBlock>({
+      kind: 'paragraph',
+      text: 'a <i>foreign</i> phrase'
+    })
+    expect(healed.text).toBe('a foreign phrase')
+    expect(healed.emphasis).toEqual([1])
+  })
+})
+
+describe('emphasis survives the journey to the page', () => {
+  const block = (text: string, emphasis?: number[]): BookBlock => ({
+    id: `b${text.length}`,
+    kind: 'paragraph',
+    text,
+    sourcePages: [0],
+    ...(emphasis ? { emphasis } : {})
+  })
+
+  it('sets the emphasised words in italic and leaves the rest roman', () => {
+    const book = run(doc([block('nothing of a practical nature how to project it', [5, 6, 7, 8])]))
+    expect(runsSaying(book, 'how')[0]!.font.style).toBe('italic')
+    expect(runsSaying(book, 'project')[0]!.font.style).toBe('italic')
+    expect(runsSaying(book, 'practical')[0]!.font.style).toBe('regular')
+  })
+
+  it('measures the italic words in italic, or the line breaks in the wrong place', () => {
+    // The breaker has to know: italic advances differ from roman, and a
+    // paragraph measured in roman then drawn partly in italic sets its lines
+    // to the wrong width.
+    const wide = fixedWidthMeasurer(0.5)
+    const narrow = {
+      ...wide,
+      widthOf: (t: string, f: { style: string }, s: number) =>
+        wide.widthOf(t, f as never, s) * (f.style === 'italic' ? 3 : 1)
+    }
+    const document = doc([block('word '.repeat(60).trim(), [0, 1, 2, 3, 4, 5, 6, 7, 8, 9])])
+    const roman = layout(document, defaultStyleProfile(), wide, {
+      edition: { title: 'T', author: 'A' }
+    })
+    const mixed = layout(document, defaultStyleProfile(), narrow as never, {
+      edition: { title: 'T', author: 'A' }
+    })
+    const count = (b: LaidOutBook): number => b.pages.reduce((n, p) => n + lines(p).length, 0)
+    expect(count(mixed)).not.toBe(count(roman))
+  })
+
+  it('moves the italics along when a paragraph is joined across a page seam', () => {
+    // Emphasis is word indices, so the second half's italics have to shift by
+    // the first half's word count or they land on the wrong words.
+    // Through the real parser, because that is where the tags become emphasis:
+    // assembly is handed transcriptions that have already been through it.
+    const built = assembleBook([
+      parsePageTranscription(
+        {
+          role: 'body',
+          blocks: [{ kind: 'paragraph', text: 'the first four words here', continuesNext: true }],
+          uncertain: [],
+          furniture: {}
+        },
+        0
+      ),
+      parsePageTranscription(
+        {
+          role: 'body',
+          blocks: [{ kind: 'paragraph', text: 'and <i>then</i> more', continuesPrevious: true }],
+          uncertain: [],
+          furniture: {}
+        },
+        1
+      )
+    ])
+    expect(built.blocks).toHaveLength(1)
+    const joined = built.blocks[0]!
+    const words = joined.text.split(/\s+/u)
+    expect(joined.emphasis?.map((i) => words[i])).toEqual(['then'])
+  })
+
+  it('forgets the emphasis when the user retypes the text', () => {
+    // The indices point into the old wording; keeping them would italicise
+    // whichever words now happen to sit at those positions.
+    const before = doc([block('one two three four', [3])])
+    const after = applyEdits(before, [{ kind: 'text', blockId: before.blocks[0]!.id, text: 'a b' }])
+    expect(after.blocks[0]!.emphasis).toBeUndefined()
+  })
+
+  it('reads a tag the user types by hand in the proof editor', () => {
+    const before = doc([block('one two three')])
+    const after = applyEdits(before, [
+      { kind: 'text', blockId: before.blocks[0]!.id, text: 'one <i>two</i> three' }
+    ])
+    expect(after.blocks[0]!.text).toBe('one two three')
+    expect(after.blocks[0]!.emphasis).toEqual([1])
+  })
+})
+
+describe('the small helpers', () => {
+  it('counts words the way the line breaker splits them', () => {
+    expect(wordCount('  two  words ')).toBe(2)
+    expect(wordCount('')).toBe(0)
+  })
+
+  it('shifts indices without reordering them', () => {
+    expect(shiftEmphasis([0, 2], 5)).toEqual([5, 7])
+  })
+})

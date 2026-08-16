@@ -16,7 +16,13 @@
  */
 import type { ImageEditOp } from '@core/model'
 import { dispositionFor, type PageRole } from '@core/pages'
-import { tableToText, type PageTranscription, type TranscribedBlock } from '@core/transcribe'
+import {
+  shiftEmphasis,
+  tableToText,
+  wordCount,
+  type PageTranscription,
+  type TranscribedBlock
+} from '@core/transcribe'
 
 /** A block in the assembled book, with provenance back to its source page. */
 export interface BookBlock extends TranscribedBlock {
@@ -348,6 +354,15 @@ export function assembleBook(
       const joinable = previous !== undefined && !seamBroken
       seamBroken = false
       if (joinable && shouldJoin(previous, block)) {
+        // Emphasis is carried as word indices, so the second half's italics have
+        // to move along by however many words the first half had — or they land
+        // on the wrong words once the two are one paragraph.
+        if (block.emphasis?.length) {
+          previous.emphasis = [
+            ...(previous.emphasis ?? []),
+            ...shiftEmphasis(block.emphasis, wordCount(previous.text))
+          ]
+        }
         previous.text = stripSoftHyphens(joinText(previous.text, block.text))
         if (!previous.sourcePages.includes(page.pageIndex)) {
           previous.sourcePages.push(page.pageIndex)

@@ -119,6 +119,15 @@ export interface BreakParagraphOptions {
   hyphenate?: (word: string) => string[]
   /** Spans set differently from the paragraph, glued to the end of a word. */
   attachments?: readonly Attachment[]
+  /**
+   * Word indices to set in italic, and the face to set them in.
+   *
+   * The breaker has to know, rather than the renderer alone: italic advances
+   * differ from roman, and a paragraph measured entirely in roman then drawn
+   * partly in italic breaks its lines in the wrong places.
+   */
+  emphasis?: ReadonlySet<number>
+  emphasisFont?: FontRef
 }
 
 /**
@@ -216,7 +225,12 @@ function padLineWidths(lineWidths: number | number[], itemCount: number): number
  */
 export function itemsFromText(text: string, options: BreakParagraphOptions): InputItem[] {
   const { font, sizePt, measurer, alignment, hyphenate } = options
-  const width = (s: string): number => measurer.widthOf(s, font, sizePt)
+  const emphasis = options.emphasis
+  const emphasisFont = options.emphasisFont ?? font
+  /** A word's own face — italic where the original emphasised it. */
+  const fontAt = (index: number): FontRef => (emphasis?.has(index) ? emphasisFont : font)
+  const width = (s: string, index = -1): number =>
+    measurer.widthOf(s, index >= 0 ? fontAt(index) : font, sizePt)
 
   const spaceWidth = width(' ')
   const hyphenWidth = width('-')
@@ -248,11 +262,11 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
 
     const pieces = hyphenate ? hyphenate(word) : [word]
     if (pieces.length <= 1) {
-      items.push(box(word, width(word), i))
+      items.push(box(word, width(word, i), i))
     } else {
       pieces.forEach((piece, p) => {
         if (p > 0) items.push(penalty(hyphenWidth, HYPHEN_PENALTY, true))
-        items.push(box(piece, width(piece), i))
+        items.push(box(piece, width(piece, i), i))
       })
     }
 

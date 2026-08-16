@@ -422,7 +422,8 @@ function toFlowLines(
   sizePt: number,
   leftOffsets: number[],
   markToNote?: ReadonlyMap<string, string>,
-  optical?: TextMeasurer
+  optical?: TextMeasurer,
+  emphasis?: { words: ReadonlySet<number>; font: FontRef }
 ): FlowLine[] {
   return broken.map((line, i) => {
     const offset = leftOffsets[Math.min(i, leftOffsets.length - 1)] ?? 0
@@ -434,8 +435,11 @@ function toFlowLines(
         if (noteId !== undefined && !noteIds.includes(noteId)) noteIds.push(noteId)
       }
       return {
+        // Italic where the original emphasised it. A hyphenated fragment keeps
+        // its host word's index, so both halves of a split italic word stay
+        // italic.
         text: w.text,
-        font,
+        font: emphasis?.words.has(w.sourceIndex) ? emphasis.font : font,
         sizePt: w.sizePt ?? sizePt,
         xPt: w.xPt + offset,
         ...(w.risePt ? { risePt: w.risePt } : {})
@@ -733,6 +737,18 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
   }))
   const markToNote = new Map(references.map((ref) => [ref.mark, ref.noteId]))
 
+  /**
+   * Words the original printed in italic, recovered from the model's markup.
+   *
+   * Skipped when the block itself is already italic — an epigraph is set in
+   * italic entire, and emphasis inside one would have to be roman to show at
+   * all, which is a refinement no book here has needed.
+   */
+  const emphasisWords =
+    style.style === 'regular' && block.emphasis?.length ? new Set(block.emphasis) : undefined
+  const emphasisFont: FontRef = { family, style: 'italic' }
+  const emphasis = emphasisWords ? { words: emphasisWords, font: emphasisFont } : undefined
+
   const dropCap = opts.dropCap && block.kind === 'paragraph' && text.trim().length > 0
   if (!dropCap) {
     const broken = breakParagraph(text, {
@@ -745,7 +761,8 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
       ...(attachments.length > 0 ? { attachments } : {}),
       ...(block.kind === 'paragraph' || block.kind === 'blockquote'
         ? { hyphenate: ctx.hyphenate }
-        : {})
+        : {}),
+      ...(emphasisWords ? { emphasis: emphasisWords, emphasisFont } : {})
     })
     // A chapter opener may carry a flourish under its title. It belongs to the
     // heading's own lines so the two can never be separated by a page break.
@@ -756,7 +773,8 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
       sizePt,
       hang > 0 ? [indentLeft - hang, indentLeft] : [indentLeft],
       markToNote,
-      ctx.profile.opticalMargins ? ctx.measurer : undefined
+      ctx.profile.opticalMargins ? ctx.measurer : undefined,
+      emphasis
     )
 
     return {

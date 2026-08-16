@@ -24,6 +24,7 @@
  */
 import { BLOCK_KINDS, type PageTranscription } from '@core/transcribe'
 import type { BookEdit } from '@core/edits'
+import { normalizeMarkup } from '@core/transcribe'
 import type { ImageEditOp } from '@core/model'
 
 /**
@@ -284,7 +285,15 @@ export function migrateSavedRun(raw: unknown): SavedRun {
     fileName: str(raw['fileName'], 'a book'),
     savedAt: str(raw['savedAt'], new Date(0).toISOString()),
     pageCount: num(raw['pageCount'], transcriptions.length),
-    transcriptions: transcriptions as PageTranscription[],
+    // Inline markup is converted on the way back in, not only on the way out
+    // of the model. A book transcribed before that conversion existed is sitting
+    // in storage with `<em>` in its text, and it was paid for — healing it here
+    // costs nothing and means nobody has to buy the same pages twice to stop
+    // their edition printing angle brackets.
+    transcriptions: (transcriptions as PageTranscription[]).map((page) => ({
+      ...page,
+      blocks: page.blocks.map((b) => normalizeMarkup(b))
+    })),
     failures: rawFailures.filter(isObject).map((f) => ({
       pageIndex: num(f['pageIndex'], 0),
       message: str(f['message'], 'unknown failure')

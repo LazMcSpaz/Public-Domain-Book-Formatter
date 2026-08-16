@@ -10,6 +10,7 @@ export {
   parseTableText,
   tableToText,
   normalizeTable,
+  normalizeMarkup,
   transcriptionText,
   type PageTranscription,
   type TranscribedBlock,
@@ -18,6 +19,7 @@ export {
   type PageFurniture,
   type ExtractedMetadata
 } from './schema'
+export { parseInlineMarkup, shiftEmphasis, wordCount, type InlineMarkup } from './markup'
 export {
   buildSystemPrompt,
   buildPagePrompt,
