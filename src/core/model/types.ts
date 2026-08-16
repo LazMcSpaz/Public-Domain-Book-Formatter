@@ -268,6 +268,14 @@ export interface StyleProfile {
    */
   hyphenate: boolean
   /**
+   * Hang punctuation past the margin so the *ink* lines up rather than the box.
+   *
+   * The cheapest thing that makes set text look set rather than typed. Applied
+   * after line breaking, so switching it changes no break and no page count —
+   * only where the last glyph of some lines sits.
+   */
+  opticalMargins: boolean
+  /**
    * Start every chapter on a right-hand page, inserting a blank verso where
    * needed. Traditional, and it costs paper: a book of short chapters can gain
    * thirty leaves this way.

@@ -279,6 +279,16 @@ export function styleQuestions(
       defaultValue: profile.hyphenate
     },
     {
+      id: 'opticalMargins',
+      type: 'confirm',
+      prompt: 'Hang punctuation past the margin?',
+      help:
+        'A line ending in a comma looks short, because the mark is mostly white space. ' +
+        'Hanging it lines up the ink instead of the box, which is what every book printed ' +
+        'before phototypesetting did. Changes no line break and no page count.',
+      defaultValue: profile.opticalMargins
+    },
+    {
       id: 'ornamentChapter',
       type: 'choice',
       prompt: 'Chapter-opening ornament',
@@ -381,6 +391,7 @@ export function applyStyleAnswers(profile: StyleProfile, answers: Answers): Styl
     paragraphIndentEms: pickNumber(answers, 'paragraphIndentEms', profile.paragraphIndentEms),
     paragraphSpacingEms: pickNumber(answers, 'paragraphSpacingEms', profile.paragraphSpacingEms),
     hyphenate: pickBool(answers, 'hyphenate', profile.hyphenate),
+    opticalMargins: pickBool(answers, 'opticalMargins', profile.opticalMargins),
     pageNumber: pick(answers, 'pageNumber', profile.pageNumber) as PageNumberPosition,
     ornaments: {
       chapterOpener: pickOrnament(answers, 'ornamentChapter', profile.ornaments.chapterOpener),

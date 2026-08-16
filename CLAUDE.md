@@ -291,6 +291,18 @@ in `screenshots/`. Don't ship UI blind.
   `cat *.jsonl` works. Nothing merges _across_ books on purpose: two books
   attesting the same thing is corroboration, and only whatever consolidates the
   files later can see enough to judge it. Approved notes are banked free.
+- **Also done**: the four pieces of typographic polish that were left. **List
+  items hang their markers** (a negative first-line indent, so wrapped lines line
+  up under the text rather than under the number). **Running heads are cut to
+  fit** — subtitle first, then a leading article, then a word-boundary truncation
+  with an ellipsis, all measured with the engine that draws. **Optical margins**
+  (`src/core/layout/optical.ts`) hang punctuation past the margin so the ink
+  lines up rather than the box; it runs _after_ line breaking, so switching it
+  changes no break and no page count, and it is skipped on a paragraph's short
+  last line where there is no edge to align against. And **any leaf of the
+  finished book can be looked at** (`src/app/PageBrowser.tsx`), rendered from the
+  exported bytes — the design gate's four-page sample answers questions about the
+  look but never shows the page a note actually landed on.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

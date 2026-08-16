@@ -123,6 +123,7 @@ export function normalizeStyleProfile(raw: unknown): StyleProfile {
     paragraphIndentEms: num(raw['paragraphIndentEms'], d.paragraphIndentEms),
     paragraphSpacingEms: num(raw['paragraphSpacingEms'], d.paragraphSpacingEms),
     hyphenate: bool(raw['hyphenate'], d.hyphenate),
+    opticalMargins: bool(raw['opticalMargins'], d.opticalMargins),
     chaptersOpenRecto: bool(raw['chaptersOpenRecto'], d.chaptersOpenRecto),
     pageNumber: oneOf(raw['pageNumber'], PAGE_NUMBER_POSITIONS, d.pageNumber),
     ornaments: {
@@ -159,6 +160,7 @@ export function mergeStyle(base: StyleProfile, patch: Partial<StyleProfile>): St
   if (patch.paragraphIndentEms !== undefined) next.paragraphIndentEms = patch.paragraphIndentEms
   if (patch.paragraphSpacingEms !== undefined) next.paragraphSpacingEms = patch.paragraphSpacingEms
   if (patch.hyphenate !== undefined) next.hyphenate = patch.hyphenate
+  if (patch.opticalMargins !== undefined) next.opticalMargins = patch.opticalMargins
   if (patch.chaptersOpenRecto !== undefined) next.chaptersOpenRecto = patch.chaptersOpenRecto
   if (patch.margins !== undefined) next.margins = { ...next.margins, ...patch.margins }
   if (patch.headingStyle !== undefined) {

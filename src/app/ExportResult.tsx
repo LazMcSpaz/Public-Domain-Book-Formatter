@@ -21,6 +21,7 @@
 import type { BuildExportResult } from '@core/export'
 import type { BankFile } from '@core/harvest'
 import { downloadPdf, downloadText } from '../platform/browser/download'
+import { PageBrowser } from './PageBrowser'
 
 export interface ExportResultProps {
   result: BuildExportResult
@@ -67,6 +68,17 @@ export function ExportResult({
         ) : null}
         {savedNote ? <div className="help">{savedNote}</div> : null}
       </div>
+
+      {pdf ? (
+        <details className="q leafing">
+          <summary>Look through the finished book</summary>
+          <div className="help">
+            Any page of it. The design gate previews four leaves, which answers questions about the
+            look but never shows you the page your note actually landed on.
+          </div>
+          <PageBrowser bytes={pdf.bytes} pageCount={pdf.pageCount} />
+        </details>
+      ) : null}
 
       {bank && bank.count > 0 ? (
         <div className="q">

@@ -810,6 +810,24 @@ const savedBackNote = await page
   .innerText()
   .catch(() => '')
 
+// Any page of the finished book — the design gate shows four leaves, which
+// never includes the one your note actually landed on.
+await page.locator('.leafing summary').click()
+await page.waitForSelector('.browser-leaf img', { timeout: 60000 })
+const browserPages = await page.locator('.browser-bar').innerText()
+// A leaf with body text on it, so the ink reading below means something —
+// page four of this fixture is the copyright page and is nearly white.
+await page.locator('.browser-bar input').fill('7')
+await page.waitForTimeout(2500)
+const leafedTo = await page.locator('.browser-leaf img').getAttribute('alt')
+// Proof the leaf actually rasterized, rather than that an <img> tag exists.
+const leafRendered = await page.evaluate(() => {
+  const img = document.querySelector('.browser-leaf img')
+  return img ? img.naturalWidth > 200 && img.naturalHeight > 200 : false
+})
+await shot('05e3-page-browser')
+await page.locator('.leafing summary').click()
+
 // The fact bank, offered below the PDF and never as part of it.
 const bankPanel = await page
   .locator('.q')
@@ -1326,6 +1344,9 @@ console.log(
   `  book two's notes gate arrives as: "${penNameOnBookTwo}" (charged to decline: ${chargedForDeclining > 0})`
 )
 console.log(`  the gate asks about the fact bank: ${asksHarvest === 1}`)
+console.log(
+  `  any leaf of the finished book is reachable: ${browserPages.replace(/\s+/g, ' ')} → ${leafedTo} (rasterized: ${leafRendered})`
+)
 console.log(`  the bank is offered as files: ${bankDownloads} — ${bankPanel.split('\n')[0] ?? ''}`)
 console.log(
   `  and the file carries footing and provenance: ${/stated by the book/.test(bankMarkdown)} / ${/scan p\./.test(bankMarkdown)}`

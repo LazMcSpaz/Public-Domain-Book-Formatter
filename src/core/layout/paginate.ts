@@ -36,6 +36,7 @@ import {
   trimToPoints
 } from './frames'
 import type { TextMeasurer } from './measure'
+import { hangPunctuation } from './optical'
 import {
   PT_PER_INCH,
   type FontRef,
@@ -140,6 +141,18 @@ const NOTE_HANG_GAP_RATIO = 0.35
  * with the title above it instead of sitting under it.
  */
 const ORNAMENT_WIDTH_RATIO = 0.45
+
+/**
+ * How far a list is indented from the measure, and how far its marker hangs
+ * back out of that indent.
+ *
+ * A list item was set flush, so "12. The chirurgeon examined…" wrapped with the
+ * second line hard under the "1" and there was no way to see where one item
+ * ended and the next began. Hanging the marker is what a printed list does, and
+ * it costs one negative first-line indent.
+ */
+const LIST_INDENT_EMS = 2.4
+const LIST_HANG_EMS = 1.4
 
 /**
  * A table is set a little smaller than the body it interrupts.
@@ -377,7 +390,16 @@ function blockStyle(block: BookBlock, profile: StyleProfile): BlockStyle {
         spaceAfter: 1
       }
     case 'list-item':
-      return { ...base, indentLeftEms: 1.5, firstLineIndentEms: 0 }
+      return {
+        ...base,
+        indentLeftEms: LIST_INDENT_EMS,
+        // Negative: the marker hangs out to the left of the text it labels, so
+        // the wrapped lines of one item line up under each other rather than
+        // under the number. See `hangingIndentEms`.
+        firstLineIndentEms: -LIST_HANG_EMS,
+        spaceBefore: 0,
+        spaceAfter: 0.35
+      }
     case 'paragraph':
     default:
       return base
@@ -399,13 +421,14 @@ function toFlowLines(
   font: FontRef,
   sizePt: number,
   leftOffsets: number[],
-  markToNote?: ReadonlyMap<string, string>
+  markToNote?: ReadonlyMap<string, string>,
+  optical?: TextMeasurer
 ): FlowLine[] {
   return broken.map((line, i) => {
     const offset = leftOffsets[Math.min(i, leftOffsets.length - 1)] ?? 0
     const noteIds: string[] = []
 
-    const runs = line.words.map((w) => {
+    const placed = line.words.map((w) => {
       if (w.sizePt !== undefined && markToNote) {
         const noteId = markToNote.get(w.text)
         if (noteId !== undefined && !noteIds.includes(noteId)) noteIds.push(noteId)
@@ -419,12 +442,35 @@ function toFlowLines(
       }
     })
 
+    // Whether this line reaches the right margin, which decides if there is an
+    // edge for punctuation to hang off. Measured from where the breaker put the
+    // last word rather than assumed from the alignment, because a justified
+    // paragraph's own last line is short too.
+    const last = placed[placed.length - 1]
+    const reach = last ? last.xPt - offset + widthOfRun(last, optical, font) : 0
+    const flushRight = last !== undefined && reach >= line.widthPt - FLUSH_TOLERANCE_PT
+
+    const runs = optical ? [...hangPunctuation(placed, optical, font, { flushRight })] : placed
+
     return {
       runs,
       ...(line.overfull ? { overfull: true } : {}),
       ...(noteIds.length > 0 ? { noteIds } : {})
     }
   })
+}
+
+/**
+ * How close to the measure a line must sit to count as flush with it.
+ *
+ * A justified line lands on the measure to within rounding; a paragraph's last
+ * line is short by whole words. A third of a point separates the two cases with
+ * room to spare.
+ */
+const FLUSH_TOLERANCE_PT = 0.34
+
+function widthOfRun(run: TextRun, measurer: TextMeasurer | undefined, font: FontRef): number {
+  return measurer ? measurer.widthOf(run.text, font, run.sizePt) : 0
 }
 
 /**
@@ -658,6 +704,13 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
   const indentRight = style.indentRightEms * sizePt
   const measure = Math.max(1, ctx.measureWidth - indentLeft - indentRight)
   const firstIndent = opts.suppressFirstIndent ? 0 : style.firstLineIndentEms * sizePt
+  /**
+   * A negative first-line indent is a *hanging* indent: line one starts to the
+   * left of the block and every line after it is inset. The breaker is told
+   * line one is that much wider, and the placement below moves it out — both
+   * halves are needed, or the marker sets over the top of the text.
+   */
+  const hang = firstIndent < 0 ? -firstIndent : 0
 
   const isChapter = block.kind === 'heading' && (block.level ?? 1) === 1
 
@@ -697,7 +750,14 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
     // A chapter opener may carry a flourish under its title. It belongs to the
     // heading's own lines so the two can never be separated by a page break.
     const flourish = isChapter ? findOrnament(ctx.profile.ornaments.chapterOpener) : null
-    const lines = toFlowLines(broken, font, sizePt, [indentLeft], markToNote)
+    const lines = toFlowLines(
+      broken,
+      font,
+      sizePt,
+      hang > 0 ? [indentLeft - hang, indentLeft] : [indentLeft],
+      markToNote,
+      ctx.profile.opticalMargins ? ctx.measurer : undefined
+    )
 
     return {
       lines: flourish ? [...lines, ...ornamentLines(flourish, ctx)] : lines,
@@ -1740,6 +1800,58 @@ function runsAt(line: FlowLine, frameX: number): TextRun[] {
 }
 
 /** A single centred or outer-aligned line of page furniture. */
+/**
+ * A running head cut down until it fits the measure.
+ *
+ * A long title — and old books have very long titles — is set wider than the
+ * text block and runs out into the margins, or off the paper. Shortening is
+ * done in the order a person would do it by hand: drop the subtitle after a
+ * colon first, because that is the part a running head never wants; then drop
+ * a leading article; and only then truncate, at a word boundary, with an
+ * ellipsis so the reader can see it was cut.
+ *
+ * Deterministic, and measured with the same measurer that draws — so "it fits"
+ * means it fits.
+ */
+export function fitRunningHead(
+  text: string,
+  measurer: TextMeasurer,
+  font: FontRef,
+  sizePt: number,
+  maxWidth: number
+): string {
+  const fits = (candidate: string): boolean => measurer.widthOf(candidate, font, sizePt) <= maxWidth
+
+  const trimmed = text.trim()
+  if (!trimmed || fits(trimmed)) return trimmed
+
+  // The subtitle: everything after the first colon or semicolon. This is what
+  // a printer drops first, and on a 17th-century title page it is most of the
+  // words.
+  const head = trimmed.split(/\s*[:;]\s*/u)[0]?.trim() ?? trimmed
+  if (head && fits(head)) return head
+
+  const shortest = head || trimmed
+  const withoutArticle = shortest.replace(/^(the|a|an)\s+/iu, '')
+  if (withoutArticle !== shortest && fits(withoutArticle)) return withoutArticle
+
+  // Word by word from the end, with an ellipsis, so the cut is visible rather
+  // than looking like a title that happens to end oddly.
+  const words = withoutArticle.split(/\s+/u)
+  for (let n = words.length - 1; n > 0; n--) {
+    const candidate = `${words.slice(0, n).join(' ')}…`
+    if (fits(candidate)) return candidate
+  }
+
+  // A single word wider than the measure. Nothing left to cut but the word.
+  const only = words[0] ?? ''
+  for (let n = only.length - 1; n > 1; n--) {
+    const candidate = `${only.slice(0, n)}…`
+    if (fits(candidate)) return candidate
+  }
+  return ''
+}
+
 function furnitureLine(
   text: string,
   profile: StyleProfile,
@@ -1753,7 +1865,10 @@ function furnitureLine(
 ): PositionedLine {
   const font: FontRef = { family: profile.bodyFont, style: 'regular' }
   const sizePt = profile.bodyFontSize * 0.85
-  const width = measurer.widthOf(text, font, sizePt)
+  // Furniture never spills into the margins. A folio always fits; a running
+  // head carrying a long title does not, and is cut down until it does.
+  const fitted = fitRunningHead(text, measurer, font, sizePt, opts.frame.widthPt)
+  const width = measurer.widthOf(fitted, font, sizePt)
 
   let x: number
   if (opts.placement === 'center') {
@@ -1767,7 +1882,7 @@ function furnitureLine(
   return {
     kind: 'line',
     baselinePt: opts.baseline,
-    runs: [{ text, font, sizePt, xPt: Math.round(x * 1000) / 1000 }]
+    runs: fitted ? [{ text: fitted, font, sizePt, xPt: Math.round(x * 1000) / 1000 }] : []
   }
 }
 
