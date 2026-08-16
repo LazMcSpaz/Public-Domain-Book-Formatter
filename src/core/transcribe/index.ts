@@ -62,3 +62,4 @@ export {
   type PageFailure
 } from './runner'
 export type { OcrWordLike } from './types'
+export { verifyBook, type VerifyBookOptions } from './verify-book'

@@ -15,7 +15,7 @@ import {
   type PageTranscription,
   type ClientConfig
 } from '@core/transcribe'
-import type { LexiconEntry } from '@core/lexicon'
+import type { LexiconEntry, TermCorrection } from '@core/lexicon'
 import type { OrthographyPolicy } from '@core/transcribe'
 import { openPdf, renderPage } from './pdf'
 import type { OcrWord } from './ocr'
@@ -26,6 +26,8 @@ export interface BrowserRunOptions {
   pageText: string[]
   client: ClientConfig
   lexicon: readonly LexiconEntry[]
+  /** Misreadings the user corrected at Gate 1. */
+  termCorrections?: readonly TermCorrection[]
   orthography: OrthographyPolicy
   normalizeLongS: boolean
   bookContext?: string
@@ -102,6 +104,7 @@ export async function runBrowserTranscription(options: BrowserRunOptions): Promi
   return runTranscription(sources, {
     client: options.client,
     lexicon: options.lexicon,
+    ...(options.termCorrections ? { termCorrections: options.termCorrections } : {}),
     orthography: options.orthography,
     normalizeLongS: options.normalizeLongS,
     bookContext: options.bookContext,

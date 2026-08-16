@@ -13,3 +13,10 @@ export {
   type BuildLexiconOptions
 } from './build-lexicon'
 export { isCommonWord, COMMON_WORDS } from './common-words'
+export {
+  applyTermCorrections,
+  vetLexicon,
+  type TermCorrection,
+  type TermDecision,
+  type VettedLexicon
+} from './vetted'

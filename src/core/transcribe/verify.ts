@@ -27,7 +27,17 @@ import type { PageTranscription } from './schema'
 import { transcriptionText } from './schema'
 
 export type VerificationCode =
-  'text-dropped' | 'text-added' | 'confident-word-missing' | 'orphan-footnote' | 'empty-page'
+  // Per-page, from the OCR cross-check.
+  | 'text-dropped'
+  | 'text-added'
+  | 'confident-word-missing'
+  | 'orphan-footnote'
+  | 'empty-page'
+  // Cross-page — see `verify-book.ts`. These need more than one page to see,
+  // which is why they live apart and why nothing caught them before.
+  | 'seam-broken'
+  | 'duplicate-page'
+  | 'furniture-missing'
 
 export type Severity = 'high' | 'medium' | 'low'
 

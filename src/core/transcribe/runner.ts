@@ -13,7 +13,7 @@
  * Pure orchestration: page images and the transport are supplied by the caller,
  * so this is fully testable without a browser or a network.
  */
-import type { LexiconEntry } from '@core/lexicon'
+import { applyTermCorrections, type LexiconEntry, type TermCorrection } from '@core/lexicon'
 import { buildPagePrompt, buildSystemPrompt, tailOf, type OrthographyPolicy } from './prompt'
 import { transcribePage, TranscribeError, type ClientConfig, type ApiUsage } from './client'
 import { transcriptionText, type PageTranscription } from './schema'
@@ -40,6 +40,15 @@ export interface PageSource {
 export interface RunOptions {
   client: ClientConfig
   lexicon: readonly LexiconEntry[]
+  /**
+   * Misreadings the user corrected at Gate 1, applied to what the model returns.
+   *
+   * Belt as well as braces. The corrected spelling is already in the prompt, but
+   * a vision model reading the same smudge can land on the same wrong answer —
+   * and the gate promised the fix would hold everywhere in the book, not
+   * usually.
+   */
+  termCorrections?: readonly TermCorrection[]
   orthography: OrthographyPolicy
   normalizeLongS: boolean
   bookContext?: string
@@ -92,6 +101,26 @@ export interface RunResult {
   usage: ApiUsage
   /** True when the run was cancelled before finishing. */
   cancelled: boolean
+}
+
+/**
+ * Rewrite a page's blocks through the term corrections.
+ *
+ * Returns the page unchanged when there is nothing to do, so a book with no
+ * corrections allocates nothing and the common case costs one comparison.
+ */
+function correctTerms(
+  page: PageTranscription,
+  corrections: readonly TermCorrection[] | undefined
+): PageTranscription {
+  if (!corrections || corrections.length === 0) return page
+  return {
+    ...page,
+    blocks: page.blocks.map((block) => {
+      const { text, replaced } = applyTermCorrections(block.text, corrections)
+      return replaced > 0 ? { ...block, text } : block
+    })
+  }
 }
 
 const defaultSleep = (ms: number): Promise<void> =>
@@ -182,7 +211,7 @@ export async function runTranscription(
           systemPrompt,
           userPrompt
         })
-        done.set(source.pageIndex, result.transcription)
+        done.set(source.pageIndex, correctTerms(result.transcription, options.termCorrections))
         usage.inputTokens += result.usage.inputTokens
         usage.outputTokens += result.usage.outputTokens
         usage.cacheReadTokens += result.usage.cacheReadTokens

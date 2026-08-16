@@ -29,12 +29,14 @@ import {
   formatEstimate,
   mergeMetadata,
   validateApiKey,
+  verifyBook,
   verifyPage,
   type PageTranscription,
   type RunProgress,
   type RunResult
 } from '@core/transcribe'
 import { assembleBook } from '@core/assemble'
+import { vetLexicon, type TermDecision } from '@core/lexicon'
 import { runBrowserTranscription } from '../platform/browser/transcribe-run'
 import {
   loadApiKey,
@@ -652,7 +654,13 @@ export function App(): JSX.Element {
           selfReportedConfidence: 0,
           furniture: t.furniture
         })),
-        findings: transcriptions.flatMap((t) => verifyPage(t, wordsByPage.get(t.pageIndex) ?? [])),
+        // Per-page cross-checks against OCR, plus the ones that need more than
+        // one page to see — a seam that does not join, a leaf read twice, a
+        // running head swallowed into the body on one page out of forty.
+        findings: [
+          ...transcriptions.flatMap((t) => verifyPage(t, wordsByPage.get(t.pageIndex) ?? [])),
+          ...verifyBook(transcriptions)
+        ],
         uncertainties: transcriptions.flatMap((t) =>
           t.uncertain.map((u) => ({
             pageIndex: t.pageIndex,
@@ -852,6 +860,11 @@ export function App(): JSX.Element {
       (currentAnswers['useSavedRun'] ?? 'resume') === 'resume'
     const alreadyRead = resuming && runKey ? ((await loadRun(runKey))?.transcriptions ?? []) : []
 
+    const vetted = vetLexicon(
+      state.lexicon,
+      (identity['terms'] as Record<string, TermDecision> | undefined) ?? {}
+    )
+
     // Warned once, not once per checkpoint: a storage failure repeated every
     // five pages would bury the run's own progress under its own complaint.
     let warnedAboutStorage = false
@@ -862,7 +875,12 @@ export function App(): JSX.Element {
         ocrWordsByPage: wordsByPage,
         pageText: recon.pageText,
         client: { apiKey: key, modelId, effort: 'medium' },
-        lexicon: state.lexicon,
+        // The vetted list, not the raw harvest. The gate promised that
+        // confirming a word fixes it everywhere; before this the verdicts were
+        // read by nothing, and a word the user had just rejected was still
+        // handed to the model under the heading "confirmed as correct".
+        lexicon: vetted.entries,
+        termCorrections: vetted.corrections,
         orthography: (identity['orthography'] as 'preserve' | 'modernize') ?? 'preserve',
         normalizeLongS: identity['longS'] === true,
         bookContext,
@@ -1080,7 +1098,10 @@ export function App(): JSX.Element {
             modelId: prefs.modelId,
             effort: 'medium'
           },
-          lexicon: state.lexicon,
+          lexicon: vetLexicon(
+            state.lexicon,
+            (identity['terms'] as Record<string, TermDecision> | undefined) ?? {}
+          ).entries,
           orthography: (identity['orthography'] as 'preserve' | 'modernize') ?? 'preserve',
           normalizeLongS: identity['longS'] === true,
           // From this book's own answer at the transcribe gate, not from a
