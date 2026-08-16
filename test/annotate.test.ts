@@ -14,6 +14,10 @@ import {
   parseAnnotations,
   proposalsToEdits,
   runAnnotation,
+  buildIntroductionPrompt,
+  draftIntroduction,
+  parseIntroduction,
+  sampleBook,
   voiceBlock,
   withExemplar,
   MAX_EXEMPLARS,
@@ -404,5 +408,122 @@ describe('checkProposals', () => {
       [earlier.text, here.text].join('\n')
     )
     expect(checked[0]!.outsideClaims).toEqual([])
+  })
+})
+
+/**
+ * The other half of what an editor adds. It shares the voice card with the
+ * notes on purpose: an introduction that reads like a different person from the
+ * notes underneath it is worse than either alone.
+ */
+describe('the editor’s introduction', () => {
+  const chapters = ['Of Fire', 'Of Water', 'Of the Quintessence']
+  const long = (n: number): string =>
+    `Chapter ${n}. ` +
+    'The alembick being set upon a gentle fire and the matter therein digested. '.repeat(8)
+
+  function bookOfChapters(): BookDocument {
+    const blocks: BookBlock[] = []
+    chapters.forEach((title, i) => {
+      blocks.push(block(title, 'heading'))
+      blocks.push(block(long(i)), block(long(i + 10)))
+    })
+    const built = doc(blocks)
+    return {
+      ...built,
+      chapters: chapters.map((title, i) => ({
+        id: `c${i}`,
+        title,
+        level: 1,
+        blockIndex: i * 3,
+        sourcePage: i
+      }))
+    }
+  }
+
+  it('is written in the same voice as the notes', () => {
+    const voice: EditorVoice = { ...defaultVoice(), penName: 'Etsu T. Dhent' }
+    const { system } = buildIntroductionPrompt(bookOfChapters(), { voice })
+    expect(system).toContain('Etsu T. Dhent')
+    expect(system).toContain('curious general reader')
+  })
+
+  it('shows the book’s own shape and lets it be heard', () => {
+    const { user } = buildIntroductionPrompt(bookOfChapters(), {
+      voice: defaultVoice(),
+      facts: { title: 'A Treatise of Airs', author: 'Robert Boyle', originalYear: '1662' }
+    })
+    for (const title of chapters) expect(user).toContain(title)
+    expect(user).toContain('1662')
+    expect(user).toContain('alembick')
+  })
+
+  it('samples across the whole book, not just its opening', () => {
+    // The first pages of an old book are its least representative: that is
+    // where the dedication and the throat-clearing live.
+    const built = bookOfChapters()
+    const samples = sampleBook(built, 3)
+    expect(samples.length).toBeGreaterThan(1)
+    expect(new Set(samples).size).toBe(samples.length)
+  })
+
+  it('forbids the introduction that would fit any book of the period', () => {
+    const { system } = buildIntroductionPrompt(bookOfChapters(), { voice: defaultVoice() })
+    expect(system).toContain('Do not write the generic')
+    expect(system).toContain('leave it out rather than filling it in')
+  })
+
+  it('asks for the length the editor chose', () => {
+    const brief = buildIntroductionPrompt(bookOfChapters(), {
+      voice: defaultVoice(),
+      length: 'brief'
+    }).system
+    expect(brief).toContain('350 words')
+  })
+
+  it('parses paragraphs into the shape a section edit already takes', () => {
+    const { title, text } = parseIntroduction({
+      title: 'Introduction',
+      paragraphs: ['First paragraph.', '  ', 'Second paragraph.']
+    })
+    expect(title).toBe('Introduction')
+    // Blank lines between paragraphs — the convention the section edit splits
+    // on, so there is no markup for anyone to learn.
+    expect(text).toBe('First paragraph.\n\nSecond paragraph.')
+  })
+
+  it('refuses an empty draft rather than adding a blank division', () => {
+    expect(() => parseIntroduction({ title: 'Introduction', paragraphs: [] })).toThrow()
+    expect(() => parseIntroduction({ nope: true })).toThrow()
+  })
+
+  it('comes back with the claims the book never made, for checking', async () => {
+    const built = bookOfChapters()
+    const transport: Transport = async () =>
+      ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          content: [
+            {
+              type: 'text',
+              text: JSON.stringify({
+                title: 'Introduction',
+                paragraphs: ['Boyle published this in 1662, against the Aristotelians.']
+              })
+            }
+          ],
+          usage: { input_tokens: 900, output_tokens: 400, cache_read_input_tokens: 0 }
+        })
+      }) as Response
+
+    const { draft, usage } = await draftIntroduction(built, {
+      client: { ...CLIENT, transport },
+      voice: defaultVoice()
+    })
+    expect(draft.text).toContain('1662')
+    expect(draft.outsideClaims).toContain('1662')
+    expect(draft.outsideClaims).toContain('Aristotelians')
+    expect(usage.outputTokens).toBe(400)
   })
 })

@@ -51,4 +51,15 @@ export {
   type ChunkFailure
 } from './runner'
 export { learnVoice, proposalsToEdits, type AcceptedProposal } from './apply'
+export {
+  INTRODUCTION_SCHEMA,
+  INTRODUCTION_WORDS,
+  buildIntroductionPrompt,
+  draftIntroduction,
+  parseIntroduction,
+  sampleBook,
+  type IntroductionDraft,
+  type IntroductionLength,
+  type IntroductionOptions
+} from './introduce'
 export { estimateAnnotationCost, type AnnotationCostInputs } from './cost'
