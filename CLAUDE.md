@@ -242,6 +242,23 @@ in `screenshots/`. Don't ship UI blind.
   than hopes. Small capitals then needed no glyph-level draw path at all —
   pdf-lib applies features per embedded font, so a small-caps run is the same
   bytes embedded again with `smcp` on.
+- **Also done**: **tables.** Matter set in columns is a `table` block carrying
+  its `cells`, and its `text` is a _derived_ flattened view (rows on lines,
+  cells separated by `|`) so the word-count cross-check, the seam checks and
+  the proof editor all keep reading a page as prose. `normalizeTable` is the one
+  place the two are reconciled, and it runs wherever a table can enter the book
+  — the model's reply, assembly, and every correction — so they can never
+  disagree. The engine sets one flowable **per row**, unbreakable: a long table
+  breaks between rows without the pagination machinery knowing tables exist.
+  Columns of figures are set to the right, heads in italic over a rule.
+- **Also done**: **cross-page verification** (`src/core/transcribe/verify-book.ts`)
+  — the other five checks compare a page against the OCR of _that page_, so a
+  leaf missed, mis-ordered or read twice was invisible. Three deterministic
+  comparisons across pages, with quorums and length floors so a book without
+  running heads produces nothing rather than one finding per page.
+- **Also done**: **Gate 1's term verdicts count** (`src/core/lexicon/vetted.ts`).
+  The answer used to be read by nothing while the prompt called the raw harvest
+  "confirmed as correct"; rejecting a word made the app insist on it.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

@@ -32,11 +32,21 @@ function isBodyPage(page: PageTranscription): boolean {
   return page.role !== 'blank' && page.role !== 'plate' && page.blocks.length > 0
 }
 
-/** The last block that carries running text, ignoring notes and captions. */
+/**
+ * Kinds that are not running text, and so say nothing about a seam.
+ *
+ * A note sits at the foot of the page under the text it belongs to, a caption
+ * under its picture, and a table is columns rather than sentences — none of the
+ * three ends a paragraph, so judging the seam by one would flag every page that
+ * happens to close with a footnote.
+ */
+const NOT_FLOW = new Set(['footnote', 'caption', 'table'])
+
+/** The last block that carries running text. */
 function lastFlowBlock(page: PageTranscription): string | null {
   for (let i = page.blocks.length - 1; i >= 0; i--) {
     const block = page.blocks[i]!
-    if (block.kind === 'footnote' || block.kind === 'caption') continue
+    if (NOT_FLOW.has(block.kind)) continue
     return block.text.trim()
   }
   return null
@@ -44,7 +54,7 @@ function lastFlowBlock(page: PageTranscription): string | null {
 
 function firstFlowBlock(page: PageTranscription): { text: string; kind: string } | null {
   for (const block of page.blocks) {
-    if (block.kind === 'footnote' || block.kind === 'caption') continue
+    if (NOT_FLOW.has(block.kind)) continue
     return { text: block.text.trim(), kind: block.kind }
   }
   return null

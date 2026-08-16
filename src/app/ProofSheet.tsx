@@ -100,7 +100,8 @@ const KINDS: { value: BlockKind; label: string }[] = [
   { value: 'verse', label: 'Verse' },
   { value: 'epigraph', label: 'Epigraph' },
   { value: 'caption', label: 'Caption' },
-  { value: 'list-item', label: 'List item' }
+  { value: 'list-item', label: 'List item' },
+  { value: 'table', label: 'Table' }
 ]
 
 export function ProofSheet({
@@ -388,10 +389,23 @@ export function ProofSheet({
                   </span>
                 </div>
 
+                {kind === 'table' ? (
+                  <p className="proof-hint">
+                    One row to a line, cells separated by a vertical bar. The columns are measured
+                    and set to this edition’s page, so the original’s spacing and leader dots are
+                    not needed.
+                  </p>
+                ) : null}
+
                 <textarea
                   value={text}
-                  spellCheck
-                  rows={Math.max(2, Math.ceil(text.length / 70))}
+                  spellCheck={kind !== 'table'}
+                  className={kind === 'table' ? 'proof-table' : undefined}
+                  rows={
+                    kind === 'table'
+                      ? Math.max(2, text.split('\n').length)
+                      : Math.max(2, Math.ceil(text.length / 70))
+                  }
                   aria-label={`Text of block ${block.id}`}
                   onChange={(e) => push({ kind: 'text', blockId: block.id, text: e.target.value })}
                   onSelect={(e) => {

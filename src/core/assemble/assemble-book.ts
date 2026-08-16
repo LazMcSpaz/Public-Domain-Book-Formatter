@@ -16,7 +16,7 @@
  */
 import type { ImageEditOp } from '@core/model'
 import { dispositionFor, type PageRole } from '@core/pages'
-import type { PageTranscription, TranscribedBlock } from '@core/transcribe'
+import { tableToText, type PageTranscription, type TranscribedBlock } from '@core/transcribe'
 
 /** A block in the assembled book, with provenance back to its source page. */
 export interface BookBlock extends TranscribedBlock {
@@ -188,6 +188,20 @@ export function stripSoftHyphens(text: string): string {
 }
 
 /**
+ * A block with the scan's artefacts off it, structure included.
+ *
+ * A table's cells carry the same soft hyphens its text does, and cleaning only
+ * the text would leave the two describing different tables \u2014 which is precisely
+ * the drift `normalizeTable` exists to prevent, so the cells are cleaned and
+ * the text re-derived from them rather than the other way round.
+ */
+function cleaned(block: BookBlock): BookBlock {
+  if (block.kind !== 'table' || !block.cells) return block
+  const cells = block.cells.map((row) => row.map(stripSoftHyphens))
+  return { ...block, cells, text: tableToText(cells) }
+}
+
+/**
  * True when two blocks should be joined into one. The model's own
  * continues* hints are trusted first; failing that, punctuation is a reliable
  * fallback (a paragraph that ends without terminal punctuation and is followed
@@ -342,12 +356,14 @@ export function assembleBook(
         continue
       }
 
-      target.push({
-        ...block,
-        id: `p${page.pageIndex}b${blockIndex}`,
-        text: stripSoftHyphens(block.text),
-        sourcePages: [page.pageIndex]
-      })
+      target.push(
+        cleaned({
+          ...block,
+          id: `p${page.pageIndex}b${blockIndex}`,
+          text: stripSoftHyphens(block.text),
+          sourcePages: [page.pageIndex]
+        })
+      )
     }
 
     // Pictures this page never printed a caption for. Uncaptioned is normal in

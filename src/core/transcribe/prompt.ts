@@ -71,9 +71,25 @@ export function buildSystemPrompt(options: PromptOptions): string {
     `WHAT TO RECOVER:`,
     `Classify the page's role. Split the text into blocks by what each run of`,
     `text IS — paragraph, heading, block quote, verse, epigraph, caption,`,
-    `footnote, list item. Join words hyphenated across line breaks. Reflow lines`,
-    `into whole paragraphs; do not preserve the original line wrapping. Mark`,
-    `continuesPrevious/continuesNext when a paragraph runs across the page edge.`
+    `footnote, list item, table. Join words hyphenated across line breaks. Reflow`,
+    `lines into whole paragraphs; do not preserve the original line wrapping.`,
+    `Mark continuesPrevious/continuesNext when a paragraph runs across the page`,
+    `edge.`
+  )
+
+  parts.push(
+    ``,
+    `TABLES:`,
+    `Matter set in columns — a table of weights, a list of dates against places,`,
+    `a schedule of rates — is one "table" block. Put its rows in "cells", each`,
+    `row an array of cells left to right, every row the same length; pad a row`,
+    `with empty strings where a cell is blank rather than leaving it short, or`,
+    `the columns after it shift. Set "headerRow" true when the first row is the`,
+    `column heads, which the printed rule under it usually tells you. Do NOT try`,
+    `to preserve the original's column widths or its leader dots: this edition`,
+    `sets the table to its own measure. A page of columns transcribed as`,
+    `paragraphs comes out as prose with the numbers run together, so when in`,
+    `doubt about a run of short aligned lines, it is a table.`
   )
 
   parts.push(

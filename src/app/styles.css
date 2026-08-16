@@ -828,6 +828,18 @@ button.ghost {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
+.proof-hint {
+  margin: 0 0 6px;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+/* A table is edited as columns, so it is shown in a face whose columns line up. */
+.proof-block textarea.proof-table {
+  font-family: ui-monospace, 'SF Mono', 'Cascadia Mono', Menlo, Consolas, monospace;
+  font-size: 0.85rem;
+  white-space: pre;
+  overflow-x: auto;
+}
 .proof-split {
   margin-top: 6px;
 }

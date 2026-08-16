@@ -20,10 +20,39 @@ export type BlockKind =
   | 'caption'
   | 'footnote'
   | 'list-item'
+  | 'table'
 
 export interface TranscribedBlock {
   kind: BlockKind
+  /**
+   * The block as running text.
+   *
+   * For a `table` this is the flattened view — rows on their own lines, cells
+   * separated by ` | ` — and it is *derived from* `cells`, never the other way
+   * about. Everything that treats a page as prose reads this: the word-count
+   * cross-check against OCR, the seam checks, the proof editor. Keeping one
+   * canonical structure and one derived view is what stops the two disagreeing
+   * about what the page says.
+   */
   text: string
+  /**
+   * The rows of a `table`, each an array of cells. Never set on anything else.
+   *
+   * Present on every table after parsing: a reply that names a table without
+   * giving its cells has them recovered from the text, because a table whose
+   * columns were lost still has its lines, and printing those beats printing
+   * the numbers run together into a paragraph.
+   */
+  cells?: string[][]
+  /**
+   * True when the table's first row is its column heads rather than data.
+   *
+   * A heads row is set apart — italic, with a rule under it — which is the
+   * whole visual difference between a table and a grid of numbers. The model
+   * can see the printed rule, so this is read off the page rather than guessed
+   * from the first row's contents.
+   */
+  headerRow?: boolean
   /** Heading level 1–6, only meaningful when `kind` is 'heading'. */
   level?: number
   /**
@@ -119,8 +148,64 @@ export const BLOCK_KINDS: readonly BlockKind[] = [
   'epigraph',
   'caption',
   'footnote',
-  'list-item'
+  'list-item',
+  'table'
 ]
+
+/**
+ * The separator between cells in a table's flattened text.
+ *
+ * A pipe rather than a tab because the flattened text is what the proof step
+ * puts in a textarea for the user to correct, and a tab there moves focus
+ * instead of typing. A pipe is visible, typeable, and already what anyone who
+ * has written a table in plain text reaches for.
+ */
+export const CELL_SEPARATOR = ' | '
+
+/** A table's rows as running text: rows on lines, cells separated by a pipe. */
+export function tableToText(cells: readonly (readonly string[])[]): string {
+  return cells.map((row) => row.join(CELL_SEPARATOR)).join('\n')
+}
+
+/**
+ * Recover a table's rows from its flattened text.
+ *
+ * The inverse of `tableToText`, and the reason a table can be corrected in the
+ * proof step with an ordinary textarea: the user edits the text, and the
+ * columns come back. A row with no pipe in it is a single wide cell, which is
+ * what a caption or a spanning heading inside a table actually is.
+ */
+export function parseTableText(text: string): string[][] {
+  return text
+    .split(/\r?\n/u)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => line.split('|').map((cell) => cell.trim()))
+}
+
+/**
+ * Put a block's table structure and its text beyond disagreement.
+ *
+ * Called on every block that claims to be a table, wherever one can enter the
+ * book — the model's reply, and a correction typed at the proof step. `cells`
+ * wins where it exists and the text is regenerated from it; where it does not,
+ * the text is parsed for it. Either way both come out of here consistent, so
+ * nothing downstream has to decide which to believe.
+ */
+export function normalizeTable<T extends TranscribedBlock>(block: T): T {
+  if (block.kind !== 'table') {
+    // A block retyped away from a table keeps no rows behind it.
+    if (block.cells === undefined && block.headerRow === undefined) return block
+    const { cells: _cells, headerRow: _headerRow, ...rest } = block
+    // Removing two optional properties leaves the same block; the cast says so,
+    // because `Omit` cannot express that to a generic parameter.
+    return rest as T
+  }
+  const cells = (block.cells ?? parseTableText(block.text))
+    .map((row) => row.map((cell) => cell.trim()))
+    .filter((row) => row.some((cell) => cell.length > 0))
+  return { ...block, cells, text: tableToText(cells) }
+}
 
 /**
  * JSON Schema handed to the API so replies are shape-guaranteed.
@@ -138,6 +223,11 @@ export const PAGE_SCHEMA = {
         properties: {
           kind: { type: 'string', enum: [...BLOCK_KINDS] },
           text: { type: 'string' },
+          cells: {
+            type: 'array',
+            items: { type: 'array', items: { type: 'string' } }
+          },
+          headerRow: { type: 'boolean' },
           level: { type: 'integer' },
           marker: { type: 'string' },
           continuesPrevious: { type: 'boolean' },
@@ -225,7 +315,14 @@ export function parsePageTranscription(raw: unknown, pageIndex: number): PageTra
     if (typeof b['marker'] === 'string') block.marker = b['marker']
     if (b['continuesPrevious'] === true) block.continuesPrevious = true
     if (b['continuesNext'] === true) block.continuesNext = true
-    return block
+    const rawCells = b['cells']
+    if (Array.isArray(rawCells)) {
+      block.cells = rawCells
+        .filter((row): row is unknown[] => Array.isArray(row))
+        .map((row) => row.map((cell) => (typeof cell === 'string' ? cell : '')))
+    }
+    if (b['headerRow'] === true) block.headerRow = true
+    return normalizeTable(block)
   })
 
   const rawUncertain = Array.isArray(raw['uncertain']) ? raw['uncertain'] : []

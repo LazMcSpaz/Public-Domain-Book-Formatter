@@ -30,7 +30,7 @@
  */
 import type { ImageEditOp } from '@core/model'
 import { sizeAfterOps } from '@core/image'
-import type { BlockKind } from '@core/transcribe'
+import { normalizeTable, type BlockKind } from '@core/transcribe'
 import type { BookBlock, BookDocument, Illustration } from '@core/assemble'
 
 /**
@@ -204,18 +204,26 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
 
     switch (edit.kind) {
       case 'text':
-        blocks[index] = { ...block, text: edit.text }
+        // Through `normalizeTable` because the text of a table *is* its rows:
+        // correcting a cell in the flattened view has to come back as columns,
+        // or the table would print what it was read as rather than what the
+        // user just typed.
+        blocks[index] = normalizeTable({
+          ...block,
+          text: edit.text,
+          ...(block.cells ? { cells: undefined } : {})
+        })
         break
 
       case 'retype': {
         const { level, ...rest } = block
-        blocks[index] = {
+        blocks[index] = normalizeTable({
           ...rest,
           kind: edit.blockKind,
           // A level only means anything on a heading, and carrying a stale one
           // onto a paragraph would put it in the contents.
           ...(edit.blockKind === 'heading' ? { level: edit.level ?? level ?? 1 } : {})
-        }
+        })
         break
       }
 
@@ -231,17 +239,23 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
         // keeping the block whole beats leaving an empty paragraph in the book.
         if (first.length === 0 || second.length === 0) break
         blocks.splice(index, 1, {
-          ...block,
+          ...normalizeTable({
+            ...block,
+            text: first,
+            ...(block.cells ? { cells: undefined } : {})
+          }),
           id: splitId(block.id, 1),
-          text: first,
           // The first half no longer runs on: the second half is what follows
           // it, and it is right here.
           continuesNext: false
         })
         blocks.splice(index + 1, 0, {
-          ...block,
+          ...normalizeTable({
+            ...block,
+            text: second,
+            ...(block.cells ? { cells: undefined } : {})
+          }),
           id: splitId(block.id, 2),
-          text: second,
           continuesPrevious: false
         })
         // Anything pinned *after* this block belongs after the whole of it,
@@ -254,9 +268,15 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
       case 'merge': {
         const next = blocks[index + 1]
         if (!next) break
+        // A table's rows are separated by newlines, so two tables run together
+        // join row-wise; prose joins with a space, as prose does.
+        const joiner = block.kind === 'table' || next.kind === 'table' ? '\n' : ' '
         blocks.splice(index, 2, {
-          ...block,
-          text: `${block.text.trim()} ${next.text.trim()}`.trim(),
+          ...normalizeTable({
+            ...block,
+            text: `${block.text.trim()}${joiner}${next.text.trim()}`.trim(),
+            ...(block.cells ? { cells: undefined } : {})
+          }),
           sourcePages: [...new Set([...block.sourcePages, ...next.sourcePages])].sort(
             (a, b) => a - b
           ),

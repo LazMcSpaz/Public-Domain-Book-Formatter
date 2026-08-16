@@ -311,6 +311,24 @@ const seeded = await page.evaluate(
             // anything to take out of the flow and give to the picture.
             ...(i === 5
               ? [{ kind: 'caption', text: 'Fig. 1. The alembick and its receiver.' }]
+              : []),
+            // A table, so the columns are driven through assembly, the proof
+            // step, the layout engine and pdf-lib rather than only asserted on
+            // in the unit tests.
+            ...(i === 3
+              ? [
+                  {
+                    kind: 'table',
+                    text: '',
+                    headerRow: true,
+                    cells: [
+                      ['Year', 'Barrels', 'Port'],
+                      ['1665', '1,204', 'Bristol'],
+                      ['1666', '987', 'Hull'],
+                      ['1667', '1,310', 'Whitby']
+                    ]
+                  }
+                ]
               : [])
           ],
           uncertain: [],
@@ -451,10 +469,26 @@ await shot('05c2e-image-editing')
 
 // A picture cut from the scan is edited on the leaf it came from — which is
 // also the case that matters, since the detector's crop is a first guess.
+// The title page is a source of metadata rather than a leaf to proof, so the
+// first leaf here is page two of the scan and the seeded table on page four is
+// two steps along.
 await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
 await page.waitForTimeout(400)
 await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
 await page.waitForTimeout(400)
+
+// This leaf carries the seeded table. A table is edited as its rows rather
+// than as prose, so this is also where the columns can be seen going in.
+const tableBoxes = await page.locator('.proof-block textarea.proof-table').count()
+const tableRetyped = await page
+  .locator('.proof-block')
+  .filter({ has: page.locator('textarea.proof-table') })
+  .locator('select')
+  .first()
+  .inputValue()
+  .catch(() => '')
+await shot('05c2f-proof-table')
+
 await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
 await page.waitForTimeout(400)
 await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
@@ -1106,6 +1140,7 @@ console.log(`  after correcting one: ${correctedCount.replace(/\s+/g, ' ')}`)
 console.log(`  editor's notes attached: ${annotations}`)
 console.log(`  pictures the editor added: ${suppliedPictures} (previewed: ${suppliedPreview})`)
 console.log(`  divisions written: ${sectionsWritten}`)
+console.log(`  the table is edited as rows: ${tableBoxes} (typed as: ${tableRetyped})`)
 console.log(`  image editors offered: ${editors} (${beforeDpi.replace(/\s+/g, ' ')})`)
 console.log(`  retouching applied: ${retouchedPicture > 0}`)
 console.log(`  editor on a scan-cut picture: ${cutEditor > 0}`)

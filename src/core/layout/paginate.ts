@@ -141,6 +141,22 @@ const NOTE_HANG_GAP_RATIO = 0.35
  */
 const ORNAMENT_WIDTH_RATIO = 0.45
 
+/**
+ * A table is set a little smaller than the body it interrupts.
+ *
+ * Not for the sake of fitting — the columns are measured and fitted either way
+ * — but because a table is apparatus rather than prose, and matching the body
+ * size exactly makes a page of figures shout over the text around it.
+ */
+const TABLE_SIZE_RATIO = 0.92
+/** Space between columns, in ems of the table's own size. */
+const TABLE_GUTTER_EMS = 1.4
+/** The narrowest a column may be squeezed, in ems, before it is left to overflow. */
+const TABLE_MIN_COLUMN_EMS = 2.5
+const TABLE_RULE_THICKNESS = 0.5
+/** How far a table's rule sits below the baseline it hangs from, in ems. */
+const TABLE_RULE_DROP_EMS = 0.34
+
 /** A caption is set smaller than the body, and in italic, as captions are. */
 const CAPTION_SIZE_RATIO = 0.85
 /** Blank slots between an illustration and the caption under it. */
@@ -222,6 +238,15 @@ interface FlowLine {
    * of it — the engine never draws over anything, it only runs out of slots.
    */
   image?: { id: string; widthPt: number; heightPt: number }
+  /**
+   * A rule drawn with this line — a table's head or foot rule.
+   *
+   * Offsets are relative to the line's slot (`yPt` down from the top of it) and
+   * to the frame (`xPt`), like everything else a flow line carries, so the rule
+   * travels with the row it belongs to instead of being positioned against a
+   * page that has not been chosen yet.
+   */
+  rule?: { xPt: number; yPt: number; widthPt: number; thicknessPt: number }
 }
 
 /** A footnote broken to the measure, ready to be set at the foot of a page. */
@@ -695,6 +720,182 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
 }
 
 /**
+ * Whether a column is a column of figures, and so should be set to the right.
+ *
+ * Digits and no letters. A column of years, prices or quantities lines up on
+ * its right edge in every printed table, because that is what makes the
+ * magnitudes comparable down the column; a column of words does not. "£3 4s.
+ * 6d." has letters in it and is set to the left, which is the honest answer —
+ * it is not a number the reader scans, it is a phrase.
+ */
+function isFigureColumn(values: readonly string[]): boolean {
+  const filled = values.filter((v) => v.trim().length > 0)
+  if (filled.length === 0) return false
+  return filled.every((v) => /\d/u.test(v) && !/\p{L}/u.test(v))
+}
+
+/** How wide a broken line's content actually is, as opposed to its measure. */
+function naturalWidth(
+  line: BrokenLine,
+  measurer: TextMeasurer,
+  font: FontRef,
+  sizePt: number
+): number {
+  const last = line.words[line.words.length - 1]
+  if (!last) return 0
+  return last.xPt + measurer.widthOf(last.text, font, last.sizePt ?? sizePt)
+}
+
+/**
+ * Column widths for a table, fitted to the measure.
+ *
+ * Natural widths where the whole table fits, because a table narrower than the
+ * measure should be set at its natural width and centred rather than stretched
+ * to the margins — a stretched table reads as a page of leader dots with no
+ * leaders. Where it does not fit, every column is given at most its fair share
+ * and the space the narrow columns did not want is handed back to the ones that
+ * did, in proportion to what they asked for. That is what keeps a column of
+ * years from being squeezed to the same width as a column of sentences.
+ */
+function fitColumns(natural: readonly number[], available: number, minWidth: number): number[] {
+  const total = natural.reduce((a, b) => a + b, 0)
+  if (total <= available) return [...natural]
+
+  const fair = available / natural.length
+  const widths = natural.map((n) => Math.max(minWidth, Math.min(n, fair)))
+  const wanting = natural.map((n, i) => ({ n, i })).filter(({ n }) => n > fair)
+  const surplus = available - widths.reduce((a, b) => a + b, 0)
+  if (surplus > 0 && wanting.length > 0) {
+    const asked = wanting.reduce((a, { n }) => a + n, 0)
+    for (const { n, i } of wanting) widths[i] = (widths[i] ?? 0) + (surplus * n) / asked
+  }
+  return widths
+}
+
+/**
+ * A table, as one flowable per row.
+ *
+ * A row at a time rather than a table at a time, and every row unbreakable, is
+ * what makes the rest of the engine handle tables without knowing they exist: a
+ * table long enough to need two pages breaks *between* rows because a row is
+ * the indivisible thing, and the widow and orphan machinery never has to be
+ * taught that a wrapped cell is not a line of prose. The head row carries
+ * `keepWithNext`, so a table cannot leave its column heads alone at the foot of
+ * a page.
+ *
+ * What this deliberately does not do is repeat the heads at the top of the
+ * continuation. That is a real convention, and it is also a second pass — the
+ * heads only need repeating once the break is known, and the break depends on
+ * how many rows fit. It belongs with the two-pass contents, not here.
+ */
+function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
+  const rows = (block.cells ?? []).filter((row) => row.length > 0)
+  if (rows.length === 0) return []
+
+  const sizePt = ctx.profile.bodyFontSize * TABLE_SIZE_RATIO
+  const family = ctx.profile.bodyFont
+  const bodyFont: FontRef = { family, style: 'regular' }
+  // Column heads are set in italic: it is the one contrast available in every
+  // face here, where bold is not — the book faces are shipped as regular and
+  // italic, and a synthesised bold is a smear.
+  const headFont: FontRef = { family, style: 'italic' }
+  const hasHead = block.headerRow === true && rows.length > 1
+  const fontFor = (rowIndex: number): FontRef => (hasHead && rowIndex === 0 ? headFont : bodyFont)
+
+  const columns = Math.max(...rows.map((row) => row.length))
+  const cellAt = (row: readonly string[], c: number): string => (row[c] ?? '').trim()
+
+  const natural: number[] = []
+  for (let c = 0; c < columns; c++) {
+    let widest = 0
+    rows.forEach((row, r) => {
+      widest = Math.max(widest, ctx.measurer.widthOf(cellAt(row, c), fontFor(r), sizePt))
+    })
+    natural.push(widest)
+  }
+
+  const gutter = sizePt * TABLE_GUTTER_EMS
+  const available = Math.max(1, ctx.measureWidth - gutter * (columns - 1))
+  const widths = fitColumns(natural, available, sizePt * TABLE_MIN_COLUMN_EMS)
+
+  // A table narrower than the measure is centred in it.
+  const tableWidth = widths.reduce((a, b) => a + b, 0) + gutter * (columns - 1)
+  const tableLeft = Math.max(0, (ctx.measureWidth - tableWidth) / 2)
+
+  const columnX: number[] = []
+  let x = tableLeft
+  for (let c = 0; c < columns; c++) {
+    columnX.push(x)
+    x += (widths[c] ?? 0) + gutter
+  }
+
+  const bodyRows = hasHead ? rows.slice(1) : rows
+  const alignRight = Array.from({ length: columns }, (_, c) =>
+    isFigureColumn(bodyRows.map((row) => cellAt(row, c)))
+  )
+
+  const ruleDrop = ctx.measurer.metrics(bodyFont, sizePt).ascent + sizePt * TABLE_RULE_DROP_EMS
+  const ruleAt = (): FlowLine['rule'] => ({
+    xPt: tableLeft,
+    yPt: ruleDrop,
+    widthPt: tableWidth,
+    thicknessPt: TABLE_RULE_THICKNESS
+  })
+
+  const flowables: Flowable[] = []
+
+  rows.forEach((row, r) => {
+    const font = fontFor(r)
+    // Each cell broken to its own column, then the columns zipped back together
+    // line by line — line 2 of a wrapped cell shares its slot with line 2 of
+    // every other wrapped cell in the row, which is what makes a row of unequal
+    // cells still sit on the baseline grid.
+    const perColumn = Array.from({ length: columns }, (_, c) => {
+      const width = Math.max(1, widths[c] ?? 1)
+      const broken = breakParagraph(cellAt(row, c), {
+        font,
+        sizePt,
+        measurer: ctx.measurer,
+        lineWidths: width,
+        alignment: 'left'
+      })
+      const offsets = broken.map((line) => {
+        const base = columnX[c] ?? 0
+        if (!alignRight[c]) return base
+        return base + Math.max(0, width - naturalWidth(line, ctx.measurer, font, sizePt))
+      })
+      return toFlowLines(broken, font, sizePt, offsets.length > 0 ? offsets : [columnX[c] ?? 0])
+    })
+
+    const height = Math.max(1, ...perColumn.map((lines) => lines.length))
+    const lines: FlowLine[] = Array.from({ length: height }, (_, i) => {
+      const runs = perColumn.flatMap((col) => col[i]?.runs ?? [])
+      const overfull = perColumn.some((col) => col[i]?.overfull === true)
+      return { runs, ...(overfull ? { overfull: true } : {}) }
+    })
+
+    // Head rule and foot rule, hung off the last line of the row they close.
+    // Only when the table has heads: a lone rule under the last row of a table
+    // with no heads is a line across the page with nothing to close.
+    const last = lines[lines.length - 1]
+    if (last && hasHead && (r === 0 || r === rows.length - 1)) last.rule = ruleAt()
+
+    flowables.push({
+      lines,
+      spaceBefore: r === 0 ? 1 : 0,
+      spaceAfter: r === rows.length - 1 ? 1 : 0,
+      startsChapter: false,
+      chapter: null,
+      keepWithNext: hasHead && r === 0,
+      orphanControl: false,
+      unbreakable: true
+    })
+  })
+
+  return flowables
+}
+
+/**
  * A paragraph opening with a large initial.
  *
  * The initial is not drawn over the text — it *is* the reason the first few
@@ -956,7 +1157,17 @@ export function layout(
 
   // Reference marks are located and renumbered before anything is broken,
   // because a mark occupies width and so is a line-breaking input.
-  const prepared = prepareFootnotes(doc.blocks, doc.footnotes)
+  //
+  // A table's text is hidden from the search. Its cells are set column by
+  // column, so a mark found inside one has no word to ride on and no line to
+  // land on — and a note claimed by a block that never prints its mark would be
+  // reported as "the page was not laid out", which is a lie about a note the
+  // reader will find missing. Hidden, it stays an orphan: reported truthfully,
+  // and collected as an endnote when the structure gate asked for that.
+  const prepared = prepareFootnotes(
+    doc.blocks.map((b) => (b.kind === 'table' ? { id: b.id, text: '' } : b)),
+    doc.footnotes
+  )
 
   // Every note broken to the measure once. A note's line count does not depend
   // on which page it lands on, so this is computed here and only looked up
@@ -999,6 +1210,11 @@ export function layout(
     const afterHeading = previous?.kind === 'heading'
     const afterChapterHeading = afterHeading && (previous?.level ?? 1) === 1
     const prep = prepared.blocks[i]
+    if (block.kind === 'table') {
+      flowables.push(...buildTableFlowables(block, ctx))
+      pushIllustrationsAfter(i)
+      return
+    }
     flowables.push(
       buildFlowable(block, ctx, {
         // A paragraph directly under a heading is set flush: there is no
@@ -1435,6 +1651,16 @@ function finishPage(
         yPt: frame.yPt + slot * ctx.leading,
         widthPt,
         heightPt
+      })
+    }
+
+    if (line.rule) {
+      items.push({
+        kind: 'rule',
+        xPt: frame.xPt + line.rule.xPt,
+        yPt: frame.yPt + slot * ctx.leading + line.rule.yPt,
+        widthPt: line.rule.widthPt,
+        thicknessPt: line.rule.thicknessPt
       })
     }
 

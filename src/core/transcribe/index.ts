@@ -4,8 +4,12 @@
  */
 export {
   BLOCK_KINDS,
+  CELL_SEPARATOR,
   PAGE_SCHEMA,
   parsePageTranscription,
+  parseTableText,
+  tableToText,
+  normalizeTable,
   transcriptionText,
   type PageTranscription,
   type TranscribedBlock,
