@@ -34,14 +34,15 @@ import { migrateSavedProfile, type SavedStyleProfile } from '@core/style'
 const DB_NAME = 'pdbf'
 /**
  * v2 added the `profiles` store (banked looks, SPEC §7); v3 added `files`, the
- * source PDF itself. The upgrade handler below creates whichever stores are
- * missing rather than switching on the old version, so a database at any
- * version arrives complete.
+ * source PDF itself; v4 added `recon`, the free-but-slow reading of it. The
+ * upgrade handler below creates whichever stores are missing rather than
+ * switching on the old version, so a database at any version arrives complete.
  */
-const DB_VERSION = 3
+const DB_VERSION = 4
 const STORE = 'runs'
 const PROFILE_STORE = 'profiles'
 const FILE_STORE = 'files'
+const RECON_STORE = 'recon'
 
 /**
  * How many books' transcriptions to keep, oldest evicted first.
@@ -81,6 +82,14 @@ function openDb(): Promise<IDBDatabase | null> {
         // in a *separate* store, because a scan is two orders of magnitude
         // larger and must never be able to fail the write that saves the run.
         db.createObjectStore(FILE_STORE, { keyPath: 'key' })
+      }
+      if (!db.objectStoreNames.contains(RECON_STORE)) {
+        // The free-but-slow reading of a scan. Same key, separate store, same
+        // reasoning as the file above: it is tens of megabytes of thumbnails
+        // and word boxes, and the write that saves it must never be able to
+        // take the paid transcription down with it.
+        const store = db.createObjectStore(RECON_STORE, { keyPath: 'key' })
+        store.createIndex('savedAt', 'savedAt')
       }
     }
     request.onsuccess = () => resolve(request.result)
@@ -306,6 +315,82 @@ export async function storedFileKeys(): Promise<string[]> {
 
 export async function deleteSourceFile(key: string): Promise<void> {
   await withStore('readwrite', (store) => promisify(store.delete(key)), FILE_STORE)
+}
+
+// ---------------------------------------------------------------------------
+// The reading of the scan
+// ---------------------------------------------------------------------------
+
+/**
+ * How many books' readings to keep.
+ *
+ * Fewer than runs: a reading is tens of megabytes against a transcription's one
+ * or two, and it is the cheap thing of the pair — losing one costs the time to
+ * read the scan again, which is exactly what the user was going to spend before
+ * this store existed.
+ */
+const MAX_RECON_CACHES = 3
+
+/**
+ * Store a reading of a scan, evicting the oldest if the cap is reached.
+ *
+ * The record must be structured-cloneable — word boxes, text and Blobs, no
+ * object URLs, since a URL means nothing in a later session. `recon-cache.ts`
+ * in the platform layer is what converts between the two.
+ */
+export async function saveRecon(
+  record: { key: string; savedAt: string } & Record<string, unknown>
+): Promise<boolean> {
+  const ok = await withStore(
+    'readwrite',
+    async (store) => {
+      await promisify(store.put(record))
+      const keys = await promisify(store.index('savedAt').getAllKeys())
+      const excess = keys.length - MAX_RECON_CACHES
+      for (let i = 0; i < excess; i++) {
+        const key = keys[i]
+        if (key !== undefined && key !== record.key) await promisify(store.delete(key))
+      }
+      return true
+    },
+    RECON_STORE
+  )
+  return ok === true
+}
+
+/** The stored reading for a file, unvalidated — the caller checks the stamp. */
+export async function loadReconRecord(key: string): Promise<unknown> {
+  return withStore('readonly', (store) => promisify(store.get(key)), RECON_STORE)
+}
+
+export async function deleteRecon(key: string): Promise<void> {
+  await withStore('readwrite', (store) => promisify(store.delete(key)), RECON_STORE)
+}
+
+/**
+ * Forget every stored reading.
+ *
+ * Paired with `deleteAllSourceFiles`: someone who switches off keeping book data
+ * on this device means all of it, and a reading left behind would be the larger
+ * half of what they asked to be rid of.
+ */
+export async function deleteAllRecons(): Promise<number> {
+  const keys = await withStore('readonly', (store) => promisify(store.getAllKeys()), RECON_STORE)
+  const strings = (keys ?? []).filter((k): k is string => typeof k === 'string')
+  for (const key of strings) await deleteRecon(key)
+  return strings.length
+}
+
+/** What each stored reading takes up, for the settings screen. */
+export async function storedReconSizes(): Promise<Map<string, number>> {
+  const raw = await withStore('readonly', (store) => promisify(store.getAll()), RECON_STORE)
+  const sizes = new Map<string, number>()
+  for (const record of raw ?? []) {
+    if (!record || typeof record !== 'object') continue
+    const r = record as { key?: unknown; bytes?: unknown }
+    if (typeof r.key === 'string' && typeof r.bytes === 'number') sizes.set(r.key, r.bytes)
+  }
+  return sizes
 }
 
 // ---------------------------------------------------------------------------

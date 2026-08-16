@@ -323,6 +323,35 @@ in `screenshots/`. Don't ship UI blind.
   than a cross-check's. The same channel reports a recovered passage the app
   could not place, which was silently dropped before — the footnote rule applied
   to the other repair that can fail.
+- **Also done**: **the uncertainty gate can fix a leaf, not only judge it.**
+  Being shown a discrepancy and offered "keep it", "pay to read it again" or
+  "leave it out" is three wrong answers when the mistake is one word and it is
+  on the screen. A `page-edit` question carries the leaf's own passages and its
+  answer is `blockId → corrected text`, holding only what changed — so a fix
+  typed here becomes exactly the `text` edit the proof step produces and needed
+  nothing new in layout, storage or export. The answer starts _empty_ rather
+  than seeded with the current text, and `withCorrections` drops anything equal
+  to it, because seeding would write an edit over every block on every flagged
+  leaf and report the whole book as corrected. Passages are grouped under the
+  leaf they _began_ on, matching the proof sheet. Where a hand correction meets
+  the automatic one, the hand wins: a retyped leaf is no longer auto-restored,
+  and the recovered passage is handed back through `Attention` rather than
+  spliced in over the user's own words.
+- **Also done**: **the reading of a scan is kept** (`src/core/project/recon-cache.ts`
+  for the rules, `src/platform/browser/recon-cache.ts` for the storage). Render,
+  OCR and harvest are free and repeatable, which is why they were never stored —
+  but free is not quick, and reopening a book to fix one word meant ten minutes
+  of Tesseract first. Measured in the harness: **7.9 s cold, 82 ms warm.** The
+  record holds **Blobs**, not object URLs, since a URL names a Blob in a tab that
+  has since closed; rehydrating mints fresh ones that `releaseRecon` frees as
+  usual. What is worth the pure module is knowing when to _refuse_ one: a
+  different DPI puts every word box, crop and illustration region somewhere else
+  and makes the KDP image check divide by a number the pixels never had, and a
+  partial "try a few pages" reading handed back as the whole book is a book
+  missing its second half in silence. Both are misses, and a miss is deleted
+  rather than refused daily — unlike a transcription it costs only time to
+  replace. Written only when the user has agreed to book data being kept here,
+  the same answer that governs storing the scan.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

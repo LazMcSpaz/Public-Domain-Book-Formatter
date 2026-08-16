@@ -20,9 +20,11 @@ import {
 import {
   runRecon,
   releaseRecon,
+  RECON_DPI,
   type ReconProgress,
   type ReconResult
 } from '../platform/browser/recon'
+import { loadReconCache, saveReconCache } from '../platform/browser/recon-cache'
 import { QuestionView } from './QuestionView'
 import {
   estimateCost,
@@ -235,6 +237,8 @@ export function App(): JSX.Element {
    * rather than at the end.
    */
   const [resumeNote, setResumeNote] = useState<string | null>(null)
+  /** Reading a stored reading back out, which is quick but not instantaneous. */
+  const [reusing, setReusing] = useState(false)
   const [buildProgress, setBuildProgress] = useState<{ done: number; total: number } | null>(null)
   /**
    * Corrections made at the proof step.
@@ -589,11 +593,6 @@ export function App(): JSX.Element {
       const known = await findRunForFile(file)
       if (known) {
         fileKeyRef.current = known.key
-        setResumeNote(
-          `You have already paid to have this book read — ${known.run.pageCount} pages. ` +
-            'Re-reading the scan is free and costs only time; the transcription is waiting ' +
-            'at the end of it.'
-        )
         // Keep the scan from now on, so the next time is one tap. It was very
         // likely saved before this was possible, and re-picking the file once
         // is the only chance to catch up.
@@ -603,11 +602,51 @@ export function App(): JSX.Element {
           }
         }
       }
+
+      // Has this scan already been read on this device? Rendering and OCR are
+      // free and repeatable, which is why they were never stored — but free is
+      // not quick, and someone reopening a book to fix one word should not
+      // watch ten minutes of Tesseract to get back to it. Discarded rather than
+      // trusted whenever it might not describe the book any more; see
+      // `recon-cache`.
+      const wanted = { dpi: RECON_DPI, maxPages: null }
+      // Flagged rather than silent: fetching a book's worth of thumbnails and
+      // word boxes out of IndexedDB is quick but not instant, and a screen that
+      // shows nothing during it looks like a file that failed to open.
+      setReusing(true)
+      const cached = await loadReconCache(fileKeyRef.current, wanted).finally(() =>
+        setReusing(false)
+      )
+
+      // Said before the wait rather than after it, and said accurately: "this
+      // is free, it only costs time" is cold comfort at the start of ten
+      // minutes, and simply untrue when the reading is already here.
+      if (known) {
+        setResumeNote(
+          `You have already paid to have this book read — ${known.run.pageCount} pages. ` +
+            (cached
+              ? 'The scan was read on this device before, so that part is skipped too — ' +
+                'the transcription is waiting.'
+              : 'Re-reading the scan is free and costs only time; the transcription is ' +
+                'waiting at the end of it.')
+        )
+      } else if (cached) {
+        setResumeNote('The scan was already read on this device, so that part is skipped.')
+      }
+
       // Asset paths come from the platform default, which resolves them
       // against the app's base URL. Repeating them here once meant they were
       // root-absolute and 404'd on any deploy below the domain root.
-      const result = await runRecon(file, { onProgress: setProgress })
+      const result = cached ?? (await runRecon(file, { onProgress: setProgress }))
       reconRef.current = result
+
+      // Written after the reading is in hand and never awaited into the user's
+      // path: this is a convenience, and a full quota must not stand between
+      // them and the book. Only when they have agreed to book data being kept
+      // here at all — the same answer that governs storing the scan.
+      if (!cached && loadPrefs().keepScans !== false) {
+        void saveReconCache(fileKeyRef.current, result, wanted)
+      }
 
       // Has this book already been paid for? Looked up after the free pass
       // rather than before it, because the crops and thumbnails it produces are
@@ -1893,6 +1932,22 @@ export function App(): JSX.Element {
             if (f) void startRecon(f)
           }}
         />
+
+        {/* Fetching a stored reading. Its own stage rather than a fake progress
+            bar: there are no pages going by to count. */}
+        {reusing && !progressInfo ? (
+          <div className="progress">
+            <strong>Opening the reading of this scan…</strong>
+            <div className="meta">it was read on this device before</div>
+          </div>
+        ) : null}
+
+        {/* Why the wait was short, said where it can still be read. Inside the
+            running stage it is gone in a second on a book that did not have to
+            be read again — which is the case the note exists to explain. */}
+        {resumeNote && !progressInfo && !reusing && !state.completed.includes('transcribe') ? (
+          <div className="resume-note">{resumeNote}</div>
+        ) : null}
 
         {/* --- running stage --- */}
         {progressInfo ? (

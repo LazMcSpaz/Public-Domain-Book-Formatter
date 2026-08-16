@@ -35,12 +35,15 @@ import { describeAge, type SavedRunSummary } from '@core/project'
 import {
   deleteAllSourceFiles,
   deleteProfile,
+  deleteRecon,
   deleteRun,
   deleteSourceFile,
+  deleteAllRecons,
   listProfiles,
   listRuns,
   saveProfile,
-  storedFileSizes
+  storedFileSizes,
+  storedReconSizes
 } from '../platform/browser/run-store'
 import {
   clearApiKey,
@@ -68,6 +71,15 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
   const [keyDraft, setKeyDraft] = useState('')
   const [runs, setRuns] = useState<SavedRunSummary[]>([])
   const [sizes, setSizes] = useState<Map<string, number>>(new Map())
+  /**
+   * What the *readings* of the scans take up.
+   *
+   * Kept apart from the scans themselves because they answer different
+   * questions: a scan is reopened without the file picker, a reading is the ten
+   * minutes of OCR that does not have to run again. Someone reclaiming space
+   * should be able to see which of the two is costing them.
+   */
+  const [readSizes, setReadSizes] = useState<Map<string, number>>(new Map())
   const [profiles, setProfiles] = useState<SavedStyleProfile[]>([])
   const [estimate, setEstimate] = useState<{ quota: number; usage: number } | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
@@ -90,6 +102,7 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
   const refresh = useCallback(async () => {
     setRuns(await listRuns())
     setSizes(await storedFileSizes())
+    setReadSizes(await storedReconSizes())
     setProfiles(await listProfiles())
     setEstimate(await storageEstimate())
   }, [])
@@ -153,6 +166,7 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
   }, [editing, editingProfile, styleAnswers, profiles, refresh])
 
   const totalScans = [...sizes.values()].reduce((a, b) => a + b, 0)
+  const totalReadings = [...readSizes.values()].reduce((a, b) => a + b, 0)
 
   return (
     <div className="settings">
@@ -363,7 +377,8 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
             {estimate ? (
               <p className="help">
                 Using {formatBytes(estimate.usage)} of about {formatBytes(estimate.quota)} this
-                browser allows. Scans account for {formatBytes(totalScans)} of it.
+                browser allows. Scans account for {formatBytes(totalScans)} of it, and the readings
+                of them for {formatBytes(totalReadings)}.
               </p>
             ) : (
               <p className="help">This browser will not say how much room it allows.</p>
@@ -394,6 +409,23 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
                 }
               >
                 Remove every stored scan
+              </button>
+              <button
+                type="button"
+                onClick={() =>
+                  setPending({
+                    prompt: 'Remove every stored reading?',
+                    detail:
+                      'The transcriptions and the scans stay. Reopening a book will render ' +
+                      'and re-read it, which costs nothing but time.',
+                    run: async () => {
+                      const n = await deleteAllRecons()
+                      setNote(`Removed ${n} stored reading(s). Nothing paid for was touched.`)
+                    }
+                  })
+                }
+              >
+                Remove every stored reading
               </button>
             </div>
 
@@ -442,6 +474,9 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
                               // of the same file.
                               clearReviewProgress(run.key)
                               await deleteSourceFile(run.key)
+                              // And the reading of it, which is the same size
+                              // as the scan and useful for nothing else.
+                              await deleteRecon(run.key)
                               setNote(`Deleted the transcription of “${run.fileName}”.`)
                             }
                           })

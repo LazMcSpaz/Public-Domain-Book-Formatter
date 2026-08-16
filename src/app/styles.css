@@ -151,6 +151,16 @@ body {
   border-radius: 8px;
   padding: 22px;
 }
+/* Standing note about how this session got where it is — the paid run that was
+   found, the reading that did not have to be taken again. */
+.resume-note {
+  background: var(--accent-soft);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 6px 6px 0;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+}
 .bar {
   height: 7px;
   background: var(--accent-soft);

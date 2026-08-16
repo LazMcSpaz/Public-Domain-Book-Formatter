@@ -194,6 +194,121 @@ for (const [check, ok] of Object.entries(store)) {
 }
 console.log('  → runs round-trip, the store is capped and evicts oldest, stale records are dropped')
 
+// The reading of a scan is the free half of the pipeline and the slow one. It
+// is kept as Blobs, because an object URL means nothing in a later session, so
+// the round trip through storage is the whole feature and there is no IndexedDB
+// and no Blob in vitest to check it with.
+console.log('2c2. the stored reading of a scan')
+const reading = await page.evaluate(async (repo) => {
+  const cache = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
+  const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+
+  const pixels = async (text) => {
+    const c = document.createElement('canvas')
+    c.width = 40
+    c.height = 12
+    const ctx = c.getContext('2d')
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, 40, 12)
+    ctx.fillStyle = '#000'
+    ctx.fillText(text, 1, 10)
+    const blob = await new Promise((r) => c.toBlob(r, 'image/png'))
+    return URL.createObjectURL(blob)
+  }
+
+  const result = async () => ({
+    pageCount: 2,
+    words: [
+      {
+        id: 'p0_w0',
+        text: 'chirurgeon',
+        confidence: 71,
+        bbox: { x0: 1, y0: 2, x1: 3, y1: 4 },
+        pageIndex: 0
+      }
+    ],
+    lexicon: [
+      {
+        term: 'chirurgeon',
+        count: 4,
+        meanConfidence: 71,
+        pages: [0],
+        variants: [],
+        signals: ['archaic-form'],
+        impact: 9,
+        sampleTokenId: 'p0_w0'
+      }
+    ],
+    crops: new Map([['p0_w0', await pixels('chi')]]),
+    contextCrops: new Map([['p0_w0', await pixels('the chi')]]),
+    thumbnails: new Map([
+      [0, await pixels('pg1')],
+      [1, await pixels('pg2')]
+    ]),
+    illustrations: [
+      {
+        region: { id: 'r0', pageIndex: 1, bbox: { x0: 0, y0: 0, x1: 9, y1: 9 } },
+        ink: 0.4,
+        previewUrl: await pixels('fig')
+      }
+    ],
+    pageText: ['Page one text.', 'Page two text.']
+  })
+
+  const wanted = { dpi: 300, maxPages: null }
+  try {
+    await runStore.deleteRecon('read-probe')
+    const wrote = await cache.saveReconCache('read-probe', await result(), wanted)
+    const back = await cache.loadReconCache('read-probe', wanted)
+
+    // Everything the session needs, and the pixels as live URLs rather than
+    // dead ones left over from the tab that wrote them.
+    const cropUrl = back?.crops.get('p0_w0') ?? ''
+    const cropBytes = cropUrl.startsWith('blob:') ? (await (await fetch(cropUrl)).blob()).size : 0
+    const roundTrip =
+      wrote &&
+      back !== null &&
+      back.words[0].text === 'chirurgeon' &&
+      back.pageText[1] === 'Page two text.' &&
+      back.lexicon[0].term === 'chirurgeon' &&
+      back.thumbnails.size === 2 &&
+      back.contextCrops.size === 1 &&
+      back.illustrations[0].previewUrl.startsWith('blob:') &&
+      cropBytes > 0
+
+    // A reading taken at another resolution describes pixels this session does
+    // not have. It must miss — and be thrown away rather than refused daily.
+    const wrongDpi = await cache.loadReconCache('read-probe', { dpi: 150, maxPages: null })
+    const gone = await cache.loadReconCache('read-probe', wanted)
+    const staleDiscarded = wrongDpi === null && gone === null
+
+    // The cap, and that it evicts by age.
+    for (let i = 0; i < 5; i++) {
+      await cache.saveReconCache(`read-${i}`, await result(), wanted)
+    }
+    const survivors = []
+    for (let i = 0; i < 5; i++) {
+      if ((await cache.loadReconCache(`read-${i}`, wanted)) !== null) survivors.push(i)
+    }
+    const capped = survivors.length <= 3 && survivors.includes(4) && !survivors.includes(0)
+
+    const cleared = (await runStore.deleteAllRecons()) >= 0
+    const emptied = (await cache.loadReconCache('read-4', wanted)) === null
+
+    return { roundTrip, staleDiscarded, capped, cleared, emptied }
+  } catch (e) {
+    return { error: String(e.message) }
+  }
+}, REPO)
+
+if (reading.error) throw new Error(`The reading store failed: ${reading.error}`)
+for (const [check, ok] of Object.entries(reading)) {
+  if (!ok) throw new Error(`The reading store failed: ${check}`)
+}
+console.log(
+  '  → a reading round-trips as live pixels, a wrong-DPI one is discarded, the store is capped'
+)
+
 // Banked looks live in the same database as runs but under opposite rules, and
 // the upgrade that added them has to leave the runs alone — which is the one
 // thing no unit test can check, because there is no IndexedDB in vitest.
@@ -353,8 +468,14 @@ if (!seeded) throw new Error('Could not seed a saved run')
 
 // Loaded from the path rather than a buffer: Playwright keeps the file's real
 // modification time that way, which is what the key is built from.
+//
+// Timed, because this is the first time *this* file has been opened: the scan
+// is rendered and OCR'd for real. The same open later in the flow should not
+// have to do any of it again.
+const coldOpenAt = Date.now()
 await page.setInputFiles('input[type=file]', bookPath)
 await page.waitForSelector('.terms', { timeout: 180000 })
+const coldOpenMs = Date.now() - coldOpenAt
 
 // Nothing to fill in here. This gate asks how the book's own language should be
 // read, and every question arrives with a recommended answer — the title, the
@@ -1236,8 +1357,18 @@ await page.evaluate(
   [REPO, savedKey]
 )
 await page.goto(URL_BASE, { waitUntil: 'networkidle' })
+// The same file again, so the reading of it is already stored. Rendering and
+// OCR are free, which is why they were never kept — but free is not quick, and
+// this is the claim the cache exists to make.
+const warmOpenAt = Date.now()
 await page.setInputFiles('input[type=file]', bookPath)
 await page.waitForSelector('.terms', { timeout: 180000 })
+const warmOpenMs = Date.now() - warmOpenAt
+const skippedNote = await page
+  .locator('.resume-note')
+  .innerText()
+  .catch(() => '')
+await shot('02d-reading-reused')
 await page.locator('button.primary', { hasText: 'Looks right' }).click()
 await page.waitForSelector('.q', { timeout: 20000 })
 // Space is asked beside money, once per device, with this browser's real quota
@@ -1462,6 +1593,10 @@ console.log(`  a verdict is written to storage as it is made: ${verdictSaved}`)
 console.log(`  illustration candidates: ${foundIllustrations} (crops shown: ${illustrationCrops})`)
 console.log(`  advanced past the structure gate to: ${afterStructure}`)
 console.log(`  proof sheet: ${proofBoxes} editable block(s), ${proofScan} scan(s) beside them`)
+console.log(
+  `  reopening skips the reading: ${coldOpenMs} ms cold -> ${warmOpenMs} ms warm` +
+    (skippedNote ? ` (${skippedNote.replace(/\s+/g, ' ')})` : '')
+)
 console.log(`  the gate offers: ${verdictOptions.join(' / ')}`)
 console.log(
   `  a fix typed at the gate reaches the book: ${

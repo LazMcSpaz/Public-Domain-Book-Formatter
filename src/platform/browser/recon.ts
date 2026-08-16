@@ -14,6 +14,15 @@ import { openPdf, renderPage, cropToObjectUrl, thumbnailToObjectUrl } from './pd
 import { detectIllustrations, type RegionCandidate } from './illustrations'
 import { OcrEngine, type OcrWord, type OcrAssetPaths } from './ocr'
 
+/**
+ * The resolution pages are read at, and every pixel coordinate recon produces.
+ *
+ * Named rather than inlined because a stored reading is only reusable at the
+ * DPI it was taken under — word boxes, crops and illustration regions are all
+ * in these pixels — so the cache has to be able to say what it was made with.
+ */
+export const RECON_DPI = 300
+
 export interface ReconProgress {
   page: number
   total: number
@@ -67,7 +76,7 @@ export async function runRecon(
   fileData: ArrayBuffer | Blob,
   options: ReconOptions = {}
 ): Promise<ReconResult> {
-  const { dpi = 300, cropLimit = 60, onProgress, signal } = options
+  const { dpi = RECON_DPI, cropLimit = 60, onProgress, signal } = options
 
   const doc = await openPdf(fileData)
   const total = Math.min(doc.numPages, options.maxPages ?? doc.numPages)
