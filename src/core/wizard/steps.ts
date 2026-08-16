@@ -153,6 +153,14 @@ export interface WizardState {
    * design.
    */
   voice: EditorVoice
+  /**
+   * What the user is collecting towards, remembered across books.
+   *
+   * A property of the person and their project rather than of any one book,
+   * like the editor's voice — someone building towards a history of glassmaking
+   * is still building towards it on the next volume.
+   */
+  harvestInterest: string
   /** Answers gathered so far, keyed by step then question id. */
   answers: Record<string, Answers>
   /** Steps the user has completed. */
@@ -189,6 +197,7 @@ export function initialState(): WizardState {
     illustrationCandidates: [],
     document: null,
     voice: defaultVoice(),
+    harvestInterest: '',
     answers: {},
     completed: []
   }
@@ -793,6 +802,49 @@ const annotate: Step = {
         { value: 'full', label: 'Yes — full', description: 'About 1400 words.' },
         { value: 'none', label: 'No introduction', description: 'Leave the front matter as it is.' }
       ]
+    })
+
+    // Independent of the notes on purpose: a book can be worth mining and not
+    // worth annotating. Riding the annotation pass is nearly free; harvesting a
+    // book that is not being annotated pays to read it, and the gate says so.
+    qs.push({
+      id: 'harvestFacts',
+      type: 'choice',
+      prompt: 'Keep what this book is worth remembering?',
+      help:
+        'Writes a separate file of what the book attests — practices, prices, methods, ' +
+        'what its author took for granted — each with the words to prove it and the leaf ' +
+        'it came from. Nothing to do with the printed book; it is for writing from later.',
+      defaultValue: 'standard',
+      options: [
+        {
+          value: 'selective',
+          label: 'Only the best of it',
+          description: 'About one entry per thousand words.'
+        },
+        {
+          value: 'standard',
+          label: 'A useful amount',
+          description: 'About two or three per thousand words.'
+        },
+        {
+          value: 'thorough',
+          label: 'Everything worth keeping',
+          description: 'About five per thousand words. Slower, and dearer.'
+        },
+        { value: 'none', label: 'Skip it', description: 'Nothing is written out.' }
+      ]
+    })
+
+    qs.push({
+      id: 'harvestInterest',
+      type: 'text',
+      prompt: 'Collecting towards anything in particular?',
+      help:
+        'Optional. Names a subject to weight the harvest by — it still keeps whatever ' +
+        'else the book has.',
+      defaultValue: s.harvestInterest,
+      placeholder: 'e.g. early modern glassmaking, or leave blank'
     })
 
     qs.push({

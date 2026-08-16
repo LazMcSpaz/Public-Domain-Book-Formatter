@@ -274,6 +274,23 @@ in `screenshots/`. Don't ship UI blind.
   produces. The introduction shares the card and is written from the book's
   shape plus evenly spaced extracts, because a model handed three hundred pages
   summarises the last twenty.
+- **Also done**: **the fact bank** (`src/core/harvest`) — what each book leaves
+  behind after it is printed, so a shelf of reprints becomes material to write
+  _from_. Built around **primary attestation, not summary**: a model already
+  knows the general history of any subject an old book covers, so an entry that
+  restates an encyclopaedia buries the ones that are actually primary, and the
+  prompt says so. `footing` (`stated` / `implied` / `context`) is the field that
+  makes the file usable years later, and it is **enforced** — a `stated` entry
+  whose quotation cannot be found in the book is demoted to `context` with the
+  demotion printed. Tags accrete rather than drift: the vocabulary already in
+  use travels into the prompt, the same technique as Gate 1's confirmed
+  vocabulary and the voice exemplars. Two paths, priced apart — riding the
+  annotation reply costs output tokens only, while a book worth mining and not
+  worth annotating gets a standalone pass that also harvests tables. Exports as
+  Markdown to read and JSONL to merge, with the book on every record so
+  `cat *.jsonl` works. Nothing merges _across_ books on purpose: two books
+  attesting the same thing is corroboration, and only whatever consolidates the
+  files later can see enough to judge it. Approved notes are banked free.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

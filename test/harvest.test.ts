@@ -28,6 +28,7 @@ import {
 import { defaultVoice, runAnnotation } from '@core/annotate'
 import type { BookBlock } from '@core/assemble'
 import type { Transport } from '@core/transcribe'
+import { initialState, stepById, type WizardState } from '@core/wizard'
 
 let nextId = 0
 function block(text: string, kind: BookBlock['kind'] = 'paragraph', page = 0): BookBlock {
@@ -478,5 +479,57 @@ describe('what it costs', () => {
     const selective = estimateHarvestCost({ ...inputs, depth: 'selective', standalone: true })
     const thorough = estimateHarvestCost({ ...inputs, depth: 'thorough', standalone: true })
     expect(thorough.usd).toBeGreaterThan(selective.usd)
+  })
+})
+
+/**
+ * The gate. Harvesting is deliberately independent of the notes: a book can be
+ * worth mining and not worth annotating, and the two are priced apart because
+ * riding the annotation pass is nearly free and reading the book again is not.
+ */
+describe('the harvest question at the gate', () => {
+  const ready = (): WizardState => ({
+    ...initialState(),
+    document: {
+      blocks: [],
+      footnotes: [],
+      chapters: [],
+      asides: [],
+      illustrations: [],
+      sections: [],
+      skipped: []
+    },
+    completed: [
+      'intake',
+      'recon',
+      'gate-identity',
+      'transcribe',
+      'gate-uncertainties',
+      'gate-structure',
+      'proof'
+    ]
+  })
+
+  const valuesOf = (id: string): string[] => {
+    const q = stepById('annotate')
+      .questions(ready())
+      .find((x) => x.id === id)
+    return q && 'options' in q ? q.options.map((o) => String(o.value)) : []
+  }
+
+  it('can be answered independently of the notes', () => {
+    expect(valuesOf('harvestFacts')).toEqual(['selective', 'standard', 'thorough', 'none'])
+  })
+
+  it('can be skipped, so a plain reprint stays free', () => {
+    expect(valuesOf('harvestFacts')).toContain('none')
+  })
+
+  it('remembers what the user is collecting towards, across books', () => {
+    const state: WizardState = { ...ready(), harvestInterest: 'early modern glassmaking' }
+    const q = stepById('annotate')
+      .questions(state)
+      .find((x) => x.id === 'harvestInterest')
+    expect(q && 'defaultValue' in q ? q.defaultValue : '').toBe('early modern glassmaking')
   })
 })

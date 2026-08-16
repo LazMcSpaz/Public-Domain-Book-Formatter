@@ -23,3 +23,14 @@ export function downloadPdf(bytes: Uint8Array, fileName: string): void {
   // and a Blob over that would carry the whole thing.
   downloadBlob(new Blob([new Uint8Array(bytes)], { type: 'application/pdf' }), fileName)
 }
+
+/**
+ * A text file the app generated — the fact bank's two renderings.
+ *
+ * Separate from `downloadPdf` because these are not the deliverable and must
+ * never look like it: the book is what the user came for, and these are what
+ * the reading left behind.
+ */
+export function downloadText(contents: string, fileName: string, mimeType: string): void {
+  downloadBlob(new Blob([contents], { type: `${mimeType};charset=utf-8` }), fileName)
+}

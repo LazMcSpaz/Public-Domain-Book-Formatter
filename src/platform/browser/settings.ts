@@ -7,10 +7,18 @@
  * it can never be committed or shared along with a book.
  */
 import { defaultVoice, normalizeVoice, type EditorVoice } from '@core/annotate'
+import {
+  emptyVocabulary,
+  growVocabulary,
+  normalizeVocabulary,
+  type Fact,
+  type TagVocabulary
+} from '@core/harvest'
 
 const KEY_STORAGE = 'pdbf.apiKey'
 const PREFS_STORAGE = 'pdbf.prefs'
 const VOICE_STORAGE = 'pdbf.voice'
+const BANK_STORAGE = 'pdbf.bank'
 
 export interface AppPrefs {
   modelId: string
@@ -119,6 +127,54 @@ export function saveVoice(voice: EditorVoice): void {
 
 export function clearVoice(): void {
   safeLocalStorage()?.removeItem(VOICE_STORAGE)
+}
+
+/**
+ * The fact bank's tag vocabulary and standing interest, kept on this device.
+ *
+ * Only the *vocabulary* is kept, never the entries themselves. The entries are
+ * downloaded as files the user owns and files away; holding a second copy here
+ * would grow without bound in a browser store and make this app the custodian
+ * of a library it has no way to show anyone. What has to persist is the small
+ * thing that makes the next book's tags line up with the last one's.
+ */
+export interface BankSettings {
+  vocabulary: TagVocabulary
+  /** A subject the user is collecting towards, carried between books. */
+  interest: string
+}
+
+export function loadBank(): BankSettings {
+  const raw = safeLocalStorage()?.getItem(BANK_STORAGE)
+  if (!raw) return { vocabulary: emptyVocabulary(), interest: '' }
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    return {
+      vocabulary: normalizeVocabulary(parsed['vocabulary']),
+      interest: typeof parsed['interest'] === 'string' ? parsed['interest'] : ''
+    }
+  } catch {
+    return { vocabulary: emptyVocabulary(), interest: '' }
+  }
+}
+
+export function saveBank(bank: BankSettings): void {
+  safeLocalStorage()?.setItem(BANK_STORAGE, JSON.stringify(bank))
+}
+
+/** Fold a finished harvest into the vocabulary, so the next book lines up. */
+export function recordHarvest(facts: readonly Fact[], interest: string): BankSettings {
+  const current = loadBank()
+  const next: BankSettings = {
+    vocabulary: growVocabulary(current.vocabulary, facts),
+    interest
+  }
+  saveBank(next)
+  return next
+}
+
+export function clearBank(): void {
+  safeLocalStorage()?.removeItem(BANK_STORAGE)
 }
 
 /** Bytes, rounded to something a person reads rather than parses. */

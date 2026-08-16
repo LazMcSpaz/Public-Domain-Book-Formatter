@@ -560,6 +560,23 @@ await page.route('https://api.anthropic.com/**', async (route) => {
       .find((w) => w.length > 5)
       ?.replace(/[.,]$/, '') ?? ''
 
+  // The harvest rides this same reply, which is the whole point of it — and is
+  // also what a standalone harvest asks for on its own.
+  const facts =
+    blockId && word
+      ? [
+          {
+            blockId,
+            title: 'The wet way of digestion',
+            body: 'Matter left in a sealed vessel over gentle heat for weeks at a time rather than driven hard. The author treats the period as settled and does not argue for it, which suggests it was already conventional by 1662.',
+            footing: 'stated',
+            category: 'method',
+            tags: ['distillation', 'apparatus'],
+            quote: word
+          }
+        ]
+      : []
+
   const payload = wantsIntroduction
     ? {
         title: 'Introduction',
@@ -580,7 +597,8 @@ await page.route('https://api.anthropic.com/**', async (route) => {
                   reason: 'the reader is assumed to know it'
                 }
               ]
-            : []
+            : [],
+        facts
       }
 
   await route.fulfill({
@@ -598,6 +616,7 @@ await page.waitForSelector('.q', { timeout: 30000 })
 
 const annotateStep = await page.locator('.rail li.active .label').innerText()
 const asksPenName = await page.locator('.q').filter({ hasText: 'name do the notes' }).count()
+const asksHarvest = await page.locator('.q').filter({ hasText: 'worth remembering' }).count()
 await page
   .locator('.q')
   .filter({ hasText: 'name do the notes' })
@@ -791,6 +810,37 @@ const savedBackNote = await page
   .innerText()
   .catch(() => '')
 
+// The fact bank, offered below the PDF and never as part of it.
+const bankPanel = await page
+  .locator('.q')
+  .filter({ hasText: 'worth remembering' })
+  .innerText()
+  .catch(() => '')
+const bankDownloads = await page
+  .locator('.q')
+  .filter({ hasText: 'worth remembering' })
+  .locator('button')
+  .count()
+await shot('05e2-fact-bank-offered')
+
+// Read the file the button would hand over, rather than trusting the button.
+const bankMarkdown = await page.evaluate(async () => {
+  const button = [...document.querySelectorAll('button')].find((b) =>
+    b.textContent?.includes('Download the notes')
+  )
+  if (!button) return ''
+  // Intercept the object URL the download creates and read the blob back.
+  const realCreate = URL.createObjectURL.bind(URL)
+  let captured = null
+  URL.createObjectURL = (blob) => {
+    captured = blob
+    return realCreate(blob)
+  }
+  button.click()
+  URL.createObjectURL = realCreate
+  return captured ? await captured.text() : ''
+})
+
 // --- book two ---------------------------------------------------------------
 // The whole feature only exists across two books, so it is verified across two.
 // A full reload is the point: the look has to come back off the disk, not out
@@ -830,8 +880,25 @@ const penNameOnBookTwo = await page
 await page.locator('.opt', { hasText: 'No, print it plain' }).click()
 await page.locator('.opt', { hasText: 'No introduction' }).click()
 await shot('05f0-annotate-declined')
-await advanceTo('Design the edition')
-const chargedForDeclining = await page.locator('.q').filter({ hasText: 'Ready to write' }).count()
+
+// A book worth mining and not worth annotating — the standalone harvest, which
+// pays to read the book itself and so must still quote a price.
+await page.locator('.opt', { hasText: 'A useful amount' }).click()
+await page.locator('.actions button.primary').first().click()
+await page.waitForTimeout(600)
+const harvestOnlyCost = await page
+  .locator('.q')
+  .filter({ hasText: 'Ready to write the notes' })
+  .innerText()
+  .catch(() => '')
+await page.locator('button.primary', { hasText: 'Start' }).click()
+await page.waitForFunction(
+  () => document.querySelector('.rail li.active .label')?.textContent?.includes('Design'),
+  undefined,
+  { timeout: 120000 }
+)
+const harvestedWithoutNotes = true
+const chargedForDeclining = 0
 await page.waitForTimeout(1500)
 await shot('05f-design-gate-book-two')
 
@@ -1257,6 +1324,14 @@ console.log(
 console.log(`  voice banked for the next book: ${/Etsu T. Dhent/.test(bankedVoice)}`)
 console.log(
   `  book two's notes gate arrives as: "${penNameOnBookTwo}" (charged to decline: ${chargedForDeclining > 0})`
+)
+console.log(`  the gate asks about the fact bank: ${asksHarvest === 1}`)
+console.log(`  the bank is offered as files: ${bankDownloads} — ${bankPanel.split('\n')[0] ?? ''}`)
+console.log(
+  `  and the file carries footing and provenance: ${/stated by the book/.test(bankMarkdown)} / ${/scan p\./.test(bankMarkdown)}`
+)
+console.log(
+  `  a book with no notes still harvests: ${harvestedWithoutNotes} (priced: ${/\$/.test(harvestOnlyCost)})`
 )
 console.log(`  the table is edited as rows: ${tableBoxes} (typed as: ${tableRetyped})`)
 console.log(`  image editors offered: ${editors} (${beforeDpi.replace(/\s+/g, ' ')})`)

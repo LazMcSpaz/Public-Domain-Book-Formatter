@@ -45,6 +45,8 @@ import {
   savePrefs,
   loadVoice,
   saveVoice,
+  loadBank,
+  recordHarvest,
   storageEstimate
 } from '../platform/browser/settings'
 import {
@@ -84,6 +86,14 @@ import {
   type IntroductionLength,
   type NoteDensity
 } from '@core/annotate'
+import {
+  estimateHarvestCost,
+  factsFromNotes,
+  renderBank,
+  runHarvest,
+  type Fact,
+  type HarvestDepth
+} from '@core/harvest'
 import { renderInterior } from '../platform/browser/interior'
 import { cropIllustrations, readSuppliedImage, retouchPng } from '../platform/browser/illustrations'
 import { renderPageToObjectUrl } from '../platform/browser/pdf'
@@ -172,6 +182,14 @@ export function App(): JSX.Element {
     failures: ChunkFailure[]
     introduction: IntroductionDraft | null
   } | null>(null)
+  /**
+   * The fact bank for this book, offered as files at the end.
+   *
+   * Not part of the book and never written into it — this is the material the
+   * reading turned up, kept so a shelf of reprints becomes something to write
+   * from. Held until the export screen, where it is downloaded.
+   */
+  const [bankFacts, setBankFacts] = useState<Fact[]>([])
   const [exported, setExported] = useState<BuildExportResult | null>(null)
   const [pdf, setPdf] = useState<{ bytes: Uint8Array; pageCount: number } | null>(null)
   const [buildNote, setBuildNote] = useState<string | null>(null)
@@ -494,6 +512,9 @@ export function App(): JSX.Element {
       // the pen name again on every book and throw away the exemplars that
       // make the notes sound like the ones already approved.
       voice: s.voice,
+      // The subject someone is collecting towards outlives the book in front of
+      // them, exactly as the voice and the banked looks do.
+      harvestInterest: s.harvestInterest,
       fileName: file.name,
       completed: ['intake']
     }))
@@ -636,7 +657,8 @@ export function App(): JSX.Element {
         defaultLook: loadDefaultLook(),
         // The editor is the same person on every book, so the annotate gate's
         // questions arrive prefilled from here rather than empty.
-        voice: loadVoice()
+        voice: loadVoice(),
+        harvestInterest: loadBank().interest
       }))
     })()
   }, [])
@@ -843,6 +865,29 @@ export function App(): JSX.Element {
     },
     []
   )
+
+  /**
+   * The fact bank as files, named after the book the export screen is about.
+   *
+   * Derived rather than stored: the entries are the truth and the two files are
+   * renderings of them, so an edit to the title at the export gate renames both
+   * without anything having to be regenerated.
+   */
+  const bankMemo = useMemo(() => {
+    if (bankFacts.length === 0) return null
+    const answers = state.answers['export'] ?? {}
+    const files = renderBank(
+      {
+        title: String(answers['title'] ?? state.metadata.title ?? ''),
+        author: String(answers['author'] ?? state.metadata.author ?? ''),
+        originalYear: String(answers['originalYear'] ?? state.metadata.originalYear ?? ''),
+        fileName: state.fileName ?? 'book.pdf',
+        harvestedAt: new Date().toISOString()
+      },
+      bankFacts
+    )
+    return { files, count: bankFacts.length }
+  }, [bankFacts, state.answers, state.metadata, state.fileName])
 
   /** Run the paid pass. Only reached after the user approves the estimate. */
   const startTranscription = useCallback(async () => {
@@ -1289,6 +1334,11 @@ export function App(): JSX.Element {
     saveVoice(voice)
     setState((st) => ({ ...st, voice }))
 
+    const harvestDepth = String(answers['harvestFacts'] ?? 'standard')
+    const wantsHarvest = harvestDepth !== 'none'
+    const interest = String(answers['harvestInterest'] ?? state.harvestInterest)
+    const bank = loadBank()
+
     const identity = state.answers['gate-identity'] ?? {}
     const facts = {
       ...(state.metadata.title ? { title: state.metadata.title } : {}),
@@ -1298,16 +1348,46 @@ export function App(): JSX.Element {
     }
     const client = { apiKey: loadApiKey(), modelId: loadPrefs().modelId }
 
+    const harvestOptions = {
+      depth: harvestDepth as HarvestDepth,
+      vocabulary: bank.vocabulary,
+      sourceKey: fileKeyRef.current ?? state.fileName ?? 'book',
+      ...(interest.trim() ? { interest: interest.trim() } : {})
+    }
+
     setNotesProgress({ done: 0, total: 1 })
     try {
+      // When both are wanted, the harvest rides the annotation reply: the book
+      // is read once and the entries cost output tokens only.
       const notes = wantsNotes
         ? await runAnnotation(doc.blocks, {
             client,
             voice,
             facts,
+            ...(wantsHarvest ? { harvest: harvestOptions } : {}),
             onProgress: (done, total) => setNotesProgress({ done, total })
           })
-        : { proposals: [], failures: [], discarded: 0, cancelled: false }
+        : { proposals: [], facts: [], failures: [], discarded: 0, cancelled: false }
+
+      // A book worth mining and not worth annotating pays for its own reading.
+      const harvested =
+        wantsHarvest && !wantsNotes
+          ? await runHarvest(doc.blocks, {
+              client,
+              facts,
+              ...harvestOptions,
+              onProgress: (done, total) => setNotesProgress({ done, total })
+            })
+          : { facts: notes.facts, failures: [], discarded: 0, cancelled: false }
+
+      setBankFacts(harvested.facts)
+      // Recorded as soon as it exists rather than at the review, because the
+      // harvest is not reviewed: the entries are files the user keeps, and the
+      // vocabulary has to grow even if they walk away from this screen.
+      if (harvested.facts.length > 0) recordHarvest(harvested.facts, interest)
+      if (interest !== state.harvestInterest) {
+        setState((st) => ({ ...st, harvestInterest: interest }))
+      }
 
       let introduction: IntroductionDraft | null = null
       if (wantsIntro) {
@@ -1322,7 +1402,16 @@ export function App(): JSX.Element {
         introduction = drafted.draft
       }
 
-      setProposals({ notes: notes.proposals, failures: notes.failures, introduction })
+      // A review screen with nothing on it is a dead end the user has to click
+      // past. When the pass produced only bank entries — which is the whole of
+      // what a harvest-only run produces — there is nothing to approve, so the
+      // step is finished here and the files wait at the export screen.
+      const worthReviewing = notes.proposals.length > 0 || introduction !== null
+      if (worthReviewing) {
+        setProposals({ notes: notes.proposals, failures: notes.failures, introduction })
+      } else {
+        complete()
+      }
     } catch (err) {
       // A failed annotation pass is not a failed book: everything up to here is
       // intact and the step is optional. Say so and let the user carry on.
@@ -1334,7 +1423,7 @@ export function App(): JSX.Element {
     } finally {
       setNotesProgress(null)
     }
-  }, [state, currentAnswers])
+  }, [state, currentAnswers, complete])
 
   /**
    * Leaving the review: the approved notes become ordinary corrections.
@@ -1367,6 +1456,25 @@ export function App(): JSX.Element {
       saveVoice(learned)
       setState((st) => ({ ...st, voice: learned }))
 
+      // Approved notes are the best entries in the bank and cost nothing: each
+      // has already been read by a person and judged against its passage.
+      const doc = state.document
+      if (doc && bankFacts.length > 0) {
+        const fromNotes = factsFromNotes(
+          result.accepted.map(({ proposal, text }) => ({
+            blockId: proposal.blockId,
+            anchorText: proposal.anchorText,
+            kind: proposal.kind,
+            text
+          })),
+          doc.blocks,
+          fileKeyRef.current ?? state.fileName ?? 'book'
+        )
+        const all = [...bankFacts, ...fromNotes]
+        setBankFacts(all)
+        recordHarvest(fromNotes, state.harvestInterest)
+      }
+
       setEdits(next)
       setProposals(null)
 
@@ -1376,7 +1484,17 @@ export function App(): JSX.Element {
       }
       complete()
     },
-    [edits, state.voice, state.answers, persistRun, complete]
+    [
+      edits,
+      state.voice,
+      state.document,
+      state.fileName,
+      state.harvestInterest,
+      state.answers,
+      bankFacts,
+      persistRun,
+      complete
+    ]
   )
 
   /**
@@ -1437,18 +1555,37 @@ export function App(): JSX.Element {
       const doc = state.document
       const wantsNotes = (currentAnswers['annotateBook'] ?? 'yes') === 'yes'
       const wantsIntro = String(currentAnswers['writeIntroduction'] ?? 'standard') !== 'none'
-      // Declining both is free and instant; there is nothing to quote for.
-      if (!doc || (!wantsNotes && !wantsIntro)) {
+      const depth = String(currentAnswers['harvestFacts'] ?? 'standard')
+      const wantsHarvest = depth !== 'none'
+      // Declining all three is free and instant; there is nothing to quote for.
+      if (!doc || (!wantsNotes && !wantsIntro && !wantsHarvest)) {
         complete()
         return
       }
       const words = doc.blocks.reduce((n, b) => n + b.text.split(/\s+/u).length, 0)
-      const estimate = estimateAnnotationCost({
+      const notesCost = estimateAnnotationCost({
         wordCount: wantsNotes ? words : 0,
         modelId: loadPrefs().modelId,
         density: String(currentAnswers['noteDensity'] ?? state.voice.density) as NoteDensity
       })
-      setPendingNotesCost(formatEstimate(estimate))
+      // Riding the notes costs output tokens only; harvesting a book nobody is
+      // annotating pays to read it. Quoting one number for both would be a lie
+      // in whichever direction the user happened to choose.
+      const harvestCost = wantsHarvest
+        ? estimateHarvestCost({
+            wordCount: words,
+            modelId: loadPrefs().modelId,
+            depth: depth as HarvestDepth,
+            standalone: !wantsNotes
+          })
+        : { usd: 0, usdLow: 0, usdHigh: 0, inputTokens: 0, outputTokens: 0 }
+      const total = {
+        ...notesCost,
+        usd: notesCost.usd + harvestCost.usd,
+        usdLow: notesCost.usdLow + harvestCost.usdLow,
+        usdHigh: notesCost.usdHigh + harvestCost.usdHigh
+      }
+      setPendingNotesCost(formatEstimate(total))
       return
     }
     if (step.id === 'transcribe') {
@@ -1734,7 +1871,13 @@ export function App(): JSX.Element {
         {/* --- the finished edition --- */}
         {exported && !buildProgress ? (
           <>
-            <ExportResult result={exported} pdf={pdf} note={buildNote} savedNote={bankedNote} />
+            <ExportResult
+              result={exported}
+              pdf={pdf}
+              note={buildNote}
+              savedNote={bankedNote}
+              bank={bankMemo}
+            />
             <div className="actions">
               <button
                 type="button"

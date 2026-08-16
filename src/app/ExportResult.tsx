@@ -19,7 +19,8 @@
  * of helpfulness that becomes a surprise three books later.
  */
 import type { BuildExportResult } from '@core/export'
-import { downloadPdf } from '../platform/browser/download'
+import type { BankFile } from '@core/harvest'
+import { downloadPdf, downloadText } from '../platform/browser/download'
 
 export interface ExportResultProps {
   result: BuildExportResult
@@ -28,9 +29,24 @@ export interface ExportResultProps {
   note: string | null
   /** What was written back to a banked look, when anything was. */
   savedNote?: string | null
+  /**
+   * The fact bank harvested from this book, as files to keep.
+   *
+   * Offered here and nowhere else, well below the PDF: this is not part of the
+   * edition and must never look like it is. The app's job ends at writing a
+   * good file — consolidating a shelf of them is a separate tool for when there
+   * is a shelf.
+   */
+  bank?: { files: BankFile[]; count: number } | null
 }
 
-export function ExportResult({ result, pdf, note, savedNote }: ExportResultProps): JSX.Element {
+export function ExportResult({
+  result,
+  pdf,
+  note,
+  savedNote,
+  bank
+}: ExportResultProps): JSX.Element {
   return (
     <div className="result">
       <div className="q">
@@ -51,6 +67,29 @@ export function ExportResult({ result, pdf, note, savedNote }: ExportResultProps
         ) : null}
         {savedNote ? <div className="help">{savedNote}</div> : null}
       </div>
+
+      {bank && bank.count > 0 ? (
+        <div className="q">
+          <span className="prompt">What this book is worth remembering</span>
+          <div className="help">
+            {bank.count} entr{bank.count === 1 ? 'y' : 'ies'} — what the book attests, each with the
+            words to prove it and the leaf it came from. Nothing to do with the printed edition; it
+            is for writing from later. The Markdown is to read; the JSONL is the same entries one
+            per line, so a shelf of these can be merged by a script.
+          </div>
+          <div className="actions">
+            {bank.files.map((file) => (
+              <button
+                key={file.fileName}
+                type="button"
+                onClick={() => downloadText(file.contents, file.fileName, file.mimeType)}
+              >
+                {file.fileName.endsWith('.md') ? 'Download the notes' : 'Download the data file'}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
 
       {result.notes.length > 0 ? (
         <div className="q">
