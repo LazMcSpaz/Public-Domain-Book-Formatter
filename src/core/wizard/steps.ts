@@ -14,7 +14,7 @@
 import type { LexiconEntry } from '@core/lexicon'
 import type { BookMetadata, PageClassification } from '@core/pages'
 import { isFrontMatter } from '@core/pages'
-import type { VerificationFinding } from '@core/transcribe'
+import type { DroppedRun, VerificationFinding } from '@core/transcribe'
 import { describeAge, type SavedRunSummary } from '@core/project'
 import type { BookDocument } from '@core/assemble'
 import { defaultVoice, type EditorVoice } from '@core/annotate'
@@ -152,6 +152,14 @@ export interface WizardState {
    * asking the user to trust a number.
    */
   pageText: Record<number, string>
+  /**
+   * Text OCR read that the transcription does not have, per page.
+   *
+   * The gate used to report a *count* of missing words and offer one remedy
+   * that costs money. Both texts are in hand, so the words themselves can be
+   * shown and put back for nothing — see `@core/transcribe/recover`.
+   */
+  droppedRuns: Record<number, DroppedRun[]>
   /** The assembled book, once transcription and assembly have run. */
   document: BookDocument | null
   /**
@@ -206,6 +214,7 @@ export function initialState(): WizardState {
     failedPages: [],
     illustrationCandidates: [],
     pageText: {},
+    droppedRuns: {},
     document: null,
     voice: defaultVoice(),
     harvestInterest: '',
@@ -545,20 +554,46 @@ const gateUncertainties: Step = {
 
     for (const [pageIndex, messages] of [...byPage.entries()].sort((a, b) => a[0] - b[0])) {
       const read = (s.pageText[pageIndex] ?? '').trim()
+      const dropped = s.droppedRuns[pageIndex] ?? []
+      const recoverable = dropped.length > 0
+
       qs.push({
         id: `page-${pageIndex}`,
         type: 'choice',
         prompt: `Page ${pageIndex + 1}`,
         help: messages.join(' · '),
-        defaultValue: 'accept',
+        // Putting the text back is the recommended answer when there is text to
+        // put back: it is free, it is the thing the user actually wants, and the
+        // alternative on offer costs money to maybe get the same page again.
+        defaultValue: recoverable ? 'restore' : 'accept',
         // The scan and what was read off it, together. Either alone leaves the
         // user guessing: the thumbnail cannot be proofread and the text cannot
         // be checked against anything.
         evidence: [
           { kind: 'image', src: `page:${pageIndex}`, alt: `Scan of page ${pageIndex + 1}` },
-          ...(read ? [{ kind: 'text' as const, text: read, label: 'What was read off it' }] : [])
+          ...(read ? [{ kind: 'text' as const, text: read, label: 'What was read off it' }] : []),
+          // The dropped passages themselves, so the decision is made on the
+          // words rather than on a count of them.
+          ...dropped.map((run, n) => ({
+            kind: 'text' as const,
+            text: run.text,
+            label:
+              `Missing passage ${n + 1} of ${dropped.length} — OCR ${run.confidence}% sure` +
+              (run.after ? `, goes after “…${run.after}”` : ', at the start of the page')
+          }))
         ],
         options: [
+          ...(recoverable
+            ? [
+                {
+                  value: 'restore',
+                  label: `Put the missing text back`,
+                  description:
+                    `${dropped.length} passage${dropped.length === 1 ? '' : 's'} OCR read and ` +
+                    `the transcription lacks, shown above. Costs nothing.`
+                }
+              ]
+            : []),
           { value: 'accept', label: 'Looks fine', description: 'Keep the transcription as-is.' },
           {
             value: 'redo',

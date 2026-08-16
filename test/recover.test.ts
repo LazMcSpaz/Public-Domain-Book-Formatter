@@ -1,0 +1,192 @@
+import { describe, it, expect } from 'vitest'
+import { findDroppedRuns, spliceRun, type DroppedRun } from '@core/transcribe'
+import type { OcrWordLike } from '@core/transcribe'
+import { initialState, stepById, type WizardState } from '@core/wizard'
+
+/** OCR words from a sentence, all read confidently unless said otherwise. */
+function ocr(text: string, confidence = 92): OcrWordLike[] {
+  return text
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => ({ text: word, confidence }))
+}
+
+const PAGE =
+  'The astral and the physical bodies are invariably connected by means of a sort of cord, ' +
+  'or cable, along which vital currents pass. Should this cord be severed, death instantly ' +
+  'results. The only difference between astral projection and death is that the cord is ' +
+  'intact in the former case, and severed in the latter.'
+
+/**
+ * The existing check compares the two texts as sets, so it can say "fourteen
+ * words are absent" and nothing else — leaving the user an alarming number and
+ * one remedy that costs money. Both texts are right there.
+ */
+describe('finding what was dropped', () => {
+  it('recovers a clause dropped from the middle of a page', () => {
+    const dropped = 'Should this cord be severed, death instantly results.'
+    const transcription = PAGE.replace(` ${dropped}`, '')
+
+    const [run] = findDroppedRuns(transcription, ocr(PAGE))
+    expect(run).toBeDefined()
+    expect(run!.text).toContain('Should this cord be severed')
+    expect(run!.words.length).toBeGreaterThanOrEqual(7)
+  })
+
+  it('says where it belongs, in words the transcription actually contains', () => {
+    const dropped = 'Should this cord be severed, death instantly results.'
+    const transcription = PAGE.replace(` ${dropped}`, '')
+
+    const [run] = findDroppedRuns(transcription, ocr(PAGE))
+    // The anchor has to be findable in the text, or the run cannot be put back
+    // where it came from.
+    expect(transcription).toContain(run!.after)
+    expect(transcription).toContain(run!.before)
+  })
+
+  it('recovers a tail dropped off the end of the page', () => {
+    const transcription = PAGE.slice(0, PAGE.indexOf('The only difference'))
+    const [run] = findDroppedRuns(transcription, ocr(PAGE))
+    expect(run!.text).toContain('The only difference between astral projection')
+  })
+
+  it('finds two separate gaps as two runs, not one', () => {
+    const transcription = PAGE.replace(
+      ' Should this cord be severed, death instantly results.',
+      ''
+    ).replace(' intact in the former case, and severed in the latter.', '')
+    const runs = findDroppedRuns(transcription, ocr(PAGE))
+    expect(runs.length).toBe(2)
+  })
+
+  it('says nothing when the transcription has everything', () => {
+    expect(findDroppedRuns(PAGE, ocr(PAGE))).toEqual([])
+  })
+
+  it('ignores a single word, which is usually OCR seeing things', () => {
+    // Being asked about one word a hundred times is how a review stops being
+    // read at all.
+    const transcription = PAGE.replace(' invariably', '')
+    expect(findDroppedRuns(transcription, ocr(PAGE))).toEqual([])
+  })
+
+  it('will not offer a run OCR was unsure about', () => {
+    const dropped = 'Should this cord be severed, death instantly results.'
+    const transcription = PAGE.replace(` ${dropped}`, '')
+    const words = ocr(PAGE).map((w) => (dropped.includes(w.text) ? { ...w, confidence: 30 } : w))
+    expect(findDroppedRuns(transcription, words)).toEqual([])
+  })
+
+  it('carries the confidence, so a garbled run can be seen for what it is', () => {
+    const dropped = 'Should this cord be severed, death instantly results.'
+    const transcription = PAGE.replace(` ${dropped}`, '')
+    const [run] = findDroppedRuns(transcription, ocr(PAGE, 78))
+    expect(run!.confidence).toBe(78)
+  })
+
+  it('is not upset by words OCR missed that the transcription has', () => {
+    // OCR is the noisier reader — that is the whole reason the vision pass
+    // exists — so its own omissions must not register as drops.
+    const partial = ocr(PAGE).filter((_, i) => i % 7 !== 0)
+    expect(findDroppedRuns(PAGE, partial)).toEqual([])
+  })
+
+  it('does not let a repeated word swallow the gap between its occurrences', () => {
+    const text = 'the cord is one thing and the cord is another thing entirely here'
+    const transcription = 'the cord is another thing entirely here'
+    const runs = findDroppedRuns(transcription, ocr(text), { minWords: 3 })
+    expect(runs.length).toBeGreaterThan(0)
+  })
+})
+
+describe('putting a run back', () => {
+  const run: DroppedRun = {
+    words: ['Should', 'this', 'cord', 'be', 'severed.'],
+    text: 'Should this cord be severed.',
+    confidence: 90,
+    after: 'along which vital currents pass.',
+    before: 'The only difference'
+  }
+
+  it('splices it in after the words it followed, not at the end', () => {
+    const block =
+      'connected by a cord, along which vital currents pass. The only difference is that'
+    const fixed = spliceRun(block, run)
+    expect(fixed).toBe(
+      'connected by a cord, along which vital currents pass. Should this cord be severed. The only difference is that'
+    )
+  })
+
+  it('hands back null when the anchor is not in this block, so the caller tries the next', () => {
+    expect(spliceRun('a completely different paragraph', run)).toBeNull()
+  })
+
+  it('puts a run dropped from the very start at the front', () => {
+    const opening = { ...run, after: '' }
+    expect(spliceRun('the rest of it', opening)).toBe('Should this cord be severed. the rest of it')
+  })
+})
+
+/**
+ * The gate used to report a *count* of missing words and offer one remedy that
+ * costs money. Both texts are in hand, so the words themselves can be shown and
+ * put back for nothing.
+ */
+describe('the gate offers the text back', () => {
+  const run: DroppedRun = {
+    words: ['Should', 'this', 'cord', 'be', 'severed.'],
+    text: 'Should this cord be severed.',
+    confidence: 90,
+    after: 'vital currents pass.',
+    before: 'The only difference'
+  }
+
+  const ready = (droppedRuns: WizardState['droppedRuns']): WizardState => ({
+    ...initialState(),
+    completed: ['intake', 'recon', 'gate-identity', 'transcribe'],
+    findings: [
+      {
+        code: 'confident-word-missing',
+        severity: 'medium',
+        pageIndex: 16,
+        message: '14 words OCR read clearly are absent from the transcription.'
+      }
+    ],
+    pageText: { 16: 'connected by a cord, along which vital currents pass. The only difference' },
+    droppedRuns
+  })
+
+  const question = (state: WizardState) =>
+    stepById('gate-uncertainties')
+      .questions(state)
+      .find((q) => q.id === 'page-16')
+
+  it('shows the missing words themselves, not a count of them', () => {
+    const q = question(ready({ 16: [run] }))
+    const texts = q?.evidence?.filter((e) => e.kind === 'text') ?? []
+    expect(texts.some((e) => 'text' in e && e.text.includes('Should this cord be severed'))).toBe(
+      true
+    )
+  })
+
+  it('says where it goes and how sure OCR was', () => {
+    const q = question(ready({ 16: [run] }))
+    const label = q?.evidence?.map((e) => ('label' in e ? e.label : '')).join(' ')
+    expect(label).toContain('90% sure')
+    expect(label).toContain('vital currents pass.')
+  })
+
+  it('offers putting it back, and recommends that over paying to re-read', () => {
+    const q = question(ready({ 16: [run] }))
+    const values = q && 'options' in q ? q.options.map((o) => String(o.value)) : []
+    expect(values).toContain('restore')
+    expect(q && 'defaultValue' in q ? q.defaultValue : '').toBe('restore')
+  })
+
+  it('does not offer it when there is nothing to put back', () => {
+    const q = question(ready({}))
+    const values = q && 'options' in q ? q.options.map((o) => String(o.value)) : []
+    expect(values).not.toContain('restore')
+    expect(q && 'defaultValue' in q ? q.defaultValue : '').toBe('accept')
+  })
+})

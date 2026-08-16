@@ -20,6 +20,7 @@ export {
   type ExtractedMetadata
 } from './schema'
 export { parseInlineMarkup, shiftEmphasis, wordCount, type InlineMarkup } from './markup'
+export { findDroppedRuns, spliceRun, type DroppedRun, type RecoverOptions } from './recover'
 export {
   buildSystemPrompt,
   buildPagePrompt,

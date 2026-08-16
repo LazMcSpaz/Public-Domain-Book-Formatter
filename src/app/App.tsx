@@ -29,6 +29,8 @@ import {
   formatEstimate,
   mergeMetadata,
   validateApiKey,
+  findDroppedRuns,
+  spliceRun,
   transcriptionText,
   verifyBook,
   verifyPage,
@@ -773,6 +775,18 @@ export function App(): JSX.Element {
         pageText: Object.fromEntries(
           transcriptions.map((t) => [t.pageIndex, transcriptionText(t)])
         ),
+        // What OCR read and the transcription lacks, per page. Computed here
+        // for the same reason as `pageText`: both a fresh run and a restored
+        // one come through this function, and a gate that could only offer the
+        // recovery on a live read would fail exactly when it matters.
+        droppedRuns: Object.fromEntries(
+          transcriptions
+            .map((t) => {
+              const words = wordsByPage.get(t.pageIndex) ?? []
+              return [t.pageIndex, findDroppedRuns(transcriptionText(t), words)] as const
+            })
+            .filter(([, runs]) => runs.length > 0)
+        ),
         // Assemble immediately: seam repair and footnote linking are pure and
         // fast, and Gate 3 needs the finished document to describe its shape.
         document: assembleBook(transcriptions)
@@ -1191,11 +1205,38 @@ export function App(): JSX.Element {
 
     const redo: number[] = []
     const skip: number[] = []
+    const restore: number[] = []
     for (const [key, value] of Object.entries(currentAnswers)) {
       const match = /^page-(\d+)$/.exec(key)
       if (!match) continue
       if (value === 'redo') redo.push(Number(match[1]))
       if (value === 'skip') skip.push(Number(match[1]))
+      if (value === 'restore') restore.push(Number(match[1]))
+    }
+
+    /**
+     * Put back the passages OCR read and the transcription lacks.
+     *
+     * As ordinary `text` corrections, so they are undoable at the proof step,
+     * saved with the run, and indistinguishable from a fix typed by hand — the
+     * same rule every other repair in this app follows. The recovered words are
+     * OCR's, not the model's, so they are spliced in where they were taken from
+     * and left for the user to read rather than trusted.
+     */
+    const recovered: BookEdit[] = []
+    if (restore.length > 0 && state.document) {
+      const blocks = applyEdits(state.document, edits).blocks
+      for (const pageIndex of restore) {
+        for (const run of state.droppedRuns[pageIndex] ?? []) {
+          // The block the anchor is in, among those that came off this page.
+          const host = blocks.find(
+            (b) => b.sourcePages.includes(pageIndex) && spliceRun(b.text, run) !== null
+          )
+          const fixed = host ? spliceRun(host.text, run) : null
+          if (host && fixed) recovered.push({ kind: 'text', blockId: host.id, text: fixed })
+        }
+      }
+      if (recovered.length > 0) setEdits((current) => [...current, ...recovered])
     }
 
     let transcriptions = run.transcriptions
