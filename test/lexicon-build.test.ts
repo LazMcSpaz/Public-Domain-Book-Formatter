@@ -151,3 +151,49 @@ describe('lexiconPromptBlock', () => {
     expect(lexiconPromptBlock([])).toBe('')
   })
 })
+
+/**
+ * Reported from a real book: the grid was "all basic words, ranked by how many
+ * times they appear". It was — `impact` multiplied by the raw count, so a
+ * common word seen three thousand times buried every distinctive one. And a
+ * word OCR stumbles over is, almost by definition, not one of the commonest in
+ * the book.
+ */
+describe('the grid ranks by distinctiveness, not by frequency', () => {
+  const token = (text: string, confidence: number, n: number, page = 0): LexiconToken[] =>
+    Array.from({ length: n }, (_, i) => ({
+      text,
+      confidence,
+      pageIndex: page,
+      tokenId: `${text}-${i}`
+    }))
+
+  it('keeps an ordinary word out however badly it was read', () => {
+    // A common word OCR struggled with is a scanning problem, not a vocabulary
+    // one, and no prompt needs telling that "the" is a word.
+    const entries = buildLexicon([...token('the', 62, 400), ...token('chirurgeon', 71, 6)])
+    expect(entries.map((e) => e.term)).not.toContain('the')
+    expect(entries.map((e) => e.term)).toContain('chirurgeon')
+  })
+
+  it('puts an odd word above a mundane one that appears far more often', () => {
+    // "knoweth" is archaic orthography; "hospital" is merely not in the common
+    // list. The archaic one wins despite being outnumbered twenty to one,
+    // because confirming "hospital" teaches the model nothing.
+    const entries = buildLexicon([...token('hospital', 96, 120), ...token('knoweth', 88, 6)])
+    expect(entries[0]!.term).toBe('knoweth')
+  })
+
+  it('still lets frequency separate two equally odd words', () => {
+    const entries = buildLexicon([...token('alembick', 80, 40), ...token('cucurbite', 80, 4)])
+    expect(entries[0]!.term).toBe('alembick')
+  })
+
+  it('does not let frequency run away with the ranking', () => {
+    // Ten times the sightings must not mean ten times the score, or the grid
+    // becomes a frequency list again.
+    const [many] = buildLexicon(token('alembick', 80, 200))
+    const [few] = buildLexicon(token('alembick', 80, 20))
+    expect(many!.impact / few!.impact).toBeLessThan(2)
+  })
+})

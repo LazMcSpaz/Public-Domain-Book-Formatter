@@ -51,8 +51,13 @@ export interface LexiconEntry {
   /** Why this surfaced for review. */
   signals: LexiconSignal[]
   /**
-   * Review priority: frequency × uncertainty. Fixing a term that appears 40×
-   * is worth 40× fixing a one-off, so the review grid sorts on this.
+   * Review priority: how *distinctive* the term is, times the log of how often
+   * it appears.
+   *
+   * Distinctiveness leads and frequency only separates ties. Multiplying by the
+   * raw count — which this used to do — made the grid a frequency list with a
+   * thin coat of uncertainty on it, and a word OCR stumbles over is almost by
+   * definition not one of the commonest in the book.
    */
   impact: number
   /** A representative token id for pulling the word-crop evidence. */
@@ -151,7 +156,14 @@ export function buildLexicon(
   }
 
   // --- 2. Keep only terms worth a human's attention. ---
-  const kept: { key: string; bucket: Bucket; signals: LexiconSignal[] }[] = []
+  const kept: {
+    key: string
+    bucket: Bucket
+    signals: LexiconSignal[]
+    archaic: number
+    properNoun: boolean
+    corroborated: boolean
+  }[] = []
   for (const [key, bucket] of buckets) {
     const display = mostFrequentForm(bucket.forms)
     const meanConf = bucket.confSum / bucket.count
@@ -169,13 +181,21 @@ export function buildLexicon(
     if (meanConf < 80) signals.push('low-confidence')
     if (properNoun && bucket.count >= minCount) signals.push('proper-noun')
 
-    // Ordinary words with nothing odd about them never reach review.
-    if (known && !isCorroborated && meanConf >= 80) continue
+    // Ordinary words never reach review at all, however badly OCR read them.
+    //
+    // This used to admit any common word whose mean confidence dipped below 80,
+    // which on an old scan is most of them — and since impact was dominated by
+    // frequency, "the" at 3000 sightings buried every distinctive word in the
+    // book. It also taught the model nothing: the gate exists to stop
+    // `chirurgeon` being "corrected" into `surgeon`, and no prompt needs to be
+    // told that "the" is a word. A common word OCR read badly is a scanning
+    // problem, which `verifyPage` reports against the page it happened on.
+    if (known && !isCorroborated) continue
     if (signals.length === 0) continue
     // A single sighting is noise unless the index vouches for it.
     if (bucket.count < minCount && !isCorroborated) continue
 
-    kept.push({ key, bucket, signals })
+    kept.push({ key, bucket, signals, archaic, properNoun, corroborated: isCorroborated })
   }
 
   // --- 3. Fold near-identical spellings together (OCR variants of one term). ---
@@ -204,21 +224,45 @@ export function buildLexicon(
   }
 
   // --- 4. Score and rank by review impact. ---
-  const entries: LexiconEntry[] = merged.map(({ key, bucket, signals }) => {
-    const meanConfidence = bucket.confSum / bucket.count
-    // Uncertainty rises as confidence falls and as orthography looks unusual.
-    const uncertainty = (100 - meanConfidence) / 100 + signals.length * 0.15
-    return {
-      term: mostFrequentForm(bucket.forms),
-      count: bucket.count,
-      meanConfidence: Math.round(meanConfidence),
-      pages: [...bucket.pages].sort((a, b) => a - b),
-      variants: absorbed.get(key) ?? [],
-      signals,
-      impact: Math.round(bucket.count * (1 + uncertainty) * 100) / 100,
-      sampleTokenId: bucket.sampleTokenId
+  //
+  // Distinctiveness first, frequency only as a tie-breaker. The previous
+  // formula multiplied by the raw count, so the ranking was frequency wearing
+  // a thin coat of uncertainty — and a word OCR stumbles over is, almost by
+  // definition, not one of the commonest in the book. Frequency still matters
+  // (confirming a term that appears forty times is worth more than a one-off)
+  // but on a log scale, so it separates equally odd words rather than drowning
+  // them.
+  const entries: LexiconEntry[] = merged.map(
+    ({ key, bucket, signals, archaic, properNoun, corroborated: vouched }) => {
+      const meanConfidence = bucket.confSum / bucket.count
+      const distinctive =
+        // The index or contents printed it, so the book itself vouches for the
+        // spelling — the strongest signal there is.
+        (vouched ? 1.5 : 0) +
+        // Not an ordinary English word: the class the model most wants to
+        // "helpfully" modernise.
+        1 +
+        Math.min(1, archaic) * 0.8 +
+        (properNoun ? 0.6 : 0) +
+        // How badly OCR struggled with it, which is a real probability.
+        (100 - meanConfidence) / 100
+
+      return {
+        term: mostFrequentForm(bucket.forms),
+        count: bucket.count,
+        meanConfidence: Math.round(meanConfidence),
+        pages: [...bucket.pages].sort((a, b) => a - b),
+        variants: absorbed.get(key) ?? [],
+        signals,
+        // Squared, so oddness outweighs frequency rather than merely competing
+        // with it. Linear, a twentyfold frequency advantage still beat a
+        // genuinely archaic word — and confirming "hospital" teaches the model
+        // nothing, while confirming "knoweth" is the whole point of the gate.
+        impact: Math.round(distinctive * distinctive * Math.log2(1 + bucket.count) * 100) / 100,
+        sampleTokenId: bucket.sampleTokenId
+      }
     }
-  })
+  )
 
   entries.sort((a, b) => b.impact - a.impact || b.count - a.count)
   return entries.slice(0, limit)
