@@ -1,0 +1,195 @@
+/**
+ * Running the annotation pass over a whole book.
+ *
+ * The same shape as the transcription runner and for the same reasons —
+ * retries with backoff, a cancel that takes effect between chunks, running
+ * usage so the cost can be reported against the estimate — but with one
+ * important difference in what a failure means.
+ *
+ * A page that fails to transcribe is a hole in the book. A chunk that fails to
+ * annotate is some suggestions the user never sees, in a list of suggestions
+ * they are about to accept or reject one at a time. So this runner does not
+ * fail the run on a bad chunk: it records the failure, reports it, and carries
+ * on. Refusing to annotate the other three hundred pages because chunk nine
+ * returned malformed JSON would be the wrong trade.
+ *
+ * Pure orchestration: the transport is injected, so the whole of this is
+ * testable with no key and no spend.
+ */
+import { callModel, TranscribeError, type ApiUsage, type ClientConfig } from '@core/transcribe'
+import type { BookBlock } from '@core/assemble'
+import {
+  buildAnnotationSystemPrompt,
+  buildAnnotationUserPrompt,
+  chunkBlocks,
+  contextFor,
+  type AnnotationChunk,
+  type BookFacts
+} from './prompt'
+import { ANNOTATION_SCHEMA, checkProposals, parseAnnotations, type CheckedProposal } from './schema'
+import type { EditorVoice } from './voice'
+
+export interface AnnotationRunOptions {
+  client: ClientConfig
+  voice: EditorVoice
+  facts?: BookFacts
+  /** Words of the book per request. Defaults to `CHUNK_WORDS`. */
+  chunkWords?: number
+  maxAttempts?: number
+  onProgress?: (done: number, total: number) => void
+  /** Polled between chunks, so cancelling costs at most one more request. */
+  isCancelled?: () => boolean
+  sleep?: (ms: number) => Promise<void>
+}
+
+export interface ChunkFailure {
+  chunkIndex: number
+  message: string
+}
+
+export interface AnnotationRunResult {
+  proposals: CheckedProposal[]
+  failures: ChunkFailure[]
+  /** Entries the reply contained that were not usable notes. */
+  discarded: number
+  usage: ApiUsage
+  cancelled: boolean
+}
+
+const defaultSleep = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms))
+
+/** The request body for one chunk. Exported so a test can read it without a network. */
+export function buildAnnotationBody(
+  config: ClientConfig,
+  systemPrompt: string,
+  userPrompt: string
+): Record<string, unknown> {
+  return {
+    model: config.modelId,
+    max_tokens: config.maxTokens ?? 4000,
+    system: [
+      {
+        // Identical for every chunk of a run, so the voice card — the long,
+        // carefully written half of the prompt — is paid for once.
+        type: 'text',
+        text: systemPrompt,
+        cache_control: { type: 'ephemeral' }
+      }
+    ],
+    output_config: {
+      // Unlike transcription, which is perception, deciding what deserves a note
+      // and writing it well is the reasoning part of this app.
+      effort: config.effort ?? 'high',
+      format: { type: 'json_schema', schema: ANNOTATION_SCHEMA }
+    },
+    messages: [{ role: 'user', content: [{ type: 'text', text: userPrompt }] }]
+  }
+}
+
+/**
+ * Annotate a book.
+ *
+ * Proposals come back located and checked — see `checkProposals` — because the
+ * review screen needs to show the passage beside every note, and a note that
+ * could not be located is something the user has to be told about rather than
+ * something to attach at a guessed offset.
+ */
+export async function runAnnotation(
+  blocks: readonly BookBlock[],
+  options: AnnotationRunOptions
+): Promise<AnnotationRunResult> {
+  const sleep = options.sleep ?? defaultSleep
+  const maxAttempts = options.maxAttempts ?? 3
+  const chunks = chunkBlocks(blocks, options.chunkWords)
+
+  const systemPrompt = buildAnnotationSystemPrompt(options.voice, options.facts)
+  const blockText = new Map(blocks.map((b) => [b.id, b.text]))
+  const bookText = blocks.map((b) => b.text).join('\n')
+
+  const proposals: CheckedProposal[] = []
+  const failures: ChunkFailure[] = []
+  const usage: ApiUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 }
+  let discarded = 0
+  let cancelled = false
+
+  for (const [i, chunk] of chunks.entries()) {
+    if (options.isCancelled?.()) {
+      cancelled = true
+      break
+    }
+
+    const context = contextFor(chunks[i - 1])
+    const userPrompt = buildAnnotationUserPrompt(chunk, context)
+    // Only the chunk's own blocks may be annotated. The overlap is there to be
+    // read, and a note on it would duplicate one from the previous chunk.
+    const ownIds = new Set(chunk.blocks.map((b) => b.id))
+
+    const outcome = await annotateChunk({
+      chunk,
+      config: options.client,
+      systemPrompt,
+      userPrompt,
+      ownIds,
+      maxAttempts,
+      sleep
+    })
+
+    usage.inputTokens += outcome.usage.inputTokens
+    usage.outputTokens += outcome.usage.outputTokens
+    usage.cacheReadTokens += outcome.usage.cacheReadTokens
+
+    if (outcome.error) {
+      failures.push({ chunkIndex: chunk.index, message: outcome.error })
+    } else {
+      discarded += outcome.discarded
+      proposals.push(...checkProposals(outcome.proposals, blockText, bookText))
+    }
+
+    options.onProgress?.(i + 1, chunks.length)
+  }
+
+  return { proposals, failures, discarded, usage, cancelled }
+}
+
+interface ChunkOutcome {
+  proposals: ReturnType<typeof parseAnnotations>['proposals']
+  discarded: number
+  usage: ApiUsage
+  error?: string
+}
+
+async function annotateChunk(args: {
+  chunk: AnnotationChunk
+  config: ClientConfig
+  systemPrompt: string
+  userPrompt: string
+  ownIds: ReadonlySet<string>
+  maxAttempts: number
+  sleep: (ms: number) => Promise<void>
+}): Promise<ChunkOutcome> {
+  const usage: ApiUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 }
+  let lastError = 'unknown error'
+
+  for (let attempt = 1; attempt <= args.maxAttempts; attempt++) {
+    try {
+      const { json, usage: used } = await callModel(
+        args.config,
+        buildAnnotationBody(args.config, args.systemPrompt, args.userPrompt)
+      )
+      usage.inputTokens += used.inputTokens
+      usage.outputTokens += used.outputTokens
+      usage.cacheReadTokens += used.cacheReadTokens
+
+      const { proposals, discarded } = parseAnnotations(json, args.ownIds)
+      return { proposals, discarded, usage }
+    } catch (err) {
+      lastError = err instanceof Error ? err.message : String(err)
+      const retryable = err instanceof TranscribeError ? err.retryable : true
+      if (!retryable || attempt === args.maxAttempts) break
+      await args.sleep(500 * 2 ** (attempt - 1))
+    }
+  }
+
+  return { proposals: [], discarded: 0, usage, error: lastError }
+}

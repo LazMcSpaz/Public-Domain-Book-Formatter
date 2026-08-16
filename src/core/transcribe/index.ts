@@ -46,6 +46,7 @@ export {
   type ModelPricing
 } from './cost'
 export {
+  callModel,
   transcribePage,
   validateApiKey,
   buildRequestBody,

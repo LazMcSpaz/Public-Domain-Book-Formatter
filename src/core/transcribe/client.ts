@@ -135,8 +135,20 @@ function usageOf(body: unknown): ApiUsage {
   }
 }
 
-/** Transcribe one page. Throws `TranscribeError`; the runner decides on retry. */
-export async function transcribePage(config: ClientConfig, req: PageRequest): Promise<PageResult> {
+/**
+ * Post a request body and return the structured reply.
+ *
+ * The single place an API key is put on a request and an HTTP failure is
+ * classified as retryable. Both of the app's model passes go through here: a
+ * second copy would be a second place to get the browser-access header wrong,
+ * and — worse — a second place that could start logging the key.
+ *
+ * Throws `TranscribeError`; the caller's runner decides on retry.
+ */
+export async function callModel(
+  config: ClientConfig,
+  body: Record<string, unknown>
+): Promise<{ json: unknown; usage: ApiUsage }> {
   const transport = config.transport ?? fetch
   const response = await transport(API_URL, {
     method: 'POST',
@@ -148,7 +160,7 @@ export async function transcribePage(config: ClientConfig, req: PageRequest): Pr
       // direct browser use rather than routing through a server we don't have.
       'anthropic-dangerous-direct-browser-access': 'true'
     },
-    body: JSON.stringify(buildRequestBody(config, req))
+    body: JSON.stringify(body)
   })
 
   if (!response.ok) {
@@ -168,12 +180,14 @@ export async function transcribePage(config: ClientConfig, req: PageRequest): Pr
     )
   }
 
-  const body = (await response.json()) as unknown
-  const json = extractJson(body)
-  return {
-    transcription: parsePageTranscription(json, req.pageIndex),
-    usage: usageOf(body)
-  }
+  const parsed = (await response.json()) as unknown
+  return { json: extractJson(parsed), usage: usageOf(parsed) }
+}
+
+/** Transcribe one page. Throws `TranscribeError`; the runner decides on retry. */
+export async function transcribePage(config: ClientConfig, req: PageRequest): Promise<PageResult> {
+  const { json, usage } = await callModel(config, buildRequestBody(config, req))
+  return { transcription: parsePageTranscription(json, req.pageIndex), usage }
 }
 
 /** Cheap credential check so a bad key fails before a whole-book run starts. */
