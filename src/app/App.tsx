@@ -76,7 +76,7 @@ import {
 } from '@core/project'
 import { BODY_FONTS, describeProfile } from '@core/design'
 import { buildExport, editionFromAnswers, type BuildExportResult } from '@core/export'
-import { applyEdits, type Attention, type BookEdit } from '@core/edits'
+import { applyEdits, withCorrections, withEdit, type Attention, type BookEdit } from '@core/edits'
 import {
   draftIntroduction,
   estimateAnnotationCost,
@@ -1218,7 +1218,14 @@ export function App(): JSX.Element {
     const skip: number[] = []
     const restore: number[] = []
     const attention: Attention[] = []
+    /** Leaves the user retyped here, and what they retyped on each. */
+    const corrected = new Map<number, Record<string, string>>()
     for (const [key, value] of Object.entries(currentAnswers)) {
+      const fix = /^page-(\d+)-fix$/.exec(key)
+      if (fix && value && typeof value === 'object' && !Array.isArray(value)) {
+        corrected.set(Number(fix[1]), value as Record<string, string>)
+        continue
+      }
       const match = /^page-(\d+)$/.exec(key)
       if (!match) continue
       const pageIndex = Number(match[1])
@@ -1234,6 +1241,26 @@ export function App(): JSX.Element {
     }
 
     /**
+     * Corrections typed at the gate, folded in before anything else reads the
+     * text — a re-read is decided against the page as the user has left it.
+     *
+     * They are ordinary `text` edits: the gate and the proof step produce the
+     * same thing, so a fix made here is saved with the run, undoable there, and
+     * applies to the book rather than to the screen it was typed on.
+     */
+    const pristine = new Map((state.document?.blocks ?? []).map((b) => [b.id, b.text]))
+    let nextEdits = edits
+    for (const corrections of corrected.values()) {
+      nextEdits = withCorrections(nextEdits, corrections, pristine)
+    }
+    /** Leaves whose text the user actually changed, not merely visited. */
+    const editedPages = new Set(
+      [...corrected.entries()]
+        .filter(([, c]) => Object.entries(c).some(([id, text]) => text !== pristine.get(id)))
+        .map(([pageIndex]) => pageIndex)
+    )
+
+    /**
      * Put back the passages OCR read and the transcription lacks.
      *
      * As ordinary `text` corrections, so they are undoable at the proof step,
@@ -1242,18 +1269,30 @@ export function App(): JSX.Element {
      * OCR's, not the model's, so they are spliced in where they were taken from
      * and left for the user to read rather than trusted.
      */
-    const recovered: BookEdit[] = []
     if (restore.length > 0 && state.document) {
-      const blocks = applyEdits(state.document, edits).blocks
+      const blocks = applyEdits(state.document, nextEdits).blocks
       for (const pageIndex of restore) {
         for (const run of state.droppedRuns[pageIndex] ?? []) {
+          // A leaf the user has just retyped is theirs. Splicing on top of it
+          // would most likely duplicate the words they typed in, so the passage
+          // is handed back instead of applied — and handed back visibly, since
+          // they did ask for it.
+          if (editedPages.has(pageIndex)) {
+            attention.push({
+              pageIndex,
+              message:
+                'You corrected this leaf yourself, so the missing passage was left ' +
+                `for you rather than spliced in over your text: “${run.text}”`
+            })
+            continue
+          }
           // The block the anchor is in, among those that came off this page.
           const host = blocks.find(
             (b) => b.sourcePages.includes(pageIndex) && spliceRun(b.text, run) !== null
           )
           const fixed = host ? spliceRun(host.text, run) : null
           if (host && fixed) {
-            recovered.push({ kind: 'text', blockId: host.id, text: fixed })
+            nextEdits = withEdit(nextEdits, { kind: 'text', blockId: host.id, text: fixed })
           } else {
             // Nowhere to put it: the anchor phrase is in no block off this leaf.
             // Reported rather than dropped — the same rule as a footnote with no
@@ -1266,8 +1305,9 @@ export function App(): JSX.Element {
           }
         }
       }
-      if (recovered.length > 0) setEdits((current) => [...current, ...recovered])
     }
+
+    if (nextEdits !== edits) setEdits(nextEdits)
 
     let transcriptions = run.transcriptions
     let findings = run.findings

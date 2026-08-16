@@ -5,6 +5,7 @@ import {
   nextFlaggedPage,
   proofSheet,
   withEdit,
+  withCorrections,
   type BookEdit
 } from '@core/edits'
 import { assembleBook, type BookDocument } from '@core/assemble'
@@ -290,6 +291,39 @@ describe('withEdit — keeping the list from growing without bound', () => {
       { kind: 'text', blockId: 'p0b2', text: 'b' }
     ]
     expect(countEdited(edits)).toBe(2)
+  })
+})
+
+describe('withCorrections — fixing a leaf at the gate instead of paying again', () => {
+  const pristine = new Map(book().blocks.map((b) => [b.id, b.text]))
+
+  it('turns a retyped passage into the same edit the proof step makes', () => {
+    const edits = withCorrections([], { p0b1: 'The chirurgeon examined the specimen.' }, pristine)
+    expect(edits).toEqual([
+      { kind: 'text', blockId: 'p0b1', text: 'The chirurgeon examined the specimen.' }
+    ])
+    expect(texts(applyEdits(book(), edits))[1]).toBe('The chirurgeon examined the specimen.')
+  })
+
+  it('records nothing for a passage left as it was', () => {
+    // Walking through the gate twice, or clicking into a box and out again,
+    // must not claim every block on the leaf was corrected.
+    const untouched = { p0b1: 'The chirnrgeon examined the specimen.', p0b2: 'A second paragraph.' }
+    expect(withCorrections([], untouched, pristine)).toEqual([])
+    expect(countEdited(withCorrections([], untouched, pristine))).toBe(0)
+  })
+
+  it('replaces its own earlier correction rather than stacking one on it', () => {
+    const once = withCorrections([], { p0b1: 'First go.' }, pristine)
+    const twice = withCorrections(once, { p0b1: 'Second go.' }, pristine)
+    expect(twice).toEqual([{ kind: 'text', blockId: 'p0b1', text: 'Second go.' }])
+  })
+
+  it('leaves corrections to other blocks alone', () => {
+    const existing: BookEdit[] = [{ kind: 'text', blockId: 'p1b0', text: 'Fixed elsewhere.' }]
+    const edits = withCorrections(existing, { p0b1: 'Fixed here.' }, pristine)
+    expect(edits).toHaveLength(2)
+    expect(edits.find((e) => e.kind === 'text' && e.blockId === 'p1b0')).toBeDefined()
   })
 })
 

@@ -35,7 +35,7 @@ import {
 } from '@core/style'
 import type { StyleProfile } from '@core/model'
 import { bookWordCount, seamCount } from '@core/assemble'
-import type { Answers, Question, TermRow } from './questions'
+import type { Answers, PageEditRow, Question, TermRow } from './questions'
 
 export type StepId =
   | 'intake'
@@ -561,10 +561,25 @@ const gateUncertainties: Step = {
       byPage.set(u.pageIndex, list)
     }
 
+    // The passages that came off each leaf, so the gate can offer them for
+    // correction rather than only for inspection. Grouped by the leaf a block
+    // *began* on, the same rule the proof sheet uses: a paragraph joined across
+    // a seam belongs to one leaf, or the same correction would be offered twice
+    // and the second view would show the first one's text as unedited.
+    const blocksByPage = new Map<number, PageEditRow[]>()
+    for (const block of s.document?.blocks ?? []) {
+      const [first, ...rest] = block.sourcePages
+      if (first === undefined) continue
+      const list = blocksByPage.get(first) ?? []
+      list.push({ id: block.id, text: block.text, kind: block.kind, alsoFromPages: rest })
+      blocksByPage.set(first, list)
+    }
+
     for (const [pageIndex, messages] of [...byPage.entries()].sort((a, b) => a[0] - b[0])) {
       const read = (s.pageText[pageIndex] ?? '').trim()
       const dropped = s.droppedRuns[pageIndex] ?? []
       const recoverable = dropped.length > 0
+      const rows = blocksByPage.get(pageIndex) ?? []
 
       qs.push({
         id: `page-${pageIndex}`,
@@ -580,7 +595,12 @@ const gateUncertainties: Step = {
         // be checked against anything.
         evidence: [
           { kind: 'image', src: `page:${pageIndex}`, alt: `Scan of page ${pageIndex + 1}` },
-          ...(read ? [{ kind: 'text' as const, text: read, label: 'What was read off it' }] : []),
+          // What was read off it — unless the passages themselves are offered
+          // below, in which case this would be the same text a second time and
+          // the read-only copy is the one to drop.
+          ...(read && rows.length === 0
+            ? [{ kind: 'text' as const, text: read, label: 'What was read off it' }]
+            : []),
           // The dropped passages themselves, so the decision is made on the
           // words rather than on a count of them.
           ...dropped.map((run, n) => ({
@@ -625,6 +645,23 @@ const gateUncertainties: Step = {
           { value: 'skip', label: 'Leave this page out', description: 'Exclude it from the book.' }
         ]
       })
+
+      // The text itself, editable, directly under the scan it was read from.
+      // Someone who has just been shown a discrepancy and can see what it is
+      // should not have to choose between paying for a re-read and remembering
+      // to come back later. A correction typed here is the same `text` edit the
+      // proof step produces, applied book-wide and undoable there.
+      if (rows.length > 0) {
+        qs.push({
+          id: `page-${pageIndex}-fix`,
+          type: 'page-edit',
+          prompt: `…or fix page ${pageIndex + 1} here`,
+          help:
+            'Type over anything that was read wrong. This costs nothing and is ' +
+            'the same correction the proof step makes, so it applies to the whole book.',
+          rows
+        })
+      }
     }
 
     return qs

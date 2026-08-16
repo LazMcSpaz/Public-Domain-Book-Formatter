@@ -202,6 +202,60 @@ body {
   outline: 2px solid var(--accent);
   outline-offset: -1px;
 }
+
+/* Fixing a leaf at the gate. The boxes carry the book's own text, so they are
+   set at reading width and reading size rather than as form fields. */
+.page-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.page-edit-row.changed .page-edit-kind {
+  color: var(--accent);
+  font-weight: 600;
+}
+.page-edit-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.page-edit-kind {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.page-edit-seam {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-style: italic;
+}
+.page-edit-head button {
+  margin-left: auto;
+  font-size: 0.75rem;
+  padding: 2px 8px;
+}
+.page-edit textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  resize: vertical;
+}
+.page-edit-row.changed textarea {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.page-edit textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
 .q-row {
   display: flex;
   gap: 22px;

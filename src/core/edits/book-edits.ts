@@ -460,6 +460,33 @@ export function countEdited(edits: readonly BookEdit[]): number {
 }
 
 /**
+ * Fold corrections typed at the uncertainty gate into an edit list.
+ *
+ * The gate hands back `blockId → corrected text` for whatever the user retyped.
+ * They become ordinary `text` edits, because a correction is a correction
+ * wherever it was made — saved with the run, undoable at the proof step, and
+ * indistinguishable from one typed there.
+ *
+ * `pristine` is what each block said before, and a "correction" equal to it is
+ * dropped rather than recorded: passing through the gate twice, or clicking into
+ * a box and out again, must not litter the list with edits that change nothing
+ * and inflate the count of corrected blocks the user is shown.
+ */
+export function withCorrections(
+  edits: readonly BookEdit[],
+  corrections: Readonly<Record<string, string>>,
+  pristine: ReadonlyMap<string, string>
+): BookEdit[] {
+  let out = [...edits]
+  for (const [blockId, text] of Object.entries(corrections)) {
+    if (typeof text !== 'string') continue
+    if (text === pristine.get(blockId)) continue
+    out = withEdit(out, { kind: 'text', blockId, text })
+  }
+  return out
+}
+
+/**
  * Replace any edit that names the same target and does the same job.
  *
  * Typing in a box produces an edit per keystroke; keeping all of them would

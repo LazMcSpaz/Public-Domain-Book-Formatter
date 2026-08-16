@@ -377,19 +377,26 @@ const resumedTo = await page.locator('.rail li.active .label').innerText()
 const chargedAgain = await page.locator('.cost').count()
 
 // The uncertainty gate has to show the scan *and* what was read off it: a
-// thumbnail of a page of dense type cannot be proofread on its own.
-const gateScans = await page.locator('.q-evidence.readable img').count()
+// thumbnail of a page of dense type cannot be proofread on its own. The text is
+// now the editable copy — being asked to verify a discrepancy and given no way
+// to fix it was the reason a re-read got bought for a one-word mistake.
+const gateScans = await page.locator('.q-evidence img').count()
 const gateText = await page
-  .locator('.q-evidence.readable pre')
+  .locator('.page-edit textarea')
   .first()
-  .innerText()
+  .inputValue()
   .catch(() => '')
 await shot('08c-uncertainty-gate-side-by-side')
 
 // A verdict clicked here must survive a refresh. It costs time rather than
 // money, which is why it used to be thrown away while the pages it applied to
 // were carefully kept.
-const pageVerdicts = page.locator('.q').filter({ hasText: 'Page ' })
+//
+// Located by the options they carry rather than by their prompt: the editor
+// that now sits under each one names its page too.
+const pageVerdicts = page
+  .locator('.q')
+  .filter({ has: page.locator('.opt', { hasText: 'Looks fine' }) })
 const verdictCount = await pageVerdicts.count()
 const verdicts = pageVerdicts.first()
 if (verdictCount > 0) {
@@ -405,6 +412,29 @@ if (verdictCount > 1) {
   markedALeaf = true
 }
 const verdictOptions = await verdicts.locator('.opt .t').allInnerTexts()
+
+// Typing over a misreading here has to reach the finished book. The leaf is
+// picked by number rather than by position, because a leaf with only a picture
+// on it is flagged without having any text to offer.
+const GATE_FIX = 'Corrected at the gate, not paid for twice.'
+const verdictPages = (await pageVerdicts.locator('.prompt').allInnerTexts())
+  .map((t) => Number(/Page (\d+)/.exec(t)?.[1] ?? 0))
+  .filter((n) => n > 0)
+// Not the first: that one was just left out of the book, so a correction to it
+// would prove nothing.
+const fixablePage = verdictPages.slice(1).find(Boolean) ?? verdictPages[0]
+const gateEditor = page
+  .locator('.q')
+  .filter({ hasText: `fix page ${fixablePage} here` })
+  .locator('textarea')
+  .first()
+let gateEdited = false
+if ((await gateEditor.count()) > 0) {
+  await gateEditor.fill(GATE_FIX)
+  await page.waitForTimeout(500)
+  gateEdited = true
+  await shot('08c2-uncertainty-gate-corrected')
+}
 const verdictBefore = await page.evaluate(() =>
   Object.keys(localStorage)
     .filter((k) => k.startsWith('pdbf.review.'))
@@ -461,8 +491,35 @@ if (toFixButton) {
     .innerText()
     .catch(() => '')
   await shot('05c2a-proof-marked-leaf')
-  // Back to the top of the sheet, so what follows reads leaves by their number.
-  const previous = page.locator('.proof-bar button', { hasText: '‹ Previous' })
+}
+
+// The correction typed at the gate is an ordinary edit, so it has to be here on
+// the leaf it was made on — and editable again, not baked in.
+const previous = page.locator('.proof-bar button', { hasText: '‹ Previous' })
+const forward = page.locator('.proof-bar button', { hasText: 'Next ›' })
+let gateFixOnLeaf = ''
+if (gateEdited) {
+  while (await previous.isEnabled()) {
+    await previous.click()
+    await page.waitForTimeout(120)
+  }
+  for (let i = 0; i < 40; i++) {
+    const where = await page.locator('.proof-where').innerText()
+    if (where.startsWith(`Leaf ${fixablePage}\n`) || where.startsWith(`Leaf ${fixablePage} `)) {
+      const values = await page.locator('.proof-block textarea').allInnerTexts()
+      const boxes = await page.locator('.proof-block textarea').all()
+      const texts = await Promise.all(boxes.map((b) => b.inputValue()))
+      gateFixOnLeaf = [...texts, ...values].find((t) => t.includes(GATE_FIX)) ?? ''
+      break
+    }
+    if (!(await forward.isEnabled())) break
+    await forward.click()
+    await page.waitForTimeout(150)
+  }
+}
+
+// Back to the top of the sheet, so what follows reads leaves by their number.
+if (toFixButton || gateEdited) {
   while (await previous.isEnabled()) {
     await previous.click()
     await page.waitForTimeout(120)
@@ -1406,6 +1463,11 @@ console.log(`  illustration candidates: ${foundIllustrations} (crops shown: ${il
 console.log(`  advanced past the structure gate to: ${afterStructure}`)
 console.log(`  proof sheet: ${proofBoxes} editable block(s), ${proofScan} scan(s) beside them`)
 console.log(`  the gate offers: ${verdictOptions.join(' / ')}`)
+console.log(
+  `  a fix typed at the gate reaches the book: ${
+    gateEdited ? gateFixOnLeaf === GATE_FIX : 'not exercised'
+  } (leaf ${fixablePage})`
+)
 console.log(
   `  a leaf marked to fix keeps its note: ${markedALeaf ? markedFlag || 'NO' : 'not exercised'}` +
     (toFixButton ? ` (${toFixButton})` : '')

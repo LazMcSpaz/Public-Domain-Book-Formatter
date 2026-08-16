@@ -11,6 +11,8 @@ export {
   type ConfirmQuestion,
   type TermGridQuestion,
   type TermRow,
+  type PageEditQuestion,
+  type PageEditRow,
   type TermVerdict,
   type Evidence,
   type Answers,

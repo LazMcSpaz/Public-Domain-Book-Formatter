@@ -186,6 +186,63 @@ function TermGrid({
   )
 }
 
+/**
+ * The passages off one leaf, editable in place.
+ *
+ * The answer holds only what was *changed*, so a box the user never touched
+ * contributes nothing and reverting one removes its entry rather than recording
+ * "corrected back to what it said". That is what keeps a gate someone walked
+ * through twice from claiming every block in the book was corrected.
+ */
+function PageEditor({
+  question,
+  value,
+  onChange
+}: {
+  question: Extract<Question, { type: 'page-edit' }>
+  value: Record<string, string>
+  onChange: (v: Record<string, string>) => void
+}): JSX.Element {
+  const set = (id: string, text: string, original: string): void => {
+    const next = { ...value }
+    if (text === original) delete next[id]
+    else next[id] = text
+    onChange(next)
+  }
+
+  return (
+    <div className="page-edit">
+      {question.rows.map((row) => {
+        const current = value[row.id] ?? row.text
+        const changed = current !== row.text
+        return (
+          <div key={row.id} className={changed ? 'page-edit-row changed' : 'page-edit-row'}>
+            <div className="page-edit-head">
+              <span className="page-edit-kind">{row.kind}</span>
+              {row.alsoFromPages.length > 0 ? (
+                <span className="page-edit-seam">
+                  runs on to page {row.alsoFromPages.map((p) => p + 1).join(', ')}
+                </span>
+              ) : null}
+              {changed ? (
+                <button type="button" onClick={() => set(row.id, row.text, row.text)}>
+                  Undo
+                </button>
+              ) : null}
+            </div>
+            <textarea
+              value={current}
+              rows={Math.min(12, Math.max(2, Math.ceil(current.length / 60)))}
+              aria-label={`${row.kind} from this page`}
+              onChange={(e) => set(row.id, e.target.value, row.text)}
+            />
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 export function QuestionView({ question, value, onChange, resolveEvidence }: Props): JSX.Element {
   const body = (): JSX.Element => {
     switch (question.type) {
@@ -269,6 +326,14 @@ export function QuestionView({ question, value, onChange, resolveEvidence }: Pro
           <TermGrid
             question={question}
             value={(value as Record<string, TermVerdict>) ?? {}}
+            onChange={onChange}
+          />
+        )
+      case 'page-edit':
+        return (
+          <PageEditor
+            question={question}
+            value={(value as Record<string, string>) ?? {}}
             onChange={onChange}
           />
         )

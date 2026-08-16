@@ -245,10 +245,12 @@ describe('the export gate — the imprint arrives filled in on book two', () => 
 
   const find = (qs: Question[], id: string): Question => qs.find((q) => q.id === id)!
 
-  /** The prefilled answer, narrowed past the one question kind that has none. */
+  /** The prefilled answer, narrowed past the question kinds that have none. */
   const defaultOf = (qs: Question[], id: string): unknown => {
     const q = find(qs, id)
-    if (q.type === 'term-grid') throw new Error(`${id} is a term grid, not a field`)
+    if (q.type === 'term-grid' || q.type === 'page-edit') {
+      throw new Error(`${id} is a ${q.type}, not a field`)
+    }
     return q.defaultValue
   }
 

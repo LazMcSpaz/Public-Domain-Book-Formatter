@@ -406,6 +406,91 @@ describe('gate 2 — uncertain spots', () => {
     expect(opts).toEqual(['accept', 'later', 'redo', 'skip'])
   })
 
+  describe('fixing a leaf without paying to have it read again', () => {
+    const flagged = (overrides: Partial<WizardState> = {}) =>
+      stepById('gate-uncertainties').questions(
+        transcribed({
+          findings: [
+            { code: 'text-dropped', severity: 'high', pageIndex: 0, message: '30% shorter.' }
+          ],
+          document: assembleBook([
+            {
+              pageIndex: 0,
+              role: 'body',
+              uncertain: [],
+              furniture: {},
+              blocks: [
+                { kind: 'heading', text: 'CHAP. I.' },
+                { kind: 'paragraph', text: 'The alembick being set upon a gentle fire.' }
+              ]
+            }
+          ]),
+          ...overrides
+        })
+      )
+
+    it('offers the leaf’s own passages, in order, with what each one is', () => {
+      const fix = flagged().find((q) => q.id === 'page-0-fix')!
+      expect(fix.type).toBe('page-edit')
+      const rows = (fix as { rows: { text: string; kind: string }[] }).rows
+      expect(rows.map((r) => r.kind)).toEqual(['heading', 'paragraph'])
+      expect(rows[1]!.text).toContain('alembick')
+    })
+
+    it('starts empty — an untouched leaf must correct nothing', () => {
+      // Seeding the answer with the current text would write an edit over every
+      // block on every flagged page and claim the whole book was corrected.
+      const fix = flagged().find((q) => q.id === 'page-0-fix')!
+      expect(defaultAnswers([fix])['page-0-fix']).toEqual({})
+    })
+
+    it('drops the read-only copy, so the text is not shown twice', () => {
+      const q = flagged().find((x) => x.id === 'page-0')!
+      expect(q.evidence?.filter((e) => e.kind === 'text')).toHaveLength(0)
+      expect(q.evidence?.[0]).toMatchObject({ kind: 'image' })
+    })
+
+    it('still shows the text read-only when there is no document to edit', () => {
+      const q = flagged({ document: null, pageText: { 0: 'The alembick.' } }).find(
+        (x) => x.id === 'page-0'
+      )!
+      expect(q.evidence?.find((e) => e.kind === 'text')).toMatchObject({ text: 'The alembick.' })
+      expect(flagged({ document: null }).find((x) => x.id === 'page-0-fix')).toBeUndefined()
+    })
+
+    it('puts a joined paragraph on the leaf it began, and says where it runs on', () => {
+      // Otherwise the same correction is offered under two leaves and the second
+      // shows the first one's text as though it had never been made.
+      const qs = flagged({
+        findings: [
+          { code: 'text-dropped', severity: 'high', pageIndex: 0, message: 'a' },
+          { code: 'text-dropped', severity: 'high', pageIndex: 1, message: 'b' }
+        ],
+        document: assembleBook([
+          {
+            pageIndex: 0,
+            role: 'body',
+            uncertain: [],
+            furniture: {},
+            blocks: [{ kind: 'paragraph', text: 'The alembick being set', continuesNext: true }]
+          },
+          {
+            pageIndex: 1,
+            role: 'body',
+            uncertain: [],
+            furniture: {},
+            blocks: [{ kind: 'paragraph', text: 'upon a gentle fire.', continuesPrevious: true }]
+          }
+        ])
+      })
+      const rows = (
+        qs.find((q) => q.id === 'page-0-fix') as { rows: { alsoFromPages: number[] }[] }
+      ).rows
+      expect(rows[0]!.alsoFromPages).toEqual([1])
+      expect(qs.find((q) => q.id === 'page-1-fix')).toBeUndefined()
+    })
+  })
+
   it('separates “it’s fine” from “I can see what’s wrong”', () => {
     // Someone who can read the mistake off the scan is not saying the page is
     // good; they are saying they will fix it. Without this answer they had to

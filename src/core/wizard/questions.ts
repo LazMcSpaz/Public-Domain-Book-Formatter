@@ -97,14 +97,55 @@ export interface TermGridQuestion extends QuestionBase {
   rows: TermRow[]
 }
 
+/** One passage off a leaf, as it currently reads. */
+export interface PageEditRow {
+  /** The block's id — what a correction is keyed to, book-wide. */
+  id: string
+  /** What it says now, with any corrections already made to it. */
+  text: string
+  /** What kind of thing it is, so a heading is not mistaken for a paragraph. */
+  kind: string
+  /**
+   * Later leaves this passage also runs onto, if any.
+   *
+   * A paragraph joined across a seam is shown on the leaf it began, so the text
+   * here can run past what the scan beside it shows. Saying so is the difference
+   * between a repair and an apparent mistake to be edited out.
+   */
+  alsoFromPages: number[]
+}
+
+/**
+ * Fix a leaf's text in place, rather than paying to have it read again.
+ *
+ * The gate exists to ask "is this good enough to keep", and the honest answer is
+ * often "no, and I can see exactly what's wrong". Until this existed the only
+ * remedies on offer were to re-run the page at a cost or to remember to come
+ * back at the proof step; both are worse than typing the word.
+ *
+ * The answer is `blockId → corrected text`, holding only what was *changed* —
+ * so it converts straight into the same `text` edits a correction typed at the
+ * proof step produces, and an untouched leaf contributes nothing.
+ */
+export interface PageEditQuestion extends QuestionBase {
+  type: 'page-edit'
+  rows: PageEditRow[]
+}
+
 export type Question =
-  ChoiceQuestion | MultiChoiceQuestion | TextQuestion | ConfirmQuestion | TermGridQuestion
+  | ChoiceQuestion
+  | MultiChoiceQuestion
+  | TextQuestion
+  | ConfirmQuestion
+  | TermGridQuestion
+  | PageEditQuestion
 
 /** Per-term verdict from the review grid. */
 export type TermVerdict =
   { action: 'accept' } | { action: 'correct'; text: string } | { action: 'ignore' }
 
-export type AnswerValue = string | string[] | boolean | Record<string, TermVerdict>
+export type AnswerValue =
+  string | string[] | boolean | Record<string, TermVerdict> | Record<string, string>
 
 /** Answers keyed by question id. */
 export type Answers = Record<string, AnswerValue>
@@ -129,6 +170,13 @@ export function defaultAnswers(questions: readonly Question[]): Answers {
         out[q.id] = Object.fromEntries(
           q.rows.map((r) => [r.id, { action: 'accept' } as TermVerdict])
         )
+        break
+      case 'page-edit':
+        // Empty, not a copy of the rows: the answer holds corrections, and a
+        // leaf nobody touched must produce no edit at all. Seeding it with the
+        // current text would write an edit over every block in the book and
+        // make "undo" at the proof step revert to a correction of nothing.
+        out[q.id] = {}
         break
     }
   }
