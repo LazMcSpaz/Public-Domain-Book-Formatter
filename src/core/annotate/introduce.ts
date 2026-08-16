@@ -23,7 +23,7 @@
  */
 import type { BookDocument } from '@core/assemble'
 import { callModel, type ApiUsage, type ClientConfig } from '@core/transcribe'
-import type { BookFacts } from './prompt'
+import type { BookFacts } from '@core/harvest'
 import { outsideClaims } from './schema'
 import { voiceBlock, type EditorVoice } from './voice'
 

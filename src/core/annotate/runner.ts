@@ -19,12 +19,20 @@
 import { callModel, TranscribeError, type ApiUsage, type ClientConfig } from '@core/transcribe'
 import type { BookBlock } from '@core/assemble'
 import {
+  checkFacts,
+  dedupeFacts,
+  parseFacts,
+  topTags,
+  type BookFacts,
+  type Fact,
+  type HarvestPromptOptions
+} from '@core/harvest'
+import {
   buildAnnotationSystemPrompt,
   buildAnnotationUserPrompt,
   chunkBlocks,
   contextFor,
-  type AnnotationChunk,
-  type BookFacts
+  type BookChunk
 } from './prompt'
 import { ANNOTATION_SCHEMA, checkProposals, parseAnnotations, type CheckedProposal } from './schema'
 import type { EditorVoice } from './voice'
@@ -33,6 +41,14 @@ export interface AnnotationRunOptions {
   client: ClientConfig
   voice: EditorVoice
   facts?: BookFacts
+  /**
+   * Harvest entries for the fact bank from the same replies.
+   *
+   * Omit to annotate only. Supplying it costs output tokens and nothing else —
+   * the book is already being read and the instruction is cached — which is
+   * why this rides here rather than running as a second pass.
+   */
+  harvest?: HarvestPromptOptions & { sourceKey: string }
   /** Words of the book per request. Defaults to `CHUNK_WORDS`. */
   chunkWords?: number
   maxAttempts?: number
@@ -49,6 +65,8 @@ export interface ChunkFailure {
 
 export interface AnnotationRunResult {
   proposals: CheckedProposal[]
+  /** Bank entries harvested alongside the notes. Empty when none was asked for. */
+  facts: Fact[]
   failures: ChunkFailure[]
   /** Entries the reply contained that were not usable notes. */
   discarded: number
@@ -103,11 +121,13 @@ export async function runAnnotation(
   const maxAttempts = options.maxAttempts ?? 3
   const chunks = chunkBlocks(blocks, options.chunkWords)
 
-  const systemPrompt = buildAnnotationSystemPrompt(options.voice, options.facts)
+  const systemPrompt = buildAnnotationSystemPrompt(options.voice, options.facts, options.harvest)
+  const knownTags = options.harvest?.vocabulary ? topTags(options.harvest.vocabulary) : []
   const blockText = new Map(blocks.map((b) => [b.id, b.text]))
   const bookText = blocks.map((b) => b.text).join('\n')
 
   const proposals: CheckedProposal[] = []
+  const facts: Fact[] = []
   const failures: ChunkFailure[] = []
   const usage: ApiUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 }
   let discarded = 0
@@ -132,7 +152,8 @@ export async function runAnnotation(
       userPrompt,
       ownIds,
       maxAttempts,
-      sleep
+      sleep,
+      knownTags
     })
 
     usage.inputTokens += outcome.usage.inputTokens
@@ -144,29 +165,34 @@ export async function runAnnotation(
     } else {
       discarded += outcome.discarded
       proposals.push(...checkProposals(outcome.proposals, blockText, bookText))
+      if (options.harvest) {
+        facts.push(...checkFacts(outcome.facts, blocks, options.harvest.sourceKey))
+      }
     }
 
     options.onProgress?.(i + 1, chunks.length)
   }
 
-  return { proposals, failures, discarded, usage, cancelled }
+  return { proposals, facts: dedupeFacts(facts), failures, discarded, usage, cancelled }
 }
 
 interface ChunkOutcome {
   proposals: ReturnType<typeof parseAnnotations>['proposals']
+  facts: ReturnType<typeof parseFacts>['facts']
   discarded: number
   usage: ApiUsage
   error?: string
 }
 
 async function annotateChunk(args: {
-  chunk: AnnotationChunk
+  chunk: BookChunk
   config: ClientConfig
   systemPrompt: string
   userPrompt: string
   ownIds: ReadonlySet<string>
   maxAttempts: number
   sleep: (ms: number) => Promise<void>
+  knownTags: readonly string[]
 }): Promise<ChunkOutcome> {
   const usage: ApiUsage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 }
   let lastError = 'unknown error'
@@ -182,7 +208,15 @@ async function annotateChunk(args: {
       usage.cacheReadTokens += used.cacheReadTokens
 
       const { proposals, discarded } = parseAnnotations(json, args.ownIds)
-      return { proposals, discarded, usage }
+      // A malformed harvest never costs the notes from the same reply: the two
+      // are independent lists, and the notes are the part with a deadline.
+      const harvested = parseFacts(json, args.knownTags)
+      return {
+        proposals,
+        facts: harvested.facts,
+        discarded: discarded + harvested.discarded,
+        usage
+      }
     } catch (err) {
       lastError = err instanceof Error ? err.message : String(err)
       const retryable = err instanceof TranscribeError ? err.retryable : true
@@ -191,5 +225,5 @@ async function annotateChunk(args: {
     }
   }
 
-  return { proposals: [], discarded: 0, usage, error: lastError }
+  return { proposals: [], facts: [], discarded: 0, usage, error: lastError }
 }

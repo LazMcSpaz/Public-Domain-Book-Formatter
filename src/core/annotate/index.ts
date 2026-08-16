@@ -40,8 +40,7 @@ export {
   buildAnnotationUserPrompt,
   chunkBlocks,
   contextFor,
-  type AnnotationChunk,
-  type BookFacts
+  type BookChunk as AnnotationChunk
 } from './prompt'
 export {
   buildAnnotationBody,

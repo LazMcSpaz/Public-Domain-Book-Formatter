@@ -21,6 +21,7 @@
  *
  * Pure: text in, proposals and findings out.
  */
+import { FACT_ITEM_SCHEMA } from '@core/harvest'
 import { ANNOTATION_KINDS, type AnnotationKind } from './voice'
 
 /** One note the pass suggests, before anybody has approved it. */
@@ -77,7 +78,11 @@ export const ANNOTATION_SCHEMA = {
         required: ['blockId', 'anchorText', 'kind', 'text', 'reason'],
         additionalProperties: false
       }
-    }
+    },
+    // The harvest rides this reply when it is wanted. One request produces the
+    // notes for the page and the entries for the bank, so the reading — the
+    // expensive half — is paid for once.
+    facts: { type: 'array', items: FACT_ITEM_SCHEMA }
   },
   required: ['notes'],
   additionalProperties: false
