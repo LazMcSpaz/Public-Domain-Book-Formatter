@@ -855,7 +855,9 @@ describe('gate 1 — never ask about a word without showing it', () => {
   it('says the list is a subset instead of implying the book had only those', () => {
     const g = grid(stateWith(10, (id) => (id === 'term0word-0' ? 'blob:x' : undefined)))!
     expect(g.prompt).toContain('of 10')
-    expect(g.help).toContain('9 appear less often')
+    // "scored lower", not "appear less often": the grid ranks by how odd a word
+    // is, not by how often it turns up.
+    expect(g.help).toContain('The other 9 scored lower')
   })
 
   it('does not claim a subset when every term has its pixels', () => {

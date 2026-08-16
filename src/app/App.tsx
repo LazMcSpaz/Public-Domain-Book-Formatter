@@ -619,6 +619,7 @@ export function App(): JSX.Element {
         lexicon: result.lexicon,
         classifications: [{ pageIndex: 0, role: 'title-page', selfReportedConfidence: 0 }],
         cropFor: (tokenId: string) => result.crops.get(tokenId),
+        contextCropFor: (tokenId: string) => result.contextCrops.get(tokenId),
         illustrationCandidates: result.illustrations.map((c) => ({
           id: c.region.id,
           pageIndex: c.region.pageIndex,

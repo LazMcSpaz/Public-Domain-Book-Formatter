@@ -86,6 +86,13 @@ export interface WizardState {
   classifications: PageClassification[]
   /** Resolver for a term's word-crop image (object URL). */
   cropFor?: (tokenId: string) => string | undefined
+  /**
+   * A wider cut of the same word, showing it among its neighbours on the line.
+   *
+   * Shown on hover: the word alone is enough to read the letters and not always
+   * enough to judge them.
+   */
+  contextCropFor?: (tokenId: string) => string | undefined
   /** True when an API key is already stored locally — don't ask again. */
   hasApiKey: boolean
   /**
@@ -329,6 +336,7 @@ const gateIdentity: Step = {
         reading: e.term,
         count: e.count,
         cropSrc: e.sampleTokenId ? s.cropFor?.(e.sampleTokenId) : undefined,
+        contextSrc: e.sampleTokenId ? s.contextCropFor?.(e.sampleTokenId) : undefined,
         signals: e.signals,
         pages: e.pages
       }))
@@ -343,10 +351,11 @@ const gateIdentity: Step = {
             ? `Check the ${rows.length} highest-impact of ${s.lexicon.length} unusual words`
             : `Check the ${rows.length} unusual words I found`,
         help:
-          'Sorted by how often each appears — the ones at the top affect the most pages. ' +
-          'Confirming a word here fixes it everywhere in the book.' +
+          'The oddest first — archaic spellings, names, and words OCR struggled with. ' +
+          'Ordinary words are left out however badly they were read. Hover a cutting to ' +
+          'see the word in its line. Confirming a word here fixes it everywhere in the book.' +
           (held > 0
-            ? ` The other ${held} appear less often; they are still given to the model as context.`
+            ? ` The other ${held} scored lower; they are still given to the model as context.`
             : ''),
         rows
       })

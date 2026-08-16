@@ -268,7 +268,13 @@ await shot('05-gate-identity-mobile')
 await page.setViewportSize({ width: 1360, height: 900 })
 
 const rows = await page.locator('.terms tbody tr').count()
-const crops = await page.locator('.terms img').count()
+const crops = await page.locator('.terms td .crop img').count()
+// The wider cut of the same word, held back until asked for.
+const contextCrops = await page.locator('.terms .crop-context img').count()
+await page.locator('.terms .crop').first().hover()
+await page.waitForTimeout(400)
+const contextVisible = await page.locator('.terms .crop-context').first().isVisible()
+await shot('03c-term-context-on-hover')
 
 // The one step in this app that costs money is the one worth not repeating.
 // A run stored under this file's key should be *offered* rather than silently
@@ -1348,6 +1354,7 @@ for (const want of ['Extra gutter for binding', 'Page numbers', 'Print a half-ti
 console.log('\nresult:')
 console.log(`  term rows: ${rows}`)
 console.log(`  word crops rendered: ${crops}`)
+console.log(`  each with its line on hover: ${contextCrops} (popover shows: ${contextVisible})`)
 console.log(`  design summary: ${after}`)
 console.log(`  summary responds to answers: ${before !== after}`)
 console.log(`  saved run offered: ${offered === 1}`)

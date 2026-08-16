@@ -9,7 +9,7 @@
  * rendered, consumed, and dropped before the next is created, so peak usage is
  * one page (~19 MB) rather than the whole book (~5.8 GB for 300 pages).
  */
-import { buildLexicon, type LexiconEntry, type LexiconToken } from '@core/lexicon'
+import { buildLexicon, contextBox, type LexiconEntry, type LexiconToken } from '@core/lexicon'
 import { openPdf, renderPage, cropToObjectUrl, thumbnailToObjectUrl } from './pdf'
 import { detectIllustrations, type RegionCandidate } from './illustrations'
 import { OcrEngine, type OcrWord, type OcrAssetPaths } from './ocr'
@@ -27,6 +27,16 @@ export interface ReconResult {
   lexicon: LexiconEntry[]
   /** tokenId → object URL of that word's pixels (review-grid evidence). */
   crops: Map<string, string>
+  /**
+   * A wider cut of the same word, showing it among its neighbours on the line.
+   *
+   * Shown on hover at the term grid: a word alone is enough to read the letters
+   * and not always enough to judge them — `mineralls` could be the book's own
+   * spelling or OCR doubling an `l`, and the sentence around it settles that.
+   * Taken while the page is already rendered for the word crop, so it costs an
+   * encode and nothing else.
+   */
+  contextCrops: Map<string, string>
   /** pageIndex → object URL of a page thumbnail (front-matter review). */
   thumbnails: Map<number, string>
   /**
@@ -116,6 +126,7 @@ export async function runRecon(
 
     // --- render crops for the terms that will actually be reviewed ---
     const crops = new Map<string, string>()
+    const contextCrops = new Map<string, string>()
     const wanted = lexicon.slice(0, cropLimit)
     const pagesNeeded = new Set<number>()
     for (const e of wanted) {
@@ -135,13 +146,28 @@ export async function runRecon(
         } catch {
           // A crop is evidence, not load-bearing — skip a bad box silently.
         }
+        try {
+          const wider = contextBox(w, boxesByPage.get(pageIndex) ?? [])
+          contextCrops.set(w.id, await cropToObjectUrl(rendered.canvas, wider, 0))
+        } catch {
+          // Same rule. The word crop above is the one that has to be there.
+        }
       }
       rendered.canvas.width = 0
       rendered.canvas.height = 0
     }
 
     onProgress?.({ page: total, total, phase: 'done' })
-    return { pageCount: doc.numPages, words, lexicon, crops, thumbnails, illustrations, pageText }
+    return {
+      pageCount: doc.numPages,
+      words,
+      lexicon,
+      crops,
+      contextCrops,
+      thumbnails,
+      illustrations,
+      pageText
+    }
   } finally {
     await engine.dispose()
   }
@@ -150,6 +176,7 @@ export async function runRecon(
 /** Release every object URL a recon produced. */
 export function releaseRecon(result: ReconResult): void {
   for (const url of result.crops.values()) URL.revokeObjectURL(url)
+  for (const url of result.contextCrops.values()) URL.revokeObjectURL(url)
   for (const url of result.thumbnails.values()) URL.revokeObjectURL(url)
   for (const c of result.illustrations) URL.revokeObjectURL(c.previewUrl)
 }

@@ -1447,3 +1447,47 @@ mark.claim {
     max-height: 40vh;
   }
 }
+
+/* --- a word crop, with its line on hover ---------------------------------- */
+/*
+ * One word is enough to read the letters and not always enough to judge them:
+ * `mineralls` could be the book's spelling or OCR doubling an l. The wider cut
+ * is held back until asked for, so the grid stays a grid.
+ */
+.crop {
+  position: relative;
+  display: inline-block;
+  cursor: help;
+}
+.crop-context {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 20;
+  display: none;
+  padding: 8px;
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.16);
+  /* Wider than the cell it hangs off, and never wider than the viewport. */
+  max-width: min(560px, 80vw);
+}
+.crop:hover .crop-context,
+.crop:focus .crop-context,
+.crop:focus-within .crop-context {
+  display: block;
+}
+.crop-context img {
+  display: block;
+  max-width: 100%;
+  max-height: 90px;
+  border: 0;
+}
+.crop-context small {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-family: ui-sans-serif, system-ui;
+}

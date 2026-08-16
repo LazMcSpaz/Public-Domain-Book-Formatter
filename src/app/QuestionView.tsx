@@ -111,7 +111,19 @@ function TermGrid({
                 <tr key={row.id} className={v.action === 'ignore' ? 'ignored' : undefined}>
                   <td>
                     {row.cropSrc ? (
-                      <img src={row.cropSrc} alt={`Scan of “${row.reading}”`} />
+                      // The wider cut sits in a popover on hover and focus:
+                      // one word is enough to read the letters and not always
+                      // enough to judge them. Focusable so it is reachable
+                      // without a pointer.
+                      <span className="crop" tabIndex={row.contextSrc ? 0 : -1}>
+                        <img src={row.cropSrc} alt={`Scan of “${row.reading}”`} />
+                        {row.contextSrc ? (
+                          <span className="crop-context" role="tooltip">
+                            <img src={row.contextSrc} alt={`“${row.reading}” in its line`} />
+                            <small>as printed, in its line</small>
+                          </span>
+                        ) : null}
+                      </span>
                     ) : (
                       <span className="crop-missing">no crop</span>
                     )}

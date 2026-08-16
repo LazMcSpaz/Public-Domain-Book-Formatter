@@ -20,3 +20,5 @@ export {
   type TermDecision,
   type VettedLexicon
 } from './vetted'
+
+export { contextBox, onSameLine, type BoxLike, type ContextBoxOptions } from './context-box'

@@ -80,6 +80,8 @@ export interface TermRow {
   count: number
   /** Cropped pixels of the word, as an object URL or data URL. */
   cropSrc?: string
+  /** A wider cut of the same word, in its line — shown on hover. */
+  contextSrc?: string
   /** Why it surfaced. */
   signals: string[]
   pages: number[]
