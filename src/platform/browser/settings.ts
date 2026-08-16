@@ -19,6 +19,7 @@ const KEY_STORAGE = 'pdbf.apiKey'
 const PREFS_STORAGE = 'pdbf.prefs'
 const VOICE_STORAGE = 'pdbf.voice'
 const BANK_STORAGE = 'pdbf.bank'
+const REVIEW_PREFIX = 'pdbf.review.'
 
 export interface AppPrefs {
   modelId: string
@@ -175,6 +176,59 @@ export function recordHarvest(facts: readonly Fact[], interest: string): BankSet
 
 export function clearBank(): void {
   safeLocalStorage()?.removeItem(BANK_STORAGE)
+}
+
+/**
+ * Where the user had got to in reviewing a book, keyed to the file.
+ *
+ * The transcription is the thing that costs money and it has always been
+ * stored. This is the thing that costs *time*: three hundred pages of "looks
+ * fine / read it again / leave it out" at the uncertainty gate is an hour of
+ * someone's attention, and until now a refresh threw all of it away while
+ * carefully preserving the pages it applied to.
+ *
+ * Kept out of the saved run deliberately. That record is megabytes of
+ * transcription, and rewriting it on every click of a radio button would make
+ * the gate stutter on a long book. These are a few kilobytes of verdicts, so
+ * they go somewhere cheap to write often.
+ */
+export type StepAnswers = Record<string, Record<string, unknown>>
+
+const reviewKey = (fileKey: string): string => `${REVIEW_PREFIX}${fileKey}`
+
+export function loadReviewProgress(fileKey: string): StepAnswers {
+  if (!fileKey) return {}
+  const raw = safeLocalStorage()?.getItem(reviewKey(fileKey))
+  if (!raw) return {}
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {}
+    const out: StepAnswers = {}
+    for (const [step, value] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+        out[step] = value as Record<string, unknown>
+      }
+    }
+    return out
+  } catch {
+    return {}
+  }
+}
+
+export function saveReviewProgress(fileKey: string, answers: StepAnswers): void {
+  if (!fileKey) return
+  try {
+    safeLocalStorage()?.setItem(reviewKey(fileKey), JSON.stringify(answers))
+  } catch {
+    // A full store must never break the gate the user is standing on. The
+    // transcription is safe either way, and losing the verdicts is what
+    // happened before this existed.
+  }
+}
+
+export function clearReviewProgress(fileKey: string): void {
+  if (!fileKey) return
+  safeLocalStorage()?.removeItem(reviewKey(fileKey))
 }
 
 /** Bytes, rounded to something a person reads rather than parses. */

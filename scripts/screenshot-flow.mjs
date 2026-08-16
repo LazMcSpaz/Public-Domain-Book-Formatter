@@ -370,6 +370,32 @@ await page.waitForTimeout(2000)
 const resumedTo = await page.locator('.rail li.active .label').innerText()
 const chargedAgain = await page.locator('.cost').count()
 
+// The uncertainty gate has to show the scan *and* what was read off it: a
+// thumbnail of a page of dense type cannot be proofread on its own.
+const gateScans = await page.locator('.q-evidence.readable img').count()
+const gateText = await page
+  .locator('.q-evidence.readable pre')
+  .first()
+  .innerText()
+  .catch(() => '')
+await shot('08c-uncertainty-gate-side-by-side')
+
+// A verdict clicked here must survive a refresh. It costs time rather than
+// money, which is why it used to be thrown away while the pages it applied to
+// were carefully kept.
+const verdicts = page.locator('.q').filter({ hasText: 'Page ' }).first()
+if ((await verdicts.count()) > 0) {
+  await verdicts.locator('.opt', { hasText: 'Leave this page out' }).click()
+  await page.waitForTimeout(900)
+}
+const verdictBefore = await page.evaluate(() =>
+  Object.keys(localStorage)
+    .filter((k) => k.startsWith('pdbf.review.'))
+    .map((k) => localStorage.getItem(k) ?? '')
+    .join('')
+)
+const verdictSaved = /"skip"/.test(verdictBefore)
+
 // --- the illustration review ------------------------------------------------
 // The fixture prints an alembick in the text of one leaf and a full-page plate
 // on another, so recon should have found two candidates and no others: the
@@ -1327,6 +1353,10 @@ console.log(`  summary responds to answers: ${before !== after}`)
 console.log(`  saved run offered: ${offered === 1}`)
 console.log(`  no key asked for when reusing it: ${askedForKey === 0}`)
 console.log(`  resumed to: ${resumedTo} (cost prompts: ${chargedAgain})`)
+console.log(
+  `  the gate shows scan and text: ${gateScans > 0} / ${gateText.replace(/\s+/g, ' ').slice(0, 48)}…`
+)
+console.log(`  a verdict is written to storage as it is made: ${verdictSaved}`)
 console.log(`  illustration candidates: ${foundIllustrations} (crops shown: ${illustrationCrops})`)
 console.log(`  advanced past the structure gate to: ${afterStructure}`)
 console.log(`  proof sheet: ${proofBoxes} editable block(s), ${proofScan} scan(s) beside them`)

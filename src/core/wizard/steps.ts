@@ -142,6 +142,16 @@ export interface WizardState {
    * by. Candidates, not decisions — the structure gate asks about every one.
    */
   illustrationCandidates: IllustrationCandidate[]
+  /**
+   * What was read off each page, keyed by page index.
+   *
+   * Held for the uncertainty gate, which asks whether a transcription is good
+   * enough to keep and until now showed only the scan. A thumbnail of a page of
+   * dense type answers nothing on its own: the question is whether the *text*
+   * beside it is right, and that has to be on the same screen or the gate is
+   * asking the user to trust a number.
+   */
+  pageText: Record<number, string>
   /** The assembled book, once transcription and assembly have run. */
   document: BookDocument | null
   /**
@@ -195,6 +205,7 @@ export function initialState(): WizardState {
     uncertainties: [],
     failedPages: [],
     illustrationCandidates: [],
+    pageText: {},
     document: null,
     voice: defaultVoice(),
     harvestInterest: '',
@@ -533,14 +544,19 @@ const gateUncertainties: Step = {
     }
 
     for (const [pageIndex, messages] of [...byPage.entries()].sort((a, b) => a[0] - b[0])) {
+      const read = (s.pageText[pageIndex] ?? '').trim()
       qs.push({
         id: `page-${pageIndex}`,
         type: 'choice',
         prompt: `Page ${pageIndex + 1}`,
         help: messages.join(' · '),
         defaultValue: 'accept',
+        // The scan and what was read off it, together. Either alone leaves the
+        // user guessing: the thumbnail cannot be proofread and the text cannot
+        // be checked against anything.
         evidence: [
-          { kind: 'image', src: `page:${pageIndex}`, alt: `Scan of page ${pageIndex + 1}` }
+          { kind: 'image', src: `page:${pageIndex}`, alt: `Scan of page ${pageIndex + 1}` },
+          ...(read ? [{ kind: 'text' as const, text: read, label: 'What was read off it' }] : [])
         ],
         options: [
           { value: 'accept', label: 'Looks fine', description: 'Keep the transcription as-is.' },

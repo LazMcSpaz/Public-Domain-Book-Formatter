@@ -44,6 +44,7 @@ import {
 } from '../platform/browser/run-store'
 import {
   clearApiKey,
+  clearReviewProgress,
   formatBytes,
   loadApiKey,
   loadPrefs,
@@ -435,6 +436,11 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
                               'first time. Corrections made at the proof step go with it.',
                             run: async () => {
                               await deleteRun(run.key)
+                              // The verdicts belong to the transcription they
+                              // were made against. Leaving them behind would
+                              // put someone's old "looks fine" onto a re-read
+                              // of the same file.
+                              clearReviewProgress(run.key)
                               await deleteSourceFile(run.key)
                               setNote(`Deleted the transcription of “${run.fileName}”.`)
                             }

@@ -23,8 +23,12 @@ function EvidenceView({
   resolve?: (src: string) => string | undefined
 }): JSX.Element | null {
   if (!items?.length) return null
+  // Evidence that includes a passage of text needs room to be read, and so does
+  // the scan beside it. A word crop at Gate 1 does not — it is one word — so
+  // the wider layout is asked for rather than assumed.
+  const readable = items.some((e) => e.kind === 'text')
   return (
-    <div className="q-evidence">
+    <div className={readable ? 'q-evidence readable' : 'q-evidence'}>
       {items.map((e, i) => {
         if (e.kind === 'image') {
           const src = resolve?.(e.src) ?? e.src
@@ -260,13 +264,17 @@ export function QuestionView({ question, value, onChange, resolveEvidence }: Pro
   }
 
   const hasEvidence = (question.evidence?.length ?? 0) > 0
+  // Evidence carrying a passage of text is the point of the screen, not a
+  // footnote to it: the scan and the transcription both need room, and three
+  // radio buttons do not. So the row is told which way to divide itself.
+  const readsEvidence = question.evidence?.some((e) => e.kind === 'text') ?? false
 
   return (
     <div className="q">
       <span className="prompt">{question.prompt}</span>
       {question.help ? <div className="help">{question.help}</div> : null}
       {hasEvidence ? (
-        <div className="q-row">
+        <div className={readsEvidence ? 'q-row evidence-led' : 'q-row'}>
           <div className="fields">{body()}</div>
           <EvidenceView items={question.evidence} resolve={resolveEvidence} />
         </div>

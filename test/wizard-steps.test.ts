@@ -1003,3 +1003,51 @@ describe('the storage question — asked once, against measured numbers', () => 
     expect(ids).toEqual(['useSavedRun'])
   })
 })
+
+/**
+ * The gate asks whether a transcription is good enough to keep, and showed only
+ * a thumbnail of the scan. A thumbnail of a page of dense type answers nothing:
+ * the question is whether the *text* is right, which means both have to be on
+ * the same screen or the user is being asked to trust a number.
+ */
+describe('the uncertainty gate shows the scan and what was read off it', () => {
+  const readied = (): WizardState => ({
+    ...initialState(),
+    completed: ['intake', 'recon', 'gate-identity', 'transcribe'],
+    findings: [
+      {
+        code: 'text-dropped',
+        severity: 'medium',
+        pageIndex: 345,
+        message: '19 words OCR read clearly are absent from the transcription.'
+      }
+    ],
+    pageText: { 345: 'INDEX\n\nPeibles, Dr., 219\nWill, what is it, 154, 55' }
+  })
+
+  const pageQuestion = (state: WizardState) =>
+    stepById('gate-uncertainties')
+      .questions(state)
+      .find((q) => q.id === 'page-345')
+
+  it('puts the text beside the scan', () => {
+    const q = pageQuestion(readied())
+    const kinds = q?.evidence?.map((e) => e.kind)
+    expect(kinds).toContain('image')
+    expect(kinds).toContain('text')
+  })
+
+  it('shows what was actually read, not a summary of it', () => {
+    const q = pageQuestion(readied())
+    const text = q?.evidence?.find((e) => e.kind === 'text')
+    expect(text && 'text' in text ? text.text : '').toContain('Peibles, Dr., 219')
+  })
+
+  it('shows the scan alone when there is no text for that page', () => {
+    // A page that failed every attempt has a finding and no transcription. An
+    // empty text panel beside it would read as "the model returned nothing"
+    // rather than "nothing was returned".
+    const q = pageQuestion({ ...readied(), pageText: {} })
+    expect(q?.evidence?.map((e) => e.kind)).toEqual(['image'])
+  })
+})

@@ -29,6 +29,7 @@ import {
   formatEstimate,
   mergeMetadata,
   validateApiKey,
+  transcriptionText,
   verifyBook,
   verifyPage,
   type PageTranscription,
@@ -47,6 +48,8 @@ import {
   saveVoice,
   loadBank,
   recordHarvest,
+  loadReviewProgress,
+  saveReviewProgress,
   storageEstimate
 } from '../platform/browser/settings'
 import {
@@ -255,6 +258,37 @@ export function App(): JSX.Element {
   }, [questions, answers])
 
   const missing = missingRequired(questions, currentAnswers)
+
+  /**
+   * Review progress, saved as it is made and restored on the way back in.
+   *
+   * The transcription has always survived a refresh because it costs money.
+   * These verdicts cost *time* — three hundred pages of "looks fine" at the
+   * uncertainty gate — and used to be thrown away while the pages they applied
+   * to were carefully kept.
+   *
+   * Written on a timer rather than on every keystroke: a text answer would
+   * otherwise hit storage once per character.
+   */
+  useEffect(() => {
+    const key = fileKeyRef.current
+    if (!key || Object.keys(answers).length === 0) return
+    const timer = setTimeout(() => {
+      saveReviewProgress(key, { ...loadReviewProgress(key), [step.id]: answers })
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [answers, step.id])
+
+  // Arriving at a step: put back whatever was answered here last time. Keyed by
+  // step, so this cannot resurrect an answer onto a different gate.
+  const restoredFor = useRef<string | null>(null)
+  useEffect(() => {
+    const key = fileKeyRef.current
+    if (!key || restoredFor.current === step.id) return
+    restoredFor.current = step.id
+    const saved = loadReviewProgress(key)[step.id]
+    if (saved && Object.keys(saved).length > 0) setAnswers(saved as Answers)
+  }, [step.id])
 
   // The design gate answers questions about the *book*; this is the style they
   // add up to. Built live, because both the one-line summary and the page
@@ -731,6 +765,14 @@ export function App(): JSX.Element {
           }))
         ),
         failedPages: failures.map((f) => f.pageIndex),
+        // What was read off each page, for the uncertainty gate to show beside
+        // the scan. Built here rather than at the gate because this is the one
+        // place both a fresh run and a restored one pass through, and a gate
+        // that showed the text only after a live read would be worst exactly
+        // when it matters — coming back to a book the next day.
+        pageText: Object.fromEntries(
+          transcriptions.map((t) => [t.pageIndex, transcriptionText(t)])
+        ),
         // Assemble immediately: seam repair and footnote linking are pure and
         // fast, and Gate 3 needs the finished document to describe its shape.
         document: assembleBook(transcriptions)

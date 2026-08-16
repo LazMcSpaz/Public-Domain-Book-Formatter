@@ -303,6 +303,16 @@ in `screenshots/`. Don't ship UI blind.
   finished book can be looked at** (`src/app/PageBrowser.tsx`), rendered from the
   exported bytes — the design gate's four-page sample answers questions about the
   look but never shows the page a note actually landed on.
+- **Also done**: **the uncertainty gate shows the text, not just the scan**, and
+  **review verdicts survive a refresh**. The gate asks whether a transcription
+  is good enough to keep and showed only a thumbnail — which cannot be
+  proofread. `WizardState.pageText` carries what was read off each leaf, built
+  in the one place both a fresh run and a restored one pass through. The
+  verdicts themselves go to `localStorage` keyed by file, not into the saved
+  run: that record is megabytes of transcription and rewriting it on every
+  radio click would make a long book stutter. The transcription costs money and
+  was always stored; these cost _time_, and used to be thrown away while the
+  pages they applied to were carefully kept.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

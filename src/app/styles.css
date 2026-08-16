@@ -1399,3 +1399,51 @@ mark.claim {
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
   background: #fff;
 }
+
+/* --- evidence that has to be read, not just glanced at --------------------- */
+/*
+ * The uncertainty gate asks whether a transcription is good enough to keep, so
+ * it shows the scan and the text together. Both need real width: a thumbnail
+ * sized for a one-word crop cannot be proofread against.
+ */
+.q-row.evidence-led .fields {
+  flex: 0 1 clamp(220px, 26%, 320px);
+}
+.q-evidence.readable {
+  flex: 3;
+  min-width: 0;
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+.q-evidence.readable figure {
+  flex: 1;
+  min-width: 0;
+}
+.q-evidence.readable img {
+  max-width: 100%;
+  max-height: 60vh;
+}
+.q-evidence.readable pre {
+  margin: 0;
+  max-height: 60vh;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: ui-serif, Georgia, serif;
+  font-size: 0.86rem;
+  line-height: 1.5;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+}
+@media (max-width: 900px) {
+  .q-evidence.readable {
+    flex-direction: column;
+  }
+  .q-evidence.readable img,
+  .q-evidence.readable pre {
+    max-height: 40vh;
+  }
+}
