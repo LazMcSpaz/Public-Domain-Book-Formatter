@@ -26,6 +26,7 @@ import {
   type EditorVoice
 } from '@core/annotate'
 import { applyEdits } from '@core/edits'
+import { initialState, STEPS, stepById, type WizardState } from '@core/wizard'
 import type { BookBlock, BookDocument } from '@core/assemble'
 import type { Transport } from '@core/transcribe'
 
@@ -525,5 +526,64 @@ describe('the editor’s introduction', () => {
     expect(draft.outsideClaims).toContain('1662')
     expect(draft.outsideClaims).toContain('Aristotelians')
     expect(usage.outputTokens).toBe(400)
+  })
+})
+
+/**
+ * The step the pass hangs off. It sits after the proof step because a note
+ * written against a misread word wastes both the note and the money, and before
+ * the design gate because notes change how many pages the book runs to.
+ */
+describe('the annotate step in the wizard', () => {
+  const ready = (): WizardState => ({
+    ...initialState(),
+    document: doc([block('The chirurgeon examined the specimen.')]),
+    completed: [
+      'intake',
+      'recon',
+      'gate-identity',
+      'transcribe',
+      'gate-uncertainties',
+      'gate-structure',
+      'proof'
+    ]
+  })
+
+  it('falls between reading it through and designing it', () => {
+    const order = STEPS.map((s) => s.id)
+    expect(order.indexOf('annotate')).toBeGreaterThan(order.indexOf('proof'))
+    expect(order.indexOf('annotate')).toBeLessThan(order.indexOf('design'))
+  })
+
+  it('cannot be entered before the book has been proofed', () => {
+    const step = stepById('annotate')
+    expect(step.canEnter(initialState())).toBe(false)
+    expect(step.canEnter(ready())).toBe(true)
+  })
+
+  it('offers a plain reprint, so nobody pays for a pass to decline it', () => {
+    const qs = stepById('annotate').questions(ready())
+    const valuesOf = (id: string): string[] => {
+      const q = qs.find((x) => x.id === id)
+      return q && 'options' in q ? q.options.map((o) => String(o.value)) : []
+    }
+    expect(valuesOf('annotateBook')).toContain('no')
+    expect(valuesOf('writeIntroduction')).toContain('none')
+  })
+
+  it('arrives prefilled from the banked voice, so book two asks less', () => {
+    const state: WizardState = {
+      ...ready(),
+      voice: { ...defaultVoice(), penName: 'Etsu T. Dhent', density: 'generous' }
+    }
+    const qs = stepById('annotate').questions(state)
+    // Narrowed off the union rather than reached through it: a term grid has no
+    // default, and the compiler is right to say so.
+    const defaultOf = (id: string): unknown => {
+      const q = qs.find((x) => x.id === id)
+      return q && 'defaultValue' in q ? q.defaultValue : undefined
+    }
+    expect(defaultOf('penName')).toBe('Etsu T. Dhent')
+    expect(defaultOf('noteDensity')).toBe('generous')
   })
 })

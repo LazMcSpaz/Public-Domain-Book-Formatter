@@ -259,6 +259,21 @@ in `screenshots/`. Don't ship UI blind.
 - **Also done**: **Gate 1's term verdicts count** (`src/core/lexicon/vetted.ts`).
   The answer used to be read by nothing while the prompt called the raw harvest
   "confirmed as correct"; rejecting a word made the app insist on it.
+- **Also done**: **the editor's voice, and notes written in it**
+  (`src/core/annotate`). The first thing the app _writes_ rather than recovers,
+  and the reason a reprint is worth publishing. The voice is a persona card plus
+  exemplars carried in the prompt — there is no fine-tune and should not be —
+  and the exemplars are **accepted notes in the form they were accepted in**, so
+  a rewritten note teaches the rewrite. Rejections teach nothing on purpose. The
+  model is never asked for a character offset: it quotes the words the note
+  hangs on, `findAnchor` locates them, and a quote it cannot find comes back
+  _unplaced_ rather than attached at a guess. Every date, figure and name a note
+  asserts is compared against the book's own text and the difference is shown as
+  the list to check — deterministic, so it is a flag that means something under
+  SPEC §4. An approved note becomes exactly the `note` edit a hand-typed one
+  produces. The introduction shares the card and is written from the book's
+  shape plus evenly spaced extracts, because a model handed three hundred pages
+  summarises the last twenty.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

@@ -17,6 +17,7 @@ import { isFrontMatter } from '@core/pages'
 import type { VerificationFinding } from '@core/transcribe'
 import { describeAge, type SavedRunSummary } from '@core/project'
 import type { BookDocument } from '@core/assemble'
+import { defaultVoice, type EditorVoice } from '@core/annotate'
 import {
   BODY_FONTS,
   fontForPeriod,
@@ -44,6 +45,7 @@ export type StepId =
   | 'gate-uncertainties'
   | 'gate-structure'
   | 'proof'
+  | 'annotate'
   | 'design'
   | 'export'
 
@@ -142,6 +144,15 @@ export interface WizardState {
   illustrationCandidates: IllustrationCandidate[]
   /** The assembled book, once transcription and assembly have run. */
   document: BookDocument | null
+  /**
+   * The editor's voice, as banked on this device.
+   *
+   * Part of the state rather than read at the gate because the annotate step's
+   * questions arrive *prefilled from it* — which is the whole of what "book two
+   * asks less" means for the notes, exactly as the banked look is for the
+   * design.
+   */
+  voice: EditorVoice
   /** Answers gathered so far, keyed by step then question id. */
   answers: Record<string, Answers>
   /** Steps the user has completed. */
@@ -177,6 +188,7 @@ export function initialState(): WizardState {
     failedPages: [],
     illustrationCandidates: [],
     document: null,
+    voice: defaultVoice(),
     answers: {},
     completed: []
   }
@@ -690,6 +702,114 @@ const proof: Step = {
 }
 
 /**
+ * The editor's own contribution: notes, and an introduction.
+ *
+ * The one step that *adds* to the book rather than recovering it, and the
+ * reason a reprint is worth publishing at all. It sits after the proof step
+ * because a note should be written against corrected text — annotating a
+ * misread word wastes the note and the money — and before the design gate
+ * because notes change how many pages the book runs to.
+ *
+ * Everything here is optional and asked as a question, because plenty of books
+ * want a plain reprint and nobody should have to pay for a pass to decline it.
+ */
+const annotate: Step = {
+  id: 'annotate',
+  title: 'Write the notes',
+  blurb: 'Notes and an introduction of your own — what makes this edition yours.',
+  isGate: true,
+  canEnter: (s) => s.completed.includes('proof') && s.document !== null,
+  questions: (s) => {
+    const qs: Question[] = []
+
+    qs.push({
+      id: 'annotateBook',
+      type: 'choice',
+      prompt: 'Add notes of your own to this book?',
+      help:
+        'Each note is proposed with the passage it explains beside it, and goes in ' +
+        'only when you accept it. Nothing is added on its own.',
+      defaultValue: 'yes',
+      required: true,
+      options: [
+        {
+          value: 'yes',
+          label: 'Yes — suggest notes',
+          description: 'Reads the book and proposes notes for you to go through.'
+        },
+        {
+          value: 'no',
+          label: 'No, print it plain',
+          description: 'A straight reprint, with only the notes you write yourself.'
+        }
+      ]
+    })
+
+    // Everything below describes the editor, not the book, so it is asked once
+    // and banked. On the second book these arrive already answered.
+    qs.push({
+      id: 'penName',
+      type: 'text',
+      prompt: 'What name do the notes appear under?',
+      help:
+        'Printed nowhere by itself — it is who the notes are written as, which is ' +
+        'what keeps them in one voice across a series.',
+      defaultValue: s.voice.penName,
+      placeholder: 'e.g. your name, or a pen name'
+    })
+
+    qs.push({
+      id: 'noteDensity',
+      type: 'choice',
+      prompt: 'How freely should notes be offered?',
+      help: 'A target, not a quota — a chapter with nothing to explain gets nothing.',
+      defaultValue: s.voice.density,
+      options: [
+        { value: 'sparing', label: 'Sparing', description: 'Only where a reader would stall.' },
+        {
+          value: 'balanced',
+          label: 'Balanced',
+          description: 'The usual density for a general reader.'
+        },
+        {
+          value: 'generous',
+          label: 'Generous',
+          description: 'A fuller apparatus, closer to a scholarly edition.'
+        }
+      ]
+    })
+
+    qs.push({
+      id: 'writeIntroduction',
+      type: 'choice',
+      prompt: 'Write an introduction?',
+      help:
+        'Drafted from the book’s own shape and a sample of its prose, in the same ' +
+        'voice as the notes. You will see it before it goes in.',
+      defaultValue: 'standard',
+      options: [
+        { value: 'brief', label: 'Yes — brief', description: 'About 350 words.' },
+        { value: 'standard', label: 'Yes — standard', description: 'About 700 words.' },
+        { value: 'full', label: 'Yes — full', description: 'About 1400 words.' },
+        { value: 'none', label: 'No introduction', description: 'Leave the front matter as it is.' }
+      ]
+    })
+
+    qs.push({
+      id: 'introBrief',
+      type: 'text',
+      prompt: 'Anything the introduction should be sure to say?',
+      help: 'Optional. A theme to draw out, or why you are reprinting this book.',
+      defaultValue: '',
+      multiline: true,
+      placeholder: 'Leave blank and I’ll write from the book alone.'
+    })
+
+    return qs
+  }
+}
+
+/**
  * The `profile` answer meaning "none of the banked looks — interview me".
  * A sentinel rather than `''` because an empty string is also what an
  * unanswered question looks like, and the two mean opposite things here.
@@ -1103,6 +1223,7 @@ export const STEPS: readonly Step[] = [
   gateUncertainties,
   gateStructure,
   proof,
+  annotate,
   design,
   exportStep
 ]

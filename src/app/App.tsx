@@ -43,6 +43,8 @@ import {
   saveApiKey,
   loadPrefs,
   savePrefs,
+  loadVoice,
+  saveVoice,
   storageEstimate
 } from '../platform/browser/settings'
 import {
@@ -68,11 +70,26 @@ import {
 import { BODY_FONTS, describeProfile } from '@core/design'
 import { buildExport, editionFromAnswers, type BuildExportResult } from '@core/export'
 import { applyEdits, type BookEdit } from '@core/edits'
+import {
+  draftIntroduction,
+  estimateAnnotationCost,
+  learnVoice,
+  proposalsToEdits,
+  runAnnotation,
+  type AcceptedProposal,
+  type CheckedProposal,
+  type ChunkFailure,
+  type EditorVoice,
+  type IntroductionDraft,
+  type IntroductionLength,
+  type NoteDensity
+} from '@core/annotate'
 import { renderInterior } from '../platform/browser/interior'
 import { cropIllustrations, readSuppliedImage, retouchPng } from '../platform/browser/illustrations'
 import { renderPageToObjectUrl } from '../platform/browser/pdf'
 import { loadDefaultLook } from './Settings'
 import { ExportResult } from './ExportResult'
+import { NoteReview } from './NoteReview'
 import { PreviewPane } from './PreviewPane'
 import { ProofSheet } from './ProofSheet'
 
@@ -141,6 +158,20 @@ export function App(): JSX.Element {
   const transcriptionRef = useRef<RunResult | null>(null)
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
   const [pendingCost, setPendingCost] = useState<string | null>(null)
+  /**
+   * The annotation pass, which is the app's second and much cheaper paid step.
+   *
+   * Held here rather than in the wizard state because it is a *proposal* — none
+   * of it is part of the book until the review gate says so, at which point it
+   * becomes ordinary edits and stops being special.
+   */
+  const [pendingNotesCost, setPendingNotesCost] = useState<string | null>(null)
+  const [notesProgress, setNotesProgress] = useState<{ done: number; total: number } | null>(null)
+  const [proposals, setProposals] = useState<{
+    notes: CheckedProposal[]
+    failures: ChunkFailure[]
+    introduction: IntroductionDraft | null
+  } | null>(null)
   const [exported, setExported] = useState<BuildExportResult | null>(null)
   const [pdf, setPdf] = useState<{ bytes: Uint8Array; pageCount: number } | null>(null)
   const [buildNote, setBuildNote] = useState<string | null>(null)
@@ -458,6 +489,11 @@ export function App(): JSX.Element {
       // them here would offer the interview again to someone who banked a look
       // precisely so they would not be asked twice.
       styleProfiles: s.styleProfiles,
+      // The same reasoning, and the same bug if it is left out: the editor's
+      // voice is the editor's, not this book's. Losing it here would ask for
+      // the pen name again on every book and throw away the exemplars that
+      // make the notes sound like the ones already approved.
+      voice: s.voice,
       fileName: file.name,
       completed: ['intake']
     }))
@@ -597,7 +633,10 @@ export function App(): JSX.Element {
         ...s,
         keepScans: prefs.keepScans,
         defaultModelId: prefs.modelId,
-        defaultLook: loadDefaultLook()
+        defaultLook: loadDefaultLook(),
+        // The editor is the same person on every book, so the annotate gate's
+        // questions arrive prefilled from here rather than empty.
+        voice: loadVoice()
       }))
     })()
   }, [])
@@ -1222,6 +1261,125 @@ export function App(): JSX.Element {
   }, [edits, state.answers, persistRun, complete])
 
   /**
+   * The annotation pass, and the introduction if one was asked for.
+   *
+   * The second paid step, and much the cheaper of the two — no images, and the
+   * voice card is cached across every chunk. Nothing it produces touches the
+   * book here: it all lands in `proposals` for the review gate, which is what
+   * makes it safe to run without the user having read a word of it yet.
+   */
+  const startAnnotation = useCallback(async () => {
+    const doc = state.document
+    if (!doc) return
+    setPendingNotesCost(null)
+
+    const answers = state.answers['annotate'] ?? currentAnswers
+    const wantsNotes = (answers['annotateBook'] ?? 'yes') === 'yes'
+    const introLength = String(answers['writeIntroduction'] ?? 'standard')
+    const wantsIntro = introLength !== 'none'
+
+    // The voice is the editor's, not the book's, so what was asked here is
+    // banked before the run rather than after it — a run that fails still
+    // leaves the pen name entered.
+    const voice: EditorVoice = {
+      ...state.voice,
+      penName: String(answers['penName'] ?? state.voice.penName),
+      density: (String(answers['noteDensity'] ?? state.voice.density) as NoteDensity) || 'balanced'
+    }
+    saveVoice(voice)
+    setState((st) => ({ ...st, voice }))
+
+    const identity = state.answers['gate-identity'] ?? {}
+    const facts = {
+      ...(state.metadata.title ? { title: state.metadata.title } : {}),
+      ...(state.metadata.author ? { author: state.metadata.author } : {}),
+      ...(state.metadata.originalYear ? { originalYear: state.metadata.originalYear } : {}),
+      ...(identity['bookContext'] ? { context: String(identity['bookContext']) } : {})
+    }
+    const client = { apiKey: loadApiKey(), modelId: loadPrefs().modelId }
+
+    setNotesProgress({ done: 0, total: 1 })
+    try {
+      const notes = wantsNotes
+        ? await runAnnotation(doc.blocks, {
+            client,
+            voice,
+            facts,
+            onProgress: (done, total) => setNotesProgress({ done, total })
+          })
+        : { proposals: [], failures: [], discarded: 0, cancelled: false }
+
+      let introduction: IntroductionDraft | null = null
+      if (wantsIntro) {
+        setNotesProgress({ done: 1, total: 1 })
+        const drafted = await draftIntroduction(doc, {
+          client,
+          voice,
+          facts,
+          length: introLength as IntroductionLength,
+          ...(answers['introBrief'] ? { brief: String(answers['introBrief']) } : {})
+        })
+        introduction = drafted.draft
+      }
+
+      setProposals({ notes: notes.proposals, failures: notes.failures, introduction })
+    } catch (err) {
+      // A failed annotation pass is not a failed book: everything up to here is
+      // intact and the step is optional. Say so and let the user carry on.
+      setProposals({
+        notes: [],
+        failures: [{ chunkIndex: 0, message: err instanceof Error ? err.message : String(err) }],
+        introduction: null
+      })
+    } finally {
+      setNotesProgress(null)
+    }
+  }, [state, currentAnswers])
+
+  /**
+   * Leaving the review: the approved notes become ordinary corrections.
+   *
+   * From here they are indistinguishable from a note typed by hand — undoable,
+   * editable, saved with the run — which is the whole reason the generator
+   * writes into the existing edit list rather than into a store of its own.
+   */
+  const finishAnnotation = useCallback(
+    (result: {
+      accepted: AcceptedProposal[]
+      introduction: { title: string; text: string } | null
+    }) => {
+      const { edits: noteEdits } = proposalsToEdits(result.accepted)
+      const next: BookEdit[] = [...edits, ...noteEdits]
+
+      if (result.introduction) {
+        next.push({
+          kind: 'section',
+          sectionId: `intro-${Date.now().toString(36)}`,
+          placement: 'front',
+          title: result.introduction.title,
+          text: result.introduction.text
+        })
+      }
+
+      // What the user approved is what the voice learns from — in the form they
+      // approved it in, so a rewritten note teaches the rewrite.
+      const learned = learnVoice(state.voice, result.accepted)
+      saveVoice(learned)
+      setState((st) => ({ ...st, voice: learned }))
+
+      setEdits(next)
+      setProposals(null)
+
+      const run = transcriptionRef.current
+      if (run) {
+        void persistRun(run, state.answers['gate-identity'] ?? {}, loadPrefs().modelId, next)
+      }
+      complete()
+    },
+    [edits, state.voice, state.answers, persistRun, complete]
+  )
+
+  /**
    * Leaving the design gate: bank the look if the user named one.
    *
    * The imprint fields are still empty at this point — they are asked one gate
@@ -1273,6 +1431,24 @@ export function App(): JSX.Element {
     }
     if (step.id === 'proof') {
       void finishProof()
+      return
+    }
+    if (step.id === 'annotate') {
+      const doc = state.document
+      const wantsNotes = (currentAnswers['annotateBook'] ?? 'yes') === 'yes'
+      const wantsIntro = String(currentAnswers['writeIntroduction'] ?? 'standard') !== 'none'
+      // Declining both is free and instant; there is nothing to quote for.
+      if (!doc || (!wantsNotes && !wantsIntro)) {
+        complete()
+        return
+      }
+      const words = doc.blocks.reduce((n, b) => n + b.text.split(/\s+/u).length, 0)
+      const estimate = estimateAnnotationCost({
+        wordCount: wantsNotes ? words : 0,
+        modelId: loadPrefs().modelId,
+        density: String(currentAnswers['noteDensity'] ?? state.voice.density) as NoteDensity
+      })
+      setPendingNotesCost(formatEstimate(estimate))
       return
     }
     if (step.id === 'transcribe') {
@@ -1470,6 +1646,52 @@ export function App(): JSX.Element {
           </div>
         ) : null}
 
+        {/* --- the annotation pass, the app's second and cheaper paid step --- */}
+        {pendingNotesCost ? (
+          <div className="q">
+            <span className="prompt">Ready to write the notes</span>
+            <div className="help">
+              Estimated cost: <b>{pendingNotesCost}</b> — much less than the transcription, because
+              nothing here sends an image. Every note comes back as a suggestion with the passage
+              beside it; nothing goes into the book until you say so.
+            </div>
+            <div className="actions">
+              <button type="button" className="primary" onClick={() => void startAnnotation()}>
+                Start — {pendingNotesCost}
+              </button>
+              <button type="button" className="ghost" onClick={() => setPendingNotesCost(null)}>
+                Back
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {notesProgress ? (
+          <div className="progress">
+            <strong>
+              Reading the book for notes — {notesProgress.done} of {notesProgress.total}
+            </strong>
+            <div className="bar">
+              <i
+                style={{
+                  width: `${(notesProgress.done / Math.max(1, notesProgress.total)) * 100}%`
+                }}
+              />
+            </div>
+            <div className="meta">writing in your editor’s voice</div>
+          </div>
+        ) : null}
+
+        {proposals && !notesProgress ? (
+          <NoteReview
+            document={state.document!}
+            proposals={proposals.notes}
+            introduction={proposals.introduction}
+            failures={proposals.failures}
+            onDone={finishAnnotation}
+          />
+        ) : null}
+
         {/* --- paid run in progress --- */}
         {runProgress ? (
           <div className="progress">
@@ -1562,7 +1784,14 @@ export function App(): JSX.Element {
         ) : null}
 
         {/* --- gates --- */}
-        {!exported && !progressInfo && !runProgress && !pendingCost && questions.length > 0 ? (
+        {!exported &&
+        !progressInfo &&
+        !runProgress &&
+        !pendingCost &&
+        !pendingNotesCost &&
+        !notesProgress &&
+        !proposals &&
+        questions.length > 0 ? (
           <>
             {questions.map((q) => (
               <QuestionView

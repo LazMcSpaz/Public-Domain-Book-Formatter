@@ -536,8 +536,100 @@ const proofOverflow = await page.evaluate(
 await page.setViewportSize({ width: 1360, height: 900 })
 await page.waitForTimeout(300)
 
+// --- the editor's own notes -------------------------------------------------
+// The first thing the app *writes* rather than recovers. The API is stubbed
+// here, so this exercises the gate, the review screen and the path from an
+// approved note to the printed page without a key and without spending.
+console.log('5c4. notes and an introduction of the editor’s own')
+
+await page.evaluate(() => localStorage.setItem('pdbf.apiKey', 'sk-ant-harness'))
+
+await page.route('https://api.anthropic.com/**', async (route) => {
+  const body = JSON.parse(route.request().postData() ?? '{}')
+  const wantsIntroduction = Boolean(body.output_config?.format?.schema?.properties?.paragraphs)
+  const prompt = body.messages?.[0]?.content?.[0]?.text ?? ''
+
+  // Anchor the note to a block the app actually sent, read out of the prompt
+  // rather than assumed here — a harness that reimplements the thing it tests
+  // passes when the two drift apart.
+  const match = /\[(p\d+b\d+)\](?: \[[^\]]+\])? (.+)/.exec(prompt)
+  const blockId = match?.[1] ?? ''
+  const word =
+    (match?.[2] ?? '')
+      .split(/\s+/)
+      .find((w) => w.length > 5)
+      ?.replace(/[.,]$/, '') ?? ''
+
+  const payload = wantsIntroduction
+    ? {
+        title: 'Introduction',
+        paragraphs: [
+          'This treatise was printed in 1662, when chymistry was still arguing with alchemy.',
+          'What follows is set afresh, with the spelling of the original kept.'
+        ]
+      }
+    : {
+        notes:
+          blockId && word
+            ? [
+                {
+                  blockId,
+                  anchorText: word,
+                  kind: 'obsolete-science',
+                  text: 'A term of art from the older chymistry, which Boyle was in the middle of dismantling.',
+                  reason: 'the reader is assumed to know it'
+                }
+              ]
+            : []
+      }
+
+  await route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      content: [{ type: 'text', text: JSON.stringify(payload) }],
+      usage: { input_tokens: 800, output_tokens: 120, cache_read_input_tokens: 0 }
+    })
+  })
+})
+
 await page.locator('.actions button.primary').first().click()
-await page.waitForTimeout(1500)
+await page.waitForSelector('.q', { timeout: 30000 })
+
+const annotateStep = await page.locator('.rail li.active .label').innerText()
+const asksPenName = await page.locator('.q').filter({ hasText: 'name do the notes' }).count()
+await page
+  .locator('.q')
+  .filter({ hasText: 'name do the notes' })
+  .locator('input')
+  .fill('Etsu T. Dhent')
+await shot('05c4-annotate-gate')
+
+// The cost approval, which must appear before anything is spent.
+await page.locator('.actions button.primary').first().click()
+await page.waitForTimeout(600)
+const notesCost = await page
+  .locator('.q')
+  .filter({ hasText: 'Ready to write the notes' })
+  .innerText()
+  .catch(() => '')
+await shot('05c4b-annotate-cost')
+
+await page.locator('button.primary', { hasText: 'Start' }).click()
+await page.waitForSelector('.notes', { timeout: 60000 })
+await page.waitForTimeout(800)
+
+const proposedNotes = await page.locator('.note').count()
+const notePassages = await page.locator('.note-passage b').count()
+const claimsMarked = await page.locator('.note mark.claim').count()
+const introDrafted = await page.locator('.notes-intro textarea').count()
+await shot('05c4c-note-review')
+
+await page.locator('.notes .actions button.primary').click()
+await page.waitForTimeout(2000)
+
+// The voice is banked on the device, so book two does not ask again.
+const bankedVoice = await page.evaluate(() => localStorage.getItem('pdbf.voice') ?? '')
 
 // The design gate now previews the *real* book, pictures and all. This is the
 // end of the path: detected from the OCR boxes, judged by the pixels, reviewed,
@@ -722,7 +814,24 @@ await advanceTo('Transcribing')
 await advanceTo('Check the uncertain spots')
 await advanceTo('Confirm the structure')
 await advanceTo('Read it through')
+
+// The notes gate on book two: the editor is the same person, so the pen name
+// and the density come back off the disk exactly as the banked look does.
+await advanceTo('Write the notes')
+const penNameOnBookTwo = await page
+  .locator('.q')
+  .filter({ hasText: 'name do the notes' })
+  .locator('input')
+  .inputValue()
+
+// Declining has to be free and instant — nobody should pay for a pass to say
+// they want a plain reprint. Reaching the design gate with no cost screen in
+// between is the proof.
+await page.locator('.opt', { hasText: 'No, print it plain' }).click()
+await page.locator('.opt', { hasText: 'No introduction' }).click()
+await shot('05f0-annotate-declined')
 await advanceTo('Design the edition')
+const chargedForDeclining = await page.locator('.q').filter({ hasText: 'Ready to write' }).count()
 await page.waitForTimeout(1500)
 await shot('05f-design-gate-book-two')
 
@@ -1140,6 +1249,15 @@ console.log(`  after correcting one: ${correctedCount.replace(/\s+/g, ' ')}`)
 console.log(`  editor's notes attached: ${annotations}`)
 console.log(`  pictures the editor added: ${suppliedPictures} (previewed: ${suppliedPreview})`)
 console.log(`  divisions written: ${sectionsWritten}`)
+console.log(`  the annotate gate: ${annotateStep} (asks the pen name: ${asksPenName === 1})`)
+console.log(`  quoted a price first: ${/\$/.test(notesCost)}`)
+console.log(
+  `  notes proposed: ${proposedNotes} (passages shown: ${notePassages}, claims marked: ${claimsMarked}, introduction drafted: ${introDrafted === 1})`
+)
+console.log(`  voice banked for the next book: ${/Etsu T. Dhent/.test(bankedVoice)}`)
+console.log(
+  `  book two's notes gate arrives as: "${penNameOnBookTwo}" (charged to decline: ${chargedForDeclining > 0})`
+)
 console.log(`  the table is edited as rows: ${tableBoxes} (typed as: ${tableRetyped})`)
 console.log(`  image editors offered: ${editors} (${beforeDpi.replace(/\s+/g, ' ')})`)
 console.log(`  retouching applied: ${retouchedPicture > 0}`)

@@ -1180,3 +1180,157 @@ button.ghost {
 .tweaks[open] > summary {
   margin-bottom: 8px;
 }
+
+/* --- the notes the editor's pass proposed --------------------------------- */
+.notes-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--panel, #f3efe7);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-bottom: 10px;
+}
+.notes-actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+}
+.notes-actions button,
+.note-head button,
+.notes-head button {
+  font: inherit;
+  font-size: 0.75rem;
+  padding: 3px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--muted);
+  cursor: pointer;
+}
+.notes-actions button:hover,
+.note-head button:hover,
+.notes-head button:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.note {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-bottom: 10px;
+  background: #fff;
+}
+.note.dropped {
+  opacity: 0.45;
+}
+.note.dropped .note-text {
+  text-decoration: line-through;
+}
+.note-passage {
+  font-size: 0.9rem;
+  line-height: 1.6;
+}
+.note-passage b {
+  background: #fdf0c8;
+  padding: 0 2px;
+}
+.note-passage .muted {
+  color: var(--muted);
+}
+.note-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.note-kind {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 1px 6px;
+}
+.note-why {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-style: italic;
+}
+.note-head button {
+  margin-left: auto;
+}
+.note-text {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+/* An assertion the book itself never made — the part worth checking. */
+mark.claim {
+  background: #ffe9e0;
+  border-bottom: 1px solid #e8a184;
+  padding: 0 1px;
+}
+.note textarea,
+.notes-intro textarea {
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  resize: vertical;
+}
+.notes-intro {
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  margin-bottom: 14px;
+  background: #fff;
+}
+.notes-intro.dropped {
+  opacity: 0.45;
+}
+.notes-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.notes-head input {
+  font: inherit;
+  font-weight: 600;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  flex: 1;
+}
+.notes-claims,
+.notes-failures {
+  font-size: 0.78rem;
+  color: var(--muted);
+  margin: 0 0 8px;
+}
+.notes-unplaced {
+  padding: 12px 14px;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  margin: 12px 0;
+}
+.notes-unplaced ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+  font-size: 0.85rem;
+}
+@media (max-width: 720px) {
+  .note {
+    grid-template-columns: 1fr;
+  }
+}

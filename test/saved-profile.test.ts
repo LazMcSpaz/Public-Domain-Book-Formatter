@@ -84,7 +84,14 @@ describe('the two-level separation — what may be banked', () => {
     const banked = newSavedProfile({
       name: 'Blackthorn',
       style: appliedLook(bookOne, bookOne.answers['design']).style,
-      imprint: { imprint: 'Blackthorn Press' }
+      imprint: { imprint: 'Blackthorn Press' },
+      // The id and the timestamp are pinned because both are minted from the
+      // clock, and the search below is over the whole serialized record. An id
+      // of `sp-20260816165812-…` contains "1658", so this test failed for one
+      // minute in every day — a fact about the wall clock, not about what the
+      // profile carries.
+      id: 'sp-test',
+      now: new Date('2026-01-01T00:00:00.000Z')
     })
 
     const flat = JSON.stringify(banked)

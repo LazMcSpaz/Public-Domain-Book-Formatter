@@ -6,9 +6,11 @@
  * transmitted anywhere else. It is deliberately kept out of the project file so
  * it can never be committed or shared along with a book.
  */
+import { defaultVoice, normalizeVoice, type EditorVoice } from '@core/annotate'
 
 const KEY_STORAGE = 'pdbf.apiKey'
 const PREFS_STORAGE = 'pdbf.prefs'
+const VOICE_STORAGE = 'pdbf.voice'
 
 export interface AppPrefs {
   modelId: string
@@ -90,6 +92,33 @@ export function loadPrefs(): AppPrefs {
 
 export function savePrefs(prefs: AppPrefs): void {
   safeLocalStorage()?.setItem(PREFS_STORAGE, JSON.stringify(prefs))
+}
+
+/**
+ * The editor's voice, banked on this device.
+ *
+ * Kept here beside the other local settings rather than with the saved looks,
+ * because there is one editor and many books: an editor's pen name, register
+ * and approved notes are the same on every title they put out, so there is
+ * nothing to choose between at a gate. It is small enough that local storage is
+ * the right home — the exemplars are a few hundred words at most.
+ */
+export function loadVoice(): EditorVoice {
+  const raw = safeLocalStorage()?.getItem(VOICE_STORAGE)
+  if (!raw) return defaultVoice()
+  try {
+    return normalizeVoice(JSON.parse(raw))
+  } catch {
+    return defaultVoice()
+  }
+}
+
+export function saveVoice(voice: EditorVoice): void {
+  safeLocalStorage()?.setItem(VOICE_STORAGE, JSON.stringify(voice))
+}
+
+export function clearVoice(): void {
+  safeLocalStorage()?.removeItem(VOICE_STORAGE)
 }
 
 /** Bytes, rounded to something a person reads rather than parses. */
