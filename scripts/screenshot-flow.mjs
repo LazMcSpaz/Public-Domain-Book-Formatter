@@ -389,11 +389,22 @@ await shot('08c-uncertainty-gate-side-by-side')
 // A verdict clicked here must survive a refresh. It costs time rather than
 // money, which is why it used to be thrown away while the pages it applied to
 // were carefully kept.
-const verdicts = page.locator('.q').filter({ hasText: 'Page ' }).first()
-if ((await verdicts.count()) > 0) {
+const pageVerdicts = page.locator('.q').filter({ hasText: 'Page ' })
+const verdictCount = await pageVerdicts.count()
+const verdicts = pageVerdicts.first()
+if (verdictCount > 0) {
   await verdicts.locator('.opt', { hasText: 'Leave this page out' }).click()
   await page.waitForTimeout(900)
 }
+// "I'll fix this myself" is not "looks fine": the note has to survive to the
+// proof step, or someone who can see the mistake is asked to lie about it.
+let markedALeaf = false
+if (verdictCount > 1) {
+  await pageVerdicts.last().locator('.opt', { hasText: 'fix this myself' }).click()
+  await page.waitForTimeout(600)
+  markedALeaf = true
+}
+const verdictOptions = await verdicts.locator('.opt .t').allInnerTexts()
 const verdictBefore = await page.evaluate(() =>
   Object.keys(localStorage)
     .filter((k) => k.startsWith('pdbf.review.'))
@@ -430,6 +441,33 @@ await shot('05c2-proof-sheet')
 
 const proofBoxes = await page.locator('.proof-block textarea').count()
 const proofScan = await page.locator('.proof-scan img').count()
+
+// The leaf marked "I'll fix this myself" has to still carry its note here —
+// that answer is a to-do, and until now it was indistinguishable from "looks
+// fine", which erased the very thing the user asked to be reminded of. The
+// marked leaves get their own jump button so a to-do is not hunted for among
+// the cross-check warnings.
+const toFixButton = await page
+  .locator('.proof-marked')
+  .innerText()
+  .catch(() => '')
+let markedFlag = ''
+if (toFixButton) {
+  await page.locator('.proof-marked').click()
+  await page.waitForTimeout(400)
+  markedFlag = await page
+    .locator('.proof-flags.marked li')
+    .first()
+    .innerText()
+    .catch(() => '')
+  await shot('05c2a-proof-marked-leaf')
+  // Back to the top of the sheet, so what follows reads leaves by their number.
+  const previous = page.locator('.proof-bar button', { hasText: '‹ Previous' })
+  while (await previous.isEnabled()) {
+    await previous.click()
+    await page.waitForTimeout(120)
+  }
+}
 
 // Correcting a word must reach the finished PDF, which is the whole point.
 const firstBox = page.locator('.proof-block textarea').first()
@@ -1367,6 +1405,11 @@ console.log(`  a verdict is written to storage as it is made: ${verdictSaved}`)
 console.log(`  illustration candidates: ${foundIllustrations} (crops shown: ${illustrationCrops})`)
 console.log(`  advanced past the structure gate to: ${afterStructure}`)
 console.log(`  proof sheet: ${proofBoxes} editable block(s), ${proofScan} scan(s) beside them`)
+console.log(`  the gate offers: ${verdictOptions.join(' / ')}`)
+console.log(
+  `  a leaf marked to fix keeps its note: ${markedALeaf ? markedFlag || 'NO' : 'not exercised'}` +
+    (toFixButton ? ` (${toFixButton})` : '')
+)
 console.log(`  after correcting one: ${correctedCount.replace(/\s+/g, ' ')}`)
 console.log(`  editor's notes attached: ${annotations}`)
 console.log(`  pictures the editor added: ${suppliedPictures} (previewed: ${suppliedPreview})`)

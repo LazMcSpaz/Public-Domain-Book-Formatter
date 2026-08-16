@@ -603,7 +603,20 @@ const gateUncertainties: Step = {
                 }
               ]
             : []),
-          { value: 'accept', label: 'Looks fine', description: 'Keep the transcription as-is.' },
+          {
+            value: 'accept',
+            label: 'Looks fine',
+            description: "I've checked it — keep it as-is and stop flagging it."
+          },
+          // The answer that was missing, and the reason a flag used to vanish
+          // just when it was most wanted: someone who can see what is wrong is
+          // not saying the page is fine, they are saying they will fix it. That
+          // is a to-do, and the proof step is where it gets done.
+          {
+            value: 'later',
+            label: "I'll fix this myself",
+            description: 'Keep the page and keep this note, so the proof step brings you back.'
+          },
           {
             value: 'redo',
             label: 'Read this page again',

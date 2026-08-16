@@ -23,6 +23,7 @@ import {
   nextFlaggedPage,
   proofSheet,
   withEdit,
+  type Attention,
   type BookEdit,
   type ProofPage
 } from '@core/edits'
@@ -75,6 +76,8 @@ export interface ProofSheetProps {
   findings?: VerificationFinding[]
   uncertainties?: { pageIndex: number; text: string }[]
   reviewedPages?: number[]
+  /** Leaves the user asked to be brought back to at the uncertainty gate. */
+  attention?: Attention[]
 }
 
 /** The last few words before a point, so a note can say what it is attached to. */
@@ -115,7 +118,8 @@ export function ProofSheet({
   pictures,
   findings,
   uncertainties,
-  reviewedPages
+  reviewedPages,
+  attention
 }: ProofSheetProps): JSX.Element {
   const pages = useMemo(
     () =>
@@ -123,13 +127,16 @@ export function ProofSheet({
         document: doc,
         ...(findings ? { findings } : {}),
         ...(uncertainties ? { uncertainties } : {}),
-        ...(reviewedPages ? { reviewedPages } : {})
+        ...(reviewedPages ? { reviewedPages } : {}),
+        ...(attention ? { attention } : {})
       }),
-    [doc, findings, uncertainties, reviewedPages]
+    [doc, findings, uncertainties, reviewedPages, attention]
   )
 
   // Open on the first page something flagged, since that is where the app has
-  // an opinion — and on the first page otherwise.
+  // an opinion — and on the first page otherwise. Deliberately not on the first
+  // leaf the user marked: the sheet is read in page order, and the marked ones
+  // have their own jump button rather than jumping the queue.
   const [pageIndex, setPageIndex] = useState<number>(
     () => nextFlaggedPage(pages, -1) ?? pages[0]?.pageIndex ?? 0
   )
@@ -137,6 +144,10 @@ export function ProofSheet({
   const at = pages.findIndex((p) => p.pageIndex === pageIndex)
   const page: ProofPage | undefined = pages[at < 0 ? 0 : at]
   const flaggedCount = pages.filter((p) => p.flags.length > 0).length
+  // Leaves the user themselves put on the list. They get their own jump button:
+  // a to-do that has to be found among forty cross-check warnings is a to-do
+  // that gets missed.
+  const markedPages = useMemo(() => pages.filter((p) => p.marked), [pages])
   const changed = countEdited(edits)
 
   // What each block currently says, with the edits already on it, so the boxes
@@ -296,6 +307,18 @@ export function ProofSheet({
         >
           Next ›
         </button>
+        {markedPages.length > 0 ? (
+          <button
+            type="button"
+            className="proof-flagged proof-marked"
+            onClick={() => {
+              const next = nextFlaggedPage(markedPages, page.pageIndex)
+              if (next !== null) setPageIndex(next)
+            }}
+          >
+            Next of {markedPages.length} to fix
+          </button>
+        ) : null}
         {flaggedCount > 0 ? (
           <button
             type="button"
@@ -311,7 +334,7 @@ export function ProofSheet({
       </div>
 
       {page.flags.length > 0 ? (
-        <ul className="proof-flags">
+        <ul className={page.marked ? 'proof-flags marked' : 'proof-flags'}>
           {page.flags.map((f) => (
             <li key={f}>{f}</li>
           ))}

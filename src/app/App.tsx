@@ -76,7 +76,7 @@ import {
 } from '@core/project'
 import { BODY_FONTS, describeProfile } from '@core/design'
 import { buildExport, editionFromAnswers, type BuildExportResult } from '@core/export'
-import { applyEdits, type BookEdit } from '@core/edits'
+import { applyEdits, type Attention, type BookEdit } from '@core/edits'
 import {
   draftIntroduction,
   estimateAnnotationCost,
@@ -170,6 +170,15 @@ export function App(): JSX.Element {
    * page someone has just been over is how a proofing pass stops being read.
    */
   const reviewedPagesRef = useRef<number[]>([])
+  /**
+   * Pages the user asked to be brought back to, and why.
+   *
+   * The counterpart to the list above, and the reason the two exist separately:
+   * "I checked it and it's fine" and "I can see what's wrong and I'll fix it"
+   * are both answers that keep the page, and only one of them means the note
+   * about it should stop being shown.
+   */
+  const attentionRef = useRef<Attention[]>([])
   const transcriptionRef = useRef<RunResult | null>(null)
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
   const [pendingCost, setPendingCost] = useState<string | null>(null)
@@ -533,6 +542,7 @@ export function App(): JSX.Element {
     retouchedRef.current = new Map()
     excludedPagesRef.current = []
     reviewedPagesRef.current = []
+    attentionRef.current = []
     setEdits([])
 
     setState((s) => ({
@@ -1207,12 +1217,20 @@ export function App(): JSX.Element {
     const redo: number[] = []
     const skip: number[] = []
     const restore: number[] = []
+    const attention: Attention[] = []
     for (const [key, value] of Object.entries(currentAnswers)) {
       const match = /^page-(\d+)$/.exec(key)
       if (!match) continue
-      if (value === 'redo') redo.push(Number(match[1]))
-      if (value === 'skip') skip.push(Number(match[1]))
-      if (value === 'restore') restore.push(Number(match[1]))
+      const pageIndex = Number(match[1])
+      if (value === 'redo') redo.push(pageIndex)
+      if (value === 'skip') skip.push(pageIndex)
+      if (value === 'restore') restore.push(pageIndex)
+      if (value === 'later') {
+        attention.push({
+          pageIndex,
+          message: 'You marked this leaf to fix by hand.'
+        })
+      }
     }
 
     /**
@@ -1234,7 +1252,18 @@ export function App(): JSX.Element {
             (b) => b.sourcePages.includes(pageIndex) && spliceRun(b.text, run) !== null
           )
           const fixed = host ? spliceRun(host.text, run) : null
-          if (host && fixed) recovered.push({ kind: 'text', blockId: host.id, text: fixed })
+          if (host && fixed) {
+            recovered.push({ kind: 'text', blockId: host.id, text: fixed })
+          } else {
+            // Nowhere to put it: the anchor phrase is in no block off this leaf.
+            // Reported rather than dropped — the same rule as a footnote with no
+            // home, and for the same reason. Silence here means the user thinks
+            // the passage was restored and finds out in print that it was not.
+            attention.push({
+              pageIndex,
+              message: `Couldn’t place a recovered passage — add it by hand: “${run.text}”`
+            })
+          }
         }
       }
       if (recovered.length > 0) setEdits((current) => [...current, ...recovered])
@@ -1306,6 +1335,8 @@ export function App(): JSX.Element {
     reviewedPagesRef.current = Object.entries(currentAnswers)
       .filter(([key, value]) => /^page-\d+$/.test(key) && value === 'accept')
       .map(([key]) => Number(key.slice(5)))
+    // And the pages they want brought back, which is the opposite errand.
+    attentionRef.current = attention
 
     complete({
       findings,
@@ -2001,6 +2032,7 @@ export function App(): JSX.Element {
               findings={state.findings}
               uncertainties={state.uncertainties}
               reviewedPages={reviewedPagesRef.current}
+              attention={attentionRef.current}
             />
             <div className="actions">
               <button type="button" className="primary" onClick={advance}>

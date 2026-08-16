@@ -46,6 +46,27 @@ export interface ProofPage {
    * cross-check disagreed.
    */
   flags: string[]
+  /**
+   * The user asked to come back to this page.
+   *
+   * Distinct from "something flagged it": this one is the editor's own to-do,
+   * so it leads the flag list and survives having been reviewed.
+   */
+  marked: boolean
+}
+
+/**
+ * A page the user themselves asked to be brought back to, and why.
+ *
+ * The gate before this one offers "looks fine" and "read it again"; this is the
+ * third answer, the one someone gives when they can see exactly what is wrong
+ * and would rather spend a minute than a re-read. It is also how a repair the
+ * app could not finish gets reported instead of vanishing — the same rule that
+ * governs a footnote with nowhere to go.
+ */
+export interface Attention {
+  pageIndex: number
+  message: string
 }
 
 export interface ProofSheetInput {
@@ -56,6 +77,8 @@ export interface ProofSheetInput {
   uncertainties?: readonly { pageIndex: number; text: string }[]
   /** Pages the user already looked at and accepted at the uncertainty gate. */
   reviewedPages?: readonly number[]
+  /** Pages the user asked to be brought back to, with the reason. */
+  attention?: readonly Attention[]
 }
 
 /**
@@ -85,9 +108,13 @@ export function proofSheet(input: ProofSheetInput): ProofPage[] {
     picturesByPage.set(illustration.pageIndex, list)
   }
 
+  const attention = input.attention ?? []
+  const marked = new Set(attention.map((a) => a.pageIndex))
+
   // A page with only a picture on it still has to be reachable, or a plate
-  // could never be re-anchored.
-  const pageIndexes = [...new Set([...byPage.keys(), ...picturesByPage.keys()])].sort(
+  // could never be re-anchored. A page the user marked has to be reachable for
+  // the same reason: a to-do that cannot be opened is a to-do that was dropped.
+  const pageIndexes = [...new Set([...byPage.keys(), ...picturesByPage.keys(), ...marked])].sort(
     (a, b) => a - b
   )
 
@@ -96,13 +123,18 @@ export function proofSheet(input: ProofSheetInput): ProofPage[] {
   const flag = (pageIndex: number, message: string): void => {
     // Already looked at and accepted: re-flagging it would send the user back
     // over ground they have covered, which is how a proofing pass stops being
-    // read at all.
-    if (reviewed.has(pageIndex)) return
+    // read at all. Unless they accepted it *and asked to come back* — the two
+    // are different answers, and conflating them throws away the note at
+    // exactly the moment it was wanted.
+    if (reviewed.has(pageIndex) && !marked.has(pageIndex)) return
     const list = flagsByPage.get(pageIndex) ?? []
     if (!list.includes(message)) list.push(message)
     flagsByPage.set(pageIndex, list)
   }
 
+  // The user's own reason leads, because it is the only one of the three they
+  // wrote themselves and the only one they are already expecting.
+  for (const item of attention) flag(item.pageIndex, item.message)
   for (const finding of input.findings ?? []) {
     if (finding.severity === 'low') continue
     flag(finding.pageIndex, finding.message)
@@ -115,7 +147,8 @@ export function proofSheet(input: ProofSheetInput): ProofPage[] {
     pageIndex,
     blocks: byPage.get(pageIndex) ?? [],
     illustrationIds: picturesByPage.get(pageIndex) ?? [],
-    flags: flagsByPage.get(pageIndex) ?? []
+    flags: flagsByPage.get(pageIndex) ?? [],
+    marked: marked.has(pageIndex)
   }))
 }
 

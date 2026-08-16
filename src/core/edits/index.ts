@@ -11,5 +11,6 @@ export {
   nextFlaggedPage,
   type ProofBlock,
   type ProofPage,
-  type ProofSheetInput
+  type ProofSheetInput,
+  type Attention
 } from './proof-sheet'

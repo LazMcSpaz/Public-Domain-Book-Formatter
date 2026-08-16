@@ -706,6 +706,16 @@ button.ghost {
   border-color: var(--accent);
   color: var(--accent);
 }
+/* Both jump buttons carry .proof-flagged, so only the first may claim the gap;
+   the second sits beside it rather than at the far end of the bar. */
+.proof-bar .proof-flagged ~ .proof-flagged {
+  margin-left: 8px;
+}
+/* The user's own list, filled rather than outlined: it outranks the app's. */
+.proof-bar .proof-marked {
+  background: var(--accent);
+  color: var(--bg);
+}
 .proof-where {
   display: flex;
   flex-direction: column;
@@ -723,6 +733,10 @@ button.ghost {
   border-bottom: 1px solid var(--line);
   color: var(--accent);
   font-size: 0.85rem;
+}
+.proof-flags.marked {
+  background: var(--accent-soft);
+  border-left: 3px solid var(--accent);
 }
 .proof-body {
   display: grid;

@@ -396,14 +396,28 @@ describe('gate 2 — uncertain spots', () => {
     expect(failed.help).toContain('8, 9') // 1-based in the UI
   })
 
-  it('offers accept / re-read / omit for each flagged page', () => {
+  it('offers accept / fix-it-myself / re-read / omit for each flagged page', () => {
     const qs = stepById('gate-uncertainties').questions(
       transcribed({
         findings: [{ code: 'text-added', severity: 'medium', pageIndex: 0, message: 'Longer.' }]
       })
     )
     const opts = (qs[0] as { options: { value: string }[] }).options.map((o) => o.value)
-    expect(opts).toEqual(['accept', 'redo', 'skip'])
+    expect(opts).toEqual(['accept', 'later', 'redo', 'skip'])
+  })
+
+  it('separates “it’s fine” from “I can see what’s wrong”', () => {
+    // Someone who can read the mistake off the scan is not saying the page is
+    // good; they are saying they will fix it. Without this answer they had to
+    // claim it was fine, which silenced the note at the proof step.
+    const qs = stepById('gate-uncertainties').questions(
+      transcribed({
+        findings: [{ code: 'text-added', severity: 'medium', pageIndex: 0, message: 'Longer.' }]
+      })
+    )
+    const opts = (qs[0] as { options: { value: string; description?: string }[] }).options
+    expect(opts.find((o) => o.value === 'accept')!.description).toContain('stop flagging')
+    expect(opts.find((o) => o.value === 'later')!.description).toContain('proof step')
   })
 })
 

@@ -313,6 +313,16 @@ in `screenshots/`. Don't ship UI blind.
   radio click would make a long book stutter. The transcription costs money and
   was always stored; these cost _time_, and used to be thrown away while the
   pages they applied to were carefully kept.
+- **Also done**: **"I'll fix this myself" is its own answer** at the uncertainty
+  gate. Accepting a page used to mean both "I checked it and it's fine" and "I
+  can see exactly what's wrong and I'll correct it" — and the second reading
+  erased the finding at the proof step, which is where the correction would have
+  been made. The two are now separate answers, and the second travels as
+  `Attention` (`src/core/edits/proof-sheet.ts`): the leaf keeps its note, gets
+  its own jump button, and leads the flag list with the user's own words rather
+  than a cross-check's. The same channel reports a recovered passage the app
+  could not place, which was silently dropped before — the footnote rule applied
+  to the other repair that can fail.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

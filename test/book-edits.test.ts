@@ -359,6 +359,50 @@ describe('proofSheet — what to put in front of a proofreader', () => {
     expect(pages[0]!.flags).toEqual([])
   })
 
+  it('keeps the note on a page the user accepted *and* marked to fix', () => {
+    // The two answers are not the same answer. "It's fine" means stop telling
+    // me; "I'll fix it myself" means remind me. Conflating them threw the note
+    // away at exactly the moment it had been asked for.
+    const pages = sheet({
+      document: book(),
+      uncertainties: [{ pageIndex: 0, text: 'chirnrgeon' }],
+      reviewedPages: [0],
+      attention: [{ pageIndex: 0, message: 'You marked this leaf to fix by hand.' }]
+    })
+    expect(pages[0]!.marked).toBe(true)
+    expect(pages[0]!.flags).toEqual([
+      'You marked this leaf to fix by hand.',
+      'Couldn’t read “chirnrgeon”'
+    ])
+  })
+
+  it('leads with the reason the user gave, not the one the app found', () => {
+    const pages = sheet({
+      document: book(),
+      findings: [
+        { code: 'text-dropped', pageIndex: 1, severity: 'high', message: 'word count differs' }
+      ],
+      attention: [{ pageIndex: 1, message: 'You marked this leaf to fix by hand.' }]
+    })
+    expect(pages[1]!.flags[0]).toBe('You marked this leaf to fix by hand.')
+  })
+
+  it('reaches a marked page even when nothing was read off it', () => {
+    // A repair the app could not place is reported here or nowhere. Same rule
+    // as a footnote with no home: never silently dropped.
+    const pages = sheet({
+      document: book(),
+      attention: [{ pageIndex: 7, message: 'Couldn’t place a recovered passage.' }]
+    })
+    const orphan = pages.find((p) => p.pageIndex === 7)!
+    expect(orphan.marked).toBe(true)
+    expect(orphan.flags).toEqual(['Couldn’t place a recovered passage.'])
+  })
+
+  it('marks nothing when the user marked nothing', () => {
+    expect(sheet({ document: book() }).every((p) => p.marked)).toBe(false)
+  })
+
   it('lists every page that produced text, flagged or not', () => {
     // The whole reason this feature exists is a misreading both witnesses agree
     // on, which raises no flag at all. An unflagged page is not a promise.
@@ -373,7 +417,8 @@ describe('nextFlaggedPage — working through what was flagged', () => {
       pageIndex,
       blocks: [],
       illustrationIds: [],
-      flags: flagged.includes(pageIndex) ? ['something'] : []
+      flags: flagged.includes(pageIndex) ? ['something'] : [],
+      marked: false
     }))
 
   it('finds the next one after where you are', () => {
