@@ -2162,9 +2162,18 @@ const waitingHelp = await page.locator('.q .help').first().innerText()
 await shot('08b7-batch-still-running')
 
 await page.locator('button.primary', { hasText: 'Check again' }).click()
-// Collected, and the flow carries on into the ordinary review gate.
+// Collected, and the flow carries on into the ordinary review gate — but not
+// straight away: the second reading runs between the results landing and the
+// run being saved, so waiting for a question to appear is not waiting for the
+// work to finish. Wait for every running stage to clear first, or the store is
+// read before anything has been written to it.
+await page
+  .locator('.progress')
+  .last()
+  .waitFor({ state: 'detached', timeout: 180000 })
+  .catch(() => {})
 await page.waitForSelector('.q', { timeout: 120000 })
-await page.waitForTimeout(500)
+await page.waitForTimeout(800)
 const afterCollect = await page.locator('.rail li.done').allInnerTexts()
 const transcribeDone = afterCollect.some((t) => /Transcrib/i.test(t))
 const collected = await page.evaluate(
