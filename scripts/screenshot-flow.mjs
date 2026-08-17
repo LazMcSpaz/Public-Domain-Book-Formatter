@@ -2540,8 +2540,9 @@ if (desktopCards !== pagedCards) throw new Error('The desktop view is not paged 
 if (!/0 of [1-9]\d* checked/.test(desktopWhere)) {
   throw new Error(`The gate opened claiming progress: "${desktopWhere}"`)
 }
+// One leaf of however many: somewhere above nothing and well short of done.
 if (barAfterOne < 5 || barAfterOne > 40) {
-  throw new Error(`The progress bar reads ${barAfterOne}% after one of seven leaves`)
+  throw new Error(`The progress bar reads ${barAfterOne}% after a single leaf`)
 }
 console.log(
   `  place remembered: ${cursorKept || 'NO'} · continue hidden midway: ${continueMidway === 0}` +
@@ -2552,8 +2553,15 @@ if (continueMidway !== 0) throw new Error('The continue button is reachable befo
 if (!cursorKept) throw new Error('Moving through the gate does not record where you got to')
 if (!pagerInView) throw new Error('The pager is off-screen on a phone')
 console.log(`  and after closing the tab it reopens on: "${resumedAt.replace(/\s+/g, ' ')}"`)
-if (!resumedAt.startsWith('Page 3')) {
-  throw new Error(`Reopening the gate landed on "${resumedAt}", not the leaf it was left on`)
+// Compared against the leaf actually left on, not a literal. Which page sits at
+// a given place in the gate depends on which leaves got flagged, and that
+// changes whenever the checks improve — the run before this one left on page 4
+// where the assertion still wanted page 3, and landed on page 4 correctly.
+const leftOn = /^Page \d+/.exec(afterNext)?.[0] ?? ''
+if (!leftOn || !resumedAt.startsWith(leftOn)) {
+  throw new Error(
+    `Reopening the gate landed on "${resumedAt}", not the leaf it was left on (${leftOn})`
+  )
 }
 console.log(`  the gate offers: ${verdictOptions.join(' / ')}`)
 console.log(
