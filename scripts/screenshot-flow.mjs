@@ -324,6 +324,105 @@ console.log(
   '  → a reading round-trips as live pixels, a wrong-DPI one is discarded, the store is capped'
 )
 
+// Losing a tab partway through a ten-minute read used to cost the whole book.
+// A wake lock stops the usual cause — a phone dimming and locking — but a
+// backgrounded tab can still be frozen or discarded, and nothing in a browser
+// prevents that. So the reading checkpoints, and a fresh run carries on.
+console.log('2c3. a reading that stopped partway is carried on from')
+const resumed = await page.evaluate(async (repo) => {
+  const cache = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
+  const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+
+  const pixels = async () => {
+    const c = document.createElement('canvas')
+    c.width = 8
+    c.height = 8
+    c.getContext('2d').fillRect(0, 0, 8, 8)
+    return await new Promise((r) => c.toBlob(r, 'image/png'))
+  }
+
+  const wanted = { dpi: 300, maxPages: null }
+  try {
+    await runStore.deleteRecon('half-read')
+    const wrote = await cache.saveReconCheckpoint(
+      'half-read',
+      {
+        pagesDone: 4,
+        words: [
+          {
+            id: 'p0_w0',
+            text: 'alembick',
+            confidence: 80,
+            bbox: { x0: 1, y0: 2, x1: 3, y1: 4 },
+            pageIndex: 0
+          }
+        ],
+        pageText: ['one', 'two', 'three', 'four'],
+        thumbnails: new Map([
+          [0, await pixels()],
+          [3, await pixels()]
+        ]),
+        illustrations: []
+      },
+      9,
+      wanted
+    )
+
+    // It is a checkpoint, so it must never be handed back as the whole book —
+    // that is an edition that stops at leaf four with nothing said.
+    const asWhole = await cache.loadReconCache('half-read', wanted)
+    const asCheckpoint = await cache.loadReconCheckpoint('half-read', wanted)
+    const carriesOn =
+      wrote &&
+      asWhole === null &&
+      asCheckpoint !== null &&
+      asCheckpoint.pagesDone === 4 &&
+      asCheckpoint.words[0].text === 'alembick' &&
+      asCheckpoint.pageText.length === 4 &&
+      asCheckpoint.thumbnails.size === 2
+
+    // A checkpoint taken at another resolution describes pixels this run will
+    // not produce, so it is dropped rather than resumed from.
+    const wrongDpi = await cache.loadReconCheckpoint('half-read', { dpi: 150, maxPages: null })
+    const dropped =
+      wrongDpi === null && (await cache.loadReconCheckpoint('half-read', wanted)) === null
+
+    await runStore.deleteRecon('half-read')
+    return { carriesOn, dropped }
+  } catch (e) {
+    return { error: String(e.message) }
+  }
+}, REPO)
+
+if (resumed.error) throw new Error(`The checkpoint failed: ${resumed.error}`)
+for (const [check, ok] of Object.entries(resumed)) {
+  if (!ok) throw new Error(`The checkpoint failed: ${check}`)
+}
+console.log('  → a partial reading is resumed, never mistaken for a whole one')
+
+// The screen has to stay on while a long read runs, or a phone locks and takes
+// the tab down with it. Nothing can keep it going with the screen *off*.
+const wake = await page.evaluate(async (repo) => {
+  const mod = await import(`/@fs${repo}/src/platform/browser/wake-lock.ts`)
+  const offered = mod.canKeepAwake()
+  let held = false
+  const original = navigator.wakeLock?.request
+  if (original) {
+    navigator.wakeLock.request = async () => {
+      held = true
+      return { release: async () => {}, released: false }
+    }
+  }
+  const release = mod.keepAwake()
+  await new Promise((r) => setTimeout(r, 60))
+  release()
+  release() // twice is safe
+  if (original) navigator.wakeLock.request = original
+  return { offered, held: !offered || held }
+}, REPO)
+if (!wake.held) throw new Error('The wake lock was never requested')
+console.log(`  → the screen is held awake while reading (offered here: ${wake.offered})`)
+
 // Banked looks live in the same database as runs but under opposite rules, and
 // the upgrade that added them has to leave the runs alone — which is the one
 // thing no unit test can check, because there is no IndexedDB in vitest.

@@ -26,6 +26,7 @@ export {
 export {
   RECON_CACHE_VERSION,
   reconCacheUsable,
+  reconResumeFrom,
   reconStamp,
   type ReconStamp,
   type ReconWanted

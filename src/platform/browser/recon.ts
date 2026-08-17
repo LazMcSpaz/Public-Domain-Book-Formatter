@@ -10,7 +10,7 @@
  * one page (~19 MB) rather than the whole book (~5.8 GB for 300 pages).
  */
 import { buildLexicon, contextBox, type LexiconEntry, type LexiconToken } from '@core/lexicon'
-import { openPdf, renderPage, cropToObjectUrl, thumbnailToObjectUrl } from './pdf'
+import { openPdf, renderPage, cropToObjectUrl, thumbnailToBlob, blobOfUrl } from './pdf'
 import { detectIllustrations, type RegionCandidate } from './illustrations'
 import { OcrEngine, type OcrWord, type OcrAssetPaths } from './ocr'
 
@@ -61,6 +61,22 @@ export interface ReconResult {
   pageText: string[]
 }
 
+/**
+ * The leaves already read, handed back in to carry on from.
+ *
+ * Everything here is per-leaf and additive, which is what makes resuming a
+ * matter of starting the loop later rather than of merging two readings. The
+ * lexicon and the word crops are *not* carried: both are derived from the words
+ * at the end and cost seconds, where re-OCR-ing the leaves costs minutes.
+ */
+export interface ReconPartial {
+  pagesDone: number
+  words: OcrWord[]
+  pageText: string[]
+  thumbnails: Map<number, Blob>
+  illustrations: { region: RegionCandidate['region']; ink: number; preview: Blob }[]
+}
+
 export interface ReconOptions {
   dpi?: number
   /** Cap pages processed — used by the "try a few pages first" path. */
@@ -70,13 +86,34 @@ export interface ReconOptions {
   assets?: OcrAssetPaths
   onProgress?: (p: ReconProgress) => void
   signal?: AbortSignal
+  /** Leaves read on an earlier visit, to be carried on from rather than redone. */
+  resumeFrom?: ReconPartial | null
+  /**
+   * Called every `checkpointEvery` leaves with everything read so far.
+   *
+   * The mitigation for the thing a wake lock cannot fix: a phone that freezes
+   * the tab anyway, or a browser that discards it under memory pressure. What
+   * is handed over is Blobs rather than object URLs, because a URL names a Blob
+   * in a page that may not exist by the time anyone reads the record.
+   */
+  onCheckpoint?: (partial: ReconPartial) => void
+  /** Leaves between checkpoints. Default 20. */
+  checkpointEvery?: number
 }
 
 export async function runRecon(
   fileData: ArrayBuffer | Blob,
   options: ReconOptions = {}
 ): Promise<ReconResult> {
-  const { dpi = RECON_DPI, cropLimit = 60, onProgress, signal } = options
+  const {
+    dpi = RECON_DPI,
+    cropLimit = 60,
+    onProgress,
+    signal,
+    resumeFrom = null,
+    onCheckpoint,
+    checkpointEvery = 20
+  } = options
 
   const doc = await openPdf(fileData)
   const total = Math.min(doc.numPages, options.maxPages ?? doc.numPages)
@@ -84,16 +121,45 @@ export async function runRecon(
   const engine = new OcrEngine(options.assets)
   await engine.init()
 
-  const words: OcrWord[] = []
-  const pageText: string[] = []
+  // Whatever an earlier visit got through, if it was reading the same book the
+  // same way. `from` is the first leaf this run has to do itself.
+  const from = Math.max(0, Math.min(resumeFrom?.pagesDone ?? 0, total))
+  const words: OcrWord[] = [...(resumeFrom?.words ?? [])]
+  const pageText: string[] = [...(resumeFrom?.pageText ?? [])]
+  const illustrations: RegionCandidate[] = (resumeFrom?.illustrations ?? []).map((c) => ({
+    region: c.region,
+    ink: c.ink,
+    previewUrl: URL.createObjectURL(c.preview)
+  }))
+  // The Blobs are kept beside the object URLs made from them, so a checkpoint
+  // is assembled from references rather than by reading every thumbnail back
+  // out of its URL — which would be O(n²) work over a long book.
+  const thumbBlobs = new Map<number, Blob>(resumeFrom?.thumbnails ?? [])
   const thumbnails = new Map<number, string>()
-  const illustrations: RegionCandidate[] = []
+  for (const [page, blob] of thumbBlobs) thumbnails.set(page, URL.createObjectURL(blob))
+  const illustrationBlobs: { region: RegionCandidate['region']; ink: number; preview: Blob }[] = [
+    ...(resumeFrom?.illustrations ?? [])
+  ]
   // Word boxes are kept (tiny) so crops can be re-rendered on demand; the page
   // canvases themselves are not retained.
   const boxesByPage = new Map<number, OcrWord[]>()
+  for (const w of words) {
+    const list = boxesByPage.get(w.pageIndex) ?? []
+    list.push(w)
+    boxesByPage.set(w.pageIndex, list)
+  }
+
+  const checkpoint = (pagesDone: number): void =>
+    onCheckpoint?.({
+      pagesDone,
+      words,
+      pageText,
+      thumbnails: thumbBlobs,
+      illustrations: illustrationBlobs
+    })
 
   try {
-    for (let i = 0; i < total; i++) {
+    for (let i = from; i < total; i++) {
       if (signal?.aborted) throw new Error('Cancelled')
 
       onProgress?.({ page: i + 1, total, phase: 'rendering' })
@@ -110,18 +176,31 @@ export async function runRecon(
       // gate, and any page can later be flagged for review, where the scan is
       // the evidence. Thumbnails are small (~200px wide) so a whole book of
       // them is cheap compared with holding page canvases.
-      thumbnails.set(i, await thumbnailToObjectUrl(rendered.canvas))
+      const thumb = await thumbnailToBlob(rendered.canvas)
+      thumbBlobs.set(i, thumb)
+      thumbnails.set(i, URL.createObjectURL(thumb))
 
       // While the page is still in hand. Doing this later would mean rendering
       // every page a second time to find out most of them have no pictures.
-      illustrations.push(...(await detectIllustrations(rendered.canvas, i, result.words)))
+      const found = await detectIllustrations(rendered.canvas, i, result.words)
+      illustrations.push(...found)
+      for (const c of found) {
+        const preview = await blobOfUrl(c.previewUrl)
+        if (preview) illustrationBlobs.push({ region: c.region, ink: c.ink, preview })
+      }
 
       onProgress?.({ page: i + 1, total, phase: 'ocr', meanConfidence: result.meanConfidence })
 
       // Release the page before the next one is rendered.
       rendered.canvas.width = 0
       rendered.canvas.height = 0
+
+      // Every so often, not every leaf: a checkpoint is a structured clone of
+      // everything read so far, and writing one per page would spend more time
+      // in storage than in Tesseract.
+      if ((i + 1) % checkpointEvery === 0 && i + 1 < total) checkpoint(i + 1)
     }
+    checkpoint(total)
 
     // --- harvest the book's vocabulary from everything OCR saw ---
     onProgress?.({ page: total, total, phase: 'harvesting' })

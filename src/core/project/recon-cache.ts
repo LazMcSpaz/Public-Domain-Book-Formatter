@@ -35,7 +35,7 @@
  * response to a record this version cannot read is to drop it and read the scan
  * again, not to write code that guesses at what an older one meant.
  */
-export const RECON_CACHE_VERSION = 1
+export const RECON_CACHE_VERSION = 2
 
 /** What a stored reading was made under. */
 export interface ReconStamp {
@@ -44,10 +44,26 @@ export interface ReconStamp {
   dpi: number
   /** How many pages were read, or null for all of them. */
   maxPages: number | null
+  /**
+   * Leaves read so far.
+   *
+   * A *finished* reading has read every leaf it set out to. A **checkpoint** is
+   * the same record written partway, so a tab that gets frozen on a phone costs
+   * the minutes since the last one rather than the whole book. The two are told
+   * apart here and nowhere else: handing a checkpoint back as a finished
+   * reading is a book missing its second half in silence, which is the exact
+   * failure this field exists to make impossible.
+   */
+  pagesDone: number
+  /** How many there are in total, so a checkpoint knows what it is short of. */
+  pageCount: number
 }
 
-/** What the reading is wanted for now. */
-export type ReconWanted = Omit<ReconStamp, 'version'>
+/** What the reading is wanted for now — the conditions, not the progress. */
+export interface ReconWanted {
+  dpi: number
+  maxPages: number | null
+}
 
 /**
  * Whether a stored reading answers the question being asked of it.
@@ -55,7 +71,7 @@ export type ReconWanted = Omit<ReconStamp, 'version'>
  * Takes `unknown` because it is reading a record off disk that may have been
  * written by any past version of this app, or by nothing at all.
  */
-export function reconCacheUsable(stored: unknown, wanted: ReconWanted): boolean {
+function conditionsMatch(stored: unknown, wanted: ReconWanted): stored is ReconStamp {
   if (!stored || typeof stored !== 'object') return false
   const s = stored as Partial<ReconStamp>
   if (s.version !== RECON_CACHE_VERSION) return false
@@ -63,10 +79,44 @@ export function reconCacheUsable(stored: unknown, wanted: ReconWanted): boolean 
   // `undefined` and `null` are not the same answer here: a record written
   // before the field existed cannot claim to be a reading of the whole book.
   if (s.maxPages === undefined) return false
-  return (s.maxPages ?? null) === wanted.maxPages
+  if ((s.maxPages ?? null) !== wanted.maxPages) return false
+  return typeof s.pagesDone === 'number' && typeof s.pageCount === 'number'
+}
+
+/**
+ * Whether a stored reading can be handed back as the reading of this book.
+ *
+ * Only a *finished* one can. A checkpoint describes part of a book and saying
+ * otherwise would produce an edition that stops halfway with nothing said.
+ */
+export function reconCacheUsable(stored: unknown, wanted: ReconWanted): boolean {
+  if (!conditionsMatch(stored, wanted)) return false
+  return stored.pagesDone >= stored.pageCount && stored.pageCount > 0
+}
+
+/**
+ * How many leaves a stored checkpoint lets a fresh run skip, or 0 for none.
+ *
+ * The same conditions have to hold — a checkpoint taken at another resolution
+ * describes pixels this run will not produce — but being unfinished is the
+ * whole point rather than a disqualification.
+ */
+export function reconResumeFrom(stored: unknown, wanted: ReconWanted): number {
+  if (!conditionsMatch(stored, wanted)) return 0
+  if (stored.pageCount <= 0) return 0
+  return Math.max(0, Math.min(stored.pagesDone, stored.pageCount))
 }
 
 /** The stamp to write beside a reading taken under these conditions. */
-export function reconStamp(wanted: ReconWanted): ReconStamp {
-  return { version: RECON_CACHE_VERSION, dpi: wanted.dpi, maxPages: wanted.maxPages }
+export function reconStamp(
+  wanted: ReconWanted,
+  progress: { pagesDone: number; pageCount: number }
+): ReconStamp {
+  return {
+    version: RECON_CACHE_VERSION,
+    dpi: wanted.dpi,
+    maxPages: wanted.maxPages,
+    pagesDone: progress.pagesDone,
+    pageCount: progress.pageCount
+  }
 }

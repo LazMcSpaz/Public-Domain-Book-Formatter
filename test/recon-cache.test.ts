@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { RECON_CACHE_VERSION, reconCacheUsable, reconStamp } from '@core/project'
+import { RECON_CACHE_VERSION, reconCacheUsable, reconResumeFrom, reconStamp } from '@core/project'
 
 /**
  * Everything here is about *refusing* a stored reading. Accepting one is the
@@ -8,7 +8,8 @@ import { RECON_CACHE_VERSION, reconCacheUsable, reconStamp } from '@core/project
  */
 describe('reconCacheUsable — when a stored reading may be reused', () => {
   const wanted = { dpi: 300, maxPages: null }
-  const good = { ...reconStamp(wanted) }
+  /** A reading that got all the way through a nine-leaf book. */
+  const good = reconStamp(wanted, { pagesDone: 9, pageCount: 9 })
 
   it('accepts a reading taken under the same conditions', () => {
     expect(reconCacheUsable(good, wanted)).toBe(true)
@@ -52,10 +53,57 @@ describe('reconCacheUsable — when a stored reading may be reused', () => {
   })
 
   it('stamps what it was actually taken under', () => {
-    expect(reconStamp({ dpi: 150, maxPages: 8 })).toEqual({
+    expect(reconStamp({ dpi: 150, maxPages: 8 }, { pagesDone: 3, pageCount: 8 })).toEqual({
       version: RECON_CACHE_VERSION,
       dpi: 150,
-      maxPages: 8
+      maxPages: 8,
+      pagesDone: 3,
+      pageCount: 8
     })
+  })
+
+  it('refuses a reading that stopped partway', () => {
+    // The whole point of telling a checkpoint from a finished reading. Handing
+    // this back as the book would produce an edition that stops at leaf four
+    // with nothing said about the rest.
+    const partway = reconStamp(wanted, { pagesDone: 4, pageCount: 9 })
+    expect(reconCacheUsable(partway, wanted)).toBe(false)
+  })
+
+  it('refuses a record from before it recorded how far it got', () => {
+    const { pagesDone, ...older } = good
+    expect(pagesDone).toBe(9)
+    expect(reconCacheUsable(older, wanted)).toBe(false)
+  })
+})
+
+describe('reconResumeFrom — carrying on from where a reading stopped', () => {
+  const wanted = { dpi: 300, maxPages: null }
+
+  it('says how many leaves a fresh run can skip', () => {
+    expect(reconResumeFrom(reconStamp(wanted, { pagesDone: 40, pageCount: 350 }), wanted)).toBe(40)
+  })
+
+  it('will not resume across a change that moves every pixel', () => {
+    // Same reasoning as refusing a finished one: the boxes and crops in the
+    // record describe a page rendered at another size.
+    const at200 = reconStamp({ dpi: 200, maxPages: null }, { pagesDone: 40, pageCount: 350 })
+    expect(reconResumeFrom(at200, wanted)).toBe(0)
+    const capped = reconStamp({ dpi: 300, maxPages: 5 }, { pagesDone: 4, pageCount: 5 })
+    expect(reconResumeFrom(capped, wanted)).toBe(0)
+  })
+
+  it('never claims more leaves than the book has', () => {
+    const wild = reconStamp(wanted, { pagesDone: 900, pageCount: 350 })
+    expect(reconResumeFrom(wild, wanted)).toBe(350)
+  })
+
+  it('is happy to resume from a finished record, and says nothing for rubbish', () => {
+    // A finished one is not *unusable* to resume from — it just has nothing
+    // left to do, which is the same answer either way.
+    expect(reconResumeFrom(reconStamp(wanted, { pagesDone: 9, pageCount: 9 }), wanted)).toBe(9)
+    for (const junk of [null, undefined, 0, '', [], true]) {
+      expect(reconResumeFrom(junk, wanted)).toBe(0)
+    }
   })
 })

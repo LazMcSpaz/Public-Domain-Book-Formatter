@@ -289,6 +289,35 @@ export async function renderPageToObjectUrl(
 }
 
 /** Downscale a page to a thumbnail object URL (front-matter review, page rail). */
+/**
+ * Downscale a page to a thumbnail Blob.
+ *
+ * The Blob rather than a URL made from it, because a reading that is stored and
+ * resumed needs the bytes: an object URL names a Blob in a page that may have
+ * been closed since. Callers that only want to show it make the URL themselves.
+ */
+export async function thumbnailToBlob(source: HTMLCanvasElement, maxWidth = 200): Promise<Blob> {
+  const scale = Math.min(1, maxWidth / source.width)
+  const c = document.createElement('canvas')
+  c.width = Math.round(source.width * scale)
+  c.height = Math.round(source.height * scale)
+  const ctx = c.getContext('2d')
+  if (!ctx) throw new Error('Could not acquire a 2D canvas context')
+  ctx.drawImage(source, 0, 0, c.width, c.height)
+  const blob = await new Promise<Blob | null>((resolve) => c.toBlob(resolve, 'image/png'))
+  if (!blob) throw new Error('Could not encode thumbnail')
+  return blob
+}
+
+/** The Blob behind a live object URL, or null once it has been revoked. */
+export async function blobOfUrl(url: string): Promise<Blob | null> {
+  try {
+    return await (await fetch(url)).blob()
+  } catch {
+    return null
+  }
+}
+
 export async function thumbnailToObjectUrl(
   source: HTMLCanvasElement,
   maxWidth = 200

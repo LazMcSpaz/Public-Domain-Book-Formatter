@@ -387,6 +387,18 @@ in `screenshots/`. Don't ship UI blind.
   place is silently ignored. The forward action is held back until the last
   screen, because a "continue" button beside "next leaf" on leaf three of forty
   is an invitation to skip the other thirty-seven by accident.
+- **Also done**: **the reading survives a phone.** Two halves of one problem.
+  The screen is held awake while a long job runs
+  (`src/platform/browser/wake-lock.ts`) — a phone that dims and locks takes the
+  tab down with it, which is the commonest reason a ten-minute read never
+  finished. The lock is released by the platform whenever the page is hidden
+  and _not_ given back, so it is re-acquired on `visibilitychange`; without
+  that, glancing at another app once would silently undo it for the rest of the
+  run. It cannot keep work going with the screen off or the tab backgrounded —
+  nothing in a browser can, workers included — so the other half is that recon
+  **checkpoints** every 20 leaves and a fresh run carries on from where it
+  stopped. `pagesDone` is what tells a checkpoint from a finished reading, and
+  `reconCacheUsable` refuses to hand a partial one back as a whole book.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

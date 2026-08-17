@@ -24,7 +24,13 @@ import {
   type ReconProgress,
   type ReconResult
 } from '../platform/browser/recon'
-import { loadReconCache, saveReconCache } from '../platform/browser/recon-cache'
+import {
+  loadReconCache,
+  loadReconCheckpoint,
+  saveReconCache,
+  saveReconCheckpoint
+} from '../platform/browser/recon-cache'
+import { canKeepAwake, keepAwake, type ReleaseWakeLock } from '../platform/browser/wake-lock'
 import { QuestionView } from './QuestionView'
 import { QuestionList } from './QuestionList'
 import {
@@ -254,6 +260,15 @@ export function App(): JSX.Element {
   })
   /** Reading a stored reading back out, which is quick but not instantaneous. */
   const [reusing, setReusing] = useState(false)
+  /**
+   * Whether the screen is being held awake for a long job.
+   *
+   * Shown rather than done quietly: someone who put their phone down expects it
+   * to sleep, and a screen that stays lit for ten minutes with no explanation
+   * reads as a bug rather than as the app doing what they wanted.
+   */
+  const [awake, setAwake] = useState(false)
+  const releaseWakeRef = useRef<ReleaseWakeLock | null>(null)
   const [buildProgress, setBuildProgress] = useState<{ done: number; total: number } | null>(null)
   /**
    * Corrections made at the proof step.
@@ -655,6 +670,11 @@ export function App(): JSX.Element {
       const cached = await loadReconCache(fileKeyRef.current, wanted).finally(() =>
         setReusing(false)
       )
+      // Nothing finished, but perhaps something got partway. A phone freezes a
+      // backgrounded tab and a browser discards one under memory pressure;
+      // neither is preventable from inside a page, and neither has to cost the
+      // whole book.
+      const partial = cached ? null : await loadReconCheckpoint(fileKeyRef.current, wanted)
 
       // Said before the wait rather than after it, and said accurately: "this
       // is free, it only costs time" is cold comfort at the start of ten
@@ -672,10 +692,31 @@ export function App(): JSX.Element {
         setResumeNote('The scan was already read on this device, so that part is skipped.')
       }
 
+      // The screen stays on while this runs. Reading a long book is ten
+      // minutes the page has to stay alive for, and a phone that dims and
+      // locks takes the tab down with it — the single most common way this
+      // never finished. Released in the `finally` below, whatever happens.
+      releaseWakeRef.current = keepAwake()
+      setAwake(canKeepAwake())
+
       // Asset paths come from the platform default, which resolves them
       // against the app's base URL. Repeating them here once meant they were
       // root-absolute and 404'd on any deploy below the domain root.
-      const result = cached ?? (await runRecon(file, { onProgress: setProgress }))
+      const key = fileKeyRef.current
+      const result =
+        cached ??
+        (await runRecon(file, {
+          onProgress: setProgress,
+          resumeFrom: partial,
+          // Never awaited: a slow write must not hold up the next page, and a
+          // failed one costs the minutes since the last checkpoint rather than
+          // anything that cannot be had again.
+          onCheckpoint: (p) => {
+            if (loadPrefs().keepScans !== false) {
+              void saveReconCheckpoint(key, p, state.pageCount || p.pageText.length, wanted)
+            }
+          }
+        }))
       reconRef.current = result
 
       // Written after the reading is in hand and never awaited into the user's
@@ -722,6 +763,9 @@ export function App(): JSX.Element {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setProgress(null)
+      releaseWakeRef.current?.()
+      releaseWakeRef.current = null
+      setAwake(false)
     }
   }, [])
 
@@ -2028,6 +2072,7 @@ export function App(): JSX.Element {
               {progressInfo.meanConfidence
                 ? ` · ${Math.round(progressInfo.meanConfidence)}% confidence`
                 : null}
+              {awake ? ' · keeping the screen on' : null}
             </div>
           </div>
         ) : null}

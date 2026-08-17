@@ -29,11 +29,11 @@
  *
  * Browser-only.
  */
-import { reconCacheUsable, reconStamp, type ReconWanted } from '@core/project'
+import { reconCacheUsable, reconResumeFrom, reconStamp, type ReconWanted } from '@core/project'
 import type { LexiconEntry } from '@core/lexicon'
 import type { ImageRegion } from '@core/model'
 import { deleteRecon, loadReconRecord, saveRecon } from './run-store'
-import type { ReconResult } from './recon'
+import type { ReconPartial, ReconResult } from './recon'
 import type { OcrWord } from './ocr'
 
 /** The stored form: no object URLs, everything structured-cloneable. */
@@ -43,6 +43,7 @@ interface StoredRecon {
   version: number
   dpi: number
   maxPages: number | null
+  pagesDone: number
   /** Roughly what this record occupies, so the settings screen can say. */
   bytes: number
   pageCount: number
@@ -102,7 +103,7 @@ export async function saveReconCache(
     const base = {
       key,
       savedAt: new Date().toISOString(),
-      ...reconStamp(wanted),
+      ...reconStamp(wanted, { pagesDone: result.pageCount, pageCount: result.pageCount }),
       pageCount: result.pageCount,
       words: result.words,
       lexicon: result.lexicon,
@@ -140,7 +141,11 @@ export async function loadReconCache(
   const raw = await loadReconRecord(key)
   if (!raw || typeof raw !== 'object') return null
   if (!reconCacheUsable(raw, wanted)) {
-    void deleteRecon(key)
+    // Not a whole reading — but a *checkpoint* of this book read this way is
+    // exactly what `loadReconCheckpoint` is about to ask for, and deleting it
+    // here would quietly make resuming impossible. Only a record that can
+    // serve neither purpose is worth dropping.
+    if (reconResumeFrom(raw, wanted) <= 0) void deleteRecon(key)
     return null
   }
 
@@ -170,6 +175,91 @@ export async function loadReconCache(
         ink: c.ink,
         previewUrl: URL.createObjectURL(c.preview)
       }))
+    }
+  } catch {
+    return null
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Checkpoints
+// ---------------------------------------------------------------------------
+
+/**
+ * Keep what has been read so far, partway through a reading.
+ *
+ * The half of "don't lose ten minutes of work" that a wake lock cannot deliver:
+ * a phone can still freeze the tab when the user switches apps, and a browser
+ * can still discard it under memory pressure. Neither is preventable from
+ * inside a page — but neither has to cost the whole book.
+ *
+ * Written into the same store and under the same key as a finished reading, so
+ * a checkpoint is simply superseded when the run completes. `pagesDone` is what
+ * tells them apart, and `reconCacheUsable` refuses to hand a checkpoint back as
+ * a whole book.
+ */
+export async function saveReconCheckpoint(
+  key: string,
+  partial: ReconPartial,
+  pageCount: number,
+  wanted: ReconWanted
+): Promise<boolean> {
+  if (!key || pageCount <= 0) return false
+  try {
+    const base = {
+      key,
+      savedAt: new Date().toISOString(),
+      ...reconStamp(wanted, { pagesDone: partial.pagesDone, pageCount }),
+      pageCount,
+      words: partial.words,
+      // Derived at the end of a run from the words, in seconds. Storing them
+      // here would make every checkpoint bigger for no saving at all.
+      lexicon: [],
+      pageText: partial.pageText,
+      crops: new Map<string, Blob>(),
+      contextCrops: new Map<string, Blob>(),
+      thumbnails: partial.thumbnails,
+      illustrations: partial.illustrations
+    }
+    return await saveRecon({ ...base, bytes: weigh(base) })
+  } catch {
+    return false
+  }
+}
+
+/**
+ * A checkpoint to carry on from, or null when there is nothing worth resuming.
+ *
+ * Deliberately returns null for a *finished* record: the caller asks for that
+ * through `loadReconCache`, and answering both questions from one function is
+ * how a whole reading ends up resumed from as though it were partial.
+ */
+export async function loadReconCheckpoint(
+  key: string,
+  wanted: ReconWanted
+): Promise<ReconPartial | null> {
+  if (!key) return null
+  const raw = await loadReconRecord(key)
+  if (!raw || typeof raw !== 'object') return null
+  if (reconCacheUsable(raw, wanted)) return null
+
+  const pagesDone = reconResumeFrom(raw, wanted)
+  if (pagesDone <= 0) {
+    // Not a checkpoint of this book read this way. Nothing to keep.
+    void deleteRecon(key)
+    return null
+  }
+
+  try {
+    const record = raw as StoredRecon
+    if (!Array.isArray(record.words) || !Array.isArray(record.pageText)) return null
+    if (!(record.thumbnails instanceof Map)) return null
+    return {
+      pagesDone,
+      words: record.words,
+      pageText: record.pageText,
+      thumbnails: record.thumbnails,
+      illustrations: record.illustrations ?? []
     }
   } catch {
     return null
