@@ -2532,7 +2532,12 @@ console.log(
 )
 console.log(`  the bar fills as leaves are finished: ${barAfterOne}% after one`)
 if (desktopCards !== pagedCards) throw new Error('The desktop view is not paged like the phone')
-if (!/0 of 7 checked/.test(desktopWhere)) {
+// Zero checked, however many there are. The count is a property of the book and
+// of how good the checks are — it dropped from seven to six the day the running
+// head stopped being reported as missing text — so pinning it makes this
+// assertion fail every time the flagging gets better. What it is really about
+// is that a freshly opened gate claims no progress.
+if (!/0 of [1-9]\d* checked/.test(desktopWhere)) {
   throw new Error(`The gate opened claiming progress: "${desktopWhere}"`)
 }
 if (barAfterOne < 5 || barAfterOne > 40) {
