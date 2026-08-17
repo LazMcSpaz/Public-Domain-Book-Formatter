@@ -8,6 +8,7 @@ import {
   type PageTranscription
 } from '@core/transcribe'
 import { pruneStaleAnswers } from '@core/wizard'
+import { spotsFromStored } from '@core/adjudicate'
 import { unionBox } from '../src/platform/browser/word-crops'
 
 /**
@@ -341,5 +342,61 @@ describe('leaves whose text is deliberately not carried over', () => {
     // the words go into the book, so losing them is a real loss.
     const findings = verifyPage(leaf('preface'), imprint)
     expect(findings.some((f) => f.code === 'empty-page')).toBe(true)
+  })
+})
+
+/**
+ * Reusing a transcription you already paid for is the commonest way to reach
+ * the review gate, and it was the one path the second reading never ran on.
+ *
+ * The pass fired in exactly two places — a fresh paid read, and collecting a
+ * batch. Someone who opened a book, took "use what I already paid for", and
+ * arrived at a hundred and thirty flagged spots got a gate with no verdicts on
+ * it and no button to ask for any. The verdicts a *previous* visit had bought
+ * were dropped on the way in as well, so paying for them twice was the only
+ * route back to them.
+ */
+describe('verdicts survive being stored with the run', () => {
+  it('rebuilds a spot from what storage holds', () => {
+    const back = spotsFromStored({
+      p4d0: { verdict: 'not-there', reading: '', note: 'A speck of dirt read as a word.' }
+    })
+    expect(back['p4d0']).toEqual({
+      // The id is the key it was filed under — stored once, so the two can
+      // never drift apart.
+      id: 'p4d0',
+      verdict: 'not-there',
+      reading: '',
+      note: 'A speck of dirt read as a word.'
+    })
+  })
+
+  it('keeps the reading, which is the field that makes a verdict checkable', () => {
+    const back = spotsFromStored({
+      p9d2: { verdict: 'missing', reading: 'and of the fixed salt', note: 'Clear on the page.' }
+    })
+    expect(back['p9d2']?.reading).toBe('and of the fixed salt')
+  })
+
+  it('drops a verdict this version does not recognise', () => {
+    // Rather than pass it through to a gate that has no way to render it,
+    // which shows the user a recommendation nothing can act on. The spot
+    // arriving unjudged is the better failure.
+    expect(spotsFromStored({ p1d0: { verdict: 'probably', reading: 'x', note: 'y' } })).toEqual({})
+  })
+
+  it('tolerates a record missing its text fields', () => {
+    const back = spotsFromStored({
+      p1d0: { verdict: 'unsure' } as unknown as { verdict: string; reading: string; note: string }
+    })
+    expect(back['p1d0']).toEqual({ id: 'p1d0', verdict: 'unsure', reading: '', note: '' })
+  })
+
+  it('keeps every well-formed spot when one beside it is broken', () => {
+    const back = spotsFromStored({
+      p1d0: { verdict: 'nonsense', reading: '', note: '' },
+      p2d0: { verdict: 'different', reading: 'quintessence', note: 'Neither reading has it.' }
+    })
+    expect(Object.keys(back)).toEqual(['p2d0'])
   })
 })

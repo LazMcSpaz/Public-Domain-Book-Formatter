@@ -182,3 +182,30 @@ export function parseAdjudication(raw: unknown, asked: readonly string[]): Adjud
   }
   return out
 }
+
+/**
+ * Rebuild the verdicts from what storage holds.
+ *
+ * A saved run keeps a spot as three plain fields, without its id — the id is
+ * the key it is filed under, so storing it twice would let the two disagree.
+ * This puts it back, and re-checks the verdict against the vocabulary rather
+ * than trusting a string that has been through a database: an unrecognised
+ * verdict reaches the gate as a recommendation nothing knows how to render,
+ * which is worse than the spot simply arriving unjudged.
+ */
+export function spotsFromStored(
+  stored: Readonly<Record<string, { verdict: string; reading: string; note: string }>>
+): Record<string, AdjudicatedSpot> {
+  const out: Record<string, AdjudicatedSpot> = {}
+  for (const [id, value] of Object.entries(stored)) {
+    const verdict = SPOT_VERDICTS.find((v) => v === value.verdict)
+    if (!id || !verdict) continue
+    out[id] = {
+      id,
+      verdict,
+      reading: typeof value.reading === 'string' ? value.reading : '',
+      note: typeof value.note === 'string' ? value.note : ''
+    }
+  }
+  return out
+}

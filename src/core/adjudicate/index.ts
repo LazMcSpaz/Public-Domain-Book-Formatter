@@ -19,6 +19,7 @@ export {
   type SpotToCheck,
   type SpotVerdict
 } from './schema'
+export { spotsFromStored } from './schema'
 export { buildAdjudicationPrompt, buildAdjudicationSystemPrompt } from './prompt'
 export {
   buildAdjudicationBody,

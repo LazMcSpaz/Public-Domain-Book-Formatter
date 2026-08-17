@@ -89,7 +89,12 @@ import { collectBookBatch, submitBookBatch } from '../platform/browser/batch-run
 import { canReachBatchApi } from '../platform/browser/batch-reach'
 import { cropWordsFromPage } from '../platform/browser/word-crops'
 import { runBrowserAdjudication, type FlaggedLeaf } from '../platform/browser/adjudicate-run'
-import { describeAdjudication, type AdjudicatedSpot } from '@core/adjudicate'
+import {
+  describeAdjudication,
+  estimateAdjudicationCost,
+  spotsFromStored,
+  type AdjudicatedSpot
+} from '@core/adjudicate'
 import { newSavedProfile, styleQuestions, type SavedStyleProfile } from '@core/style'
 import {
   createBatchTicket,
@@ -234,6 +239,16 @@ export function App(): JSX.Element {
   /** What the last check found, so the waiting screen says something true. */
   const [batchWaiting, setBatchWaiting] = useState<string | null>(null)
   /** The second reading over the flagged spots, while it runs and after. */
+  /**
+   * The second reading, offered at the gate rather than only after a fresh read.
+   *
+   * It used to run in exactly two places — a paid transcription and a batch
+   * collection — which left out the commonest way of arriving at this screen:
+   * reusing the transcription you already bought. Someone with a hundred and
+   * thirty flagged spots and a run they had paid for last week got the gate
+   * with no verdicts on it and no way to ask for any.
+   */
+  const [pendingCheckCost, setPendingCheckCost] = useState<string | null>(null)
   const [checkProgress, setCheckProgress] = useState<{
     leaf: number
     total: number
@@ -1274,7 +1289,13 @@ export function App(): JSX.Element {
         'gate-identity': { ...(s.answers['gate-identity'] ?? {}), ...restored }
       }
     }))
-    complete(stateFromTranscriptions(saved.transcriptions, saved.failures))
+    complete({
+      ...stateFromTranscriptions(saved.transcriptions, saved.failures),
+      // The verdicts come back with the run. They were paid for alongside it,
+      // and a reopened book that has forgotten them shows the gate every spot
+      // as though nobody had ever looked.
+      adjudicated: spotsFromStored(saved.adjudicated)
+    })
   }, [complete, stateFromTranscriptions])
 
   /**
@@ -1925,6 +1946,78 @@ export function App(): JSX.Element {
    * to read. "Leave this page out" excludes it, but the export still accounts
    * for it rather than letting it vanish.
    */
+  /**
+   * Which flagged spots have not been looked at again yet.
+   *
+   * Counted from the gate's own rows rather than from a flag, so the offer
+   * disappears once every spot carries a verdict instead of lingering as a
+   * button that would spend money to re-answer answered questions.
+   */
+  const unchecked = useMemo(() => {
+    let spots = 0
+    const leaves = new Set<number>()
+    for (const [pageIndex, runs] of Object.entries(state.droppedRuns)) {
+      runs.forEach((_, n) => {
+        if (state.adjudicated[`p${pageIndex}d${n}`]) return
+        spots += 1
+        leaves.add(Number(pageIndex))
+      })
+    }
+    return { spots, leaves: leaves.size }
+  }, [state.droppedRuns, state.adjudicated])
+
+  /**
+   * Have the model read the flagged spots, from the gate, on demand.
+   *
+   * The same pass the live runner performs, over whatever is flagged now — so
+   * it works on a transcription bought weeks ago, and the verdicts are saved
+   * back onto that run rather than living for the length of a tab.
+   */
+  const runSecondReading = useCallback(async () => {
+    const run = transcriptionRef.current
+    const recon = reconRef.current
+    const file = fileDataRef.current
+    const key = loadApiKey()
+    setPendingCheckCost(null)
+    if (!run || !recon || !file) return
+    if (!key) {
+      setError('An API key is needed to have the spots read again.')
+      return
+    }
+
+    const wordsByPage = new Map<number, ReconResult['words']>()
+    for (const w of recon.words) {
+      const list = wordsByPage.get(w.pageIndex) ?? []
+      list.push(w)
+      wordsByPage.set(w.pageIndex, list)
+    }
+
+    setError(null)
+    const checked = await secondRead(
+      run.transcriptions,
+      wordsByPage,
+      { apiKey: key, modelId: loadPrefs().modelId },
+      file
+    )
+    if (Object.keys(checked).length === 0) return
+
+    // Merged, not replaced: a spot judged on an earlier visit keeps its verdict
+    // rather than being paid for twice.
+    const merged = { ...state.adjudicated, ...checked }
+    setState((s) => ({ ...s, adjudicated: merged }))
+    // Saved onto the run it belongs to, so closing the tab does not lose what
+    // was just bought — the same rule the transcription itself follows.
+    await persistRun(
+      run,
+      state.answers['gate-identity'] ?? {},
+      loadPrefs().modelId,
+      edits,
+      suppliedBytesRef.current,
+      true,
+      merged
+    )
+  }, [state.adjudicated, state.answers, edits, secondRead, persistRun])
+
   const finishUncertainties = useCallback(async () => {
     const run = transcriptionRef.current
     const data = fileDataRef.current
@@ -2902,6 +2995,63 @@ export function App(): JSX.Element {
           </div>
         ) : null}
 
+        {/* --- the second reading, offered wherever the flags are --- */}
+        {step.id === 'gate-uncertainties' &&
+        !checkProgress &&
+        !pendingCheckCost &&
+        unchecked.spots > 0 &&
+        state.textSource === 'ocr' ? (
+          <div className="q">
+            <span className="prompt">Have the model look at these first?</span>
+            <div className="help">
+              {unchecked.spots} spot(s) across {unchecked.leaves} leaf(s) are waiting for a verdict.
+              The model reads each one against the scan and says what the page actually shows — with
+              the words it read, so you can check it against the picture rather than take its word.
+              It never changes anything on its own.
+            </div>
+            <div className="actions">
+              <button
+                type="button"
+                className="primary"
+                onClick={() =>
+                  setPendingCheckCost(
+                    formatEstimate(
+                      estimateAdjudicationCost({
+                        leafCount: unchecked.leaves,
+                        modelId: loadPrefs().modelId,
+                        imageLongEdge: loadPrefs().imageLongEdge
+                      })
+                    )
+                  )
+                }
+              >
+                Look at them — show me the cost
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {pendingCheckCost ? (
+          <div className="q">
+            <span className="prompt">
+              Reading {unchecked.spots} spot(s) on {unchecked.leaves} leaf(s)
+            </span>
+            <div className="help">
+              Estimated cost: <b>{pendingCheckCost}</b>. Only the flagged leaves are sent — a leaf
+              the checks were happy with costs nothing. Far less than reading the book again,
+              because the transcription you already paid for is kept exactly as it is.
+            </div>
+            <div className="actions">
+              <button type="button" className="primary" onClick={() => void runSecondReading()}>
+                Start — {pendingCheckCost}
+              </button>
+              <button type="button" className="ghost" onClick={() => setPendingCheckCost(null)}>
+                Back
+              </button>
+            </div>
+          </div>
+        ) : null}
+
         {/* --- fetching a finished batch --- */}
         {collectProgress ? (
           <div className="progress">
@@ -3022,6 +3172,7 @@ export function App(): JSX.Element {
         !runProgress &&
         !pendingCost &&
         !checkProgress &&
+        !pendingCheckCost &&
         !submitProgress &&
         !collectProgress &&
         !batchWaiting &&
@@ -3147,6 +3298,7 @@ export function App(): JSX.Element {
         !runProgress &&
         !pendingCost &&
         !checkProgress &&
+        !pendingCheckCost &&
         !submitProgress &&
         !collectProgress &&
         !batchWaiting &&
