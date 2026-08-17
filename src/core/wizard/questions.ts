@@ -12,6 +12,7 @@
  * "given this book state, the wizard asks exactly these questions with this
  * evidence".
  */
+import type { SpotVerdict } from '@core/adjudicate'
 
 /** Visual proof shown beside a question so the user never decides blind. */
 export type Evidence =
@@ -145,6 +146,80 @@ export interface PageEditQuestion extends QuestionBase {
   rows: PageEditRow[]
 }
 
+/**
+ * One place the transcription and OCR disagree, located on the page.
+ *
+ * The row the whole redesign is for. The gate used to say "18 words OCR read
+ * clearly are absent from the transcription" and show a thumbnail of the whole
+ * leaf — a true statement and a useless one, because finding those eighteen
+ * words meant reading a page of dense type against a transcription in another
+ * pane, by eye, eighteen times.
+ *
+ * Everything needed to point at them instead was already in hand: OCR gives
+ * every word a box, the alignment in `@core/transcribe/recover` already knows
+ * which words are missing and which transcribed words sit either side, and the
+ * crop machinery Gate 1 uses for its term grid can cut a word out of the scan.
+ * This is those three facts in one shape.
+ */
+export interface DiscrepancyRow {
+  /** Stable within the page, so a verdict survives a re-render. */
+  id: string
+  /** The OCR word ids, for cropping the scan at exactly these pixels. */
+  tokenIds: string[]
+  /** What OCR read here and the transcription lacks. */
+  text: string
+  /** Mean OCR confidence, 0–100. This is a real probability (SPEC §4). */
+  confidence: number
+  /**
+   * Whether it is long enough to look like a dropped clause.
+   *
+   * Shown, never acted on by default: a `weak` row is as likely to be OCR
+   * inventing a word, or the vision pass having *corrected* one, as it is to
+   * be a real omission.
+   */
+  strength: 'strong' | 'weak'
+  /** The transcribed words just before the gap — where this would go back. */
+  after: string
+  /** The transcribed words just after it, so the place reads as a sentence. */
+  before: string
+  /**
+   * What a second reading of the pixels concluded, where one was run.
+   *
+   * A recommendation, never a removal. The row is still shown, still decidable,
+   * and carries the *reading* the verdict rests on — so the user can check it
+   * against the crop beside it in a second rather than taking it on trust. A
+   * verdict with no reading behind it would be the model's opinion of its own
+   * work, which SPEC §4 says is worth nothing.
+   *
+   * Absent when the pass was not run, or could not read that leaf. Both leave
+   * the row exactly as it would have been without this feature.
+   */
+  checked?: {
+    verdict: SpotVerdict
+    /** What the page says there. Empty when the verdict is that nothing is. */
+    reading: string
+    note: string
+  }
+}
+
+/**
+ * Work through a leaf's disagreements one at a time, with the pixels attached.
+ *
+ * The answer is `rowId → verdict`, holding only the rows actually decided.
+ * Nothing is pre-selected, deliberately: OCR is the noisier of the two
+ * witnesses — that is the whole reason the vision pass exists — so a default
+ * that put every run back would quietly copy OCR's own misreadings into a
+ * transcription the user paid a better model to produce. The rule this app
+ * runs on is that the user never decides blind, not that the app decides for
+ * them.
+ */
+export interface DiscrepancyQuestion extends QuestionBase {
+  type: 'discrepancies'
+  /** The leaf these were found on, so the renderer knows what to crop. */
+  pageIndex: number
+  rows: DiscrepancyRow[]
+}
+
 export type Question =
   | ChoiceQuestion
   | MultiChoiceQuestion
@@ -152,16 +227,52 @@ export type Question =
   | ConfirmQuestion
   | TermGridQuestion
   | PageEditQuestion
+  | DiscrepancyQuestion
 
 /** Per-term verdict from the review grid. */
 export type TermVerdict =
   { action: 'accept' } | { action: 'correct'; text: string } | { action: 'ignore' }
 
+/** What the user decided about one located discrepancy. */
+export type DiscrepancyVerdict = 'restore' | 'ignore'
+
 export type AnswerValue =
-  string | string[] | boolean | Record<string, TermVerdict> | Record<string, string>
+  | string
+  | string[]
+  | boolean
+  | Record<string, TermVerdict>
+  | Record<string, string>
+  | Record<string, DiscrepancyVerdict>
 
 /** Answers keyed by question id. */
 export type Answers = Record<string, AnswerValue>
+
+/**
+ * Drop answers a question can no longer accept.
+ *
+ * Review progress is kept between sittings, and the questions it answers change
+ * as the app does. A verdict the user gave last week against an option that no
+ * longer exists — `restore`, retired when the blanket per-leaf splice was
+ * replaced by per-gap decisions — would otherwise sit in storage naming
+ * nothing: the radio shows unselected, the leaf looks unvisited, and the work
+ * of getting through it appears undone.
+ *
+ * Only `choice` is checked, because it is the only kind whose answer is drawn
+ * from a fixed list. Text and grids hold whatever the user typed, which never
+ * stops being valid.
+ */
+export function pruneStaleAnswers(questions: readonly Question[], saved: Answers): Answers {
+  const out: Answers = {}
+  const byId = new Map(questions.map((q) => [q.id, q]))
+  for (const [id, value] of Object.entries(saved)) {
+    const q = byId.get(id)
+    if (q?.type === 'choice' && typeof value === 'string') {
+      if (!q.options.some((o) => o.value === value)) continue
+    }
+    out[id] = value
+  }
+  return out
+}
 
 /** Every question's recommended answer — the "just hit continue" path. */
 export function defaultAnswers(questions: readonly Question[]): Answers {
@@ -189,6 +300,13 @@ export function defaultAnswers(questions: readonly Question[]): Answers {
         // leaf nobody touched must produce no edit at all. Seeding it with the
         // current text would write an edit over every block in the book and
         // make "undo" at the proof step revert to a correction of nothing.
+        out[q.id] = {}
+        break
+      case 'discrepancies':
+        // Also empty, and for a sharper reason. Defaulting these to `restore`
+        // would splice OCR's reading of every gap into the book on a plain
+        // "continue" — and OCR is the witness the vision pass exists to
+        // improve on. The user is shown the pixels and decides.
         out[q.id] = {}
         break
     }

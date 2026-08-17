@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { findDroppedRuns, spliceRun, spliceRunInto, type DroppedRun } from '@core/transcribe'
 import type { OcrWordLike } from '@core/transcribe'
-import { initialState, stepById, type WizardState } from '@core/wizard'
+import { defaultAnswers, initialState, stepById, type WizardState } from '@core/wizard'
 
 /** OCR words from a sentence, all read confidently unless said otherwise. */
 function ocr(text: string, confidence = 92): OcrWordLike[] {
@@ -104,6 +104,8 @@ describe('putting a run back', () => {
     words: ['Should', 'this', 'cord', 'be', 'severed.'],
     text: 'Should this cord be severed.',
     confidence: 90,
+    tokenIds: [],
+    strength: 'strong',
     after: 'along which vital currents pass.',
     before: 'The only difference'
   }
@@ -137,6 +139,8 @@ describe('the gate offers the text back', () => {
     words: ['Should', 'this', 'cord', 'be', 'severed.'],
     text: 'Should this cord be severed.',
     confidence: 90,
+    tokenIds: [],
+    strength: 'strong',
     after: 'vital currents pass.',
     before: 'The only difference'
   }
@@ -161,32 +165,59 @@ describe('the gate offers the text back', () => {
       .questions(state)
       .find((q) => q.id === 'page-16')
 
+  /** The gaps question for the same leaf. */
+  const gaps = (state: WizardState) =>
+    stepById('gate-uncertainties')
+      .questions(state)
+      .find((q) => q.id === 'page-16-gaps')
+
   it('shows the missing words themselves, not a count of them', () => {
-    const q = question(ready({ 16: [run] }))
-    const texts = q?.evidence?.filter((e) => e.kind === 'text') ?? []
-    expect(texts.some((e) => 'text' in e && e.text.includes('Should this cord be severed'))).toBe(
+    const q = gaps(ready({ 16: [run] }))
+    expect(q?.type).toBe('discrepancies')
+    const rows = q && 'rows' in q ? q.rows : []
+    expect(rows.some((r) => 'text' in r && r.text.includes('Should this cord be severed'))).toBe(
       true
     )
   })
 
   it('says where it goes and how sure OCR was', () => {
-    const q = question(ready({ 16: [run] }))
-    const label = q?.evidence?.map((e) => ('label' in e ? e.label : '')).join(' ')
-    expect(label).toContain('90% sure')
-    expect(label).toContain('vital currents pass.')
+    const q = gaps(ready({ 16: [run] }))
+    const rows = q && 'rows' in q ? q.rows : []
+    const row = rows[0] as { confidence: number; after: string } | undefined
+    expect(row?.confidence).toBe(90)
+    expect(row?.after).toContain('vital currents pass.')
   })
 
-  it('offers putting it back, and recommends that over paying to re-read', () => {
+  /**
+   * The change this describe block exists to pin down.
+   *
+   * The leaf used to carry one blanket "put the missing text back" covering
+   * every gap on it, pre-selected. That is the wrong shape twice over: a leaf
+   * with eighteen disagreements almost never wants all or none of them, and
+   * OCR — the rougher of the two readers — should never be copied over a paid
+   * transcription by a default nobody chose.
+   */
+  it('no longer offers one blanket restore for the whole leaf', () => {
     const q = question(ready({ 16: [run] }))
-    const values = q && 'options' in q ? q.options.map((o) => String(o.value)) : []
-    expect(values).toContain('restore')
-    expect(q && 'defaultValue' in q ? q.defaultValue : '').toBe('restore')
-  })
-
-  it('does not offer it when there is nothing to put back', () => {
-    const q = question(ready({}))
     const values = q && 'options' in q ? q.options.map((o) => String(o.value)) : []
     expect(values).not.toContain('restore')
+    expect(q && 'defaultValue' in q ? q.defaultValue : '').toBe('accept')
+  })
+
+  it('pre-selects nothing, so no gap is filled from OCR unasked', () => {
+    const q = gaps(ready({ 16: [run] }))
+    expect(q ? defaultAnswers([q])[q.id] : null).toEqual({})
+  })
+
+  it('carries the word ids, so the gate can show the pixels', () => {
+    const q = gaps(ready({ 16: [{ ...run, tokenIds: ['p16_w4', 'p16_w5'] }] }))
+    const rows = q && 'rows' in q ? q.rows : []
+    expect((rows[0] as { tokenIds: string[] }).tokenIds).toEqual(['p16_w4', 'p16_w5'])
+  })
+
+  it('asks nothing when there is nothing to put back', () => {
+    expect(gaps(ready({}))).toBeUndefined()
+    const q = question(ready({}))
     expect(q && 'defaultValue' in q ? q.defaultValue : '').toBe('accept')
   })
 })
@@ -194,6 +225,8 @@ describe('the gate offers the text back', () => {
 describe('spliceRunInto — putting a clause back without losing the italics', () => {
   const run = (after: string, text = 'and of the fixed salt'): DroppedRun => ({
     words: text.split(' '),
+    tokenIds: [],
+    strength: 'strong',
     text,
     confidence: 90,
     after,

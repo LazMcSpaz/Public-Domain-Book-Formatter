@@ -108,8 +108,12 @@ export interface RunResult {
  *
  * Returns the page unchanged when there is nothing to do, so a book with no
  * corrections allocates nothing and the common case costs one comparison.
+ *
+ * Exported for the batch path, which applies the same corrections on the way
+ * *in* from the results file. Gate 1 promised that confirming a word fixes it
+ * book-wide, and a promise that holds only on one of the two doors is not one.
  */
-function correctTerms(
+export function correctTerms(
   page: PageTranscription,
   corrections: readonly TermCorrection[] | undefined
 ): PageTranscription {
@@ -244,16 +248,29 @@ export async function runTranscription(
   if (sinceCheckpoint > 0) await checkpoint()
 
   const transcriptions = ordered()
+  return { transcriptions, findings: verifyRun(transcriptions, pages), failures, usage, cancelled }
+}
 
-  // Deterministic verification — evidence, never the model's self-assessment.
+/**
+ * Cross-check every page against the OCR of that page.
+ *
+ * Deterministic — evidence, never the model's self-assessment (SPEC §4). Shared
+ * with the batch path, which collects the same transcriptions a day later and
+ * must be held to exactly the same checks: a finding that only the live runner
+ * produces is a gate that quietly stops working when the user takes the cheaper
+ * door.
+ */
+export function verifyRun(
+  transcriptions: readonly PageTranscription[],
+  pages: readonly { pageIndex: number; ocrWords: readonly OcrWordLike[] }[]
+): VerificationFinding[] {
   const byIndex = new Map(pages.map((p) => [p.pageIndex, p]))
   const findings: VerificationFinding[] = []
   for (const t of transcriptions) {
     const source = byIndex.get(t.pageIndex)
     if (source) findings.push(...verifyPage(t, source.ocrWords))
   }
-
-  return { transcriptions, findings, failures, usage, cancelled }
+  return findings
 }
 
 /** Merge the metadata found across front-matter pages, first non-empty wins. */

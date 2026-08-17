@@ -24,8 +24,10 @@
 import {
   fileKey,
   keyMatchesFile,
+  migrateBatchTicket,
   migrateSavedRun,
   summarize,
+  type BatchTicket,
   type SavedRun,
   type SavedRunSummary
 } from '@core/project'
@@ -34,15 +36,17 @@ import { migrateSavedProfile, type SavedStyleProfile } from '@core/style'
 const DB_NAME = 'pdbf'
 /**
  * v2 added the `profiles` store (banked looks, SPEC §7); v3 added `files`, the
- * source PDF itself; v4 added `recon`, the free-but-slow reading of it. The
+ * source PDF itself; v4 added `recon`, the free-but-slow reading of it; v5
+ * added `batches`, the tickets for books submitted and not yet collected. The
  * upgrade handler below creates whichever stores are missing rather than
  * switching on the old version, so a database at any version arrives complete.
  */
-const DB_VERSION = 4
+const DB_VERSION = 5
 const STORE = 'runs'
 const PROFILE_STORE = 'profiles'
 const FILE_STORE = 'files'
 const RECON_STORE = 'recon'
+const BATCH_STORE = 'batches'
 
 /**
  * How many books' transcriptions to keep, oldest evicted first.
@@ -90,6 +94,13 @@ function openDb(): Promise<IDBDatabase | null> {
         // take the paid transcription down with it.
         const store = db.createObjectStore(RECON_STORE, { keyPath: 'key' })
         store.createIndex('savedAt', 'savedAt')
+      }
+      if (!db.objectStoreNames.contains(BATCH_STORE)) {
+        // Outstanding batch tickets. Same key as the run, and pointedly *not*
+        // capped or evicted the way the others are: every one of these names
+        // pages the user has already been billed for, and dropping the oldest
+        // to save a kilobyte would throw away the only address they have.
+        db.createObjectStore(BATCH_STORE, { keyPath: 'key' })
       }
     }
     request.onsuccess = () => resolve(request.result)
@@ -391,6 +402,81 @@ export async function storedReconSizes(): Promise<Map<string, number>> {
     if (typeof r.key === 'string' && typeof r.bytes === 'number') sizes.set(r.key, r.bytes)
   }
   return sizes
+}
+
+// ---------------------------------------------------------------------------
+// Outstanding batches
+// ---------------------------------------------------------------------------
+
+/**
+ * Keep the ticket for a submitted book.
+ *
+ * The one write in this file whose failure is not merely inconvenient. A run
+ * that cannot be saved costs the user the pages read since the last checkpoint;
+ * a ticket that cannot be saved costs them **every page in the batch**, because
+ * the batch id is the only way back to work that is already being billed for.
+ * The caller treats `false` as a reason to stop submitting, not as a reason to
+ * carry on quietly.
+ */
+export async function saveBatchTicket(ticket: BatchTicket): Promise<boolean> {
+  const ok = await withStore(
+    'readwrite',
+    async (store) => {
+      await promisify(store.put(ticket))
+      return true
+    },
+    BATCH_STORE
+  )
+  return ok === true
+}
+
+/** The outstanding ticket for a file, or null. */
+export async function loadBatchTicket(key: string): Promise<BatchTicket | null> {
+  const raw = await withStore('readonly', (store) => promisify(store.get(key)), BATCH_STORE)
+  if (raw === null || raw === undefined) return null
+  return migrateBatchTicket(raw)
+}
+
+/**
+ * The ticket for a file the user has just opened, by exact identity or by
+ * name-and-size.
+ *
+ * The same fallback as `findRunForFile`, and it matters more here: a
+ * re-downloaded PDF changes its modification time, and a ticket stranded that
+ * way is money that can no longer be collected at all.
+ */
+export async function findBatchTicketForFile(file: {
+  name: string
+  size: number
+  lastModified: number
+}): Promise<{ ticket: BatchTicket; key: string } | null> {
+  const exact = fileKey(file)
+  const direct = await loadBatchTicket(exact)
+  if (direct) return { ticket: direct, key: exact }
+
+  const keys = await withStore('readonly', (store) => promisify(store.getAllKeys()), BATCH_STORE)
+  for (const key of keys ?? []) {
+    if (typeof key !== 'string' || !keyMatchesFile(key, file)) continue
+    const ticket = await loadBatchTicket(key)
+    if (ticket) return { ticket, key }
+  }
+  return null
+}
+
+/** Every outstanding ticket, newest first — for the settings screen. */
+export async function listBatchTickets(): Promise<BatchTicket[]> {
+  const raw = await withStore('readonly', (store) => promisify(store.getAll()), BATCH_STORE)
+  const tickets: BatchTicket[] = []
+  for (const record of raw ?? []) {
+    const ticket = migrateBatchTicket(record)
+    if (ticket) tickets.push(ticket)
+  }
+  return tickets.sort((a, b) => b.submittedAt.localeCompare(a.submittedAt))
+}
+
+/** Drop a ticket, once its results are safely in the run. */
+export async function deleteBatchTicket(key: string): Promise<void> {
+  await withStore('readwrite', (store) => promisify(store.delete(key)), BATCH_STORE)
 }
 
 // ---------------------------------------------------------------------------

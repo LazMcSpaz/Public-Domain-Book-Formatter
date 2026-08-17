@@ -72,7 +72,17 @@ const page = await browser.newPage({ viewport: { width: 1360, height: 900 } })
 const errors = []
 page.on('pageerror', (e) => errors.push(e.message))
 page.on('console', (m) => {
-  if (m.type() === 'error') errors.push(m.text())
+  if (m.type() !== 'error') return
+  // A request to the API that the browser refuses outright is not the app
+  // breaking — it is `batch-reach` asking whether the batch endpoints will
+  // talk to a page, and being told no. That question can only be asked by
+  // trying, and a cross-origin refusal always logs a console error the page
+  // cannot suppress. (Here it is the sandbox's own TLS proxy that Chromium
+  // does not trust; in a browser it would be the CORS refusal itself. Either
+  // way the answer is "no" and the app handles it.) Everything else still
+  // counts.
+  if (m.location()?.url?.includes('api.anthropic.com')) return
+  errors.push(m.text())
 })
 
 const shot = async (name) => {
@@ -872,6 +882,40 @@ if ((await gateEditor.count()) > 0) {
   gateEdited = true
   await shot('08c2-uncertainty-gate-corrected')
 }
+// --- the disagreements, located ---------------------------------------------
+// The gate used to say "18 words OCR read clearly are absent" and show a
+// thumbnail of the whole leaf. Finding those eighteen meant reading a page of
+// dense type against a transcription in another pane, by eye. Everything needed
+// to point at them was already in hand — OCR boxes every word — so each one is
+// now a row with the word as it appears on the paper.
+const gapsQ = page
+  .locator('.q')
+  .filter({ has: page.locator('.discrepancy') })
+  .first()
+const gapRows = await gapsQ.locator('.discrepancy').count()
+let gapCrops = 0
+let gapPreselected = -1
+let gapHighlighted = ''
+let gapRestoreStuck = false
+if (gapRows > 0) {
+  // The crops are cut from the scan when the leaf is reached, so give the
+  // render a moment before counting them.
+  await page.waitForTimeout(2500)
+  gapCrops = await gapsQ.locator('.discrepancy-pixels img').count()
+  // Nothing pre-selected: OCR is the rougher reader, and a default that put
+  // every gap back would copy its misreadings over a paid transcription.
+  gapPreselected = await gapsQ.locator('.discrepancy-verdict button.primary').count()
+  gapHighlighted = await gapsQ.locator('.discrepancy-where .gap').first().innerText()
+  // And a verdict has to stick, or the row is decoration.
+  await gapsQ.locator('.discrepancy-verdict button', { hasText: 'Put it back' }).first().click()
+  await page.waitForTimeout(300)
+  gapRestoreStuck =
+    (await gapsQ
+      .locator('.discrepancy-verdict button.primary', { hasText: 'Put it back' })
+      .count()) > 0
+  await shot('08c6-discrepancies-located')
+}
+
 const verdictBefore = await page.evaluate(() =>
   Object.keys(localStorage)
     .filter((k) => k.startsWith('pdbf.review.'))
@@ -916,18 +960,44 @@ const proofScan = await page.locator('.proof-scan img').count()
 // invisible everywhere it could be corrected, and silently dropped by anyone
 // who retyped the paragraph.
 let italicsShown = ''
+/** Every leaf the sheet walked, so a miss says which leaves it actually saw. */
+const leavesWalked = []
+// Start at the beginning. The sheet does not necessarily open on leaf one — it
+// restores the place it was left at — so a forward-only search from wherever it
+// happens to be silently skips everything behind it. That is what made this
+// look for italics across leaves 8 and 9 only, and it is the same assumption
+// that broke two other checks in this section.
+const rewind = page.locator('.proof-bar button', { hasText: '‹ Previous' })
+for (let i = 0; i < 60; i++) {
+  if (!(await rewind.isEnabled())) break
+  await rewind.click()
+  await page.waitForTimeout(120)
+}
 for (let i = 0; i < 40; i++) {
+  // The leaf has to have rendered before its boxes are read, or an empty
+  // textarea reads as a leaf with no italics on it.
+  await page
+    .locator('.proof-block textarea')
+    .first()
+    .waitFor({ timeout: 4000 })
+    .catch(() => {})
+  const where = await page
+    .locator('.proof-where')
+    .innerText()
+    .catch(() => '?')
   const boxes = await page.locator('.proof-block textarea').all()
   const texts = await Promise.all(boxes.map((b) => b.inputValue()))
+  leavesWalked.push(`${where.split('\n')[0]}:${texts.length}`)
   const found = texts.find((t) => t.includes('<i>'))
   if (found) {
     italicsShown = found
     await shot('05c2a2-proof-italics-visible')
     break
   }
-  if (!(await page.locator('.proof-bar button', { hasText: 'Next ›' }).isEnabled())) break
-  await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
-  await page.waitForTimeout(150)
+  const next = page.locator('.proof-bar button', { hasText: 'Next ›' })
+  if (!(await next.isEnabled())) break
+  await next.click()
+  await page.waitForTimeout(400)
 }
 const italicsHinted = italicsShown
   ? await page.locator('.proof-hint').filter({ hasText: 'italic' }).count()
@@ -997,10 +1067,40 @@ if (toFixButton || gateEdited) {
 }
 
 // Correcting a word must reach the finished PDF, which is the whole point.
+//
+// Measured as a *rise*, not as a number. The gate before this leaves most
+// flagged leaves on their default answer — "put the missing text back" — and
+// every one of those is a real correction, so the sheet legitimately arrives
+// here already carrying several. Pinning the total meant this line quietly
+// stopped being true the moment the gate walkthrough was added, which is
+// exactly what happened.
+const correctionsOf = (text) => Number(/(\d+) corrected/.exec(text)?.[1] ?? 0)
+// The first leaf of the sheet need not have any text on it: a title page is
+// mined for metadata rather than transcribed, and a leaf can be listed here
+// purely because it carries a note. So walk forward to the first leaf that
+// actually has something to type in, rather than assuming leaf one does.
+for (let i = 0; i < 40; i++) {
+  if ((await page.locator('.proof-block textarea').count()) > 0) break
+  if (!(await forward.isEnabled())) break
+  await forward.click()
+  await page.waitForTimeout(150)
+}
+const correctedBefore = correctionsOf(await page.locator('.proof-where small').innerText())
 const firstBox = page.locator('.proof-block textarea').first()
+// Note for what follows: everything below navigates by counting `Next ›` from
+// the top of the sheet, so the walk above has to be undone before then or every
+// later section lands a few leaves off. See the rewind after the fill.
+
 await firstBox.fill('The chirurgeon examined the specimen with extraordinary care.')
 await page.waitForTimeout(300)
 const correctedCount = await page.locator('.proof-where small').innerText()
+// Back to the top, restoring the invariant every section below depends on:
+// they step forward by a known number of leaves from leaf one.
+while (await previous.isEnabled()) {
+  await previous.click()
+  await page.waitForTimeout(120)
+}
+const correctionCounted = correctionsOf(correctedCount) > correctedBefore
 
 // An editor's note — the differentiation route that costs nothing but writing.
 // It has to reach the foot of the printed page, or it is decoration.
@@ -1069,10 +1169,15 @@ await shot('05c2e-image-editing')
 // The title page is a source of metadata rather than a leaf to proof, so the
 // first leaf here is page two of the scan and the seeded table on page four is
 // two steps along.
-await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
-await page.waitForTimeout(400)
-await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
-await page.waitForTimeout(400)
+// Walk to the leaf carrying the seeded table, for the same reason as below:
+// its position in the sheet depends on decisions made at the gate before it.
+for (let i = 0; i < 40; i++) {
+  if ((await page.locator('.proof-block textarea.proof-table').count()) > 0) break
+  const next = page.locator('.proof-bar button', { hasText: 'Next ›' })
+  if (!(await next.isEnabled())) break
+  await next.click()
+  await page.waitForTimeout(400)
+}
 
 // This leaf carries the seeded table. A table is edited as its rows rather
 // than as prose, so this is also where the columns can be seen going in.
@@ -1086,10 +1191,18 @@ const tableRetyped = await page
   .catch(() => '')
 await shot('05c2f-proof-table')
 
-await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
-await page.waitForTimeout(400)
-await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
-await page.waitForTimeout(1500)
+// Walk to the leaf that actually carries a picture, rather than counting a
+// fixed number of steps to where one used to be. Counting is what broke this
+// twice: which leaves reach the proof sheet depends on what the gate before it
+// decided, and that has changed twice in a day.
+for (let i = 0; i < 40; i++) {
+  if ((await page.locator('.proof-picture .editor-canvas').count()) > 0) break
+  const next = page.locator('.proof-bar button', { hasText: 'Next ›' })
+  if (!(await next.isEnabled())) break
+  await next.click()
+  await page.waitForTimeout(400)
+}
+await page.waitForTimeout(1100)
 
 const cutEditor = await page.locator('.proof-picture .editor').count()
 const cutHintBefore = await page
@@ -1865,6 +1978,329 @@ console.log(
   `  → storage asked with measured figures: ${storageHelp.replace(/\s+/g, ' ').slice(0, 96)}…`
 )
 
+// --- the batch door ---------------------------------------------------------
+// The one path in this app where the loop is *not* in the tab. The API is
+// stubbed, so this exercises submission, the ticket surviving a reload, the
+// wait, and the collection — everything except the spend. The reload is the
+// point: a batch id lives only in the ticket, and a submission the user cannot
+// come back to is money on the floor.
+console.log('5b3. the batch door — submit, close the tab, come back')
+
+await page.evaluate(
+  async ([repo, key]) => {
+    const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+    await runStore.deleteRun(key)
+    await runStore.deleteBatchTicket(key)
+  },
+  [REPO, savedKey]
+)
+
+// What went into each batch, recorded from the request the app actually sent
+// rather than assumed here — the results have to come back keyed to the ids it
+// chose, which is the whole mechanism under test.
+const submittedBatches = new Map()
+let statusChecks = 0
+
+await page.route('https://api.anthropic.com/v1/messages/batches**', async (route) => {
+  const url = route.request().url()
+  const method = route.request().method()
+  const json = (body) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+
+  if (method === 'POST' && url.endsWith('/batches')) {
+    const body = JSON.parse(route.request().postData() ?? '{}')
+    const id = `msgbatch_${submittedBatches.size + 1}`
+    submittedBatches.set(
+      id,
+      body.requests.map((r) => r.custom_id)
+    )
+    return json({
+      id,
+      processing_status: 'in_progress',
+      request_counts: {
+        processing: body.requests.length,
+        succeeded: 0,
+        errored: 0,
+        canceled: 0,
+        expired: 0
+      },
+      results_url: null,
+      created_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 29 * 86400000).toISOString()
+    })
+  }
+
+  // The reachability probe — a bare list request. Answered without touching
+  // the status counter, or the probe would consume the "still in progress"
+  // reply that the waiting screen exists to show.
+  if (method === 'GET' && url.includes('/batches?')) {
+    return json({ data: [], has_more: false, first_id: null, last_id: null })
+  }
+
+  if (url.endsWith('/results')) {
+    const id = /batches\/([^/]+)\/results/.exec(url)?.[1] ?? ''
+    const lines = (submittedBatches.get(id) ?? []).map((customId, i) =>
+      JSON.stringify({
+        custom_id: customId,
+        result: {
+          type: 'succeeded',
+          message: {
+            stop_reason: 'end_turn',
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  role: i === 0 ? 'title-page' : 'body',
+                  blocks: [{ kind: 'paragraph', text: `Collected from a batch, leaf ${i + 1}.` }],
+                  uncertain: [],
+                  furniture: {}
+                })
+              }
+            ],
+            usage: { input_tokens: 900, output_tokens: 300, cache_read_input_tokens: 800 }
+          }
+        }
+      })
+    )
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/x-jsonlines',
+      body: lines.join('\n')
+    })
+  }
+
+  // A retrieve. The first check reports it still working, so the waiting
+  // screen is exercised rather than skipped past.
+  const id = /batches\/([^/?]+)/.exec(url)?.[1] ?? ''
+  statusChecks += 1
+  const ended = statusChecks > 1
+  return json({
+    id,
+    processing_status: ended ? 'ended' : 'in_progress',
+    request_counts: {
+      processing: ended ? 0 : (submittedBatches.get(id) ?? []).length,
+      succeeded: ended ? (submittedBatches.get(id) ?? []).length : 0,
+      errored: 0,
+      canceled: 0,
+      expired: 0
+    },
+    results_url: ended ? `https://api.anthropic.com/v1/messages/batches/${id}/results` : null,
+    created_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 29 * 86400000).toISOString()
+  })
+})
+
+// The second reading goes to /v1/messages, not to the batch endpoints, so it
+// needs its own stub. It answers "not on the page" for every spot it is asked
+// about — the commonest true answer, since most flagged spots are OCR seeing
+// something that is not there.
+let secondReadCalls = 0
+const secondReadIds = []
+await page.route('https://api.anthropic.com/v1/messages', async (route) => {
+  const body = JSON.parse(route.request().postData() ?? '{}')
+  const prompt = body.messages?.[0]?.content?.[1]?.text ?? ''
+  const ids = [...prompt.matchAll(/\[(p\d+d\d+)\]/g)].map((m) => m[1])
+  if (ids.length === 0) {
+    // Not an adjudication request — the credential check uses this endpoint too.
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ content: [{ type: 'text', text: '{}' }] })
+    })
+  }
+  secondReadCalls += 1
+  secondReadIds.push(...ids)
+  return route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      stop_reason: 'end_turn',
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            spots: ids.map((id) => ({
+              id,
+              verdict: 'not-there',
+              reading: '',
+              note: 'A speck of dirt read as a word.'
+            }))
+          })
+        }
+      ],
+      usage: { input_tokens: 1800, output_tokens: 300, cache_read_input_tokens: 0 }
+    })
+  })
+})
+
+await page.goto(URL_BASE, { waitUntil: 'networkidle' })
+await page.evaluate(() => localStorage.setItem('pdbf.apiKey', 'sk-ant-harness'))
+await page.setInputFiles('input[type=file]', bookPath)
+await page.waitForSelector('.terms', { timeout: 180000 })
+await page.locator('button.primary', { hasText: 'Looks right' }).click()
+await page.waitForSelector('.q', { timeout: 20000 })
+
+// Both prices on one screen, which is the evidence the recommendation rests on.
+const modeQ = page.locator('.q').filter({ hasText: 'How should the reading be run' })
+const modeOptions = await modeQ.locator('.opt').allInnerTexts()
+const batchOption = modeOptions.find((t) => /Submit it and come back/.test(t)) ?? ''
+const nowOption = modeOptions.find((t) => /Read it now/.test(t)) ?? ''
+const priceOf = (text) => Number(/about \$([\d.]+)/.exec(text)?.[1] ?? '0')
+await shot('08b3-batch-door-offered')
+
+await modeQ.locator('.opt', { hasText: 'Submit it and come back' }).click()
+await page.locator('button.primary', { hasText: 'Continue' }).last().click()
+await page.waitForSelector('.q .prompt', { timeout: 20000 })
+const approvalPrompt = await page.locator('.q .prompt').first().innerText()
+const approvalHelp = await page.locator('.q .help').first().innerText()
+await shot('08b4-batch-cost-approval')
+
+await page.locator('button.primary', { hasText: 'Submit —' }).click()
+// Uploading, then straight to the collect offer.
+await page.waitForSelector('.q .prompt:has-text("This book is out being read")', {
+  timeout: 120000
+})
+const batchesMade = submittedBatches.size
+const pagesSubmitted = [...submittedBatches.values()].reduce((n, ids) => n + ids.length, 0)
+await shot('08b5-batch-submitted')
+
+// The tab goes away entirely, which is the feature. Everything after this
+// depends only on what was written to disk.
+await page.goto(URL_BASE, { waitUntil: 'networkidle' })
+await page.setInputFiles('input[type=file]', bookPath)
+await page.waitForSelector('.terms', { timeout: 180000 })
+await page.locator('button.primary', { hasText: 'Looks right' }).click()
+await page.waitForSelector('.q', { timeout: 20000 })
+const survivedReload = await page
+  .locator('.q .prompt')
+  .filter({ hasText: 'This book is out being read' })
+  .count()
+const collectHelp = await page.locator('.q .help').first().innerText()
+// Nothing on this screen may quote a price: these pages are already bought.
+const quotedAgain = await page.locator('.q').filter({ hasText: 'read the pages' }).count()
+await shot('08b6-batch-offered-after-reload')
+
+const collectLabel = await page.locator('button.primary').last().innerText()
+await page.locator('button.primary').last().click()
+// First check finds it still running — the honest intermediate state.
+await page.waitForSelector('.q .prompt:has-text("Still being read")', { timeout: 60000 })
+const waitingHelp = await page.locator('.q .help').first().innerText()
+await shot('08b7-batch-still-running')
+
+await page.locator('button.primary', { hasText: 'Check again' }).click()
+// Collected, and the flow carries on into the ordinary review gate — but not
+// straight away: the second reading runs between the results landing and the
+// run being saved, so waiting for a question to appear is not waiting for the
+// work to finish. Wait for every running stage to clear first, or the store is
+// read before anything has been written to it.
+// Wait for the thing being asserted, not for a picture of it. Waiting on the
+// progress panel to detach races its own appearance: called in the instant
+// before it renders, "no progress element" is already true and the store gets
+// read before anything has been written to it. That passed once and failed the
+// next run, which is what a race looks like.
+await page.waitForFunction(
+  async ([repo, key]) => {
+    const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+    const run = await runStore.loadRun(key)
+    return (run?.transcriptions.length ?? 0) > 0
+  },
+  [REPO, savedKey],
+  { timeout: 240000, polling: 1000 }
+)
+await page.waitForSelector('.q', { timeout: 120000 })
+await page.waitForTimeout(500)
+// Read off the step heading rather than the rail. The rail is a horizontal
+// strip on a narrow viewport and its later labels scroll out of the box, which
+// makes `innerText` on them a question about layout rather than about state.
+// The heading is the state: reaching the gate *is* being past the paid step.
+const afterCollect = await page
+  .locator('.step-head')
+  .innerText()
+  .catch(() => '')
+const transcribeDone = /uncertain spots/i.test(afterCollect)
+const collected = await page.evaluate(
+  async ([repo, key]) => {
+    const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+    const run = await runStore.loadRun(key)
+    const ticket = await runStore.loadBatchTicket(key)
+    return {
+      pages: run?.transcriptions.length ?? 0,
+      complete: run?.complete ?? false,
+      text: run?.transcriptions[0]?.blocks[0]?.text ?? '',
+      ticketGone: ticket === null,
+      // Which keys tickets actually live under, so a mismatch between the key
+      // the app deleted and the key the run is filed under is visible rather
+      // than guessed at.
+      ticketKeys: (await runStore.listBatchTickets()).map((t) => t.key),
+      askedFor: key
+    }
+  },
+  [REPO, savedKey]
+)
+await shot('08b8-batch-collected')
+
+if (!batchOption || !nowOption) throw new Error('The batch door was not offered')
+if (priceOf(batchOption) > priceOf(nowOption) * 0.6) {
+  throw new Error('The batch option did not quote a lower price than reading it now')
+}
+if (!/OCR/.test(batchOption)) throw new Error('The batch option hides what it gives up')
+if (!/submit/i.test(approvalPrompt)) throw new Error('The approval screen did not say "submit"')
+if (!/close it/.test(approvalHelp))
+  throw new Error('The approval screen did not say the tab can be closed')
+if (batchesMade < 1) throw new Error('Nothing was submitted')
+if (pagesSubmitted !== 9) throw new Error(`Submitted ${pagesSubmitted} pages, expected 9`)
+if (survivedReload !== 1) throw new Error('The batch ticket did not survive a reload')
+if (quotedAgain !== 0) throw new Error('A book already out being read was quoted a price again')
+if (!/already paid for/.test(collectHelp)) throw new Error('Collecting was not said to be free')
+// The button under a "these pages are bought" screen must not promise a cost.
+if (/cost/i.test(collectLabel)) {
+  throw new Error(`The collect button offered to show a cost: "${collectLabel}"`)
+}
+if (!/close this tab/.test(waitingHelp))
+  throw new Error('The waiting screen did not say the tab can be closed')
+if (collected.pages !== 9) throw new Error(`Collected ${collected.pages} pages, expected 9`)
+if (!collected.complete) throw new Error('The collected run was not marked complete')
+if (!/Collected from a batch/.test(collected.text)) {
+  throw new Error('The saved run does not hold what the batch returned')
+}
+// The second reading ran over the flagged leaves on the way in, and its
+// verdicts are on the rows rather than hidden behind a shorter list. Checked
+// here rather than at the earlier gate because that one is fed from a seeded
+// saved run, so nothing was ever read a second time for it.
+const checkNote = await page
+  .locator('.resume-note')
+  .filter({ hasText: 'looked at again' })
+  .innerText()
+  .catch(() => '')
+const checkedRows = await page.locator('.discrepancy-checked').count()
+const checkedReadable = await page
+  .locator('.discrepancy-checked b')
+  .first()
+  .innerText()
+  .catch(() => '')
+const takeAllOffered = await page
+  .locator('.discrepancy-head button', { hasText: 'checked answer' })
+  .count()
+
+console.log(
+  `  → tickets left: ${JSON.stringify(collected.ticketKeys)} (run filed under ${JSON.stringify(
+    collected.askedFor
+  )})`
+)
+if (!collected.ticketGone)
+  throw new Error('The ticket outlived the collection it was the receipt for')
+if (!transcribeDone) throw new Error('Collecting did not carry the flow past the paid step')
+console.log(
+  `  → second reading: ${secondReadCalls} leaf request(s), ${secondReadIds.length} spot(s), ` +
+    `${checkedRows} row(s) carry a verdict`
+)
+console.log(
+  `  → ${pagesSubmitted} pages in ${batchesMade} batch(es) at ${priceOf(batchOption)} against ` +
+    `${priceOf(nowOption)}; survived a reload; collected ${collected.pages} pages and the ticket was cleared`
+)
+
+await page.unroute('https://api.anthropic.com/v1/messages/batches**')
+
 // The failure this guards against was reported from a real book: a refresh put
 // an empty drop zone in front of someone whose paid run was in the database,
 // with nothing on the screen to say so. `listRuns` had been written for exactly
@@ -1957,7 +2393,18 @@ const reopenOffered = await reopenBtn.count()
 if (reopenOffered === 0) throw new Error('No way to reopen a book whose scan is stored')
 await reopenBtn.first().click()
 await page.waitForSelector('.progress', { timeout: 30000 })
-const resumeSaid = await page.locator('.progress .help').filter({ hasText: 'already paid' }).count()
+// Either place. The note lives in the running stage while there *is* one, and
+// in `.resume-note` after — which is the whole point of that second element,
+// since a book whose reading is cached skips the progress screen in under a
+// second. Looking only at the running stage makes this assertion a race that a
+// warm cache loses.
+const resumeSaid = await page
+  .locator('.progress .help, .resume-note')
+  .filter({ hasText: 'already paid' })
+  .first()
+  .waitFor({ timeout: 20000 })
+  .then(() => 1)
+  .catch(() => 0)
 await shot('02c-reopened-from-storage')
 console.log(
   `  → reopened from storage without the picker; said so during the re-read: ${resumeSaid === 1}`
@@ -2083,6 +2530,7 @@ console.log(
   `  italics are visible where they can be edited: ${italicsShown || 'NOT SHOWN'}` +
     ` (explained: ${italicsHinted > 0})`
 )
+if (!italicsShown) console.log(`  leaves walked: ${leavesWalked.join(' | ')}`)
 if (!italicsShown) throw new Error('The proof editor shows no italics at all')
 if (!italicsHinted) throw new Error('The italic tags appear with nothing explaining them')
 if (!proofBig) throw new Error('The proof leaf does not open full size')
@@ -2093,11 +2541,17 @@ console.log(
 )
 console.log(`  the bar fills as leaves are finished: ${barAfterOne}% after one`)
 if (desktopCards !== pagedCards) throw new Error('The desktop view is not paged like the phone')
-if (!/0 of 7 checked/.test(desktopWhere)) {
+// Zero checked, however many there are. The count is a property of the book and
+// of how good the checks are — it dropped from seven to six the day the running
+// head stopped being reported as missing text — so pinning it makes this
+// assertion fail every time the flagging gets better. What it is really about
+// is that a freshly opened gate claims no progress.
+if (!/0 of [1-9]\d* checked/.test(desktopWhere)) {
   throw new Error(`The gate opened claiming progress: "${desktopWhere}"`)
 }
+// One leaf of however many: somewhere above nothing and well short of done.
 if (barAfterOne < 5 || barAfterOne > 40) {
-  throw new Error(`The progress bar reads ${barAfterOne}% after one of seven leaves`)
+  throw new Error(`The progress bar reads ${barAfterOne}% after a single leaf`)
 }
 console.log(
   `  place remembered: ${cursorKept || 'NO'} · continue hidden midway: ${continueMidway === 0}` +
@@ -2108,10 +2562,21 @@ if (continueMidway !== 0) throw new Error('The continue button is reachable befo
 if (!cursorKept) throw new Error('Moving through the gate does not record where you got to')
 if (!pagerInView) throw new Error('The pager is off-screen on a phone')
 console.log(`  and after closing the tab it reopens on: "${resumedAt.replace(/\s+/g, ' ')}"`)
-if (!resumedAt.startsWith('Page 3')) {
-  throw new Error(`Reopening the gate landed on "${resumedAt}", not the leaf it was left on`)
+// Compared against the leaf actually left on, not a literal. Which page sits at
+// a given place in the gate depends on which leaves got flagged, and that
+// changes whenever the checks improve — the run before this one left on page 4
+// where the assertion still wanted page 3, and landed on page 4 correctly.
+const leftOn = /^Page \d+/.exec(afterNext)?.[0] ?? ''
+if (!leftOn || !resumedAt.startsWith(leftOn)) {
+  throw new Error(
+    `Reopening the gate landed on "${resumedAt}", not the leaf it was left on (${leftOn})`
+  )
 }
 console.log(`  the gate offers: ${verdictOptions.join(' / ')}`)
+console.log(
+  `  disagreements located: ${gapRows} row(s), ${gapCrops} with the pixels, ` +
+    `${gapPreselected} pre-selected`
+)
 console.log(
   `  a fix typed at the gate reaches the book: ${
     gateEdited ? gateFixOnLeaf === GATE_FIX : 'not exercised'
@@ -2121,7 +2586,9 @@ console.log(
   `  a leaf marked to fix keeps its note: ${markedALeaf ? markedFlag || 'NO' : 'not exercised'}` +
     (toFixButton ? ` (${toFixButton})` : '')
 )
-console.log(`  after correcting one: ${correctedCount.replace(/\s+/g, ' ')}`)
+console.log(
+  `  after correcting one: ${correctedCount.replace(/\s+/g, ' ')} (was ${correctedBefore})`
+)
 console.log(`  editor's notes attached: ${annotations}`)
 console.log(`  pictures the editor added: ${suppliedPictures} (previewed: ${suppliedPreview})`)
 console.log(`  divisions written: ${sectionsWritten}`)
@@ -2181,48 +2648,93 @@ console.log(`  mobile horizontal overflow: ${overflow}px`)
 console.log(`  page errors: ${errors.length ? errors.join(' | ') : 'none'}`)
 
 await browser.close()
-process.exit(
-  errors.length === 0 &&
-    rows > 0 &&
-    before !== after &&
-    offered === 1 &&
-    askedForKey === 0 &&
-    chargedAgain === 0 &&
-    // The two the fixture prints, and nothing from the eight pages of text.
-    foundIllustrations === 2 &&
-    illustrationCrops === foundIllustrations &&
-    plateFound &&
-    proofBoxes > 0 &&
-    proofScan === 1 &&
-    /1 corrected/.test(correctedCount) &&
-    annotations === 1 &&
-    suppliedPictures === 1 &&
-    sectionsWritten === 1 &&
-    editors > 0 &&
-    retouchedPicture > 0 &&
-    cutEditor > 0 &&
-    cropShrankIt &&
-    // A book whose only heading is the editor's own still gets a contents page.
-    /1 heading\(s\), 1 of them yours/.test(contentsNote) &&
-    suppliedPreview === 1 &&
-    // Three pictures now reach the book: two cut from the scan, one supplied.
-    /3 illustrations set into the book/.test(illustrationNote) &&
-    // The export screen reports what the engine actually placed, so this is
-    // the authored note reaching the book rather than reaching a form.
-    /1 footnote\(s\) were set at the foot/.test(noteNote) &&
-    proofOverflow <= 0 &&
-    // A real answer, not the "no placed images to check" it gave before.
-    blockedWithoutTitle &&
-    /DPI/.test(imageCheck) &&
-    !/No placed images/.test(imageCheck) &&
-    /illustration/.test(illustrationNote) &&
-    leaves > 0 &&
-    pagesBefore !== pagesAfter &&
-    /\d+ pages/.test(download) &&
-    previewOverflow <= 0 &&
-    checks > 0 &&
-    pending === 0 &&
-    overflow <= 0
-    ? 0
-    : 1
-)
+/**
+ * The final tally.
+ *
+ * A named list rather than one long `&&`, because the chain could only ever
+ * say *that* something was wrong \u2014 never which. Two of these had been false
+ * for some time and nobody could see it: the run that would have caught them
+ * was piped through `tail`, which masks the exit code, and even once the
+ * failure surfaced there was nothing to do but read the whole condition and
+ * guess, at ten minutes a guess.
+ */
+const finalChecks = [
+  ['no page errors', errors.length === 0],
+  ['the term grid has rows', rows > 0],
+  ['answering the gate changed something', before !== after],
+  ['a paid run was offered back', offered === 1],
+  ['the key was not asked for again', askedForKey === 0],
+  ['the same pages were not charged twice', chargedAgain === 0],
+  // The two the fixture prints, and nothing from the eight pages of text.
+  ['both printed illustrations were found', foundIllustrations === 2],
+  ['every found illustration got a crop', illustrationCrops === foundIllustrations],
+  ['a plate is previewed from the real PDF', plateFound],
+  // The second reading: one request per flagged leaf, its verdicts visible on
+  // the rows, and what it found said out loud rather than left as a screen that
+  // is quietly shorter than it would otherwise have been.
+  ['the flagged leaves were read a second time', secondReadCalls > 0],
+  ['it was asked about the spots by their row ids', secondReadIds.length > 0],
+  ['it reported what it found', /looked at again/.test(checkNote)],
+  ['its verdicts are shown on the rows', checkedRows > 0],
+  ['each verdict says what was read, not just yes or no', checkedReadable.length > 0],
+  ['taking the checked answers is offered as a choice', takeAllOffered > 0],
+  ['every disagreement is listed as its own row', gapRows > 0],
+  // The row exists to point at the word. Without the crop it is the old
+  // "somewhere on this page" with extra steps.
+  ['each row shows the word as it appears on the scan', gapRows === 0 || gapCrops === gapRows],
+  ['the missing words are marked in their context', gapRows === 0 || gapHighlighted.length > 0],
+  ['no gap is filled from OCR unasked', gapPreselected === 0],
+  ['a verdict on a gap sticks', gapRows === 0 || gapRestoreStuck],
+  ['the proof sheet has editable text', proofBoxes > 0],
+  ['the proof sheet shows the scan', proofScan === 1],
+  ['typing on the proof sheet counted as a correction', correctionCounted],
+  ['a note was proposed', annotations === 1],
+  ['a supplied picture was taken', suppliedPictures === 1],
+  ['an introduction was written', sectionsWritten === 1],
+  ['the design gate offers controls', editors > 0],
+  ['a picture was retouched', retouchedPicture > 0],
+  ['a picture was cut down', cutEditor > 0],
+  ['cropping shrank what the book gets', cropShrankIt],
+  // A book whose headings are all the editor's own still gets a contents
+  // page. The property, not a count: the harness authors an introduction and
+  // a note, and pinning the number here meant this line silently stopped
+  // being true the moment a second authored section was added.
+  [
+    'every heading in the contents is the editor\u2019s own',
+    /(\d+) heading\(s\), \1 of them yours/.test(contentsNote) && !/ 0 heading/.test(contentsNote)
+  ],
+  ['the supplied picture is previewed', suppliedPreview === 1],
+  // Three pictures now reach the book: two cut from the scan, one supplied.
+  [
+    'three illustrations reach the book',
+    /3 illustrations set into the book/.test(illustrationNote)
+  ],
+  // The export screen reports what the engine actually placed, so this is the
+  // authored note reaching the book rather than reaching a form. Any number
+  // above zero \u2014 the harness writes one at the proof step and accepts another
+  // from the annotation pass, and which of those runs is not what this is about.
+  [
+    'an authored note was set at the foot of a page',
+    /[1-9]\d* footnote\(s\) were set at the foot/.test(noteNote)
+  ],
+  ['the proof sheet fits a phone', proofOverflow <= 0],
+  // A real answer, not the "no placed images to check" it gave before.
+  ['export is blocked until the title is given', blockedWithoutTitle],
+  ['the image check reports a DPI', /DPI/.test(imageCheck)],
+  ['the image check found images to check', !/No placed images/.test(imageCheck)],
+  ['the export note mentions the illustrations', /illustration/.test(illustrationNote)],
+  ['the page browser has leaves', leaves > 0],
+  ['a design answer changed the page count', pagesBefore !== pagesAfter],
+  ['the export offers a page count', /\d+ pages/.test(download)],
+  ['the preview fits a phone', previewOverflow <= 0],
+  ['the KDP checks ran', checks > 0],
+  ['no KDP check is still pending', pending === 0],
+  ['the export screen fits a phone', overflow <= 0]
+]
+
+const failedChecks = finalChecks.filter(([, ok]) => !ok).map(([name]) => name)
+if (failedChecks.length > 0) {
+  console.log(`\nFAILED (${failedChecks.length}):`)
+  for (const name of failedChecks) console.log(`  \u2717 ${name}`)
+}
+process.exit(failedChecks.length === 0 ? 0 : 1)

@@ -23,8 +23,9 @@
  * Pure: no model calls, no I/O.
  */
 import type { OcrWordLike } from './types'
+import { dispositionFor } from '@core/pages'
 import type { PageTranscription } from './schema'
-import { transcriptionText } from './schema'
+import { checkableText } from './schema'
 
 export type VerificationCode =
   // Per-page, from the OCR cross-check.
@@ -89,15 +90,27 @@ export function verifyPage(
   const missingTolerance = options.missingTolerance ?? 3
 
   const findings: VerificationFinding[] = []
-  const transcribed = words(transcriptionText(page))
+  const transcribed = words(checkableText(page))
   const ocrTokens = ocrWords
     .map((w) => w.text)
     .flatMap((t) => words(t))
     .filter((w) => w.length > 0)
 
-  // Pages that are legitimately empty or pure furniture have nothing to check.
+  // Pages whose text is deliberately not carried into the book have nothing to
+  // check. A title page is *mined for metadata*, a scanned contents page is
+  // *discarded* because it carries the original edition's pagination — so OCR
+  // reads a page full of words and the transcription rightly holds none of
+  // them. Comparing the two reports the whole leaf as dropped, which is how the
+  // title page of a real book arrived at the gate claiming every word on it was
+  // missing, with an offer to splice the imprint into chapter one.
+  //
+  // Decided from the disposition rather than a list kept here, so a role added
+  // to `@core/pages` cannot quietly start being checked against a body it was
+  // never going to reach.
   const meaningfulOcr = ocrTokens.length
-  const isDiscardable = page.role === 'blank' || page.role === 'plate'
+  const disposition = dispositionFor(page.role)
+  const isDiscardable =
+    page.role === 'blank' || disposition === 'discard' || disposition === 'extract-metadata'
 
   if (!isDiscardable && meaningfulOcr >= 20 && transcribed.length === 0) {
     findings.push({
@@ -136,12 +149,19 @@ export function verifyPage(
   }
 
   // Words OCR was confident about that never appear in the transcription.
+  //
+  // Guarded by the same rule as the length checks above, and it was not — which
+  // is why the title page still arrived at the gate reporting every word of the
+  // imprint as absent even once the length check had been taught to stay quiet
+  // about it.
   const transcribedSet = new Set(transcribed)
-  const missing = ocrWords
-    .filter((w) => w.confidence >= confidentAt)
-    .map((w) => words(w.text)[0])
-    .filter((w): w is string => Boolean(w) && w.length > 3)
-    .filter((w) => !transcribedSet.has(w))
+  const missing = isDiscardable
+    ? []
+    : ocrWords
+        .filter((w) => w.confidence >= confidentAt)
+        .map((w) => words(w.text)[0])
+        .filter((w): w is string => Boolean(w) && w.length > 3)
+        .filter((w) => !transcribedSet.has(w))
 
   const uniqueMissing = [...new Set(missing)]
   if (uniqueMissing.length > missingTolerance) {

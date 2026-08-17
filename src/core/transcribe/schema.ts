@@ -411,3 +411,29 @@ export function parsePageTranscription(raw: unknown, pageIndex: number): PageTra
 export function transcriptionText(page: PageTranscription): string {
   return page.blocks.map((b) => b.text).join('\n\n')
 }
+
+/**
+ * Everything the page *has*, including its furniture — what the cross-checks
+ * compare OCR against.
+ *
+ * Not the same as `transcriptionText`, and the difference is the whole point.
+ * The body text is what the reader gets and what the seam checks and the proof
+ * sheet work on, so the running head and folio are rightly absent from it: the
+ * layout engine sets those itself, and a head spliced into the body would print
+ * twice.
+ *
+ * But OCR read them off the paper, so a check that compares OCR against the
+ * body alone concludes that every running head and every folio in the book has
+ * been dropped. On a book with heads on every leaf that is one false finding
+ * per page, and — worse — it offers to put the head *back into the body*, which
+ * is the one edit that would actually damage the page.
+ *
+ * So the checks get this, and only the checks.
+ */
+export function checkableText(page: PageTranscription): string {
+  const furniture = [page.furniture?.runningHead, page.furniture?.folio]
+    .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
+    .join(' ')
+  const body = transcriptionText(page)
+  return furniture ? `${furniture}\n\n${body}` : body
+}

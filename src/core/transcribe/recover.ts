@@ -24,12 +24,36 @@
  */
 import type { OcrWordLike } from './types'
 
+/**
+ * How likely a gap is to be a real dropped clause rather than OCR noise.
+ *
+ * A run of several words in a row is a sentence the vision pass skipped. One
+ * or two words is far more often OCR seeing something that is not there, or
+ * the vision pass silently *fixing* a misreading — `thc` becoming `the` looks
+ * exactly like a dropped word from this side of the comparison.
+ *
+ * Both are reported. Only the strong ones are worth a suggestion.
+ */
+export type RunStrength = 'strong' | 'weak'
+
 /** A contiguous stretch of the page that OCR read and the transcription lacks. */
 export interface DroppedRun {
   /** The words as OCR read them, in reading order. */
   words: string[]
   /** Those words as a sentence — what would go into the book. */
   text: string
+  /**
+   * The ids of the OCR words in this run, where OCR supplied them.
+   *
+   * What lets the gate show the *pixels* rather than describe them. Each id
+   * names a word box on the scan, so the leaf can be rendered once and every
+   * discrepancy on it cut out at exactly the place it was read from. Without
+   * this the user is told a word is missing and left to find it by eye on a
+   * page of dense type, which is the complaint this field exists to answer.
+   */
+  tokenIds: string[]
+  /** Whether this is long enough to be worth suggesting. See `RunStrength`. */
+  strength: RunStrength
   /** Mean OCR confidence across the run, 0–100. Low means "look hard at this". */
   confidence: number
   /**
@@ -46,7 +70,7 @@ export interface DroppedRun {
 
 export interface RecoverOptions {
   /**
-   * Shortest run worth offering, in words.
+   * Shortest run counted as `strong`, in words.
    *
    * A single missing word is usually OCR seeing something that is not there, or
    * the vision pass silently fixing a typo — both of which the user does not
@@ -54,6 +78,16 @@ export interface RecoverOptions {
    * a dropped clause, which is the thing worth recovering.
    */
   minWords?: number
+  /**
+   * Whether to return the short gaps too, marked `weak`.
+   *
+   * Off by default, because the *suggestion* list must stay short. On for the
+   * review gate, which had the opposite problem: it announced "18 words OCR
+   * read clearly are absent" and then offered one four-word run, leaving the
+   * other fourteen named, unlocated and impossible to act on. A discrepancy
+   * worth counting is worth pointing at.
+   */
+  includeWeak?: boolean
   /** Mean OCR confidence a run must reach to be offered at all. Default 70. */
   minConfidence?: number
   /** Words of transcription quoted either side of a gap. Default 6. */
@@ -104,6 +138,7 @@ export function findDroppedRuns(
   options: RecoverOptions = {}
 ): DroppedRun[] {
   const minWords = options.minWords ?? 4
+  const includeWeak = options.includeWeak ?? false
   const minConfidence = options.minConfidence ?? 70
   const contextWords = options.contextWords ?? 6
   const lookahead = options.lookahead ?? 40
@@ -122,7 +157,10 @@ export function findDroppedRuns(
   const flush = (): void => {
     const words = gap
     gap = []
-    if (words.length < minWords) return
+    if (words.length === 0) return
+
+    const strength: RunStrength = words.length >= minWords ? 'strong' : 'weak'
+    if (strength === 'weak' && !includeWeak) return
 
     const confidence = words.reduce((sum, w) => sum + w.confidence, 0) / words.length
     if (confidence < minConfidence) return
@@ -130,6 +168,8 @@ export function findDroppedRuns(
     runs.push({
       words: words.map((w) => w.text),
       text: words.map((w) => w.text).join(' '),
+      tokenIds: words.map((w) => w.id).filter((id): id is string => typeof id === 'string'),
+      strength,
       confidence: Math.round(confidence),
       after: transcribed.slice(Math.max(0, cursor - contextWords), cursor).join(' '),
       before: transcribed.slice(cursor, cursor + contextWords).join(' ')

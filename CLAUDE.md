@@ -146,6 +146,33 @@ Path aliases: `@core`, `@platform` (defined in `tsconfig.json`,
   time. Never accumulate page canvases.
 - **Object URLs must be revoked.** Crops and thumbnails leak otherwise — see
   `releaseRecon`.
+- **The loop is in the tab, unless it isn't.** The sequential runner sends one
+  page and waits for the reply before building the next, so the reading stops
+  dead when a phone locks — nothing on Anthropic's side knows there is a book,
+  only three hundred unrelated requests. A wake lock and a checkpoint soften
+  that; only the **Message Batches API** removes it, by moving the loop off the
+  device (`src/core/transcribe/batch.ts`). What it costs is the seam context —
+  page N's request is built before page N−1 has been read, so the tail is the
+  previous leaf's _OCR_ and the prompt says so.
+- **The batch door is built and, from a browser, currently shut.** The
+  `anthropic-dangerous-direct-browser-access` opt-in that makes this
+  server-less app possible is honoured **per endpoint**, and it covers
+  `/v1/messages` but not `/v1/messages/batches`. Measured, not assumed: a
+  preflight for any batch path returns `400 Disallowed CORS origin` with no
+  `access-control-allow-origin`, for every origin, while the same preflight for
+  `/v1/messages` returns `200` and `access-control-allow-origin: *`. Nothing in
+  a page can argue with that, and the usual fix — proxy it through your own
+  server — is the one thing this app has never had. So the offer is **probed
+  rather than hard-coded** (`platform/browser/batch-reach`): the gate asks the
+  server once per session and withdraws the question when the answer is no, so
+  the day the header is extended the door opens with no change here.
+- **A batch id is the only address of work already billed for.** So the ticket
+  (`src/core/project/batch-ticket.ts`) is written after every batch is created
+  and before the next page is rendered, a failed ticket write **stops** the
+  submission, and the ticket is deleted only once every page is in the run. It
+  is the one record here that is never capped, never evicted and never cleared
+  by "don't keep book data on this device": everything else in the store costs
+  time to replace and this costs money.
 - **Only the paid step is persisted.** Everything else — rendering, OCR, the
   lexicon, assembly, layout — is free and repeatable, so the saved unit is the
   transcription, keyed to the file it came from (`src/core/project`). Reopening
@@ -448,6 +475,68 @@ in `screenshots/`. Don't ship UI blind.
   alongside it to describe _damage_, which is what warns on an EPUB with no
   pixels to fall back on. The scan fixture now carries a sheet of paper under
   every leaf, because it claims to be a scan and the app can now tell.
+- **Also done**: **the reading can leave the tab.** The wake lock and the
+  checkpoints treat the symptom; the cause is that the sequential runner's loop
+  lives in the page, so a locked phone stops the book where it stands. The
+  **Message Batches API** moves the loop to Anthropic's side: every leaf goes up
+  in one submission, the tab can close, and the results are collected in a
+  session that may be days later on another device. **Half the price**, which on
+  a three-hundred-page book is a number a person would answer differently, so
+  the gate quotes both and lets them choose. What makes it work is chunking and
+  a receipt. A batch takes 256 MB and a scanned leaf is one to two megabytes of
+  base64, so a long book is _larger than one batch_ — and the body is stringified
+  whole, so the ceiling that binds is the phone's, not the server's: pages are
+  packed into 32 MB chunks, rendered into the chunk being filled and released
+  with it. The ticket is written after each batch is created and before the next
+  page is rendered, because from the instant a batch exists those pages are
+  being billed and the id is their only address; a ticket that will not save
+  **stops** the submission rather than uploading more of them. A page submitted
+  and never returned is reported as a failure, never dropped — the footnote rule
+  applied to the one repair that costs money. What is given up is honest and
+  said at the gate: no live progress, and the seam context is the previous
+  leaf's OCR rather than its finished reading, because page N's request is built
+  before page N−1 has been read. **It does not work from a browser yet** — the
+  batch endpoints refuse the direct-browser-access origin, as above — so the
+  question withdraws itself and the sequential door is what runs. The whole path
+  is exercised end to end against a stubbed API in `screenshot-flow`, including
+  the reload that proves the ticket outlives the tab.
+- **Also done**: **the gate points at the missing words instead of counting
+  them.** A real book showed "18 words OCR read clearly are absent" above a
+  thumbnail of a dense leaf and one four-word offer — leaving the other fourteen
+  to be found by eye, in two panes. Everything needed to point at them was
+  already in hand and thrown away: OCR boxes every word, the alignment already
+  knows which words are missing and what sits either side of each gap, and Gate
+  1's term grid already cuts a word out of a scan. Each disagreement is now a row
+  carrying the word as it appears on the paper, its place in the transcribed
+  text, and a verdict. Runs under four words are kept and marked `weak` rather
+  than discarded, which is what produced the eighteen-against-one. Nothing is
+  pre-selected: OCR is the rougher of the two readers, so a default that put
+  every gap back would copy its misreadings over a transcription bought from a
+  better one. Three false-positive classes went with it, all the same shape — a
+  leaf's text compared against a body it was never going to reach.
+  `checkableText` counts the running head and folio as transcribed (they are, in
+  `furniture`); `dispositionFor` exempts leaves that are mined for metadata or
+  discarded, which is what had the title page reporting the whole imprint as
+  missing and offering to splice it into chapter one.
+- **Also done**: **a second reading of the flagged spots** (`src/core/adjudicate`),
+  before any of them reach a person. Most of those decisions do not need a
+  human — they need someone to look at the pixels again, which is what the first
+  pass did not do for these spots in particular: it read the whole leaf once, at
+  speed, with a book to get through. One request per flagged _leaf_, carrying
+  its image and every spot on it, because the image is nearly all of the cost;
+  clean leaves are never sent, so a book the checks were happy with costs
+  nothing. Two rules shape every line of it. **Never repair text without
+  pixels**: the image goes with every request and the schema has no field for
+  what the text ought to say, only for what the page _does_ say. **Never gate a
+  check on a model's opinion of its own output** (SPEC §4): the prompt never
+  says "you transcribed this" and never asks whether the earlier reading was
+  right — that is self-assessment and carries no weight — it asks it to read a
+  place on an image. The answer reaches the gate as a recommendation _carrying
+  the reading it rests on_, so it can be checked against the crop beside it, and
+  it removes nothing. Its worst outcome is the behaviour it replaces: a leaf it
+  cannot read leaves its spots unadjudicated, exactly as they arrived before.
+  Wired into both doors, because putting it only in the live runner left anyone
+  who took the batch path without it.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

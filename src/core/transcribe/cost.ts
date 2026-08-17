@@ -54,7 +54,19 @@ export interface CostInputs {
   outputTokensPerPage?: number
   /** Shared system prompt size; cached after the first page. Default 900. */
   systemTokens?: number
+  /**
+   * Whether this is going through the Message Batches API, which bills at half.
+   *
+   * A real halving of the bill, not a rounding — which is why it is shown at
+   * the gate beside the immediate price rather than mentioned afterwards. On a
+   * three-hundred-page book it is the difference between two numbers a person
+   * would answer differently.
+   */
+  batch?: boolean
 }
+
+/** What the Batches API takes off the bill. */
+export const BATCH_DISCOUNT = 0.5
 
 export interface CostEstimate {
   modelId: string
@@ -99,9 +111,11 @@ export function estimateCost(inputs: CostInputs): CostEstimate {
   const inputTokens = Math.round(pageCount * (imageTokensPerPage + ocrTokensPerPage) + cachedSystem)
   const outputTokens = Math.round(pageCount * outputTokensPerPage)
 
+  const rate = inputs.batch ? BATCH_DISCOUNT : 1
   const usd =
-    (inputTokens / 1_000_000) * pricing.inputPerMTok +
-    (outputTokens / 1_000_000) * pricing.outputPerMTok
+    ((inputTokens / 1_000_000) * pricing.inputPerMTok +
+      (outputTokens / 1_000_000) * pricing.outputPerMTok) *
+    rate
 
   return {
     modelId,

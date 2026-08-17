@@ -8,8 +8,28 @@
  */
 import { PAGE_SCHEMA, parsePageTranscription, type PageTranscription } from './schema'
 
-const API_URL = 'https://api.anthropic.com/v1/messages'
+export const API_BASE = 'https://api.anthropic.com'
+const API_URL = `${API_BASE}/v1/messages`
 const API_VERSION = '2023-06-01'
+
+/**
+ * The headers every call to the API carries.
+ *
+ * One function rather than a literal repeated at each call site, because two of
+ * these headers are load-bearing and one of them is the user's key. A second
+ * copy is a second place to forget the browser-access opt-in, and — far worse —
+ * a second place that could start logging the key.
+ */
+export function apiHeaders(apiKey: string): Record<string, string> {
+  return {
+    'content-type': 'application/json',
+    'x-api-key': apiKey,
+    'anthropic-version': API_VERSION,
+    // The key never leaves the user's browser; this opts the request into
+    // direct browser use rather than routing through a server we don't have.
+    'anthropic-dangerous-direct-browser-access': 'true'
+  }
+}
 
 /** Whatever performs the HTTP call. Mocked in tests. */
 export type Transport = (url: string, init: RequestInit) => Promise<Response>
@@ -93,6 +113,18 @@ export class TranscribeError extends Error {
   }
 }
 
+/**
+ * The JSON a completed message carries, and what it cost.
+ *
+ * Exported because a batch result holds *the same message object* the Messages
+ * endpoint returns — it just arrives a day later inside a JSONL line instead of
+ * as an HTTP body. Reading it in a second place would mean a second reading of
+ * the refusal stop reason and a second way to mis-handle a page.
+ */
+export function readMessage(body: unknown): { json: unknown; usage: ApiUsage } {
+  return { json: extractJson(body), usage: usageOf(body) }
+}
+
 function extractJson(body: unknown): unknown {
   if (typeof body !== 'object' || body === null) {
     throw new TranscribeError('Malformed API response', null, false)
@@ -152,36 +184,33 @@ export async function callModel(
   const transport = config.transport ?? fetch
   const response = await transport(API_URL, {
     method: 'POST',
-    headers: {
-      'content-type': 'application/json',
-      'x-api-key': config.apiKey,
-      'anthropic-version': API_VERSION,
-      // The key never leaves the user's browser; this opts the request into
-      // direct browser use rather than routing through a server we don't have.
-      'anthropic-dangerous-direct-browser-access': 'true'
-    },
+    headers: apiHeaders(config.apiKey),
     body: JSON.stringify(body)
   })
 
-  if (!response.ok) {
-    const status = response.status
-    // 429 and 5xx are transient; 4xx are the caller's problem and won't improve on retry.
-    const retryable = status === 429 || status >= 500
-    let detail = ''
-    try {
-      detail = ((await response.json()) as { error?: { message?: string } })?.error?.message ?? ''
-    } catch {
-      /* body wasn't JSON; the status alone is the message */
-    }
-    throw new TranscribeError(
-      `API error ${status}${detail ? `: ${detail}` : ''}`,
-      status,
-      retryable
-    )
-  }
+  await throwIfFailed(response)
+  return readMessage((await response.json()) as unknown)
+}
 
-  const parsed = (await response.json()) as unknown
-  return { json: extractJson(parsed), usage: usageOf(parsed) }
+/**
+ * Turn a failed HTTP response into a `TranscribeError` carrying the API's own
+ * message, or return quietly when it succeeded.
+ *
+ * Shared with the batch endpoints, which fail in exactly the same shapes and
+ * need the same retryable/not decision.
+ */
+export async function throwIfFailed(response: Response): Promise<void> {
+  if (response.ok) return
+  const status = response.status
+  // 429 and 5xx are transient; 4xx are the caller's problem and won't improve on retry.
+  const retryable = status === 429 || status >= 500
+  let detail = ''
+  try {
+    detail = ((await response.json()) as { error?: { message?: string } })?.error?.message ?? ''
+  } catch {
+    /* body wasn't JSON; the status alone is the message */
+  }
+  throw new TranscribeError(`API error ${status}${detail ? `: ${detail}` : ''}`, status, retryable)
 }
 
 /** Transcribe one page. Throws `TranscribeError`; the runner decides on retry. */
@@ -198,12 +227,7 @@ export async function validateApiKey(
   try {
     const response = await transport(API_URL, {
       method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': API_VERSION,
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
+      headers: apiHeaders(apiKey),
       body: JSON.stringify({
         model: 'claude-haiku-4-5',
         max_tokens: 1,

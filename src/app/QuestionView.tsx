@@ -7,7 +7,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import type { Question, AnswerValue, TermVerdict, Evidence } from '@core/wizard'
+import type { Question, AnswerValue, TermVerdict, DiscrepancyVerdict, Evidence } from '@core/wizard'
 import { Lightbox } from './Lightbox'
 
 interface Props {
@@ -25,6 +25,18 @@ interface Props {
    * megabytes for a book, so it is done when the user asks to see one.
    */
   enlargeEvidence?: (src: string) => Promise<string | undefined>
+  /**
+   * Cut these words out of a leaf's scan, for the discrepancy grid.
+   *
+   * Async and by the handful, because unlike Gate 1's term crops these are not
+   * pre-made: which words a cross-check calls missing is not known until the
+   * vision pass has run. One call per leaf renders that leaf once; the returned
+   * URLs are the caller's to revoke.
+   */
+  cropWords?: (
+    pageIndex: number,
+    groups: readonly { id: string; tokenIds: readonly string[] }[]
+  ) => Promise<Map<string, string>>
 }
 
 /** A scan opened full size, and where it came from. */
@@ -345,6 +357,7 @@ export function QuestionView({
   value,
   onChange,
   resolveEvidence,
+  cropWords,
   enlargeEvidence
 }: Props): JSX.Element {
   const [enlarged, setEnlarged] = useState<Enlarged | null>(null)
@@ -475,6 +488,16 @@ export function QuestionView({
             onOpen={open}
           />
         )
+      case 'discrepancies':
+        return (
+          <DiscrepancyGrid
+            question={question}
+            value={(value as Record<string, DiscrepancyVerdict>) ?? {}}
+            onChange={onChange}
+            cropWords={cropWords}
+            onOpen={open}
+          />
+        )
       case 'page-edit':
         return (
           <PageEditor
@@ -512,6 +535,192 @@ export function QuestionView({
           onClose={() => setEnlarged(null)}
         />
       ) : null}
+    </div>
+  )
+}
+
+/**
+ * The disagreements on one leaf, each shown at the pixels it was read from.
+ *
+ * What this replaces: a count and a thumbnail. "18 words OCR read clearly are
+ * absent from the transcription", a 150-pixel picture of a dense page, and one
+ * splice offer covering four of the eighteen — which left the user reading the
+ * scan against the transcription by eye, in two panes, to find the other
+ * fourteen. The information to point at every one of them was already in hand
+ * and thrown away.
+ *
+ * So each row is the word as it appears *on the paper*, the transcribed words
+ * either side of where it belongs, and a verdict. Nothing is pre-selected: OCR
+ * is the noisier witness of the two, and a default that put every run back
+ * would copy its misreadings into a transcription the user paid a better model
+ * to produce.
+ *
+ * The crops are made on arrival and released on leaving — a leaf at a time, one
+ * render each, never a book's worth held at once.
+ */
+function DiscrepancyGrid({
+  question,
+  value,
+  onChange,
+  cropWords,
+  onOpen
+}: {
+  question: Extract<Question, { type: 'discrepancies' }>
+  value: Record<string, DiscrepancyVerdict>
+  onChange: (v: Record<string, DiscrepancyVerdict>) => void
+  cropWords?: (
+    pageIndex: number,
+    groups: readonly { id: string; tokenIds: readonly string[] }[]
+  ) => Promise<Map<string, string>>
+  onOpen?: (src: string, caption: string) => void
+}): JSX.Element {
+  const [crops, setCrops] = useState<Map<string, string>>(new Map())
+  const madeRef = useRef<string[]>([])
+
+  const groups = question.rows.map((r) => ({ id: r.id, tokenIds: r.tokenIds }))
+  const tokenKey = groups.map((g) => `${g.id}:${g.tokenIds.join('+')}`).join(',')
+
+  useEffect(() => {
+    if (!cropWords || groups.length === 0) return
+    let live = true
+    void cropWords(question.pageIndex, groups).then((made) => {
+      if (!live) {
+        for (const url of made.values()) URL.revokeObjectURL(url)
+        return
+      }
+      madeRef.current = [...made.values()]
+      setCrops(made)
+    })
+    return () => {
+      live = false
+      for (const url of madeRef.current) URL.revokeObjectURL(url)
+      madeRef.current = []
+      setCrops(new Map())
+    }
+    // Keyed on `tokenKey`, the joined ids, rather than on the array itself: the
+    // rows are rebuilt on every render of the gate, so a dependency on the
+    // array would re-render the leaf and re-cut every crop each time anything
+    // else on the screen changed.
+  }, [tokenKey, question.pageIndex, cropWords])
+
+  const set = (id: string, verdict: DiscrepancyVerdict): void => {
+    const next = { ...value }
+    // Clicking the chosen verdict again clears it, so a row can be put back to
+    // undecided without reloading the gate.
+    if (next[id] === verdict) delete next[id]
+    else next[id] = verdict
+    onChange(next)
+  }
+
+  const decided = question.rows.filter((r) => value[r.id]).length
+
+  /**
+   * Take every recommendation the second reading made.
+   *
+   * The bulk action the pass exists to enable, and still a *choice* — the
+   * verdicts are on screen with the readings behind them, so this is accepting
+   * a proposal that has been shown rather than trusting one that has not.
+   * Rows it could not settle are left alone.
+   */
+  const takeAll = (): void => {
+    const next = { ...value }
+    for (const row of question.rows) {
+      if (row.checked?.verdict === 'missing') next[row.id] = 'restore'
+      else if (row.checked?.verdict === 'not-there') next[row.id] = 'ignore'
+    }
+    onChange(next)
+  }
+  const recommended = question.rows.filter(
+    (r) => r.checked?.verdict === 'missing' || r.checked?.verdict === 'not-there'
+  ).length
+
+  return (
+    <div className="discrepancies">
+      <div className="discrepancy-head">
+        {decided} of {question.rows.length} decided
+        <span className="discrepancy-actions">
+          {recommended > 0 ? (
+            <button type="button" className="ghost" onClick={takeAll}>
+              Take the {recommended} checked answer{recommended === 1 ? '' : 's'}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="ghost"
+            onClick={() =>
+              onChange(Object.fromEntries(question.rows.map((r) => [r.id, 'ignore' as const])))
+            }
+          >
+            None of these are missing
+          </button>
+        </span>
+      </div>
+
+      {question.rows.map((row) => {
+        const crop = crops.get(row.id)
+        return (
+          <div className={`discrepancy ${row.strength}`} key={row.id}>
+            <div className="discrepancy-pixels">
+              {crop ? (
+                <img
+                  src={crop}
+                  alt={`“${row.text}” on the scan`}
+                  onClick={() =>
+                    onOpen?.(crop, `“${row.text}” as it appears on page ${question.pageIndex + 1}`)
+                  }
+                />
+              ) : (
+                <span className="no-crop">no crop</span>
+              )}
+              <small>
+                OCR {row.confidence}% sure
+                {row.strength === 'weak' ? ' · single word — often not a real omission' : null}
+              </small>
+            </div>
+
+            <div className="discrepancy-where">
+              <span className="ctx">{row.after || '(start of the page)'}</span>{' '}
+              <b className="gap">{row.text}</b>{' '}
+              <span className="ctx">{row.before || '(end of the page)'}</span>
+            </div>
+
+            {row.checked ? (
+              <div className={`discrepancy-checked ${row.checked.verdict}`}>
+                <b>
+                  {row.checked.verdict === 'missing'
+                    ? 'Read again: it is on the page'
+                    : row.checked.verdict === 'not-there'
+                      ? 'Read again: not on the page'
+                      : row.checked.verdict === 'different'
+                        ? 'Read again: neither reading matches'
+                        : 'Read again: could not tell'}
+                </b>
+                {/* The reading is what makes the verdict checkable rather than
+                    an opinion — it can be compared with the crop in a second. */}
+                {row.checked.reading ? <q>{row.checked.reading}</q> : null}
+                {row.checked.note ? <small>{row.checked.note}</small> : null}
+              </div>
+            ) : null}
+
+            <div className="discrepancy-verdict">
+              <button
+                type="button"
+                className={value[row.id] === 'restore' ? 'primary' : 'ghost'}
+                onClick={() => set(row.id, 'restore')}
+              >
+                Put it back
+              </button>
+              <button
+                type="button"
+                className={value[row.id] === 'ignore' ? 'primary' : 'ghost'}
+                onClick={() => set(row.id, 'ignore')}
+              >
+                Not missing
+              </button>
+            </div>
+          </div>
+        )
+      })}
     </div>
   )
 }

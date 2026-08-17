@@ -152,15 +152,31 @@ export function buildPagePrompt(options: {
   pageCount: number
   ocrText: string
   previousTail?: string
+  /**
+   * Whether that tail is OCR rather than the previous page's finished reading.
+   *
+   * The sequential runner hands over what the model itself produced for the
+   * page before, which it cannot do when every page is submitted at once — page
+   * N's request is built before page N−1 has been read. The batch path uses the
+   * OCR of the previous leaf instead, which is available up front and is
+   * *nearly* as good for the one job the tail has: deciding whether this page
+   * opens mid-sentence. It is noisier, so the prompt says so rather than
+   * presenting a machine reading as settled text.
+   */
+  previousTailIsOcr?: boolean
 }): string {
   const parts: string[] = [`Page ${options.pageIndex + 1} of ${options.pageCount}.`]
 
   if (options.previousTail?.trim()) {
+    const source = options.previousTailIsOcr
+      ? `The OCR of the previous page ended with the text below — machine-read, so ` +
+        `take it for sense rather than word for word.`
+      : `The previous page ended with the text below.`
     parts.push(
       ``,
-      `The previous page ended with the text below. If this page opens by`,
-      `continuing that sentence or paragraph, set continuesPrevious on the first`,
-      `block. Do not repeat this text in your output:`,
+      source,
+      `If this page opens by continuing that sentence or paragraph, set`,
+      `continuesPrevious on the first block. Do not repeat this text in your output:`,
       `"""`,
       options.previousTail.trim().slice(-400),
       `"""`

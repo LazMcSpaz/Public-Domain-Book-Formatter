@@ -79,7 +79,7 @@ describe('answers fold back onto the profile', () => {
     // Answer every question with its own default — the identity edit.
     const answers: Answers = {}
     for (const q of styleQuestions(profile)) {
-      if (q.type === 'term-grid' || q.type === 'page-edit') continue
+      if (q.type === 'term-grid' || q.type === 'page-edit' || q.type === 'discrepancies') continue
       answers[q.id] = q.defaultValue
     }
     expect(applyStyleAnswers(profile, answers)).toEqual(profile)
