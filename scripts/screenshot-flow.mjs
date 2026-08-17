@@ -2424,55 +2424,77 @@ console.log(`  mobile horizontal overflow: ${overflow}px`)
 console.log(`  page errors: ${errors.length ? errors.join(' | ') : 'none'}`)
 
 await browser.close()
-process.exit(
-  errors.length === 0 &&
-    rows > 0 &&
-    before !== after &&
-    offered === 1 &&
-    askedForKey === 0 &&
-    chargedAgain === 0 &&
-    // The two the fixture prints, and nothing from the eight pages of text.
-    foundIllustrations === 2 &&
-    illustrationCrops === foundIllustrations &&
-    plateFound &&
-    proofBoxes > 0 &&
-    proofScan === 1 &&
-    /1 corrected/.test(correctedCount) &&
-    annotations === 1 &&
-    suppliedPictures === 1 &&
-    sectionsWritten === 1 &&
-    editors > 0 &&
-    retouchedPicture > 0 &&
-    cutEditor > 0 &&
-    cropShrankIt &&
-    // A book whose headings are all the editor's own still gets a contents
-    // page. The property, not a count: the harness authors an introduction and
-    // a note, and pinning the number here meant this line silently stopped
-    // being true the moment a second authored section was added.
-    /(\d+) heading\(s\), \1 of them yours/.test(contentsNote) &&
-    !/ 0 heading/.test(contentsNote) &&
-    suppliedPreview === 1 &&
-    // Three pictures now reach the book: two cut from the scan, one supplied.
-    /3 illustrations set into the book/.test(illustrationNote) &&
-    // The export screen reports what the engine actually placed, so this is
-    // the authored note reaching the book rather than reaching a form. Any
-    // number above zero — the harness writes one at the proof step and accepts
-    // another from the annotation pass, and which of those runs is not what
-    // this line is about.
-    /[1-9]\d* footnote\(s\) were set at the foot/.test(noteNote) &&
-    proofOverflow <= 0 &&
-    // A real answer, not the "no placed images to check" it gave before.
-    blockedWithoutTitle &&
-    /DPI/.test(imageCheck) &&
-    !/No placed images/.test(imageCheck) &&
-    /illustration/.test(illustrationNote) &&
-    leaves > 0 &&
-    pagesBefore !== pagesAfter &&
-    /\d+ pages/.test(download) &&
-    previewOverflow <= 0 &&
-    checks > 0 &&
-    pending === 0 &&
-    overflow <= 0
-    ? 0
-    : 1
-)
+/**
+ * The final tally.
+ *
+ * A named list rather than one long `&&`, because the chain could only ever
+ * say *that* something was wrong \u2014 never which. Two of these had been false
+ * for some time and nobody could see it: the run that would have caught them
+ * was piped through `tail`, which masks the exit code, and even once the
+ * failure surfaced there was nothing to do but read the whole condition and
+ * guess, at ten minutes a guess.
+ */
+const finalChecks = [
+  ['no page errors', errors.length === 0],
+  ['the term grid has rows', rows > 0],
+  ['answering the gate changed something', before !== after],
+  ['a paid run was offered back', offered === 1],
+  ['the key was not asked for again', askedForKey === 0],
+  ['the same pages were not charged twice', chargedAgain === 0],
+  // The two the fixture prints, and nothing from the eight pages of text.
+  ['both printed illustrations were found', foundIllustrations === 2],
+  ['every found illustration got a crop', illustrationCrops === foundIllustrations],
+  ['a plate is previewed from the real PDF', plateFound],
+  ['the proof sheet has editable text', proofBoxes > 0],
+  ['the proof sheet shows the scan', proofScan === 1],
+  ['a correction was counted', /1 corrected/.test(correctedCount)],
+  ['a note was proposed', annotations === 1],
+  ['a supplied picture was taken', suppliedPictures === 1],
+  ['an introduction was written', sectionsWritten === 1],
+  ['the design gate offers controls', editors > 0],
+  ['a picture was retouched', retouchedPicture > 0],
+  ['a picture was cut down', cutEditor > 0],
+  ['cropping shrank what the book gets', cropShrankIt],
+  // A book whose headings are all the editor's own still gets a contents
+  // page. The property, not a count: the harness authors an introduction and
+  // a note, and pinning the number here meant this line silently stopped
+  // being true the moment a second authored section was added.
+  [
+    'every heading in the contents is the editor\u2019s own',
+    /(\d+) heading\(s\), \1 of them yours/.test(contentsNote) && !/ 0 heading/.test(contentsNote)
+  ],
+  ['the supplied picture is previewed', suppliedPreview === 1],
+  // Three pictures now reach the book: two cut from the scan, one supplied.
+  [
+    'three illustrations reach the book',
+    /3 illustrations set into the book/.test(illustrationNote)
+  ],
+  // The export screen reports what the engine actually placed, so this is the
+  // authored note reaching the book rather than reaching a form. Any number
+  // above zero \u2014 the harness writes one at the proof step and accepts another
+  // from the annotation pass, and which of those runs is not what this is about.
+  [
+    'an authored note was set at the foot of a page',
+    /[1-9]\d* footnote\(s\) were set at the foot/.test(noteNote)
+  ],
+  ['the proof sheet fits a phone', proofOverflow <= 0],
+  // A real answer, not the "no placed images to check" it gave before.
+  ['export is blocked until the title is given', blockedWithoutTitle],
+  ['the image check reports a DPI', /DPI/.test(imageCheck)],
+  ['the image check found images to check', !/No placed images/.test(imageCheck)],
+  ['the export note mentions the illustrations', /illustration/.test(illustrationNote)],
+  ['the page browser has leaves', leaves > 0],
+  ['a design answer changed the page count', pagesBefore !== pagesAfter],
+  ['the export offers a page count', /\d+ pages/.test(download)],
+  ['the preview fits a phone', previewOverflow <= 0],
+  ['the KDP checks ran', checks > 0],
+  ['no KDP check is still pending', pending === 0],
+  ['the export screen fits a phone', overflow <= 0]
+]
+
+const failedChecks = finalChecks.filter(([, ok]) => !ok).map(([name]) => name)
+if (failedChecks.length > 0) {
+  console.log(`\nFAILED (${failedChecks.length}):`)
+  for (const name of failedChecks) console.log(`  \u2717 ${name}`)
+}
+process.exit(failedChecks.length === 0 ? 0 : 1)
