@@ -4,8 +4,9 @@ Guidance for AI assistants (and humans) working in this repo.
 
 ## What this is
 
-A **browser** app (React + TypeScript + Vite) that turns public-domain book PDFs
-— usually old scans — into print-ready **KDP** interiors. It renders and OCRs
+A **browser** app (React + TypeScript + Vite) that turns public-domain books —
+scanned PDFs, or EPUBs that are already text — into print-ready **KDP**
+interiors. It renders and OCRs
 pages locally, harvests the book's own vocabulary, then (Phase 2) runs a
 vision-grounded model pass that reads each page against the scan and recovers
 its structure. The full design is in [`SPEC.md`](./SPEC.md); the module map is in
@@ -25,6 +26,7 @@ npm run format:check # prettier --check  (npm run format to fix)
 npm run build        # typecheck + vite build → dist/
 
 node scripts/make-test-book.mjs      # regenerate the 8-page test fixture
+node scripts/make-test-epub.mjs      # regenerate the EPUB fixture
 node scripts/screenshot-flow.mjs     # drive the wizard headlessly, screenshot each screen
 ```
 
@@ -399,6 +401,24 @@ in `screenshots/`. Don't ship UI blind.
   **checkpoints** every 20 leaves and a fresh run carries on from where it
   stopped. `pagesDone` is what tells a checkpoint from a finished reading, and
   `reconCacheUsable` refuses to hand a partial one back as a whole book.
+- **Also done**: **EPUBs, which cost nothing to bring in** (`src/core/epub`,
+  `src/platform/browser/epub.ts`). A great deal of public-domain text is
+  already digital — Gutenberg, Standard Ebooks, archive.org — and every part of
+  this app that exists to _recover_ a book has already been done for it by a
+  person. So an EPUB skips render, OCR, the term review and the paid vision
+  pass entirely and joins the flow at the structure gate, gaining everything
+  after it: the proofing workbench, notes and an introduction of the editor's
+  own, the fact bank, the design interview, and a KDP-legal PDF. No new
+  dependency — the archive's central directory is parsed as bytes in core and
+  `DecompressionStream` inflates the entries — and no second implementation of
+  anything: `<i>` is serialised back to the notation `parseInlineMarkup`
+  already reads, so italics from an EPUB and italics from a scan arrive as the
+  same word indices. What is worth knowing: the reading order comes from the
+  **spine**, never from the manifest or the archive, because a guessed order is
+  a book with shuffled chapters; `linear="no"` matter is left out or the cover
+  prints mid-book; the author is the `dc:creator` marked `aut`, or a reprint
+  gets credited to its 1913 translator; and `dc:date` is usually the _ebook's_
+  year, so it is offered at the export gate rather than believed.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

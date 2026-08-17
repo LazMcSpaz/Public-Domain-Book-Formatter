@@ -31,6 +31,7 @@ import {
   saveReconCheckpoint
 } from '../platform/browser/recon-cache'
 import { canKeepAwake, keepAwake, type ReleaseWakeLock } from '../platform/browser/wake-lock'
+import { looksLikeEpub, openEpub } from '../platform/browser/epub'
 import { QuestionView } from './QuestionView'
 import { QuestionList } from './QuestionList'
 import {
@@ -581,6 +582,98 @@ export function App(): JSX.Element {
     }
   }, [])
 
+  /**
+   * Open a book that is already text.
+   *
+   * An EPUB has been through everything the rest of this app exists to do: a
+   * person typed the words and marked up the structure, so there is nothing to
+   * render, nothing to OCR, and nothing to pay a model to read. It joins the
+   * flow at the structure gate with the whole recovery half behind it, and
+   * gains everything after it — the proofing workbench, notes and an
+   * introduction of the editor's own, the design interview, and a typeset PDF.
+   */
+  const startEpub = useCallback(async (file: File) => {
+    setError(null)
+    setAnswers({})
+    setExported(null)
+    setPdf(null)
+    setBuildNote(null)
+    setResumeNote(null)
+    if (reconRef.current) releaseRecon(reconRef.current)
+    reconRef.current = null
+    for (const url of previewUrlsRef.current.values()) URL.revokeObjectURL(url)
+    previewUrlsRef.current = new Map()
+    cropBytesRef.current = new Map()
+    suppliedBytesRef.current = new Map()
+    retouchedRef.current = new Map()
+    excludedPagesRef.current = []
+    reviewedPagesRef.current = []
+    attentionRef.current = []
+    setEdits([])
+
+    setState((s) => ({
+      ...s,
+      ...initialState(),
+      styleProfiles: s.styleProfiles,
+      voice: s.voice,
+      harvestInterest: s.harvestInterest,
+      fileName: file.name,
+      completed: ['intake']
+    }))
+
+    try {
+      fileDataRef.current = file
+      fileKeyRef.current = fileKey(file)
+      setProgress({ page: 0, total: 1, phase: 'rendering' })
+
+      const opened = await openEpub(file, (p) =>
+        setProgress({ page: p.done, total: Math.max(1, p.total), phase: 'harvesting' })
+      )
+
+      // Pictures the markup referenced travel as supplied images — the same
+      // channel a picture the editor adds by hand uses, so nothing downstream
+      // has to know one came out of an archive.
+      const supplied = new Map<string, Uint8Array>()
+      for (const [id, bytes] of opened.images) supplied.set(id, bytes)
+      suppliedBytesRef.current = supplied
+
+      transcriptionRef.current = {
+        transcriptions: opened.transcriptions,
+        failures: [],
+        findings: [],
+        usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 },
+        modelId: '',
+        metadata: null
+      } as unknown as RunResult
+
+      setState((s) => ({
+        ...s,
+        pageCount: opened.transcriptions.length,
+        pagesProcessed: opened.transcriptions.length,
+        metadata: {
+          ...s.metadata,
+          title: opened.package.title ?? s.metadata.title,
+          author: opened.package.author ?? s.metadata.author,
+          originalYear: opened.package.year ?? s.metadata.originalYear,
+          originalPublisher: opened.package.publisher ?? s.metadata.originalPublisher
+        },
+        document: opened.document,
+        pageText: Object.fromEntries(
+          opened.transcriptions.map((t) => [t.pageIndex, transcriptionText(t)])
+        ),
+        hasApiKey: loadApiKey().length > 0,
+        // Everything the recovery half would have decided is already decided,
+        // so those steps are marked done rather than walked through with
+        // nothing to ask. The structure gate is where a person is next useful.
+        completed: ['intake', 'recon', 'gate-identity', 'transcribe', 'gate-uncertainties']
+      }))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setProgress(null)
+    }
+  }, [])
+
   const startRecon = useCallback(async (file: File) => {
     setError(null)
     setAnswers({})
@@ -779,6 +872,20 @@ export function App(): JSX.Element {
    * cross-check are what make a resumed session a whole one rather than text
    * with no evidence behind it.
    */
+  /**
+   * Send a chosen file down the path its kind needs.
+   *
+   * The only place that decision is made. A scan has to be read; an EPUB has
+   * already been read by whoever made it.
+   */
+  const openBook = useCallback(
+    (file: File) => {
+      if (looksLikeEpub(file)) void startEpub(file)
+      else void startRecon(file)
+    },
+    [startEpub, startRecon]
+  )
+
   const reopenSaved = useCallback(
     async (key: string, fileName: string) => {
       const file = await loadSourceFile(key)
@@ -791,7 +898,7 @@ export function App(): JSX.Element {
       }
       void startRecon(file)
     },
-    [startRecon]
+    [openBook]
   )
 
   const onDrop = useCallback(
@@ -799,7 +906,7 @@ export function App(): JSX.Element {
       e.preventDefault()
       setDragOver(false)
       const file = e.dataTransfer.files?.[0]
-      if (file) void startRecon(file)
+      if (file) openBook(file)
     },
     [startRecon]
   )
@@ -1979,8 +2086,11 @@ export function App(): JSX.Element {
               onDrop={onDrop}
               onClick={() => fileInput.current?.click()}
             >
-              <strong>Drop a scanned PDF here</strong>
-              <span>or click to choose a file — the whole book, one file</span>
+              <strong>Drop a scanned PDF or an EPUB here</strong>
+              <span>
+                or click to choose a file — the whole book, one file. An EPUB is already text, so it
+                skips the reading entirely and costs nothing.
+              </span>
             </div>
 
             {savedRuns.length > 0 ? (
@@ -2027,11 +2137,11 @@ export function App(): JSX.Element {
         <input
           ref={fileInput}
           type="file"
-          accept="application/pdf"
+          accept="application/pdf,application/epub+zip,.epub"
           hidden
           onChange={(e) => {
             const f = e.target.files?.[0]
-            if (f) void startRecon(f)
+            if (f) openBook(f)
           }}
         />
 

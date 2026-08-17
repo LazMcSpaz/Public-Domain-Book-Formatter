@@ -1391,6 +1391,72 @@ const bankMarkdown = await page.evaluate(async () => {
   return captured ? await captured.text() : ''
 })
 
+// --- a book that is already text --------------------------------------------
+// An EPUB has been through everything the recovery half of this app exists to
+// do: someone typed the words and marked up the structure. So it skips render,
+// OCR and the paid pass entirely and joins at the structure gate, with nothing
+// spent — and gains the half that makes a reprint worth publishing.
+console.log('5g. an EPUB, which costs nothing to bring in')
+await page.goto(URL_BASE, { waitUntil: 'networkidle' })
+await page.setInputFiles('input[type=file]', resolve(REPO, 'public/test-book.epub'))
+await page.waitForFunction(
+  () => document.querySelector('.rail li.active .label')?.textContent?.length > 0,
+  null,
+  { timeout: 60000 }
+)
+await page.waitForTimeout(1500)
+const epubLanded = await page.locator('.rail li.active .label').innerText()
+const epubAskedForKey = await page.locator('.q').filter({ hasText: 'API key' }).count()
+const epubCost = await page.locator('.cost').count()
+await shot('09a-epub-structure-gate')
+
+// The chapters have to be in the spine's order, not the archive's, and the
+// quotation, the italics and the table have to have survived the crossing.
+await showEverything()
+await page.locator('.actions button.primary').first().click()
+await page.waitForSelector('.proof', { timeout: 60000 })
+const epubBlocks = []
+for (let i = 0; i < 20; i++) {
+  const boxes = await page.locator('.proof-block textarea').all()
+  epubBlocks.push(...(await Promise.all(boxes.map((b) => b.inputValue()))))
+  const next = page.locator('.proof-bar button', { hasText: 'Next ›' })
+  if (!(await next.isEnabled())) break
+  await next.click()
+  await page.waitForTimeout(150)
+}
+const epubText = epubBlocks.join('\n')
+await shot('09b-epub-proof-sheet')
+
+// The comma comes with it: emphasis is word-granular by design (see
+// `markup.ts`), and `<i>aqua vitae</i>,` italicises the word the comma is
+// attached to. That is the documented trade, not a fault in the crossing.
+const epubKeptItalics = /<i>aqua vitae,?<\/i>/.test(epubText)
+const epubKeptQuote = /Nature is not to be hastened\./.test(epubText)
+const epubKeptTable = /Year \| Barrels \| Port/.test(epubText)
+const epubOrder =
+  epubText.indexOf('Of the Air') < epubText.indexOf('Of the Trade in Spirits') &&
+  epubText.indexOf('Of the Air') >= 0
+const epubSkippedCover = !/outside the reading order/.test(epubText)
+
+console.log(
+  `  an EPUB lands at: ${epubLanded} (key asked for: ${epubAskedForKey > 0}, priced: ${
+    epubCost > 0
+  })`
+)
+console.log(
+  `  and arrives whole: italics ${epubKeptItalics}, table ${epubKeptTable},` +
+    ` quotation ${epubKeptQuote}, spine order ${epubOrder}, cover left out ${epubSkippedCover}`
+)
+if (!/structure/i.test(epubLanded)) {
+  throw new Error(`An EPUB landed at "${epubLanded}" instead of the structure gate`)
+}
+if (epubAskedForKey > 0 || epubCost > 0) throw new Error('An EPUB was quoted a price')
+if (!epubKeptItalics) throw new Error('The EPUB lost its italics')
+if (!epubKeptTable) throw new Error('The EPUB lost its table')
+if (!epubKeptQuote) throw new Error('The EPUB lost its quotation')
+if (!epubOrder) throw new Error('The EPUB chapters are not in the spine order')
+if (!epubSkippedCover) throw new Error('The EPUB cover was set into the reading order')
+
 // --- book two ---------------------------------------------------------------
 // The whole feature only exists across two books, so it is verified across two.
 // A full reload is the point: the look has to come back off the disk, not out
