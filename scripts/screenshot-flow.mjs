@@ -2119,12 +2119,27 @@ await page.route('https://api.anthropic.com/v1/messages', async (route) => {
         {
           type: 'text',
           text: JSON.stringify({
-            spots: ids.map((id) => ({
-              id,
-              verdict: 'not-there',
-              reading: '',
-              note: 'A speck of dirt read as a word.'
-            }))
+            // A mix, because the two outcomes have opposite consequences and a
+            // fixture that only ever returns one proves half the feature. Every
+            // spot `not-there` settles its leaf and takes it out of the review;
+            // anything else keeps the leaf and has to show its verdict on the
+            // row. Returning only `not-there` made the whole gate empty and the
+            // row assertions unfalsifiable.
+            spots: ids.map((id, n) =>
+              n % 2 === 0
+                ? {
+                    id,
+                    verdict: 'not-there',
+                    reading: '',
+                    note: 'A speck of dirt read as a word.'
+                  }
+                : {
+                    id,
+                    verdict: 'missing',
+                    reading: 'and of the fixed salt',
+                    note: 'Clear on the page; the transcription skips it.'
+                  }
+            )
           })
         }
       ],
@@ -2273,6 +2288,18 @@ const checkNote = await page
   .innerText()
   .catch(() => '')
 const checkedRows = await page.locator('.discrepancy-checked').count()
+// The point of paying for the pass: leaves it answered outright leave the
+// queue. Attaching verdicts and still walking every flagged leaf is the
+// expensive half of the job with none of the useful half, which is exactly
+// what it did before — and nothing here would have noticed.
+const settledSaid = await page
+  .locator('.q .prompt')
+  .filter({ hasText: 'settled by the second reading' })
+  .count()
+const leavesAfterCheck = await page
+  .locator('.pager-where')
+  .innerText()
+  .catch(() => '')
 const checkedReadable = await page
   .locator('.discrepancy-checked b')
   .first()
@@ -2292,7 +2319,8 @@ if (!collected.ticketGone)
 if (!transcribeDone) throw new Error('Collecting did not carry the flow past the paid step')
 console.log(
   `  → second reading: ${secondReadCalls} leaf request(s), ${secondReadIds.length} spot(s), ` +
-    `${checkedRows} row(s) carry a verdict`
+    `${checkedRows} row(s) carry a verdict · settled leaves announced: ${settledSaid > 0}` +
+    ` · now at "${leavesAfterCheck.replace(/\s+/g, ' ')}"`
 )
 console.log(
   `  → ${pagesSubmitted} pages in ${batchesMade} batch(es) at ${priceOf(batchOption)} against ` +
@@ -2678,6 +2706,8 @@ const finalChecks = [
   ['its verdicts are shown on the rows', checkedRows > 0],
   ['each verdict says what was read, not just yes or no', checkedReadable.length > 0],
   ['taking the checked answers is offered as a choice', takeAllOffered > 0],
+  // Said out loud, not a screen that is quietly shorter than it was.
+  ['leaves it settled are taken out of the review, and said so', settledSaid > 0],
   ['every disagreement is listed as its own row', gapRows > 0],
   // The row exists to point at the word. Without the crop it is the old
   // "somewhere on this page" with extra steps.
