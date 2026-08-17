@@ -102,6 +102,7 @@ import {
   type TicketBatch
 } from '@core/project'
 import { BODY_FONTS, describeProfile } from '@core/design'
+import { dispositionFor } from '@core/pages'
 import { buildExport, editionFromAnswers, type BuildExportResult } from '@core/export'
 import { applyEdits, withCorrections, withEdit, type Attention, type BookEdit } from '@core/edits'
 import {
@@ -1177,6 +1178,16 @@ export function App(): JSX.Element {
           transcriptions
             .map((t) => {
               const words = wordsByPage.get(t.pageIndex) ?? []
+              // A leaf whose text was never going to reach the book has nothing
+              // to be missing from it. The title page is mined for metadata and
+              // the scanned contents page is discarded, so OCR reads a page of
+              // words against a body that rightly holds none — and every word
+              // on it reports as dropped, with an offer to splice the imprint
+              // into chapter one.
+              const kept = dispositionFor(t.role)
+              if (kept === 'discard' || kept === 'extract-metadata') {
+                return [t.pageIndex, []] as const
+              }
               // Weak gaps included: the gate shows every disagreement now, so
               // discarding the one- and two-word ones here is what produced
               // "18 words are absent" beside a single four-word offer.

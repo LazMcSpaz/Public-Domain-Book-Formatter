@@ -288,3 +288,58 @@ describe('the picture a discrepancy row shows', () => {
     expect(unionBox([])).toBeNull()
   })
 })
+
+/**
+ * A leaf whose text was never going to reach the book cannot be missing text.
+ *
+ * The title page is mined for metadata and the scanned contents page is
+ * discarded — it carries the *original* edition's pagination, which would be
+ * wrong in this one. Both are deliberate, and both mean OCR reads a page full
+ * of words against a body that rightly holds none of them.
+ *
+ * Comparing the two reports the entire leaf as dropped. On a real book that put
+ * the title page at the review gate claiming every word on it was missing, with
+ * an offer to splice the imprint into the start of the text.
+ */
+describe('leaves whose text is deliberately not carried over', () => {
+  const leaf = (role: PageTranscription['role']): PageTranscription => ({
+    pageIndex: 0,
+    role,
+    // Nothing transcribed: that is the point of these roles, not a failure.
+    blocks: [],
+    uncertain: [],
+    furniture: {}
+  })
+
+  const imprint = ocr(
+    'THE ALCHEMIST HIS PRACTISE Wherein is declared the Vertues of Hearbes Mineralls and ' +
+      'Chymicall Preparations By a Student in the Spagyrick Art LONDON Printed for J Smith ' +
+      'at the Signe of the Bell MDCLXII'
+  )
+
+  it('says nothing about a title page', () => {
+    expect(verifyPage(leaf('title-page'), imprint)).toEqual([])
+  })
+
+  it('says nothing about a copyright page', () => {
+    expect(verifyPage(leaf('copyright'), imprint)).toEqual([])
+  })
+
+  it('says nothing about the original contents page', () => {
+    expect(verifyPage(leaf('table-of-contents'), imprint)).toEqual([])
+  })
+
+  it('still reports a body leaf that really was read and lost', () => {
+    // The exemption is about roles, not about going quiet. A body page with
+    // nothing transcribed and a page of OCR behind it is a genuine failure.
+    const findings = verifyPage(leaf('body'), imprint)
+    expect(findings.some((f) => f.code === 'empty-page')).toBe(true)
+  })
+
+  it('still reports a preface, which is real content', () => {
+    // `preface` is front matter by position and `transcribe` by disposition —
+    // the words go into the book, so losing them is a real loss.
+    const findings = verifyPage(leaf('preface'), imprint)
+    expect(findings.some((f) => f.code === 'empty-page')).toBe(true)
+  })
+})

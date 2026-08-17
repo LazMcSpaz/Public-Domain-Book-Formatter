@@ -1049,6 +1049,16 @@ if (toFixButton || gateEdited) {
 // stopped being true the moment the gate walkthrough was added, which is
 // exactly what happened.
 const correctionsOf = (text) => Number(/(\d+) corrected/.exec(text)?.[1] ?? 0)
+// The first leaf of the sheet need not have any text on it: a title page is
+// mined for metadata rather than transcribed, and a leaf can be listed here
+// purely because it carries a note. So walk forward to the first leaf that
+// actually has something to type in, rather than assuming leaf one does.
+for (let i = 0; i < 40; i++) {
+  if ((await page.locator('.proof-block textarea').count()) > 0) break
+  if (!(await forward.isEnabled())) break
+  await forward.click()
+  await page.waitForTimeout(150)
+}
 const correctedBefore = correctionsOf(await page.locator('.proof-where small').innerText())
 const firstBox = page.locator('.proof-block textarea').first()
 await firstBox.fill('The chirurgeon examined the specimen with extraordinary care.')
