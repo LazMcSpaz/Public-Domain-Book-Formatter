@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { findDroppedRuns, spliceRun, type DroppedRun } from '@core/transcribe'
+import { findDroppedRuns, spliceRun, spliceRunInto, type DroppedRun } from '@core/transcribe'
 import type { OcrWordLike } from '@core/transcribe'
 import { initialState, stepById, type WizardState } from '@core/wizard'
 
@@ -188,5 +188,47 @@ describe('the gate offers the text back', () => {
     const values = q && 'options' in q ? q.options.map((o) => String(o.value)) : []
     expect(values).not.toContain('restore')
     expect(q && 'defaultValue' in q ? q.defaultValue : '').toBe('accept')
+  })
+})
+
+describe('spliceRunInto — putting a clause back without losing the italics', () => {
+  const run = (after: string, text = 'and of the fixed salt'): DroppedRun => ({
+    words: text.split(' '),
+    text,
+    confidence: 90,
+    after,
+    before: ''
+  })
+
+  it('moves emphasis that sits after the join, and leaves the rest alone', () => {
+    // Five words go in after word 2. The italic must stay on `alembick`.
+    const out = spliceRunInto('Of the alembick being set upon a fire', [2], run('the alembick'))!
+    expect(out.text).toBe('Of the alembick and of the fixed salt being set upon a fire')
+    expect(out.emphasis).toEqual([2])
+  })
+
+  it('shifts emphasis that the inserted words pushed along', () => {
+    const out = spliceRunInto('Of the alembick being set upon a fire', [5], run('the alembick'))!
+    // `upon` was word 5; five words went in ahead of it.
+    expect(out.text.split(' ')[5 + 5]).toBe('upon')
+    expect(out.emphasis).toEqual([10])
+  })
+
+  it('shifts everything when the clause goes at the very front', () => {
+    const out = spliceRunInto('the alembick being set', [1], { ...run(''), text: 'Of these two' })!
+    expect(out.text).toBe('Of these two the alembick being set')
+    expect(out.emphasis).toEqual([4])
+    expect(out.text.split(' ')[4]).toBe('alembick')
+  })
+
+  it('says so when the anchor is in another block', () => {
+    expect(spliceRunInto('nothing like it here', [], run('the alembick'))).toBeNull()
+  })
+
+  it('is what spliceRun is built from, so the two can never disagree', () => {
+    const text = 'Of the alembick being set upon a fire'
+    expect(spliceRun(text, run('the alembick'))).toBe(
+      spliceRunInto(text, undefined, run('the alembick'))!.text
+    )
   })
 })

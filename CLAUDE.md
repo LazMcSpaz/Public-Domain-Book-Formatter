@@ -352,6 +352,26 @@ in `screenshots/`. Don't ship UI blind.
   rather than refused daily — unlike a transcription it costs only time to
   replace. Written only when the user has agreed to book data being kept here,
   the same answer that governs storing the scan.
+- **Also done**: **evidence you can actually read.** Every gate promises you
+  never decide blind, and then showed a 150-pixel thumbnail of a page of dense
+  type and a word crop squeezed into a table cell — enough to prove a page
+  exists, useless for the job being asked. Anything shown as evidence now opens
+  full size (`src/app/Lightbox.tsx`), rendering the leaf on demand at readable
+  resolution rather than blowing up the thumbnail. The term grid's context peek
+  is portalled to the body and sized in viewport units, because the grid it
+  hung off scrolls sideways and was clipping it to the width of a cell.
+- **Also done**: **italics are visible where they can be corrected.** The
+  emphasis the pass recovers reaches the PDF — that chain was complete and is
+  now tested end to end, down to the word being drawn from a second embedded
+  font and extracting correctly. What was missing is that a textarea has no
+  italics, so the emphasis was invisible at the proof step and the gate:
+  impossible to confirm, impossible to add where the pass missed it, and
+  silently discarded by retyping the paragraph. `withMarkup` puts the `<i>`
+  tags back for editing and `applyEdits` reads them straight in — the same
+  derived-view trick a table already uses for its columns. That exposed a real
+  bug behind it: restoring a dropped passage spliced into the bare text and
+  discarded the host paragraph's emphasis, so `spliceRunInto` now carries the
+  word indices across the join.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

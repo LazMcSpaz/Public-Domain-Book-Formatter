@@ -197,6 +197,68 @@ async function textOfPage(
     .trim()
 }
 
+/**
+ * The end of the emphasis chain, which begins with a tag the model emitted.
+ *
+ * Everything between — `parseInlineMarkup`, the seam shift in assembly, the
+ * word indices the breaker carries — is covered by pure tests. This is the one
+ * that answers the question a user actually asks, looking at a proof editor
+ * that cannot show italics at all: does the word come out italic in the file?
+ */
+describe('renderPdf — emphasis reaches the page', () => {
+  const emphasised = async () => {
+    const fonts = diskFontTable()
+    const body: BookBlock = {
+      ...block('paragraph', 'The Lama superintends the whole withdrawal of the astral body.'),
+      emphasis: [1]
+    }
+    const book = layout(
+      { ...DOCUMENT, blocks: [block('heading', 'Of the Air', 1), body] },
+      { ...defaultStyleProfile(), dropCap: false },
+      fonts,
+      { edition: EDITION, hyphenate: englishHyphenator() }
+    )
+    const pdf = await renderPdf(book, fonts, { title: EDITION.title, author: EDITION.author })
+    return { book, pdf }
+  }
+
+  it('embeds the italic face because one word asked for it', async () => {
+    const { book } = await emphasised()
+    expect(book.fontsUsed).toContainEqual({ family: 'EB Garamond', style: 'italic' })
+  })
+
+  it('draws that word with a different font resource from its neighbours', async () => {
+    // The decisive check, and the only one a wrong answer could not fake: the
+    // word is set from a different embedded font object than the words around
+    // it. Same resource for both would mean the emphasis was silently lost.
+    const { pdf } = await emphasised()
+    const reopened = await reopen(pdf.bytes)
+    const fontOf = new Map<string, string>()
+    for (let i = 0; i < reopened.numPages; i++) {
+      const content = await (await reopened.getPage(i + 1)).getTextContent()
+      for (const item of content.items) {
+        if (!('str' in item)) continue
+        const word = item.str.trim()
+        if (word && !fontOf.has(word)) fontOf.set(word, item.fontName)
+      }
+    }
+    expect(fontOf.get('Lama')).toBeDefined()
+    expect(fontOf.get('superintends')).toBeDefined()
+    expect(fontOf.get('Lama')).not.toBe(fontOf.get('superintends'))
+  })
+
+  it('still copies out as the sentence, italics and all', async () => {
+    // An emphasised word set from a second embedded font needs its own
+    // ToUnicode or it would extract as line noise — the exact failure the
+    // ligature work was about, reached by a different route.
+    const { pdf } = await emphasised()
+    const reopened = await reopen(pdf.bytes)
+    let all = ''
+    for (let i = 0; i < reopened.numPages; i++) all += ` ${await textOfPage(reopened, i)}`
+    expect(all).toContain('The Lama superintends the whole withdrawal')
+  })
+})
+
 describe('renderPdf — the real output', () => {
   /**
    * The end-to-end half of `fonts-coverage.test.ts`. That file proves the

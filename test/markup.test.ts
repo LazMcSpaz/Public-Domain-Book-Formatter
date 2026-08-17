@@ -3,6 +3,7 @@ import {
   normalizeMarkup,
   parseInlineMarkup,
   parsePageTranscription,
+  withMarkup,
   shiftEmphasis,
   wordCount,
   type TranscribedBlock
@@ -212,6 +213,84 @@ describe('emphasis survives the journey to the page', () => {
     ])
     expect(after.blocks[0]!.text).toBe('one two three')
     expect(after.blocks[0]!.emphasis).toEqual([1])
+  })
+})
+
+describe('withMarkup — showing the emphasis where it can be edited', () => {
+  const round = (raw: string) => {
+    const parsed = parseInlineMarkup(raw)
+    return withMarkup(parsed.text, parsed.emphasis)
+  }
+
+  it('puts the tags back where they were', () => {
+    expect(round('a priest called <i>hpho-bo</i> in the original')).toBe(
+      'a priest called <i>hpho-bo</i> in the original'
+    )
+  })
+
+  it('takes the punctuation with the word, and then stops moving', () => {
+    // Emphasis is word-granular by design (see the module note), so a tag that
+    // ended before a bracket comes back with the bracket inside it. What has to
+    // hold is that it settles: showing what was shown parses to the same thing,
+    // or a paragraph would creep every time the proof step was opened.
+    const once = round('(pron. <i>pho-o</i>)')
+    expect(once).toBe('(pron. <i>pho-o)</i>')
+    expect(round(once)).toBe(once)
+  })
+
+  it('wraps a phrase once rather than tagging each of its words', () => {
+    expect(withMarkup('how to project the astral body', [2, 3, 4, 5])).toBe(
+      'how to <i>project the astral body</i>'
+    )
+  })
+
+  it('leaves an unemphasised block completely alone', () => {
+    expect(withMarkup('nothing stressed here', [])).toBe('nothing stressed here')
+    expect(withMarkup('nothing stressed here', undefined)).toBe('nothing stressed here')
+  })
+
+  it('handles emphasis at either end of the block', () => {
+    expect(withMarkup('first word only', [0])).toBe('<i>first</i> word only')
+    expect(withMarkup('and the last', [2])).toBe('and the <i>last</i>')
+    expect(withMarkup('every single word', [0, 1, 2])).toBe('<i>every single word</i>')
+  })
+
+  it('survives the round trip both ways', () => {
+    // This is what makes the editor safe: what it shows parses back to what it
+    // was shown from, so correcting one word cannot move or lose the italics.
+    for (const raw of [
+      'plain text',
+      '<i>all of it</i>',
+      'a <i>b</i> c <i>d e</i> f',
+      'trailing <i>emphasis</i>'
+    ]) {
+      expect(round(raw)).toBe(raw)
+    }
+  })
+
+  it('is idempotent on anything at all, punctuation included', () => {
+    for (const raw of ['<i>a,</i> b.', 'x <i>y</i>; z', '“<i>quoted</i>”', 'a <i>b</i>-c']) {
+      expect(round(round(raw))).toBe(round(raw))
+    }
+  })
+
+  it('normalises what the model wrote into what the editor shows', () => {
+    // The model reaches for <em> and <cite> as well; both mean italic, and the
+    // editor should show one notation rather than three.
+    expect(round('an <em>emphasised</em> and a <cite>cited</cite> word')).toBe(
+      'an <i>emphasised</i> and a <i>cited</i> word'
+    )
+  })
+
+  it('round-trips through an edit, which is how the proof editor keeps it', () => {
+    const shown = withMarkup('the Lama superintends the withdrawal', [1])
+    expect(shown).toBe('the <i>Lama</i> superintends the withdrawal')
+    // The user fixes a different word; the emphasis is unharmed because it was
+    // never separate from the text they were handed.
+    const edited = shown.replace('withdrawal', 'withdrawing')
+    const back = parseInlineMarkup(edited)
+    expect(back.text).toBe('the Lama superintends the withdrawing')
+    expect(back.emphasis).toEqual([1])
   })
 })
 

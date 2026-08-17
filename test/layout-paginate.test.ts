@@ -19,6 +19,10 @@ import type { BookBlock, BookDocument } from '@core/assemble'
 
 const measurer = fixedWidthMeasurer(0.5)
 
+/** Every drawn run on a page — the items that are lines, not rules or pictures. */
+const textRuns = (page: LaidOutPage) =>
+  page.items.filter((i): i is PositionedLine => i.kind === 'line').flatMap((l) => l.runs)
+
 const EDITION: LayoutEdition = {
   title: 'A Treatise of Airs',
   author: 'Robert Boyle',
@@ -292,6 +296,51 @@ describe('layout — the properties later work depends on', () => {
       expect(page.widthPt).toBe(396)
       expect(page.heightPt).toBe(612)
     }
+  })
+
+  it('sets an emphasised word in italic and its neighbours in roman', () => {
+    // The question this answers is the one a user asks looking at the proof
+    // editor, where a textarea can show no italics at all: does the emphasis
+    // the pass recovered actually reach the set page?
+    const emphasised: BookBlock = {
+      ...block('paragraph', 'a priest called hpho-bo in the original'),
+      emphasis: [3]
+    }
+    const book = run(doc([emphasised]))
+    const runs = book.pages.flatMap((p) => textRuns(p))
+    const italic = runs.filter((r) => r.font.style === 'italic')
+    expect(italic.map((r) => r.text.trim()).join(' ')).toBe('hpho-bo')
+    // And nothing else on the line went italic with it.
+    expect(runs.some((r) => r.font.style === 'regular' && r.text.includes('priest'))).toBe(true)
+  })
+
+  it('carries an emphasised phrase across every word of it', () => {
+    const emphasised: BookBlock = {
+      ...block('paragraph', 'how to project the astral body at will'),
+      emphasis: [2, 3, 4, 5]
+    }
+    const book = run(doc([emphasised]))
+    const italic = book.pages
+      .flatMap((p) => textRuns(p))
+      .filter((r) => r.font.style === 'italic')
+      .map((r) => r.text.trim())
+      .filter(Boolean)
+    // A run per word, each positioned on its own — the phrase is italic entire.
+    expect(italic).toEqual(['project', 'the', 'astral', 'body'])
+  })
+
+  it('does not set emphasis inside matter that is already italic', () => {
+    // An epigraph is set italic entire, so an emphasised word inside one would
+    // have to go roman to show at all — which is a decision, not a default.
+    const emphasised: BookBlock = { ...block('epigraph', 'set wholly in italic'), emphasis: [1] }
+    const book = run(doc([emphasised]))
+    const styles = new Set(
+      book.pages
+        .flatMap((p) => textRuns(p))
+        .filter((r) => r.text.includes('wholly') || r.text.includes('italic'))
+        .map((r) => r.font.style)
+    )
+    expect([...styles]).toEqual(['italic'])
   })
 
   it('reports every face it drew with, so an embedder knows what to load', () => {

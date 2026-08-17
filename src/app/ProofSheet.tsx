@@ -17,6 +17,8 @@ import type { BookDocument } from '@core/assemble'
 import type { BlockKind, VerificationFinding } from '@core/transcribe'
 import { ImageEditor } from './ImageEditor'
 import type { ImageEditOp } from '@core/model'
+import { withMarkup } from '@core/transcribe'
+import { Lightbox } from './Lightbox'
 import {
   blockOf,
   countEdited,
@@ -167,6 +169,9 @@ export function ProofSheet({
     [edits]
   )
 
+  /** The leaf opened full size, if any. Always a URL this sheet already holds. */
+  const [enlarged, setEnlarged] = useState<string | null>(null)
+
   // The legible render of the leaf on screen, and the one before it, so the
   // previous URL is revoked exactly once when it is replaced.
   const [readable, setReadable] = useState<string | null>(null)
@@ -180,6 +185,8 @@ export function ProofSheet({
     // one arrives would show the *wrong page's* scan beside this page's text,
     // which is worse than a moment of the right page at thumbnail size.
     setReadable(null)
+    // And close anything opened off it: the URL is about to be revoked.
+    setEnlarged(null)
 
     void loadScan(pageIndex).then((url) => {
       if (!url) return
@@ -343,9 +350,32 @@ export function ProofSheet({
 
       <div className="proof-body">
         <figure className="proof-scan">
-          {scan ? <img src={scan} alt={`Scan of leaf ${page.pageIndex + 1}`} /> : null}
+          {scan ? (
+            // Opens full size. The column it sits in is a third of the screen,
+            // which is enough to see that the paragraphs line up and not enough
+            // to read a footnote or check a proper name — the two things this
+            // step exists for.
+            <button
+              type="button"
+              className="evidence-open"
+              title="See the leaf full size"
+              onClick={() => setEnlarged(scan)}
+            >
+              <img src={scan} alt={`Scan of leaf ${page.pageIndex + 1}`} />
+              <span className="evidence-zoom" aria-hidden="true">
+                ⤢
+              </span>
+            </button>
+          ) : null}
           <figcaption>{readable ? 'The scan, as it came in' : 'The scan — sharpening…'}</figcaption>
         </figure>
+        {enlarged ? (
+          <Lightbox
+            src={enlarged}
+            caption={`Leaf ${page.pageIndex + 1}, as it came in`}
+            onClose={() => setEnlarged(null)}
+          />
+        ) : null}
 
         <div className="proof-blocks">
           {page.blocks.length === 0 ? (
@@ -356,7 +386,12 @@ export function ProofSheet({
           ) : null}
 
           {page.blocks.map(({ block, alsoFromPages }) => {
-            const text = currentText.get(block.id) ?? block.text
+            // With the italics showing, where nothing has been typed over them.
+            // A textarea has no italics, so without the tags the emphasis this
+            // edition has to print is invisible here — impossible to confirm,
+            // impossible to add where the pass missed it, and quietly discarded
+            // by retyping the paragraph. `applyEdits` reads them straight back.
+            const text = currentText.get(block.id) ?? withMarkup(block.text, block.emphasis)
             const kind = currentKind.get(block.id) ?? block.kind
             const isDropped = dropped.has(block.id)
             const edited = edits.some((e) => blockOf(e) === block.id)
@@ -417,6 +452,14 @@ export function ProofSheet({
                     One row to a line, cells separated by a vertical bar. The columns are measured
                     and set to this edition’s page, so the original’s spacing and leader dots are
                     not needed.
+                  </p>
+                ) : null}
+
+                {kind !== 'table' && text.includes('<i>') ? (
+                  <p className="proof-hint">
+                    <code>&lt;i&gt;…&lt;/i&gt;</code> is set in italic, as the original printed it.
+                    The tags themselves are never printed — move or remove them to change what this
+                    edition emphasises.
                   </p>
                 ) : null}
 

@@ -14,7 +14,7 @@
 import type { LexiconEntry } from '@core/lexicon'
 import type { BookMetadata, PageClassification } from '@core/pages'
 import { isFrontMatter } from '@core/pages'
-import type { DroppedRun, VerificationFinding } from '@core/transcribe'
+import { withMarkup, type DroppedRun, type VerificationFinding } from '@core/transcribe'
 import { describeAge, type SavedRunSummary } from '@core/project'
 import type { BookDocument } from '@core/assemble'
 import { defaultVoice, type EditorVoice } from '@core/annotate'
@@ -571,7 +571,15 @@ const gateUncertainties: Step = {
       const [first, ...rest] = block.sourcePages
       if (first === undefined) continue
       const list = blocksByPage.get(first) ?? []
-      list.push({ id: block.id, text: block.text, kind: block.kind, alsoFromPages: rest })
+      list.push({
+        id: block.id,
+        // With the italics showing. They are content the original prints and
+        // this edition has to, and a plain box cannot show them — so someone
+        // correcting a word here would silently discard them.
+        text: withMarkup(block.text, block.emphasis),
+        kind: block.kind,
+        alsoFromPages: rest
+      })
       blocksByPage.set(first, list)
     }
 
@@ -656,9 +664,14 @@ const gateUncertainties: Step = {
           id: `page-${pageIndex}-fix`,
           type: 'page-edit',
           prompt: `…or fix page ${pageIndex + 1} here`,
+          // Which answer above keeps a fix typed down here is the first thing
+          // anyone asks, and guessing at it is a way to lose work. The rule is
+          // stated rather than left to be inferred from five option labels.
           help:
             'Type over anything that was read wrong. This costs nothing and is ' +
-            'the same correction the proof step makes, so it applies to the whole book.',
+            'the same correction the proof step makes, so it applies to the whole book. ' +
+            'What you type is kept whichever answer you gave above — except ' +
+            '“read this page again”, which replaces the text, and “leave this page out”.',
           rows
         })
       }
@@ -814,7 +827,9 @@ const gateStructure: Step = {
 const proof: Step = {
   id: 'proof',
   title: 'Read it through',
-  blurb: 'Your book beside the scan it came from. Fix anything that was read wrong.',
+  blurb:
+    'Your book beside the scan it came from. Fix anything that was read wrong. ' +
+    'Italics show as <i>…</i>, so you can see what the original stressed and change it.',
   isGate: true,
   canEnter: (s) => s.completed.includes('gate-structure') && s.document !== null,
   questions: () => []

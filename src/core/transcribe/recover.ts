@@ -201,10 +201,43 @@ export function findDroppedRuns(
  * which is how the caller knows to try the next block.
  */
 export function spliceRun(blockText: string, run: DroppedRun): string | null {
+  return spliceRunInto(blockText, undefined, run)?.text ?? null
+}
+
+/** A block after a recovered passage was put back into it. */
+export interface SplicedBlock {
+  text: string
+  /** The block's emphasis, moved along past the words that were inserted. */
+  emphasis: number[]
+}
+
+/**
+ * Put a run back, and carry the block's italics across the join.
+ *
+ * Emphasis is word indices, so inserting words in the middle of a paragraph
+ * moves every index after the insertion — and doing nothing about it italicises
+ * whichever words now sit at the old positions. The alternative that suggests
+ * itself, splicing into the text *with* its `<i>` tags, does not work: the
+ * anchor is a phrase taken from the tagless transcription, so it straddles a
+ * tag and is not found at all.
+ *
+ * Nothing is dropped either way, which is the point. Before this, restoring a
+ * dropped clause silently discarded the emphasis of the paragraph it landed in.
+ */
+export function spliceRunInto(
+  blockText: string,
+  emphasis: readonly number[] | undefined,
+  run: DroppedRun
+): SplicedBlock | null {
+  const inserted = run.text.split(/\s+/u).filter((w) => w.length > 0).length
+  const shift = (from: number): number[] =>
+    (emphasis ?? []).map((i) => (i < from ? i : i + inserted))
+
   const anchor = run.after.trim()
   if (!anchor) {
-    // A run dropped from the very start of the page goes at the front.
-    return `${run.text} ${blockText}`.trim()
+    // A run dropped from the very start of the page goes at the front, so every
+    // word of the block moves along by all of it.
+    return { text: `${run.text} ${blockText}`.trim(), emphasis: shift(0) }
   }
 
   const at = blockText.indexOf(anchor)
@@ -215,5 +248,9 @@ export function spliceRun(blockText: string, run: DroppedRun): string | null {
   const tail = blockText.slice(end)
   // A space either side, then collapse — so the join reads as prose whether or
   // not the anchor ended with punctuation.
-  return `${head} ${run.text}${tail.startsWith(' ') ? '' : ' '}${tail}`.replace(/\s+/gu, ' ').trim()
+  const text = `${head} ${run.text}${tail.startsWith(' ') ? '' : ' '}${tail}`
+    .replace(/\s+/gu, ' ')
+    .trim()
+  const before = head.split(/\s+/u).filter((w) => w.length > 0).length
+  return { text, emphasis: shift(before) }
 }

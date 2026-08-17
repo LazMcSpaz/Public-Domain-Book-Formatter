@@ -385,11 +385,32 @@ await page.setViewportSize({ width: 1360, height: 900 })
 const rows = await page.locator('.terms tbody tr').count()
 const crops = await page.locator('.terms td .crop img').count()
 // The wider cut of the same word, held back until asked for.
-const contextCrops = await page.locator('.terms .crop-context img').count()
+// The peek is portalled to the body and rendered only while hovered, so what
+// is counted here is how many cuttings offer one at all.
+const contextCrops = await page.locator('.terms .crop[title*="line"]').count()
 await page.locator('.terms .crop').first().hover()
 await page.waitForTimeout(400)
-const contextVisible = await page.locator('.terms .crop-context').first().isVisible()
+const contextVisible = await page.locator('.crop-context').first().isVisible()
+// The peek is only worth having if it is legible. It is portalled out to the
+// body and sized in viewport units precisely because it used to be clipped to
+// the width of a table cell, which is how a strip of a printed line arrived on
+// screen too small to read a word of.
+const peekWidth = contextVisible
+  ? Math.round((await page.locator('.crop-context').first().boundingBox()).width)
+  : 0
 await shot('03c-term-context-on-hover')
+
+// And clicking it opens that line at the size it was cut at.
+await page.locator('.terms .crop').first().click()
+await page.waitForTimeout(500)
+const lightboxOpen = await page.locator('.lightbox').count()
+const lightboxWidth = lightboxOpen
+  ? Math.round((await page.locator('.lightbox-frame img').boundingBox()).width)
+  : 0
+await shot('03d-term-context-full-size')
+await page.keyboard.press('Escape')
+await page.waitForTimeout(300)
+const lightboxClosed = (await page.locator('.lightbox').count()) === 0
 
 // The one step in this app that costs money is the one worth not repeating.
 // A run stored under this file's key should be *offered* rather than silently
@@ -426,7 +447,18 @@ const seeded = await page.evaluate(
           pageIndex: i,
           role: i === 0 ? 'title-page' : 'body',
           blocks: [
-            { kind: 'paragraph', text: `Restored page ${i + 1}.` },
+            {
+              kind: 'paragraph',
+              // With the italics the pass recovers, on one leaf. A textarea
+              // cannot show italics, so they are shown as the tags they came
+              // in as — otherwise the emphasis this edition has to print is
+              // invisible wherever the text can be corrected, and retyping the
+              // paragraph would throw it away without a word.
+              text:
+                i === 6
+                  ? `Restored page ${i + 1}, the <i>alembick</i> being set.`
+                  : `Restored page ${i + 1}.`
+            },
             // The fixture prints a figure with a caption on this leaf. The
             // caption has to be in the transcription for assembly to have
             // anything to take out of the flow and give to the picture.
@@ -508,6 +540,30 @@ const gateText = await page
   .inputValue()
   .catch(() => '')
 await shot('08c-uncertainty-gate-side-by-side')
+
+// The thumbnail beside a flagged leaf is 150px of dense type — enough to know
+// which page it is and useless for the job the gate is asking. Clicking it has
+// to render the leaf at a size a transcription can be checked against, which is
+// a *different* image from the thumbnail, not the same one blown up.
+const gateThumbWidth = Math.round(
+  (await page.locator('.q .evidence-open img').first().boundingBox()).width
+)
+await page.locator('.q .evidence-open').first().click()
+await page.waitForTimeout(2500)
+const gateBig = await page.locator('.lightbox-frame img').count()
+const gateBigWidth = gateBig
+  ? Math.round((await page.locator('.lightbox-frame img').boundingBox()).width)
+  : 0
+// It has to cover the window, not the column it was opened from — a fixed
+// overlay is only fixed if no ancestor made itself a containing block.
+const overlay = await page.locator('.lightbox').boundingBox()
+const viewport = page.viewportSize()
+const overlayCovers =
+  Math.round(overlay.width) >= viewport.width && Math.round(overlay.height) >= viewport.height
+await shot('08c1-uncertainty-gate-leaf-full-size')
+await page.keyboard.press('Escape')
+await page.waitForTimeout(300)
+const gateBigClosed = (await page.locator('.lightbox').count()) === 0
 
 // A verdict clicked here must survive a refresh. It costs time rather than
 // money, which is why it used to be thrown away while the pages it applied to
@@ -592,6 +648,38 @@ await shot('05c2-proof-sheet')
 
 const proofBoxes = await page.locator('.proof-block textarea').count()
 const proofScan = await page.locator('.proof-scan img').count()
+
+// Italics are content the original prints and this edition has to. A textarea
+// has none, so they are shown as the tags they arrived as — visible, editable,
+// and read straight back by `applyEdits`. Without this the emphasis was
+// invisible everywhere it could be corrected, and silently dropped by anyone
+// who retyped the paragraph.
+let italicsShown = ''
+for (let i = 0; i < 40; i++) {
+  const boxes = await page.locator('.proof-block textarea').all()
+  const texts = await Promise.all(boxes.map((b) => b.inputValue()))
+  const found = texts.find((t) => t.includes('<i>'))
+  if (found) {
+    italicsShown = found
+    await shot('05c2a2-proof-italics-visible')
+    break
+  }
+  if (!(await page.locator('.proof-bar button', { hasText: 'Next ›' }).isEnabled())) break
+  await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
+  await page.waitForTimeout(150)
+}
+const italicsHinted = italicsShown
+  ? await page.locator('.proof-hint').filter({ hasText: 'italic' }).count()
+  : 0
+
+// And the leaf itself opens full size here too — a third of the screen shows
+// that the paragraphs line up and will not settle a proper name.
+await page.locator('.proof-scan .evidence-open').click()
+await page.waitForTimeout(600)
+const proofBig = await page.locator('.lightbox-frame img').count()
+await shot('05c2a3-proof-leaf-full-size')
+await page.keyboard.press('Escape')
+await page.waitForTimeout(250)
 
 // The leaf marked "I'll fix this myself" has to still carry its note here —
 // that answer is a to-do, and until now it was indistinguishable from "looks
@@ -1597,7 +1685,16 @@ for (const want of ['Extra gutter for binding', 'Page numbers', 'Print a half-ti
 console.log('\nresult:')
 console.log(`  term rows: ${rows}`)
 console.log(`  word crops rendered: ${crops}`)
-console.log(`  each with its line on hover: ${contextCrops} (popover shows: ${contextVisible})`)
+console.log(
+  `  cuttings offering their line: ${contextCrops} (peek ${peekWidth}px wide, unclipped: ${
+    peekWidth > 400
+  })`
+)
+if (!contextVisible) throw new Error('The context peek does not appear on hover')
+if (peekWidth <= 400) throw new Error(`The context peek is only ${peekWidth}px wide — clipped`)
+if (!lightboxOpen) throw new Error('Clicking a word crop does not open it full size')
+if (!lightboxClosed) throw new Error('Escape does not close the full-size view')
+console.log(`  and full size on click: ${lightboxWidth}px, closed by Escape: ${lightboxClosed}`)
 console.log(`  design summary: ${after}`)
 console.log(`  summary responds to answers: ${before !== after}`)
 console.log(`  saved run offered: ${offered === 1}`)
@@ -1614,6 +1711,21 @@ console.log(
   `  reopening skips the reading: ${coldOpenMs} ms cold -> ${warmOpenMs} ms warm` +
     (skippedNote ? ` (${skippedNote.replace(/\s+/g, ' ')})` : '')
 )
+console.log(
+  `  a flagged leaf can be read: ${gateThumbWidth}px thumbnail -> ${gateBigWidth}px on click` +
+    ` (closed by Escape: ${gateBigClosed})`
+)
+if (!overlayCovers) throw new Error('The full-size view does not cover the window')
+if (gateBigWidth <= gateThumbWidth * 2) {
+  throw new Error(`Opening the leaf gave ${gateBigWidth}px — no better than the thumbnail`)
+}
+console.log(
+  `  italics are visible where they can be edited: ${italicsShown || 'NOT SHOWN'}` +
+    ` (explained: ${italicsHinted > 0})`
+)
+if (!italicsShown) throw new Error('The proof editor shows no italics at all')
+if (!italicsHinted) throw new Error('The italic tags appear with nothing explaining them')
+if (!proofBig) throw new Error('The proof leaf does not open full size')
 console.log(`  the gate offers: ${verdictOptions.join(' / ')}`)
 console.log(
   `  a fix typed at the gate reaches the book: ${

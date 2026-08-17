@@ -5,7 +5,10 @@
  * `Question` data a step emits. That's the whole point of the contract: adding
  * a question later needs no new UI code here.
  */
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import type { Question, AnswerValue, TermVerdict, Evidence } from '@core/wizard'
+import { Lightbox } from './Lightbox'
 
 interface Props {
   question: Question
@@ -13,14 +16,32 @@ interface Props {
   onChange: (value: AnswerValue) => void
   /** Resolves an evidence src like `page:3` to a displayable URL. */
   resolveEvidence?: (src: string) => string | undefined
+  /**
+   * A version of the same evidence big enough to read, made on demand.
+   *
+   * The thumbnail beside a question is 150 pixels wide, which is enough to know
+   * *which* page it is and nowhere near enough to check a transcription against.
+   * Rendering every leaf at readable size up front would be hundreds of
+   * megabytes for a book, so it is done when the user asks to see one.
+   */
+  enlargeEvidence?: (src: string) => Promise<string | undefined>
+}
+
+/** A scan opened full size, and where it came from. */
+interface Enlarged {
+  src: string
+  caption: string
+  loading: boolean
 }
 
 function EvidenceView({
   items,
-  resolve
+  resolve,
+  onOpen
 }: {
   items?: Evidence[]
   resolve?: (src: string) => string | undefined
+  onOpen?: (src: string, caption: string) => void
 }): JSX.Element | null {
   if (!items?.length) return null
   // Evidence that includes a passage of text needs room to be read, and so does
@@ -35,9 +56,26 @@ function EvidenceView({
           if (!src.startsWith('blob:') && !src.startsWith('data:') && !src.startsWith('/')) {
             return null // unresolved placeholder — show nothing rather than a broken image
           }
+          // A button rather than a clickable image: this is the only way to see
+          // the scan at a size it can be read at, so it has to be reachable
+          // from a keyboard and announce itself as something to press.
           return (
             <figure key={i} style={{ margin: 0 }}>
-              <img src={src} alt={e.alt} />
+              {onOpen ? (
+                <button
+                  type="button"
+                  className="evidence-open"
+                  title="See it full size"
+                  onClick={() => onOpen(e.src, e.alt)}
+                >
+                  <img src={src} alt={e.alt} />
+                  <span className="evidence-zoom" aria-hidden="true">
+                    ⤢
+                  </span>
+                </button>
+              ) : (
+                <img src={src} alt={e.alt} />
+              )}
               <figcaption>{e.alt}</figcaption>
             </figure>
           )
@@ -61,17 +99,59 @@ function EvidenceView({
   )
 }
 
+/** Where a hovered word crop's wider cutting should appear, in viewport space. */
+interface Peek {
+  src: string
+  alt: string
+  left: number
+  top: number
+}
+
+/**
+ * The wider cutting of a word, shown beside the pointer.
+ *
+ * Through a portal, and positioned in viewport coordinates, because the term
+ * grid scrolls sideways on a narrow screen: an absolutely positioned popover
+ * inside it is clipped to the scroll box, which is what made this unreadable —
+ * a strip of a printed line squeezed into the width of a table cell.
+ */
+function PeekView({ peek }: { peek: Peek | null }): JSX.Element | null {
+  if (!peek) return null
+  return createPortal(
+    <div className="crop-context" style={{ left: peek.left, top: peek.top }}>
+      <img src={peek.src} alt={peek.alt} />
+      <small>{peek.alt} — click the cutting to see it larger</small>
+    </div>,
+    document.body
+  )
+}
+
 function TermGrid({
   question,
   value,
-  onChange
+  onChange,
+  onOpen
 }: {
   question: Extract<Question, { type: 'term-grid' }>
   value: Record<string, TermVerdict>
   onChange: (v: Record<string, TermVerdict>) => void
+  onOpen: (src: string, caption: string) => void
 }): JSX.Element {
   const set = (id: string, verdict: TermVerdict): void => onChange({ ...value, [id]: verdict })
   const acceptedCount = Object.values(value).filter((v) => v.action === 'accept').length
+  const [peek, setPeek] = useState<Peek | null>(null)
+
+  /** Anchor the popover under the cutting, kept inside the window. */
+  const show = (el: HTMLElement, src: string, alt: string): void => {
+    const box = el.getBoundingClientRect()
+    const width = Math.min(680, window.innerWidth - 24)
+    setPeek({
+      src,
+      alt,
+      left: Math.max(12, Math.min(box.left, window.innerWidth - width - 12)),
+      top: box.bottom + 8
+    })
+  }
 
   return (
     <>
@@ -111,19 +191,35 @@ function TermGrid({
                 <tr key={row.id} className={v.action === 'ignore' ? 'ignored' : undefined}>
                   <td>
                     {row.cropSrc ? (
-                      // The wider cut sits in a popover on hover and focus:
-                      // one word is enough to read the letters and not always
-                      // enough to judge them. Focusable so it is reachable
-                      // without a pointer.
-                      <span className="crop" tabIndex={row.contextSrc ? 0 : -1}>
+                      // Hovering shows the word in its line; clicking opens
+                      // that line full size. One word is enough to read the
+                      // letters and not always enough to judge them, and a
+                      // strip of print shrunk into a table cell is enough for
+                      // neither. A button, so both are reachable by keyboard.
+                      <button
+                        type="button"
+                        className="crop"
+                        title={row.contextSrc ? 'See this line full size' : 'See it full size'}
+                        onMouseEnter={(e) =>
+                          row.contextSrc &&
+                          show(e.currentTarget, row.contextSrc, `“${row.reading}” in its line`)
+                        }
+                        onFocus={(e) =>
+                          row.contextSrc &&
+                          show(e.currentTarget, row.contextSrc, `“${row.reading}” in its line`)
+                        }
+                        onMouseLeave={() => setPeek(null)}
+                        onBlur={() => setPeek(null)}
+                        onClick={() => {
+                          setPeek(null)
+                          onOpen(
+                            row.contextSrc ?? row.cropSrc!,
+                            `“${row.reading}” as the page prints it`
+                          )
+                        }}
+                      >
                         <img src={row.cropSrc} alt={`Scan of “${row.reading}”`} />
-                        {row.contextSrc ? (
-                          <span className="crop-context" role="tooltip">
-                            <img src={row.contextSrc} alt={`“${row.reading}” in its line`} />
-                            <small>as printed, in its line</small>
-                          </span>
-                        ) : null}
-                      </span>
+                      </button>
                     ) : (
                       <span className="crop-missing">no crop</span>
                     )}
@@ -182,6 +278,7 @@ function TermGrid({
           </tbody>
         </table>
       </div>
+      <PeekView peek={peek} />
     </>
   )
 }
@@ -243,7 +340,43 @@ function PageEditor({
   )
 }
 
-export function QuestionView({ question, value, onChange, resolveEvidence }: Props): JSX.Element {
+export function QuestionView({
+  question,
+  value,
+  onChange,
+  resolveEvidence,
+  enlargeEvidence
+}: Props): JSX.Element {
+  const [enlarged, setEnlarged] = useState<Enlarged | null>(null)
+  // Minted here, so it is revoked here. A readable render of a 300-DPI leaf is
+  // megabytes, and leaking one per look would add up over a book.
+  const madeRef = useRef<string | null>(null)
+
+  useEffect(
+    () => () => {
+      if (madeRef.current) URL.revokeObjectURL(madeRef.current)
+      madeRef.current = null
+    },
+    []
+  )
+
+  const open = (src: string, caption: string): void => {
+    const immediate = resolveEvidence?.(src) ?? src
+    if (!enlargeEvidence) {
+      setEnlarged({ src: immediate, caption, loading: false })
+      return
+    }
+    // The thumbnail goes up at once and the readable render replaces it, so
+    // opening a leaf never shows an empty frame while pdf.js works.
+    setEnlarged({ src: immediate, caption, loading: false })
+    void enlargeEvidence(src).then((big) => {
+      if (!big) return
+      if (madeRef.current) URL.revokeObjectURL(madeRef.current)
+      madeRef.current = big
+      setEnlarged((current) => (current ? { ...current, src: big } : current))
+    })
+  }
+
   const body = (): JSX.Element => {
     switch (question.type) {
       case 'text':
@@ -339,6 +472,7 @@ export function QuestionView({ question, value, onChange, resolveEvidence }: Pro
             question={question}
             value={(value as Record<string, TermVerdict>) ?? {}}
             onChange={onChange}
+            onOpen={open}
           />
         )
       case 'page-edit':
@@ -365,11 +499,19 @@ export function QuestionView({ question, value, onChange, resolveEvidence }: Pro
       {hasEvidence ? (
         <div className={readsEvidence ? 'q-row evidence-led' : 'q-row'}>
           <div className="fields">{body()}</div>
-          <EvidenceView items={question.evidence} resolve={resolveEvidence} />
+          <EvidenceView items={question.evidence} resolve={resolveEvidence} onOpen={open} />
         </div>
       ) : (
         body()
       )}
+      {enlarged ? (
+        <Lightbox
+          src={enlarged.src}
+          caption={enlarged.caption}
+          loading={enlarged.loading}
+          onClose={() => setEnlarged(null)}
+        />
+      ) : null}
     </div>
   )
 }

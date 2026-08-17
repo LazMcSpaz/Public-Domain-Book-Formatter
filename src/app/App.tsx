@@ -32,8 +32,9 @@ import {
   mergeMetadata,
   validateApiKey,
   findDroppedRuns,
-  spliceRun,
+  spliceRunInto,
   transcriptionText,
+  withMarkup,
   verifyBook,
   verifyPage,
   type PageTranscription,
@@ -526,6 +527,28 @@ export function App(): JSX.Element {
     const m = /^page:(\d+)$/.exec(src)
     if (m) return reconRef.current?.thumbnails.get(Number(m[1]))
     return src
+  }, [])
+
+  /**
+   * The same leaf, rendered big enough to read.
+   *
+   * The thumbnail a gate shows is 200 pixels wide — enough to recognise a page
+   * and useless for checking a transcription against it, which is the entire
+   * job the gate is asking the user to do. Rendered on demand rather than kept,
+   * because a legible render of every leaf in a book is hundreds of megabytes;
+   * the caller revokes what it is handed.
+   */
+  const enlargeEvidence = useCallback(async (src: string): Promise<string | undefined> => {
+    const m = /^page:(\d+)$/.exec(src)
+    const file = fileDataRef.current
+    if (!m || !file) return undefined
+    try {
+      return await renderPageToObjectUrl(file, Number(m[1]))
+    } catch {
+      // The thumbnail is already on screen, so a failed render costs sharpness
+      // rather than the look.
+      return undefined
+    }
   }, [])
 
   const startRecon = useCallback(async (file: File) => {
@@ -1287,14 +1310,25 @@ export function App(): JSX.Element {
      * same thing, so a fix made here is saved with the run, undoable there, and
      * applies to the book rather than to the screen it was typed on.
      */
-    const pristine = new Map((state.document?.blocks ?? []).map((b) => [b.id, b.text]))
+    // With the markup on, because that is what the boxes were filled with — a
+    // comparison against the bare text would call every emphasised block
+    // corrected and report a book full of edits nobody made.
+    const pristine = new Map(
+      (state.document?.blocks ?? []).map((b) => [b.id, withMarkup(b.text, b.emphasis)])
+    )
     let nextEdits = edits
-    for (const corrections of corrected.values()) {
+    for (const [pageIndex, corrections] of corrected) {
+      // Not onto a leaf that is being read again or left out. Block ids are
+      // derived from the page and block index, so a correction typed against
+      // the old reading would land on whatever the new one puts in that slot —
+      // a stale fix pasted over text it was never about.
+      if (redo.includes(pageIndex) || skip.includes(pageIndex)) continue
       nextEdits = withCorrections(nextEdits, corrections, pristine)
     }
     /** Leaves whose text the user actually changed, not merely visited. */
     const editedPages = new Set(
       [...corrected.entries()]
+        .filter(([pageIndex]) => !redo.includes(pageIndex) && !skip.includes(pageIndex))
         .filter(([, c]) => Object.entries(c).some(([id, text]) => text !== pristine.get(id)))
         .map(([pageIndex]) => pageIndex)
     )
@@ -1326,12 +1360,21 @@ export function App(): JSX.Element {
             continue
           }
           // The block the anchor is in, among those that came off this page.
+          // Spliced through `spliceRunInto`, which moves the block's italics
+          // along past the inserted words — restoring a clause used to discard
+          // the emphasis of the paragraph it landed in, silently.
           const host = blocks.find(
-            (b) => b.sourcePages.includes(pageIndex) && spliceRun(b.text, run) !== null
+            (b) => b.sourcePages.includes(pageIndex) && spliceRunInto(b.text, b.emphasis, run)
           )
-          const fixed = host ? spliceRun(host.text, run) : null
+          const fixed = host ? spliceRunInto(host.text, host.emphasis, run) : null
           if (host && fixed) {
-            nextEdits = withEdit(nextEdits, { kind: 'text', blockId: host.id, text: fixed })
+            nextEdits = withEdit(nextEdits, {
+              kind: 'text',
+              blockId: host.id,
+              // Written back with the tags on, because that is how a `text`
+              // edit carries emphasis — `applyEdits` reads them straight back.
+              text: withMarkup(fixed.text, fixed.emphasis)
+            })
           } else {
             // Nowhere to put it: the anchor phrase is in no block off this leaf.
             // Reported rather than dropped — the same rule as a footnote with no
@@ -2154,6 +2197,7 @@ export function App(): JSX.Element {
                 value={currentAnswers[q.id]}
                 onChange={(v: AnswerValue) => setAnswers((a) => ({ ...a, [q.id]: v }))}
                 resolveEvidence={resolveEvidence}
+                enlargeEvidence={enlargeEvidence}
               />
             ))}
             {designSummary ? (

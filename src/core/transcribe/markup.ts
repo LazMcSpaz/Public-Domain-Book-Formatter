@@ -121,6 +121,50 @@ export function parseInlineMarkup(raw: string): InlineMarkup {
 }
 
 /**
+ * Put the tags back — the inverse of `parseInlineMarkup`.
+ *
+ * Emphasis is real content: the original *prints* those words in italic, and a
+ * reprint that loses them is a worse book. But it is invisible everywhere the
+ * text is shown for correction, because a textarea has no italics — so someone
+ * proofreading cannot tell whether it was captured, cannot add it where the
+ * pass missed it, and cannot see that retyping the paragraph discarded it.
+ *
+ * Showing the tags fixes all three at once, and needs no new field and no
+ * re-mapping of indices when the wording changes: the editor shows `<i>…</i>`,
+ * the user edits it as text, and `normalizeMarkup` reads it straight back on
+ * the way in. This is the same trick a table already uses — its `text` is a
+ * derived flattened view with `|` between the cells, reconciled by
+ * `normalizeTable` — applied to the same editor for the same reason.
+ *
+ * Contiguous emphasised words share one pair of tags, so a phrase reads as a
+ * phrase rather than as five tagged words.
+ */
+export function withMarkup(text: string, emphasis: readonly number[] | undefined): string {
+  if (!emphasis?.length) return text
+  const italic = new Set(emphasis)
+
+  let out = ''
+  let index = 0
+  let inside = false
+  for (const part of text.split(/(\s+)/u)) {
+    if (part.length === 0) continue
+    if (/^\s+$/u.test(part)) {
+      out += part
+      continue
+    }
+    const wanted = italic.has(index)
+    // Opening and closing between the words rather than around each one, so a
+    // run comes out as `<i>three whole words</i>`.
+    if (wanted && !inside) out += '<i>'
+    if (!wanted && inside) out = `${out.replace(/(\s*)$/u, '</i>$1')}`
+    inside = wanted
+    out += part
+    index += 1
+  }
+  return inside ? `${out}</i>` : out
+}
+
+/**
  * Shift emphasis indices by a number of words.
  *
  * Needed when assembly joins two blocks across a page seam: the second half's

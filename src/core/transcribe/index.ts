@@ -19,8 +19,21 @@ export {
   type PageFurniture,
   type ExtractedMetadata
 } from './schema'
-export { parseInlineMarkup, shiftEmphasis, wordCount, type InlineMarkup } from './markup'
-export { findDroppedRuns, spliceRun, type DroppedRun, type RecoverOptions } from './recover'
+export {
+  parseInlineMarkup,
+  withMarkup,
+  shiftEmphasis,
+  wordCount,
+  type InlineMarkup
+} from './markup'
+export {
+  findDroppedRuns,
+  spliceRun,
+  spliceRunInto,
+  type DroppedRun,
+  type SplicedBlock,
+  type RecoverOptions
+} from './recover'
 export {
   buildSystemPrompt,
   buildPagePrompt,
