@@ -2125,8 +2125,13 @@ await page.route('https://api.anthropic.com/v1/messages', async (route) => {
             // anything else keeps the leaf and has to show its verdict on the
             // row. Returning only `not-there` made the whole gate empty and the
             // row assertions unfalsifiable.
-            spots: ids.map((id, n) =>
-              n % 2 === 0
+            // Varied by the *leaf*, not by position within the request. One
+            // request carries one leaf's spots and this fixture's leaves have a
+            // single spot each, so alternating on the index made every spot the
+            // first one — every verdict `not-there`, every leaf settled, and an
+            // empty gate that proved nothing.
+            spots: ids.map((id) =>
+              Number(/p(\d+)d/.exec(id)?.[1] ?? 0) % 2 === 0
                 ? {
                     id,
                     verdict: 'not-there',
