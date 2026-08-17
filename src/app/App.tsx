@@ -11,6 +11,7 @@ import {
   appliedLook,
   defaultAnswers,
   pruneStaleAnswers,
+  messagesByPage,
   initialState,
   missingRequired,
   type AnswerValue,
@@ -1471,10 +1472,21 @@ export function App(): JSX.Element {
       transcriptions: readonly PageTranscription[],
       wordsByPage: Map<number, ReconResult['words']>,
       client: { apiKey: string; modelId: string },
-      file: File
+      file: File,
+      /**
+       * The leaves the gate is asking about, when the caller knows them.
+       *
+       * Without it this walked every leaf carrying any gap, which is a far
+       * wider set than the gate shows — 308 against 132 on a real book. Each
+       * leaf is an image and images are nearly all of the cost, so that was
+       * more than double the bill for spots nobody would ever be asked about.
+       * Absent, the old behaviour stands: a fresh run has no gate yet.
+       */
+      onlyPages?: ReadonlySet<number>
     ): Promise<Record<string, AdjudicatedSpot>> => {
       const leaves: FlaggedLeaf[] = []
       for (const page of transcriptions) {
+        if (onlyPages && !onlyPages.has(page.pageIndex)) continue
         // Same rule as the gate: a leaf whose text was never going to reach the
         // book has nothing to be missing from it, so it is not worth paying to
         // look at again.
@@ -1956,7 +1968,13 @@ export function App(): JSX.Element {
   const unchecked = useMemo(() => {
     let spots = 0
     const leaves = new Set<number>()
+    // Only the leaves the gate actually asks about. Every leaf carrying any gap
+    // is a much larger set — on a real book, 308 against the 132 on screen —
+    // and the pass is priced per leaf-image, so counting the wider set quotes
+    // and spends more than double for spots the user is never shown.
+    const flagged = messagesByPage(liveState)
     for (const [pageIndex, runs] of Object.entries(state.droppedRuns)) {
+      if (!flagged.has(Number(pageIndex))) continue
       runs.forEach((_, n) => {
         if (state.adjudicated[`p${pageIndex}d${n}`]) return
         spots += 1
@@ -1964,7 +1982,7 @@ export function App(): JSX.Element {
       })
     }
     return { spots, leaves: leaves.size }
-  }, [state.droppedRuns, state.adjudicated])
+  }, [state.droppedRuns, state.adjudicated, liveState])
 
   /**
    * Have the model read the flagged spots, from the gate, on demand.
@@ -1997,7 +2015,8 @@ export function App(): JSX.Element {
       run.transcriptions,
       wordsByPage,
       { apiKey: key, modelId: loadPrefs().modelId },
-      file
+      file,
+      new Set(messagesByPage(liveState).keys())
     )
     if (Object.keys(checked).length === 0) return
 
@@ -2016,7 +2035,7 @@ export function App(): JSX.Element {
       true,
       merged
     )
-  }, [state.adjudicated, state.answers, edits, secondRead, persistRun])
+  }, [state.adjudicated, state.answers, edits, secondRead, persistRun, liveState])
 
   const finishUncertainties = useCallback(async () => {
     const run = transcriptionRef.current

@@ -759,6 +759,38 @@ const transcribe: Step = {
 }
 
 /**
+ * What each flagged leaf is flagged *for*, keyed by leaf.
+ *
+ * The single statement of "which leaves does this gate ask about". Exported
+ * because the second reading has to send exactly this set and no more: it is
+ * priced per leaf-image, so a pass that walked every leaf carrying any gap
+ * would charge for leaves the gate never shows — on a real book that was 308
+ * leaves against the 132 on screen, more than double, for spots the user would
+ * never be asked about.
+ *
+ * A `low` finding is deliberately not enough to flag a leaf. Weak single-word
+ * gaps are the commonest thing OCR imagines, and a gate that stopped on every
+ * one of them would be unusable; they are still *shown*, under a leaf that
+ * something else already flagged.
+ */
+export function messagesByPage(s: WizardState): Map<number, string[]> {
+  const byPage = new Map<number, string[]>()
+  for (const f of s.findings) {
+    if (f.severity === 'low') continue
+    const list = byPage.get(f.pageIndex) ?? []
+    list.push(f.message)
+    byPage.set(f.pageIndex, list)
+  }
+  for (const u of s.uncertainties) {
+    const list = byPage.get(u.pageIndex) ?? []
+    const alts = u.alternatives.length ? ` (could be: ${u.alternatives.join(', ')})` : ''
+    list.push(`Couldn't read “${u.text}” — ${u.reason}${alts}`)
+    byPage.set(u.pageIndex, list)
+  }
+  return byPage
+}
+
+/**
  * Gate 2. Shows the places worth a human's eye — and only those. The list comes
  * from deterministic cross-checks against OCR plus the model's own reported
  * uncertainties; a page that passed both isn't shown, because reviewing clean
@@ -787,19 +819,7 @@ const gateUncertainties: Step = {
     }
 
     // One question per flagged page, each carrying that page's image.
-    const byPage = new Map<number, string[]>()
-    for (const f of s.findings) {
-      if (f.severity === 'low') continue
-      const list = byPage.get(f.pageIndex) ?? []
-      list.push(f.message)
-      byPage.set(f.pageIndex, list)
-    }
-    for (const u of s.uncertainties) {
-      const list = byPage.get(u.pageIndex) ?? []
-      const alts = u.alternatives.length ? ` (could be: ${u.alternatives.join(', ')})` : ''
-      list.push(`Couldn't read “${u.text}” — ${u.reason}${alts}`)
-      byPage.set(u.pageIndex, list)
-    }
+    const byPage = messagesByPage(s)
 
     // The passages that came off each leaf, so the gate can offer them for
     // correction rather than only for inspection. Grouped by the leaf a block

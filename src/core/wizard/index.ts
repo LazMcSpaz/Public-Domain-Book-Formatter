@@ -28,6 +28,7 @@ export {
 export {
   STEPS,
   FRESH_LOOK,
+  messagesByPage,
   stepById,
   activeStep,
   appliedLook,

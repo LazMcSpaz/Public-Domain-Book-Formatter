@@ -7,7 +7,7 @@ import {
   type OcrWordLike,
   type PageTranscription
 } from '@core/transcribe'
-import { pruneStaleAnswers } from '@core/wizard'
+import { initialState, messagesByPage, pruneStaleAnswers, type WizardState } from '@core/wizard'
 import { spotsFromStored } from '@core/adjudicate'
 import { unionBox } from '../src/platform/browser/word-crops'
 
@@ -398,5 +398,66 @@ describe('verdicts survive being stored with the run', () => {
       p2d0: { verdict: 'different', reading: 'quintessence', note: 'Neither reading has it.' }
     })
     expect(Object.keys(back)).toEqual(['p2d0'])
+  })
+})
+
+/**
+ * The offer must count the leaves the gate shows, and no others.
+ *
+ * The screen said "2253 spot(s) across 308 leaf(s)" directly above "132
+ * checked". Both numbers were honestly computed and they were counting
+ * different things: the gate asks about leaves that produced a *finding*, and
+ * the offer was counting every leaf carrying any gap at all — including the
+ * weak single-word ones that never rose to a finding.
+ *
+ * That is not a labelling slip. The pass is priced per leaf-image, so the wider
+ * set would have sent 308 leaves and billed for 176 the user is never shown.
+ */
+describe('which leaves the gate is asking about', () => {
+  const state = (over: Partial<WizardState> = {}): WizardState => ({
+    ...initialState(),
+    ...over
+  })
+
+  const finding = (pageIndex: number, severity: 'high' | 'medium' | 'low') => ({
+    code: 'confident-word-missing' as const,
+    severity,
+    pageIndex,
+    message: 'words absent'
+  })
+
+  it('flags a leaf whose finding is worth stopping for', () => {
+    const flagged = messagesByPage(state({ findings: [finding(3, 'high')] }))
+    expect([...flagged.keys()]).toEqual([3])
+  })
+
+  it('does not flag a leaf on a low finding alone', () => {
+    // Weak single-word gaps are the commonest thing OCR imagines. A gate that
+    // stopped on every one would be unusable — they are still shown, under a
+    // leaf something else already flagged.
+    expect(messagesByPage(state({ findings: [finding(4, 'low')] })).size).toBe(0)
+  })
+
+  it('flags a leaf the model itself could not read', () => {
+    const flagged = messagesByPage(
+      state({
+        uncertainties: [{ pageIndex: 9, text: 'chirurgeon', alternatives: [], reason: 'blurred' }]
+      })
+    )
+    expect([...flagged.keys()]).toEqual([9])
+  })
+
+  it('gathers every reason for one leaf under it', () => {
+    const flagged = messagesByPage(
+      state({
+        findings: [finding(2, 'high'), finding(2, 'medium')],
+        uncertainties: [{ pageIndex: 2, text: 'x', alternatives: ['y'], reason: 'blurred' }]
+      })
+    )
+    expect(flagged.get(2)).toHaveLength(3)
+  })
+
+  it('is empty for a book nothing flagged, so nothing is offered or spent', () => {
+    expect(messagesByPage(state()).size).toBe(0)
   })
 })
