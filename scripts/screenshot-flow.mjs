@@ -2193,13 +2193,22 @@ await page.locator('button.primary', { hasText: 'Check again' }).click()
 // run being saved, so waiting for a question to appear is not waiting for the
 // work to finish. Wait for every running stage to clear first, or the store is
 // read before anything has been written to it.
-await page
-  .locator('.progress')
-  .last()
-  .waitFor({ state: 'detached', timeout: 180000 })
-  .catch(() => {})
+// Wait for the thing being asserted, not for a picture of it. Waiting on the
+// progress panel to detach races its own appearance: called in the instant
+// before it renders, "no progress element" is already true and the store gets
+// read before anything has been written to it. That passed once and failed the
+// next run, which is what a race looks like.
+await page.waitForFunction(
+  async ([repo, key]) => {
+    const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+    const run = await runStore.loadRun(key)
+    return (run?.transcriptions.length ?? 0) > 0
+  },
+  [REPO, savedKey],
+  { timeout: 240000, polling: 1000 }
+)
 await page.waitForSelector('.q', { timeout: 120000 })
-await page.waitForTimeout(800)
+await page.waitForTimeout(500)
 // Read off the step heading rather than the rail. The rail is a horizontal
 // strip on a narrow viewport and its later labels scroll out of the box, which
 // makes `innerText` on them a question about layout rather than about state.
