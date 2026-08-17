@@ -378,7 +378,7 @@ in `screenshots/`. Don't ship UI blind.
   and intimidating on a laptop. The same questions are now shown a group to a
   screen, with a bar that fills as leaves are finished and the place kept in
   `localStorage`, so closing the tab and coming back lands on the leaf you left
-  rather than on the first one. What a group *is* comes from the step's own
+  rather than on the first one. What a group _is_ comes from the step's own
   `group` field (`groupQuestions`), never from a renderer parsing `page-9-fix`
   out of an id — a contract nobody wrote down is a contract nothing tests. The
   pager is **controlled**, holding no copy of the place: a local copy seeded
