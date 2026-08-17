@@ -960,18 +960,33 @@ const proofScan = await page.locator('.proof-scan img').count()
 // invisible everywhere it could be corrected, and silently dropped by anyone
 // who retyped the paragraph.
 let italicsShown = ''
+/** Every leaf the sheet walked, so a miss says which leaves it actually saw. */
+const leavesWalked = []
 for (let i = 0; i < 40; i++) {
+  // The leaf has to have rendered before its boxes are read, or an empty
+  // textarea reads as a leaf with no italics on it.
+  await page
+    .locator('.proof-block textarea')
+    .first()
+    .waitFor({ timeout: 4000 })
+    .catch(() => {})
+  const where = await page
+    .locator('.proof-where')
+    .innerText()
+    .catch(() => '?')
   const boxes = await page.locator('.proof-block textarea').all()
   const texts = await Promise.all(boxes.map((b) => b.inputValue()))
+  leavesWalked.push(`${where.split('\n')[0]}:${texts.length}`)
   const found = texts.find((t) => t.includes('<i>'))
   if (found) {
     italicsShown = found
     await shot('05c2a2-proof-italics-visible')
     break
   }
-  if (!(await page.locator('.proof-bar button', { hasText: 'Next ›' }).isEnabled())) break
-  await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
-  await page.waitForTimeout(150)
+  const next = page.locator('.proof-bar button', { hasText: 'Next ›' })
+  if (!(await next.isEnabled())) break
+  await next.click()
+  await page.waitForTimeout(400)
 }
 const italicsHinted = italicsShown
   ? await page.locator('.proof-hint').filter({ hasText: 'italic' }).count()
@@ -2495,6 +2510,7 @@ console.log(
   `  italics are visible where they can be edited: ${italicsShown || 'NOT SHOWN'}` +
     ` (explained: ${italicsHinted > 0})`
 )
+if (!italicsShown) console.log(`  leaves walked: ${leavesWalked.join(' | ')}`)
 if (!italicsShown) throw new Error('The proof editor shows no italics at all')
 if (!italicsHinted) throw new Error('The italic tags appear with nothing explaining them')
 if (!proofBig) throw new Error('The proof leaf does not open full size')
