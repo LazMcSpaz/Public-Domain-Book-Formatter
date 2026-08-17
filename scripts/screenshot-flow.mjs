@@ -1143,10 +1143,15 @@ await shot('05c2e-image-editing')
 // The title page is a source of metadata rather than a leaf to proof, so the
 // first leaf here is page two of the scan and the seeded table on page four is
 // two steps along.
-await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
-await page.waitForTimeout(400)
-await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
-await page.waitForTimeout(400)
+// Walk to the leaf carrying the seeded table, for the same reason as below:
+// its position in the sheet depends on decisions made at the gate before it.
+for (let i = 0; i < 40; i++) {
+  if ((await page.locator('.proof-block textarea.proof-table').count()) > 0) break
+  const next = page.locator('.proof-bar button', { hasText: 'Next ›' })
+  if (!(await next.isEnabled())) break
+  await next.click()
+  await page.waitForTimeout(400)
+}
 
 // This leaf carries the seeded table. A table is edited as its rows rather
 // than as prose, so this is also where the columns can be seen going in.
@@ -1160,10 +1165,18 @@ const tableRetyped = await page
   .catch(() => '')
 await shot('05c2f-proof-table')
 
-await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
-await page.waitForTimeout(400)
-await page.locator('.proof-bar button', { hasText: 'Next ›' }).click()
-await page.waitForTimeout(1500)
+// Walk to the leaf that actually carries a picture, rather than counting a
+// fixed number of steps to where one used to be. Counting is what broke this
+// twice: which leaves reach the proof sheet depends on what the gate before it
+// decided, and that has changed twice in a day.
+for (let i = 0; i < 40; i++) {
+  if ((await page.locator('.proof-picture .editor-canvas').count()) > 0) break
+  const next = page.locator('.proof-bar button', { hasText: 'Next ›' })
+  if (!(await next.isEnabled())) break
+  await next.click()
+  await page.waitForTimeout(400)
+}
+await page.waitForTimeout(1100)
 
 const cutEditor = await page.locator('.proof-picture .editor').count()
 const cutHintBefore = await page
