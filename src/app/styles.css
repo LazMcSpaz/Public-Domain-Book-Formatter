@@ -1861,3 +1861,15 @@ mark.claim {
     grid-column: 1;
   }
 }
+
+/* An aside's buttons, beside the step's own action row rather than part of it.
+   Same look, different meaning: `.actions` advances the step and there is one
+   per screen; this offers something extra without competing to be the way
+   forward. */
+.offer-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}

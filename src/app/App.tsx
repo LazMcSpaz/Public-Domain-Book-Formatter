@@ -3009,7 +3009,14 @@ export function App(): JSX.Element {
               the words it read, so you can check it against the picture rather than take its word.
               It never changes anything on its own.
             </div>
-            <div className="actions">
+            {/* Deliberately not an `.actions` row. In this app that class means
+                "the buttons that advance the step", and there is exactly one
+                such row on a screen — the gate's own continue. This is an
+                aside beside it, and putting it in an `.actions` row made it
+                the first primary button on the page, which is a real
+                ambiguity for anyone reading the screen and not only for the
+                harness that clicked the wrong one. */}
+            <div className="offer-actions">
               <button
                 type="button"
                 className="primary"
