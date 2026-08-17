@@ -500,6 +500,43 @@ in `screenshots/`. Don't ship UI blind.
   question withdraws itself and the sequential door is what runs. The whole path
   is exercised end to end against a stubbed API in `screenshot-flow`, including
   the reload that proves the ticket outlives the tab.
+- **Also done**: **the gate points at the missing words instead of counting
+  them.** A real book showed "18 words OCR read clearly are absent" above a
+  thumbnail of a dense leaf and one four-word offer — leaving the other fourteen
+  to be found by eye, in two panes. Everything needed to point at them was
+  already in hand and thrown away: OCR boxes every word, the alignment already
+  knows which words are missing and what sits either side of each gap, and Gate
+  1's term grid already cuts a word out of a scan. Each disagreement is now a row
+  carrying the word as it appears on the paper, its place in the transcribed
+  text, and a verdict. Runs under four words are kept and marked `weak` rather
+  than discarded, which is what produced the eighteen-against-one. Nothing is
+  pre-selected: OCR is the rougher of the two readers, so a default that put
+  every gap back would copy its misreadings over a transcription bought from a
+  better one. Three false-positive classes went with it, all the same shape — a
+  leaf's text compared against a body it was never going to reach.
+  `checkableText` counts the running head and folio as transcribed (they are, in
+  `furniture`); `dispositionFor` exempts leaves that are mined for metadata or
+  discarded, which is what had the title page reporting the whole imprint as
+  missing and offering to splice it into chapter one.
+- **Also done**: **a second reading of the flagged spots** (`src/core/adjudicate`),
+  before any of them reach a person. Most of those decisions do not need a
+  human — they need someone to look at the pixels again, which is what the first
+  pass did not do for these spots in particular: it read the whole leaf once, at
+  speed, with a book to get through. One request per flagged _leaf_, carrying
+  its image and every spot on it, because the image is nearly all of the cost;
+  clean leaves are never sent, so a book the checks were happy with costs
+  nothing. Two rules shape every line of it. **Never repair text without
+  pixels**: the image goes with every request and the schema has no field for
+  what the text ought to say, only for what the page _does_ say. **Never gate a
+  check on a model's opinion of its own output** (SPEC §4): the prompt never
+  says "you transcribed this" and never asks whether the earlier reading was
+  right — that is self-assessment and carries no weight — it asks it to read a
+  place on an image. The answer reaches the gate as a recommendation _carrying
+  the reading it rests on_, so it can be checked against the crop beside it, and
+  it removes nothing. Its worst outcome is the behaviour it replaces: a leaf it
+  cannot read leaves its spots unadjudicated, exactly as they arrived before.
+  Wired into both doors, because putting it only in the live runner left anyone
+  who took the batch path without it.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and
