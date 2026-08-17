@@ -1386,11 +1386,28 @@ const carryOn = await page.locator('.opt').filter({ hasText: 'Carry on from page
 // Carrying on spends money, so the cost questions must still be asked — the
 // finished-run path returns before them and this one must not.
 const stillAsksModel = await page.locator('.q').filter({ hasText: 'read the pages' }).count()
+
+// A question that asks for a sentence has to give room for one. `multiline` was
+// declared on this question and on the introduction brief, and rendered as a
+// one-line box for both, which answers "tell me about this book" with "keep it
+// short" — and the help text right above it says a sentence measurably improves
+// how unusual words are read.
+const contextQ = page.locator('.q').filter({ hasText: 'Anything I should know about this book' })
+const contextBox = contextQ.locator('textarea')
+const contextIsRoomy = (await contextBox.count()) === 1
+if (contextIsRoomy) {
+  await contextBox.fill('A 1662 alchemical treatise.\nHeavy use of Latin terms.')
+}
+const contextKeptLines = contextIsRoomy ? (await contextBox.inputValue()).includes('\n') : false
+
 await shot('08b2-partial-run-offered')
 if (partialPrompt !== 1) throw new Error('A half-read book was not offered as one')
 if (carryOn !== 1) throw new Error('No option to carry on from where it stopped')
 if (stillAsksModel !== 1) throw new Error('Resuming skipped the cost approval')
 console.log('  → offered "Carry on from page 5", and still asked what it would cost')
+if (!contextIsRoomy) throw new Error('The book-context question is not a multi-line box')
+if (!contextKeptLines) throw new Error('The book-context box will not hold a line break')
+console.log('  → "anything I should know" is a box you can write a paragraph in')
 if (storageAsked !== 1) throw new Error('The storage question was not asked')
 if (!/free for the app/.test(storageHelp)) throw new Error('Storage was asked without figures')
 if (!/transcription is saved either way/.test(storageHelp)) {

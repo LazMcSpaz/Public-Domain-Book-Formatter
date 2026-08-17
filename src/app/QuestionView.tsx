@@ -247,7 +247,19 @@ export function QuestionView({ question, value, onChange, resolveEvidence }: Pro
   const body = (): JSX.Element => {
     switch (question.type) {
       case 'text':
-        return (
+        // A question that asks for a sentence has to look like it wants one.
+        // Both of the questions that set this — what the book is about, and
+        // what the introduction should say — are invitations to write, and a
+        // single line that scrolls sideways answers them with "keep it short".
+        return question.multiline ? (
+          <textarea
+            value={(value as string) ?? ''}
+            rows={3}
+            placeholder={question.placeholder}
+            aria-label={question.prompt}
+            onChange={(e) => onChange(e.target.value)}
+          />
+        ) : (
           <input
             type="text"
             value={(value as string) ?? ''}

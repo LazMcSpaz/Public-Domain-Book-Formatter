@@ -310,6 +310,10 @@ describe('transcribe step questions', () => {
       .find((x) => x.id === 'bookContext')
     expect(q).toBeDefined()
     expect(q!.required).toBeFalsy()
+    // Asked for in a box with room to write it. The flag was declared here and
+    // ignored by the renderer, which answered "tell me about this book" with a
+    // single line that scrolls sideways.
+    expect((q as { multiline?: boolean }).multiline).toBe(true)
   })
 
   it('is not enterable until the identity gate is done', () => {
