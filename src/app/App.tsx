@@ -3331,11 +3331,40 @@ export function App(): JSX.Element {
         questions.length === 0 &&
         !isProofing &&
         step.id !== 'intake' ? (
-          <div className="actions">
-            <button type="button" className="primary" onClick={() => fileInput.current?.click()}>
-              {error ? 'Try another file' : 'Choose a book'}
-            </button>
-          </div>
+          state.fileName ? (
+            /* A step with nothing to ask, on a book that is open.
+               
+               This used to render the file picker — the same screen as having
+               no book at all — so a gate that could not build its questions
+               looked exactly like being sent back to the beginning with the
+               whole afternoon's work gone. It is not gone: the transcription
+               and every verdict are in storage, filed against this book. What
+               is missing is whatever this step needed, so say which step, and
+               offer the way on rather than the way back. */
+            <div className="q">
+              <span className="prompt">Nothing to review at “{step.title}”</span>
+              <div className="help">
+                This step has no questions for this book — usually because something it needs was
+                not built. Your transcription and any verdicts are saved against this file and are
+                not affected. You can carry on to the next step, or reopen the book to rebuild what
+                is missing.
+              </div>
+              <div className="actions">
+                <button type="button" className="primary" onClick={() => complete()}>
+                  Carry on
+                </button>
+                <button type="button" className="ghost" onClick={() => fileInput.current?.click()}>
+                  Reopen this book
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="actions">
+              <button type="button" className="primary" onClick={() => fileInput.current?.click()}>
+                {error ? 'Try another file' : 'Choose a book'}
+              </button>
+            </div>
+          )
         ) : null}
       </main>
     </div>
