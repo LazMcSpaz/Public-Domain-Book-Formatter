@@ -10,6 +10,7 @@ import {
   activeStep,
   appliedLook,
   defaultAnswers,
+  pruneStaleAnswers,
   initialState,
   missingRequired,
   type AnswerValue,
@@ -43,6 +44,7 @@ import {
   findDroppedRuns,
   spliceRunInto,
   transcriptionText,
+  checkableText,
   withMarkup,
   verifyBook,
   verifyPage,
@@ -85,6 +87,7 @@ import {
 } from '../platform/browser/run-store'
 import { collectBookBatch, submitBookBatch } from '../platform/browser/batch-run'
 import { canReachBatchApi } from '../platform/browser/batch-reach'
+import { cropWordsFromPage } from '../platform/browser/word-crops'
 import { newSavedProfile, styleQuestions, type SavedStyleProfile } from '@core/style'
 import {
   createBatchTicket,
@@ -392,9 +395,18 @@ export function App(): JSX.Element {
     if (!key || restoredFor.current === step.id) return
     restoredFor.current = step.id
     const saved = loadReviewProgress(key)[step.id]
-    if (saved && Object.keys(saved).length > 0) setAnswers(saved as Answers)
+    if (saved && Object.keys(saved).length > 0) {
+      // Pruned on the way in. A verdict saved against an option this version no
+      // longer offers would otherwise leave the leaf looking undecided, which
+      // on a book already half worked through reads as lost progress.
+      setAnswers(pruneStaleAnswers(questions, saved as Answers))
+    }
     setPlace(loadReviewPlace(key, step.id))
-  }, [step.id])
+    // `questions` is read to prune, but must not be a dependency: it is rebuilt
+    // whenever an answer changes, and re-running this would restore the saved
+    // answers over what the user has just typed. `restoredFor` guards it to
+    // once per step regardless, and the guard is the contract here.
+  }, [step.id, questions])
 
   // The design gate answers questions about the *book*; this is the style they
   // add up to. Built live, because both the one-line summary and the page
@@ -618,6 +630,37 @@ export function App(): JSX.Element {
     if (m) return reconRef.current?.thumbnails.get(Number(m[1]))
     return src
   }, [])
+
+  /**
+   * Cut the named words out of a leaf, for the discrepancy grid.
+   *
+   * The boxes come from the reading already in hand — OCR gave every word one —
+   * so this is a lookup plus one page render, not a second reading of the scan.
+   * Rendered at `RECON_DPI` because that is the space the boxes are in; at any
+   * other scale they point at the wrong pixels.
+   *
+   * The URLs belong to the grid, which revokes them when it moves to the next
+   * leaf. Nothing accumulates across a book.
+   */
+  const cropWords = useCallback(
+    async (pageIndex: number, tokenIds: readonly string[]): Promise<Map<string, string>> => {
+      const file = fileDataRef.current
+      const recon = reconRef.current
+      if (!file || !recon) return new Map()
+      const wanted = new Set(tokenIds)
+      const boxes = recon.words
+        .filter((w) => w.pageIndex === pageIndex && wanted.has(w.id))
+        .map((w) => ({ id: w.id, bbox: w.bbox }))
+      try {
+        return await cropWordsFromPage(file, pageIndex, boxes, { dpi: RECON_DPI })
+      } catch {
+        // Evidence, not load-bearing: the rows still list what is missing and
+        // where it goes, which is more than the count they replaced.
+        return new Map()
+      }
+    },
+    []
+  )
 
   /**
    * The same leaf, rendered big enough to read.
@@ -1122,7 +1165,13 @@ export function App(): JSX.Element {
           transcriptions
             .map((t) => {
               const words = wordsByPage.get(t.pageIndex) ?? []
-              return [t.pageIndex, findDroppedRuns(transcriptionText(t), words)] as const
+              // Weak gaps included: the gate shows every disagreement now, so
+              // discarding the one- and two-word ones here is what produced
+              // "18 words are absent" beside a single four-word offer.
+              return [
+                t.pageIndex,
+                findDroppedRuns(checkableText(t), words, { includeWeak: true })
+              ] as const
             })
             .filter(([, runs]) => runs.length > 0)
         ),
@@ -1755,11 +1804,30 @@ export function App(): JSX.Element {
 
     const redo: number[] = []
     const skip: number[] = []
-    const restore: number[] = []
     const attention: Attention[] = []
     /** Leaves the user retyped here, and what they retyped on each. */
     const corrected = new Map<number, Record<string, string>>()
+    /**
+     * Which individual gaps the user said to put back, per leaf.
+     *
+     * Per gap rather than per leaf, which is the point of the change: a leaf
+     * with eighteen disagreements on it almost never wants all eighteen or none
+     * of them, and the blanket verdict this replaces made the user choose
+     * between those two.
+     */
+    const restoreRuns = new Map<number, Set<number>>()
     for (const [key, value] of Object.entries(currentAnswers)) {
+      const gaps = /^page-(\d+)-gaps$/.exec(key)
+      if (gaps && value && typeof value === 'object' && !Array.isArray(value)) {
+        const pageIndex = Number(gaps[1])
+        const wanted = new Set<number>()
+        for (const [rowId, verdict] of Object.entries(value as Record<string, string>)) {
+          const n = /^p\d+d(\d+)$/.exec(rowId)
+          if (verdict === 'restore' && n) wanted.add(Number(n[1]))
+        }
+        if (wanted.size > 0) restoreRuns.set(pageIndex, wanted)
+        continue
+      }
       const fix = /^page-(\d+)-fix$/.exec(key)
       if (fix && value && typeof value === 'object' && !Array.isArray(value)) {
         corrected.set(Number(fix[1]), value as Record<string, string>)
@@ -1770,7 +1838,6 @@ export function App(): JSX.Element {
       const pageIndex = Number(match[1])
       if (value === 'redo') redo.push(pageIndex)
       if (value === 'skip') skip.push(pageIndex)
-      if (value === 'restore') restore.push(pageIndex)
       if (value === 'later') {
         attention.push({
           pageIndex,
@@ -1819,10 +1886,16 @@ export function App(): JSX.Element {
      * OCR's, not the model's, so they are spliced in where they were taken from
      * and left for the user to read rather than trusted.
      */
-    if (restore.length > 0 && state.document) {
+    if (restoreRuns.size > 0 && state.document) {
       const blocks = applyEdits(state.document, nextEdits).blocks
-      for (const pageIndex of restore) {
-        for (const run of state.droppedRuns[pageIndex] ?? []) {
+      for (const [pageIndex, wanted] of restoreRuns) {
+        const runs = state.droppedRuns[pageIndex] ?? []
+        for (const [n, run] of runs.entries()) {
+          // Only the gaps this user actually chose. The row ids the question
+          // emitted are positional against this same list, which is why the
+          // index is the key rather than the text — two identical missing
+          // words on one leaf are two decisions, not one.
+          if (!wanted.has(n)) continue
           // A leaf the user has just retyped is theirs. Splicing on top of it
           // would most likely duplicate the words they typed in, so the passage
           // is handed back instead of applied — and handed back visibly, since
@@ -2787,6 +2860,7 @@ export function App(): JSX.Element {
               onChange={(id, v) => setAnswers((a) => ({ ...a, [id]: v }))}
               resolveEvidence={resolveEvidence}
               enlargeEvidence={enlargeEvidence}
+              cropWords={cropWords}
               place={place}
               onPlace={(next) => {
                 setPlace(next)

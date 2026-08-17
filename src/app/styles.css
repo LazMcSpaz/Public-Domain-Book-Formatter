@@ -1729,3 +1729,86 @@ mark.claim {
   color: var(--muted);
   font-family: ui-sans-serif, system-ui;
 }
+
+/* --- located discrepancies (Gate 2) ---------------------------------------
+   A place OCR and the transcription disagree, shown at the pixels it was read
+   from. The row is deliberately wide-first and stacks on a phone: the crop has
+   to stay legible, since it is the whole reason the row exists. */
+.discrepancy-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
+}
+
+.discrepancy {
+  display: grid;
+  grid-template-columns: minmax(9rem, 16rem) 1fr auto;
+  gap: 0.75rem 1rem;
+  align-items: center;
+  padding: 0.7rem 0;
+  border-top: 1px solid var(--line);
+}
+
+/* A one- or two-word gap is as often OCR imagining a word as a real omission,
+   so it is present but visibly quieter than a dropped clause. */
+.discrepancy.weak {
+  opacity: 0.82;
+}
+
+.discrepancy-pixels img {
+  display: block;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #fff;
+  cursor: zoom-in;
+}
+
+.discrepancy-pixels small,
+.discrepancy-pixels .no-crop {
+  display: block;
+  margin-top: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.discrepancy-where {
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.discrepancy-where .ctx {
+  color: var(--muted);
+}
+
+/* The missing words themselves, marked so the eye lands on them first — the
+   row exists to point at exactly this. */
+.discrepancy-where .gap {
+  background: var(--accent-soft);
+  padding: 0 0.2em;
+  border-radius: 2px;
+}
+
+.discrepancy-verdict {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.discrepancy-verdict button {
+  font-size: 0.85rem;
+  padding: 0.35rem 0.7rem;
+}
+
+@media (max-width: 720px) {
+  .discrepancy {
+    grid-template-columns: 1fr;
+  }
+  .discrepancy-verdict {
+    justify-content: flex-start;
+  }
+}

@@ -12,6 +12,7 @@ export {
   normalizeTable,
   normalizeMarkup,
   transcriptionText,
+  checkableText,
   type PageTranscription,
   type TranscribedBlock,
   type BlockKind,
@@ -31,6 +32,7 @@ export {
   spliceRun,
   spliceRunInto,
   type DroppedRun,
+  type RunStrength,
   type SplicedBlock,
   type RecoverOptions
 } from './recover'

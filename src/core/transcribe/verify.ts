@@ -24,7 +24,7 @@
  */
 import type { OcrWordLike } from './types'
 import type { PageTranscription } from './schema'
-import { transcriptionText } from './schema'
+import { checkableText } from './schema'
 
 export type VerificationCode =
   // Per-page, from the OCR cross-check.
@@ -89,7 +89,7 @@ export function verifyPage(
   const missingTolerance = options.missingTolerance ?? 3
 
   const findings: VerificationFinding[] = []
-  const transcribed = words(transcriptionText(page))
+  const transcribed = words(checkableText(page))
   const ocrTokens = ocrWords
     .map((w) => w.text)
     .flatMap((t) => words(t))

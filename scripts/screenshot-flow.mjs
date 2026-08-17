@@ -882,6 +882,40 @@ if ((await gateEditor.count()) > 0) {
   gateEdited = true
   await shot('08c2-uncertainty-gate-corrected')
 }
+// --- the disagreements, located ---------------------------------------------
+// The gate used to say "18 words OCR read clearly are absent" and show a
+// thumbnail of the whole leaf. Finding those eighteen meant reading a page of
+// dense type against a transcription in another pane, by eye. Everything needed
+// to point at them was already in hand — OCR boxes every word — so each one is
+// now a row with the word as it appears on the paper.
+const gapsQ = page
+  .locator('.q')
+  .filter({ has: page.locator('.discrepancy') })
+  .first()
+const gapRows = await gapsQ.locator('.discrepancy').count()
+let gapCrops = 0
+let gapPreselected = -1
+let gapHighlighted = ''
+let gapRestoreStuck = false
+if (gapRows > 0) {
+  // The crops are cut from the scan when the leaf is reached, so give the
+  // render a moment before counting them.
+  await page.waitForTimeout(2500)
+  gapCrops = await gapsQ.locator('.discrepancy-pixels img').count()
+  // Nothing pre-selected: OCR is the rougher reader, and a default that put
+  // every gap back would copy its misreadings over a paid transcription.
+  gapPreselected = await gapsQ.locator('.discrepancy-verdict button.primary').count()
+  gapHighlighted = await gapsQ.locator('.discrepancy-where .gap').first().innerText()
+  // And a verdict has to stick, or the row is decoration.
+  await gapsQ.locator('.discrepancy-verdict button', { hasText: 'Put it back' }).first().click()
+  await page.waitForTimeout(300)
+  gapRestoreStuck =
+    (await gapsQ
+      .locator('.discrepancy-verdict button.primary', { hasText: 'Put it back' })
+      .count()) > 0
+  await shot('08c6-discrepancies-located')
+}
+
 const verdictBefore = await page.evaluate(() =>
   Object.keys(localStorage)
     .filter((k) => k.startsWith('pdbf.review.'))
@@ -2366,6 +2400,10 @@ if (!resumedAt.startsWith('Page 3')) {
 }
 console.log(`  the gate offers: ${verdictOptions.join(' / ')}`)
 console.log(
+  `  disagreements located: ${gapRows} row(s), ${gapCrops} with the pixels, ` +
+    `${gapPreselected} pre-selected`
+)
+console.log(
   `  a fix typed at the gate reaches the book: ${
     gateEdited ? gateFixOnLeaf === GATE_FIX : 'not exercised'
   } (leaf ${fixablePage})`
@@ -2457,6 +2495,13 @@ const finalChecks = [
   ['both printed illustrations were found', foundIllustrations === 2],
   ['every found illustration got a crop', illustrationCrops === foundIllustrations],
   ['a plate is previewed from the real PDF', plateFound],
+  ['every disagreement is listed as its own row', gapRows > 0],
+  // The row exists to point at the word. Without the crop it is the old
+  // "somewhere on this page" with extra steps.
+  ['each row shows the word as it appears on the scan', gapRows === 0 || gapCrops === gapRows],
+  ['the missing words are marked in their context', gapRows === 0 || gapHighlighted.length > 0],
+  ['no gap is filled from OCR unasked', gapPreselected === 0],
+  ['a verdict on a gap sticks', gapRows === 0 || gapRestoreStuck],
   ['the proof sheet has editable text', proofBoxes > 0],
   ['the proof sheet shows the scan', proofScan === 1],
   ['typing on the proof sheet counted as a correction', correctionCounted],

@@ -768,7 +768,6 @@ const gateUncertainties: Step = {
     for (const [pageIndex, messages] of [...byPage.entries()].sort((a, b) => a[0] - b[0])) {
       const read = (s.pageText[pageIndex] ?? '').trim()
       const dropped = s.droppedRuns[pageIndex] ?? []
-      const recoverable = dropped.length > 0
       const rows = blocksByPage.get(pageIndex) ?? []
 
       qs.push({
@@ -779,10 +778,13 @@ const gateUncertainties: Step = {
         // so a narrow screen shows them together and moves on to the next.
         group: `page-${pageIndex}`,
         help: messages.join(' · '),
-        // Putting the text back is the recommended answer when there is text to
-        // put back: it is free, it is the thing the user actually wants, and the
-        // alternative on offer costs money to maybe get the same page again.
-        defaultValue: recoverable ? 'restore' : 'accept',
+        // "Looks fine", always. What used to be recommended here was a blanket
+        // "put the missing text back", covering every gap on the leaf at once —
+        // and OCR is the noisier of the two witnesses, so that quietly copied
+        // its misreadings over a transcription the user paid a better model to
+        // produce. The gaps are now decided one at a time, with their pixels,
+        // in the question below.
+        defaultValue: 'accept',
         // The scan and what was read off it, together. Either alone leaves the
         // user guessing: the thumbnail cannot be proofread and the text cannot
         // be checked against anything.
@@ -793,29 +795,9 @@ const gateUncertainties: Step = {
           // the read-only copy is the one to drop.
           ...(read && rows.length === 0
             ? [{ kind: 'text' as const, text: read, label: 'What was read off it' }]
-            : []),
-          // The dropped passages themselves, so the decision is made on the
-          // words rather than on a count of them.
-          ...dropped.map((run, n) => ({
-            kind: 'text' as const,
-            text: run.text,
-            label:
-              `Missing passage ${n + 1} of ${dropped.length} — OCR ${run.confidence}% sure` +
-              (run.after ? `, goes after “…${run.after}”` : ', at the start of the page')
-          }))
+            : [])
         ],
         options: [
-          ...(recoverable
-            ? [
-                {
-                  value: 'restore',
-                  label: `Put the missing text back`,
-                  description:
-                    `${dropped.length} passage${dropped.length === 1 ? '' : 's'} OCR read and ` +
-                    `the transcription lacks, shown above. Costs nothing.`
-                }
-              ]
-            : []),
           {
             value: 'accept',
             label: 'Looks fine',
@@ -838,6 +820,35 @@ const gateUncertainties: Step = {
           { value: 'skip', label: 'Leave this page out', description: 'Exclude it from the book.' }
         ]
       })
+
+      // Every place the two readings disagree, one row each, with the word as
+      // it appears on the paper. This is the question that answers "18 words
+      // are absent" with eighteen things to look at rather than a number and a
+      // thumbnail of the whole leaf. Same group as the verdict above, so a
+      // narrow screen still shows one leaf at a time.
+      if (dropped.length > 0) {
+        qs.push({
+          id: `page-${pageIndex}-gaps`,
+          type: 'discrepancies',
+          group: `page-${pageIndex}`,
+          pageIndex,
+          prompt: `Where page ${pageIndex + 1} and the scan disagree`,
+          help:
+            'Each of these is a place OCR read something the transcription does not have. ' +
+            'OCR is the rougher reader of the two, so some will be words it imagined and ' +
+            'some will be words the transcription fixed — the picture is there so you can ' +
+            'tell which. Putting one back costs nothing and is undoable at the proof step.',
+          rows: dropped.map((run, n) => ({
+            id: `p${pageIndex}d${n}`,
+            tokenIds: run.tokenIds,
+            text: run.text,
+            confidence: run.confidence,
+            strength: run.strength,
+            after: run.after,
+            before: run.before
+          }))
+        })
+      }
 
       // The text itself, editable, directly under the scan it was read from.
       // Someone who has just been shown a discrepancy and can see what it is
