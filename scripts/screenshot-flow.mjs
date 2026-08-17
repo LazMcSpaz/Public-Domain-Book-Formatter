@@ -2174,8 +2174,15 @@ await page
   .catch(() => {})
 await page.waitForSelector('.q', { timeout: 120000 })
 await page.waitForTimeout(800)
-const afterCollect = await page.locator('.rail li.done').allInnerTexts()
-const transcribeDone = afterCollect.some((t) => /Transcrib/i.test(t))
+// Read off the step heading rather than the rail. The rail is a horizontal
+// strip on a narrow viewport and its later labels scroll out of the box, which
+// makes `innerText` on them a question about layout rather than about state.
+// The heading is the state: reaching the gate *is* being past the paid step.
+const afterCollect = await page
+  .locator('.step-head')
+  .innerText()
+  .catch(() => '')
+const transcribeDone = /uncertain spots/i.test(afterCollect)
 const collected = await page.evaluate(
   async ([repo, key]) => {
     const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
