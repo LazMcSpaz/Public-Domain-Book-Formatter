@@ -791,6 +791,62 @@ export function messagesByPage(s: WizardState): Map<number, string[]> {
 }
 
 /**
+ * Findings that are *about* the words OCR read and the transcription lacks.
+ *
+ * These are the ones a second reading of the pixels can answer outright. The
+ * others cannot be: an orphan footnote, a page of invented text, a leaf that
+ * came back empty — none of those are questions about a gap in the middle of a
+ * paragraph, and settling every gap on the leaf leaves them exactly as
+ * unanswered as they were.
+ */
+const DROPPED_TEXT_CODES = new Set(['confident-word-missing', 'text-dropped'])
+
+/**
+ * Leaves the second reading has answered outright, so nobody need open them.
+ *
+ * The point of paying for that pass. Attaching a verdict to each spot and still
+ * walking the user through all hundred and thirty leaves is the pass doing half
+ * its job — the half that costs money and saves no time. A leaf is settled when
+ * there is genuinely nothing left to decide on it:
+ *
+ *   - every reason it was flagged is a dropped-text finding, and
+ *   - it carries at least one spot, and
+ *   - every one of those spots came back `not-there` — OCR imagined the words,
+ *     and the transcription was right as it stood.
+ *
+ * Only `not-there`. A `missing` verdict says text really is absent, and putting
+ * words *into* a book is the consequential direction — that stays a human's
+ * call however good the reading behind it. `different` and `unsure` are the
+ * pass saying so itself.
+ *
+ * Nothing is hidden silently: the gate says how many leaves this cleared, for
+ * the same reason a note that cannot be placed is reported rather than dropped.
+ */
+export function settledLeaves(s: WizardState): Set<number> {
+  const settled = new Set<number>()
+  const flagged = messagesByPage(s)
+  const uncertain = new Set(s.uncertainties.map((u) => u.pageIndex))
+
+  for (const pageIndex of flagged.keys()) {
+    // The model said it could not read something here. That is a reason to
+    // look that no cross-check raised and no spot verdict can retire.
+    if (uncertain.has(pageIndex)) continue
+
+    const reasons = s.findings.filter((f) => f.pageIndex === pageIndex && f.severity !== 'low')
+    if (reasons.length === 0) continue
+    if (!reasons.every((f) => DROPPED_TEXT_CODES.has(f.code))) continue
+
+    const spots = s.droppedRuns[pageIndex] ?? []
+    if (spots.length === 0) continue
+    const allDismissed = spots.every(
+      (_, n) => s.adjudicated[`p${pageIndex}d${n}`]?.verdict === 'not-there'
+    )
+    if (allDismissed) settled.add(pageIndex)
+  }
+  return settled
+}
+
+/**
  * Gate 2. Shows the places worth a human's eye — and only those. The list comes
  * from deterministic cross-checks against OCR plus the model's own reported
  * uncertainties; a page that passed both isn't shown, because reviewing clean
@@ -821,6 +877,13 @@ const gateUncertainties: Step = {
     // One question per flagged page, each carrying that page's image.
     const byPage = messagesByPage(s)
 
+    // Leaves the second reading answered outright are taken out of the queue.
+    // Leaving them in is the pass doing the expensive half of its job and none
+    // of the useful half: a hundred and thirty leaves to walk, each carrying an
+    // opinion that nothing acted on.
+    const settled = settledLeaves(s)
+    for (const pageIndex of settled) byPage.delete(pageIndex)
+
     // The passages that came off each leaf, so the gate can offer them for
     // correction rather than only for inspection. Grouped by the leaf a block
     // *began* on, the same rule the proof sheet uses: a paragraph joined across
@@ -841,6 +904,24 @@ const gateUncertainties: Step = {
         alsoFromPages: rest
       })
       blocksByPage.set(first, list)
+    }
+
+    // Said, never silent. Taking leaves out of the review is the app deciding
+    // something on the user's behalf, and the rule everywhere else here is that
+    // it may do that only out loud — the same reason a note that cannot be
+    // placed is reported rather than dropped.
+    if (settled.size > 0) {
+      qs.push({
+        id: 'settledByCheck',
+        type: 'confirm',
+        prompt: `${settled.size} leaf(s) were settled by the second reading`,
+        help:
+          'On each of these, every disagreement came back as something OCR imagined rather ' +
+          'than words the page actually has — so the transcription was right as it stood and ' +
+          'there is nothing to decide. They are out of the list below. Anything the reading ' +
+          'judged missing, different, or could not settle is still here for you.',
+        defaultValue: true
+      })
     }
 
     for (const [pageIndex, messages] of [...byPage.entries()].sort((a, b) => a[0] - b[0])) {

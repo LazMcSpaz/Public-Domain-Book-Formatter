@@ -7,7 +7,14 @@ import {
   type OcrWordLike,
   type PageTranscription
 } from '@core/transcribe'
-import { initialState, messagesByPage, pruneStaleAnswers, type WizardState } from '@core/wizard'
+import {
+  initialState,
+  messagesByPage,
+  pruneStaleAnswers,
+  settledLeaves,
+  stepById,
+  type WizardState
+} from '@core/wizard'
 import { spotsFromStored } from '@core/adjudicate'
 import { unionBox } from '../src/platform/browser/word-crops'
 
@@ -459,5 +466,117 @@ describe('which leaves the gate is asking about', () => {
 
   it('is empty for a book nothing flagged, so nothing is offered or spent', () => {
     expect(messagesByPage(state()).size).toBe(0)
+  })
+})
+
+/**
+ * The second reading has to *shorten the queue*, not decorate it.
+ *
+ * As built, it attached a verdict to every spot and left all 132 flagged
+ * leaves in the review — so a book cost real money to check and then asked for
+ * exactly as many decisions as before. That is the expensive half of the job
+ * without the useful half.
+ *
+ * A leaf leaves the queue only when there is genuinely nothing left to decide
+ * on it, and the gate says how many went.
+ */
+describe('leaves the second reading answers outright', () => {
+  const dismissed = { verdict: 'not-there' as const, reading: '', note: 'imagined' }
+
+  const at = (over: Partial<WizardState> = {}): WizardState => ({
+    ...initialState(),
+    findings: [
+      { code: 'confident-word-missing', severity: 'medium', pageIndex: 7, message: '3 words' }
+    ],
+    droppedRuns: {
+      7: [
+        {
+          words: ['a'],
+          text: 'a',
+          tokenIds: [],
+          strength: 'weak',
+          confidence: 90,
+          after: '',
+          before: ''
+        },
+        {
+          words: ['b'],
+          text: 'b',
+          tokenIds: [],
+          strength: 'weak',
+          confidence: 90,
+          after: '',
+          before: ''
+        }
+      ]
+    },
+    adjudicated: { p7d0: { id: 'p7d0', ...dismissed }, p7d1: { id: 'p7d1', ...dismissed } },
+    ...over
+  })
+
+  it('drops a leaf whose every spot was OCR imagining things', () => {
+    expect([...settledLeaves(at())]).toEqual([7])
+  })
+
+  it('keeps a leaf with one spot still unjudged', () => {
+    const s = at({ adjudicated: { p7d0: { id: 'p7d0', ...dismissed } } })
+    expect(settledLeaves(s).size).toBe(0)
+  })
+
+  it('keeps a leaf where the words really are missing', () => {
+    // Putting words *into* a book is the consequential direction, and stays a
+    // human's call however good the reading behind it.
+    const s = at({
+      adjudicated: {
+        p7d0: { id: 'p7d0', ...dismissed },
+        p7d1: { id: 'p7d1', verdict: 'missing', reading: 'the fixed salt', note: 'clear' }
+      }
+    })
+    expect(settledLeaves(s).size).toBe(0)
+  })
+
+  it('keeps a leaf the reading could not settle', () => {
+    const s = at({
+      adjudicated: {
+        p7d0: { id: 'p7d0', ...dismissed },
+        p7d1: { id: 'p7d1', verdict: 'unsure', reading: '', note: 'too faint' }
+      }
+    })
+    expect(settledLeaves(s).size).toBe(0)
+  })
+
+  it('keeps a leaf flagged for something spots cannot answer', () => {
+    // An empty page — the cover — is not a question about a gap mid-paragraph,
+    // so settling every gap on it leaves the real reason untouched.
+    const s = at({
+      findings: [
+        { code: 'confident-word-missing', severity: 'medium', pageIndex: 7, message: '3 words' },
+        { code: 'empty-page', severity: 'high', pageIndex: 7, message: 'nothing transcribed' }
+      ]
+    })
+    expect(settledLeaves(s).size).toBe(0)
+  })
+
+  it('keeps a leaf the model itself said it could not read', () => {
+    const s = at({
+      uncertainties: [{ pageIndex: 7, text: 'chirurgeon', alternatives: [], reason: 'blurred' }]
+    })
+    expect(settledLeaves(s).size).toBe(0)
+  })
+
+  it('settles nothing before the reading has run', () => {
+    expect(settledLeaves(at({ adjudicated: {} })).size).toBe(0)
+  })
+
+  it('takes the settled leaves out of the gate, and says how many', () => {
+    const ready: WizardState = {
+      ...at(),
+      pageText: { 7: 'some text' },
+      completed: ['intake', 'recon', 'gate-identity', 'transcribe']
+    }
+    const qs = stepById('gate-uncertainties').questions(ready)
+    expect(qs.some((q) => q.id === 'page-7')).toBe(false)
+    const said = qs.find((q) => q.id === 'settledByCheck')
+    expect(said?.prompt).toContain('1 leaf(s) were settled')
   })
 })
