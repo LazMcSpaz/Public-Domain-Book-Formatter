@@ -2298,7 +2298,7 @@ const checkedRows = await page.locator('.discrepancy-checked').count()
 // expensive half of the job with none of the useful half, which is exactly
 // what it did before — and nothing here would have noticed.
 const settledSaid = await page
-  .locator('.q .prompt')
+  .locator('.resume-note')
   .filter({ hasText: 'settled by the second reading' })
   .count()
 const leavesAfterCheck = await page

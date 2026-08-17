@@ -12,6 +12,7 @@ import {
   defaultAnswers,
   pruneStaleAnswers,
   messagesByPage,
+  settledLeaves,
   initialState,
   missingRequired,
   type AnswerValue,
@@ -1965,6 +1966,9 @@ export function App(): JSX.Element {
    * disappears once every spot carries a verdict instead of lingering as a
    * button that would spend money to re-answer answered questions.
    */
+  /** How many leaves the second reading took off the list, for the notice. */
+  const settledCount = useMemo(() => settledLeaves(liveState).size, [liveState])
+
   const unchecked = useMemo(() => {
     let spots = 0
     const leaves = new Set<number>()
@@ -3011,6 +3015,22 @@ export function App(): JSX.Element {
             <div className="meta">
               {checkProgress.settled} spot(s) settled · only the flagged leaves are read again
             </div>
+          </div>
+        ) : null}
+
+        {/* --- what the second reading took off the list ---------------------
+             Stated rather than asked, and above the pager rather than inside
+             it: taking leaves out of a review is the app deciding something on
+             the user's behalf, which it may do only out loud — and a notice
+             that lives on one screen out of forty is paged past before the
+             leaves it explains. */}
+        {step.id === 'gate-uncertainties' && settledCount > 0 ? (
+          <div className="resume-note">
+            <b>{settledCount} leaf(s) were settled by the second reading.</b> On each of them every
+            disagreement came back as something OCR imagined rather than words the page has, so the
+            transcription was right as it stood and there is nothing to decide. They are out of the
+            list below. Anything it judged missing, different, or could not settle is still here for
+            you.
           </div>
         ) : null}
 

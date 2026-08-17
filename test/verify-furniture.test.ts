@@ -568,7 +568,7 @@ describe('leaves the second reading answers outright', () => {
     expect(settledLeaves(at({ adjudicated: {} })).size).toBe(0)
   })
 
-  it('takes the settled leaves out of the gate, and says how many', () => {
+  it('takes the settled leaves out of the gate', () => {
     const ready: WizardState = {
       ...at(),
       pageText: { 7: 'some text' },
@@ -576,7 +576,29 @@ describe('leaves the second reading answers outright', () => {
     }
     const qs = stepById('gate-uncertainties').questions(ready)
     expect(qs.some((q) => q.id === 'page-7')).toBe(false)
-    const said = qs.find((q) => q.id === 'settledByCheck')
-    expect(said?.prompt).toContain('1 leaf(s) were settled')
+  })
+
+  it('leaves an unsettled leaf in the gate, so the queue is not merely emptied', () => {
+    const ready: WizardState = {
+      ...at({ adjudicated: {} }),
+      pageText: { 7: 'some text' },
+      completed: ['intake', 'recon', 'gate-identity', 'transcribe']
+    }
+    expect(
+      stepById('gate-uncertainties')
+        .questions(ready)
+        .some((q) => q.id === 'page-7')
+    ).toBe(true)
+  })
+
+  /**
+   * What was settled is *stated*, above the list, not asked inside the pager.
+   *
+   * It went in as a `confirm` first, which put a statement about the whole gate
+   * on one screen out of forty — paged past before the leaves it explains. The
+   * count is exported so the app can say it where it stays visible.
+   */
+  it('reports a count the app can state', () => {
+    expect(settledLeaves(at()).size).toBe(1)
   })
 })

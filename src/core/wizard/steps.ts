@@ -906,23 +906,11 @@ const gateUncertainties: Step = {
       blocksByPage.set(first, list)
     }
 
-    // Said, never silent. Taking leaves out of the review is the app deciding
-    // something on the user's behalf, and the rule everywhere else here is that
-    // it may do that only out loud — the same reason a note that cannot be
-    // placed is reported rather than dropped.
-    if (settled.size > 0) {
-      qs.push({
-        id: 'settledByCheck',
-        type: 'confirm',
-        prompt: `${settled.size} leaf(s) were settled by the second reading`,
-        help:
-          'On each of these, every disagreement came back as something OCR imagined rather ' +
-          'than words the page actually has — so the transcription was right as it stood and ' +
-          'there is nothing to decide. They are out of the list below. Anything the reading ' +
-          'judged missing, different, or could not settle is still here for you.',
-        defaultValue: true
-      })
-    }
+    // What was settled is *stated*, not asked — see `settledLeaves`. It went in
+    // here as a `confirm` first, which put it on its own screen inside the
+    // pager: a statement about the whole gate, visible on one screen out of
+    // forty and paged past before the leaves it explains. The app renders it
+    // above the list instead, where it stays.
 
     for (const [pageIndex, messages] of [...byPage.entries()].sort((a, b) => a[0] - b[0])) {
       const read = (s.pageText[pageIndex] ?? '').trim()
