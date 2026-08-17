@@ -6,6 +6,7 @@ import {
   stepById,
   progress,
   defaultAnswers,
+  groupQuestions,
   missingRequired,
   frontMatterPages,
   type WizardState,
@@ -492,6 +493,78 @@ describe('gate 2 — uncertain spots', () => {
       ).rows
       expect(rows[0]!.alsoFromPages).toEqual([1])
       expect(qs.find((q) => q.id === 'page-1-fix')).toBeUndefined()
+    })
+  })
+
+  describe('one decision at a time, for a screen that cannot hold forty', () => {
+    const twoLeaves = () =>
+      stepById('gate-uncertainties').questions(
+        transcribed({
+          failedPages: [9],
+          findings: [
+            { code: 'text-dropped', severity: 'high', pageIndex: 0, message: 'a' },
+            { code: 'text-dropped', severity: 'high', pageIndex: 1, message: 'b' }
+          ],
+          document: assembleBook([
+            {
+              pageIndex: 0,
+              role: 'body',
+              uncertain: [],
+              furniture: {},
+              blocks: [{ kind: 'paragraph', text: 'The alembick.' }]
+            },
+            {
+              pageIndex: 1,
+              role: 'body',
+              uncertain: [],
+              furniture: {},
+              blocks: [{ kind: 'paragraph', text: 'A gentle fire.' }]
+            }
+          ])
+        })
+      )
+
+    it('keeps a leaf’s verdict and its editor on one screen', () => {
+      // Split across screens, the gate would ask "is this good enough?" with
+      // the passage it is about on another page.
+      const groups = groupQuestions(twoLeaves())
+      expect(groups.map((g) => g.questions.map((q) => q.id))).toEqual([
+        ['failedPages'],
+        ['page-0', 'page-0-fix'],
+        ['page-1', 'page-1-fix']
+      ])
+    })
+
+    it('names each screen after the decision on it', () => {
+      expect(groupQuestions(twoLeaves()).map((g) => g.label)).toEqual([
+        expect.stringContaining('could not be transcribed'),
+        'Page 1',
+        'Page 2'
+      ])
+    })
+
+    it('gives every screen an id that survives a reload', () => {
+      const ids = groupQuestions(twoLeaves()).map((g) => g.id)
+      expect(ids).toEqual(['loose-1', 'group-page-0', 'group-page-1'])
+      expect(new Set(ids).size).toBe(ids.length)
+    })
+
+    it('keeps a run of ungrouped questions together rather than one per screen', () => {
+      // A gate's preamble is one screen. Otherwise the identity gate would
+      // become four.
+      const groups = groupQuestions(stepById('gate-identity').questions(reconDone()))
+      expect(groups).toHaveLength(1)
+      expect(groups[0]!.questions.length).toBeGreaterThan(1)
+    })
+
+    it('is a no-op on a step whose questions declare no groups', () => {
+      const qs = stepById('gate-identity').questions(reconDone())
+      expect(groupQuestions(qs).flatMap((g) => g.questions)).toEqual(qs)
+    })
+
+    it('preserves order and loses nothing, whatever the shape', () => {
+      const qs = twoLeaves()
+      expect(groupQuestions(qs).flatMap((g) => g.questions)).toEqual(qs)
     })
   })
 

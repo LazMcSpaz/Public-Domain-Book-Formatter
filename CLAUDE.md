@@ -372,6 +372,21 @@ in `screenshots/`. Don't ship UI blind.
   bug behind it: restoring a dropped passage spliced into the bare text and
   discarded the host paragraph's emphasis, so `spliceRunInto` now carries the
   word indices across the join.
+- **Also done**: **a gate is worked through one decision at a time.** Gate 2 on
+  a real book is forty flagged leaves, each a verdict plus an editor carrying
+  the passage it is about — one wall of scrolling that is unusable on a phone
+  and intimidating on a laptop. The same questions are now shown a group to a
+  screen, with a bar that fills as leaves are finished and the place kept in
+  `localStorage`, so closing the tab and coming back lands on the leaf you left
+  rather than on the first one. What a group *is* comes from the step's own
+  `group` field (`groupQuestions`), never from a renderer parsing `page-9-fix`
+  out of an id — a contract nobody wrote down is a contract nothing tests. The
+  pager is **controlled**, holding no copy of the place: a local copy seeded
+  from a prop has to be re-seeded when the prop arrives, and the prop arrives
+  after the child's first effect, so the seeded copy wins and the remembered
+  place is silently ignored. The forward action is held back until the last
+  screen, because a "continue" button beside "next leaf" on leaf three of forty
+  is an invitation to skip the other thirty-seven by accident.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

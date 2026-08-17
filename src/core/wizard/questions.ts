@@ -32,6 +32,19 @@ export interface QuestionBase {
   evidence?: Evidence[]
   /** When true the step cannot be completed until answered. */
   required?: boolean
+  /**
+   * Questions that are one decision and have to be seen together.
+   *
+   * A flagged leaf is a verdict *and* an editor for the same text; splitting
+   * them across screens would ask "is this good enough?" with the passage on
+   * another page. Declared here rather than inferred from the ids, because a
+   * renderer parsing `page-9-fix` out of a string is a contract nobody wrote
+   * down and nothing tests.
+   *
+   * Grouping is what makes it possible to show a gate one decision at a time,
+   * which is the difference between usable and unusable on a phone.
+   */
+  group?: string
 }
 
 export interface ChoiceOption {
@@ -179,6 +192,59 @@ export function defaultAnswers(questions: readonly Question[]): Answers {
         out[q.id] = {}
         break
     }
+  }
+  return out
+}
+
+/** One screenful: a decision and everything needed to make it. */
+export interface QuestionGroup {
+  /** Stable across reloads, so "where was I" survives one. */
+  id: string
+  /** What to call it in a pager — the leading question's own prompt. */
+  label: string
+  questions: Question[]
+}
+
+/**
+ * Split a step's questions into the decisions they add up to.
+ *
+ * Order is preserved and consecutive ungrouped questions travel together, so a
+ * gate's preamble stays one screen rather than becoming one screen per line.
+ *
+ * Always safe to ignore: a renderer with room for everything can lay the whole
+ * list out as before, and this says what the seams *would* be.
+ */
+export function groupQuestions(questions: readonly Question[]): QuestionGroup[] {
+  const out: QuestionGroup[] = []
+  const named = new Map<string, QuestionGroup>()
+  // The run of ungrouped questions currently being filled, if any. Closed by
+  // the next grouped question, so a preamble cannot swallow a later aside.
+  let loose: QuestionGroup | null = null
+  let looseCount = 0
+
+  for (const q of questions) {
+    if (q.group !== undefined) {
+      loose = null
+      const existing = named.get(q.group)
+      if (existing) {
+        // A group named twice is one group. Ids have to stay unique or the
+        // "where was I" cursor would point at two different screens.
+        existing.questions.push(q)
+        continue
+      }
+      const group: QuestionGroup = { id: `group-${q.group}`, label: q.prompt, questions: [q] }
+      named.set(q.group, group)
+      out.push(group)
+      continue
+    }
+
+    if (loose) {
+      loose.questions.push(q)
+      continue
+    }
+    looseCount += 1
+    loose = { id: `loose-${looseCount}`, label: q.prompt, questions: [q] }
+    out.push(loose)
   }
   return out
 }

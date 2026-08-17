@@ -3,6 +3,7 @@
  */
 export {
   defaultAnswers,
+  groupQuestions,
   missingRequired,
   type Question,
   type ChoiceQuestion,
@@ -13,6 +14,7 @@ export {
   type TermRow,
   type PageEditQuestion,
   type PageEditRow,
+  type QuestionGroup,
   type TermVerdict,
   type Evidence,
   type Answers,

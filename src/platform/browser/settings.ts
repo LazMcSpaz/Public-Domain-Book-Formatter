@@ -20,6 +20,7 @@ const PREFS_STORAGE = 'pdbf.prefs'
 const VOICE_STORAGE = 'pdbf.voice'
 const BANK_STORAGE = 'pdbf.bank'
 const REVIEW_PREFIX = 'pdbf.review.'
+const CURSOR_PREFIX = 'pdbf.cursor.'
 
 export interface AppPrefs {
   modelId: string
@@ -229,6 +230,70 @@ export function saveReviewProgress(fileKey: string, answers: StepAnswers): void 
 export function clearReviewProgress(fileKey: string): void {
   if (!fileKey) return
   safeLocalStorage()?.removeItem(reviewKey(fileKey))
+  safeLocalStorage()?.removeItem(cursorKey(fileKey))
+}
+
+// ---------------------------------------------------------------------------
+// Where you had got to
+// ---------------------------------------------------------------------------
+
+/**
+ * Where the user had got to in a gate, and what they have already been through.
+ *
+ * The verdicts themselves were already kept; this is the other half of not
+ * losing your work. Forty flagged leaves taken one at a time is a job you come
+ * back to, and coming back to leaf one every time — with no way to see how much
+ * is left — is how a review stops being finished at all.
+ *
+ * Beside the verdicts rather than inside them, so reading "what did I answer"
+ * never has to step over a field that is not an answer.
+ */
+const cursorKey = (fileKey: string): string => `${CURSOR_PREFIX}${fileKey}`
+
+export interface ReviewPlace {
+  /** The group id last opened. */
+  at: string | null
+  /** Group ids already worked through — what the progress bar measures. */
+  done: string[]
+}
+
+const EMPTY_PLACE: ReviewPlace = { at: null, done: [] }
+
+export function loadReviewPlace(fileKey: string, stepId: string): ReviewPlace {
+  if (!fileKey) return EMPTY_PLACE
+  const raw = safeLocalStorage()?.getItem(cursorKey(fileKey))
+  if (!raw) return EMPTY_PLACE
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null) return EMPTY_PLACE
+    const entry = (parsed as Record<string, unknown>)[stepId]
+    if (typeof entry !== 'object' || entry === null) return EMPTY_PLACE
+    const record = entry as { at?: unknown; done?: unknown }
+    return {
+      at: typeof record.at === 'string' ? record.at : null,
+      done: Array.isArray(record.done)
+        ? record.done.filter((d): d is string => typeof d === 'string')
+        : []
+    }
+  } catch {
+    return EMPTY_PLACE
+  }
+}
+
+export function saveReviewPlace(fileKey: string, stepId: string, place: ReviewPlace): void {
+  if (!fileKey) return
+  try {
+    const raw = safeLocalStorage()?.getItem(cursorKey(fileKey))
+    const all: unknown = raw ? JSON.parse(raw) : {}
+    const base = typeof all === 'object' && all !== null && !Array.isArray(all) ? all : {}
+    safeLocalStorage()?.setItem(
+      cursorKey(fileKey),
+      JSON.stringify({ ...(base as Record<string, unknown>), [stepId]: place })
+    )
+  } catch {
+    // Losing your place is a nuisance, never a reason to break the gate you
+    // are standing on.
+  }
 }
 
 /** Bytes, rounded to something a person reads rather than parses. */

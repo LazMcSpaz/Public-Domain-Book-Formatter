@@ -80,6 +80,21 @@ const shot = async (name) => {
   console.log(`  → ${OUT}/${name}.png`)
 }
 
+/**
+ * Reveal a gate's whole list when it is showing one decision at a time.
+ *
+ * The forward button is deliberately held back until the last screen, so a
+ * harness that wants to leave a gate has to either work through it or ask for
+ * everything — the same two choices a user has.
+ */
+const showEverything = async () => {
+  const toggle = page.locator('.pager-head button', { hasText: 'all at once' })
+  if ((await toggle.count()) > 0) {
+    await toggle.click()
+    await page.waitForTimeout(250)
+  }
+}
+
 console.log('1. intake')
 await page.goto(URL_BASE, { waitUntil: 'networkidle' })
 await page.waitForSelector('.drop')
@@ -565,6 +580,82 @@ await page.keyboard.press('Escape')
 await page.waitForTimeout(300)
 const gateBigClosed = (await page.locator('.lightbox').count()) === 0
 
+console.log('5b1. the uncertainty gate, one leaf at a time')
+// Paged on any width — a wall of forty leaves is intimidating on a laptop too —
+// and checked at phone size, where the pager also pins itself to the bottom.
+const desktopCards = await page.locator('.q').count()
+const desktopWhere = await page
+  .locator('.pager-where')
+  .innerText()
+  .catch(() => '')
+await page.setViewportSize({ width: 390, height: 844 })
+await page.waitForTimeout(500)
+const pagedCards = await page.locator('.q').count()
+const pagerWhere = await page
+  .locator('.pager-where')
+  .innerText()
+  .catch(() => '')
+const pagerSticky = await page
+  .locator('.pager')
+  .evaluate((el) => getComputedStyle(el).position)
+  .catch(() => '')
+// Reachable without scrolling to the end of a leaf taller than the window.
+const pagerBox = await page.locator('.pager').boundingBox()
+const pagerInView = pagerBox !== null && pagerBox.y < 844
+await shot('08c3-uncertainty-gate-phone')
+
+// Next moves on, and remembers where it got to.
+await page.locator('.pager button', { hasText: 'Next' }).click()
+await page.waitForTimeout(400)
+const afterNext = await page.locator('.pager-where').innerText()
+const cursorKept = await page.evaluate(() =>
+  Object.keys(localStorage)
+    .filter((k) => k.startsWith('pdbf.cursor.'))
+    .map((k) => localStorage.getItem(k) ?? '')
+    .join('')
+)
+// The bar measures leaves finished, not the screen you happen to be on.
+const barAfterOne = Math.round(
+  ((await page.locator('.pager-bar > i').evaluate((el) => el.getBoundingClientRect().width)) /
+    (await page.locator('.pager-bar').evaluate((el) => el.getBoundingClientRect().width))) *
+    100
+)
+await shot('08c4-uncertainty-gate-phone-next')
+
+// The forward action is held back until the last screen, or the other
+// thirty-nine leaves get skipped by an accidental tap.
+const continueMidway = await page.locator('.actions button', { hasText: 'Looks right' }).count()
+
+// And someone who would rather have it all at once can say so.
+await page.locator('.pager-head button').click()
+await page.waitForTimeout(400)
+const allAtOnce = await page.locator('.q').count()
+await page.locator('.pager-head button').click()
+await page.waitForTimeout(300)
+
+// The half that matters: closing the tab and coming back has to land on the
+// leaf you were on, not on the first one. Writing the place down and never
+// reading it back would look identical until someone actually left.
+await page.goto(URL_BASE, { waitUntil: 'networkidle' })
+await page.setInputFiles('input[type=file]', bookPath)
+await page.waitForSelector('.terms', { timeout: 180000 })
+await page.locator('button.primary', { hasText: 'Looks right' }).click()
+await page.waitForSelector('.q', { timeout: 20000 })
+await page.locator('.actions button.primary').first().click()
+await page.waitForTimeout(2500)
+const resumedAt = await page
+  .locator('.pager-where')
+  .innerText()
+  .catch(() => '')
+await shot('08c5-uncertainty-gate-resumed')
+await page.setViewportSize({ width: 1360, height: 900 })
+await page.waitForTimeout(400)
+
+// With the whole list on screen for the bulk work below. Someone who would
+// rather see all forty at once can say so, and the harness is that someone.
+await page.locator('.pager-head button', { hasText: 'all at once' }).click()
+await page.waitForTimeout(400)
+
 // A verdict clicked here must survive a refresh. It costs time rather than
 // money, which is why it used to be thrown away while the pages it applied to
 // were carefully kept.
@@ -590,6 +681,11 @@ if (verdictCount > 1) {
 }
 const verdictOptions = await verdicts.locator('.opt .t').allInnerTexts()
 
+// --- the same gate on a phone -----------------------------------------------
+// Forty flagged leaves, each a verdict plus an editor carrying the passage it
+// is about, is one unusable wall of scrolling on a phone. The same questions
+// are shown one decision to a screen, with the position kept so closing the tab
+// does not mean finding your place again by hand.
 // Typing over a misreading here has to reach the finished book. The leaf is
 // picked by number rather than by position, because a leaf with only a picture
 // on it is flagged without having any text to offer.
@@ -625,6 +721,7 @@ const verdictSaved = /"skip"/.test(verdictBefore)
 // on another, so recon should have found two candidates and no others: the
 // eight pages of plain text must produce nothing, or the gate is unusable.
 console.log('5c. illustrations found in the scan')
+await showEverything()
 await page.locator('.actions button.primary').first().click()
 await page.waitForTimeout(1500)
 
@@ -1206,6 +1303,7 @@ await page.waitForSelector('.terms', { timeout: 180000 })
 
 /** Click the gate's primary button and wait for the rail to land on `label`. */
 const advanceTo = async (label) => {
+  await showEverything()
   await page.locator('.actions button.primary').first().click()
   await page.waitForFunction(
     (want) => document.querySelector('.rail li.active .label')?.textContent?.includes(want),
@@ -1726,6 +1824,31 @@ console.log(
 if (!italicsShown) throw new Error('The proof editor shows no italics at all')
 if (!italicsHinted) throw new Error('The italic tags appear with nothing explaining them')
 if (!proofBig) throw new Error('The proof leaf does not open full size')
+console.log(
+  `  one leaf a screen: ${desktopCards} on a desktop, ${pagedCards} on a phone` +
+    ` — "${pagerWhere.replace(/\s+/g, ' ')}" -> "${afterNext.replace(/\s+/g, ' ')}"` +
+    ` (pager ${pagerSticky}, in view: ${pagerInView})`
+)
+console.log(`  the bar fills as leaves are finished: ${barAfterOne}% after one`)
+if (desktopCards !== pagedCards) throw new Error('The desktop view is not paged like the phone')
+if (!/0 of 7 checked/.test(desktopWhere)) {
+  throw new Error(`The gate opened claiming progress: "${desktopWhere}"`)
+}
+if (barAfterOne < 5 || barAfterOne > 40) {
+  throw new Error(`The progress bar reads ${barAfterOne}% after one of seven leaves`)
+}
+console.log(
+  `  place remembered: ${cursorKept || 'NO'} · continue hidden midway: ${continueMidway === 0}` +
+    ` · "all at once" gives ${allAtOnce} cards`
+)
+if (pagedCards >= allAtOnce) throw new Error('The phone view is not paging the gate at all')
+if (continueMidway !== 0) throw new Error('The continue button is reachable before the last leaf')
+if (!cursorKept) throw new Error('Moving through the gate does not record where you got to')
+if (!pagerInView) throw new Error('The pager is off-screen on a phone')
+console.log(`  and after closing the tab it reopens on: "${resumedAt.replace(/\s+/g, ' ')}"`)
+if (!resumedAt.startsWith('Page 3')) {
+  throw new Error(`Reopening the gate landed on "${resumedAt}", not the leaf it was left on`)
+}
 console.log(`  the gate offers: ${verdictOptions.join(' / ')}`)
 console.log(
   `  a fix typed at the gate reaches the book: ${

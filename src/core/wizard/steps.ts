@@ -593,6 +593,9 @@ const gateUncertainties: Step = {
         id: `page-${pageIndex}`,
         type: 'choice',
         prompt: `Page ${pageIndex + 1}`,
+        // The verdict and the editor below it are one decision about one leaf,
+        // so a narrow screen shows them together and moves on to the next.
+        group: `page-${pageIndex}`,
         help: messages.join(' · '),
         // Putting the text back is the recommended answer when there is text to
         // put back: it is free, it is the thing the user actually wants, and the
@@ -663,6 +666,7 @@ const gateUncertainties: Step = {
         qs.push({
           id: `page-${pageIndex}-fix`,
           type: 'page-edit',
+          group: `page-${pageIndex}`,
           prompt: `…or fix page ${pageIndex + 1} here`,
           // Which answer above keeps a fix typed down here is the first thing
           // anyone asks, and guessing at it is a way to lose work. The rule is

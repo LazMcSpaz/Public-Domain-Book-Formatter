@@ -26,6 +26,7 @@ import {
 } from '../platform/browser/recon'
 import { loadReconCache, saveReconCache } from '../platform/browser/recon-cache'
 import { QuestionView } from './QuestionView'
+import { QuestionList } from './QuestionList'
 import {
   estimateCost,
   formatEstimate,
@@ -55,6 +56,8 @@ import {
   recordHarvest,
   loadReviewProgress,
   saveReviewProgress,
+  loadReviewPlace,
+  saveReviewPlace,
   storageEstimate
 } from '../platform/browser/settings'
 import {
@@ -238,6 +241,17 @@ export function App(): JSX.Element {
    * rather than at the end.
    */
   const [resumeNote, setResumeNote] = useState<string | null>(null)
+  /**
+   * How far through the current gate the user had worked.
+   *
+   * A gate of forty flagged leaves reviewed one at a time is a job you come
+   * back to. The verdicts were already kept; without this the user came back
+   * to leaf one every time and had to find their place by hand.
+   */
+  const [place, setPlace] = useState<{ at: string | null; done: string[] }>({
+    at: null,
+    done: []
+  })
   /** Reading a stored reading back out, which is quick but not instantaneous. */
   const [reusing, setReusing] = useState(false)
   const [buildProgress, setBuildProgress] = useState<{ done: number; total: number } | null>(null)
@@ -304,6 +318,7 @@ export function App(): JSX.Element {
     restoredFor.current = step.id
     const saved = loadReviewProgress(key)[step.id]
     if (saved && Object.keys(saved).length > 0) setAnswers(saved as Answers)
+    setPlace(loadReviewPlace(key, step.id))
   }, [step.id])
 
   // The design gate answers questions about the *book*; this is the style they
@@ -2190,87 +2205,107 @@ export function App(): JSX.Element {
         !proposals &&
         questions.length > 0 ? (
           <>
-            {questions.map((q) => (
-              <QuestionView
-                key={q.id}
-                question={q}
-                value={currentAnswers[q.id]}
-                onChange={(v: AnswerValue) => setAnswers((a) => ({ ...a, [q.id]: v }))}
-                resolveEvidence={resolveEvidence}
-                enlargeEvidence={enlargeEvidence}
-              />
-            ))}
-            {designSummary ? (
-              <div className="summary">
-                <span className="summary-label">Your edition will be set as</span>
-                <b>{designSummary}</b>
-              </div>
-            ) : null}
-            {designProfile ? (
-              <details className="tweaks">
-                <summary>Anything you’d change?</summary>
-                <p className="help">
-                  Every control the questions above set for you, and a few they never touch. These
-                  apply to this book only — bank the look if you want them on the next one.
-                </p>
-                {styleQuestions(designProfile, {
-                  families: BODY_FONTS.map((f) => ({
-                    value: f.family,
-                    label: f.label,
-                    description: f.note
-                  }))
-                }).map((q) => (
-                  <QuestionView
-                    key={q.id}
-                    question={q}
-                    value={state.styleOverrides[q.id]}
-                    onChange={(v: AnswerValue) =>
-                      setState((st) => ({
-                        ...st,
-                        styleOverrides: { ...st.styleOverrides, [q.id]: v }
-                      }))
-                    }
-                  />
-                ))}
-                {Object.keys(state.styleOverrides).length > 0 ? (
-                  <div className="actions">
-                    <button
-                      type="button"
-                      onClick={() => setState((st) => ({ ...st, styleOverrides: {} }))}
-                    >
-                      Undo my changes
-                    </button>
+            <QuestionList
+              // Remounted per step, so a position in one gate is never carried
+              // into the next one.
+              key={step.id}
+              questions={questions}
+              answers={currentAnswers}
+              onChange={(id, v) => setAnswers((a) => ({ ...a, [id]: v }))}
+              resolveEvidence={resolveEvidence}
+              enlargeEvidence={enlargeEvidence}
+              place={place}
+              onPlace={(next) => {
+                setPlace(next)
+                if (fileKeyRef.current) saveReviewPlace(fileKeyRef.current, step.id, next)
+              }}
+            >
+              {(atEnd) =>
+                atEnd ? (
+                  <>
+                    {designSummary ? (
+                      <div className="summary">
+                        <span className="summary-label">Your edition will be set as</span>
+                        <b>{designSummary}</b>
+                      </div>
+                    ) : null}
+                    {designProfile ? (
+                      <details className="tweaks">
+                        <summary>Anything you’d change?</summary>
+                        <p className="help">
+                          Every control the questions above set for you, and a few they never touch.
+                          These apply to this book only — bank the look if you want them on the next
+                          one.
+                        </p>
+                        {styleQuestions(designProfile, {
+                          families: BODY_FONTS.map((f) => ({
+                            value: f.family,
+                            label: f.label,
+                            description: f.note
+                          }))
+                        }).map((q) => (
+                          <QuestionView
+                            key={q.id}
+                            question={q}
+                            value={state.styleOverrides[q.id]}
+                            onChange={(v: AnswerValue) =>
+                              setState((st) => ({
+                                ...st,
+                                styleOverrides: { ...st.styleOverrides, [q.id]: v }
+                              }))
+                            }
+                          />
+                        ))}
+                        {Object.keys(state.styleOverrides).length > 0 ? (
+                          <div className="actions">
+                            <button
+                              type="button"
+                              onClick={() => setState((st) => ({ ...st, styleOverrides: {} }))}
+                            >
+                              Undo my changes
+                            </button>
+                          </div>
+                        ) : null}
+                      </details>
+                    ) : null}
+                    {designProfile ? (
+                      <PreviewPane
+                        book={correctedDocument}
+                        profile={designProfile}
+                        edition={previewEdition}
+                        images={drawableImageBytes()}
+                      />
+                    ) : null}
+                    <div className="actions">
+                      <button
+                        type="button"
+                        className="primary"
+                        disabled={missing.length > 0}
+                        onClick={advance}
+                      >
+                        {step.id === 'transcribe'
+                          ? state.savedRun && (currentAnswers['useSavedRun'] ?? 'use') === 'use'
+                            ? 'Use it — continue'
+                            : 'Continue — show me the cost'
+                          : step.id === 'export'
+                            ? 'Build the interior'
+                            : 'Looks right — continue'}
+                      </button>
+                      {missing.length > 0 ? (
+                        <span className="hint">Fill in: {missing.join(', ')}</span>
+                      ) : null}
+                    </div>
+                  </>
+                ) : (
+                  // Held back until the last screen. A "continue" button beside
+                  // "next leaf" on leaf three of forty is an invitation to skip
+                  // the other thirty-seven by accident.
+                  <div className="pager-note">
+                    Everything you answer is kept as you go — close this and come back to it.
                   </div>
-                ) : null}
-              </details>
-            ) : null}
-            {designProfile ? (
-              <PreviewPane
-                book={correctedDocument}
-                profile={designProfile}
-                edition={previewEdition}
-                images={drawableImageBytes()}
-              />
-            ) : null}
-            <div className="actions">
-              <button
-                type="button"
-                className="primary"
-                disabled={missing.length > 0}
-                onClick={advance}
-              >
-                {step.id === 'transcribe'
-                  ? state.savedRun && (currentAnswers['useSavedRun'] ?? 'use') === 'use'
-                    ? 'Use it — continue'
-                    : 'Continue — show me the cost'
-                  : step.id === 'export'
-                    ? 'Build the interior'
-                    : 'Looks right — continue'}
-              </button>
-              {missing.length > 0 ? (
-                <span className="hint">Fill in: {missing.join(', ')}</span>
-              ) : null}
-            </div>
+                )
+              }
+            </QuestionList>
           </>
         ) : null}
 
