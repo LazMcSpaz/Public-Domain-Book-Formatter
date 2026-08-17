@@ -1061,9 +1061,19 @@ for (let i = 0; i < 40; i++) {
 }
 const correctedBefore = correctionsOf(await page.locator('.proof-where small').innerText())
 const firstBox = page.locator('.proof-block textarea').first()
+// Note for what follows: everything below navigates by counting `Next ›` from
+// the top of the sheet, so the walk above has to be undone before then or every
+// later section lands a few leaves off. See the rewind after the fill.
+
 await firstBox.fill('The chirurgeon examined the specimen with extraordinary care.')
 await page.waitForTimeout(300)
 const correctedCount = await page.locator('.proof-where small').innerText()
+// Back to the top, restoring the invariant every section below depends on:
+// they step forward by a known number of leaves from leaf one.
+while (await previous.isEnabled()) {
+  await previous.click()
+  await page.waitForTimeout(120)
+}
 const correctionCounted = correctionsOf(correctedCount) > correctedBefore
 
 // An editor's note — the differentiation route that costs nothing but writing.
