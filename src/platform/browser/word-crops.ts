@@ -39,33 +39,63 @@ export interface CropWordsOptions {
   padding?: number
 }
 
+/** A run of words to cut out as one picture, under one name. */
+export interface CropGroup {
+  /** What the caller will look the crop up by — a discrepancy row's id. */
+  id: string
+  words: WordBox[]
+}
+
 /**
- * Crop these words out of one leaf.
+ * The box that contains all of these.
+ *
+ * A discrepancy is usually several words, and cropping only the first of them
+ * shows the reader the word `THE` as evidence for a missing clause — which
+ * looks like the app pointing at the wrong thing, and is. The union is the
+ * whole phrase where it sits on one line, and the block it occupies where it
+ * runs across two; both are the thing the row is actually about.
+ */
+export function unionBox(words: readonly WordBox[]): WordBox['bbox'] | null {
+  if (words.length === 0) return null
+  let { x0, y0, x1, y1 } = words[0]!.bbox
+  for (const w of words.slice(1)) {
+    x0 = Math.min(x0, w.bbox.x0)
+    y0 = Math.min(y0, w.bbox.y0)
+    x1 = Math.max(x1, w.bbox.x1)
+    y1 = Math.max(y1, w.bbox.y1)
+  }
+  return { x0, y0, x1, y1 }
+}
+
+/**
+ * Crop each group out of one leaf, as one picture per group.
  *
  * Returns object URLs the caller must revoke — the same contract as every other
  * crop in this app, and the reason the gate releases them when it moves to the
  * next leaf rather than accumulating a book's worth.
  *
- * Best-effort per word: a box that cannot be cut is left out of the map rather
- * than failing the screen. Evidence that is missing shows as a row without a
- * picture, which is worse than a picture and far better than no row — the
- * discrepancy is still real and still worth deciding.
+ * Best-effort per group: a box that cannot be cut is left out of the map rather
+ * than failing the screen. A row without its picture still names what is
+ * missing and where it goes, which is more than the count it replaced.
  */
 export async function cropWordsFromPage(
   file: Blob,
   pageIndex: number,
-  words: readonly WordBox[],
+  groups: readonly CropGroup[],
   options: CropWordsOptions
 ): Promise<Map<string, string>> {
   const out = new Map<string, string>()
-  if (words.length === 0) return out
+  const wanted = groups.filter((g) => g.words.length > 0)
+  if (wanted.length === 0) return out
 
   const doc = await openPdf(file)
   const rendered = await renderPage(doc, pageIndex, options.dpi)
   try {
-    for (const word of words) {
+    for (const group of wanted) {
+      const box = unionBox(group.words)
+      if (!box) continue
       try {
-        out.set(word.id, await cropToObjectUrl(rendered.canvas, word.bbox, options.padding ?? 6))
+        out.set(group.id, await cropToObjectUrl(rendered.canvas, box, options.padding ?? 6))
       } catch {
         // A crop is evidence, not load-bearing. Skip a bad box silently.
       }

@@ -8,6 +8,7 @@ import {
   type PageTranscription
 } from '@core/transcribe'
 import { pruneStaleAnswers } from '@core/wizard'
+import { unionBox } from '../src/platform/browser/word-crops'
 
 /**
  * The running head is transcribed — into `furniture`, which is where it
@@ -197,5 +198,93 @@ describe('a verdict saved against an option that no longer exists', () => {
     // them just because they are not on this screen.
     const other = { 'some-other-question': 'value' }
     expect(pruneStaleAnswers([leaf], other)).toEqual(other)
+  })
+})
+
+/**
+ * "Looks fine" is both the pre-selected answer and the one that removes a leaf
+ * from the proof sheet. Those two facts together are a trap: on a book with a
+ * hundred and sixty flagged leaves, tapping through the gate would mark every
+ * one of them checked and leave the proof step with nothing in it — the flags
+ * gone, and no sign they were ever raised.
+ *
+ * So the rule is a fact rather than a claim: a leaf carrying disagreements is
+ * reviewed only once each of them has a verdict. Deciding them is the work the
+ * grid exists to collect, and having done it is the evidence that the leaf was
+ * actually read.
+ *
+ * Expressed here as the predicate `App` applies, so the rule is pinned even
+ * though the wiring around it is not pure.
+ */
+describe('a leaf counts as reviewed only when its gaps are decided', () => {
+  const isReviewed = (gapCount: number, decided: Record<string, string> | undefined): boolean => {
+    if (gapCount === 0) return true
+    return (
+      decided !== undefined &&
+      decided !== null &&
+      typeof decided === 'object' &&
+      !Array.isArray(decided) &&
+      Object.keys(decided).length >= gapCount
+    )
+  }
+
+  it('is reviewed when the leaf had nothing to disagree about', () => {
+    expect(isReviewed(0, undefined)).toBe(true)
+  })
+
+  it('is not reviewed when the gaps were never looked at', () => {
+    expect(isReviewed(3, undefined)).toBe(false)
+    expect(isReviewed(3, {})).toBe(false)
+  })
+
+  it('is not reviewed when only some gaps were decided', () => {
+    expect(isReviewed(3, { p1d0: 'ignore' })).toBe(false)
+  })
+
+  it('is reviewed once every gap has a verdict', () => {
+    expect(isReviewed(3, { p1d0: 'ignore', p1d1: 'restore', p1d2: 'ignore' })).toBe(true)
+  })
+
+  it('counts "not missing" as deciding, not only "put it back"', () => {
+    // Judging a gap to be OCR noise is a decision, and the commonest one.
+    expect(isReviewed(2, { p1d0: 'ignore', p1d1: 'ignore' })).toBe(true)
+  })
+})
+
+describe('the picture a discrepancy row shows', () => {
+  const at = (x0: number, y0: number, x1: number, y1: number) => ({ bbox: { x0, y0, x1, y1 } })
+
+  it('covers every word of the run, not just the first', () => {
+    // The defect this replaced: a row about a missing clause showed a crop of
+    // the word "THE", because only the first box was used. The app appeared to
+    // be pointing at the wrong thing, and was.
+    const box = unionBox([
+      { id: 'a', ...at(100, 40, 140, 60) },
+      { id: 'b', ...at(145, 40, 220, 60) },
+      { id: 'c', ...at(225, 38, 300, 62) }
+    ])
+    expect(box).toEqual({ x0: 100, y0: 38, x1: 300, y1: 62 })
+  })
+
+  it('spans both lines when a run wraps', () => {
+    const box = unionBox([
+      { id: 'a', ...at(400, 40, 480, 60) },
+      { id: 'b', ...at(60, 70, 130, 90) }
+    ])
+    // A block rather than a strip, which is still the thing the row is about.
+    expect(box).toEqual({ x0: 60, y0: 40, x1: 480, y1: 90 })
+  })
+
+  it('is the word itself for a one-word gap', () => {
+    expect(unionBox([{ id: 'a', ...at(10, 20, 30, 40) }])).toEqual({
+      x0: 10,
+      y0: 20,
+      x1: 30,
+      y1: 40
+    })
+  })
+
+  it('is null when OCR gave no boxes, rather than a crop of nothing', () => {
+    expect(unionBox([])).toBeNull()
   })
 })

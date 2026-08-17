@@ -643,14 +643,26 @@ export function App(): JSX.Element {
    * leaf. Nothing accumulates across a book.
    */
   const cropWords = useCallback(
-    async (pageIndex: number, tokenIds: readonly string[]): Promise<Map<string, string>> => {
+    async (
+      pageIndex: number,
+      groups: readonly { id: string; tokenIds: readonly string[] }[]
+    ): Promise<Map<string, string>> => {
       const file = fileDataRef.current
       const recon = reconRef.current
       if (!file || !recon) return new Map()
-      const wanted = new Set(tokenIds)
-      const boxes = recon.words
-        .filter((w) => w.pageIndex === pageIndex && wanted.has(w.id))
-        .map((w) => ({ id: w.id, bbox: w.bbox }))
+      const onPage = new Map(
+        recon.words.filter((w) => w.pageIndex === pageIndex).map((w) => [w.id, w])
+      )
+      // One picture per discrepancy, covering all of its words — cropping only
+      // the first would show the reader "THE" as the evidence for a missing
+      // clause.
+      const boxes = groups.map((g) => ({
+        id: g.id,
+        words: g.tokenIds
+          .map((id) => onPage.get(id))
+          .filter((w): w is NonNullable<typeof w> => Boolean(w))
+          .map((w) => ({ id: w.id, bbox: w.bbox }))
+      }))
       try {
         return await cropWordsFromPage(file, pageIndex, boxes, { dpi: RECON_DPI })
       } catch {
@@ -2007,6 +2019,27 @@ export function App(): JSX.Element {
     reviewedPagesRef.current = Object.entries(currentAnswers)
       .filter(([key, value]) => /^page-\d+$/.test(key) && value === 'accept')
       .map(([key]) => Number(key.slice(5)))
+      // "Looks fine" removes a leaf from the proof sheet, so it has to mean
+      // the user actually looked. It is also the pre-selected answer — the
+      // "just hit continue" path this app is built around — and those two
+      // facts together would quietly dismiss every flagged leaf in the book
+      // the moment someone tapped through the gate.
+      //
+      // A leaf with disagreements on it is only reviewed once each of them has
+      // a verdict. That is a fact the app can check rather than a claim it has
+      // to take on trust, and it is exactly what the grid below the verdict
+      // was added to collect.
+      .filter((pageIndex) => {
+        const gaps = state.droppedRuns[pageIndex] ?? []
+        if (gaps.length === 0) return true
+        const decided = currentAnswers[`page-${pageIndex}-gaps`]
+        return (
+          decided !== null &&
+          typeof decided === 'object' &&
+          !Array.isArray(decided) &&
+          Object.keys(decided).length >= gaps.length
+        )
+      })
     // And the pages they want brought back, which is the opposite errand.
     attentionRef.current = attention
 

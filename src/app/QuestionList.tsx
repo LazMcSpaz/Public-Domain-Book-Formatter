@@ -28,7 +28,10 @@ export interface QuestionListProps {
   resolveEvidence?: (src: string) => string | undefined
   enlargeEvidence?: (src: string) => Promise<string | undefined>
   /** Cuts the words a discrepancy names out of the leaf's scan. */
-  cropWords?: (pageIndex: number, tokenIds: readonly string[]) => Promise<Map<string, string>>
+  cropWords?: (
+    pageIndex: number,
+    groups: readonly { id: string; tokenIds: readonly string[] }[]
+  ) => Promise<Map<string, string>>
   /** Where the user had got to and what they had been through, from storage. */
   place?: { at: string | null; done: string[] }
   onPlace?: (place: { at: string | null; done: string[] }) => void

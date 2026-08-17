@@ -33,7 +33,10 @@ interface Props {
    * vision pass has run. One call per leaf renders that leaf once; the returned
    * URLs are the caller's to revoke.
    */
-  cropWords?: (pageIndex: number, tokenIds: readonly string[]) => Promise<Map<string, string>>
+  cropWords?: (
+    pageIndex: number,
+    groups: readonly { id: string; tokenIds: readonly string[] }[]
+  ) => Promise<Map<string, string>>
 }
 
 /** A scan opened full size, and where it came from. */
@@ -565,19 +568,22 @@ function DiscrepancyGrid({
   question: Extract<Question, { type: 'discrepancies' }>
   value: Record<string, DiscrepancyVerdict>
   onChange: (v: Record<string, DiscrepancyVerdict>) => void
-  cropWords?: (pageIndex: number, tokenIds: readonly string[]) => Promise<Map<string, string>>
+  cropWords?: (
+    pageIndex: number,
+    groups: readonly { id: string; tokenIds: readonly string[] }[]
+  ) => Promise<Map<string, string>>
   onOpen?: (src: string, caption: string) => void
 }): JSX.Element {
   const [crops, setCrops] = useState<Map<string, string>>(new Map())
   const madeRef = useRef<string[]>([])
 
-  const tokenIds = question.rows.flatMap((r) => r.tokenIds)
-  const tokenKey = tokenIds.join(',')
+  const groups = question.rows.map((r) => ({ id: r.id, tokenIds: r.tokenIds }))
+  const tokenKey = groups.map((g) => `${g.id}:${g.tokenIds.join('+')}`).join(',')
 
   useEffect(() => {
-    if (!cropWords || tokenIds.length === 0) return
+    if (!cropWords || groups.length === 0) return
     let live = true
-    void cropWords(question.pageIndex, tokenIds).then((made) => {
+    void cropWords(question.pageIndex, groups).then((made) => {
       if (!live) {
         for (const url of made.values()) URL.revokeObjectURL(url)
         return
@@ -624,7 +630,7 @@ function DiscrepancyGrid({
       </div>
 
       {question.rows.map((row) => {
-        const crop = row.tokenIds.map((id) => crops.get(id)).find(Boolean)
+        const crop = crops.get(row.id)
         return (
           <div className={`discrepancy ${row.strength}`} key={row.id}>
             <div className="discrepancy-pixels">
