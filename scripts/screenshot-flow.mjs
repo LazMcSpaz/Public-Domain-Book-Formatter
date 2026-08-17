@@ -1007,10 +1007,20 @@ if (toFixButton || gateEdited) {
 }
 
 // Correcting a word must reach the finished PDF, which is the whole point.
+//
+// Measured as a *rise*, not as a number. The gate before this leaves most
+// flagged leaves on their default answer — "put the missing text back" — and
+// every one of those is a real correction, so the sheet legitimately arrives
+// here already carrying several. Pinning the total meant this line quietly
+// stopped being true the moment the gate walkthrough was added, which is
+// exactly what happened.
+const correctionsOf = (text) => Number(/(\d+) corrected/.exec(text)?.[1] ?? 0)
+const correctedBefore = correctionsOf(await page.locator('.proof-where small').innerText())
 const firstBox = page.locator('.proof-block textarea').first()
 await firstBox.fill('The chirurgeon examined the specimen with extraordinary care.')
 await page.waitForTimeout(300)
 const correctedCount = await page.locator('.proof-where small').innerText()
+const correctionCounted = correctionsOf(correctedCount) > correctedBefore
 
 // An editor's note — the differentiation route that costs nothing but writing.
 // It has to reach the foot of the printed page, or it is decoration.
@@ -2364,7 +2374,9 @@ console.log(
   `  a leaf marked to fix keeps its note: ${markedALeaf ? markedFlag || 'NO' : 'not exercised'}` +
     (toFixButton ? ` (${toFixButton})` : '')
 )
-console.log(`  after correcting one: ${correctedCount.replace(/\s+/g, ' ')}`)
+console.log(
+  `  after correcting one: ${correctedCount.replace(/\s+/g, ' ')} (was ${correctedBefore})`
+)
 console.log(`  editor's notes attached: ${annotations}`)
 console.log(`  pictures the editor added: ${suppliedPictures} (previewed: ${suppliedPreview})`)
 console.log(`  divisions written: ${sectionsWritten}`)
@@ -2447,7 +2459,7 @@ const finalChecks = [
   ['a plate is previewed from the real PDF', plateFound],
   ['the proof sheet has editable text', proofBoxes > 0],
   ['the proof sheet shows the scan', proofScan === 1],
-  ['a correction was counted', /1 corrected/.test(correctedCount)],
+  ['typing on the proof sheet counted as a correction', correctionCounted],
   ['a note was proposed', annotations === 1],
   ['a supplied picture was taken', suppliedPictures === 1],
   ['an introduction was written', sectionsWritten === 1],
