@@ -2445,14 +2445,21 @@ process.exit(
     retouchedPicture > 0 &&
     cutEditor > 0 &&
     cropShrankIt &&
-    // A book whose only heading is the editor's own still gets a contents page.
-    /1 heading\(s\), 1 of them yours/.test(contentsNote) &&
+    // A book whose headings are all the editor's own still gets a contents
+    // page. The property, not a count: the harness authors an introduction and
+    // a note, and pinning the number here meant this line silently stopped
+    // being true the moment a second authored section was added.
+    /(\d+) heading\(s\), \1 of them yours/.test(contentsNote) &&
+    !/ 0 heading/.test(contentsNote) &&
     suppliedPreview === 1 &&
     // Three pictures now reach the book: two cut from the scan, one supplied.
     /3 illustrations set into the book/.test(illustrationNote) &&
     // The export screen reports what the engine actually placed, so this is
-    // the authored note reaching the book rather than reaching a form.
-    /1 footnote\(s\) were set at the foot/.test(noteNote) &&
+    // the authored note reaching the book rather than reaching a form. Any
+    // number above zero — the harness writes one at the proof step and accepts
+    // another from the annotation pass, and which of those runs is not what
+    // this line is about.
+    /[1-9]\d* footnote\(s\) were set at the foot/.test(noteNote) &&
     proofOverflow <= 0 &&
     // A real answer, not the "no placed images to check" it gave before.
     blockedWithoutTitle &&
