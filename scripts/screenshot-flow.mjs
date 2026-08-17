@@ -2192,7 +2192,12 @@ const collected = await page.evaluate(
       pages: run?.transcriptions.length ?? 0,
       complete: run?.complete ?? false,
       text: run?.transcriptions[0]?.blocks[0]?.text ?? '',
-      ticketGone: ticket === null
+      ticketGone: ticket === null,
+      // Which keys tickets actually live under, so a mismatch between the key
+      // the app deleted and the key the run is filed under is visible rather
+      // than guessed at.
+      ticketKeys: (await runStore.listBatchTickets()).map((t) => t.key),
+      askedFor: key
     }
   },
   [REPO, savedKey]
@@ -2242,6 +2247,11 @@ const takeAllOffered = await page
   .locator('.discrepancy-head button', { hasText: 'checked answer' })
   .count()
 
+console.log(
+  `  → tickets left: ${JSON.stringify(collected.ticketKeys)} (run filed under ${JSON.stringify(
+    collected.askedFor
+  )})`
+)
 if (!collected.ticketGone)
   throw new Error('The ticket outlived the collection it was the receipt for')
 if (!transcribeDone) throw new Error('Collecting did not carry the flow past the paid step')
