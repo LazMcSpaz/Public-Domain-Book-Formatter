@@ -22,6 +22,7 @@ import {
   type EpubPackage
 } from '@core/epub'
 import { assembleBook, type BookDocument } from '@core/assemble'
+import { assessText, type TextAssessment } from '@core/textquality'
 import type { PageTranscription, TranscribedBlock } from '@core/transcribe'
 
 export interface EpubProgress {
@@ -39,6 +40,17 @@ export interface OpenedEpub {
   images: Map<string, Uint8Array>
   /** Pictures found in the markup, in the order they appeared. */
   pictures: { id: string; afterBlock: number; alt: string; bytes: Uint8Array }[]
+  /**
+   * How much this text can be believed.
+   *
+   * An EPUB from Standard Ebooks or Gutenberg was typed and proofread by a
+   * person. One exported by archive.org is *their OCR of a scan*, with no
+   * images attached — and this app has no way to check it, because there are no
+   * pixels behind it to check against. Telling the two apart is the difference
+   * between a book that needs no reading and three hundred leaves of
+   * `J^? ske5>tlcal` that the user finds out about at leaf seven.
+   */
+  quality: TextAssessment
 }
 
 /** Whether a file is worth trying to open as an EPUB at all. */
@@ -189,5 +201,14 @@ export async function openEpub(
   }
   onProgress?.({ done: pkg.spine.length, total: pkg.spine.length })
 
-  return { document: assembleBook(transcriptions), transcriptions, package: pkg, images, pictures }
+  const quality = assessText(transcriptions.flatMap((t) => t.blocks.map((b) => b.text)).join('\n'))
+
+  return {
+    document: assembleBook(transcriptions),
+    transcriptions,
+    package: pkg,
+    images,
+    pictures,
+    quality
+  }
 }

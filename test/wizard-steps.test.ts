@@ -150,6 +150,18 @@ describe('gate 1 questions', () => {
     const qs = stepById('gate-identity').questions(reconDone({ lexicon: [] }))
     expect(qs.find((q) => q.type === 'term-grid')).toBeUndefined()
   })
+
+  it('omits it entirely when nothing *read* the words', () => {
+    // A typeset PDF or an EPUB states its own characters. The grid exists to
+    // catch what OCR got wrong, and asking someone to confirm forty spellings a
+    // file already spells correctly is the exact opposite of interviewing them
+    // about something the app could find out first.
+    const qs = stepById('gate-identity').questions(reconDone({ textSource: 'embedded' }))
+    expect(qs.find((q) => q.type === 'term-grid')).toBeUndefined()
+    // And the rest of the gate still gets asked — orthography is about the
+    // book's own spelling, which a typeset reprint has just as much of.
+    expect(qs.find((q) => q.id === 'orthography')).toBeDefined()
+  })
 })
 
 describe('answers', () => {

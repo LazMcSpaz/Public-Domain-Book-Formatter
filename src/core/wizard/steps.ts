@@ -167,6 +167,14 @@ export interface WizardState {
    * shown and put back for nothing — see `@core/transcribe/recover`.
    */
   droppedRuns: Record<number, DroppedRun[]>
+  /**
+   * Where this book's words came from.
+   *
+   * `embedded` means the file supplied its own characters — a typeset PDF, or
+   * an EPUB — and no OCR was involved. It changes what is worth asking: there
+   * is no point vetting how a word was *read* when nothing read it.
+   */
+  textSource: 'ocr' | 'embedded'
   /** The assembled book, once transcription and assembly have run. */
   document: BookDocument | null
   /**
@@ -222,6 +230,7 @@ export function initialState(): WizardState {
     illustrationCandidates: [],
     pageText: {},
     droppedRuns: {},
+    textSource: 'ocr',
     document: null,
     voice: defaultVoice(),
     harvestInterest: '',
@@ -327,9 +336,17 @@ const gateIdentity: Step = {
     // whole lexicon regardless — so past the cap every row read "no crop",
     // asking the user to vet a word with no evidence at all. That is the one
     // thing this gate must never do.
-    const reviewable = s.cropFor
-      ? s.lexicon.filter((e) => e.sampleTokenId && s.cropFor?.(e.sampleTokenId))
-      : s.lexicon
+    // Nothing read these words, so there is nothing to vet. The grid exists to
+    // catch what OCR got *wrong*; a file that states its own characters cannot
+    // have got them wrong, and asking anyway is exactly the "never ask what the
+    // app could find out first" failure — forty spellings to confirm that the
+    // file already spells correctly.
+    const reviewable =
+      s.textSource === 'embedded'
+        ? []
+        : s.cropFor
+          ? s.lexicon.filter((e) => e.sampleTokenId && s.cropFor?.(e.sampleTokenId))
+          : s.lexicon
     if (reviewable.length > 0) {
       const rows: TermRow[] = reviewable.map((e) => ({
         id: e.term,

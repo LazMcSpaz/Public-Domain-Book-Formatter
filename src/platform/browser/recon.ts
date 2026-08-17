@@ -10,7 +10,15 @@
  * one page (~19 MB) rather than the whole book (~5.8 GB for 300 pages).
  */
 import { buildLexicon, contextBox, type LexiconEntry, type LexiconToken } from '@core/lexicon'
-import { openPdf, renderPage, cropToObjectUrl, thumbnailToBlob, blobOfUrl } from './pdf'
+import {
+  openPdf,
+  renderPage,
+  cropToObjectUrl,
+  thumbnailToBlob,
+  blobOfUrl,
+  looksScanned,
+  extractPageWords
+} from './pdf'
 import { detectIllustrations, type RegionCandidate } from './illustrations'
 import { OcrEngine, type OcrWord, type OcrAssetPaths } from './ocr'
 
@@ -59,6 +67,14 @@ export interface ReconResult {
   illustrations: RegionCandidate[]
   /** Full OCR text per page, used later as the model's cross-check witness. */
   pageText: string[]
+  /**
+   * Where the words came from.
+   *
+   * `embedded` means the file supplied its own text and no OCR was run — a
+   * born-digital PDF, which is a different kind of source and should be told
+   * apart from a scan everywhere the difference matters.
+   */
+  source: 'ocr' | 'embedded'
 }
 
 /**
@@ -99,6 +115,15 @@ export interface ReconOptions {
   onCheckpoint?: (partial: ReconPartial) => void
   /** Leaves between checkpoints. Default 20. */
   checkpointEvery?: number
+  /**
+   * Read the PDF's own text instead of running OCR over pictures of it.
+   *
+   * Decided by `looksScanned` rather than passed by a caller's guess: a page
+   * that is a photograph has to be OCR'd whatever text is laid over it, and a
+   * page that is not was typeset from real characters that are simply *there*.
+   * Left undefined the question is asked here.
+   */
+  useEmbeddedText?: boolean
 }
 
 export async function runRecon(
@@ -118,8 +143,16 @@ export async function runRecon(
   const doc = await openPdf(fileData)
   const total = Math.min(doc.numPages, options.maxPages ?? doc.numPages)
 
-  const engine = new OcrEngine(options.assets)
-  await engine.init()
+  // Is this a photograph of a book, or a book? Asked once, structurally, before
+  // ten minutes are spent OCR-ing text the file was carrying all along.
+  const embedded =
+    options.useEmbeddedText ??
+    (await looksScanned(doc).then((m) => !m.scanned && m.textPerPage > 200))
+
+  // Tesseract is a few seconds and a worker to start. A book that needs no OCR
+  // should not pay for it.
+  const engine = embedded ? null : new OcrEngine(options.assets)
+  await engine?.init()
 
   // Whatever an earlier visit got through, if it was reading the same book the
   // same way. `from` is the first leaf this run has to do itself.
@@ -166,7 +199,16 @@ export async function runRecon(
       const rendered = await renderPage(doc, i, dpi)
 
       onProgress?.({ page: i + 1, total, phase: 'ocr' })
-      const result = await engine.recognize(rendered.canvas, i)
+      // The file's own words where it has them, Tesseract's where it does not.
+      // Shaped identically, so nothing after this point can tell the difference
+      // or has to.
+      const result = engine
+        ? await engine.recognize(rendered.canvas, i)
+        : await extractPageWords(doc, i, dpi).then((e) => ({
+            words: e.words,
+            text: e.text,
+            meanConfidence: 100
+          }))
 
       words.push(...result.words)
       pageText[i] = result.text
@@ -254,10 +296,11 @@ export async function runRecon(
       contextCrops,
       thumbnails,
       illustrations,
-      pageText
+      pageText,
+      source: embedded ? 'embedded' : 'ocr'
     }
   } finally {
-    await engine.dispose()
+    await engine?.dispose()
   }
 }
 

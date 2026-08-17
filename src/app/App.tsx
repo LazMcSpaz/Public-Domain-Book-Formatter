@@ -32,6 +32,7 @@ import {
 } from '../platform/browser/recon-cache'
 import { canKeepAwake, keepAwake, type ReleaseWakeLock } from '../platform/browser/wake-lock'
 import { looksLikeEpub, openEpub } from '../platform/browser/epub'
+import { describeAssessment } from '@core/textquality'
 import { QuestionView } from './QuestionView'
 import { QuestionList } from './QuestionList'
 import {
@@ -269,6 +270,14 @@ export function App(): JSX.Element {
    * reads as a bug rather than as the app doing what they wanted.
    */
   const [awake, setAwake] = useState(false)
+  /**
+   * Whether this book's words came out of the file rather than out of OCR.
+   *
+   * Worth saying, and worth saying it *structurally*: a born-digital PDF is a
+   * different kind of source from a photograph of a book, and the difference is
+   * ten minutes of reading and a much better starting text.
+   */
+  const [embedded, setEmbedded] = useState(false)
   const releaseWakeRef = useRef<ReleaseWakeLock | null>(null)
   const [buildProgress, setBuildProgress] = useState<{ done: number; total: number } | null>(null)
   /**
@@ -630,6 +639,18 @@ export function App(): JSX.Element {
         setProgress({ page: p.done, total: Math.max(1, p.total), phase: 'harvesting' })
       )
 
+      // Said before anything else, because it decides whether this file is
+      // worth the next hour. An EPUB from Standard Ebooks needs no reading; one
+      // exported by archive.org is their OCR of a scan, and this app has no
+      // pixels to check it against — the PDF of the same book does.
+      setResumeNote(
+        opened.quality.verdict === 'trustworthy'
+          ? 'This EPUB is already text, so there is nothing to read and nothing to pay for.'
+          : `${describeAssessment(opened.quality)} There are no page images in an EPUB, so this ` +
+              'cannot be checked or corrected against the original. If it came from a scan, the ' +
+              'PDF of the same book can be read properly — that is the file to use.'
+      )
+
       // Pictures the markup referenced travel as supplied images — the same
       // channel a picture the editor adds by hand uses, so nothing downstream
       // has to know one came out of an archive.
@@ -661,6 +682,7 @@ export function App(): JSX.Element {
         pageText: Object.fromEntries(
           opened.transcriptions.map((t) => [t.pageIndex, transcriptionText(t)])
         ),
+        textSource: 'embedded',
         hasApiKey: loadApiKey().length > 0,
         // Everything the recovery half would have decided is already decided,
         // so those steps are marked done rather than walked through with
@@ -768,6 +790,7 @@ export function App(): JSX.Element {
       // neither is preventable from inside a page, and neither has to cost the
       // whole book.
       const partial = cached ? null : await loadReconCheckpoint(fileKeyRef.current, wanted)
+      setEmbedded(cached?.source === 'embedded')
 
       // Said before the wait rather than after it, and said accurately: "this
       // is free, it only costs time" is cold comfort at the start of ten
@@ -811,6 +834,18 @@ export function App(): JSX.Element {
           }
         }))
       reconRef.current = result
+      setEmbedded(result.source === 'embedded')
+
+      // A PDF that was typeset rather than photographed carries its own text,
+      // and reading it off pictures would have been ten minutes spent to get a
+      // worse answer. Said here because it changes what the next step is for.
+      if (result.source === 'embedded') {
+        setResumeNote(
+          'This PDF was typeset rather than scanned, so it already contains its own text and ' +
+            'none had to be read off pictures of it. Check it at the next step before paying ' +
+            'to have it read again — you may not need to.'
+        )
+      }
 
       // Written after the reading is in hand and never awaited into the user's
       // path: this is a convenience, and a full quota must not stand between
@@ -839,6 +874,7 @@ export function App(): JSX.Element {
         pagesProcessed: result.pageCount,
         lexicon: result.lexicon,
         classifications: [{ pageIndex: 0, role: 'title-page', selfReportedConfidence: 0 }],
+        textSource: result.source,
         cropFor: (tokenId: string) => result.crops.get(tokenId),
         contextCropFor: (tokenId: string) => result.contextCrops.get(tokenId),
         illustrationCandidates: result.illustrations.map((c) => ({
@@ -2182,6 +2218,7 @@ export function App(): JSX.Element {
               {progressInfo.meanConfidence
                 ? ` · ${Math.round(progressInfo.meanConfidence)}% confidence`
                 : null}
+              {embedded ? ' · using the text the file already has' : null}
               {awake ? ' · keeping the screen on' : null}
             </div>
           </div>

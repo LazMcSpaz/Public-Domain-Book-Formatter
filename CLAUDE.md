@@ -27,6 +27,7 @@ npm run build        # typecheck + vite build → dist/
 
 node scripts/make-test-book.mjs      # regenerate the 8-page test fixture
 node scripts/make-test-epub.mjs      # regenerate the EPUB fixture
+node scripts/make-test-digital.mjs   # regenerate the born-digital PDF fixture
 node scripts/screenshot-flow.mjs     # drive the wizard headlessly, screenshot each screen
 ```
 
@@ -106,6 +107,20 @@ Path aliases: `@core`, `@platform` (defined in `tsconfig.json`,
   `imagesDropped` and `missingImages` are the same rule for pictures, and
   nothing is drawn in place of one — a grey placeholder box in a book for sale
   is worse than a gap the user was told about.
+- **Never repair text without pixels.** With a scan, the model reads a page
+  against the image and OCR is the independent witness that catches it
+  drifting. Given only garbled text and no picture, it has nothing to be right
+  _against_: it returns fluent, confident, partly-invented prose, and no
+  downstream check can tell. For a public-domain reprint that is the one
+  unrecoverable failure. A text-only "clean this up" pass must never be added.
+- **What needs reading is a structural question, not a statistical one.** Good
+  OCR of a clean scan is made of `chirnrgeon` and `thc` — shaped exactly like
+  words — so no measurement of word shapes can decide whether a file's text can
+  be trusted. What can decide it is whether the page _is a photograph_:
+  `looksScanned` tracks the transformation matrix and asks whether one image
+  covers the page. `@core/textquality` is the other half and answers a
+  different question — how _damaged_ a text is — which it does see well, and
+  which is what warns about an EPUB that has no pixels behind it at all.
 - **Never invent resolution.** Illustration crops are taken at the DPI the page
   renders at and placed at exactly that pixel size. Rendering a page larger to
   make the DPI number look better only interpolates pixels the scan never had:
@@ -419,6 +434,20 @@ in `screenshots/`. Don't ship UI blind.
   prints mid-book; the author is the `dc:creator` marked `aut`, or a reprint
   gets credited to its 1913 translator; and `dc:date` is usually the _ebook's_
   year, so it is offered at the export gate rather than believed.
+- **Also done**: **the app measures what it has been handed instead of trusting
+  the file extension.** Two assumptions were wrong at the edges, and the edges
+  are where the real books are: an archive.org EPUB is _machine OCR with no
+  images_, believed completely, and a born-digital PDF carries flawless text
+  that was rasterised, OCR'd for ten minutes and then paid for a second time.
+  Now `looksScanned` asks the structural question — does one image cover the
+  page? — and a typeset PDF has its own words read straight out of it, shaped
+  as `OcrWord` with confidence 100 so the coordinate map, the lexicon, the ink
+  test and the cross-checks all work unchanged. **Measured: 1.4 s against ~8 s
+  of Tesseract**, and Gate 1's term grid disappears entirely, because nothing
+  read those words and there is nothing to vet. `@core/textquality` runs
+  alongside it to describe _damage_, which is what warns on an EPUB with no
+  pixels to fall back on. The scan fixture now carries a sheet of paper under
+  every leaf, because it claims to be a scan and the app can now tell.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

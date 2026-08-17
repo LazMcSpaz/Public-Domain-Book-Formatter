@@ -50,6 +50,8 @@ interface StoredRecon {
   words: OcrWord[]
   lexicon: LexiconEntry[]
   pageText: string[]
+  /** Whether the words were OCR'd or supplied by the file itself. */
+  source?: 'ocr' | 'embedded'
   crops: Map<string, Blob>
   contextCrops: Map<string, Blob>
   thumbnails: Map<number, Blob>
@@ -108,6 +110,7 @@ export async function saveReconCache(
       words: result.words,
       lexicon: result.lexicon,
       pageText: result.pageText,
+      source: result.source,
       crops: await blobMap(result.crops),
       contextCrops: await blobMap(result.contextCrops),
       thumbnails: await blobMap(result.thumbnails),
@@ -167,6 +170,7 @@ export async function loadReconCache(
       words: record.words,
       lexicon: record.lexicon ?? [],
       pageText: record.pageText,
+      source: record.source ?? 'ocr',
       crops: urls(record.crops),
       contextCrops: urls(record.contextCrops ?? new Map()),
       thumbnails: urls(record.thumbnails),

@@ -423,6 +423,71 @@ const wake = await page.evaluate(async (repo) => {
 if (!wake.held) throw new Error('The wake lock was never requested')
 console.log(`  → the screen is held awake while reading (offered here: ${wake.offered})`)
 
+// A scan and a typeset file look identical once you have the text out of them,
+// which is why the app asks a *structural* question instead: is the page a
+// photograph? No statistic over word shapes can tell good OCR from real text —
+// `chirnrgeon` and `thc` are shaped exactly like words — so this is the check
+// that decides whether ten minutes of Tesseract is worth running at all.
+console.log('2c4. telling a scan from a book that was typeset')
+const makeup = await page.evaluate(async (repo) => {
+  const pdf = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+  const quality = await import(`/@fs${repo}/src/core/textquality/index.ts`)
+
+  const open = async (name) => {
+    const res = await fetch(name)
+    return pdf.openPdf(await res.arrayBuffer())
+  }
+
+  try {
+    const scan = await open('test-book.pdf')
+    const digital = await open('test-digital.pdf')
+
+    const scanned = await pdf.looksScanned(scan)
+    const typeset = await pdf.looksScanned(digital)
+
+    // And the text a typeset file carries comes out as words with boxes, in
+    // the shape everything downstream already reads.
+    const extracted = await pdf.extractPageWords(digital, 1, 300)
+    const assessed = quality.assessText(
+      (
+        await Promise.all(
+          [1, 2, 3, 4, 5].map(async (i) => (await pdf.extractPageWords(digital, i, 300)).text)
+        )
+      ).join(' ')
+    )
+
+    return {
+      scanIsScanned: scanned.scanned,
+      typesetIsNot: !typeset.scanned,
+      typesetHasText: typeset.textPerPage > 200,
+      wordsHaveBoxes:
+        extracted.words.length > 50 &&
+        extracted.words.every(
+          (w) => w.bbox.x1 > w.bbox.x0 && w.bbox.y1 > w.bbox.y0 && w.confidence === 100
+        ),
+      readsAsProse: /chirurgeon/i.test(extracted.text),
+      verdict: assessed.verdict
+    }
+  } catch (e) {
+    return { error: String(e.message) }
+  }
+}, REPO)
+
+if (makeup.error) throw new Error(`The makeup check failed: ${makeup.error}`)
+console.log(
+  `  → a scan reads as a scan: ${makeup.scanIsScanned}; a typeset file does not:` +
+    ` ${makeup.typesetIsNot} (its text: ${makeup.verdict})`
+)
+if (!makeup.scanIsScanned) throw new Error('A scanned fixture was not recognised as a scan')
+if (!makeup.typesetIsNot) throw new Error('A typeset fixture was mistaken for a scan')
+if (!makeup.typesetHasText) throw new Error('The typeset fixture yielded no embedded text')
+if (!makeup.wordsHaveBoxes) throw new Error('Embedded words came back without usable boxes')
+if (!makeup.readsAsProse) throw new Error('The embedded text does not read as the book')
+if (makeup.verdict !== 'trustworthy') {
+  throw new Error(`A typeset PDF's own text was judged "${makeup.verdict}"`)
+}
+console.log('  → its words come out with boxes and confidence 100, no OCR run')
+
 // Banked looks live in the same database as runs but under opposite rules, and
 // the upgrade that added them has to leave the runs alone — which is the one
 // thing no unit test can check, because there is no IndexedDB in vitest.
@@ -1390,6 +1455,38 @@ const bankMarkdown = await page.evaluate(async () => {
   URL.createObjectURL = realCreate
   return captured ? await captured.text() : ''
 })
+
+// --- a book that was typeset, not photographed -------------------------------
+// The saving the structural check unlocks: no Tesseract, no ten minutes, and a
+// starting text that is the file's own characters rather than a reading of a
+// picture of them.
+console.log('5g0. a typeset PDF is read, not OCR’d')
+await page.goto(URL_BASE, { waitUntil: 'networkidle' })
+const typesetAt = Date.now()
+await page.setInputFiles('input[type=file]', resolve(REPO, 'public/test-digital.pdf'))
+await page.waitForSelector('.terms, .q', { timeout: 180000 })
+const typesetMs = Date.now() - typesetAt
+const typesetNote = await page
+  .locator('.resume-note')
+  .innerText()
+  .catch(() => '')
+// No term grid at all: nothing read these words, so there is nothing to vet.
+const typesetTerms = await page.locator('.terms tbody tr').count()
+await shot('09c-typeset-pdf-no-ocr')
+
+console.log(
+  `  a typeset PDF opens in ${typesetMs} ms with ${typesetTerms} term(s): ` +
+    `"${typesetNote.replace(/\s+/g, ' ').slice(0, 90)}"`
+)
+if (!/typeset rather than scanned/i.test(typesetNote)) {
+  throw new Error(`A typeset PDF was not recognised — note said "${typesetNote}"`)
+}
+// The scan of the same length takes seconds of Tesseract per leaf; this must be
+// in a different league or nothing was actually skipped.
+if (typesetMs > 4000) throw new Error(`A typeset PDF took ${typesetMs} ms — OCR probably ran`)
+if (typesetTerms > 0) {
+  throw new Error(`A typeset PDF asked for ${typesetTerms} spellings to be vetted`)
+}
 
 // --- a book that is already text --------------------------------------------
 // An EPUB has been through everything the recovery half of this app exists to

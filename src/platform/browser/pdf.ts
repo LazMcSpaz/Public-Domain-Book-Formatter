@@ -288,7 +288,203 @@ export async function renderPageToObjectUrl(
   }
 }
 
-/** Downscale a page to a thumbnail object URL (front-matter review, page rail). */
+/**
+ * What a page is made of: pictures, text, or a picture with text laid over it.
+ *
+ * This is the check that decides whether a PDF needs reading at all, and it is
+ * **structural rather than statistical** on purpose. Judging the text layer by
+ * how its words look cannot work: good OCR of a clean scan is made of
+ * `chirnrgeon` and `thc`, which are shaped exactly like words. But a scanned
+ * page *is a photograph* with invisible text placed on top of it, and a
+ * born-digital page is not — and that is a fact about the file rather than a
+ * guess about its contents.
+ *
+ * So: does one image cover most of the page? Then whatever text is there was
+ * produced by somebody's OCR, and this app should read the pixels itself.
+ */
+export interface PageMakeup {
+  /** True when a single image covers most of the page — i.e. it is a scan. */
+  scanned: boolean
+  /** Characters of embedded text, whoever produced it. */
+  textLength: number
+  /** Fraction of the page covered by the largest image drawn on it. */
+  imageCoverage: number
+}
+
+export async function pageMakeup(doc: PDFDocumentProxy, pageIndex: number): Promise<PageMakeup> {
+  const page = await doc.getPage(pageIndex + 1)
+  try {
+    const viewport = page.getViewport({ scale: 1 })
+    const area = Math.max(1, viewport.width * viewport.height)
+
+    const ops = await page.getOperatorList()
+    let largest = 0
+    // The drawn size of an image is the *current transformation matrix* at the
+    // moment it is painted — an image is always drawn into the unit square, so
+    // the matrix's determinant is the area it covers. Walking back to find "the
+    // transform before the paint" reads the image's own pixel dimensions
+    // instead, which is a fact about the file and not about the page.
+    let ctm: number[] = [1, 0, 0, 1, 0, 0]
+    const stack: number[][] = []
+
+    for (let i = 0; i < ops.fnArray.length; i++) {
+      const fn = ops.fnArray[i]
+      if (fn === pdfjs.OPS.save) {
+        stack.push([...ctm])
+        continue
+      }
+      if (fn === pdfjs.OPS.restore) {
+        ctm = stack.pop() ?? [1, 0, 0, 1, 0, 0]
+        continue
+      }
+      if (fn === pdfjs.OPS.transform) {
+        ctm = pdfjs.Util.transform(ctm, ops.argsArray[i] as number[])
+        continue
+      }
+      const isImage =
+        fn === pdfjs.OPS.paintImageXObject ||
+        fn === pdfjs.OPS.paintImageMaskXObject ||
+        fn === pdfjs.OPS.paintInlineImageXObject
+      if (!isImage) continue
+      const determinant = Math.abs((ctm[0] ?? 0) * (ctm[3] ?? 0) - (ctm[1] ?? 0) * (ctm[2] ?? 0))
+      largest = Math.max(largest, determinant / area)
+    }
+
+    const content = await page.getTextContent()
+    const textLength = content.items.reduce(
+      (n, item) => n + ('str' in item ? item.str.length : 0),
+      0
+    )
+
+    // Two thirds rather than nearly all: a scan is often placed with a margin,
+    // and a decorative header on a born-digital page never reaches it.
+    return { scanned: largest >= 0.66, textLength, imageCoverage: largest }
+  } finally {
+    page.cleanup()
+  }
+}
+
+/** What a sample of the book's pages are made of. */
+export interface PdfMakeup {
+  /** True when most sampled pages are a photograph with text over them. */
+  scanned: boolean
+  /** Mean characters of embedded text per sampled page. */
+  textPerPage: number
+  sampled: number
+}
+
+/**
+ * Whether this PDF is a scan, sampled across the book.
+ *
+ * Sampled rather than read whole because opening three hundred operator lists
+ * to answer a yes/no question costs more than it tells. Evenly spaced, because
+ * a scanned book often opens with a typed title page and one such leaf must not
+ * make the other three hundred look born-digital.
+ */
+export async function looksScanned(doc: PDFDocumentProxy, sample = 8): Promise<PdfMakeup> {
+  const total = doc.numPages
+  const step = Math.max(1, Math.floor(total / Math.min(sample, total)))
+  let scannedPages = 0
+  let sampled = 0
+  let text = 0
+
+  for (let i = 0; i < total && sampled < sample; i += step) {
+    const makeup = await pageMakeup(doc, i)
+    sampled += 1
+    text += makeup.textLength
+    if (makeup.scanned) scannedPages += 1
+  }
+
+  return { scanned: scannedPages * 2 > sampled, textPerPage: text / Math.max(1, sampled), sampled }
+}
+
+/** A word the PDF itself supplied, shaped as everything downstream expects. */
+export interface EmbeddedWord {
+  id: string
+  text: string
+  confidence: number
+  pageIndex: number
+  bbox: { x0: number; y0: number; x1: number; y1: number }
+}
+
+/**
+ * The text a PDF already contains, as words with boxes.
+ *
+ * Shaped as an OCR word on purpose. Everything downstream — the coordinate map,
+ * the lexicon, illustration detection, the cross-checks — is written against
+ * word boxes, and text the file itself supplies is simply a *better* source of
+ * them than Tesseract. Confidence is 100 because this is not a reading: it is
+ * what the file says it says.
+ *
+ * pdf.js hands back runs rather than words, so a run is split on spaces and its
+ * width shared out by character count. That approximates where each word sits,
+ * which is all the coordinate map and the ink test need of it.
+ */
+export async function extractPageWords(
+  doc: PDFDocumentProxy,
+  pageIndex: number,
+  dpi: number
+): Promise<{ words: EmbeddedWord[]; text: string }> {
+  const page = await doc.getPage(pageIndex + 1)
+  const scale = dpi / PDF_POINTS_PER_INCH
+  try {
+    const viewport = page.getViewport({ scale })
+    const content = await page.getTextContent()
+
+    const words: EmbeddedWord[] = []
+    const lines: string[] = []
+    let n = 0
+
+    for (const item of content.items) {
+      if (!('str' in item)) continue
+      const raw = item.str
+      if (raw.trim().length === 0) {
+        if (item.hasEOL) lines.push('\n')
+        continue
+      }
+
+      const t = pdfjs.Util.transform(viewport.transform, item.transform)
+      const x = t[4] ?? 0
+      // The transform puts the origin on the baseline; a box wants the top.
+      const height = Math.abs(item.height || 10) * scale
+      const y = (t[5] ?? 0) - height
+      const width = (item.width || 0) * scale
+      const perChar = raw.length > 0 ? width / raw.length : 0
+
+      let offset = 0
+      for (const part of raw.split(/(\s+)/u)) {
+        if (part.trim().length > 0) {
+          words.push({
+            id: `p${pageIndex}_e${n++}`,
+            text: part,
+            confidence: 100,
+            pageIndex,
+            bbox: {
+              x0: x + offset * perChar,
+              y0: y,
+              x1: x + (offset + part.length) * perChar,
+              y1: y + height
+            }
+          })
+        }
+        offset += part.length
+      }
+      lines.push(raw)
+      if (item.hasEOL) lines.push('\n')
+    }
+
+    return {
+      words,
+      text: lines
+        .join(' ')
+        .replace(/ *\n */gu, '\n')
+        .trim()
+    }
+  } finally {
+    page.cleanup()
+  }
+}
+
 /**
  * Downscale a page to a thumbnail Blob.
  *

@@ -11,6 +11,7 @@
  */
 import { PDFDocument, StandardFonts, rgb } from 'pdf-lib'
 import { writeFileSync } from 'node:fs'
+import { crc32, deflateSync } from 'node:zlib'
 
 const OUT = process.argv[2] ?? 'public/test-book.pdf'
 
@@ -21,8 +22,56 @@ const italic = await doc.embedFont(StandardFonts.TimesRomanItalic)
 const PAGE = [432, 648] // 6×9in at 72dpi
 const RUNNING_HEAD = 'THE ALCHEMIST HIS PRACTISE'
 
+/**
+ * A scan is a photograph of paper, and the app now tells that apart from a
+ * typeset file *structurally* — does one image cover the page? — because no
+ * statistic over word shapes can distinguish good OCR from real text.
+ *
+ * This fixture stands in for a scanned book, so it has to be one: every leaf
+ * gets a full-page sheet of off-white "paper" under the type. Without it the
+ * fixture is born-digital, the app correctly reads its embedded text, and the
+ * entire OCR half of the pipeline goes untested.
+ */
+const PAPER = await doc.embedPng(paperPng())
+
+/**
+ * An eight-pixel square of near-white, as a PNG, built rather than pasted.
+ *
+ * Built because a base64 blob is a colour nobody can check, and the whole point
+ * of this sheet is that it must be light enough to leave OCR and the ink test
+ * exactly as they were. 0xFA is paper; anything darker changes what the
+ * detector sees on every leaf.
+ */
+function paperPng() {
+  const size = 8
+  const chunk = (type, body) => {
+    const out = Buffer.alloc(8 + body.length + 4)
+    out.writeUInt32BE(body.length, 0)
+    out.write(type, 4, 'ascii')
+    body.copy(out, 8)
+    out.writeUInt32BE(crc32(Buffer.concat([Buffer.from(type, 'ascii'), body])), 8 + body.length)
+    return out
+  }
+  const header = Buffer.alloc(13)
+  header.writeUInt32BE(size, 0)
+  header.writeUInt32BE(size, 4)
+  header[8] = 8 // bit depth
+  header[9] = 2 // truecolour
+  // One filter byte per row, then RGB triples.
+  const raw = Buffer.alloc(size * (1 + size * 3), 0xfa)
+  for (let y = 0; y < size; y++) raw[y * (1 + size * 3)] = 0
+  return Buffer.concat([
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+    chunk('IHDR', header),
+    chunk('IDAT', deflateSync(raw)),
+    chunk('IEND', Buffer.alloc(0))
+  ])
+}
+
 function newPage() {
-  return doc.addPage(PAGE)
+  const page = doc.addPage(PAGE)
+  page.drawImage(PAPER, { x: 0, y: 0, width: PAGE[0], height: PAGE[1] })
+  return page
 }
 
 const write = (page, text, y, opts = {}) =>
