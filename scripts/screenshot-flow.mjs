@@ -962,6 +962,17 @@ const proofScan = await page.locator('.proof-scan img').count()
 let italicsShown = ''
 /** Every leaf the sheet walked, so a miss says which leaves it actually saw. */
 const leavesWalked = []
+// Start at the beginning. The sheet does not necessarily open on leaf one — it
+// restores the place it was left at — so a forward-only search from wherever it
+// happens to be silently skips everything behind it. That is what made this
+// look for italics across leaves 8 and 9 only, and it is the same assumption
+// that broke two other checks in this section.
+const rewind = page.locator('.proof-bar button', { hasText: '‹ Previous' })
+for (let i = 0; i < 60; i++) {
+  if (!(await rewind.isEnabled())) break
+  await rewind.click()
+  await page.waitForTimeout(120)
+}
 for (let i = 0; i < 40; i++) {
   // The leaf has to have rendered before its boxes are read, or an empty
   // textarea reads as a leaf with no italics on it.
