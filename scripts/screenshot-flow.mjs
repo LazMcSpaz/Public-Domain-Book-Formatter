@@ -72,7 +72,17 @@ const page = await browser.newPage({ viewport: { width: 1360, height: 900 } })
 const errors = []
 page.on('pageerror', (e) => errors.push(e.message))
 page.on('console', (m) => {
-  if (m.type() === 'error') errors.push(m.text())
+  if (m.type() !== 'error') return
+  // A request to the API that the browser refuses outright is not the app
+  // breaking — it is `batch-reach` asking whether the batch endpoints will
+  // talk to a page, and being told no. That question can only be asked by
+  // trying, and a cross-origin refusal always logs a console error the page
+  // cannot suppress. (Here it is the sandbox's own TLS proxy that Chromium
+  // does not trust; in a browser it would be the CORS refusal itself. Either
+  // way the answer is "no" and the app handles it.) Everything else still
+  // counts.
+  if (m.location()?.url?.includes('api.anthropic.com')) return
+  errors.push(m.text())
 })
 
 const shot = async (name) => {
@@ -1865,6 +1875,228 @@ console.log(
   `  → storage asked with measured figures: ${storageHelp.replace(/\s+/g, ' ').slice(0, 96)}…`
 )
 
+// --- the batch door ---------------------------------------------------------
+// The one path in this app where the loop is *not* in the tab. The API is
+// stubbed, so this exercises submission, the ticket surviving a reload, the
+// wait, and the collection — everything except the spend. The reload is the
+// point: a batch id lives only in the ticket, and a submission the user cannot
+// come back to is money on the floor.
+console.log('5b3. the batch door — submit, close the tab, come back')
+
+await page.evaluate(
+  async ([repo, key]) => {
+    const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+    await runStore.deleteRun(key)
+    await runStore.deleteBatchTicket(key)
+  },
+  [REPO, savedKey]
+)
+
+// What went into each batch, recorded from the request the app actually sent
+// rather than assumed here — the results have to come back keyed to the ids it
+// chose, which is the whole mechanism under test.
+const submittedBatches = new Map()
+let statusChecks = 0
+
+await page.route('https://api.anthropic.com/v1/messages/batches**', async (route) => {
+  const url = route.request().url()
+  const method = route.request().method()
+  const json = (body) =>
+    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(body) })
+
+  if (method === 'POST' && url.endsWith('/batches')) {
+    const body = JSON.parse(route.request().postData() ?? '{}')
+    const id = `msgbatch_${submittedBatches.size + 1}`
+    submittedBatches.set(
+      id,
+      body.requests.map((r) => r.custom_id)
+    )
+    return json({
+      id,
+      processing_status: 'in_progress',
+      request_counts: {
+        processing: body.requests.length,
+        succeeded: 0,
+        errored: 0,
+        canceled: 0,
+        expired: 0
+      },
+      results_url: null,
+      created_at: new Date().toISOString(),
+      expires_at: new Date(Date.now() + 29 * 86400000).toISOString()
+    })
+  }
+
+  // The reachability probe — a bare list request. Answered without touching
+  // the status counter, or the probe would consume the "still in progress"
+  // reply that the waiting screen exists to show.
+  if (method === 'GET' && url.includes('/batches?')) {
+    return json({ data: [], has_more: false, first_id: null, last_id: null })
+  }
+
+  if (url.endsWith('/results')) {
+    const id = /batches\/([^/]+)\/results/.exec(url)?.[1] ?? ''
+    const lines = (submittedBatches.get(id) ?? []).map((customId, i) =>
+      JSON.stringify({
+        custom_id: customId,
+        result: {
+          type: 'succeeded',
+          message: {
+            stop_reason: 'end_turn',
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  role: i === 0 ? 'title-page' : 'body',
+                  blocks: [{ kind: 'paragraph', text: `Collected from a batch, leaf ${i + 1}.` }],
+                  uncertain: [],
+                  furniture: {}
+                })
+              }
+            ],
+            usage: { input_tokens: 900, output_tokens: 300, cache_read_input_tokens: 800 }
+          }
+        }
+      })
+    )
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/x-jsonlines',
+      body: lines.join('\n')
+    })
+  }
+
+  // A retrieve. The first check reports it still working, so the waiting
+  // screen is exercised rather than skipped past.
+  const id = /batches\/([^/?]+)/.exec(url)?.[1] ?? ''
+  statusChecks += 1
+  const ended = statusChecks > 1
+  return json({
+    id,
+    processing_status: ended ? 'ended' : 'in_progress',
+    request_counts: {
+      processing: ended ? 0 : (submittedBatches.get(id) ?? []).length,
+      succeeded: ended ? (submittedBatches.get(id) ?? []).length : 0,
+      errored: 0,
+      canceled: 0,
+      expired: 0
+    },
+    results_url: ended ? `https://api.anthropic.com/v1/messages/batches/${id}/results` : null,
+    created_at: new Date().toISOString(),
+    expires_at: new Date(Date.now() + 29 * 86400000).toISOString()
+  })
+})
+
+await page.goto(URL_BASE, { waitUntil: 'networkidle' })
+await page.evaluate(() => localStorage.setItem('pdbf.apiKey', 'sk-ant-harness'))
+await page.setInputFiles('input[type=file]', bookPath)
+await page.waitForSelector('.terms', { timeout: 180000 })
+await page.locator('button.primary', { hasText: 'Looks right' }).click()
+await page.waitForSelector('.q', { timeout: 20000 })
+
+// Both prices on one screen, which is the evidence the recommendation rests on.
+const modeQ = page.locator('.q').filter({ hasText: 'How should the reading be run' })
+const modeOptions = await modeQ.locator('.opt').allInnerTexts()
+const batchOption = modeOptions.find((t) => /Submit it and come back/.test(t)) ?? ''
+const nowOption = modeOptions.find((t) => /Read it now/.test(t)) ?? ''
+const priceOf = (text) => Number(/about \$([\d.]+)/.exec(text)?.[1] ?? '0')
+await shot('08b3-batch-door-offered')
+
+await modeQ.locator('.opt', { hasText: 'Submit it and come back' }).click()
+await page.locator('button.primary', { hasText: 'Continue' }).last().click()
+await page.waitForSelector('.q .prompt', { timeout: 20000 })
+const approvalPrompt = await page.locator('.q .prompt').first().innerText()
+const approvalHelp = await page.locator('.q .help').first().innerText()
+await shot('08b4-batch-cost-approval')
+
+await page.locator('button.primary', { hasText: 'Submit —' }).click()
+// Uploading, then straight to the collect offer.
+await page.waitForSelector('.q .prompt:has-text("This book is out being read")', {
+  timeout: 120000
+})
+const batchesMade = submittedBatches.size
+const pagesSubmitted = [...submittedBatches.values()].reduce((n, ids) => n + ids.length, 0)
+await shot('08b5-batch-submitted')
+
+// The tab goes away entirely, which is the feature. Everything after this
+// depends only on what was written to disk.
+await page.goto(URL_BASE, { waitUntil: 'networkidle' })
+await page.setInputFiles('input[type=file]', bookPath)
+await page.waitForSelector('.terms', { timeout: 180000 })
+await page.locator('button.primary', { hasText: 'Looks right' }).click()
+await page.waitForSelector('.q', { timeout: 20000 })
+const survivedReload = await page
+  .locator('.q .prompt')
+  .filter({ hasText: 'This book is out being read' })
+  .count()
+const collectHelp = await page.locator('.q .help').first().innerText()
+// Nothing on this screen may quote a price: these pages are already bought.
+const quotedAgain = await page.locator('.q').filter({ hasText: 'read the pages' }).count()
+await shot('08b6-batch-offered-after-reload')
+
+const collectLabel = await page.locator('button.primary').last().innerText()
+await page.locator('button.primary').last().click()
+// First check finds it still running — the honest intermediate state.
+await page.waitForSelector('.q .prompt:has-text("Still being read")', { timeout: 60000 })
+const waitingHelp = await page.locator('.q .help').first().innerText()
+await shot('08b7-batch-still-running')
+
+await page.locator('button.primary', { hasText: 'Check again' }).click()
+// Collected, and the flow carries on into the ordinary review gate.
+await page.waitForSelector('.q', { timeout: 120000 })
+await page.waitForTimeout(500)
+const afterCollect = await page.locator('.rail li.done').allInnerTexts()
+const transcribeDone = afterCollect.some((t) => /Transcrib/i.test(t))
+const collected = await page.evaluate(
+  async ([repo, key]) => {
+    const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+    const run = await runStore.loadRun(key)
+    const ticket = await runStore.loadBatchTicket(key)
+    return {
+      pages: run?.transcriptions.length ?? 0,
+      complete: run?.complete ?? false,
+      text: run?.transcriptions[0]?.blocks[0]?.text ?? '',
+      ticketGone: ticket === null
+    }
+  },
+  [REPO, savedKey]
+)
+await shot('08b8-batch-collected')
+
+if (!batchOption || !nowOption) throw new Error('The batch door was not offered')
+if (priceOf(batchOption) > priceOf(nowOption) * 0.6) {
+  throw new Error('The batch option did not quote a lower price than reading it now')
+}
+if (!/OCR/.test(batchOption)) throw new Error('The batch option hides what it gives up')
+if (!/submit/i.test(approvalPrompt)) throw new Error('The approval screen did not say "submit"')
+if (!/close it/.test(approvalHelp))
+  throw new Error('The approval screen did not say the tab can be closed')
+if (batchesMade < 1) throw new Error('Nothing was submitted')
+if (pagesSubmitted !== 9) throw new Error(`Submitted ${pagesSubmitted} pages, expected 9`)
+if (survivedReload !== 1) throw new Error('The batch ticket did not survive a reload')
+if (quotedAgain !== 0) throw new Error('A book already out being read was quoted a price again')
+if (!/already paid for/.test(collectHelp)) throw new Error('Collecting was not said to be free')
+// The button under a "these pages are bought" screen must not promise a cost.
+if (/cost/i.test(collectLabel)) {
+  throw new Error(`The collect button offered to show a cost: "${collectLabel}"`)
+}
+if (!/close this tab/.test(waitingHelp))
+  throw new Error('The waiting screen did not say the tab can be closed')
+if (collected.pages !== 9) throw new Error(`Collected ${collected.pages} pages, expected 9`)
+if (!collected.complete) throw new Error('The collected run was not marked complete')
+if (!/Collected from a batch/.test(collected.text)) {
+  throw new Error('The saved run does not hold what the batch returned')
+}
+if (!collected.ticketGone)
+  throw new Error('The ticket outlived the collection it was the receipt for')
+if (!transcribeDone) throw new Error('Collecting did not carry the flow past the paid step')
+console.log(
+  `  → ${pagesSubmitted} pages in ${batchesMade} batch(es) at ${priceOf(batchOption)} against ` +
+    `${priceOf(nowOption)}; survived a reload; collected ${collected.pages} pages and the ticket was cleared`
+)
+
+await page.unroute('https://api.anthropic.com/v1/messages/batches**')
+
 // The failure this guards against was reported from a real book: a refresh put
 // an empty drop zone in front of someone whose paid run was in the database,
 // with nothing on the screen to say so. `listRuns` had been written for exactly
@@ -1957,7 +2189,18 @@ const reopenOffered = await reopenBtn.count()
 if (reopenOffered === 0) throw new Error('No way to reopen a book whose scan is stored')
 await reopenBtn.first().click()
 await page.waitForSelector('.progress', { timeout: 30000 })
-const resumeSaid = await page.locator('.progress .help').filter({ hasText: 'already paid' }).count()
+// Either place. The note lives in the running stage while there *is* one, and
+// in `.resume-note` after — which is the whole point of that second element,
+// since a book whose reading is cached skips the progress screen in under a
+// second. Looking only at the running stage makes this assertion a race that a
+// warm cache loses.
+const resumeSaid = await page
+  .locator('.progress .help, .resume-note')
+  .filter({ hasText: 'already paid' })
+  .first()
+  .waitFor({ timeout: 20000 })
+  .then(() => 1)
+  .catch(() => 0)
 await shot('02c-reopened-from-storage')
 console.log(
   `  → reopened from storage without the picker; said so during the re-read: ${resumeSaid === 1}`

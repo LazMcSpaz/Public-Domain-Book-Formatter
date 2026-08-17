@@ -146,6 +146,33 @@ Path aliases: `@core`, `@platform` (defined in `tsconfig.json`,
   time. Never accumulate page canvases.
 - **Object URLs must be revoked.** Crops and thumbnails leak otherwise — see
   `releaseRecon`.
+- **The loop is in the tab, unless it isn't.** The sequential runner sends one
+  page and waits for the reply before building the next, so the reading stops
+  dead when a phone locks — nothing on Anthropic's side knows there is a book,
+  only three hundred unrelated requests. A wake lock and a checkpoint soften
+  that; only the **Message Batches API** removes it, by moving the loop off the
+  device (`src/core/transcribe/batch.ts`). What it costs is the seam context —
+  page N's request is built before page N−1 has been read, so the tail is the
+  previous leaf's _OCR_ and the prompt says so.
+- **The batch door is built and, from a browser, currently shut.** The
+  `anthropic-dangerous-direct-browser-access` opt-in that makes this
+  server-less app possible is honoured **per endpoint**, and it covers
+  `/v1/messages` but not `/v1/messages/batches`. Measured, not assumed: a
+  preflight for any batch path returns `400 Disallowed CORS origin` with no
+  `access-control-allow-origin`, for every origin, while the same preflight for
+  `/v1/messages` returns `200` and `access-control-allow-origin: *`. Nothing in
+  a page can argue with that, and the usual fix — proxy it through your own
+  server — is the one thing this app has never had. So the offer is **probed
+  rather than hard-coded** (`platform/browser/batch-reach`): the gate asks the
+  server once per session and withdraws the question when the answer is no, so
+  the day the header is extended the door opens with no change here.
+- **A batch id is the only address of work already billed for.** So the ticket
+  (`src/core/project/batch-ticket.ts`) is written after every batch is created
+  and before the next page is rendered, a failed ticket write **stops** the
+  submission, and the ticket is deleted only once every page is in the run. It
+  is the one record here that is never capped, never evicted and never cleared
+  by "don't keep book data on this device": everything else in the store costs
+  time to replace and this costs money.
 - **Only the paid step is persisted.** Everything else — rendering, OCR, the
   lexicon, assembly, layout — is free and repeatable, so the saved unit is the
   transcription, keyed to the file it came from (`src/core/project`). Reopening
@@ -448,6 +475,31 @@ in `screenshots/`. Don't ship UI blind.
   alongside it to describe _damage_, which is what warns on an EPUB with no
   pixels to fall back on. The scan fixture now carries a sheet of paper under
   every leaf, because it claims to be a scan and the app can now tell.
+- **Also done**: **the reading can leave the tab.** The wake lock and the
+  checkpoints treat the symptom; the cause is that the sequential runner's loop
+  lives in the page, so a locked phone stops the book where it stands. The
+  **Message Batches API** moves the loop to Anthropic's side: every leaf goes up
+  in one submission, the tab can close, and the results are collected in a
+  session that may be days later on another device. **Half the price**, which on
+  a three-hundred-page book is a number a person would answer differently, so
+  the gate quotes both and lets them choose. What makes it work is chunking and
+  a receipt. A batch takes 256 MB and a scanned leaf is one to two megabytes of
+  base64, so a long book is _larger than one batch_ — and the body is stringified
+  whole, so the ceiling that binds is the phone's, not the server's: pages are
+  packed into 32 MB chunks, rendered into the chunk being filled and released
+  with it. The ticket is written after each batch is created and before the next
+  page is rendered, because from the instant a batch exists those pages are
+  being billed and the id is their only address; a ticket that will not save
+  **stops** the submission rather than uploading more of them. A page submitted
+  and never returned is reported as a failure, never dropped — the footnote rule
+  applied to the one repair that costs money. What is given up is honest and
+  said at the gate: no live progress, and the seam context is the previous
+  leaf's OCR rather than its finished reading, because page N's request is built
+  before page N−1 has been read. **It does not work from a browser yet** — the
+  batch endpoints refuse the direct-browser-access origin, as above — so the
+  question withdraws itself and the sequential door is what runs. The whole path
+  is exercised end to end against a stubbed API in `screenshot-flow`, including
+  the reload that proves the ticket outlives the tab.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

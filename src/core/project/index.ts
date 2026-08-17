@@ -24,6 +24,21 @@ export {
   type SavedUsage
 } from './saved-run'
 export {
+  BATCH_TICKET_VERSION,
+  RESULTS_RETAINED_DAYS,
+  createBatchTicket,
+  describeTicket,
+  expiresAt,
+  migrateBatchTicket,
+  pendingBatches,
+  submittedPages,
+  summarizeTicket,
+  ticketExpired,
+  type BatchTicket,
+  type BatchTicketSummary,
+  type TicketBatch
+} from './batch-ticket'
+export {
   RECON_CACHE_VERSION,
   reconCacheUsable,
   reconResumeFrom,

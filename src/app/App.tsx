@@ -69,24 +69,34 @@ import {
   storageEstimate
 } from '../platform/browser/settings'
 import {
+  deleteBatchTicket,
+  findBatchTicketForFile,
   findRunForFile,
   listProfiles,
   listRuns,
   loadRun,
   loadRunSummary,
   loadSourceFile,
+  saveBatchTicket,
   saveProfile,
   saveRun,
   saveSourceFile,
   storedFileKeys
 } from '../platform/browser/run-store'
+import { collectBookBatch, submitBookBatch } from '../platform/browser/batch-run'
+import { canReachBatchApi } from '../platform/browser/batch-reach'
 import { newSavedProfile, styleQuestions, type SavedStyleProfile } from '@core/style'
 import {
+  createBatchTicket,
   createSavedRun,
   describeAge,
   fileKey,
+  pendingBatches,
   summarize as summarizeRun,
-  type SavedRunSummary
+  summarizeTicket,
+  type BatchTicket,
+  type SavedRunSummary,
+  type TicketBatch
 } from '@core/project'
 import { BODY_FONTS, describeProfile } from '@core/design'
 import { buildExport, editionFromAnswers, type BuildExportResult } from '@core/export'
@@ -196,6 +206,27 @@ export function App(): JSX.Element {
   const transcriptionRef = useRef<RunResult | null>(null)
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
   const [pendingCost, setPendingCost] = useState<string | null>(null)
+  /**
+   * The book that is out with the API, if there is one.
+   *
+   * A ref rather than state because it is written from inside the submission
+   * loop, once per batch, and a re-render between two uploads is the last thing
+   * that loop needs. The *summary* of it goes into wizard state, which is what
+   * the question renders from.
+   */
+  const batchTicketRef = useRef<BatchTicket | null>(null)
+  const [submitProgress, setSubmitProgress] = useState<{
+    page: number
+    total: number
+    batches: number
+  } | null>(null)
+  const [collectProgress, setCollectProgress] = useState<{
+    checked: number
+    total: number
+    collected: number
+  } | null>(null)
+  /** What the last check found, so the waiting screen says something true. */
+  const [batchWaiting, setBatchWaiting] = useState<string | null>(null)
   /**
    * The annotation pass, which is the app's second and much cheaper paid step.
    *
@@ -333,6 +364,25 @@ export function App(): JSX.Element {
     }, 400)
     return () => clearTimeout(timer)
   }, [answers, step.id])
+
+  /**
+   * Ask the server, once, whether the batch door is open from a browser.
+   *
+   * Done on arrival at the paid gate rather than at start-up, because that is
+   * the only screen the answer changes — and it is one free request, so asking
+   * on every page load would be a request nobody needed. The question renders
+   * optimistically and withdraws if the answer is no; see `batch-reach`.
+   */
+  useEffect(() => {
+    if (step.id !== 'transcribe' || state.batchAvailable !== null) return
+    let live = true
+    void canReachBatchApi(loadApiKey()).then((ok) => {
+      if (live) setState((s) => ({ ...s, batchAvailable: ok }))
+    })
+    return () => {
+      live = false
+    }
+  }, [step.id, state.batchAvailable])
 
   // Arriving at a step: put back whatever was answered here last time. Keyed by
   // step, so this cannot resurrect an answer onto a different gate.
@@ -618,6 +668,7 @@ export function App(): JSX.Element {
     excludedPagesRef.current = []
     reviewedPagesRef.current = []
     attentionRef.current = []
+    batchTicketRef.current = null
     setEdits([])
 
     setState((s) => ({
@@ -715,6 +766,7 @@ export function App(): JSX.Element {
     excludedPagesRef.current = []
     reviewedPagesRef.current = []
     attentionRef.current = []
+    batchTicketRef.current = null
     setEdits([])
 
     setState((s) => ({
@@ -758,6 +810,18 @@ export function App(): JSX.Element {
       // Before the free pass, not after: this only reads three fields off the
       // File, and it is the difference between watching a progress bar in hope
       // and watching it knowing what is at the end of it.
+      // Pages already out with the API, from a session that may have been days
+      // ago on another device. Looked up in the same breath as the saved run
+      // and with the same name-and-size fallback, because a ticket stranded by
+      // a changed modification time is not an inconvenience — it is the only
+      // address of work the user has already been billed for.
+      const outstanding = await findBatchTicketForFile(file)
+      if (outstanding) {
+        fileKeyRef.current = outstanding.key
+        batchTicketRef.current = outstanding.ticket
+        setState((s) => ({ ...s, savedBatch: summarizeTicket(outstanding.ticket) }))
+      }
+
       const known = await findRunForFile(file)
       if (known) {
         fileKeyRef.current = known.key
@@ -1220,17 +1284,32 @@ export function App(): JSX.Element {
     return { files, count: bankFacts.length }
   }, [bankFacts, state.answers, state.metadata, state.fileName])
 
-  /** Run the paid pass. Only reached after the user approves the estimate. */
-  const startTranscription = useCallback(async () => {
+  /**
+   * Everything both doors need before a page is sent: a checked key, the model,
+   * the vetted vocabulary and the OCR grouped for cross-checking.
+   *
+   * One function because the alternative is two, and the two would drift. The
+   * batch path spends the same money on the same pages, so it must validate the
+   * same credential, obey the same Gate 1 verdicts and be measured against the
+   * same OCR. Returns null when something is missing, having already said why.
+   */
+  const prepareRun = useCallback(async (): Promise<{
+    key: string
+    modelId: string
+    identity: Record<string, unknown>
+    bookContext: string
+    vetted: ReturnType<typeof vetLexicon>
+    wordsByPage: Map<number, ReconResult['words']>
+    prefs: ReturnType<typeof loadPrefs>
+  } | null> => {
     const recon = reconRef.current
-    const data = fileDataRef.current
-    if (!recon || !data) return
+    if (!recon) return null
 
     const identity = state.answers['gate-identity'] ?? {}
     const key = (currentAnswers['apiKey'] as string) || loadApiKey()
     if (!key) {
       setError('An API key is needed to transcribe.')
-      return
+      return null
     }
 
     // Check the credential before spending anything. Without this a bad key
@@ -1241,29 +1320,49 @@ export function App(): JSX.Element {
     const credential = await validateApiKey(key)
     if (!credential.ok) {
       setError(credential.message ?? 'That API key could not be used.')
-      return
+      return null
     }
     saveApiKey(key)
 
     const prefs = loadPrefs()
     const modelId = (currentAnswers['model'] as string) ?? prefs.modelId
-    const bookContext = (currentAnswers['bookContext'] as string) ?? ''
     // `bookContext` deliberately not stored: it is a fact about *this* book
     // ("a 1662 alchemical treatise"), so keeping it as a device preference was
     // a category error. It was written and never read back, so nothing is lost
     // by dropping it — and restoring it on the next book would have been wrong.
     savePrefs({ ...prefs, modelId })
 
-    const controller = new AbortController()
-    abortRef.current = controller
-
     // Group OCR words by page for the verification cross-check.
-    const wordsByPage = new Map<number, typeof recon.words>()
+    const wordsByPage = new Map<number, ReconResult['words']>()
     for (const w of recon.words) {
       const list = wordsByPage.get(w.pageIndex) ?? []
       list.push(w)
       wordsByPage.set(w.pageIndex, list)
     }
+
+    return {
+      key,
+      modelId,
+      identity,
+      bookContext: (currentAnswers['bookContext'] as string) ?? '',
+      vetted: vetLexicon(
+        state.lexicon,
+        (identity['terms'] as Record<string, TermDecision> | undefined) ?? {}
+      ),
+      wordsByPage,
+      prefs
+    }
+  }, [state.answers, state.lexicon, currentAnswers])
+
+  /** Run the paid pass. Only reached after the user approves the estimate. */
+  const startTranscription = useCallback(async () => {
+    const data = fileDataRef.current
+    const ready = await prepareRun()
+    if (!ready || !data) return
+    const { key, modelId, identity, bookContext, vetted, wordsByPage, prefs } = ready
+
+    const controller = new AbortController()
+    abortRef.current = controller
 
     // Pages an earlier run already bought, when the user chose to carry on.
     // Loaded here rather than held in state because it is the whole
@@ -1275,11 +1374,6 @@ export function App(): JSX.Element {
       (currentAnswers['useSavedRun'] ?? 'resume') === 'resume'
     const alreadyRead = resuming && runKey ? ((await loadRun(runKey))?.transcriptions ?? []) : []
 
-    const vetted = vetLexicon(
-      state.lexicon,
-      (identity['terms'] as Record<string, TermDecision> | undefined) ?? {}
-    )
-
     // Warned once, not once per checkpoint: a storage failure repeated every
     // five pages would bury the run's own progress under its own complaint.
     let warnedAboutStorage = false
@@ -1288,7 +1382,7 @@ export function App(): JSX.Element {
       const result = await runBrowserTranscription({
         fileData: data,
         ocrWordsByPage: wordsByPage,
-        pageText: recon.pageText,
+        pageText: reconRef.current?.pageText ?? [],
         client: { apiKey: key, modelId, effort: 'medium' },
         // The vetted list, not the raw harvest. The gate promised that
         // confirming a word fixes it everywhere; before this the verdicts were
@@ -1356,7 +1450,188 @@ export function App(): JSX.Element {
       setRunProgress(null)
       abortRef.current = null
     }
-  }, [state, currentAnswers, complete])
+  }, [state, currentAnswers, complete, prepareRun, persistRun, stateFromTranscriptions])
+
+  /**
+   * Hand the book over and let the tab go.
+   *
+   * The ticket is written after every batch is created, before the next page is
+   * rendered. That ordering is the whole safety property: from the instant a
+   * batch exists, those pages are being read and billed, and the only way back
+   * to them is an id that lives nowhere else. A submission killed by a closed
+   * lid, a dead battery or a lost network leaves behind a ticket naming exactly
+   * the batches that got out — never a batch nothing knows about.
+   *
+   * A ticket that will not save stops the submission cold, for the same reason.
+   */
+  const submitBatch = useCallback(async () => {
+    const data = fileDataRef.current
+    const ready = await prepareRun()
+    if (!ready || !data) return
+    const { key, modelId, identity, bookContext, vetted, prefs } = ready
+
+    const runKey = fileKeyRef.current
+    if (!runKey) return
+
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    const ticket = createBatchTicket({
+      key: runKey,
+      fileName: data.name,
+      modelId,
+      pageCount: state.pageCount,
+      identityAnswers: identity,
+      termCorrections: vetted.corrections
+    })
+    batchTicketRef.current = ticket
+
+    setSubmitProgress({ page: 0, total: state.pageCount, batches: 0 })
+    try {
+      const result = await submitBookBatch({
+        fileData: data,
+        pageText: reconRef.current?.pageText ?? [],
+        client: { apiKey: key, modelId, effort: 'medium' },
+        lexicon: vetted.entries,
+        orthography: (identity['orthography'] as 'preserve' | 'modernize') ?? 'preserve',
+        normalizeLongS: identity['longS'] === true,
+        bookContext,
+        imageLongEdge: prefs.imageLongEdge,
+        onProgress: setSubmitProgress,
+        onBatchCreated: async (batch: TicketBatch) => {
+          ticket.batches.push(batch)
+          if (!(await saveBatchTicket(ticket))) {
+            throw new Error(
+              'A batch of pages was submitted but this browser refused to save the ' +
+                'ticket for it. Those pages are being read and charged for, and without ' +
+                'the ticket there is no way to collect them. Stopping here rather than ' +
+                'submitting more. Free up storage and try again — and note the batch id ' +
+                `${batch.id} if you can.`
+            )
+          }
+          setState((s) => ({ ...s, savedBatch: summarizeTicket(ticket) }))
+        },
+        signal: controller.signal
+      })
+
+      ticket.complete = result.complete
+      await saveBatchTicket(ticket)
+      setState((s) => ({ ...s, savedBatch: summarizeTicket(ticket) }))
+
+      if (!result.complete && !result.cancelled) {
+        setError(
+          'Not every page reached a batch. What was submitted can still be collected; ' +
+            'the rest can be submitted again from this screen.'
+        )
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setSubmitProgress(null)
+      abortRef.current = null
+    }
+  }, [state.pageCount, prepareRun])
+
+  /**
+   * Fetch whatever has finished, and fold it into the run.
+   *
+   * Additive on purpose. Eleven batches do not end at the same moment, so this
+   * merges what it collects with what a previous collection already banked and
+   * marks only the batches it actually read. Coming back to it an hour later
+   * picks up where this left off; nothing is fetched or merged twice.
+   *
+   * The run is written before the step completes, and the ticket is only
+   * deleted once every batch is in — an outstanding ticket is the user's
+   * receipt, and dropping it early would leave paid pages unreachable.
+   */
+  const collectBatch = useCallback(async () => {
+    const ticket = batchTicketRef.current
+    const ready = await prepareRun()
+    if (!ready || !ticket) return
+    const { key, modelId, wordsByPage } = ready
+
+    const outstanding = pendingBatches(ticket)
+    if (outstanding.length === 0) return
+
+    // The ticket is authoritative about which file this is. It was found by the
+    // same name-and-size fallback the run lookup uses, and if the two ever
+    // disagreed the merge below would read one record and write another —
+    // banking collected pages into a run nothing will look at again.
+    fileKeyRef.current = ticket.key
+
+    setCollectProgress({ checked: 0, total: outstanding.length, collected: 0 })
+    setBatchWaiting(null)
+    try {
+      const result = await collectBookBatch({
+        client: { apiKey: key, modelId },
+        batches: outstanding,
+        ocrWordsByPage: wordsByPage,
+        termCorrections: ticket.termCorrections,
+        onProgress: setCollectProgress
+      })
+
+      const collected = new Set(result.collectedIds)
+      for (const batch of ticket.batches) {
+        if (collected.has(batch.id)) batch.collected = true
+      }
+
+      // Merge with anything an earlier collection banked. Keyed by page so a
+      // batch fetched twice — which costs nothing but could scramble the order
+      // — cannot put the same leaf in the book twice.
+      const banked = (await loadRun(ticket.key))?.transcriptions ?? []
+      const byPage = new Map(banked.map((t) => [t.pageIndex, t]))
+      for (const page of result.transcriptions) byPage.set(page.pageIndex, page)
+      const transcriptions = [...byPage.values()].sort((a, b) => a.pageIndex - b.pageIndex)
+
+      const everything = pendingBatches(ticket).length === 0 && ticket.complete
+      const merged: RunResult = {
+        transcriptions,
+        findings: result.findings,
+        failures: result.failures,
+        usage: result.usage,
+        cancelled: false
+      }
+      transcriptionRef.current = merged
+
+      await persistRun(merged, ticket.identityAnswers, ticket.modelId, [], new Map(), everything)
+
+      if (everything) {
+        // Every page is in the run now, so the receipt has nothing left to
+        // point at. Only here — never on a partial collection.
+        await deleteBatchTicket(ticket.key)
+        batchTicketRef.current = null
+        setState((s) => ({ ...s, savedBatch: null }))
+        complete(stateFromTranscriptions(merged.transcriptions, merged.failures))
+        return
+      }
+
+      await saveBatchTicket(ticket)
+      setState((s) => ({ ...s, savedBatch: summarizeTicket(ticket) }))
+
+      const running = result.stillRunning.length
+      setBatchWaiting(
+        running > 0
+          ? `${running} batch${running === 1 ? ' is' : 'es are'} still being read. ` +
+              `${result.transcriptions.length} page(s) collected and saved so far — ` +
+              'you can close this tab and come back.'
+          : 'Everything submitted so far has been collected, but not every page of the ' +
+              'book was submitted. Collect again once the rest have been sent.'
+      )
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+    } finally {
+      setCollectProgress(null)
+    }
+  }, [prepareRun, persistRun, stateFromTranscriptions, complete])
+
+  /** Give up on an outstanding batch, keeping nothing but what was collected. */
+  const abandonBatch = useCallback(async () => {
+    const ticket = batchTicketRef.current
+    if (!ticket) return
+    await deleteBatchTicket(ticket.key)
+    batchTicketRef.current = null
+    setState((s) => ({ ...s, savedBatch: null }))
+  }, [])
 
   /**
    * Build the edition.
@@ -2036,6 +2311,24 @@ export function App(): JSX.Element {
         setState((s) => ({ ...s, keepScans: keep }))
       }
 
+      // Pages already out with the API come first, because collecting them
+      // costs nothing and every other branch here spends money.
+      if (state.savedBatch) {
+        // Read off the summary, which is the same field the question decided
+        // its own default from — two readings of "expired" that could disagree
+        // would offer a collect button that does nothing.
+        const expired = new Date(state.savedBatch.expiresAt).getTime() < Date.now()
+        const action =
+          (currentAnswers['batchAction'] as string) ?? (expired ? 'abandon' : 'collect')
+        if (action === 'collect') {
+          void collectBatch()
+          return
+        }
+        void abandonBatch()
+        // Falls through to the ordinary cost approval below: giving up on a
+        // batch means reading the book again, which is a thing to be quoted.
+      }
+
       const saved = state.savedRun
       // A *finished* run the user said to use: nothing to approve.
       if (saved?.complete && (currentAnswers['useSavedRun'] ?? 'use') === 'use') {
@@ -2052,7 +2345,8 @@ export function App(): JSX.Element {
       const estimate = estimateCost({
         pageCount: resuming ? Math.max(1, state.pageCount - saved.pageCount) : state.pageCount,
         modelId: (currentAnswers['model'] as string) ?? 'claude-opus-5',
-        imageLongEdge: loadPrefs().imageLongEdge
+        imageLongEdge: loadPrefs().imageLongEdge,
+        batch: currentAnswers['runMode'] === 'batch'
       })
       setPendingCost(formatEstimate(estimate))
       return
@@ -2062,6 +2356,7 @@ export function App(): JSX.Element {
     step.id,
     state.pageCount,
     state.savedRun,
+    state.savedBatch,
     currentAnswers,
     complete,
     runExport,
@@ -2069,8 +2364,19 @@ export function App(): JSX.Element {
     finishStructure,
     finishProof,
     finishDesign,
-    useSavedRun
+    useSavedRun,
+    collectBatch,
+    abandonBatch
   ])
+
+  /**
+   * Which door the approved cost goes through.
+   *
+   * Read at the moment the user presses the button rather than captured when
+   * the estimate was made, so changing the answer and coming back cannot leave
+   * a "half price" quote wired to the full-price path.
+   */
+  const goingViaBatch = currentAnswers['runMode'] === 'batch'
 
   return (
     <div className="shell">
@@ -2227,14 +2533,28 @@ export function App(): JSX.Element {
         {/* --- cost approval before any spend --- */}
         {pendingCost ? (
           <div className="q">
-            <span className="prompt">Ready to transcribe {state.pageCount} pages</span>
+            <span className="prompt">
+              Ready to {goingViaBatch ? 'submit' : 'transcribe'} {state.pageCount} pages
+            </span>
             <div className="help">
               This is the only step that costs money. Estimated cost: <b>{pendingCost}</b>. You are
               billed directly by Anthropic for your own API key.
+              {goingViaBatch ? (
+                <>
+                  {' '}
+                  Half price because it goes through the batch API. This tab has to stay open while
+                  the pages upload — after that you can close it, and come back to collect the
+                  reading.
+                </>
+              ) : null}
             </div>
             <div className="actions">
-              <button type="button" className="primary" onClick={() => void startTranscription()}>
-                Start — {pendingCost}
+              <button
+                type="button"
+                className="primary"
+                onClick={() => void (goingViaBatch ? submitBatch() : startTranscription())}
+              >
+                {goingViaBatch ? 'Submit' : 'Start'} — {pendingCost}
               </button>
               <button type="button" className="ghost" onClick={() => setPendingCost(null)}>
                 Back
@@ -2307,6 +2627,64 @@ export function App(): JSX.Element {
             <div className="actions">
               <button type="button" className="ghost" onClick={() => abortRef.current?.abort()}>
                 Stop — keep what's done
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* --- uploading the book to the batch API --- */}
+        {submitProgress ? (
+          <div className="progress">
+            <strong>
+              Uploading page {submitProgress.page} of {submitProgress.total}
+            </strong>
+            <div className="bar">
+              <i
+                style={{
+                  width: `${(submitProgress.page / Math.max(1, submitProgress.total)) * 100}%`
+                }}
+              />
+            </div>
+            <div className="meta">
+              {submitProgress.batches} batch(es) submitted · keep this tab open until the upload
+              finishes
+            </div>
+            <div className="actions">
+              <button type="button" className="ghost" onClick={() => abortRef.current?.abort()}>
+                Stop — keep what's submitted
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* --- fetching a finished batch --- */}
+        {collectProgress ? (
+          <div className="progress">
+            <strong>
+              Checking batch {collectProgress.checked} of {collectProgress.total}
+            </strong>
+            <div className="bar">
+              <i
+                style={{
+                  width: `${(collectProgress.checked / Math.max(1, collectProgress.total)) * 100}%`
+                }}
+              />
+            </div>
+            <div className="meta">{collectProgress.collected} collected so far</div>
+          </div>
+        ) : null}
+
+        {/* --- still out being read --- */}
+        {batchWaiting && !collectProgress ? (
+          <div className="q">
+            <span className="prompt">Still being read</span>
+            <div className="help">{batchWaiting}</div>
+            <div className="actions">
+              <button type="button" className="primary" onClick={() => void collectBatch()}>
+                Check again
+              </button>
+              <button type="button" className="ghost" onClick={() => setBatchWaiting(null)}>
+                Back
               </button>
             </div>
           </div>
@@ -2392,6 +2770,9 @@ export function App(): JSX.Element {
         !progressInfo &&
         !runProgress &&
         !pendingCost &&
+        !submitProgress &&
+        !collectProgress &&
+        !batchWaiting &&
         !pendingNotesCost &&
         !notesProgress &&
         !proposals &&
@@ -2476,9 +2857,15 @@ export function App(): JSX.Element {
                         onClick={advance}
                       >
                         {step.id === 'transcribe'
-                          ? state.savedRun && (currentAnswers['useSavedRun'] ?? 'use') === 'use'
-                            ? 'Use it — continue'
-                            : 'Continue — show me the cost'
+                          ? // Collecting a batch is free, so promising a cost here
+                            // would contradict the screen it sits under — the
+                            // whole point of which is that these pages are bought.
+                            state.savedBatch &&
+                            (currentAnswers['batchAction'] ?? 'collect') === 'collect'
+                            ? 'Collect it — free'
+                            : state.savedRun && (currentAnswers['useSavedRun'] ?? 'use') === 'use'
+                              ? 'Use it — continue'
+                              : 'Continue — show me the cost'
                           : step.id === 'export'
                             ? 'Build the interior'
                             : 'Looks right — continue'}
@@ -2506,6 +2893,9 @@ export function App(): JSX.Element {
         !progressInfo &&
         !runProgress &&
         !pendingCost &&
+        !submitProgress &&
+        !collectProgress &&
+        !batchWaiting &&
         questions.length === 0 &&
         !isProofing &&
         step.id !== 'intake' ? (

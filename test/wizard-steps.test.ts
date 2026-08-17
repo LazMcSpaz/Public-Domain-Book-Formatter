@@ -300,6 +300,7 @@ describe('transcribe step questions', () => {
       'useSavedRun',
       'apiKey',
       'model',
+      'runMode',
       'bookContext',
       'keepScans'
     ])
@@ -1109,7 +1110,7 @@ describe('the transcribe gate — a run that stopped partway', () => {
     // The finished-run path returns early here; the partial one must not, or
     // the user resumes without ever approving a charge.
     const ids = ask({ ...base(), savedRun: partial }).map((q) => q.id)
-    expect(ids).toEqual(['useSavedRun', 'model', 'bookContext', 'keepScans'])
+    expect(ids).toEqual(['useSavedRun', 'model', 'runMode', 'bookContext', 'keepScans'])
   })
 
   it('leaves a finished run alone', () => {
@@ -1117,6 +1118,146 @@ describe('the transcribe gate — a run that stopped partway', () => {
     const q = ask({ ...base(), savedRun: done }).find((x) => x.id === 'useSavedRun')!
     expect((q as { defaultValue: string }).defaultValue).toBe('use')
     expect(q.prompt).toContain('already had this book read')
+  })
+})
+
+/**
+ * Which door the reading goes through, and what happens when a book is already
+ * out being read.
+ *
+ * The point of the batch door is that the loop stops living in the tab, so the
+ * gate has to make the trade legible: half the price and a closable tab against
+ * no live progress and a wait. And a book already submitted must never be
+ * quoted a price again — those pages are bought.
+ */
+describe('the batch door', () => {
+  const base = (): WizardState => ({
+    ...reconDone(),
+    pageCount: 312,
+    hasApiKey: true,
+    keepScans: true,
+    completed: ['intake', 'recon', 'gate-identity']
+  })
+
+  const outstanding = {
+    key: 'k',
+    fileName: 'book.pdf',
+    submittedAt: new Date().toISOString(),
+    modelId: 'claude-opus-5',
+    pageCount: 312,
+    submittedPages: 312,
+    batchCount: 11,
+    collectedBatches: 0,
+    complete: true,
+    expiresAt: new Date(Date.now() + 86_400_000).toISOString()
+  }
+
+  const ask = (state: WizardState) => stepById('transcribe').questions(state)
+
+  it('asks how the reading should be run', () => {
+    const q = ask(base()).find((x) => x.id === 'runMode')!
+    expect(q).toBeDefined()
+    const options = (q as { options: { value: string; description: string }[] }).options
+    expect(options.map((o) => o.value)).toEqual(['batch', 'now'])
+  })
+
+  it('quotes both prices, so the halving is a fact rather than a claim', () => {
+    const options = (
+      ask(base()).find((x) => x.id === 'runMode') as {
+        options: { value: string; description: string }[]
+      }
+    ).options
+    const price = (v: string) =>
+      Number(/\$([\d.]+)/.exec(options.find((o) => o.value === v)!.description)![1])
+    expect(price('batch')).toBeCloseTo(price('now') / 2, 1)
+  })
+
+  it('recommends the batch for a book long enough for a phone to lock during', () => {
+    const q = ask(base()).find((x) => x.id === 'runMode')!
+    expect((q as { defaultValue: string }).defaultValue).toBe('batch')
+  })
+
+  /**
+   * The browser-access opt-in that makes this whole app possible covers
+   * `/v1/messages` and not, at present, the batch endpoints — a preflight for
+   * those comes back `400 Disallowed CORS origin`. A half-price recommendation
+   * that fails on the first click with a cross-origin error is worse than no
+   * recommendation, so the offer is withdrawn where it cannot work.
+   */
+  it('is not offered where the browser cannot reach the batch endpoints', () => {
+    const ids = ask({ ...base(), batchAvailable: false }).map((q) => q.id)
+    expect(ids).not.toContain('runMode')
+    // And the ordinary door is still there, unchanged.
+    expect(ids).toContain('model')
+  })
+
+  it('is offered while the answer is still unknown, not withheld pending a probe', () => {
+    // The probe is a network round trip and the gate renders before it lands.
+    // Only an explicit no withdraws the question; otherwise it would flicker
+    // into existence a moment after the screen is drawn.
+    expect(ask({ ...base(), batchAvailable: null }).map((q) => q.id)).toContain('runMode')
+  })
+
+  it('recommends watching it happen for a pamphlet', () => {
+    const q = ask({ ...base(), pageCount: 8 }).find((x) => x.id === 'runMode')!
+    expect((q as { defaultValue: string }).defaultValue).toBe('now')
+  })
+
+  it('says plainly what the batch gives up', () => {
+    const options = (
+      ask(base()).find((x) => x.id === 'runMode') as {
+        options: { value: string; description: string }[]
+      }
+    ).options
+    expect(options.find((o) => o.value === 'batch')!.description).toMatch(/OCR/)
+    expect(options.find((o) => o.value === 'now')!.description).toMatch(/stays? open|open the/)
+  })
+
+  it('offers to collect a book that is out, and asks nothing else', () => {
+    // Every other question on this screen spends money, and these pages are
+    // already bought. Showing a cost estimate here invites paying twice.
+    const ids = ask({ ...base(), savedBatch: outstanding }).map((q) => q.id)
+    expect(ids).toEqual(['batchAction'])
+  })
+
+  it('defaults to collecting, and says collecting is free', () => {
+    const q = ask({ ...base(), savedBatch: outstanding }).find((x) => x.id === 'batchAction')!
+    expect((q as { defaultValue: string }).defaultValue).toBe('collect')
+    expect(q.help).toMatch(/already paid for/i)
+  })
+
+  it('falls through to the spending questions only when giving up on it', () => {
+    const ids = ask({
+      ...base(),
+      savedBatch: outstanding,
+      answers: { transcribe: { batchAction: 'abandon' } }
+    }).map((q) => q.id)
+    expect(ids).toEqual(['batchAction', 'model', 'runMode', 'bookContext'])
+  })
+
+  it('says so when the collection window has closed', () => {
+    const expired = {
+      ...outstanding,
+      submittedAt: new Date(Date.now() - 40 * 86_400_000).toISOString(),
+      expiresAt: new Date(Date.now() - 11 * 86_400_000).toISOString()
+    }
+    const q = ask({ ...base(), savedBatch: expired }).find((x) => x.id === 'batchAction')!
+    expect((q as { defaultValue: string }).defaultValue).toBe('abandon')
+    expect(q.prompt).toMatch(/too long ago/i)
+    // No collect option at all: offering a button that cannot work is worse
+    // than saying the pages are gone.
+    const options = (q as { options: { value: string }[] }).options
+    expect(options.map((o) => o.value)).toEqual(['abandon'])
+  })
+
+  it('reports how much of a partly-collected book is left', () => {
+    const q = ask({
+      ...base(),
+      savedBatch: { ...outstanding, collectedBatches: 4 }
+    }).find((x) => x.id === 'batchAction')!
+    expect(q.help).toContain('4 of 11 already collected')
+    const options = (q as { options: { label: string }[] }).options
+    expect(options[0]!.label).toContain('remaining 7')
   })
 })
 

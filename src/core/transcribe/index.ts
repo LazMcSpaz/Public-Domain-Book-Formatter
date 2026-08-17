@@ -52,6 +52,7 @@ export {
   type VerifyOptions
 } from './verify'
 export {
+  BATCH_DISCOUNT,
   estimateCost,
   formatEstimate,
   imageTokensFor,
@@ -62,7 +63,11 @@ export {
   type ModelPricing
 } from './cost'
 export {
+  API_BASE,
+  apiHeaders,
   callModel,
+  readMessage,
+  throwIfFailed,
   transcribePage,
   validateApiKey,
   buildRequestBody,
@@ -74,8 +79,33 @@ export {
   type ApiUsage
 } from './client'
 export {
+  API_BATCH_MAX_BYTES,
+  API_BATCH_MAX_REQUESTS,
+  BATCH_LIMITS,
+  buildBatchRequest,
+  cancelBatch,
+  createBatch,
+  customIdFor,
+  fetchBatchResults,
+  fits,
+  pageIndexOf,
+  parseBatchResults,
+  parseBatchStatus,
+  planBatches,
+  retrieveBatch,
+  sizeOfRequest,
+  type BatchCounts,
+  type BatchLimits,
+  type BatchProcessingStatus,
+  type BatchRequest,
+  type BatchResults,
+  type BatchStatus
+} from './batch'
+export {
   runTranscription,
+  correctTerms,
   mergeMetadata,
+  verifyRun,
   type PageSource,
   type RunOptions,
   type RunProgress,

@@ -15,7 +15,14 @@ import type { LexiconEntry } from '@core/lexicon'
 import type { BookMetadata, PageClassification } from '@core/pages'
 import { isFrontMatter } from '@core/pages'
 import { withMarkup, type DroppedRun, type VerificationFinding } from '@core/transcribe'
-import { describeAge, type SavedRunSummary } from '@core/project'
+import {
+  describeAge,
+  describeTicket,
+  RESULTS_RETAINED_DAYS,
+  type BatchTicketSummary,
+  type SavedRunSummary
+} from '@core/project'
+import { estimateCost, formatEstimate } from '@core/transcribe'
 import type { BookDocument } from '@core/assemble'
 import { defaultVoice, type EditorVoice } from '@core/annotate'
 import {
@@ -101,6 +108,28 @@ export interface WizardState {
    * cost" to "you have already paid for this — use it?".
    */
   savedRun: SavedRunSummary | null
+  /**
+   * A batch of *this* file that is out with the API and not yet collected.
+   *
+   * Outranks everything else the transcribe step could ask, because while it
+   * exists the user has already been billed for pages that are sitting on a
+   * server under an id only this record knows. Offering them the cost estimate
+   * again would be inviting them to buy the same book twice.
+   */
+  savedBatch: BatchTicketSummary | null
+  /**
+   * Whether this browser can reach the Batches API.
+   *
+   * `null` until asked — the probe is one request and the gate renders before
+   * it lands. Only an explicit `false` withdraws the offer, so the question
+   * appears optimistically and disappears if the server says no, rather than
+   * flickering into existence a moment after the screen is drawn.
+   *
+   * See `platform/browser/batch-reach`: the browser-access opt-in that makes
+   * this app possible at all covers `/v1/messages` and not, at present, the
+   * batch endpoints.
+   */
+  batchAvailable: boolean | null
   /**
    * Whether scans are kept on this device. `null` until the user has been
    * asked. A device-level answer, not a per-book one.
@@ -218,6 +247,8 @@ export function initialState(): WizardState {
     classifications: [],
     hasApiKey: false,
     savedRun: null,
+    savedBatch: null,
+    batchAvailable: null,
     keepScans: null,
     defaultLook: null,
     defaultModelId: 'claude-opus-5',
@@ -383,6 +414,72 @@ const gateIdentity: Step = {
 }
 
 /**
+ * Books above this length default to the batch door.
+ *
+ * Below it, waiting an hour to save a few cents on a pamphlet is the wrong
+ * trade and watching it happen is genuinely nicer. Above it, the sequential
+ * reading is long enough that a phone will lock, a laptop will sleep, or a
+ * network will drop before it finishes — which is the failure this exists to
+ * remove, and the saving stops being rounding error.
+ */
+const BATCH_DEFAULT_ABOVE_PAGES = 40
+
+/**
+ * Which door the reading goes through.
+ *
+ * The evidence is both prices, side by side, because the halving is the part a
+ * person would want to decide on and quoting only the recommended one would be
+ * asking them to take it on trust. The estimate is the same function the cost
+ * approval uses, run twice.
+ */
+function batchModeQuestion(s: WizardState): Question | null {
+  // Not offered where it cannot work. The browser-access opt-in that lets a
+  // page with no server call the API covers `/v1/messages` and, at the time of
+  // writing, not the batch endpoints — so on most origins this door is shut by
+  // a CORS policy nothing in the page can argue with. Offering it anyway would
+  // mean a confident half-price recommendation that fails on the first click
+  // with a message about cross-origin requests. `canReachBatchApi` asks the
+  // server rather than hard-coding the answer, so the day it opens the question
+  // appears on its own.
+  if (s.batchAvailable === false) return null
+
+  const answers = s.answers['transcribe'] ?? {}
+  const modelId = (answers['model'] as string) ?? s.defaultModelId
+  const now = estimateCost({ pageCount: s.pageCount, modelId })
+  const batched = estimateCost({ pageCount: s.pageCount, modelId, batch: true })
+  const long = s.pageCount > BATCH_DEFAULT_ABOVE_PAGES
+
+  return {
+    id: 'runMode',
+    type: 'choice',
+    prompt: 'How should the reading be run?',
+    help:
+      'The model runs on Anthropic’s servers either way. What differs is where the ' +
+      'loop that feeds it lives: in this tab, or on their side.',
+    defaultValue: long ? 'batch' : 'now',
+    options: [
+      {
+        value: 'batch',
+        label: 'Submit it and come back',
+        description:
+          `${formatEstimate(batched)} — half price. This tab uploads the pages and can ` +
+          'then be closed; the book is read on Anthropic’s side. Usually under an hour, ' +
+          'at most a day. No live progress, and pages cannot use the previous page’s ' +
+          'finished text for context — only its OCR.'
+      },
+      {
+        value: 'now',
+        label: 'Read it now, page by page',
+        description:
+          `${formatEstimate(now)}. You watch it happen and can stop at any point, but ` +
+          'this tab has to stay open and awake the whole time — a phone that locks its ' +
+          'screen stops the reading where it stands.'
+      }
+    ]
+  }
+}
+
+/**
  * The transcribe step asks for what it needs *before* spending anything: the
  * key, the model, and an explicit approval of an estimated cost. A whole-book
  * pass costs real money, so the user approves a number rather than discovering
@@ -398,11 +495,70 @@ const transcribe: Step = {
     // Once a key is stored the credential question disappears — never ask twice.
     const qs: Question[] = []
 
+    // Pages already submitted and not yet collected come before every other
+    // question here, including the saved run. They are bought and unfinished:
+    // any other offer on this screen would be an invitation to buy them again.
+    if (s.savedBatch) {
+      const batch = s.savedBatch
+      const expired = new Date(batch.expiresAt).getTime() < Date.now()
+      const left = batch.batchCount - batch.collectedBatches
+      const progress =
+        batch.collectedBatches > 0
+          ? ` ${batch.collectedBatches} of ${batch.batchCount} already collected.`
+          : ''
+
+      qs.push({
+        id: 'batchAction',
+        type: 'choice',
+        prompt: expired
+          ? 'This book was submitted too long ago to collect.'
+          : 'This book is out being read.',
+        help: expired
+          ? `${describeTicket(batch, describeAge(batch.submittedAt))} Results are kept for ` +
+            `${RESULTS_RETAINED_DAYS} days and that window has closed, so these pages cannot ` +
+            'be fetched any more. Reading it again costs what the first reading cost.'
+          : `${describeTicket(batch, describeAge(batch.submittedAt))}${progress} ` +
+            'Most batches finish within an hour; the limit is a day. Collecting is free — ' +
+            'the pages are already paid for.',
+        defaultValue: expired ? 'abandon' : 'collect',
+        options: expired
+          ? [
+              {
+                value: 'abandon',
+                label: 'Read the book again',
+                description: 'The expired submission is forgotten.'
+              }
+            ]
+          : [
+              {
+                value: 'collect',
+                label: `Collect ${left === batch.batchCount ? 'the reading' : `the remaining ${left}`}`,
+                description: 'Free. Anything still in progress can be collected later.'
+              },
+              {
+                value: 'abandon',
+                label: 'Give up on it and read it now instead',
+                description:
+                  'Pays for every page a second time. Only worth it if the batch has gone wrong.'
+              }
+            ]
+      })
+
+      // Collecting spends nothing and needs no further decisions. Abandoning
+      // does, so it falls through to the model and cost questions below.
+      const answers = s.answers['transcribe'] ?? {}
+      const action = (answers['batchAction'] as string) ?? (expired ? 'abandon' : 'collect')
+      if (action === 'collect') return qs
+    }
+
     // The user has already paid to have this exact file read. Asking them to
     // approve the cost again — or worse, spending it silently — would be the
     // app forgetting something they cannot get back for free. Everything else
     // in the flow is regenerated from the scan on the way here, so accepting
     // this is a complete resumption, not a degraded one.
+    // Reaching here with a batch outstanding means the user chose to abandon
+    // it — so any pages an earlier collection already banked are still theirs,
+    // and the resume offer below is exactly the right thing to show them.
     if (s.savedRun) {
       const run = s.savedRun
       const failed =
@@ -509,6 +665,15 @@ const transcribe: Step = {
         }
       ]
     })
+
+    // How the reading is *run*, which is a different question from what it
+    // costs or which model does it — and the one that decides whether the book
+    // needs this tab to stay open. Asked here, after the model, because the
+    // model is what the halving applies to. Absent where the batch endpoints
+    // are not reachable from a browser, which is a fact this asks the server
+    // for rather than assuming in either direction.
+    const mode = batchModeQuestion(s)
+    if (mode) qs.push(mode)
 
     qs.push({
       id: 'bookContext',
