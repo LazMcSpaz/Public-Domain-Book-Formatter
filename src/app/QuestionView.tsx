@@ -614,19 +614,46 @@ function DiscrepancyGrid({
 
   const decided = question.rows.filter((r) => value[r.id]).length
 
+  /**
+   * Take every recommendation the second reading made.
+   *
+   * The bulk action the pass exists to enable, and still a *choice* — the
+   * verdicts are on screen with the readings behind them, so this is accepting
+   * a proposal that has been shown rather than trusting one that has not.
+   * Rows it could not settle are left alone.
+   */
+  const takeAll = (): void => {
+    const next = { ...value }
+    for (const row of question.rows) {
+      if (row.checked?.verdict === 'missing') next[row.id] = 'restore'
+      else if (row.checked?.verdict === 'not-there') next[row.id] = 'ignore'
+    }
+    onChange(next)
+  }
+  const recommended = question.rows.filter(
+    (r) => r.checked?.verdict === 'missing' || r.checked?.verdict === 'not-there'
+  ).length
+
   return (
     <div className="discrepancies">
       <div className="discrepancy-head">
         {decided} of {question.rows.length} decided
-        <button
-          type="button"
-          className="ghost"
-          onClick={() =>
-            onChange(Object.fromEntries(question.rows.map((r) => [r.id, 'ignore' as const])))
-          }
-        >
-          None of these are missing
-        </button>
+        <span className="discrepancy-actions">
+          {recommended > 0 ? (
+            <button type="button" className="ghost" onClick={takeAll}>
+              Take the {recommended} checked answer{recommended === 1 ? '' : 's'}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="ghost"
+            onClick={() =>
+              onChange(Object.fromEntries(question.rows.map((r) => [r.id, 'ignore' as const])))
+            }
+          >
+            None of these are missing
+          </button>
+        </span>
       </div>
 
       {question.rows.map((row) => {
@@ -656,6 +683,24 @@ function DiscrepancyGrid({
               <b className="gap">{row.text}</b>{' '}
               <span className="ctx">{row.before || '(end of the page)'}</span>
             </div>
+
+            {row.checked ? (
+              <div className={`discrepancy-checked ${row.checked.verdict}`}>
+                <b>
+                  {row.checked.verdict === 'missing'
+                    ? 'Read again: it is on the page'
+                    : row.checked.verdict === 'not-there'
+                      ? 'Read again: not on the page'
+                      : row.checked.verdict === 'different'
+                        ? 'Read again: neither reading matches'
+                        : 'Read again: could not tell'}
+                </b>
+                {/* The reading is what makes the verdict checkable rather than
+                    an opinion — it can be compared with the crop in a second. */}
+                {row.checked.reading ? <q>{row.checked.reading}</q> : null}
+                {row.checked.note ? <small>{row.checked.note}</small> : null}
+              </div>
+            ) : null}
 
             <div className="discrepancy-verdict">
               <button

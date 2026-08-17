@@ -88,6 +88,8 @@ import {
 import { collectBookBatch, submitBookBatch } from '../platform/browser/batch-run'
 import { canReachBatchApi } from '../platform/browser/batch-reach'
 import { cropWordsFromPage } from '../platform/browser/word-crops'
+import { runBrowserAdjudication, type FlaggedLeaf } from '../platform/browser/adjudicate-run'
+import { describeAdjudication, type AdjudicatedSpot } from '@core/adjudicate'
 import { newSavedProfile, styleQuestions, type SavedStyleProfile } from '@core/style'
 import {
   createBatchTicket,
@@ -231,6 +233,13 @@ export function App(): JSX.Element {
   } | null>(null)
   /** What the last check found, so the waiting screen says something true. */
   const [batchWaiting, setBatchWaiting] = useState<string | null>(null)
+  /** The second reading over the flagged spots, while it runs and after. */
+  const [checkProgress, setCheckProgress] = useState<{
+    leaf: number
+    total: number
+    settled: number
+  } | null>(null)
+  const [checkNote, setCheckNote] = useState<string | null>(null)
   /**
    * The annotation pass, which is the app's second and much cheaper paid step.
    *
@@ -1282,7 +1291,8 @@ export function App(): JSX.Element {
       modelId: string,
       corrections: readonly BookEdit[] = [],
       images: ReadonlyMap<string, Uint8Array> = new Map(),
-      complete = true
+      complete = true,
+      adjudicated: Record<string, AdjudicatedSpot> = {}
     ): Promise<void> => {
       const key = fileKeyRef.current
       const file = fileDataRef.current
@@ -1305,7 +1315,8 @@ export function App(): JSX.Element {
           identityAnswers,
           edits: corrections,
           images,
-          complete
+          complete,
+          adjudicated
         })
       )
       if (!stored) {
@@ -1426,6 +1437,71 @@ export function App(): JSX.Element {
     }
   }, [state.answers, state.lexicon, currentAnswers])
 
+  /**
+   * The second reading, over the leaves the checks flagged.
+   *
+   * Runs between the transcription arriving and it being saved, so what it
+   * concludes is stored beside the reading it is about. It is the only paid
+   * step whose failure costs nothing: a leaf it cannot read leaves its spots
+   * unchecked, which is exactly how every spot arrived before this existed.
+   */
+  const secondRead = useCallback(
+    async (
+      transcriptions: readonly PageTranscription[],
+      wordsByPage: Map<number, ReconResult['words']>,
+      client: { apiKey: string; modelId: string },
+      file: File
+    ): Promise<Record<string, AdjudicatedSpot>> => {
+      const leaves: FlaggedLeaf[] = []
+      for (const page of transcriptions) {
+        // Same rule as the gate: a leaf whose text was never going to reach the
+        // book has nothing to be missing from it, so it is not worth paying to
+        // look at again.
+        const kept = dispositionFor(page.role)
+        if (kept === 'discard' || kept === 'extract-metadata') continue
+        const runs = findDroppedRuns(checkableText(page), wordsByPage.get(page.pageIndex) ?? [], {
+          includeWeak: true
+        })
+        if (runs.length === 0) continue
+        leaves.push({
+          pageIndex: page.pageIndex,
+          transcription: transcriptionText(page),
+          spots: runs.map((run, n) => ({
+            id: `p${page.pageIndex}d${n}`,
+            ocrReading: run.text,
+            after: run.after,
+            before: run.before
+          }))
+        })
+      }
+      if (leaves.length === 0) return {}
+
+      setCheckProgress({ leaf: 0, total: leaves.length, settled: 0 })
+      try {
+        const result = await runBrowserAdjudication({
+          fileData: file,
+          leaves,
+          client: { ...client, effort: 'medium' },
+          imageLongEdge: loadPrefs().imageLongEdge,
+          onProgress: (p) => setCheckProgress({ leaf: p.leaf, total: p.total, settled: p.settled })
+        })
+        setCheckNote(describeAdjudication(result))
+        return Object.fromEntries(result.spots)
+      } catch (err) {
+        // Never fatal. The book is read and paid for; this was the cheap extra.
+        setCheckNote(
+          `The spots could not be checked a second time (${
+            err instanceof Error ? err.message : String(err)
+          }). They are all still here to judge yourself.`
+        )
+        return {}
+      } finally {
+        setCheckProgress(null)
+      }
+    },
+    []
+  )
+
   /** Run the paid pass. Only reached after the user approves the estimate. */
   const startTranscription = useCallback(async () => {
     const data = fileDataRef.current
@@ -1503,6 +1579,14 @@ export function App(): JSX.Element {
 
       transcriptionRef.current = result
 
+      // Look again at the flagged spots, before any of them reach the user.
+      // After the transcription is in hand and before it is saved, so the
+      // verdicts are stored with the reading they belong to.
+      const checked =
+        (currentAnswers['secondReading'] ?? 'yes') === 'yes'
+          ? await secondRead(result.transcriptions, wordsByPage, { apiKey: key, modelId }, data)
+          : {}
+
       // Store it before anything else can go wrong. This is the only step in
       // the app the user cannot repeat for free, and a refresh, a crash or a
       // closed tab between here and the export used to lose all of it.
@@ -1512,10 +1596,14 @@ export function App(): JSX.Element {
         modelId,
         [],
         new Map(),
-        !result.cancelled
+        !result.cancelled,
+        checked
       )
 
-      complete(stateFromTranscriptions(result.transcriptions, result.failures))
+      complete({
+        ...stateFromTranscriptions(result.transcriptions, result.failures),
+        adjudicated: checked
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -1656,6 +1744,16 @@ export function App(): JSX.Element {
       const transcriptions = [...byPage.values()].sort((a, b) => a.pageIndex - b.pageIndex)
 
       const everything = pendingBatches(ticket).length === 0 && ticket.complete
+
+      // The same second reading the live path runs. Only once the whole book is
+      // in: adjudicating half a book would pay to look at leaves whose seams
+      // are still missing their other side, and would have to be redone.
+      const file = fileDataRef.current
+      const checked =
+        everything && file && (currentAnswers['secondReading'] ?? 'yes') === 'yes'
+          ? await secondRead(transcriptions, wordsByPage, { apiKey: key, modelId }, file)
+          : {}
+
       const merged: RunResult = {
         transcriptions,
         findings: result.findings,
@@ -1665,7 +1763,15 @@ export function App(): JSX.Element {
       }
       transcriptionRef.current = merged
 
-      await persistRun(merged, ticket.identityAnswers, ticket.modelId, [], new Map(), everything)
+      await persistRun(
+        merged,
+        ticket.identityAnswers,
+        ticket.modelId,
+        [],
+        new Map(),
+        everything,
+        checked
+      )
 
       if (everything) {
         // Every page is in the run now, so the receipt has nothing left to
@@ -1673,7 +1779,10 @@ export function App(): JSX.Element {
         await deleteBatchTicket(ticket.key)
         batchTicketRef.current = null
         setState((s) => ({ ...s, savedBatch: null }))
-        complete(stateFromTranscriptions(merged.transcriptions, merged.failures))
+        complete({
+          ...stateFromTranscriptions(merged.transcriptions, merged.failures),
+          adjudicated: checked
+        })
         return
       }
 
@@ -1694,7 +1803,7 @@ export function App(): JSX.Element {
     } finally {
       setCollectProgress(null)
     }
-  }, [prepareRun, persistRun, stateFromTranscriptions, complete])
+  }, [prepareRun, persistRun, stateFromTranscriptions, complete, secondRead, currentAnswers])
 
   /** Give up on an outstanding batch, keeping nothing but what was collected. */
   const abandonBatch = useCallback(async () => {
@@ -2774,6 +2883,25 @@ export function App(): JSX.Element {
           </div>
         ) : null}
 
+        {/* --- the second reading over the flagged spots --- */}
+        {checkProgress ? (
+          <div className="progress">
+            <strong>
+              Checking flagged leaf {checkProgress.leaf} of {checkProgress.total}
+            </strong>
+            <div className="bar">
+              <i
+                style={{
+                  width: `${(checkProgress.leaf / Math.max(1, checkProgress.total)) * 100}%`
+                }}
+              />
+            </div>
+            <div className="meta">
+              {checkProgress.settled} spot(s) settled · only the flagged leaves are read again
+            </div>
+          </div>
+        ) : null}
+
         {/* --- fetching a finished batch --- */}
         {collectProgress ? (
           <div className="progress">
@@ -2882,11 +3010,18 @@ export function App(): JSX.Element {
           </>
         ) : null}
 
+        {/* What the second reading found. Said plainly rather than left as a
+            screen that is quietly shorter than it would have been. */}
+        {checkNote && step.id === 'gate-uncertainties' && !progressInfo ? (
+          <div className="resume-note">{checkNote}</div>
+        ) : null}
+
         {/* --- gates --- */}
         {!exported &&
         !progressInfo &&
         !runProgress &&
         !pendingCost &&
+        !checkProgress &&
         !submitProgress &&
         !collectProgress &&
         !batchWaiting &&
@@ -3011,6 +3146,7 @@ export function App(): JSX.Element {
         !progressInfo &&
         !runProgress &&
         !pendingCost &&
+        !checkProgress &&
         !submitProgress &&
         !collectProgress &&
         !batchWaiting &&

@@ -23,8 +23,10 @@ import {
   type SavedRunSummary
 } from '@core/project'
 import { estimateCost, formatEstimate } from '@core/transcribe'
+import { TYPICAL_FLAG_RATE, estimateAdjudicationCost } from '@core/adjudicate'
 import type { BookDocument } from '@core/assemble'
 import { defaultVoice, type EditorVoice } from '@core/annotate'
+import type { AdjudicatedSpot } from '@core/adjudicate'
 import {
   BODY_FONTS,
   fontForPeriod,
@@ -197,6 +199,14 @@ export interface WizardState {
    */
   droppedRuns: Record<number, DroppedRun[]>
   /**
+   * What the second reading concluded, keyed by discrepancy row id.
+   *
+   * Empty when the pass was not run or could not read a leaf, and the gate is
+   * then exactly what it would have been without it — which is the property
+   * that makes a paid pre-check safe to offer at all.
+   */
+  adjudicated: Record<string, AdjudicatedSpot>
+  /**
    * Where this book's words came from.
    *
    * `embedded` means the file supplied its own characters — a typeset PDF, or
@@ -261,6 +271,7 @@ export function initialState(): WizardState {
     illustrationCandidates: [],
     pageText: {},
     droppedRuns: {},
+    adjudicated: {},
     textSource: 'ocr',
     document: null,
     voice: defaultVoice(),
@@ -480,6 +491,48 @@ function batchModeQuestion(s: WizardState): Question | null {
 }
 
 /**
+ * Whether to look again at the flagged spots before showing them to anyone.
+ *
+ * The estimate rests on a guess — how many leaves the checks will flag is not
+ * known until the book has been read — so the question says so rather than
+ * quoting a figure that looks measured. The *actual* spend is reported
+ * afterwards from what the run returns.
+ */
+function secondReadingQuestion(s: WizardState): Question {
+  const answers = s.answers['transcribe'] ?? {}
+  const modelId = (answers['model'] as string) ?? s.defaultModelId
+  const likely = Math.max(1, Math.round(s.pageCount * TYPICAL_FLAG_RATE))
+  const estimate = estimateAdjudicationCost({ leafCount: likely, modelId })
+
+  return {
+    id: 'secondReading',
+    type: 'choice',
+    prompt: 'Check the flagged spots before I see them?',
+    help:
+      'When the reading is done, deterministic checks flag every place the transcription ' +
+      'and the OCR disagree. Most of those are OCR seeing something that is not there, and ' +
+      'sorting them out by eye is the longest job in this app. This looks at each one again ' +
+      'with the scan — only the flagged leaves, never the whole book.',
+    defaultValue: 'yes',
+    options: [
+      {
+        value: 'yes',
+        label: 'Yes — look again first',
+        description:
+          `Roughly ${formatEstimate(estimate)}, assuming about ${Math.round(TYPICAL_FLAG_RATE * 100)}% ` +
+          `of ${s.pageCount} leaves get flagged; you are told what it actually cost. Every spot ` +
+          'still reaches you, with what the second reading saw beside it.'
+      },
+      {
+        value: 'no',
+        label: 'No — show me everything unchecked',
+        description: 'Free. You judge each disagreement yourself against the scan.'
+      }
+    ]
+  }
+}
+
+/**
  * The transcribe step asks for what it needs *before* spending anything: the
  * key, the model, and an explicit approval of an estimated cost. A whole-book
  * pass costs real money, so the user approves a number rather than discovering
@@ -675,6 +728,11 @@ const transcribe: Step = {
     const mode = batchModeQuestion(s)
     if (mode) qs.push(mode)
 
+    // The second reading. Offered here rather than after the book is read,
+    // because this is the screen where spending is decided and a second
+    // approval screen an hour later is a worse way to ask the same question.
+    qs.push(secondReadingQuestion(s))
+
     qs.push({
       id: 'bookContext',
       type: 'text',
@@ -838,15 +896,28 @@ const gateUncertainties: Step = {
             'OCR is the rougher reader of the two, so some will be words it imagined and ' +
             'some will be words the transcription fixed — the picture is there so you can ' +
             'tell which. Putting one back costs nothing and is undoable at the proof step.',
-          rows: dropped.map((run, n) => ({
-            id: `p${pageIndex}d${n}`,
-            tokenIds: run.tokenIds,
-            text: run.text,
-            confidence: run.confidence,
-            strength: run.strength,
-            after: run.after,
-            before: run.before
-          }))
+          rows: dropped.map((run, n) => {
+            const id = `p${pageIndex}d${n}`
+            const checked = s.adjudicated[id]
+            return {
+              id,
+              tokenIds: run.tokenIds,
+              text: run.text,
+              confidence: run.confidence,
+              strength: run.strength,
+              after: run.after,
+              before: run.before,
+              ...(checked
+                ? {
+                    checked: {
+                      verdict: checked.verdict,
+                      reading: checked.reading,
+                      note: checked.note
+                    }
+                  }
+                : {})
+            }
+          })
         })
       }
 

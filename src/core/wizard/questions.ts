@@ -12,6 +12,7 @@
  * "given this book state, the wizard asks exactly these questions with this
  * evidence".
  */
+import type { SpotVerdict } from '@core/adjudicate'
 
 /** Visual proof shown beside a question so the user never decides blind. */
 export type Evidence =
@@ -181,6 +182,24 @@ export interface DiscrepancyRow {
   after: string
   /** The transcribed words just after it, so the place reads as a sentence. */
   before: string
+  /**
+   * What a second reading of the pixels concluded, where one was run.
+   *
+   * A recommendation, never a removal. The row is still shown, still decidable,
+   * and carries the *reading* the verdict rests on — so the user can check it
+   * against the crop beside it in a second rather than taking it on trust. A
+   * verdict with no reading behind it would be the model's opinion of its own
+   * work, which SPEC §4 says is worth nothing.
+   *
+   * Absent when the pass was not run, or could not read that leaf. Both leave
+   * the row exactly as it would have been without this feature.
+   */
+  checked?: {
+    verdict: SpotVerdict
+    /** What the page says there. Empty when the verdict is that nothing is. */
+    reading: string
+    note: string
+  }
 }
 
 /**

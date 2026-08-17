@@ -2041,6 +2041,49 @@ await page.route('https://api.anthropic.com/v1/messages/batches**', async (route
   })
 })
 
+// The second reading goes to /v1/messages, not to the batch endpoints, so it
+// needs its own stub. It answers "not on the page" for every spot it is asked
+// about — the commonest true answer, since most flagged spots are OCR seeing
+// something that is not there.
+let secondReadCalls = 0
+const secondReadIds = []
+await page.route('https://api.anthropic.com/v1/messages', async (route) => {
+  const body = JSON.parse(route.request().postData() ?? '{}')
+  const prompt = body.messages?.[0]?.content?.[1]?.text ?? ''
+  const ids = [...prompt.matchAll(/\[(p\d+d\d+)\]/g)].map((m) => m[1])
+  if (ids.length === 0) {
+    // Not an adjudication request — the credential check uses this endpoint too.
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ content: [{ type: 'text', text: '{}' }] })
+    })
+  }
+  secondReadCalls += 1
+  secondReadIds.push(...ids)
+  return route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({
+      stop_reason: 'end_turn',
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            spots: ids.map((id) => ({
+              id,
+              verdict: 'not-there',
+              reading: '',
+              note: 'A speck of dirt read as a word.'
+            }))
+          })
+        }
+      ],
+      usage: { input_tokens: 1800, output_tokens: 300, cache_read_input_tokens: 0 }
+    })
+  })
+})
+
 await page.goto(URL_BASE, { waitUntil: 'networkidle' })
 await page.evaluate(() => localStorage.setItem('pdbf.apiKey', 'sk-ant-harness'))
 await page.setInputFiles('input[type=file]', bookPath)
@@ -2141,9 +2184,32 @@ if (!collected.complete) throw new Error('The collected run was not marked compl
 if (!/Collected from a batch/.test(collected.text)) {
   throw new Error('The saved run does not hold what the batch returned')
 }
+// The second reading ran over the flagged leaves on the way in, and its
+// verdicts are on the rows rather than hidden behind a shorter list. Checked
+// here rather than at the earlier gate because that one is fed from a seeded
+// saved run, so nothing was ever read a second time for it.
+const checkNote = await page
+  .locator('.resume-note')
+  .filter({ hasText: 'looked at again' })
+  .innerText()
+  .catch(() => '')
+const checkedRows = await page.locator('.discrepancy-checked').count()
+const checkedReadable = await page
+  .locator('.discrepancy-checked b')
+  .first()
+  .innerText()
+  .catch(() => '')
+const takeAllOffered = await page
+  .locator('.discrepancy-head button', { hasText: 'checked answer' })
+  .count()
+
 if (!collected.ticketGone)
   throw new Error('The ticket outlived the collection it was the receipt for')
 if (!transcribeDone) throw new Error('Collecting did not carry the flow past the paid step')
+console.log(
+  `  → second reading: ${secondReadCalls} leaf request(s), ${secondReadIds.length} spot(s), ` +
+    `${checkedRows} row(s) carry a verdict`
+)
 console.log(
   `  → ${pagesSubmitted} pages in ${batchesMade} batch(es) at ${priceOf(batchOption)} against ` +
     `${priceOf(nowOption)}; survived a reload; collected ${collected.pages} pages and the ticket was cleared`
@@ -2505,6 +2571,15 @@ const finalChecks = [
   ['both printed illustrations were found', foundIllustrations === 2],
   ['every found illustration got a crop', illustrationCrops === foundIllustrations],
   ['a plate is previewed from the real PDF', plateFound],
+  // The second reading: one request per flagged leaf, its verdicts visible on
+  // the rows, and what it found said out loud rather than left as a screen that
+  // is quietly shorter than it would otherwise have been.
+  ['the flagged leaves were read a second time', secondReadCalls > 0],
+  ['it was asked about the spots by their row ids', secondReadIds.length > 0],
+  ['it reported what it found', /looked at again/.test(checkNote)],
+  ['its verdicts are shown on the rows', checkedRows > 0],
+  ['each verdict says what was read, not just yes or no', checkedReadable.length > 0],
+  ['taking the checked answers is offered as a choice', takeAllOffered > 0],
   ['every disagreement is listed as its own row', gapRows > 0],
   // The row exists to point at the word. Without the crop it is the old
   // "somewhere on this page" with extra steps.

@@ -1812,3 +1812,52 @@ mark.claim {
     justify-content: flex-start;
   }
 }
+
+/* What the second reading concluded about a spot. Sits between the pixels and
+   the verdict buttons, because it is a recommendation to weigh against the
+   crop — never a replacement for looking. */
+.discrepancy-checked {
+  grid-column: 2;
+  font-size: 0.85rem;
+  padding: 0.4rem 0.6rem;
+  border-left: 3px solid var(--line);
+  background: var(--bg);
+  border-radius: 0 3px 3px 0;
+}
+
+.discrepancy-checked.missing {
+  border-left-color: var(--warn);
+}
+
+.discrepancy-checked.not-there {
+  border-left-color: var(--ok);
+}
+
+.discrepancy-checked b {
+  display: block;
+  font-weight: 600;
+}
+
+.discrepancy-checked q {
+  display: block;
+  margin-top: 0.2rem;
+  font-style: italic;
+}
+
+.discrepancy-checked small {
+  display: block;
+  margin-top: 0.2rem;
+  color: var(--muted);
+}
+
+.discrepancy-actions {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 720px) {
+  .discrepancy-checked {
+    grid-column: 1;
+  }
+}

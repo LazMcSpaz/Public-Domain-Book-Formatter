@@ -301,6 +301,7 @@ describe('transcribe step questions', () => {
       'apiKey',
       'model',
       'runMode',
+      'secondReading',
       'bookContext',
       'keepScans'
     ])
@@ -1110,7 +1111,14 @@ describe('the transcribe gate — a run that stopped partway', () => {
     // The finished-run path returns early here; the partial one must not, or
     // the user resumes without ever approving a charge.
     const ids = ask({ ...base(), savedRun: partial }).map((q) => q.id)
-    expect(ids).toEqual(['useSavedRun', 'model', 'runMode', 'bookContext', 'keepScans'])
+    expect(ids).toEqual([
+      'useSavedRun',
+      'model',
+      'runMode',
+      'secondReading',
+      'bookContext',
+      'keepScans'
+    ])
   })
 
   it('leaves a finished run alone', () => {
@@ -1232,7 +1240,7 @@ describe('the batch door', () => {
       savedBatch: outstanding,
       answers: { transcribe: { batchAction: 'abandon' } }
     }).map((q) => q.id)
-    expect(ids).toEqual(['batchAction', 'model', 'runMode', 'bookContext'])
+    expect(ids).toEqual(['batchAction', 'model', 'runMode', 'secondReading', 'bookContext'])
   })
 
   it('says so when the collection window has closed', () => {

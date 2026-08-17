@@ -35,13 +35,15 @@ import type { ImageEditOp } from '@core/model'
  * image edits, none of which the browser app produces. Nothing ever wrote one
  * from a browser, so this does not migrate them; it recognises them and says so.
  *
- * v5 → v6 added the proofreading corrections, and v6 → v7 the pixels of any
- * pictures the editor supplied. Neither damages an older run — each is a
- * complete transcription that simply has none of the newer thing on it yet — so
- * both upgrade in place rather than being refused. That distinction is the
- * whole reason a migration exists instead of a version check.
+ * v5 → v6 added the proofreading corrections, v6 → v7 the pixels of any
+ * pictures the editor supplied, v7 → v8 whether the paid pass reached the end,
+ * and v8 → v9 what the second reading concluded about the flagged spots. None
+ * of them damages an older run — each is a complete transcription that simply
+ * has none of the newer thing on it yet — so all upgrade in place rather than
+ * being refused. That distinction is the whole reason a migration exists
+ * instead of a version check.
  */
-export const CURRENT_SCHEMA_VERSION = 8
+export const CURRENT_SCHEMA_VERSION = 9
 
 /** A page the model could not read at all. Mirrors the runner's `PageFailure`. */
 export interface SavedFailure {
@@ -113,6 +115,18 @@ export interface SavedRun {
    * prints a book missing its last hundred pages in the other.
    */
   complete: boolean
+  /**
+   * What the second reading concluded, keyed by discrepancy row id.
+   *
+   * Stored for the same reason the transcription is: it cost money. Losing it
+   * would mean paying twice to be told the same thing about the same spots —
+   * and unlike the reading of a scan, no amount of local work reproduces it.
+   *
+   * Additive, so a run written before this existed restores with none of it and
+   * behaves exactly as it did: the gate shows every spot unchecked, which is
+   * what it did before the pass existed at all.
+   */
+  adjudicated: Record<string, { verdict: string; reading: string; note: string }>
 }
 
 /** The facts the resume question needs, without loading the whole run. */
@@ -221,6 +235,7 @@ export function createSavedRun(init: {
   savedAt?: string
   /** Defaults true: a caller that does not say is finishing a book, not checkpointing one. */
   complete?: boolean
+  adjudicated?: Record<string, { verdict: string; reading: string; note: string }>
 }): SavedRun {
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -235,7 +250,8 @@ export function createSavedRun(init: {
     identityAnswers: init.identityAnswers,
     edits: [...(init.edits ?? [])],
     images: [...(init.images ?? new Map())].map(([id, bytes]) => ({ id, bytes })),
-    complete: init.complete ?? true
+    complete: init.complete ?? true,
+    adjudicated: { ...(init.adjudicated ?? {}) }
   }
 }
 
@@ -309,8 +325,33 @@ export function migrateSavedRun(raw: unknown): SavedRun {
     images: parseImages(raw['images']),
     // Anything written before v8 could only have been written by the old
     // save-at-the-end path, so it is complete by construction.
-    complete: typeof raw['complete'] === 'boolean' ? raw['complete'] : true
+    complete: typeof raw['complete'] === 'boolean' ? raw['complete'] : true,
+    adjudicated: parseAdjudicated(raw['adjudicated'])
   }
+}
+
+/**
+ * Read back what the second reading found, keeping only well-formed entries.
+ *
+ * Same rule as the edit list: a malformed record is dropped rather than thrown
+ * on. Losing one verdict costs a spot that has to be judged by eye — which is
+ * how every spot arrived before this existed — where refusing the whole run
+ * would cost the transcription.
+ */
+function parseAdjudicated(
+  raw: unknown
+): Record<string, { verdict: string; reading: string; note: string }> {
+  if (!isObject(raw)) return {}
+  const out: Record<string, { verdict: string; reading: string; note: string }> = {}
+  for (const [id, value] of Object.entries(raw)) {
+    if (!isObject(value) || typeof value['verdict'] !== 'string') continue
+    out[id] = {
+      verdict: value['verdict'],
+      reading: str(value['reading'], ''),
+      note: str(value['note'], '')
+    }
+  }
+  return out
 }
 
 /**
