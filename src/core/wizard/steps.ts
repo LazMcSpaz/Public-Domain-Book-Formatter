@@ -1271,19 +1271,38 @@ const annotate: Step = {
     const cp = s.notesCheckpoint
     if (cp) {
       const written = `${cp.notes} note(s)${cp.facts > 0 ? ` and ${cp.facts} bank entr(ies)` : ''}`
-      const left = Math.max(0, cp.chunksTotal - cp.chunksDone)
-      const finished = cp.chunksDone >= cp.chunksTotal
+      const left = Math.max(0, cp.chunksTotal - cp.chunksRead)
+      const finished = cp.chunksRead >= cp.chunksTotal
+      // Why it stopped, in the API's own words. A pass that ran the account out
+      // of credit is the commonest way to get here, and "12 stretches could not
+      // be read" without the reason is a book that looks broken when the
+      // billing is what ran out.
+      const because = cp.failedBecause
+        ? ` ${cp.chunksFailed} stretch(es) came back an error (${cp.failedBecause}) and would be ` +
+          'read again.'
+        : cp.chunksFailed > 0
+          ? ` ${cp.chunksFailed} stretch(es) came back an error and would be read again.`
+          : ''
       // Not a reason to refuse the resume — every note is read before it goes
       // in — but a book finished under a second pen name is worth saying out
       // loud rather than discovering in the printed apparatus.
       const voiceChanged = cp.writtenAs
         ? ` They were written as ${cp.writtenAs}; the rest would be written as ${s.voice.penName}.`
         : ''
-      const take = {
-        value: 'take',
-        label: 'Just show me what was written',
-        description: 'Free. The rest of the book goes without notes.'
-      }
+      // Only where there is something to show. After the notes of a stopped
+      // pass have been reviewed the record stays behind — it is the only thing
+      // that knows which stretches were never read — but by then it carries no
+      // notes, and offering to show them would be a dead end.
+      const anythingWritten = cp.notes > 0 || cp.facts > 0
+      const take = anythingWritten
+        ? [
+            {
+              value: 'take',
+              label: 'Just show me what was written',
+              description: 'Free. The rest of the book goes without notes.'
+            }
+          ]
+        : []
       const again = {
         value: 'again',
         label: 'Start the pass over',
@@ -1297,17 +1316,18 @@ const annotate: Step = {
               type: 'choice',
               prompt: 'The last pass over this book stopped partway.',
               help:
-                `${written} from ${cp.chunksDone} of ${cp.chunksTotal} stretches, written ` +
+                `${written} from ${cp.chunksRead} of ${cp.chunksTotal} stretches, written ` +
                 `${describeAge(cp.savedAt)} — and paid for. Carrying on reads only what is left.` +
+                because +
                 voiceChanged,
               defaultValue: 'resume',
               options: [
                 {
                   value: 'resume',
-                  label: `Carry on from stretch ${cp.chunksDone + 1}`,
-                  description: `${left} left to read — you pay only for those.`
+                  label: 'Carry on where it stopped',
+                  description: `${left} stretch(es) left to read — you pay only for those.`
                 },
-                take,
+                ...take,
                 again
               ]
             }
@@ -1327,14 +1347,14 @@ const annotate: Step = {
                   'been edited since, so carrying on where it stopped would leave a stretch ' +
                   'unread. A note whose words are no longer in the text arrives unplaced ' +
                   'rather than in the wrong place.',
-              defaultValue: 'take',
-              options: [take, again]
+              defaultValue: anythingWritten ? 'take' : 'again',
+              options: [...take, again]
             }
       )
 
       // Nothing below shapes a pass that is not going to run. The one exception
       // is the introduction, which is its own request and still on offer.
-      const fallback = cp.resumable ? 'resume' : 'take'
+      const fallback = cp.resumable ? 'resume' : anythingWritten ? 'take' : 'again'
       const chosen = (s.answers['annotate']?.['useNotes'] as string) ?? fallback
       if (chosen === 'take') {
         qs.push(...introductionQuestions())

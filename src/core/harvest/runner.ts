@@ -13,7 +13,13 @@
  *
  * Pure orchestration behind an injected transport.
  */
-import { callModel, TranscribeError, type ApiUsage, type ClientConfig } from '@core/transcribe'
+import {
+  callModel,
+  haltWatch,
+  TranscribeError,
+  type ApiUsage,
+  type ClientConfig
+} from '@core/transcribe'
 import type { BookBlock } from '@core/assemble'
 import { chunkBlocks, contextFor, renderChunk, type ChunkOptions } from './chunk'
 import { buildHarvestSystemPrompt, type HarvestPromptOptions } from './prompt'
@@ -30,8 +36,14 @@ export interface HarvestRunOptions extends HarvestPromptOptions {
   maxAttempts?: number
   onProgress?: (done: number, total: number) => void
   isCancelled?: () => boolean
-  /** Chunks an earlier sitting already paid for. Skipped, never re-sent. */
-  resumeFrom?: number
+  /**
+   * Chunks an earlier sitting already read. Skipped, never re-sent.
+   *
+   * Indices rather than a count, for the reason the annotation runner spells
+   * out: a chunk that *failed* is not a chunk that was read, and resuming past
+   * it would leave a hole nothing on screen would mention.
+   */
+  alreadyRead?: ReadonlySet<number>
   /**
    * Called after every chunk with everything read so far in this run.
    *
@@ -52,6 +64,8 @@ export interface HarvestRunResult {
   discarded: number
   usage: ApiUsage
   cancelled: boolean
+  /** The same failure several chunks running — the account, not the book. */
+  haltedBy: string | null
 }
 
 const defaultSleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
@@ -103,18 +117,20 @@ export async function runHarvest(
   let discarded = 0
   let cancelled = false
 
-  const resumeFrom = Math.max(0, Math.min(options.resumeFrom ?? 0, chunks.length))
+  const alreadyRead = options.alreadyRead ?? new Set<number>()
+  const halt = haltWatch()
 
   const result = (): HarvestRunResult => ({
     facts: dedupeFacts(facts),
     failures,
     discarded,
     usage,
-    cancelled
+    cancelled,
+    haltedBy: halt.reason()
   })
 
   for (const [i, chunk] of chunks.entries()) {
-    if (i < resumeFrom) continue
+    if (alreadyRead.has(i)) continue
 
     if (options.isCancelled?.()) {
       cancelled = true
@@ -160,6 +176,9 @@ export async function runHarvest(
         // Saving is not what the user is paying for. Carry on reading.
       }
     }
+
+    // The account, not the book — see `haltWatch`.
+    if (halt.note(done ? null : lastError)) break
   }
 
   return result()

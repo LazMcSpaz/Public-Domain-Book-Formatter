@@ -367,7 +367,7 @@ describe('running the pass', () => {
       },
       voice: defaultVoice(),
       chunkWords: 200,
-      resumeFrom: 4,
+      alreadyRead: new Set([0, 1, 2, 3]),
       onCheckpoint: ({ chunksDone }) => {
         saves.push(chunksDone)
       }
@@ -375,6 +375,56 @@ describe('running the pass', () => {
     // Two requests, not six — which is the whole of what resuming is for.
     expect(calls).toBe(2)
     expect(saves).toEqual([5, 6])
+  })
+
+  it('gives up when the same failure keeps coming back', async () => {
+    // What a real book did: the account ran out of credit partway through, so
+    // every remaining stretch answered with the same 400. The run fired one
+    // doomed request per stretch and then reported the *book* as unreadable.
+    const blocks = Array.from({ length: 12 }, () => block('word '.repeat(200).trim()))
+    let calls = 0
+    const transport: Transport = async (url, init) => {
+      calls += 1
+      if (calls <= 2) return replyWith([])(url, init)
+      return {
+        ok: false,
+        status: 400,
+        json: async () => ({ error: { message: 'Your credit balance is too low' } })
+      } as Response
+    }
+    const result = await runAnnotation(blocks, {
+      client: { ...CLIENT, transport },
+      voice: defaultVoice(),
+      chunkWords: 200,
+      sleep: async () => {}
+    })
+    expect(result.haltedBy).toContain('credit balance')
+    // Two good stretches, three that failed alike, and then it stopped — rather
+    // than nine more requests that could not have worked.
+    expect(result.failures).toHaveLength(3)
+    expect(calls).toBe(5)
+  })
+
+  it('does not give up on a book that fails intermittently', async () => {
+    // A bad chunk is still a bad chunk. Only a failure that keeps repeating is
+    // evidence about the account rather than about the stretch.
+    const blocks = Array.from({ length: 8 }, () => block('word '.repeat(200).trim()))
+    let calls = 0
+    const transport: Transport = async (url, init) => {
+      calls += 1
+      if (calls % 2 === 0) {
+        return { ok: false, status: 400, json: async () => ({}) } as Response
+      }
+      return replyWith([])(url, init)
+    }
+    const result = await runAnnotation(blocks, {
+      client: { ...CLIENT, transport },
+      voice: defaultVoice(),
+      chunkWords: 200,
+      sleep: async () => {}
+    })
+    expect(result.haltedBy).toBeNull()
+    expect(calls).toBe(8)
   })
 
   it('stops between chunks when cancelled', async () => {

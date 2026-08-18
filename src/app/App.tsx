@@ -105,12 +105,13 @@ import {
 import { newSavedProfile, styleQuestions, type SavedStyleProfile } from '@core/style'
 import {
   bodyKeyFor,
+  checkpointComplete,
   createAnnotationCheckpoint,
   createBatchTicket,
   createSavedRun,
   describeAge,
   fileKey,
-  annotationResumeFrom,
+  chunksAlreadyRead,
   pendingBatches,
   summarize as summarizeRun,
   summarizeCheckpoint,
@@ -2503,14 +2504,19 @@ export function App(): JSX.Element {
       depth: harvestDepth
     })
 
-    // Chunks an earlier sitting paid for. Zero unless the user asked to carry
-    // on *and* the record still describes this text — `annotationResumeFrom`
-    // is the one place that decides, so the gate's offer and what actually
-    // happens cannot drift apart.
+    // The stretches an earlier sitting actually read, which this one must not
+    // pay for again — and which pointedly excludes the ones that failed.
+    // `chunksAlreadyRead` is the single place that decides, so the gate's offer
+    // and what the run does cannot drift apart.
     const resumeMode: AnnotationPassMode = wantsNotes ? 'notes' : 'facts'
-    const resumeFrom =
-      kept && useKept === 'resume' ? annotationResumeFrom(kept, wantedFor(resumeMode)) : 0
+    const alreadyRead =
+      kept && useKept === 'resume'
+        ? chunksAlreadyRead(kept, wantedFor(resumeMode))
+        : new Set<number>()
     const carried = useKept === 'again' || !kept ? null : kept
+    // A carried failure is about a stretch this run is about to read again, so
+    // reporting it would describe a hole that is being filled as we speak.
+    const carriedFailures = useKept === 'resume' ? [] : (carried?.failures ?? [])
 
     // Said once, not once per chunk: a storage failure repeated every few
     // seconds would bury the run's own progress under its own complaint.
@@ -2531,12 +2537,13 @@ export function App(): JSX.Element {
         createAnnotationCheckpoint({
           key: runKey,
           wanted: wantedFor(mode),
-          // Chunks this run read, plus the ones it was handed.
-          chunksDone: Math.max(chunksDone, resumeFrom),
+          // How far down the book this run has got. The stretches it skipped
+          // are behind it, so the count is the position either way.
+          chunksDone,
           // Everything bought for this book, not merely this sitting.
           proposals: [...(carried?.proposals ?? []), ...part.proposals],
           facts: [...(carried?.facts ?? []), ...part.facts],
-          failures: [...(carried?.failures ?? []), ...part.failures],
+          failures: [...carriedFailures, ...part.failures],
           discarded: (carried?.discarded ?? 0) + part.discarded,
           usage: part.usage
         })
@@ -2552,7 +2559,10 @@ export function App(): JSX.Element {
 
     cancelNotesRef.current = false
     setNotesNote(null)
-    setNotesProgress({ done: resumeFrom, total: Math.max(1, wantedFor(resumeMode).chunksTotal) })
+    setNotesProgress({
+      done: alreadyRead.size,
+      total: Math.max(1, wantedFor(resumeMode).chunksTotal)
+    })
     try {
       // When both are wanted, the harvest rides the annotation reply: the book
       // is read once and the entries cost output tokens only.
@@ -2562,12 +2572,12 @@ export function App(): JSX.Element {
             voice,
             facts,
             ...(wantsHarvest ? { harvest: harvestOptions } : {}),
-            resumeFrom,
+            alreadyRead,
             isCancelled: () => cancelNotesRef.current,
             onProgress: (done, total) => setNotesProgress({ done, total }),
             onCheckpoint: ({ chunksDone, result }) => writeCheckpoint('notes', chunksDone, result)
           })
-        : { proposals: [], facts: [], failures: [], discarded: 0, cancelled: false }
+        : { proposals: [], facts: [], failures: [], discarded: 0, cancelled: false, haltedBy: null }
 
       // A book worth mining and not worth annotating pays for its own reading.
       const harvested =
@@ -2576,13 +2586,13 @@ export function App(): JSX.Element {
               client,
               facts,
               ...harvestOptions,
-              resumeFrom,
+              alreadyRead,
               isCancelled: () => cancelNotesRef.current,
               onProgress: (done, total) => setNotesProgress({ done, total }),
               onCheckpoint: ({ chunksDone, result }) =>
                 writeCheckpoint('facts', chunksDone, { ...result, proposals: [] })
             })
-          : { facts: notes.facts, failures: [], discarded: 0, cancelled: false }
+          : { facts: notes.facts, failures: [], discarded: 0, cancelled: false, haltedBy: null }
 
       // Everything bought for this book, whichever sitting bought it. The kept
       // notes are located against the book *as it stands now* rather than
@@ -2596,7 +2606,7 @@ export function App(): JSX.Element {
         ...checkProposals(carried?.proposals ?? [], blockText, bookText),
         ...notes.proposals
       ]
-      const allFailures = [...(carried?.failures ?? []), ...notes.failures]
+      const allFailures = [...carriedFailures, ...notes.failures, ...harvested.failures]
       const allFacts = [...(carried?.facts ?? []), ...harvested.facts]
 
       setBankFacts(allFacts)
@@ -2609,28 +2619,57 @@ export function App(): JSX.Element {
       }
 
       const stopped = notes.cancelled || harvested.cancelled
+      const halted = notes.haltedBy ?? harvested.haltedBy
 
       let introduction: IntroductionDraft | null = null
-      // Not drafted after a cancel. Stopping the pass is a request to stop
-      // spending, and the introduction is a fresh request rather than the tail
-      // of the one that was interrupted.
-      if (wantsIntro && !stopped) {
+      let introError: string | null = null
+      // In its own try, and this is the whole of why. A book was annotated to
+      // the last stretch, the account ran out of credit, the introduction
+      // request threw — and the catch around the whole pass replaced every note
+      // that had come back with a single line about a credit balance. The user
+      // was shown "0 of 0 notes going in" for work they had paid for. A failure
+      // to write the introduction is a failure to write the introduction.
+      //
+      // Not attempted at all after a stop: stopping is a request to stop
+      // spending, and this is a fresh request rather than the tail of the one
+      // that was interrupted.
+      if (wantsIntro && !stopped && !halted) {
         setNotesProgress({ done: 1, total: 1 })
-        const drafted = await draftIntroduction(doc, {
-          client,
-          voice,
-          facts,
-          length: introLength as IntroductionLength,
-          ...(answers['introBrief'] ? { brief: String(answers['introBrief']) } : {})
-        })
-        introduction = drafted.draft
+        try {
+          const drafted = await draftIntroduction(doc, {
+            client,
+            voice,
+            facts,
+            length: introLength as IntroductionLength,
+            ...(answers['introBrief'] ? { brief: String(answers['introBrief']) } : {})
+          })
+          introduction = drafted.draft
+        } catch (err) {
+          introError = err instanceof Error ? err.message : String(err)
+        }
       }
 
+      const keptSaid = `The ${allNotes.length} note(s) already written are kept${
+        allNotes.length > 0 ? ' and are below' : ''
+      }`
       if (stopped) {
         setNotesNote(
-          `Stopped. The ${allNotes.length} note(s) already written are kept${
-            allNotes.length > 0 ? ' and are below' : ''
-          }; the rest of the book was not read, and nothing further was charged.`
+          `Stopped. ${keptSaid}; the rest of the book was not read, and nothing further ` +
+            'was charged.'
+        )
+      } else if (halted) {
+        // The account, not the book. Said as such, because "12 stretches could
+        // not be read" describes a damaged book and sends the user looking at
+        // the wrong thing.
+        setNotesNote(
+          `The pass stopped early: the same error came back several stretches running ` +
+            `(${halted}). That is the account rather than the book, so nothing more was ` +
+            `attempted. ${keptSaid}, and coming back to this step offers to carry on with ` +
+            'only the stretches that were never read.'
+        )
+      } else if (introError) {
+        setNotesNote(
+          `The introduction could not be written (${introError}). The notes are unaffected.`
         )
       }
 
@@ -2641,7 +2680,7 @@ export function App(): JSX.Element {
       const worthReviewing = allNotes.length > 0 || introduction !== null
       if (worthReviewing) {
         setProposals({ notes: allNotes, failures: allFailures, introduction })
-      } else if (!stopped) {
+      } else if (!stopped && !halted) {
         complete()
       }
       // A cancel with nothing to show for it deliberately does *not* move the
@@ -2649,13 +2688,14 @@ export function App(): JSX.Element {
       // answer a question they had just declined to answer, and the way back
       // is not obvious once the step is behind them.
     } catch (err) {
-      // A failed annotation pass is not a failed book: everything up to here is
-      // intact and the step is optional. Say so and let the user carry on.
-      setProposals({
-        notes: [],
-        failures: [{ chunkIndex: 0, message: err instanceof Error ? err.message : String(err) }],
-        introduction: null
-      })
+      // Only genuinely unexpected failures reach here now: both runners record a
+      // bad chunk and carry on, and the introduction has its own catch. So this
+      // means the pass could not run at all, and it says that rather than
+      // reporting a book with one bad stretch in it.
+      setNotesNote(
+        `The pass could not run (${err instanceof Error ? err.message : String(err)}). ` +
+          'Nothing was changed, and anything an earlier sitting bought is still here.'
+      )
     } finally {
       setNotesProgress(null)
     }
@@ -2720,14 +2760,31 @@ export function App(): JSX.Element {
         void persistRun(run, state.answers['gate-identity'] ?? {}, loadPrefs().modelId, next)
       }
 
-      // The checkpoint's job is done: every note it held has either been
-      // accepted — in which case it is an edit now, saved with the run — or
-      // turned down. Keeping it would offer the rejected ones back on the next
-      // visit as though they had never been seen.
+      // Every note the checkpoint held has now been accepted — in which case it
+      // is an edit, saved with the run — or turned down, so the notes come out
+      // of the record; keeping them would offer the rejected ones back on the
+      // next visit as though unseen.
+      //
+      // The record itself only goes when the pass actually finished the book.
+      // A pass that stopped partway — an account out of credit is the usual
+      // reason — leaves stretches nobody has read, and *which* stretches is
+      // known only here. Deleting it would mean topping the balance up and then
+      // paying to read the whole book again.
       const key = fileKeyRef.current
-      if (key) void deleteAnnotationCheckpoint(key)
-      setNotesCheckpoint(null)
-      setState((st) => ({ ...st, notesCheckpoint: null }))
+      const partial = notesCheckpoint && !checkpointComplete(notesCheckpoint)
+      if (key && partial && notesCheckpoint) {
+        const emptied = { ...notesCheckpoint, proposals: [], facts: [] }
+        void saveAnnotationCheckpoint(emptied)
+        setNotesCheckpoint(emptied)
+        setState((st) => ({
+          ...st,
+          notesCheckpoint: st.notesCheckpoint ? { ...st.notesCheckpoint, notes: 0, facts: 0 } : null
+        }))
+      } else {
+        if (key) void deleteAnnotationCheckpoint(key)
+        setNotesCheckpoint(null)
+        setState((st) => ({ ...st, notesCheckpoint: null }))
+      }
 
       complete()
     },
@@ -2739,6 +2796,7 @@ export function App(): JSX.Element {
       state.harvestInterest,
       state.answers,
       bankFacts,
+      notesCheckpoint,
       persistRun,
       complete
     ]

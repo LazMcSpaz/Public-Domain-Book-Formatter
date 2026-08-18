@@ -249,7 +249,15 @@ export function NoteReview({
         <p className="notes-failures">
           {failures.length} stretch(es) of the book could not be read for notes (
           {failures[0]!.message}
-          ). The rest of the book was annotated normally.
+          ).{' '}
+          {/* Never "the rest was annotated normally" when there is no rest to
+              speak of. A real book ended this pass with every stretch failing
+              on a spent credit balance and this line told the user the book had
+              been annotated — under a heading reading "0 of 0 notes going in". */}
+          {proposals.length > 0
+            ? 'The rest of the book was annotated normally.'
+            : 'Nothing else came back either, so this is the whole of what the pass produced. ' +
+              'Coming back to this step offers to read the stretches that were missed.'}
         </p>
       ) : null}
 

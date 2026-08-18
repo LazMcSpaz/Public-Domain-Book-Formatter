@@ -150,8 +150,13 @@ export function bodyKeyFor(blocks: readonly { id: string; text: string }[]): str
 export interface AnnotationCheckpointSummary {
   savedAt: string
   mode: AnnotationPassMode
-  chunksDone: number
+  /** Stretches actually read — failures excluded, because they were not. */
+  chunksRead: number
   chunksTotal: number
+  /** Stretches that came back an error, and will be read again on a resume. */
+  chunksFailed: number
+  /** What the failures said, when they all said the same thing. */
+  failedBecause: string | null
   notes: number
   facts: number
   /** Whether carrying on where it stopped is still an honest offer. */
@@ -164,11 +169,14 @@ export function summarizeCheckpoint(
   checkpoint: AnnotationCheckpoint,
   wanted: AnnotationWanted
 ): AnnotationCheckpointSummary {
+  const messages = new Set(checkpoint.failures.map((f) => f.message))
   return {
     savedAt: checkpoint.savedAt,
     mode: checkpoint.mode,
-    chunksDone: checkpoint.chunksDone,
+    chunksRead: chunksAlreadyRead(checkpoint, wanted).size,
     chunksTotal: checkpoint.chunksTotal,
+    chunksFailed: checkpoint.failures.length,
+    failedBecause: messages.size === 1 ? [...messages][0]! : null,
     notes: checkpoint.proposals.length,
     facts: checkpoint.facts.length,
     resumable: annotationResumeFrom(checkpoint, wanted) > 0,
@@ -177,26 +185,63 @@ export function summarizeCheckpoint(
 }
 
 /**
- * How many chunks a fresh run may skip, or 0 for none.
+ * The chunks a fresh run may skip: the ones this record actually *read*.
  *
- * Zero is also the answer for a checkpoint that finished: there is nothing left
- * to read, and "resume from the end" would be a request with no work in it.
+ * Not "everything before where it stopped". A chunk that failed is a chunk that
+ * was not read, and the commonest way for one to fail is the way a real book
+ * failed here — an account that ran out of credit mid-pass, which answers every
+ * remaining request the same way. Skipping those on the way back would leave
+ * stretches of the book unannotated with nothing on screen to say so, which is
+ * the exact failure this module exists to prevent. So they come out of the set
+ * and get read again, which is also what the user topped their balance up for.
+ *
+ * Empty when the record may not be carried on at all.
+ */
+export function chunksAlreadyRead(
+  checkpoint: AnnotationCheckpoint,
+  wanted: AnnotationWanted
+): Set<number> {
+  const read = new Set<number>()
+  if (!resumable(checkpoint, wanted)) return read
+  const failed = new Set(checkpoint.failures.map((f) => f.chunkIndex))
+  for (let i = 0; i < Math.min(checkpoint.chunksDone, checkpoint.chunksTotal); i++) {
+    if (!failed.has(i)) read.add(i)
+  }
+  return read
+}
+
+/** Whether the record still describes the book this run is about to read. */
+function resumable(checkpoint: AnnotationCheckpoint, wanted: AnnotationWanted): boolean {
+  if (checkpoint.version !== ANNOTATION_CHECKPOINT_VERSION) return false
+  if (checkpoint.mode !== wanted.mode) return false
+  if (checkpoint.bodyKey !== wanted.bodyKey) return false
+  if (checkpoint.chunksTotal !== wanted.chunksTotal) return false
+  return true
+}
+
+/**
+ * How much of the book is still to read, or 0 when there is nothing left.
+ *
+ * Counted from the stretches actually read rather than from where the pass
+ * stopped, so a run that ended with a dozen failures reports a dozen stretches
+ * left rather than none.
  */
 export function annotationResumeFrom(
   checkpoint: AnnotationCheckpoint,
   wanted: AnnotationWanted
 ): number {
-  if (checkpoint.version !== ANNOTATION_CHECKPOINT_VERSION) return 0
-  if (checkpoint.mode !== wanted.mode) return 0
-  if (checkpoint.bodyKey !== wanted.bodyKey) return 0
-  if (checkpoint.chunksTotal !== wanted.chunksTotal) return 0
-  if (checkpoint.chunksDone >= checkpoint.chunksTotal) return 0
-  return Math.max(0, checkpoint.chunksDone)
+  if (!resumable(checkpoint, wanted)) return 0
+  const read = chunksAlreadyRead(checkpoint, wanted).size
+  return read >= checkpoint.chunksTotal ? 0 : checkpoint.chunksTotal - read
 }
 
-/** Whether the pass this record came from read the whole book. */
+/** Whether the pass this record came from read the whole book, failures aside. */
 export function checkpointComplete(checkpoint: AnnotationCheckpoint): boolean {
-  return checkpoint.chunksTotal > 0 && checkpoint.chunksDone >= checkpoint.chunksTotal
+  return (
+    checkpoint.chunksTotal > 0 &&
+    checkpoint.chunksDone >= checkpoint.chunksTotal &&
+    checkpoint.failures.length === 0
+  )
 }
 
 export function createAnnotationCheckpoint(init: {

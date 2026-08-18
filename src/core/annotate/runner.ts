@@ -16,7 +16,13 @@
  * Pure orchestration: the transport is injected, so the whole of this is
  * testable with no key and no spend.
  */
-import { callModel, TranscribeError, type ApiUsage, type ClientConfig } from '@core/transcribe'
+import {
+  callModel,
+  haltWatch,
+  TranscribeError,
+  type ApiUsage,
+  type ClientConfig
+} from '@core/transcribe'
 import type { BookBlock } from '@core/assemble'
 import {
   checkFacts,
@@ -56,13 +62,16 @@ export interface AnnotationRunOptions {
   /** Polled between chunks, so cancelling costs at most one more request. */
   isCancelled?: () => boolean
   /**
-   * Chunks an earlier run already paid for, and this one must not read again.
+   * Chunks an earlier sitting already read, which this one must not pay for
+   * twice.
    *
-   * The proposals from those chunks are the caller's to hold — this returns
-   * only what it read itself — because merging is where the run and the record
-   * on disk would otherwise get two chances to disagree.
+   * A set of indices rather than a count, because "how far it got" is the wrong
+   * question: a run that reached stretch forty with three failures along the
+   * way has *not* read those three, and resuming past them would leave holes in
+   * the book that nothing on screen would ever mention. The caller holds the
+   * proposals from the chunks it names; this returns only what it read itself.
    */
-  resumeFrom?: number
+  alreadyRead?: ReadonlySet<number>
   /**
    * Called after every chunk with everything read *so far in this run*.
    *
@@ -93,6 +102,12 @@ export interface AnnotationRunResult {
   discarded: number
   usage: ApiUsage
   cancelled: boolean
+  /**
+   * Why the run gave up early, when it did — the same failure several chunks
+   * running, which is the account rather than the book. Null when it read to
+   * the end or the user stopped it.
+   */
+  haltedBy: string | null
 }
 
 const defaultSleep = (ms: number): Promise<void> =>
@@ -154,7 +169,8 @@ export async function runAnnotation(
   let discarded = 0
   let cancelled = false
 
-  const resumeFrom = Math.max(0, Math.min(options.resumeFrom ?? 0, chunks.length))
+  const alreadyRead = options.alreadyRead ?? new Set<number>()
+  const halt = haltWatch()
 
   const result = (): AnnotationRunResult => ({
     proposals,
@@ -162,7 +178,8 @@ export async function runAnnotation(
     failures,
     discarded,
     usage,
-    cancelled
+    cancelled,
+    haltedBy: halt.reason()
   })
 
   const checkpoint = async (chunksDone: number): Promise<void> => {
@@ -178,7 +195,7 @@ export async function runAnnotation(
   for (const [i, chunk] of chunks.entries()) {
     // Already read and already paid for. Skipped rather than re-sent, which is
     // the entire point of resuming.
-    if (i < resumeFrom) continue
+    if (alreadyRead.has(i)) continue
 
     if (options.isCancelled?.()) {
       cancelled = true
@@ -218,6 +235,12 @@ export async function runAnnotation(
 
     options.onProgress?.(i + 1, chunks.length)
     await checkpoint(i + 1)
+
+    // The same unretryable answer several chunks running is not about the
+    // chunks. Stopping keeps everything bought so far and leaves a checkpoint
+    // to carry on from, instead of firing one doomed request per remaining
+    // stretch and then describing the book as unreadable.
+    if (halt.note(outcome.error ?? null)) break
   }
 
   // No final write on the way out: the cancel is checked *before* a chunk is

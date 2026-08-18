@@ -116,5 +116,6 @@ export {
   type RunResult,
   type PageFailure
 } from './runner'
+export { REPEATS_BEFORE_HALT, haltWatch, type HaltWatch } from './halt'
 export type { OcrWordLike } from './types'
 export { verifyBook, type VerifyBookOptions } from './verify-book'

@@ -42,6 +42,7 @@ export {
   ANNOTATION_CHECKPOINT_VERSION,
   annotationResumeFrom,
   bodyKeyFor,
+  chunksAlreadyRead,
   checkpointComplete,
   createAnnotationCheckpoint,
   migrateAnnotationCheckpoint,
