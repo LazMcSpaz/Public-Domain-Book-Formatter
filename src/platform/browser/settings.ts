@@ -7,6 +7,7 @@
  * it can never be committed or shared along with a book.
  */
 import { defaultVoice, normalizeVoice, type EditorVoice } from '@core/annotate'
+import { validRepo, type ShelfConfig } from '@core/sync'
 import {
   emptyVocabulary,
   growVocabulary,
@@ -19,6 +20,15 @@ const KEY_STORAGE = 'pdbf.apiKey'
 const PREFS_STORAGE = 'pdbf.prefs'
 const VOICE_STORAGE = 'pdbf.voice'
 const BANK_STORAGE = 'pdbf.bank'
+/**
+ * The shelf: which repository books are kept in, and the token to write there.
+ *
+ * Beside the API key rather than with a book, and under the same rules. A token
+ * that travelled with a book file would be published the first time that book
+ * was saved to a repository — which is the one way this feature could hurt
+ * someone, so the credential lives here and the book files never see it.
+ */
+const SHELF_STORAGE = 'pdbf.shelf'
 const REVIEW_PREFIX = 'pdbf.review.'
 const CURSOR_PREFIX = 'pdbf.cursor.'
 
@@ -70,6 +80,45 @@ export function saveApiKey(key: string): void {
   if (!store) return
   if (key.trim()) store.setItem(KEY_STORAGE, key.trim())
   else store.removeItem(KEY_STORAGE)
+}
+
+/** The shelf configuration, or empty strings when it has not been set up. */
+export function loadShelf(): ShelfConfig {
+  const raw = safeLocalStorage()?.getItem(SHELF_STORAGE)
+  if (!raw) return { repo: '', branch: 'main', token: '' }
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null) throw new Error('not an object')
+    const value = parsed as Partial<ShelfConfig>
+    return {
+      repo: typeof value.repo === 'string' ? value.repo : '',
+      branch: typeof value.branch === 'string' && value.branch ? value.branch : 'main',
+      token: typeof value.token === 'string' ? value.token : ''
+    }
+  } catch {
+    return { repo: '', branch: 'main', token: '' }
+  }
+}
+
+export function saveShelf(config: ShelfConfig): void {
+  const store = safeLocalStorage()
+  if (!store) return
+  const clean: ShelfConfig = {
+    repo: config.repo.trim(),
+    branch: config.branch.trim() || 'main',
+    token: config.token.trim()
+  }
+  if (!clean.repo && !clean.token) store.removeItem(SHELF_STORAGE)
+  else store.setItem(SHELF_STORAGE, JSON.stringify(clean))
+}
+
+/** Whether the shelf is set up enough to talk to. */
+export function shelfReady(config: ShelfConfig): boolean {
+  return validRepo(config.repo) && config.token.length > 0
+}
+
+export function clearShelf(): void {
+  safeLocalStorage()?.removeItem(SHELF_STORAGE)
 }
 
 export function clearApiKey(): void {

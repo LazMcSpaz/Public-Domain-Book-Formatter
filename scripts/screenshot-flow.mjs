@@ -82,6 +82,12 @@ page.on('console', (m) => {
   // way the answer is "no" and the app handles it.) Everything else still
   // counts.
   if (m.location()?.url?.includes('api.anthropic.com')) return
+  // A 404 from GitHub is not a failure either: it is how the contents API
+  // spells "not there yet", and the shelf asks that question deliberately —
+  // before every write, to learn whether it is creating or replacing, and
+  // before the first save, when `books/` does not exist at all. The browser
+  // logs the failed request regardless.
+  if (m.location()?.url?.includes('api.github.com') && /404/.test(m.text())) return
   errors.push(m.text())
 })
 
@@ -2600,6 +2606,233 @@ for (const want of ['Extra gutter for binding', 'Page numbers', 'Print a half-ti
   }
 }
 
+// --- the shelf --------------------------------------------------------------
+// A repository of the user's own, standing in for GitHub here. The point of
+// exercising it in a browser rather than only in unit tests: a book has to come
+// off the shelf onto a device that has never seen it, which means the whole
+// round trip — a book file written from the stores, parsed back, and the stores
+// rebuilt from it.
+console.log('13. the shelf')
+
+const shelfFiles = new Map()
+let shelfPuts = 0
+await page.route('https://api.github.com/**', async (route) => {
+  const url = route.request().url()
+  const method = route.request().method()
+
+  if (/\/repos\/[^/]+\/[^/]+$/.test(url)) {
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        full_name: 'LazMcSpaz/Test-Shelf',
+        default_branch: 'main',
+        private: true
+      })
+    })
+  }
+
+  const path = decodeURIComponent(/\/contents\/([^?]+)/.exec(url)?.[1] ?? '')
+
+  if (method === 'PUT') {
+    shelfPuts += 1
+    shelfFiles.set(path, JSON.parse(route.request().postData() ?? '{}').content)
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({ content: { sha: `sha-${shelfFiles.size}` } })
+    })
+  }
+
+  // A directory listing.
+  if (path === 'books') {
+    const dirs = new Set(
+      [...shelfFiles.keys()].filter((p) => p.startsWith('books/')).map((p) => p.split('/')[1])
+    )
+    if (dirs.size === 0) return route.fulfill({ status: 404, body: '{}' })
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify([...dirs].map((name) => ({ name, type: 'dir' })))
+    })
+  }
+
+  const stored = shelfFiles.get(path)
+  if (stored === undefined) return route.fulfill({ status: 404, body: '{}' })
+  // The raw media type is what the app asks for, because a book file with its
+  // transcription is past the megabyte the JSON envelope gives up at.
+  if ((route.request().headers()['accept'] ?? '').includes('raw')) {
+    return route.fulfill({
+      status: 200,
+      contentType: 'application/octet-stream',
+      body: Buffer.from(stored, 'base64')
+    })
+  }
+  return route.fulfill({
+    status: 200,
+    contentType: 'application/json',
+    body: JSON.stringify({ sha: 'sha-existing', content: stored, encoding: 'base64' })
+  })
+})
+
+await page.goto(`${URL_BASE}#settings`, { waitUntil: 'networkidle' })
+await page.waitForSelector('.settings', { timeout: 20000 })
+const shelfSection = await page
+  .locator('.settings section')
+  .filter({ hasText: 'Your shelf' })
+  .first()
+await shelfSection.locator('input[type=text]').first().fill('LazMcSpaz/Test-Shelf')
+await shelfSection.locator('input[type=password]').fill('github_pat_harness_token')
+await shelfSection.locator('button', { hasText: 'Connect' }).click()
+await page.waitForTimeout(800)
+const shelfConnected = await shelfSection.locator('.help').last().innerText()
+await shot('12-shelf-settings')
+
+// The token is stored the way the API key is, and shown the way it is.
+const tokenMasked = await page.evaluate(() => {
+  const raw = localStorage.getItem('pdbf.shelf')
+  return raw ? JSON.parse(raw).token : ''
+})
+
+// Save the book that is already in the store, then prove the round trip by
+// wiping this device entirely and taking it back off the shelf.
+const pushed = await page.evaluate(
+  async ([repo, path]) => {
+    const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+    const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+    const shelf = await import(`/@fs${repo}/src/platform/browser/shelf.ts`)
+    const settings = await import(`/@fs${repo}/src/platform/browser/settings.ts`)
+    const annotate = await import(`/@fs${repo}/src/core/annotate/index.ts`)
+
+    const bytes = new Uint8Array(await (await fetch(path)).arrayBuffer())
+    const file = new File([bytes], 'shelf-book.pdf', {
+      type: 'application/pdf',
+      lastModified: 4242
+    })
+    const key = project.fileKey(file)
+    const run = project.createSavedRun({
+      key,
+      fileName: 'shelf-book.pdf',
+      pageCount: 1,
+      transcriptions: [
+        {
+          pageIndex: 0,
+          role: 'body',
+          blocks: [
+            { id: 'p0b0', kind: 'paragraph', text: 'Of the alembick being set upon a fire.' }
+          ],
+          uncertain: [],
+          furniture: {}
+        }
+      ],
+      failures: [],
+      usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0 },
+      modelId: 'claude-opus-5',
+      identityAnswers: { bookContext: 'a chymical treatise' },
+      edits: [{ kind: 'text', blockId: 'p0b0', text: 'Of the alembick, being set upon a fire.' }],
+      facts: [
+        {
+          id: 'f1',
+          title: 'The wet way',
+          body: 'Gentle heat over weeks.',
+          footing: 'stated',
+          category: 'method',
+          tags: ['distillation'],
+          blockId: 'p0b0',
+          quote: 'upon a fire',
+          sourcePage: 0,
+          quoteVerified: true
+        }
+      ]
+    })
+    await runStore.saveRun(run)
+    settings.saveReviewProgress(key, { design: { period: 'early-modern' } })
+
+    const config = settings.loadShelf()
+    const { path: scanPath } = await shelf.pushScan(config, file, 'shelf-book.pdf')
+    // Twice on purpose: git keeps every version, so a scan that is re-sent on
+    // each save grows the repository by a whole scan every time.
+    const second = await shelf.pushScan(config, file, 'shelf-book.pdf')
+
+    const json = project.serializeBookFile({
+      run,
+      answers: settings.loadReviewProgress(key),
+      voice: annotate.defaultVoice(),
+      scan: { path: scanPath, fileName: 'shelf-book.pdf', bytes: file.size, key }
+    })
+    const summary = project.summarizeBookFile(project.parseBookFile(json))
+    await shelf.pushBook(
+      config,
+      key,
+      json,
+      {
+        key,
+        fileName: 'shelf-book.pdf',
+        savedAt: new Date().toISOString(),
+        pageCount: 1,
+        notes: summary.notes,
+        corrections: summary.corrections,
+        facts: summary.facts,
+        complete: true,
+        scanPath
+      },
+      'the transcription'
+    )
+
+    // Now this device forgets everything about the book, which is what moving
+    // to another one looks like from the app's side.
+    await runStore.deleteRun(key)
+    await runStore.deleteSourceFile(key)
+    settings.clearReviewProgress(key)
+
+    return { key, scanPath, scanUploadedTwice: second.uploaded, bytes: json.length }
+  },
+  [REPO, '/test-book.pdf']
+)
+
+// Off the shelf, on the intake screen, with nothing left locally.
+await page.goto(URL_BASE, { waitUntil: 'networkidle' })
+await page.waitForSelector('.drop', { timeout: 30000 })
+await page.waitForTimeout(1200)
+const shelfListed = await page
+  .locator('.q')
+  .filter({ hasText: 'Books on your shelf' })
+  .innerText()
+  .catch(() => '')
+await shot('12b-shelf-intake')
+
+const pulled = await page.evaluate(
+  async ([repo, key]) => {
+    const shelf = await import(`/@fs${repo}/src/platform/browser/shelf.ts`)
+    const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+    const settings = await import(`/@fs${repo}/src/platform/browser/settings.ts`)
+    const json = await shelf.fetchBook(settings.loadShelf(), key)
+    if (!json) return null
+    const file = project.parseBookFile(json)
+    const scan = file.scan ? await shelf.getBytes(settings.loadShelf(), file.scan.path) : null
+    return {
+      pages: file.run.transcriptions.length,
+      text: file.run.transcriptions[0]?.blocks[0]?.text ?? '',
+      corrections: file.run.edits.length,
+      facts: file.run.facts.length,
+      answers: file.answers.design?.period ?? '',
+      identity: file.run.identityAnswers?.bookContext ?? '',
+      scanBytes: scan ? scan.length : 0,
+      isPdf: scan ? new TextDecoder().decode(scan.slice(0, 5)) : ''
+    }
+  },
+  [REPO, pushed.key]
+)
+
+console.log(`  → ${shelfConnected.replace(/\s+/g, ' ')}`)
+console.log(
+  `  → wrote ${shelfFiles.size} file(s) in ${shelfPuts} commit(s): ${[...shelfFiles.keys()].join(', ')}`
+)
+console.log(
+  `  → came back: ${pulled?.pages} page(s), ${pulled?.corrections} correction(s), ` +
+    `${pulled?.facts} bank entr(y/ies), design "${pulled?.answers}", scan ${pulled?.scanBytes} bytes`
+)
+
 console.log('\nresult:')
 console.log(`  term rows: ${rows}`)
 console.log(`  word crops rendered: ${crops}`)
@@ -2808,6 +3041,27 @@ const finalChecks = [
   ['the record is dropped once the notes are in the book', checkpointCleared],
   ['a running pass can be stopped', /Stop/.test(stopOffered)],
   ['and says it is saving as it goes', savingSaid === 1],
+  // A shelf is what makes a book survive the device it was made on. The round
+  // trip is the whole claim: written from the stores, and the stores rebuilt
+  // from it on a device that has just been wiped of the book.
+  ['the shelf says it is private before anything is saved', /private|PUBLIC/.test(shelfConnected)],
+  ['the token is stored, not printed', tokenMasked === 'github_pat_harness_token'],
+  [
+    'the book file is written',
+    [...shelfFiles.keys()].some((p) => /^books\/.+\/book\.json$/.test(p))
+  ],
+  [
+    'a catalogue card is written beside it',
+    [...shelfFiles.keys()].some((p) => /^books\/.+\/about\.json$/.test(p))
+  ],
+  ['the scan is written once, not once per save', pushed.scanUploadedTwice === false],
+  ['the shelf is listed on the intake screen', /Books on your shelf/.test(shelfListed)],
+  ['the transcription comes back', pulled?.pages === 1],
+  ['the corrections come back', pulled?.corrections === 1],
+  ['the fact bank comes back', pulled?.facts === 1],
+  ['the gate answers come back', pulled?.answers === 'early-modern'],
+  ['what the book is about comes back', pulled?.identity === 'a chymical treatise'],
+  ['the scan comes back as a PDF, byte for byte', pulled?.isPdf === '%PDF-'],
   ['every disagreement is listed as its own row', gapRows > 0],
   // The row exists to point at the word. Without the crop it is the old
   // "somewhere on this page" with extra steps.

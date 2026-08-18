@@ -553,6 +553,31 @@ in `screenshots/`. Don't ship UI blind.
   wired to nothing, is now a button: stopping keeps what has been read, charges
   nothing further, and does not carry the user past a gate they just declined.
 
+- **Also done**: **a book is one file, and the shelf is a repository.** Every
+  store this app had belongs to one browser on one device: clear the site data
+  or pick up the laptop and the transcription that cost money and the evening of
+  proofreading that cost time are both gone. `src/core/project/book-file.ts`
+  puts the lot in one JSON — transcription, corrections, notes, introduction,
+  supplied pictures and their retouches, the second reading's verdicts, the fact
+  bank, every gate answer and the voice — and `src/core/sync` plus
+  `platform/browser/shelf` write it to a git repository of the user's own with
+  their own fine-grained token, on their own, whenever something expensive or
+  laborious is finished. Still no server and still no account. What decides the
+  layout is that **git keeps every version forever**: the file rewritten on each
+  save is the small one, and the scan goes up **once** under its own SHA-256, so
+  re-saving costs kilobytes rather than another scan. A catalogue card of a few
+  hundred bytes sits beside each book so the intake screen can list a shelf
+  without downloading it. Pictures are base64 and everything else is plain text,
+  because a book file should diff in a repository and be readable by a person
+  wondering what the app kept. The token lives where the API key lives and
+  **never** enters a book file — a credential that reached one would be
+  published the moment that book was saved — and the Settings panel says out
+  loud when the repository it just connected to is _public_, because a git
+  history cannot be taken back. `SavedRun` v10 carries the fact bank for the
+  same reason: until now those entries lived in a React state variable and
+  vanished on a refresh, so a book file written from a reopened session would
+  have been quietly short of what was paid for.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

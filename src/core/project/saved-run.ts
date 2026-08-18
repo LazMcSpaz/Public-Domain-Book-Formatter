@@ -26,6 +26,7 @@ import { BLOCK_KINDS, type PageTranscription } from '@core/transcribe'
 import type { BookEdit } from '@core/edits'
 import { normalizeMarkup } from '@core/transcribe'
 import type { ImageEditOp } from '@core/model'
+import { FOOTINGS, type Fact } from '@core/harvest'
 
 /**
  * Current schema version. Bump and extend `migrateSavedRun` on any shape change.
@@ -37,13 +38,13 @@ import type { ImageEditOp } from '@core/model'
  *
  * v5 → v6 added the proofreading corrections, v6 → v7 the pixels of any
  * pictures the editor supplied, v7 → v8 whether the paid pass reached the end,
- * and v8 → v9 what the second reading concluded about the flagged spots. None
- * of them damages an older run — each is a complete transcription that simply
+ * v8 → v9 what the second reading concluded about the flagged spots, and
+ * v9 → v10 the fact bank this book produced. None of them damages an older run — each is a complete transcription that simply
  * has none of the newer thing on it yet — so all upgrade in place rather than
  * being refused. That distinction is the whole reason a migration exists
  * instead of a version check.
  */
-export const CURRENT_SCHEMA_VERSION = 9
+export const CURRENT_SCHEMA_VERSION = 10
 
 /** A page the model could not read at all. Mirrors the runner's `PageFailure`. */
 export interface SavedFailure {
@@ -127,6 +128,16 @@ export interface SavedRun {
    * what it did before the pass existed at all.
    */
   adjudicated: Record<string, { verdict: string; reading: string; note: string }>
+  /**
+   * What the book was worth remembering — the fact bank, as the pass produced it.
+   *
+   * Stored for the plainest of reasons: it was paid for. Until v10 these lived
+   * in a React state variable and were offered as two downloads on the export
+   * screen, so anyone who closed the tab without pressing those buttons had
+   * bought a file that no longer existed. Nothing about the printed book
+   * depends on them, which is exactly why they were easy to forget.
+   */
+  facts: Fact[]
 }
 
 /** The facts the resume question needs, without loading the whole run. */
@@ -236,6 +247,7 @@ export function createSavedRun(init: {
   /** Defaults true: a caller that does not say is finishing a book, not checkpointing one. */
   complete?: boolean
   adjudicated?: Record<string, { verdict: string; reading: string; note: string }>
+  facts?: readonly Fact[]
 }): SavedRun {
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -251,7 +263,8 @@ export function createSavedRun(init: {
     edits: [...(init.edits ?? [])],
     images: [...(init.images ?? new Map())].map(([id, bytes]) => ({ id, bytes })),
     complete: init.complete ?? true,
-    adjudicated: { ...(init.adjudicated ?? {}) }
+    adjudicated: { ...(init.adjudicated ?? {}) },
+    facts: [...(init.facts ?? [])]
   }
 }
 
@@ -326,8 +339,49 @@ export function migrateSavedRun(raw: unknown): SavedRun {
     // Anything written before v8 could only have been written by the old
     // save-at-the-end path, so it is complete by construction.
     complete: typeof raw['complete'] === 'boolean' ? raw['complete'] : true,
-    adjudicated: parseAdjudicated(raw['adjudicated'])
+    adjudicated: parseAdjudicated(raw['adjudicated']),
+    facts: parseFacts(raw['facts'])
   }
+}
+
+/**
+ * Read the bank entries back, keeping only the well-formed ones.
+ *
+ * Same rule as the edits and the verdicts: a malformed entry is dropped rather
+ * than thrown on. What is at stake here is one entry in a file for reading
+ * later; what refusing would cost is the transcription.
+ *
+ * `footing` is checked against the vocabulary rather than trusted, because it
+ * is the field that makes the bank usable years later — whether the book
+ * *stated* a thing, implied it, or merely surrounded it — and an entry claiming
+ * a footing this app does not know is worse than one that is missing.
+ */
+function parseFacts(raw: unknown): Fact[] {
+  if (!Array.isArray(raw)) return []
+  const out: Fact[] = []
+  for (const item of raw) {
+    if (!isObject(item)) continue
+    const footing = FOOTINGS.find((f) => f === item['footing'])
+    const id = str(item['id'], '')
+    const title = str(item['title'], '')
+    if (!footing || !id || !title) continue
+    out.push({
+      id,
+      title,
+      body: str(item['body'], ''),
+      footing,
+      category: str(item['category'], ''),
+      tags: Array.isArray(item['tags']) ? item['tags'].filter((t) => typeof t === 'string') : [],
+      blockId: str(item['blockId'], ''),
+      quote: str(item['quote'], ''),
+      sourcePage: typeof item['sourcePage'] === 'number' ? item['sourcePage'] : null,
+      quoteVerified: item['quoteVerified'] === true,
+      ...(typeof item['demotedFrom'] === 'string'
+        ? { demotedFrom: FOOTINGS.find((f) => f === item['demotedFrom']) }
+        : {})
+    } as Fact)
+  }
+  return out
 }
 
 /**

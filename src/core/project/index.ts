@@ -54,6 +54,19 @@ export {
   type ChunkFailureRecord
 } from './annotation-checkpoint'
 export {
+  BOOK_FILE_FORMAT,
+  BOOK_FILE_VERSION,
+  bookFileName,
+  fromBase64,
+  parseBookFile,
+  serializeBookFile,
+  summarizeBookFile,
+  toBase64,
+  type BookFile,
+  type BookFileSummary,
+  type ScanPointer
+} from './book-file'
+export {
   RECON_CACHE_VERSION,
   reconCacheUsable,
   reconResumeFrom,

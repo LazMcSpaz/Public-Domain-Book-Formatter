@@ -31,6 +31,8 @@ import {
   type SavedStyleProfile
 } from '@core/style'
 import type { StyleProfile } from '@core/model'
+import { validRepo, type ShelfConfig } from '@core/sync'
+import { checkShelf } from '../platform/browser/shelf'
 import { describeAge, type SavedRunSummary } from '@core/project'
 import {
   deleteAllSourceFiles,
@@ -50,10 +52,13 @@ import {
   clearApiKey,
   clearReviewProgress,
   formatBytes,
+  clearShelf,
   loadApiKey,
+  loadShelf,
   loadPrefs,
   maskApiKey,
   saveApiKey,
+  saveShelf,
   savePrefs,
   storageEstimate,
   type AppPrefs
@@ -69,6 +74,10 @@ export interface SettingsProps {
 export function Settings({ onClose }: SettingsProps): JSX.Element {
   const [prefs, setPrefs] = useState<AppPrefs>(() => loadPrefs())
   const [apiKey, setKey] = useState(() => loadApiKey())
+  const [shelf, setShelf] = useState<ShelfConfig>(() => loadShelf())
+  const [shelfToken, setShelfToken] = useState('')
+  const [shelfNote, setShelfNote] = useState<string | null>(null)
+  const [shelfChecking, setShelfChecking] = useState(false)
   const [keyDraft, setKeyDraft] = useState('')
   const [runs, setRuns] = useState<SavedRunSummary[]>([])
   const [sizes, setSizes] = useState<Map<string, number>>(new Map())
@@ -335,6 +344,110 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
                   }}
                 >
                   Remove key
+                </button>
+              ) : null}
+            </div>
+          </section>
+
+          {/* --- the shelf ------------------------------------------------ */}
+          <section>
+            <h2>Your shelf</h2>
+            <p className="help">
+              A repository of your own where books are kept whole — the transcription, every
+              correction, the notes and introduction, the pictures, the fact bank and the design.
+              Saved on its own whenever something is finished, so picking a book up on another
+              device loses nothing. Like the API key, the token is stored only in this browser and
+              sent only to GitHub; it is never written into a book file.
+            </p>
+            <p className="help">
+              Use a <b>fine-grained</b> token with access to that repository alone and one
+              permission: <b>Contents: Read and write</b>. Keep the repository <b>private</b> — your
+              notes and introduction are the part of a reprint that is yours.
+            </p>
+            <label>
+              Repository
+              <input
+                type="text"
+                placeholder="owner/name"
+                value={shelf.repo}
+                onChange={(e) => setShelf({ ...shelf, repo: e.target.value })}
+              />
+            </label>
+            <label>
+              Branch
+              <input
+                type="text"
+                placeholder="main"
+                value={shelf.branch}
+                onChange={(e) => setShelf({ ...shelf, branch: e.target.value })}
+              />
+            </label>
+            {shelf.token ? (
+              <p>
+                Token stored: <code>{maskApiKey(shelf.token)}</code>
+              </p>
+            ) : (
+              <p className="help">No token stored, so nothing is saved to a shelf yet.</p>
+            )}
+            <label>
+              Token
+              <input
+                type="password"
+                placeholder={shelf.token ? 'Replace with a different token' : 'github_pat_…'}
+                value={shelfToken}
+                onChange={(e) => setShelfToken(e.target.value)}
+              />
+            </label>
+            {shelfNote ? <p className="help">{shelfNote}</p> : null}
+            <div className="actions">
+              <button
+                type="button"
+                className="primary"
+                disabled={shelfChecking || !validRepo(shelf.repo)}
+                onClick={() => {
+                  const next: ShelfConfig = {
+                    ...shelf,
+                    branch: shelf.branch.trim() || 'main',
+                    token: shelfToken.trim() || shelf.token
+                  }
+                  setShelfChecking(true)
+                  setShelfNote(null)
+                  void checkShelf(next)
+                    .then((info) => {
+                      saveShelf(next)
+                      setShelf(next)
+                      setShelfToken('')
+                      // Said plainly, because the first save is what publishes
+                      // it and there is no taking a git history back.
+                      setShelfNote(
+                        info.private
+                          ? `Connected to ${info.repo} — private, so what you save stays yours. ` +
+                              'Books will be written there as you finish them.'
+                          : `Connected to ${info.repo} — but it is PUBLIC. Anything saved there, ` +
+                              'including your notes and introduction, becomes world-readable and ' +
+                              'stays in the history for good. Make it private before saving a book.'
+                      )
+                    })
+                    .catch((err: unknown) => {
+                      setShelfNote(err instanceof Error ? err.message : String(err))
+                    })
+                    .finally(() => setShelfChecking(false))
+                }}
+              >
+                {shelfChecking ? 'Checking…' : 'Connect'}
+              </button>
+              {shelf.token ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    clearShelf()
+                    setShelf({ repo: '', branch: 'main', token: '' })
+                    setShelfNote(
+                      'Shelf forgotten on this device. Nothing in the repository changed.'
+                    )
+                  }}
+                >
+                  Forget this shelf
                 </button>
               ) : null}
             </div>

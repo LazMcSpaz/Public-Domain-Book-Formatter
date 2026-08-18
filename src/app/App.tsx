@@ -69,7 +69,9 @@ import {
   loadBank,
   recordHarvest,
   loadReviewProgress,
+  loadShelf,
   saveReviewProgress,
+  shelfReady,
   loadReviewPlace,
   saveReviewPlace,
   storageEstimate
@@ -93,6 +95,7 @@ import {
   storedFileKeys
 } from '../platform/browser/run-store'
 import { collectBookBatch, submitBookBatch } from '../platform/browser/batch-run'
+import { fetchBook, getBytes, pushBook, pushScan, readShelf } from '../platform/browser/shelf'
 import { canReachBatchApi } from '../platform/browser/batch-reach'
 import { cropWordsFromPage } from '../platform/browser/word-crops'
 import { runBrowserAdjudication, type FlaggedLeaf } from '../platform/browser/adjudicate-run'
@@ -103,6 +106,7 @@ import {
   type AdjudicatedSpot
 } from '@core/adjudicate'
 import { newSavedProfile, styleQuestions, type SavedStyleProfile } from '@core/style'
+import { scanRefusal, type ShelfAbout } from '@core/sync'
 import {
   bodyKeyFor,
   checkpointComplete,
@@ -114,11 +118,15 @@ import {
   chunksAlreadyRead,
   pendingBatches,
   summarize as summarizeRun,
+  parseBookFile,
+  serializeBookFile,
+  summarizeBookFile,
   summarizeCheckpoint,
   summarizeTicket,
   type AnnotationCheckpoint,
   type AnnotationPassMode,
   type AnnotationWanted,
+  type ScanPointer,
   type BatchTicket,
   type SavedRunSummary,
   type TicketBatch
@@ -1116,6 +1124,177 @@ export function App(): JSX.Element {
     [openBook]
   )
 
+  /**
+   * The shelf: a repository of the user's own, holding every book whole.
+   *
+   * IndexedDB is the right store for *using* a book and the wrong one for
+   * owning it — it belongs to one browser on one device. This puts the same
+   * material somewhere both devices can see, with the user's own token, and it
+   * happens on its own at the points where something expensive or laborious has
+   * just been finished rather than as a button they have to remember.
+   */
+  const [shelfBooks, setShelfBooks] = useState<ShelfAbout[]>([])
+  const [shelfNote, setShelfNote] = useState<string | null>(null)
+  const [shelfBusy, setShelfBusy] = useState(false)
+
+  const saveToShelf = useCallback(
+    async (what: string): Promise<void> => {
+      const config = loadShelf()
+      const key = fileKeyRef.current
+      if (!shelfReady(config) || !key) return
+
+      setShelfBusy(true)
+      try {
+        // Read back what was stored rather than rebuilding it from state: the
+        // shelf copy is then the *same* record the device holds, and the two
+        // cannot drift into disagreeing about what the book says.
+        const run = await loadRun(key)
+        if (!run) return
+
+        // The scan goes up once, under its own digest, and is skipped ever
+        // after — git keeps every version, so re-sending it on each save would
+        // grow the repository by a whole scan each time and change nothing.
+        let scan: ScanPointer | null = null
+        const file = fileDataRef.current
+        if (file) {
+          const refusal = scanRefusal(file.size)
+          if (refusal) {
+            setShelfNote(refusal)
+          } else {
+            const { path } = await pushScan(config, file, file.name)
+            scan = { path, fileName: file.name, bytes: file.size, key }
+          }
+        }
+
+        const json = serializeBookFile({
+          run,
+          answers: loadReviewProgress(key),
+          voice: state.voice,
+          notesCheckpoint: await loadAnnotationCheckpoint(key),
+          scan
+        })
+        const parsed = parseBookFile(json)
+        const summary = summarizeBookFile(parsed)
+        await pushBook(
+          config,
+          key,
+          json,
+          {
+            key,
+            fileName: summary.fileName,
+            savedAt: new Date().toISOString(),
+            pageCount: summary.pageCount,
+            notes: summary.notes,
+            corrections: summary.corrections,
+            facts: summary.facts,
+            complete: summary.complete,
+            scanPath: scan?.path ?? null
+          },
+          what
+        )
+        setShelfNote(`Saved to ${config.repo}: ${what}.`)
+      } catch (err) {
+        // Never fatal. The book is safe on this device either way, and a shelf
+        // that cannot be written to is a worse day, not a lost one.
+        setShelfNote(
+          `Could not save to the shelf (${err instanceof Error ? err.message : String(err)}). ` +
+            'Everything is still here on this device.'
+        )
+      } finally {
+        setShelfBusy(false)
+      }
+    },
+    [state.voice]
+  )
+
+  /**
+   * Take a book off the shelf onto this device.
+   *
+   * Puts the run, the answers, the voice and any unfinished notes pass back
+   * into the stores the app already reads, then opens the scan if the shelf has
+   * one. Nothing here is a second way of loading a book: after this the
+   * ordinary path runs, finds a saved run for the file, and offers it back.
+   */
+  const openFromShelf = useCallback(
+    async (about: ShelfAbout): Promise<void> => {
+      const config = loadShelf()
+      if (!shelfReady(config)) return
+      setShelfBusy(true)
+      setShelfNote(`Fetching “${about.fileName}” from ${config.repo}…`)
+      try {
+        const json = await fetchBook(config, about.key)
+        if (!json) {
+          setShelfNote(`The shelf lists “${about.fileName}” but the book file is not there.`)
+          return
+        }
+        const file = parseBookFile(json)
+
+        const stored = await saveRun(file.run)
+        if (!stored) {
+          setShelfNote(
+            'The book came down from the shelf but would not fit in this browser’s storage. ' +
+              'Free some space and try again.'
+          )
+          return
+        }
+        saveReviewProgress(file.run.key, file.answers)
+        if (file.voice?.penName !== undefined) saveVoice(file.voice)
+        if (file.notesCheckpoint) await saveAnnotationCheckpoint(file.notesCheckpoint)
+
+        setSavedRuns(await listRuns())
+
+        // With the scan, this is a complete move: the book opens and every gate
+        // that shows pixels works. Without it, the work is here and the user is
+        // asked for the file — which is the same bargain the app already makes
+        // when a scan was never kept.
+        if (file.scan) {
+          const bytes = await getBytes(config, file.scan.path)
+          if (bytes) {
+            const opened = new File([new Uint8Array(bytes)], file.scan.fileName, {
+              type: /\.epub$/i.test(file.scan.fileName) ? 'application/epub+zip' : 'application/pdf'
+            })
+            await saveSourceFile(file.run.key, opened)
+            setReopenable(await storedFileKeys())
+            setShelfNote(null)
+            void startRecon(opened)
+            return
+          }
+        }
+        setShelfNote(
+          `“${about.fileName}” is on this device now — the transcription, the corrections and ` +
+            'the notes. The scan is not on the shelf, so choose the same file above and it will ' +
+            'find all of it.'
+        )
+      } catch (err) {
+        setShelfNote(
+          `Could not open that book (${err instanceof Error ? err.message : String(err)}).`
+        )
+      } finally {
+        setShelfBusy(false)
+      }
+    },
+    [startRecon]
+  )
+
+  /** What is on the shelf, listed once at start-up when one is configured. */
+  useEffect(() => {
+    const config = loadShelf()
+    if (!shelfReady(config)) return
+    let live = true
+    void (async () => {
+      try {
+        const books = await readShelf(config)
+        if (live) setShelfBooks(books)
+      } catch {
+        // A shelf that cannot be read is not a reason to fail the intake
+        // screen. The Settings panel says what is wrong, in words.
+      }
+    })()
+    return () => {
+      live = false
+    }
+  }, [])
+
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault()
@@ -1666,6 +1845,9 @@ export function App(): JSX.Element {
         !result.cancelled,
         checked
       )
+      // And onto the shelf, which is the copy that survives this device. The
+      // transcription is the one thing here that cannot be had again for free.
+      void saveToShelf(`the transcription — ${result.transcriptions.length} page(s)`)
 
       complete({
         ...stateFromTranscriptions(result.transcriptions, result.failures),
@@ -1839,6 +2021,7 @@ export function App(): JSX.Element {
         everything,
         checked
       )
+      void saveToShelf(`the transcription — ${transcriptions.length} page(s) from a batch`)
 
       if (everything) {
         // Every page is in the run now, so the receipt has nothing left to
@@ -2390,9 +2573,12 @@ export function App(): JSX.Element {
     const run = transcriptionRef.current
     if (run && edits.length > 0) {
       await persistRun(run, state.answers['gate-identity'] ?? {}, loadPrefs().modelId, edits)
+      // An evening of proofreading is the other thing in this app that cannot
+      // be had again cheaply. It goes to the shelf as soon as it is saved here.
+      void saveToShelf(`${edits.length} correction(s) from the proof step`)
     }
     complete()
-  }, [edits, state.answers, persistRun, complete])
+  }, [edits, state.answers, persistRun, complete, saveToShelf])
 
   /**
    * The annotation pass, and the introduction if one was asked for.
@@ -2757,7 +2943,9 @@ export function App(): JSX.Element {
 
       const run = transcriptionRef.current
       if (run) {
-        void persistRun(run, state.answers['gate-identity'] ?? {}, loadPrefs().modelId, next)
+        void persistRun(run, state.answers['gate-identity'] ?? {}, loadPrefs().modelId, next).then(
+          () => saveToShelf('the notes and introduction you kept')
+        )
       }
 
       // Every note the checkpoint held has now been accepted — in which case it
@@ -2798,6 +2986,7 @@ export function App(): JSX.Element {
       bankFacts,
       notesCheckpoint,
       persistRun,
+      saveToShelf,
       complete
     ]
   )
@@ -3025,6 +3214,42 @@ export function App(): JSX.Element {
                 skips the reading entirely and costs nothing.
               </span>
             </div>
+
+            {shelfNote ? <div className="resume-note">{shelfNote}</div> : null}
+
+            {shelfBooks.length > 0 ? (
+              <div className="q">
+                <span className="prompt">Books on your shelf</span>
+                <div className="help">
+                  Kept in your own repository — the transcription, every correction, the notes and
+                  the introduction, the pictures and the fact bank. Opening one brings the whole
+                  thing to this device, scan and all when the shelf has it.
+                </div>
+                <ul className="notes">
+                  {shelfBooks.map((book) => (
+                    <li key={book.key}>
+                      <strong>{book.fileName}</strong> — {book.pageCount} page
+                      {book.pageCount === 1 ? '' : 's'}
+                      {book.complete ? '' : ' read so far, stopped partway'}
+                      {book.corrections > 0 ? `, ${book.corrections} correction(s)` : ''}
+                      {book.notes > 0 ? `, ${book.notes} note(s)` : ''}
+                      {book.facts > 0 ? `, ${book.facts} bank entr(ies)` : ''} ·{' '}
+                      {describeAge(book.savedAt)}
+                      <div className="actions">
+                        <button
+                          type="button"
+                          className="primary"
+                          disabled={shelfBusy}
+                          onClick={() => void openFromShelf(book)}
+                        >
+                          {book.scanPath ? 'Open this book' : 'Bring the work to this device'}
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : null}
 
             {savedRuns.length > 0 ? (
               <div className="q">
@@ -3428,7 +3653,17 @@ export function App(): JSX.Element {
               savedNote={bankedNote}
               bank={bankMemo}
             />
+            {shelfNote ? <div className="resume-note">{shelfNote}</div> : null}
             <div className="actions">
+              {shelfReady(loadShelf()) ? (
+                <button
+                  type="button"
+                  disabled={shelfBusy}
+                  onClick={() => void saveToShelf('the finished edition')}
+                >
+                  {shelfBusy ? 'Saving to the shelf…' : 'Save this book to the shelf'}
+                </button>
+              ) : null}
               <button
                 type="button"
                 onClick={() => {
