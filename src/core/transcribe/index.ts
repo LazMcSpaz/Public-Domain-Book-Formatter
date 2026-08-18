@@ -29,6 +29,7 @@ export {
 } from './markup'
 export {
   findDroppedRuns,
+  healLineBreaks,
   spliceRun,
   spliceRunInto,
   type DroppedRun,

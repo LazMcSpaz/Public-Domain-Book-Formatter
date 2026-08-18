@@ -26,6 +26,7 @@ import type { OcrWordLike } from './types'
 import { dispositionFor } from '@core/pages'
 import type { PageTranscription } from './schema'
 import { checkableText } from './schema'
+import { healLineBreaks } from './recover'
 
 export type VerificationCode =
   // Per-page, from the OCR cross-check.
@@ -81,7 +82,7 @@ function words(text: string): string[] {
  */
 export function verifyPage(
   page: PageTranscription,
-  ocrWords: readonly OcrWordLike[],
+  rawOcrWords: readonly OcrWordLike[],
   options: VerifyOptions = {}
 ): VerificationFinding[] {
   const dropThreshold = options.dropThreshold ?? 0.15
@@ -91,6 +92,10 @@ export function verifyPage(
 
   const findings: VerificationFinding[] = []
   const transcribed = words(checkableText(page))
+  // Hyphenated line breaks healed first, for the same reason the recovery does
+  // it: OCR's `pro-` and `ceed` are one word the transcription spells whole,
+  // and counting both halves as absent flags a leaf for text it already has.
+  const ocrWords = healLineBreaks(rawOcrWords)
   const ocrTokens = ocrWords
     .map((w) => w.text)
     .flatMap((t) => words(t))

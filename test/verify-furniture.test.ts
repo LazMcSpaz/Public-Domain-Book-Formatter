@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import {
   checkableText,
   findDroppedRuns,
+  healLineBreaks,
   transcriptionText,
   verifyPage,
   type OcrWordLike,
@@ -600,5 +601,72 @@ describe('leaves the second reading answers outright', () => {
    */
   it('reports a count the app can state', () => {
     expect(settledLeaves(at()).size).toBe(1)
+  })
+})
+
+/**
+ * A word broken across a line is not a missing word.
+ *
+ * The vision pass reads the page and writes `proceed`. OCR reads the same page
+ * and emits `pro-` and `ceed`, because the line ended mid-word. Neither half
+ * matches anything in the transcription, so both were reported as absent — and
+ * the row asked the user to judge a word that was already correct, where the
+ * only wrong answer ("put it back") writes `pro- ceed proceed` into the book.
+ *
+ * Reported from a real leaf. Every hyphenated line break in a book produced one
+ * of these, which on three hundred leaves is hundreds of them.
+ */
+describe('hyphenated line breaks', () => {
+  const boxes = (text: string): OcrWordLike[] =>
+    text.split(/\s+/).map((word, i) => ({ text: word, confidence: 94, id: `p13_w${i}` }))
+
+  it('joins the halves OCR saw', () => {
+    const healed = healLineBreaks(boxes('compelled to pro- ceed along lines'))
+    expect(healed.map((w) => w.text)).toEqual(['compelled', 'to', 'proceed', 'along', 'lines'])
+  })
+
+  it('no longer calls the healed word missing', () => {
+    const body = 'I have been compelled to proceed along lines exactly opposite'
+    const scan = boxes('I have been compelled to pro- ceed along lines exactly opposite')
+    expect(findDroppedRuns(body, scan, { includeWeak: true })).toEqual([])
+  })
+
+  it('takes the worse half’s confidence, since a join is only as good as its ends', () => {
+    const healed = healLineBreaks([
+      { text: 'chirur-', confidence: 91 },
+      { text: 'geon', confidence: 62 }
+    ])
+    expect(healed[0]).toEqual({ text: 'chirurgeon', confidence: 62 })
+  })
+
+  it('keeps the first half’s id, so a crop still points at the word', () => {
+    const healed = healLineBreaks(boxes('pro- ceed'))
+    expect(healed[0]?.id).toBe('p13_w0')
+  })
+
+  it('heals a soft hyphen the same way', () => {
+    const healed = healLineBreaks([
+      { text: 'chirur­', confidence: 90 },
+      { text: 'geon', confidence: 90 }
+    ])
+    expect(healed[0]?.text).toBe('chirurgeon')
+  })
+
+  it('leaves a trailing hyphen with nothing after it alone', () => {
+    // The last word on a page. Assembly joins that across the seam; there is
+    // nothing here to join it to, and inventing a join would be worse.
+    expect(healLineBreaks([{ text: 'pro-', confidence: 90 }])[0]?.text).toBe('pro-')
+  })
+
+  it('does not swallow a word that merely contains a hyphen', () => {
+    const healed = healLineBreaks(boxes('a well-known fact'))
+    expect(healed.map((w) => w.text)).toEqual(['a', 'well-known', 'fact'])
+  })
+
+  it('still finds text that really is missing on the same leaf', () => {
+    const body = 'I have been compelled to proceed along lines'
+    const scan = boxes('I have been compelled to pro- ceed along quite different lines')
+    const runs = findDroppedRuns(body, scan, { includeWeak: true })
+    expect(runs.some((r) => r.text.includes('quite different'))).toBe(true)
   })
 })

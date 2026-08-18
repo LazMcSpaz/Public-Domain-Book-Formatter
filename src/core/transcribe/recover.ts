@@ -114,6 +114,49 @@ function alignable(word: string): boolean {
 }
 
 /**
+ * Join the two halves of a word OCR saw broken across a line.
+ *
+ * The vision pass reads a page and writes `proceed`. OCR reads the same page
+ * and, because the line ends mid-word, emits `pro-` and `ceed` as two words.
+ * Neither half matches anything in the transcription, so the comparison calls
+ * both of them missing — on a leaf with three hyphenated line breaks that is
+ * three spurious discrepancies, and a book of three hundred leaves produces
+ * hundreds of them. Every one asks the user to judge a word that is already
+ * right, and the only wrong answer, "put it back", writes `pro- ceed proceed`
+ * into the book.
+ *
+ * The same rule assembly uses across a *page* break, applied to the OCR stream
+ * across a *line* break: a hyphen at the end of a word, immediately before
+ * another word, was line-wrap rather than spelling. It is the same ambiguity
+ * assembly already lives with — a genuine compound broken at a line end heals
+ * into one word — and the same answer, because the transcription made that
+ * choice first and this is only trying to agree with it.
+ *
+ * The merged word keeps the *first* half's id, so a crop still points at where
+ * the word starts.
+ */
+export function healLineBreaks(words: readonly OcrWordLike[]): OcrWordLike[] {
+  const out: OcrWordLike[] = []
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i]!
+    const next = words[i + 1]
+    if (next && /\p{L}[-\u00AD]$/u.test(word.text)) {
+      out.push({
+        text: word.text.replace(/[-\u00AD]$/u, '') + next.text,
+        // The rougher of the two halves: a join is only as trustworthy as its
+        // worse end, and this number is shown to a person as a probability.
+        confidence: Math.min(word.confidence, next.confidence),
+        ...(word.id ? { id: word.id } : {})
+      })
+      i += 1
+      continue
+    }
+    out.push(word)
+  }
+  return out
+}
+
+/**
  * How many words in a row must agree before a match is believed.
  *
  * The reason this is not one: a page says "the cord" three times, and a single
@@ -145,7 +188,7 @@ export function findDroppedRuns(
 
   const transcribed = transcription.split(/\s+/u).filter((w) => w.length > 0)
   const transcribedKeys = transcribed.map(key)
-  const ocr = ocrWords.filter((w) => alignable(w.text))
+  const ocr = healLineBreaks(ocrWords).filter((w) => alignable(w.text))
   const ocrKeys = ocr.map((w) => key(w.text))
   if (transcribed.length === 0 || ocr.length === 0) return []
 
