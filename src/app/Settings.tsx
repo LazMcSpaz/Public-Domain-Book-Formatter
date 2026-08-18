@@ -39,6 +39,7 @@ import {
   deleteRun,
   deleteSourceFile,
   deleteAllRecons,
+  deleteAnnotationCheckpoint,
   listProfiles,
   listRuns,
   saveProfile,
@@ -477,6 +478,10 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
                               // And the reading of it, which is the same size
                               // as the scan and useful for nothing else.
                               await deleteRecon(run.key)
+                              // Notes bought against a transcription that is
+                              // being deleted quote a book this device will no
+                              // longer have.
+                              await deleteAnnotationCheckpoint(run.key)
                               setNote(`Deleted the transcription of “${run.fileName}”.`)
                             }
                           })

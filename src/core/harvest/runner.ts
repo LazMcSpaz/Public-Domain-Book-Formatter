@@ -30,6 +30,19 @@ export interface HarvestRunOptions extends HarvestPromptOptions {
   maxAttempts?: number
   onProgress?: (done: number, total: number) => void
   isCancelled?: () => boolean
+  /** Chunks an earlier sitting already paid for. Skipped, never re-sent. */
+  resumeFrom?: number
+  /**
+   * Called after every chunk with everything read so far in this run.
+   *
+   * Awaited and its errors swallowed, exactly as in the annotation runner: an
+   * entry that has come back is billed for whether or not the next one does.
+   */
+  onCheckpoint?: (progress: {
+    chunksDone: number
+    chunksTotal: number
+    result: HarvestRunResult
+  }) => void | Promise<void>
   sleep?: (ms: number) => Promise<void>
 }
 
@@ -90,7 +103,19 @@ export async function runHarvest(
   let discarded = 0
   let cancelled = false
 
+  const resumeFrom = Math.max(0, Math.min(options.resumeFrom ?? 0, chunks.length))
+
+  const result = (): HarvestRunResult => ({
+    facts: dedupeFacts(facts),
+    failures,
+    discarded,
+    usage,
+    cancelled
+  })
+
   for (const [i, chunk] of chunks.entries()) {
+    if (i < resumeFrom) continue
+
     if (options.isCancelled?.()) {
       cancelled = true
       break
@@ -124,7 +149,18 @@ export async function runHarvest(
 
     if (!done) failures.push({ chunkIndex: chunk.index, message: lastError })
     options.onProgress?.(i + 1, chunks.length)
+    if (options.onCheckpoint) {
+      try {
+        await options.onCheckpoint({
+          chunksDone: i + 1,
+          chunksTotal: chunks.length,
+          result: result()
+        })
+      } catch {
+        // Saving is not what the user is paying for. Carry on reading.
+      }
+    }
   }
 
-  return { facts: dedupeFacts(facts), failures, discarded, usage, cancelled }
+  return result()
 }

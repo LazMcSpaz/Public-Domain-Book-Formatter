@@ -24,9 +24,11 @@
 import {
   fileKey,
   keyMatchesFile,
+  migrateAnnotationCheckpoint,
   migrateBatchTicket,
   migrateSavedRun,
   summarize,
+  type AnnotationCheckpoint,
   type BatchTicket,
   type SavedRun,
   type SavedRunSummary
@@ -37,16 +39,18 @@ const DB_NAME = 'pdbf'
 /**
  * v2 added the `profiles` store (banked looks, SPEC §7); v3 added `files`, the
  * source PDF itself; v4 added `recon`, the free-but-slow reading of it; v5
- * added `batches`, the tickets for books submitted and not yet collected. The
+ * added `batches`, the tickets for books submitted and not yet collected; v6
+ * added `notes`, what an interrupted annotation pass had already bought. The
  * upgrade handler below creates whichever stores are missing rather than
  * switching on the old version, so a database at any version arrives complete.
  */
-const DB_VERSION = 5
+const DB_VERSION = 6
 const STORE = 'runs'
 const PROFILE_STORE = 'profiles'
 const FILE_STORE = 'files'
 const RECON_STORE = 'recon'
 const BATCH_STORE = 'batches'
+const NOTES_STORE = 'notes'
 
 /**
  * How many books' transcriptions to keep, oldest evicted first.
@@ -101,6 +105,13 @@ function openDb(): Promise<IDBDatabase | null> {
         // pages the user has already been billed for, and dropping the oldest
         // to save a kilobyte would throw away the only address they have.
         db.createObjectStore(BATCH_STORE, { keyPath: 'key' })
+      }
+      if (!db.objectStoreNames.contains(NOTES_STORE)) {
+        // An annotation pass caught partway. Same key as the run and a store of
+        // its own for the same reason as the others: this is written every few
+        // chunks while a book is being read, and a write here must never be
+        // able to disturb the transcription it sits beside.
+        db.createObjectStore(NOTES_STORE, { keyPath: 'key' })
       }
     }
     request.onsuccess = () => resolve(request.result)
@@ -477,6 +488,49 @@ export async function listBatchTickets(): Promise<BatchTicket[]> {
 /** Drop a ticket, once its results are safely in the run. */
 export async function deleteBatchTicket(key: string): Promise<void> {
   await withStore('readwrite', (store) => promisify(store.delete(key)), BATCH_STORE)
+}
+
+// ---------------------------------------------------------------------------
+// An annotation pass caught partway
+// ---------------------------------------------------------------------------
+
+/**
+ * Keep what the pass has read so far.
+ *
+ * Written after every chunk while a book is being annotated, so the cost of a
+ * tab that dies is the chunk in flight rather than the whole sitting. Returns
+ * false when it could not be written; the caller says so once rather than once
+ * per chunk, because a storage failure repeated every few seconds would bury
+ * the run's own progress under its own complaint.
+ */
+export async function saveAnnotationCheckpoint(checkpoint: AnnotationCheckpoint): Promise<boolean> {
+  const ok = await withStore(
+    'readwrite',
+    async (store) => {
+      await promisify(store.put(checkpoint))
+      return true
+    },
+    NOTES_STORE
+  )
+  return ok === true
+}
+
+/** What an interrupted pass over this file left behind, or null. */
+export async function loadAnnotationCheckpoint(key: string): Promise<AnnotationCheckpoint | null> {
+  const raw = await withStore('readonly', (store) => promisify(store.get(key)), NOTES_STORE)
+  if (raw === null || raw === undefined) return null
+  return migrateAnnotationCheckpoint(raw)
+}
+
+/**
+ * Drop it, once its notes are in the book's edit list.
+ *
+ * Only then: from the moment the user accepts a note it is saved with the run
+ * like any other correction, and keeping a second copy here would let the two
+ * disagree about what the book says.
+ */
+export async function deleteAnnotationCheckpoint(key: string): Promise<void> {
+  await withStore('readwrite', (store) => promisify(store.delete(key)), NOTES_STORE)
 }
 
 // ---------------------------------------------------------------------------

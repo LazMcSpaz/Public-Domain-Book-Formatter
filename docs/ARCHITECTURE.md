@@ -313,6 +313,20 @@ the user's path, and both degrade to "do it again" rather than to an error.
 The API key is stored with neither. It lives in its own place and must never
 travel with a book.
 
+The annotation pass is the app's **second** paid step, and it is written down on
+the same principle (`src/core/project/annotation-checkpoint.ts`, stored by
+`run-store`). It reads a book in 1,200-word chunks, one request each, and the
+record is rewritten after every one of them: a chunk that has come back is
+billed for whether or not the next one arrives. What it stores is the notes
+**unlocated** — the character offset a note's mark goes at is re-derived from the
+book as it stands when they come back out, so a paragraph corrected in between
+cannot put a mark inside a word, and a quote that is no longer there arrives
+unplaced. Carrying on where it stopped is refused when the body of the book has
+changed since (`bodyKeyFor`), because the chunks the record calls done would no
+longer describe the text a resumed run skips — a stretch of book unread, and
+nothing on screen to say so. A refusal still offers the notes; only the resume
+is withdrawn. A changed pen name is reported rather than enforced.
+
 ## Why OCR is still here
 
 Under the vision-pass design the model reads the page, so OCR is no longer the

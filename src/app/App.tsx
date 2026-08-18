@@ -51,6 +51,7 @@ import {
   withMarkup,
   verifyBook,
   verifyPage,
+  type ApiUsage,
   type PageTranscription,
   type RunProgress,
   type RunResult
@@ -74,14 +75,17 @@ import {
   storageEstimate
 } from '../platform/browser/settings'
 import {
+  deleteAnnotationCheckpoint,
   deleteBatchTicket,
   findBatchTicketForFile,
   findRunForFile,
   listProfiles,
   listRuns,
+  loadAnnotationCheckpoint,
   loadRun,
   loadRunSummary,
   loadSourceFile,
+  saveAnnotationCheckpoint,
   saveBatchTicket,
   saveProfile,
   saveRun,
@@ -100,13 +104,20 @@ import {
 } from '@core/adjudicate'
 import { newSavedProfile, styleQuestions, type SavedStyleProfile } from '@core/style'
 import {
+  bodyKeyFor,
+  createAnnotationCheckpoint,
   createBatchTicket,
   createSavedRun,
   describeAge,
   fileKey,
+  annotationResumeFrom,
   pendingBatches,
   summarize as summarizeRun,
+  summarizeCheckpoint,
   summarizeTicket,
+  type AnnotationCheckpoint,
+  type AnnotationPassMode,
+  type AnnotationWanted,
   type BatchTicket,
   type SavedRunSummary,
   type TicketBatch
@@ -116,12 +127,15 @@ import { dispositionFor } from '@core/pages'
 import { buildExport, editionFromAnswers, type BuildExportResult } from '@core/export'
 import { applyEdits, withCorrections, withEdit, type Attention, type BookEdit } from '@core/edits'
 import {
+  chunkBlocks,
+  checkProposals,
   draftIntroduction,
   estimateAnnotationCost,
   learnVoice,
   proposalsToEdits,
   runAnnotation,
   type AcceptedProposal,
+  type AnnotationProposal,
   type CheckedProposal,
   type ChunkFailure,
   type EditorVoice,
@@ -267,6 +281,23 @@ export function App(): JSX.Element {
    */
   const [pendingNotesCost, setPendingNotesCost] = useState<string | null>(null)
   const [notesProgress, setNotesProgress] = useState<{ done: number; total: number } | null>(null)
+  /**
+   * What an interrupted pass over this book already bought.
+   *
+   * The whole record, not the summary the gate shows: the notes in it are paid
+   * for, and the point of holding them here is to be able to hand them to the
+   * review screen without reading the book again.
+   */
+  const [notesCheckpoint, setNotesCheckpoint] = useState<AnnotationCheckpoint | null>(null)
+  const [notesNote, setNotesNote] = useState<string | null>(null)
+  /**
+   * Polled between chunks by both runners.
+   *
+   * A ref rather than state because the runner reads it inside a loop that
+   * started before the click: a state variable captured in that closure would
+   * still be `false` however many times the button was pressed.
+   */
+  const cancelNotesRef = useRef(false)
   const [proposals, setProposals] = useState<{
     notes: CheckedProposal[]
     failures: ChunkFailure[]
@@ -2370,13 +2401,59 @@ export function App(): JSX.Element {
    * book here: it all lands in `proposals` for the review gate, which is what
    * makes it safe to run without the user having read a word of it yet.
    */
+  /**
+   * Notes an interrupted pass already bought, read back when the gate opens.
+   *
+   * The gate is the only place they are any use, and the record is a book's
+   * worth of prose, so it is fetched on arrival rather than held from the
+   * moment the file was opened. What the questions see is the *summary* — how
+   * far it got, and whether carrying on is still honest — while the notes
+   * themselves stay here until the review screen wants them.
+   */
+  useEffect(() => {
+    const doc = state.document
+    const key = fileKeyRef.current
+    if (step.id !== 'annotate' || !doc || !key) return
+
+    let live = true
+    void (async () => {
+      const stored = await loadAnnotationCheckpoint(key)
+      if (!live) return
+      setNotesCheckpoint(stored)
+      const summary = stored
+        ? summarizeCheckpoint(stored, {
+            mode: stored.mode,
+            bodyKey: bodyKeyFor(doc.blocks),
+            chunksTotal: chunkBlocks(
+              doc.blocks,
+              stored.mode === 'facts' ? { requireProse: false } : {}
+            ).length,
+            penName: state.voice.penName,
+            density: state.voice.density,
+            depth: stored.depth
+          })
+        : null
+      setState((st) =>
+        summary === null && st.notesCheckpoint === null ? st : { ...st, notesCheckpoint: summary }
+      )
+    })()
+    return () => {
+      live = false
+    }
+  }, [step.id, state.document, state.voice.penName, state.voice.density])
+
   const startAnnotation = useCallback(async () => {
     const doc = state.document
     if (!doc) return
     setPendingNotesCost(null)
 
     const answers = state.answers['annotate'] ?? currentAnswers
-    const wantsNotes = (answers['annotateBook'] ?? 'yes') === 'yes'
+    // What an interrupted pass already bought, and what the user said to do
+    // with it. `take` reads nothing more: the notes on disk go straight to the
+    // review, and only the introduction — its own request — is still bought.
+    const kept = notesCheckpoint
+    const useKept = kept ? String(answers['useNotes'] ?? 'take') : 'again'
+    const wantsNotes = useKept === 'take' ? false : (answers['annotateBook'] ?? 'yes') === 'yes'
     const introLength = String(answers['writeIntroduction'] ?? 'standard')
     const wantsIntro = introLength !== 'none'
 
@@ -2392,7 +2469,7 @@ export function App(): JSX.Element {
     setState((st) => ({ ...st, voice }))
 
     const harvestDepth = String(answers['harvestFacts'] ?? 'standard')
-    const wantsHarvest = harvestDepth !== 'none'
+    const wantsHarvest = useKept === 'take' ? false : harvestDepth !== 'none'
     const interest = String(answers['harvestInterest'] ?? state.harvestInterest)
     const bank = loadBank()
 
@@ -2412,7 +2489,70 @@ export function App(): JSX.Element {
       ...(interest.trim() ? { interest: interest.trim() } : {})
     }
 
-    setNotesProgress({ done: 0, total: 1 })
+    // What the pass is about to do, and what an interrupted one may be
+    // measured against. The two doors chunk a book differently, so each asks
+    // for its own count rather than assuming the other's.
+    const runKey = fileKeyRef.current
+    const bodyKey = bodyKeyFor(doc.blocks)
+    const wantedFor = (mode: AnnotationPassMode): AnnotationWanted => ({
+      mode,
+      bodyKey,
+      chunksTotal: chunkBlocks(doc.blocks, mode === 'facts' ? { requireProse: false } : {}).length,
+      penName: voice.penName,
+      density: voice.density,
+      depth: harvestDepth
+    })
+
+    // Chunks an earlier sitting paid for. Zero unless the user asked to carry
+    // on *and* the record still describes this text — `annotationResumeFrom`
+    // is the one place that decides, so the gate's offer and what actually
+    // happens cannot drift apart.
+    const resumeMode: AnnotationPassMode = wantsNotes ? 'notes' : 'facts'
+    const resumeFrom =
+      kept && useKept === 'resume' ? annotationResumeFrom(kept, wantedFor(resumeMode)) : 0
+    const carried = useKept === 'again' || !kept ? null : kept
+
+    // Said once, not once per chunk: a storage failure repeated every few
+    // seconds would bury the run's own progress under its own complaint.
+    let warnedAboutStorage = false
+    const writeCheckpoint = async (
+      mode: AnnotationPassMode,
+      chunksDone: number,
+      part: {
+        proposals: readonly AnnotationProposal[]
+        facts: readonly Fact[]
+        failures: readonly ChunkFailure[]
+        discarded: number
+        usage: ApiUsage
+      }
+    ): Promise<void> => {
+      if (!runKey) return
+      const ok = await saveAnnotationCheckpoint(
+        createAnnotationCheckpoint({
+          key: runKey,
+          wanted: wantedFor(mode),
+          // Chunks this run read, plus the ones it was handed.
+          chunksDone: Math.max(chunksDone, resumeFrom),
+          // Everything bought for this book, not merely this sitting.
+          proposals: [...(carried?.proposals ?? []), ...part.proposals],
+          facts: [...(carried?.facts ?? []), ...part.facts],
+          failures: [...(carried?.failures ?? []), ...part.failures],
+          discarded: (carried?.discarded ?? 0) + part.discarded,
+          usage: part.usage
+        })
+      )
+      if (!ok && !warnedAboutStorage) {
+        warnedAboutStorage = true
+        setNotesNote(
+          'The notes bought so far could not be saved to this browser, so closing the tab ' +
+            'would lose them. The pass is still running.'
+        )
+      }
+    }
+
+    cancelNotesRef.current = false
+    setNotesNote(null)
+    setNotesProgress({ done: resumeFrom, total: Math.max(1, wantedFor(resumeMode).chunksTotal) })
     try {
       // When both are wanted, the harvest rides the annotation reply: the book
       // is read once and the entries cost output tokens only.
@@ -2422,7 +2562,10 @@ export function App(): JSX.Element {
             voice,
             facts,
             ...(wantsHarvest ? { harvest: harvestOptions } : {}),
-            onProgress: (done, total) => setNotesProgress({ done, total })
+            resumeFrom,
+            isCancelled: () => cancelNotesRef.current,
+            onProgress: (done, total) => setNotesProgress({ done, total }),
+            onCheckpoint: ({ chunksDone, result }) => writeCheckpoint('notes', chunksDone, result)
           })
         : { proposals: [], facts: [], failures: [], discarded: 0, cancelled: false }
 
@@ -2433,21 +2576,45 @@ export function App(): JSX.Element {
               client,
               facts,
               ...harvestOptions,
-              onProgress: (done, total) => setNotesProgress({ done, total })
+              resumeFrom,
+              isCancelled: () => cancelNotesRef.current,
+              onProgress: (done, total) => setNotesProgress({ done, total }),
+              onCheckpoint: ({ chunksDone, result }) =>
+                writeCheckpoint('facts', chunksDone, { ...result, proposals: [] })
             })
           : { facts: notes.facts, failures: [], discarded: 0, cancelled: false }
 
-      setBankFacts(harvested.facts)
+      // Everything bought for this book, whichever sitting bought it. The kept
+      // notes are located against the book *as it stands now* rather than
+      // restored with the offsets they were written at: a paragraph corrected
+      // since would otherwise put a note's mark in the middle of a word, and a
+      // quote that can no longer be found belongs in the unplaced list where
+      // the review screen already shows it.
+      const blockText = new Map(doc.blocks.map((b) => [b.id, b.text]))
+      const bookText = doc.blocks.map((b) => b.text).join('\n')
+      const allNotes = [
+        ...checkProposals(carried?.proposals ?? [], blockText, bookText),
+        ...notes.proposals
+      ]
+      const allFailures = [...(carried?.failures ?? []), ...notes.failures]
+      const allFacts = [...(carried?.facts ?? []), ...harvested.facts]
+
+      setBankFacts(allFacts)
       // Recorded as soon as it exists rather than at the review, because the
       // harvest is not reviewed: the entries are files the user keeps, and the
       // vocabulary has to grow even if they walk away from this screen.
-      if (harvested.facts.length > 0) recordHarvest(harvested.facts, interest)
+      if (allFacts.length > 0) recordHarvest(allFacts, interest)
       if (interest !== state.harvestInterest) {
         setState((st) => ({ ...st, harvestInterest: interest }))
       }
 
+      const stopped = notes.cancelled || harvested.cancelled
+
       let introduction: IntroductionDraft | null = null
-      if (wantsIntro) {
+      // Not drafted after a cancel. Stopping the pass is a request to stop
+      // spending, and the introduction is a fresh request rather than the tail
+      // of the one that was interrupted.
+      if (wantsIntro && !stopped) {
         setNotesProgress({ done: 1, total: 1 })
         const drafted = await draftIntroduction(doc, {
           client,
@@ -2459,16 +2626,28 @@ export function App(): JSX.Element {
         introduction = drafted.draft
       }
 
+      if (stopped) {
+        setNotesNote(
+          `Stopped. The ${allNotes.length} note(s) already written are kept${
+            allNotes.length > 0 ? ' and are below' : ''
+          }; the rest of the book was not read, and nothing further was charged.`
+        )
+      }
+
       // A review screen with nothing on it is a dead end the user has to click
       // past. When the pass produced only bank entries — which is the whole of
       // what a harvest-only run produces — there is nothing to approve, so the
       // step is finished here and the files wait at the export screen.
-      const worthReviewing = notes.proposals.length > 0 || introduction !== null
+      const worthReviewing = allNotes.length > 0 || introduction !== null
       if (worthReviewing) {
-        setProposals({ notes: notes.proposals, failures: notes.failures, introduction })
-      } else {
+        setProposals({ notes: allNotes, failures: allFailures, introduction })
+      } else if (!stopped) {
         complete()
       }
+      // A cancel with nothing to show for it deliberately does *not* move the
+      // flow on. The user stopped the pass; carrying them past the gate would
+      // answer a question they had just declined to answer, and the way back
+      // is not obvious once the step is behind them.
     } catch (err) {
       // A failed annotation pass is not a failed book: everything up to here is
       // intact and the step is optional. Say so and let the user carry on.
@@ -2480,7 +2659,7 @@ export function App(): JSX.Element {
     } finally {
       setNotesProgress(null)
     }
-  }, [state, currentAnswers, complete])
+  }, [state, currentAnswers, complete, notesCheckpoint])
 
   /**
    * Leaving the review: the approved notes become ordinary corrections.
@@ -2534,11 +2713,22 @@ export function App(): JSX.Element {
 
       setEdits(next)
       setProposals(null)
+      setNotesNote(null)
 
       const run = transcriptionRef.current
       if (run) {
         void persistRun(run, state.answers['gate-identity'] ?? {}, loadPrefs().modelId, next)
       }
+
+      // The checkpoint's job is done: every note it held has either been
+      // accepted — in which case it is an edit now, saved with the run — or
+      // turned down. Keeping it would offer the rejected ones back on the next
+      // visit as though they had never been seen.
+      const key = fileKeyRef.current
+      if (key) void deleteAnnotationCheckpoint(key)
+      setNotesCheckpoint(null)
+      setState((st) => ({ ...st, notesCheckpoint: null }))
+
       complete()
     },
     [
@@ -2938,9 +3128,31 @@ export function App(): JSX.Element {
                 }}
               />
             </div>
-            <div className="meta">writing in your editor’s voice</div>
+            <div className="meta">
+              writing in your editor’s voice · saved after every stretch, so closing this tab costs
+              at most the one in flight
+            </div>
+            {/* The same offer the transcription makes, and it means the same
+                thing: what has already come back is bought and kept. Without
+                it the only way out of a pass that is going badly — or costing
+                more than expected — is to close the tab. */}
+            <div className="actions">
+              <button
+                type="button"
+                className="ghost"
+                disabled={cancelNotesRef.current}
+                onClick={() => {
+                  cancelNotesRef.current = true
+                  setNotesNote('Stopping after the stretch being read now…')
+                }}
+              >
+                Stop — keep the notes so far
+              </button>
+            </div>
           </div>
         ) : null}
+
+        {notesNote ? <div className="resume-note">{notesNote}</div> : null}
 
         {proposals && !notesProgress ? (
           <NoteReview

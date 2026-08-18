@@ -39,6 +39,20 @@ export {
   type TicketBatch
 } from './batch-ticket'
 export {
+  ANNOTATION_CHECKPOINT_VERSION,
+  annotationResumeFrom,
+  bodyKeyFor,
+  checkpointComplete,
+  createAnnotationCheckpoint,
+  migrateAnnotationCheckpoint,
+  summarizeCheckpoint,
+  type AnnotationCheckpoint,
+  type AnnotationCheckpointSummary,
+  type AnnotationPassMode,
+  type AnnotationWanted,
+  type ChunkFailureRecord
+} from './annotation-checkpoint'
+export {
   RECON_CACHE_VERSION,
   reconCacheUsable,
   reconResumeFrom,

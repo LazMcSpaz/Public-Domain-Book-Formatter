@@ -19,6 +19,7 @@ import {
   describeAge,
   describeTicket,
   RESULTS_RETAINED_DAYS,
+  type AnnotationCheckpointSummary,
   type BatchTicketSummary,
   type SavedRunSummary
 } from '@core/project'
@@ -226,6 +227,15 @@ export interface WizardState {
    */
   voice: EditorVoice
   /**
+   * What an interrupted annotation pass over this book already bought.
+   *
+   * Null when there is none, which is the ordinary case. Present, it is money
+   * the user has spent and not yet seen, so the gate offers it back rather than
+   * quietly reading the book again — the same bargain the transcribe gate
+   * strikes with a saved run, at a tenth of the price.
+   */
+  notesCheckpoint: AnnotationCheckpointSummary | null
+  /**
    * What the user is collecting towards, remembered across books.
    *
    * A property of the person and their project rather than of any one book,
@@ -275,6 +285,7 @@ export function initialState(): WizardState {
     textSource: 'ocr',
     document: null,
     voice: defaultVoice(),
+    notesCheckpoint: null,
     harvestInterest: '',
     answers: {},
     completed: []
@@ -1206,6 +1217,44 @@ const proof: Step = {
  * Everything here is optional and asked as a question, because plenty of books
  * want a plain reprint and nobody should have to pay for a pass to decline it.
  */
+/**
+ * The introduction's two questions, asked wherever an introduction can still be
+ * written.
+ *
+ * Shared rather than duplicated because they are also the *only* questions
+ * worth asking when the user is taking notes an interrupted pass already
+ * bought: the pen name and the note density shape a pass that is not going to
+ * run, and the introduction is a separate request that is.
+ */
+function introductionQuestions(): Question[] {
+  return [
+    {
+      id: 'writeIntroduction',
+      type: 'choice',
+      prompt: 'Write an introduction?',
+      help:
+        'Drafted from the book’s own shape and a sample of its prose, in the same ' +
+        'voice as the notes. You will see it before it goes in.',
+      defaultValue: 'standard',
+      options: [
+        { value: 'brief', label: 'Yes — brief', description: 'About 350 words.' },
+        { value: 'standard', label: 'Yes — standard', description: 'About 700 words.' },
+        { value: 'full', label: 'Yes — full', description: 'About 1400 words.' },
+        { value: 'none', label: 'No introduction', description: 'Leave the front matter as it is.' }
+      ]
+    },
+    {
+      id: 'introBrief',
+      type: 'text',
+      prompt: 'Anything the introduction should be sure to say?',
+      help: 'Optional. A theme to draw out, or why you are reprinting this book.',
+      defaultValue: '',
+      multiline: true,
+      placeholder: 'Leave blank and I’ll write from the book alone.'
+    }
+  ]
+}
+
 const annotate: Step = {
   id: 'annotate',
   title: 'Write the notes',
@@ -1214,6 +1263,84 @@ const annotate: Step = {
   canEnter: (s) => s.completed.includes('proof') && s.document !== null,
   questions: (s) => {
     const qs: Question[] = []
+
+    // A pass that was interrupted — a locked phone, a closed tab — left notes
+    // on disk that were paid for and never seen. Offering them back is the same
+    // bargain the transcribe gate strikes with a saved run, and for the same
+    // reason: the app must not quietly buy something twice.
+    const cp = s.notesCheckpoint
+    if (cp) {
+      const written = `${cp.notes} note(s)${cp.facts > 0 ? ` and ${cp.facts} bank entr(ies)` : ''}`
+      const left = Math.max(0, cp.chunksTotal - cp.chunksDone)
+      const finished = cp.chunksDone >= cp.chunksTotal
+      // Not a reason to refuse the resume — every note is read before it goes
+      // in — but a book finished under a second pen name is worth saying out
+      // loud rather than discovering in the printed apparatus.
+      const voiceChanged = cp.writtenAs
+        ? ` They were written as ${cp.writtenAs}; the rest would be written as ${s.voice.penName}.`
+        : ''
+      const take = {
+        value: 'take',
+        label: 'Just show me what was written',
+        description: 'Free. The rest of the book goes without notes.'
+      }
+      const again = {
+        value: 'again',
+        label: 'Start the pass over',
+        description: 'Pays to read the whole book again, including the part already read.'
+      }
+
+      qs.push(
+        cp.resumable
+          ? {
+              id: 'useNotes',
+              type: 'choice',
+              prompt: 'The last pass over this book stopped partway.',
+              help:
+                `${written} from ${cp.chunksDone} of ${cp.chunksTotal} stretches, written ` +
+                `${describeAge(cp.savedAt)} — and paid for. Carrying on reads only what is left.` +
+                voiceChanged,
+              defaultValue: 'resume',
+              options: [
+                {
+                  value: 'resume',
+                  label: `Carry on from stretch ${cp.chunksDone + 1}`,
+                  description: `${left} left to read — you pay only for those.`
+                },
+                take,
+                again
+              ]
+            }
+          : {
+              id: 'useNotes',
+              type: 'choice',
+              // The two ways carrying on stops being honest: the pass finished
+              // and nobody reviewed it, or the book's text has changed since —
+              // in which case the stretches this record calls done no longer
+              // describe what a resumed run would skip.
+              prompt: finished
+                ? 'These notes were written and never reviewed.'
+                : 'Notes were written against an earlier version of this text.',
+              help: finished
+                ? `${written}, written ${describeAge(cp.savedAt)} and paid for.`
+                : `${written}, written ${describeAge(cp.savedAt)} and paid for. The book has ` +
+                  'been edited since, so carrying on where it stopped would leave a stretch ' +
+                  'unread. A note whose words are no longer in the text arrives unplaced ' +
+                  'rather than in the wrong place.',
+              defaultValue: 'take',
+              options: [take, again]
+            }
+      )
+
+      // Nothing below shapes a pass that is not going to run. The one exception
+      // is the introduction, which is its own request and still on offer.
+      const fallback = cp.resumable ? 'resume' : 'take'
+      const chosen = (s.answers['annotate']?.['useNotes'] as string) ?? fallback
+      if (chosen === 'take') {
+        qs.push(...introductionQuestions())
+        return qs
+      }
+    }
 
     qs.push({
       id: 'annotateBook',
@@ -1272,21 +1399,7 @@ const annotate: Step = {
       ]
     })
 
-    qs.push({
-      id: 'writeIntroduction',
-      type: 'choice',
-      prompt: 'Write an introduction?',
-      help:
-        'Drafted from the book’s own shape and a sample of its prose, in the same ' +
-        'voice as the notes. You will see it before it goes in.',
-      defaultValue: 'standard',
-      options: [
-        { value: 'brief', label: 'Yes — brief', description: 'About 350 words.' },
-        { value: 'standard', label: 'Yes — standard', description: 'About 700 words.' },
-        { value: 'full', label: 'Yes — full', description: 'About 1400 words.' },
-        { value: 'none', label: 'No introduction', description: 'Leave the front matter as it is.' }
-      ]
-    })
+    qs.push(...introductionQuestions())
 
     // Independent of the notes on purpose: a book can be worth mining and not
     // worth annotating. Riding the annotation pass is nearly free; harvesting a
@@ -1329,16 +1442,6 @@ const annotate: Step = {
         'else the book has.',
       defaultValue: s.harvestInterest,
       placeholder: 'e.g. early modern glassmaking, or leave blank'
-    })
-
-    qs.push({
-      id: 'introBrief',
-      type: 'text',
-      prompt: 'Anything the introduction should be sure to say?',
-      help: 'Optional. A theme to draw out, or why you are reprinting this book.',
-      defaultValue: '',
-      multiline: true,
-      placeholder: 'Leave blank and I’ll write from the book alone.'
     })
 
     return qs

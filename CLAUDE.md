@@ -537,6 +537,22 @@ in `screenshots/`. Don't ship UI blind.
   cannot read leaves its spots unadjudicated, exactly as they arrived before.
   Wired into both doors, because putting it only in the live runner left anyone
   who took the batch path without it.
+- **Also done**: **the notes pass survives an interruption, and can be stopped.**
+  It was the one paid step with nothing on disk while it ran: a book was read in
+  chunks, every proposal was held in memory, and a locked phone or a closed tab
+  lost every chunk already billed for. It now writes after **each** chunk
+  (`src/core/project/annotation-checkpoint.ts`) and the gate offers what was
+  bought back — carry on, take what is there, or start over — the same bargain
+  the transcribe gate strikes with a saved run. Notes are stored _unlocated_:
+  the offset a mark goes at is re-found against the book as it stands when they
+  come out, so a paragraph corrected in between cannot put a mark inside a word.
+  Resuming is refused when the body has changed (`bodyKeyFor`), because the
+  chunks the record calls done would no longer describe the text a resumed run
+  skips — a stretch of book unread in silence; the notes are still offered, only
+  the resume is withdrawn. And the runner's `isCancelled`, which existed and was
+  wired to nothing, is now a button: stopping keeps what has been read, charges
+  nothing further, and does not carry the user past a gate they just declined.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

@@ -1259,9 +1259,13 @@ console.log('5c4. notes and an introduction of the editor’s own')
 
 await page.evaluate(() => localStorage.setItem('pdbf.apiKey', 'sk-ant-harness'))
 
+// Held long enough for the progress panel — and the stop button on it — to be
+// looked at. The pass is otherwise over before a screenshot could catch it.
+let notesDelayMs = 0
 await page.route('https://api.anthropic.com/**', async (route) => {
   const body = JSON.parse(route.request().postData() ?? '{}')
   const wantsIntroduction = Boolean(body.output_config?.format?.schema?.properties?.paragraphs)
+  if (notesDelayMs > 0) await new Promise((r) => setTimeout(r, notesDelayMs))
   const prompt = body.messages?.[0]?.content?.[0]?.text ?? ''
 
   // Anchor the note to a block the app actually sent, read out of the prompt
@@ -1349,9 +1353,57 @@ const notesCost = await page
   .catch(() => '')
 await shot('05c4b-annotate-cost')
 
+notesDelayMs = 1500
 await page.locator('button.primary', { hasText: 'Start' }).click()
+
+// The pass is now the only paid step with a way out that keeps what it has
+// bought. Before this the only way to stop one that was going badly was to
+// close the tab, which threw away every chunk already billed for.
+await page.waitForSelector('.progress .actions button', { timeout: 20000 })
+const stopOffered = await page
+  .locator('.progress .actions button', { hasText: 'Stop' })
+  .innerText()
+  .catch(() => '')
+const savingSaid = await page
+  .locator('.progress .meta')
+  .filter({ hasText: 'saved after every stretch' })
+  .count()
+await shot('05c4b2-annotate-running')
+notesDelayMs = 0
+
 await page.waitForSelector('.notes', { timeout: 60000 })
 await page.waitForTimeout(800)
+
+// What the pass bought is on disk before anyone has approved a word of it —
+// the whole point, and unprovable from the screen alone.
+const checkpointed = await page.evaluate(
+  () =>
+    new Promise((resolve) => {
+      const open = indexedDB.open('pdbf')
+      open.onerror = () => resolve(null)
+      open.onsuccess = () => {
+        const db = open.result
+        if (!db.objectStoreNames.contains('notes')) return resolve(null)
+        const req = db.transaction('notes', 'readonly').objectStore('notes').getAll()
+        req.onerror = () => resolve(null)
+        req.onsuccess = () => {
+          const rec = req.result[0]
+          resolve(
+            rec
+              ? {
+                  notes: rec.proposals.length,
+                  chunksDone: rec.chunksDone,
+                  chunksTotal: rec.chunksTotal,
+                  // Stored unlocated on purpose: the offset is re-found against
+                  // the book as it stands when the notes come back out.
+                  unlocated: rec.proposals.every((p) => p.at === undefined)
+                }
+              : null
+          )
+        }
+      }
+    })
+)
 
 const proposedNotes = await page.locator('.note').count()
 const notePassages = await page.locator('.note-passage b').count()
@@ -1361,6 +1413,23 @@ await shot('05c4c-note-review')
 
 await page.locator('.notes .actions button.primary').click()
 await page.waitForTimeout(2000)
+
+// And it is gone once the notes are in the book's edit list. Keeping it would
+// offer the rejected ones back on the next visit as though unseen.
+const checkpointCleared = await page.evaluate(
+  () =>
+    new Promise((resolve) => {
+      const open = indexedDB.open('pdbf')
+      open.onerror = () => resolve(false)
+      open.onsuccess = () => {
+        const db = open.result
+        if (!db.objectStoreNames.contains('notes')) return resolve(true)
+        const req = db.transaction('notes', 'readonly').objectStore('notes').count()
+        req.onerror = () => resolve(false)
+        req.onsuccess = () => resolve(req.result === 0)
+      }
+    })
+)
 
 // The voice is banked on the device, so book two does not ask again.
 const bankedVoice = await page.evaluate(() => localStorage.getItem('pdbf.voice') ?? '')
@@ -2639,6 +2708,14 @@ console.log(`  quoted a price first: ${/\$/.test(notesCost)}`)
 console.log(
   `  notes proposed: ${proposedNotes} (passages shown: ${notePassages}, claims marked: ${claimsMarked}, introduction drafted: ${introDrafted === 1})`
 )
+console.log(
+  `  the pass saves as it goes: ${
+    checkpointed
+      ? `${checkpointed.notes} note(s) at ${checkpointed.chunksDone}/${checkpointed.chunksTotal} stretches, unlocated: ${checkpointed.unlocated}`
+      : 'NOTHING WRITTEN'
+  } (cleared after the review: ${checkpointCleared})`
+)
+console.log(`  and can be stopped without losing them: ${stopOffered || 'NOT OFFERED'}`)
 console.log(`  voice banked for the next book: ${/Etsu T. Dhent/.test(bankedVoice)}`)
 console.log(
   `  book two's notes gate arrives as: "${penNameOnBookTwo}" (charged to decline: ${chargedForDeclining > 0})`
@@ -2722,6 +2799,15 @@ const finalChecks = [
   ['taking the checked answers is offered as a choice', takeAllOffered > 0],
   // Said out loud, not a screen that is quietly shorter than it was.
   ['leaves it settled are taken out of the review, and said so', settledSaid > 0],
+  // The pass is paid for by the chunk, so what has come back is written down
+  // before the next request goes out. Until this existed a locked phone lost a
+  // book's worth of notes that had already been billed for.
+  ['the notes pass saves as it goes', checkpointed !== null && checkpointed.notes > 0],
+  ['it saved every stretch it read', checkpointed?.chunksDone === checkpointed?.chunksTotal],
+  ['a saved note carries no stale offset', checkpointed?.unlocated === true],
+  ['the record is dropped once the notes are in the book', checkpointCleared],
+  ['a running pass can be stopped', /Stop/.test(stopOffered)],
+  ['and says it is saving as it goes', savingSaid === 1],
   ['every disagreement is listed as its own row', gapRows > 0],
   // The row exists to point at the word. Without the crop it is the old
   // "somewhere on this page" with extra steps.

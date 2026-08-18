@@ -55,6 +55,27 @@ export interface AnnotationRunOptions {
   onProgress?: (done: number, total: number) => void
   /** Polled between chunks, so cancelling costs at most one more request. */
   isCancelled?: () => boolean
+  /**
+   * Chunks an earlier run already paid for, and this one must not read again.
+   *
+   * The proposals from those chunks are the caller's to hold — this returns
+   * only what it read itself — because merging is where the run and the record
+   * on disk would otherwise get two chances to disagree.
+   */
+  resumeFrom?: number
+  /**
+   * Called after every chunk with everything read *so far in this run*.
+   *
+   * Awaited, so a slow write throttles the run rather than piling up behind it,
+   * and any error is the caller's to swallow: failing to save a chunk is not a
+   * reason to stop reading a book. Every chunk that has come back is billed for
+   * whether or not the next one arrives, which is the whole reason this exists.
+   */
+  onCheckpoint?: (progress: {
+    chunksDone: number
+    chunksTotal: number
+    result: AnnotationRunResult
+  }) => void | Promise<void>
   sleep?: (ms: number) => Promise<void>
 }
 
@@ -133,7 +154,32 @@ export async function runAnnotation(
   let discarded = 0
   let cancelled = false
 
+  const resumeFrom = Math.max(0, Math.min(options.resumeFrom ?? 0, chunks.length))
+
+  const result = (): AnnotationRunResult => ({
+    proposals,
+    facts: dedupeFacts(facts),
+    failures,
+    discarded,
+    usage,
+    cancelled
+  })
+
+  const checkpoint = async (chunksDone: number): Promise<void> => {
+    if (!options.onCheckpoint) return
+    try {
+      await options.onCheckpoint({ chunksDone, chunksTotal: chunks.length, result: result() })
+    } catch {
+      // A failed write must not end a run the user is paying for. The caller
+      // reports it; this loop carries on reading.
+    }
+  }
+
   for (const [i, chunk] of chunks.entries()) {
+    // Already read and already paid for. Skipped rather than re-sent, which is
+    // the entire point of resuming.
+    if (i < resumeFrom) continue
+
     if (options.isCancelled?.()) {
       cancelled = true
       break
@@ -171,9 +217,14 @@ export async function runAnnotation(
     }
 
     options.onProgress?.(i + 1, chunks.length)
+    await checkpoint(i + 1)
   }
 
-  return { proposals, facts: dedupeFacts(facts), failures, discarded, usage, cancelled }
+  // No final write on the way out: the cancel is checked *before* a chunk is
+  // sent, so the checkpoint after the last completed chunk already says exactly
+  // how far the run got. A cancel on the very first chunk read nothing and has
+  // nothing to record.
+  return result()
 }
 
 interface ChunkOutcome {

@@ -294,6 +294,89 @@ describe('running the pass', () => {
     expect(call).toBeGreaterThan(1)
   })
 
+  it('saves after every chunk, so a tab that dies costs one request', async () => {
+    // The failure this closes: the pass held every proposal in memory until the
+    // last chunk came back, so a locked phone lost a book's worth of notes the
+    // user had already been billed for.
+    const blocks = Array.from({ length: 6 }, () =>
+      block(`Paracelsus. ${'word '.repeat(200).trim()}`)
+    )
+    const saves: { chunksDone: number; notes: number }[] = []
+    // A note on whichever block the chunk actually carries — a reply naming
+    // someone else's block is dropped, which is the runner being right and
+    // would make this measure nothing.
+    const perChunk: Transport = async (url, init) => {
+      const body = JSON.parse(String(init.body)) as { messages: { content: { text: string }[] }[] }
+      // Not the overlap block at the head of the chunk: it is marked context
+      // only, a note on it is dropped by design, and matching it would have
+      // this test measure the runner refusing rather than the run growing.
+      const id =
+        /\[(p0b\d+)\](?! \[context only\])/.exec(body.messages[0]!.content[0]!.text)?.[1] ?? ''
+      return replyWith([{ ...note, blockId: id }])(url, init)
+    }
+    await runAnnotation(blocks, {
+      client: { ...CLIENT, transport: perChunk },
+      voice: defaultVoice(),
+      chunkWords: 200,
+      onCheckpoint: ({ chunksDone, result }) => {
+        saves.push({ chunksDone, notes: result.proposals.length })
+      }
+    })
+    expect(saves.map((s) => s.chunksDone)).toEqual([1, 2, 3, 4, 5, 6])
+    // Every write holds the whole run so far, not the chunk that just landed:
+    // a checkpoint is what to carry on from, not a diff to replay.
+    expect(saves.at(-1)!.notes).toBeGreaterThan(saves[0]!.notes)
+  })
+
+  it('leaves the last save saying how far a cancelled run got', async () => {
+    const blocks = Array.from({ length: 6 }, () => block('word '.repeat(200).trim()))
+    let calls = 0
+    const saves: number[] = []
+    const result = await runAnnotation(blocks, {
+      client: {
+        ...CLIENT,
+        transport: async (url, init) => {
+          calls += 1
+          return replyWith([])(url, init)
+        }
+      },
+      voice: defaultVoice(),
+      chunkWords: 200,
+      isCancelled: () => calls >= 2,
+      onCheckpoint: ({ chunksDone }) => {
+        saves.push(chunksDone)
+      }
+    })
+    expect(result.cancelled).toBe(true)
+    // The cancel is checked before a chunk is sent, so the write after the last
+    // completed one already says two — no extra save on the way out.
+    expect(saves).toEqual([1, 2])
+  })
+
+  it('skips the chunks an earlier sitting paid for', async () => {
+    const blocks = Array.from({ length: 6 }, () => block('word '.repeat(200).trim()))
+    let calls = 0
+    const saves: number[] = []
+    await runAnnotation(blocks, {
+      client: {
+        ...CLIENT,
+        transport: async (url, init) => {
+          calls += 1
+          return replyWith([])(url, init)
+        }
+      },
+      voice: defaultVoice(),
+      chunkWords: 200,
+      resumeFrom: 4,
+      onCheckpoint: ({ chunksDone }) => {
+        saves.push(chunksDone)
+      }
+    })
+    // Two requests, not six — which is the whole of what resuming is for.
+    expect(calls).toBe(2)
+    expect(saves).toEqual([5, 6])
+  })
+
   it('stops between chunks when cancelled', async () => {
     const blocks = Array.from({ length: 6 }, () => block('word '.repeat(200).trim()))
     let calls = 0
