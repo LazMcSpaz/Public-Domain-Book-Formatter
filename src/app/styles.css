@@ -1896,6 +1896,10 @@ mark.claim {
 .discrepancy-where .caret {
   color: var(--accent);
   font-weight: 700;
+  font-size: 0.85em;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 @media (max-width: 720px) {

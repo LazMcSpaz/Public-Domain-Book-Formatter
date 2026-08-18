@@ -690,7 +690,13 @@ function DiscrepancyGrid({
               <div className="ctx-line">
                 <span className="ctx-label">Your text reads</span>
                 <span className="ctx">
-                  {row.after || '(start of the page)'} <span className="caret">⌃</span>{' '}
+                  {row.after || '(start of the page)'}{' '}
+                  {/* Named, not just drawn. A bare caret is a mark the reader
+                      has to guess at — and the guess that matters is whether
+                      the words are already in the text. */}
+                  <span className="caret" title="OCR's words would go in here">
+                    ⌃ gap ⌃
+                  </span>{' '}
                   {row.before || '(end of the page)'}
                 </span>
               </div>

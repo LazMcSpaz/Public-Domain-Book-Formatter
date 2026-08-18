@@ -14,7 +14,7 @@
 import type { LexiconEntry } from '@core/lexicon'
 import type { BookMetadata, PageClassification } from '@core/pages'
 import { isFrontMatter } from '@core/pages'
-import { withMarkup, type DroppedRun, type VerificationFinding } from '@core/transcribe'
+import { spotId, withMarkup, type DroppedRun, type VerificationFinding } from '@core/transcribe'
 import {
   describeAge,
   describeTicket,
@@ -839,7 +839,7 @@ export function settledLeaves(s: WizardState): Set<number> {
     const spots = s.droppedRuns[pageIndex] ?? []
     if (spots.length === 0) continue
     const allDismissed = spots.every(
-      (_, n) => s.adjudicated[`p${pageIndex}d${n}`]?.verdict === 'not-there'
+      (run) => s.adjudicated[spotId(pageIndex, run)]?.verdict === 'not-there'
     )
     if (allDismissed) settled.add(pageIndex)
   }
@@ -984,9 +984,11 @@ const gateUncertainties: Step = {
             'Each of these is a place OCR read something the transcription does not have. ' +
             'OCR is the rougher reader of the two, so some will be words it imagined and ' +
             'some will be words the transcription fixed — the picture is there so you can ' +
-            'tell which. Putting one back costs nothing and is undoable at the proof step.',
-          rows: dropped.map((run, n) => {
-            const id = `p${pageIndex}d${n}`
+            'tell which. The gap mark shows where in your text those words would go if you ' +
+            'put them back; they are not there now. Putting one back costs nothing and is ' +
+            'undoable at the proof step.',
+          rows: dropped.map((run) => {
+            const id = spotId(pageIndex, run)
             const checked = s.adjudicated[id]
             return {
               id,

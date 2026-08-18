@@ -44,6 +44,7 @@ import {
   mergeMetadata,
   validateApiKey,
   findDroppedRuns,
+  spotId,
   spliceRunInto,
   transcriptionText,
   checkableText,
@@ -1500,8 +1501,8 @@ export function App(): JSX.Element {
         leaves.push({
           pageIndex: page.pageIndex,
           transcription: transcriptionText(page),
-          spots: runs.map((run, n) => ({
-            id: `p${page.pageIndex}d${n}`,
+          spots: runs.map((run) => ({
+            id: spotId(page.pageIndex, run),
             ocrReading: run.text,
             after: run.after,
             before: run.before
@@ -1979,8 +1980,8 @@ export function App(): JSX.Element {
     const flagged = messagesByPage(liveState)
     for (const [pageIndex, runs] of Object.entries(state.droppedRuns)) {
       if (!flagged.has(Number(pageIndex))) continue
-      runs.forEach((_, n) => {
-        if (state.adjudicated[`p${pageIndex}d${n}`]) return
+      runs.forEach((run) => {
+        if (state.adjudicated[spotId(Number(pageIndex), run)]) return
         spots += 1
         leaves.add(Number(pageIndex))
       })

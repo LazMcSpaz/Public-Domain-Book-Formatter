@@ -2104,7 +2104,9 @@ const secondReadIds = []
 await page.route('https://api.anthropic.com/v1/messages', async (route) => {
   const body = JSON.parse(route.request().postData() ?? '{}')
   const prompt = body.messages?.[0]?.content?.[1]?.text ?? ''
-  const ids = [...prompt.matchAll(/\[(p\d+d\d+)\]/g)].map((m) => m[1])
+  // A spot id is the leaf and a hash of what the row says — never its position
+  // in the list, which is what let a stored verdict land on another row.
+  const ids = [...prompt.matchAll(/\[(p\d+s[0-9a-z]+)\]/g)].map((m) => m[1])
   if (ids.length === 0) {
     // Not an adjudication request — the credential check uses this endpoint too.
     return route.fulfill({
@@ -2135,8 +2137,10 @@ await page.route('https://api.anthropic.com/v1/messages', async (route) => {
             // single spot each, so alternating on the index made every spot the
             // first one — every verdict `not-there`, every leaf settled, and an
             // empty gate that proved nothing.
+            // The leaf is the `p<n>` prefix of a spot id; the rest names the
+            // spot by its content, so it is never parsed here.
             spots: ids.map((id) =>
-              Number(/p(\d+)d/.exec(id)?.[1] ?? 0) % 2 === 0
+              Number(/^p(\d+)/.exec(id)?.[1] ?? 0) % 2 === 0
                 ? {
                     id,
                     verdict: 'not-there',

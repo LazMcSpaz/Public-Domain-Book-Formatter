@@ -30,6 +30,7 @@ export {
 export {
   findDroppedRuns,
   healLineBreaks,
+  spotId,
   spliceRun,
   spliceRunInto,
   type DroppedRun,

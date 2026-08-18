@@ -192,7 +192,18 @@ export function parseAdjudication(raw: unknown, asked: readonly string[]): Adjud
  * than trusting a string that has been through a database: an unrecognised
  * verdict reaches the gate as a recommendation nothing knows how to render,
  * which is worse than the spot simply arriving unjudged.
+ *
+ * Verdicts filed under the first scheme are dropped rather than restored. That
+ * scheme named a spot by its *position* in the list of disagreements, and the
+ * list is recomputed on every open — so as soon as the comparison changed
+ * length, every verdict past the change described a different row. There is no
+ * way to repair one: nothing in the record says which words it was about. A
+ * dropped verdict costs a re-read of one leaf; a re-pointed one puts a
+ * confident sentence about a word that is not there under a picture of a word
+ * that is, which is the failure this whole gate exists to prevent.
  */
+const LEGACY_POSITIONAL_ID = /^p\d+d\d+$/
+
 export function spotsFromStored(
   stored: Readonly<Record<string, { verdict: string; reading: string; note: string }>>
 ): Record<string, AdjudicatedSpot> {
@@ -200,6 +211,7 @@ export function spotsFromStored(
   for (const [id, value] of Object.entries(stored)) {
     const verdict = SPOT_VERDICTS.find((v) => v === value.verdict)
     if (!id || !verdict) continue
+    if (LEGACY_POSITIONAL_ID.test(id)) continue
     out[id] = {
       id,
       verdict,

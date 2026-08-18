@@ -3,8 +3,10 @@ import {
   checkableText,
   findDroppedRuns,
   healLineBreaks,
+  spotId,
   transcriptionText,
   verifyPage,
+  type DroppedRun,
   type OcrWordLike,
   type PageTranscription
 } from '@core/transcribe'
@@ -365,14 +367,17 @@ describe('leaves whose text is deliberately not carried over', () => {
  * route back to them.
  */
 describe('verdicts survive being stored with the run', () => {
+  const id4 = spotId(4, { text: 'a speck', after: 'of the', before: 'fixed salt' })
+  const id9 = spotId(9, { text: 'and of the fixed salt', after: 'the alembick', before: 'being' })
+
   it('rebuilds a spot from what storage holds', () => {
     const back = spotsFromStored({
-      p4d0: { verdict: 'not-there', reading: '', note: 'A speck of dirt read as a word.' }
+      [id4]: { verdict: 'not-there', reading: '', note: 'A speck of dirt read as a word.' }
     })
-    expect(back['p4d0']).toEqual({
+    expect(back[id4]).toEqual({
       // The id is the key it was filed under — stored once, so the two can
       // never drift apart.
-      id: 'p4d0',
+      id: id4,
       verdict: 'not-there',
       reading: '',
       note: 'A speck of dirt read as a word.'
@@ -381,31 +386,45 @@ describe('verdicts survive being stored with the run', () => {
 
   it('keeps the reading, which is the field that makes a verdict checkable', () => {
     const back = spotsFromStored({
-      p9d2: { verdict: 'missing', reading: 'and of the fixed salt', note: 'Clear on the page.' }
+      [id9]: { verdict: 'missing', reading: 'and of the fixed salt', note: 'Clear on the page.' }
     })
-    expect(back['p9d2']?.reading).toBe('and of the fixed salt')
+    expect(back[id9]?.reading).toBe('and of the fixed salt')
   })
 
   it('drops a verdict this version does not recognise', () => {
     // Rather than pass it through to a gate that has no way to render it,
     // which shows the user a recommendation nothing can act on. The spot
     // arriving unjudged is the better failure.
-    expect(spotsFromStored({ p1d0: { verdict: 'probably', reading: 'x', note: 'y' } })).toEqual({})
+    expect(spotsFromStored({ [id4]: { verdict: 'probably', reading: 'x', note: 'y' } })).toEqual({})
   })
 
   it('tolerates a record missing its text fields', () => {
     const back = spotsFromStored({
-      p1d0: { verdict: 'unsure' } as unknown as { verdict: string; reading: string; note: string }
+      [id4]: { verdict: 'unsure' } as unknown as { verdict: string; reading: string; note: string }
     })
-    expect(back['p1d0']).toEqual({ id: 'p1d0', verdict: 'unsure', reading: '', note: '' })
+    expect(back[id4]).toEqual({ id: id4, verdict: 'unsure', reading: '', note: '' })
   })
 
   it('keeps every well-formed spot when one beside it is broken', () => {
     const back = spotsFromStored({
-      p1d0: { verdict: 'nonsense', reading: '', note: '' },
-      p2d0: { verdict: 'different', reading: 'quintessence', note: 'Neither reading has it.' }
+      [id4]: { verdict: 'nonsense', reading: '', note: '' },
+      [id9]: { verdict: 'different', reading: 'quintessence', note: 'Neither reading has it.' }
     })
-    expect(Object.keys(back)).toEqual(['p2d0'])
+    expect(Object.keys(back)).toEqual([id9])
+  })
+
+  it('throws away a verdict filed by position rather than by content', () => {
+    // The first scheme named a spot `p9d2`: page nine, third row. Healing
+    // hyphenated line breaks then removed rows from that list, and every stored
+    // verdict past a removed row described a different spot — a note about
+    // `ob-jectively` under a crop of `1s that of`, on a real book. Nothing in
+    // the record says which words it was about, so it cannot be repaired; it
+    // can only be dropped, and re-earned for the price of one leaf.
+    expect(
+      spotsFromStored({
+        p9d2: { verdict: 'missing', reading: 'ob-jectively', note: 'Hyphenated across the line.' }
+      })
+    ).toEqual({})
   })
 })
 
@@ -484,34 +503,31 @@ describe('which leaves the gate is asking about', () => {
 describe('leaves the second reading answers outright', () => {
   const dismissed = { verdict: 'not-there' as const, reading: '', note: 'imagined' }
 
+  const gap = (text: string, after: string): DroppedRun => ({
+    words: text.split(' '),
+    text,
+    tokenIds: [],
+    strength: 'weak',
+    confidence: 90,
+    after,
+    before: ''
+  })
+
+  const first = gap('alembick', 'of the')
+  const second = gap('quintessence', 'drawn from the')
+  const idFirst = spotId(7, first)
+  const idSecond = spotId(7, second)
+
   const at = (over: Partial<WizardState> = {}): WizardState => ({
     ...initialState(),
     findings: [
       { code: 'confident-word-missing', severity: 'medium', pageIndex: 7, message: '3 words' }
     ],
-    droppedRuns: {
-      7: [
-        {
-          words: ['a'],
-          text: 'a',
-          tokenIds: [],
-          strength: 'weak',
-          confidence: 90,
-          after: '',
-          before: ''
-        },
-        {
-          words: ['b'],
-          text: 'b',
-          tokenIds: [],
-          strength: 'weak',
-          confidence: 90,
-          after: '',
-          before: ''
-        }
-      ]
+    droppedRuns: { 7: [first, second] },
+    adjudicated: {
+      [idFirst]: { id: idFirst, ...dismissed },
+      [idSecond]: { id: idSecond, ...dismissed }
     },
-    adjudicated: { p7d0: { id: 'p7d0', ...dismissed }, p7d1: { id: 'p7d1', ...dismissed } },
     ...over
   })
 
@@ -520,7 +536,7 @@ describe('leaves the second reading answers outright', () => {
   })
 
   it('keeps a leaf with one spot still unjudged', () => {
-    const s = at({ adjudicated: { p7d0: { id: 'p7d0', ...dismissed } } })
+    const s = at({ adjudicated: { [idFirst]: { id: idFirst, ...dismissed } } })
     expect(settledLeaves(s).size).toBe(0)
   })
 
@@ -529,8 +545,8 @@ describe('leaves the second reading answers outright', () => {
     // human's call however good the reading behind it.
     const s = at({
       adjudicated: {
-        p7d0: { id: 'p7d0', ...dismissed },
-        p7d1: { id: 'p7d1', verdict: 'missing', reading: 'the fixed salt', note: 'clear' }
+        [idFirst]: { id: idFirst, ...dismissed },
+        [idSecond]: { id: idSecond, verdict: 'missing', reading: 'the fixed salt', note: 'clear' }
       }
     })
     expect(settledLeaves(s).size).toBe(0)
@@ -539,8 +555,8 @@ describe('leaves the second reading answers outright', () => {
   it('keeps a leaf the reading could not settle', () => {
     const s = at({
       adjudicated: {
-        p7d0: { id: 'p7d0', ...dismissed },
-        p7d1: { id: 'p7d1', verdict: 'unsure', reading: '', note: 'too faint' }
+        [idFirst]: { id: idFirst, ...dismissed },
+        [idSecond]: { id: idSecond, verdict: 'unsure', reading: '', note: 'too faint' }
       }
     })
     expect(settledLeaves(s).size).toBe(0)

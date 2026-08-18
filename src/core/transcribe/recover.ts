@@ -156,6 +156,48 @@ export function healLineBreaks(words: readonly OcrWordLike[]): OcrWordLike[] {
   return out
 }
 
+/** What a spot's id is derived from, stripped of everything cosmetic. */
+function idSeed(text: string): string {
+  return text
+    .split(/\s+/)
+    .map(key)
+    .filter((w) => w.length > 0)
+    .join(' ')
+}
+
+/**
+ * The name a verdict about a spot is filed under.
+ *
+ * It has to come from the *spot*, never from its position in the list. The list
+ * is recomputed from the transcription and the OCR every time the app opens a
+ * book, and anything that changes the comparison changes its length: healing a
+ * hyphenated line break removes three rows from a leaf, and every stored verdict
+ * after them then lands on a different row. That is not a cosmetic bug — the
+ * user is shown a crop of `1s that of` under a note about `ob-jectively`, which
+ * is the app confidently describing a picture it is not looking at, and it was
+ * measured on a real book the day healing shipped.
+ *
+ * Derived from what the row *says*: OCR's words and the transcribed phrases
+ * either side of the gap, normalised the same way the alignment normalises. So a
+ * verdict follows its spot through a re-run, and a spot that no longer exists
+ * simply has no verdict — an orphan, which shows as an unjudged row rather than
+ * as someone else's answer.
+ */
+export function spotId(
+  pageIndex: number,
+  run: Pick<DroppedRun, 'text' | 'after' | 'before'>
+): string {
+  const seed = `${idSeed(run.text)} ${idSeed(run.after)} ${idSeed(run.before)}`
+  // FNV-1a, 32-bit. Short enough to read in a log, and a collision only makes
+  // two spots that say the same words in the same place share an answer.
+  let h = 0x811c9dc5
+  for (let i = 0; i < seed.length; i++) {
+    h ^= seed.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return `p${pageIndex}s${(h >>> 0).toString(36)}`
+}
+
 /**
  * How many words in a row must agree before a match is believed.
  *

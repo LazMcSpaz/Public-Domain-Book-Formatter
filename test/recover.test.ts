@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { findDroppedRuns, spliceRun, spliceRunInto, type DroppedRun } from '@core/transcribe'
+import {
+  findDroppedRuns,
+  spliceRun,
+  spliceRunInto,
+  spotId,
+  type DroppedRun
+} from '@core/transcribe'
 import type { OcrWordLike } from '@core/transcribe'
 import { defaultAnswers, initialState, stepById, type WizardState } from '@core/wizard'
 
@@ -263,5 +269,63 @@ describe('spliceRunInto — putting a clause back without losing the italics', (
     expect(spliceRun(text, run('the alembick'))).toBe(
       spliceRunInto(text, undefined, run('the alembick'))!.text
     )
+  })
+})
+
+/**
+ * A verdict has to name the spot it is about, not the row number it sat on.
+ *
+ * The first scheme was `p9d2` — page nine, third disagreement. That list is
+ * recomputed from the transcription and the OCR every time a book is opened,
+ * and anything that changes the comparison changes its length: healing
+ * hyphenated line breaks removed rows, and every stored verdict past a removed
+ * row landed on a different one. On a real book that put a note reading "the
+ * word is hyphenated across the line" under a crop of `1s that of`, which is
+ * the app describing a picture it is not looking at — the exact failure the
+ * whole gate exists to prevent.
+ */
+describe('the name a verdict is filed under', () => {
+  const run = (text: string, after: string, before = ''): DroppedRun => ({
+    words: text.split(' '),
+    text,
+    tokenIds: [],
+    strength: 'strong',
+    confidence: 90,
+    after,
+    before
+  })
+
+  it('is unchanged when rows ahead of it disappear', () => {
+    // The regression, stated as the property that prevents it: the same spot,
+    // once third in the list and now first, is still the same spot.
+    const spot = run('and of the fixed salt', 'the alembick', 'being set')
+    const beforeHealing = [run('pro', 'a'), run('ceed', 'b'), spot]
+    const afterHealing = [spot]
+    expect(spotId(9, beforeHealing[2]!)).toBe(spotId(9, afterHealing[0]!))
+  })
+
+  it('tells two spots on a leaf apart by the words either side of them', () => {
+    const a = run('salt', 'the alembick')
+    const b = run('salt', 'a gentle fire')
+    expect(spotId(9, a)).not.toBe(spotId(9, b))
+  })
+
+  it('keeps leaves apart, so a verdict cannot cross pages', () => {
+    const spot = run('salt', 'the alembick')
+    expect(spotId(9, spot)).not.toBe(spotId(10, spot))
+  })
+
+  it('ignores what the alignment ignores — case and punctuation', () => {
+    // Two readings of the same spot that differ only in a comma are the same
+    // spot, and a verdict bought for one answers the other.
+    expect(spotId(3, run('the fixed salt,', 'Of THE alembick'))).toBe(
+      spotId(3, run('the Fixed salt', 'of the alembick'))
+    )
+  })
+
+  it('is not the old positional name, so storage can tell them apart', () => {
+    // `spotsFromStored` drops the old scheme on sight. That is only possible
+    // while the two shapes cannot be confused for one another.
+    expect(spotId(9, run('salt', 'the alembick'))).not.toMatch(/^p\d+d\d+$/)
   })
 })
