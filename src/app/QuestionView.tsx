@@ -678,10 +678,26 @@ function DiscrepancyGrid({
               </small>
             </div>
 
+            {/* Whose words are whose, said rather than implied by styling.
+                
+                These three ran together as one sentence — your text, then
+                OCR's words, then your text again — which reads as though the
+                transcription contains both. It is really a preview of what
+                "put it back" would produce, and a reader who takes it for the
+                current text concludes their book already has the words and
+                answers the opposite of what they meant. */}
             <div className="discrepancy-where">
-              <span className="ctx">{row.after || '(start of the page)'}</span>{' '}
-              <b className="gap">{row.text}</b>{' '}
-              <span className="ctx">{row.before || '(end of the page)'}</span>
+              <div className="ctx-line">
+                <span className="ctx-label">Your text reads</span>
+                <span className="ctx">
+                  {row.after || '(start of the page)'} <span className="caret">⌃</span>{' '}
+                  {row.before || '(end of the page)'}
+                </span>
+              </div>
+              <div className="ctx-line">
+                <span className="ctx-label">OCR read here</span>
+                <b className="gap">{row.text}</b>
+              </div>
             </div>
 
             {row.checked ? (

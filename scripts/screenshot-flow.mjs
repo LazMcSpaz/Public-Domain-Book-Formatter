@@ -896,6 +896,7 @@ const gapRows = await gapsQ.locator('.discrepancy').count()
 let gapCrops = 0
 let gapPreselected = -1
 let gapHighlighted = ''
+let gapAttributed = ''
 let gapRestoreStuck = false
 if (gapRows > 0) {
   // The crops are cut from the scan when the leaf is reached, so give the
@@ -906,6 +907,10 @@ if (gapRows > 0) {
   // every gap back would copy its misreadings over a paid transcription.
   gapPreselected = await gapsQ.locator('.discrepancy-verdict button.primary').count()
   gapHighlighted = await gapsQ.locator('.discrepancy-where .gap').first().innerText()
+  // Whose words are whose has to be on the screen, not implied by styling: the
+  // two readings ran together as one sentence and were read as one — as the
+  // book already containing both, which is the opposite of what the row means.
+  gapAttributed = (await gapsQ.locator('.discrepancy-where .ctx-label').allInnerTexts()).join(' | ')
   // And a verdict has to stick, or the row is decoration.
   await gapsQ.locator('.discrepancy-verdict button', { hasText: 'Put it back' }).first().click()
   await page.waitForTimeout(300)
@@ -2718,6 +2723,10 @@ const finalChecks = [
   // "somewhere on this page" with extra steps.
   ['each row shows the word as it appears on the scan', gapRows === 0 || gapCrops === gapRows],
   ['the missing words are marked in their context', gapRows === 0 || gapHighlighted.length > 0],
+  [
+    'the row says which words are yours and which are OCR’s',
+    gapRows === 0 || (/your text/i.test(gapAttributed) && /ocr read/i.test(gapAttributed))
+  ],
   ['no gap is filled from OCR unasked', gapPreselected === 0],
   ['a verdict on a gap sticks', gapRows === 0 || gapRestoreStuck],
   ['the proof sheet has editable text', proofBoxes > 0],

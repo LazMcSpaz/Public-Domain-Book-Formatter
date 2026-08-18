@@ -1873,3 +1873,34 @@ mark.claim {
   margin-top: 20px;
   flex-wrap: wrap;
 }
+
+/* Whose words are whose. The transcription and OCR's reading used to run
+   together as one sentence, which reads as though the book already contains
+   both — and someone who believes that answers the opposite of what they mean. */
+.discrepancy-where .ctx-line {
+  display: grid;
+  grid-template-columns: 7.5rem 1fr;
+  gap: 0.5rem;
+  align-items: baseline;
+  margin-bottom: 0.3rem;
+}
+
+.discrepancy-where .ctx-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+/* Where the words would go, if they went anywhere. */
+.discrepancy-where .caret {
+  color: var(--accent);
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .discrepancy-where .ctx-line {
+    grid-template-columns: 1fr;
+    gap: 0.1rem;
+  }
+}
