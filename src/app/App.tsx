@@ -2667,7 +2667,12 @@ export function App(): JSX.Element {
       ...(state.metadata.originalYear ? { originalYear: state.metadata.originalYear } : {}),
       ...(identity['bookContext'] ? { context: String(identity['bookContext']) } : {})
     }
-    const client = { apiKey: loadApiKey(), modelId: loadPrefs().modelId }
+    // The notes get their own model, chosen at this gate. Writing a note is
+    // judgement rather than perception, so the answer that was right for the
+    // scan is not automatically right here — and with no page images in this
+    // pass the better model is a fraction of what it costs upstairs.
+    const notesModelId = String(answers['notesModel'] ?? loadPrefs().modelId)
+    const client = { apiKey: loadApiKey(), modelId: notesModelId }
 
     const harvestOptions = {
       depth: harvestDepth as HarvestDepth,
@@ -3059,7 +3064,8 @@ export function App(): JSX.Element {
       const words = doc.blocks.reduce((n, b) => n + b.text.split(/\s+/u).length, 0)
       const notesCost = estimateAnnotationCost({
         wordCount: wantsNotes ? words : 0,
-        modelId: loadPrefs().modelId,
+        // The model this gate chose, so the quote is for what will actually run.
+        modelId: String(currentAnswers['notesModel'] ?? loadPrefs().modelId),
         density: String(currentAnswers['noteDensity'] ?? state.voice.density) as NoteDensity
       })
       // Riding the notes costs output tokens only; harvesting a book nobody is
@@ -3068,7 +3074,7 @@ export function App(): JSX.Element {
       const harvestCost = wantsHarvest
         ? estimateHarvestCost({
             wordCount: words,
-            modelId: loadPrefs().modelId,
+            modelId: String(currentAnswers['notesModel'] ?? loadPrefs().modelId),
             depth: depth as HarvestDepth,
             standalone: !wantsNotes
           })

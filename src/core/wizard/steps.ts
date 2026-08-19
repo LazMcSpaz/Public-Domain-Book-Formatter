@@ -319,7 +319,9 @@ const intake: Step = {
 const recon: Step = {
   id: 'recon',
   title: 'Reading the book',
-  blurb: 'Rendering pages, running OCR, and harvesting this book’s vocabulary. No cost.',
+  blurb:
+    'Rendering pages, running OCR, and harvesting this book’s vocabulary. ' +
+    'Free — nothing is charged until you approve an estimate two screens from now.',
   isGate: false,
   canEnter: (s) => s.fileName !== null && s.pageCount > 0,
   questions: () => []
@@ -341,7 +343,9 @@ const recon: Step = {
 const gateIdentity: Step = {
   id: 'gate-identity',
   title: 'Confirm how to read it',
-  blurb: 'Decide how the original spelling is handled, and vet the unusual words I found.',
+  blurb:
+    'Free, but these answers go into the paid reading — the spelling policy especially, ' +
+    'which would take a second reading to change.',
   isGate: true,
   canEnter: (s) => s.pagesProcessed > 0,
   questions: (s) => {
@@ -354,7 +358,10 @@ const gateIdentity: Step = {
       prompt: 'How should original spelling be handled?',
       help:
         'Old books spell differently on purpose. Preserving keeps the work’s character; ' +
-        'modernizing makes it easier to read but is an edit, not a reprint.',
+        'modernizing makes it easier to read but is an edit, not a reprint. ' +
+        'This is the one answer here that is hard to undo: it goes into the instructions ' +
+        'for every page, so changing your mind afterwards means paying to read the book ' +
+        'again. Everything else in this app is free to revisit.',
       defaultValue: 'preserve',
       options: [
         {
@@ -523,7 +530,9 @@ function secondReadingQuestion(s: WizardState): Question {
       'When the reading is done, deterministic checks flag every place the transcription ' +
       'and the OCR disagree. Most of those are OCR seeing something that is not there, and ' +
       'sorting them out by eye is the longest job in this app. This looks at each one again ' +
-      'with the scan — only the flagged leaves, never the whole book.',
+      'with the scan — only the flagged leaves, never the whole book. It uses the same ' +
+      'model you chose above, and it is looking at pixels again rather than reasoning about ' +
+      'text, so it is worth the better one for the same reason the reading is.',
     defaultValue: 'yes',
     options: [
       {
@@ -552,7 +561,10 @@ function secondReadingQuestion(s: WizardState): Question {
 const transcribe: Step = {
   id: 'transcribe',
   title: 'Transcribing',
-  blurb: 'Reading each page against the scan and recovering its structure.',
+  blurb:
+    'The one step that costs real money. Reading each page against the scan and ' +
+    'recovering its structure — you approve an estimate before anything is spent, and ' +
+    'the result is saved so you never pay for the same page twice.',
   isGate: false,
   canEnter: (s) => s.completed.includes('gate-identity'),
   questions: (s) => {
@@ -706,7 +718,13 @@ const transcribe: Step = {
       id: 'model',
       type: 'choice',
       prompt: 'Which model should read the pages?',
-      help: 'You are paying for this directly. Higher quality costs more per page.',
+      help:
+        'This job is *perception*: reading type off a photograph, deciding whether a mark ' +
+        'is a comma or a speck, and telling a heading from a line of small capitals. It is ' +
+        'not writing. So pick by how hard the pages are to look at, not by how difficult ' +
+        'the book is to read — a plain modern reprint of Aristotle is an easy page; a foxed ' +
+        '1662 quarto with marginalia is not. Whatever you choose here also does the second ' +
+        'reading below, which looks at the same pixels again.',
       // The one you used last, kept in Settings. It was already being saved
       // after every run and then ignored here, so choosing Sonnet once meant
       // choosing it again on every book.
@@ -714,18 +732,26 @@ const transcribe: Step = {
       options: [
         {
           value: 'claude-opus-5',
-          label: 'Opus — highest quality',
-          description: 'Best on damaged scans and unusual typography.'
+          label: 'Opus — recommended for anything old',
+          description:
+            'Worth it on foxed paper, tight gutters, long-s, marginalia, mixed scripts and ' +
+            'anything set in columns. A misread word costs more to find at the proof step ' +
+            'than the difference in price.'
         },
         {
           value: 'claude-sonnet-5',
-          label: 'Sonnet — balanced',
-          description: 'Close to Opus on clean scans, roughly a third of the cost.'
+          label: 'Sonnet — for clean scans',
+          description:
+            'Roughly a third of the price and close to Opus on an evenly lit, ' +
+            'well-printed page. The gap shows up on damage, not on difficulty.'
         },
         {
           value: 'claude-haiku-4-5',
-          label: 'Haiku — cheapest',
-          description: 'Fine for clean modern print; weaker on judgment.'
+          label: 'Haiku — modern print only',
+          description:
+            'Cheapest per page, and honestly so: fine for a clean 20th-century reprint, ' +
+            'weak on judgement calls about structure. Not the one for a book worth ' +
+            'reprinting carefully.'
         }
       ]
     })
@@ -749,8 +775,11 @@ const transcribe: Step = {
       type: 'text',
       prompt: 'Anything I should know about this book?',
       help:
-        'Subject, period, or quirks. A sentence here measurably improves how ' +
-        'unusual words are read.',
+        'Free, and the cheapest accuracy you can buy: this sentence goes into the ' +
+        'instructions for every page, so it is read alongside each one. Worth naming the ' +
+        'subject, the period, the language of any quotations, and anything a reader would ' +
+        'need to know — trade jargon, unit names, a printer who sets long-s. Blank is fine; ' +
+        'it just makes the harder words guesswork.',
       defaultValue: '',
       placeholder: 'e.g. A 1662 alchemical treatise; heavy use of Latin terms.',
       multiline: true
@@ -1081,7 +1110,12 @@ const gateStructure: Step = {
       id: 'structureOk',
       type: 'confirm',
       prompt: 'Does this look like the right shape for the book?',
-      help: summary,
+      help:
+        `${summary}. What to look at: the chapter count against what the book actually has, ` +
+        'and the word count against its length. Two chapters in a long book means the ' +
+        'headings were not recognised, which is worth going back for; a count that is ' +
+        'merely a little off is usually a front-matter page counted as a chapter, and the ' +
+        'contents page is regenerated from this list either way.',
       defaultValue: true,
       required: true,
       evidence: [
@@ -1255,10 +1289,59 @@ function introductionQuestions(): Question[] {
   ]
 }
 
+/**
+ * The other place a model is chosen, and deliberately its own question rather
+ * than an inheritance from the reading.
+ *
+ * The two jobs are not the same job. Transcription is perception — read this
+ * photograph — and the model that does it best is the one that sees best.
+ * Writing a note is judgement: knowing a reader will trip over `chirurgeon`,
+ * knowing what is worth saying about it, and saying it in twenty words without
+ * sounding like an encyclopaedia. Someone who read a clean scan on the cheapest
+ * model has no reason to write the book's notes on it — and with no page images
+ * in this pass, the better model costs a fraction of what it costs upstairs.
+ */
+function notesModelQuestion(s: WizardState): Question {
+  return {
+    id: 'notesModel',
+    type: 'choice',
+    prompt: 'Which model should write the notes and the introduction?',
+    help:
+      'Not the same question as the one at the reading. Reading a scan is perception; ' +
+      'writing a note is judgement — what a reader will stumble on, what is worth saying, ' +
+      'and how to say it in a sentence. There are no page images in this pass, so the whole ' +
+      'book costs a small fraction of the reading and the better model is cheap here. This ' +
+      'also writes the fact bank.',
+    defaultValue: s.defaultModelId,
+    options: [
+      {
+        value: 'claude-opus-5',
+        label: 'Opus — recommended for the notes',
+        description:
+          'The difference shows in what it decides to annotate and what it leaves alone. ' +
+          'Cheap here: no images, and you approve every note before it goes in.'
+      },
+      {
+        value: 'claude-sonnet-5',
+        label: 'Sonnet — solid, a third of the price',
+        description: 'Notes are competent; more of them will be worth dropping.'
+      },
+      {
+        value: 'claude-haiku-4-5',
+        label: 'Haiku — for a first look',
+        description: 'Useful to see what a pass would even suggest before paying for a good one.'
+      }
+    ]
+  }
+}
+
 const annotate: Step = {
   id: 'annotate',
   title: 'Write the notes',
-  blurb: 'Notes and an introduction of your own — what makes this edition yours.',
+  blurb:
+    'Notes and an introduction of your own — what makes this edition yours. The second ' +
+    'paid step, and far the cheaper: no page images, so a whole book costs a fraction of ' +
+    'the reading. Every note is yours to accept or drop.',
   isGate: true,
   canEnter: (s) => s.completed.includes('proof') && s.document !== null,
   questions: (s) => {
@@ -1357,7 +1440,7 @@ const annotate: Step = {
       const fallback = cp.resumable ? 'resume' : anythingWritten ? 'take' : 'again'
       const chosen = (s.answers['annotate']?.['useNotes'] as string) ?? fallback
       if (chosen === 'take') {
-        qs.push(...introductionQuestions())
+        qs.push(notesModelQuestion(s), ...introductionQuestions())
         return qs
       }
     }
@@ -1384,6 +1467,8 @@ const annotate: Step = {
         }
       ]
     })
+
+    qs.push(notesModelQuestion(s))
 
     // Everything below describes the editor, not the book, so it is asked once
     // and banked. On the second book these arrive already answered.
@@ -1431,7 +1516,10 @@ const annotate: Step = {
       help:
         'Writes a separate file of what the book attests — practices, prices, methods, ' +
         'what its author took for granted — each with the words to prove it and the leaf ' +
-        'it came from. Nothing to do with the printed book; it is for writing from later.',
+        'it came from. Nothing to do with the printed book; it is for writing from later. ' +
+        'If you are taking notes as well it rides along on the same reading and costs only ' +
+        'the words it writes; on its own it pays to read the book, which is most of the ' +
+        'price. So the cheap combination is notes *and* harvest together.',
       defaultValue: 'standard',
       options: [
         {
@@ -1490,7 +1578,9 @@ export const FRESH_LOOK = 'fresh'
 const design: Step = {
   id: 'design',
   title: 'Design the edition',
-  blurb: 'A few questions about the book, and I’ll set the rest.',
+  blurb:
+    'A few questions about the book, and I’ll set the rest. Free, and free to change — ' +
+    'every answer re-lays the whole book in a second, so nothing here is a commitment.',
   isGate: true,
   canEnter: (s) => s.completed.includes('proof'),
   questions: (s) => {
@@ -1546,14 +1636,28 @@ const design: Step = {
         defaultValue: 'novel',
         options: [
           { value: 'novel', label: 'Novel or narrative', description: '6×9in — the standard.' },
-          { value: 'nonfiction', label: 'Non-fiction prose', description: '6×9in.' },
+          {
+            value: 'nonfiction',
+            label: 'Non-fiction prose',
+            description: '6×9in — the same trim as a novel, with a little more room for notes.'
+          },
           {
             value: 'poetry',
             label: 'Poetry or verse',
             description: '5.5×8.5in — a narrower measure so lines don’t wrap.'
           },
-          { value: 'illustrated', label: 'Heavily illustrated', description: '7×10in.' },
-          { value: 'reference', label: 'Reference or technical', description: '7×10in.' }
+          {
+            value: 'illustrated',
+            label: 'Heavily illustrated',
+            description:
+              '7×10in — a wider page, so a plate can be set larger before it has ' +
+              'to take a leaf of its own.'
+          },
+          {
+            value: 'reference',
+            label: 'Reference or technical',
+            description: '7×10in — the width tables and long headings need to stay on one line.'
+          }
         ]
       },
       {
@@ -1589,15 +1693,31 @@ const design: Step = {
         id: 'chapterOpener',
         type: 'choice',
         prompt: 'How should chapters open?',
+        help:
+          'Every chapter starts on a right-hand page whichever you choose; this is only ' +
+          'what sits at the top of it. Look at the preview below — it is the real page, ' +
+          'and changing this costs nothing but the second it takes to re-lay the book.',
         defaultValue: 'plain',
         options: [
-          { value: 'plain', label: 'Plain', description: 'Just the chapter title.' },
+          {
+            value: 'plain',
+            label: 'Plain',
+            description: 'Just the chapter title. Never looks wrong, in any period.'
+          },
           {
             value: 'ornamented',
             label: 'With a printer’s ornament',
-            description: 'A ruled flourish beneath the chapter title.'
+            description:
+              'A ruled flourish beneath the title, as an early printer would have set it. ' +
+              'At home on anything before about 1850.'
           },
-          { value: 'drop-cap', label: 'Drop capital', description: 'A large opening initial.' }
+          {
+            value: 'drop-cap',
+            label: 'Drop capital',
+            description:
+              'A large opening initial, three lines deep. Handsome in a novel; awkward ' +
+              'where chapters open on a quotation or a list.'
+          }
         ]
       },
       {
@@ -1842,6 +1962,10 @@ const exportStep: Step = {
         id: 'editionDate',
         type: 'text',
         prompt: 'Publication year of this edition',
+        help:
+          'The year *this* printing appears, not the year the book was written — the ' +
+          'original year is recorded separately above and both are printed on the ' +
+          'copyright page. Almost always the current year.',
         defaultValue: thisYear,
         placeholder: thisYear
       },
@@ -1849,7 +1973,10 @@ const exportStep: Step = {
         id: 'editionStatement',
         type: 'text',
         prompt: 'Edition statement',
-        help: 'A single line describing this printing.',
+        help:
+          'One line on the copyright page saying what this printing is, so a reader can ' +
+          'tell it from the original and from any later one of yours. Leave it as it ' +
+          'stands unless you are reprinting the same book twice.',
         defaultValue: originalYear ? `A new edition of the ${originalYear} original.` : '',
         placeholder: 'e.g. First modern edition.'
       },
