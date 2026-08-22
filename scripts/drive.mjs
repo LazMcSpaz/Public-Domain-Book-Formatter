@@ -597,7 +597,16 @@ async function serve() {
               pages: b.sourcePages,
               text: markup.withMarkup(b.text, b.emphasis)
             }))
-          return { edited: say(applied.blocks), pristine: say(bare.blocks) }
+          return {
+            edited: say(applied.blocks),
+            pristine: say(bare.blocks),
+            sections: applied.sections.map((s) => ({
+              id: s.id,
+              placement: s.placement,
+              title: s.title,
+              blocks: s.blocks.length
+            }))
+          }
         },
         [REPO]
       )
