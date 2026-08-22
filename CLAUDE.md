@@ -68,6 +68,46 @@ headlessly by the driver already, and the reason the design gate's approval
 means anything is that one engine draws the page. See **The preview is the
 PDF**, below.
 
+### The subject matter, and the thumb on the scale
+
+The shelf is **occult and esoteric books**, and it will stay that way. That is
+not incidental to how this work is done, because an assistant writing about
+this material brings a lean to it whether or not anyone asked for one — the
+default register for "astral body" is a shade more guarded than the default
+register for "endocrine gland", and a reader going down a page absorbs which is
+which without a single argument being made.
+
+So the standing rule, for every book here: **it is nobody's place to assert the
+absolute truth of these things, and equally nobody's place to quietly deny
+it.** Much of what these books describe is held to be real by the people who
+publish these editions and by a great many people who have worked at it. The
+job is to hand a reader what they need to find out for themselves.
+
+In practice that comes down to three habits, and they are checkable:
+
+- **Hedge both sides or neither.** "The supposed astral body" beside "a gland
+  secreting melatonin" is a verdict smuggled in as caution. Describe a teaching
+  in the tradition's own terms with the same steadiness a physiologist gets,
+  then say separately what is known, what is disputed, and what rests on one
+  witness.
+- **Ancestry is not an argument.** That a term was borrowed, or that a doctrine
+  took its present shape in the 1880s, is history worth having and settles
+  nothing about whether the thing is real. Give the history; don't let it do the
+  work of a conclusion it has not earned.
+- **Warmth is not imprecision.** These books are an invitation to try
+  something. An entry so flat that nobody who read it would want to try anything
+  has failed, and it has not been made more truthful by being made duller.
+
+**Audit your own output against this before shipping it.** Not as a feeling —
+grep the draft for `supposed`, `so-called`, `purported`, `merely`, `worthless`,
+`nothing more than`, and read every hit next to how the same draft treats a
+scientific claim. This has caught real bias in work already committed here, more
+than once.
+
+The editor's voice card (`voice/<pen-name>.json` on the shelf, and
+`scripts/voice.mjs` to read it) carries the same rules in the form the writing
+is actually done against. Read it before writing anything that goes in a book.
+
 ### What a session looks like
 
 The **shelf repository is the source of truth**; the browser's IndexedDB is a
