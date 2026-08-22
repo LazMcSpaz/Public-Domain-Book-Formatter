@@ -397,3 +397,82 @@ describe('assembleBook — pages the user left out', () => {
     expect(empty).toEqual(plain)
   })
 })
+
+/**
+ * A descriptive contents is *recovered*, never composed.
+ *
+ * The rule this protects is the editor's, and it is narrower than "it would be
+ * nice to have descriptions": keep them where the original printed them, and
+ * add them nowhere else. A book whose contents was a bare list of chapter names
+ * had no such prose, and inventing some would be writing the author's book for
+ * them — the one thing a public-domain reprint must not do.
+ *
+ * Structurally this cannot happen, because `synopsis` only ever takes a value
+ * from text read off the contents leaves. Asserted anyway: "it cannot happen"
+ * is how it happens, and the failure would be invisible — a plausible paragraph
+ * under a chapter heading looks exactly like a recovered one.
+ */
+describe('assembleBook — descriptions in the contents', () => {
+  const chapter = (n: string) =>
+    page(1, [{ kind: 'heading', text: n, level: 1 }, para('The body of the chapter.')])
+
+  it('recovers them when the original printed them', () => {
+    const doc = assembleBook([
+      page(
+        0,
+        [
+          { kind: 'heading', text: 'CONTENTS' },
+          { kind: 'heading', text: 'LESSON I' },
+          { kind: 'heading', text: 'THE ASTRAL SENSES' },
+          para('The skeptical person who believes only the evidence of his senses, and why.'),
+          para('Page 13'),
+          { kind: 'heading', text: 'LESSON II' },
+          { kind: 'heading', text: 'TELEPATHY vs. CLAIRVOYANCE' },
+          para('The two extra physical senses of man, and how they may be told apart.'),
+          para('Page 28')
+        ],
+        'table-of-contents'
+      ),
+      page(
+        1,
+        [
+          { kind: 'heading', text: 'THE ASTRAL SENSES.', level: 1 },
+          para('The body of the chapter.')
+        ],
+        'chapter-opening'
+      )
+    ])
+    const found = doc.chapters.find((c) => c.title === 'THE ASTRAL SENSES.')
+    expect(found?.synopsis).toContain('skeptical person')
+  })
+
+  it('adds none to a book that had no contents page at all', () => {
+    const doc = assembleBook([chapter('Of the Air')])
+    expect(doc.chapters.every((c) => c.synopsis === undefined)).toBe(true)
+  })
+
+  /**
+   * The case that matters most: a contents page *exists* but is a bare list.
+   * Nothing is offered, because there was nothing there — and a bare list is
+   * still perfectly well served by the regenerated contents.
+   */
+  it('adds none when the original contents was only names and numbers', () => {
+    const doc = assembleBook([
+      page(
+        0,
+        [
+          { kind: 'heading', text: 'CONTENTS' },
+          { kind: 'heading', text: 'CHAPTER I' },
+          { kind: 'heading', text: 'OF THE AIR' },
+          para('Page 13'),
+          { kind: 'heading', text: 'CHAPTER II' },
+          { kind: 'heading', text: 'OF FIRE' },
+          para('Page 28')
+        ],
+        'table-of-contents'
+      ),
+      page(1, [{ kind: 'heading', text: 'OF THE AIR', level: 1 }, para('Body.')], 'chapter-opening')
+    ])
+    expect(doc.chapters.every((c) => c.synopsis === undefined)).toBe(true)
+  })
+})
