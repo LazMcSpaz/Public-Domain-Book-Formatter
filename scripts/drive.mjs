@@ -233,7 +233,13 @@ async function serve() {
               identityAnswers: { orthography: 'preserve' }
             })
           )
-          return { seeded: saved, key }
+          // The scan too, as a real reading leaves it when scans are kept.
+          // Without it the harness could only ever exercise the half of the
+          // shelf push that has no pixels to send.
+          const res = await fetch(`/${file.name}`)
+          const blob = await res.blob()
+          await runStore.saveSourceFile(key, new File([blob], file.name, { type: blob.type }))
+          return { seeded: saved, key, scanStored: true }
         },
         [REPO, { name, size: meta.size, lastModified: Math.floor(meta.mtimeMs) }, Number(pages)]
       )
@@ -485,6 +491,33 @@ async function serve() {
       if (!stored) return { replies: [] }
       return JSON.parse(Buffer.from(stored, 'base64').toString())
     },
+
+    /** A picture of one part of the screen, scrolled into view first. */
+    shotOf: async ([selector, name = 'area']) => {
+      const target = page.locator(selector).first()
+      await target.scrollIntoViewIfNeeded()
+      await page.waitForTimeout(200)
+      const file = `${OUT}/${name}.png`
+      await target.screenshot({ path: file })
+      return { wrote: file }
+    },
+
+    /** Press a button by its visible text — for UI a command cannot reach. */
+    click: async ([...text]) => {
+      const label = text.join(' ')
+      const button = page.locator('button', { hasText: label }).first()
+      await button.click({ timeout: 10000 })
+      await page.waitForTimeout(400)
+      return { clicked: label }
+    },
+
+    /** What the stubbed repository holds, so a push can be checked. */
+    repo: () => ({
+      files: [...repoFiles.keys()].sort(),
+      bytes: Object.fromEntries(
+        [...repoFiles.entries()].map(([k, v]) => [k, Buffer.from(v, 'base64').length])
+      )
+    }),
 
     goto: async ([url = URL_BASE]) => {
       await page.goto(url.startsWith('http') ? url : `${URL_BASE}${url}`, {

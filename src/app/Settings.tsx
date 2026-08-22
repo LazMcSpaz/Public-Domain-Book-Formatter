@@ -34,6 +34,7 @@ import type { StyleProfile } from '@core/model'
 import { validRepo, type ShelfConfig } from '@core/sync'
 import { validSession } from '@core/control'
 import { checkShelf } from '../platform/browser/shelf'
+import { pushStoredBook } from '../platform/browser/shelf-save'
 import { describeAge, type SavedRunSummary } from '@core/project'
 import {
   deleteAllSourceFiles,
@@ -54,6 +55,7 @@ import {
   clearReviewProgress,
   formatBytes,
   clearShelf,
+  shelfReady,
   controlConfig,
   loadControl,
   saveControl,
@@ -86,6 +88,8 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
   const [control, setControl] = useState<ControlSettings>(() => loadControl())
   const [controlToken, setControlToken] = useState('')
   const [controlNote, setControlNote] = useState<string | null>(null)
+  /** Which book is being sent, so its button can say so and the rest wait. */
+  const [sending, setSending] = useState<string | null>(null)
   const [keyDraft, setKeyDraft] = useState('')
   const [runs, setRuns] = useState<SavedRunSummary[]>([])
   const [sizes, setSizes] = useState<Map<string, number>>(new Map())
@@ -669,6 +673,36 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
                       ? ` · scan ${formatBytes(sizes.get(run.key) ?? 0)}`
                       : ' · scan not kept'}
                     <div className="actions">
+                      {/* First, and the only one here that does not destroy
+                          something. A book read before there was a shelf to
+                          send it to has no other way up: the automatic save
+                          happens once, when the reading ends, and connecting a
+                          repository afterwards does not go back for it. */}
+                      <button
+                        type="button"
+                        className="primary"
+                        disabled={sending !== null || !shelfReady(shelf)}
+                        onClick={() => {
+                          void (async () => {
+                            setSending(run.key)
+                            setNote(null)
+                            try {
+                              const result = await pushStoredBook(shelf, run.key)
+                              setNote(result.note)
+                            } catch (err) {
+                              setNote(
+                                `Could not send “${run.fileName}” to the shelf: ` +
+                                  `${err instanceof Error ? err.message : String(err)}. ` +
+                                  'Nothing on this device changed.'
+                              )
+                            } finally {
+                              setSending(null)
+                            }
+                          })()
+                        }}
+                      >
+                        {sending === run.key ? 'Sending…' : 'Send to the shelf'}
+                      </button>
                       {sizes.has(run.key) ? (
                         <button
                           type="button"
@@ -722,6 +756,16 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
             <p className="help">
               Deleting a transcription cannot be undone, and it is the one thing here you paid for.
               Removing a scan only costs you the file picker.
+            </p>
+            <p className="help">
+              {shelfReady(shelf)
+                ? 'Sending a book to the shelf copies the whole record to your repository — the ' +
+                  'reading, every correction, the notes and the fact bank — and the scan with it ' +
+                  'when this device still has one. A book whose scan is not kept still goes up: ' +
+                  'enough to open it anywhere, not enough to check a word against the page. ' +
+                  'Sending the same book twice replaces it rather than adding a second copy.'
+                : 'Connect a shelf above and each book here can be sent to it. Books read before ' +
+                  'a shelf was connected are not sent automatically — this is how they get there.'}
             </p>
           </section>
         </>

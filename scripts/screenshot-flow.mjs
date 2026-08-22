@@ -2833,6 +2833,58 @@ console.log(
     `${pulled?.facts} bank entr(y/ies), design "${pulled?.answers}", scan ${pulled?.scanBytes} bytes`
 )
 
+/**
+ * A book read before there was a shelf still has a way up.
+ *
+ * The automatic save happens once, when a reading ends, and does nothing when
+ * no shelf is configured — so connecting one afterwards leaves every book
+ * already on the device invisible to the repository, with the device's own list
+ * still showing them. That looks exactly like a working shelf until somebody
+ * reads the repository. The button in Settings is the only way back from it,
+ * which is worth a check that fails rather than a screenshot nobody compares.
+ */
+console.log('13b. sending a book that was read before the shelf existed')
+const beforeManual = shelfFiles.size
+await page.goto(`${URL_BASE}#settings`, { waitUntil: 'networkidle' })
+await page.waitForSelector('.settings', { timeout: 20000 })
+const sendButton = page.locator('button', { hasText: 'Send to the shelf' }).first()
+if ((await sendButton.count()) === 0) {
+  throw new Error('Settings offers no way to send a stored book to the shelf')
+}
+await sendButton.click()
+await page.waitForFunction(() => !document.body.innerText.includes('Sending…'), undefined, {
+  timeout: 30000
+})
+const sentNote = await page
+  .locator('.settings > p.help')
+  .first()
+  .innerText()
+  .catch(() => '')
+if (!/^Sent /.test(sentNote)) {
+  throw new Error(`The send button reported: ${sentNote || '(nothing)'}`)
+}
+const afterFirst = shelfFiles.size
+if (afterFirst <= beforeManual) {
+  throw new Error('Sending a stored book wrote nothing to the shelf')
+}
+
+// Rewritten in place, not added beside. The same book sent twice must replace
+// itself — a shelf that grew a second copy of every book anybody re-sent would
+// be unusable within a week, and re-sending is exactly what this button is for
+// when a correction has been made since.
+await sendButton.click()
+await page.waitForFunction(() => !document.body.innerText.includes('Sending…'), undefined, {
+  timeout: 30000
+})
+if (shelfFiles.size !== afterFirst) {
+  throw new Error(`Sending the same book again added files: ${afterFirst} -> ${shelfFiles.size}`)
+}
+console.log(`  → ${sentNote.replace(/\s+/g, ' ')}`)
+console.log(
+  `  → ${beforeManual} file(s) before, ${afterFirst} after; sending it twice left it at ` +
+    `${shelfFiles.size} — replaced, not duplicated`
+)
+
 console.log('\nresult:')
 console.log(`  term rows: ${rows}`)
 console.log(`  word crops rendered: ${crops}`)

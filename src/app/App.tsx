@@ -104,7 +104,8 @@ import {
   storedFileKeys
 } from '../platform/browser/run-store'
 import { collectBookBatch, submitBookBatch } from '../platform/browser/batch-run'
-import { fetchBook, getBytes, pushBook, pushScan, readShelf } from '../platform/browser/shelf'
+import { fetchBook, getBytes, readShelf } from '../platform/browser/shelf'
+import { pushBookToShelf } from '../platform/browser/shelf-save'
 import { canReachBatchApi } from '../platform/browser/batch-reach'
 import { cropWordsFromPage } from '../platform/browser/word-crops'
 import { runBrowserAdjudication, type FlaggedLeaf } from '../platform/browser/adjudicate-run'
@@ -115,7 +116,7 @@ import {
   type AdjudicatedSpot
 } from '@core/adjudicate'
 import { newSavedProfile, styleQuestions, type SavedStyleProfile } from '@core/style'
-import { scanRefusal, type ShelfAbout } from '@core/sync'
+import { type ShelfAbout } from '@core/sync'
 import {
   bodyKeyFor,
   checkpointComplete,
@@ -128,14 +129,11 @@ import {
   pendingBatches,
   summarize as summarizeRun,
   parseBookFile,
-  serializeBookFile,
-  summarizeBookFile,
   summarizeCheckpoint,
   summarizeTicket,
   type AnnotationCheckpoint,
   type AnnotationPassMode,
   type AnnotationWanted,
-  type ScanPointer,
   type BatchTicket,
   type SavedRunSummary,
   type TicketBatch
@@ -1160,47 +1158,20 @@ export function App(): JSX.Element {
         const run = await loadRun(key)
         if (!run) return
 
-        // The scan goes up once, under its own digest, and is skipped ever
-        // after — git keeps every version, so re-sending it on each save would
-        // grow the repository by a whole scan each time and change nothing.
-        let scan: ScanPointer | null = null
-        const file = fileDataRef.current
-        if (file) {
-          const refusal = scanRefusal(file.size)
-          if (refusal) {
-            setShelfNote(refusal)
-          } else {
-            const { path } = await pushScan(config, file, file.name)
-            scan = { path, fileName: file.name, bytes: file.size, key }
-          }
-        }
-
-        const json = serializeBookFile({
+        // The same call Settings makes for a book read before there was a
+        // shelf. One implementation, so a book put up by hand is the same file
+        // as one put up automatically — otherwise opening it on another device
+        // would depend on which button had been pressed months earlier.
+        const result = await pushBookToShelf(config, {
+          key,
           run,
           answers: loadReviewProgress(key),
           voice: state.voice,
           notesCheckpoint: await loadAnnotationCheckpoint(key),
-          scan
-        })
-        const parsed = parseBookFile(json)
-        const summary = summarizeBookFile(parsed)
-        await pushBook(
-          config,
-          key,
-          json,
-          {
-            key,
-            fileName: summary.fileName,
-            savedAt: new Date().toISOString(),
-            pageCount: summary.pageCount,
-            notes: summary.notes,
-            corrections: summary.corrections,
-            facts: summary.facts,
-            complete: summary.complete,
-            scanPath: scan?.path ?? null
-          },
+          scanFile: fileDataRef.current ?? null,
           what
-        )
+        })
+        if (result.scan === null && fileDataRef.current) setShelfNote(result.note)
         setShelfNote(`Saved to ${config.repo}: ${what}.`)
       } catch (err) {
         // Never fatal. The book is safe on this device either way, and a shelf
