@@ -31,6 +31,7 @@
 import {
   aboutPath,
   bookPath,
+  imagePath,
   commitMessage,
   parseAbout,
   scanPath,
@@ -294,5 +295,29 @@ export async function pushScan(
     toBase64(new Uint8Array(bytes)),
     commitMessage(fileName, 'the scan itself')
   )
+  return { path, uploaded: true }
+}
+
+/**
+ * Put one of the editor's own pictures on the shelf, once.
+ *
+ * The scan's rule applied to the other bytes that cannot be re-derived. A
+ * picture the editor chose off their own disk is gone with the tab if it is not
+ * kept — unlike a crop, which is cut out of the scan again whenever it is
+ * wanted — so it has to be stored, and storing it inside the book file meant
+ * rewriting it into git history on every save.
+ *
+ * Named by its own digest, so the same picture used in two books costs the
+ * shelf nothing twice, and re-saving a book uploads nothing at all.
+ */
+export async function pushImage(
+  config: ShelfConfig,
+  bytes: Uint8Array,
+  fileName: string
+): Promise<{ path: string; uploaded: boolean }> {
+  const copy = new Uint8Array(bytes)
+  const path = imagePath(await digestOf(copy.buffer as ArrayBuffer))
+  if (await shelfHas(config, path)) return { path, uploaded: false }
+  await putFile(config, path, toBase64(copy), commitMessage(fileName, 'a picture of your own'))
   return { path, uploaded: true }
 }

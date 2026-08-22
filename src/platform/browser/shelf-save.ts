@@ -30,7 +30,7 @@ import {
   type ScanPointer
 } from '@core/project'
 import type { EditorVoice } from '@core/annotate'
-import { pushBook, pushScan } from './shelf'
+import { pushBook, pushImage, pushScan } from './shelf'
 import { loadAnnotationCheckpoint, loadRun, loadSourceFile } from './run-store'
 import { loadReviewProgress, loadVoice } from './settings'
 
@@ -85,12 +85,32 @@ export async function pushBookToShelf(
       'book anywhere, not enough to check a word against the page.'
   }
 
+  // Each of the editor's own pictures goes up once, under its own digest, and
+  // the book file names it rather than carrying it. Inline base64 is a third
+  // larger than the bytes and is rewritten on every save — and git keeps every
+  // version, so a book with plates in it used to grow the repository by all of
+  // them again each time a correction was typed.
+  //
+  // A picture that will not upload falls back to being carried inline rather
+  // than being left out. The failure costs repository tidiness; leaving it out
+  // would cost the picture, and nothing is ever drawn in place of one.
+  const imagePaths: Record<string, string> = {}
+  for (const image of input.run.images) {
+    try {
+      const { path } = await pushImage(config, image.bytes, input.run.fileName)
+      imagePaths[image.id] = path
+    } catch {
+      /* carried inline instead */
+    }
+  }
+
   const json = serializeBookFile({
     run: input.run,
     answers: input.answers,
     voice: input.voice,
     notesCheckpoint: input.notesCheckpoint,
-    scan
+    scan,
+    imagePaths
   })
   // Parsed straight back before it is sent. The book file is the only copy of
   // this work that leaves the device, and a file that will not load is worse

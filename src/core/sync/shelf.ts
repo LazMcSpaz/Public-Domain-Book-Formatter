@@ -41,6 +41,21 @@ export const SHELF_ROOT = 'books'
 export const SCAN_ROOT = 'scans'
 
 /**
+ * Where the editor's own pictures go, under the same rule as the scan.
+ *
+ * They used to ride inside the book file as base64, which is a third larger
+ * than the bytes and — far worse — is rewritten on *every* save. Git keeps
+ * every version, so a book with a few plates in it grew the repository by all
+ * of them again each time a correction was typed. A picture is written once
+ * here, under its own digest, and the book file names it.
+ *
+ * Crops cut out of the scan are deliberately not here: those are re-cut from
+ * the scan whenever they are wanted, so storing them would be keeping a second
+ * copy of something already on the shelf.
+ */
+export const IMAGE_ROOT = 'images'
+
+/**
  * The largest scan worth attempting.
  *
  * GitHub refuses a blob over 100 MB and warns past 50. The margin below 50 is
@@ -163,6 +178,15 @@ export function parseAbout(text: string): ShelfAbout | null {
 export function scanPath(digest: string, fileName: string): string {
   const ext = /\.epub$/i.test(fileName) ? 'epub' : 'pdf'
   return `${SCAN_ROOT}/${digest}.${ext}`
+}
+
+/**
+ * Where one supplied picture lives. Always PNG — `readSuppliedImage` writes
+ * PNG, because these are often line art or plates where JPEG's ringing around
+ * every edge is the artefact that shows up in print.
+ */
+export function imagePath(digest: string): string {
+  return `${IMAGE_ROOT}/${digest}.png`
 }
 
 /** One book on the shelf, as the intake screen lists it. */

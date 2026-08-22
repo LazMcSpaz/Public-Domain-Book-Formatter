@@ -66,7 +66,7 @@ export const BOOK_FILE_FORMAT = 'public-domain-book-formatter/book'
  * the way in, because a file from a newer app is the one case where guessing
  * would put half a book in front of someone.
  */
-export const BOOK_FILE_VERSION = 1
+export const BOOK_FILE_VERSION = 2
 
 /** Everything a book file carries, in memory. */
 export interface BookFile {
@@ -81,6 +81,15 @@ export interface BookFile {
   voice: EditorVoice
   /** An annotation pass that was interrupted, so it can be carried on. */
   notesCheckpoint: AnnotationCheckpoint | null
+  /**
+   * Pictures the file *names* rather than carries, by image id.
+   *
+   * Empty for a downloaded book, which holds its pixels inline. Whatever loads
+   * a shelf book fetches these and puts the bytes back on the run — until then
+   * `run.images` is short of them, which is why `missingImages` exists and why
+   * nothing is ever drawn in place of a picture that did not arrive.
+   */
+  imagePaths: Record<string, string>
   /**
    * Where the scan sits on the shelf, when it was small enough to send.
    *
@@ -150,7 +159,18 @@ interface WireFile {
   savedAt: string
   runSchema: number
   run: Record<string, unknown>
-  images: { id: string; base64: string }[]
+  /**
+   * The editor's own pictures — inline, or named.
+   *
+   * Two shapes on purpose, and which one is written depends on where the file
+   * is going. A book *downloaded* to disk has to carry its pixels: it is one
+   * file and there is nowhere else for them to be. A book on a *shelf* names
+   * them instead, because the repository can hold them once under their own
+   * digest and git would otherwise keep every version of every plate forever.
+   *
+   * A reader takes whichever it finds, so a v1 file — all base64 — still loads.
+   */
+  images: { id: string; base64?: string; path?: string }[]
   answers: Record<string, Record<string, unknown>>
   voice: EditorVoice
   notesCheckpoint: AnnotationCheckpoint | null
@@ -179,15 +199,28 @@ export function serializeBookFile(input: {
   notesCheckpoint?: AnnotationCheckpoint | null
   scan?: ScanPointer | null
   savedAt?: string
+  /**
+   * Where each picture was written, by image id.
+   *
+   * Given for a shelf, omitted for a download. A picture with no path falls
+   * back to being carried inline, so a failed upload costs repository tidiness
+   * rather than the picture.
+   */
+  imagePaths?: Record<string, string>
 }): string {
   const { images, ...run } = input.run
+  const paths = input.imagePaths ?? {}
   const wire: WireFile = {
     format: BOOK_FILE_FORMAT,
     version: BOOK_FILE_VERSION,
     savedAt: input.savedAt ?? new Date().toISOString(),
     runSchema: input.run.schemaVersion,
     run,
-    images: images.map((image) => ({ id: image.id, base64: toBase64(image.bytes) })),
+    images: images.map((image) =>
+      paths[image.id]
+        ? { id: image.id, path: paths[image.id]! }
+        : { id: image.id, base64: toBase64(image.bytes) }
+    ),
     answers: input.answers,
     voice: input.voice,
     notesCheckpoint: input.notesCheckpoint ?? null,
@@ -234,10 +267,21 @@ export function parseBookFile(text: string): BookFile {
   // second migration path that could disagree with the first.
   const run = migrateSavedRun(raw['run'])
   const images = Array.isArray(raw['images']) ? raw['images'] : []
-  run.images = images.filter(isObject).map((image) => ({
-    id: typeof image['id'] === 'string' ? image['id'] : '',
-    bytes: fromBase64(typeof image['base64'] === 'string' ? image['base64'] : '')
-  }))
+  const imagePaths: Record<string, string> = {}
+  // Carried and named pictures are both read. Only the carried ones become
+  // bytes here; a named one is a path for whoever has the repository to fetch,
+  // and arrives on the run later. Reading a v1 file is the same code path,
+  // because a v1 file simply has no names in it.
+  run.images = images.filter(isObject).flatMap((image) => {
+    const id = typeof image['id'] === 'string' ? image['id'] : ''
+    if (!id) return []
+    const path = typeof image['path'] === 'string' ? image['path'] : ''
+    if (path) {
+      imagePaths[id] = path
+      return []
+    }
+    return [{ id, bytes: fromBase64(typeof image['base64'] === 'string' ? image['base64'] : '') }]
+  })
 
   const answers: Record<string, Record<string, unknown>> = {}
   if (isObject(raw['answers'])) {
@@ -257,7 +301,8 @@ export function parseBookFile(text: string): BookFile {
     // pen name and a handful of exemplars, and the gate asks for them again.
     voice: isObject(raw['voice']) ? (raw['voice'] as unknown as EditorVoice) : ({} as EditorVoice),
     notesCheckpoint: migrateAnnotationCheckpoint(raw['notesCheckpoint']),
-    scan: parseScan(raw['scan'])
+    scan: parseScan(raw['scan']),
+    imagePaths
   }
 }
 
@@ -294,7 +339,9 @@ export function summarizeBookFile(file: BookFile): BookFileSummary {
     notes: file.run.edits.filter((e) => e.kind === 'note').length,
     corrections: file.run.edits.length,
     facts: file.run.facts.length,
-    images: file.run.images.length,
+    // Named and carried alike: the count is what the book *has*, not how this
+    // particular file happens to hold it.
+    images: file.run.images.length + Object.keys(file.imagePaths).length,
     complete: file.run.complete
   }
 }

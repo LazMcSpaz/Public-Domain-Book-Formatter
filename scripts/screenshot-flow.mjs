@@ -2885,6 +2885,66 @@ console.log(
     `${shelfFiles.size} — replaced, not duplicated`
 )
 
+/**
+ * A picture the editor supplied goes up beside the book, not inside it.
+ *
+ * Base64 in the book file is a third larger than the bytes and is rewritten on
+ * every save; git keeps every version, so a book with plates in it grew the
+ * repository by all of them again each time a correction was typed. Asserted
+ * on the bytes actually written, because the failure this guards against is
+ * invisible in the app and only shows up as a repository nobody can clone.
+ */
+console.log('13c. the editor’s own pictures are written once, beside the book')
+const plate = grayscalePng(40, 30)
+const platedKey = await page.evaluate(
+  async ([repo, bytes]) => {
+    const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+    const runs = await runStore.listRuns()
+    const target = runs[0]
+    if (!target) throw new Error('no stored run to attach a picture to')
+    const run = await runStore.loadRun(target.key)
+    run.images = [{ id: 'plate1', bytes: new Uint8Array(bytes) }]
+    await runStore.saveRun(run)
+    return target.key
+  },
+  [REPO, [...plate]]
+)
+await page.goto(`${URL_BASE}#settings`, { waitUntil: 'networkidle' })
+await page.waitForSelector('.settings', { timeout: 20000 })
+await page.locator('button', { hasText: 'Send to the shelf' }).first().click()
+await page.waitForFunction(() => !document.body.innerText.includes('Sending…'), undefined, {
+  timeout: 30000
+})
+
+const imageBlobs = [...shelfFiles.keys()].filter((p) => p.startsWith('images/'))
+if (imageBlobs.length === 0) {
+  throw new Error('A supplied picture was not written to the shelf as its own file')
+}
+// The shelf holds more than one book by now, so the check is against the one
+// that names this picture rather than against whichever book.json sorts first.
+const platedJson = [...shelfFiles.entries()]
+  .filter(([p]) => p.endsWith('book.json'))
+  .map(([, v]) => Buffer.from(v, 'base64').toString())
+  .find((json) => json.includes(imageBlobs[0]))
+if (!platedJson) {
+  throw new Error(`No book file names ${imageBlobs[0]}`)
+}
+if (platedJson.includes(plate.toString('base64').slice(0, 64))) {
+  throw new Error('The picture is still carried inside the book file as base64')
+}
+// Sent again: the digest is the name, so nothing new is written.
+const beforeResend = shelfFiles.size
+await page.locator('button', { hasText: 'Send to the shelf' }).first().click()
+await page.waitForFunction(() => !document.body.innerText.includes('Sending…'), undefined, {
+  timeout: 30000
+})
+if (shelfFiles.size !== beforeResend) {
+  throw new Error(`Re-sending wrote the picture again: ${beforeResend} -> ${shelfFiles.size}`)
+}
+console.log(`  → ${imageBlobs.join(', ')} written once; the book file names it`)
+console.log(`  → re-sending left the shelf at ${shelfFiles.size} file(s)`)
+void platedKey
+
 console.log('\nresult:')
 console.log(`  term rows: ${rows}`)
 console.log(`  word crops rendered: ${crops}`)

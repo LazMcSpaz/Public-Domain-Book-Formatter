@@ -5,11 +5,13 @@
  * `platform/browser/shelf`.
  */
 export {
+  IMAGE_ROOT,
   MAX_SCAN_BYTES,
   SCAN_ROOT,
   SHELF_ROOT,
   aboutPath,
   bookPath,
+  imagePath,
   commitMessage,
   parseAbout,
   scanPath,

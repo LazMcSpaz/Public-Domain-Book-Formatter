@@ -181,6 +181,24 @@ function retouchKey(id: string, ops: readonly unknown[]): string {
   return `${id}:${JSON.stringify(ops)}`
 }
 
+/**
+ * Say which pictures did not come down, or say nothing.
+ *
+ * A picture that failed to arrive is a gap in a book somebody is about to sell.
+ * `imagesDropped` and `missingImages` carry the same rule through the engine
+ * and the export report; this is that rule at the point where a book crosses
+ * between devices.
+ */
+function lostNote(lost: readonly string[]): string {
+  if (lost.length === 0) return ''
+  return (
+    ` ${lost.length} picture${lost.length === 1 ? '' : 's'} named by this book ` +
+    `could not be fetched from the shelf (${lost.join(', ')}), so ${
+      lost.length === 1 ? 'it is' : 'they are'
+    } missing rather than wrong — nothing is drawn in ${lost.length === 1 ? 'its' : 'their'} place.`
+  )
+}
+
 export function App(): JSX.Element {
   const [state, setState] = useState<WizardState>(initialState)
   const [progressInfo, setProgress] = useState<ReconProgress | null>(null)
@@ -1209,6 +1227,20 @@ export function App(): JSX.Element {
         }
         const file = parseBookFile(json)
 
+        // Pictures the file names rather than carries, fetched before the run
+        // is stored so what lands on this device is the whole book. A picture
+        // that cannot be fetched is *reported*, never quietly missing: the
+        // engine already refuses to draw anything in its place, and a plate
+        // that vanished between two devices is exactly the kind of silence
+        // that is only noticed once the book is printed.
+        const named = Object.entries(file.imagePaths)
+        const lost: string[] = []
+        for (const [id, path] of named) {
+          const bytes = await getBytes(config, path)
+          if (bytes) file.run.images.push({ id, bytes: new Uint8Array(bytes) })
+          else lost.push(path)
+        }
+
         const stored = await saveRun(file.run)
         if (!stored) {
           setShelfNote(
@@ -1235,7 +1267,7 @@ export function App(): JSX.Element {
             })
             await saveSourceFile(file.run.key, opened)
             setReopenable(await storedFileKeys())
-            setShelfNote(null)
+            setShelfNote(lost.length > 0 ? lostNote(lost).trim() : null)
             void startRecon(opened)
             return
           }
@@ -1243,7 +1275,8 @@ export function App(): JSX.Element {
         setShelfNote(
           `“${about.fileName}” is on this device now — the transcription, the corrections and ` +
             'the notes. The scan is not on the shelf, so choose the same file above and it will ' +
-            'find all of it.'
+            'find all of it.' +
+            lostNote(lost)
         )
       } catch (err) {
         setShelfNote(

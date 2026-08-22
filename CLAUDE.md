@@ -605,6 +605,26 @@ in `screenshots/`. Don't ship UI blind.
   time it is live, because an app that can be operated remotely and shows no
   sign of it is indistinguishable from one that has been taken over.
 
+- **Also done**: **a book read before there was a shelf can be put on one, and
+  the editor's own pictures are written beside it rather than inside it.** The
+  shelf save runs once, when a reading finishes, and does nothing when no shelf
+  is configured — so connecting a repository afterwards left every book already
+  on the device invisible to it, with the device's own list still showing them
+  two inches from "Books on your shelf". Each book in Settings now offers to go
+  up, as the first action on the row and the only one there that does not
+  destroy something. `pushBookToShelf` is one implementation for both occasions,
+  because a book put up by hand has to be the same file as one put up
+  automatically or opening it later would depend on which button was pressed
+  months earlier. The pictures are the other half: they rode inside the book
+  file as base64, a third larger than the bytes and rewritten on **every** save,
+  and git keeps every version — so a book with plates in it grew the repository
+  by all of them again each time a correction was typed. They now go to
+  `images/<digest>.png` under the scan's own rule, written once and named by the
+  book file, with a picture the shelf will not take still carried inline rather
+  than left out. The 40 MB refusal was only ever about the scan; what actually
+  needed bounding was this. Crops cut from the scan are deliberately not stored
+  at all — they are re-cut when wanted, and the scan is already up there.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and
