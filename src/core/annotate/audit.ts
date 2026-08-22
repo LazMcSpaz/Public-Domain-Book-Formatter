@@ -1,0 +1,390 @@
+/**
+ * Reading the editor's own prose back, looking for the thumb on the scale.
+ *
+ * Every other check in this app exists because the thing being checked cannot
+ * be trusted to check itself: OCR is the independent witness against the vision
+ * pass, `verifyBook` compares leaves the model read separately, `checkProposals`
+ * lists the claims a note makes that the book never made. SPEC §4 puts it as a
+ * rule — escalation is decided by deterministic cross-checks, never by a
+ * model's opinion of its own output.
+ *
+ * The bias this module measures is exactly that shape. The shelf is occult and
+ * esoteric books, and anything writing about them carries a lean whether or not
+ * it was asked for: the natural register for "astral body" comes out a shade
+ * more guarded than the register for "endocrine gland". Nobody argues the case,
+ * and a reader going down the page absorbs it anyway. Asking the writer whether
+ * they were even-handed is worthless — they will say yes, and mean it. So this
+ * counts instead.
+ *
+ * ## What is actually measured
+ *
+ * **Hedge asymmetry** is the headline and the only one of these that catches
+ * the real defect. Sentences are sorted into those about the tradition and
+ * those about material science, hedges are counted in each, and the two rates
+ * are compared. Any single hedge may be perfectly honest — "held to be" is the
+ * correct way to report a doctrine — so no individual match means anything. The
+ * *ratio* means something: hedging the tradition three times as often as the
+ * science is a verdict delivered by grammar, and it shows up here as a number
+ * whatever the writer intended.
+ *
+ * A floor of `MIN_SENTENCES` on each side before a ratio is reported at all,
+ * for the reason `verify-book.ts` has quorums: a passage with two sentences
+ * about science in it can produce any ratio you like out of noise, and a check
+ * that cries wolf on short texts gets switched off.
+ *
+ * **Dismissals** and **banned phrasing** are plain lexical scans. They catch
+ * less, and what they catch is unambiguous: "worthless", "exploded",
+ * "nothing more than" are verdicts however they are framed.
+ *
+ * What is *not* measured is flatness — whether an entry is so dry nobody would
+ * want to try anything. That one needs a reader, and pretending a word list
+ * could stand in for one would be the same error this module exists to catch.
+ *
+ * Pure: no I/O, no network, no model.
+ */
+
+/** Words that mark a sentence as being about the tradition's own subject. */
+const TRADITION = [
+  'astral',
+  'aura',
+  'auric',
+  'akasha',
+  'akashic',
+  'prana',
+  'pranic',
+  'clairvoyan',
+  'clairaudien',
+  'psychic',
+  'psychometr',
+  'occult',
+  'esoteric',
+  'theosoph',
+  'etheric',
+  'thought-form',
+  'thought form',
+  'siddhi',
+  'telepath',
+  'telekine',
+  'medium',
+  'seer',
+  'adept',
+  'magic',
+  'mystic',
+  'spirit',
+  'soul',
+  'vibration',
+  'plane',
+  'chakra',
+  'karma',
+  'reincarnat',
+  'second sight',
+  'prevision',
+  'subtle',
+  'emanation',
+  'invisible world',
+  'higher plane',
+  'scrying',
+  'crystal-gaz',
+  'trance',
+  'meditat'
+]
+
+/** Words that mark a sentence as being about material science or its findings. */
+const SCIENCE = [
+  'gland',
+  'secret',
+  'melatonin',
+  'hormone',
+  'neuro',
+  'nerve',
+  'nervous system',
+  'brain',
+  'cortex',
+  'physiolog',
+  'anatom',
+  'molecul',
+  'atom',
+  'chemic',
+  'physic',
+  'experiment',
+  'laborator',
+  'measur',
+  'observ',
+  'wavelength',
+  'radiation',
+  'electric',
+  'magnetis',
+  'microscop',
+  'telescop',
+  'astronom',
+  'geolog',
+  'evidence',
+  'statistic',
+  'commission',
+  'research',
+  'scientif',
+  'medicin',
+  'clinical'
+]
+
+/** Constructions that hold a statement at arm's length. */
+const HEDGES = [
+  'supposed',
+  'purported',
+  'alleged',
+  'so-called',
+  'said to be',
+  'said to',
+  'held to be',
+  'claimed to',
+  'believed to',
+  'thought to be',
+  'is claimed',
+  'are claimed',
+  'ostensibl',
+  'apparent',
+  'would-be'
+]
+
+/** Verdicts, which are never in this editor's gift however they are dressed. */
+const DISMISSALS = [
+  'worthless',
+  'nonsense',
+  'exploded',
+  'disproved',
+  'debunked',
+  'mere superstition',
+  'nothing more than',
+  'nothing but',
+  'no such thing',
+  'has no known function',
+  'sheer invention',
+  'pure invention',
+  'imaginary'
+]
+
+/** Phrasing the house rules and the voice card rule out. */
+const BANNED = [
+  'fascinating',
+  'intriguing',
+  'curiously',
+  'it is worth noting',
+  'worth noticing',
+  'the present editor',
+  'cf.',
+  'q.v.'
+]
+
+/**
+ * How many sentences of each kind are needed before a ratio is reported.
+ *
+ * Below this the number is noise. Same reasoning as the quorums in
+ * `verify-book.ts`: a check that fires on a short passage is a check somebody
+ * learns to ignore.
+ */
+export const MIN_SENTENCES = 6
+
+/**
+ * The longest a leading fragment can be and still be only a headword.
+ *
+ * "Aerolite." is one word; "Lavater, Johann Kaspar (1741-1801)." is four. A
+ * real opening sentence is longer than either.
+ */
+export const HEADWORD_WORDS = 5
+
+/**
+ * How much more hedged the tradition may be before it is worth saying so.
+ *
+ * Not 1.0. Some excess is honest — a doctrine genuinely does need reporting as
+ * a doctrine more often than a measurement needs reporting as a measurement.
+ * What is being caught is the systematic difference, and by 1.6 the reader is
+ * being told something nobody wrote down.
+ */
+export const HEDGE_RATIO_LIMIT = 1.6
+
+export type BiasKind = 'dismissal' | 'banned' | 'hedge'
+
+export interface BiasFinding {
+  kind: BiasKind
+  /** The phrase that matched. */
+  match: string
+  /** The sentence it sits in, for judging whether it is fair in context. */
+  sentence: string
+}
+
+export interface ProseAudit {
+  findings: BiasFinding[]
+  sentences: { tradition: number; science: number; total: number }
+  hedges: { tradition: number; science: number }
+  /** The same counts over opening sentences only. See `openingRatio`. */
+  openings: { tradition: number; science: number }
+  openingHedges: { tradition: number; science: number }
+  /**
+   * The asymmetry where it actually lives, or null when either side is thin.
+   *
+   * Measured across a whole document the effect washes out: the first version
+   * of a real glossary on this shelf hedged its doctrinal *definitions* three
+   * times over — "the supposed imperishable record", "matter said to
+   * interpenetrate the physical" — and still came out at 0.72 overall, because
+   * two hundred sentences about people and places and dates diluted it to
+   * nothing. The check reported even and the prose was not.
+   *
+   * The opening sentence of an entry is where the definition lives, and a hedge
+   * there colours everything under it. Counting those separately is what
+   * catches the thing this module was built for.
+   */
+  openingRatio: number | null
+  /**
+   * Tradition hedge rate over science hedge rate, or null when either side is
+   * too thin to say. Above `HEDGE_RATIO_LIMIT` is the finding that matters.
+   */
+  ratio: number | null
+  /** True when nothing here needs a person to look at it. */
+  clean: boolean
+}
+
+/** Sentence-ish. Abbreviations make this approximate, and approximate is fine. */
+function sentencesOf(text: string): string[] {
+  return text
+    .replace(/[ \t]+/gu, ' ')
+    .split(/(?<=[.!?])\s+(?=[A-Z"“(])/u)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+}
+
+/**
+ * What a sentence is about, falling back to the paragraph around it.
+ *
+ * Sentence-by-sentence classification loses the subject, and the sentences it
+ * loses it on are the ones that matter: "The world of subtle matter said to
+ * interpenetrate the physical" is unmistakably about the tradition and contains
+ * no word a list would catch, so the hedge in it went uncounted — which was the
+ * first thing this check got wrong when it was tried on real prose.
+ *
+ * An entry is a paragraph about one thing, so an unmarked sentence takes the
+ * paragraph's subject. Only when the paragraph is unambiguous: where a
+ * paragraph talks about both, an unmarked sentence in it is genuinely unclear
+ * and counting it on both sides would inflate the rates it is there to compare.
+ */
+function classify(
+  sentence: string,
+  paragraph: { tradition: boolean; science: boolean }
+): { tradition: boolean; science: boolean } {
+  const lower = sentence.toLocaleLowerCase()
+  const tradition = has(lower, TRADITION).length > 0
+  const science = has(lower, SCIENCE).length > 0
+  if (tradition || science) return { tradition, science }
+  if (paragraph.tradition !== paragraph.science) return paragraph
+  return { tradition: false, science: false }
+}
+
+const has = (haystack: string, needles: readonly string[]): string[] =>
+  needles.filter((n) => haystack.includes(n))
+
+/**
+ * Audit a piece of the editor's prose.
+ *
+ * `text` is whatever was written — an introduction, a glossary, the notes of a
+ * chapter run together. Sentence classification is deliberately crude: a
+ * sentence mentioning both a gland and an aura counts for both sides, because
+ * that is exactly the sentence where the asymmetry does its work.
+ */
+export function auditProse(text: string): ProseAudit {
+  const findings: BiasFinding[] = []
+  let traditionSentences = 0
+  let scienceSentences = 0
+  let traditionHedges = 0
+  let scienceHedges = 0
+
+  let total = 0
+  let openTradition = 0
+  let openScience = 0
+  let openTraditionHedged = 0
+  let openScienceHedged = 0
+
+  for (const paragraph of text.split(/\n\s*\n/u)) {
+    if (!paragraph.trim()) continue
+    const context = paragraph.toLocaleLowerCase()
+    const around = {
+      tradition: has(context, TRADITION).length > 0,
+      science: has(context, SCIENCE).length > 0
+    }
+
+    // Which sentence is the *definition*, as against the headword.
+    //
+    // A glossary entry opens "Akashic Records. The supposed imperishable
+    // record…", and a sentence splitter quite correctly makes "Akashic
+    // Records." a sentence of its own — so measuring "the opening sentence"
+    // measured the term and never the definition, and the check reported no
+    // hedged openings at all on prose that was full of them. The definition is
+    // the first sentence long enough to be one.
+    const sentences = sentencesOf(paragraph)
+    const opening = sentences.findIndex((x) => x.split(/\s+/u).length > HEADWORD_WORDS)
+
+    let index = -1
+    for (const sentence of sentences) {
+      index += 1
+      total += 1
+      const lower = sentence.toLocaleLowerCase()
+      const { tradition: isTradition, science: isScience } = classify(sentence, around)
+      if (isTradition) traditionSentences += 1
+      if (isScience) scienceSentences += 1
+
+      if (index === opening) {
+        // A glossary headword sits in its own opening sentence, so the opener
+        // is classified on its own terms and not by inheritance — inheriting
+        // here would let the rest of an entry decide what its definition was
+        // about.
+        if (isTradition) openTradition += 1
+        if (isScience) openScience += 1
+        if (has(lower, HEDGES).length > 0) {
+          if (isTradition) openTraditionHedged += 1
+          if (isScience) openScienceHedged += 1
+        }
+      }
+
+      const hedges = has(lower, HEDGES)
+      if (hedges.length > 0) {
+        if (isTradition) traditionHedges += 1
+        if (isScience) scienceHedges += 1
+        // Reported so a person can read them in context, not as faults: the
+        // count is what carries the argument, and any one of these may be the
+        // honest way to report a doctrine.
+        for (const match of hedges) findings.push({ kind: 'hedge', match, sentence })
+      }
+      for (const match of has(lower, DISMISSALS)) {
+        findings.push({ kind: 'dismissal', match, sentence })
+      }
+      for (const match of has(lower, BANNED)) findings.push({ kind: 'banned', match, sentence })
+    }
+  }
+
+  const enough = traditionSentences >= MIN_SENTENCES && scienceSentences >= MIN_SENTENCES
+  // Rates rather than counts: a text with four times as many sentences about
+  // the tradition would otherwise look biased for being about its subject.
+  const ratio = enough
+    ? traditionHedges / traditionSentences / Math.max(scienceHedges / scienceSentences, 1e-9)
+    : null
+
+  const enoughOpeners = openTradition >= MIN_SENTENCES && openScience >= MIN_SENTENCES
+  const openingRatio = enoughOpeners
+    ? openTraditionHedged / openTradition / Math.max(openScienceHedged / openScience, 1e-9)
+    : null
+
+  const serious = findings.some((f) => f.kind !== 'hedge')
+  const leaning = (r: number | null): boolean => r !== null && r > HEDGE_RATIO_LIMIT
+  return {
+    findings,
+    sentences: {
+      tradition: traditionSentences,
+      science: scienceSentences,
+      total
+    },
+    hedges: { tradition: traditionHedges, science: scienceHedges },
+    ratio,
+    openings: { tradition: openTradition, science: openScience },
+    openingHedges: { tradition: openTraditionHedged, science: openScienceHedged },
+    openingRatio,
+    clean: !serious && !leaning(ratio) && !leaning(openingRatio)
+  }
+}

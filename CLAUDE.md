@@ -98,11 +98,46 @@ In practice that comes down to three habits, and they are checkable:
   something. An entry so flat that nobody who read it would want to try anything
   has failed, and it has not been made more truthful by being made duller.
 
-**Audit your own output against this before shipping it.** Not as a feeling —
-grep the draft for `supposed`, `so-called`, `purported`, `merely`, `worthless`,
-`nothing more than`, and read every hit next to how the same draft treats a
-scientific claim. This has caught real bias in work already committed here, more
-than once.
+### The bias pass, which runs after the writing
+
+Getting it right while writing is not enough, and must not be the only place it
+has to be right. The writer is the one party who cannot judge this: asked
+whether they were even-handed they will say yes, and mean it. Every other check
+in this app exists for that reason — OCR against the vision pass, `verifyBook`
+across leaves, `checkProposals` against the book's own text — and SPEC §4 states
+it as a rule: escalation is decided by deterministic cross-checks, never by a
+model's opinion of its own output.
+
+So **the introduction, the notes and any glossary get an audit pass of their
+own, after they are written and before they are pushed**:
+
+```bash
+node scripts/voice.mjs audit <book.json>   # or any file of prose
+```
+
+`auditProse` (`src/core/annotate/audit.ts`, pure and unit-tested) reports:
+
+- **The hedge ratio**, over the whole text and again over _definitions only_.
+  Sentences are sorted into those about the tradition and those about material
+  science, and the two hedge rates compared. No single hedge is a fault — "held
+  to be" is the correct way to report a doctrine — but hedging one side half
+  again as often as the other is a verdict delivered by grammar. The
+  definitions are measured separately because over a long document the effect
+  washes out: the first glossary written here hedged its doctrinal definitions
+  three times over and still scored 0.72 overall, diluted by hundreds of
+  sentences about people and dates.
+- **Dismissals and banned phrasing**, as plain lexical scans. These catch less
+  and what they catch is unambiguous.
+
+A non-zero exit means a person reads the flagged passages. Do not tune the
+limits to make a draft pass; fix the draft, and re-run.
+
+**What the audit cannot see is flatness** — whether an entry is so dry nobody
+who read it would want to try anything. That needs a reader, and it is the
+other half of the pass. Read the doctrinal entries end to end and ask whether
+they sound like they were written by someone who finds the material alive.
+Pretending a word list could stand in for that would be the same error the
+module exists to catch.
 
 The editor's voice card (`voice/<pen-name>.json` on the shelf, and
 `scripts/voice.mjs` to read it) carries the same rules in the form the writing

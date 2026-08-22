@@ -63,3 +63,11 @@ export {
   type IntroductionOptions
 } from './introduce'
 export { estimateAnnotationCost, type AnnotationCostInputs } from './cost'
+export {
+  HEDGE_RATIO_LIMIT,
+  MIN_SENTENCES,
+  auditProse,
+  type BiasFinding,
+  type BiasKind,
+  type ProseAudit
+} from './audit'

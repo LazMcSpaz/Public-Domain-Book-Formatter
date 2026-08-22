@@ -32,6 +32,7 @@
  *   node scripts/voice.mjs avoid "Never do X" ...   # append refusals (--clear to empty)
  *   node scripts/voice.mjs learn --passage "..." --note "..."
  *   node scripts/voice.mjs learn-file accepted.json # [{ passage, note }, ...]
+ *   node scripts/voice.mjs audit book.json          # the bias pass, after the writing
  *   node scripts/voice.mjs check notes.json body.json
  *
  * The shelf is $SHELF_DIR, or --shelf <dir>. The editor is --name <pen name>,
@@ -171,6 +172,63 @@ try {
       voice
     )
     console.log(`${next.exemplars.length} exemplar(s)\n→ ${await save(path, next)}`)
+  } else if (verb === 'audit') {
+    // The pass that runs *after* the writing, because the writer cannot be
+    // asked. Takes a book file (auditing every section and note the editor has
+    // added to it) or any file of prose.
+    const target = resolve(opts._[0] ?? '.')
+    const raw = await readFile(target, 'utf8')
+    let prose = raw
+    let what = target
+    if (target.endsWith('.json')) {
+      const book = JSON.parse(raw)
+      const edits = book.run?.edits ?? book.edits ?? []
+      const written = edits.filter((e) => e.kind === 'section' || e.kind === 'note')
+      prose = written.map((e) => e.text).join('\n\n')
+      what = `${written.length} section(s) and note(s) in ${target}`
+    }
+    const audit = annotate.auditProse(prose)
+    const { tradition, science } = audit.sentences
+    console.log(what)
+    console.log(
+      `  ${audit.sentences.total} sentences — ${tradition} on the tradition, ${science} on the science`
+    )
+    console.log(`  hedged: ${audit.hedges.tradition} vs ${audit.hedges.science}`)
+    if (audit.ratio === null) {
+      console.log(
+        `  ratio: not enough of one side to say (needs ${annotate.MIN_SENTENCES} sentences each)`
+      )
+    } else {
+      const verdict = audit.ratio > annotate.HEDGE_RATIO_LIMIT ? 'LEANING' : 'even'
+      console.log(
+        `  ratio: ${audit.ratio.toFixed(2)} (${verdict}; limit ${annotate.HEDGE_RATIO_LIMIT})`
+      )
+    }
+    const { tradition: ot, science: os } = audit.openings
+    console.log(`  openings: ${ot} on the tradition, ${os} on the science`)
+    console.log(
+      `  hedged openings: ${audit.openingHedges.tradition} vs ${audit.openingHedges.science}`
+    )
+    if (audit.openingRatio === null) {
+      console.log('  opening ratio: not enough openings of one kind to say')
+    } else {
+      const v = audit.openingRatio > annotate.HEDGE_RATIO_LIMIT ? 'LEANING' : 'even'
+      const shown = audit.openingRatio > 999 ? '∞' : audit.openingRatio.toFixed(2)
+      console.log(`  opening ratio: ${shown} (${v}) — where a definition is made`)
+    }
+    for (const kind of ['dismissal', 'banned']) {
+      for (const f of audit.findings.filter((x) => x.kind === kind)) {
+        console.log(`  ${kind.toUpperCase()} “${f.match}” — ${f.sentence.slice(0, 110)}`)
+      }
+    }
+    if (opts.hedges) {
+      for (const f of audit.findings.filter((x) => x.kind === 'hedge')) {
+        console.log(`  hedge “${f.match}” — ${f.sentence.slice(0, 110)}`)
+      }
+    }
+    console.log(audit.clean ? '\n  CLEAN' : '\n  NEEDS A LOOK')
+    // The exit code is the point: this belongs in a checklist, not in a habit.
+    if (!audit.clean) process.exitCode = 1
   } else if (verb === 'check') {
     // The deterministic half, and the reason notes written in a conversation
     // are held to the same standard as notes bought from the API: every date,
