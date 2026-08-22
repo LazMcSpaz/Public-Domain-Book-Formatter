@@ -240,6 +240,187 @@ async function serve() {
     },
 
     /**
+     * Load a book saved to the shelf, so its flags can be worked offline.
+     *
+     * This is the whole point of the offline path. The transcription is the
+     * part that costs money and it has already been bought; everything the
+     * uncertainty gate needs besides it — the render, the OCR, the word boxes,
+     * the cross-check findings — is free and is redone here from the scan.
+     *
+     * The run is **re-keyed**. A key is `name\0size\0modified`, and the scan
+     * on this disk has a different modification time from the one on the
+     * machine that read it, so the stored key would name a file this browser is
+     * never going to see and the app would offer nothing. Re-keying to what
+     * *this* copy of the scan will produce is what makes the saved run findable.
+     * Nothing else about the run is touched.
+     */
+    load: async ([bookPath, scanPath]) => {
+      const { readFile, stat } = await import('node:fs/promises')
+      const json = await readFile(resolve(REPO, bookPath), 'utf8')
+      const scan = resolve(REPO, scanPath)
+      const meta = await stat(scan)
+      const name = scanPath.split('/').pop()
+      const loaded = await page.evaluate(
+        async ([repo, text, file]) => {
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const book = project.parseBookFile(text)
+          const key = project.fileKey(file)
+          const run = { ...book.run, key, fileName: file.name }
+          await runStore.deleteRun(key)
+          const saved = await runStore.saveRun(run)
+          // The gate answers travel with the book — they are what the user
+          // already decided, and re-asking them would be the app forgetting.
+          if (book.answers && Object.keys(book.answers).length > 0) {
+            localStorage.setItem(`pdbf.review.${key}`, JSON.stringify(book.answers))
+          }
+          return {
+            saved,
+            key,
+            pages: run.pageCount,
+            edits: run.edits.length,
+            complete: run.complete,
+            savedAt: book.savedAt
+          }
+        },
+        [REPO, json, { name, size: meta.size, lastModified: Math.floor(meta.mtimeMs) }]
+      )
+      return loaded
+    },
+
+    /**
+     * Every flagged spot in the book, with its pixels on disk.
+     *
+     * A gate read one command at a time is forty round trips before anything
+     * can be judged. This takes the whole gate in one pass and writes a crop
+     * per disagreement, so the words on the paper can actually be looked at —
+     * which is the only basis on which any of these should be decided. Text
+     * alone is exactly what this app refuses to repair from.
+     */
+    flags: async ([dir = 'flags']) => {
+      const { mkdir, writeFile } = await import('node:fs/promises')
+      const out = `${OUT}/${dir}`
+      await mkdir(out, { recursive: true })
+      const reply = await run({ op: 'state' })
+      const view = reply.view
+      if (!view || view.step !== 'gate-uncertainties') {
+        return { outcome: 'failed', reason: `At “${view?.step}”, not the uncertainty gate.` }
+      }
+
+      const leaves = new Map()
+      for (const q of view.questions) {
+        const m = /^page-(\d+)(?:-(gaps|fix))?$/.exec(q.id)
+        if (!m) continue
+        const pageIndex = Number(m[1])
+        const leaf = leaves.get(pageIndex) ?? { pageIndex, why: [], gaps: [], passages: [] }
+        leaves.set(pageIndex, leaf)
+        if (!m[2]) {
+          // The *reason* the leaf was flagged — the word-count drift, the
+          // confidently-read words that are absent. This is what any verdict
+          // here has to be made against, so it is the one field that must not
+          // be missing.
+          leaf.prompt = q.prompt
+          leaf.why = q.help ?? ''
+          leaf.verdicts = (q.options ?? []).map((o) => o.value)
+          // The whole leaf, fetched on demand rather than written now: forty
+          // page renders to answer one question is the scan all over again.
+          const scan = q.evidence.find((e) => e.kind === 'image')
+          if (scan) leaf.scanRef = scan.ref
+        } else if (m[2] === 'gaps') {
+          for (const row of q.rows ?? []) {
+            const crop = row.images?.[0]
+            let wrote = null
+            if (crop) {
+              const got = await run({ op: 'evidence', ref: crop.ref })
+              if (got.outcome === 'done' && got.image) {
+                wrote = `${out}/p${pageIndex}-${row.id}.png`
+                await writeFile(wrote, Buffer.from(got.image.base64, 'base64'))
+              }
+            }
+            leaf.gaps.push({ id: row.id, ocrRead: row.text, context: row.notes, crop: wrote })
+          }
+        } else {
+          leaf.passages = (q.rows ?? []).map((r) => ({ id: r.id, kind: r.kind, text: r.text }))
+        }
+      }
+      return { leaves: [...leaves.values()].sort((a, b) => a.pageIndex - b.pageIndex) }
+    },
+
+    /**
+     * Write the book back out, corrections and all.
+     *
+     * Read from the run store rather than rebuilt from what is on screen, the
+     * same way the app's own shelf save does it: the file that goes back is
+     * then the record the app holds, and the two cannot drift into disagreeing
+     * about what the book says.
+     *
+     * The gate *answers* travel too, and for corrections made at the
+     * uncertainty gate they are the whole point. A fix typed there is folded
+     * into the edit list when the gate is left, but the edit list is not
+     * persisted until the proof step ends — the durable record in between is
+     * the answer itself, which the app re-derives the edit from on the way back
+     * in. Carrying the answers back means a verdict reached here survives
+     * without having to walk the rest of the book to make it stick.
+     */
+    save: async ([bookPath, out = 'book.out.json']) => {
+      const { readFile, writeFile } = await import('node:fs/promises')
+      // No original when one is being made for the first time — writing a book
+      // file out of a seeded run is how the round trip gets something to test
+      // against without a real book having been read.
+      const original =
+        bookPath && bookPath !== '-'
+          ? JSON.parse(await readFile(resolve(REPO, bookPath), 'utf8'))
+          : { run: {}, answers: {}, voice: {}, notesCheckpoint: null, scan: null }
+      const json = await page.evaluate(
+        async ([repo, was]) => {
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const keys = await runStore.listRuns()
+          const newest = keys.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          if (!newest) throw new Error('No run in the store to save.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That run could not be read back.')
+          // The key and the scan pointer are the shelf's, not this machine's:
+          // re-keying was a local necessity and must not travel back, or the
+          // book would stop matching the scan it was read from.
+          let answers = was.answers ?? {}
+          try {
+            const stored = localStorage.getItem(`pdbf.review.${newest.key}`)
+            if (stored) answers = { ...answers, ...JSON.parse(stored) }
+          } catch {
+            /* a review record that will not parse is not worth losing the book over */
+          }
+          return project.serializeBookFile({
+            run: {
+              ...run,
+              key: was.run.key ?? run.key,
+              fileName: was.run.fileName ?? run.fileName
+            },
+            answers,
+            voice: was.voice ?? {},
+            notesCheckpoint: was.notesCheckpoint ?? null,
+            scan: was.scan ?? null
+          })
+        },
+        [REPO, original]
+      )
+      const path = resolve(REPO, out)
+      await writeFile(path, json)
+      const parsed = JSON.parse(json)
+      const verdicts = parsed.answers?.['gate-uncertainties'] ?? {}
+      const fixes = Object.entries(verdicts).filter(
+        ([id, v]) => /-fix$/.test(id) && v && Object.keys(v).length > 0
+      )
+      return {
+        wrote: path,
+        edits: (parsed.run?.edits ?? []).length,
+        leavesJudged: Object.keys(verdicts).filter((id) => /^page-\d+$/.test(id)).length,
+        leavesRetyped: fixes.length,
+        blocksRetyped: fixes.reduce((n, [, v]) => n + Object.keys(v).length, 0)
+      }
+    },
+
+    /**
      * Wait for the app to reach a step, or just to stop working.
      *
      * Recon is a real OCR run and the paid steps are real requests, so a

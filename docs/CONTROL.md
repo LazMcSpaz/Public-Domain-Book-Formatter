@@ -131,3 +131,73 @@ batch ticket: record the thing that cannot be recovered before doing it.
 It is not fast. The round trip is one poll interval (10s), so this is for a book
 being worked through by someone who is not at the keyboard, not for a live
 cursor.
+
+## Working a book's flags offline
+
+The transcription is the only part that costs money, and the app saves the book
+to the shelf the moment that pass finishes (`App.tsx`, after
+`runBrowserTranscription`). Everything the uncertainty gate needs besides it —
+the render, the OCR, the word boxes, the cross-check findings — is free and
+repeatable. So a book can be picked up from the shelf somewhere else entirely,
+have its flags worked through, and be put back, without the person who paid for
+the reading being at the keyboard.
+
+```bash
+node scripts/drive.mjs load ../shelf/books/<slug>/book.json ../shelf/scans/<sha>.pdf
+node scripts/drive.mjs open ../shelf/scans/<sha>.pdf
+node scripts/drive.mjs wait gate-identity 600
+node scripts/drive.mjs advance
+node scripts/drive.mjs answer useSavedRun use
+node scripts/drive.mjs advance
+node scripts/drive.mjs wait gate-uncertainties 600
+
+node scripts/drive.mjs flags                 # every flagged leaf + its crops
+# … judge them, one `answer` per verdict …
+node scripts/drive.mjs save ../shelf/books/<slug>/book.json out.json
+```
+
+`flags` is the one that matters: it takes the whole gate in a single pass and
+writes a crop per disagreement to disk, so the words on the paper can be looked
+at rather than inferred. Each leaf comes back with the reason it was flagged
+(the word-count drift, the confidently-read words that are absent), what OCR
+read, what the transcription says, and the verdicts on offer.
+
+Two things about the round trip are worth knowing:
+
+**The run is re-keyed on the way in.** A key is `name\0size\0modified`, and a
+scan on another disk has a different modification time, so the stored key would
+name a file this browser will never see and the app would offer nothing back.
+`load` re-keys to what this copy of the scan produces; `save` puts the shelf's
+key back, so the book still matches the scan it was read from.
+
+**Verdicts travel as answers, not as edits.** A fix typed at the uncertainty
+gate is folded into the edit list when the gate is left, but that list is not
+persisted until the proof step ends. The durable record in between is the
+answer itself, which the app re-derives the edit from on the way back in. So
+`save` carries `answers` back, and a verdict reached offline survives without
+walking the rest of the book to make it stick.
+
+### What may be decided without asking
+
+The temptation is a confidence threshold — resolve anything you are, say, 85%
+sure of. That is exactly the thing SPEC §4 rules out: a model's estimate of its
+own reliability is not a probability, and gating a check on one means the flag
+list is filtered by the same judgement that would have to be wrong for the flag
+to matter.
+
+What can carry a decision is **corroboration**, which is what the rest of this
+app already runs on. A flagged gap has two independent readers: OCR, which is
+not a language model and has no shared blind spots with one, and a fresh reading
+of the pixels. So:
+
+- Both readings agree on what the page says → resolve it. Two witnesses, neither
+  taking the other's word, and the crop is on disk to be checked afterwards.
+- They disagree, or the crop cannot be read → it goes to the person, with the
+  crop, both readings, and what the transcription currently says.
+- The transcription alone is never enough. Given garbled text and no picture, a
+  model returns fluent, confident, partly-invented prose and no downstream check
+  can tell — the one unrecoverable failure for a public-domain reprint.
+
+In practice this resolves most of a gate and escalates a short list, which is
+the same split a confidence threshold was reaching for, with something behind it
+that can be checked.
