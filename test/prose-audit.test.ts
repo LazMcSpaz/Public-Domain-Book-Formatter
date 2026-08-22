@@ -132,6 +132,16 @@ describe('auditing the editor’s prose for a thumb on the scale', () => {
     }
   })
 
+  it('leaves an ordinary intensifier alone', () => {
+    // The first false positive this check produced on real prose: the book's
+    // own advice on concentration is to write a letter thinking of nothing but
+    // that letter, which is not a verdict about anything.
+    const fine = auditProse('Write a letter thinking of nothing but that letter.')
+    expect(fine.findings).toHaveLength(0)
+    const verdict = auditProse('The astral body is nothing but a figure of speech.')
+    expect(verdict.findings.some((f) => f.kind === 'dismissal')).toBe(true)
+  })
+
   it('catches the phrasing the house rules ban', () => {
     const audit = auditProse('It is worth noting that this is a fascinating case.')
     const banned = audit.findings.filter((f) => f.kind === 'banned').map((f) => f.match)

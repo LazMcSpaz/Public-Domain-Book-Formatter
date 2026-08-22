@@ -155,7 +155,14 @@ const DISMISSALS = [
   'debunked',
   'mere superstition',
   'nothing more than',
-  'nothing but',
+  // Anchored to a copula. Bare "nothing but" is an ordinary intensifier —
+  // "thinking of nothing but that letter" is the book's own advice on
+  // concentration — and flagging it taught this check to cry wolf on the first
+  // piece of real prose it was pointed at.
+  'is nothing but',
+  'was nothing but',
+  'are nothing but',
+  'were nothing but',
   'no such thing',
   'has no known function',
   'sheer invention',
