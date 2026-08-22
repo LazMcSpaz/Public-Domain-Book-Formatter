@@ -537,11 +537,19 @@ async function serve() {
      * already accepted has no question, so no `ref`, so no way to look at it.
      * The scan is on the device either way.
      */
-    leaf: async ([n, name, dpi = '150']) => {
+    leaf: async ([n, name, dpi = '150', crop = '']) => {
       const pageIndex = Number(n)
       const resolution = Number(dpi)
+      // `x,y,w,h` as fractions of the leaf, for cutting a plate out of a scan:
+      // a cover with a later owner's label pasted across the foot, a page with
+      // a digitiser's watermark along the bottom. Fractions rather than pixels
+      // so the same crop survives a change of resolution.
+      const box = crop
+        .split(',')
+        .map(Number)
+        .filter((v) => Number.isFinite(v))
       const url = await page.evaluate(
-        async ([repo, index, atDpi]) => {
+        async ([repo, index, atDpi, window]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const pdf = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
           const runs = await runStore.listRuns()
@@ -549,9 +557,33 @@ async function serve() {
           if (!newest) throw new Error('No book open on this device.')
           const file = await runStore.loadSourceFile(newest.key)
           if (!file) throw new Error('The scan is not stored on this device.')
-          return pdf.renderPageToObjectUrl(file, index, atDpi)
+          if (window.length !== 4) return pdf.renderPageToObjectUrl(file, index, atDpi)
+          const doc = await pdf.openPdf(file)
+          const rendered = await pdf.renderPage(doc, index, atDpi)
+          const [fx, fy, fw, fh] = window
+          const cut = document.createElement('canvas')
+          cut.width = Math.round(rendered.canvas.width * fw)
+          cut.height = Math.round(rendered.canvas.height * fh)
+          cut
+            .getContext('2d')
+            .drawImage(
+              rendered.canvas,
+              Math.round(rendered.canvas.width * fx),
+              Math.round(rendered.canvas.height * fy),
+              cut.width,
+              cut.height,
+              0,
+              0,
+              cut.width,
+              cut.height
+            )
+          rendered.canvas.width = 0
+          rendered.canvas.height = 0
+          return await new Promise((resolve) =>
+            cut.toBlob((b) => resolve(URL.createObjectURL(b)), 'image/png')
+          )
         },
-        [REPO, pageIndex, resolution]
+        [REPO, pageIndex, resolution, box]
       )
       const bytes = await page.evaluate(async (u) => {
         const res = await fetch(u)
