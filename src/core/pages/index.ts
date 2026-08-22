@@ -13,3 +13,10 @@ export {
   type BookMetadata,
   type PageClassification
 } from './page-roles'
+export {
+  readSynopsis,
+  synopsisKey,
+  synopsisLooksSound,
+  type SynopsisBlock,
+  type SynopsisEntry
+} from './synopsis'

@@ -625,6 +625,32 @@ in `screenshots/`. Don't ship UI blind.
   needed bounding was this. Crops cut from the scan are deliberately not stored
   at all — they are re-cut when wanted, and the scan is already up there.
 
+- **Also done**: **the original contents page is kept for its prose**
+  (`src/core/pages/synopsis.ts`). Front matter is replaced rather than
+  transcribed and the scanned contents is the clearest case — but the reason is
+  narrow: its page numbers describe a pagination this edition does not have. An
+  _analytical_ contents, which is what an older book usually has (this one calls
+  its own "SYNOPSIS OF THE LESSONS"), sets a paragraph under each chapter saying
+  what is in it, and that paragraph is editorial work and the reason such a page
+  is read rather than scanned. Discarding it with the numbers threw away the
+  wrong half. The entries are now read back off the transcribed contents leaves,
+  matched to the chapters the body actually prints — on letters and digits
+  alone, because "MIND-READING, AND BEYOND" against "MIND READING, AND BEYOND."
+  is a difference in hyphenation and a full stop rather than in what the chapter
+  is called — and set under their entries with the folio **this** edition
+  measures. A restoration and not an invention: every word comes off the paper.
+  The parse is offered only when it comes back regular (`synopsisLooksSound`:
+  most entries described, folios ascending), because a ragged one means the page
+  was not laid out the way the reader assumes and a mangled contents printed
+  under the author's name is worse than the plain one it replaces. Two things
+  the parser must get right are the two the page actually does: a description
+  routinely begins on one leaf and finishes on the next, and the folio line
+  comes back as a `caption` on some leaves and a `paragraph` on others — so it
+  reads the whole contents at once and matches on what the line _says_. Safe for
+  the contents' two-pass scheme because a description comes from the document
+  rather than from a layout, and the existing guard checks that rather than
+  trusting it.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

@@ -126,6 +126,7 @@ export function normalizeStyleProfile(raw: unknown): StyleProfile {
     opticalMargins: bool(raw['opticalMargins'], d.opticalMargins),
     chaptersOpenRecto: bool(raw['chaptersOpenRecto'], d.chaptersOpenRecto),
     pageNumber: oneOf(raw['pageNumber'], PAGE_NUMBER_POSITIONS, d.pageNumber),
+    contentsSynopsis: bool(raw['contentsSynopsis'], d.contentsSynopsis),
     ornaments: {
       chapterOpener:
         typeof rawOrn['chapterOpener'] === 'string' ? (rawOrn['chapterOpener'] as string) : null,

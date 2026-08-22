@@ -34,6 +34,8 @@ const URL_BASE = process.env.APP_URL ?? 'http://localhost:5173'
 const EXECUTABLE = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
 const OUT = process.env.DRIVE_OUT ?? 'screenshots'
 const REPO = resolve(import.meta.dirname, '..')
+/** Where the browser keeps its storage between runs. See `launchPersistentContext`. */
+const PROFILE = process.env.DRIVE_PROFILE ?? resolve(REPO, '.drive-profile')
 
 const [verb, ...rest] = process.argv.slice(2)
 
@@ -63,8 +65,22 @@ async function send(verb, args) {
 
 async function serve() {
   await mkdir(OUT, { recursive: true })
-  const browser = await chromium.launch({ executablePath: EXECUTABLE, args: ['--no-sandbox'] })
-  const page = await browser.newPage({ viewport: { width: 1360, height: 900 } })
+  // A *persistent* profile, so IndexedDB outlives the driver process.
+  //
+  // Everything the app keeps — the loaded run, the scan, and the recon
+  // checkpoint written every twenty leaves — lives in the browser's storage.
+  // With the throwaway profile `chromium.launch()` gives you, restarting the
+  // driver for any reason threw all of it away, which on a real book means
+  // re-running hours of OCR to get back to where you were. The checkpoint
+  // exists precisely so a stopped reading can be carried on; it can only do
+  // that if the storage holding it survives.
+  const context = await chromium.launchPersistentContext(PROFILE, {
+    executablePath: EXECUTABLE,
+    args: ['--no-sandbox'],
+    viewport: { width: 1360, height: 900 }
+  })
+  const browser = context
+  const page = context.pages()[0] ?? (await context.newPage())
 
   /** Kept rather than printed: a controller asks for them when something looks wrong. */
   const errors = []

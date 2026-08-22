@@ -105,6 +105,15 @@ export interface StyleQuestionOptions {
    * caller has the list anyway.
    */
   families?: ChoiceOption[]
+  /**
+   * Whether this book's original contents carried a description per chapter.
+   *
+   * The question is only asked when there is something to keep. A book whose
+   * contents was a bare list has nothing to recover, and offering the choice
+   * anyway would be asking about a feature that cannot do anything — which is
+   * exactly the kind of setting this app exists not to have.
+   */
+  hasSynopses?: boolean
 }
 
 /**
@@ -242,6 +251,21 @@ export function styleQuestions(
       prompt: 'Open each chapter with a drop capital?',
       defaultValue: profile.dropCap
     },
+    ...(options.hasSynopses
+      ? [
+          {
+            id: 'contentsSynopsis',
+            type: 'confirm' as const,
+            prompt: 'Keep the descriptions under each chapter in the contents?',
+            help:
+              'The original contents gives a paragraph under each chapter saying what is in ' +
+              'it — the reason a page like that is read rather than scanned. Keeping them is ' +
+              'the original’s own arrangement with this edition’s page numbers; it turns a ' +
+              'one-leaf contents into several.',
+            defaultValue: profile.contentsSynopsis
+          }
+        ]
+      : []),
     {
       id: 'chaptersOpenRecto',
       type: 'confirm',
@@ -393,6 +417,7 @@ export function applyStyleAnswers(profile: StyleProfile, answers: Answers): Styl
     hyphenate: pickBool(answers, 'hyphenate', profile.hyphenate),
     opticalMargins: pickBool(answers, 'opticalMargins', profile.opticalMargins),
     pageNumber: pick(answers, 'pageNumber', profile.pageNumber) as PageNumberPosition,
+    contentsSynopsis: pickBool(answers, 'contentsSynopsis', profile.contentsSynopsis),
     ornaments: {
       chapterOpener: pickOrnament(answers, 'ornamentChapter', profile.ornaments.chapterOpener),
       sectionDivider: pickOrnament(answers, 'ornamentDivider', profile.ornaments.sectionDivider),

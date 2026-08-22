@@ -282,6 +282,21 @@ export interface StyleProfile {
    */
   chaptersOpenRecto: boolean
   pageNumber: PageNumberPosition
+  /**
+   * Set each chapter's description under its contents entry, where the original
+   * book printed one.
+   *
+   * An analytical contents — this book's own name for it is "SYNOPSIS OF THE
+   * LESSONS" — gives a paragraph under each chapter saying what is in it, and
+   * that paragraph is the reason such a page is read rather than scanned. It is
+   * recovered from the scanned contents, which is otherwise discarded for its
+   * stale page numbers alone.
+   *
+   * A preference, not a fact about the book: the descriptions are long, and a
+   * contents that was one leaf becomes four. Does nothing on a book whose
+   * contents had no descriptions to recover.
+   */
+  contentsSynopsis: boolean
   ornaments: OrnamentChoices
   /** Front-matter visual toggles. */
   frontMatter: {

@@ -103,6 +103,16 @@ export interface TocLine {
   level: number
   /** The printed folio, or null on the first pass when it isn't known yet. */
   folio: string | null
+  /**
+   * The chapter's description from the original contents, where the book had
+   * one and the style asks for it.
+   *
+   * Safe for the two-pass scheme because it comes from the *document*, not from
+   * a layout: it is identical in both passes, so it cannot change the contents'
+   * length between them. The guard in `layoutWithToc` checks that rather than
+   * trusting it.
+   */
+  synopsis?: string
 }
 
 /** The heading over collected endnotes, and the contents entry for them. */
@@ -1995,6 +2005,25 @@ function buildContents(
     })
     if (broken.length === 0) return
 
+    // The description, set smaller and indented under the entry — the shape an
+    // analytical contents has always had, so it reads as one block with its
+    // chapter rather than as loose text between two.
+    //
+    // Measured to the full width less the folio column, because nothing hangs
+    // in the number's lane: an entry's folio belongs to its title line, and a
+    // description running under it would collide with the digits.
+    const synopsisSize = sizePt * 0.86
+    const synopsisIndent = indent + sizePt * 1.5
+    const synopsisLines = entry.synopsis
+      ? breakParagraph(entry.synopsis, {
+          font: body,
+          sizePt: synopsisSize,
+          measurer: ctx.measurer,
+          lineWidths: [Math.max(1, ctx.measureWidth - folioColumn - synopsisIndent)],
+          alignment: 'left'
+        })
+      : []
+
     // A blank line before each top-level entry after the first, so chapters
     // group visibly when there are sub-headings between them.
     const gapBefore = i > 0 && entry.level === 1 ? 1 : 0
@@ -2026,6 +2055,31 @@ function buildContents(
       page.lines.push({ slot: slot + lineIndex, line: { runs } })
     })
     slot += broken.length
+
+    // The description flows and may cross onto the next contents leaf, which is
+    // ordinary for a page of this kind — the alternative is a page broken early
+    // to keep an entry whole and a contents full of white space.
+    for (const line of synopsisLines) {
+      if (slot >= slotsPerPage) {
+        page = newPage('front')
+        page.kind = 'contents'
+        page.suppressRunningHead = true
+        page.suppressFolio = true
+        slot = 0
+      }
+      page.lines.push({
+        slot,
+        line: {
+          runs: line.words.map((w) => ({
+            text: w.text,
+            font: body,
+            sizePt: synopsisSize,
+            xPt: w.xPt + synopsisIndent
+          }))
+        }
+      })
+      slot += 1
+    }
   })
 }
 

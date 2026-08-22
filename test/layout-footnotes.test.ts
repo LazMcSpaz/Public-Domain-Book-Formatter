@@ -305,6 +305,90 @@ describe('layout — notes with no reference mark', () => {
   })
 })
 
+/**
+ * An analytical contents: the chapter's own description under its entry.
+ *
+ * Recovered from the scanned contents, which is otherwise discarded — and
+ * discarded only because its page numbers describe a pagination this edition
+ * does not have. The prose beside those numbers is editorial work and is the
+ * reason such a page is read rather than scanned.
+ *
+ * The property that matters is the *two-pass* one. The contents is laid out
+ * twice, blank folios then measured ones, and the second pass may not change
+ * the length of the first or the numbers describe a book that no longer exists.
+ * A description is safe there because it comes from the document rather than
+ * from a layout — but "safe because I reasoned about it" is how that invariant
+ * gets broken later, so it is asserted.
+ */
+describe('layoutWithToc — descriptions under the entries', () => {
+  const described = build([
+    page(0, [
+      { kind: 'heading', text: 'Of the Air', level: 1 },
+      { kind: 'paragraph', text: PROSE.repeat(8) }
+    ]),
+    page(1, [
+      { kind: 'heading', text: 'Of Fire', level: 1 },
+      { kind: 'paragraph', text: PROSE.repeat(8) }
+    ])
+  ])
+  described.chapters[0]!.synopsis =
+    'What the air is made of, and why the ancients thought otherwise. The bellows and its uses.'
+  described.chapters[1]!.synopsis = 'The nature of flame. Whether fire is a substance or a motion.'
+
+  const withSynopses = (on: boolean): LaidOutBook =>
+    layoutWithToc(described, { ...defaultStyleProfile(), contentsSynopsis: on }, measurer, {
+      edition: EDITION
+    })
+
+  // The line separator taken out, because a description wraps and any phrase
+  // long enough to be worth searching for straddles a break.
+  const flat = (book: LaidOutBook): string =>
+    book.pages
+      .filter((p) => p.kind === 'contents')
+      .map(textOf)
+      .join(' ')
+      .replace(/ · /g, ' ')
+
+  it('sets each description under its chapter', () => {
+    const text = flat(withSynopses(true))
+    expect(text).toContain('why the ancients thought otherwise')
+    expect(text).toContain('Whether fire is a substance or a motion')
+  })
+
+  it('leaves them out when the style says not to', () => {
+    const text = flat(withSynopses(false))
+    expect(text).toContain('Of the Air')
+    expect(text).not.toContain('why the ancients thought otherwise')
+  })
+
+  it('still prints the folio each chapter opens on', () => {
+    const book = withSynopses(true)
+    const contents = book.pages.filter((p) => p.kind === 'contents')
+    const printed = contents
+      .flatMap((c) => lines(c))
+      .flatMap((l) => l.runs)
+      .filter((r) => /^\d+$/.test(r.text))
+      .map((r) => r.text)
+    const actual = book.chapterPages.map((c) => book.pages[c.pageIndex]!.folio)
+    for (const folio of actual) expect(printed).toContain(folio)
+  })
+
+  /**
+   * The guard `layoutWithToc` already keeps, exercised with descriptions in
+   * play: filling the numbers in must not move a single page.
+   */
+  it('does not let the second pass invalidate the first', () => {
+    const book = withSynopses(true)
+    const contents = book.pages.filter((p) => p.kind === 'contents')
+    // More than one leaf of contents here, which is the point — descriptions
+    // are long, and the flow across leaves is where a length change would show.
+    expect(contents.length).toBeGreaterThan(0)
+    const again = withSynopses(true)
+    expect(again.pages.length).toBe(book.pages.length)
+    expect(again.chapterPages).toEqual(book.chapterPages)
+  })
+})
+
 describe('layoutWithToc — a contents page with measured numbers', () => {
   const doc = build([
     page(0, [

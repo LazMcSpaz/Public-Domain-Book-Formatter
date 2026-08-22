@@ -3878,7 +3878,12 @@ export function App(): JSX.Element {
                             value: f.family,
                             label: f.label,
                             description: f.note
-                          }))
+                          })),
+                          // Asked only when this book's original contents had
+                          // descriptions to keep. Nothing to offer otherwise.
+                          hasSynopses: (correctedDocument?.chapters ?? []).some(
+                            (c) => c.synopsis !== undefined
+                          )
                         }).map((q) => (
                           <QuestionView
                             key={q.id}

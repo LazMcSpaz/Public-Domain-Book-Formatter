@@ -15,7 +15,13 @@
  * Pure: no I/O, no model calls.
  */
 import type { ImageEditOp } from '@core/model'
-import { dispositionFor, type PageRole } from '@core/pages'
+import {
+  dispositionFor,
+  readSynopsis,
+  synopsisKey,
+  synopsisLooksSound,
+  type PageRole
+} from '@core/pages'
 import {
   shiftEmphasis,
   tableToText,
@@ -81,6 +87,17 @@ export interface ChapterEntry {
   id: string
   title: string
   level: number
+  /**
+   * What the original contents page said this chapter contains.
+   *
+   * Recovered from the scanned contents, which is otherwise discarded — and
+   * discarded for one reason only, that its page numbers describe a pagination
+   * this edition does not have. The prose beside those numbers is editorial
+   * work that belongs to the book, and in an analytical contents of this kind
+   * it is the whole point of the page. Absent when the book had no such
+   * contents, or when the parse was not sound enough to trust.
+   */
+  synopsis?: string
   /** Index into `blocks` where the chapter starts. */
   blockIndex: number
   sourcePage: number
@@ -400,6 +417,29 @@ export function assembleBook(
       blockIndex: i,
       sourcePage: b.sourcePages[0] ?? 0
     }))
+
+  // The original contents, read for its prose and matched to the chapters the
+  // body actually has. Matched on letters and digits alone, because a contents
+  // page and a chapter opening are typeset differently — "MIND-READING, AND
+  // BEYOND" against "MIND READING, AND BEYOND." is a difference in hyphenation
+  // and a full stop, not in what the chapter is called.
+  //
+  // Only attached when the parse comes back sound. A ragged one means the page
+  // was not laid out the way the reader assumes, and printing a mangled
+  // contents under the author's name is worse than printing a plain one.
+  const contentsBlocks = ordered
+    .filter((page) => page.role === 'table-of-contents')
+    .flatMap((page) => page.blocks.map((b) => ({ kind: b.kind, text: b.text })))
+  const synopses = readSynopsis(contentsBlocks)
+  if (synopsisLooksSound(synopses)) {
+    const byTitle = new Map(
+      synopses.filter((e) => e.synopsis.length > 0).map((e) => [synopsisKey(e.title), e.synopsis])
+    )
+    for (const chapter of chapters) {
+      const found = byTitle.get(synopsisKey(chapter.title))
+      if (found) chapter.synopsis = found
+    }
+  }
 
   // A picture on a page that was dropped goes with it: its pixels came from a
   // leaf the user removed, and embedding them would put back the one thing they
