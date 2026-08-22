@@ -83,13 +83,18 @@ it.** Much of what these books describe is held to be real by the people who
 publish these editions and by a great many people who have worked at it. The
 job is to hand a reader what they need to find out for themselves.
 
-In practice that comes down to three habits, and they are checkable:
+In practice that comes down to four habits, and they are checkable:
 
-- **Hedge both sides or neither.** "The supposed astral body" beside "a gland
-  secreting melatonin" is a verdict smuggled in as caution. Describe a teaching
-  in the tradition's own terms with the same steadiness a physiologist gets,
-  then say separately what is known, what is disputed, and what rests on one
-  witness.
+- **State the established teaching plainly.** Not "hedge both sides equally";
+  that was the first version of this rule and it was wrong. The editor is not an
+  arbitrator between two parties. He holds the tradition's teaching to be true
+  and writes it as such, while respecting the scientific method as how anyone
+  gets to the bottom of anything. So "supposed", "so-called" and "said to be"
+  belong on contested claims and single-witness stories, never on doctrine. Say
+  separately what is known, what is disputed, and what rests on one witness.
+- **Never push.** No arguing a reader round, no scolding a doubter, no triumph
+  when the evidence goes the tradition's way. Set the thing out, give the reader
+  what they need to weigh it, and stop there.
 - **Ancestry is not an argument.** That a term was borrowed, or that a doctrine
   took its present shape in the 1880s, is history worth having and settles
   nothing about whether the thing is real. Give the history; don't let it do the
@@ -117,15 +122,18 @@ node scripts/voice.mjs audit <book.json>   # or any file of prose
 
 `auditProse` (`src/core/annotate/audit.ts`, pure and unit-tested) reports:
 
+- **Every hedge sitting on a sentence about the tradition**, listed for
+  reading. This is the list that matters. No lexicon can tell an established
+  teaching from a contested claim, so none of them is a fault on its own and
+  each one is a decision for a person.
 - **The hedge ratio**, over the whole text and again over _definitions only_.
-  Sentences are sorted into those about the tradition and those about material
-  science, and the two hedge rates compared. No single hedge is a fault — "held
-  to be" is the correct way to report a doctrine — but hedging one side half
-  again as often as the other is a verdict delivered by grammar. The
-  definitions are measured separately because over a long document the effect
+  Secondary, and kept only because it catches a lean in either direction.
+  Definitions are measured separately because over a long document the effect
   washes out: the first glossary written here hedged its doctrinal definitions
   three times over and still scored 0.72 overall, diluted by hundreds of
-  sentences about people and dates.
+  sentences about people and dates. Both ratios stay silent below a floor of
+  hedges, since a rate built from one event flags good prose and a check that
+  does that gets switched off.
 - **Dismissals and banned phrasing**, as plain lexical scans. These catch less
   and what they catch is unambiguous.
 - **Long dashes**, which are out of this editor's prose by request and are the

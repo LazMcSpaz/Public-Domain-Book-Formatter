@@ -213,12 +213,23 @@ export const HEADWORD_WORDS = 5
 /**
  * How much more hedged the tradition may be before it is worth saying so.
  *
- * Not 1.0. Some excess is honest — a doctrine genuinely does need reporting as
- * a doctrine more often than a measurement needs reporting as a measurement.
- * What is being caught is the systematic difference, and by 1.6 the reader is
- * being told something nobody wrote down.
+ * Secondary, and kept because it catches a lean in either direction. It is not
+ * the main measure and was wrong when it was: symmetry with the science is not
+ * what this editor is after. See `ProseAudit.hedgedTeaching`.
  */
 export const HEDGE_RATIO_LIMIT = 1.6
+
+/**
+ * How many hedges are needed on the tradition side before a ratio means
+ * anything.
+ *
+ * `MIN_SENTENCES` puts a floor under the denominator; nothing put one under the
+ * numerator, so a clean document with a single legitimate hedge in it and none
+ * on the science side divided one by zero and reported an infinite lean. A
+ * check that flags good prose is a check that gets ignored, which this module's
+ * own notes say twice and then did anyway.
+ */
+export const MIN_HEDGES = 3
 
 export type BiasKind = 'dismissal' | 'banned' | 'hedge' | 'dash'
 
@@ -228,6 +239,8 @@ export interface BiasFinding {
   match: string
   /** The sentence it sits in, for judging whether it is fair in context. */
   sentence: string
+  /** Whether that sentence was about the tradition. Only set for hedges. */
+  tradition?: boolean
 }
 
 export interface ProseAudit {
@@ -268,6 +281,27 @@ export interface ProseAudit {
    * subject's fault, long sentences are the writer's.
    */
   reading: { grade: number; wordsPerSentence: number }
+  /**
+   * Every hedge sitting on a sentence about the tradition, to be read and
+   * judged one at a time.
+   *
+   * This is the list that matters, and it took a correction from the editor to
+   * see why. The first version of this module measured whether the tradition
+   * was hedged *more than the science was*, as though the job were even-handed
+   * arbitration between two parties. It is not. This editor holds the
+   * established teaching to be true and writes about it accordingly; what the
+   * scientific method gets is respect, not equal billing. So a glossary with
+   * four doctrines hedged into vagueness scored a comfortable 1.41 "even",
+   * because the science had been hedged a bit too.
+   *
+   * No lexicon can tell an established teaching from a contested claim, and
+   * both take the same words. So nothing here is a fault on its own: the
+   * astral cord stated plainly is right, and second sight reported as a
+   * regional reputation is also right. They are listed because each one is a
+   * decision, there are rarely more than a handful, and the decision is a
+   * person's.
+   */
+  hedgedTeaching: BiasFinding[]
   /** True when nothing here needs a person to look at it. */
   clean: boolean
 }
@@ -406,7 +440,9 @@ export function auditProse(text: string): ProseAudit {
         // Reported so a person can read them in context, not as faults: the
         // count is what carries the argument, and any one of these may be the
         // honest way to report a doctrine.
-        for (const match of hedges) findings.push({ kind: 'hedge', match, sentence })
+        for (const match of hedges) {
+          findings.push({ kind: 'hedge', match, sentence, tradition: isTradition })
+        }
       }
       for (const match of has(lower, DISMISSALS)) {
         findings.push({ kind: 'dismissal', match, sentence })
@@ -418,14 +454,20 @@ export function auditProse(text: string): ProseAudit {
     }
   }
 
-  const enough = traditionSentences >= MIN_SENTENCES && scienceSentences >= MIN_SENTENCES
+  const enough =
+    traditionSentences >= MIN_SENTENCES &&
+    scienceSentences >= MIN_SENTENCES &&
+    traditionHedges + scienceHedges >= MIN_HEDGES
   // Rates rather than counts: a text with four times as many sentences about
   // the tradition would otherwise look biased for being about its subject.
   const ratio = enough
     ? traditionHedges / traditionSentences / Math.max(scienceHedges / scienceSentences, 1e-9)
     : null
 
-  const enoughOpeners = openTradition >= MIN_SENTENCES && openScience >= MIN_SENTENCES
+  const enoughOpeners =
+    openTradition >= MIN_SENTENCES &&
+    openScience >= MIN_SENTENCES &&
+    openTraditionHedged + openScienceHedged >= MIN_HEDGES
   const openingRatio = enoughOpeners
     ? openTraditionHedged / openTradition / Math.max(openScienceHedged / openScience, 1e-9)
     : null
@@ -444,6 +486,7 @@ export function auditProse(text: string): ProseAudit {
     openings: { tradition: openTradition, science: openScience },
     openingHedges: { tradition: openTraditionHedged, science: openScienceHedged },
     openingRatio,
+    hedgedTeaching: findings.filter((f) => f.kind === 'hedge' && f.tradition),
     reading: readingOf(text),
     clean: !serious && !leaning(ratio) && !leaning(openingRatio)
   }

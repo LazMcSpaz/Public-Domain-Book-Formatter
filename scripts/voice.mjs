@@ -228,9 +228,18 @@ try {
         console.log(`  ${kind.toUpperCase()} “${f.match}” — ${f.sentence.slice(0, 110)}`)
       }
     }
+    // Shown by default, because each one is a decision only a person can make:
+    // an established teaching stated plainly, or a contested claim reported as
+    // one. No word list can tell them apart.
+    if (audit.hedgedTeaching.length > 0) {
+      console.log(`\n  ${audit.hedgedTeaching.length} hedge(s) on the tradition — read each:`)
+      for (const f of audit.hedgedTeaching) {
+        console.log(`    “${f.match}” in: ${f.sentence.slice(0, 120)}`)
+      }
+    }
     if (opts.hedges) {
-      for (const f of audit.findings.filter((x) => x.kind === 'hedge')) {
-        console.log(`  hedge “${f.match}” — ${f.sentence.slice(0, 110)}`)
+      for (const f of audit.findings.filter((x) => x.kind === 'hedge' && !x.tradition)) {
+        console.log(`  hedge (science) “${f.match}” — ${f.sentence.slice(0, 110)}`)
       }
     }
     console.log(audit.clean ? '\n  CLEAN' : '\n  NEEDS A LOOK')

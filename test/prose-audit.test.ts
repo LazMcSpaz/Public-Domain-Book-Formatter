@@ -103,6 +103,31 @@ describe('auditing the editor’s prose for a thumb on the scale', () => {
     expect(leaning.clean).toBe(false)
   })
 
+  it('does not build a rate out of one hedge', () => {
+    // A clean glossary with a single legitimate hedge in it, and none on the
+    // science side, divided one by zero and reported an infinite lean. Flagging
+    // good prose is how a check gets switched off.
+    const audit = auditProse(
+      `${EVEN}\n\nSecond sight. It was held to be commonest in the Highlands.`
+    )
+    expect(audit.openingRatio).toBeNull()
+    expect(audit.clean).toBe(true)
+    // Still listed, because it is still a decision for a person.
+    expect(audit.hedgedTeaching).toHaveLength(1)
+  })
+
+  it('lists a hedge on the tradition without calling it a fault', () => {
+    // The correction that reshaped this module: symmetry with the science is
+    // not the goal. Every hedge on a teaching is a decision — stated plainly if
+    // it is established doctrine, reported as a claim if it is contested — and
+    // no lexicon can tell those apart.
+    const audit = auditProse(
+      'Astral cord. The thread said to join the astral body to the physical.'
+    )
+    expect(audit.hedgedTeaching).toHaveLength(1)
+    expect(audit.hedgedTeaching[0]!.match).toBe('said to')
+  })
+
   it('says nothing about a text too short to have a rate', () => {
     // A quorum, for the reason verify-book has them: a ratio from two
     // sentences is noise, and a check that cries wolf gets switched off.
