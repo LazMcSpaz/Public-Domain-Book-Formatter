@@ -14,6 +14,7 @@
 export {
   ANNOTATION_KINDS,
   MAX_EXEMPLARS,
+  VOICE_KEYS,
   NOTES_PER_THOUSAND_WORDS,
   defaultVoice,
   normalizeVoice,

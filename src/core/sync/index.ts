@@ -9,6 +9,7 @@ export {
   MAX_SCAN_BYTES,
   SCAN_ROOT,
   SHELF_ROOT,
+  VOICE_ROOT,
   aboutPath,
   bookPath,
   imagePath,
@@ -19,6 +20,7 @@ export {
   shelfEntries,
   shelfSlug,
   validRepo,
+  voicePath,
   type ShelfAbout,
   type ShelfConfig,
   type ShelfEntry

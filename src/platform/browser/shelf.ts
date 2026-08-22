@@ -36,9 +36,11 @@ import {
   parseAbout,
   scanPath,
   shelfEntries,
+  voicePath,
   type ShelfAbout,
   type ShelfConfig
 } from '@core/sync'
+import { normalizeVoice, type EditorVoice } from '@core/annotate'
 import { toBase64 } from '@core/project'
 
 const API = 'https://api.github.com'
@@ -247,6 +249,54 @@ export async function pushBook(
     aboutPath(key),
     toBase64(new TextEncoder().encode(JSON.stringify(about, null, 2))),
     message
+  )
+  return path
+}
+
+/**
+ * The editor, fetched from the shelf.
+ *
+ * Returns null when there is none there yet, which is the ordinary case on a
+ * fresh repository rather than a failure — the caller falls back to whatever is
+ * on the device. A voice that will not parse comes back through
+ * `normalizeVoice`, which backfills rather than refuses: losing a pen name and
+ * six exemplars to protect the user from a density dial in the wrong position
+ * would be the worse trade, and it is the same call `loadVoice` makes.
+ */
+export async function fetchVoice(
+  config: ShelfConfig,
+  penName: string
+): Promise<EditorVoice | null> {
+  const raw = await getText(config, voicePath(penName))
+  if (raw === null) return null
+  try {
+    return normalizeVoice(JSON.parse(raw))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * The editor, written to the shelf.
+ *
+ * Addressed by pen name rather than by book, because this is the one record
+ * here that belongs to no book. Whoever changes the name is starting a second
+ * editor and gets a second file; the old one is left alone rather than renamed,
+ * since notes already published over it were written by that editor and its
+ * exemplars are still the evidence of how they read.
+ */
+export async function pushVoice(
+  config: ShelfConfig,
+  voice: EditorVoice,
+  what = 'voice updated'
+): Promise<string> {
+  const path = voicePath(voice.penName)
+  const json = JSON.stringify(voice, null, 2)
+  await putFile(
+    config,
+    path,
+    toBase64(new TextEncoder().encode(json)),
+    `${voice.penName.trim() || 'editor'}: ${what}`
   )
   return path
 }

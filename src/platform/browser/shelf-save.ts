@@ -30,9 +30,9 @@ import {
   type ScanPointer
 } from '@core/project'
 import type { EditorVoice } from '@core/annotate'
-import { pushBook, pushImage, pushScan } from './shelf'
+import { fetchVoice, pushBook, pushImage, pushScan, pushVoice } from './shelf'
 import { loadAnnotationCheckpoint, loadRun, loadSourceFile } from './run-store'
-import { loadReviewProgress, loadVoice } from './settings'
+import { loadReviewProgress, loadVoice, saveVoice } from './settings'
 
 export interface ShelfPushResult {
   /** Where the book landed. */
@@ -135,11 +135,49 @@ export async function pushBookToShelf(
     input.what
   )
 
+  // The editor goes up with the book, every time, on the shelf's own rails.
+  //
+  // Write-through rather than a separate action, because the whole failure this
+  // fixes is a voice that only ever existed in one browser: an editor banked by
+  // a button nobody presses is the arrangement we already had. It is a few
+  // hundred bytes and it only rewrites when it has changed, so the cost against
+  // a history that keeps every version is nothing worth weighing.
+  //
+  // Failing here does not fail the save. The book is the thing that cost money
+  // and an evening; the voice can be sent again by the next save, and refusing
+  // to store a finished book because a pen name would not upload gets the
+  // priority exactly backwards.
+  let voiceNote = ''
+  try {
+    await pushVoice(config, input.voice, `banked with ${summary.fileName}`)
+  } catch {
+    voiceNote = ' The editor’s voice could not be sent; the next save will try again.'
+  }
+
   return {
     path,
     scan,
-    note: `Sent ${summary.fileName} to ${config.repo}: ${summary.pageCount} page(s).${scanNote}`
+    note: `Sent ${summary.fileName} to ${config.repo}: ${summary.pageCount} page(s).${scanNote}${voiceNote}`
   }
+}
+
+/**
+ * Take the editor from the shelf, if there is one there.
+ *
+ * The shelf is the source of truth and the device is a cache of it, so on a
+ * device that has one configured this is what the voice *is*. It writes the
+ * local copy so everything already reading `loadVoice` keeps working unchanged.
+ *
+ * What this deliberately does not do is merge. Two divergent voices cannot be
+ * reconciled without asking which exemplar belongs to whom, and the honest
+ * answer for a record this small is that the shelf wins — the same bargain the
+ * book file already strikes, and the reason to keep the voice small enough that
+ * losing an offline edit costs a sentence rather than an evening.
+ */
+export async function pullVoice(config: ShelfConfig, penName: string): Promise<EditorVoice | null> {
+  const voice = await fetchVoice(config, penName)
+  if (voice) saveVoice(voice)
+  return voice
 }
 
 /**

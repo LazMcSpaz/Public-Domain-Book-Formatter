@@ -14,6 +14,72 @@ its structure. The full design is in [`SPEC.md`](./SPEC.md); the module map is i
 
 Everything runs client-side. There is no server and no Electron shell.
 
+## How the work is actually done
+
+**The books are made in a conversation, not in the wizard.** The editor works
+through a Claude Code session — mobile, desktop or web — and the assistant
+drives the app. That is the primary interface now, and it is the one to design
+for. If you are an assistant reading this: this means you.
+
+The division of labour follows from what each side is actually good at.
+
+- **The app is the engine and the viewer.** Rendering a leaf, OCR, assembly,
+  layout, writing the PDF: all of it needs a browser and none of it needs
+  judgement. It also holds the pixels, which is what every gate here promises
+  never to decide without.
+- **The conversation is the interview.** Reading the book, weighing a
+  discrepancy against the scan, deciding what a passage says, writing the
+  introduction and the notes — these are prose problems, and the wizard was
+  only ever a way of getting a person to answer them one radio button at a
+  time.
+
+So **a change to this app is worth making if it improves what the assistant can
+see, check or write.** That is the standing brief. In practice it means one of
+four shapes:
+
+- **A verb on `scripts/drive.mjs`.** Anything the assistant needs from the
+  browser goes through the driver rather than through a one-off `page.evaluate`
+  buried in a shell command. `ocr` and `body` were both added this way, and both
+  because a job turned out to be impossible without them.
+- **Evidence that comes back as an image.** A crop, a leaf, a contact sheet.
+  The rule is unchanged and the assistant is not exempt from it: never repair
+  text without pixels.
+- **A pure function that runs without a browser at all.** `checkProposals` and
+  `findAnchor` are the model — deterministic, no network, and they do not care
+  whether a person, a model or the API wrote the thing they are checking. Work
+  written in conversation gets checked by the same machinery as work bought
+  from the API. Prefer this shape; it is the cheapest and the most honest.
+- **A file on the shelf a person can read.** `corrections.md`, `glossary.md`.
+  A repository is a shelf rather than a blob store precisely so its owner can
+  look at it, and JSON is not looking.
+
+Two things this does **not** license.
+
+**The wizard is not deprecated and must not rot.** It is the app a person
+without an assistant uses, and the bridge was built as a second door onto the
+same surface (`useAgentSurface`) rather than as a replacement, so that a driver
+and a person cannot disagree about what the flow is. Keep it that way: a
+feature reachable only from a chat session is a feature the app does not have.
+
+**No second renderer, still.** The temptation from this working model is a Node
+platform so the assistant can lay a book out without Chromium. Resist it until
+something actually blocks: `layout()` is pure and the browser is driven
+headlessly by the driver already, and the reason the design gate's approval
+means anything is that one engine draws the page. See **The preview is the
+PDF**, below.
+
+### What a session looks like
+
+The **shelf repository is the source of truth**; the browser's IndexedDB is a
+cache of it. Load the book from the shelf before touching it (`drive.mjs load`),
+and push what you change. A session that edits the local copy and forgets to
+push has done the work into a container that is about to be reclaimed.
+
+Corrections and notes are **edits keyed to assembled blocks**, carrying each
+block's whole text with emphasis rendered back as `<i>` tags. `drive.mjs body`
+hands back exactly those strings. Writing one against a raw page silently
+truncates every paragraph the page seam joined — see `applyEdits`.
+
 ## Commands
 
 ```bash
@@ -29,6 +95,19 @@ node scripts/make-test-book.mjs      # regenerate the 8-page test fixture
 node scripts/make-test-epub.mjs      # regenerate the EPUB fixture
 node scripts/make-test-digital.mjs   # regenerate the born-digital PDF fixture
 node scripts/screenshot-flow.mjs     # drive the wizard headlessly, screenshot each screen
+```
+
+Working _on a book_ (see **How the work is actually done**, above):
+
+```bash
+node scripts/drive.mjs serve &       # hold a browser open, take commands on :7788
+node scripts/drive.mjs load <book.json> <scan.pdf>   # from the shelf, not from the device
+node scripts/drive.mjs body out.json # the assembled book: block ids and the exact
+                                     #   strings an edit must be written in terms of
+node scripts/drive.mjs ocr 12 16 19  # what OCR reads off named leaves, as plain text
+node scripts/drive.mjs sheet typos 28:occulist   # words cut from the leaves they sit on
+node scripts/drive.mjs leaf 133      # any leaf, rendered
+node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` work it
 ```
 
 **Before committing: typecheck + test + format:check + lint.**
