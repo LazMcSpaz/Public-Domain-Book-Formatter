@@ -529,6 +529,58 @@ async function serve() {
       return { clicked: label }
     },
 
+    /**
+     * Render any leaf of the open book, flagged or not.
+     *
+     * A gate only carries evidence for what it is asking about, which is right
+     * on screen and wrong when the job is checking somebody's working: a leaf
+     * already accepted has no question, so no `ref`, so no way to look at it.
+     * The scan is on the device either way.
+     */
+    leaf: async ([n, name]) => {
+      const pageIndex = Number(n)
+      const url = await page.evaluate(
+        async ([repo, index]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const pdf = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+          const runs = await runStore.listRuns()
+          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          if (!newest) throw new Error('No book open on this device.')
+          const file = await runStore.loadSourceFile(newest.key)
+          if (!file) throw new Error('The scan is not stored on this device.')
+          return pdf.renderPageToObjectUrl(file, index, 150)
+        },
+        [REPO, pageIndex]
+      )
+      const bytes = await page.evaluate(async (u) => {
+        const res = await fetch(u)
+        const buf = new Uint8Array(await (await res.blob()).arrayBuffer())
+        URL.revokeObjectURL(u)
+        return [...buf]
+      }, url)
+      const { writeFile } = await import('node:fs/promises')
+      const file = `${OUT}/${name ?? `leaf-${String(pageIndex).padStart(3, '0')}`}.png`
+      await writeFile(file, Buffer.from(bytes))
+      return { wrote: file, pageIndex }
+    },
+
+    /**
+     * Forget the verdicts stored for the open book, so the gate shows every
+     * flagged leaf again.
+     *
+     * A leaf that has been answered is settled and drops out of the gate, which
+     * is right for working through a book and wrong for checking the working.
+     * The verdicts themselves are in the book file on the shelf; this only
+     * clears the copy this browser is holding.
+     */
+    forget: async () => {
+      return page.evaluate(() => {
+        const keys = Object.keys(localStorage).filter((k) => k.startsWith('pdbf.review.'))
+        for (const k of keys) localStorage.removeItem(k)
+        return { cleared: keys }
+      })
+    },
+
     /** What the stubbed repository holds, so a push can be checked. */
     repo: () => ({
       files: [...repoFiles.keys()].sort(),
