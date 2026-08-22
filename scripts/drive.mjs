@@ -565,6 +565,101 @@ async function serve() {
     },
 
     /**
+     * The book as it will be set, one block to a record.
+     *
+     * The gates show a leaf at a time and the export shows a PDF; neither is
+     * the thing a proofreader actually needs, which is the running text with
+     * the corrections already in it and a handle on every block. The handle is
+     * the point: a `text` edit is keyed to an *assembled* block and carries
+     * that block's whole text, so a correction typed against a raw page would
+     * silently truncate a paragraph the seam had joined. This hands back the
+     * ids and the strings an edit must be written in terms of — emphasis
+     * included, as the `<i>` tags `applyEdits` reads back — so a list of fixes
+     * can be checked before any of it is written.
+     */
+    body: async ([out = 'body.json']) => {
+      const doc = await page.evaluate(
+        async ([repo]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const edits = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const markup = await import(`/@fs${repo}/src/core/transcribe/index.ts`)
+          const runs = await runStore.listRuns()
+          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          if (!newest) throw new Error('No book open on this device.')
+          const run = await runStore.loadRun(newest.key)
+          const bare = assemble.assembleBook(run.transcriptions)
+          const applied = edits.applyEdits(bare, run.edits ?? [])
+          const say = (blocks) =>
+            blocks.map((b) => ({
+              id: b.id,
+              kind: b.kind,
+              pages: b.sourcePages,
+              text: markup.withMarkup(b.text, b.emphasis)
+            }))
+          return { edited: say(applied.blocks), pristine: say(bare.blocks) }
+        },
+        [REPO]
+      )
+      const { writeFile } = await import('node:fs/promises')
+      await writeFile(out, JSON.stringify(doc, null, 1))
+      return { wrote: out, blocks: doc.edited.length }
+    },
+
+    /**
+     * What OCR reads off a leaf, as plain text.
+     *
+     * The word crops answer "is this word really printed like that?"; they
+     * cannot answer "is this word really *missing*?" A dropped `is`, a doubled
+     * phrase or a stray `and` has no box to cut. So this hands back the
+     * independent witness's own reading of whole leaves, to be set beside the
+     * transcription: where the two agree the page says it, and where they
+     * differ the place is worth a picture.
+     */
+    ocr: async ([...ns]) => {
+      const pages = ns.map(Number)
+      return page.evaluate(
+        async ([repo, list]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
+          const ocrMod = await import(`/@fs${repo}/src/platform/browser/ocr.ts`)
+          const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+          const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const runs = await runStore.listRuns()
+          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          if (!newest) throw new Error('No book open on this device.')
+          const file = await runStore.loadSourceFile(newest.key)
+          if (!file) throw new Error('The scan is not stored on this device.')
+          const cached = await cacheMod.loadReconCache(newest.key, {
+            dpi: recon.RECON_DPI,
+            maxPages: null
+          })
+          const out = {}
+          const say = (words) => words.map((w) => w.text).join(' ')
+          if (cached) {
+            for (const n of list) out[n] = say(cached.words.filter((w) => w.pageIndex === n))
+            return out
+          }
+          const engine = new ocrMod.OcrEngine()
+          const doc = await pdfMod.openPdf(file)
+          try {
+            for (const n of list) {
+              const rendered = await pdfMod.renderPage(doc, n, recon.RECON_DPI)
+              const result = await engine.recognize(rendered.canvas, n)
+              out[n] = say(result.words)
+              rendered.canvas.width = 0
+              rendered.canvas.height = 0
+            }
+          } finally {
+            await engine.dispose()
+          }
+          return out
+        },
+        [REPO, pages]
+      )
+    },
+
+    /**
      * A contact sheet of words, cut from the pages they are printed on.
      *
      * The rule is that text is never repaired without pixels, and the honest
