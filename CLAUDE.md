@@ -128,6 +128,13 @@ node scripts/voice.mjs audit <book.json>   # or any file of prose
   sentences about people and dates.
 - **Dismissals and banned phrasing**, as plain lexical scans. These catch less
   and what they catch is unambiguous.
+- **Long dashes**, which are out of this editor's prose by request and are the
+  most recognisable habit of machine-written English. Hyphens inside compounds
+  are untouched; only a dash doing the work of a comma is caught.
+- **A Flesch-Kincaid grade**, reported and not enforced, with the average
+  sentence length beside it. There is no correct grade for an introduction, but
+  the number moves when prose gets tangled, and long sentences are the writer's
+  fault where long words are usually the subject's.
 
 A non-zero exit means a person reads the flagged passages. Do not tune the
 limits to make a draft pass; fix the draft, and re-run.

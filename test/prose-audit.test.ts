@@ -132,6 +132,34 @@ describe('auditing the editor’s prose for a thumb on the scale', () => {
     }
   })
 
+  it('catches a dash doing the work of a comma', () => {
+    const audit = auditProse(
+      'The astral body \u2014 the vehicle of desire \u2014 is not the etheric double.'
+    )
+    expect(audit.findings.filter((f) => f.kind === 'dash')).toHaveLength(2)
+    expect(audit.clean).toBe(false)
+  })
+
+  it('leaves a hyphen inside a compound alone', () => {
+    const audit = auditProse(
+      'A needle-pointed mind pierces where a blunt-pointed one is turned back.'
+    )
+    expect(audit.findings.filter((f) => f.kind === 'dash')).toHaveLength(0)
+  })
+
+  it('reports a grade level and the sentence length behind it', () => {
+    const plain = auditProse(
+      'The book is a course. It has twenty lessons. Each one asks you to try something.'
+    )
+    const tangled = auditProse(
+      'The book, which is a course of twenty consecutive lessons, each of which incorporates ' +
+        'exercises intended for independent practical application, presupposes a systematic ' +
+        'progression through its constituent parts rather than intermittent consultation.'
+    )
+    expect(plain.reading.grade).toBeLessThan(tangled.reading.grade)
+    expect(plain.reading.wordsPerSentence).toBeLessThan(tangled.reading.wordsPerSentence)
+  })
+
   it('leaves an ordinary intensifier alone', () => {
     // The first false positive this check produced on real prose: the book's
     // own advice on concentration is to write a letter thinking of nothing but

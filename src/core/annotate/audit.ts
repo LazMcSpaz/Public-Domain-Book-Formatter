@@ -183,6 +183,17 @@ const BANNED = [
 ]
 
 /**
+ * A dash doing the work of a comma, a colon or a bracket.
+ *
+ * Kept out of this editor's prose by request, and worth a mechanical check
+ * rather than a good intention: it is the single most recognisable habit of
+ * machine-written English, and a reader who has noticed it once notices it
+ * everywhere after. Hyphens inside compounds are untouched — only a dash with
+ * space around it, or an em dash anywhere, is the construction meant.
+ */
+const DASH = /\u2014|\s\u2013\s/gu
+
+/**
  * How many sentences of each kind are needed before a ratio is reported.
  *
  * Below this the number is noise. Same reasoning as the quorums in
@@ -209,7 +220,7 @@ export const HEADWORD_WORDS = 5
  */
 export const HEDGE_RATIO_LIMIT = 1.6
 
-export type BiasKind = 'dismissal' | 'banned' | 'hedge'
+export type BiasKind = 'dismissal' | 'banned' | 'hedge' | 'dash'
 
 export interface BiasFinding {
   kind: BiasKind
@@ -246,8 +257,46 @@ export interface ProseAudit {
    * too thin to say. Above `HEDGE_RATIO_LIMIT` is the finding that matters.
    */
   ratio: number | null
+  /**
+   * Flesch-Kincaid grade level, and the average sentence length behind it.
+   *
+   * Reported rather than enforced. There is no correct grade for an
+   * introduction and a glossary is not a school reader, but the number moves
+   * when prose gets tangled and it is the fastest way to see that a draft has
+   * drifted upwards while nobody was watching. Sentence length is given beside
+   * it because that is almost always the lever: long words are usually the
+   * subject's fault, long sentences are the writer's.
+   */
+  reading: { grade: number; wordsPerSentence: number }
   /** True when nothing here needs a person to look at it. */
   clean: boolean
+}
+
+/**
+ * Syllables, by the usual heuristic: vowel groups, with a silent final e.
+ *
+ * Wrong on "fire" and on "business", right often enough for a grade level,
+ * which is a coarse instrument being used as a coarse instrument.
+ */
+function syllablesIn(word: string): number {
+  const w = word.toLocaleLowerCase().replace(/[^a-z]/gu, '')
+  if (!w) return 0
+  return Math.max(1, (w.replace(/(?<!^)e$/u, '').match(/[aeiouy]+/gu) ?? []).length)
+}
+
+/** Flesch-Kincaid, and the sentence length that usually explains it. */
+function readingOf(text: string): { grade: number; wordsPerSentence: number } {
+  const sentences = sentencesOf(text.replace(/\n\s*\n/gu, ' '))
+  const words = text.match(/[A-Za-z][A-Za-z'-]*/gu) ?? []
+  if (sentences.length === 0 || words.length === 0) {
+    return { grade: 0, wordsPerSentence: 0 }
+  }
+  const syllables = words.reduce((n, w) => n + syllablesIn(w), 0)
+  const wordsPerSentence = words.length / sentences.length
+  return {
+    grade: 0.39 * wordsPerSentence + 11.8 * (syllables / words.length) - 15.59,
+    wordsPerSentence
+  }
 }
 
 /** Sentence-ish. Abbreviations make this approximate, and approximate is fine. */
@@ -363,6 +412,9 @@ export function auditProse(text: string): ProseAudit {
         findings.push({ kind: 'dismissal', match, sentence })
       }
       for (const match of has(lower, BANNED)) findings.push({ kind: 'banned', match, sentence })
+      for (const match of sentence.match(DASH) ?? []) {
+        findings.push({ kind: 'dash', match, sentence })
+      }
     }
   }
 
@@ -392,6 +444,7 @@ export function auditProse(text: string): ProseAudit {
     openings: { tradition: openTradition, science: openScience },
     openingHedges: { tradition: openTraditionHedged, science: openScienceHedged },
     openingRatio,
+    reading: readingOf(text),
     clean: !serious && !leaning(ratio) && !leaning(openingRatio)
   }
 }

@@ -216,6 +216,13 @@ try {
       const shown = audit.openingRatio > 999 ? '∞' : audit.openingRatio.toFixed(2)
       console.log(`  opening ratio: ${shown} (${v}) — where a definition is made`)
     }
+    const r = audit.reading
+    console.log(
+      `  reading: grade ${r.grade.toFixed(1)}, ${r.wordsPerSentence.toFixed(1)} words/sentence`
+    )
+    const dashes = audit.findings.filter((f) => f.kind === 'dash')
+    if (dashes.length > 0)
+      console.log(`  DASHES: ${dashes.length} — none belong in this editor's prose`)
     for (const kind of ['dismissal', 'banned']) {
       for (const f of audit.findings.filter((x) => x.kind === kind)) {
         console.log(`  ${kind.toUpperCase()} “${f.match}” — ${f.sentence.slice(0, 110)}`)
