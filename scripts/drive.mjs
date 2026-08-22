@@ -565,6 +565,165 @@ async function serve() {
     },
 
     /**
+     * A contact sheet of words, cut from the pages they are printed on.
+     *
+     * The rule is that text is never repaired without pixels, and the honest
+     * way to honour it for a list of suspect spellings is to look at every one.
+     * Done a page at a time that is two dozen full-page renders to check two
+     * dozen words. This crops each word out of its own leaf and stacks them
+     * into a single image, with what the transcription says beside it, so the
+     * whole list can be read at once and any of them argued with.
+     *
+     * The boxes come from the reading already in hand — OCR gave every word one
+     * — so this is a lookup plus one render per leaf, not a second reading.
+     * Matching is on letters only: OCR's own text is what the box is filed
+     * under, and it will have its own punctuation.
+     *
+     * Takes `page:word` pairs, e.g. `sheet typos 28:occulist 227:arrivd`.
+     */
+    sheet: async ([name = 'sheet', ...pairs]) => {
+      const wanted = pairs.map((p) => {
+        const [page, ...rest] = p.split(':')
+        return { pageIndex: Number(page), word: rest.join(':') }
+      })
+      const dataUrl = await page.evaluate(
+        async ([repo, list]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
+          const crops = await import(`/@fs${repo}/src/platform/browser/word-crops.ts`)
+          const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+
+          const runs = await runStore.listRuns()
+          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const file = await runStore.loadSourceFile(newest.key)
+          // `maxPages: null` is "the whole book" — the same shape the app
+          // asks with. A record written for a partial reading is deliberately
+          // refused, so this has to match rather than be left out.
+          const cached = await cacheMod.loadReconCache(newest.key, {
+            dpi: recon.RECON_DPI,
+            maxPages: null
+          })
+
+          // No stored reading is the ordinary case rather than a failure: it is
+          // written only as a convenience and only when the device is keeping
+          // book data, so it is routinely absent. Reading the handful of leaves
+          // actually asked about costs a minute; re-reading the book to get at
+          // them would cost hours.
+          const pages = [...new Set(list.map((i) => i.pageIndex))]
+          let words = cached ? cached.words : []
+          if (!cached) {
+            const ocrMod = await import(`/@fs${repo}/src/platform/browser/ocr.ts`)
+            const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+            const engine = new ocrMod.OcrEngine()
+            const doc = await pdfMod.openPdf(file)
+            try {
+              for (const n of pages) {
+                const rendered = await pdfMod.renderPage(doc, n, recon.RECON_DPI)
+                const result = await engine.recognize(rendered.canvas, n)
+                words = words.concat(result.words)
+                rendered.canvas.width = 0
+                rendered.canvas.height = 0
+              }
+            } finally {
+              await engine.dispose()
+            }
+          }
+
+          const plain = (t) => t.toLowerCase().replace(/[^a-z]/g, '')
+          const byPage = new Map()
+          for (const item of list) {
+            const want = plain(item.word)
+            const onPage = words.filter((w) => w.pageIndex === item.pageIndex)
+            // Exact first. Failing that, the word is very likely broken at a
+            // line end — the printer hyphenated it and OCR filed the halves
+            // separately — so take the longest half that is a piece of it.
+            // Showing the half that carries the misspelling is what the crop is
+            // for; showing nothing because the word wrapped is not.
+            const found =
+              onPage.find((w) => plain(w.text) === want) ??
+              onPage
+                .filter((w) => {
+                  const t = plain(w.text)
+                  return t.length >= 3 && (want.startsWith(t) || want.endsWith(t))
+                })
+                .sort((a, b) => plain(b.text).length - plain(a.text).length)[0]
+            if (!found) continue
+            const group = byPage.get(item.pageIndex) ?? []
+            // A little air either side, so the word is seen in its own ink
+            // rather than shaved to the glyphs.
+            group.push({
+              id: `${item.pageIndex}:${item.word}`,
+              words: [{ id: found.id, bbox: found.bbox }]
+            })
+            byPage.set(item.pageIndex, group)
+          }
+
+          const images = []
+          for (const [pageIndex, groups] of byPage) {
+            const cut = await crops.cropWordsFromPage(file, pageIndex, groups, {
+              dpi: recon.RECON_DPI
+            })
+            for (const [id, url] of cut) {
+              const bmp = await createImageBitmap(await (await fetch(url)).blob())
+              URL.revokeObjectURL(url)
+              images.push({ id, bmp })
+            }
+          }
+          if (images.length === 0)
+            throw new Error('None of those words were found on those leaves.')
+
+          const pad = 10
+          const labelW = 260
+          const rowH = Math.max(...images.map((i) => i.bmp.height)) + pad
+          const canvas = document.createElement('canvas')
+          canvas.width = labelW + Math.max(...images.map((i) => i.bmp.width)) + pad * 2
+          canvas.height = rowH * images.length + pad
+          const ctx = canvas.getContext('2d')
+          ctx.fillStyle = '#fff'
+          ctx.fillRect(0, 0, canvas.width, canvas.height)
+          ctx.fillStyle = '#000'
+          ctx.font = '20px monospace'
+          images.forEach((img, i) => {
+            const y = pad + i * rowH
+            ctx.fillText(img.id, pad, y + img.bmp.height / 2 + 7)
+            ctx.drawImage(img.bmp, labelW, y)
+            img.bmp.close()
+          })
+          return canvas.toDataURL('image/png')
+        },
+        [REPO, wanted]
+      )
+      const { writeFile } = await import('node:fs/promises')
+      const file = `${OUT}/${name}.png`
+      await writeFile(file, Buffer.from(dataUrl.split(',')[1], 'base64'))
+      return { wrote: file, words: wanted.length }
+    },
+
+    /** What this browser is actually holding, when something says it is not. */
+    diag: async () => {
+      return page.evaluate(
+        async ([repo]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
+          const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const runs = await runStore.listRuns()
+          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const whole = newest
+            ? await cacheMod.loadReconCache(newest.key, { dpi: recon.RECON_DPI, maxPages: null })
+            : null
+          const part = newest ? await cacheMod.loadReconCheckpoint(newest.key) : null
+          return {
+            runs: runs.map((r) => ({ key: r.key, pages: r.pageCount, savedAt: r.savedAt })),
+            wholeReading: whole ? { words: whole.words.length } : null,
+            checkpoint: part ? { pagesDone: part.pagesDone ?? null } : null,
+            dpi: recon.RECON_DPI
+          }
+        },
+        [REPO]
+      )
+    },
+
+    /**
      * Forget the verdicts stored for the open book, so the gate shows every
      * flagged leaf again.
      *
