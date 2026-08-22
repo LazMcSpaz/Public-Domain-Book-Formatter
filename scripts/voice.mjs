@@ -28,6 +28,7 @@
  *   node scripts/voice.mjs show                     # the voice as stored
  *   node scripts/voice.mjs card                     # what the model is actually told
  *   node scripts/voice.mjs set about "..."          # penName|about|guidance|density|maxWords
+ *   node scripts/voice.mjs set about --file about.txt   # for anything with paragraphs in it
  *   node scripts/voice.mjs avoid "Never do X" ...   # append refusals (--clear to empty)
  *   node scripts/voice.mjs learn --passage "..." --note "..."
  *   node scripts/voice.mjs learn-file accepted.json # [{ passage, note }, ...]
@@ -130,7 +131,13 @@ try {
     console.log(annotate.voiceBlock(voice))
   } else if (verb === 'set') {
     const [field, ...rest] = opts._
-    const value = rest.join(' ')
+    // `--file` because `about` and `guidance` are paragraphs, and a paragraph
+    // typed at a shell loses its line breaks and fights the quoting. The whole
+    // point of these two fields is that they are prose.
+    const value =
+      typeof opts.file === 'string'
+        ? (await readFile(resolve(opts.file), 'utf8')).trim()
+        : rest.join(' ')
     if (!annotate.VOICE_KEYS.includes(field)) {
       throw new Error(`No such field: ${field}. One of ${annotate.VOICE_KEYS.join(', ')}.`)
     }
