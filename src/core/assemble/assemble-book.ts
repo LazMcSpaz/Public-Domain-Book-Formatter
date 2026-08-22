@@ -26,6 +26,7 @@ import {
   shiftEmphasis,
   tableToText,
   wordCount,
+  type BlockKind,
   type PageTranscription,
   type TranscribedBlock
 } from '@core/transcribe'
@@ -224,15 +225,55 @@ function cleaned(block: BookBlock): BookBlock {
   return { ...block, cells, text: tableToText(cells) }
 }
 
+/** Blocks whose second half can arrive under another name. See `shouldJoin`. */
+const RUNS_ON: readonly BlockKind[] = ['paragraph', 'verse', 'list-item', 'blockquote']
+
 /**
  * True when two blocks should be joined into one. The model's own
  * continues* hints are trusted first; failing that, punctuation is a reliable
  * fallback (a paragraph that ends without terminal punctuation and is followed
  * by lowercase text is almost always one sentence split by the page edge).
+ *
+ * ## Why a page break relaxes the rules
+ *
+ * The pass reads one leaf at a time, which is what makes it affordable and is
+ * also why the *second half* of something is so often misfiled. A list item
+ * broken by the page edge continues on the next leaf with no number in front
+ * of it; a quotation continues with no opening quotation mark. Read on its own,
+ * that leaf begins with an ordinary paragraph, and the pass is right to say so
+ * — it is looking at a paragraph.
+ *
+ * Requiring the two kinds to match therefore left a sentence in two pieces
+ * every time a list or a quotation crossed a leaf, which in one real book was
+ * eight broken sentences the reader would meet in print. Across a seam the
+ * kinds may differ and the first block's kind wins: a list item that runs on is
+ * still a list item.
+ *
+ * Within a single leaf nothing is relaxed. There a change of kind is a real
+ * change — two consecutive list items are two items, and merging them because
+ * one happened to end without a full stop would be inventing a paragraph.
  */
-export function shouldJoin(previous: TranscribedBlock, next: TranscribedBlock): boolean {
-  if (previous.kind !== next.kind) return false
-  if (previous.kind !== 'paragraph' && previous.kind !== 'verse') return false
+export function shouldJoin(
+  previous: TranscribedBlock,
+  next: TranscribedBlock,
+  acrossSeam = false
+): boolean {
+  const kindsDiffer = previous.kind !== next.kind
+  if (acrossSeam) {
+    if (!RUNS_ON.includes(previous.kind)) return false
+    // The continuation is a paragraph, or the same kind read correctly.
+    if (next.kind !== 'paragraph' && next.kind !== previous.kind) return false
+    // A block that *opens* a quotation is starting something, not continuing a
+    // sentence. This is the one signal that separates the two cases, and
+    // without it the relaxation above merges the paragraphs of a long
+    // quotation: printing convention opens every one of them with a quotation
+    // mark and closes only the last, so the pass marks the whole run as
+    // continuing — which is true of the quotation and false of the sentence.
+    if (kindsDiffer && /^\s*["“]/.test(next.text)) return false
+  } else {
+    if (kindsDiffer) return false
+    if (previous.kind !== 'paragraph' && previous.kind !== 'verse') return false
+  }
   if (previous.continuesNext || next.continuesPrevious) return true
 
   const prevText = previous.text.trimEnd()
@@ -370,7 +411,10 @@ export function assembleBook(
       const previous = target[target.length - 1]
       const joinable = previous !== undefined && !seamBroken
       seamBroken = false
-      if (joinable && shouldJoin(previous, block)) {
+      // Whether the page edge sits between these two, which is the only place
+      // the kind rules relax.
+      const acrossSeam = previous !== undefined && !previous.sourcePages.includes(page.pageIndex)
+      if (joinable && shouldJoin(previous, block, acrossSeam)) {
         // Emphasis is carried as word indices, so the second half's italics have
         // to move along by however many words the first half had — or they land
         // on the wrong words once the two are one paragraph.

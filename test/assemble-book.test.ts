@@ -476,3 +476,114 @@ describe('assembleBook — descriptions in the contents', () => {
     expect(doc.chapters.every((c) => c.synopsis === undefined)).toBe(true)
   })
 })
+
+/**
+ * A sentence broken by the page edge, where the two halves were read as
+ * different kinds of thing.
+ *
+ * The pass reads one leaf at a time. A list item broken by the page edge
+ * continues on the next leaf with no number in front of it, and a quotation
+ * continues with no opening quotation mark — so that leaf begins with what
+ * looks exactly like an ordinary paragraph, and the pass is right to call it
+ * one. Requiring the kinds to match left the sentence in two pieces, which a
+ * reader meets in print as a line that stops in the middle.
+ *
+ * Found in a real book: eight of them, in lists and in quoted narrative.
+ */
+describe('assembleBook — a sentence broken across a leaf', () => {
+  const half = (kind: TranscribedBlock['kind'], text: string) => ({ kind, text })
+
+  it('joins a list item that runs on as a paragraph', () => {
+    const doc = assembleBook([
+      page(0, [half('list-item', 'Clairvoyance in Time, in which the seer senses events which')]),
+      page(1, [half('paragraph', 'have had their original place in past time.')])
+    ])
+    expect(doc.blocks).toHaveLength(1)
+    expect(doc.blocks[0]?.text).toBe(
+      'Clairvoyance in Time, in which the seer senses events which have had their ' +
+        'original place in past time.'
+    )
+    // The first half's kind wins: an item that runs on is still an item.
+    expect(doc.blocks[0]?.kind).toBe('list-item')
+    expect(doc.blocks[0]?.sourcePages).toEqual([0, 1])
+  })
+
+  it('joins a quotation that runs on as a paragraph', () => {
+    const doc = assembleBook([
+      page(0, [half('blockquote', '“I dashed in his face some water which I')]),
+      page(1, [half('paragraph', 'fortunately had in my flask.”')])
+    ])
+    expect(doc.blocks).toHaveLength(1)
+    expect(doc.blocks[0]?.kind).toBe('blockquote')
+  })
+
+  /**
+   * The guard on the other side. Two list items on one leaf are two items, and
+   * the first ending without a full stop is ordinary — merging them would
+   * invent a paragraph the book never had.
+   */
+  it('does not merge two items that merely sit next to each other on one leaf', () => {
+    const doc = assembleBook([
+      page(0, [
+        half('list-item', 'Locations. Begin by finding particular locations in a room'),
+        half('list-item', 'large objects. Then begin to find tables, chairs')
+      ])
+    ])
+    expect(doc.blocks).toHaveLength(2)
+  })
+
+  it('never joins a heading to anything', () => {
+    const doc = assembleBook([
+      page(0, [half('list-item', 'something ending open')]),
+      page(1, [half('heading', 'lesson iv')])
+    ])
+    expect(doc.blocks).toHaveLength(2)
+  })
+})
+
+/**
+ * The other side of that relaxation, and a regression it caused once.
+ *
+ * A long quotation is printed with a quotation mark opening every paragraph and
+ * closing only the last, so the pass marks the whole run as continuing — true
+ * of the quotation, false of the sentence. With the kinds no longer required to
+ * match, that hint was enough to weld two paragraphs of a quoted narrative into
+ * one. A block that opens a quotation is starting something.
+ */
+describe('assembleBook — a quotation that runs over several paragraphs', () => {
+  it('keeps its paragraphs apart even though the pass marks them as continuing', () => {
+    const doc = assembleBook([
+      page(0, [
+        {
+          kind: 'blockquote',
+          text: '“…through the connecting sequence of ether waves of appropriate order.',
+          continuesNext: true
+        }
+      ]),
+      page(1, [
+        {
+          kind: 'paragraph',
+          text: '“Roentgen has familiarized us with an order of vibrations.',
+          continuesPrevious: true
+        }
+      ])
+    ])
+    expect(doc.blocks).toHaveLength(2)
+  })
+
+  /** But an abbreviation at the page edge is still one sentence. */
+  it('still joins where the break falls inside a name', () => {
+    const doc = assembleBook([
+      page(0, [
+        {
+          kind: 'blockquote',
+          text: 'poachers who lived in a lonely wood near St.',
+          continuesNext: true
+        }
+      ]),
+      page(1, [{ kind: 'paragraph', text: 'Eglos. They wished him good night.' }])
+    ])
+    expect(doc.blocks).toHaveLength(1)
+    expect(doc.blocks[0]?.text).toContain('near St. Eglos')
+  })
+})
