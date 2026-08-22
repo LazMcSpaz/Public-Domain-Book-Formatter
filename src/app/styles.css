@@ -1908,3 +1908,55 @@ mark.claim {
     gap: 0.1rem;
   }
 }
+
+/* ---------- being driven remotely ---------- */
+
+/* Deliberately conspicuous. An app that can be operated from elsewhere and
+   shows no sign of it is indistinguishable from one that has been taken over,
+   so this sits above the step, in the warning colour, and does not scroll away
+   with the questions it is answering. */
+.agent-bridge {
+  border: 1.5px solid var(--warn);
+  border-radius: 8px;
+  background: var(--accent-soft);
+  padding: 0.75rem 0.9rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.agent-bridge-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+
+.agent-bridge-head b {
+  color: var(--warn);
+}
+
+.agent-bridge-status {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.agent-bridge-note {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.8rem;
+  color: var(--ink);
+  word-break: break-word;
+}
+
+.agent-bridge-error {
+  font-size: 0.85rem;
+  color: var(--warn);
+}
+
+.agent-bridge .actions {
+  margin: 0;
+}

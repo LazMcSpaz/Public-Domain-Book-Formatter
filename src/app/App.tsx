@@ -15,6 +15,7 @@ import {
   settledLeaves,
   initialState,
   missingRequired,
+  progress,
   type AnswerValue,
   type Answers,
   type StepId,
@@ -38,6 +39,10 @@ import { looksLikeEpub, openEpub } from '../platform/browser/epub'
 import { describeAssessment } from '@core/textquality'
 import { QuestionView } from './QuestionView'
 import { QuestionList } from './QuestionList'
+import { useAgentSurface } from './agent-surface'
+import { AgentBridge } from './AgentBridge'
+import type { ControlConfig } from '../platform/browser/control'
+import { validSession } from '@core/control'
 import {
   estimateCost,
   formatEstimate,
@@ -70,6 +75,10 @@ import {
   recordHarvest,
   loadReviewProgress,
   loadShelf,
+  loadControl,
+  saveControl,
+  controlConfig,
+  type ControlSettings,
   saveReviewProgress,
   shelfReady,
   loadReviewPlace,
@@ -3156,6 +3165,84 @@ export function App(): JSX.Element {
   ])
 
   /**
+   * What is running, named — and what is waiting to be paid for.
+   *
+   * A controller that cannot see this reads a gate mid-OCR as an empty one and
+   * starts answering the last book's questions. The quotes matter more: a
+   * screen showing a price is the app waiting for a *person*, and the useful
+   * thing a controller can do with it is say the number out loud so that
+   * person can decide. It must never be able to press the button itself, which
+   * is why the price appears here, as a state to report, and nowhere as a
+   * command.
+   */
+  const busy =
+    progressInfo !== null
+      ? 'Reading the scan'
+      : runProgress !== null
+        ? 'Reading the pages'
+        : submitProgress !== null
+          ? 'Submitting the batch'
+          : collectProgress !== null
+            ? 'Collecting the batch'
+            : checkProgress !== null
+              ? 'Reading the flagged spots again'
+              : notesProgress !== null
+                ? 'Writing the notes'
+                : buildProgress !== null
+                  ? 'Building the interior'
+                  : pendingCost !== null
+                    ? `Waiting for a person to approve ${pendingCost}`
+                    : pendingCheckCost !== null
+                      ? `Waiting for a person to approve ${pendingCheckCost}`
+                      : pendingNotesCost !== null
+                        ? `Waiting for a person to approve ${pendingNotesCost}`
+                        : undefined
+
+  /**
+   * The one place a command is executed, whichever transport carried it.
+   *
+   * Given the gate's own questions, the same `setAnswers` the renderer calls
+   * and the same `advance` the button calls — so a controller drives the app
+   * rather than a copy of it.
+   */
+  const agent = useAgentSurface({
+    step: step.id,
+    title: step.title,
+    fileName: state.fileName,
+    pageCount: state.pageCount,
+    progress: progress(state),
+    questions,
+    answers: currentAnswers,
+    missing,
+    ...(busy ? { busy } : {}),
+    error,
+    setAnswer: (id, value) => setAnswers((a) => ({ ...a, [id]: value })),
+    advance,
+    resolveEvidence,
+    enlargeEvidence,
+    cropWords
+  })
+
+  /**
+   * Whether a controller is being let in, and on what.
+   *
+   * Read once at start-up and again whenever it is turned off here, rather
+   * than watched: this changes when a person changes it, in Settings or with
+   * the stop button, and polling `localStorage` on every render to notice
+   * would be a lot of work to learn nothing.
+   */
+  const [control, setControl] = useState<ControlSettings>(() => loadControl())
+  const controlConf = useMemo((): ControlConfig | null => {
+    if (!control.enabled) return null
+    const merged = controlConfig(control, loadShelf())
+    // A session with no repository or no token is not a session that is off —
+    // it is one that would throw on every poll. Treated as off, and Settings
+    // is where it is explained.
+    if (!merged.repo || !merged.token || !validSession(merged.session)) return null
+    return merged
+  }, [control])
+
+  /**
    * Which door the approved cost goes through.
    *
    * Read at the moment the user presses the button rather than captured when
@@ -3194,6 +3281,16 @@ export function App(): JSX.Element {
       </nav>
 
       <main className="main">
+        {controlConf ? (
+          <AgentBridge
+            config={controlConf}
+            surface={agent}
+            onStop={() => {
+              saveControl({ ...loadControl(), enabled: false })
+              setControl(loadControl())
+            }}
+          />
+        ) : null}
         <div className="step-head">
           <h2>{step.title}</h2>
           <p>{step.blurb}</p>

@@ -29,6 +29,7 @@ const BANK_STORAGE = 'pdbf.bank'
  * someone, so the credential lives here and the book files never see it.
  */
 const SHELF_STORAGE = 'pdbf.shelf'
+const CONTROL_STORAGE = 'pdbf.control'
 const REVIEW_PREFIX = 'pdbf.review.'
 const CURSOR_PREFIX = 'pdbf.cursor.'
 
@@ -110,6 +111,92 @@ export function saveShelf(config: ShelfConfig): void {
   }
   if (!clean.repo && !clean.token) store.removeItem(SHELF_STORAGE)
   else store.setItem(SHELF_STORAGE, JSON.stringify(clean))
+}
+
+/**
+ * A control session: where an outside controller's commands are picked up.
+ *
+ * Off unless the user turns it on, and off again on the next visit unless they
+ * asked for it to be remembered — being remotely operable is not a thing to
+ * drift into by having once tried it.
+ *
+ * The repository defaults to the shelf's but does not have to be it. That is
+ * deliberate: a shelf may reasonably be public, so that a person can point
+ * somebody at their reprints, and a control session in a public repository
+ * publishes every command and every gate snapshot into a history that cannot
+ * be taken back.
+ */
+export interface ControlSettings {
+  enabled: boolean
+  /** Names the pair of files. Lower-case letters, digits and hyphens. */
+  session: string
+  /** Blank to use the shelf's repository. */
+  repo: string
+  branch: string
+  /** Blank to use the shelf's token. */
+  token: string
+}
+
+export const DEFAULT_CONTROL: ControlSettings = {
+  enabled: false,
+  session: '',
+  repo: '',
+  branch: '',
+  token: ''
+}
+
+export function loadControl(): ControlSettings {
+  const raw = safeLocalStorage()?.getItem(CONTROL_STORAGE)
+  if (!raw) return { ...DEFAULT_CONTROL }
+  try {
+    const parsed: unknown = JSON.parse(raw)
+    if (typeof parsed !== 'object' || parsed === null) throw new Error('not an object')
+    const value = parsed as Partial<ControlSettings>
+    return {
+      enabled: value.enabled === true,
+      session: typeof value.session === 'string' ? value.session : '',
+      repo: typeof value.repo === 'string' ? value.repo : '',
+      branch: typeof value.branch === 'string' ? value.branch : '',
+      token: typeof value.token === 'string' ? value.token : ''
+    }
+  } catch {
+    return { ...DEFAULT_CONTROL }
+  }
+}
+
+export function saveControl(control: ControlSettings): void {
+  const store = safeLocalStorage()
+  if (!store) return
+  store.setItem(
+    CONTROL_STORAGE,
+    JSON.stringify({
+      enabled: control.enabled,
+      session: control.session.trim(),
+      repo: control.repo.trim(),
+      branch: control.branch.trim(),
+      token: control.token.trim()
+    })
+  )
+}
+
+export function clearControl(): void {
+  safeLocalStorage()?.removeItem(CONTROL_STORAGE)
+}
+
+/**
+ * The credentials a control session will actually use, shelf's where its own
+ * are blank.
+ */
+export function controlConfig(
+  control: ControlSettings,
+  shelf: ShelfConfig
+): { repo: string; branch: string; token: string; session: string } {
+  return {
+    repo: control.repo.trim() || shelf.repo,
+    branch: control.branch.trim() || shelf.branch,
+    token: control.token.trim() || shelf.token,
+    session: control.session.trim()
+  }
 }
 
 /** Whether the shelf is set up enough to talk to. */

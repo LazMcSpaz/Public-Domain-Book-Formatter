@@ -32,6 +32,7 @@ import {
 } from '@core/style'
 import type { StyleProfile } from '@core/model'
 import { validRepo, type ShelfConfig } from '@core/sync'
+import { validSession } from '@core/control'
 import { checkShelf } from '../platform/browser/shelf'
 import { describeAge, type SavedRunSummary } from '@core/project'
 import {
@@ -53,6 +54,10 @@ import {
   clearReviewProgress,
   formatBytes,
   clearShelf,
+  controlConfig,
+  loadControl,
+  saveControl,
+  type ControlSettings,
   loadApiKey,
   loadShelf,
   loadPrefs,
@@ -78,6 +83,9 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
   const [shelfToken, setShelfToken] = useState('')
   const [shelfNote, setShelfNote] = useState<string | null>(null)
   const [shelfChecking, setShelfChecking] = useState(false)
+  const [control, setControl] = useState<ControlSettings>(() => loadControl())
+  const [controlToken, setControlToken] = useState('')
+  const [controlNote, setControlNote] = useState<string | null>(null)
   const [keyDraft, setKeyDraft] = useState('')
   const [runs, setRuns] = useState<SavedRunSummary[]>([])
   const [sizes, setSizes] = useState<Map<string, number>>(new Map())
@@ -451,6 +459,110 @@ export function Settings({ onClose }: SettingsProps): JSX.Element {
                 </button>
               ) : null}
             </div>
+          </section>
+
+          {/* --- letting something else drive ------------------------------ */}
+          <section>
+            <h2>Letting something else drive</h2>
+            <p className="help">
+              A controller elsewhere — an assistant you are talking to, a script — can read the
+              question on screen and answer it, through a repository you own. Commands are picked up
+              from <code>control/&lt;session&gt;/inbox.json</code> and answered in{' '}
+              <code>outbox.json</code> beside it. Off unless you turn it on.
+            </p>
+            <p className="help">
+              <b>It cannot spend your money.</b> Every paid step in this app stops at a button that
+              names a price, and nothing here can press that button — a controller can reach the
+              quote and report the number to you, and the decision stays yours. The one place the
+              app spends without quoting first, re-reading a leaf you marked at the uncertainty
+              gate, is refused outright. Nor can it read or set your API key.
+            </p>
+            <p className="help">
+              Every command and every snapshot of what is on screen lands in that repository's
+              history, which cannot be taken back. Use a <b>private</b> one. It may be your shelf;
+              leave the repository and token below blank to use it, or name a different one.
+            </p>
+            <label>
+              Session name
+              <input
+                type="text"
+                placeholder="laptop-1"
+                value={control.session}
+                onChange={(e) => setControl({ ...control, session: e.target.value })}
+              />
+            </label>
+            <label>
+              Repository
+              <input
+                type="text"
+                placeholder={shelf.repo ? `${shelf.repo} (your shelf)` : 'owner/name'}
+                value={control.repo}
+                onChange={(e) => setControl({ ...control, repo: e.target.value })}
+              />
+            </label>
+            <label>
+              Token
+              <input
+                type="password"
+                placeholder={
+                  control.token ? 'Replace with a different token' : "blank — use the shelf's"
+                }
+                value={controlToken}
+                onChange={(e) => setControlToken(e.target.value)}
+              />
+            </label>
+            {controlNote ? <p className="help">{controlNote}</p> : null}
+            <div className="actions">
+              <button
+                type="button"
+                className="primary"
+                disabled={!validSession(control.session.trim())}
+                onClick={() => {
+                  const next: ControlSettings = {
+                    ...control,
+                    enabled: true,
+                    session: control.session.trim(),
+                    token: controlToken.trim() || control.token
+                  }
+                  const merged = controlConfig(next, loadShelf())
+                  if (!merged.repo || !merged.token) {
+                    setControlNote(
+                      'No repository or token to use — set one here, or connect a shelf above.'
+                    )
+                    return
+                  }
+                  saveControl(next)
+                  setControl(next)
+                  setControlToken('')
+                  setControlNote(
+                    `On. Commands will be read from ${merged.repo}, in ` +
+                      `control/${next.session}/inbox.json. The book screen says so while it is ` +
+                      'running, and has a stop button.'
+                  )
+                }}
+              >
+                Turn it on
+              </button>
+              {control.enabled ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const next = { ...control, enabled: false }
+                    saveControl(next)
+                    setControl(next)
+                    setControlNote('Off. Nothing is read from the repository until you turn it on.')
+                  }}
+                >
+                  Turn it off
+                </button>
+              ) : null}
+            </div>
+            {!validSession(control.session.trim()) && control.session.trim().length > 0 ? (
+              <p className="help">
+                A session name is lower-case letters, digits and hyphens — it becomes a path in the
+                repository.
+              </p>
+            ) : null}
           </section>
 
           {/* --- run defaults --------------------------------------------- */}

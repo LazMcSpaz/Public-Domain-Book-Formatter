@@ -578,6 +578,33 @@ in `screenshots/`. Don't ship UI blind.
   vanished on a refresh, so a book file written from a reopened session would
   have been quietly short of what was paid for.
 
+- **Also done**: **the app can be driven from outside the tab**
+  (`src/core/control` for the protocol, `src/app/agent-surface.ts` for the one
+  place a command is executed, `scripts/drive.mjs` and
+  `src/platform/browser/control.ts` for the two transports — see
+  [`docs/CONTROL.md`](./docs/CONTROL.md)). Questions being _data_ is what makes
+  it possible: a controller reads the gate as JSON and answers by id, so it
+  drives the app rather than a copy of it, and both transports go through the
+  same surface because a driver that clicked buttons while a bridge set state
+  would disagree with it exactly where it mattered. Two rules are enforced
+  rather than trusted, and both are tested against the real step machine instead
+  of against themselves. **Nothing here can spend money**: the paid gates all
+  stop at a button that names a price, so a controller advances freely and
+  reports the number for a person to decide — and the one place the app spends
+  with no quote, a leaf marked `redo` at the uncertainty gate, is refused by
+  name, from the answers about to be committed. **No credential travels the
+  channel**, in either direction: the key question keeps its prompt and loses
+  its content, and setting one is refused. Evidence crosses as a `ref` rather
+  than an object URL, because a `blob:` that resolves to nothing outside the tab
+  that minted it looks exactly like evidence and is the one thing every gate
+  here promises not to do; a discrepancy's crop is cut only when it is asked
+  for, so reading one gate does not render the whole scan. The repository
+  transport rides the shelf's rails — no server, no account, the same token
+  rules — writes its reply _before_ running the command so a tab that dies
+  cannot leave `advance` to be run twice, and puts a panel on screen the whole
+  time it is live, because an app that can be operated remotely and shows no
+  sign of it is indistinguishable from one that has been taken over.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

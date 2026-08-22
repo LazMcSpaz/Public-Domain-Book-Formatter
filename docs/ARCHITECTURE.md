@@ -45,6 +45,7 @@ Gates are the only stops. Everything between them runs unattended.
 | **Design**     | `src/core/design`      | Interview answers → a complete style profile      | no            |
 | **Export**     | `src/core/export`      | Edition details, file naming, the honest report   | no            |
 | Ornament       | `src/core/ornament`    | Vector ornament library (paths, no files)         | no            |
+| **Control**    | `src/core/control`     | Driving the interview from outside the tab        | no            |
 | **Platform**   | `src/platform/browser` | PDF.js, Tesseract.js, fonts, PDF writer, preview  | **yes**       |
 | **App**        | `src/app`              | Wizard shell, question renderer, page preview     | **yes**       |
 
