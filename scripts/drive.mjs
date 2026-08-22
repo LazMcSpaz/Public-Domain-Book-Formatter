@@ -178,14 +178,16 @@ async function serve() {
 
     /** Load a book. The 8-page fixture unless another path is named. */
     open: async ([path = 'public/test-book.pdf']) => {
-      const buffer = await (await import('node:fs/promises')).readFile(resolve(REPO, path))
-      const name = path.split('/').pop()
-      await page.setInputFiles('input[type=file]', {
-        name,
-        mimeType: name.endsWith('.epub') ? 'application/epub+zip' : 'application/pdf',
-        buffer
-      })
-      return { opened: name, bytes: buffer.length }
+      // The *path*, never a buffer. A run key is name\0size\0modified, and
+      // Playwright only preserves the file's real modification time when it is
+      // handed a path — given a buffer it stamps one, so the key would differ
+      // from the one `load` seeded against the same file and the app would
+      // offer nothing back.
+      const full = resolve(REPO, path)
+      const { stat } = await import('node:fs/promises')
+      const meta = await stat(full)
+      await page.setInputFiles('input[type=file]', full)
+      return { opened: full.split('/').pop(), bytes: meta.size }
     },
 
     /**
