@@ -565,6 +565,90 @@ async function serve() {
     },
 
     /**
+     * Lay the whole book out and write the PDF, then say what happened.
+     *
+     * The last thing that was only reachable by clicking through the wizard,
+     * and the one that actually decides whether a piece of work is sound. Three
+     * things it answers that nothing else can: how many pages the book runs to,
+     * whether any footnote or picture could not be placed (`notesDropped` is
+     * reported and never silently swallowed, which is the rule the engine is
+     * built around), and whether every glyph the text uses has a width in the
+     * embedded fonts. That last one is why this exists at all: `renderPdf`
+     * raises rather than write a book with holes in it, so a character the
+     * faces cannot set is a thrown error here instead of a full em of white
+     * space discovered in print.
+     *
+     * `proof 3 4 120` also writes those pages as PNGs, which is the only
+     * honest way to check that a footnote sits where it should.
+     */
+    proof: async ([...wanted]) => {
+      const shots = wanted.map(Number).filter((n) => Number.isFinite(n))
+      const result = await page.evaluate(
+        async ([repo, pageNumbers]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const styleMod = await import(`/@fs${repo}/src/core/style/index.ts`)
+          const interior = await import(`/@fs${repo}/src/platform/browser/interior.ts`)
+
+          const runs = await runStore.listRuns()
+          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const run = await runStore.loadRun(newest.key)
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const meta = run.transcriptions.flatMap((t) => (t.metadata ? [t.metadata] : []))
+          const edition = {
+            title: meta.find((m) => m.title)?.title ?? 'Untitled',
+            author: meta.find((m) => m.author)?.author ?? ''
+          }
+          // Through the app's own path rather than a second assembly of the
+          // same steps, so this cannot report a book the export would not write.
+          const built = await interior.renderInterior(doc, styleMod.defaultStyleProfile(), {
+            edition,
+            orphanNotes: 'collect'
+          })
+
+          const shots = []
+          if (pageNumbers.length > 0) {
+            const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+            const file = new File([built.bytes], 'proof.pdf', { type: 'application/pdf' })
+            const opened = await pdfMod.openPdf(file)
+            for (const n of pageNumbers) {
+              const rendered = await pdfMod.renderPage(opened, n - 1, 150)
+              shots.push([n, rendered.canvas.toDataURL('image/png')])
+              rendered.canvas.width = 0
+              rendered.canvas.height = 0
+            }
+          }
+          return {
+            title: edition.title,
+            pages: built.pageCount,
+            notesPlaced: built.notesPlaced,
+            notesCollected: built.notesCollected,
+            notesDropped: built.notesDropped,
+            imagesDropped: built.imagesDropped,
+            warnings: built.warnings.length,
+            substitutions: built.substitutions,
+            bytes: built.bytes.length,
+            shots
+          }
+        },
+        [REPO, shots]
+      )
+      const { writeFile } = await import('node:fs/promises')
+      const wrote = []
+      for (const [n, dataUrl] of result.shots) {
+        const file = `${OUT}/proof-${String(n).padStart(3, '0')}.png`
+        await writeFile(file, Buffer.from(dataUrl.split(',')[1], 'base64'))
+        wrote.push(file)
+      }
+      delete result.shots
+      return { ...result, wrote }
+    },
+
+    /**
      * The book as it will be set, one block to a record.
      *
      * The gates show a leaf at a time and the export shows a PDF; neither is
