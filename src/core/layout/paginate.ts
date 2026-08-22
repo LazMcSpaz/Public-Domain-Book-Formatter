@@ -27,6 +27,7 @@ import { effectiveDpi } from '@core/image'
 import { breakParagraph, type Alignment, type Attachment, type BrokenLine } from './break-lines'
 import { prepareFootnotes, type NoteReference, type PreparedNote } from './footnotes'
 import { anchorIllustrations } from './illustrations'
+import { withTypographicQuotes } from './quotes'
 import {
   bottomFolioBaseline,
   frameFor,
@@ -514,7 +515,9 @@ function ornamentLines(art: OrnamentArt, ctx: BuildContext): FlowLine[] {
 function sectionFlowables(
   section: BookSection,
   ctx: BuildContext,
-  profile: StyleProfile
+  profile: StyleProfile,
+  illustrations: readonly Illustration[],
+  slotsPerPage: number
 ): Flowable[] {
   const pageSection: PageSection = section.placement === 'front' ? 'front' : 'back'
 
@@ -524,16 +527,31 @@ function sectionFlowables(
     { suppressFirstIndent: true, dropCap: false }
   )
 
-  const body = section.blocks.map((block, i) =>
-    buildFlowable(block, ctx, {
-      // The first paragraph sits directly under the title, so it is set flush:
-      // there is no preceding paragraph for an indent to distinguish it from.
-      suppressFirstIndent: i === 0,
-      dropCap: profile.dropCap && i === 0
-    })
-  )
+  const out: Flowable[] = [title]
+  section.blocks.forEach((block, i) => {
+    out.push(
+      buildFlowable(block, ctx, {
+        // The first paragraph sits directly under the title, so it is set
+        // flush: there is no preceding paragraph for an indent to distinguish
+        // it from.
+        suppressFirstIndent: i === 0,
+        dropCap: profile.dropCap && i === 0
+      })
+    )
+    // A picture the editor pinned to a paragraph of their own prose.
+    //
+    // The body anchors by block *index*, which is meaningless here: a section
+    // is written rather than read, its blocks are derived from the prose on
+    // every layout, and the only stable handle is the id. An introduction that
+    // discusses a title page and cannot show it is the case this exists for.
+    for (const illustration of illustrations) {
+      if (illustration.anchorAfterBlockId === block.id) {
+        out.push(buildIllustrationFlowable(illustration, ctx, slotsPerPage))
+      }
+    }
+  })
 
-  return [title, ...body].map((flow) => ({ ...flow, pageSection }))
+  return out.map((flow) => ({ ...flow, pageSection }))
 }
 
 /**
@@ -1088,11 +1106,16 @@ function runningHeadText(
 }
 
 export function layout(
-  doc: BookDocument,
+  raw: BookDocument,
   profile: StyleProfile,
   measurer: TextMeasurer,
   options: LayoutOptions
 ): LaidOutBook {
+  // Presentation, applied on the way in for the same reason optical margins are
+  // applied on the way out: the transcription records what the page said, and
+  // the shape of a quotation mark is not part of that. Idempotent, which
+  // matters because `layoutWithToc` runs this twice.
+  const doc = profile.typographicQuotes ? withTypographicQuotes(raw) : raw
   const rectoFrame = frameFor(profile, 'recto')
   const versoFrame = frameFor(profile, 'verso')
   const leading = leadingFor(profile.bodyFontSize)
@@ -1269,7 +1292,21 @@ export function layout(
   // Where each picture falls in the reading order. Computed before anything is
   // broken so an illustration is a flowable like any other from here on, and
   // the placement loop needs to know nothing about pictures at all.
-  const anchored = anchorIllustrations(doc.blocks, doc.illustrations)
+  // Pictures pinned inside a written section are placed by `sectionFlowables`,
+  // so they are held back from the body anchoring — which would otherwise find
+  // no block of that id and drop them at the end of the book as a lost
+  // supplied image.
+  const sectionBlockIds = new Set(doc.sections.flatMap((s) => s.blocks.map((b) => b.id)))
+  const inSections = doc.illustrations.filter(
+    (i) =>
+      i.anchorAfterBlockId !== undefined &&
+      i.anchorAfterBlockId !== null &&
+      sectionBlockIds.has(i.anchorAfterBlockId)
+  )
+  const anchored = anchorIllustrations(
+    doc.blocks,
+    doc.illustrations.filter((i) => !inSections.includes(i))
+  )
 
   const flowables: Flowable[] = []
 
@@ -1282,7 +1319,7 @@ export function layout(
   // questions that gate exists to ask.
   if (options.maxBodyPages === undefined) {
     for (const section of doc.sections.filter((x) => x.placement === 'front')) {
-      flowables.push(...sectionFlowables(section, ctx, profile))
+      flowables.push(...sectionFlowables(section, ctx, profile, inSections, slotsPerPage))
     }
   }
 
@@ -1319,7 +1356,7 @@ export function layout(
   // notes — an afterword belongs with the book, an apparatus after it.
   if (options.maxBodyPages === undefined) {
     for (const section of doc.sections.filter((x) => x.placement === 'back')) {
-      flowables.push(...sectionFlowables(section, ctx, profile))
+      flowables.push(...sectionFlowables(section, ctx, profile, inSections, slotsPerPage))
     }
   }
 

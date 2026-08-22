@@ -804,6 +804,47 @@ describe('applyEdits — a division the editor wrote', () => {
     expect(doc.sections[0]!.blocks[0]!.text).toBe('Second.')
   })
 
+  it('keeps a picture pinned to a paragraph of a written section', () => {
+    // An introduction that discusses a cover and then shows it. Supplied
+    // pictures were filtered against the *body* block ids alone, so an anchor
+    // into a section matched nothing and the picture was dropped before the
+    // engine ever saw it — silently, since nothing had been laid out yet to
+    // report it as missing.
+    const doc = applyEdits(book(), [
+      {
+        kind: 'section',
+        sectionId: 'intro',
+        placement: 'front',
+        title: 'Before You Begin',
+        text: 'First paragraph.\n\nThe paragraph about the cover.'
+      },
+      {
+        kind: 'image',
+        imageId: 'cover',
+        afterBlockId: 'intro/b1',
+        sourceWidth: 1653,
+        sourceHeight: 2337,
+        caption: 'The cover of the 1916 edition.'
+      }
+    ])
+    const supplied = doc.illustrations.find((i) => i.id === 'cover')
+    expect(supplied).toBeDefined()
+    expect(supplied!.anchorAfterBlockId).toBe('intro/b1')
+  })
+
+  it('still drops a picture pinned to a block that is gone', () => {
+    const doc = applyEdits(book(), [
+      {
+        kind: 'image',
+        imageId: 'orphan',
+        afterBlockId: 'nowhere/b9',
+        sourceWidth: 10,
+        sourceHeight: 10
+      }
+    ])
+    expect(doc.illustrations.find((i) => i.id === 'orphan')).toBeUndefined()
+  })
+
   it('keeps a front and a back section apart', () => {
     const doc = applyEdits(book(), [
       { kind: 'section', sectionId: 'a', placement: 'front', title: 'Introduction', text: 'One.' },

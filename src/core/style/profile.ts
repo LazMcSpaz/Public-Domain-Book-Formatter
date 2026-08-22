@@ -124,6 +124,7 @@ export function normalizeStyleProfile(raw: unknown): StyleProfile {
     paragraphSpacingEms: num(raw['paragraphSpacingEms'], d.paragraphSpacingEms),
     hyphenate: bool(raw['hyphenate'], d.hyphenate),
     opticalMargins: bool(raw['opticalMargins'], d.opticalMargins),
+    typographicQuotes: bool(raw['typographicQuotes'], d.typographicQuotes),
     chaptersOpenRecto: bool(raw['chaptersOpenRecto'], d.chaptersOpenRecto),
     pageNumber: oneOf(raw['pageNumber'], PAGE_NUMBER_POSITIONS, d.pageNumber),
     contentsSynopsis: bool(raw['contentsSynopsis'], d.contentsSynopsis),

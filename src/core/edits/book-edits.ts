@@ -325,8 +325,28 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
       anchor: { blockId: note.blockId, at: note.at }
     })
   }
+  // Built before the supplied pictures are filtered, because a picture may be
+  // pinned to a paragraph of a written section — an introduction that discusses
+  // a cover and then shows it — and those blocks exist nowhere else.
+  const builtSections = [...sections.values()]
+    // A section with no prose is not a section. Its title alone would print as
+    // a division of the book with nothing in it.
+    .map((section) => ({
+      id: section.sectionId,
+      placement: section.placement,
+      title: section.title.trim() || 'Introduction',
+      blocks: paragraphsOf(section.text, section.sectionId)
+    }))
+    .filter((section) => section.blocks.length > 0)
+  const sectionBlockIds = new Set(builtSections.flatMap((s) => s.blocks.map((b) => b.id)))
+
   const suppliedIllustrations = [...supplied.values()]
-    .filter((image) => image.afterBlockId === null || byId.has(image.afterBlockId))
+    .filter(
+      (image) =>
+        image.afterBlockId === null ||
+        byId.has(image.afterBlockId) ||
+        sectionBlockIds.has(image.afterBlockId)
+    )
     .map((image) => ({
       id: image.imageId,
       // A supplied picture has no source leaf. The field is kept at -1 rather
@@ -355,16 +375,7 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   return {
     ...doc,
     blocks,
-    sections: [...sections.values()]
-      // A section with no prose is not a section. Its title alone would print
-      // as a division of the book with nothing in it.
-      .map((section) => ({
-        id: section.sectionId,
-        placement: section.placement,
-        title: section.title.trim() || 'Introduction',
-        blocks: paragraphsOf(section.text, section.sectionId)
-      }))
-      .filter((section) => section.blocks.length > 0),
+    sections: builtSections,
     footnotes,
     illustrations: [...illustrations, ...suppliedIllustrations],
     // Chapters are derived from the blocks, so retyping a paragraph into a

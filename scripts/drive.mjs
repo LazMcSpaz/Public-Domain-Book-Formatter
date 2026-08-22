@@ -537,10 +537,11 @@ async function serve() {
      * already accepted has no question, so no `ref`, so no way to look at it.
      * The scan is on the device either way.
      */
-    leaf: async ([n, name]) => {
+    leaf: async ([n, name, dpi = '150']) => {
       const pageIndex = Number(n)
+      const resolution = Number(dpi)
       const url = await page.evaluate(
-        async ([repo, index]) => {
+        async ([repo, index, atDpi]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const pdf = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
           const runs = await runStore.listRuns()
@@ -548,9 +549,9 @@ async function serve() {
           if (!newest) throw new Error('No book open on this device.')
           const file = await runStore.loadSourceFile(newest.key)
           if (!file) throw new Error('The scan is not stored on this device.')
-          return pdf.renderPageToObjectUrl(file, index, 150)
+          return pdf.renderPageToObjectUrl(file, index, atDpi)
         },
-        [REPO, pageIndex]
+        [REPO, pageIndex, resolution]
       )
       const bytes = await page.evaluate(async (u) => {
         const res = await fetch(u)
@@ -605,9 +606,16 @@ async function serve() {
           }
           // Through the app's own path rather than a second assembly of the
           // same steps, so this cannot report a book the export would not write.
+          // The pixels travel beside the document rather than in it, so they
+          // have to be handed over explicitly. Without them a book with plates
+          // lays out with the space reserved and every picture reported
+          // missing, which is a quieter failure than it sounds: the page count
+          // is right, nothing is dropped, and the plate is simply blank.
+          const images = new Map((run.images ?? []).map((i) => [i.id, i.bytes]))
           const built = await interior.renderInterior(doc, styleMod.defaultStyleProfile(), {
             edition,
-            orphanNotes: 'collect'
+            orphanNotes: 'collect',
+            images
           })
 
           const shots = []
@@ -628,6 +636,7 @@ async function serve() {
             notesPlaced: built.notesPlaced,
             notesCollected: built.notesCollected,
             notesDropped: built.notesDropped,
+            imagesPlaced: built.imagesPlaced.map((i) => ({ id: i.id, dpi: Math.round(i.dpi) })),
             imagesDropped: built.imagesDropped,
             warnings: built.warnings.length,
             substitutions: built.substitutions,

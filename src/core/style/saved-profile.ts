@@ -81,6 +81,7 @@ export const BANKED_STYLE_KEYS: readonly (keyof StyleProfile)[] = [
   'paragraphSpacingEms',
   'hyphenate',
   'opticalMargins',
+  'typographicQuotes',
   'chaptersOpenRecto',
   'pageNumber',
   'contentsSynopsis',

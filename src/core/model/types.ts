@@ -276,6 +276,19 @@ export interface StyleProfile {
    */
   opticalMargins: boolean
   /**
+   * Turn typewriter quotes and apostrophes into printer's marks.
+   *
+   * A reading of a scan comes back with a mixture of the two, because the model
+   * reads real marks off the paper on one line and types plain ones on the
+   * next. Straightening them is presentation and not correction, so it happens
+   * here rather than in the transcription: applied to the document on the way
+   * into `layout()`, the same way optical margins are applied on the way out.
+   *
+   * Off for a facsimile edition, or for a book where the plain marks are
+   * carrying something.
+   */
+  typographicQuotes: boolean
+  /**
    * Start every chapter on a right-hand page, inserting a blank verso where
    * needed. Traditional, and it costs paper: a book of short chapters can gain
    * thirty leaves this way.
