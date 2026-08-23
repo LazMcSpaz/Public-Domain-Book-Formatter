@@ -4,6 +4,11 @@ The process a book goes through from a scan to a transcription that can be
 proofed, annotated and printed — written down so it can be **run and audited by
 someone who did not build it**.
 
+For the **code-level** version of one of these stages — the same flow traced
+hop by hop with a numbered, falsifiable claim at each one — see
+[`TRACE-draft-to-store.md`](./TRACE-draft-to-store.md). That is the document to
+review code against; this one is the process a person follows.
+
 There is no API. Every reading step happens either in a browser the driver
 holds open, or in a conversation. That changes what the safeguards have to
 catch, and most of this document is about the safeguards rather than the steps.
