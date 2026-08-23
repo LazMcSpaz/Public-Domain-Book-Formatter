@@ -42,8 +42,8 @@ four shapes:
   buried in a shell command. `ocr` and `body` were both added this way, and both
   because a job turned out to be impossible without them.
 - **Evidence that comes back as an image.** A crop, a leaf, a contact sheet.
-  The rule is unchanged and the assistant is not exempt from it: never repair
-  text without pixels.
+  The rule is unchanged and the assistant is not exempt from it: propose a
+  reading from sense if you like, but only pixels accept one.
 - **A pure function that runs without a browser at all.** `checkProposals` and
   `findAnchor` are the model — deterministic, no network, and they do not care
   whether a person, a model or the API wrote the thing they are checking. Work
@@ -157,6 +157,50 @@ module exists to catch.
 The editor's voice card (`voice/<pen-name>.json` on the shelf, and
 `scripts/voice.mjs` to read it) carries the same rules in the form the writing
 is actually done against. Read it before writing anything that goes in a book.
+
+### How a book gets read, and what checks it
+
+No API. Transcription and annotation both happen in a session, which changes
+what the safeguards have to catch: the vision pass saw one leaf at a time and
+could not drift because it could not see far, and a conversation that has read
+three hundred pages of one author is the exact condition under which fluent
+invention appears. So the reading is staged, and every stage after the first is
+a check on the one before it.
+
+1. **Take the free reading first.** Recon renders, OCRs and harvests every
+   leaf, and caches it. A born-digital PDF has its own words read straight out.
+   No model, no spend. This is the step that matters most, because it turns the
+   job from _"read this image and produce text"_ — the generative act, where
+   invention lives — into _"here is an image and here is a text, where do they
+   differ"_. A reader that never writes unprompted cannot confabulate a
+   paragraph.
+2. **Triage deterministically.** OCR confidences are real probabilities and
+   `assessText` measures damage. Clean, consistent leaves keep their OCR.
+   Damaged or structurally ambiguous ones get eyes. Escalation is measured,
+   never a model saying it feels unsure — SPEC §4, applied to spend.
+3. **Batch the leaves that need eyes into subagents.** One agent per handful of
+   leaves, given the images, their OCR, and the tail of the previous batch for
+   the seam. It returns transcription and dies; the parent never holds a page
+   image. That rebuilds on purpose the property that made the vision pass safe.
+4. **Checkpoint every batch**, the way the notes pass and recon already do. A
+   session that dies or hits a limit loses one batch, not a book.
+5. **Check the book against itself, for free** (`@core/coherence`). A name
+   spelled two ways, a doubled word, a cross-reference to a chapter that is not
+   there, a quotation that never closes. Pure, deterministic, no spend, and
+   whatever it catches never needs adjudicating.
+6. **Read for sense** — the one check with _meaning_ available. A chapter at a
+   time, output **findings and never text**. See the propose/accept rule below.
+7. **Adjudicate every finding against the crop**, with a reader that has not
+   seen the hypothesis. Shown both, a model confirms; shown the crop, it reads.
+8. **A person decides.** The verdicts are a sheet to read, not a queue to
+   approve. Nothing reaches the book until the editor has looked, and the sheet
+   is built so that looking is cheap: the crop, what the paper says, what was
+   proposed, and what the deterministic checks made of it, in one place.
+
+Keep the ledger. Findings raised, confirmed, refuted, per book. A check nobody
+can score is worse than no check, because it manufactures confidence: if the
+sense pass proposes a hundred and sixty survive the pixels it is earning its
+place, and if fifteen survive it is noise and should be tightened or dropped.
 
 ### What a session looks like
 
@@ -276,12 +320,29 @@ Path aliases: `@core`, `@platform` (defined in `tsconfig.json`,
   `imagesDropped` and `missingImages` are the same rule for pictures, and
   nothing is drawn in place of one — a grey placeholder box in a book for sale
   is worse than a gap the user was told about.
-- **Never repair text without pixels.** With a scan, the model reads a page
-  against the image and OCR is the independent witness that catches it
-  drifting. Given only garbled text and no picture, it has nothing to be right
-  _against_: it returns fluent, confident, partly-invented prose, and no
-  downstream check can tell. For a public-domain reprint that is the one
-  unrecoverable failure. A text-only "clean this up" pass must never be added.
+- **A model may propose a reading; only pixels may accept one.** With a scan,
+  the model reads a page against the image and OCR is the independent witness
+  that catches it drifting. Given only garbled text and no picture, it has
+  nothing to be right _against_: it returns fluent, confident, partly-invented
+  prose, and no downstream check can tell. For a public-domain reprint that is
+  the one unrecoverable failure.
+
+  This used to read "never repair text without pixels", and the rule has not
+  moved — only the wording, because it forbade something worth having. Sense is
+  the one check with _meaning_ available: `a fate that could move mountains` is
+  two real words either side of one wrong one, both scanning, both what OCR saw,
+  and nothing mechanical will ever catch it. So a pass that reads the assembled
+  prose and says **"this does not cohere, and I would expect X"** is not the
+  forbidden thing. Acting on X without looking is.
+
+  The line is therefore drawn at the artefact, not at the activity. A reader
+  without pixels emits a **finding** — a place, a reason, and a hypothesis
+  marked as one. A finding becomes an edit only after a reader _with_ the crop
+  has said what the paper says, and that reader is shown the crop before the
+  hypothesis, because a model shown both confirms rather than reads. What must
+  never be added is a pass whose output is text: a "clean this up" step that
+  hands back prose instead of a list of places to look.
+
 - **What needs reading is a structural question, not a statistical one.** Good
   OCR of a clean scan is made of `chirnrgeon` and `thc` — shaped exactly like
   words — so no measurement of word shapes can decide whether a file's text can

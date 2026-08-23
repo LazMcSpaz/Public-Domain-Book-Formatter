@@ -318,6 +318,23 @@ async function serve() {
         else missing.push(image.path)
       }
 
+      // The scan itself, when the browser has not already got it. Everything
+      // that looks at pixels — `leaf`, `ocr`, `sheet`, every crop a correction
+      // is checked against — reads it back out of the run store, and `load`
+      // stored the book without it. The rule the app is built on is that no
+      // text is repaired without pixels; a loader that leaves the pixels behind
+      // makes following that rule impossible rather than merely inconvenient.
+      const scanBytes = await readFile(scan)
+      const alreadyStored = await page.evaluate(
+        async ([repo, file]) => {
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const held = await runStore.loadSourceFile(project.fileKey(file))
+          return held !== null && held.size === file.size
+        },
+        [REPO, { name, size: meta.size, lastModified: Math.floor(meta.mtimeMs) }]
+      )
+
       const loaded = await page.evaluate(
         async ([repo, text, file, pictures]) => {
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
@@ -353,7 +370,30 @@ async function serve() {
         },
         [REPO, json, { name, size: meta.size, lastModified: Math.floor(meta.mtimeMs) }, pictures]
       )
-      return missing.length > 0 ? { ...loaded, missingImages: missing } : loaded
+      // Sent after the run, and only when it is not already there: a scan is
+      // tens of megabytes of base64 across the wire, and re-loading the same
+      // book to answer one more question should not pay for it twice.
+      if (!alreadyStored) {
+        await page.evaluate(
+          async ([repo, file, base64]) => {
+            const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+            const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+            const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+            await runStore.saveSourceFile(
+              project.fileKey(file),
+              new File([bytes], file.name, { type: 'application/pdf' })
+            )
+          },
+          [
+            REPO,
+            { name, size: meta.size, lastModified: Math.floor(meta.mtimeMs) },
+            scanBytes.toString('base64')
+          ]
+        )
+      }
+
+      const out = { ...loaded, scanStored: true }
+      return missing.length > 0 ? { ...out, missingImages: missing } : out
     },
 
     /**
@@ -793,6 +833,50 @@ async function serve() {
       }
       delete result.shots
       return { ...result, wrote }
+    },
+
+    /**
+     * Every way the book disagrees with itself, deterministically.
+     *
+     * The free half of the coherence work, and the half that runs first: a
+     * name spelled two ways, a word or a line set twice, a quotation that never
+     * closes, a cross-reference to a chapter the book has not got. No model, no
+     * spend, and nothing here proposes a reading — each finding is a place
+     * where the book contradicts itself, which is a fact about the text rather
+     * than an opinion about it, so it needs somebody to look rather than a
+     * second reader to adjudicate.
+     *
+     * Runs over the *assembled* document, because a doubled line and a name
+     * variant both live at page seams and a raw leaf cannot show you a seam.
+     */
+    consistency: async ([out = 'consistency.json']) => {
+      const found = await page.evaluate(
+        async ([repo]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const coherence = await import(`/@fs${repo}/src/core/coherence/index.ts`)
+          const quotes = await import(`/@fs${repo}/src/core/layout/index.ts`)
+          const runs = await runStore.listRuns()
+          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          if (!newest) throw new Error('No book open on this device.')
+          const run = await runStore.loadRun(newest.key)
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          // Through the quote pass first, because the unclosed-quote check
+          // counts printer's marks: a straight mark opens and closes with the
+          // same character and cannot be counted at all.
+          return coherence.checkConsistency(quotes.withTypographicQuotes(doc))
+        },
+        [REPO]
+      )
+      const { writeFile } = await import('node:fs/promises')
+      await writeFile(out, JSON.stringify(found, null, 1))
+      const byKind = {}
+      for (const f of found) byKind[f.kind] = (byKind[f.kind] ?? 0) + 1
+      return { wrote: out, findings: found.length, byKind }
     },
 
     /**
