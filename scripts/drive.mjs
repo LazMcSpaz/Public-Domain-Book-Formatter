@@ -21,6 +21,8 @@
  *   node scripts/drive.mjs answer orthography preserve
  *   node scripts/drive.mjs advance
  *   node scripts/drive.mjs evidence 'terms#0' word.png
+ *   node scripts/drive.mjs leaf 7 page7 300      # the scan itself, big enough to read
+ *   node scripts/drive.mjs ocr 7 8               # the independent witness's own reading
  *   node scripts/drive.mjs shot design
  *   node scripts/drive.mjs quit
  */
@@ -127,6 +129,15 @@ async function serve() {
   await page.goto(URL_BASE, { waitUntil: 'networkidle' })
 
   /** The app's own command surface, or a clear reason it is not there. */
+  // What `open` last put into the app. `leaf` and `ocr` go back to the file on
+  // disk, and asking for the path again on every crop is how the wrong book
+  // gets looked at.
+  let openedScan = null
+  const scanPath = () => {
+    if (!openedScan) throw new Error('Nothing is open. Run `drive.mjs open <path>` first.')
+    return openedScan
+  }
+
   const run = async (command) => {
     const present = await page.evaluate(() => Boolean(window.__pdbfAgent))
     if (!present) {
@@ -185,7 +196,120 @@ async function serve() {
         mimeType: name.endsWith('.epub') ? 'application/epub+zip' : 'application/pdf',
         buffer
       })
+      openedScan = resolve(REPO, path)
       return { opened: name, bytes: buffer.length }
+    },
+
+    /**
+     * A leaf of the scan, big enough to read.
+     *
+     * `evidence` cuts the word box a gate is asking about, which is the right
+     * crop for "is this word right?" and useless for everything else: a
+     * correction has to be checked against the *line* it sits in, and a
+     * disagreement the checks found is often a word that is not there at all
+     * and so has no box to cut. This renders the page itself, at whatever DPI
+     * is asked for, with an optional region in rendered pixels.
+     *
+     * It goes to the file on disk rather than to the app's open document on
+     * purpose: what a correction is checked against must be the scan, not the
+     * app's idea of it, and a verb that still works when the app is between
+     * gates is worth more than one that does not.
+     *
+     *   drive.mjs leaf 7 page7 300
+     *   drive.mjs leaf 7 bottom 300 0,1400,1115,341
+     */
+    leaf: async ([index, name, dpi = '300', box]) => {
+      const n = Number(index)
+      if (!Number.isInteger(n) || n < 0) throw new Error(`Not a leaf index: “${index}”`)
+      const buffer = await (await import('node:fs/promises')).readFile(resolve(REPO, scanPath()))
+      const region = box ? box.split(',').map(Number) : null
+      if (region && (region.length !== 4 || region.some((v) => !Number.isFinite(v)))) {
+        throw new Error(`A region is x,y,w,h in rendered pixels, not “${box}”`)
+      }
+      const shot = await page.evaluate(
+        async ([repo, bytes, pageIndex, dots, rect]) => {
+          const pdf = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+          const doc = await pdf.openPdf(Uint8Array.from(atob(bytes), (c) => c.charCodeAt(0)).buffer)
+          const page = await pdf.renderPage(doc, pageIndex, dots)
+          const whole = { width: page.width, height: page.height }
+          const cut = rect
+            ? await pdf.cropToPngBytes(page.canvas, {
+                x0: rect[0],
+                y0: rect[1],
+                x1: rect[0] + rect[2],
+                y1: rect[1] + rect[3]
+              })
+            : await pdf.cropToPngBytes(page.canvas, {
+                x0: 0,
+                y0: 0,
+                x1: page.width,
+                y1: page.height
+              })
+          page.canvas.width = 0
+          page.canvas.height = 0
+          let binary = ''
+          for (const byte of cut.bytes) binary += String.fromCharCode(byte)
+          return { base64: btoa(binary), width: cut.width, height: cut.height, leaf: whole }
+        },
+        [REPO, buffer.toString('base64'), n, Number(dpi), region]
+      )
+      const file = `${OUT}/${name ?? `leaf-${n}`}.png`
+      await writeFile(file, Buffer.from(shot.base64, 'base64'))
+      return {
+        wrote: file,
+        leaf: n,
+        dpi: Number(dpi),
+        size: [shot.width, shot.height],
+        page: shot.leaf
+      }
+    },
+
+    /**
+     * What OCR made of a leaf, in its own words.
+     *
+     * The independent witness, asked directly. A word the vision pass dropped
+     * has no crop to look at and no box to point to, so the only way to see
+     * that it is missing is to read what the other reader saw in the same
+     * place. Confidences come with it, because they are a real probability and
+     * the reason OCR is worth consulting at all.
+     */
+    ocr: async ([...leaves]) => {
+      if (leaves.length === 0) throw new Error('Which leaves? e.g. drive.mjs ocr 7 8')
+      const indices = leaves.map(Number)
+      if (indices.some((n) => !Number.isInteger(n) || n < 0)) {
+        throw new Error(`Leaf indices are whole numbers, not “${leaves.join(' ')}”`)
+      }
+      const buffer = await (await import('node:fs/promises')).readFile(resolve(REPO, scanPath()))
+      return page.evaluate(
+        async ([repo, bytes, pageIndices]) => {
+          const pdf = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+          const ocr = await import(`/@fs${repo}/src/platform/browser/ocr.ts`)
+          const doc = await pdf.openPdf(Uint8Array.from(atob(bytes), (c) => c.charCodeAt(0)).buffer)
+          const engine = new ocr.OcrEngine()
+          try {
+            const out = []
+            for (const pageIndex of pageIndices) {
+              // One leaf held at a time: a 300-DPI page is ~19 MB of pixels.
+              const rendered = await pdf.renderPage(doc, pageIndex, 300)
+              const result = await engine.recognize(rendered.canvas, pageIndex)
+              rendered.canvas.width = 0
+              rendered.canvas.height = 0
+              out.push({
+                leaf: pageIndex,
+                meanConfidence: Math.round(result.meanConfidence * 10) / 10,
+                text: result.text,
+                weak: result.words
+                  .filter((w) => w.confidence < 70 && w.text.trim())
+                  .map((w) => `${w.text} (${Math.round(w.confidence)})`)
+              })
+            }
+            return { leaves: out }
+          } finally {
+            await engine.dispose()
+          }
+        },
+        [REPO, buffer.toString('base64'), indices]
+      )
     },
 
     /**
