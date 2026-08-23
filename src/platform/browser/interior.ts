@@ -24,6 +24,15 @@ export interface Interior {
   bytes: Uint8Array
   /** The measured page count — what the cover spine needs. */
   pageCount: number
+  /**
+   * That page count split by section: front matter, body, back matter.
+   *
+   * A total on its own cannot answer the question anybody actually asks of a
+   * reprint — "why is this shorter than the original?" — because the front and
+   * back matter of this edition are not the original's at all. The body is the
+   * only part the two share, and this is what makes it comparable.
+   */
+  sectionPages: Record<string, number>
   /** Typeface families embedded in the file. */
   embeddedFamilies: string[]
   /** Lines that would not fit their measure. */
@@ -98,9 +107,15 @@ export async function renderInterior(
       : {})
   })
 
+  const sectionPages: Record<string, number> = {}
+  for (const page of book.pages) {
+    sectionPages[page.section] = (sectionPages[page.section] ?? 0) + 1
+  }
+
   return {
     bytes: pdf.bytes,
     pageCount: pdf.pageCount,
+    sectionPages,
     embeddedFamilies: pdf.embeddedFamilies,
     warnings: book.warnings,
     chapterPages: book.chapterPages,

@@ -748,6 +748,10 @@ async function serve() {
               profile.runningHeads.verso
             }/${profile.runningHeads.recto}`,
             pages: built.pageCount,
+            // Where those pages went. A total on its own cannot say why an
+            // edition runs to the length it does; the body is the only part it
+            // shares with the book it was set from.
+            sections: built.sectionPages,
             notesPlaced: built.notesPlaced,
             notesCollected: built.notesCollected,
             notesDropped: built.notesDropped,
