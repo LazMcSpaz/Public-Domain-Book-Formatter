@@ -239,10 +239,24 @@ node scripts/drive.mjs load <book.json> <scan.pdf>   # from the shelf, not from 
 node scripts/drive.mjs body out.json # the assembled book: block ids and the exact
                                      #   strings an edit must be written in terms of
 node scripts/drive.mjs ocr 12 16 19  # what OCR reads off named leaves, as plain text
+node scripts/drive.mjs draft b.json 12 13 14   # those leaves as blocks, from the cached
+                                     #   OCR — the free reading, to be corrected not trusted
+node scripts/drive.mjs transcribe <scan.pdf> b.json   # land a checked batch; merges by
+                                     #   `pageIndex`, never replaces, cross-checked against OCR
 node scripts/drive.mjs sheet typos 28:occulist   # words cut from the leaves they sit on
 node scripts/drive.mjs leaf 133      # any leaf, rendered
+node scripts/drive.mjs leaf 133 tight 600 0.3,0.24,0.2,0.03   # a crop of it, at any DPI
+node scripts/drive.mjs runs          # readings held here; `runs drop <n>` removes one
 node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` work it
 ```
+
+**Reading a leaf is `draft` → look → correct → `transcribe`.** Never type a leaf
+out from the render: that is the generative act the whole design avoids, and a
+reader producing text from an image alone has nothing to be wrong against.
+`draft` turns the job into _"here is an image and here is a text, where do they
+differ"_, which is the one shape of reading that cannot confabulate a paragraph.
+Its `structural` list says what it guessed rather than measured, and is the
+order to check things in.
 
 **Before committing: typecheck + test + format:check + lint.**
 
@@ -925,6 +939,64 @@ in `screenshots/`. Don't ship UI blind.
   to 13.4 without a word changing; and a compound no longer gains a second
   hyphen when it breaks at its own (`cross--legged`), since the hyphenator hands
   back `["cross-", "legged"]` and the breaker was adding one on top.
+
+- **Also done**: **a leaf can be read without an API, and without anyone typing
+  it out** (`src/core/draft`, `drive.mjs draft` and `transcribe`). With the
+  paid vision pass gone there was nothing between a scan and a transcription
+  but a person retyping the page from the render — which is exactly the
+  generative act the propose/accept rule exists to prevent, because a reader
+  producing text from an image alone has nothing to be wrong against. `draft`
+  closes the gap from the other end: recon has already OCR'd every leaf and
+  measured a box round every word, so the characters come off the pixels and
+  what the module adds is the **geometry that was being thrown away** — which
+  lines sit together, which are indented, which are centred, which are set
+  apart at the head and foot. The job that remains is _"here is an image and
+  here is a text, where do they differ"_, and a reader that never writes
+  unprompted cannot confabulate a paragraph. Nothing downstream believes a
+  draft: it is not saved, `transcribe` is still the only door to the store, and
+  every draft carries a `structural` list of what it guessed rather than
+  measured, which is the order to check it in.
+
+  Three faults came out of the first real leaf, and all three were invisible
+  until a page went through it. **Line clustering scrambled the page**: words
+  were gathered by distance from the _current_ line only, so a word whose box
+  sat a few pixels low — a quotation mark, a descender, a letter the scan
+  thickened — opened a line of its own that the next line's words then joined,
+  and the last word of every line surfaced at the end of the line below it.
+  Overlap against _every_ open band fixes it. **A line robbed of its last word
+  looks inset on the right**, so it read as centred and was called a heading —
+  the knock-on from the first, and the reason equal insets are no longer enough:
+  a centred line must also be substantially shorter than the measure, because an
+  indented first line that breaks early is inset on both sides to the pixel.
+  **And a display title sits exactly where a running head sits**, so
+  "SYNOPSIS OF THE LESSONS" was taken off the leaf as furniture. Position
+  cannot tell them apart; size can, measured on the line's _tallest_ word
+  because a letterspaced title comes back from OCR as a couple of words and a
+  row of dashes.
+
+  `transcribe` had three of its own, all of the same kind — a report that was
+  not true. It keyed on the exact `name\0size\0date` triple, so a batch landed
+  in a run of its own that nothing would ever open: no error, no book, and a
+  session that believed it had filed a leaf. `findRunForFile` is what the app
+  itself opens books with and is now what this uses. It took the leaf count
+  from the batches when the scan was not stored, which made `stillMissing: 0`
+  and `complete: true` come out of a book that had barely been started — the
+  one wrong answer here, because it is the answer that stops anybody looking;
+  it now asks the open app, and says "this is a floor" when nothing knows. And
+  it reported `checked against the cached reading` over leaves the cache had no
+  words for, which is worse than no check because it stops anyone looking
+  again. `runs` came with them, because something that can write a run has to
+  be able to unwrite one: a stray run does not sit quietly beside the real one,
+  it _is_ what `listRuns()` hands back as the newest, which is how every other
+  verb here finds the book.
+
+  What the first leaf actually turned up is the argument for the whole shape.
+  OCR read `belleves`; sense says `believes`; the 1916 compositor set two
+  `l`s, and the 600-DPI crop settles it — the strokes are ascender height,
+  against the x-height dotless `i` of `skeptical` in the same line. Dots ink
+  unevenly all over this scan and are worth nothing as evidence; stroke height
+  is worth everything. A pass that had been allowed to emit text would have
+  quietly corrected it and nothing downstream could have caught that.
 
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.

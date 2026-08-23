@@ -836,6 +836,217 @@ async function serve() {
     },
 
     /**
+     * Land a transcription that was made in a session, one batch at a time.
+     *
+     * There is no API any more: the reading happens in a conversation, in
+     * batches, by subagents that each see a handful of leaves and die. This is
+     * where those batches land, and it is deliberately the only door — a
+     * harness that wrote to the store itself would be a second implementation
+     * of the one thing that must not have two.
+     *
+     * Three properties, each of them load-bearing.
+     *
+     * **Validated through the app's own parser.** Every page goes through
+     * `parsePageTranscription`, which is what the API path used and what the
+     * schema means. A page that will not parse fails the whole call rather than
+     * landing half-read: a partly-understood transcription looks exactly like a
+     * whole one and prints with holes in it.
+     *
+     * **Merged, never replaced.** A batch covering leaves 40 to 47 leaves the
+     * other three hundred alone. That is what makes a session that dies or hits
+     * a limit cost one batch rather than a book, and it is why `pageIndex` is
+     * required on every page instead of being taken from array position — a
+     * batch has to be able to say which leaves it is.
+     *
+     * **Checked against OCR before it is believed.** `verifyPage` compares each
+     * page to what Tesseract read off the same leaf. OCR is not a language
+     * model, so it has no shared blind spots with whoever wrote the batch, and
+     * with the API gone it is the only independent witness left. The findings
+     * are reported, not enforced — this is a place to look, not a gate — but a
+     * batch that comes back with half its leaves flagged is a batch to re-read.
+     */
+    transcribe: async ([scanPath, pagesPath, mode = 'merge']) => {
+      if (!scanPath || !pagesPath) {
+        throw new Error('transcribe <scan.pdf> <pages.json> [merge|replace]')
+      }
+      const { readFile, stat } = await import('node:fs/promises')
+      const scan = resolve(REPO, scanPath)
+      const meta = await stat(scan)
+      const name = scanPath.split('/').pop()
+      const raw = JSON.parse(await readFile(resolve(REPO, pagesPath), 'utf8'))
+      const pages = Array.isArray(raw) ? raw : (raw.pages ?? [])
+      if (!Array.isArray(pages) || pages.length === 0) {
+        throw new Error(`${pagesPath}: no pages. Expected an array, or { "pages": [...] }.`)
+      }
+
+      return page.evaluate(
+        async ([repo, file, pages, replace]) => {
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const schema = await import(`/@fs${repo}/src/core/transcribe/index.ts`)
+          const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
+          const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+
+          // `findRunForFile` rather than `fileKey`, because the app itself
+          // opens books that way and a batch has to land in the run the app
+          // will open. The timestamp is the one part of a key that moves for
+          // reasons having nothing to do with the book — a re-download, a
+          // restore, a sync — and Playwright's `setInputFiles` and Node's
+          // `stat` need not agree on it to the millisecond. Keying on the exact
+          // triple alone put this batch in a run of its own that nothing would
+          // ever open: no error, no book, and a session that believed it had
+          // just filed a leaf.
+          const existing = await runStore.findRunForFile(file)
+          const key = existing?.key ?? project.fileKey(file)
+          const foundBy = !existing
+            ? 'nothing on this device — this batch starts a new run'
+            : existing.key === project.fileKey(file)
+              ? 'name, size and date'
+              : 'name and size — the stored date differs'
+
+          // Parsed before anything is touched, so a bad batch changes nothing.
+          const parsed = pages.map((entry, i) => {
+            const at = entry?.pageIndex
+            if (typeof at !== 'number' || !Number.isInteger(at) || at < 0) {
+              throw new Error(
+                `Page ${i + 1} of this batch has no pageIndex. ` +
+                  'A batch must say which leaves it read; position in the array is not that.'
+              )
+            }
+            return { ...schema.parsePageTranscription(entry, at), pageIndex: at }
+          })
+
+          const held = existing?.run ?? null
+          const byIndex = new Map(
+            replace || !held ? [] : held.transcriptions.map((t) => [t.pageIndex, t])
+          )
+          for (const p of parsed) byIndex.set(p.pageIndex, p)
+          const transcriptions = [...byIndex.values()].sort((a, b) => a.pageIndex - b.pageIndex)
+
+          // The leaf count comes from the scan, not from the batches: a book is
+          // not three hundred pages long because three hundred have been read.
+          // Taken from the stored source file, which `load` and `open` both put
+          // there — and falling back to what has been read only when the scan is
+          // genuinely absent, which the report then says out loud rather than
+          // letting `stillMissing: 0` imply a finished book.
+          let pageCount = held?.pageCount ?? 0
+          let countFrom = 'the run already on this device'
+          let counted = pageCount > 0
+          if (!pageCount) {
+            const source = await runStore.loadSourceFile(key)
+            if (source) {
+              pageCount = (await pdfMod.openPdf(source)).numPages
+              countFrom = 'the scan'
+              counted = true
+            } else {
+              // The open book, if it is this one. `open` hands the scan to the
+              // app without storing it — only `load` stores — so a book being
+              // worked on right now routinely has no source file in the store
+              // while the app itself knows perfectly well how many leaves it
+              // has. Matched on the file name, because the app is holding a
+              // `File` and this is the same path that was handed to it.
+              const view = window.__pdbfAgent?.run
+                ? (await window.__pdbfAgent.run({ op: 'state' }))?.view
+                : null
+              if (view && view.fileName === file.name && view.pageCount > 0) {
+                pageCount = view.pageCount
+                countFrom = 'the book open in the app'
+                counted = true
+              } else {
+                // Never `transcriptions.length`. A book is not one leaf long
+                // because one leaf has been read, and a count taken from the
+                // batches makes `stillMissing: 0` and `complete: true` come out
+                // of a book that has barely been started — the one wrong answer
+                // here, because it is the answer that stops anybody looking.
+                // The highest leaf read is a floor, and is reported as one.
+                pageCount = Math.max(...transcriptions.map((t) => t.pageIndex)) + 1
+                countFrom = 'the batches — nothing here knows the book, so this is a floor'
+                counted = false
+              }
+            }
+          }
+
+          const run = project.createSavedRun({
+            key,
+            fileName: file.name,
+            pageCount,
+            transcriptions,
+            failures: held?.failures ?? [],
+            // No API was called. Saying otherwise would put a number in the
+            // book file that nobody spent.
+            usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 },
+            modelId: 'in-session',
+            identityAnswers: held?.identityAnswers ?? {},
+            edits: held?.edits ?? [],
+            // A book is complete when every leaf has been read, and only then
+            // — and never when the leaf count itself was guessed.
+            complete: counted && transcriptions.length >= pageCount,
+            ...(held?.adjudicated ? { adjudicated: held.adjudicated } : {}),
+            ...(held?.facts ? { facts: held.facts } : {})
+          })
+          const saved = await runStore.saveRun(run)
+
+          // The independent witness. Cached OCR only: re-reading the scan here
+          // would turn landing a batch into a ten-minute job, and a batch that
+          // cannot be checked should say so rather than appear to pass.
+          const cached = await cacheMod.loadReconCache(key, {
+            dpi: recon.RECON_DPI,
+            maxPages: null
+          })
+          const checked = []
+          let compared = 0
+          if (cached) {
+            for (const p of parsed) {
+              const words = cached.words.filter((w) => w.pageIndex === p.pageIndex)
+              // No cached words for this leaf is not a pass. Counted apart, so
+              // `ocr` cannot report "checked" over leaves nothing was compared
+              // against — a check that claims success on work it skipped is
+              // worse than no check, because it stops anyone looking again.
+              if (words.length === 0) continue
+              compared++
+              const findings = schema.verifyPage(p, words)
+              if (findings.length > 0) {
+                checked.push({
+                  pageIndex: p.pageIndex,
+                  findings: findings.map((f) => ({ code: f.code, detail: f.detail }))
+                })
+              }
+            }
+          }
+
+          const missing = []
+          for (let i = 0; i < pageCount; i++) if (!byIndex.has(i)) missing.push(i)
+
+          return {
+            saved,
+            landed: parsed.length,
+            transcribed: transcriptions.length,
+            pageCount,
+            pageCountFrom: countFrom,
+            complete: run.complete,
+            stillMissing: missing.length,
+            firstMissing: missing.slice(0, 12),
+            matchedRunBy: foundBy,
+            ocr: !cached
+              ? 'NOT CHECKED — no cached reading on this device'
+              : compared === parsed.length
+                ? `checked against the cached reading, all ${compared} leaf(s)`
+                : `NOT CHECKED on ${parsed.length - compared} of ${parsed.length} leaf(s) —` +
+                  ' the cached reading has no words for them',
+            flagged: checked
+          }
+        },
+        [
+          REPO,
+          { name, size: meta.size, lastModified: Math.floor(meta.mtimeMs) },
+          pages,
+          mode === 'replace'
+        ]
+      )
+    },
+
+    /**
      * Every way the book disagrees with itself, deterministically.
      *
      * The free half of the coherence work, and the half that runs first: a
@@ -1220,6 +1431,113 @@ async function serve() {
     },
 
     /**
+     * The free reading, shaped like a page and ready to be corrected.
+     *
+     * With no API there is nothing that turns a leaf into blocks, and asking a
+     * session to type one out from the render is the generative act this whole
+     * design exists to avoid — a reader producing text from an image alone has
+     * nothing to be wrong against. So the draft comes from the OCR that recon
+     * already did and cached: every character is what Tesseract read off the
+     * pixels, and what `draftPage` adds is the geometry it measured and threw
+     * away — which lines sit together, which are indented, which are centred.
+     *
+     * The job that remains is therefore *"here is an image and here is a text,
+     * where do they differ"*, which is the one shape of reading that cannot
+     * confabulate a paragraph. Correct the draft against `leaf <n>`, then land
+     * it with `transcribe`.
+     *
+     * `structural` is the reading order for that check: it lists what was
+     * guessed rather than measured, so the correcting starts where the draft is
+     * weakest. Nothing here is believed by anything downstream — the draft is
+     * not saved, and only `transcribe` writes to the store.
+     */
+    draft: async ([out, ...ns]) => {
+      if (!out || ns.length === 0) throw new Error('draft <out.json> <leaf> [leaf...]')
+      const pages = ns.map(Number)
+      if (pages.some((n) => !Number.isInteger(n) || n < 0)) {
+        throw new Error('Leaves are whole numbers, counted from 0.')
+      }
+      const drafted = await page.evaluate(
+        async ([repo, list]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
+          const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const draftMod = await import(`/@fs${repo}/src/core/draft/index.ts`)
+          const runs = await runStore.listRuns()
+          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          if (!newest) throw new Error('No book open on this device.')
+          // The cache first, because it is instant and because it is the
+          // same reading every crop and word box on this device was built
+          // from. Falling back to reading the leaves afresh rather than
+          // refusing: the cache is only written once the user has agreed to
+          // book data being kept here, and a session that declined that should
+          // still be able to draft a page. Same DPI either way — a draft read
+          // at a different one would put every box somewhere other than the
+          // crops its corrections are checked against.
+          const cached = await cacheMod.loadReconCache(newest.key, {
+            dpi: recon.RECON_DPI,
+            maxPages: null
+          })
+          const draftOf = (pageIndex, words) => ({
+            pageIndex,
+            words: words.length,
+            ...draftMod.draftPage(words)
+          })
+          if (cached) {
+            return {
+              read: 'the cached reading',
+              pages: list.map((n) =>
+                draftOf(
+                  n,
+                  cached.words.filter((w) => w.pageIndex === n)
+                )
+              )
+            }
+          }
+          const file = await runStore.loadSourceFile(newest.key)
+          if (!file) throw new Error('No cached reading and no scan on this device.')
+          const ocrMod = await import(`/@fs${repo}/src/platform/browser/ocr.ts`)
+          const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+          const engine = new ocrMod.OcrEngine()
+          const doc = await pdfMod.openPdf(file)
+          const out = []
+          try {
+            for (const n of list) {
+              const rendered = await pdfMod.renderPage(doc, n, recon.RECON_DPI)
+              const result = await engine.recognize(rendered.canvas, n)
+              out.push(draftOf(n, result.words))
+              rendered.canvas.width = 0
+              rendered.canvas.height = 0
+            }
+          } finally {
+            await engine.dispose()
+          }
+          return { read: 'the leaves, read again just now', pages: out }
+        },
+        [REPO, pages]
+      )
+
+      const { writeFile } = await import('node:fs/promises')
+      // The batch is written as the array `transcribe` takes, with the guesses
+      // kept beside each page rather than stripped: a draft handed on without
+      // its `structural` list looks exactly like a checked transcription, and
+      // that is the one confusion that would put an unread leaf in a book.
+      await writeFile(resolve(REPO, out), JSON.stringify(drafted.pages, null, 2) + '\n', 'utf8')
+      return {
+        wrote: out,
+        read: drafted.read,
+        leaves: drafted.pages.map((d) => ({
+          pageIndex: d.pageIndex,
+          role: d.role,
+          blocks: d.blocks.length,
+          words: d.words,
+          uncertain: d.uncertain.length
+        })),
+        next: `Check each against \`leaf <n>\`, correct the text, then \`transcribe\`.`
+      }
+    },
+
+    /**
      * A contact sheet of words, cut from the pages they are printed on.
      *
      * The rule is that text is never repaired without pixels, and the honest
@@ -1393,6 +1711,52 @@ async function serve() {
         for (const k of keys) localStorage.removeItem(k)
         return { cleared: keys }
       })
+    },
+
+    /**
+     * Every reading on this device, and a way to drop one.
+     *
+     * `transcribe` can write a run, so something has to be able to unwrite one:
+     * a batch landed against a mistyped file, or a run stranded under a key
+     * nothing will look up again, otherwise sits in the store forever and — far
+     * worse — is what `listRuns()` hands back as "the newest", which is how
+     * every other verb here finds the book. A stray run does not sit quietly
+     * beside the real one; it *replaces* it for anything sorting by date.
+     *
+     * Named rather than matched: dropping a reading is the one destructive
+     * thing this driver does, and the transcription is the half of the work
+     * that costs money.
+     */
+    runs: async ([action, which]) => {
+      return page.evaluate(
+        async ([repo, verb, target]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const summaries = (await runStore.listRuns()).sort((a, b) =>
+            b.savedAt.localeCompare(a.savedAt)
+          )
+          // Only what a summary actually carries. It has no count of leaves
+          // read — `pageCount` is how long the book is — so there is no
+          // "transcribed" here to report, and standing one up out of
+          // `pageCount` would have every partial reading on the device
+          // announcing itself as finished.
+          const shown = summaries.map((r, i) => ({
+            at: i,
+            key: r.key,
+            fileName: r.fileName,
+            pageCount: r.pageCount,
+            complete: r.complete,
+            failedPages: r.failedPages,
+            savedAt: r.savedAt
+          }))
+          if (verb !== 'drop') return { runs: shown, newest: shown[0]?.fileName ?? null }
+          const at = Number(target)
+          const chosen = shown[at]
+          if (!chosen) throw new Error(`No run at ${target}. Run \`runs\` to see them.`)
+          await runStore.deleteRun(chosen.key)
+          return { dropped: chosen, left: shown.length - 1 }
+        },
+        [REPO, action ?? 'list', which]
+      )
     },
 
     /** What the stubbed repository holds, so a push can be checked. */
