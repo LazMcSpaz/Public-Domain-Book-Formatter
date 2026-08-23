@@ -121,12 +121,12 @@ resumed session is complete rather than degraded.
 **Not built yet**, with the honest reasons in
 [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md):
 
-- **An image-editing mode.** Illustrations are found, reviewed, cut and placed,
-  but not _retouched_: no crop, straighten, levels or despeckle. The engine for
-  all of that is written (`src/core/image/engine`) and not yet wired to a UI, so
-  a crooked or foxed scan comes through crooked and foxed.
-- **Real small capitals**, and the ligatures that pdf-lib's embedder cannot
-  write widths for.
+- **A book-length run against the live API.** Everything is exercised against a
+  mock transport, which proves the shape of the thing and not the cost or the
+  failure modes of three hundred real requests. See
+  [`docs/PLAN-next.md`](./docs/PLAN-next.md).
+- **A physical proof copy.** No digital check substitutes for one, on the
+  interior or the cover.
 
 ## Covers
 

@@ -198,10 +198,28 @@ colour, which is the one thing these checks cannot afford.
 2. **A physical proof.** SPEC §10's rule applies here more than anywhere: no
    digital check substitutes for one printed copy, and the spine is the thing to
    look at.
-3. **Retouching cover art in the studio.** `CoverArt.ops` is the interior's op
-   stack and the engine is wired for the interior already; the studio does not
-   yet open `ImageEditor` on a cover picture. A plate that wants straightening
-   has to be straightened inside the book first.
+3. **Retouching cover art in the studio** — deliberately _not_ done, and here is
+   the reasoning, because the obvious reading of the gap is wrong.
+
+   `ImageEditor` exists and is wired to the interior's illustrations. The studio
+   does not open it on a cover picture, and mostly does not need to: the handoff
+   sends `drawableImageBytes()`, which is the **retouched** bytes, with the
+   post-op dimensions to match. A plate straightened and levelled inside the
+   book arrives on the cover already straightened and levelled. Uploaded and
+   generated art was prepared before it got here by definition.
+
+   What is left is the case where the cover wants a _different_ treatment from
+   the same picture — a tight detail crop of the frontispiece, pushed harder in
+   contrast, while the plate inside the book stays whole and gentle. That is a
+   real want and a narrow one, and the escape hatch is to crop the file before
+   uploading it. It is also once per book rather than once per leaf, which is
+   what makes the friction tolerable here and intolerable at the proof step.
+
+   `CoverArt.ops` stays in the model regardless. It costs nothing, `sizeAfterOps`
+   already consults it so the DPI check divides by the right number, and it
+   means wiring the editor in later is a UI job with no change to the document,
+   the writer or the store.
+
 4. **Interior art.** The reason the art module is `@core/cover/art` and not
    `@core/cover/replicate-prompt`: nothing in the brief-building, the resolution
    arithmetic or the provenance record is about covers. A chapter-opener or an
