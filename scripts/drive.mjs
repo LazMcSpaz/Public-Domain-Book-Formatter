@@ -277,20 +277,63 @@ async function serve() {
      * never going to see and the app would offer nothing. Re-keying to what
      * *this* copy of the scan will produce is what makes the saved run findable.
      * Nothing else about the run is touched.
+     *
+     * The **pictures come with it**. A book file names its plates rather than
+     * carrying them (`images/<digest>.png`, written once so a re-save costs
+     * kilobytes), and `parseBookFile` hands those names back as `imagePaths`
+     * for whoever holds the repository to fetch. The driver holds it — the
+     * shelf is a directory on this disk — so it reads them here. Without this
+     * every plate lays out as an empty box and `proof` reports it dropped,
+     * which is a false alarm indistinguishable from a real one.
      */
     load: async ([bookPath, scanPath]) => {
       const { readFile, stat } = await import('node:fs/promises')
-      const json = await readFile(resolve(REPO, bookPath), 'utf8')
+      const { dirname } = await import('node:path')
+      const bookFile = resolve(REPO, bookPath)
+      const json = await readFile(bookFile, 'utf8')
       const scan = resolve(REPO, scanPath)
       const meta = await stat(scan)
       const name = scanPath.split('/').pop()
+
+      // A picture's path is relative to the shelf root, and a book lives two
+      // directories down from it (`books/<slug>/book.json`). Both are tried
+      // rather than one assumed, because a book file read from somewhere other
+      // than a shelf should still find pictures sitting beside it.
+      const book = JSON.parse(json)
+      const roots = [resolve(dirname(bookFile), '..', '..'), dirname(bookFile)]
+      const pictures = []
+      const missing = []
+      for (const image of Array.isArray(book.images) ? book.images : []) {
+        if (!image?.path || !image?.id) continue
+        let bytes = null
+        for (const root of roots) {
+          try {
+            bytes = await readFile(resolve(root, image.path))
+            break
+          } catch {
+            /* try the next root */
+          }
+        }
+        if (bytes) pictures.push({ id: image.id, base64: bytes.toString('base64') })
+        else missing.push(image.path)
+      }
+
       const loaded = await page.evaluate(
-        async ([repo, text, file]) => {
+        async ([repo, text, file, pictures]) => {
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const book = project.parseBookFile(text)
           const key = project.fileKey(file)
-          const run = { ...book.run, key, fileName: file.name }
+          const fetched = pictures.map((p) => ({
+            id: p.id,
+            bytes: Uint8Array.from(atob(p.base64), (c) => c.charCodeAt(0))
+          }))
+          const run = {
+            ...book.run,
+            key,
+            fileName: file.name,
+            images: [...book.run.images, ...fetched]
+          }
           await runStore.deleteRun(key)
           const saved = await runStore.saveRun(run)
           // The gate answers travel with the book — they are what the user
@@ -303,13 +346,14 @@ async function serve() {
             key,
             pages: run.pageCount,
             edits: run.edits.length,
+            images: run.images.length,
             complete: run.complete,
             savedAt: book.savedAt
           }
         },
-        [REPO, json, { name, size: meta.size, lastModified: Math.floor(meta.mtimeMs) }]
+        [REPO, json, { name, size: meta.size, lastModified: Math.floor(meta.mtimeMs) }, pictures]
       )
-      return loaded
+      return missing.length > 0 ? { ...loaded, missingImages: missing } : loaded
     },
 
     /**
