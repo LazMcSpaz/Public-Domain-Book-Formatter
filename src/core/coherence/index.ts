@@ -13,3 +13,20 @@
  * may propose a reading; only pixels may accept one** in CLAUDE.md.
  */
 export { checkConsistency, type ConsistencyFinding, type ConsistencyKind } from './consistency'
+export {
+  parseSenseFinding,
+  parseVerdict,
+  locateFindings,
+  settle,
+  settleAll,
+  scoreSense,
+  SENSE_KINDS,
+  type SenseFinding,
+  type SenseKind,
+  type LocatedFinding,
+  type Verdict,
+  type Outcome,
+  type SettledFinding,
+  type SenseLedger
+} from './sense'
+export { chunkForSense, type SenseChunk, type SenseChunking } from './chunk'

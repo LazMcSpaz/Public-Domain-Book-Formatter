@@ -880,6 +880,232 @@ async function serve() {
     },
 
     /**
+     * The book cut into chapters, ready for readers who each see one.
+     *
+     * A three-hundred-page book will not fit in one context and should not: the
+     * failure this pass exists to avoid is a reader who has absorbed an author
+     * so thoroughly it can write him. A chapter is the unit because coherence is
+     * what is being tested and a chapter is a thing that coheres.
+     *
+     * The register travels with every chunk — the names and terms the book has
+     * already established, drawn from its own text. Without it each reader meets
+     * "Panchadasi" and "akasha" cold and files them as incoherent, which is the
+     * commonest way a sense pass drowns in findings nobody wants.
+     */
+    chunks: async ([out = 'chunks.json']) => {
+      const built = await page.evaluate(
+        async ([repo]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const coherence = await import(`/@fs${repo}/src/core/coherence/index.ts`)
+          const runs = await runStore.listRuns()
+          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          if (!newest) throw new Error('No book open on this device.')
+          const run = await runStore.loadRun(newest.key)
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          return coherence.chunkForSense(doc)
+        },
+        [REPO]
+      )
+      const { writeFile } = await import('node:fs/promises')
+      await writeFile(out, JSON.stringify(built, null, 1))
+      return {
+        wrote: out,
+        chunks: built.chunks.length,
+        words: built.chunks.reduce((n, c) => n + c.words, 0),
+        register: built.register.length,
+        chapters: built.chunks.map((c) => ({ title: c.title, blocks: c.blocks.length }))
+      }
+    },
+
+    /**
+     * A crop for every finding, and a manifest that does **not** carry the guess.
+     *
+     * This is the safeguard, in the one place it can be enforced rather than
+     * asked for. Shown a crop and a proposed reading, a model confirms; shown a
+     * crop alone, it reads. The difference is invisible in the output and total
+     * in what it is worth — so `expected` and `why` are stripped here, and the
+     * adjudicator is handed the leaf, the span as the book currently has it, and
+     * one question: what does the paper say?
+     *
+     * A finding whose quote is not in the block it names comes back `unplaced`
+     * and gets no crop. That is a paraphrase rather than a quotation, and a
+     * paraphrase cannot be cropped, so it cannot be adjudicated, so it must not
+     * be acted on.
+     */
+    crops: async ([path = 'findings.json', dir = 'crops', dpi = '200']) => {
+      const { readFile, writeFile, mkdir } = await import('node:fs/promises')
+      const raw = JSON.parse(await readFile(resolve(REPO, path), 'utf8'))
+      const located = await page.evaluate(
+        async ([repo, raw]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const coherence = await import(`/@fs${repo}/src/core/coherence/index.ts`)
+          const runs = await runStore.listRuns()
+          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const run = await runStore.loadRun(newest.key)
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const findings = raw.map((f, i) => coherence.parseSenseFinding(f, i))
+          const blocks = new Map(doc.blocks.map((b) => [b.id, b.text]))
+          const pages = new Map(doc.blocks.map((b) => [b.id, b.sourcePages]))
+          return coherence.locateFindings(findings, blocks).map((f) => ({
+            blockId: f.blockId,
+            quote: f.quote,
+            at: f.at,
+            pages: [...(pages.get(f.blockId) ?? [])]
+          }))
+        },
+        [REPO, raw]
+      )
+
+      // Crops go beside every other rendered leaf, under the driver's own
+      // output directory, so one `.gitignore` line covers all of them.
+      const into = `${OUT}/${dir}`
+      await mkdir(resolve(REPO, into), { recursive: true })
+      const manifest = []
+      const unplaced = []
+      for (const [i, f] of located.entries()) {
+        if (f.at === null || f.pages.length === 0) {
+          unplaced.push({ blockId: f.blockId, quote: f.quote })
+          continue
+        }
+        const leaves = []
+        for (const n of f.pages) {
+          const stem = `${dir}/f${String(i).padStart(3, '0')}-leaf${n}`
+          await handlers.leaf([String(n), stem, dpi])
+          leaves.push(`${OUT}/${stem}.png`)
+        }
+        // What the adjudicator is given: the leaves, and the span as the book
+        // currently has it. No reason, and above all no hypothesis.
+        manifest.push({ blockId: f.blockId, quote: f.quote, leaves })
+      }
+      const at = `${into}/manifest.json`
+      await writeFile(at, JSON.stringify(manifest, null, 1))
+      return {
+        wrote: at,
+        cropped: manifest.length,
+        unplaced,
+        note: 'The manifest carries no hypothesis. Ask only what the paper says.'
+      }
+    },
+
+    /**
+     * The sheet a person reads before anything reaches the book.
+     *
+     * The last gate, and the only one that is not a model. Every finding with
+     * its crop, what the paper was read to say, what was proposed, and what the
+     * two together came to — in one place, so that looking is cheap. The ledger
+     * at the foot is what says whether the pass is earning its keep: a hundred
+     * findings of which sixty survive is a good check, and a hundred of which
+     * fifteen survive is noise wearing a check's clothes.
+     */
+    review: async ([
+      findingsPath = 'findings.json',
+      verdictsPath = 'verdicts.json',
+      out = 'sense.md'
+    ]) => {
+      const { readFile, writeFile } = await import('node:fs/promises')
+      const rawFindings = JSON.parse(await readFile(resolve(REPO, findingsPath), 'utf8'))
+      const rawVerdicts = JSON.parse(await readFile(resolve(REPO, verdictsPath), 'utf8'))
+      const built = await page.evaluate(
+        async ([repo, rawFindings, rawVerdicts]) => {
+          const coherence = await import(`/@fs${repo}/src/core/coherence/index.ts`)
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const runs = await runStore.listRuns()
+          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const run = await runStore.loadRun(newest.key)
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const findings = rawFindings.map((f, i) => coherence.parseSenseFinding(f, i))
+          const verdicts = rawVerdicts.map((v, i) => coherence.parseVerdict(v, i))
+          const blocks = new Map(doc.blocks.map((b) => [b.id, b.text]))
+          // Unplaced findings are set aside rather than settled. Their quote is
+          // not in the block they name, so no crop was ever cut and nothing
+          // adjudicated them — settling them would report a crop that could not
+          // be read, which is a different fault wanting different work.
+          const located = coherence.locateFindings(findings, blocks)
+          const unplaced = located.filter((f) => f.at === null)
+          const placed = located.filter((f) => f.at !== null)
+          const settled = coherence.settleAll(placed, verdicts)
+          return {
+            settled,
+            unplaced: unplaced.map((f) => ({
+              blockId: f.blockId,
+              quote: f.quote,
+              kind: f.kind,
+              why: f.why
+            })),
+            ledger: coherence.scoreSense(settled, unplaced.length)
+          }
+        },
+        [REPO, rawFindings, rawVerdicts]
+      )
+
+      const order = { corrected: 0, unreadable: 1, 'as-printed': 2 }
+      const rows = [...built.settled].sort((a, b) => order[a.outcome] - order[b.outcome])
+      const lines = ['# The sense pass, for reading', '']
+      const l = built.ledger
+      const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`
+      lines.push(
+        `${l.raised} raised · **${plural(l.corrected, 'correction', 'corrections')}** · ` +
+          `${l.asPrinted} as printed · ${l.unreadable} unreadable · ${l.unplaced} unplaced`,
+        '',
+        l.precision === null
+          ? 'Nothing adjudicated yet, so no precision to report.'
+          : `Precision ${(l.precision * 100).toFixed(0)}% of what was judged. ` +
+              `The hypothesis was right ${l.hypothesisAgreed} of ${l.corrected} times.`,
+        '',
+        '---',
+        ''
+      )
+      for (const row of rows) {
+        const f = row.finding
+        lines.push(`## ${row.outcome} — \`${f.blockId}\` (${f.kind})`, '')
+        lines.push(`**The book has:** ${f.quote}`, '')
+        if (row.verdict?.legible) lines.push(`**The paper says:** ${row.verdict.reads}`, '')
+        else lines.push('**The paper:** could not be read.', '')
+        lines.push(`**Why it was raised:** ${f.why}`, '')
+        if (f.expected) {
+          lines.push(
+            `**Proposed** (a guess, and not what would be applied): ${f.expected}` +
+              (row.outcome === 'corrected' && !row.hypothesisAgreed ? ' — and it was wrong.' : ''),
+            ''
+          )
+        }
+        if (row.correction) lines.push(`**Would become:** ${row.correction}`, '')
+        lines.push('')
+      }
+      if (built.unplaced.length > 0) {
+        lines.push(
+          '## Could not be located',
+          '',
+          'The quoted words are not in the block named, so no crop could be cut and',
+          'nothing has adjudicated these. A paraphrase rather than a quotation —',
+          'nothing here may be acted on.',
+          ''
+        )
+        for (const f of built.unplaced) {
+          lines.push(`- \`${f.blockId}\` (${f.kind}) — “${f.quote}” · ${f.why}`)
+        }
+        lines.push('')
+      }
+      await writeFile(out, lines.join('\n'))
+      return { wrote: out, ...built.ledger }
+    },
+
+    /**
      * The book as it will be set, one block to a record.
      *
      * The gates show a leaf at a time and the export shows a PDF; neither is
