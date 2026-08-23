@@ -700,11 +700,21 @@ async function serve() {
             assemble.assembleBook(run.transcriptions),
             run.edits ?? []
           )
+          // The whole edition, not just its title. A copyright page is built
+          // from the imprint, the copyright holder, the edition statement, the
+          // ISBN and the public-domain notice, and `proof` used to hand over
+          // none of them — so the leaf came out blank and looked like a bug in
+          // the engine rather than an answer nobody had given. Through
+          // `editionFromAnswers`, which is what the export gate itself uses.
+          const stored = localStorage.getItem(`pdbf.review.${newest.key}`)
+          const saved = stored ? JSON.parse(stored) : {}
           const meta = run.transcriptions.flatMap((t) => (t.metadata ? [t.metadata] : []))
-          const edition = {
+          const exportMod = await import(`/@fs${repo}/src/core/export/index.ts`)
+          const edition = exportMod.editionFromAnswers({
             title: meta.find((m) => m.title)?.title ?? 'Untitled',
-            author: meta.find((m) => m.author)?.author ?? ''
-          }
+            author: meta.find((m) => m.author)?.author ?? '',
+            ...(saved.export ?? {})
+          })
           // Through the app's own path rather than a second assembly of the
           // same steps, so this cannot report a book the export would not write.
           // The pixels travel beside the document rather than in it, so they
@@ -716,8 +726,7 @@ async function serve() {
           // The same call the design gate and the export make, off the answers
           // the book carries — so a look that proofs here is the look that
           // prints.
-          const stored = localStorage.getItem(`pdbf.review.${newest.key}`)
-          const answers = { ...(stored ? JSON.parse(stored).design : null), ...tweaks }
+          const answers = { ...saved.design, ...tweaks }
           const profile = wizard.appliedLook(
             { ...wizard.initialState(), styleProfiles: [] },
             answers
@@ -752,6 +761,16 @@ async function serve() {
             // edition runs to the length it does; the body is the only part it
             // shares with the book it was set from.
             sections: built.sectionPages,
+            // Where each chapter opens, so a leaf can be asked for by name
+            // rather than found by bisecting the book. `side` is the check
+            // that matters when chapters are set to open recto: a right-hand
+            // page is an odd one, and one chapter landing verso is the kind of
+            // fault nobody sees until the proof copy arrives.
+            chapters: built.chapterPages.map((c) => ({
+              title: c.title,
+              page: c.pageIndex + 1,
+              side: (c.pageIndex + 1) % 2 === 1 ? 'recto' : 'verso'
+            })),
             notesPlaced: built.notesPlaced,
             notesCollected: built.notesCollected,
             notesDropped: built.notesDropped,
