@@ -1960,3 +1960,120 @@ mark.claim {
 .agent-bridge .actions {
   margin: 0;
 }
+
+/* ---------------------------------------------------------------------------
+   The cover studio (#cover)
+
+   Two columns: the interview, and the cover itself rendered from the PDF it
+   will download. The preview sticks, because every answer on the left is about
+   something visible on the right and scrolling away from it would turn the
+   interview back into a form.
+   --------------------------------------------------------------------------- */
+
+.cover-studio {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 24px 20px 64px;
+}
+
+.cover-head {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 12px;
+  margin-bottom: 20px;
+}
+
+.cover-head h1 {
+  margin: 0;
+  font-size: 1.5rem;
+}
+
+.cover-head .help {
+  flex: 1 1 320px;
+  color: var(--muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+.cover-body {
+  display: grid;
+  grid-template-columns: minmax(320px, 1fr) minmax(320px, 1fr);
+  gap: 28px;
+  align-items: start;
+}
+
+.cover-questions .q-group {
+  border-bottom: 1px solid var(--line);
+  padding-bottom: 8px;
+  margin-bottom: 8px;
+}
+
+.cover-questions .q-group:last-of-type {
+  border-bottom: none;
+}
+
+.cover-preview {
+  position: sticky;
+  top: 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.cover-preview img {
+  width: 100%;
+  height: auto;
+  display: block;
+  /* A cover is a printed object; the shadow says "sheet" rather than "screen". */
+  box-shadow: 0 1px 6px rgb(35 32 27 / 22%);
+}
+
+/* While a new render is in flight the old one stays up, dimmed. A blank frame
+   between keystrokes would make the studio feel broken rather than busy. */
+.cover-preview img.stale {
+  opacity: 0.55;
+  transition: opacity 120ms ease-in;
+}
+
+.cover-preview .help {
+  color: var(--muted);
+  font-size: 0.85rem;
+  margin: 10px 0 0;
+}
+
+.cover-preview .help.warn,
+.cover-questions .help.warn {
+  color: var(--warn);
+}
+
+.cover-preview .checks {
+  margin-top: 16px;
+}
+
+@media (max-width: 900px) {
+  .cover-body {
+    grid-template-columns: 1fr;
+  }
+
+  /* On a phone the preview goes first: it is the thing being decided about,
+     and a sticky panel below the questions would never be seen at all. */
+  .cover-preview {
+    position: static;
+    order: -1;
+  }
+}
+
+.cover-questions details.q-group > summary {
+  cursor: pointer;
+  padding: 10px 2px;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.cover-questions details.q-group[open] > summary {
+  color: var(--ink);
+}

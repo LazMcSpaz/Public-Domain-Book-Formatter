@@ -72,6 +72,18 @@ export interface CoverInterviewState {
    * shape as `batchAvailable`, and for the same reason.
    */
   replicateAvailable: boolean | null
+  /**
+   * Which door the user has taken to a picture, as answered on this gate.
+   *
+   * Carried in the state rather than read out of the answers by the question
+   * builder, because the builder is pure and takes the book's state: it is the
+   * same reason the wizard's steps take a `WizardState` and not the answer map.
+   * What it buys is the rule the whole interview runs on — a model, a brief and
+   * a subject are three questions nobody uploading their own picture should
+   * ever be shown.
+   */
+  artSource?: 'plate' | 'upload' | 'generated' | 'none'
+
   /** A rendered sample of the cover as it currently stands. */
   previewUrl?: string
 }
@@ -367,7 +379,9 @@ export function artQuestions(state: CoverInterviewState): Question[] {
     }
   ]
 
-  if (plates.length > 0) {
+  const source = state.artSource ?? (plates.length > 0 ? 'plate' : 'upload')
+
+  if (plates.length > 0 && source === 'plate') {
     out.push({
       id: 'cover-plate',
       type: 'choice',
@@ -382,6 +396,8 @@ export function artQuestions(state: CoverInterviewState): Question[] {
       defaultValue: plates[0]?.id ?? ''
     })
   }
+
+  if (source !== 'generated') return out
 
   out.push(
     {

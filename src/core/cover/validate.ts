@@ -103,21 +103,30 @@ export function validateCover(input: ValidateCoverInput): CoverValidationReport 
       level: measured ? 'ok' : 'pending',
       detail: measured
         ? `Spine ${geometry.spineIn.toFixed(3)} in, from a measured ${geometry.pageCount}-page interior on ${PAPER_LABEL[geometry.paper].toLowerCase()}.`
-        : `Spine ${geometry.spineIn.toFixed(3)} in, from a page count of ${geometry.pageCount} that this app did not measure. Typeset the interior and use its final count before printing — a spine off by a few pages puts the fold inside the front cover.`
+        : geometry.pageCount <= 0
+          ? 'No page count yet, so the sheet below is drawn with no spine at all. Everything on it moves once there is one.'
+          : `Spine ${geometry.spineIn.toFixed(3)} in, from a page count of ${geometry.pageCount} that this app did not measure. Typeset the interior and use its final count before printing — a spine off by a few pages puts the fold inside the front cover.`
     })
   }
 
   // 2. Page count against what the chosen stock can be printed on.
   {
     const limits = PAGE_LIMITS[geometry.paper]
+    const unanswered = geometry.pageCount <= 0
     const inRange = geometry.pageCount >= limits.min && geometry.pageCount <= limits.max
     checks.push({
       id: 'page-limits',
       label: 'Page count for this paper',
-      level: inRange ? 'ok' : 'fail',
-      detail: inRange
-        ? `${geometry.pageCount} pages is within the ${limits.min}–${limits.max} KDP prints on ${PAPER_LABEL[geometry.paper].toLowerCase()}.`
-        : `${geometry.pageCount} pages is outside the ${limits.min}–${limits.max} KDP prints on ${PAPER_LABEL[geometry.paper].toLowerCase()}; pick another paper or change the interior.`
+      // Nothing is *wrong* with a cover whose page count has not been given
+      // yet — it is unanswered, not out of range. Opening the studio to a red
+      // failure for not having typed anything teaches people to ignore the
+      // colour, which is the one thing these checks cannot afford.
+      level: unanswered ? 'pending' : inRange ? 'ok' : 'fail',
+      detail: unanswered
+        ? `KDP prints ${limits.min}–${limits.max} pages on ${PAPER_LABEL[geometry.paper].toLowerCase()}. Say how long the interior is and the spine follows from it.`
+        : inRange
+          ? `${geometry.pageCount} pages is within the ${limits.min}–${limits.max} KDP prints on ${PAPER_LABEL[geometry.paper].toLowerCase()}.`
+          : `${geometry.pageCount} pages is outside the ${limits.min}–${limits.max} KDP prints on ${PAPER_LABEL[geometry.paper].toLowerCase()}; pick another paper or change the interior.`
     })
   }
 

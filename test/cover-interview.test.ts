@@ -7,6 +7,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { defaultAnswers, groupQuestions, missingRequired } from '@core/wizard'
+import type { ChoiceQuestion, Question } from '@core/wizard'
 import {
   artQuestions,
   coverFromAnswers,
@@ -19,6 +20,13 @@ import {
   MIN_PAGES_FOR_SPINE_TEXT,
   type CoverInterviewState
 } from '@core/cover'
+
+/** Narrow to a choice, so a question that changed kind fails loudly here. */
+function choice(questions: readonly Question[], id: string): ChoiceQuestion {
+  const found = questions.find((q) => q.id === id)
+  if (!found || found.type !== 'choice') throw new Error(`${id} is not a choice question`)
+  return found
+}
 
 function state(patch: Partial<CoverInterviewState> = {}): CoverInterviewState {
   return {
@@ -83,30 +91,26 @@ describe('never ask what is not relevant yet', () => {
         }
       ]
     })
-    const q = artQuestions(withPlates).find((q) => q.id === 'cover-plate')!
+    const q = choice(artQuestions(withPlates), 'cover-plate')
     expect(q.options[0]!.evidence?.[0]).toMatchObject({ kind: 'image' })
     // And the plate is the recommendation when the book has one.
-    expect(artQuestions(withPlates).find((q) => q.id === 'cover-art-source')!.defaultValue).toBe(
-      'plate'
-    )
+    expect(choice(artQuestions(withPlates), 'cover-art-source').defaultValue).toBe('plate')
   })
 
   it('withdraws generation when the browser cannot reach Replicate', () => {
     const unreachable = state({ replicateAvailable: false })
-    const source = artQuestions(unreachable).find((q) => q.id === 'cover-art-source')!
+    const source = choice(artQuestions(unreachable), 'cover-art-source')
     expect(source.options.map((o) => o.value)).not.toContain('generated')
     // Optimistic until told otherwise, so the door does not flicker into view.
     const unknown = artQuestions(state({ replicateAvailable: null }))
-    expect(unknown.find((q) => q.id === 'cover-art-source')!.options.map((o) => o.value)).toContain(
-      'generated'
-    )
+    expect(choice(unknown, 'cover-art-source').options.map((o) => o.value)).toContain('generated')
   })
 })
 
 describe('collections', () => {
   it('offers a banked look first when there is one', () => {
     const banked = newSavedCoverLook({ name: 'Blackthorn plain', look: defaultLook() })
-    const q = lookQuestions(state({ bankedLooks: [banked] })).find((q) => q.id === 'cover-banked')!
+    const q = choice(lookQuestions(state({ bankedLooks: [banked] })), 'cover-banked')
     expect(q.defaultValue).toBe(banked.id)
     expect(q.options.at(-1)!.value).toBe('')
   })
@@ -193,5 +197,54 @@ describe('coverFromInterior', () => {
       imprint: ''
     })
     expect(doc.look.spineText).toBe(false)
+  })
+})
+
+describe('the picture questions follow the door taken', () => {
+  const plates = [
+    {
+      id: 'p1',
+      pageIndex: 12,
+      caption: 'The apiary',
+      previewUrl: 'blob:x',
+      widthPx: 1800,
+      heightPx: 2400
+    }
+  ]
+
+  it('asks nothing about a model or a brief when the picture is being uploaded', () => {
+    const ids = artQuestions(state({ artSource: 'upload' })).map((q) => q.id)
+    expect(ids).toContain('cover-art-source')
+    expect(ids).not.toContain('cover-art-brief')
+    expect(ids).not.toContain('cover-art-model')
+  })
+
+  it('asks which plate only when a plate is being used', () => {
+    expect(artQuestions(state({ plates, artSource: 'plate' })).map((q) => q.id)).toContain(
+      'cover-plate'
+    )
+    expect(artQuestions(state({ plates, artSource: 'generated' })).map((q) => q.id)).not.toContain(
+      'cover-plate'
+    )
+  })
+
+  it('asks the brief only when one is being made', () => {
+    const ids = artQuestions(state({ artSource: 'generated' })).map((q) => q.id)
+    expect(ids).toContain('cover-art-brief')
+    expect(ids).toContain('cover-art-model')
+  })
+
+  it('asks nothing further when there is to be no picture', () => {
+    const ids = artQuestions(state({ artSource: 'none' })).map((q) => q.id)
+    expect(ids).toEqual(['cover-art-source'])
+  })
+})
+
+describe('an unanswered page count is not a failing cover', () => {
+  it('is reported as pending rather than out of range', () => {
+    // Opening the studio to a red failure for not having typed anything yet
+    // teaches people to ignore the colour.
+    const fresh = defaultCover('6x9', 0)
+    expect(fresh.pageCount).toBe(0)
   })
 })

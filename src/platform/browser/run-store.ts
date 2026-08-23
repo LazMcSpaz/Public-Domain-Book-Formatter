@@ -34,23 +34,26 @@ import {
   type SavedRunSummary
 } from '@core/project'
 import { migrateSavedProfile, type SavedStyleProfile } from '@core/style'
+import { migrateSavedCoverLook, type SavedCoverLook } from '@core/cover'
 
 const DB_NAME = 'pdbf'
 /**
  * v2 added the `profiles` store (banked looks, SPEC §7); v3 added `files`, the
  * source PDF itself; v4 added `recon`, the free-but-slow reading of it; v5
  * added `batches`, the tickets for books submitted and not yet collected; v6
- * added `notes`, what an interrupted annotation pass had already bought. The
- * upgrade handler below creates whichever stores are missing rather than
- * switching on the old version, so a database at any version arrives complete.
+ * added `notes`, what an interrupted annotation pass had already bought; v7
+ * added `covers`, banked cover looks — the collection. The upgrade handler
+ * below creates whichever stores are missing rather than switching on the old
+ * version, so a database at any version arrives complete.
  */
-const DB_VERSION = 6
+const DB_VERSION = 7
 const STORE = 'runs'
 const PROFILE_STORE = 'profiles'
 const FILE_STORE = 'files'
 const RECON_STORE = 'recon'
 const BATCH_STORE = 'batches'
 const NOTES_STORE = 'notes'
+const COVER_STORE = 'covers'
 
 /**
  * How many books' transcriptions to keep, oldest evicted first.
@@ -112,6 +115,13 @@ function openDb(): Promise<IDBDatabase | null> {
         // chunks while a book is being read, and a write here must never be
         // able to disturb the transcription it sits beside.
         db.createObjectStore(NOTES_STORE, { keyPath: 'key' })
+      }
+      if (!db.objectStoreNames.contains(COVER_STORE)) {
+        // Banked cover looks, keyed on their own id and not on any book — a
+        // collection is precisely the thing that outlives the book it was first
+        // designed for. Uncapped for the same reason as `profiles`: evicting
+        // one would silently break the set it exists to hold together.
+        db.createObjectStore(COVER_STORE, { keyPath: 'id' })
       }
     }
     request.onsuccess = () => resolve(request.result)
@@ -581,6 +591,49 @@ export async function listProfiles(): Promise<SavedStyleProfile[]> {
   for (const record of raw) {
     const profile = migrateSavedProfile(record)
     if (profile) out.push(profile)
+  }
+  return out.sort((a, b) => b.savedAt.localeCompare(a.savedAt))
+}
+
+/**
+ * Bank a cover look, replacing one with the same id.
+ *
+ * Beside `saveProfile` and under the same rules. The two are deliberately
+ * separate stores rather than two fields of one record: a press often has one
+ * interior style across everything it prints and several cover looks within it,
+ * and forcing them to travel together would make "the same inside, a different
+ * outside" impossible to express.
+ */
+export async function saveCoverLook(look: SavedCoverLook): Promise<boolean> {
+  const ok = await withStore(
+    'readwrite',
+    async (store) => {
+      await promisify(store.put(look))
+      return true
+    },
+    COVER_STORE
+  )
+  return ok === true
+}
+
+export async function loadCoverLook(id: string): Promise<SavedCoverLook | null> {
+  const raw = await withStore('readonly', (store) => promisify(store.get(id)), COVER_STORE)
+  if (raw === null || raw === undefined) return null
+  return migrateSavedCoverLook(raw)
+}
+
+export async function deleteCoverLook(id: string): Promise<void> {
+  await withStore('readwrite', (store) => promisify(store.delete(id)), COVER_STORE)
+}
+
+/** Every banked cover look, newest first — what the cover studio offers. */
+export async function listCoverLooks(): Promise<SavedCoverLook[]> {
+  const raw = await withStore('readonly', (store) => promisify(store.getAll()), COVER_STORE)
+  if (!raw) return []
+  const out: SavedCoverLook[] = []
+  for (const record of raw) {
+    const look = migrateSavedCoverLook(record)
+    if (look) out.push(look)
   }
   return out.sort((a, b) => b.savedAt.localeCompare(a.savedAt))
 }

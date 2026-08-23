@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest'
 import { fixedWidthMeasurer } from '@core/layout'
 import { BUILTIN_ORNAMENTS } from '@core/ornament'
 import {
+  artFrame,
   blurbFrame,
   composeCover,
   coverGeometry,
@@ -301,5 +302,50 @@ describe('small capitals are real or they are capitals', () => {
     expect(title.text).toBe('BEE KEEPING')
     expect(title.font.smallCaps).toBeUndefined()
     expect(warnings.join(' ')).toMatch(/no real small capitals/)
+  })
+})
+
+describe('artFrame', () => {
+  it('reports where a picture would print before there is one', () => {
+    const doc = bookCover((d) => {
+      d.look.arrangement = 'classic-centered'
+    })
+    const frame = artFrame(doc, measurer)!
+    expect(frame.width).toBeGreaterThan(0)
+    // And it is the frame the composer really uses, not a second copy of it.
+    const doc2 = bookCover((d) => {
+      d.look.arrangement = 'classic-centered'
+      d.content.art = {
+        id: 'real',
+        sourceWidthPx: 2000,
+        sourceHeightPx: 3000,
+        provenance: null,
+        ops: [],
+        fit: 'cover'
+      }
+    })
+    expect(composeCover(doc2, { measurer }).placedArt!.rect).toEqual(frame)
+  })
+
+  it('is null when the arrangement has no picture in it', () => {
+    expect(artFrame(bookCover(), measurer)).toBeNull()
+  })
+})
+
+describe('a cover with no picture is still designed', () => {
+  it('sets the title down the panel and the author near the foot', () => {
+    // Type starting at the top safe line with three inches of nothing below it
+    // reads as a cover that lost its illustration, not as one that never had a
+    // picture in it.
+    const { items, geometry } = composeCover(bookCover(), { measurer })
+    const front = texts(items).filter((t) => t.xPt / 72 > geometry.front.x && !t.rotate)
+    const title = front.find((t) => t.text.toUpperCase().includes('TREATISE'))!
+    const author = front.find((t) => t.text.includes('Amos'))!
+    const panelTop = geometry.frontSafe.y
+    const panelBottom = geometry.frontSafe.y + geometry.frontSafe.height
+
+    expect(title.yPt / 72).toBeGreaterThan(panelTop + geometry.frontSafe.height * 0.1)
+    expect(author.yPt / 72).toBeGreaterThan(panelTop + geometry.frontSafe.height * 0.6)
+    expect(author.yPt / 72).toBeLessThan(panelBottom)
   })
 })

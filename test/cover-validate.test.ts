@@ -182,3 +182,17 @@ describe('validateCover', () => {
     expect(check(r, 'compose-warnings').detail).toMatch(/wants a picture/)
   })
 })
+
+describe('a cover nobody has finished yet', () => {
+  it('reports an unanswered page count as pending, not as out of range', () => {
+    const doc = cover((d) => {
+      d.pageCount = 0
+    })
+    const r = report(doc, { pageCountMeasured: false })
+    expect(check(r, 'page-limits').level).toBe('pending')
+    expect(check(r, 'spine-source').level).toBe('pending')
+    expect(check(r, 'spine-source').detail).toMatch(/No page count yet/)
+    // Nothing here is a failure: the sheet is composable, it just has no spine.
+    expect(r.ready).toBe(true)
+  })
+})

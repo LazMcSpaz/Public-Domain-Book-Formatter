@@ -375,7 +375,15 @@ function drawRule(
 
 /** The measure available for back-cover copy, stopping short of the barcode. */
 export function blurbFrame(geometry: CoverGeometry): Rect {
-  const safe = geometry.backSafe
+  // Started a little down the panel rather than hard against the top safe line.
+  // Back-cover copy set at the very top of the panel reads as a caption that
+  // slid; every printed book puts it in the upper middle.
+  const inset = geometry.backSafe.height * 0.12
+  const safe = {
+    ...geometry.backSafe,
+    y: geometry.backSafe.y + inset,
+    height: geometry.backSafe.height - inset
+  }
   // The barcode sits in the bottom corner; the copy simply ends above it rather
   // than flowing around it. Wrapping text around a rectangle KDP will paste
   // over is fiddly and looks, on the printed book, like a mistake.
@@ -584,6 +592,14 @@ function layFrontCover(
     typeBox = { widthPt: pt(safe.width), heightPt: pt(safe.height * 0.22) }
   } else if (arrangement === 'classic-centered') {
     typeBox = { widthPt: pt(safe.width), heightPt: pt(safe.height * 0.38) }
+  } else {
+    // Typographic. With no picture to balance against, type starting at the top
+    // safe line reads as a page that lost its illustration. The old jobbing
+    // printers put the title in the upper third and the imprint at the foot,
+    // and the space between them is the design — so the block starts down the
+    // panel and the author goes to the foot below.
+    typeTop = pt(safe.y + safe.height * 0.16)
+    typeBox = { widthPt: pt(safe.width), heightPt: pt(safe.height * 0.5) }
   }
 
   let y = typeTop
@@ -672,7 +688,10 @@ function layFrontCover(
     if (content.author.trim()) {
       const size = Math.max(11, fitted.sizePt * AUTHOR_RATIO)
       const lines = wrapText(content.author, typeBox.widthPt, authorFont, size, measurer)
-      centeredLines(items, lines, geometry.front, y, authorFont, size, inkColor, measurer)
+      // On a typographic cover the author sits low, with the empty middle of
+      // the panel doing the work a picture would otherwise do.
+      const authorTop = arrangement === 'typographic' ? pt(safe.y + safe.height * 0.74) : y
+      centeredLines(items, lines, geometry.front, authorTop, authorFont, size, inkColor, measurer)
     }
   }
 
@@ -877,3 +896,37 @@ export function itemBounds(item: CoverItem): Rect | null {
 }
 
 export { contains, overlaps }
+
+/**
+ * Where a picture *would* print on this cover, before there is one.
+ *
+ * The studio has to say "this needs 1800 × 2700 pixels" while the user is
+ * choosing a model, which is before any art exists to measure. Composing with a
+ * stand-in of a known size and reading back the rectangle answers that with the
+ * real arrangement rather than a second copy of its geometry — so a change to
+ * how `plate-window` sizes its window cannot leave this advice behind.
+ *
+ * Returns null for an arrangement that has no picture in it.
+ */
+export function artFrame(doc: CoverDocument, measurer: TextMeasurer): Rect | null {
+  if (doc.look.arrangement === 'typographic') return null
+  const probe: CoverDocument = {
+    ...doc,
+    content: {
+      ...doc.content,
+      art: {
+        id: '__probe__',
+        // A 2:3 stand-in: `cover` fit keeps the frame whatever the proportions,
+        // and `contain` needs *some* ratio to letterbox against. Portrait is
+        // the right guess for a cover, and the caller is told the frame, not
+        // the picture.
+        sourceWidthPx: 2000,
+        sourceHeightPx: 3000,
+        provenance: null,
+        ops: [],
+        fit: 'cover'
+      }
+    }
+  }
+  return composeCover(probe, { measurer }).placedArt?.rect ?? null
+}

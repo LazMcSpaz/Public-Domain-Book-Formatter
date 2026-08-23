@@ -171,7 +171,9 @@ import { renderInterior } from '../platform/browser/interior'
 import { cropIllustrations, readSuppliedImage, retouchPng } from '../platform/browser/illustrations'
 import { renderPageToObjectUrl } from '../platform/browser/pdf'
 import { loadDefaultLook } from './Settings'
+import type { PlateOffer } from '@core/cover'
 import { ExportResult } from './ExportResult'
+import { setCoverHandoff } from './cover-handoff'
 import { NoteReview } from './NoteReview'
 import { PreviewPane } from './PreviewPane'
 import { ProofSheet } from './ProofSheet'
@@ -2182,6 +2184,58 @@ export function App(): JSX.Element {
   }, [state, currentAnswers, complete])
 
   /**
+   * Hand the cover studio everything this book already told us.
+   *
+   * The point of the button, and of the arm being wired to this screen at all:
+   * the page count here is *measured*, and the page count is the spine. Every
+   * other route to a cover starts by asking a human to remember a number they
+   * read a minute ago on another screen.
+   *
+   * The plates travel as pixels rather than as ids. They were cut out of the
+   * scan at render resolution and retouched with the interior's own op stack,
+   * which makes them the best cover art most of these books will ever have —
+   * and they exist only in this tab, so a link that named them would resolve to
+   * nothing the moment it was followed.
+   */
+  const composeCover = useCallback(() => {
+    const edition = editionFromAnswers(currentAnswers)
+    const bytes = drawableImageBytes()
+    const offers: PlateOffer[] = []
+    const plateBytes = new Map<string, Uint8Array>()
+    for (const illustration of correctedDocument?.illustrations ?? []) {
+      const pixels = bytes.get(illustration.id)
+      if (!pixels) continue
+      const url = previewOf(illustration.id)
+      if (!url) continue
+      offers.push({
+        id: illustration.id,
+        pageIndex: illustration.pageIndex,
+        caption: illustration.caption ?? '',
+        previewUrl: url,
+        widthPx: illustration.sourceWidth,
+        heightPx: illustration.sourceHeight
+      })
+      plateBytes.set(illustration.id, pixels)
+    }
+
+    setCoverHandoff(
+      {
+        trimSize: appliedLook(state).style.trimSize,
+        pageCount: pdf?.pageCount ?? state.pageCount,
+        // Only a built interior gives a count worth building a spine on. Saying
+        // so here is what makes the studio's own check honest rather than a
+        // green tick over a guess.
+        pageCountMeasured: pdf !== null,
+        title: edition.title,
+        author: edition.author,
+        imprint: edition.imprint ?? ''
+      },
+      { offers, bytes: plateBytes }
+    )
+    window.location.hash = 'cover'
+  }, [currentAnswers, correctedDocument, drawableImageBytes, previewOf, state, pdf])
+
+  /**
    * Apply the review gate's per-page verdicts. "Read this page again" costs
    * money, so it re-runs only the pages asked for, at a higher resolution than
    * the first pass — the reason to look again is usually that the page was hard
@@ -3759,6 +3813,7 @@ export function App(): JSX.Element {
               note={buildNote}
               savedNote={bankedNote}
               bank={bankMemo}
+              onComposeCover={composeCover}
             />
             {shelfNote ? <div className="resume-note">{shelfNote}</div> : null}
             <div className="actions">

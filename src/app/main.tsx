@@ -1,6 +1,7 @@
 import { StrictMode, Suspense, lazy, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
+import { CoverStudio } from './CoverStudio'
 import { Settings } from './Settings'
 import './styles.css'
 
@@ -30,6 +31,14 @@ function Root(): JSX.Element {
   // way to change an API key or reclaim storage, so it cannot be a dev tool.
   if (hash.startsWith('#settings')) {
     return <Settings onClose={() => (window.location.hash = '')} />
+  }
+
+  // The cover arm. A route of its own rather than a stage of the wizard,
+  // because a cover is wanted for books this app never set — and the export
+  // screen links in here with the measured page count already in hand, so the
+  // book that *was* set here pays nothing for the independence.
+  if (hash.startsWith('#cover')) {
+    return <CoverStudio onClose={() => (window.location.hash = '')} />
   }
 
   if (DevPreview && hash.startsWith('#preview')) {
