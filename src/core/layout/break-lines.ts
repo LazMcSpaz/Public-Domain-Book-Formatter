@@ -120,14 +120,35 @@ export interface BreakParagraphOptions {
   /** Spans set differently from the paragraph, glued to the end of a word. */
   attachments?: readonly Attachment[]
   /**
-   * Word indices to set in italic, and the face to set them in.
+   * Runs set in a face other than the paragraph's own, by word index.
    *
-   * The breaker has to know, rather than the renderer alone: italic advances
-   * differ from roman, and a paragraph measured entirely in roman then drawn
-   * partly in italic breaks its lines in the wrong places.
+   * The breaker has to know, rather than the renderer alone: italic and bold
+   * advances differ from roman, and a paragraph measured entirely in roman then
+   * drawn partly in italic breaks its lines in the wrong places.
+   *
+   * A list rather than one pair because a book needs two of these at once — the
+   * emphasis a page printed, and the strong runs the editor wrote into a
+   * glossary headword. First match wins, so the order is the caller's priority.
    */
-  emphasis?: ReadonlySet<number>
-  emphasisFont?: FontRef
+  spans?: readonly TextSpan[]
+}
+
+/** Word indices to set in `font` instead of the paragraph's own face. */
+export interface TextSpan {
+  words: ReadonlySet<number>
+  font: FontRef
+}
+
+/** The face a word is set in: the first span that claims it, or the default. */
+export function fontForWord(
+  index: number,
+  spans: readonly TextSpan[] | undefined,
+  fallback: FontRef
+): FontRef {
+  if (spans) {
+    for (const span of spans) if (span.words.has(index)) return span.font
+  }
+  return fallback
 }
 
 /**
@@ -135,6 +156,15 @@ export interface BreakParagraphOptions {
  * A space may grow by half its width and shrink by a third — the elasticity
  * that lets Knuth–Plass find good breaks without visible rivers.
  */
+/**
+ * A piece the hyphenator ended at a mark that is already printed.
+ *
+ * `cross-legged` comes back as `["cross-", "legged"]` — the compound's own
+ * hyphen, not a discretionary one — and the same is true of the dashes a
+ * 19th-century text uses inside a word.
+ */
+const ENDS_HYPHENATED = /[-\u2010\u2011\u2012\u2013\u2014]$/u
+
 const GLUE_STRETCH = 0.5
 const GLUE_SHRINK = 0.333
 
@@ -225,10 +255,8 @@ function padLineWidths(lineWidths: number | number[], itemCount: number): number
  */
 export function itemsFromText(text: string, options: BreakParagraphOptions): InputItem[] {
   const { font, sizePt, measurer, alignment, hyphenate } = options
-  const emphasis = options.emphasis
-  const emphasisFont = options.emphasisFont ?? font
-  /** A word's own face — italic where the original emphasised it. */
-  const fontAt = (index: number): FontRef => (emphasis?.has(index) ? emphasisFont : font)
+  /** A word's own face — italic or bold where a span claims it. */
+  const fontAt = (index: number): FontRef => fontForWord(index, options.spans, font)
   const width = (s: string, index = -1): number =>
     measurer.widthOf(s, index >= 0 ? fontAt(index) : font, sizePt)
 
@@ -265,7 +293,15 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
       items.push(box(word, width(word, i), i))
     } else {
       pieces.forEach((piece, p) => {
-        if (p > 0) items.push(penalty(hyphenWidth, HYPHEN_PENALTY, true))
+        if (p > 0) {
+          // A compound's own hyphen is a break point that needs no *drawn*
+          // hyphen: the hyphenator hands back `["cross-", "legged"]`, so adding
+          // one here set "cross--" at the margin. A zero-width penalty is what
+          // says so — `hyphenated` below is decided on the penalty's width, and
+          // a break taken at a zero-width one draws nothing.
+          const already = ENDS_HYPHENATED.test(pieces[p - 1] ?? '')
+          items.push(penalty(already ? 0 : hyphenWidth, HYPHEN_PENALTY, true))
+        }
         items.push(box(piece, width(piece, i), i))
       })
     }

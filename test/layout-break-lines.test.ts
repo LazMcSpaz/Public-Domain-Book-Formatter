@@ -4,7 +4,8 @@ import {
   englishHyphenator,
   fixedWidthMeasurer,
   itemsFromText,
-  type BreakParagraphOptions
+  type BreakParagraphOptions,
+  type FontRef
 } from '@core/layout'
 
 const FONT = { family: 'Test', style: 'regular' } as const
@@ -168,5 +169,46 @@ describe('englishHyphenator', () => {
 
   it('leaves words with no legal break point alone', () => {
     expect(englishHyphenator()('the')).toEqual(['the'])
+  })
+})
+
+/**
+ * `cross-legged` came out as "cross--" at the margin. The hyphenator hands back
+ * `["cross-", "legged"]` — the compound's own hyphen, not a discretionary one —
+ * and the breaker added a second of its own on top of it.
+ */
+describe('a compound breaks at its own hyphen without gaining another', () => {
+  const measurer = fixedWidthMeasurer(0.5)
+  const font: FontRef = { family: 'EB Garamond', style: 'regular' }
+
+  /** Every line's text, with the drawn hyphen included as the breaker set it. */
+  const setAt = (text: string, widthPt: number): string[] =>
+    breakParagraph(text, {
+      font,
+      sizePt: 10,
+      measurer,
+      lineWidths: widthPt,
+      alignment: 'justify',
+      hyphenate: (word) => (word === 'cross-legged' ? ['cross-', 'legged'] : [word])
+      // The line breaker draws the mark itself; `words` carries it.
+    }).map((line) => line.words.map((w) => w.text).join(''))
+
+  it('draws no second hyphen where the word already has one', () => {
+    const lines = setAt('A swami sits cross-legged upon it', 65)
+    const joined = lines.join('|')
+    expect(joined).toContain('cross-')
+    expect(joined).not.toContain('cross--')
+  })
+
+  it('still draws one where the break is the hyphenator’s own', () => {
+    const lines = breakParagraph('an extraordinary thing', {
+      font,
+      sizePt: 10,
+      measurer,
+      lineWidths: 55,
+      alignment: 'justify',
+      hyphenate: (word) => (word === 'extraordinary' ? ['extra', 'ordinary'] : [word])
+    }).map((line) => line.words.map((w) => w.text).join(''))
+    expect(lines.join('|')).toContain('extra-')
   })
 })

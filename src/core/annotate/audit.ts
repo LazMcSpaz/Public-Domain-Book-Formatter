@@ -200,6 +200,7 @@ const DASH = /\u2014|\s\u2013\s/gu
  * `verify-book.ts`: a check that fires on a short passage is a check somebody
  * learns to ignore.
  */
+import { parseInlineMarkup } from '@core/transcribe'
 export const MIN_SENTENCES = 6
 
 /**
@@ -379,7 +380,14 @@ const has = (haystack: string, needles: readonly string[]): string[] =>
  * sentence mentioning both a gland and an aura counts for both sides, because
  * that is exactly the sentence where the asymmetry does its work.
  */
-export function auditProse(text: string): ProseAudit {
+export function auditProse(raw: string): ProseAudit {
+  // Inline markup is notation, not prose, and it wrecks the sentence splitter:
+  // `<b>Aerolite.</b> A stony meteorite.` has its full stop followed by `<`
+  // rather than a space, so the two sentences read as one. A glossary with 126
+  // bold headwords in it moved the reading grade from 9.1 to 13.4 without a
+  // word changing. Stripped through the same parser the book is set from, so
+  // the audit sees exactly the words a reader will.
+  const text = parseInlineMarkup(raw).text
   const findings: BiasFinding[] = []
   let traditionSentences = 0
   let scienceSentences = 0

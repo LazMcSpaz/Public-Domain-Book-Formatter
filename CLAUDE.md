@@ -845,6 +845,26 @@ in `screenshots/`. Don't ship UI blind.
   style tweaks now ride in the design step's own answers so they survive a
   refresh and travel in the book file, which they never did.
 
+- **Also done**: **the book can set a word bold, which is what a glossary is
+  made of.** `<i>` had been the only inline markup that reached the page, so 126
+  glossary headwords printed in the same colour as their definitions and the
+  back matter read as a wall. `<b>` and `<strong>` are now read into a `strong`
+  field beside `emphasis` — same word-index convention, same round trip through
+  `withMarkup`, and carried across a page seam, a retype and a spliced run by
+  the same code that carries italics. What a strong run _prints_ as is decided
+  in the engine, because five of the seven faces offered ship a real bold and IM
+  FELL English does not: `TextMeasurer.hasBold` is asked, and a face without one
+  sets its strong runs in **italic** rather than in a bold smeared out of the
+  regular outlines — the same refusal that governs small capitals, for the same
+  reason. Bold is a third embedded face, so `renderPdf` is held to it end to
+  end: the headword draws from a different font resource than its definition and
+  the entry still copies out as text. Two things fell out of the same pass — the
+  prose audit now strips markup before measuring, because `<b>Aerolite.</b>`
+  puts a full stop against a `<` and moved the reported reading grade from 9.1
+  to 13.4 without a word changing; and a compound no longer gains a second
+  hyphen when it breaks at its own (`cross--legged`), since the hyphenator hands
+  back `["cross-", "legged"]` and the breaker was adding one on top.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

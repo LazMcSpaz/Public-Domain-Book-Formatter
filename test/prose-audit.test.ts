@@ -211,3 +211,21 @@ describe('auditing the editor’s prose for a thumb on the scale', () => {
     expect(audit.sentences.science).toBe(1)
   })
 })
+
+/**
+ * Inline markup is notation, not prose. `<b>Aerolite.</b> A stony meteorite.`
+ * has its full stop followed by `<` rather than a space, so a splitter that saw
+ * the tags read the two sentences as one — and a glossary with 126 bold
+ * headwords in it moved the reported reading grade from 9.1 to 13.4 without a
+ * word changing.
+ */
+describe('markup is not prose', () => {
+  it('reads a tagged sentence exactly as its untagged twin', async () => {
+    const { auditProse } = await import('@core/annotate')
+    const plain = 'Aerolite. A stony meteorite. Standard usage in the geology of the day.'
+    const tagged =
+      '<b>Aerolite.</b> A stony meteorite. Standard usage in the <i>geology</i> of the day.'
+    expect(auditProse(tagged).sentences.total).toBe(auditProse(plain).sentences.total)
+    expect(auditProse(tagged).reading.grade).toBeCloseTo(auditProse(plain).reading.grade, 5)
+  })
+})

@@ -224,7 +224,8 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
             ...block,
             text: edit.text,
             ...(block.cells ? { cells: undefined } : {}),
-            ...(block.emphasis ? { emphasis: undefined } : {})
+            ...(block.emphasis ? { emphasis: undefined } : {}),
+            ...(block.strong ? { strong: undefined } : {})
           })
         )
         break
@@ -333,6 +334,7 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
       originalMarker: '',
       text: marked.text,
       ...(marked.emphasis?.length ? { emphasis: marked.emphasis } : {}),
+      ...(marked.strong?.length ? { strong: marked.strong } : {}),
       pageIndex: block.sourcePages[0] ?? 0,
       orphaned: false,
       anchor: { blockId: note.blockId, at: note.at }

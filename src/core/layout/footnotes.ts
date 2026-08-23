@@ -53,6 +53,8 @@ export interface PreparedNote {
   text: string
   /** Word indices set in italic. See `Footnote.emphasis`. */
   emphasis?: number[]
+  /** Word indices set bold. See `Footnote.strong`. */
+  strong?: number[]
 }
 
 export interface PreparedFootnotes {
@@ -180,7 +182,8 @@ export function prepareFootnotes(
         id: note.id,
         mark,
         text: note.text,
-        ...(note.emphasis?.length ? { emphasis: note.emphasis } : {})
+        ...(note.emphasis?.length ? { emphasis: note.emphasis } : {}),
+        ...(note.strong?.length ? { strong: note.strong } : {})
       })
       remaining.delete(note.id)
 

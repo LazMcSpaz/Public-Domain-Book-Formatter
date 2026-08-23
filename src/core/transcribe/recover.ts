@@ -334,6 +334,8 @@ export interface SplicedBlock {
   text: string
   /** The block's emphasis, moved along past the words that were inserted. */
   emphasis: number[]
+  /** The block's strong runs, moved the same way and for the same reason. */
+  strong: number[]
 }
 
 /**
@@ -352,17 +354,22 @@ export interface SplicedBlock {
 export function spliceRunInto(
   blockText: string,
   emphasis: readonly number[] | undefined,
-  run: DroppedRun
+  run: DroppedRun,
+  strong?: readonly number[]
 ): SplicedBlock | null {
   const inserted = run.text.split(/\s+/u).filter((w) => w.length > 0).length
-  const shift = (from: number): number[] =>
-    (emphasis ?? []).map((i) => (i < from ? i : i + inserted))
+  const shift = (marks: readonly number[] | undefined, from: number): number[] =>
+    (marks ?? []).map((i) => (i < from ? i : i + inserted))
 
   const anchor = run.after.trim()
   if (!anchor) {
     // A run dropped from the very start of the page goes at the front, so every
     // word of the block moves along by all of it.
-    return { text: `${run.text} ${blockText}`.trim(), emphasis: shift(0) }
+    return {
+      text: `${run.text} ${blockText}`.trim(),
+      emphasis: shift(emphasis, 0),
+      strong: shift(strong, 0)
+    }
   }
 
   const at = blockText.indexOf(anchor)
@@ -377,5 +384,5 @@ export function spliceRunInto(
     .replace(/\s+/gu, ' ')
     .trim()
   const before = head.split(/\s+/u).filter((w) => w.length > 0).length
-  return { text, emphasis: shift(before) }
+  return { text, emphasis: shift(emphasis, before), strong: shift(strong, before) }
 }

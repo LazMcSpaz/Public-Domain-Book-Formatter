@@ -45,7 +45,8 @@ const FILES: Record<string, string> = {
   'Crimson Pro|regular':
     'node_modules/@expo-google-fonts/crimson-pro/400Regular/CrimsonPro_400Regular.ttf',
   'Crimson Pro|italic':
-    'node_modules/@expo-google-fonts/crimson-pro/400Regular_Italic/CrimsonPro_400Regular_Italic.ttf'
+    'node_modules/@expo-google-fonts/crimson-pro/400Regular_Italic/CrimsonPro_400Regular_Italic.ttf',
+  'EB Garamond|bold': 'node_modules/@expo-google-fonts/eb-garamond/700Bold/EBGaramond_700Bold.ttf'
 }
 
 /**
@@ -86,6 +87,7 @@ function diskFontTable(): FontTable {
     bytesFor: (ref) => faceFor(ref).bytes,
     hasSmallCaps: (family) =>
       faceFor({ family, style: 'regular' }).font.availableFeatures.includes('smcp'),
+    hasBold: (family) => faces.has(`${family}|bold`),
     resolve: (family) => family,
     substitutions: new Map()
   }
@@ -256,6 +258,63 @@ describe('renderPdf — emphasis reaches the page', () => {
     let all = ''
     for (let i = 0; i < reopened.numPages; i++) all += ` ${await textOfPage(reopened, i)}`
     expect(all).toContain('The Lama superintends the whole withdrawal')
+  })
+})
+
+/**
+ * The same chain for a strong run, which is what a glossary headword is.
+ *
+ * Worth its own end-to-end test rather than trusting the italic one: bold is a
+ * *third* embedded face, and pdf-lib writes the width array and `ToUnicode` per
+ * embedded font. A face that reached the page without them would print a full
+ * em of white space per glyph and copy out as line noise — the ligature failure
+ * again, by a third route.
+ */
+describe('renderPdf — a strong run reaches the page', () => {
+  const withHeadword = async () => {
+    const fonts = diskFontTable()
+    const body: BookBlock = {
+      ...block('paragraph', 'Aerolite. A stony meteorite, standard in the geology of the day.'),
+      strong: [0]
+    }
+    const book = layout(
+      { ...DOCUMENT, blocks: [block('heading', 'Glossary', 1), body] },
+      { ...defaultStyleProfile(), dropCap: false },
+      fonts,
+      { edition: EDITION, hyphenate: englishHyphenator() }
+    )
+    const pdf = await renderPdf(book, fonts, { title: EDITION.title, author: EDITION.author })
+    return { book, pdf }
+  }
+
+  it('embeds the bold face because one word asked for it', async () => {
+    const { book } = await withHeadword()
+    expect(book.fontsUsed).toContainEqual({ family: 'EB Garamond', style: 'bold' })
+  })
+
+  it('draws the headword from a different font resource than the definition', async () => {
+    const { pdf } = await withHeadword()
+    const reopened = await reopen(pdf.bytes)
+    const fontOf = new Map<string, string>()
+    for (let i = 0; i < reopened.numPages; i++) {
+      const content = await (await reopened.getPage(i + 1)).getTextContent()
+      for (const item of content.items) {
+        if (!('str' in item)) continue
+        const word = item.str.trim()
+        if (word && !fontOf.has(word)) fontOf.set(word, item.fontName)
+      }
+    }
+    expect(fontOf.get('Aerolite.')).toBeDefined()
+    expect(fontOf.get('stony')).toBeDefined()
+    expect(fontOf.get('Aerolite.')).not.toBe(fontOf.get('stony'))
+  })
+
+  it('still copies out as the entry', async () => {
+    const { pdf } = await withHeadword()
+    const reopened = await reopen(pdf.bytes)
+    let all = ''
+    for (let i = 0; i < reopened.numPages; i++) all += ` ${await textOfPage(reopened, i)}`
+    expect(all).toContain('Aerolite. A stony meteorite')
   })
 })
 

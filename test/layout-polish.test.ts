@@ -394,3 +394,52 @@ describe('a run of headings is one chapter opening', () => {
     ])
   })
 })
+
+/**
+ * A strong run is set in a real bold where the face has one and in italic where
+ * it has none. Never in a bold smeared out of the regular outlines, which is
+ * the same forgery as scaling capitals down for small capitals.
+ */
+describe('strong runs pick a face the book actually has', () => {
+  const withStrong = (): BookDocument => {
+    nextId = 0
+    return doc([
+      {
+        ...block('paragraph', 'Aerolite. A stony meteorite, standard in the geology of the day.'),
+        strong: [0]
+      }
+    ])
+  }
+
+  const boldMeasurer = { ...measurer, hasBold: () => true }
+  const plainMeasurer = { ...measurer, hasBold: () => false }
+
+  const runWith = (m: typeof measurer): LaidOutBook =>
+    layout(withStrong(), defaultStyleProfile(), m, { edition: EDITION })
+
+  const faceOf = (book: LaidOutBook, word: string) =>
+    book.pages.flatMap((p) => lines(p).flatMap((l) => l.runs)).find((r) => r.text === word)?.font
+
+  it('uses the real bold when the face has one', () => {
+    expect(faceOf(runWith(boldMeasurer), 'Aerolite.')?.style).toBe('bold')
+    expect(faceOf(runWith(boldMeasurer), 'stony')?.style).toBe('regular')
+  })
+
+  it('falls back to italic in a face with no bold', () => {
+    expect(faceOf(runWith(plainMeasurer), 'Aerolite.')?.style).toBe('italic')
+    expect(faceOf(runWith(plainMeasurer), 'stony')?.style).toBe('regular')
+  })
+
+  /**
+   * A word can be both — a headword that is also a book title — and the
+   * headword is what the reader is scanning for, so strong wins.
+   */
+  it('sets a word that is both strong and emphasised as strong', () => {
+    nextId = 0
+    const document = doc([
+      { ...block('paragraph', 'Isis Unveiled. Her first book.'), strong: [0, 1], emphasis: [0, 1] }
+    ])
+    const book = layout(document, defaultStyleProfile(), boldMeasurer, { edition: EDITION })
+    expect(faceOf(book, 'Isis')?.style).toBe('bold')
+  })
+})

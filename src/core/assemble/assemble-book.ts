@@ -72,6 +72,8 @@ export interface Footnote {
    * as the tag.
    */
   emphasis?: number[]
+  /** Word indices the note sets bold. See `TranscribedBlock.strong`. */
+  strong?: number[]
   /** Page the note was printed on. */
   pageIndex: number
   /** True when no body text referenced this marker. */
@@ -454,6 +456,12 @@ export function assembleBook(
           previous.emphasis = [
             ...(previous.emphasis ?? []),
             ...shiftEmphasis(block.emphasis, wordCount(previous.text))
+          ]
+        }
+        if (block.strong?.length) {
+          previous.strong = [
+            ...(previous.strong ?? []),
+            ...shiftEmphasis(block.strong, wordCount(previous.text))
           ]
         }
         previous.text = stripSoftHyphens(joinText(previous.text, block.text))

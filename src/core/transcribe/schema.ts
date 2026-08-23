@@ -61,6 +61,15 @@ export interface TranscribedBlock {
    * on a block with no emphasis, which is nearly all of them.
    */
   emphasis?: number[]
+  /**
+   * Indices of whitespace-separated words to set strong.
+   *
+   * Same convention as `emphasis` and recovered the same way, from `<b>` in the
+   * inline markup. What "strong" prints as is the layout engine's decision: a
+   * real bold where the book's face has one, italic where it has none, and
+   * never a bold smeared out of the regular outlines.
+   */
+  strong?: number[]
   /** Heading level 1–6, only meaningful when `kind` is 'heading'. */
   level?: number
   /**
@@ -206,7 +215,8 @@ export function normalizeMarkup<T extends TranscribedBlock>(block: T): T {
   return {
     ...block,
     text: markup.text,
-    ...(markup.emphasis.length > 0 ? { emphasis: markup.emphasis } : {})
+    ...(markup.emphasis.length > 0 ? { emphasis: markup.emphasis } : {}),
+    ...(markup.strong.length > 0 ? { strong: markup.strong } : {})
   }
 }
 
@@ -341,6 +351,7 @@ export function parsePageTranscription(raw: unknown, pageIndex: number): PageTra
     const markup = parseInlineMarkup(text)
     const block: TranscribedBlock = { kind: kind as BlockKind, text: markup.text }
     if (markup.emphasis.length > 0) block.emphasis = markup.emphasis
+    if (markup.strong.length > 0) block.strong = markup.strong
     const level = b['level']
     if (typeof level === 'number' && Number.isFinite(level)) {
       block.level = Math.min(6, Math.max(1, Math.round(level)))

@@ -2359,7 +2359,7 @@ export function App(): JSX.Element {
     // comparison against the bare text would call every emphasised block
     // corrected and report a book full of edits nobody made.
     const pristine = new Map(
-      (state.document?.blocks ?? []).map((b) => [b.id, withMarkup(b.text, b.emphasis)])
+      (state.document?.blocks ?? []).map((b) => [b.id, withMarkup(b.text, b.emphasis, b.strong)])
     )
     let nextEdits = edits
     for (const [pageIndex, corrections] of corrected) {
@@ -2415,16 +2415,17 @@ export function App(): JSX.Element {
           // along past the inserted words — restoring a clause used to discard
           // the emphasis of the paragraph it landed in, silently.
           const host = blocks.find(
-            (b) => b.sourcePages.includes(pageIndex) && spliceRunInto(b.text, b.emphasis, run)
+            (b) =>
+              b.sourcePages.includes(pageIndex) && spliceRunInto(b.text, b.emphasis, run, b.strong)
           )
-          const fixed = host ? spliceRunInto(host.text, host.emphasis, run) : null
+          const fixed = host ? spliceRunInto(host.text, host.emphasis, run, host.strong) : null
           if (host && fixed) {
             nextEdits = withEdit(nextEdits, {
               kind: 'text',
               blockId: host.id,
               // Written back with the tags on, because that is how a `text`
               // edit carries emphasis — `applyEdits` reads them straight back.
-              text: withMarkup(fixed.text, fixed.emphasis)
+              text: withMarkup(fixed.text, fixed.emphasis, fixed.strong)
             })
           } else {
             // Nowhere to put it: the anchor phrase is in no block off this leaf.

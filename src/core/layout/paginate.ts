@@ -24,7 +24,14 @@ import type { StyleProfile } from '@core/model'
 import { findOrnament, type OrnamentArt } from '@core/ornament'
 import type { BookBlock, BookDocument, BookSection, Illustration } from '@core/assemble'
 import { effectiveDpi } from '@core/image'
-import { breakParagraph, type Alignment, type Attachment, type BrokenLine } from './break-lines'
+import {
+  breakParagraph,
+  fontForWord,
+  type Alignment,
+  type Attachment,
+  type BrokenLine,
+  type TextSpan
+} from './break-lines'
 import { prepareFootnotes, type NoteReference, type PreparedNote } from './footnotes'
 import { anchorIllustrations } from './illustrations'
 import { withTypographicQuotes } from './quotes'
@@ -41,6 +48,7 @@ import { hangPunctuation } from './optical'
 import {
   PT_PER_INCH,
   type FontRef,
+  type FontStyle,
   type LaidOutBook,
   type LayoutWarning,
   type PageKind,
@@ -455,7 +463,7 @@ function toFlowLines(
   leftOffsets: number[],
   markToNote?: ReadonlyMap<string, string>,
   optical?: TextMeasurer,
-  emphasis?: { words: ReadonlySet<number>; font: FontRef }
+  spans?: readonly TextSpan[]
 ): FlowLine[] {
   return broken.map((line, i) => {
     const offset = leftOffsets[Math.min(i, leftOffsets.length - 1)] ?? 0
@@ -467,11 +475,11 @@ function toFlowLines(
         if (noteId !== undefined && !noteIds.includes(noteId)) noteIds.push(noteId)
       }
       return {
-        // Italic where the original emphasised it. A hyphenated fragment keeps
+        // Italic or bold where a span claims it. A hyphenated fragment keeps
         // its host word's index, so both halves of a split italic word stay
         // italic.
         text: w.text,
-        font: emphasis?.words.has(w.sourceIndex) ? emphasis.font : font,
+        font: fontForWord(w.sourceIndex, spans, font),
         sizePt: w.sizePt ?? sizePt,
         xPt: w.xPt + offset,
         ...(w.risePt ? { risePt: w.risePt } : {})
@@ -684,8 +692,7 @@ function breakNote(note: PreparedNote, ctx: BuildContext): NoteBlock {
   const markSize = sizePt * MARK_SIZE_RATIO
   const hang = ctx.measurer.widthOf(note.mark, font, markSize) + sizePt * NOTE_HANG_GAP_RATIO
 
-  const emphasisWords = note.emphasis?.length ? new Set(note.emphasis) : undefined
-  const emphasisFont: FontRef = { family: ctx.profile.bodyFont, style: 'italic' }
+  const spans = spansFor(ctx, ctx.profile.bodyFont, 'regular', note.emphasis, note.strong)
 
   const broken = breakParagraph(note.text, {
     font,
@@ -694,18 +701,10 @@ function breakNote(note: PreparedNote, ctx: BuildContext): NoteBlock {
     lineWidths: Math.max(1, ctx.measureWidth - hang),
     alignment: 'left',
     ...(ctx.hyphenate ? { hyphenate: ctx.hyphenate } : {}),
-    ...(emphasisWords ? { emphasis: emphasisWords, emphasisFont } : {})
+    ...(spans.length > 0 ? { spans } : {})
   })
 
-  const lines = toFlowLines(
-    broken,
-    font,
-    sizePt,
-    [hang],
-    undefined,
-    undefined,
-    emphasisWords ? { words: emphasisWords, font: emphasisFont } : undefined
-  )
+  const lines = toFlowLines(broken, font, sizePt, [hang], undefined, undefined, spans)
   const first = lines[0]
   if (first) {
     first.decorations = [
@@ -730,6 +729,41 @@ interface BuildContext {
   measureWidth: number
   leading: number
   hyphenate?: (word: string) => string[]
+}
+
+/**
+ * The faces a block's marked-up runs are set in.
+ *
+ * Two kinds of run, in priority order, and the order matters because a word can
+ * be both: **strong** first, then **emphasis**. A glossary headword that
+ * happens to be a book title should read as a headword.
+ *
+ * Bold is asked for rather than assumed. Five of the seven faces offered ship
+ * one and IM FELL English does not, so a strong run in a face without a bold is
+ * set in **italic** — the face every one of them has, and what a printer with
+ * no bold in the case would have reached for. Never a bold smeared out of the
+ * regular outlines, for the same reason small capitals are never scaled-down
+ * capitals: it is a forgery and it looks like one.
+ *
+ * Decided here, in the engine, so the width the breaker measures and the glyphs
+ * the writer draws come from one answer.
+ */
+function spansFor(
+  ctx: BuildContext,
+  family: string,
+  base: FontStyle,
+  emphasis: readonly number[] | undefined,
+  strong: readonly number[] | undefined
+): TextSpan[] {
+  const spans: TextSpan[] = []
+  if (strong?.length) {
+    const style: FontStyle = ctx.measurer.hasBold(family) ? 'bold' : 'italic'
+    spans.push({ words: new Set(strong), font: { family, style } })
+  }
+  if (emphasis?.length) {
+    spans.push({ words: new Set(emphasis), font: { family, style: 'italic' } })
+  }
+  return base === 'regular' ? spans : []
 }
 
 /**
@@ -827,10 +861,10 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
    * italic entire, and emphasis inside one would have to be roman to show at
    * all, which is a refinement no book here has needed.
    */
-  const emphasisWords =
-    style.style === 'regular' && block.emphasis?.length ? new Set(block.emphasis) : undefined
-  const emphasisFont: FontRef = { family, style: 'italic' }
-  const emphasis = emphasisWords ? { words: emphasisWords, font: emphasisFont } : undefined
+  const spans =
+    style.style === 'regular'
+      ? spansFor(ctx, family, style.style, block.emphasis, block.strong)
+      : []
 
   const dropCap = opts.dropCap && block.kind === 'paragraph' && text.trim().length > 0
   if (!dropCap) {
@@ -845,7 +879,7 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
       ...(block.kind === 'paragraph' || block.kind === 'blockquote'
         ? { hyphenate: ctx.hyphenate }
         : {}),
-      ...(emphasisWords ? { emphasis: emphasisWords, emphasisFont } : {})
+      ...(spans.length > 0 ? { spans } : {})
     })
     // A chapter opener may carry a flourish under its title. It belongs to the
     // heading's own lines so the two can never be separated by a page break.
@@ -857,7 +891,7 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
       hang > 0 ? [indentLeft - hang, indentLeft] : [indentLeft],
       markToNote,
       ctx.profile.opticalMargins ? ctx.measurer : undefined,
-      emphasis
+      spans
     )
 
     // "LESSON I." over "THE ASTRAL SENSES.", as one opening. Built here so a
@@ -1519,6 +1553,11 @@ export function layout(
                   emphasis: note.originalMarker.trim()
                     ? note.emphasis.map((i) => i + 1)
                     : note.emphasis
+                }
+              : {}),
+            ...(note.strong?.length
+              ? {
+                  strong: note.originalMarker.trim() ? note.strong.map((i) => i + 1) : note.strong
                 }
               : {}),
             sourcePages: []

@@ -927,7 +927,7 @@ const gateUncertainties: Step = {
         // With the italics showing. They are content the original prints and
         // this edition has to, and a plain box cannot show them — so someone
         // correcting a word here would silently discard them.
-        text: withMarkup(block.text, block.emphasis),
+        text: withMarkup(block.text, block.emphasis, block.strong),
         kind: block.kind,
         alsoFromPages: rest
       })
