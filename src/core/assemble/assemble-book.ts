@@ -15,11 +15,18 @@
  * Pure: no I/O, no model calls.
  */
 import type { ImageEditOp } from '@core/model'
-import { dispositionFor, type PageRole } from '@core/pages'
+import {
+  dispositionFor,
+  readSynopsis,
+  synopsisKey,
+  synopsisLooksSound,
+  type PageRole
+} from '@core/pages'
 import {
   shiftEmphasis,
   tableToText,
   wordCount,
+  type BlockKind,
   type PageTranscription,
   type TranscribedBlock
 } from '@core/transcribe'
@@ -56,6 +63,17 @@ export interface Footnote {
    */
   originalMarker: string
   text: string
+  /**
+   * Word indices the note sets in italic, the same convention a block uses.
+   *
+   * A note names books more often than the text around it does — this edition's
+   * own notes name a dozen — and until this existed it was the only kind of
+   * block in the book that could not italicise one. A tag typed in hope printed
+   * as the tag.
+   */
+  emphasis?: number[]
+  /** Word indices the note sets bold. See `TranscribedBlock.strong`. */
+  strong?: number[]
   /** Page the note was printed on. */
   pageIndex: number
   /** True when no body text referenced this marker. */
@@ -77,10 +95,44 @@ export interface Footnote {
 }
 
 export interface ChapterEntry {
-  /** The id of the block this heading is, so the contents can match on it. */
+  /**
+   * The id of the block this heading is, so the contents can match on it.
+   *
+   * For a chapter opened by more than one heading (see {@link label}) this is
+   * the *first* of them, because that is the block the opening starts at.
+   */
   id: string
   title: string
+  /**
+   * The line printed over the title, where the book prints one.
+   *
+   * A great many books open a chapter with two headings — a number and a name,
+   * "LESSON I." over "THE ASTRAL SENSES." — and the reading brings them back as
+   * two heading blocks, because on the page that is what they are. Treating
+   * them as two chapters is the wrong answer three times over: the contents
+   * lists every chapter twice, the running head says "LESSON I." for a page or
+   * two before changing its mind, and with chapters opening recto each lesson
+   * costs two extra leaves, one carrying a number and nothing else. This book
+   * lost forty pages that way.
+   *
+   * So a run of consecutive headings is one chapter: the last is what the
+   * chapter is *called*, and everything before it is the label over it. The
+   * title is the last rather than the whole run joined because the title is
+   * what the running head shows and what a recovered synopsis is matched on.
+   */
+  label?: string
   level: number
+  /**
+   * What the original contents page said this chapter contains.
+   *
+   * Recovered from the scanned contents, which is otherwise discarded — and
+   * discarded for one reason only, that its page numbers describe a pagination
+   * this edition does not have. The prose beside those numbers is editorial
+   * work that belongs to the book, and in an analytical contents of this kind
+   * it is the whole point of the page. Absent when the book had no such
+   * contents, or when the parse was not sound enough to trust.
+   */
+  synopsis?: string
   /** Index into `blocks` where the chapter starts. */
   blockIndex: number
   sourcePage: number
@@ -207,15 +259,55 @@ function cleaned(block: BookBlock): BookBlock {
   return { ...block, cells, text: tableToText(cells) }
 }
 
+/** Blocks whose second half can arrive under another name. See `shouldJoin`. */
+const RUNS_ON: readonly BlockKind[] = ['paragraph', 'verse', 'list-item', 'blockquote']
+
 /**
  * True when two blocks should be joined into one. The model's own
  * continues* hints are trusted first; failing that, punctuation is a reliable
  * fallback (a paragraph that ends without terminal punctuation and is followed
  * by lowercase text is almost always one sentence split by the page edge).
+ *
+ * ## Why a page break relaxes the rules
+ *
+ * The pass reads one leaf at a time, which is what makes it affordable and is
+ * also why the *second half* of something is so often misfiled. A list item
+ * broken by the page edge continues on the next leaf with no number in front
+ * of it; a quotation continues with no opening quotation mark. Read on its own,
+ * that leaf begins with an ordinary paragraph, and the pass is right to say so
+ * — it is looking at a paragraph.
+ *
+ * Requiring the two kinds to match therefore left a sentence in two pieces
+ * every time a list or a quotation crossed a leaf, which in one real book was
+ * eight broken sentences the reader would meet in print. Across a seam the
+ * kinds may differ and the first block's kind wins: a list item that runs on is
+ * still a list item.
+ *
+ * Within a single leaf nothing is relaxed. There a change of kind is a real
+ * change — two consecutive list items are two items, and merging them because
+ * one happened to end without a full stop would be inventing a paragraph.
  */
-export function shouldJoin(previous: TranscribedBlock, next: TranscribedBlock): boolean {
-  if (previous.kind !== next.kind) return false
-  if (previous.kind !== 'paragraph' && previous.kind !== 'verse') return false
+export function shouldJoin(
+  previous: TranscribedBlock,
+  next: TranscribedBlock,
+  acrossSeam = false
+): boolean {
+  const kindsDiffer = previous.kind !== next.kind
+  if (acrossSeam) {
+    if (!RUNS_ON.includes(previous.kind)) return false
+    // The continuation is a paragraph, or the same kind read correctly.
+    if (next.kind !== 'paragraph' && next.kind !== previous.kind) return false
+    // A block that *opens* a quotation is starting something, not continuing a
+    // sentence. This is the one signal that separates the two cases, and
+    // without it the relaxation above merges the paragraphs of a long
+    // quotation: printing convention opens every one of them with a quotation
+    // mark and closes only the last, so the pass marks the whole run as
+    // continuing — which is true of the quotation and false of the sentence.
+    if (kindsDiffer && /^\s*["“]/.test(next.text)) return false
+  } else {
+    if (kindsDiffer) return false
+    if (previous.kind !== 'paragraph' && previous.kind !== 'verse') return false
+  }
   if (previous.continuesNext || next.continuesPrevious) return true
 
   const prevText = previous.text.trimEnd()
@@ -353,7 +445,10 @@ export function assembleBook(
       const previous = target[target.length - 1]
       const joinable = previous !== undefined && !seamBroken
       seamBroken = false
-      if (joinable && shouldJoin(previous, block)) {
+      // Whether the page edge sits between these two, which is the only place
+      // the kind rules relax.
+      const acrossSeam = previous !== undefined && !previous.sourcePages.includes(page.pageIndex)
+      if (joinable && shouldJoin(previous, block, acrossSeam)) {
         // Emphasis is carried as word indices, so the second half's italics have
         // to move along by however many words the first half had — or they land
         // on the wrong words once the two are one paragraph.
@@ -361,6 +456,12 @@ export function assembleBook(
           previous.emphasis = [
             ...(previous.emphasis ?? []),
             ...shiftEmphasis(block.emphasis, wordCount(previous.text))
+          ]
+        }
+        if (block.strong?.length) {
+          previous.strong = [
+            ...(previous.strong ?? []),
+            ...shiftEmphasis(block.strong, wordCount(previous.text))
           ]
         }
         previous.text = stripSoftHyphens(joinText(previous.text, block.text))
@@ -390,16 +491,30 @@ export function assembleBook(
 
   markOrphanFootnotes(blocks, footnotes)
 
-  const chapters: ChapterEntry[] = blocks
-    .map((b, i) => ({ b, i }))
-    .filter(({ b }) => b.kind === 'heading')
-    .map(({ b, i }) => ({
-      id: b.id,
-      title: b.text.trim(),
-      level: b.level ?? 1,
-      blockIndex: i,
-      sourcePage: b.sourcePages[0] ?? 0
-    }))
+  const chapters = deriveChapters(blocks)
+
+  // The original contents, read for its prose and matched to the chapters the
+  // body actually has. Matched on letters and digits alone, because a contents
+  // page and a chapter opening are typeset differently — "MIND-READING, AND
+  // BEYOND" against "MIND READING, AND BEYOND." is a difference in hyphenation
+  // and a full stop, not in what the chapter is called.
+  //
+  // Only attached when the parse comes back sound. A ragged one means the page
+  // was not laid out the way the reader assumes, and printing a mangled
+  // contents under the author's name is worse than printing a plain one.
+  const contentsBlocks = ordered
+    .filter((page) => page.role === 'table-of-contents')
+    .flatMap((page) => page.blocks.map((b) => ({ kind: b.kind, text: b.text })))
+  const synopses = readSynopsis(contentsBlocks)
+  if (synopsisLooksSound(synopses)) {
+    const byTitle = new Map(
+      synopses.filter((e) => e.synopsis.length > 0).map((e) => [synopsisKey(e.title), e.synopsis])
+    )
+    for (const chapter of chapters) {
+      const found = byTitle.get(synopsisKey(chapter.title))
+      if (found) chapter.synopsis = found
+    }
+  }
 
   // A picture on a page that was dropped goes with it: its pixels came from a
   // leaf the user removed, and embedding them would put back the one thing they
@@ -408,6 +523,47 @@ export function assembleBook(
 
   // Nothing the scan contains is a section: they are written, never read.
   return { blocks, footnotes, chapters, asides, illustrations, sections: [], skipped }
+}
+
+/**
+ * The chapter list, from whatever the blocks now are.
+ *
+ * Exported and shared because it is derived *twice*: once when the scan is
+ * assembled, and again by `applyEdits` after a correction, since retyping a
+ * heading changes what the contents says. Two copies of this rule had already
+ * drifted — the second dropped every recovered synopsis on the floor, so an
+ * analytical contents was read off the original, matched to the body, and then
+ * silently discarded on its way to the page.
+ *
+ * A run of consecutive headings is one chapter. See {@link ChapterEntry.label}.
+ */
+export function deriveChapters(blocks: readonly BookBlock[]): ChapterEntry[] {
+  const chapters: ChapterEntry[] = []
+  for (let i = 0; i < blocks.length; i++) {
+    if (blocks[i]!.kind !== 'heading') continue
+    let end = i
+    while (end + 1 < blocks.length && blocks[end + 1]!.kind === 'heading') end++
+    const first = blocks[i]!
+    const last = blocks[end]!
+    const label = blocks
+      .slice(i, end)
+      .map((b) => b.text.trim())
+      .filter((t) => t.length > 0)
+      .join(' ')
+    chapters.push({
+      id: first.id,
+      title: last.text.trim(),
+      ...(label ? { label } : {}),
+      // The shallowest level in the run: a number tagged level 2 over a title
+      // tagged level 3 is still the opening of a chapter, and the pass tags
+      // these inconsistently or not at all.
+      level: Math.min(...blocks.slice(i, end + 1).map((b) => b.level ?? 1)),
+      blockIndex: i,
+      sourcePage: first.sourcePages[0] ?? 0
+    })
+    i = end
+  }
+  return chapters
 }
 
 /**

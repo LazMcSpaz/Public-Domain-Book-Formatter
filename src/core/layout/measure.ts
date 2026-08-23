@@ -39,6 +39,16 @@ export interface TextMeasurer {
    * forgery.
    */
   hasSmallCaps(family: string): boolean
+  /**
+   * Whether this family carries a real bold.
+   *
+   * Five of the seven do. IM FELL English does not — it is a digitisation of
+   * types cut before bold existed as a thing a face had — and neither does
+   * anything else the user may add later. Asking is what keeps the alternative
+   * honest: a strong run in a face with no bold is set in italic rather than in
+   * a bold smeared out of the regular outlines.
+   */
+  hasBold(family: string): boolean
 }
 
 /**
@@ -59,7 +69,8 @@ export function fixedWidthMeasurer(emRatio = 0.5): TextMeasurer {
     }),
     // The fixed-width measurer stands in for a font it does not have, so it
     // reports the capability the engine's default path assumes: none.
-    hasSmallCaps: () => false
+    hasSmallCaps: () => false,
+    hasBold: () => false
   }
 }
 
@@ -98,6 +109,7 @@ export function cachedMeasurer(inner: TextMeasurer): TextMeasurer {
     // Not cached: it is a lookup in a small table, and caching a capability
     // behind the same wrapper that caches measurements would invite the two to
     // be invalidated on different schedules.
-    hasSmallCaps: (family) => inner.hasSmallCaps(family)
+    hasSmallCaps: (family) => inner.hasSmallCaps(family),
+    hasBold: (family) => inner.hasBold(family)
   }
 }

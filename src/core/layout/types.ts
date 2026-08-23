@@ -21,8 +21,18 @@ import type { OrnamentArt } from '@core/ornament'
 /** Points per inch. The one conversion constant in the layout engine. */
 export const PT_PER_INCH = 72
 
-/** Which face of a family a run wants. Kept small on purpose: v1 needs two. */
-export type FontStyle = 'regular' | 'italic'
+/**
+ * Which face of a family a run wants.
+ *
+ * `bold` is the newest and the one with a gap behind it: five of the seven
+ * families offered ship a real bold and two do not, so nothing may assume it is
+ * there. `TextMeasurer.hasBold` is what the engine asks, exactly as it asks
+ * `hasSmallCaps`, and a face without one sets its strong runs in italic — the
+ * face every one of them does have, and what a printer with no bold in the case
+ * would have reached for. Never a synthesised bold: smearing the outlines is
+ * the same forgery as scaling capitals down for small caps.
+ */
+export type FontStyle = 'regular' | 'italic' | 'bold'
 
 /**
  * A font, named the way the style profile names it. Resolution to actual bytes

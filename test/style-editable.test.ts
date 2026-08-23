@@ -181,13 +181,9 @@ describe('per-book tweaks sit on top of the look, not inside it', () => {
       name: 'Blackthorn',
       style: { ...defaultStyleProfile(), gutter: 0.13 }
     })
-    const state = {
-      ...initialState(),
-      styleProfiles: [banked],
-      styleOverrides: { gutter: '0.25', hyphenate: false }
-    }
+    const state = { ...initialState(), styleProfiles: [banked] }
 
-    const look = appliedLook(state, { profile: banked.id })
+    const look = appliedLook(state, { profile: banked.id, gutter: '0.25', hyphenate: false })
     expect(look.style.gutter).toBe(0.25)
     expect(look.style.hyphenate).toBe(false)
     // The banked record itself is untouched — that is the whole point.
@@ -195,11 +191,34 @@ describe('per-book tweaks sit on top of the look, not inside it', () => {
     expect(banked.style.hyphenate).toBe(true)
   })
 
+  /**
+   * The reason the tweaks live in the design step's answers rather than in a
+   * field of their own: answers are what gets written to the review progress
+   * and to the book file. A tweak in a separate field survived neither, so a
+   * look adjusted at the gate came back plain after a refresh and came back
+   * plain on the next device.
+   */
+  it('takes a tweak from the same answers as the five questions', async () => {
+    const { appliedLook, initialState } = await import('@core/wizard')
+    const look = appliedLook(initialState(), {
+      kind: 'nonfiction',
+      period: 'victorian',
+      chapterOpener: 'ornamented',
+      runningHeads: 'chapter',
+      // Not one of the five, and not implied by any of them.
+      dropCap: true,
+      bodyFontSize: '10.5'
+    })
+    expect(look.style.ornaments.chapterOpener).not.toBeNull()
+    expect(look.style.dropCap).toBe(true)
+    expect(look.style.bodyFontSize).toBe(10.5)
+  })
+
   it('drops back to the look when the tweaks are cleared', async () => {
     const { appliedLook, initialState } = await import('@core/wizard')
     const { newSavedProfile } = await import('@core/style')
     const banked = newSavedProfile({ name: 'B', style: { ...defaultStyleProfile(), gutter: 0.13 } })
-    const state = { ...initialState(), styleProfiles: [banked], styleOverrides: {} }
+    const state = { ...initialState(), styleProfiles: [banked] }
     expect(appliedLook(state, { profile: banked.id }).style.gutter).toBe(0.13)
   })
 })

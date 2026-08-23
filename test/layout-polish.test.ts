@@ -220,3 +220,226 @@ describe('optical margins', () => {
     expect(xs(on)).not.toEqual(xs(off))
   })
 })
+
+/**
+ * The running head is on every page of the book and was set in plain roman at
+ * 85% of the body size — the same colour as the text it sits over, which is the
+ * one thing no printer of any period did.
+ */
+describe('running heads are set as furniture, not as text', () => {
+  const chaptered = (): BookDocument => ({
+    ...doc([block('heading', 'Of the Spring of the Air'), ...long()]),
+    chapters: [
+      {
+        id: 'p0b0',
+        title: 'Of the Spring of the Air',
+        level: 1,
+        blockIndex: 0,
+        sourcePage: 0
+      }
+    ]
+  })
+
+  function long(): BookBlock[] {
+    return Array.from({ length: 60 }, () =>
+      block('paragraph', 'The air hath a spring in it, and that spring is measurable. ')
+    )
+  }
+
+  /** Every head this book prints, as the text of its single run. */
+  function heads(book: LaidOutBook): string[] {
+    return book.pages
+      .filter((p) => p.section === 'body')
+      .flatMap((p) =>
+        lines(p)
+          .filter((l) => l.baselinePt < 60 && l.runs.length === 1)
+          .map((l) => l.runs[0]!)
+      )
+      .filter((r) => !/^[0-9ivxlc]+$/.test(r.text))
+      .map((r) => r.text)
+  }
+
+  it('sets the head in full capitals where the face has no real small ones', () => {
+    // `fixedWidthMeasurer` reports no `smcp`, which is the honest case for four
+    // of the seven faces offered.
+    const book = run(chaptered(), {
+      runningHeadStyle: 'smallCaps',
+      runningHeads: { verso: 'bookTitle', recto: 'chapterTitle' }
+    })
+    expect(heads(book).length).toBeGreaterThan(0)
+    for (const head of heads(book)) expect(head).toBe(head.toLocaleUpperCase())
+  })
+
+  it('leaves the head as written when it is set plain', () => {
+    const book = run(chaptered(), {
+      runningHeadStyle: 'plain',
+      runningHeads: { verso: 'bookTitle', recto: 'bookTitle' }
+    })
+    expect(heads(book)).toContain('A Treatise of Airs')
+  })
+
+  it('sets the head in italic when asked, without touching its case', () => {
+    const book = run(chaptered(), {
+      runningHeadStyle: 'italic',
+      runningHeads: { verso: 'bookTitle', recto: 'bookTitle' }
+    })
+    const italic = book.pages
+      .filter((p) => p.section === 'body')
+      .flatMap((p) => lines(p).flatMap((l) => l.runs))
+      .filter((r) => r.text === 'A Treatise of Airs')
+    expect(italic.length).toBeGreaterThan(0)
+    for (const r of italic) expect(r.font.style).toBe('italic')
+  })
+
+  /**
+   * A folio has no lower case for `smcp` to map and no business being italic,
+   * so it stays plain however the head is set. Both share `furnitureLine`,
+   * which is why this is worth a test rather than an assumption.
+   */
+  it('leaves the folio alone', () => {
+    const book = run(chaptered(), { runningHeadStyle: 'italic', pageNumber: 'bottomCenter' })
+    const folios = book.pages
+      .filter((p) => p.section === 'body')
+      .flatMap((p) => lines(p).flatMap((l) => l.runs))
+      .filter((r) => /^[0-9]+$/.test(r.text))
+    expect(folios.length).toBeGreaterThan(0)
+    for (const r of folios) {
+      expect(r.font.style).toBe('regular')
+      expect(r.font.smallCaps).toBeUndefined()
+    }
+  })
+})
+
+/**
+ * A chapter opened by a number over a name — "LESSON I." above "THE ASTRAL
+ * SENSES." — is one opening. Read off the page it is two heading blocks,
+ * because on the page that is what it is, and treating the two as two chapters
+ * went wrong three ways: the contents listed every chapter twice, the running
+ * head said "LESSON I." for a leaf before changing its mind, and with chapters
+ * opening recto each one cost two extra leaves, the first carrying a number and
+ * nothing else. The book this was found on lost forty pages that way.
+ */
+describe('a run of headings is one chapter opening', () => {
+  const numbered = (): BookDocument => {
+    nextId = 0
+    const blocks = [
+      block('heading', 'LESSON I.'),
+      block('heading', 'THE ASTRAL SENSES.'),
+      ...Array.from({ length: 30 }, () =>
+        block('paragraph', 'The astral senses are the senses of the astral body. ')
+      ),
+      block('heading', 'LESSON II.'),
+      block('heading', 'TELEPATHY EXPLAINED.'),
+      ...Array.from({ length: 30 }, () =>
+        block('paragraph', 'Telepathy is the sending of thought without speech. ')
+      )
+    ]
+    return { ...doc([]), blocks, chapters: chaptersOf(blocks) }
+  }
+
+  /** What assembly makes of those blocks, without going through the scan path. */
+  function chaptersOf(blocks: BookBlock[]): BookDocument['chapters'] {
+    const out: BookDocument['chapters'] = []
+    for (let i = 0; i < blocks.length; i++) {
+      if (blocks[i]!.kind !== 'heading') continue
+      let end = i
+      while (end + 1 < blocks.length && blocks[end + 1]!.kind === 'heading') end++
+      out.push({
+        id: blocks[i]!.id,
+        title: blocks[end]!.text,
+        ...(end > i ? { label: blocks[i]!.text } : {}),
+        level: 1,
+        blockIndex: i,
+        sourcePage: 0
+      })
+      i = end
+    }
+    return out
+  }
+
+  it('opens once, not twice — no leaf carrying only a number', () => {
+    const book = run(numbered(), { chaptersOpenRecto: true })
+    expect(book.chapterPages).toHaveLength(2)
+    // The number and the name are on the same page.
+    const opening = book.pages[book.chapterPages[0]!.pageIndex]!
+    const said = lines(opening).flatMap((l) => l.runs.map((r) => r.text))
+    expect(said.join(' ')).toContain('LESSON')
+    expect(said.join(' ')).toContain('ASTRAL')
+  })
+
+  it('sets the number smaller than the name it announces', () => {
+    const book = run(numbered())
+    const runs = book.pages.flatMap((p) => lines(p).flatMap((l) => l.runs))
+    const number = runs.find((r) => r.text === 'LESSON')!
+    const name = runs.find((r) => r.text === 'ASTRAL')!
+    expect(number.sizePt).toBeLessThan(name.sizePt)
+  })
+
+  /**
+   * The contents matches folios back by identity, and assembly names a chapter
+   * by the *first* block of its run. An opening that reported the id of the
+   * block carrying the title would hand every chapter a folio of null.
+   */
+  it('reports the run’s own id, so the contents can find its folio', () => {
+    const document = numbered()
+    const book = run(document)
+    expect(book.chapterPages.map((c) => c.id)).toEqual(document.chapters.map((c) => c.id))
+  })
+
+  it('names the chapter by the last heading, so the running head says what it is', () => {
+    const book = run(numbered(), { runningHeads: { verso: 'chapterTitle', recto: 'chapterTitle' } })
+    expect(book.chapterPages.map((c) => c.title)).toEqual([
+      'THE ASTRAL SENSES.',
+      'TELEPATHY EXPLAINED.'
+    ])
+  })
+})
+
+/**
+ * A strong run is set in a real bold where the face has one and in italic where
+ * it has none. Never in a bold smeared out of the regular outlines, which is
+ * the same forgery as scaling capitals down for small capitals.
+ */
+describe('strong runs pick a face the book actually has', () => {
+  const withStrong = (): BookDocument => {
+    nextId = 0
+    return doc([
+      {
+        ...block('paragraph', 'Aerolite. A stony meteorite, standard in the geology of the day.'),
+        strong: [0]
+      }
+    ])
+  }
+
+  const boldMeasurer = { ...measurer, hasBold: () => true }
+  const plainMeasurer = { ...measurer, hasBold: () => false }
+
+  const runWith = (m: typeof measurer): LaidOutBook =>
+    layout(withStrong(), defaultStyleProfile(), m, { edition: EDITION })
+
+  const faceOf = (book: LaidOutBook, word: string) =>
+    book.pages.flatMap((p) => lines(p).flatMap((l) => l.runs)).find((r) => r.text === word)?.font
+
+  it('uses the real bold when the face has one', () => {
+    expect(faceOf(runWith(boldMeasurer), 'Aerolite.')?.style).toBe('bold')
+    expect(faceOf(runWith(boldMeasurer), 'stony')?.style).toBe('regular')
+  })
+
+  it('falls back to italic in a face with no bold', () => {
+    expect(faceOf(runWith(plainMeasurer), 'Aerolite.')?.style).toBe('italic')
+    expect(faceOf(runWith(plainMeasurer), 'stony')?.style).toBe('regular')
+  })
+
+  /**
+   * A word can be both — a headword that is also a book title — and the
+   * headword is what the reader is scanning for, so strong wins.
+   */
+  it('sets a word that is both strong and emphasised as strong', () => {
+    nextId = 0
+    const document = doc([
+      { ...block('paragraph', 'Isis Unveiled. Her first book.'), strong: [0, 1], emphasis: [0, 1] }
+    ])
+    const book = layout(document, defaultStyleProfile(), boldMeasurer, { edition: EDITION })
+    expect(faceOf(book, 'Isis')?.style).toBe('bold')
+  })
+})

@@ -147,6 +147,7 @@ export function blocksFromDocument(root: EpubNode, startIndex = 0): EpubContent 
       kind,
       text: markup.text,
       ...(markup.emphasis.length > 0 ? { emphasis: markup.emphasis } : {}),
+      ...(markup.strong.length > 0 ? { strong: markup.strong } : {}),
       ...extra
     })
   }

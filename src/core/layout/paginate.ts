@@ -24,9 +24,17 @@ import type { StyleProfile } from '@core/model'
 import { findOrnament, type OrnamentArt } from '@core/ornament'
 import type { BookBlock, BookDocument, BookSection, Illustration } from '@core/assemble'
 import { effectiveDpi } from '@core/image'
-import { breakParagraph, type Alignment, type Attachment, type BrokenLine } from './break-lines'
+import {
+  breakParagraph,
+  fontForWord,
+  type Alignment,
+  type Attachment,
+  type BrokenLine,
+  type TextSpan
+} from './break-lines'
 import { prepareFootnotes, type NoteReference, type PreparedNote } from './footnotes'
 import { anchorIllustrations } from './illustrations'
+import { withTypographicQuotes } from './quotes'
 import {
   bottomFolioBaseline,
   frameFor,
@@ -40,6 +48,7 @@ import { hangPunctuation } from './optical'
 import {
   PT_PER_INCH,
   type FontRef,
+  type FontStyle,
   type LaidOutBook,
   type LayoutWarning,
   type PageKind,
@@ -100,9 +109,28 @@ export interface TocLine {
   /** The heading this entry is, so its folio can be matched back by identity. */
   id: string
   title: string
+  /**
+   * The chapter's number, where the book prints one over the title.
+   *
+   * Set on the same line as the title in the contents — "LESSON I. THE ASTRAL
+   * SENSES." — rather than on a line of its own. A contents is a list of
+   * places to go, and giving each entry two lines doubles its length to say
+   * nothing the one line did not.
+   */
+  label?: string
   level: number
   /** The printed folio, or null on the first pass when it isn't known yet. */
   folio: string | null
+  /**
+   * The chapter's description from the original contents, where the book had
+   * one and the style asks for it.
+   *
+   * Safe for the two-pass scheme because it comes from the *document*, not from
+   * a layout: it is identical in both passes, so it cannot change the contents'
+   * length between them. The guard in `layoutWithToc` checks that rather than
+   * trusting it.
+   */
+  synopsis?: string
 }
 
 /** The heading over collected endnotes, and the contents entry for them. */
@@ -172,6 +200,18 @@ const TABLE_RULE_DROP_EMS = 0.34
 
 /** A caption is set smaller than the body, and in italic, as captions are. */
 const CAPTION_SIZE_RATIO = 0.85
+
+/**
+ * How big a chapter's number is set beside its name.
+ *
+ * Smaller than the title, which is the ordinary relation: "LESSON I." announces
+ * which chapter this is, and "THE ASTRAL SENSES." says what it is about, so the
+ * second is the one the eye should land on.
+ */
+const SUPERSCRIPTION_SIZE_RATIO = 0.55
+
+/** How wide the title page's divider ornament is set, as a fraction of the measure. */
+const TITLE_ORNAMENT_WIDTH_RATIO = 0.3
 /** Blank slots between an illustration and the caption under it. */
 const CAPTION_GAP_SLOTS = 1
 /** Blank slots above and below an illustration set in the text flow. */
@@ -423,7 +463,7 @@ function toFlowLines(
   leftOffsets: number[],
   markToNote?: ReadonlyMap<string, string>,
   optical?: TextMeasurer,
-  emphasis?: { words: ReadonlySet<number>; font: FontRef }
+  spans?: readonly TextSpan[]
 ): FlowLine[] {
   return broken.map((line, i) => {
     const offset = leftOffsets[Math.min(i, leftOffsets.length - 1)] ?? 0
@@ -435,11 +475,11 @@ function toFlowLines(
         if (noteId !== undefined && !noteIds.includes(noteId)) noteIds.push(noteId)
       }
       return {
-        // Italic where the original emphasised it. A hyphenated fragment keeps
+        // Italic or bold where a span claims it. A hyphenated fragment keeps
         // its host word's index, so both halves of a split italic word stay
         // italic.
         text: w.text,
-        font: emphasis?.words.has(w.sourceIndex) ? emphasis.font : font,
+        font: fontForWord(w.sourceIndex, spans, font),
         sizePt: w.sizePt ?? sizePt,
         xPt: w.xPt + offset,
         ...(w.risePt ? { risePt: w.risePt } : {})
@@ -504,7 +544,9 @@ function ornamentLines(art: OrnamentArt, ctx: BuildContext): FlowLine[] {
 function sectionFlowables(
   section: BookSection,
   ctx: BuildContext,
-  profile: StyleProfile
+  profile: StyleProfile,
+  illustrations: readonly Illustration[],
+  slotsPerPage: number
 ): Flowable[] {
   const pageSection: PageSection = section.placement === 'front' ? 'front' : 'back'
 
@@ -514,16 +556,31 @@ function sectionFlowables(
     { suppressFirstIndent: true, dropCap: false }
   )
 
-  const body = section.blocks.map((block, i) =>
-    buildFlowable(block, ctx, {
-      // The first paragraph sits directly under the title, so it is set flush:
-      // there is no preceding paragraph for an indent to distinguish it from.
-      suppressFirstIndent: i === 0,
-      dropCap: profile.dropCap && i === 0
-    })
-  )
+  const out: Flowable[] = [title]
+  section.blocks.forEach((block, i) => {
+    out.push(
+      buildFlowable(block, ctx, {
+        // The first paragraph sits directly under the title, so it is set
+        // flush: there is no preceding paragraph for an indent to distinguish
+        // it from.
+        suppressFirstIndent: i === 0,
+        dropCap: profile.dropCap && i === 0
+      })
+    )
+    // A picture the editor pinned to a paragraph of their own prose.
+    //
+    // The body anchors by block *index*, which is meaningless here: a section
+    // is written rather than read, its blocks are derived from the prose on
+    // every layout, and the only stable handle is the id. An introduction that
+    // discusses a title page and cannot show it is the case this exists for.
+    for (const illustration of illustrations) {
+      if (illustration.anchorAfterBlockId === block.id) {
+        out.push(buildIllustrationFlowable(illustration, ctx, slotsPerPage))
+      }
+    }
+  })
 
-  return [title, ...body].map((flow) => ({ ...flow, pageSection }))
+  return out.map((flow) => ({ ...flow, pageSection }))
 }
 
 /**
@@ -635,16 +692,19 @@ function breakNote(note: PreparedNote, ctx: BuildContext): NoteBlock {
   const markSize = sizePt * MARK_SIZE_RATIO
   const hang = ctx.measurer.widthOf(note.mark, font, markSize) + sizePt * NOTE_HANG_GAP_RATIO
 
+  const spans = spansFor(ctx, ctx.profile.bodyFont, 'regular', note.emphasis, note.strong)
+
   const broken = breakParagraph(note.text, {
     font,
     sizePt,
     measurer: ctx.measurer,
     lineWidths: Math.max(1, ctx.measureWidth - hang),
     alignment: 'left',
-    ...(ctx.hyphenate ? { hyphenate: ctx.hyphenate } : {})
+    ...(ctx.hyphenate ? { hyphenate: ctx.hyphenate } : {}),
+    ...(spans.length > 0 ? { spans } : {})
   })
 
-  const lines = toFlowLines(broken, font, sizePt, [hang])
+  const lines = toFlowLines(broken, font, sizePt, [hang], undefined, undefined, spans)
   const first = lines[0]
   if (first) {
     first.decorations = [
@@ -672,6 +732,41 @@ interface BuildContext {
 }
 
 /**
+ * The faces a block's marked-up runs are set in.
+ *
+ * Two kinds of run, in priority order, and the order matters because a word can
+ * be both: **strong** first, then **emphasis**. A glossary headword that
+ * happens to be a book title should read as a headword.
+ *
+ * Bold is asked for rather than assumed. Five of the seven faces offered ship
+ * one and IM FELL English does not, so a strong run in a face without a bold is
+ * set in **italic** — the face every one of them has, and what a printer with
+ * no bold in the case would have reached for. Never a bold smeared out of the
+ * regular outlines, for the same reason small capitals are never scaled-down
+ * capitals: it is a forgery and it looks like one.
+ *
+ * Decided here, in the engine, so the width the breaker measures and the glyphs
+ * the writer draws come from one answer.
+ */
+function spansFor(
+  ctx: BuildContext,
+  family: string,
+  base: FontStyle,
+  emphasis: readonly number[] | undefined,
+  strong: readonly number[] | undefined
+): TextSpan[] {
+  const spans: TextSpan[] = []
+  if (strong?.length) {
+    const style: FontStyle = ctx.measurer.hasBold(family) ? 'bold' : 'italic'
+    spans.push({ words: new Set(strong), font: { family, style } })
+  }
+  if (emphasis?.length) {
+    spans.push({ words: new Set(emphasis), font: { family, style: 'italic' } })
+  }
+  return base === 'regular' ? spans : []
+}
+
+/**
  * Break one block into a flowable.
  *
  * `dropCap` is handled here rather than at placement time because it changes
@@ -686,6 +781,26 @@ interface FlowableOptions {
   text?: string
   /** Footnote references found in that text. */
   references?: readonly NoteReference[]
+  /**
+   * Headings set *above* this one, as part of the same opening.
+   *
+   * A chapter opened by "LESSON I." over "THE ASTRAL SENSES." is one opening
+   * and not two — see `ChapterEntry.label`. They are built here rather than as
+   * flowables of their own so the pair can never be split by a page break, and
+   * so the ornament, the page break and the sinkage happen once. Set smaller
+   * than the title, which is the ordinary relation between a chapter's number
+   * and its name.
+   */
+  superscription?: readonly string[]
+  /**
+   * The chapter this opening records, where it differs from the block.
+   *
+   * The contents matches folios back by identity, and assembly names a chapter
+   * by the *first* heading of its run while the title comes from the last. So
+   * an opening built from a run has to report the run's id, not the id of the
+   * block that happens to carry the title.
+   */
+  chapter?: { id: string; title: string; level: number }
 }
 
 function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOptions): Flowable {
@@ -716,7 +831,9 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
    */
   const hang = firstIndent < 0 ? -firstIndent : 0
 
-  const isChapter = block.kind === 'heading' && (block.level ?? 1) === 1
+  // A run's own level wins: a chapter opened by "LESSON I." over its name is a
+  // chapter however the pass happened to tag the two lines.
+  const isChapter = block.kind === 'heading' && (opts.chapter?.level ?? block.level ?? 1) === 1
 
   // `smcp` maps *lower case* to small capitals, so the text is handed over as
   // written; upper-casing it first would defeat the feature and give full caps
@@ -744,10 +861,10 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
    * italic entire, and emphasis inside one would have to be roman to show at
    * all, which is a refinement no book here has needed.
    */
-  const emphasisWords =
-    style.style === 'regular' && block.emphasis?.length ? new Set(block.emphasis) : undefined
-  const emphasisFont: FontRef = { family, style: 'italic' }
-  const emphasis = emphasisWords ? { words: emphasisWords, font: emphasisFont } : undefined
+  const spans =
+    style.style === 'regular'
+      ? spansFor(ctx, family, style.style, block.emphasis, block.strong)
+      : []
 
   const dropCap = opts.dropCap && block.kind === 'paragraph' && text.trim().length > 0
   if (!dropCap) {
@@ -762,7 +879,7 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
       ...(block.kind === 'paragraph' || block.kind === 'blockquote'
         ? { hyphenate: ctx.hyphenate }
         : {}),
-      ...(emphasisWords ? { emphasis: emphasisWords, emphasisFont } : {})
+      ...(spans.length > 0 ? { spans } : {})
     })
     // A chapter opener may carry a flourish under its title. It belongs to the
     // heading's own lines so the two can never be separated by a page break.
@@ -774,18 +891,42 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
       hang > 0 ? [indentLeft - hang, indentLeft] : [indentLeft],
       markToNote,
       ctx.profile.opticalMargins ? ctx.measurer : undefined,
-      emphasis
+      spans
     )
 
+    // "LESSON I." over "THE ASTRAL SENSES.", as one opening. Built here so a
+    // page break can never fall between them.
+    const above = (opts.superscription ?? []).flatMap((line) => {
+      const size = sizePt * SUPERSCRIPTION_SIZE_RATIO
+      return toFlowLines(
+        breakParagraph(wantsSmallCaps && !realSmallCaps ? line.toLocaleUpperCase() : line, {
+          font,
+          sizePt: size,
+          measurer: ctx.measurer,
+          lineWidths: measure,
+          alignment: style.alignment
+        }),
+        font,
+        size,
+        [indentLeft]
+      )
+    })
+
     return {
-      lines: flourish ? [...lines, ...ornamentLines(flourish, ctx)] : lines,
+      lines: [
+        ...above,
+        ...(above.length > 0 ? [{ runs: [] }] : []),
+        ...lines,
+        ...(flourish ? ornamentLines(flourish, ctx) : [])
+      ],
       spaceBefore: style.spaceBefore,
       spaceAfter: style.spaceAfter,
       startsChapter: isChapter,
       chapter:
-        block.kind === 'heading'
+        opts.chapter ??
+        (block.kind === 'heading'
           ? { id: block.id, title: block.text.trim(), level: block.level ?? 1 }
-          : null,
+          : null),
       keepWithNext: block.kind === 'heading',
       orphanControl: block.kind === 'paragraph'
     }
@@ -1078,11 +1219,16 @@ function runningHeadText(
 }
 
 export function layout(
-  doc: BookDocument,
+  raw: BookDocument,
   profile: StyleProfile,
   measurer: TextMeasurer,
   options: LayoutOptions
 ): LaidOutBook {
+  // Presentation, applied on the way in for the same reason optical margins are
+  // applied on the way out: the transcription records what the page said, and
+  // the shape of a quotation mark is not part of that. Idempotent, which
+  // matters because `layoutWithToc` runs this twice.
+  const doc = profile.typographicQuotes ? withTypographicQuotes(raw) : raw
   const rectoFrame = frameFor(profile, 'recto')
   const versoFrame = frameFor(profile, 'verso')
   const leading = leadingFor(profile.bodyFontSize)
@@ -1259,7 +1405,21 @@ export function layout(
   // Where each picture falls in the reading order. Computed before anything is
   // broken so an illustration is a flowable like any other from here on, and
   // the placement loop needs to know nothing about pictures at all.
-  const anchored = anchorIllustrations(doc.blocks, doc.illustrations)
+  // Pictures pinned inside a written section are placed by `sectionFlowables`,
+  // so they are held back from the body anchoring — which would otherwise find
+  // no block of that id and drop them at the end of the book as a lost
+  // supplied image.
+  const sectionBlockIds = new Set(doc.sections.flatMap((s) => s.blocks.map((b) => b.id)))
+  const inSections = doc.illustrations.filter(
+    (i) =>
+      i.anchorAfterBlockId !== undefined &&
+      i.anchorAfterBlockId !== null &&
+      sectionBlockIds.has(i.anchorAfterBlockId)
+  )
+  const anchored = anchorIllustrations(
+    doc.blocks,
+    doc.illustrations.filter((i) => !inSections.includes(i))
+  )
 
   const flowables: Flowable[] = []
 
@@ -1272,7 +1432,7 @@ export function layout(
   // questions that gate exists to ask.
   if (options.maxBodyPages === undefined) {
     for (const section of doc.sections.filter((x) => x.placement === 'front')) {
-      flowables.push(...sectionFlowables(section, ctx, profile))
+      flowables.push(...sectionFlowables(section, ctx, profile, inSections, slotsPerPage))
     }
   }
 
@@ -1282,23 +1442,70 @@ export function layout(
     }
   }
 
+  /**
+   * Headings that belong to the opening *below* them, and so print no flowable
+   * of their own.
+   *
+   * A chapter opened by "LESSON I." over "THE ASTRAL SENSES." is one opening.
+   * Assembly already says so — `doc.chapters` has one entry for the run — and
+   * this is the other half: the earlier headings are handed to the last one as
+   * a superscription, so the pair takes one page break, one ornament and one
+   * sinkage between them. Keyed by the index of the heading that carries them.
+   */
+  const superscriptions = new Map<number, string[]>()
+  const consumed = new Set<number>()
+  for (let i = 0; i < doc.blocks.length; i++) {
+    if (doc.blocks[i]!.kind !== 'heading') continue
+    let end = i
+    while (end + 1 < doc.blocks.length && doc.blocks[end + 1]!.kind === 'heading') end++
+    if (end > i) {
+      superscriptions.set(
+        end,
+        doc.blocks
+          .slice(i, end)
+          .map((b) => b.text.trim())
+          .filter((t) => t.length > 0)
+      )
+      for (let k = i; k < end; k++) consumed.add(k)
+    }
+    i = end
+  }
+  // The chapter each run reports, by the index of its last heading. Assembly
+  // names a chapter by the *first* block of the run and the contents matches
+  // folios back by identity, so the opening has to report that id rather than
+  // the id of the block carrying the title.
+  const runChapters = new Map(doc.chapters.map((c) => [c.blockIndex, c]))
+
   pushIllustrationsAfter(-1)
   doc.blocks.forEach((block, i) => {
     const previous = doc.blocks[i - 1]
     const afterHeading = previous?.kind === 'heading'
     const afterChapterHeading = afterHeading && (previous?.level ?? 1) === 1
     const prep = prepared.blocks[i]
+    // A heading swallowed into the opening below it. Its pictures still travel
+    // — a plate anchored to a block that prints no flowable must not vanish.
+    if (consumed.has(i)) {
+      pushIllustrationsAfter(i)
+      return
+    }
     if (block.kind === 'table') {
       flowables.push(...buildTableFlowables(block, ctx))
       pushIllustrationsAfter(i)
       return
     }
+    const above = superscriptions.get(i)
+    const runStart = above ? i - above.length : i
+    const chapter = above ? runChapters.get(runStart) : undefined
     flowables.push(
       buildFlowable(block, ctx, {
         // A paragraph directly under a heading is set flush: there is no
         // preceding paragraph for an indent to distinguish it from.
         suppressFirstIndent: afterHeading,
         dropCap: profile.dropCap && afterChapterHeading,
+        ...(above ? { superscription: above } : {}),
+        ...(chapter
+          ? { chapter: { id: chapter.id, title: chapter.title, level: chapter.level } }
+          : {}),
         ...(prep ? { text: prep.text, references: prep.references } : {})
       })
     )
@@ -1309,7 +1516,7 @@ export function layout(
   // notes — an afterword belongs with the book, an apparatus after it.
   if (options.maxBodyPages === undefined) {
     for (const section of doc.sections.filter((x) => x.placement === 'back')) {
-      flowables.push(...sectionFlowables(section, ctx, profile))
+      flowables.push(...sectionFlowables(section, ctx, profile, inSections, slotsPerPage))
     }
   }
 
@@ -1339,6 +1546,20 @@ export function layout(
             id: `endnote-${note.id}`,
             kind: 'paragraph',
             text: `${note.originalMarker} ${note.text}`.trim(),
+            // The marker is prepended as a word, so every italic index moves
+            // along by one. Dropped when there is no marker to prepend.
+            ...(note.emphasis?.length
+              ? {
+                  emphasis: note.originalMarker.trim()
+                    ? note.emphasis.map((i) => i + 1)
+                    : note.emphasis
+                }
+              : {}),
+            ...(note.strong?.length
+              ? {
+                  strong: note.originalMarker.trim() ? note.strong.map((i) => i + 1) : note.strong
+                }
+              : {}),
             sourcePages: []
           },
           ctx,
@@ -1781,7 +2002,8 @@ function finishPage(
         furnitureLine(text, profile, measurer, page, {
           baseline: runningHeadBaseline(profile),
           placement: 'center',
-          frame
+          frame,
+          head: true
         })
       )
     }
@@ -1879,13 +2101,32 @@ function furnitureLine(
     baseline: number
     placement: 'center' | 'outer'
     frame: PageFrame
+    /**
+     * Set as a running head rather than as a folio. Only the head takes
+     * `runningHeadStyle`: a folio in small capitals is a folio in ordinary
+     * figures, since digits have no lower case for `smcp` to map, and one in
+     * italic is a mannerism nobody asked for.
+     */
+    head?: boolean
   }
 ): PositionedLine {
-  const font: FontRef = { family: profile.bodyFont, style: 'regular' }
+  const style = opts.head ? profile.runningHeadStyle : 'plain'
+  // Real small capitals where the face has them; ordinary capitals where it
+  // does not, exactly as a small-capped heading falls back. Never synthesised
+  // by scaling capitals down — see `RunningHeadStyle`.
+  const realSmallCaps = style === 'smallCaps' && measurer.hasSmallCaps(profile.bodyFont)
+  const font: FontRef = {
+    family: profile.bodyFont,
+    style: style === 'italic' ? 'italic' : 'regular',
+    ...(realSmallCaps ? { smallCaps: true } : {})
+  }
   const sizePt = profile.bodyFontSize * 0.85
+  // `smcp` maps *lower case* to small capitals, so text bound for the real
+  // feature is handed over as written and only the fallback is upper-cased.
+  const set = style === 'smallCaps' && !realSmallCaps ? text.toLocaleUpperCase() : text
   // Furniture never spills into the margins. A folio always fits; a running
   // head carrying a long title does not, and is cut down until it does.
-  const fitted = fitRunningHead(text, measurer, font, sizePt, opts.frame.widthPt)
+  const fitted = fitRunningHead(set, measurer, font, sizePt, opts.frame.widthPt)
   const width = measurer.widthOf(fitted, font, sizePt)
 
   let x: number
@@ -1986,7 +2227,7 @@ function buildContents(
     const hang = sizePt
     const measure = Math.max(1, ctx.measureWidth - folioColumn - indent)
 
-    const broken = breakParagraph(entry.title, {
+    const broken = breakParagraph(entry.label ? `${entry.label} ${entry.title}` : entry.title, {
       font: body,
       sizePt,
       measurer: ctx.measurer,
@@ -1994,6 +2235,25 @@ function buildContents(
       alignment: 'left'
     })
     if (broken.length === 0) return
+
+    // The description, set smaller and indented under the entry — the shape an
+    // analytical contents has always had, so it reads as one block with its
+    // chapter rather than as loose text between two.
+    //
+    // Measured to the full width less the folio column, because nothing hangs
+    // in the number's lane: an entry's folio belongs to its title line, and a
+    // description running under it would collide with the digits.
+    const synopsisSize = sizePt * 0.86
+    const synopsisIndent = indent + sizePt * 1.5
+    const synopsisLines = entry.synopsis
+      ? breakParagraph(entry.synopsis, {
+          font: body,
+          sizePt: synopsisSize,
+          measurer: ctx.measurer,
+          lineWidths: [Math.max(1, ctx.measureWidth - folioColumn - synopsisIndent)],
+          alignment: 'left'
+        })
+      : []
 
     // A blank line before each top-level entry after the first, so chapters
     // group visibly when there are sub-headings between them.
@@ -2026,6 +2286,31 @@ function buildContents(
       page.lines.push({ slot: slot + lineIndex, line: { runs } })
     })
     slot += broken.length
+
+    // The description flows and may cross onto the next contents leaf, which is
+    // ordinary for a page of this kind — the alternative is a page broken early
+    // to keep an entry whole and a contents full of white space.
+    for (const line of synopsisLines) {
+      if (slot >= slotsPerPage) {
+        page = newPage('front')
+        page.kind = 'contents'
+        page.suppressRunningHead = true
+        page.suppressFolio = true
+        slot = 0
+      }
+      page.lines.push({
+        slot,
+        line: {
+          runs: line.words.map((w) => ({
+            text: w.text,
+            font: body,
+            sizePt: synopsisSize,
+            xPt: w.xPt + synopsisIndent
+          }))
+        }
+      })
+      slot += 1
+    }
   })
 }
 
@@ -2041,11 +2326,12 @@ function buildFrontMatter(
   const body: FontRef = { family: profile.bodyFont, style: 'regular' }
   const heading: FontRef = { family: profile.headingFont, style: 'regular' }
 
+  /** Set the entries centred from `startSlot`, and say which slot is next free. */
   const centred = (
     page: PageBuilder,
     startSlot: number,
     entries: { text: string; sizePt: number; font: FontRef; gapAfter?: number }[]
-  ): void => {
+  ): number => {
     let slot = startSlot
     for (const entry of entries) {
       if (entry.text.trim().length === 0) continue
@@ -2056,6 +2342,13 @@ function buildFrontMatter(
         lineWidths: page.frame.widthPt,
         alignment: 'center'
       })
+      // Slots are one *body* leading apart, and a title page sets type at up
+      // to 1.6 times the body size. Advancing one slot a line put the second
+      // line of a two-line title through the descenders of the first: on this
+      // book "A Course of Advanced Lessons in / Clairvoyance and Occult
+      // Powers" collided, on the title page, which is the first thing anybody
+      // opens. Room is taken from the size actually being set.
+      const perLine = Math.max(1, Math.ceil(leadingFor(entry.sizePt) / ctx.leading))
       for (const line of broken) {
         page.lines.push({
           slot,
@@ -2068,10 +2361,11 @@ function buildFrontMatter(
             }))
           }
         })
-        slot += 1
+        slot += perLine
       }
       slot += entry.gapAfter ?? 1
     }
+    return slot
   }
 
   if (profile.frontMatter.halfTitle) {
@@ -2098,13 +2392,41 @@ function buildFrontMatter(
     page.kind = 'title'
     page.suppressFolio = true
     page.suppressRunningHead = true
-    centred(page, Math.floor(slotsPerPage / 4), [
+    // The title takes the same treatment as a chapter heading, because it is
+    // the same decision: real small capitals where the face has them, ordinary
+    // capitals where it has none, never synthesised. A title page set in
+    // upper and lower case while every heading in the book is capped reads as
+    // two books bound together.
+    const capped = profile.headingStyle.smallCaps
+    const realSmallCaps = capped && ctx.measurer.hasSmallCaps(profile.headingFont)
+    const titleFont: FontRef = realSmallCaps ? { ...heading, smallCaps: true } : heading
+    const titleText = capped && !realSmallCaps ? edition.title.toLocaleUpperCase() : edition.title
+    const start = Math.floor(slotsPerPage / 4)
+    const after = centred(page, start, [
       {
-        text: edition.title,
+        text: titleText,
         sizePt: profile.bodyFontSize * profile.headingStyle.scale,
-        font: heading,
-        gapAfter: 3
-      },
+        font: titleFont,
+        gapAfter: 2
+      }
+    ])
+    // The divider ornament, between the title and the name under it.
+    //
+    // Until now it was offered in Settings, banked with the look, carried in
+    // every book file — and drawn nowhere at all, because the vision schema has
+    // no scene-break block for it to sit at. A title page is the one division
+    // every book of this period marks, and marking it is what the ornament was
+    // put in the library for.
+    const divider = findOrnament(profile.ornaments.sectionDivider)
+    const afterDivider = divider
+      ? (() => {
+          const widthPt = ctx.measureWidth * TITLE_ORNAMENT_WIDTH_RATIO
+          const heightPt = (widthPt * divider.height) / divider.width
+          page.lines.push({ slot: after, line: { runs: [], ornament: { art: divider, widthPt } } })
+          return after + Math.max(1, Math.ceil(heightPt / ctx.leading)) + 2
+        })()
+      : after
+    centred(page, afterDivider, [
       { text: edition.author, sizePt: profile.bodyFontSize * 1.15, font: body, gapAfter: 0 }
     ])
     if (edition.imprint) {

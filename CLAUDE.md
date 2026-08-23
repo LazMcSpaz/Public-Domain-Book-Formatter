@@ -14,6 +14,162 @@ its structure. The full design is in [`SPEC.md`](./SPEC.md); the module map is i
 
 Everything runs client-side. There is no server and no Electron shell.
 
+## How the work is actually done
+
+**The books are made in a conversation, not in the wizard.** The editor works
+through a Claude Code session — mobile, desktop or web — and the assistant
+drives the app. That is the primary interface now, and it is the one to design
+for. If you are an assistant reading this: this means you.
+
+The division of labour follows from what each side is actually good at.
+
+- **The app is the engine and the viewer.** Rendering a leaf, OCR, assembly,
+  layout, writing the PDF: all of it needs a browser and none of it needs
+  judgement. It also holds the pixels, which is what every gate here promises
+  never to decide without.
+- **The conversation is the interview.** Reading the book, weighing a
+  discrepancy against the scan, deciding what a passage says, writing the
+  introduction and the notes — these are prose problems, and the wizard was
+  only ever a way of getting a person to answer them one radio button at a
+  time.
+
+So **a change to this app is worth making if it improves what the assistant can
+see, check or write.** That is the standing brief. In practice it means one of
+four shapes:
+
+- **A verb on `scripts/drive.mjs`.** Anything the assistant needs from the
+  browser goes through the driver rather than through a one-off `page.evaluate`
+  buried in a shell command. `ocr` and `body` were both added this way, and both
+  because a job turned out to be impossible without them.
+- **Evidence that comes back as an image.** A crop, a leaf, a contact sheet.
+  The rule is unchanged and the assistant is not exempt from it: never repair
+  text without pixels.
+- **A pure function that runs without a browser at all.** `checkProposals` and
+  `findAnchor` are the model — deterministic, no network, and they do not care
+  whether a person, a model or the API wrote the thing they are checking. Work
+  written in conversation gets checked by the same machinery as work bought
+  from the API. Prefer this shape; it is the cheapest and the most honest.
+- **A file on the shelf a person can read.** `corrections.md`, `glossary.md`.
+  A repository is a shelf rather than a blob store precisely so its owner can
+  look at it, and JSON is not looking.
+
+Two things this does **not** license.
+
+**The wizard is not deprecated and must not rot.** It is the app a person
+without an assistant uses, and the bridge was built as a second door onto the
+same surface (`useAgentSurface`) rather than as a replacement, so that a driver
+and a person cannot disagree about what the flow is. Keep it that way: a
+feature reachable only from a chat session is a feature the app does not have.
+
+**No second renderer, still.** The temptation from this working model is a Node
+platform so the assistant can lay a book out without Chromium. Resist it until
+something actually blocks: `layout()` is pure and the browser is driven
+headlessly by the driver already, and the reason the design gate's approval
+means anything is that one engine draws the page. See **The preview is the
+PDF**, below.
+
+### The subject matter, and the thumb on the scale
+
+The shelf is **occult and esoteric books**, and it will stay that way. That is
+not incidental to how this work is done, because an assistant writing about
+this material brings a lean to it whether or not anyone asked for one — the
+default register for "astral body" is a shade more guarded than the default
+register for "endocrine gland", and a reader going down a page absorbs which is
+which without a single argument being made.
+
+So the standing rule, for every book here: **it is nobody's place to assert the
+absolute truth of these things, and equally nobody's place to quietly deny
+it.** Much of what these books describe is held to be real by the people who
+publish these editions and by a great many people who have worked at it. The
+job is to hand a reader what they need to find out for themselves.
+
+In practice that comes down to four habits, and they are checkable:
+
+- **State the established teaching plainly.** Not "hedge both sides equally";
+  that was the first version of this rule and it was wrong. The editor is not an
+  arbitrator between two parties. He holds the tradition's teaching to be true
+  and writes it as such, while respecting the scientific method as how anyone
+  gets to the bottom of anything. So "supposed", "so-called" and "said to be"
+  belong on contested claims and single-witness stories, never on doctrine. Say
+  separately what is known, what is disputed, and what rests on one witness.
+- **Never push.** No arguing a reader round, no scolding a doubter, no triumph
+  when the evidence goes the tradition's way. Set the thing out, give the reader
+  what they need to weigh it, and stop there.
+- **Ancestry is not an argument.** That a term was borrowed, or that a doctrine
+  took its present shape in the 1880s, is history worth having and settles
+  nothing about whether the thing is real. Give the history; don't let it do the
+  work of a conclusion it has not earned.
+- **Warmth is not imprecision.** These books are an invitation to try
+  something. An entry so flat that nobody who read it would want to try anything
+  has failed, and it has not been made more truthful by being made duller.
+
+### The bias pass, which runs after the writing
+
+Getting it right while writing is not enough, and must not be the only place it
+has to be right. The writer is the one party who cannot judge this: asked
+whether they were even-handed they will say yes, and mean it. Every other check
+in this app exists for that reason — OCR against the vision pass, `verifyBook`
+across leaves, `checkProposals` against the book's own text — and SPEC §4 states
+it as a rule: escalation is decided by deterministic cross-checks, never by a
+model's opinion of its own output.
+
+So **the introduction, the notes and any glossary get an audit pass of their
+own, after they are written and before they are pushed**:
+
+```bash
+node scripts/voice.mjs audit <book.json>   # or any file of prose
+```
+
+`auditProse` (`src/core/annotate/audit.ts`, pure and unit-tested) reports:
+
+- **Every hedge sitting on a sentence about the tradition**, listed for
+  reading. This is the list that matters. No lexicon can tell an established
+  teaching from a contested claim, so none of them is a fault on its own and
+  each one is a decision for a person.
+- **The hedge ratio**, over the whole text and again over _definitions only_.
+  Secondary, and kept only because it catches a lean in either direction.
+  Definitions are measured separately because over a long document the effect
+  washes out: the first glossary written here hedged its doctrinal definitions
+  three times over and still scored 0.72 overall, diluted by hundreds of
+  sentences about people and dates. Both ratios stay silent below a floor of
+  hedges, since a rate built from one event flags good prose and a check that
+  does that gets switched off.
+- **Dismissals and banned phrasing**, as plain lexical scans. These catch less
+  and what they catch is unambiguous.
+- **Long dashes**, which are out of this editor's prose by request and are the
+  most recognisable habit of machine-written English. Hyphens inside compounds
+  are untouched; only a dash doing the work of a comma is caught.
+- **A Flesch-Kincaid grade**, reported and not enforced, with the average
+  sentence length beside it. There is no correct grade for an introduction, but
+  the number moves when prose gets tangled, and long sentences are the writer's
+  fault where long words are usually the subject's.
+
+A non-zero exit means a person reads the flagged passages. Do not tune the
+limits to make a draft pass; fix the draft, and re-run.
+
+**What the audit cannot see is flatness** — whether an entry is so dry nobody
+who read it would want to try anything. That needs a reader, and it is the
+other half of the pass. Read the doctrinal entries end to end and ask whether
+they sound like they were written by someone who finds the material alive.
+Pretending a word list could stand in for that would be the same error the
+module exists to catch.
+
+The editor's voice card (`voice/<pen-name>.json` on the shelf, and
+`scripts/voice.mjs` to read it) carries the same rules in the form the writing
+is actually done against. Read it before writing anything that goes in a book.
+
+### What a session looks like
+
+The **shelf repository is the source of truth**; the browser's IndexedDB is a
+cache of it. Load the book from the shelf before touching it (`drive.mjs load`),
+and push what you change. A session that edits the local copy and forgets to
+push has done the work into a container that is about to be reclaimed.
+
+Corrections and notes are **edits keyed to assembled blocks**, carrying each
+block's whole text with emphasis rendered back as `<i>` tags. `drive.mjs body`
+hands back exactly those strings. Writing one against a raw page silently
+truncates every paragraph the page seam joined — see `applyEdits`.
+
 ## Commands
 
 ```bash
@@ -29,6 +185,19 @@ node scripts/make-test-book.mjs      # regenerate the 8-page test fixture
 node scripts/make-test-epub.mjs      # regenerate the EPUB fixture
 node scripts/make-test-digital.mjs   # regenerate the born-digital PDF fixture
 node scripts/screenshot-flow.mjs     # drive the wizard headlessly, screenshot each screen
+```
+
+Working _on a book_ (see **How the work is actually done**, above):
+
+```bash
+node scripts/drive.mjs serve &       # hold a browser open, take commands on :7788
+node scripts/drive.mjs load <book.json> <scan.pdf>   # from the shelf, not from the device
+node scripts/drive.mjs body out.json # the assembled book: block ids and the exact
+                                     #   strings an edit must be written in terms of
+node scripts/drive.mjs ocr 12 16 19  # what OCR reads off named leaves, as plain text
+node scripts/drive.mjs sheet typos 28:occulist   # words cut from the leaves they sit on
+node scripts/drive.mjs leaf 133      # any leaf, rendered
+node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` work it
 ```
 
 **Before committing: typecheck + test + format:check + lint.**
@@ -624,6 +793,77 @@ in `screenshots/`. Don't ship UI blind.
   than left out. The 40 MB refusal was only ever about the scan; what actually
   needed bounding was this. Crops cut from the scan are deliberately not stored
   at all — they are re-cut when wanted, and the scan is already up there.
+
+- **Also done**: **the original contents page is kept for its prose**
+  (`src/core/pages/synopsis.ts`). Front matter is replaced rather than
+  transcribed and the scanned contents is the clearest case — but the reason is
+  narrow: its page numbers describe a pagination this edition does not have. An
+  _analytical_ contents, which is what an older book usually has (this one calls
+  its own "SYNOPSIS OF THE LESSONS"), sets a paragraph under each chapter saying
+  what is in it, and that paragraph is editorial work and the reason such a page
+  is read rather than scanned. Discarding it with the numbers threw away the
+  wrong half. The entries are now read back off the transcribed contents leaves,
+  matched to the chapters the body actually prints — on letters and digits
+  alone, because "MIND-READING, AND BEYOND" against "MIND READING, AND BEYOND."
+  is a difference in hyphenation and a full stop rather than in what the chapter
+  is called — and set under their entries with the folio **this** edition
+  measures. A restoration and not an invention: every word comes off the paper.
+  The parse is offered only when it comes back regular (`synopsisLooksSound`:
+  most entries described, folios ascending), because a ragged one means the page
+  was not laid out the way the reader assumes and a mangled contents printed
+  under the author's name is worse than the plain one it replaces. Two things
+  the parser must get right are the two the page actually does: a description
+  routinely begins on one leaf and finishes on the next, and the folio line
+  comes back as a `caption` on some leaves and a `paragraph` on others — so it
+  reads the whole contents at once and matches on what the line _says_. Safe for
+  the contents' two-pass scheme because a description comes from the document
+  rather than from a layout, and the existing guard checks that rather than
+  trusting it.
+
+- **Also done**: **the formatting pass, and the four faults it found.** Proofing
+  a finished book against the look it will actually export turned up things no
+  unit test was ever going to. **A chapter opened by a number over a name** —
+  "LESSON I." above "THE ASTRAL SENSES." — came back from the reading as two
+  heading blocks, because on the page that is what it is, and was being counted
+  as two chapters: the contents listed every chapter twice, the running head
+  named the lesson number for a leaf before changing its mind, and with chapters
+  opening recto each lesson cost two extra leaves, the first carrying a number
+  and nothing else. A run of consecutive headings is now one chapter, named by
+  the last and identified by the first, with the number set smaller over the
+  title (`deriveChapters`). **`applyEdits` re-derived that list with its own copy
+  of the rule**, and that copy dropped every recovered synopsis, so the
+  analytical contents was read, matched, and silently thrown away on the way to
+  the page — one implementation now, shared. **The title page put the second
+  line of a two-line title through the descenders of the first**, because slots
+  are one _body_ leading apart and a title sets at 1.6 times the body size.
+  **And the editor's own prose could not italicise a word**: a written section
+  and a written note were the two kinds of block `<i>` never reached, so a
+  glossary naming forty books printed every title in roman. Three smaller
+  things came with it — running heads take a `runningHeadStyle` (small capitals,
+  falling back to full capitals in a face with no `smcp`, never synthesised),
+  the divider ornament is drawn at last, on the title page, and the per-book
+  style tweaks now ride in the design step's own answers so they survive a
+  refresh and travel in the book file, which they never did.
+
+- **Also done**: **the book can set a word bold, which is what a glossary is
+  made of.** `<i>` had been the only inline markup that reached the page, so 126
+  glossary headwords printed in the same colour as their definitions and the
+  back matter read as a wall. `<b>` and `<strong>` are now read into a `strong`
+  field beside `emphasis` — same word-index convention, same round trip through
+  `withMarkup`, and carried across a page seam, a retype and a spliced run by
+  the same code that carries italics. What a strong run _prints_ as is decided
+  in the engine, because five of the seven faces offered ship a real bold and IM
+  FELL English does not: `TextMeasurer.hasBold` is asked, and a face without one
+  sets its strong runs in **italic** rather than in a bold smeared out of the
+  regular outlines — the same refusal that governs small capitals, for the same
+  reason. Bold is a third embedded face, so `renderPdf` is held to it end to
+  end: the headword draws from a different font resource than its definition and
+  the entry still copies out as text. Two things fell out of the same pass — the
+  prose audit now strips markup before measuring, because `<b>Aerolite.</b>`
+  puts a full stop against a `<` and moved the reported reading grade from 9.1
+  to 13.4 without a word changing; and a compound no longer gains a second
+  hyphen when it breaks at its own (`cross--legged`), since the hyphenator hands
+  back `["cross-", "legged"]` and the breaker was adding one on top.
 
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.

@@ -56,6 +56,28 @@ export const SCAN_ROOT = 'scans'
 export const IMAGE_ROOT = 'images'
 
 /**
+ * Where the editor lives, as against where the editions do.
+ *
+ * The voice was banked in `localStorage` and copied into each book file, which
+ * is the same arrangement the books themselves had before this module existed
+ * and it fails the same way: clear the site data or pick up the other device
+ * and the editor is gone, while the copies scattered through the book files are
+ * snapshots that cannot be reconciled with each other.
+ *
+ * It belongs on the shelf because it is not part of any one book. `voice.ts`
+ * has always said so — a voice is the same editor on every book they put out —
+ * and the copy that rides inside a book file stays, but demoted to what it
+ * always really was: a record of the voice *those* notes were written under,
+ * which is why `annotationCheckpointStale` reports a changed voice rather than
+ * refusing one.
+ *
+ * One file per editor rather than one for "the voice", because a person may
+ * reasonably put out a scholarly series under one name and a plain reading
+ * edition under another, and nothing here should make them choose.
+ */
+export const VOICE_ROOT = 'voice'
+
+/**
  * The largest scan worth attempting.
  *
  * GitHub refuses a blob over 100 MB and warns past 50. The margin below 50 is
@@ -187,6 +209,23 @@ export function scanPath(digest: string, fileName: string): string {
  */
 export function imagePath(digest: string): string {
   return `${IMAGE_ROOT}/${digest}.png`
+}
+
+/**
+ * The file name for one editor's voice.
+ *
+ * Slugged from the pen name, so the shelf reads as a shelf: `voice/etsu-t-dhent.json`
+ * next to `books/`. An editor with no pen name yet is `voice/editor.json` — one
+ * file rather than none, because the alternative is losing the guidance and the
+ * exemplars of anyone who never got round to naming themselves.
+ */
+export function voicePath(penName: string): string {
+  const stem = penName
+    .toLocaleLowerCase()
+    .replace(/[^\w]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 60)
+  return `${VOICE_ROOT}/${stem || 'editor'}.json`
 }
 
 /** One book on the shelf, as the intake screen lists it. */

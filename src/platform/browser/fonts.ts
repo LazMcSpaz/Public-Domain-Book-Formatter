@@ -19,25 +19,42 @@ import type { FontMetrics, FontRef, FontStyle, TextMeasurer } from '@core/layout
 
 import ebGaramondRegular from '@expo-google-fonts/eb-garamond/400Regular/EBGaramond_400Regular.ttf?url'
 import ebGaramondItalic from '@expo-google-fonts/eb-garamond/400Regular_Italic/EBGaramond_400Regular_Italic.ttf?url'
+import ebGaramondBold from '@expo-google-fonts/eb-garamond/700Bold/EBGaramond_700Bold.ttf?url'
 import cardoRegular from '@expo-google-fonts/cardo/400Regular/Cardo_400Regular.ttf?url'
 import cardoItalic from '@expo-google-fonts/cardo/400Regular_Italic/Cardo_400Regular_Italic.ttf?url'
+import cardoBold from '@expo-google-fonts/cardo/700Bold/Cardo_700Bold.ttf?url'
 import imFellRegular from '@expo-google-fonts/im-fell-english/400Regular/IMFellEnglish_400Regular.ttf?url'
 import imFellItalic from '@expo-google-fonts/im-fell-english/400Regular_Italic/IMFellEnglish_400Regular_Italic.ttf?url'
 import baskervilleRegular from '@expo-google-fonts/libre-baskerville/400Regular/LibreBaskerville_400Regular.ttf?url'
 import baskervilleItalic from '@expo-google-fonts/libre-baskerville/400Regular_Italic/LibreBaskerville_400Regular_Italic.ttf?url'
+import baskervilleBold from '@expo-google-fonts/libre-baskerville/700Bold/LibreBaskerville_700Bold.ttf?url'
 import caslonRegular from '@expo-google-fonts/libre-caslon-text/400Regular/LibreCaslonText_400Regular.ttf?url'
 import caslonItalic from '@expo-google-fonts/libre-caslon-text/400Regular_Italic/LibreCaslonText_400Regular_Italic.ttf?url'
+import caslonBold from '@expo-google-fonts/libre-caslon-text/700Bold/LibreCaslonText_700Bold.ttf?url'
 import crimsonRegular from '@expo-google-fonts/crimson-pro/400Regular/CrimsonPro_400Regular.ttf?url'
 import crimsonItalic from '@expo-google-fonts/crimson-pro/400Regular_Italic/CrimsonPro_400Regular_Italic.ttf?url'
+import crimsonBold from '@expo-google-fonts/crimson-pro/700Bold/CrimsonPro_700Bold.ttf?url'
 
-/** Where each family's faces come from. Keys match `StyleProfile.bodyFont`. */
-const FONT_URLS: Record<string, Record<FontStyle, string>> = {
-  'EB Garamond': { regular: ebGaramondRegular, italic: ebGaramondItalic },
-  Cardo: { regular: cardoRegular, italic: cardoItalic },
+/**
+ * Where each family's faces come from. Keys match `StyleProfile.bodyFont`.
+ *
+ * `bold` is optional and IM FELL English has none: it is a digitisation of
+ * types cut in the 17th century, and bold as a member of a family is a 19th-
+ * century idea. Nothing here fakes one. A book set in a face with no bold sets
+ * its strong runs in italic instead, decided in the engine off
+ * `TextMeasurer.hasBold` so the measured width and the drawn glyphs agree.
+ */
+const FONT_URLS: Record<string, Partial<Record<FontStyle, string>>> = {
+  'EB Garamond': { regular: ebGaramondRegular, italic: ebGaramondItalic, bold: ebGaramondBold },
+  Cardo: { regular: cardoRegular, italic: cardoItalic, bold: cardoBold },
   'IM FELL English': { regular: imFellRegular, italic: imFellItalic },
-  'Libre Baskerville': { regular: baskervilleRegular, italic: baskervilleItalic },
-  'Libre Caslon Text': { regular: caslonRegular, italic: caslonItalic },
-  'Crimson Pro': { regular: crimsonRegular, italic: crimsonItalic }
+  'Libre Baskerville': {
+    regular: baskervilleRegular,
+    italic: baskervilleItalic,
+    bold: baskervilleBold
+  },
+  'Libre Caslon Text': { regular: caslonRegular, italic: caslonItalic, bold: caslonBold },
+  'Crimson Pro': { regular: crimsonRegular, italic: crimsonItalic, bold: crimsonBold }
 }
 
 /**
@@ -58,7 +75,8 @@ const FONT_URLS: Record<string, Record<FontStyle, string>> = {
  */
 const JUNICODE_URLS: Record<FontStyle, string> = {
   regular: 'fonts/junicode/Junicode-Regular.otf',
-  italic: 'fonts/junicode/Junicode-Italic.otf'
+  italic: 'fonts/junicode/Junicode-Italic.otf',
+  bold: 'fonts/junicode/Junicode-Bold.otf'
 }
 
 /** The face used when a profile names a family this app cannot embed. */
@@ -140,7 +158,7 @@ async function fetchFace(url: string): Promise<LoadedFace | null> {
 
 function urlFor(family: string, style: FontStyle): string | null {
   const entry = FONT_URLS[family]
-  if (entry) return entry[style]
+  if (entry) return entry[style] ?? null
   if (family === 'Junicode') {
     // Resolved against the app's base URL so it works under a subpath deploy,
     // the same way the vendored Tesseract assets are.
@@ -193,7 +211,7 @@ export async function loadFonts(families: readonly string[]): Promise<FontTable>
 
   await Promise.all(
     wanted.flatMap((family) =>
-      (['regular', 'italic'] as FontStyle[]).map(async (style) => {
+      (['regular', 'italic', 'bold'] as FontStyle[]).map(async (style) => {
         const face = await loadFace(family, style)
         if (face) faces.set(`${family}|${style}`, face)
       })
@@ -223,7 +241,9 @@ export async function loadFonts(families: readonly string[]): Promise<FontTable>
     const family = resolve(ref.family)
     // A family with no italic — or a synthetic style — falls back to its own
     // regular rather than to another family's italic. Staying inside the
-    // typeface matters more than honouring the slant.
+    // typeface matters more than honouring the slant. A missing *bold* should
+    // never reach here: the engine asks `hasBold` and sets those runs in italic
+    // instead, so this is the backstop rather than the policy.
     return faces.get(`${family}|${ref.style}`) ?? faces.get(`${family}|regular`) ?? null
   }
 
@@ -260,6 +280,15 @@ export async function loadFonts(families: readonly string[]): Promise<FontTable>
     hasSmallCaps(family) {
       const face = faces.get(`${resolve(family)}|regular`)
       return face ? face.font.availableFeatures.includes('smcp') : false
+    },
+
+    hasBold(family) {
+      // The bold face either loaded or it did not. Reported from the table
+      // rather than from `FONT_URLS`, so a face whose file failed to fetch is
+      // answered the same as one that never had a bold — the engine's job is to
+      // avoid asking for glyphs that are not there, whichever way they are
+      // missing.
+      return faces.has(`${resolve(family)}|bold`)
     },
 
     resolve,

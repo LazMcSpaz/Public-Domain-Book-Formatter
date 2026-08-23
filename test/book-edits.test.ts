@@ -804,6 +804,47 @@ describe('applyEdits — a division the editor wrote', () => {
     expect(doc.sections[0]!.blocks[0]!.text).toBe('Second.')
   })
 
+  it('keeps a picture pinned to a paragraph of a written section', () => {
+    // An introduction that discusses a cover and then shows it. Supplied
+    // pictures were filtered against the *body* block ids alone, so an anchor
+    // into a section matched nothing and the picture was dropped before the
+    // engine ever saw it — silently, since nothing had been laid out yet to
+    // report it as missing.
+    const doc = applyEdits(book(), [
+      {
+        kind: 'section',
+        sectionId: 'intro',
+        placement: 'front',
+        title: 'Before You Begin',
+        text: 'First paragraph.\n\nThe paragraph about the cover.'
+      },
+      {
+        kind: 'image',
+        imageId: 'cover',
+        afterBlockId: 'intro/b1',
+        sourceWidth: 1653,
+        sourceHeight: 2337,
+        caption: 'The cover of the 1916 edition.'
+      }
+    ])
+    const supplied = doc.illustrations.find((i) => i.id === 'cover')
+    expect(supplied).toBeDefined()
+    expect(supplied!.anchorAfterBlockId).toBe('intro/b1')
+  })
+
+  it('still drops a picture pinned to a block that is gone', () => {
+    const doc = applyEdits(book(), [
+      {
+        kind: 'image',
+        imageId: 'orphan',
+        afterBlockId: 'nowhere/b9',
+        sourceWidth: 10,
+        sourceHeight: 10
+      }
+    ])
+    expect(doc.illustrations.find((i) => i.id === 'orphan')).toBeUndefined()
+  })
+
   it('keeps a front and a back section apart', () => {
     const doc = applyEdits(book(), [
       { kind: 'section', sectionId: 'a', placement: 'front', title: 'Introduction', text: 'One.' },
@@ -880,5 +921,96 @@ describe('applyEdits — retouching a picture', () => {
 
   it('leaves a picture nobody retouched completely alone', () => {
     expect(applyEdits(illustrated(), []).illustrations[0]!.edits).toBeUndefined()
+  })
+})
+
+/**
+ * `applyEdits` re-derives the chapter list, because retyping a heading changes
+ * what the contents says. It used to re-derive it with its own copy of the
+ * rule, and that copy dropped every recovered synopsis: an analytical contents
+ * was read off the original, matched to the body, and then silently discarded
+ * on the way to the page — on every correction, including none.
+ */
+describe('the editor’s own prose carries italics', () => {
+  const bare = (): BookDocument => ({
+    blocks: [{ id: 'p0b0', kind: 'paragraph', text: 'Body.', sourcePages: [0] }],
+    footnotes: [],
+    chapters: [],
+    asides: [],
+    illustrations: [],
+    sections: [],
+    skipped: []
+  })
+
+  it('reads <i> in a section the same way a correction does', () => {
+    const out = applyEdits(bare(), [
+      {
+        kind: 'section',
+        sectionId: 'glossary',
+        placement: 'back',
+        title: 'Glossary',
+        text: 'Blavatsky wrote <i>Isis Unveiled</i> in 1877.'
+      }
+    ])
+    const block = out.sections[0]!.blocks[0]!
+    // The tag is gone from the text and has become word indices, exactly as it
+    // does for a retyped page. Printed as a tag, it was three visible angle
+    // brackets in the middle of a sentence.
+    expect(block.text).toBe('Blavatsky wrote Isis Unveiled in 1877.')
+    expect(block.emphasis).toEqual([2, 3])
+  })
+
+  it('leaves prose with no tags in it exactly as written', () => {
+    const out = applyEdits(bare(), [
+      {
+        kind: 'section',
+        sectionId: 'introduction',
+        placement: 'front',
+        title: 'Before You Begin',
+        text: 'In 1895 a German physicist noticed a screen had begun to glow.'
+      }
+    ])
+    const block = out.sections[0]!.blocks[0]!
+    expect(block.text).toBe('In 1895 a German physicist noticed a screen had begun to glow.')
+    expect(block.emphasis).toBeUndefined()
+  })
+})
+
+describe('chapters survive an edit', () => {
+  const doc = (): BookDocument => ({
+    blocks: [
+      { id: 'p0b0', kind: 'heading', text: 'LESSON I.', sourcePages: [0] },
+      { id: 'p0b1', kind: 'heading', text: 'THE ASTRAL SENSES.', sourcePages: [0] },
+      { id: 'p0b2', kind: 'paragraph', text: 'The student of occultism.', sourcePages: [0] }
+    ],
+    footnotes: [],
+    chapters: [
+      {
+        id: 'p0b0',
+        title: 'THE ASTRAL SENSES.',
+        label: 'LESSON I.',
+        level: 1,
+        blockIndex: 0,
+        sourcePage: 0,
+        synopsis: 'What the senses report, and what they leave out.'
+      }
+    ],
+    asides: [],
+    illustrations: [],
+    sections: [],
+    skipped: []
+  })
+
+  it('keeps the synopsis read off the original contents', () => {
+    const out = applyEdits(doc(), [])
+    expect(out.chapters).toHaveLength(1)
+    expect(out.chapters[0]!.synopsis).toBe('What the senses report, and what they leave out.')
+  })
+
+  it('still groups the run after a heading is retyped', () => {
+    const out = applyEdits(doc(), [{ kind: 'text', blockId: 'p0b1', text: 'THE ASTRAL SENSES' }])
+    expect(out.chapters).toHaveLength(1)
+    expect(out.chapters[0]!.title).toBe('THE ASTRAL SENSES')
+    expect(out.chapters[0]!.label).toBe('LESSON I.')
   })
 })

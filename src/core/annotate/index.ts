@@ -14,6 +14,7 @@
 export {
   ANNOTATION_KINDS,
   MAX_EXEMPLARS,
+  VOICE_KEYS,
   NOTES_PER_THOUSAND_WORDS,
   defaultVoice,
   normalizeVoice,
@@ -62,3 +63,11 @@ export {
   type IntroductionOptions
 } from './introduce'
 export { estimateAnnotationCost, type AnnotationCostInputs } from './cost'
+export {
+  HEDGE_RATIO_LIMIT,
+  MIN_SENTENCES,
+  auditProse,
+  type BiasFinding,
+  type BiasKind,
+  type ProseAudit
+} from './audit'

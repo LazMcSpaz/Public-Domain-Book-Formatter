@@ -205,6 +205,23 @@ export interface Margins {
 /** What a running head shows on a given page side (SPEC §8). */
 export type RunningHeadMode = 'none' | 'bookTitle' | 'author' | 'chapterTitle' | 'pageNumber'
 
+/**
+ * How a running head is *set* — as against what it says.
+ *
+ * The head is the one piece of furniture on every page of the book, and it was
+ * set in plain roman at 85% of the body size, which is the one thing no printer
+ * of any period did: a head in the same colour as the text competes with it.
+ * Small capitals are the ordinary answer and have been since the 18th century;
+ * italic is the other, commoner in 19th-century English work than American.
+ *
+ * `smallCaps` falls back to full capitals in a face that has no `smcp`, exactly
+ * as a small-capped heading does, and for the same reason — synthesising them
+ * by scaling capitals down gives strokes too light for the size, which is the
+ * tell of a cheap reprint. That fallback is not a consolation prize here: full
+ * capitals in the head is what an American book of 1916 actually looks like.
+ */
+export type RunningHeadStyle = 'plain' | 'smallCaps' | 'italic'
+
 /** Where/how page numbers are set. */
 export type PageNumberPosition = 'none' | 'bottomCenter' | 'bottomOuter' | 'topOuter'
 
@@ -241,6 +258,8 @@ export interface StyleProfile {
     verso: RunningHeadMode
     recto: RunningHeadMode
   }
+  /** How the running head is set. See {@link RunningHeadStyle}. */
+  runningHeadStyle: RunningHeadStyle
   /**
    * Open each chapter's first paragraph with a large initial (a drop cap).
    * Traditional in reprints of early-modern books, and mutually intelligible
@@ -276,12 +295,40 @@ export interface StyleProfile {
    */
   opticalMargins: boolean
   /**
+   * Turn typewriter quotes and apostrophes into printer's marks.
+   *
+   * A reading of a scan comes back with a mixture of the two, because the model
+   * reads real marks off the paper on one line and types plain ones on the
+   * next. Straightening them is presentation and not correction, so it happens
+   * here rather than in the transcription: applied to the document on the way
+   * into `layout()`, the same way optical margins are applied on the way out.
+   *
+   * Off for a facsimile edition, or for a book where the plain marks are
+   * carrying something.
+   */
+  typographicQuotes: boolean
+  /**
    * Start every chapter on a right-hand page, inserting a blank verso where
    * needed. Traditional, and it costs paper: a book of short chapters can gain
    * thirty leaves this way.
    */
   chaptersOpenRecto: boolean
   pageNumber: PageNumberPosition
+  /**
+   * Set each chapter's description under its contents entry, where the original
+   * book printed one.
+   *
+   * An analytical contents — this book's own name for it is "SYNOPSIS OF THE
+   * LESSONS" — gives a paragraph under each chapter saying what is in it, and
+   * that paragraph is the reason such a page is read rather than scanned. It is
+   * recovered from the scanned contents, which is otherwise discarded for its
+   * stale page numbers alone.
+   *
+   * A preference, not a fact about the book: the descriptions are long, and a
+   * contents that was one leaf becomes four. Does nothing on a book whose
+   * contents had no descriptions to recover.
+   */
+  contentsSynopsis: boolean
   ornaments: OrnamentChoices
   /** Front-matter visual toggles. */
   frontMatter: {

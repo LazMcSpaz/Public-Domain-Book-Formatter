@@ -114,8 +114,44 @@ export interface EditorVoice {
   maxWords: number
   /** Anything else the user wants the editor to do or avoid, in plain words. */
   guidance: string
+  /**
+   * What this editor refuses to do, one refusal to a line.
+   *
+   * Separate from `guidance` because a voice is as much what it will not say as
+   * what it will, and the two behave differently in a prompt: an instruction
+   * competes with the other instructions for attention, while a prohibition
+   * only has to be recognised. Kept as a list rather than a paragraph so that
+   * one can be added the moment it is noticed — which is how they are actually
+   * discovered, by reading a note and disliking one thing about it.
+   */
+  avoid: string[]
   exemplars: VoiceExemplar[]
 }
+
+/**
+ * Every field an `EditorVoice` may carry, and the tripwire for what banks.
+ *
+ * The same device as `BANKED_STYLE_KEYS`, for the same reason and against the
+ * same accident. This file has always *said* that a voice is the same editor on
+ * every book and that anything about one book's subject does not belong in it;
+ * nothing enforced it, so the claim survived only as long as whoever added a
+ * field happened to read the comment. The test checks this list against the
+ * type, so adding a field now fails until somebody has decided.
+ *
+ * Everything here banks. That is not laziness — it is what the type is for. A
+ * field that should *not* travel to the next book does not belong on the voice
+ * at all; it belongs in the per-book context the pass is given.
+ */
+export const VOICE_KEYS: readonly (keyof EditorVoice)[] = [
+  'penName',
+  'about',
+  'density',
+  'kinds',
+  'maxWords',
+  'guidance',
+  'avoid',
+  'exemplars'
+]
 
 /**
  * The default editor: well-informed, and determined to be understood.
@@ -134,6 +170,7 @@ export function defaultVoice(): EditorVoice {
     kinds: [...ANNOTATION_KINDS],
     maxWords: 45,
     guidance: '',
+    avoid: [],
     exemplars: []
   }
 }
@@ -199,12 +236,22 @@ export function voiceBlock(voice: EditorVoice): string {
     ``,
     `WHAT EARNS A NOTE:`,
     ...voice.kinds.map((kind) => `- ${KIND_GUIDANCE[kind]}`),
-    `Aim for roughly ${NOTES_PER_THOUSAND_WORDS[voice.density]} notes per thousand`,
-    `words of the book, as a target and not a quota.`
+    `Aim for roughly ${NOTES_PER_THOUSAND_WORDS[voice.density]} note${
+      NOTES_PER_THOUSAND_WORDS[voice.density] === 1 ? '' : 's'
+    } per thousand words of the book, as a target and not a quota.`
   )
 
   if (voice.guidance.trim()) {
     parts.push(``, `THE EDITOR ALSO ASKS:`, voice.guidance.trim())
+  }
+
+  // Last before the exemplars, and phrased as refusals rather than as more
+  // advice: these are the lines this editor has actually struck out of a note,
+  // and they are worth more than anything above them because each one was
+  // learned from something that came back wrong.
+  const avoid = voice.avoid.map((line) => line.trim()).filter((line) => line.length > 0)
+  if (avoid.length > 0) {
+    parts.push(``, `WHAT THIS EDITOR NEVER DOES:`, ...avoid.map((line) => `- ${line}`))
   }
 
   const exemplars = voice.exemplars.slice(-MAX_EXEMPLARS)
@@ -302,6 +349,9 @@ export function normalizeVoice(raw: unknown): EditorVoice {
         ? Math.min(120, Math.max(10, Math.round(maxWords)))
         : base.maxWords,
     guidance: str(raw['guidance'], base.guidance),
+    avoid: Array.isArray(raw['avoid'])
+      ? raw['avoid'].map((line) => str(line, '')).filter((line) => line.trim().length > 0)
+      : base.avoid,
     exemplars
   }
 }

@@ -187,6 +187,48 @@ describe('assembleBook', () => {
     expect(doc.chapters[1]!.level).toBe(2)
   })
 
+  /**
+   * "LESSON I." over "THE ASTRAL SENSES." is one chapter opening printed on two
+   * lines, and the reading brings it back as two heading blocks because on the
+   * page that is what it is. Counting it as two chapters listed every chapter
+   * twice in the contents, put the lesson number in the running head for a
+   * leaf, and — with chapters opening recto — cost two extra leaves per lesson,
+   * the first carrying a number and nothing else.
+   */
+  it('takes a run of consecutive headings as one chapter', () => {
+    const doc = assembleBook([
+      page(0, [
+        { kind: 'heading', text: 'LESSON I.' },
+        { kind: 'heading', text: 'THE ASTRAL SENSES.' },
+        para('The student of occultism.')
+      ]),
+      page(1, [
+        { kind: 'heading', text: 'LESSON II.' },
+        { kind: 'heading', text: 'TELEPATHY EXPLAINED.' },
+        para('Telepathy is the sending of thought.')
+      ])
+    ])
+    expect(doc.chapters).toHaveLength(2)
+    // Named by the last of the run, because the title is what the running head
+    // shows and what a recovered synopsis is matched on.
+    expect(doc.chapters.map((c) => c.title)).toEqual(['THE ASTRAL SENSES.', 'TELEPATHY EXPLAINED.'])
+    expect(doc.chapters.map((c) => c.label)).toEqual(['LESSON I.', 'LESSON II.'])
+    // Identified by the first, because that is where the opening starts.
+    expect(doc.chapters[0]!.id).toBe(doc.blocks[0]!.id)
+    expect(doc.chapters[0]!.blockIndex).toBe(0)
+    // Every heading block survives: nothing about this drops text.
+    expect(doc.blocks.filter((b) => b.kind === 'heading')).toHaveLength(4)
+  })
+
+  it('leaves a lone heading without a label', () => {
+    const doc = assembleBook([
+      page(0, [{ kind: 'heading', text: 'INTRODUCTION.' }, para('In preparing this series.')])
+    ])
+    expect(doc.chapters).toHaveLength(1)
+    expect(doc.chapters[0]!.label).toBeUndefined()
+    expect(doc.chapters[0]!.title).toBe('INTRODUCTION.')
+  })
+
   it('orders pages regardless of the order supplied', () => {
     const doc = assembleBook([
       page(2, [para('Third.')]),
@@ -395,5 +437,195 @@ describe('assembleBook — pages the user left out', () => {
     const plain = assembleBook([page(0, 'One.'), page(1, 'Two.')])
     const empty = assembleBook([page(0, 'One.'), page(1, 'Two.')], { excludePages: [] })
     expect(empty).toEqual(plain)
+  })
+})
+
+/**
+ * A descriptive contents is *recovered*, never composed.
+ *
+ * The rule this protects is the editor's, and it is narrower than "it would be
+ * nice to have descriptions": keep them where the original printed them, and
+ * add them nowhere else. A book whose contents was a bare list of chapter names
+ * had no such prose, and inventing some would be writing the author's book for
+ * them — the one thing a public-domain reprint must not do.
+ *
+ * Structurally this cannot happen, because `synopsis` only ever takes a value
+ * from text read off the contents leaves. Asserted anyway: "it cannot happen"
+ * is how it happens, and the failure would be invisible — a plausible paragraph
+ * under a chapter heading looks exactly like a recovered one.
+ */
+describe('assembleBook — descriptions in the contents', () => {
+  const chapter = (n: string) =>
+    page(1, [{ kind: 'heading', text: n, level: 1 }, para('The body of the chapter.')])
+
+  it('recovers them when the original printed them', () => {
+    const doc = assembleBook([
+      page(
+        0,
+        [
+          { kind: 'heading', text: 'CONTENTS' },
+          { kind: 'heading', text: 'LESSON I' },
+          { kind: 'heading', text: 'THE ASTRAL SENSES' },
+          para('The skeptical person who believes only the evidence of his senses, and why.'),
+          para('Page 13'),
+          { kind: 'heading', text: 'LESSON II' },
+          { kind: 'heading', text: 'TELEPATHY vs. CLAIRVOYANCE' },
+          para('The two extra physical senses of man, and how they may be told apart.'),
+          para('Page 28')
+        ],
+        'table-of-contents'
+      ),
+      page(
+        1,
+        [
+          { kind: 'heading', text: 'THE ASTRAL SENSES.', level: 1 },
+          para('The body of the chapter.')
+        ],
+        'chapter-opening'
+      )
+    ])
+    const found = doc.chapters.find((c) => c.title === 'THE ASTRAL SENSES.')
+    expect(found?.synopsis).toContain('skeptical person')
+  })
+
+  it('adds none to a book that had no contents page at all', () => {
+    const doc = assembleBook([chapter('Of the Air')])
+    expect(doc.chapters.every((c) => c.synopsis === undefined)).toBe(true)
+  })
+
+  /**
+   * The case that matters most: a contents page *exists* but is a bare list.
+   * Nothing is offered, because there was nothing there — and a bare list is
+   * still perfectly well served by the regenerated contents.
+   */
+  it('adds none when the original contents was only names and numbers', () => {
+    const doc = assembleBook([
+      page(
+        0,
+        [
+          { kind: 'heading', text: 'CONTENTS' },
+          { kind: 'heading', text: 'CHAPTER I' },
+          { kind: 'heading', text: 'OF THE AIR' },
+          para('Page 13'),
+          { kind: 'heading', text: 'CHAPTER II' },
+          { kind: 'heading', text: 'OF FIRE' },
+          para('Page 28')
+        ],
+        'table-of-contents'
+      ),
+      page(1, [{ kind: 'heading', text: 'OF THE AIR', level: 1 }, para('Body.')], 'chapter-opening')
+    ])
+    expect(doc.chapters.every((c) => c.synopsis === undefined)).toBe(true)
+  })
+})
+
+/**
+ * A sentence broken by the page edge, where the two halves were read as
+ * different kinds of thing.
+ *
+ * The pass reads one leaf at a time. A list item broken by the page edge
+ * continues on the next leaf with no number in front of it, and a quotation
+ * continues with no opening quotation mark — so that leaf begins with what
+ * looks exactly like an ordinary paragraph, and the pass is right to call it
+ * one. Requiring the kinds to match left the sentence in two pieces, which a
+ * reader meets in print as a line that stops in the middle.
+ *
+ * Found in a real book: eight of them, in lists and in quoted narrative.
+ */
+describe('assembleBook — a sentence broken across a leaf', () => {
+  const half = (kind: TranscribedBlock['kind'], text: string) => ({ kind, text })
+
+  it('joins a list item that runs on as a paragraph', () => {
+    const doc = assembleBook([
+      page(0, [half('list-item', 'Clairvoyance in Time, in which the seer senses events which')]),
+      page(1, [half('paragraph', 'have had their original place in past time.')])
+    ])
+    expect(doc.blocks).toHaveLength(1)
+    expect(doc.blocks[0]?.text).toBe(
+      'Clairvoyance in Time, in which the seer senses events which have had their ' +
+        'original place in past time.'
+    )
+    // The first half's kind wins: an item that runs on is still an item.
+    expect(doc.blocks[0]?.kind).toBe('list-item')
+    expect(doc.blocks[0]?.sourcePages).toEqual([0, 1])
+  })
+
+  it('joins a quotation that runs on as a paragraph', () => {
+    const doc = assembleBook([
+      page(0, [half('blockquote', '“I dashed in his face some water which I')]),
+      page(1, [half('paragraph', 'fortunately had in my flask.”')])
+    ])
+    expect(doc.blocks).toHaveLength(1)
+    expect(doc.blocks[0]?.kind).toBe('blockquote')
+  })
+
+  /**
+   * The guard on the other side. Two list items on one leaf are two items, and
+   * the first ending without a full stop is ordinary — merging them would
+   * invent a paragraph the book never had.
+   */
+  it('does not merge two items that merely sit next to each other on one leaf', () => {
+    const doc = assembleBook([
+      page(0, [
+        half('list-item', 'Locations. Begin by finding particular locations in a room'),
+        half('list-item', 'large objects. Then begin to find tables, chairs')
+      ])
+    ])
+    expect(doc.blocks).toHaveLength(2)
+  })
+
+  it('never joins a heading to anything', () => {
+    const doc = assembleBook([
+      page(0, [half('list-item', 'something ending open')]),
+      page(1, [half('heading', 'lesson iv')])
+    ])
+    expect(doc.blocks).toHaveLength(2)
+  })
+})
+
+/**
+ * The other side of that relaxation, and a regression it caused once.
+ *
+ * A long quotation is printed with a quotation mark opening every paragraph and
+ * closing only the last, so the pass marks the whole run as continuing — true
+ * of the quotation, false of the sentence. With the kinds no longer required to
+ * match, that hint was enough to weld two paragraphs of a quoted narrative into
+ * one. A block that opens a quotation is starting something.
+ */
+describe('assembleBook — a quotation that runs over several paragraphs', () => {
+  it('keeps its paragraphs apart even though the pass marks them as continuing', () => {
+    const doc = assembleBook([
+      page(0, [
+        {
+          kind: 'blockquote',
+          text: '“…through the connecting sequence of ether waves of appropriate order.',
+          continuesNext: true
+        }
+      ]),
+      page(1, [
+        {
+          kind: 'paragraph',
+          text: '“Roentgen has familiarized us with an order of vibrations.',
+          continuesPrevious: true
+        }
+      ])
+    ])
+    expect(doc.blocks).toHaveLength(2)
+  })
+
+  /** But an abbreviation at the page edge is still one sentence. */
+  it('still joins where the break falls inside a name', () => {
+    const doc = assembleBook([
+      page(0, [
+        {
+          kind: 'blockquote',
+          text: 'poachers who lived in a lonely wood near St.',
+          continuesNext: true
+        }
+      ]),
+      page(1, [{ kind: 'paragraph', text: 'Eglos. They wished him good night.' }])
+    ])
+    expect(doc.blocks).toHaveLength(1)
+    expect(doc.blocks[0]?.text).toContain('near St. Eglos')
   })
 })

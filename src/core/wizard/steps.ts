@@ -147,17 +147,6 @@ export interface WizardState {
   /** The model the user reached for last, so the gate can offer it again. */
   defaultModelId: string
   /**
-   * Per-book tweaks to the look, from "anything you'd change?" at the design
-   * gate.
-   *
-   * Kept apart from the answers that *built* the style rather than folded into
-   * them, for the same reason corrections are kept apart from the
-   * transcription: the five questions and the banked look stay what they were,
-   * and every tweak can be dropped without rebuilding anything. They belong to
-   * this book alone — banking a look is what makes a change travel.
-   */
-  styleOverrides: Answers
-  /**
    * The measured facts the storage question shows: how big this scan is, and
    * how much room this browser will give the app. `quota`/`usage` are null
    * where the browser declines to say, and the question then asks without
@@ -272,7 +261,6 @@ export function initialState(): WizardState {
     keepScans: null,
     defaultLook: null,
     defaultModelId: 'claude-opus-5',
-    styleOverrides: {},
     storage: null,
     styleProfiles: [],
     findings: [],
@@ -939,7 +927,7 @@ const gateUncertainties: Step = {
         // With the italics showing. They are content the original prints and
         // this edition has to, and a plain box cannot show them — so someone
         // correcting a word here would silently discard them.
-        text: withMarkup(block.text, block.emphasis),
+        text: withMarkup(block.text, block.emphasis, block.strong),
         kind: block.kind,
         alsoFromPages: rest
       })
@@ -1124,7 +1112,11 @@ const gateStructure: Step = {
           label: 'Chapters found (these become your table of contents)',
           text:
             doc.chapters.length > 0
-              ? doc.chapters.map((c) => `${'  '.repeat(c.level - 1)}${c.title}`).join('\n')
+              ? doc.chapters
+                  .map(
+                    (c) => `${'  '.repeat(c.level - 1)}${c.label ? `${c.label} ` : ''}${c.title}`
+                  )
+                  .join('\n')
               : 'None found — the book will have no table of contents.'
         }
       ]
@@ -1828,6 +1820,17 @@ function keepScansQuestion(s: WizardState): Question {
  *
  * `answers` is passed rather than read from state so the gate can show the
  * consequence of an answer the user has not committed yet.
+ *
+ * The per-book tweaks from "anything you'd change?" are read from the *same*
+ * object as the five questions, and deliberately so. They used to sit in a
+ * `styleOverrides` field of their own, on the reasoning that a tweak should be
+ * droppable without disturbing the answers that built the style — which is
+ * true, and is still true, because `styleQuestions` names the ids and nothing
+ * else uses them. What that field also was, though, was the one part of the
+ * design gate that nothing persisted: it was not written to the review
+ * progress, so it did not survive a refresh, and it was not in the book file,
+ * so a look tweaked on one device came back plain on the next. Answers travel
+ * already. These are answers.
  */
 export function appliedLook(
   state: WizardState,
@@ -1840,7 +1843,7 @@ export function appliedLook(
 
   if (banked) {
     return {
-      style: applyStyleAnswers(banked.style, state.styleOverrides),
+      style: applyStyleAnswers(banked.style, answers),
       imprint: banked.imprint,
       fromProfileId: banked.id
     }
@@ -1857,7 +1860,7 @@ export function appliedLook(
         answers['font'] as string,
         state.defaultLook ?? undefined
       ),
-      state.styleOverrides
+      answers
     ),
     imprint: emptyImprint(),
     fromProfileId: null

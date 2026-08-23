@@ -546,6 +546,30 @@ export function App(): JSX.Element {
     [state.document, edits]
   )
 
+  // The detailed controls behind "anything you'd change?". They answer into the
+  // design step like every other question, so they persist and travel with the
+  // book — which means the reset button has to know which ids are *theirs*
+  // rather than clearing the gate.
+  const styleTweakQuestions = useMemo(
+    () =>
+      designProfile
+        ? styleQuestions(designProfile, {
+            families: BODY_FONTS.map((f) => ({
+              value: f.family,
+              label: f.label,
+              description: f.note
+            })),
+            // Asked only when this book's original contents had descriptions to
+            // keep. Nothing to offer otherwise.
+            hasSynopses: (correctedDocument?.chapters ?? []).some((c) => c.synopsis !== undefined)
+          })
+        : [],
+    [designProfile, correctedDocument]
+  )
+  const styleTweaks = styleTweakQuestions
+    .map((q) => q.id)
+    .filter((id) => currentAnswers[id] !== undefined)
+
   /**
    * Retouched pixels, keyed by the picture *and* the exact stack that made them.
    *
@@ -2335,7 +2359,7 @@ export function App(): JSX.Element {
     // comparison against the bare text would call every emphasised block
     // corrected and report a book full of edits nobody made.
     const pristine = new Map(
-      (state.document?.blocks ?? []).map((b) => [b.id, withMarkup(b.text, b.emphasis)])
+      (state.document?.blocks ?? []).map((b) => [b.id, withMarkup(b.text, b.emphasis, b.strong)])
     )
     let nextEdits = edits
     for (const [pageIndex, corrections] of corrected) {
@@ -2391,16 +2415,17 @@ export function App(): JSX.Element {
           // along past the inserted words — restoring a clause used to discard
           // the emphasis of the paragraph it landed in, silently.
           const host = blocks.find(
-            (b) => b.sourcePages.includes(pageIndex) && spliceRunInto(b.text, b.emphasis, run)
+            (b) =>
+              b.sourcePages.includes(pageIndex) && spliceRunInto(b.text, b.emphasis, run, b.strong)
           )
-          const fixed = host ? spliceRunInto(host.text, host.emphasis, run) : null
+          const fixed = host ? spliceRunInto(host.text, host.emphasis, run, host.strong) : null
           if (host && fixed) {
             nextEdits = withEdit(nextEdits, {
               kind: 'text',
               blockId: host.id,
               // Written back with the tags on, because that is how a `text`
               // edit carries emphasis — `applyEdits` reads them straight back.
-              text: withMarkup(fixed.text, fixed.emphasis)
+              text: withMarkup(fixed.text, fixed.emphasis, fixed.strong)
             })
           } else {
             // Nowhere to put it: the anchor phrase is in no block off this leaf.
@@ -3873,30 +3898,25 @@ export function App(): JSX.Element {
                           These apply to this book only — bank the look if you want them on the next
                           one.
                         </p>
-                        {styleQuestions(designProfile, {
-                          families: BODY_FONTS.map((f) => ({
-                            value: f.family,
-                            label: f.label,
-                            description: f.note
-                          }))
-                        }).map((q) => (
+                        {styleTweakQuestions.map((q) => (
                           <QuestionView
                             key={q.id}
                             question={q}
-                            value={state.styleOverrides[q.id]}
-                            onChange={(v: AnswerValue) =>
-                              setState((st) => ({
-                                ...st,
-                                styleOverrides: { ...st.styleOverrides, [q.id]: v }
-                              }))
-                            }
+                            value={currentAnswers[q.id]}
+                            onChange={(v: AnswerValue) => setAnswers((a) => ({ ...a, [q.id]: v }))}
                           />
                         ))}
-                        {Object.keys(state.styleOverrides).length > 0 ? (
+                        {styleTweaks.length > 0 ? (
                           <div className="actions">
                             <button
                               type="button"
-                              onClick={() => setState((st) => ({ ...st, styleOverrides: {} }))}
+                              onClick={() =>
+                                setAnswers((a) =>
+                                  Object.fromEntries(
+                                    Object.entries(a).filter(([id]) => !styleTweaks.includes(id))
+                                  )
+                                )
+                              }
                             >
                               Undo my changes
                             </button>

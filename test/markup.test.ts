@@ -304,3 +304,56 @@ describe('the small helpers', () => {
     expect(shiftEmphasis([0, 2], 5)).toEqual([5, 7])
   })
 })
+
+/**
+ * `<b>` was transparent — content kept, tag dropped — for as long as nothing
+ * downstream could set a bold run. A glossary with 126 headwords is what made
+ * it worth having: without it every headword read as body text and the page was
+ * a wall.
+ */
+describe('strong runs', () => {
+  it('reads <b> into word indices, like <i>', () => {
+    const m = parseInlineMarkup('<b>Aerolite.</b> A stony meteorite.')
+    expect(m.text).toBe('Aerolite. A stony meteorite.')
+    expect(m.strong).toEqual([0])
+    expect(m.emphasis).toEqual([])
+  })
+
+  it('reads <strong> the same way', () => {
+    expect(parseInlineMarkup('a <strong>very loud</strong> word').strong).toEqual([1, 2])
+  })
+
+  it('keeps the two kinds apart in one block', () => {
+    const m = parseInlineMarkup('<b>Blavatsky.</b> She wrote <i>Isis Unveiled</i> in 1877.')
+    expect(m.text).toBe('Blavatsky. She wrote Isis Unveiled in 1877.')
+    expect(m.strong).toEqual([0])
+    expect(m.emphasis).toEqual([3, 4])
+  })
+
+  it('lets a word be both', () => {
+    const m = parseInlineMarkup('<b><i>Isis Unveiled.</i></b> Her first book.')
+    expect(m.strong).toEqual([0, 1])
+    expect(m.emphasis).toEqual([0, 1])
+  })
+
+  it('writes both tags back, nested rather than crossed', () => {
+    const round = withMarkup('Blavatsky. She wrote Isis Unveiled in 1877.', [3, 4], [0])
+    expect(round).toBe('<b>Blavatsky.</b> She wrote <i>Isis Unveiled</i> in 1877.')
+    expect(parseInlineMarkup(round).strong).toEqual([0])
+    expect(parseInlineMarkup(round).emphasis).toEqual([3, 4])
+  })
+
+  it('round-trips a word that is both', () => {
+    const round = withMarkup('Isis Unveiled. Her first book.', [0, 1], [0, 1])
+    expect(round).toBe('<b><i>Isis Unveiled.</i></b> Her first book.')
+    const back = parseInlineMarkup(round)
+    expect(back.text).toBe('Isis Unveiled. Her first book.')
+    expect(back.strong).toEqual([0, 1])
+    expect(back.emphasis).toEqual([0, 1])
+  })
+
+  it('leaves unmarked text alone', () => {
+    expect(withMarkup('plain words', undefined, undefined)).toBe('plain words')
+    expect(withMarkup('plain words', [], [])).toBe('plain words')
+  })
+})

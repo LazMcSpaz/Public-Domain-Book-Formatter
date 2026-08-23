@@ -51,6 +51,10 @@ export interface PreparedNote {
   /** The mark as printed, matching the one left in the body. */
   mark: string
   text: string
+  /** Word indices set in italic. See `Footnote.emphasis`. */
+  emphasis?: number[]
+  /** Word indices set bold. See `Footnote.strong`. */
+  strong?: number[]
 }
 
 export interface PreparedFootnotes {
@@ -174,7 +178,13 @@ export function prepareFootnotes(
       const mark = String(nextNumber++)
 
       references.push({ wordIndex: counter.lastWordIndex(), noteId: note.id, mark })
-      notes.set(note.id, { id: note.id, mark, text: note.text })
+      notes.set(note.id, {
+        id: note.id,
+        mark,
+        text: note.text,
+        ...(note.emphasis?.length ? { emphasis: note.emphasis } : {}),
+        ...(note.strong?.length ? { strong: note.strong } : {})
+      })
       remaining.delete(note.id)
 
       // The printed marker is dropped here and redrawn during layout. Leaving

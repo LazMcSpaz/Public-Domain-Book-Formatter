@@ -23,7 +23,13 @@
  * where detail belongs, but "0.13 in" typed into a box invites 13, and a body
  * size of 13 inches is not a validation error anyone should have to read about.
  */
-import type { Margins, PageNumberPosition, RunningHeadMode, StyleProfile } from '@core/model'
+import type {
+  Margins,
+  PageNumberPosition,
+  RunningHeadMode,
+  RunningHeadStyle,
+  StyleProfile
+} from '@core/model'
 import type { Answers, ChoiceOption, Question } from '@core/wizard/questions'
 import { BUILTIN_ORNAMENTS } from '@core/ornament'
 
@@ -105,6 +111,15 @@ export interface StyleQuestionOptions {
    * caller has the list anyway.
    */
   families?: ChoiceOption[]
+  /**
+   * Whether this book's original contents carried a description per chapter.
+   *
+   * The question is only asked when there is something to keep. A book whose
+   * contents was a bare list has nothing to recover, and offering the choice
+   * anyway would be asking about a feature that cannot do anything — which is
+   * exactly the kind of setting this app exists not to have.
+   */
+  hasSynopses?: boolean
 }
 
 /**
@@ -230,6 +245,20 @@ export function styleQuestions(
       options: RUNNING_HEAD_MODES.map((m) => ({ value: m, label: RUNNING_HEAD_LABELS[m] }))
     },
     {
+      id: 'runningHeadStyle',
+      type: 'choice',
+      prompt: 'Running head, how it is set',
+      help:
+        'A head set like the text competes with it. Small capitals are the usual answer, ' +
+        'and a face without them falls back to full capitals rather than faking them.',
+      defaultValue: profile.runningHeadStyle,
+      options: [
+        { value: 'smallCaps', label: 'Small capitals' },
+        { value: 'italic', label: 'Italic' },
+        { value: 'plain', label: 'Same as the text' }
+      ]
+    },
+    {
       id: 'pageNumber',
       type: 'choice',
       prompt: 'Page numbers',
@@ -242,6 +271,21 @@ export function styleQuestions(
       prompt: 'Open each chapter with a drop capital?',
       defaultValue: profile.dropCap
     },
+    ...(options.hasSynopses
+      ? [
+          {
+            id: 'contentsSynopsis',
+            type: 'confirm' as const,
+            prompt: 'Keep the descriptions under each chapter in the contents?',
+            help:
+              'The original contents gives a paragraph under each chapter saying what is in ' +
+              'it — the reason a page like that is read rather than scanned. Keeping them is ' +
+              'the original’s own arrangement with this edition’s page numbers; it turns a ' +
+              'one-leaf contents into several.',
+            defaultValue: profile.contentsSynopsis
+          }
+        ]
+      : []),
     {
       id: 'chaptersOpenRecto',
       type: 'confirm',
@@ -386,6 +430,11 @@ export function applyStyleAnswers(profile: StyleProfile, answers: Answers): Styl
       verso: pick(answers, 'runningHeadVerso', profile.runningHeads.verso) as RunningHeadMode,
       recto: pick(answers, 'runningHeadRecto', profile.runningHeads.recto) as RunningHeadMode
     },
+    runningHeadStyle: pick(
+      answers,
+      'runningHeadStyle',
+      profile.runningHeadStyle
+    ) as RunningHeadStyle,
     dropCap: pickBool(answers, 'dropCap', profile.dropCap),
     chaptersOpenRecto: pickBool(answers, 'chaptersOpenRecto', profile.chaptersOpenRecto),
     paragraphIndentEms: pickNumber(answers, 'paragraphIndentEms', profile.paragraphIndentEms),
@@ -393,6 +442,7 @@ export function applyStyleAnswers(profile: StyleProfile, answers: Answers): Styl
     hyphenate: pickBool(answers, 'hyphenate', profile.hyphenate),
     opticalMargins: pickBool(answers, 'opticalMargins', profile.opticalMargins),
     pageNumber: pick(answers, 'pageNumber', profile.pageNumber) as PageNumberPosition,
+    contentsSynopsis: pickBool(answers, 'contentsSynopsis', profile.contentsSynopsis),
     ornaments: {
       chapterOpener: pickOrnament(answers, 'ornamentChapter', profile.ornaments.chapterOpener),
       sectionDivider: pickOrnament(answers, 'ornamentDivider', profile.ornaments.sectionDivider),

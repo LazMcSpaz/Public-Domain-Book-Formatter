@@ -5,6 +5,7 @@ import {
   checkProposals,
   chunkBlocks,
   contextFor,
+  VOICE_KEYS,
   defaultVoice,
   estimateAnnotationCost,
   findAnchor,
@@ -110,6 +111,47 @@ describe('the editor’s voice', () => {
     expect(voice.exemplars).toHaveLength(MAX_EXEMPLARS)
     expect(voice.exemplars[0]!.note).toBe('note 2')
     expect(voiceBlock(voice)).toContain('note 7')
+  })
+
+  /**
+   * The guard the banking rule rests on, and the one this module went without.
+   *
+   * The file has always claimed that a voice is the same editor on every book;
+   * nothing checked it, so the claim held only as long as whoever added a field
+   * read the comment first. Now adding one fails here until somebody has
+   * decided whether it is really the editor or really this book.
+   */
+  it('accounts for every field an EditorVoice carries', () => {
+    expect(Object.keys(defaultVoice()).sort()).toEqual([...VOICE_KEYS].sort())
+  })
+
+  it('carries the refusals, and as refusals', () => {
+    const card = voiceBlock({
+      ...defaultVoice(),
+      avoid: ['Call the author naive', '  ', 'Open a note with “Interestingly”']
+    })
+    expect(card).toContain('WHAT THIS EDITOR NEVER DOES:')
+    expect(card).toContain('- Call the author naive')
+    expect(card).toContain('- Open a note with “Interestingly”')
+    // A blank line in the list is a blank line in the textarea, not a refusal.
+    expect(card).not.toContain('- \n')
+  })
+
+  it('counts a single note per thousand words as one note', () => {
+    // "1 notes per thousand" in the instruction that sets the density. Small,
+    // and exactly the class of slip this edition spent a day removing from a
+    // printed book — no reason to write new ones into the prompt.
+    expect(voiceBlock({ ...defaultVoice(), density: 'sparing' })).toContain('1 note per thousand')
+    expect(voiceBlock({ ...defaultVoice(), density: 'generous' })).toContain('5 notes per thousand')
+  })
+
+  it('says nothing about refusals when the editor has none', () => {
+    expect(voiceBlock(defaultVoice())).not.toContain('NEVER DOES')
+  })
+
+  it('reads an avoid list back, and survives one written as anything else', () => {
+    expect(normalizeVoice({ avoid: ['no jokes', 42, ''] }).avoid).toEqual(['no jokes'])
+    expect(normalizeVoice({ avoid: 'no jokes' }).avoid).toEqual([])
   })
 
   it('does not keep the same note twice', () => {

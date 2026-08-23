@@ -29,8 +29,20 @@
  * Pure: text in, text and indices out.
  */
 
-/** Tags that mean "set this in italic", which is all a book actually needs. */
+/** Tags that mean "set this in italic", which is most of what a book needs. */
 const ITALIC_TAGS = new Set(['i', 'em', 'cite', 'var'])
+/**
+ * Tags that mean "set this strong".
+ *
+ * These were transparent — content kept, tag dropped — for as long as nothing
+ * downstream could set a bold run. Now something can, and the same argument
+ * that applies to `<i>` applies here: where the original prints a word bold the
+ * model is telling us so, and where the *editor* writes a glossary the headword
+ * is the one thing on the page that has to be findable at a glance. The face a
+ * strong run is actually set in is decided in the layout engine, which knows
+ * whether the book's typeface has a bold at all.
+ */
+const STRONG_TAGS = new Set(['b', 'strong'])
 /**
  * Tags whose content is kept but whose meaning the book expresses another way.
  *
@@ -38,7 +50,7 @@ const ITALIC_TAGS = new Set(['i', 'em', 'cite', 'var'])
  * and the footnote machinery finds those by looking for the bare marker in the
  * text. Keeping the digit and dropping the tag is what lets it work.
  */
-const TRANSPARENT_TAGS = new Set(['sup', 'sub', 'b', 'strong', 'span', 'p', 'small'])
+const TRANSPARENT_TAGS = new Set(['sup', 'sub', 'span', 'p', 'small'])
 
 export interface InlineMarkup {
   /** The text with every tag removed. */
@@ -50,6 +62,13 @@ export interface InlineMarkup {
    * store it, so an unemphasised book carries no extra bytes.
    */
   emphasis: number[]
+  /**
+   * Indices of whitespace-separated words to set strong, ascending.
+   *
+   * Same convention and same reasons as `emphasis`, and stored the same way:
+   * omitted entirely where there is none.
+   */
+  strong: number[]
 }
 
 /** Anything that looks like a tag, closing or not, with or without attributes. */
@@ -65,43 +84,49 @@ const TAG = /<\s*(\/?)\s*([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/gu
  * in the printed text.
  */
 export function parseInlineMarkup(raw: string): InlineMarkup {
-  if (!raw.includes('<')) return { text: raw, emphasis: [] }
+  if (!raw.includes('<')) return { text: raw, emphasis: [], strong: [] }
 
   // Walk the source once, building the clean text and remembering the character
-  // ranges the italic tags covered. Words are counted afterwards, from the
+  // ranges each kind of tag covered. Words are counted afterwards, from the
   // clean text, so the indices match what the breaker will produce.
   let text = ''
-  const ranges: { start: number; end: number }[] = []
-  const open: number[] = []
+  const ranges = { italic: [] as Range[], strong: [] as Range[] }
+  const open = { italic: [] as number[], strong: [] as number[] }
   let last = 0
 
   for (const match of raw.matchAll(TAG)) {
     const [whole, closing, rawName] = match
     const name = (rawName ?? '').toLowerCase()
-    if (!ITALIC_TAGS.has(name) && !TRANSPARENT_TAGS.has(name)) continue
+    const kind = ITALIC_TAGS.has(name) ? 'italic' : STRONG_TAGS.has(name) ? 'strong' : null
+    if (!kind && !TRANSPARENT_TAGS.has(name)) continue
 
     text += raw.slice(last, match.index)
     last = match.index + whole.length
 
-    if (!ITALIC_TAGS.has(name)) continue
+    if (!kind) continue
     if (closing === '/') {
-      const start = open.pop()
-      if (start !== undefined) ranges.push({ start, end: text.length })
+      const start = open[kind].pop()
+      if (start !== undefined) ranges[kind].push({ start, end: text.length })
     } else {
-      open.push(text.length)
+      open[kind].push(text.length)
     }
   }
   text += raw.slice(last)
 
-  // An unclosed tag emphasises the rest of the block, which is what it asked
-  // for and the least surprising reading of a mistake.
-  for (const start of open) ranges.push({ start, end: text.length })
+  // An unclosed tag marks the rest of the block, which is what it asked for and
+  // the least surprising reading of a mistake.
+  for (const kind of ['italic', 'strong'] as const) {
+    for (const start of open[kind]) ranges[kind].push({ start, end: text.length })
+  }
 
-  if (ranges.length === 0) return { text, emphasis: [] }
+  if (ranges.italic.length === 0 && ranges.strong.length === 0) {
+    return { text, emphasis: [], strong: [] }
+  }
 
   // Map character ranges onto word indices, counting words exactly as
   // `itemsFromText` does — by splitting on whitespace.
   const emphasis = new Set<number>()
+  const strong = new Set<number>()
   let index = 0
   let cursor = 0
   for (const word of text.split(/(\s+)/u)) {
@@ -110,14 +135,22 @@ export function parseInlineMarkup(raw: string): InlineMarkup {
     if (!isSpace) {
       const start = cursor
       const end = cursor + word.length
-      // Any overlap counts: a range covering half a word italicises the word.
-      if (ranges.some((r) => r.start < end && r.end > start)) emphasis.add(index)
+      // Any overlap counts: a range covering half a word marks the word.
+      const hits = (rs: Range[]): boolean => rs.some((r) => r.start < end && r.end > start)
+      if (hits(ranges.italic)) emphasis.add(index)
+      if (hits(ranges.strong)) strong.add(index)
       index += 1
     }
     cursor += word.length
   }
 
-  return { text, emphasis: [...emphasis].sort((a, b) => a - b) }
+  const sorted = (set: Set<number>): number[] => [...set].sort((a, b) => a - b)
+  return { text, emphasis: sorted(emphasis), strong: sorted(strong) }
+}
+
+interface Range {
+  start: number
+  end: number
 }
 
 /**
@@ -139,29 +172,44 @@ export function parseInlineMarkup(raw: string): InlineMarkup {
  * Contiguous emphasised words share one pair of tags, so a phrase reads as a
  * phrase rather than as five tagged words.
  */
-export function withMarkup(text: string, emphasis: readonly number[] | undefined): string {
-  if (!emphasis?.length) return text
-  const italic = new Set(emphasis)
+export function withMarkup(
+  text: string,
+  emphasis: readonly number[] | undefined,
+  strong?: readonly number[]
+): string {
+  if (!emphasis?.length && !strong?.length) return text
+  const marks = [
+    { words: new Set(strong ?? []), tag: 'b', inside: false },
+    { words: new Set(emphasis ?? []), tag: 'i', inside: false }
+  ]
 
   let out = ''
   let index = 0
-  let inside = false
   for (const part of text.split(/(\s+)/u)) {
     if (part.length === 0) continue
     if (/^\s+$/u.test(part)) {
       out += part
       continue
     }
-    const wanted = italic.has(index)
-    // Opening and closing between the words rather than around each one, so a
-    // run comes out as `<i>three whole words</i>`.
-    if (wanted && !inside) out += '<i>'
-    if (!wanted && inside) out = `${out.replace(/(\s*)$/u, '</i>$1')}`
-    inside = wanted
+    // Closing runs before opening any, and in reverse, so the tags nest:
+    // `<b><i>…</i></b>` and never `<b><i>…</b></i>`.
+    for (const mark of [...marks].reverse()) {
+      if (mark.inside && !mark.words.has(index)) {
+        out = out.replace(/(\s*)$/u, `</${mark.tag}>$1`)
+        mark.inside = false
+      }
+    }
+    for (const mark of marks) {
+      if (!mark.inside && mark.words.has(index)) {
+        out += `<${mark.tag}>`
+        mark.inside = true
+      }
+    }
     out += part
     index += 1
   }
-  return inside ? `${out}</i>` : out
+  for (const mark of [...marks].reverse()) if (mark.inside) out += `</${mark.tag}>`
+  return out
 }
 
 /**
