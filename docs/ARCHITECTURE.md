@@ -46,6 +46,7 @@ Gates are the only stops. Everything between them runs unattended.
 | **Export**     | `src/core/export`      | Edition details, file naming, the honest report   | no            |
 | Ornament       | `src/core/ornament`    | Vector ornament library (paths, no files)         | no            |
 | **Control**    | `src/core/control`     | Driving the interview from outside the tab        | no            |
+| **Cover**      | `src/core/cover`       | The flat sheet: geometry, composition, validation | no            |
 | **Platform**   | `src/platform/browser` | PDF.js, Tesseract.js, fonts, PDF writer, preview  | **yes**       |
 | **App**        | `src/app`              | Wizard shell, question renderer, page preview     | **yes**       |
 
@@ -348,6 +349,37 @@ source of truth. It stays for two reasons that a language model can't provide:
 | UI           | `node scripts/screenshot-flow.mjs` → real Chromium, screenshots per screen              |
 | Later gates  | `#preview` in dev → `src/app/DevPreview.tsx`, so gates behind the paid run stay visible |
 | Test fixture | `node scripts/make-test-book.mjs` → 8-page mock scan with recurring archaic vocabulary  |
+
+## The other arm: the cover
+
+```
+Export ──▶ measured page count ──┐
+                                 ▼
+#cover  ──▶ interview ──▶ CoverDocument ──▶ composeCover (pure core)
+                                                  │
+                                                  ▼
+                                           CoverItem[] ──▶ pdf-lib ──▶ PDF bytes
+                                                                          │
+                                                            ┌─────────────┴────────┐
+                                                            ▼                      ▼
+                                                   preview: pdf.js → canvas    download
+```
+
+The same three properties as the interior, deliberately: a pure composer, one
+renderer, and a preview made of the deliverable's own bytes. What differs is
+that a cover is _made_ rather than _recovered_, and everything downstream of
+that follows — arrangements instead of a flow, a look banked for a _collection_
+rather than for one press's house style, and a picture that may have to be
+created rather than found.
+
+Two things it borrows without modification: the question contract (so the whole
+interview is testable with no DOM, and the control channel could drive it) and
+the DPI rule (so a generated picture is held to exactly the standard a scanned
+plate is). The reasoning is in [`PLAN-cover.md`](./PLAN-cover.md).
+
+It is a route of its own, `#cover`, because covers are wanted for books this app
+never set. The export screen links into it carrying the measured page count —
+the number that sets the spine and the one people get wrong.
 
 ## Known gaps
 

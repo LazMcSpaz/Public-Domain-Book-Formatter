@@ -75,6 +75,10 @@ Practical rules:
 - `src/platform/browser` — the only place browser APIs appear: PDF.js rendering,
   Tesseract.js OCR, canvas crops, the recon runner, font loading, the pdf-lib
   writer, and the page preview.
+- `src/core/cover` — **the other arm.** The flat KDP sheet: spine from page count
+  and paper caliper, bleed, panels, the barcode keep-out, a composer that turns
+  a cover document into placed items, the KDP cover checks, a bankable look for
+  a _collection_, and the art briefs. Pure, like the rest of core.
 - `src/app` — the React wizard shell (`App.tsx`), the generic question renderer
   (`QuestionView.tsx`), the live page preview (`PreviewPane.tsx`), the export
   screen, and a dev-only `#preview` route for looking at gates that sit behind
@@ -624,6 +628,35 @@ in `screenshots/`. Don't ship UI blind.
   than left out. The 40 MB refusal was only ever about the scan; what actually
   needed bounding was this. Crops cut from the scan are deliberately not stored
   at all — they are re-cut when wanted, and the scan is already up there.
+
+- **Also done**: **the cover** (`src/core/cover`, `platform/browser/cover-*`,
+  `src/app/CoverStudio.tsx` — the reasoning is in
+  [`docs/PLAN-cover.md`](./docs/PLAN-cover.md)). SPEC §1 called covers a
+  non-goal with one carve-out — the tool must report the page count, "which the
+  user needs for spine-width math" — and that carve-out is the argument for
+  reversing it: the page count _is_ the spine, this app is the only thing that
+  knows it, and the old answer was to print the number and send the user
+  elsewhere with it in their head. What makes it cheap is that everything else
+  was already here: the trim, the title and author read off the original title
+  page, plates cut at render resolution, the ornament library, six embeddable
+  faces, a measurer that agrees with the writer, and the DPI rule. **The
+  geometry is computed, not looked up** — KDP publishes the arithmetic, and
+  their template files are kept as _evidence_ against it in
+  `test/cover-geometry`, the same bargain the app strikes with OCR. The
+  interior's two-level split (SPEC §7) reappears as a `CoverLook` banked for a
+  **collection** and a `CoverContent` that never travels, enforced by
+  `BANKED_COVER_KEYS`; the front is one of five **arrangements** rather than a
+  canvas, because free placement makes volume two a fresh act of design and a
+  collection is the point. The preview is the PDF, as at the design gate. Art
+  has four equal doors — a plate from the book, an upload, a generated picture,
+  or none — and the honesty is in the pixels: a 6×9 front at 300 DPI is 4.9 MP
+  where most models return one, which is 136 DPI, so the requirement is computed
+  from the arrangement's own frame _before_ anything is generated and quoted in
+  DPI rather than megapixels. Every brief forbids lettering, because the type is
+  the composer's job and a model's version of it is a second, misspelled title.
+  Provenance is recorded for every picture. Replicate is **probed, not
+  assumed**, exactly as the batch endpoint is: if a browser may not call it the
+  question withdraws itself and the other three doors are undiminished.
 
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
