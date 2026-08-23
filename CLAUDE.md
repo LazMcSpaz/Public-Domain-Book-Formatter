@@ -953,9 +953,10 @@ in `screenshots/`. Don't ship UI blind.
   apart at the head and foot. The job that remains is _"here is an image and
   here is a text, where do they differ"_, and a reader that never writes
   unprompted cannot confabulate a paragraph. Nothing downstream believes a
-  draft: it is not saved, `transcribe` is still the only door to the store, and
-  every draft carries a `structural` list of what it guessed rather than
-  measured, which is the order to check it in.
+  draft: it is not saved, nothing downstream reads one, and its contents reach
+  the store only by being corrected and passed to `transcribe`; every draft
+  carries a `structural` list of what it guessed rather than measured, which is
+  the order to check it in.
 
   Three faults came out of the first real leaf, and all three were invisible
   until a page went through it. **Line clustering scrambled the page**: words
