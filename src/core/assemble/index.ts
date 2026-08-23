@@ -4,6 +4,7 @@
  */
 export {
   assembleBook,
+  deriveChapters,
   shouldJoin,
   joinText,
   bookWordCount,

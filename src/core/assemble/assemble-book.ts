@@ -63,6 +63,15 @@ export interface Footnote {
    */
   originalMarker: string
   text: string
+  /**
+   * Word indices the note sets in italic, the same convention a block uses.
+   *
+   * A note names books more often than the text around it does — this edition's
+   * own notes name a dozen — and until this existed it was the only kind of
+   * block in the book that could not italicise one. A tag typed in hope printed
+   * as the tag.
+   */
+  emphasis?: number[]
   /** Page the note was printed on. */
   pageIndex: number
   /** True when no body text referenced this marker. */
@@ -84,9 +93,32 @@ export interface Footnote {
 }
 
 export interface ChapterEntry {
-  /** The id of the block this heading is, so the contents can match on it. */
+  /**
+   * The id of the block this heading is, so the contents can match on it.
+   *
+   * For a chapter opened by more than one heading (see {@link label}) this is
+   * the *first* of them, because that is the block the opening starts at.
+   */
   id: string
   title: string
+  /**
+   * The line printed over the title, where the book prints one.
+   *
+   * A great many books open a chapter with two headings — a number and a name,
+   * "LESSON I." over "THE ASTRAL SENSES." — and the reading brings them back as
+   * two heading blocks, because on the page that is what they are. Treating
+   * them as two chapters is the wrong answer three times over: the contents
+   * lists every chapter twice, the running head says "LESSON I." for a page or
+   * two before changing its mind, and with chapters opening recto each lesson
+   * costs two extra leaves, one carrying a number and nothing else. This book
+   * lost forty pages that way.
+   *
+   * So a run of consecutive headings is one chapter: the last is what the
+   * chapter is *called*, and everything before it is the label over it. The
+   * title is the last rather than the whole run joined because the title is
+   * what the running head shows and what a recovered synopsis is matched on.
+   */
+  label?: string
   level: number
   /**
    * What the original contents page said this chapter contains.
@@ -451,16 +483,7 @@ export function assembleBook(
 
   markOrphanFootnotes(blocks, footnotes)
 
-  const chapters: ChapterEntry[] = blocks
-    .map((b, i) => ({ b, i }))
-    .filter(({ b }) => b.kind === 'heading')
-    .map(({ b, i }) => ({
-      id: b.id,
-      title: b.text.trim(),
-      level: b.level ?? 1,
-      blockIndex: i,
-      sourcePage: b.sourcePages[0] ?? 0
-    }))
+  const chapters = deriveChapters(blocks)
 
   // The original contents, read for its prose and matched to the chapters the
   // body actually has. Matched on letters and digits alone, because a contents
@@ -492,6 +515,47 @@ export function assembleBook(
 
   // Nothing the scan contains is a section: they are written, never read.
   return { blocks, footnotes, chapters, asides, illustrations, sections: [], skipped }
+}
+
+/**
+ * The chapter list, from whatever the blocks now are.
+ *
+ * Exported and shared because it is derived *twice*: once when the scan is
+ * assembled, and again by `applyEdits` after a correction, since retyping a
+ * heading changes what the contents says. Two copies of this rule had already
+ * drifted — the second dropped every recovered synopsis on the floor, so an
+ * analytical contents was read off the original, matched to the body, and then
+ * silently discarded on its way to the page.
+ *
+ * A run of consecutive headings is one chapter. See {@link ChapterEntry.label}.
+ */
+export function deriveChapters(blocks: readonly BookBlock[]): ChapterEntry[] {
+  const chapters: ChapterEntry[] = []
+  for (let i = 0; i < blocks.length; i++) {
+    if (blocks[i]!.kind !== 'heading') continue
+    let end = i
+    while (end + 1 < blocks.length && blocks[end + 1]!.kind === 'heading') end++
+    const first = blocks[i]!
+    const last = blocks[end]!
+    const label = blocks
+      .slice(i, end)
+      .map((b) => b.text.trim())
+      .filter((t) => t.length > 0)
+      .join(' ')
+    chapters.push({
+      id: first.id,
+      title: last.text.trim(),
+      ...(label ? { label } : {}),
+      // The shallowest level in the run: a number tagged level 2 over a title
+      // tagged level 3 is still the opening of a chapter, and the pass tags
+      // these inconsistently or not at all.
+      level: Math.min(...blocks.slice(i, end + 1).map((b) => b.level ?? 1)),
+      blockIndex: i,
+      sourcePage: first.sourcePages[0] ?? 0
+    })
+    i = end
+  }
+  return chapters
 }
 
 /**

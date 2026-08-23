@@ -13,6 +13,7 @@ import type {
   PageNumberPosition,
   PerBookConfig,
   RunningHeadMode,
+  RunningHeadStyle,
   StyleProfile
 } from '@core/model'
 import { defaultStyleProfile } from './defaults'
@@ -24,6 +25,8 @@ const RUNNING_HEAD_MODES: RunningHeadMode[] = [
   'chapterTitle',
   'pageNumber'
 ]
+
+const RUNNING_HEAD_STYLES: RunningHeadStyle[] = ['plain', 'smallCaps', 'italic']
 
 const PAGE_NUMBER_POSITIONS: PageNumberPosition[] = [
   'none',
@@ -119,6 +122,7 @@ export function normalizeStyleProfile(raw: unknown): StyleProfile {
       verso: oneOf(rawRunning['verso'], RUNNING_HEAD_MODES, d.runningHeads.verso),
       recto: oneOf(rawRunning['recto'], RUNNING_HEAD_MODES, d.runningHeads.recto)
     },
+    runningHeadStyle: oneOf(raw['runningHeadStyle'], RUNNING_HEAD_STYLES, d.runningHeadStyle),
     dropCap: bool(raw['dropCap'], d.dropCap),
     paragraphIndentEms: num(raw['paragraphIndentEms'], d.paragraphIndentEms),
     paragraphSpacingEms: num(raw['paragraphSpacingEms'], d.paragraphSpacingEms),

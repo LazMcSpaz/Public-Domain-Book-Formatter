@@ -205,6 +205,23 @@ export interface Margins {
 /** What a running head shows on a given page side (SPEC §8). */
 export type RunningHeadMode = 'none' | 'bookTitle' | 'author' | 'chapterTitle' | 'pageNumber'
 
+/**
+ * How a running head is *set* — as against what it says.
+ *
+ * The head is the one piece of furniture on every page of the book, and it was
+ * set in plain roman at 85% of the body size, which is the one thing no printer
+ * of any period did: a head in the same colour as the text competes with it.
+ * Small capitals are the ordinary answer and have been since the 18th century;
+ * italic is the other, commoner in 19th-century English work than American.
+ *
+ * `smallCaps` falls back to full capitals in a face that has no `smcp`, exactly
+ * as a small-capped heading does, and for the same reason — synthesising them
+ * by scaling capitals down gives strokes too light for the size, which is the
+ * tell of a cheap reprint. That fallback is not a consolation prize here: full
+ * capitals in the head is what an American book of 1916 actually looks like.
+ */
+export type RunningHeadStyle = 'plain' | 'smallCaps' | 'italic'
+
 /** Where/how page numbers are set. */
 export type PageNumberPosition = 'none' | 'bottomCenter' | 'bottomOuter' | 'topOuter'
 
@@ -241,6 +258,8 @@ export interface StyleProfile {
     verso: RunningHeadMode
     recto: RunningHeadMode
   }
+  /** How the running head is set. See {@link RunningHeadStyle}. */
+  runningHeadStyle: RunningHeadStyle
   /**
    * Open each chapter's first paragraph with a large initial (a drop cap).
    * Traditional in reprints of early-modern books, and mutually intelligible

@@ -109,7 +109,15 @@ export function withTypographicQuotes(doc: BookDocument): BookDocument {
   return {
     ...doc,
     blocks: doc.blocks.map(overBlock),
-    chapters: doc.chapters.map((c) => ({ ...c, title: typographicQuotes(c.title) })),
+    chapters: doc.chapters.map((c) => ({
+      ...c,
+      title: typographicQuotes(c.title),
+      ...(c.label ? { label: typographicQuotes(c.label) } : {}),
+      // The analytical contents is the one place in this book where a long
+      // stretch of the original's *prose* is set outside the body, and it was
+      // the one place still printing typewriter marks.
+      ...(c.synopsis ? { synopsis: typographicQuotes(c.synopsis) } : {})
+    })),
     footnotes: doc.footnotes.map((f) => ({ ...f, text: typographicQuotes(f.text) })),
     sections: doc.sections.map((s) => ({
       ...s,

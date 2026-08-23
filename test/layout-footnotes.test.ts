@@ -470,3 +470,53 @@ describe('layoutWithToc — a contents page with measured numbers', () => {
     expect(book.pages.some((p) => p.kind === 'contents')).toBe(false)
   })
 })
+
+/**
+ * A note names books more often than the text around it does, and until the
+ * emphasis reached `breakNote` it was the only kind of block in the book that
+ * could not italicise one: a tag typed in hope printed as the tag.
+ */
+describe('a footnote can italicise the book it names', () => {
+  it('sets the marked words from a second, italic font', async () => {
+    const { applyEdits } = await import('@core/edits')
+    const document: BookDocument = {
+      blocks: [
+        {
+          id: 'p0b0',
+          kind: 'paragraph',
+          text: 'Leadbeater described the plane at length.',
+          sourcePages: [0]
+        }
+      ],
+      footnotes: [],
+      chapters: [],
+      asides: [],
+      illustrations: [],
+      sections: [],
+      skipped: []
+    }
+    const edited = applyEdits(document, [
+      {
+        kind: 'note',
+        noteId: 'n1',
+        blockId: 'p0b0',
+        at: 11,
+        text: 'See <i>The Astral Plane</i> of 1895.'
+      }
+    ])
+    expect(edited.footnotes[0]!.text).toBe('See The Astral Plane of 1895.')
+    expect(edited.footnotes[0]!.emphasis).toEqual([1, 2, 3])
+
+    const book = layout(edited, defaultStyleProfile(), measurer, { edition: EDITION })
+    const italic = book.pages
+      .flatMap((p) => p.items)
+      .filter((i): i is PositionedLine => i.kind === 'line')
+      .flatMap((l) => l.runs)
+      .filter((r) => r.font.style === 'italic')
+      .map((r) => r.text)
+    expect(italic).toEqual(expect.arrayContaining(['The', 'Astral', 'Plane']))
+    // And nothing either side of it went italic with them.
+    expect(italic).not.toContain('See')
+    expect(italic).not.toContain('1895.')
+  })
+})

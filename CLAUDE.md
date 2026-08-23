@@ -820,6 +820,31 @@ in `screenshots/`. Don't ship UI blind.
   rather than from a layout, and the existing guard checks that rather than
   trusting it.
 
+- **Also done**: **the formatting pass, and the four faults it found.** Proofing
+  a finished book against the look it will actually export turned up things no
+  unit test was ever going to. **A chapter opened by a number over a name** —
+  "LESSON I." above "THE ASTRAL SENSES." — came back from the reading as two
+  heading blocks, because on the page that is what it is, and was being counted
+  as two chapters: the contents listed every chapter twice, the running head
+  named the lesson number for a leaf before changing its mind, and with chapters
+  opening recto each lesson cost two extra leaves, the first carrying a number
+  and nothing else. A run of consecutive headings is now one chapter, named by
+  the last and identified by the first, with the number set smaller over the
+  title (`deriveChapters`). **`applyEdits` re-derived that list with its own copy
+  of the rule**, and that copy dropped every recovered synopsis, so the
+  analytical contents was read, matched, and silently thrown away on the way to
+  the page — one implementation now, shared. **The title page put the second
+  line of a two-line title through the descenders of the first**, because slots
+  are one _body_ leading apart and a title sets at 1.6 times the body size.
+  **And the editor's own prose could not italicise a word**: a written section
+  and a written note were the two kinds of block `<i>` never reached, so a
+  glossary naming forty books printed every title in roman. Three smaller
+  things came with it — running heads take a `runningHeadStyle` (small capitals,
+  falling back to full capitals in a face with no `smcp`, never synthesised),
+  the divider ornament is drawn at last, on the title page, and the per-book
+  style tweaks now ride in the design step's own answers so they survive a
+  refresh and travel in the book file, which they never did.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
   against the live API is all that remains, and it needs a key and real spend.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and

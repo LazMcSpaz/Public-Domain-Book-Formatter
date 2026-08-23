@@ -65,6 +65,7 @@ export function layoutWithToc(
     ...doc.chapters.map((chapter) => ({
       id: chapter.id,
       title: chapter.title,
+      ...(chapter.label ? { label: chapter.label } : {}),
       level: chapter.level,
       // Only when the style asks. The descriptions are long — twenty of them
       // turn a one-leaf contents into four — so this is a preference and not a

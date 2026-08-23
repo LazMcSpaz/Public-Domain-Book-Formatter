@@ -59,3 +59,30 @@ describe('typographic quotes', () => {
     expect(typographicQuotes(once)).toBe(once)
   })
 })
+
+describe('the whole document', () => {
+  it('straightens the contents synopsis, which is prose like any other', async () => {
+    const { withTypographicQuotes } = await import('@core/layout')
+    const doc = {
+      blocks: [],
+      footnotes: [],
+      chapters: [
+        {
+          id: 'p0b0',
+          title: 'THE ASTRAL SENSES.',
+          label: 'LESSON I.',
+          level: 1,
+          blockIndex: 0,
+          sourcePage: 0,
+          synopsis: 'The man who has much to say about "horse sense."'
+        }
+      ],
+      asides: [],
+      illustrations: [],
+      sections: [],
+      skipped: []
+    }
+    const out = withTypographicQuotes(doc)
+    expect(out.chapters[0]!.synopsis).toBe('The man who has much to say about “horse sense.”')
+  })
+})

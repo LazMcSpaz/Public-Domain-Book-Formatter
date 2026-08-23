@@ -657,15 +657,40 @@ async function serve() {
      *
      * `proof 3 4 120` also writes those pages as PNGs, which is the only
      * honest way to check that a footnote sits where it should.
+     *
+     * **The look is the book's own.** This used to lay out with
+     * `defaultStyleProfile()`, which meant the pages the assistant looked at
+     * were set in a typeface, at a size and on a trim the export was never
+     * going to use — ornaments off, drop capitals off, running heads from a
+     * different pair of answers. A proof of a different book. The design gate's
+     * answers travel in the book file, so `appliedLook` rebuilds exactly what
+     * the export gate would build from them.
+     *
+     * An argument with an `=` in it is a **tweak on top**, in the same ids the
+     * gate's "anything you'd change?" panel uses: `proof 40 dropCap=true
+     * bodyFontSize=10.5`. It changes this proof only. Deciding a look means
+     * writing the answer into the book file, where the app will read it too.
      */
     proof: async ([...wanted]) => {
-      const shots = wanted.map(Number).filter((n) => Number.isFinite(n))
+      const shots = wanted
+        .filter((a) => !a.includes('='))
+        .map(Number)
+        .filter(Number.isFinite)
+      const tweaks = Object.fromEntries(
+        wanted
+          .filter((a) => a.includes('='))
+          .map((a) => {
+            const [k, ...v] = a.split('=')
+            const raw = v.join('=')
+            return [k, raw === 'true' ? true : raw === 'false' ? false : raw]
+          })
+      )
       const result = await page.evaluate(
-        async ([repo, pageNumbers]) => {
+        async ([repo, pageNumbers, tweaks]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
           const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
-          const styleMod = await import(`/@fs${repo}/src/core/style/index.ts`)
+          const wizard = await import(`/@fs${repo}/src/core/wizard/index.ts`)
           const interior = await import(`/@fs${repo}/src/platform/browser/interior.ts`)
 
           const runs = await runStore.listRuns()
@@ -688,7 +713,16 @@ async function serve() {
           // missing, which is a quieter failure than it sounds: the page count
           // is right, nothing is dropped, and the plate is simply blank.
           const images = new Map((run.images ?? []).map((i) => [i.id, i.bytes]))
-          const built = await interior.renderInterior(doc, styleMod.defaultStyleProfile(), {
+          // The same call the design gate and the export make, off the answers
+          // the book carries — so a look that proofs here is the look that
+          // prints.
+          const stored = localStorage.getItem(`pdbf.review.${newest.key}`)
+          const answers = { ...(stored ? JSON.parse(stored).design : null), ...tweaks }
+          const profile = wizard.appliedLook(
+            { ...wizard.initialState(), styleProfiles: [] },
+            answers
+          ).style
+          const built = await interior.renderInterior(doc, profile, {
             edition,
             orphanNotes: 'collect',
             images
@@ -708,6 +742,11 @@ async function serve() {
           }
           return {
             title: edition.title,
+            look: `${profile.trimSize}in · ${profile.bodyFont} ${profile.bodyFontSize}pt · ${
+              profile.dropCap ? 'drop cap' : 'no drop cap'
+            } · ${profile.ornaments.chapterOpener ?? 'no chapter ornament'} · heads ${
+              profile.runningHeads.verso
+            }/${profile.runningHeads.recto}`,
             pages: built.pageCount,
             notesPlaced: built.notesPlaced,
             notesCollected: built.notesCollected,
@@ -720,7 +759,7 @@ async function serve() {
             shots
           }
         },
-        [REPO, shots]
+        [REPO, shots, tweaks]
       )
       const { writeFile } = await import('node:fs/promises')
       const wrote = []
@@ -769,6 +808,16 @@ async function serve() {
           return {
             edited: say(applied.blocks),
             pristine: say(bare.blocks),
+            // What the contents and the running heads will be built from. A
+            // chapter opened by a number over a name is one entry here and two
+            // heading blocks above, which is worth being able to see rather
+            // than infer from a rendered page.
+            chapters: applied.chapters.map((c) => ({
+              id: c.id,
+              label: c.label ?? null,
+              title: c.title,
+              level: c.level
+            })),
             sections: applied.sections.map((s) => ({
               id: s.id,
               placement: s.placement,

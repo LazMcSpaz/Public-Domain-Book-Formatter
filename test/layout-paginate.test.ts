@@ -133,7 +133,10 @@ describe('layout — front matter', () => {
     const book = run(doc([block('paragraph', PROSE)]), {
       frontMatter: { halfTitle: false, titlePage: true, copyrightPage: false }
     })
-    expect(textOf(book.pages[0]!)).toContain('A Treatise of Airs')
+    // Capped, because the default profile caps its headings and a title page
+    // set in upper and lower case beside capped chapter openings reads as two
+    // books bound together.
+    expect(textOf(book.pages[0]!)).toContain('A TREATISE OF AIRS')
     expect(book.pages[0]!.section).toBe('front')
     expect(textOf(book.pages[0]!)).not.toContain('978-')
   })
@@ -659,5 +662,39 @@ describe('layout — an aside longer than its page', () => {
     const asides = book.pages.filter((p) => p.kind === 'aside')
     expect(asides).toHaveLength(1)
     expect(lines(asides[0]!)[0]!.baselinePt).toBeGreaterThan(asides[0]!.frame.yPt + 50)
+  })
+})
+
+/**
+ * Slots are one *body* leading apart, and a title page sets type at up to 1.6
+ * times the body size. Advancing one slot a line put the second line of a
+ * two-line title through the descenders of the first — on the title page, which
+ * is the first thing anybody opens.
+ */
+describe('layout — the title page gives its type room', () => {
+  it('leaves more than one body leading between two lines of a big title', () => {
+    const book = layout(
+      doc([block('paragraph', 'Body.')]),
+      {
+        ...defaultStyleProfile(),
+        frontMatter: { halfTitle: false, titlePage: true, copyrightPage: false },
+        ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null }
+      },
+      measurer,
+      {
+        edition: {
+          ...EDITION,
+          title: 'A Course of Advanced Lessons in Clairvoyance and Occult Powers'
+        }
+      }
+    )
+    const baselines = lines(book.pages[0]!)
+      .filter((l) => l.runs.length > 0)
+      .map((l) => l.baselinePt)
+      .sort((a, b) => a - b)
+    expect(baselines.length).toBeGreaterThan(2)
+    const leading = 11 * 1.32
+    // The title wraps; every gap inside it is more than one body leading.
+    expect(baselines[1]! - baselines[0]!).toBeGreaterThan(leading * 1.2)
   })
 })

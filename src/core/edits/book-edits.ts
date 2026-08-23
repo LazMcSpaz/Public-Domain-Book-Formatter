@@ -30,7 +30,13 @@
  */
 import type { ImageEditOp } from '@core/model'
 import { sizeAfterOps } from '@core/image'
-import { normalizeMarkup, normalizeTable, type BlockKind } from '@core/transcribe'
+import {
+  normalizeMarkup,
+  normalizeTable,
+  type BlockKind,
+  type TranscribedBlock
+} from '@core/transcribe'
+import { deriveChapters } from '@core/assemble'
 import type { BookBlock, BookDocument, Illustration } from '@core/assemble'
 
 /**
@@ -314,12 +320,19 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   for (const note of authored.values()) {
     const block = blockById.get(note.blockId)
     if (!block || note.text.trim().length === 0) continue
+    // `<i>` read the same way it is read in a correction and in a written
+    // section, so a note can italicise the book it names.
+    const marked = normalizeMarkup<TranscribedBlock>({
+      kind: 'paragraph',
+      text: note.text.trim()
+    })
     footnotes.push({
       id: note.noteId,
       // No printed marker: this note was never on the page. `anchor` is what
       // locates it, and an empty marker is what keeps the regex search off it.
       originalMarker: '',
-      text: note.text.trim(),
+      text: marked.text,
+      ...(marked.emphasis?.length ? { emphasis: marked.emphasis } : {}),
       pageIndex: block.sourcePages[0] ?? 0,
       orphaned: false,
       anchor: { blockId: note.blockId, at: note.at }
@@ -382,7 +395,7 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
     // heading has to be able to add one — and dropping a heading has to be able
     // to remove one. Recomputed rather than patched, for the same reason the
     // engine re-runs instead of mutating.
-    chapters: chaptersOf(blocks)
+    chapters: chaptersOf(blocks, doc.chapters)
   }
 }
 
@@ -408,33 +421,52 @@ function withRetouching(illustration: Illustration, ops: ImageEditOp[] | undefin
  * The convention prose already uses, so nobody has to learn a markup language
  * to write an introduction — and a single run of text with no paragraph breaks
  * is a wall, which is what a plain textarea would otherwise produce.
+ *
+ * `<i>` is read the same way it is read in a correction, so the editor's own
+ * prose can italicise a word. It could not before: an introduction naming three
+ * books and a glossary naming forty had no way to set a single title, and a tag
+ * typed in hope printed as the tag. The notation is already the one the proof
+ * step edits emphasis in, so this is the same convention reaching the one kind
+ * of block that had been left out of it.
  */
 function paragraphsOf(text: string, sectionId: string): BookBlock[] {
   return text
     .split(/\n\s*\n/u)
     .map((part) => part.replace(/\s+/gu, ' ').trim())
     .filter((part) => part.length > 0)
-    .map((part, i) => ({
-      id: `${sectionId}/b${i}`,
-      kind: 'paragraph' as const,
-      text: part,
-      // Written, not read: there is no leaf behind it to point at.
-      sourcePages: []
-    }))
+    .map((part, i) =>
+      normalizeMarkup({
+        id: `${sectionId}/b${i}`,
+        kind: 'paragraph' as const,
+        text: part,
+        // Written, not read: there is no leaf behind it to point at.
+        sourcePages: []
+      })
+    )
 }
 
-/** Chapter entries, derived from whatever the blocks now are. */
-function chaptersOf(blocks: readonly BookBlock[]): BookDocument['chapters'] {
-  return blocks
-    .map((b, i) => ({ b, i }))
-    .filter(({ b }) => b.kind === 'heading')
-    .map(({ b, i }) => ({
-      id: b.id,
-      title: b.text.trim(),
-      level: b.level ?? 1,
-      blockIndex: i,
-      sourcePage: b.sourcePages[0] ?? 0
-    }))
+/**
+ * Chapter entries, derived from whatever the blocks now are.
+ *
+ * The rule itself lives in `@core/assemble`, because it is the same rule the
+ * scan is assembled with and a second copy of it had already drifted from the
+ * first. What is added here is the part that only makes sense after an edit:
+ * carrying the recovered synopses across. Those come off the original contents
+ * page, are matched to the body once, and are not re-derivable from a corrected
+ * block — so re-deriving the list without them threw away the whole point of
+ * reading that page, silently, on every correction.
+ */
+function chaptersOf(
+  blocks: readonly BookBlock[],
+  before: BookDocument['chapters']
+): BookDocument['chapters'] {
+  const synopses = new Map(
+    before.filter((c) => c.synopsis !== undefined).map((c) => [c.id, c.synopsis!])
+  )
+  return deriveChapters(blocks).map((chapter) => {
+    const synopsis = synopses.get(chapter.id)
+    return synopsis === undefined ? chapter : { ...chapter, synopsis }
+  })
 }
 
 /**

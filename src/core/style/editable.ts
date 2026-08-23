@@ -23,7 +23,13 @@
  * where detail belongs, but "0.13 in" typed into a box invites 13, and a body
  * size of 13 inches is not a validation error anyone should have to read about.
  */
-import type { Margins, PageNumberPosition, RunningHeadMode, StyleProfile } from '@core/model'
+import type {
+  Margins,
+  PageNumberPosition,
+  RunningHeadMode,
+  RunningHeadStyle,
+  StyleProfile
+} from '@core/model'
 import type { Answers, ChoiceOption, Question } from '@core/wizard/questions'
 import { BUILTIN_ORNAMENTS } from '@core/ornament'
 
@@ -239,6 +245,20 @@ export function styleQuestions(
       options: RUNNING_HEAD_MODES.map((m) => ({ value: m, label: RUNNING_HEAD_LABELS[m] }))
     },
     {
+      id: 'runningHeadStyle',
+      type: 'choice',
+      prompt: 'Running head, how it is set',
+      help:
+        'A head set like the text competes with it. Small capitals are the usual answer, ' +
+        'and a face without them falls back to full capitals rather than faking them.',
+      defaultValue: profile.runningHeadStyle,
+      options: [
+        { value: 'smallCaps', label: 'Small capitals' },
+        { value: 'italic', label: 'Italic' },
+        { value: 'plain', label: 'Same as the text' }
+      ]
+    },
+    {
       id: 'pageNumber',
       type: 'choice',
       prompt: 'Page numbers',
@@ -410,6 +430,11 @@ export function applyStyleAnswers(profile: StyleProfile, answers: Answers): Styl
       verso: pick(answers, 'runningHeadVerso', profile.runningHeads.verso) as RunningHeadMode,
       recto: pick(answers, 'runningHeadRecto', profile.runningHeads.recto) as RunningHeadMode
     },
+    runningHeadStyle: pick(
+      answers,
+      'runningHeadStyle',
+      profile.runningHeadStyle
+    ) as RunningHeadStyle,
     dropCap: pickBool(answers, 'dropCap', profile.dropCap),
     chaptersOpenRecto: pickBool(answers, 'chaptersOpenRecto', profile.chaptersOpenRecto),
     paragraphIndentEms: pickNumber(answers, 'paragraphIndentEms', profile.paragraphIndentEms),

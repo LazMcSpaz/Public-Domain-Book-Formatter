@@ -224,6 +224,11 @@ export function profileFromAnswers(
       scale: answers.kind === 'poetry' ? 1.4 : 1.6
     },
     runningHeads,
+    // Small capitals for every period but modern, on the same reasoning as
+    // small-capped headings: it is what a head was set in before the middle of
+    // the last century, and a face without `smcp` falls back to full capitals,
+    // which is what an American book of 1916 looks like anyway.
+    runningHeadStyle: answers.period === 'modern' ? 'plain' : 'smallCaps',
     dropCap: answers.chapterOpener === 'drop-cap',
     ornaments: {
       ...base.ornaments,

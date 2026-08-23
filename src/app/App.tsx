@@ -546,6 +546,30 @@ export function App(): JSX.Element {
     [state.document, edits]
   )
 
+  // The detailed controls behind "anything you'd change?". They answer into the
+  // design step like every other question, so they persist and travel with the
+  // book — which means the reset button has to know which ids are *theirs*
+  // rather than clearing the gate.
+  const styleTweakQuestions = useMemo(
+    () =>
+      designProfile
+        ? styleQuestions(designProfile, {
+            families: BODY_FONTS.map((f) => ({
+              value: f.family,
+              label: f.label,
+              description: f.note
+            })),
+            // Asked only when this book's original contents had descriptions to
+            // keep. Nothing to offer otherwise.
+            hasSynopses: (correctedDocument?.chapters ?? []).some((c) => c.synopsis !== undefined)
+          })
+        : [],
+    [designProfile, correctedDocument]
+  )
+  const styleTweaks = styleTweakQuestions
+    .map((q) => q.id)
+    .filter((id) => currentAnswers[id] !== undefined)
+
   /**
    * Retouched pixels, keyed by the picture *and* the exact stack that made them.
    *
@@ -3873,35 +3897,25 @@ export function App(): JSX.Element {
                           These apply to this book only — bank the look if you want them on the next
                           one.
                         </p>
-                        {styleQuestions(designProfile, {
-                          families: BODY_FONTS.map((f) => ({
-                            value: f.family,
-                            label: f.label,
-                            description: f.note
-                          })),
-                          // Asked only when this book's original contents had
-                          // descriptions to keep. Nothing to offer otherwise.
-                          hasSynopses: (correctedDocument?.chapters ?? []).some(
-                            (c) => c.synopsis !== undefined
-                          )
-                        }).map((q) => (
+                        {styleTweakQuestions.map((q) => (
                           <QuestionView
                             key={q.id}
                             question={q}
-                            value={state.styleOverrides[q.id]}
-                            onChange={(v: AnswerValue) =>
-                              setState((st) => ({
-                                ...st,
-                                styleOverrides: { ...st.styleOverrides, [q.id]: v }
-                              }))
-                            }
+                            value={currentAnswers[q.id]}
+                            onChange={(v: AnswerValue) => setAnswers((a) => ({ ...a, [q.id]: v }))}
                           />
                         ))}
-                        {Object.keys(state.styleOverrides).length > 0 ? (
+                        {styleTweaks.length > 0 ? (
                           <div className="actions">
                             <button
                               type="button"
-                              onClick={() => setState((st) => ({ ...st, styleOverrides: {} }))}
+                              onClick={() =>
+                                setAnswers((a) =>
+                                  Object.fromEntries(
+                                    Object.entries(a).filter(([id]) => !styleTweaks.includes(id))
+                                  )
+                                )
+                              }
                             >
                               Undo my changes
                             </button>

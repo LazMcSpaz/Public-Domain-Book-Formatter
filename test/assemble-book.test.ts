@@ -187,6 +187,48 @@ describe('assembleBook', () => {
     expect(doc.chapters[1]!.level).toBe(2)
   })
 
+  /**
+   * "LESSON I." over "THE ASTRAL SENSES." is one chapter opening printed on two
+   * lines, and the reading brings it back as two heading blocks because on the
+   * page that is what it is. Counting it as two chapters listed every chapter
+   * twice in the contents, put the lesson number in the running head for a
+   * leaf, and — with chapters opening recto — cost two extra leaves per lesson,
+   * the first carrying a number and nothing else.
+   */
+  it('takes a run of consecutive headings as one chapter', () => {
+    const doc = assembleBook([
+      page(0, [
+        { kind: 'heading', text: 'LESSON I.' },
+        { kind: 'heading', text: 'THE ASTRAL SENSES.' },
+        para('The student of occultism.')
+      ]),
+      page(1, [
+        { kind: 'heading', text: 'LESSON II.' },
+        { kind: 'heading', text: 'TELEPATHY EXPLAINED.' },
+        para('Telepathy is the sending of thought.')
+      ])
+    ])
+    expect(doc.chapters).toHaveLength(2)
+    // Named by the last of the run, because the title is what the running head
+    // shows and what a recovered synopsis is matched on.
+    expect(doc.chapters.map((c) => c.title)).toEqual(['THE ASTRAL SENSES.', 'TELEPATHY EXPLAINED.'])
+    expect(doc.chapters.map((c) => c.label)).toEqual(['LESSON I.', 'LESSON II.'])
+    // Identified by the first, because that is where the opening starts.
+    expect(doc.chapters[0]!.id).toBe(doc.blocks[0]!.id)
+    expect(doc.chapters[0]!.blockIndex).toBe(0)
+    // Every heading block survives: nothing about this drops text.
+    expect(doc.blocks.filter((b) => b.kind === 'heading')).toHaveLength(4)
+  })
+
+  it('leaves a lone heading without a label', () => {
+    const doc = assembleBook([
+      page(0, [{ kind: 'heading', text: 'INTRODUCTION.' }, para('In preparing this series.')])
+    ])
+    expect(doc.chapters).toHaveLength(1)
+    expect(doc.chapters[0]!.label).toBeUndefined()
+    expect(doc.chapters[0]!.title).toBe('INTRODUCTION.')
+  })
+
   it('orders pages regardless of the order supplied', () => {
     const doc = assembleBook([
       page(2, [para('Third.')]),
