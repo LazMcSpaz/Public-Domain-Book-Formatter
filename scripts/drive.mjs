@@ -905,7 +905,12 @@ async function serve() {
               ? 'name, size and date'
               : 'name and size — the stored date differs'
 
-          // Parsed before anything is touched, so a bad batch changes nothing.
+          // Parsed before anything is *written*, so a bad batch changes
+          // nothing. The run lookup above runs first and is deliberately a
+          // read: the whole batch has to be understood before a single page of
+          // it lands, because a partly-understood transcription looks exactly
+          // like a whole one and prints with holes in it. If a write is ever
+          // added above this line, that property is gone.
           const parsed = pages.map((entry, i) => {
             const at = entry?.pageIndex
             if (typeof at !== 'number' || !Number.isInteger(at) || at < 0) {

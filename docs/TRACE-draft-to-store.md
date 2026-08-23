@@ -10,6 +10,14 @@ assertion is numbered and falsifiable.
 claim is true.** Where it is not, the claim is the bug — not the code — and
 saying so is the finding.
 
+**The claim list is a floor, not a ceiling.** It was written by the person who
+wrote the code, which means it is shaped by the same blind spots — this
+repository's own rule is that the writer is the one party who cannot judge
+their own work, and that is exactly why an outside reviewer is worth having.
+Behaviour I did not think to claim is the most valuable thing you can find.
+Forty-eight claims all holding is _not_ a passing grade on its own; it means
+the stated intent is met, and says nothing about intent I failed to state.
+
 Line numbers are hints and will drift; the function names are the anchors.
 
 ---
@@ -241,10 +249,11 @@ you are certain of before trusting it on one you are not. This is how the
   parser — the same one the API path used. A page that will not parse throws,
   and **the whole call fails**.
 - **C32.** No write to the store happens before the parse. `findRunForFile`
-  runs first but is a **read**; the first write is `saveRun`, well after.
-  _(Precise wording matters here: the in-code comment says "parsed before
-  anything is touched", which is now slightly ahead of itself. Confirm the
-  ordering rather than the comment.)_
+  runs first but is a **read**; the first write is `saveRun`, well after. The
+  whole batch is understood before a single page of it lands, because a
+  partly-understood transcription looks exactly like a whole one and prints
+  with holes in it. **Verify the ordering in the code, not the comment beside
+  it** — that comment was wrong once already.
 - **C33.** `pageIndex` is required on every page and is never taken from array
   position. A batch must be able to say which leaves it read.
 
