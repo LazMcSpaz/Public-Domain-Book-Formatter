@@ -4,3 +4,14 @@ screenshots
 *.log
 .drive-profile
 screenshots/
+
+# Scans dropped into `public/` so the dev server can serve them — scratch for a
+# driving session, never repository content. A scan belongs on the shelf under
+# its own SHA-256, written once; git keeps every version of everything forever,
+# so a 19 MB PDF committed here is 19 MB in the history for good. The generated
+# fixtures are the exception: they are small, deterministic, and rebuilt by
+# `scripts/make-test-*.mjs`.
+public/*.pdf
+public/*.epub
+!public/test-*.pdf
+!public/test-*.epub
