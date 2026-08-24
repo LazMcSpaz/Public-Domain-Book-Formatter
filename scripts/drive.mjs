@@ -1645,6 +1645,7 @@ async function serve() {
           const engine = new ocrMod.OcrEngine()
           const doc = await pdfMod.openPdf(file)
           const leaves = doc.numPages
+          const widened = []
           try {
             for (const n of list) {
               if (n < 0 || n >= leaves) {
@@ -1654,17 +1655,176 @@ async function serve() {
               }
               const rendered = await pdfMod.renderPage(doc, n, recon.RECON_DPI)
               const result = await engine.recognize(rendered.canvas, n)
-              note(n, result.words)
+
+              // Does the frame cut through ink? A leaf printed with margins
+              // has bare paper at its edges, so ink hard against the frame
+              // means the frame is not the leaf — the capture is placed so
+              // that the page box shows only part of it. Leaf 57 of *The
+              // Human Aura* loses the right half of every line that way and
+              // reads as 113 words of a 202-word page: not empty, which is why
+              // "did it read nothing?" is the wrong question, and a check that
+              // asked it would have passed this leaf.
+              //
+              // Measured rather than assumed, and measured on the leaf's own
+              // paper tone, which is what `inkProfile` does — old paper is
+              // cream, foxed and unevenly lit, and a fixed threshold reads a
+              // blank leaf as ink on one book and misses type on the next.
+              const w = rendered.canvas.width
+              const h = rendered.canvas.height
+              const strip = Math.max(2, Math.round(w * 0.006))
+              const edges = [
+                { x0: w - strip, y0: h * 0.1, x1: w, y1: h * 0.9 },
+                { x0: 0, y0: h * 0.1, x1: strip, y1: h * 0.9 }
+              ].map((box) => pdfMod.inkProfile(rendered.canvas, box).fraction)
+              const cutsInk = Math.max(...edges) > 0.06
+
               rendered.canvas.width = 0
               rendered.canvas.height = 0
+              if (result.words.length > 0 && !cutsInk) {
+                note(n, result.words)
+                continue
+              }
+
+              // Render everything the page draws and keep whichever reading
+              // found more. Not the default: it costs a second OCR pass, and
+              // the wider frame moves every word box — which is the unit the
+              // crops and the illustration cuts are measured in.
+              const whole = await pdfMod.renderPage(doc, n, recon.RECON_DPI, { wholeImage: true })
+              const second = await engine.recognize(whole.canvas, n)
+              whole.canvas.width = 0
+              whole.canvas.height = 0
+              const better = second.words.length > result.words.length
+              note(n, better ? second.words : result.words)
+              if (better) widened.push(n)
             }
           } finally {
             await engine.dispose()
           }
-          return { source: 'pixels', leaves, text, words }
+          // Said out loud: these words were read in a different frame from
+          // every other leaf's, so their boxes do not line up with the cached
+          // reading and a crop taken from one will not land where it should.
+          return { source: 'pixels', leaves, text, words, readWhole: widened }
         },
         [REPO, pages, fresh]
       )
+    },
+
+    /**
+     * Our reading of every leaf set beside somebody else's, and the places
+     * the two could not agree.
+     *
+     * The argument for OCR has always been that it is not a language model, so
+     * it shares no blind spots with whatever else read the page. That does not
+     * stop at one engine: a book digitised twice — by archive.org's OCR, by a
+     * Project Gutenberg volunteer — carries independent readings of the same
+     * setting, and where two of them agree word for word that is evidence
+     * neither could give alone.
+     *
+     * `second.json` is `{ "<leaf>": "text" }`. What comes back is, per leaf,
+     * how far the two agree and every place they do not, **sorted worst-first
+     * by our own engine's confidence** — a real probability (SPEC §4), and the
+     * one honest way to say which disagreements are Tesseract stumbling and
+     * which are the compositor and the other transcription genuinely differing.
+     *
+     * This does not skip the pixels and does not adopt anybody's text. It turns
+     * "check every word of every leaf against the scan" into "check the places
+     * two readers could not agree on", which is an order of magnitude shorter
+     * with the hardest cases at the top.
+     */
+    witness: async ([secondPath, out = 'witness.json', ...ns]) => {
+      if (!secondPath) throw new Error('witness <second.json> [out.json] [leaf...] [--ours <f>]')
+      const { readFile, writeFile } = await import('node:fs/promises')
+      const second = JSON.parse(await readFile(resolve(REPO, secondPath), 'utf8'))
+      // `--ours <file>` compares a reading of our own that is not the raw OCR
+      // — a draft, with the running head and folio already taken off the top.
+      // Without it the commonest disagreement on every single leaf is the page
+      // furniture, which the other transcription strips and ours keeps: eighty
+      // rows of `"14 the human aura" -> ""` burying the real ones.
+      //
+      // The cost is honest and reported: a supplied reading carries no word
+      // confidences, so nothing can be sorted by which of them our engine was
+      // unsure about.
+      const oursAt = ns.indexOf('--ours')
+      const oursPath = oursAt === -1 ? null : ns[oursAt + 1]
+      const ours = oursPath ? JSON.parse(await readFile(resolve(REPO, oursPath), 'utf8')) : null
+      const only = ns
+        .filter((_, i) => i !== oursAt && i !== oursAt + 1)
+        .map(Number)
+        .filter(Number.isFinite)
+      const report = await page.evaluate(
+        async ([repo, second, only, ours]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
+          const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const witnessMod = await import(`/@fs${repo}/src/core/witness/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const cached = await cacheMod.loadReconCache(newest.key, {
+            dpi: recon.RECON_DPI,
+            maxPages: null
+          })
+          if (!cached) throw new Error('No cached reading here. Run recon first.')
+
+          const byLeaf = new Map()
+          for (const w of cached.words) {
+            if (!byLeaf.has(w.pageIndex)) byLeaf.set(w.pageIndex, [])
+            byLeaf.get(w.pageIndex).push(w)
+          }
+
+          const leaves = []
+          for (const key of Object.keys(second)) {
+            const leaf = Number(key)
+            if (!Number.isFinite(leaf)) continue
+            if (only.length > 0 && !only.includes(leaf)) continue
+            const words = byLeaf.get(leaf) ?? []
+            const supplied = ours ? String(ours[key] ?? '') : null
+            const report = witnessMod.compareWitnesses(
+              supplied ?? words.map((w) => w.text).join(' '),
+              String(second[key] ?? ''),
+              supplied === null ? { confidence: words.map((w) => w.confidence) } : {}
+            )
+            leaves.push({
+              leaf,
+              ourWords: report.words,
+              agreement: Number(report.agreement.toFixed(3)),
+              needEyes: report.needEyes,
+              // Worst first: where two readers differ *and* the one holding the
+              // pixels was unsure is the top of any list worth working.
+              disagreements: report.disagreements
+                .filter((d) => d.kind !== 'joined')
+                .sort((a, b) => (a.confidence ?? 101) - (b.confidence ?? 101)),
+              joins: witnessMod.joinsSettled(report).length
+            })
+          }
+          leaves.sort((a, b) => a.leaf - b.leaf)
+          return {
+            leaves,
+            // A leaf our engine read nothing on cannot disagree with anybody,
+            // so it scores a perfect nothing and would sit quietly at the top
+            // of a sorted list. Named separately, because it is the one row
+            // here that means "this leaf was never checked".
+            unread: leaves.filter((l) => l.ourWords === 0).map((l) => l.leaf),
+            agreement: Number(
+              (leaves.reduce((n, l) => n + l.agreement, 0) / Math.max(1, leaves.length)).toFixed(3)
+            ),
+            needEyes: leaves.reduce((n, l) => n + l.needEyes, 0)
+          }
+        },
+        [REPO, second, only, ours]
+      )
+      await writeFile(resolve(REPO, out), JSON.stringify(report, null, 1), 'utf8')
+      return {
+        wrote: out,
+        ours: oursPath ?? 'the cached OCR, furniture and all',
+        leaves: report.leaves.length,
+        agreement: report.agreement,
+        needEyes: report.needEyes,
+        unread: report.unread,
+        worst: [...report.leaves]
+          .sort((a, b) => a.agreement - b.agreement)
+          .slice(0, 8)
+          .map((l) => ({ leaf: l.leaf, agreement: l.agreement, needEyes: l.needEyes }))
+      }
     },
 
     /**
@@ -1911,10 +2071,17 @@ async function serve() {
             }
           }
 
-          const plain = (t) => t.toLowerCase().replace(/[^a-z]/g, '')
+          // Digits kept. Stripping to letters alone made every all-digit word
+          // normalise to the empty string, and an empty needle matches the
+          // first empty haystack: asking for the `3` on leaf 47 cut out the
+          // folio `48` and showed it as evidence. A crop of the wrong word is
+          // worse than no crop, because it is looked at and believed.
+          const plain = (t) => t.toLowerCase().replace(/[^a-z0-9]/g, '')
           const byPage = new Map()
           for (const item of list) {
             const want = plain(item.word)
+            // Nothing to look for is not a licence to show anything.
+            if (want === '') continue
             const onPage = words.filter((w) => w.pageIndex === item.pageIndex)
             // Exact first. Failing that, the word is very likely broken at a
             // line end — the printer hyphenated it and OCR filed the halves
