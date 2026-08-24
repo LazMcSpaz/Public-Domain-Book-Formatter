@@ -163,7 +163,16 @@ export function unapplied(rulings: readonly Ruling[], body: string): Ruling[] {
     if (ruling.decision !== 'corrected') return false
     const wanted = (ruling.correction ?? '').trim().toLowerCase()
     if (wanted === '') return true
-    return !text.includes(wanted) || text.includes(ruling.quote.trim().toLowerCase())
+    if (!text.includes(wanted)) return true
+
+    // The printed form still being in the book usually means the correction
+    // half-landed — one occurrence mended and another missed. It means nothing
+    // when the correction *contains* the printed form, which is what a
+    // correction that only adds something does: closing a quotation turns
+    // `he awoke.` into `he awoke.”`, and the first will always be inside the
+    // second. Asking then reports every such ruling as unapplied forever.
+    if (wanted.includes(ruling.quote.trim().toLowerCase())) return false
+    return text.includes(ruling.quote.trim().toLowerCase())
   })
 }
 
