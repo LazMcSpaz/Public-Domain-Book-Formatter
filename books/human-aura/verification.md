@@ -1,6 +1,6 @@
 # How this reading was checked
 
-*The Human Aura*, Swami Panchadasi, Advanced Thought Publishing Co.,
+_The Human Aura_, Swami Panchadasi, Advanced Thought Publishing Co.,
 Chicago, 1916. Eighty-eight leaves.
 
 ## What the text rests on
@@ -10,7 +10,7 @@ Two independent transcriptions of the same setting:
 1. **Tesseract on our own scan** — 16,621 words off our own pixels.
 2. **A Project Gutenberg volunteer**, proofread against a scan of this
    printing. (Their file is set from a 1940 Yoga Publication Society
-   reprint, so its *front matter* describes a different book. The body
+   reprint, so its _front matter_ describes a different book. The body
    agrees with ours at 88%, and every disagreement was looked at.)
 
 Where these two agree, our own pixels produced that word through an OCR
@@ -18,15 +18,15 @@ engine. That is what makes agreement evidence rather than assumption.
 
 ## What was looked at, and what it found
 
-| Check | Flagged | Real faults |
-| --- | --- | --- |
-| Word identity (`witness`, 286 disagreements) | 64 cropped, 6 leaves read whole | **2** |
-| Capitalisation, case-sensitive | 9 | **0** |
-| Sentence-ending punctuation, by count | 4 leaves | **0** |
-| Paragraph breaks, draft geometry vs markup | 23 leaves | **0** |
-| Italics | 2 marked, both cropped | **0** |
-| `@core/coherence` consistency | 2 | **2** |
-| Leaves with incomplete pixels | 3 | **3** |
+| Check                                        | Flagged                         | Real faults |
+| -------------------------------------------- | ------------------------------- | ----------- |
+| Word identity (`witness`, 286 disagreements) | 64 cropped, 6 leaves read whole | **2**       |
+| Capitalisation, case-sensitive               | 9                               | **0**       |
+| Sentence-ending punctuation, by count        | 4 leaves                        | **0**       |
+| Paragraph breaks, draft geometry vs markup   | 23 leaves                       | **0**       |
+| Italics                                      | 2 marked, both cropped          | **0**       |
+| `@core/coherence` consistency                | 2                               | **2**       |
+| Leaves with incomplete pixels                | 3                               | **3**       |
 
 **Of 64 words cut out of our scan and looked at, 58 read on the paper
 exactly as the second transcription had them** — `tlairvoyant` was

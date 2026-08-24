@@ -181,13 +181,44 @@ describe('optical margins', () => {
     expect(comma).toBeGreaterThan(hyphen)
   })
 
-  it('pulls a whole line left when it opens with a quotation mark', () => {
-    // The line moves, not the mark alone — moving the mark would open a gap
-    // between it and the word it belongs to.
-    const before = runs('“The', 'matter')
+  it('pulls the opening quotation mark left and leaves the right edge flush', () => {
+    // The mark moves and the line's last word does not. Shifting every run by
+    // the same amount, which is what this used to do, moved the *right* margin
+    // left by the hang and un-justified the line it was tidying.
+    const before = runs('“The', 'matter', 'therein')
     const after = hangPunctuation(before, measurer, FONT, flush)
     expect(after[0]!.xPt).toBeLessThan(before[0]!.xPt)
-    expect(before[1]!.xPt - after[1]!.xPt).toBeCloseTo(before[0]!.xPt - after[0]!.xPt, 6)
+    expect(after[2]!.xPt).toBe(before[2]!.xPt)
+  })
+
+  /**
+   * The defect this shape of hang was hiding, seen on every justified page of
+   * *The Human Aura*: `if he be well  in-formed`.
+   *
+   * Moving only the last word put the whole shift into the last word space —
+   * on a hyphenated break that is 0.55 of a hyphen, about three-quarters of a
+   * word space, and it reads as a typing error rather than as typography.
+   */
+  it('shares the shift out along the line rather than into one space', () => {
+    const before = runs('if', 'he', 'be', 'well', 'in-')
+    const after = hangPunctuation(before, measurer, FONT, flush)
+    const moved = after.map((r, i) => r.xPt - before[i]!.xPt)
+
+    // The first word stays put, the last takes the whole hang, and every space
+    // between them widens by the same small fraction.
+    expect(moved[0]).toBe(0)
+    expect(moved[4]).toBeGreaterThan(0)
+    const steps = moved.slice(1).map((m, i) => m - moved[i]!)
+    for (const step of steps) expect(step).toBeCloseTo(steps[0]!, 9)
+
+    // And no single space grows by more than a fraction of the hang.
+    expect(steps[0]!).toBeCloseTo(moved[4]! / 4, 9)
+  })
+
+  it('still moves a lone run bodily, having nothing to share with', () => {
+    const before = runs('therein.')
+    const after = hangPunctuation(before, measurer, FONT, flush)
+    expect(after[0]!.xPt).toBeGreaterThan(before[0]!.xPt)
   })
 
   it('leaves a short last line alone', () => {

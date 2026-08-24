@@ -97,23 +97,42 @@ export function hangPunctuation(
 
   const out = [...runs]
 
-  if (leftRatio > 0) {
-    // The whole line shifts left, not just the mark: moving the quotation mark
-    // alone would open a gap between it and the word it belongs to.
-    const shift = measurer.widthOf(openMark, font, first.sizePt) * leftRatio
+  /**
+   * Spread a shift across the line instead of dumping it in one place.
+   *
+   * Hanging a mark means the run it belongs to moves, and a moved run has to
+   * take its space from somewhere. Moving the last word alone put the whole
+   * shift into the last word space — which on a hyphenated line break is
+   * `0.55` of a hyphen, about three-quarters of a word space, and reads as a
+   * typing error: `if he be well  in-formed`. It was visible on every
+   * hyphenated line of every justified page.
+   *
+   * Sharing it out proportionally puts a fraction of it into each of the
+   * line's spaces, where it is invisible, and keeps the edge that is *not*
+   * hanging exactly where the breaker put it. No break moves and no line
+   * changes width, which is the property this module exists to preserve.
+   */
+  const spread = (shift: number, towardsTheEnd: boolean): void => {
+    if (out.length === 1) {
+      out[0] = { ...out[0]!, xPt: out[0]!.xPt + (towardsTheEnd ? shift : -shift) }
+      return
+    }
     for (let i = 0; i < out.length; i++) {
-      out[i] = { ...out[i]!, xPt: out[i]!.xPt - shift }
+      // 0 at the first run, 1 at the last. A right hang moves the last run by
+      // the whole shift and the first not at all; a left hang, the reverse.
+      const along = i / (out.length - 1)
+      const share = towardsTheEnd ? along : along - 1
+      out[i] = { ...out[i]!, xPt: out[i]!.xPt + shift * share }
     }
   }
 
-  if (rightRatio > 0) {
-    // The whole last word moves right by a fraction of its final mark. Its last
-    // *letter* then lands where the margin is and the mark overhangs, which is
-    // what hanging punctuation means: the ink lines up, the box does not.
-    const shift = measurer.widthOf(closeMark, font, last.sizePt) * rightRatio
-    const i = out.length - 1
-    out[i] = { ...out[i]!, xPt: out[i]!.xPt + shift }
-  }
+  // The mark hangs left of the margin and the first *letter* lands on it. The
+  // right edge stays flush, which shifting the whole line did not do.
+  if (leftRatio > 0) spread(measurer.widthOf(openMark, font, first.sizePt) * leftRatio, false)
+
+  // The last *letter* lands where the margin is and the mark overhangs, which
+  // is what hanging punctuation means: the ink lines up, the box does not.
+  if (rightRatio > 0) spread(measurer.widthOf(closeMark, font, last.sizePt) * rightRatio, true)
 
   return out
 }
