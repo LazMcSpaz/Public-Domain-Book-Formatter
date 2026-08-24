@@ -325,16 +325,22 @@ export async function renderPageToObjectUrl(
  * question for "is this a scan". It cannot answer the other one: whether the
  * image is **inside** the page at all.
  *
- * Two leaves of *The Human Aura* are drawn about three times page size and
- * offset, so the page box shows a window onto the middle of the leaf. Every
- * downstream thing then quietly worked on a fragment: the render is a crop, the
- * word boxes are of a crop, Tesseract read nothing at all off one of them, and
- * the leaf reported as empty — indistinguishable from a blank. That is the
- * failure this module keeps naming in other places and had no name for here.
+ * A scan can be placed larger than the box it sits in, and then the page shows
+ * a window onto the middle of the leaf while the rest is cut off — the render,
+ * the word boxes and every crop silently of a fragment. Leaf 57 of *The Human
+ * Aura* loses the right half of every line that way and reads as 113 words of
+ * a 202-word page.
  *
  * The box comes back in the same units as `getViewport({ scale: 1 })`, with the
- * page's own box as the origin: `x0 < 0` or `x1 > width` means content is being
- * cut off, and by how much.
+ * page's own box as the origin: `x0 < 0` or `x1 > width` means content falls
+ * outside it, and by how much.
+ *
+ * **`clipped` is not a fault on its own.** A scan is normally placed a little
+ * past the trim so no white edge shows, and this book places every one of its
+ * 88 leaves so that 45% of a two-up capture is visible — so a report built on
+ * this alone flags all of them and catches none of the three that are actually
+ * damaged. What this is for is `renderPage`'s `wholeImage`, which uses it to
+ * widen the frame once something *else* has said the frame is wrong.
  */
 export interface ImageExtent {
   /** The page's own box, at scale 1. */
