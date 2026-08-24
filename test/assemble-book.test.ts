@@ -694,3 +694,85 @@ describe('assembleBook — a description that matched no chapter', () => {
     expect(doc.synopsesUnmatched).toEqual([])
   })
 })
+
+/**
+ * The chapter number, as a second way in.
+ *
+ * A book can call a chapter two things: *The Human Aura* lists "The Aura
+ * Kaleidoscope" in its contents and heads the chapter "THE AURIC
+ * KALEIDOSCOPE". Three of its ten descriptions fell on the floor for
+ * differences of that kind, and the number is the one name both pages agree on.
+ */
+describe('assembleBook — matching a description by chapter number', () => {
+  const contents = page(
+    0,
+    [
+      { kind: 'heading' as const, text: 'CONTENTS' },
+      { kind: 'heading' as const, text: 'Chapter V. The Aura Kaleidoscope............ 39' },
+      para('What the astral body is composed of. Also the etheric double, at length.'),
+      { kind: 'heading' as const, text: 'Chapter VI. Thought Form............ 47' },
+      para('What a Thought Form is and what it is made of, described at some length.')
+    ],
+    'table-of-contents'
+  )
+
+  it('finds the chapter the contents named differently', () => {
+    const doc = assembleBook([
+      contents,
+      page(
+        1,
+        [
+          { kind: 'heading', text: 'CHAPTER V.', level: 1 },
+          { kind: 'heading', text: 'THE AURIC KALEIDOSCOPE.', level: 1 },
+          para('Body.')
+        ],
+        'chapter-opening'
+      ),
+      page(2, [
+        { kind: 'heading', text: 'CHAPTER VI.', level: 1 },
+        { kind: 'heading', text: 'THOUGHT FORMS.', level: 1 },
+        para('Body.')
+      ])
+    ])
+    expect(doc.chapters.find((c) => c.title === 'THE AURIC KALEIDOSCOPE.')?.synopsis).toContain(
+      'astral body is composed of'
+    )
+    expect(doc.chapters.find((c) => c.title === 'THOUGHT FORMS.')?.synopsis).toContain(
+      'Thought Form is'
+    )
+    expect(doc.synopsesUnmatched).toEqual([])
+  })
+
+  /** Exact, not fuzzy: a number matches its own number and no other. */
+  it('does not hand chapter VI’s description to chapter IV', () => {
+    const doc = assembleBook([
+      contents,
+      page(1, [
+        { kind: 'heading', text: 'CHAPTER IV.', level: 1 },
+        { kind: 'heading', text: 'SOMETHING ELSE.', level: 1 },
+        para('Body.')
+      ])
+    ])
+    expect(doc.chapters.find((c) => c.title === 'SOMETHING ELSE.')?.synopsis).toBeUndefined()
+  })
+
+  /** One description reaches one chapter, however many ways it could match. */
+  it('never gives the same description to two chapters', () => {
+    const doc = assembleBook([
+      contents,
+      page(1, [
+        { kind: 'heading', text: 'CHAPTER V.', level: 1 },
+        { kind: 'heading', text: 'THE AURA KALEIDOSCOPE', level: 1 },
+        para('Body.')
+      ]),
+      page(2, [
+        { kind: 'heading', text: 'CHAPTER V.', level: 1 },
+        { kind: 'heading', text: 'A SECOND ONE.', level: 1 },
+        para('Body.')
+      ])
+    ])
+    const withOne = doc.chapters.filter((c) => c.synopsis)
+    expect(withOne).toHaveLength(1)
+    expect(withOne[0]!.title).toBe('THE AURA KALEIDOSCOPE')
+  })
+})

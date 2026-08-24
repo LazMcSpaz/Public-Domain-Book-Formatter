@@ -20,7 +20,8 @@ import {
   readSynopsis,
   synopsisKey,
   synopsisLooksSound,
-  type PageRole
+  type PageRole,
+  type SynopsisEntry
 } from '@core/pages'
 import {
   shiftEmphasis,
@@ -524,18 +525,30 @@ export function assembleBook(
   const synopsesUnmatched: BookDocument['synopsesUnmatched'] = []
   if (synopsisLooksSound(synopses)) {
     const described = synopses.filter((e) => e.synopsis.length > 0)
-    const byTitle = new Map(described.map((e) => [synopsisKey(e.title), e.synopsis]))
-    const claimed = new Set<string>()
+    const byTitle = new Map(described.map((e) => [synopsisKey(e.title), e]))
+    // The chapter *number*, as a second way in. A book can call a chapter two
+    // things — *The Human Aura* lists "The Aura Kaleidoscope" in its contents
+    // and heads the chapter "THE AURIC KALEIDOSCOPE" — and three of its ten
+    // descriptions fell on the floor for differences of that kind. The number
+    // is the one name both pages agree on, and matching on it is exact rather
+    // than fuzzy: `Chapter V.` and `CHAPTER V.` key the same, and `Chapter IV`
+    // does not key to `Chapter V`.
+    //
+    // Titles first, because a book that repeats a number — a second series
+    // starting again at I — would have two entries under it, and a title that
+    // matches is unambiguous where a number might not be.
+    const byLabel = new Map(described.filter((e) => e.label).map((e) => [synopsisKey(e.label), e]))
+    const claimed = new Set<SynopsisEntry>()
     for (const chapter of chapters) {
-      const key = synopsisKey(chapter.title)
-      const found = byTitle.get(key)
-      if (found) {
-        chapter.synopsis = found
-        claimed.add(key)
-      }
+      const found =
+        byTitle.get(synopsisKey(chapter.title)) ??
+        (chapter.label ? byLabel.get(synopsisKey(chapter.label)) : undefined)
+      if (!found || claimed.has(found)) continue
+      chapter.synopsis = found.synopsis
+      claimed.add(found)
     }
     for (const entry of described) {
-      if (claimed.has(synopsisKey(entry.title))) continue
+      if (claimed.has(entry)) continue
       synopsesUnmatched.push({
         title: entry.title,
         label: entry.label,

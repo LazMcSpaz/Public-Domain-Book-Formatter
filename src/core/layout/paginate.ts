@@ -2220,11 +2220,24 @@ function buildContents(
   }
   slot += CHAPTER_GAP_SLOTS
 
+  // An analytical contents centres its chapter titles, which is how these pages
+  // have been set since long before this book: the title sits over the
+  // paragraph that describes it, and the pair reads as one thing. A plain list
+  // of names and numbers does not — there the eye runs down a column of first
+  // letters, and centring would take that column away.
+  //
+  // Decided for the page rather than per entry. Some entries carry no
+  // description — a head inside a chapter, a back-matter section — and mixing
+  // centred titles with flush-left ones down one page looks like a mistake.
+  const descriptive = toc.some((entry) => entry.synopsis)
+
   toc.forEach((entry, i) => {
     const indent = Math.max(0, entry.level - 1) * sizePt
     // A title that wraps hangs its continuation, so the eye can tell a second
-    // line of one entry from the first line of the next.
-    const hang = sizePt
+    // line of one entry from the first line of the next. Nothing hangs in a
+    // centred setting: the second line is centred under the first, and an
+    // indent on top of that would put it off axis.
+    const hang = descriptive ? 0 : sizePt
     const measure = Math.max(1, ctx.measureWidth - folioColumn - indent)
 
     const broken = breakParagraph(entry.label ? `${entry.label} ${entry.title}` : entry.title, {
@@ -2232,7 +2245,7 @@ function buildContents(
       sizePt,
       measurer: ctx.measurer,
       lineWidths: [measure, Math.max(1, measure - hang)],
-      alignment: 'left'
+      alignment: descriptive ? 'center' : 'left'
     })
     if (broken.length === 0) return
 

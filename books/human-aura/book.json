@@ -1,13 +1,13 @@
 {
   "format": "public-domain-book-formatter/book",
   "version": 2,
-  "savedAt": "2026-08-24T17:47:57.283Z",
+  "savedAt": "2026-08-24T18:51:17.643Z",
   "runSchema": 12,
   "run": {
     "schemaVersion": 12,
     "key": "6affc702c24337832136b23de2cf9dc5db7b450991a09b3c15dad9fd01205d0e.pdf\u00008177398\u00001787495788218",
     "fileName": "6affc702c24337832136b23de2cf9dc5db7b450991a09b3c15dad9fd01205d0e.pdf",
-    "savedAt": "2026-08-24T17:20:40.056Z",
+    "savedAt": "2026-08-24T18:42:43.308Z",
     "pageCount": 88,
     "leafCount": 88,
     "transcriptions": [
@@ -2330,6 +2330,11 @@
         "kind": "text",
         "blockId": "p11b2",
         "text": "But modern physical science is today offering corroborative proof (though the same is not needed by the occultist who has the astral vision) to the general public, of the existence of the human aura. In Europe, especially, a number of scientists have written on the subject of the aura, and have described the result of the experiments in which the aura has been perceived, and even photographed, by means of fluorescent screens, such as are used in taking X-Ray photographs, etc. Leading authorities in England, France, and still more recently, in Germany, have reported the discovery (!) of a nebulous, hazy, radio-active energy or substance, around the body of human beings. In short, they now claim that every human being is radio-active, and that the auric radiation may be registered and perceived by means of a screen composed of certain fluorescent material, interposed between the eye of the observer, and the person observed."
+      },
+      {
+        "kind": "text",
+        "blockId": "p75b1",
+        "text": "Having mastered this phase of the subject, the student should give himself a thorough, honest, self-examination and mental analysis. He should write down a chart of his strong points and his weak ones. He should check off the traits which should be developed, and those which should be restrained. He should determine whether he needs development along physical, mental, and spiritual lines, and in what degree. Having made this chart of himself, he should then apply the principles of charging the aura with the color vibrations indicated by his self diagnosis and prescription."
       }
     ],
     "complete": true,
@@ -2370,6 +2375,34 @@
           "realise",
           "honour"
         ],
+        "decidedOn": "2026-08-24",
+        "mention": true
+      },
+      {
+        "pageIndex": 75,
+        "quote": "self diagnosis and perscription.",
+        "kind": "printers-error",
+        "decision": "corrected",
+        "correction": "self diagnosis and prescription.",
+        "because": "A plain compositor's transposition. Fixed, and the fixing is covered by the note on the text.",
+        "decidedOn": "2026-08-24",
+        "mention": true
+      },
+      {
+        "pageIndex": 45,
+        "quote": "scenes of the higher astral planes",
+        "kind": "unclear",
+        "decision": "noted",
+        "because": "Our scan has no pixels for these two lines; the words are attested by two transcriptions of this setting. Set them rather than leave a hole — a reader is better served by the text than by a gap, and the note on the text says so.",
+        "decidedOn": "2026-08-24",
+        "mention": true
+      },
+      {
+        "pageIndex": 2,
+        "quote": "Chapter V. The Aura Kaleidoscope",
+        "kind": "inconsistent",
+        "decision": "as-printed",
+        "because": "The chapter's own heading and its running head are what this edition calls it — THE AURIC KALEIDOSCOPE, THOUGHT FORMS, PSYCHIC INFLUENCE OF COLORS. The original contents is transcribed as printed and its wording is not carried into the regenerated one; the descriptions under each chapter are.",
         "decidedOn": "2026-08-24",
         "mention": true
       }

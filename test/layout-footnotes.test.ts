@@ -361,6 +361,49 @@ describe('layoutWithToc — descriptions under the entries', () => {
     expect(text).not.toContain('why the ancients thought otherwise')
   })
 
+  /**
+   * An analytical contents centres its chapter titles: the title sits over the
+   * paragraph describing it, and the pair reads as one thing. A plain list of
+   * names and numbers does not — there the eye runs down a column of first
+   * letters, and centring would take that column away.
+   */
+  it('centres the chapter titles when the descriptions are set', () => {
+    const titleX = (book: LaidOutBook): number => {
+      const run = book.pages
+        .filter((p) => p.kind === 'contents')
+        .flatMap((c) => lines(c))
+        .flatMap((l) => l.runs)
+        .find((r) => r.text.startsWith('Of'))
+      return run!.xPt
+    }
+    expect(titleX(withSynopses(true))).toBeGreaterThan(titleX(withSynopses(false)))
+  })
+
+  /**
+   * The property a plain contents actually has, and the reason not to centre
+   * one: every entry starts at the same x, so the eye runs down a column of
+   * first letters. Centring is a function of each title's width, so it breaks
+   * that column — which is the point when there is a description under each,
+   * and a loss when there is not.
+   */
+  it('keeps a plain contents in one column, and a descriptive one out of it', () => {
+    const firstLetters = (book: LaidOutBook): number[] =>
+      book.pages
+        .filter((p) => p.kind === 'contents')
+        .flatMap((c) => lines(c))
+        .map((l) => l.runs[0])
+        .filter((r): r is NonNullable<typeof r> => Boolean(r) && r.text.startsWith('Of'))
+        .map((r) => r.xPt)
+
+    const plain = firstLetters(withSynopses(false))
+    expect(plain).toHaveLength(2)
+    expect(plain[0]).toBeCloseTo(plain[1]!, 6)
+
+    const centred = firstLetters(withSynopses(true))
+    expect(centred).toHaveLength(2)
+    expect(centred[0]).not.toBeCloseTo(centred[1]!, 3)
+  })
+
   it('still prints the folio each chapter opens on', () => {
     const book = withSynopses(true)
     const contents = book.pages.filter((p) => p.kind === 'contents')

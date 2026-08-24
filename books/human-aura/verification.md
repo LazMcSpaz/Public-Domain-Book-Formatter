@@ -60,6 +60,16 @@ leaves whose text is set roman throughout.
   `perscription` on leaf 75, and the contents calling chapter V "The Aura
   Kaleidoscope" where the chapter is headed "THE AURIC KALEIDOSCOPE".
 
+## What the editor ruled
+
+All six queries are settled; `rulings.md` carries them with the reasoning.
+In short: the two compositor's slips and the transposed `perscription` are
+corrected, the mixed British/American spelling is kept and told to the
+reader, the chapter names come from the chapters themselves rather than
+from the original contents, and leaf 45's two unpixelled lines are set
+from the two transcriptions that attest them rather than left as a hole.
+All of it is covered by the note on the text.
+
 ## What is still not verified
 
 - **Leaf 45** has no pixels at all for its first two lines. The capture is
