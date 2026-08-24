@@ -798,14 +798,18 @@ async function serve() {
      * already accepted has no question, so no `ref`, so no way to look at it.
      * The scan is on the device either way.
      */
-    leaf: async ([n, name, dpi = '150', crop = '']) => {
+    leaf: async ([n, name, dpi = '150', crop = '', ...rest]) => {
       const pageIndex = Number(n)
       const resolution = Number(dpi)
+      // `leaf 45 out 300 - whole` renders everything the page draws rather than
+      // what its box shows. A scan placed larger than its page box is a leaf
+      // this app only half has, and the page-box render gives no sign of it.
+      const whole = crop === 'whole' || rest.includes('whole')
       // `x,y,w,h` as fractions of the leaf, for cutting a plate out of a scan:
       // a cover with a later owner's label pasted across the foot, a page with
       // a digitiser's watermark along the bottom. Fractions rather than pixels
       // so the same crop survives a change of resolution.
-      const box = crop
+      const box = (crop === 'whole' ? '' : crop)
         .split(',')
         .map(Number)
         .filter((v) => Number.isFinite(v))
@@ -816,16 +820,26 @@ async function serve() {
         // on the crop-box array instead and threw for every invocation, cropped
         // or not — taking `crops`, and with it the whole adjudication path,
         // down beside it.
-        async ([repo, index, atDpi, crop]) => {
+        async ([repo, index, atDpi, crop, wholeImage]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const pdf = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
           const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           const file = await runStore.loadSourceFile(newest.key)
           if (!file) throw new Error('The scan is not stored on this device.')
-          if (crop.length !== 4) return pdf.renderPageToObjectUrl(file, index, atDpi)
+          if (crop.length !== 4 && !wholeImage) {
+            return pdf.renderPageToObjectUrl(file, index, atDpi)
+          }
           const doc = await pdf.openPdf(file)
-          const rendered = await pdf.renderPage(doc, index, atDpi)
+          const rendered = await pdf.renderPage(doc, index, atDpi, { wholeImage })
+          if (crop.length !== 4) {
+            const asIs = await new Promise((r) => rendered.canvas.toBlob(r, 'image/png'))
+            const url = URL.createObjectURL(asIs)
+            rendered.canvas.width = 0
+            rendered.canvas.height = 0
+            await doc.destroy()
+            return url
+          }
           const [fx, fy, fw, fh] = crop
           const cut = document.createElement('canvas')
           cut.width = Math.round(rendered.canvas.width * fw)
@@ -849,7 +863,7 @@ async function serve() {
             cut.toBlob((b) => resolve(URL.createObjectURL(b)), 'image/png')
           )
         },
-        [REPO, pageIndex, resolution, box]
+        [REPO, pageIndex, resolution, box, whole]
       )
       const bytes = await page.evaluate(async (u) => {
         const res = await fetch(u)
@@ -1589,9 +1603,14 @@ async function serve() {
      * differ the place is worth a picture.
      */
     ocr: async ([...ns]) => {
-      const pages = ns.map(Number)
+      // `ocr 37 fresh` re-reads the pixels instead of the cache, which is how
+      // to tell a leaf the cache has no words for from a leaf Tesseract cannot
+      // read. The two look identical from outside and want opposite work: one
+      // is a hole in the cache to refill, the other is a leaf that needs eyes.
+      const fresh = ns.includes('fresh')
+      const pages = ns.filter((n) => n !== 'fresh').map(Number)
       return page.evaluate(
-        async ([repo, list]) => {
+        async ([repo, list, ignoreCache]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
           const ocrMod = await import(`/@fs${repo}/src/platform/browser/ocr.ts`)
@@ -1601,30 +1620,122 @@ async function serve() {
           if (!newest) throw new Error('No book open on this device.')
           const file = await runStore.loadSourceFile(newest.key)
           if (!file) throw new Error('The scan is not stored on this device.')
-          const cached = await cacheMod.loadReconCache(newest.key, {
-            dpi: recon.RECON_DPI,
-            maxPages: null
-          })
-          const out = {}
-          const say = (words) => words.map((w) => w.text).join(' ')
+          const cached = ignoreCache
+            ? null
+            : await cacheMod.loadReconCache(newest.key, { dpi: recon.RECON_DPI, maxPages: null })
+          const text = {}
+          const words = {}
+          const say = (found) => found.map((w) => w.text).join(' ')
+          // Counted beside the text, because an empty string is the one answer
+          // that means two opposite things: a leaf the cache has no words for
+          // (a hole to refill) and a leaf the engine could not read (a leaf
+          // that needs eyes). Both print as `""` and want different work.
+          const note = (n, found) => {
+            text[n] = say(found)
+            words[n] = found.length
+          }
           if (cached) {
-            for (const n of list) out[n] = say(cached.words.filter((w) => w.pageIndex === n))
-            return out
+            for (const n of list)
+              note(
+                n,
+                cached.words.filter((w) => w.pageIndex === n)
+              )
+            return { source: 'cache', text, words }
           }
           const engine = new ocrMod.OcrEngine()
           const doc = await pdfMod.openPdf(file)
+          const leaves = doc.numPages
           try {
             for (const n of list) {
+              if (n < 0 || n >= leaves) {
+                text[n] = ''
+                words[n] = null
+                continue
+              }
               const rendered = await pdfMod.renderPage(doc, n, recon.RECON_DPI)
               const result = await engine.recognize(rendered.canvas, n)
-              out[n] = say(result.words)
+              note(n, result.words)
               rendered.canvas.width = 0
               rendered.canvas.height = 0
             }
           } finally {
             await engine.dispose()
           }
-          return out
+          return { source: 'pixels', leaves, text, words }
+        },
+        [REPO, pages, fresh]
+      )
+    },
+
+    /**
+     * Where each leaf's scan actually lands relative to its page box.
+     *
+     * The question `pageMakeup` cannot answer. It asks how *much* of a page an
+     * image covers, which decides "is this a scan"; it does not ask whether the
+     * image is inside the page at all. Two leaves of *The Human Aura* are drawn
+     * about three times page size and offset, so the page box is a window onto
+     * the middle of the leaf — and everything downstream then worked on a
+     * fragment in silence: the render is a crop, the word boxes are of a crop,
+     * Tesseract read nothing off one of them, and the leaf reported empty,
+     * which is indistinguishable from a blank.
+     *
+     * `extent` with no leaves walks the whole book and names only the clipped
+     * ones, which is the report worth having before a reading starts.
+     */
+    extent: async ([...ns]) => {
+      const pages = ns.map(Number).filter(Number.isFinite)
+      return page.evaluate(
+        async ([repo, list]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const file = await runStore.loadSourceFile(newest.key)
+          if (!file) throw new Error('The scan is not stored on this device.')
+          const doc = await pdfMod.openPdf(file)
+          try {
+            const wanted = list.length > 0 ? list : [...Array(doc.numPages).keys()]
+            const rows = []
+            for (const n of wanted) {
+              if (n < 0 || n >= doc.numPages) continue
+              const e = await pdfMod.pageImageExtent(doc, n)
+              rows.push({
+                leaf: n,
+                visible: Number(e.visible.toFixed(3)),
+                clipped: e.clipped,
+                page: e.page,
+                drawn: e.drawn
+              })
+            }
+            // Against the book's own habit rather than an absolute. Overhang
+            // is normal — a scan is placed a little past the trim so no white
+            // edge shows, and *The Human Aura* is placed so that every leaf
+            // shows 45% of a two-up capture. Flagging that would flag all 88.
+            // What is worth a look is a leaf placed unlike its neighbours.
+            const tally = {}
+            for (const r of rows) tally[r.visible] = (tally[r.visible] ?? 0) + 1
+            const usual = Number(Object.entries(tally).sort((a, b) => b[1] - a[1])[0]?.[0] ?? 1)
+            const odd = rows.filter((r) => Math.abs(r.visible - usual) > 0.02)
+            return {
+              leaves: doc.numPages,
+              examined: rows.length,
+              usualVisible: usual,
+              // Named rather than counted, and only the odd ones unless leaves
+              // were asked for by name: a whole-book listing of ordinary leaves
+              // is something to scroll past, and this is something to act on.
+              odd: list.length > 0 ? rows : odd,
+              oddCount: odd.length,
+              // Said out loud, because it would otherwise be read as a clean
+              // bill of health: this measures where the scan is *placed*, not
+              // whether the scan itself caught the whole leaf. A capture that
+              // shaved the right margin is placed exactly like its neighbours
+              // and shows up here as ordinary. `ocr <leaf> fresh` is what
+              // catches that, by reading no words off a leaf that has some.
+              measures: 'placement, not what the camera caught'
+            }
+          } finally {
+            await doc.destroy()
+          }
         },
         [REPO, pages]
       )

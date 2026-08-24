@@ -51,14 +51,44 @@ export async function openPdf(source: ArrayBuffer | Blob): Promise<PDFDocumentPr
 export async function renderPage(
   doc: PDFDocumentProxy,
   pageIndex: number,
-  dpi = 300
+  dpi = 300,
+  options: { wholeImage?: boolean } = {}
 ): Promise<RenderedPage> {
   const page = await doc.getPage(pageIndex + 1) // pdf.js is 1-based
-  const viewport = page.getViewport({ scale: dpi / PDF_POINTS_PER_INCH })
+  const scale = dpi / PDF_POINTS_PER_INCH
+
+  // Normally the page box *is* the leaf and this is one line. It is not always:
+  // a scan can be placed larger than the box it sits in, and then the page
+  // shows a window onto the middle of the leaf while the rest is cut off — the
+  // render, the word boxes and every crop silently of a fragment. `wholeImage`
+  // widens the canvas to whatever is actually drawn and shifts the origin so
+  // the overhang lands on it.
+  //
+  // This adds no resolution: every pixel still comes off the scan at `dpi`, and
+  // what changes is how much of the scan is inside the frame. That distinction
+  // is the whole of the never-invent-resolution rule.
+  let offsetX = 0
+  let offsetY = 0
+  let viewport = page.getViewport({ scale })
+  let width = Math.ceil(viewport.width)
+  let height = Math.ceil(viewport.height)
+
+  if (options.wholeImage) {
+    const extent = await pageImageExtent(doc, pageIndex)
+    if (extent.drawn && extent.clipped) {
+      const x0 = Math.min(0, extent.drawn.x0)
+      const y0 = Math.min(0, extent.drawn.y0)
+      offsetX = -x0 * scale
+      offsetY = -y0 * scale
+      width = Math.ceil((Math.max(extent.page.width, extent.drawn.x1) - x0) * scale)
+      height = Math.ceil((Math.max(extent.page.height, extent.drawn.y1) - y0) * scale)
+      viewport = page.getViewport({ scale, offsetX, offsetY })
+    }
+  }
 
   const canvas = document.createElement('canvas')
-  canvas.width = Math.ceil(viewport.width)
-  canvas.height = Math.ceil(viewport.height)
+  canvas.width = width
+  canvas.height = height
   const ctx = canvas.getContext('2d', { willReadFrequently: true })
   if (!ctx) throw new Error('Could not acquire a 2D canvas context')
 
@@ -289,6 +319,127 @@ export async function renderPageToObjectUrl(
 }
 
 /**
+ * Where the pictures on a page actually land, in page units.
+ *
+ * `pageMakeup` asks how *much* of the page an image covers, which is the right
+ * question for "is this a scan". It cannot answer the other one: whether the
+ * image is **inside** the page at all.
+ *
+ * Two leaves of *The Human Aura* are drawn about three times page size and
+ * offset, so the page box shows a window onto the middle of the leaf. Every
+ * downstream thing then quietly worked on a fragment: the render is a crop, the
+ * word boxes are of a crop, Tesseract read nothing at all off one of them, and
+ * the leaf reported as empty — indistinguishable from a blank. That is the
+ * failure this module keeps naming in other places and had no name for here.
+ *
+ * The box comes back in the same units as `getViewport({ scale: 1 })`, with the
+ * page's own box as the origin: `x0 < 0` or `x1 > width` means content is being
+ * cut off, and by how much.
+ */
+export interface ImageExtent {
+  /** The page's own box, at scale 1. */
+  page: { width: number; height: number }
+  /** The union of every image drawn, in the same units. Null when none is. */
+  drawn: { x0: number; y0: number; x1: number; y1: number } | null
+  /** How much of the drawn image the page box actually shows, 0–1. */
+  visible: number
+  /** True when any part of an image falls outside the page box. */
+  clipped: boolean
+}
+
+export async function pageImageExtent(
+  doc: PDFDocumentProxy,
+  pageIndex: number
+): Promise<ImageExtent> {
+  const page = await doc.getPage(pageIndex + 1)
+  try {
+    const viewport = page.getViewport({ scale: 1 })
+    const size = { width: viewport.width, height: viewport.height }
+    const ops = await page.getOperatorList()
+
+    let ctm: number[] = [1, 0, 0, 1, 0, 0]
+    const stack: number[][] = []
+    let box: { x0: number; y0: number; x1: number; y1: number } | null = null
+
+    for (let i = 0; i < ops.fnArray.length; i++) {
+      const fn = ops.fnArray[i]
+      if (fn === pdfjs.OPS.save) {
+        stack.push([...ctm])
+        continue
+      }
+      if (fn === pdfjs.OPS.restore) {
+        ctm = stack.pop() ?? [1, 0, 0, 1, 0, 0]
+        continue
+      }
+      if (fn === pdfjs.OPS.transform) {
+        ctm = pdfjs.Util.transform(ctm, ops.argsArray[i] as number[])
+        continue
+      }
+      // A form XObject carries its own matrix, and pdf.js delivers it as its
+      // own opcode rather than as a `transform`. Missing it is not a rounding
+      // error: this book paints its scans inside a form scaled roughly 2:1, so
+      // every leaf measured as twice page size and 45% visible — including the
+      // ones that render perfectly. `pageMakeup` has the same blind spot and
+      // survives it only because its threshold is loose.
+      if (fn === pdfjs.OPS.paintFormXObjectBegin) {
+        stack.push([...ctm])
+        const [matrix] = ops.argsArray[i] as [number[], number[]]
+        if (Array.isArray(matrix)) ctm = pdfjs.Util.transform(ctm, matrix)
+        continue
+      }
+      if (fn === pdfjs.OPS.paintFormXObjectEnd) {
+        ctm = stack.pop() ?? [1, 0, 0, 1, 0, 0]
+        continue
+      }
+      const isImage =
+        fn === pdfjs.OPS.paintImageXObject ||
+        fn === pdfjs.OPS.paintImageMaskXObject ||
+        fn === pdfjs.OPS.paintInlineImageXObject
+      if (!isImage) continue
+
+      // An image is always painted into the unit square, so its four corners
+      // through the current matrix are its drawn corners. All four, not two:
+      // a rotated or flipped placement has no axis-aligned pair to shortcut to.
+      const corners = [
+        [0, 0],
+        [1, 0],
+        [0, 1],
+        [1, 1]
+      ].map(([u, v]) => pdfjs.Util.applyTransform([u!, v!], ctm))
+      for (const [x, y] of corners) {
+        // PDF space has y up and the viewport has y down; the flip is what the
+        // page's own transform does, so it is applied here rather than assumed.
+        const py = size.height - (y ?? 0)
+        box = box
+          ? {
+              x0: Math.min(box.x0, x ?? 0),
+              y0: Math.min(box.y0, py),
+              x1: Math.max(box.x1, x ?? 0),
+              y1: Math.max(box.y1, py)
+            }
+          : { x0: x ?? 0, y0: py, x1: x ?? 0, y1: py }
+      }
+    }
+
+    if (!box) return { page: size, drawn: null, visible: 1, clipped: false }
+
+    const drawnArea = Math.max(1e-6, (box.x1 - box.x0) * (box.y1 - box.y0))
+    const shownWidth = Math.max(0, Math.min(box.x1, size.width) - Math.max(box.x0, 0))
+    const shownHeight = Math.max(0, Math.min(box.y1, size.height) - Math.max(box.y0, 0))
+    return {
+      page: size,
+      drawn: box,
+      visible: (shownWidth * shownHeight) / drawnArea,
+      // A hair of overhang is how a scan is normally placed — bled slightly past
+      // the trim so no white edge shows. A tenth of the image is not that.
+      clipped: (shownWidth * shownHeight) / drawnArea < 0.99
+    }
+  } finally {
+    page.cleanup()
+  }
+}
+
+/**
  * What a page is made of: pictures, text, or a picture with text laid over it.
  *
  * This is the check that decides whether a PDF needs reading at all, and it is
@@ -339,6 +490,22 @@ export async function pageMakeup(doc: PDFDocumentProxy, pageIndex: number): Prom
       }
       if (fn === pdfjs.OPS.transform) {
         ctm = pdfjs.Util.transform(ctm, ops.argsArray[i] as number[])
+        continue
+      }
+      // A form XObject carries its own matrix, and pdf.js delivers it as its
+      // own opcode rather than as a `transform`. Missing it is not a rounding
+      // error: this book paints its scans inside a form scaled roughly 2:1, so
+      // every leaf measured as twice page size and 45% visible — including the
+      // ones that render perfectly. `pageMakeup` has the same blind spot and
+      // survives it only because its threshold is loose.
+      if (fn === pdfjs.OPS.paintFormXObjectBegin) {
+        stack.push([...ctm])
+        const [matrix] = ops.argsArray[i] as [number[], number[]]
+        if (Array.isArray(matrix)) ctm = pdfjs.Util.transform(ctm, matrix)
+        continue
+      }
+      if (fn === pdfjs.OPS.paintFormXObjectEnd) {
+        ctm = stack.pop() ?? [1, 0, 0, 1, 0, 0]
         continue
       }
       const isImage =
