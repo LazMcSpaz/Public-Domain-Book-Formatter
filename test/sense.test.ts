@@ -240,7 +240,8 @@ describe('chunking a book for readers who see one chapter each', () => {
       asides: [],
       illustrations: [],
       sections: [],
-      skipped: []
+      skipped: [],
+      synopsesUnmatched: []
     }
   }
 

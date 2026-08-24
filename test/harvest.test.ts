@@ -497,7 +497,8 @@ describe('the harvest question at the gate', () => {
       asides: [],
       illustrations: [],
       sections: [],
-      skipped: []
+      skipped: [],
+      synopsesUnmatched: []
     },
     completed: [
       'intake',

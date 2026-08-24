@@ -629,3 +629,68 @@ describe('assembleBook — a quotation that runs over several paragraphs', () =>
     expect(doc.blocks[0]?.text).toContain('near St. Eglos')
   })
 })
+
+/**
+ * The footnote rule applied to the other restoration that can fail.
+ *
+ * *The Human Aura*'s contents calls chapter V "The Aura Kaleidoscope" while the
+ * chapter itself is headed "THE AURIC KALEIDOSCOPE"; three of its ten
+ * descriptions fell on the floor for differences of that kind. Nothing looked
+ * broken — the contents still prints, only plainer — which is what makes
+ * silence here the worst outcome available.
+ */
+describe('assembleBook — a description that matched no chapter', () => {
+  const contents = (...entries: string[]) =>
+    page(
+      0,
+      [
+        { kind: 'heading' as const, text: 'CONTENTS' },
+        ...entries.flatMap((title, i) => [
+          { kind: 'heading' as const, text: `CHAPTER ${i + 1}` },
+          { kind: 'heading' as const, text: title },
+          para(`What is in the chapter called ${title}, at some useful length.`),
+          para(`Page ${13 + i * 15}`)
+        ])
+      ],
+      'table-of-contents'
+    )
+
+  it('reports it rather than dropping it', () => {
+    const doc = assembleBook([
+      contents('THE AURA KALEIDOSCOPE', 'THOUGHT FORMS'),
+      page(
+        1,
+        [{ kind: 'heading', text: 'THE AURIC KALEIDOSCOPE.', level: 1 }, para('Body.')],
+        'chapter-opening'
+      ),
+      page(2, [{ kind: 'heading', text: 'THOUGHT FORMS.', level: 1 }, para('Body.')])
+    ])
+    expect(doc.synopsesUnmatched.map((s) => s.title)).toEqual(['THE AURA KALEIDOSCOPE'])
+    expect(doc.synopsesUnmatched[0]!.synopsis).toContain('AURA KALEIDOSCOPE')
+    // And the one that did match is still attached.
+    expect(doc.chapters.find((c) => c.title === 'THOUGHT FORMS.')?.synopsis).toBeTruthy()
+  })
+
+  it('reports nothing when every description found its chapter', () => {
+    const doc = assembleBook([
+      contents('OF THE AIR', 'OF THE WATER'),
+      page(
+        1,
+        [{ kind: 'heading', text: 'OF THE AIR', level: 1 }, para('Body.')],
+        'chapter-opening'
+      ),
+      page(2, [{ kind: 'heading', text: 'OF THE WATER', level: 1 }, para('Body.')])
+    ])
+    expect(doc.synopsesUnmatched).toEqual([])
+  })
+
+  it('reports nothing when the parse was refused as unsound', () => {
+    // One entry, so `synopsisLooksSound` declines it. Nothing was matched and
+    // nothing is claimed to have been lost — the contents was never read.
+    const doc = assembleBook([
+      contents('OF THE AIR'),
+      page(1, [{ kind: 'heading', text: 'SOMETHING ELSE', level: 1 }, para('Body.')])
+    ])
+    expect(doc.synopsesUnmatched).toEqual([])
+  })
+})

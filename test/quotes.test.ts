@@ -80,7 +80,8 @@ describe('the whole document', () => {
       asides: [],
       illustrations: [],
       sections: [],
-      skipped: []
+      skipped: [],
+      synopsesUnmatched: []
     }
     const out = withTypographicQuotes(doc)
     expect(out.chapters[0]!.synopsis).toBe('The man who has much to say about “horse sense.”')

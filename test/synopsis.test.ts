@@ -155,3 +155,77 @@ describe('matching a description to the chapter the body prints', () => {
     expect(synopsisKey('SIMPLE CLAIRVOYANCE')).not.toBe(synopsisKey('CLAIRVOYANCE OF THE PAST'))
   })
 })
+
+/**
+ * The other shape a contents page comes in, and the one this shelf's books
+ * actually use: the folio at the end of the entry's line after a row of leader
+ * dots, and the chapter number in front of the title rather than above it.
+ *
+ * The numbers are *The Human Aura*'s own contents leaves.
+ */
+describe('a contents set with leader dots', () => {
+  const leaves = [
+    { kind: 'heading', text: 'CONTENTS' },
+    { kind: 'heading', text: 'Chapter I. What Is the Human Aura............. 5' },
+    {
+      kind: 'paragraph',
+      text:
+        'The subtle, invisible emanation radiating from every individual. An ethereal ' +
+        'radiation. The egg-shaped human nebula. Psychic atmosphere sensed by everyone.'
+    },
+    { kind: 'heading', text: 'Chapter II. The Prana Aura.................. 15' },
+    {
+      kind: 'paragraph',
+      text:
+        'Prana, the Vital Force, Life Essence. How it affects the human aura. Health Aura. ' +
+        'Physical Aura. Health Magnetism. Peculiar appearance of Prana Aura.'
+    },
+    { kind: 'heading', text: 'Chapter III. The Astral Colors.............. 23' },
+    {
+      kind: 'paragraph',
+      text:
+        'Each mental or emotional state has its own astral hue, tint, shade or color. The ' +
+        'Primary Colors, Red, Blue and Yellow. The Secondary Colors, Green, Orange and Purple.'
+    }
+  ]
+  const entries = readSynopsis(leaves)
+
+  it('reads the folio off the end of the line', () => {
+    expect(entries.map((e) => e.originalFolio)).toEqual([5, 15, 23])
+  })
+
+  it('keeps the number as the label and the title without it', () => {
+    expect(entries[2]).toMatchObject({ label: 'Chapter III.', title: 'The Astral Colors' })
+  })
+
+  it('matches the body, which names its chapters without the number', () => {
+    expect(synopsisKey(entries[2]!.title)).toBe(synopsisKey('THE ASTRAL COLORS.'))
+  })
+
+  it('is sound, which the same page was not before the dots were read', () => {
+    expect(synopsisLooksSound(entries)).toBe(true)
+  })
+
+  /**
+   * The dots are required. Without them this would take the `4` off
+   * `Chapter IV` and the year off any title that ends in one.
+   */
+  it('does not mistake a roman numeral for a folio', () => {
+    const [entry] = readSynopsis([
+      { kind: 'heading', text: 'Chapter IV. The Astral Colors (Continued)' },
+      { kind: 'paragraph', text: 'Interpretations of the Astral Color Group.' }
+    ])
+    expect(entry!.originalFolio).toBeNull()
+    expect(entry!.title).toBe('The Astral Colors (Continued)')
+  })
+
+  it('still reads a contents that sets its folio on a line of its own', () => {
+    const [entry] = readSynopsis([
+      { kind: 'heading', text: 'LESSON I' },
+      { kind: 'heading', text: 'THE ASTRAL SENSES' },
+      { kind: 'paragraph', text: 'What the astral senses are and how they are unfolded.' },
+      { kind: 'caption', text: 'Page 9' }
+    ])
+    expect(entry).toMatchObject({ label: 'LESSON I', title: 'THE ASTRAL SENSES', originalFolio: 9 })
+  })
+})

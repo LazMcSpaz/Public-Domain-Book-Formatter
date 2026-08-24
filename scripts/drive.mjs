@@ -103,6 +103,31 @@ async function serve() {
    * tests do routinely.
    */
   await page.addInitScript(() => {
+    // Kept in `localStorage`, not only on `window`. A page global is forgotten
+    // by every reload and every restart of the browser this driver holds, and
+    // the symptom is not an error a session recognises: the next verb says
+    // "more than one book is stored here and none is current", which reads as
+    // a book that was never chosen rather than one that was and got lost.
+    const KEY = 'pdbf.drive.book'
+    Object.defineProperty(window, '__pdbfBook', {
+      configurable: true,
+      get() {
+        try {
+          return localStorage.getItem(KEY)
+        } catch {
+          return null
+        }
+      },
+      set(value) {
+        try {
+          if (value) localStorage.setItem(KEY, value)
+          else localStorage.removeItem(KEY)
+        } catch {
+          /* a driver that cannot remember still works, one verb at a time */
+        }
+      }
+    })
+
     window.__pdbfPickBook = async (runStore) => {
       const wanted = window.__pdbfBook ?? null
       if (wanted) {
@@ -1610,8 +1635,18 @@ async function serve() {
               id: c.id,
               label: c.label ?? null,
               title: c.title,
-              level: c.level
+              level: c.level,
+              // Whether the original contents' description reached this
+              // chapter. Reported because a synopsis that failed to match is
+              // silent otherwise: the contents still prints, just plainer, and
+              // nothing says the prose was read and then dropped.
+              synopsis: c.synopsis ? `${c.synopsis.slice(0, 60)}…` : null
             })),
+            // A description read off the original contents that no chapter
+            // claimed. Silent otherwise: the contents still prints, only
+            // plainer, so nothing looks broken and the prose was read and
+            // thrown away.
+            synopsesUnmatched: applied.synopsesUnmatched.map((x) => x.title),
             sections: applied.sections.map((s) => ({
               id: s.id,
               placement: s.placement,
@@ -1741,6 +1776,65 @@ async function serve() {
           return { source: 'pixels', leaves, text, words, readWhole: widened }
         },
         [REPO, pages, fresh]
+      )
+    },
+
+    /**
+     * What shelf this device is connected to, and putting the book on it.
+     *
+     * `save` writes a book file to *this filesystem*, and two places in this
+     * driver said it pushed to the shelf. It never has, and the difference is
+     * the whole point of having a shelf: this container is reclaimed when the
+     * session ends, and a book that only ever reached a local file was work
+     * done into a machine that is about to be thrown away.
+     *
+     * `shelf` says what is configured. `shelf push` sends the current book
+     * through `pushBookToShelf` — the same call the app makes when a reading
+     * finishes, so a book put up by hand is byte-for-byte the one put up
+     * automatically.
+     *
+     * No credential ever crosses this channel in either direction: the token is
+     * the app's, read from where the app keeps it, and it is never reported.
+     */
+    shelf: async ([action, what = 'the reading, from a session']) => {
+      return page.evaluate(
+        async ([repo, action, what]) => {
+          const settings = await import(`/@fs${repo}/src/platform/browser/settings.ts`)
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const shelfSave = await import(`/@fs${repo}/src/platform/browser/shelf-save.ts`)
+          const sync = await import(`/@fs${repo}/src/core/sync/index.ts`)
+
+          const config = settings.loadShelf()
+          const connected = Boolean(config?.owner && config?.repo && config?.token)
+          const where = config?.owner ? `${config.owner}/${config.repo}` : null
+          if (action !== 'push') {
+            // The token is never in this reply, only whether there is one.
+            return { connected, repository: where, branch: config?.branch ?? null }
+          }
+          if (!connected) {
+            throw new Error(
+              'No shelf is connected in this browser. Connect one in the app’s Settings ' +
+                'panel first — the token is yours and never travels through this driver.'
+            )
+          }
+
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+
+          // The app's own by-hand path, not a second assembly of the same
+          // steps: a book put up from here has to be the same file as one put
+          // up from the Settings panel, or opening it later would depend on
+          // which button was pressed months earlier.
+          const result = await shelfSave.pushStoredBook(config, newest.key, what)
+          return {
+            repository: where,
+            pushed: result.path ?? null,
+            note: result.note ?? null,
+            queries: sync.queriesPath(newest.key),
+            rulings: sync.rulingsPath(newest.key)
+          }
+        },
+        [REPO, action ?? '', what]
       )
     },
 
@@ -2276,7 +2370,8 @@ async function serve() {
             // Said out loud because a link to a book the shelf has never seen
             // opens the intake screen and looks broken.
             onTheShelf:
-              'This only works once the book has been pushed to the shelf — `save` does that.'
+              'This only works once the book has been pushed to the shelf — `shelf push` does ' +
+              'that. `save` writes a book file to this filesystem and sends nothing anywhere.'
           }
         },
         [REPO, site, at, leaf ?? '']
@@ -2459,7 +2554,7 @@ async function serve() {
             before,
             after: text,
             edits: edits.length,
-            next: '`save` pushes it to the shelf; nothing has left this device yet.'
+            next: '`shelf push` sends it to the shelf; nothing has left this device yet.'
           }
         },
         [REPO, blockId, replacement, was, now]

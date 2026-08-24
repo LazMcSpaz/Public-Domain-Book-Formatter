@@ -17,6 +17,7 @@ function doc(blocks: BookBlock[], over: Partial<BookDocument> = {}): BookDocumen
     illustrations: [],
     sections: [],
     skipped: [],
+    synopsesUnmatched: [],
     ...over
   }
 }

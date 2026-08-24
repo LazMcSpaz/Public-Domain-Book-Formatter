@@ -493,7 +493,8 @@ describe('a footnote can italicise the book it names', () => {
       asides: [],
       illustrations: [],
       sections: [],
-      skipped: []
+      skipped: [],
+      synopsesUnmatched: []
     }
     const edited = applyEdits(document, [
       {

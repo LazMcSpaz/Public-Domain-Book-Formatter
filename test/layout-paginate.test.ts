@@ -58,7 +58,8 @@ function doc(blocks: BookBlock[], asides: BookBlock[] = []): BookDocument {
     asides,
     illustrations: [],
     sections: [],
-    skipped: []
+    skipped: [],
+    synopsesUnmatched: []
   }
 }
 

@@ -44,7 +44,8 @@ function doc(blocks: BookBlock[]): BookDocument {
     asides: [],
     illustrations: [],
     sections: [],
-    skipped: []
+    skipped: [],
+    synopsesUnmatched: []
   }
 }
 
