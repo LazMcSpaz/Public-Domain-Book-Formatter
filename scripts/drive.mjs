@@ -82,6 +82,70 @@ async function serve() {
   const browser = context
   const page = context.pages()[0] ?? (await context.newPage())
 
+  /**
+   * Which book a verb means, decided in one place.
+   *
+   * Before this, three different answers were in use at once. `open` handed a
+   * scan to the app; `leaf`, `draft`, `ocr` and `sheet` rendered from the
+   * *stored* scan of whatever run was saved most recently; `transcribe` keyed
+   * off the path on the command line. So a session could open one book, read a
+   * second book's pixels, and file the result under a third — and it did, for
+   * an afternoon, with nothing in any report saying so, because no verb named
+   * the book its pixels came from.
+   *
+   * `window.__pdbfBook` is the current book's key, set by `open`, `load` and
+   * `use`. When it is set, every verb uses it. When it is not, a single stored
+   * book is taken as obvious and **anything more is refused by name** rather
+   * than guessed at: picking the newest is what caused the fault, and a driver
+   * that cannot tell which book it means should say so.
+   *
+   * Installed with `addInitScript` so it survives navigation, which the bridge
+   * tests do routinely.
+   */
+  await page.addInitScript(() => {
+    // Kept in `localStorage`, not only on `window`. A page global is forgotten
+    // by every reload and every restart of the browser this driver holds, and
+    // the symptom is not an error a session recognises: the next verb says
+    // "more than one book is stored here and none is current", which reads as
+    // a book that was never chosen rather than one that was and got lost.
+    const KEY = 'pdbf.drive.book'
+    Object.defineProperty(window, '__pdbfBook', {
+      configurable: true,
+      get() {
+        try {
+          return localStorage.getItem(KEY)
+        } catch {
+          return null
+        }
+      },
+      set(value) {
+        try {
+          if (value) localStorage.setItem(KEY, value)
+          else localStorage.removeItem(KEY)
+        } catch {
+          /* a driver that cannot remember still works, one verb at a time */
+        }
+      }
+    })
+
+    window.__pdbfPickBook = async (runStore) => {
+      const wanted = window.__pdbfBook ?? null
+      if (wanted) {
+        const summary = await runStore.loadRunSummary(wanted)
+        return summary ?? { key: wanted, fileName: wanted.split('\u0000')[0] }
+      }
+      const runs = await runStore.listRuns()
+      if (runs.length > 1) {
+        throw new Error(
+          'More than one book is stored here and none is current, so this verb ' +
+            'cannot tell which you mean. Run `use <scan.pdf>` first.\n' +
+            runs.map((r) => `  ${r.fileName}`).join('\n')
+        )
+      }
+      return runs[0]
+    }
+  })
+
   /** Kept rather than printed: a controller asks for them when something looks wrong. */
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
@@ -193,6 +257,113 @@ async function serve() {
     },
 
     /** Load a book. The 8-page fixture unless another path is named. */
+    /**
+     * Make a book current, and store its scan so the pixel verbs can reach it.
+     *
+     * Both halves matter. Without the first, verbs guess; without the second,
+     * `open` leaves the app holding a scan that nothing else can render from,
+     * so `leaf` falls back to some other book's stored file — which is the
+     * fault this whole change exists to remove.
+     *
+     * The scan is sent only when it is not already there: it is tens of
+     * megabytes of base64 across the wire, and reopening the same book to
+     * answer one more question should not pay for it twice.
+     */
+    _adopt: async (path) => {
+      const full = resolve(REPO, path)
+      const { readFile, stat } = await import('node:fs/promises')
+      const meta = await stat(full)
+      const file = {
+        name: full.split('/').pop(),
+        size: meta.size,
+        lastModified: Math.floor(meta.mtimeMs)
+      }
+      const key = [file.name, file.size, file.lastModified].join('\u0000')
+
+      const held = await page.evaluate(
+        async ([repo, k]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          window.__pdbfBook = k
+          return Boolean(await runStore.loadSourceFile(k))
+        },
+        [REPO, key]
+      )
+      if (!held) {
+        const bytes = await readFile(full)
+        await page.evaluate(
+          async ([repo, f, base64]) => {
+            const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+            const raw = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+            await runStore.saveSourceFile(
+              [f.name, f.size, f.lastModified].join('\u0000'),
+              new File([raw], f.name, { type: 'application/pdf' })
+            )
+          },
+          [REPO, file, bytes.toString('base64')]
+        )
+      }
+      return { file, key, scanStored: true }
+    },
+
+    /**
+     * Say which book every later verb means.
+     *
+     * The escape hatch for a device holding several books, and the thing the
+     * resolver names when it refuses to guess.
+     */
+    use: async ([path]) => {
+      if (!path) throw new Error('use <scan.pdf>')
+      const adopted = await handlers._adopt(path)
+      return { using: adopted.file.name, key: adopted.key }
+    },
+
+    /**
+     * Which book is current, and what else is stored here.
+     *
+     * `book clear` forgets the current one, which puts the resolver back to
+     * refusing rather than guessing whenever more than one book is stored. Not
+     * only for tests: a session moving between books is safer being made to say
+     * which than being handed whichever was saved last.
+     */
+    book: async ([action]) => {
+      return page.evaluate(
+        async ([repo, arg]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const runs = await runStore.listRuns()
+          if (arg === 'clear') window.__pdbfBook = null
+          else if (arg) {
+            // Naming a book already stored here, which `use` cannot do: `use`
+            // adopts a file from disk, and a scan loaded in an earlier session
+            // is in the store and nowhere on this filesystem. Without this, a
+            // second book on the device makes every verb refuse and there is
+            // no way to answer it short of fetching the scan again.
+            const matches = runs.filter((r) => r.fileName === arg || r.key === arg)
+            if (matches.length === 0) {
+              throw new Error(
+                `No book here is called \`${arg}\`. Stored: ` +
+                  runs.map((r) => r.fileName).join(', ')
+              )
+            }
+            if (matches.length > 1) {
+              throw new Error(
+                `${matches.length} books here are called \`${arg}\`. Name one by its key instead.`
+              )
+            }
+            window.__pdbfBook = matches[0].key
+          }
+          const wanted = window.__pdbfBook ?? null
+          return {
+            current: wanted
+              ? (runs.find((r) => r.key === wanted)?.fileName ?? wanted.split('\u0000')[0])
+              : null,
+            scanStored: wanted ? Boolean(await runStore.loadSourceFile(wanted)) : false,
+            stored: runs.map((r) => r.fileName)
+          }
+        },
+        [REPO, action ?? '']
+      )
+    },
+
     open: async ([path = 'public/test-book.pdf']) => {
       // The *path*, never a buffer. A run key is name\0size\0modified, and
       // Playwright only preserves the file's real modification time when it is
@@ -203,7 +374,10 @@ async function serve() {
       const { stat } = await import('node:fs/promises')
       const meta = await stat(full)
       await page.setInputFiles('input[type=file]', full)
-      return { opened: full.split('/').pop(), bytes: meta.size }
+      // Current from here on, and its scan stored, so no later verb has to
+      // guess which book it means or fall back to another one's pixels.
+      const adopted = await handlers._adopt(path)
+      return { opened: adopted.file.name, bytes: meta.size, current: adopted.file.name }
     },
 
     /**
@@ -232,7 +406,10 @@ async function serve() {
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const key = project.fileKey(file)
-          await runStore.deleteRun(key)
+          // No `deleteRun` first: `saveRun` does a `put` on a keyed store,
+          // which replaces. The delete bought nothing and turned "the save
+          // failed, you still have what was there" into "the save failed and
+          // there is nothing left".
           const saved = await runStore.saveRun(
             project.createSavedRun({
               key,
@@ -341,6 +518,7 @@ async function serve() {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const book = project.parseBookFile(text)
           const key = project.fileKey(file)
+          const held = await runStore.loadRun(key)
           const fetched = pictures.map((p) => ({
             id: p.id,
             bytes: Uint8Array.from(atob(p.base64), (c) => c.charCodeAt(0))
@@ -351,7 +529,25 @@ async function serve() {
             fileName: file.name,
             images: [...book.run.images, ...fetched]
           }
-          await runStore.deleteRun(key)
+          // What this book is about to displace, counted before it does.
+          //
+          // `transcribe` never pushes to the shelf — `save` is a separate verb
+          // — so a session that lands eight batches and dies before saving has
+          // all of them sitting here and nowhere else. Loading the shelf's copy
+          // over the top is how that work disappears, and it used to happen in
+          // silence: `load` reported only the incoming book.
+          //
+          // And no `deleteRun` first. `saveRun` puts on a keyed store, which
+          // replaces; the delete bought nothing and opened a window in which
+          // the old run was gone and the new one had not landed.
+          const displaced = held
+            ? {
+                leaves: held.transcriptions.length,
+                edits: held.edits.length,
+                images: held.images.length,
+                complete: held.complete
+              }
+            : null
           const saved = await runStore.saveRun(run)
           // The gate answers travel with the book — they are what the user
           // already decided, and re-asking them would be the app forgetting.
@@ -365,7 +561,10 @@ async function serve() {
             edits: run.edits.length,
             images: run.images.length,
             complete: run.complete,
-            savedAt: book.savedAt
+            savedAt: book.savedAt,
+            // Named, never silent. A session is entitled to know that loading
+            // the shelf's copy has just replaced work this device held.
+            ...(displaced ? { displaced } : {})
           }
         },
         [REPO, json, { name, size: meta.size, lastModified: Math.floor(meta.mtimeMs) }, pictures]
@@ -483,8 +682,11 @@ async function serve() {
         async ([repo, was]) => {
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
-          const keys = await runStore.listRuns()
-          const newest = keys.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          // Through the same resolver every other verb uses. Picking the
+          // most recently saved run was the last place left where "the current
+          // book" meant something different from what `book` reports — which
+          // is how an afternoon's reading once landed against the wrong scan.
+          const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No run in the store to save.')
           const run = await runStore.loadRun(newest.key)
           if (!run) throw new Error('That run could not be read back.')
@@ -621,30 +823,49 @@ async function serve() {
      * already accepted has no question, so no `ref`, so no way to look at it.
      * The scan is on the device either way.
      */
-    leaf: async ([n, name, dpi = '150', crop = '']) => {
+    leaf: async ([n, name, dpi = '150', crop = '', ...rest]) => {
       const pageIndex = Number(n)
       const resolution = Number(dpi)
+      // `leaf 45 out 300 - whole` renders everything the page draws rather than
+      // what its box shows. A scan placed larger than its page box is a leaf
+      // this app only half has, and the page-box render gives no sign of it.
+      const whole = crop === 'whole' || rest.includes('whole')
       // `x,y,w,h` as fractions of the leaf, for cutting a plate out of a scan:
       // a cover with a later owner's label pasted across the foot, a page with
       // a digitiser's watermark along the bottom. Fractions rather than pixels
       // so the same crop survives a change of resolution.
-      const box = crop
+      const box = (crop === 'whole' ? '' : crop)
         .split(',')
         .map(Number)
         .filter((v) => Number.isFinite(v))
       const url = await page.evaluate(
-        async ([repo, index, atDpi, window]) => {
+        // `crop`, never `window`: naming this parameter `window` shadowed the
+        // global inside the callback, so the moment every verb started
+        // resolving its book through `window.__pdbfPickBook` this one called it
+        // on the crop-box array instead and threw for every invocation, cropped
+        // or not — taking `crops`, and with it the whole adjudication path,
+        // down beside it.
+        async ([repo, index, atDpi, crop, wholeImage]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const pdf = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           const file = await runStore.loadSourceFile(newest.key)
           if (!file) throw new Error('The scan is not stored on this device.')
-          if (window.length !== 4) return pdf.renderPageToObjectUrl(file, index, atDpi)
+          if (crop.length !== 4 && !wholeImage) {
+            return pdf.renderPageToObjectUrl(file, index, atDpi)
+          }
           const doc = await pdf.openPdf(file)
-          const rendered = await pdf.renderPage(doc, index, atDpi)
-          const [fx, fy, fw, fh] = window
+          const rendered = await pdf.renderPage(doc, index, atDpi, { wholeImage })
+          if (crop.length !== 4) {
+            const asIs = await new Promise((r) => rendered.canvas.toBlob(r, 'image/png'))
+            const url = URL.createObjectURL(asIs)
+            rendered.canvas.width = 0
+            rendered.canvas.height = 0
+            await doc.destroy()
+            return url
+          }
+          const [fx, fy, fw, fh] = crop
           const cut = document.createElement('canvas')
           cut.width = Math.round(rendered.canvas.width * fw)
           cut.height = Math.round(rendered.canvas.height * fh)
@@ -667,7 +888,7 @@ async function serve() {
             cut.toBlob((b) => resolve(URL.createObjectURL(b)), 'image/png')
           )
         },
-        [REPO, pageIndex, resolution, box]
+        [REPO, pageIndex, resolution, box, whole]
       )
       const bytes = await page.evaluate(async (u) => {
         const res = await fetch(u)
@@ -733,8 +954,7 @@ async function serve() {
           const wizard = await import(`/@fs${repo}/src/core/wizard/index.ts`)
           const interior = await import(`/@fs${repo}/src/platform/browser/interior.ts`)
 
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           const run = await runStore.loadRun(newest.key)
           const doc = editsMod.applyEdits(
             assemble.assembleBook(run.transcriptions),
@@ -870,9 +1090,19 @@ async function serve() {
         throw new Error('transcribe <scan.pdf> <pages.json> [merge|replace]')
       }
       const { readFile, stat } = await import('node:fs/promises')
-      const scan = resolve(REPO, scanPath)
-      const meta = await stat(scan)
-      const name = scanPath.split('/').pop()
+      // `-` means the book this session is working on, resolved the way every
+      // other verb resolves it. A scan loaded in an earlier session lives in
+      // the store and nowhere on this filesystem, so demanding a path made the
+      // one verb that lands work unusable on exactly the books that have any.
+      let file = null
+      if (scanPath !== '-') {
+        const meta = await stat(resolve(REPO, scanPath))
+        file = {
+          name: scanPath.split('/').pop(),
+          size: meta.size,
+          lastModified: Math.floor(meta.mtimeMs)
+        }
+      }
       const raw = JSON.parse(await readFile(resolve(REPO, pagesPath), 'utf8'))
       const pages = Array.isArray(raw) ? raw : (raw.pages ?? [])
       if (!Array.isArray(pages) || pages.length === 0) {
@@ -880,7 +1110,7 @@ async function serve() {
       }
 
       return page.evaluate(
-        async ([repo, file, pages, replace]) => {
+        async ([repo, named, pages, replace]) => {
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const schema = await import(`/@fs${repo}/src/core/transcribe/index.ts`)
@@ -897,13 +1127,30 @@ async function serve() {
           // triple alone put this batch in a run of its own that nothing would
           // ever open: no error, no book, and a session that believed it had
           // just filed a leaf.
-          const existing = await runStore.findRunForFile(file)
+          const current = named ? null : await window.__pdbfPickBook(runStore)
+          if (!named && !current) throw new Error('No book on this device to land this batch in.')
+          const file = named ?? {
+            name: current.fileName,
+            size: Number(current.key.split('\u0000')[1] ?? 0),
+            lastModified: Number(current.key.split('\u0000')[2] ?? 0)
+          }
+          // The *whole* run, not the summary `__pdbfPickBook` hands back.
+          // `held` is what every field of the held run is carried from, and a
+          // summary has no `transcriptions`, no `edits` and no `rulings` — so
+          // reading one here made the merge believe it was starting a fresh
+          // book and silently threw away twelve leaves, two corrections and
+          // three rulings. It reported `landed: 72` while doing it.
+          const existing = named
+            ? await runStore.findRunForFile(file)
+            : { run: await runStore.loadRun(current.key), key: current.key }
           const key = existing?.key ?? project.fileKey(file)
           const foundBy = !existing
             ? 'nothing on this device — this batch starts a new run'
-            : existing.key === project.fileKey(file)
-              ? 'name, size and date'
-              : 'name and size — the stored date differs'
+            : !named
+              ? 'the book this session is working on'
+              : existing.key === project.fileKey(file)
+                ? 'name, size and date'
+                : 'name and size — the stored date differs'
 
           // Parsed before anything is *written*, so a bad batch changes
           // nothing. The run lookup above runs first and is deliberately a
@@ -919,10 +1166,27 @@ async function serve() {
                   'A batch must say which leaves it read; position in the array is not that.'
               )
             }
-            return { ...schema.parsePageTranscription(entry, at), pageIndex: at }
+            return {
+              ...schema.parsePageTranscription(entry, at),
+              pageIndex: at,
+              _draftNotes: schema.carriesDraftNotes(entry)
+            }
           })
 
           const held = existing?.run ?? null
+
+          // The guard that would have caught the above, and catches the next
+          // one of its shape. A run exists at this key and yet nothing was
+          // read back from it: whatever is wrong, merging now writes a book
+          // with only this batch in it and calls that a merge.
+          if (!held && (await runStore.loadRunSummary(key))) {
+            throw new Error(
+              `A run is stored at this key and could not be read back, so merging ` +
+                `this batch would replace ${
+                  (await runStore.loadRunSummary(key))?.pageCount ?? 'every'
+                } leaf of it with the ${pages.length} here. Nothing was written.`
+            )
+          }
           // How long the book is, or 0 when nobody knows — never a floor.
           // A floor stored is a floor read back next time as a known number,
           // which is how `complete: true` came out of a book sixteen leaves
@@ -971,9 +1235,20 @@ async function serve() {
           // construction, and three of the four bugs found in them were the
           // same shape: a field claiming a check had happened, or a book was
           // finished, when neither was true. They are unit tests now.
+          // The draft's own annotations, stripped before anything is stored: a
+          // transcription is not the place for the list of things a draft
+          // guessed. Counted first, because a batch still carrying them has
+          // very likely not been checked against the render.
+          const unchecked = parsed.filter((p) => p._draftNotes).map((p) => p.pageIndex)
+          const clean = parsed.map((page) => {
+            const stripped = { ...page }
+            delete stripped._draftNotes
+            return stripped
+          })
+
           const merged = project.mergeBatchIntoRun({
             held,
-            parsed,
+            parsed: clean,
             key,
             fileName: file.name,
             pageCount,
@@ -1027,6 +1302,17 @@ async function serve() {
                 }),
             pageCountFrom: countFrom,
             matchedRunBy: foundBy,
+            queriesRaised: clean.reduce((n, p) => n + (p.queries?.length ?? 0), 0),
+            // Not a refusal — a reader may have checked a leaf and left the
+            // list alone — but a draft landed uncorrected is the one thing this
+            // door exists to make hard, so it is never silent.
+            ...(unchecked.length > 0
+              ? {
+                  stillCarriesDraftNotes: unchecked,
+                  check:
+                    "These leaves arrived with the draft's `structural` list still on them. Was the draft checked against the render?"
+                }
+              : {}),
             ocr: !cached
               ? 'NOT CHECKED — no cached reading on this device'
               : compared === seenLeaves
@@ -1036,12 +1322,7 @@ async function serve() {
             flagged: checked
           }
         },
-        [
-          REPO,
-          { name, size: meta.size, lastModified: Math.floor(meta.mtimeMs) },
-          pages,
-          mode === 'replace'
-        ]
+        [REPO, file, pages, mode === 'replace']
       )
     },
 
@@ -1059,34 +1340,35 @@ async function serve() {
      * Runs over the *assembled* document, because a doubled line and a name
      * variant both live at page seams and a raw leaf cannot show you a seam.
      */
-    consistency: async ([out = 'consistency.json']) => {
+    consistency: async ([out = 'consistency.json', which = 'edited']) => {
+      // `consistency out.json pristine` runs over the transcription before any
+      // correction. That is the *normal* occasion for these checks — they exist
+      // to find what wants correcting — and running only over the edited text
+      // means a check can only ever confirm that work already done was done.
       const found = await page.evaluate(
-        async ([repo]) => {
+        async ([repo, which]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
           const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
           const coherence = await import(`/@fs${repo}/src/core/coherence/index.ts`)
           const quotes = await import(`/@fs${repo}/src/core/layout/index.ts`)
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           const run = await runStore.loadRun(newest.key)
-          const doc = editsMod.applyEdits(
-            assemble.assembleBook(run.transcriptions),
-            run.edits ?? []
-          )
+          const bare = assemble.assembleBook(run.transcriptions)
+          const doc = which === 'pristine' ? bare : editsMod.applyEdits(bare, run.edits ?? [])
           // Through the quote pass first, because the unclosed-quote check
           // counts printer's marks: a straight mark opens and closes with the
           // same character and cannot be counted at all.
           return coherence.checkConsistency(quotes.withTypographicQuotes(doc))
         },
-        [REPO]
+        [REPO, which]
       )
       const { writeFile } = await import('node:fs/promises')
       await writeFile(out, JSON.stringify(found, null, 1))
       const byKind = {}
       for (const f of found) byKind[f.kind] = (byKind[f.kind] ?? 0) + 1
-      return { wrote: out, findings: found.length, byKind }
+      return { wrote: out, over: which, findings: found.length, byKind }
     },
 
     /**
@@ -1109,8 +1391,7 @@ async function serve() {
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
           const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
           const coherence = await import(`/@fs${repo}/src/core/coherence/index.ts`)
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           const run = await runStore.loadRun(newest.key)
           const doc = editsMod.applyEdits(
@@ -1156,8 +1437,7 @@ async function serve() {
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
           const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
           const coherence = await import(`/@fs${repo}/src/core/coherence/index.ts`)
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           const run = await runStore.loadRun(newest.key)
           const doc = editsMod.applyEdits(
             assemble.assembleBook(run.transcriptions),
@@ -1231,8 +1511,7 @@ async function serve() {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
           const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           const run = await runStore.loadRun(newest.key)
           const doc = editsMod.applyEdits(
             assemble.assembleBook(run.transcriptions),
@@ -1335,8 +1614,7 @@ async function serve() {
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
           const edits = await import(`/@fs${repo}/src/core/edits/index.ts`)
           const markup = await import(`/@fs${repo}/src/core/transcribe/index.ts`)
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           const run = await runStore.loadRun(newest.key)
           const bare = assemble.assembleBook(run.transcriptions)
@@ -1359,8 +1637,18 @@ async function serve() {
               id: c.id,
               label: c.label ?? null,
               title: c.title,
-              level: c.level
+              level: c.level,
+              // Whether the original contents' description reached this
+              // chapter. Reported because a synopsis that failed to match is
+              // silent otherwise: the contents still prints, just plainer, and
+              // nothing says the prose was read and then dropped.
+              synopsis: c.synopsis ? `${c.synopsis.slice(0, 60)}…` : null
             })),
+            // A description read off the original contents that no chapter
+            // claimed. Silent otherwise: the contents still prints, only
+            // plainer, so nothing looks broken and the prose was read and
+            // thrown away.
+            synopsesUnmatched: applied.synopsesUnmatched.map((x) => x.title),
             sections: applied.sections.map((s) => ({
               id: s.id,
               placement: s.placement,
@@ -1387,46 +1675,322 @@ async function serve() {
      * differ the place is worth a picture.
      */
     ocr: async ([...ns]) => {
-      const pages = ns.map(Number)
+      // `ocr 37 fresh` re-reads the pixels instead of the cache, which is how
+      // to tell a leaf the cache has no words for from a leaf Tesseract cannot
+      // read. The two look identical from outside and want opposite work: one
+      // is a hole in the cache to refill, the other is a leaf that needs eyes.
+      const fresh = ns.includes('fresh')
+      const pages = ns.filter((n) => n !== 'fresh').map(Number)
       return page.evaluate(
-        async ([repo, list]) => {
+        async ([repo, list, ignoreCache]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
           const ocrMod = await import(`/@fs${repo}/src/platform/browser/ocr.ts`)
           const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
           const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           const file = await runStore.loadSourceFile(newest.key)
           if (!file) throw new Error('The scan is not stored on this device.')
+          const cached = ignoreCache
+            ? null
+            : await cacheMod.loadReconCache(newest.key, { dpi: recon.RECON_DPI, maxPages: null })
+          const text = {}
+          const words = {}
+          const say = (found) => found.map((w) => w.text).join(' ')
+          // Counted beside the text, because an empty string is the one answer
+          // that means two opposite things: a leaf the cache has no words for
+          // (a hole to refill) and a leaf the engine could not read (a leaf
+          // that needs eyes). Both print as `""` and want different work.
+          const note = (n, found) => {
+            text[n] = say(found)
+            words[n] = found.length
+          }
+          if (cached) {
+            for (const n of list)
+              note(
+                n,
+                cached.words.filter((w) => w.pageIndex === n)
+              )
+            return { source: 'cache', text, words }
+          }
+          const engine = new ocrMod.OcrEngine()
+          let doc = await pdfMod.openPdf(file)
+          const leaves = doc.numPages
+          const widened = []
+
+          // pdf.js keeps per-page state on the document, and `page.cleanup()`
+          // frees the page's own intermediates without emptying that. Over a
+          // few hundred leaves it accumulates until the renderer is killed —
+          // which is what took this down mid-sweep on leaf 110 of a 328-leaf
+          // book, and again at 280. Read one at a time, every one of those
+          // leaves is fine; it was never a bad leaf.
+          //
+          // So the document is closed and reopened every so often. The file is
+          // already in memory, so reopening costs a parse of the cross-reference
+          // table and nothing else, and it holds the working set flat the way
+          // `renderPage` already holds one page's pixels flat.
+          const RECYCLE_AFTER = 40
+          let sinceOpen = 0
+
+          try {
+            for (const n of list) {
+              if (sinceOpen >= RECYCLE_AFTER) {
+                await doc.destroy()
+                doc = await pdfMod.openPdf(file)
+                sinceOpen = 0
+              }
+              sinceOpen++
+              if (n < 0 || n >= leaves) {
+                text[n] = ''
+                words[n] = null
+                continue
+              }
+              const rendered = await pdfMod.renderPage(doc, n, recon.RECON_DPI)
+              const result = await engine.recognize(rendered.canvas, n)
+
+              // Does the frame cut through ink? A leaf printed with margins
+              // has bare paper at its edges, so ink hard against the frame
+              // means the frame is not the leaf — the capture is placed so
+              // that the page box shows only part of it. Leaf 57 of *The
+              // Human Aura* loses the right half of every line that way and
+              // reads as 113 words of a 202-word page: not empty, which is why
+              // "did it read nothing?" is the wrong question, and a check that
+              // asked it would have passed this leaf.
+              //
+              // Measured rather than assumed, and measured on the leaf's own
+              // paper tone, which is what `inkProfile` does — old paper is
+              // cream, foxed and unevenly lit, and a fixed threshold reads a
+              // blank leaf as ink on one book and misses type on the next.
+              const w = rendered.canvas.width
+              const h = rendered.canvas.height
+              const strip = Math.max(2, Math.round(w * 0.006))
+              const edges = [
+                { x0: w - strip, y0: h * 0.1, x1: w, y1: h * 0.9 },
+                { x0: 0, y0: h * 0.1, x1: strip, y1: h * 0.9 }
+              ].map((box) => pdfMod.inkProfile(rendered.canvas, box).fraction)
+              const cutsInk = Math.max(...edges) > 0.06
+
+              rendered.canvas.width = 0
+              rendered.canvas.height = 0
+              if (result.words.length > 0 && !cutsInk) {
+                note(n, result.words)
+                continue
+              }
+
+              // Render everything the page draws and keep whichever reading
+              // found more. Not the default: it costs a second OCR pass, and
+              // the wider frame moves every word box — which is the unit the
+              // crops and the illustration cuts are measured in.
+              const whole = await pdfMod.renderPage(doc, n, recon.RECON_DPI, { wholeImage: true })
+              const second = await engine.recognize(whole.canvas, n)
+              whole.canvas.width = 0
+              whole.canvas.height = 0
+              const better = second.words.length > result.words.length
+              note(n, better ? second.words : result.words)
+              if (better) widened.push(n)
+            }
+          } finally {
+            await engine.dispose()
+            // Never left open. This verb held a document for the life of the
+            // page and freed it only when the page died.
+            await doc.destroy()
+          }
+          // Said out loud: these words were read in a different frame from
+          // every other leaf's, so their boxes do not line up with the cached
+          // reading and a crop taken from one will not land where it should.
+          return { source: 'pixels', leaves, text, words, readWhole: widened }
+        },
+        [REPO, pages, fresh]
+      )
+    },
+
+    /**
+     * What shelf this device is connected to, and putting the book on it.
+     *
+     * `save` writes a book file to *this filesystem*, and two places in this
+     * driver said it pushed to the shelf. It never has, and the difference is
+     * the whole point of having a shelf: this container is reclaimed when the
+     * session ends, and a book that only ever reached a local file was work
+     * done into a machine that is about to be thrown away.
+     *
+     * `shelf` says what is configured. `shelf push` sends the current book
+     * through `pushBookToShelf` — the same call the app makes when a reading
+     * finishes, so a book put up by hand is byte-for-byte the one put up
+     * automatically.
+     *
+     * No credential ever crosses this channel in either direction: the token is
+     * the app's, read from where the app keeps it, and it is never reported.
+     */
+    shelf: async ([action, what = 'the reading, from a session']) => {
+      return page.evaluate(
+        async ([repo, action, what]) => {
+          const settings = await import(`/@fs${repo}/src/platform/browser/settings.ts`)
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const shelfSave = await import(`/@fs${repo}/src/platform/browser/shelf-save.ts`)
+          const sync = await import(`/@fs${repo}/src/core/sync/index.ts`)
+
+          const config = settings.loadShelf()
+          const connected = Boolean(config?.owner && config?.repo && config?.token)
+          const where = config?.owner ? `${config.owner}/${config.repo}` : null
+          if (action !== 'push') {
+            // The token is never in this reply, only whether there is one.
+            return { connected, repository: where, branch: config?.branch ?? null }
+          }
+          if (!connected) {
+            throw new Error(
+              'No shelf is connected in this browser. Connect one in the app’s Settings ' +
+                'panel first — the token is yours and never travels through this driver.'
+            )
+          }
+
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+
+          // The app's own by-hand path, not a second assembly of the same
+          // steps: a book put up from here has to be the same file as one put
+          // up from the Settings panel, or opening it later would depend on
+          // which button was pressed months earlier.
+          const result = await shelfSave.pushStoredBook(config, newest.key, what)
+          return {
+            repository: where,
+            pushed: result.path ?? null,
+            note: result.note ?? null,
+            queries: sync.queriesPath(newest.key),
+            rulings: sync.rulingsPath(newest.key)
+          }
+        },
+        [REPO, action ?? '', what]
+      )
+    },
+
+    /**
+     * Our reading of every leaf set beside somebody else's, and the places
+     * the two could not agree.
+     *
+     * The argument for OCR has always been that it is not a language model, so
+     * it shares no blind spots with whatever else read the page. That does not
+     * stop at one engine: a book digitised twice — by archive.org's OCR, by a
+     * Project Gutenberg volunteer — carries independent readings of the same
+     * setting, and where two of them agree word for word that is evidence
+     * neither could give alone.
+     *
+     * `second.json` is `{ "<leaf>": "text" }`. What comes back is, per leaf,
+     * how far the two agree and every place they do not, **sorted worst-first
+     * by our own engine's confidence** — a real probability (SPEC §4), and the
+     * one honest way to say which disagreements are Tesseract stumbling and
+     * which are the compositor and the other transcription genuinely differing.
+     *
+     * This does not skip the pixels and does not adopt anybody's text. It turns
+     * "check every word of every leaf against the scan" into "check the places
+     * two readers could not agree on", which is an order of magnitude shorter
+     * with the hardest cases at the top.
+     */
+    witness: async ([secondPath, out = 'witness.json', ...ns]) => {
+      if (!secondPath) throw new Error('witness <second.json> [out.json] [leaf...] [--ours <f>]')
+      const { readFile, writeFile } = await import('node:fs/promises')
+      const second = JSON.parse(await readFile(resolve(REPO, secondPath), 'utf8'))
+      // `--ours <file>` compares a reading of our own that is not the raw OCR
+      // — a draft, with the running head and folio already taken off the top.
+      // Without it the commonest disagreement on every single leaf is the page
+      // furniture, which the other transcription strips and ours keeps: eighty
+      // rows of `"14 the human aura" -> ""` burying the real ones.
+      //
+      // The cost is honest and reported: a supplied reading carries no word
+      // confidences, so nothing can be sorted by which of them our engine was
+      // unsure about.
+      const oursAt = ns.indexOf('--ours')
+      const oursPath = oursAt === -1 ? null : ns[oursAt + 1]
+      const ours = oursPath ? JSON.parse(await readFile(resolve(REPO, oursPath), 'utf8')) : null
+      const only = ns
+        .filter((_, i) => i !== oursAt && i !== oursAt + 1)
+        .map(Number)
+        .filter(Number.isFinite)
+      const report = await page.evaluate(
+        async ([repo, second, only, ours]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
+          const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const witnessMod = await import(`/@fs${repo}/src/core/witness/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
           const cached = await cacheMod.loadReconCache(newest.key, {
             dpi: recon.RECON_DPI,
             maxPages: null
           })
-          const out = {}
-          const say = (words) => words.map((w) => w.text).join(' ')
-          if (cached) {
-            for (const n of list) out[n] = say(cached.words.filter((w) => w.pageIndex === n))
-            return out
+          // Only when this needs *our* reading. A supplied one (`--ours`) is
+          // already a reading; the cache would add nothing but the per-word
+          // confidences, which a supplied reading has none of anyway. Demanding
+          // it regardless made the verb refuse every book read before the cache
+          // existed — which is exactly the set of books most in need of a
+          // second opinion.
+          if (!cached && !ours) {
+            throw new Error(
+              'No cached reading here and no `--ours` given, so there is nothing of ours to ' +
+                'compare. Run recon, or supply a reading with `--ours <file>`.'
+            )
           }
-          const engine = new ocrMod.OcrEngine()
-          const doc = await pdfMod.openPdf(file)
-          try {
-            for (const n of list) {
-              const rendered = await pdfMod.renderPage(doc, n, recon.RECON_DPI)
-              const result = await engine.recognize(rendered.canvas, n)
-              out[n] = say(result.words)
-              rendered.canvas.width = 0
-              rendered.canvas.height = 0
-            }
-          } finally {
-            await engine.dispose()
+
+          const byLeaf = new Map()
+          for (const w of cached?.words ?? []) {
+            if (!byLeaf.has(w.pageIndex)) byLeaf.set(w.pageIndex, [])
+            byLeaf.get(w.pageIndex).push(w)
           }
-          return out
+
+          const leaves = []
+          for (const key of Object.keys(second)) {
+            const leaf = Number(key)
+            if (!Number.isFinite(leaf)) continue
+            if (only.length > 0 && !only.includes(leaf)) continue
+            const words = byLeaf.get(leaf) ?? []
+            const supplied = ours ? String(ours[key] ?? '') : null
+            const report = witnessMod.compareWitnesses(
+              supplied ?? words.map((w) => w.text).join(' '),
+              String(second[key] ?? ''),
+              supplied === null ? { confidence: words.map((w) => w.confidence) } : {}
+            )
+            leaves.push({
+              leaf,
+              ourWords: report.words,
+              agreement: Number(report.agreement.toFixed(3)),
+              needEyes: report.needEyes,
+              // Worst first: where two readers differ *and* the one holding the
+              // pixels was unsure is the top of any list worth working.
+              disagreements: report.disagreements
+                .filter((d) => d.kind !== 'joined')
+                .sort((a, b) => (a.confidence ?? 101) - (b.confidence ?? 101)),
+              joins: witnessMod.joinsSettled(report).length
+            })
+          }
+          leaves.sort((a, b) => a.leaf - b.leaf)
+          return {
+            leaves,
+            // A leaf our engine read nothing on cannot disagree with anybody,
+            // so it scores a perfect nothing and would sit quietly at the top
+            // of a sorted list. Named separately, because it is the one row
+            // here that means "this leaf was never checked".
+            unread: leaves.filter((l) => l.ourWords === 0).map((l) => l.leaf),
+            agreement: Number(
+              (leaves.reduce((n, l) => n + l.agreement, 0) / Math.max(1, leaves.length)).toFixed(3)
+            ),
+            needEyes: leaves.reduce((n, l) => n + l.needEyes, 0)
+          }
         },
-        [REPO, pages]
+        [REPO, second, only, ours]
       )
+      await writeFile(resolve(REPO, out), JSON.stringify(report, null, 1), 'utf8')
+      return {
+        wrote: out,
+        ours: oursPath ?? 'the cached OCR, furniture and all',
+        leaves: report.leaves.length,
+        agreement: report.agreement,
+        needEyes: report.needEyes,
+        unread: report.unread,
+        worst: [...report.leaves]
+          .sort((a, b) => a.agreement - b.agreement)
+          .slice(0, 8)
+          .map((l) => ({ leaf: l.leaf, agreement: l.agreement, needEyes: l.needEyes }))
+      }
     },
 
     /**
@@ -1462,8 +2026,7 @@ async function serve() {
           const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
           const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
           const draftMod = await import(`/@fs${repo}/src/core/draft/index.ts`)
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           // The cache first, because it is instant and because it is the
           // same reading every crop and word box on this device was built
@@ -1565,8 +2128,7 @@ async function serve() {
           const crops = await import(`/@fs${repo}/src/platform/browser/word-crops.ts`)
           const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
 
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           const file = await runStore.loadSourceFile(newest.key)
           // `maxPages: null` is "the whole book" — the same shape the app
           // asks with. A record written for a partial reading is deliberately
@@ -1601,10 +2163,17 @@ async function serve() {
             }
           }
 
-          const plain = (t) => t.toLowerCase().replace(/[^a-z]/g, '')
+          // Digits kept. Stripping to letters alone made every all-digit word
+          // normalise to the empty string, and an empty needle matches the
+          // first empty haystack: asking for the `3` on leaf 47 cut out the
+          // folio `48` and showed it as evidence. A crop of the wrong word is
+          // worse than no crop, because it is looked at and believed.
+          const plain = (t) => t.toLowerCase().replace(/[^a-z0-9]/g, '')
           const byPage = new Map()
           for (const item of list) {
             const want = plain(item.word)
+            // Nothing to look for is not a licence to show anything.
+            if (want === '') continue
             const onPage = words.filter((w) => w.pageIndex === item.pageIndex)
             // Exact first. Failing that, the word is very likely broken at a
             // line end — the printer hyphenated it and OCR filed the halves
@@ -1678,12 +2247,22 @@ async function serve() {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
           const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          // `diag` is the one verb that legitimately wants every run rather
+          // than the current one — it exists to say what is on the device.
           const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           const whole = newest
             ? await cacheMod.loadReconCache(newest.key, { dpi: recon.RECON_DPI, maxPages: null })
             : null
-          const part = newest ? await cacheMod.loadReconCheckpoint(newest.key) : null
+          // The same `wanted` the whole-reading load uses. Called without it,
+          // this threw on every book — a verb whose only job is to say what is
+          // on the device, failing to say anything.
+          const part = newest
+            ? await cacheMod.loadReconCheckpoint(newest.key, {
+                dpi: recon.RECON_DPI,
+                maxPages: null
+              })
+            : null
           return {
             runs: runs.map((r) => ({ key: r.key, pages: r.pageCount, savedAt: r.savedAt })),
             wholeReading: whole ? { words: whole.words.length } : null,
@@ -1710,6 +2289,471 @@ async function serve() {
         for (const k of keys) localStorage.removeItem(k)
         return { cleared: keys }
       })
+    },
+
+    /**
+     * A link that opens this book, on any device, where the decisions are.
+     *
+     * The whole point of the deployed app: the editor works from a phone, and
+     * without this, looking at one flagged word costs opening the app,
+     * connecting the shelf, finding the book, waiting for the scan to be
+     * fetched and re-read, answering the offer of the saved transcription, and
+     * walking gates that were settled days ago — to arrive at a screen that
+     * could have been the first one.
+     *
+     * The link names the book by its shelf slug and the place by its step, and
+     * it **answers nothing**: every question still outstanding is still asked
+     * when it gets there.
+     *
+     * `link review`, `link proof`, `link review 42` for one leaf.
+     */
+    link: async ([at = 'review', leaf]) => {
+      const site =
+        process.env.PDBF_SITE ?? 'https://lazmcspaz.github.io/Public-Domain-Book-Formatter/'
+      return page.evaluate(
+        async ([repo, base, where, whichLeaf]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const shelf = await import(`/@fs${repo}/src/core/sync/index.ts`)
+          const wizard = await import(`/@fs${repo}/src/core/wizard/index.ts`)
+          const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          const slug = shelf.shelfSlug(newest.key)
+          const raised = run ? queriesMod.collectQueries(run.transcriptions) : []
+          return {
+            url: wizard.deepLink(base, {
+              slug,
+              at: where,
+              ...(Number.isFinite(Number(whichLeaf)) ? { leaf: Number(whichLeaf) } : {})
+            }),
+            book: run?.fileName ?? newest.fileName,
+            slug,
+            queriesWaiting: raised.length,
+            // Said out loud because a link to a book the shelf has never seen
+            // opens the intake screen and looks broken.
+            onTheShelf:
+              'This only works once the book has been pushed to the shelf — `shelf push` does ' +
+              'that. `save` writes a book file to this filesystem and sends nothing anywhere.'
+          }
+        },
+        [REPO, site, at, leaf ?? '']
+      )
+    },
+
+    /**
+     * The decisions waiting on the editor, as a sheet to read.
+     *
+     * Written to a file rather than printed, because a query that lives only in
+     * a session survives exactly as long as the session does — and the whole
+     * reason to raise one is that nobody should have to remember it. The shelf
+     * wants it at `books/<slug>/queries.md`; `queriesPath` says so.
+     *
+     * Nothing here proposes a fix. That is the point of the channel.
+     */
+    queries: async ([out = 'queries.md']) => {
+      const rendered = await page.evaluate(
+        async ([repo]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
+          const shelf = await import(`/@fs${repo}/src/core/sync/index.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+          const raised = queriesMod.collectQueries(run.transcriptions)
+          const rulings = run.rulings ?? []
+          // A `corrected` ruling is a decision that has not happened until an
+          // edit lands. The gap between the two is where a book quietly keeps
+          // the error its editor is certain was fixed, so it is measured
+          // against the assembled text rather than assumed.
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const notYet = queriesMod.unapplied(rulings, doc.blocks.map((b) => b.text).join('\n'))
+          const waiting = queriesMod.outstanding(raised, rulings)
+          const title =
+            typeof run.identityAnswers?.title === 'string' && run.identityAnswers.title
+              ? run.identityAnswers.title
+              : run.fileName
+          const book = { title, fileName: run.fileName }
+          return {
+            markdown: queriesMod.queriesMarkdown(book, raised, rulings),
+            rulingsMarkdown: queriesMod.rulingsMarkdown(book, rulings),
+            raised: raised.length,
+            // What is actually left, which is the number a session should act
+            // on. `raised` counts the ones already settled too, and a report
+            // that only gave the total would send somebody back to decisions
+            // the editor has made.
+            waiting: waiting.length,
+            ruled: rulings.length,
+            byKind: queriesMod.countQueries(waiting),
+            // Non-empty means the book does not yet read the way the editor
+            // decided it should. Named rather than counted: a count here is
+            // something to nod at and a list is something to act on.
+            decidedButNotPrinted: notYet.map((r) => ({ leaf: r.pageIndex, quote: r.quote })),
+            leaves: [...new Set(waiting.map((q) => q.pageIndex))],
+            shelfPath: shelf.queriesPath(newest.key),
+            rulingsShelfPath: shelf.rulingsPath(newest.key)
+          }
+        },
+        [REPO]
+      )
+      const { writeFile } = await import('node:fs/promises')
+      await writeFile(resolve(REPO, out), rendered.markdown, 'utf8')
+      const rulingsOut = out.replace(/queries\.md$/u, 'rulings.md')
+      const alongside = rulingsOut === out ? `${out}.rulings.md` : rulingsOut
+      await writeFile(resolve(REPO, alongside), rendered.rulingsMarkdown, 'utf8')
+      const report = { ...rendered }
+      delete report.markdown
+      delete report.rulingsMarkdown
+      return { wrote: out, wroteRulings: alongside, ...report }
+    },
+
+    /**
+     * Land a correction on one block, in the words `body` handed back.
+     *
+     * The one thing the driver could not do. A ruling that says a page should
+     * read differently is a decision that has not happened until an edit lands,
+     * and the only route to landing one was `save`, hand-editing the JSON, and
+     * `load`ing it back — three steps around a file, each of which can go wrong
+     * quietly, to change one word.
+     *
+     * ```
+     * correct p10b2 replace.txt          # the block's whole new text, from a file
+     * correct p11b2 --was radioative --now radio-active
+     * ```
+     *
+     * The `--was/--now` form is a **substitution within the block**, not a
+     * search of the book: it fails rather than guessing when the words appear
+     * more than once, because a correction that silently changed two places is
+     * indistinguishable from one that changed the right one. A `text` edit
+     * replaces a block *entirely*, so the whole string is always what is
+     * written — the substitution is a way of composing that string without
+     * retyping four hundred words, never a way of editing part of a block.
+     */
+    correct: async (argv) => {
+      const flag = (name) => {
+        const i = argv.indexOf(`--${name}`)
+        return i === -1 ? null : argv[i + 1]
+      }
+      const positional = argv.filter(
+        (a, i) => !a.startsWith('--') && !argv[i - 1]?.startsWith('--')
+      )
+      const blockId = positional[0]
+      const from = positional[1] ?? null
+      const was = flag('was')
+      const now = flag('now')
+      if (!blockId || (!from && was === null)) {
+        throw new Error('correct <blockId> <file> | correct <blockId> --was <text> --now <text>')
+      }
+
+      let replacement = null
+      if (from) {
+        const { readFile } = await import('node:fs/promises')
+        replacement = (await readFile(resolve(REPO, from), 'utf8')).replace(/\n+$/u, '')
+      }
+
+      return page.evaluate(
+        async ([repo, blockId, replacement, was, now]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const markup = await import(`/@fs${repo}/src/core/transcribe/markup.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+
+          // Against the book *as it stands*, edits included — the same text
+          // `body` hands back. A correction written against the raw pages
+          // would truncate every paragraph a seam had joined, and one written
+          // against the pristine text would silently undo an earlier fix.
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const block = doc.blocks.find((b) => b.id === blockId)
+          if (!block) throw new Error(`No block \`${blockId}\` in this book.`)
+          // With the `<i>` and `<b>` tags on, exactly as `body` hands it back
+          // and exactly as `applyEdits` reads it in — a correction typed
+          // against the bare text would strip every emphasis in the block.
+          const before = markup.withMarkup(block.text, block.emphasis, block.strong)
+
+          let text = replacement
+          if (text === null) {
+            const parts = before.split(was)
+            if (parts.length === 1) {
+              throw new Error(`\`${was}\` is not in block ${blockId}. Nothing was changed.`)
+            }
+            if (parts.length > 2) {
+              throw new Error(
+                `\`${was}\` appears ${parts.length - 1} times in block ${blockId}. ` +
+                  'Give the whole block instead, so which one is meant is not a guess.'
+              )
+            }
+            text = parts.join(now ?? '')
+          }
+          if (text === before) {
+            return { blockId, changed: false, why: 'That is what the block already says.' }
+          }
+
+          const edits = editsMod.withEdit(run.edits ?? [], { kind: 'text', blockId, text })
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            edits
+          })
+          const stored = await runStore.saveRun(next)
+          return {
+            blockId,
+            changed: true,
+            stored: stored === true,
+            before,
+            after: text,
+            edits: edits.length,
+            next: '`shelf push` sends it to the shelf; nothing has left this device yet.'
+          }
+        },
+        [REPO, blockId, replacement, was, now]
+      )
+    },
+
+    /**
+     * Raise a query on a leaf that has already been read.
+     *
+     * Queries were only ever attachable at the moment a leaf was transcribed,
+     * which is the one moment they are least likely to be noticed. Most of them
+     * turn up later — proofing the set page, or running the consistency checks
+     * over the assembled book — and until now there was nowhere to put one
+     * except a chat session, which is the one place a decision must not live.
+     *
+     * ```
+     * query 163 "the moment at which he awoke." printers-error "why this needs you"
+     * ```
+     *
+     * The quoted words must be on the leaf, checked here rather than trusted: a
+     * query whose quote is not in the book is one nobody can look up, and the
+     * sheet it lands on is read months later by someone with only the words.
+     *
+     * There is deliberately no argument for a proposed fix. A suggestion beside
+     * a question is an answer in all but name, and the answer is the editor's.
+     */
+    query: async ([leaf, quote, kind = 'unclear', why = '']) => {
+      const pageIndex = Number(leaf)
+      if (!Number.isInteger(pageIndex) || !quote || !why) {
+        throw new Error('query <leaf> <quote> <printers-error|inconsistent|unclear> <why>')
+      }
+      if (!['printers-error', 'inconsistent', 'unclear'].includes(kind)) {
+        throw new Error(`\`${kind}\` is not a kind of query.`)
+      }
+      return page.evaluate(
+        async ([repo, pageIndex, quote, kind, why]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+
+          const leafAt = run.transcriptions.find((t) => t.pageIndex === pageIndex)
+          if (!leafAt) throw new Error(`Leaf ${pageIndex} has not been read.`)
+
+          // Against the leaf's own blocks, and against them as stored rather
+          // than as assembled: a query names a place on a leaf, and the leaf is
+          // what somebody will go and look at.
+          const onTheLeaf = leafAt.blocks.map((b) => b.text).join(' ')
+          if (!onTheLeaf.includes(quote)) {
+            throw new Error(
+              `Those words are not on leaf ${pageIndex}. A query nobody can look up is worse ` +
+                'than none, so nothing was written.'
+            )
+          }
+          const already = (leafAt.queries ?? []).some((q) => q.quote === quote)
+          if (already) {
+            return { pageIndex, raised: false, why: 'That query is already on this leaf.' }
+          }
+
+          const transcriptions = run.transcriptions.map((t) =>
+            t.pageIndex === pageIndex
+              ? { ...t, queries: [...(t.queries ?? []), { quote, why, kind }] }
+              : t
+          )
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            transcriptions
+          })
+          const stored = await runStore.saveRun(next)
+          const raised = queriesMod.collectQueries(transcriptions)
+          return {
+            pageIndex,
+            raised: true,
+            stored: stored === true,
+            queriesOnThisBook: raised.length,
+            waiting: queriesMod.outstanding(raised, run.rulings ?? []).length,
+            next: 'Run `queries` to rewrite the sheet.'
+          }
+        },
+        [REPO, pageIndex, quote, kind, why]
+      )
+    },
+
+    /**
+     * Record what the editor decided about a query.
+     *
+     * The other half of a channel that was, until now, one-way: the question
+     * reached a file on the shelf and the answer reached a chat session, which
+     * is the one place it must not live. A ruling made in conversation and
+     * nowhere else means the next session raises the same question, and the
+     * introduction has to be told from memory what the edition decided.
+     *
+     * ```
+     * rule 12 radioative corrected radioactive "A plain compositor's slip." mention
+     * rule 8 "the centre" as-printed - "Keep the mixed spelling."
+     * rule standing "British/American spelling" noted - "..." covers:centre,colors
+     * ```
+     *
+     * The `correction` argument is `-` for anything but `corrected`, and it is
+     * the one field a *query* is forbidden to have — a ruling is the answer, so
+     * it may carry one.
+     */
+    rule: async ([leaf, quote, decision, correction = '-', because = '', ...flags]) => {
+      if (!quote || !decision) {
+        throw new Error(
+          'rule <leaf|standing> <quote> <as-printed|corrected|noted> [correction|-] ' +
+            '[why] [mention] [covers:a,b] [kind:inconsistent]'
+        )
+      }
+      const kind = flags.find((f) => f.startsWith('kind:'))?.slice('kind:'.length)
+      if (kind && !['printers-error', 'inconsistent', 'unclear'].includes(kind)) {
+        throw new Error(`\`${kind}\` is not a kind of query.`)
+      }
+      const covers = flags
+        .filter((f) => f.startsWith('covers:'))
+        .flatMap((f) =>
+          f
+            .slice('covers:'.length)
+            .split(',')
+            .map((c) => c.trim())
+        )
+        .filter(Boolean)
+      const ruling = {
+        pageIndex: leaf === 'standing' ? null : Number(leaf),
+        quote,
+        decision,
+        correction: correction === '-' ? undefined : correction,
+        because: because || undefined,
+        covers: covers.length > 0 ? covers : undefined,
+        kind: kind || undefined,
+        mention: flags.includes('mention'),
+        decidedOn: new Date().toISOString().slice(0, 10)
+      }
+      if (ruling.pageIndex !== null && !Number.isInteger(ruling.pageIndex)) {
+        throw new Error(`\`${leaf}\` is not a leaf number, and not \`standing\`.`)
+      }
+      // Checked here rather than left to `parseRulings`, which drops what it
+      // does not recognise: a ruling silently discarded on the next reload
+      // looks exactly like one that was never made.
+      if (!['as-printed', 'corrected', 'noted'].includes(decision)) {
+        throw new Error(`\`${decision}\` is not a decision. Use as-printed, corrected or noted.`)
+      }
+      if (decision === 'corrected' && !ruling.correction) {
+        throw new Error('A `corrected` ruling has to say what the page should read.')
+      }
+      return page.evaluate(
+        async ([repo, proposed]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+
+          const raised = queriesMod.collectQueries(run.transcriptions)
+          // The kind comes off the *question* rather than the command line: a
+          // ruling that named a kind of its own could disagree with the query
+          // it answers, and a ruling that matches nothing settles nothing
+          // while looking exactly like one that does.
+          const asked = raised.find(
+            (q) =>
+              q.pageIndex === proposed.pageIndex &&
+              q.quote.trim().toLowerCase() === proposed.quote.trim().toLowerCase()
+          )
+          // A standing ruling has no one question to take it from, so it takes
+          // it from the questions its `covers` actually reach. Refused rather
+          // than guessed when they reach none or disagree — a standing ruling
+          // filed under a kind nothing asked about is a decision that has been
+          // made and will be asked for again.
+          const covered =
+            proposed.pageIndex !== null
+              ? []
+              : [
+                  ...new Set(
+                    raised
+                      .filter((q) =>
+                        (proposed.covers ?? []).some(
+                          (c) => c.trim() && q.quote.toLowerCase().includes(c.toLowerCase())
+                        )
+                      )
+                      .map((q) => q.kind)
+                  )
+                ]
+          const kind = asked?.kind ?? proposed.kind ?? (covered.length === 1 ? covered[0] : null)
+          if (!kind) {
+            throw new Error(
+              proposed.pageIndex === null
+                ? `Nothing this covers is a single kind of query (${covered.join(', ') || 'none matched'}). ` +
+                    'Say which with `kind:printers-error`, `kind:inconsistent` or `kind:unclear`.'
+                : `No query was raised on leaf ${proposed.pageIndex} with those words. ` +
+                    'Say which kind this is with `kind:...`, or check the quote against `queries`.'
+            )
+          }
+          const ruling = { ...proposed, kind }
+          for (const key of Object.keys(ruling)) {
+            if (ruling[key] === undefined) delete ruling[key]
+          }
+
+          // Replace rather than append when the same thing is ruled on twice:
+          // two rulings on one query is a file that says the edition decided
+          // two things, and nothing downstream could pick.
+          const kept = (run.rulings ?? []).filter(
+            (r) =>
+              !(
+                r.pageIndex === ruling.pageIndex &&
+                r.quote.trim().toLowerCase() === ruling.quote.trim().toLowerCase()
+              )
+          )
+          const rulings = [...kept, ruling]
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            rulings
+          })
+          const saved = await runStore.saveRun(next)
+          const waiting = queriesMod.outstanding(raised, rulings)
+          return {
+            recorded: ruling,
+            matchedAQuery: Boolean(asked),
+            rulings: rulings.length,
+            replaced: kept.length !== (run.rulings ?? []).length,
+            waiting: waiting.length,
+            stored: saved === true,
+            savedAt: next.savedAt,
+            next: 'Run `queries` to rewrite both sheets, then `save` to push them.'
+          }
+        },
+        [REPO, ruling]
+      )
     },
 
     /**
@@ -1791,7 +2835,9 @@ async function serve() {
             res.writeHead(400, { 'Content-Type': 'application/json' })
             res.end(
               JSON.stringify({
-                error: `No such verb “${verb}”. Try: ${Object.keys(handlers).join(', ')}`
+                error: `No such verb “${verb}”. Try: ${Object.keys(handlers)
+                  .filter((v) => !v.startsWith('_'))
+                  .join(', ')}`
               })
             )
             return

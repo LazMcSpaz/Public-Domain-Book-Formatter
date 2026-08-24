@@ -53,7 +53,8 @@ const populated = (): WizardState => ({
     asides: [],
     illustrations: [],
     sections: [],
-    skipped: []
+    skipped: [],
+    synopsesUnmatched: []
   }
 })
 

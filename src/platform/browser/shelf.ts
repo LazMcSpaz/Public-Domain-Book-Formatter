@@ -31,6 +31,8 @@
 import {
   aboutPath,
   bookPath,
+  queriesPath,
+  rulingsPath,
   imagePath,
   commitMessage,
   parseAbout,
@@ -231,13 +233,29 @@ export async function digestOf(bytes: ArrayBuffer): Promise<string> {
     .join('')
 }
 
-/** Push one book's file and its catalogue card. Returns the path written to. */
+/**
+ * Push one book's file, its catalogue card and its two editorial sheets.
+ *
+ * The sheets ride along rather than being a separate action, because the whole
+ * failure they exist to prevent is a decision that lives in one place: a query
+ * raised in a session nobody pushed is a question nobody will be asked again,
+ * and a ruling made and not pushed is one the next session will ask about a
+ * second time. Returns the path written to.
+ */
 export async function pushBook(
   config: ShelfConfig,
   key: string,
   json: string,
   about: ShelfAbout,
-  what: string
+  what: string,
+  /**
+   * The queries and rulings as Markdown, rendered by core.
+   *
+   * Optional so a caller with nothing to say writes nothing — an empty sheet
+   * committed on every save is noise in a history that is meant to read as a
+   * log of the work.
+   */
+  sheets?: { queries?: string; rulings?: string }
 ): Promise<string> {
   const path = bookPath(key)
   const message = commitMessage(about.fileName, what)
@@ -250,6 +268,21 @@ export async function pushBook(
     toBase64(new TextEncoder().encode(JSON.stringify(about, null, 2))),
     message
   )
+
+  // Last, and never fatal: a sheet that fails to upload costs a re-run of
+  // `save`, while throwing here would report a book that is already on the
+  // shelf as unsaved and invite somebody to push it again.
+  for (const [text, where] of [
+    [sheets?.queries, queriesPath(key)],
+    [sheets?.rulings, rulingsPath(key)]
+  ] as const) {
+    if (!text) continue
+    try {
+      await putFile(config, where, toBase64(new TextEncoder().encode(text)), message)
+    } catch {
+      /* the book is up; the sheet can wait for the next save */
+    }
+  }
   return path
 }
 

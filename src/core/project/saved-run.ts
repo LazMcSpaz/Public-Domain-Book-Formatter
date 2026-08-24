@@ -27,6 +27,8 @@ import type { BookEdit } from '@core/edits'
 import { normalizeMarkup } from '@core/transcribe'
 import type { ImageEditOp } from '@core/model'
 import { FOOTINGS, type Fact } from '@core/harvest'
+import { RULING_DECISIONS, type Ruling } from '@core/queries'
+import { EDITORIAL_QUERY_KINDS } from '@core/transcribe'
 
 /**
  * Current schema version. Bump and extend `migrateSavedRun` on any shape change.
@@ -39,13 +41,14 @@ import { FOOTINGS, type Fact } from '@core/harvest'
  * v5 → v6 added the proofreading corrections, v6 → v7 the pixels of any
  * pictures the editor supplied, v7 → v8 whether the paid pass reached the end,
  * v8 → v9 what the second reading concluded about the flagged spots, and
- * v9 → v10 the fact bank this book produced, and v10 → v11 `leafCount`, how
- * long the book actually is. None of them damages an older run — each is a complete transcription that simply
+ * v9 → v10 the fact bank this book produced, v10 → v11 `leafCount`, how
+ * long the book actually is, and v11 → v12 the editor's rulings on the queries
+ * the reading raised. None of them damages an older run — each is a complete transcription that simply
  * has none of the newer thing on it yet — so all upgrade in place rather than
  * being refused. That distinction is the whole reason a migration exists
  * instead of a version check.
  */
-export const CURRENT_SCHEMA_VERSION = 11
+export const CURRENT_SCHEMA_VERSION = 12
 
 /** A page the model could not read at all. Mirrors the runner's `PageFailure`. */
 export interface SavedFailure {
@@ -162,6 +165,20 @@ export interface SavedRun {
    * depends on them, which is exactly why they were easy to forget.
    */
   facts: Fact[]
+  /**
+   * What the editor decided about the queries this reading raised.
+   *
+   * Here rather than in a file of its own for the reason the fact bank is: the
+   * run is what the book file carries and what IndexedDB keeps, so anything
+   * stored anywhere else is something a second device does not have. Until v12
+   * a ruling existed only in the session that made it — the question reached
+   * the shelf and the answer did not, so a later session would raise it again
+   * and the introduction had to be told from memory what the edition decided.
+   *
+   * Additive, like every field before it: a run written under v11 restores with
+   * none and behaves exactly as it did, which is every query still waiting.
+   */
+  rulings: Ruling[]
 }
 
 /** The facts the resume question needs, without loading the whole run. */
@@ -274,6 +291,7 @@ export function createSavedRun(init: {
   complete?: boolean
   adjudicated?: Record<string, { verdict: string; reading: string; note: string }>
   facts?: readonly Fact[]
+  rulings?: readonly Ruling[]
 }): SavedRun {
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -291,7 +309,8 @@ export function createSavedRun(init: {
     images: [...(init.images ?? new Map())].map(([id, bytes]) => ({ id, bytes })),
     complete: init.complete ?? true,
     adjudicated: { ...(init.adjudicated ?? {}) },
-    facts: [...(init.facts ?? [])]
+    facts: [...(init.facts ?? [])],
+    rulings: [...(init.rulings ?? [])]
   }
 }
 
@@ -371,8 +390,48 @@ export function migrateSavedRun(raw: unknown): SavedRun {
     // save-at-the-end path, so it is complete by construction.
     complete: typeof raw['complete'] === 'boolean' ? raw['complete'] : true,
     adjudicated: parseAdjudicated(raw['adjudicated']),
-    facts: parseFacts(raw['facts'])
+    facts: parseFacts(raw['facts']),
+    rulings: parseRulings(raw['rulings'])
   }
+}
+
+/**
+ * Read the rulings back, keeping only the well-formed ones.
+ *
+ * Same rule as the edits, the verdicts and the bank: a malformed entry is
+ * dropped rather than thrown on, because what is at stake in one bad record is
+ * one decision that has to be made again, and what refusing would cost is the
+ * transcription.
+ *
+ * `decision` and `kind` are checked against their vocabularies rather than
+ * trusted — a ruling with a decision nothing recognises would sit in the file
+ * settling a query in a way no code could act on, which is worse than an
+ * unanswered query because it stops anyone looking.
+ */
+function parseRulings(raw: unknown): Ruling[] {
+  if (!Array.isArray(raw)) return []
+  const out: Ruling[] = []
+  for (const item of raw) {
+    if (!isObject(item)) continue
+    const decision = RULING_DECISIONS.find((d) => d === item['decision'])
+    const kind = EDITORIAL_QUERY_KINDS.find((k) => k === item['kind'])
+    const quote = str(item['quote'], '')
+    if (!decision || !kind || !quote) continue
+    out.push({
+      pageIndex: typeof item['pageIndex'] === 'number' ? item['pageIndex'] : null,
+      quote,
+      kind,
+      decision,
+      ...(typeof item['correction'] === 'string' ? { correction: item['correction'] } : {}),
+      ...(typeof item['because'] === 'string' ? { because: item['because'] } : {}),
+      ...(Array.isArray(item['covers'])
+        ? { covers: item['covers'].filter((c): c is string => typeof c === 'string') }
+        : {}),
+      decidedOn: str(item['decidedOn'], new Date(0).toISOString().slice(0, 10)),
+      ...(item['mention'] === true ? { mention: true } : {})
+    })
+  }
+  return out
 }
 
 /**

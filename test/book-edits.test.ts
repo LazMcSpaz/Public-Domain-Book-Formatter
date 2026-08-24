@@ -939,7 +939,8 @@ describe('the editor’s own prose carries italics', () => {
     asides: [],
     illustrations: [],
     sections: [],
-    skipped: []
+    skipped: [],
+    synopsesUnmatched: []
   })
 
   it('reads <i> in a section the same way a correction does', () => {
@@ -998,7 +999,8 @@ describe('chapters survive an edit', () => {
     asides: [],
     illustrations: [],
     sections: [],
-    skipped: []
+    skipped: [],
+    synopsesUnmatched: []
   })
 
   it('keeps the synopsis read off the original contents', () => {

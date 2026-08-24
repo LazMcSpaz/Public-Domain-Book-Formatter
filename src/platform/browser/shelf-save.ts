@@ -29,6 +29,7 @@ import {
   type SavedRun,
   type ScanPointer
 } from '@core/project'
+import { collectQueries, queriesMarkdown, rulingsMarkdown } from '@core/queries'
 import type { EditorVoice } from '@core/annotate'
 import { fetchVoice, pushBook, pushImage, pushScan, pushVoice } from './shelf'
 import { loadAnnotationCheckpoint, loadRun, loadSourceFile } from './run-store'
@@ -60,6 +61,28 @@ export interface ShelfPushInput {
   scanFile: File | null
   /** Goes in the commit message, so the history reads as a log of the work. */
   what: string
+}
+
+/**
+ * The two sheets a book carries beside its file, or nothing when it has neither.
+ *
+ * Rendered here rather than stored, because both are derived: the queries come
+ * off the transcriptions and the rulings off the run, so a sheet written down
+ * would be a second copy that can disagree with the book.
+ */
+function editorialSheets(run: SavedRun): { queries?: string; rulings?: string } {
+  const raised = collectQueries(run.transcriptions)
+  const rulings = run.rulings ?? []
+  if (raised.length === 0 && rulings.length === 0) return {}
+  const title =
+    typeof run.identityAnswers?.['title'] === 'string' && run.identityAnswers['title']
+      ? (run.identityAnswers['title'] as string)
+      : run.fileName
+  const book = { title, fileName: run.fileName }
+  return {
+    ...(raised.length > 0 ? { queries: queriesMarkdown(book, raised, rulings) } : {}),
+    ...(rulings.length > 0 ? { rulings: rulingsMarkdown(book, rulings) } : {})
+  }
 }
 
 export async function pushBookToShelf(
@@ -132,7 +155,8 @@ export async function pushBookToShelf(
       complete: summary.complete,
       scanPath: scan?.path ?? null
     },
-    input.what
+    input.what,
+    editorialSheets(input.run)
   )
 
   // The editor goes up with the book, every time, on the shelf's own rails.

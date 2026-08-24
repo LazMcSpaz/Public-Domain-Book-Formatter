@@ -65,8 +65,36 @@ const CONTENTS_TITLE = /^\s*(synopsis|contents|table of contents)\b/i
  */
 const FOLIO_LINE = /^\s*page\s+([0-9ivxlc]+)\s*\.?\s*$/i
 
+/**
+ * The far commoner form: the folio at the end of the entry's own line, reached
+ * by a row of leader dots.
+ *
+ * `Chapter I. What Is the Human Aura............. 5`
+ *
+ * A contents that sets `Page 5` on a line by itself is one shape of the thing;
+ * this is the other, and the parser knew only the first — so a book set this
+ * way came back with every folio null, and `synopsisLooksSound` refused a parse
+ * that was in fact perfect. The dots are required, not optional: without them
+ * this would strip the `4` off `Chapter IV` and the year off a title ending in
+ * one.
+ */
+const TRAILING_FOLIO = /^(.*?)[.\u2026\s]{4,}\s*([0-9ivxlc]+)\s*$/i
+
 /** A number line rather than a title: "LESSON I", "CHAPTER 4", "PART TWO". */
 const NUMBER_LINE = /^\s*(lesson|chapter|part|book|section)\b[\s.]*[0-9ivxlcdm]*\s*\.?\s*$/i
+
+/**
+ * The same thing with the title after it on one line, which is how most
+ * contents pages are set: `Chapter III. The Astral Colors`.
+ *
+ * Split rather than left whole, because `label` exists for exactly this and
+ * because the body names its chapters without the number — `deriveChapters`
+ * takes the title from the last heading of a run and keeps the number as the
+ * identifier. Leaving them joined means `synopsisKey` compares
+ * `chapteriiitheastralcolors` against `theastralcolors` and every entry misses.
+ */
+const NUMBER_THEN_TITLE =
+  /^\s*((?:lesson|chapter|part|book|section)\b[\s.]*[0-9ivxlcdm]+\s*\.?)\s+(\S.*)$/i
 
 function romanToNumber(text: string): number | null {
   const plain = Number(text)
@@ -130,8 +158,23 @@ export function readSynopsis(blocks: readonly SynopsisBlock[]): SynopsisEntry[] 
       if (description.length > 0) close()
       if (!open && CONTENTS_TITLE.test(text)) continue
       open = true
-      if (NUMBER_LINE.test(text) && !label) label = text
-      else title = title ? `${title} ${text}` : text
+
+      // Leader dots and a number at the end of the line: the folio belongs to
+      // *this* entry, which is the one difference from the `Page 5` form,
+      // where it closes the entry above.
+      const trailing = TRAILING_FOLIO.exec(text)
+      const heading = trailing ? trailing[1]!.trim() : text
+      if (trailing) folio = romanToNumber(trailing[2]!)
+
+      const split = NUMBER_THEN_TITLE.exec(heading)
+      if (split && !label) {
+        label = split[1]!.trim()
+        title = title ? `${title} ${split[2]!.trim()}` : split[2]!.trim()
+      } else if (NUMBER_LINE.test(heading) && !label) {
+        label = heading
+      } else {
+        title = title ? `${title} ${heading}` : heading
+      }
       continue
     }
 

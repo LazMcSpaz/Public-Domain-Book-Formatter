@@ -8,6 +8,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   STEPS,
   activeStep,
+  parseDeepLink,
+  stepsBefore,
   appliedLook,
   defaultAnswers,
   pruneStaleAnswers,
@@ -116,7 +118,7 @@ import {
   type AdjudicatedSpot
 } from '@core/adjudicate'
 import { newSavedProfile, styleQuestions, type SavedStyleProfile } from '@core/style'
-import { type ShelfAbout } from '@core/sync'
+import { type ShelfAbout, shelfSlug } from '@core/sync'
 import {
   bodyKeyFor,
   checkpointComplete,
@@ -1317,6 +1319,16 @@ export function App(): JSX.Element {
     [startRecon]
   )
 
+  /**
+   * A link that names a book and the place a decision is waiting.
+   *
+   * Read once, at start-up, and then acted on in two halves — the book has to
+   * come down off the shelf and be read before there is anywhere to land.
+   */
+  const link = useRef(parseDeepLink(window.location.hash)).current
+  const landAt = useRef<StepId | null>(link.at)
+  const openedFromLink = useRef(false)
+
   /** What is on the shelf, listed once at start-up when one is configured. */
   useEffect(() => {
     const config = loadShelf()
@@ -1325,7 +1337,17 @@ export function App(): JSX.Element {
     void (async () => {
       try {
         const books = await readShelf(config)
-        if (live) setShelfBooks(books)
+        if (!live) return
+        setShelfBooks(books)
+        // The first half of the link: fetch the book it names. `openFromShelf`
+        // is the same path the intake button uses, so a link cannot open a
+        // book any differently from a person clicking on it.
+        if (link.slug && !openedFromLink.current) {
+          const wanted = books.find((b) => shelfSlug(b.key) === link.slug)
+          openedFromLink.current = true
+          if (wanted) void openFromShelf(wanted)
+          else setShelfNote(`This link names a book (${link.slug}) that is not on the shelf.`)
+        }
       } catch {
         // A shelf that cannot be read is not a reason to fail the intake
         // screen. The Settings panel says what is wrong, in words.
@@ -1334,6 +1356,8 @@ export function App(): JSX.Element {
     return () => {
       live = false
     }
+    // `openFromShelf` and `link` are stable for the life of the page, and
+    // `openedFromLink` makes a second run a no-op anyway.
   }, [])
 
   const onDrop = useCallback(
@@ -1552,6 +1576,32 @@ export function App(): JSX.Element {
       adjudicated: spotsFromStored(saved.adjudicated)
     })
   }, [complete, stateFromTranscriptions])
+
+  /**
+   * The second half of the link: land where the decision is.
+   *
+   * Waits for the free reading to finish and the saved transcription to be
+   * found, then adopts it and marks the steps before the landing point as
+   * walked. It does **not** answer anything — `activeStep` reads `completed`,
+   * so the app arrives exactly where it would have arrived had someone clicked
+   * through, with every outstanding question still outstanding.
+   *
+   * Fires once. After that the flow is the flow, and a person moving back and
+   * forth must not be dragged forward again by a link they followed an hour
+   * ago.
+   */
+  useEffect(() => {
+    const at = landAt.current
+    if (!at || !state.savedRun || state.completed.length === 0) return
+    landAt.current = null
+    void (async () => {
+      await useSavedRun()
+      setState((s) => ({
+        ...s,
+        completed: [...new Set([...s.completed, ...stepsBefore(at)])]
+      }))
+    })()
+  }, [state.savedRun, state.completed.length, useSavedRun])
 
   /**
    * Keep a finished run, and say so if it could not be kept.

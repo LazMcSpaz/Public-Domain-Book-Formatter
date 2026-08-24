@@ -20,7 +20,8 @@ import {
   readSynopsis,
   synopsisKey,
   synopsisLooksSound,
-  type PageRole
+  type PageRole,
+  type SynopsisEntry
 } from '@core/pages'
 import {
   shiftEmphasis,
@@ -230,6 +231,21 @@ export interface BookDocument {
   sections: BookSection[]
   /** Pages deliberately not transcribed, and why. */
   skipped: { pageIndex: number; role: PageRole; reason: string }[]
+  /**
+   * Descriptions read off the original contents that no chapter claimed.
+   *
+   * The footnote rule applied to the other restoration that can fail. An
+   * analytical contents is editorial work — a paragraph per chapter, written by
+   * whoever made the book — and matching it to the body is where it can go
+   * wrong: the contents of *The Human Aura* calls chapter V "The Aura
+   * Kaleidoscope" while the chapter itself is headed "THE AURIC KALEIDOSCOPE",
+   * and three descriptions fell on the floor for differences of that kind.
+   *
+   * Silence there is the worst outcome available: the contents still prints,
+   * only plainer, so nothing looks broken and the prose was read and thrown
+   * away. Reported, never dropped.
+   */
+  synopsesUnmatched: { title: string; label: string; synopsis: string }[]
 }
 
 /** A hyphen at the end of a block that continues — a word split by the page break. */
@@ -506,13 +522,38 @@ export function assembleBook(
     .filter((page) => page.role === 'table-of-contents')
     .flatMap((page) => page.blocks.map((b) => ({ kind: b.kind, text: b.text })))
   const synopses = readSynopsis(contentsBlocks)
+  const synopsesUnmatched: BookDocument['synopsesUnmatched'] = []
   if (synopsisLooksSound(synopses)) {
-    const byTitle = new Map(
-      synopses.filter((e) => e.synopsis.length > 0).map((e) => [synopsisKey(e.title), e.synopsis])
-    )
+    const described = synopses.filter((e) => e.synopsis.length > 0)
+    const byTitle = new Map(described.map((e) => [synopsisKey(e.title), e]))
+    // The chapter *number*, as a second way in. A book can call a chapter two
+    // things — *The Human Aura* lists "The Aura Kaleidoscope" in its contents
+    // and heads the chapter "THE AURIC KALEIDOSCOPE" — and three of its ten
+    // descriptions fell on the floor for differences of that kind. The number
+    // is the one name both pages agree on, and matching on it is exact rather
+    // than fuzzy: `Chapter V.` and `CHAPTER V.` key the same, and `Chapter IV`
+    // does not key to `Chapter V`.
+    //
+    // Titles first, because a book that repeats a number — a second series
+    // starting again at I — would have two entries under it, and a title that
+    // matches is unambiguous where a number might not be.
+    const byLabel = new Map(described.filter((e) => e.label).map((e) => [synopsisKey(e.label), e]))
+    const claimed = new Set<SynopsisEntry>()
     for (const chapter of chapters) {
-      const found = byTitle.get(synopsisKey(chapter.title))
-      if (found) chapter.synopsis = found
+      const found =
+        byTitle.get(synopsisKey(chapter.title)) ??
+        (chapter.label ? byLabel.get(synopsisKey(chapter.label)) : undefined)
+      if (!found || claimed.has(found)) continue
+      chapter.synopsis = found.synopsis
+      claimed.add(found)
+    }
+    for (const entry of described) {
+      if (claimed.has(entry)) continue
+      synopsesUnmatched.push({
+        title: entry.title,
+        label: entry.label,
+        synopsis: entry.synopsis
+      })
     }
   }
 
@@ -522,7 +563,16 @@ export function assembleBook(
   illustrations.sort((a, b) => a.pageIndex - b.pageIndex || a.id.localeCompare(b.id))
 
   // Nothing the scan contains is a section: they are written, never read.
-  return { blocks, footnotes, chapters, asides, illustrations, sections: [], skipped }
+  return {
+    blocks,
+    footnotes,
+    chapters,
+    asides,
+    illustrations,
+    sections: [],
+    skipped,
+    synopsesUnmatched
+  }
 }
 
 /**

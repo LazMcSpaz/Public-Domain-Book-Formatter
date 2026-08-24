@@ -14,6 +14,9 @@
  *
  * ## What it will and will not say
  *
+ * Every check here is chosen for **precision over recall**, and the numbers
+ * behind each threshold were measured on finished books rather than chosen.
+ *
  * Every check here is chosen for **precision over recall**. A check that fires
  * on the author's own 1916 style is worse than one that stays quiet, because a
  * list nobody trusts is a list nobody reads — and the reprint's whole promise
@@ -25,10 +28,16 @@
  * Pure: no DOM, no I/O, no network.
  */
 import type { BookBlock, BookDocument } from '@core/assemble'
+import { isCommonWord } from '@core/lexicon'
 
 /** What kind of disagreement was found. */
 export type ConsistencyKind =
-  'name-variant' | 'doubled-word' | 'doubled-phrase' | 'unclosed-quote' | 'missing-chapter'
+  | 'name-variant'
+  | 'stray-spelling'
+  | 'doubled-word'
+  | 'doubled-phrase'
+  | 'unclosed-quote'
+  | 'missing-chapter'
 
 export interface ConsistencyFinding {
   kind: ConsistencyKind
@@ -289,6 +298,166 @@ function nameVariants(blocks: readonly BookBlock[]): ConsistencyFinding[] {
 }
 
 /**
+ * How often a word must appear before it counts as this book's own spelling.
+ *
+ * Four, and measured. At eight this returned six findings on *Clairvoyance*, of
+ * which five were real. At four it returns nineteen, of which about fourteen
+ * are — `monsier` for `monsieur`, `leaning` for `learning`, `deign` for
+ * `design`, `union` for `unison`, `hundrds`, `arrivd`, `discoverd`. Doubling
+ * the list roughly trebled what it caught, and nineteen rows on a 328-leaf book
+ * is a minute's reading.
+ *
+ * Below four it would meet `ESTABLISHED_USES`, where the name check's own note
+ * says ordinary English starts colliding, and the floor stops being a floor.
+ *
+ * The cost of any floor is honest: a short book may have no settled spelling to
+ * measure a stray against. *The Human Aura* is 88 leaves and prints
+ * `radio-active` three times, so its own `radioative` — a real slip, found by a
+ * second transcription — is invisible here. This check wants a long book.
+ */
+const SETTLED_USES = 4
+
+/** Below this a word has too many neighbours for one edit to mean anything. */
+const MIN_STRAY_LENGTH = 5
+
+/**
+ * A word the book uses **once** that is one slip away from a word it uses often.
+ *
+ * The one check here that would have caught, with no second transcription and
+ * no model, most of what a second transcription actually caught: `belleves` for
+ * `believes`, `snbstance` for `substance`, `tlairvoyant` for `clairvoyant`,
+ * `gresn` for `green`, `adtral` for `astral`, `physicgl` for `physical`,
+ * `radioative` for `radio-active`, `perscription` for `prescription`. Every one
+ * of them is a hapax sitting one edit from a word the same book prints dozens
+ * of times.
+ *
+ * It needs no dictionary, which is what makes it usable on a book nobody else
+ * has transcribed: **the book's own vocabulary is the dictionary**. That is the
+ * same trick Gate 1's term review runs on, turned on the finished text.
+ *
+ * ## Kept quiet on purpose
+ *
+ * Four guards, and each one was needed:
+ *
+ * - **The stray appears once.** Twice is a spelling the book has, not a slip.
+ * - **A transposition counts as one slip**, because a compositor reaching into
+ *   the wrong box produces `perscription` and Levenshtein calls that two.
+ * - **A difference in the last position is ignored.** That is where plurals and
+ *   tenses live — `aura`/`auras`, `believe`/`believed` — and every one of them
+ *   would otherwise be a finding.
+ * - **An ordinary English word is never a stray.** A book may use `wove` once
+ *   and `wave` often, and neither is an error. `isCommonWord` only ever makes
+ *   this quieter, which is why a stop list is allowed here where a dictionary
+ *   of real words would not be: it cannot invent a finding, only withdraw one.
+ */
+function straySpellings(blocks: readonly BookBlock[]): ConsistencyFinding[] {
+  const uses = new Map<string, { block: BookBlock; at: number }[]>()
+  for (const block of blocks) {
+    if (block.kind === 'table') continue
+    const text = plain(block)
+    for (const m of text.matchAll(WORD)) {
+      const word = m[0].toLowerCase().replace(/[’']/gu, "'")
+      if (!uses.has(word)) uses.set(word, [])
+      uses.get(word)!.push({ block, at: m.index ?? 0 })
+    }
+  }
+
+  const settled = [...uses.entries()].filter(([w, u]) => u.length >= SETTLED_USES && w.length >= 3)
+  const findings: ConsistencyFinding[] = []
+
+  for (const [stray, where] of uses) {
+    if (where.length !== 1) continue
+    if (stray.length < MIN_STRAY_LENGTH) continue
+    if (isCommonWord(stray)) continue
+
+    for (const [common, commonUses] of settled) {
+      if (common === stray) continue
+      if (!oneSlipApart(stray, common)) continue
+      const use = where[0]!
+      findings.push({
+        kind: 'stray-spelling',
+        blockId: use.block.id,
+        pages: [...use.block.sourcePages],
+        found: stray,
+        against: `${common} (${commonUses.length} uses against 1)`,
+        context: around(plain(use.block), use.at, stray.length)
+      })
+      break
+    }
+  }
+  return findings
+}
+
+/**
+ * One slip apart: a **dropped or added letter**, or a transposition of
+ * neighbours — and never at the final letter.
+ *
+ * ## Why substitutions are excluded, which was measured
+ *
+ * Allowing one substitution returned 129 findings on *Clairvoyance* and not one
+ * of them was real: `winds` against `minds`, `crass` against `class`, `smart`
+ * against `start`, `sneer` against `seer`, `chose` against `those`, `coarse`
+ * against `course`. Changing one letter of an English word very often produces
+ * another English word, and with no dictionary there is nothing here that can
+ * tell those apart from `gresn` for `green`.
+ *
+ * Dropping or adding one rarely does. That asymmetry is the whole of this
+ * check: `hundrds`, `developd`, `arrivd`, `discoverd`, `conciously` are all
+ * dropped letters, and all five were real slips in a real book.
+ *
+ * What that gives up is honest and worth stating: `tlairvoyant` for
+ * `clairvoyant` and `snbstance` for `substance` are substitutions, and this
+ * will never see them. Those are what a *second reader* is for — two engines
+ * reading the same ink do not make the same substitution — and the two checks
+ * divide the work between them rather than overlapping.
+ *
+ * The last position is excluded because that is where English keeps its plurals
+ * and its tenses, and a check that reported `aura` against `auras` would report
+ * a hundred of them.
+ */
+function oneSlipApart(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false
+
+  if (a.length === b.length) {
+    // A transposition of two neighbours: Levenshtein scores it 2, and it is the
+    // commonest thing a compositor does with a pair of adjacent sorts.
+    const differs = []
+    for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) differs.push(i)
+    if (differs.length !== 2 || differs[1] !== differs[0]! + 1) return false
+    const [i, j] = differs as [number, number]
+    if (a[i] !== b[j] || a[j] !== b[i]) return false
+    // Only the very first pair is excluded: `raising` for `arising` swaps the
+    // opening two letters and is an ordinary word. One in from there,
+    // `perscription` for `prescription` is a compositor reaching into the
+    // wrong box, and a swap that deep almost never makes another word.
+    return i >= 1 && j < a.length - 1
+  }
+
+  // A **dropped** letter, and only that: the stray must be the shorter word.
+  // An added one is not symmetrical with it, because a letter added at the
+  // front of an English word so often makes another English word — `sever`,
+  // `beach`, `lover`, `treason`, `strain`, `prays`, `swords` and `mothers`
+  // were all findings of that kind, and every one of them was wrong.
+  if (a.length > b.length) return false
+  let i = 0
+  while (i < a.length && a[i] === b[i]) i++
+  let j = 0
+  while (j < a.length - i && a[a.length - 1 - j] === b[b.length - 1 - j]) j++
+  if (i + j < a.length) return false
+  // Not in the first couple of letters, where `lanes` for `planes` and `bought`
+  // for `brought` live, and not at the very end, where the plurals do.
+  return i >= GAP_FROM_FRONT && i < a.length
+}
+
+/**
+ * How far into a word a dropped letter must fall to be damage.
+ *
+ * A letter missing from the front is usually a different word rather than a
+ * damaged one. Inside the word it is nearly always damage.
+ */
+const GAP_FROM_FRONT = 2
+
+/**
  * A word printed twice in a row.
  *
  * Very high precision and the classic artefact of a page seam or a line the
@@ -452,6 +621,7 @@ export function checkConsistency(doc: BookDocument): ConsistencyFinding[] {
   const order = new Map(blocks.map((b, i) => [b.id, i]))
   return [
     ...nameVariants(blocks),
+    ...straySpellings(blocks),
     ...doubledWords(blocks),
     ...doubledPhrases(blocks),
     ...unclosedQuotes(blocks),

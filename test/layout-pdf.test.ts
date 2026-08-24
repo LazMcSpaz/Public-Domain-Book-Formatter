@@ -131,7 +131,8 @@ const DOCUMENT: BookDocument = {
   asides: [],
   illustrations: [],
   sections: [],
-  skipped: []
+  skipped: [],
+  synopsesUnmatched: []
 }
 
 async function build(trimSize = '6x9', bodyFont?: string) {

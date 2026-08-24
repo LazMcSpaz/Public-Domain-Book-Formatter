@@ -24,6 +24,7 @@
 import type { BookDocument } from '@core/assemble'
 import { callModel, type ApiUsage, type ClientConfig } from '@core/transcribe'
 import type { BookFacts } from '@core/harvest'
+import { toMention, type Ruling } from '@core/queries'
 import { outsideClaims } from './schema'
 import { voiceBlock, type EditorVoice } from './voice'
 
@@ -96,6 +97,51 @@ export interface IntroductionOptions {
   length?: IntroductionLength
   /** Anything the user wants said — a theme to draw out, a reason for the edition. */
   brief?: string
+  /**
+   * What this edition decided about its copy-text, so the introduction can end
+   * with a note on the text.
+   *
+   * Only the rulings the editor marked `mention` reach the prompt, and they
+   * reach it as **material rather than sentences**: what was kept and what was
+   * set right, in that order. A reprint that silently mends its original is not
+   * being faithful, and one that silently keeps an obvious error looks
+   * careless; either way the fix is to say so once, and the surest way to say
+   * it once is for the writer to be handed it rather than to remember it.
+   */
+  rulings?: readonly Ruling[]
+}
+
+/**
+ * The note on the text, as material for the writer.
+ *
+ * Kept things first, then corrections — the order such a note reads best in,
+ * because the first is what the reader will see on the page and the second is
+ * what they will not.
+ */
+export function noteOnTheText(rulings: readonly Ruling[]): string[] {
+  const { kept, corrected } = toMention(rulings)
+  if (kept.length === 0 && corrected.length === 0) return []
+
+  const lines: string[] = [
+    ``,
+    `A NOTE ON THE TEXT. End the introduction with a short note — two or three`,
+    `sentences, no heading of its own — saying what this edition did to its`,
+    `copy-text. State it plainly and without apology: a reprint that silently`,
+    `mends its original is not being faithful, and one that silently keeps an`,
+    `obvious error looks careless. Do not list the individual places.`
+  ]
+  if (kept.length > 0) {
+    lines.push(``, `Kept as the original printed it:`)
+    for (const r of kept) lines.push(`- ${r.quote}${r.because ? ` — ${r.because}` : ''}`)
+  }
+  if (corrected.length > 0) {
+    lines.push(``, `Set right, being plain errors of the setting rather than the author's:`)
+    for (const r of corrected) {
+      lines.push(`- “${r.quote}”, which now reads “${r.correction ?? ''}”`)
+    }
+    lines.push(``, `Say that such slips were corrected, and how many; do not name them.`)
+  }
+  return lines
 }
 
 /** The instruction. Exported so a test can read it without a network. */
@@ -147,6 +193,8 @@ export function buildIntroductionPrompt(
   if (options.brief?.trim()) {
     parts.push(``, `The editor wants this introduction to:`, options.brief.trim())
   }
+
+  parts.push(...noteOnTheText(options.rulings ?? []))
 
   const samples = sampleBook(doc)
   if (samples.length > 0) {
