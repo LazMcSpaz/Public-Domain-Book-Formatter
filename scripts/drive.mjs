@@ -787,17 +787,23 @@ async function serve() {
         .map(Number)
         .filter((v) => Number.isFinite(v))
       const url = await page.evaluate(
-        async ([repo, index, atDpi, window]) => {
+        // `crop`, never `window`: naming this parameter `window` shadowed the
+        // global inside the callback, so the moment every verb started
+        // resolving its book through `window.__pdbfPickBook` this one called it
+        // on the crop-box array instead and threw for every invocation, cropped
+        // or not — taking `crops`, and with it the whole adjudication path,
+        // down beside it.
+        async ([repo, index, atDpi, crop]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const pdf = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
           const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           const file = await runStore.loadSourceFile(newest.key)
           if (!file) throw new Error('The scan is not stored on this device.')
-          if (window.length !== 4) return pdf.renderPageToObjectUrl(file, index, atDpi)
+          if (crop.length !== 4) return pdf.renderPageToObjectUrl(file, index, atDpi)
           const doc = await pdf.openPdf(file)
           const rendered = await pdf.renderPage(doc, index, atDpi)
-          const [fx, fy, fw, fh] = window
+          const [fx, fy, fw, fh] = crop
           const cut = document.createElement('canvas')
           cut.width = Math.round(rendered.canvas.width * fw)
           cut.height = Math.round(rendered.canvas.height * fh)
