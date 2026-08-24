@@ -82,6 +82,45 @@ async function serve() {
   const browser = context
   const page = context.pages()[0] ?? (await context.newPage())
 
+  /**
+   * Which book a verb means, decided in one place.
+   *
+   * Before this, three different answers were in use at once. `open` handed a
+   * scan to the app; `leaf`, `draft`, `ocr` and `sheet` rendered from the
+   * *stored* scan of whatever run was saved most recently; `transcribe` keyed
+   * off the path on the command line. So a session could open one book, read a
+   * second book's pixels, and file the result under a third — and it did, for
+   * an afternoon, with nothing in any report saying so, because no verb named
+   * the book its pixels came from.
+   *
+   * `window.__pdbfBook` is the current book's key, set by `open`, `load` and
+   * `use`. When it is set, every verb uses it. When it is not, a single stored
+   * book is taken as obvious and **anything more is refused by name** rather
+   * than guessed at: picking the newest is what caused the fault, and a driver
+   * that cannot tell which book it means should say so.
+   *
+   * Installed with `addInitScript` so it survives navigation, which the bridge
+   * tests do routinely.
+   */
+  await page.addInitScript(() => {
+    window.__pdbfPickBook = async (runStore) => {
+      const wanted = window.__pdbfBook ?? null
+      if (wanted) {
+        const summary = await runStore.loadRunSummary(wanted)
+        return summary ?? { key: wanted, fileName: wanted.split('\u0000')[0] }
+      }
+      const runs = await runStore.listRuns()
+      if (runs.length > 1) {
+        throw new Error(
+          'More than one book is stored here and none is current, so this verb ' +
+            'cannot tell which you mean. Run `use <scan.pdf>` first.\n' +
+            runs.map((r) => `  ${r.fileName}`).join('\n')
+        )
+      }
+      return runs[0]
+    }
+  })
+
   /** Kept rather than printed: a controller asks for them when something looks wrong. */
   const errors = []
   page.on('pageerror', (e) => errors.push(e.message))
@@ -193,6 +232,93 @@ async function serve() {
     },
 
     /** Load a book. The 8-page fixture unless another path is named. */
+    /**
+     * Make a book current, and store its scan so the pixel verbs can reach it.
+     *
+     * Both halves matter. Without the first, verbs guess; without the second,
+     * `open` leaves the app holding a scan that nothing else can render from,
+     * so `leaf` falls back to some other book's stored file — which is the
+     * fault this whole change exists to remove.
+     *
+     * The scan is sent only when it is not already there: it is tens of
+     * megabytes of base64 across the wire, and reopening the same book to
+     * answer one more question should not pay for it twice.
+     */
+    _adopt: async (path) => {
+      const full = resolve(REPO, path)
+      const { readFile, stat } = await import('node:fs/promises')
+      const meta = await stat(full)
+      const file = {
+        name: full.split('/').pop(),
+        size: meta.size,
+        lastModified: Math.floor(meta.mtimeMs)
+      }
+      const key = [file.name, file.size, file.lastModified].join('\u0000')
+
+      const held = await page.evaluate(
+        async ([repo, k]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          window.__pdbfBook = k
+          return Boolean(await runStore.loadSourceFile(k))
+        },
+        [REPO, key]
+      )
+      if (!held) {
+        const bytes = await readFile(full)
+        await page.evaluate(
+          async ([repo, f, base64]) => {
+            const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+            const raw = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+            await runStore.saveSourceFile(
+              [f.name, f.size, f.lastModified].join('\u0000'),
+              new File([raw], f.name, { type: 'application/pdf' })
+            )
+          },
+          [REPO, file, bytes.toString('base64')]
+        )
+      }
+      return { file, key, scanStored: true }
+    },
+
+    /**
+     * Say which book every later verb means.
+     *
+     * The escape hatch for a device holding several books, and the thing the
+     * resolver names when it refuses to guess.
+     */
+    use: async ([path]) => {
+      if (!path) throw new Error('use <scan.pdf>')
+      const adopted = await handlers._adopt(path)
+      return { using: adopted.file.name, key: adopted.key }
+    },
+
+    /**
+     * Which book is current, and what else is stored here.
+     *
+     * `book clear` forgets the current one, which puts the resolver back to
+     * refusing rather than guessing whenever more than one book is stored. Not
+     * only for tests: a session moving between books is safer being made to say
+     * which than being handed whichever was saved last.
+     */
+    book: async ([action]) => {
+      return page.evaluate(
+        async ([repo, clear]) => {
+          if (clear === 'clear') window.__pdbfBook = null
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const wanted = window.__pdbfBook ?? null
+          const runs = await runStore.listRuns()
+          return {
+            current: wanted
+              ? (runs.find((r) => r.key === wanted)?.fileName ?? wanted.split('\u0000')[0])
+              : null,
+            scanStored: wanted ? Boolean(await runStore.loadSourceFile(wanted)) : false,
+            stored: runs.map((r) => r.fileName)
+          }
+        },
+        [REPO, action ?? '']
+      )
+    },
+
     open: async ([path = 'public/test-book.pdf']) => {
       // The *path*, never a buffer. A run key is name\0size\0modified, and
       // Playwright only preserves the file's real modification time when it is
@@ -203,7 +329,10 @@ async function serve() {
       const { stat } = await import('node:fs/promises')
       const meta = await stat(full)
       await page.setInputFiles('input[type=file]', full)
-      return { opened: full.split('/').pop(), bytes: meta.size }
+      // Current from here on, and its scan stored, so no later verb has to
+      // guess which book it means or fall back to another one's pixels.
+      const adopted = await handlers._adopt(path)
+      return { opened: adopted.file.name, bytes: meta.size, current: adopted.file.name }
     },
 
     /**
@@ -232,7 +361,10 @@ async function serve() {
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const key = project.fileKey(file)
-          await runStore.deleteRun(key)
+          // No `deleteRun` first: `saveRun` does a `put` on a keyed store,
+          // which replaces. The delete bought nothing and turned "the save
+          // failed, you still have what was there" into "the save failed and
+          // there is nothing left".
           const saved = await runStore.saveRun(
             project.createSavedRun({
               key,
@@ -341,6 +473,7 @@ async function serve() {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const book = project.parseBookFile(text)
           const key = project.fileKey(file)
+          const held = await runStore.loadRun(key)
           const fetched = pictures.map((p) => ({
             id: p.id,
             bytes: Uint8Array.from(atob(p.base64), (c) => c.charCodeAt(0))
@@ -351,7 +484,25 @@ async function serve() {
             fileName: file.name,
             images: [...book.run.images, ...fetched]
           }
-          await runStore.deleteRun(key)
+          // What this book is about to displace, counted before it does.
+          //
+          // `transcribe` never pushes to the shelf — `save` is a separate verb
+          // — so a session that lands eight batches and dies before saving has
+          // all of them sitting here and nowhere else. Loading the shelf's copy
+          // over the top is how that work disappears, and it used to happen in
+          // silence: `load` reported only the incoming book.
+          //
+          // And no `deleteRun` first. `saveRun` puts on a keyed store, which
+          // replaces; the delete bought nothing and opened a window in which
+          // the old run was gone and the new one had not landed.
+          const displaced = held
+            ? {
+                leaves: held.transcriptions.length,
+                edits: held.edits.length,
+                images: held.images.length,
+                complete: held.complete
+              }
+            : null
           const saved = await runStore.saveRun(run)
           // The gate answers travel with the book — they are what the user
           // already decided, and re-asking them would be the app forgetting.
@@ -365,7 +516,10 @@ async function serve() {
             edits: run.edits.length,
             images: run.images.length,
             complete: run.complete,
-            savedAt: book.savedAt
+            savedAt: book.savedAt,
+            // Named, never silent. A session is entitled to know that loading
+            // the shelf's copy has just replaced work this device held.
+            ...(displaced ? { displaced } : {})
           }
         },
         [REPO, json, { name, size: meta.size, lastModified: Math.floor(meta.mtimeMs) }, pictures]
@@ -636,8 +790,7 @@ async function serve() {
         async ([repo, index, atDpi, window]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const pdf = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           const file = await runStore.loadSourceFile(newest.key)
           if (!file) throw new Error('The scan is not stored on this device.')
@@ -733,8 +886,7 @@ async function serve() {
           const wizard = await import(`/@fs${repo}/src/core/wizard/index.ts`)
           const interior = await import(`/@fs${repo}/src/platform/browser/interior.ts`)
 
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           const run = await runStore.loadRun(newest.key)
           const doc = editsMod.applyEdits(
             assemble.assembleBook(run.transcriptions),
@@ -1067,8 +1219,7 @@ async function serve() {
           const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
           const coherence = await import(`/@fs${repo}/src/core/coherence/index.ts`)
           const quotes = await import(`/@fs${repo}/src/core/layout/index.ts`)
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           const run = await runStore.loadRun(newest.key)
           const doc = editsMod.applyEdits(
@@ -1109,8 +1260,7 @@ async function serve() {
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
           const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
           const coherence = await import(`/@fs${repo}/src/core/coherence/index.ts`)
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           const run = await runStore.loadRun(newest.key)
           const doc = editsMod.applyEdits(
@@ -1156,8 +1306,7 @@ async function serve() {
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
           const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
           const coherence = await import(`/@fs${repo}/src/core/coherence/index.ts`)
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           const run = await runStore.loadRun(newest.key)
           const doc = editsMod.applyEdits(
             assemble.assembleBook(run.transcriptions),
@@ -1231,8 +1380,7 @@ async function serve() {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
           const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           const run = await runStore.loadRun(newest.key)
           const doc = editsMod.applyEdits(
             assemble.assembleBook(run.transcriptions),
@@ -1335,8 +1483,7 @@ async function serve() {
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
           const edits = await import(`/@fs${repo}/src/core/edits/index.ts`)
           const markup = await import(`/@fs${repo}/src/core/transcribe/index.ts`)
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           const run = await runStore.loadRun(newest.key)
           const bare = assemble.assembleBook(run.transcriptions)
@@ -1395,8 +1542,7 @@ async function serve() {
           const ocrMod = await import(`/@fs${repo}/src/platform/browser/ocr.ts`)
           const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
           const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           const file = await runStore.loadSourceFile(newest.key)
           if (!file) throw new Error('The scan is not stored on this device.')
@@ -1462,8 +1608,7 @@ async function serve() {
           const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
           const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
           const draftMod = await import(`/@fs${repo}/src/core/draft/index.ts`)
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           // The cache first, because it is instant and because it is the
           // same reading every crop and word box on this device was built
@@ -1565,8 +1710,7 @@ async function serve() {
           const crops = await import(`/@fs${repo}/src/platform/browser/word-crops.ts`)
           const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
 
-          const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           const file = await runStore.loadSourceFile(newest.key)
           // `maxPages: null` is "the whole book" — the same shape the app
           // asks with. A record written for a partial reading is deliberately
@@ -1678,8 +1822,10 @@ async function serve() {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
           const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          // `diag` is the one verb that legitimately wants every run rather
+          // than the current one — it exists to say what is on the device.
           const runs = await runStore.listRuns()
-          const newest = runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          const newest = await window.__pdbfPickBook(runStore)
           const whole = newest
             ? await cacheMod.loadReconCache(newest.key, { dpi: recon.RECON_DPI, maxPages: null })
             : null
@@ -1791,7 +1937,9 @@ async function serve() {
             res.writeHead(400, { 'Content-Type': 'application/json' })
             res.end(
               JSON.stringify({
-                error: `No such verb “${verb}”. Try: ${Object.keys(handlers).join(', ')}`
+                error: `No such verb “${verb}”. Try: ${Object.keys(handlers)
+                  .filter((v) => !v.startsWith('_'))
+                  .join(', ')}`
               })
             )
             return

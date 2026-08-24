@@ -246,6 +246,8 @@ node scripts/drive.mjs transcribe <scan.pdf> b.json   # land a checked batch; me
 node scripts/drive.mjs sheet typos 28:occulist   # words cut from the leaves they sit on
 node scripts/drive.mjs leaf 133      # any leaf, rendered
 node scripts/drive.mjs leaf 133 tight 600 0.3,0.24,0.2,0.03   # a crop of it, at any DPI
+node scripts/drive.mjs use <scan.pdf> # which book every later verb means
+node scripts/drive.mjs book          # what that is now; `book clear` forgets it
 node scripts/drive.mjs runs          # readings held here; `runs drop <n>` removes one
 node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` work it
 ```
