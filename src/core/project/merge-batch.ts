@@ -93,7 +93,16 @@ export interface MergeReport {
   transcribed: number
   /** The book's length, or null when nobody knows. */
   pageCount: number | null
-  /** The highest leaf read, which is a floor on the book's length. */
+  /**
+   * The highest leaf index read — a floor on the book's length, which is
+   * therefore `highestLeaf + 1` leaves at least.
+   *
+   * An index, as its name says, and as every other leaf number in this report
+   * and in the errors beside it is. It used to be the count while being named
+   * and documented as the index, so landing leaves 0 and 7 told the session
+   * `highestLeaf: 8` in a report whose sibling error insists leaves are
+   * counted from 0.
+   */
   highestLeaf: number
   /** Null when the leaf count is unknown — never 0, which reads as "none left". */
   stillMissing: number | null
@@ -169,7 +178,7 @@ export function mergeBatchIntoRun(input: MergeBatchInput): MergeBatchResult {
   for (const page of parsed) byIndex.set(page.pageIndex, page)
   const transcriptions = [...byIndex.values()].sort((a, b) => a.pageIndex - b.pageIndex)
 
-  const highestLeaf = transcriptions.reduce((n, t) => Math.max(n, t.pageIndex), -1) + 1
+  const highestLeaf = transcriptions.reduce((n, t) => Math.max(n, t.pageIndex), -1)
   const known = pageCount > 0
   const missing: number[] = []
   for (let i = 0; i < pageCount; i++) if (!byIndex.has(i)) missing.push(i)

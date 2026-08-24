@@ -106,40 +106,36 @@ function ordinaryWords(words: readonly DraftWord[]): Set<string> {
   return keep
 }
 
-/** Whether `part` appears in `whole` in order, gaps allowed. */
+/**
+ * Where `part` stops appearing in `whole` in order, or -1 when it never does.
+ *
+ * Returns the index **in `part`** at which the match failed. It used to return
+ * `part.indexOf(word)` — the first occurrence of that *text* — so a scramble of
+ * the three hundredth `the` was reported as "word 2 of the draft", pointing a
+ * reader at the wrong end of the page.
+ */
 function isSubsequence(part: readonly string[], whole: readonly string[]): number {
   let at = 0
-  for (const word of part) {
-    const found = whole.indexOf(word, at)
-    if (found === -1) return part.indexOf(word)
+  for (let i = 0; i < part.length; i++) {
+    const found = whole.indexOf(part[i]!, at)
+    if (found === -1) return i
     at = found + 1
   }
   return -1
 }
 
 /**
- * Leaves where the scramble is known to happen, recorded as fact.
+ * There is no known-failing list any more.
  *
- * Marked `it.fails` rather than skipped, so the suite stays green while the
- * defect stays visible and — this is the point — **the day it is fixed this
- * entry starts failing**, which is what forces it to be removed rather than
- * quietly outliving the bug. A skipped test would rot; this cannot.
- *
- * `tight-clairvoyance` leaf 7: Tesseract splits `beyond` into `beyon` and a
- * fragment it reads as `:`, whose box is tall enough to open a band spanning
- * two lines. The fragment then surfaces between `beyon` and `doubt`. Fixing
- * this is the definition of done for the line-clustering rework.
+ * There was one, holding `tight-scramble` leaf 7 as `it.fails` while the
+ * scramble stood. The rework closed it, and the entry went with it rather than
+ * being left behind as an empty object under a comment describing a fixture it
+ * no longer named — which is what it had become.
  */
-const KNOWN_SCRAMBLE: Record<string, readonly number[]> = {}
-
-const scrambles = (name: string, pageIndex: number): boolean =>
-  (KNOWN_SCRAMBLE[name] ?? []).includes(pageIndex)
-
 describe('the draft preserves the order the page was read in', () => {
   for (const { name, fixture } of fixtures) {
     for (const leaf of fixture.leaves) {
-      const test = scrambles(name, leaf.pageIndex) ? it.fails : it
-      test(`${name} leaf ${leaf.pageIndex} — ${leaf.words.length} words`, () => {
+      it(`${name} leaf ${leaf.pageIndex} — ${leaf.words.length} words`, () => {
         const words = toWords(leaf.words)
         const drafted = draftPage(words)
         const ordinary = ordinaryWords(words)

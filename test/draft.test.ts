@@ -186,6 +186,14 @@ describe('drafting a page into blocks', () => {
     expect(page.role).toBe('blank')
     expect(page.blocks).toEqual([])
   })
+
+  /**
+   * A leaf nothing read looks exactly like a blank one from here, and a draft
+   * that returns silence is a draft that cannot say it guessed.
+   */
+  it('still says it is guessing when there are no words at all', () => {
+    expect(draftPage([]).structural.join(' ')).toMatch(/nothing read it/)
+  })
 })
 
 describe('guessing what the leaf is', () => {

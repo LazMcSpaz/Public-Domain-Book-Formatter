@@ -53,6 +53,61 @@ describe('nothing on the held run can be forgotten', () => {
     expect(fields).toEqual(accounted)
   })
 
+  /**
+   * The runtime check above reads `Object.keys` of a built run, so an
+   * **optional** field added to `SavedRun` and to `migrateSavedRun` — which
+   * builds its own object literal — but not to `createSavedRun` would never
+   * appear in it, and would be dropped on every batch in silence. That is
+   * exactly how `images` was lost.
+   *
+   * This one is a compile error instead, driven by the type rather than by an
+   * instance. It does not run; it either builds or it does not.
+   */
+  it('accounts for every field the SavedRun *type* has', () => {
+    type Accounted = (typeof CARRIED_FIELDS)[number] | (typeof DECIDED_FIELDS)[number]
+    type Unaccounted = Exclude<keyof SavedRun, Accounted>
+    const everyFieldIsAccountedFor: Unaccounted extends never ? true : Unaccounted = true
+    expect(everyFieldIsAccountedFor).toBe(true)
+  })
+
+  /**
+   * And this one proves the fields are actually *carried*, not merely named.
+   *
+   * Naming a field in `CARRIED_FIELDS` was enough to satisfy the check above,
+   * while `MergeBatchResult['init']` is hand-written — so a field could be
+   * listed and never read off `held`, and the suite stayed green. Four of the
+   * eight were in that state: replacing `held?.facts ?? []` with `[]` broke
+   * nothing. This walks the list itself, so a name added without the carrying
+   * fails here.
+   */
+  it('carries every field it says it carries', () => {
+    const held = run({
+      failures: [{ pageIndex: 3, message: 'the leaf would not render' }],
+      identityAnswers: { title: 'A Book', author: 'Somebody' },
+      edits: [{ kind: 'text', blockId: 'p0b0', text: 'corrected' }],
+      images: new Map([['plate-1', new Uint8Array([9, 8, 7])]]),
+      adjudicated: { 'p1 spot': { verdict: 'as-printed', reading: 'belleves', note: '' } },
+      facts: [{ id: 'f1', sourcePage: 4 } as unknown as SavedRun['facts'][number]]
+    })
+    const { init } = merge({ held, parsed: [leaf(9)], pageCount: 300 })
+
+    // `images` is a Map on the way in and an array on the way out; everything
+    // else compares as it stands.
+    const flat = (value: unknown): unknown =>
+      value instanceof Map
+        ? [...value.entries()]
+        : Array.isArray(value) && value.every((v) => v && typeof v === 'object' && 'bytes' in v)
+          ? (value as { id: string; bytes: Uint8Array }[]).map((i) => [i.id, i.bytes])
+          : value
+
+    for (const field of CARRIED_FIELDS) {
+      expect(
+        flat((init as unknown as Record<string, unknown>)[field]),
+        `CARRIED_FIELDS names "${field}" but the merge does not carry it`
+      ).toEqual(flat((held as unknown as Record<string, unknown>)[field]))
+    }
+  })
+
   it('carries the supplied pictures across a merge', () => {
     const held = run({ images: new Map([['plate-1', new Uint8Array([1, 2, 3])]]) })
     const { init } = merge({ held, parsed: [leaf(5)], pageCount: 300 })
@@ -116,7 +171,8 @@ describe('a guessed leaf count is never stored', () => {
     const { init, report } = merge({ parsed: [leaf(0), leaf(7)], pageCount: 0 })
     expect(init.pageCount).toBe(0)
     expect(report.pageCount).toBeNull()
-    expect(report.highestLeaf).toBe(8)
+    // The highest *index*, so leaves 0 and 7 mean the book is at least 8 long.
+    expect(report.highestLeaf).toBe(7)
   })
 
   it('cannot report a book complete when nobody knows how long it is', () => {

@@ -730,7 +730,22 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
 
   const usable = words.filter((w) => w.text.trim().length > 0)
   if (usable.length === 0) {
-    return { role: 'blank', blocks: [], uncertain: [], furniture: {}, structural: [] }
+    return {
+      role: 'blank',
+      blocks: [],
+      uncertain: [],
+      furniture: {},
+      // Never an empty `structural`. A leaf with no words is either genuinely
+      // blank or a leaf nothing read — a cache with no entry for it, an OCR
+      // pass that failed, a page handed here by mistake — and the two are
+      // indistinguishable from the outside. Returning silence made this the
+      // one shape of draft that could not say it was a guess, which is the
+      // property every other draft here is built to have.
+      structural: [
+        'No words reached this leaf, so it is called blank. That is also what a ' +
+          'leaf looks like when nothing read it — check the render before believing it.'
+      ]
+    }
   }
 
   const bodyHeight = median(usable.map(heightOf))
