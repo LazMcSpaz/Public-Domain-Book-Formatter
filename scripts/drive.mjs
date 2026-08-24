@@ -1340,9 +1340,13 @@ async function serve() {
      * Runs over the *assembled* document, because a doubled line and a name
      * variant both live at page seams and a raw leaf cannot show you a seam.
      */
-    consistency: async ([out = 'consistency.json']) => {
+    consistency: async ([out = 'consistency.json', which = 'edited']) => {
+      // `consistency out.json pristine` runs over the transcription before any
+      // correction. That is the *normal* occasion for these checks — they exist
+      // to find what wants correcting — and running only over the edited text
+      // means a check can only ever confirm that work already done was done.
       const found = await page.evaluate(
-        async ([repo]) => {
+        async ([repo, which]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
           const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
@@ -1351,22 +1355,20 @@ async function serve() {
           const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           const run = await runStore.loadRun(newest.key)
-          const doc = editsMod.applyEdits(
-            assemble.assembleBook(run.transcriptions),
-            run.edits ?? []
-          )
+          const bare = assemble.assembleBook(run.transcriptions)
+          const doc = which === 'pristine' ? bare : editsMod.applyEdits(bare, run.edits ?? [])
           // Through the quote pass first, because the unclosed-quote check
           // counts printer's marks: a straight mark opens and closes with the
           // same character and cannot be counted at all.
           return coherence.checkConsistency(quotes.withTypographicQuotes(doc))
         },
-        [REPO]
+        [REPO, which]
       )
       const { writeFile } = await import('node:fs/promises')
       await writeFile(out, JSON.stringify(found, null, 1))
       const byKind = {}
       for (const f of found) byKind[f.kind] = (byKind[f.kind] ?? 0) + 1
-      return { wrote: out, findings: found.length, byKind }
+      return { wrote: out, over: which, findings: found.length, byKind }
     },
 
     /**
@@ -1892,10 +1894,21 @@ async function serve() {
             dpi: recon.RECON_DPI,
             maxPages: null
           })
-          if (!cached) throw new Error('No cached reading here. Run recon first.')
+          // Only when this needs *our* reading. A supplied one (`--ours`) is
+          // already a reading; the cache would add nothing but the per-word
+          // confidences, which a supplied reading has none of anyway. Demanding
+          // it regardless made the verb refuse every book read before the cache
+          // existed — which is exactly the set of books most in need of a
+          // second opinion.
+          if (!cached && !ours) {
+            throw new Error(
+              'No cached reading here and no `--ours` given, so there is nothing of ours to ' +
+                'compare. Run recon, or supply a reading with `--ours <file>`.'
+            )
+          }
 
           const byLeaf = new Map()
-          for (const w of cached.words) {
+          for (const w of cached?.words ?? []) {
             if (!byLeaf.has(w.pageIndex)) byLeaf.set(w.pageIndex, [])
             byLeaf.get(w.pageIndex).push(w)
           }

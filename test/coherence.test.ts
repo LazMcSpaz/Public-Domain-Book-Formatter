@@ -282,3 +282,107 @@ describe('the shape of the report', () => {
     expect(checkConsistency(d)).toHaveLength(0)
   })
 })
+
+/**
+ * A slip the book itself can show you, with no second transcription and no
+ * model: a word used once, one dropped letter from a word used dozens of times.
+ *
+ * Every word here is a real misreading off a real leaf of *Clairvoyance*, and
+ * every one of them was missed by comparing two independent readings of the
+ * same pixels — because both readers made it. The sense pass caught them by
+ * *reading*; this catches them for nothing.
+ */
+describe('checkConsistency — a spelling the book uses once', () => {
+  const bookOf = (stray: string, common: string, uses = 10) => {
+    const filler = Array.from({ length: uses }, () =>
+      block(`The astral ${common} of the aura is plain to the trained eye.`)
+    )
+    return doc([...filler, block(`A curious ${stray} appeared upon the plate.`)])
+  }
+  const strays = (d: BookDocument) => checkConsistency(d).filter((f) => f.kind === 'stray-spelling')
+
+  for (const [stray, common] of [
+    ['hundrds', 'hundreds'],
+    ['developd', 'developed'],
+    ['arrivd', 'arrived'],
+    ['discoverd', 'discovered'],
+    ['conciously', 'consciously']
+  ] as const) {
+    it(`flags ${stray} against ${common}`, () => {
+      const found = strays(bookOf(stray, common))
+      expect(found.map((f) => f.found)).toContain(stray)
+      expect(found[0]!.against).toContain(common)
+    })
+  }
+
+  it('flags a transposition, which Levenshtein scores as two', () => {
+    // `perscription` for `prescription`: a compositor reaching into the wrong
+    // box, and the shape of a real query on *The Human Aura*.
+    expect(strays(bookOf('perscription', 'prescription')).map((f) => f.found)).toContain(
+      'perscription'
+    )
+  })
+
+  /**
+   * The measured limit, and the reason this check is worth trusting.
+   *
+   * Allowing one substitution returned 129 findings on *Clairvoyance* and not
+   * one was real — `winds` against `minds`, `crass` against `class`, `chose`
+   * against `those`. Changing a letter of an English word very often makes
+   * another English word; dropping one rarely does.
+   */
+  describe('substitutions are out of scope, and deliberately', () => {
+    for (const [stray, common] of [
+      ['winds', 'minds'],
+      ['crass', 'class'],
+      ['chose', 'those'],
+      ['coarse', 'course']
+    ] as const) {
+      it(`says nothing about ${stray} against ${common}`, () => {
+        expect(strays(bookOf(stray, common))).toEqual([])
+      })
+    }
+
+    it('and so gives up a real one, which a second reader is for', () => {
+      // `snbstance` for `substance` is a substitution. Two engines reading the
+      // same ink do not make the same one, so `witness` sees it and this does not.
+      expect(strays(bookOf('snbstance', 'substance'))).toEqual([])
+    })
+  })
+
+  it('says nothing about a plural, which is where the last letter lives', () => {
+    expect(strays(bookOf('auras', 'aura'))).toEqual([])
+  })
+
+  it('says nothing about a tense', () => {
+    expect(strays(bookOf('believed', 'believes'))).toEqual([])
+  })
+
+  it('says nothing about an ordinary English word used once', () => {
+    expect(strays(bookOf('under', 'understand'))).toEqual([])
+  })
+
+  it('says nothing when the neighbour is not this book’s settled spelling', () => {
+    // Two uses is not a spelling the book has.
+    expect(strays(bookOf('hundrds', 'hundreds', 2))).toEqual([])
+  })
+
+  it('says nothing about a word the book uses twice', () => {
+    const filler = Array.from({ length: 10 }, () =>
+      block('The astral hundreds of the aura is plain to the trained eye.')
+    )
+    expect(
+      strays(doc([...filler, block('A curious hundrds here.'), block('And hundrds again.')]))
+    ).toEqual([])
+  })
+
+  it('says nothing about a short word, which has too many neighbours', () => {
+    expect(strays(bookOf('thc', 'the'))).toEqual([])
+  })
+
+  it('carries the leaf and enough of the sentence to find the place', () => {
+    const found = strays(bookOf('developd', 'developed'))
+    expect(found[0]!.pages.length).toBeGreaterThan(0)
+    expect(found[0]!.context).toContain('developd')
+  })
+})
