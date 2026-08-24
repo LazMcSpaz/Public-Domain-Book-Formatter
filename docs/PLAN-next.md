@@ -1,262 +1,161 @@
 # Plan: what is left
 
-Status: **Tiers 1 and 2 built; Tier 3 remains.** Written after
-[`PLAN-layout-preview.md`](./PLAN-layout-preview.md) closed — every step in that
-document is now built, verified in Chromium, and on `main`.
+Status: **the tool is safe to run; no second book has been read.** Written after
+a day of review that found seventeen faults across four independent passes —
+six of them destroying or misreporting work — and closed all of them.
 
-The app can take a scan to a finished KDP interior. What follows is not the rest
-of a half-built pipeline; it is the difference between _one_ book and a
-_series_, plus three typographic debts that are already written down in the code
-as apologies.
+The previous version of this file said "a book-length run against the live API
+is all that remains". That is stale twice over: there is no API any more, and
+the run has still not happened.
 
-## How this was scoped
+## Where things actually stand
 
-Everything below is either (a) a promise in [`SPEC.md`](../SPEC.md) that the
-browser app has not kept, (b) a comment in the source that admits a
-substitution, or (c) something I know is untested because no book-sized run has
-happened. Nothing is invented to fill the list. Where the spec asks for
-something I think should stay unbuilt, it is in "Deliberately not doing" at the
-end with the reason.
+|                                                        |                                                                                            |
+| ------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
+| **Read and published**                                 | _Clairvoyance and Occult Powers_ (328 leaves) — transcribed, proofed, annotated, formatted |
+| **On the shelf, unread**                               | _The Human Aura_ (88 leaves), _The Astral World_ (102 leaves)                              |
+| **Reading a leaf**                                     | `draft` → correct against pixels → `transcribe`, proven on 12 leaves across 3 books        |
+| **Checks that exist and have never run at book scale** | the sense pass, adjudication, the ledger                                                   |
+| **Checks that cannot run**                             | none                                                                                       |
 
----
-
-## Tier 1 — the series problem — **built**
-
-This was the biggest real gap, and the one the user hit on book two. All three
-items below are done and verified in Chromium across two books. What building
-it changed is recorded at the end of each.
-
-### 1. Saved style profiles (SPEC §7) — done
-
-Today the design gate interviews the user, produces a `StyleProfile`, and throws
-it away when the tab closes. Book two starts from the shipped defaults and gets
-re-interviewed from scratch. SPEC §7 is explicit that the reusable _look_ —
-trim, margins, body face, heading treatment, running heads, folio style,
-ornaments — is banked once and applied across a series, and that setup time
-should drop sharply after the first volume.
-
-**Shape.** A second IndexedDB store beside `runs`, holding named profiles.
-`src/platform/browser/run-store.ts` already owns the database; this is a second
-object store and a `DB_VERSION` bump, not a second storage layer.
-
-**Where it appears in the flow.** Not as a settings screen — as a question, per
-the house rule. At the top of the design gate, _if_ any profile is banked:
-
-> "Use a look you have already set up?" · [The Blackthorn Press look] · [Start
-> fresh]
-
-and at the design gate's accept, one more:
-
-> "Save this look to reuse on the next book?" · name field, prefilled from the
-> imprint.
-
-**The part that needed care.** A profile must hold only what is content-free.
-SPEC §7's "two-level separation" is the test — if reusing it on an unrelated
-book would be wrong, it is per-book config and must not be banked.
-
-**This turned out better than the paragraph above assumed.** `StyleProfile` did
-_not_ mix the two levels: every one of its fourteen fields is already a fact
-about the look, so there was no split to make. The risk is not the current
-shape but the next person's addition to it, so the guard is
-`BANKED_STYLE_KEYS` — a list checked against `StyleProfile`'s own keys, which
-fails the moment a field is added without deciding which level it belongs to.
-A convention would not have caught it; a test does.
-
-One more thing the build changed: a banked look is applied **as banked**, never
-rebuilt from the five answers. A profile hand-tweaked in a later session holds
-settings no answer can express, and regenerating would silently flatten them.
-
-### 2. Front-matter templates that carry across books (SPEC §7) — done
-
-The imprint name and the copyright holder were retyped every book at the export
-gate, though they are the same for every volume an imprint publishes. They now
-ride on the banked look.
-
-**The edition statement did _not_ come along**, contrary to the sentence this
-paragraph used to end with. It names the original's year, so it is per-title;
-the ISBN is per-title and the publication date is per-printing. Banking any of
-the three would have been silently wrong on book two — the exact failure the
-feature exists to prevent.
-
-One ordering wrinkle: the look is named at the design gate, but the publisher's
-details are asked one gate later. So the profile is written at the design gate
-with the style alone and topped up when the export runs — and the export screen
-says so, because changing saved state without telling anyone is how a user finds
-out on book three that something has been following them around.
-
-### 3. Delete the dead scaffolding — done
-
-The type was `ProjectFile`, not `ProjectState` — this plan had the name wrong.
-It and everything reachable only from it came to 141 lines, referenced by
-**nothing**: the Electron-era project-file shape, left behind when the browser
-app was built in a different order. `HeadingCandidate` and `TocEntry` even
-documented themselves in terms of `ProjectFile.markdown`, a field of the type
-they would have outlived. `styleProfileId` would have actively misled whoever
-built (1), which is why this went first.
+The tooling is now better tested than the thing it serves. That is the argument
+for everything below being ordered the way it is: **the next unit of work is a
+book, not a feature.**
 
 ---
 
-## Tier 2 — the three typographic debts — **built**
+## Phase 0 — two faults that would corrupt a book mid-run
 
-All three are done, and the shape of the problem turned out to be different
-from what this section assumed. It is recorded here because the wrong diagnosis
-survived two rounds of being written down as a comment.
+Neither is hypothetical. The first caused a real misfiling in the session that
+found it.
 
-### 4 + 5. Small capitals and ligatures — done, and they were one bug
+### 0.1 The driver has three notions of "the current book"
 
-This section predicted the two were one investigation. They were — but not the
-one described. The plan said the job was "a glyph-level draw path beside
-`drawText`", and that pdf-lib could not write glyph ids. It already does:
-`CustomFontEmbedder` encodes Identity-H with `CIDToGIDMap` Identity and writes
-glyph ids in `encodeText`.
+`open` hands a scan to the app. `leaf`, `draft`, `ocr` and `sheet` render from
+`loadSourceFile(listRuns()[newest].key)` — the stored scan of whatever run was
+saved most recently. `transcribe` keys off the path on the command line.
 
-The defect was one list. pdf-lib builds the glyph set for **both** the `/W`
-width array and the `ToUnicode` map by walking the font's character set:
+So a session can open one book, read another's pixels, and file the result
+under a third. That is not a description of a risk; it is what happened. Every
+render, crop and draft for an afternoon came off the wrong scan, and nothing in
+any report said so, because no verb names the book its pixels came from.
 
-```js
-for (cp of font.characterSet) glyphs.push(font.glyphForCodePoint(cp))
-```
+**Fix:** one notion of the current book, set explicitly and reported by every
+verb that touches pixels. `leaf` and `sheet` should name the file and run they
+cut from, in the result. A verb that cannot tell which book it means should
+refuse rather than pick the newest.
 
-A glyph no code point reaches — a ligature, a contextual alternate, a small
-capital — is in neither. Missing from `/W` it prints as a full em of white
-space; missing from `ToUnicode` the page copies out as line noise.
+### 0.2 `load` and `seed` delete before they save
 
-`src/platform/browser/font-widths.ts` widens the list to the glyphs the book
-actually uses, and `renderPdf` verifies afterwards rather than hoping — an
-uncovered glyph raises instead of being handed to someone about to sell a book.
-With widths written, both debts cleared at once:
+Both call `deleteRun(key)` and then `saveRun`. The delete buys nothing —
+`saveRun` does `put` on a keyed store, which replaces — and it converts "the
+save failed, you still have yesterday's work" into "the save failed and there
+is nothing left".
 
-- **Ligatures** are back on, along with contextual alternates. `dlig` and
-  `hlig` stay off as typography rather than workaround; see `fonts.ts`.
-- **Small capitals** need no glyph-level path at all. pdf-lib applies features
-  per _embedded font_, so a small-caps run is the same bytes embedded again
-  with `smcp` on — the same cost as an italic.
+Worse, `transcribe` never pushes to the shelf; `save` is a separate verb. So a
+session that lands eight batches and dies before `save` has all of them deleted
+by the next session's opening `load`. Nothing warns, and `load`'s report
+describes only the incoming book.
 
-Two things this section got right and they held: never synthesise small
-capitals by scaling, and measure with the engine that draws. The second caught
-two real bugs during the wiring, both silent — a cache key that ignored the
-small-caps variant, and a contents title measured in one face and drawn in
-another.
-
-One fact the plan did not have: **only three of the seven faces carry `smcp`**
-— EB Garamond, Cardo and Junicode. IM FELL English, which the interview
-recommends for the 17th century, has none, while the interview asks for
-small-capped headings on every period but modern. A face without them gets full
-capitals, and the typeface question now says which is which, so the choice is
-made with the fact in view.
-
-An unlooked-for gain: because `smcp` is applied to the text as written rather
-than to an upper-cased copy, a heading now extracts as "Of the Air" instead of
-"OF THE AIR". That is what a screen reader says aloud and what a search
-matches.
-
-### 6. Junicode, vendored — done
-
-Version 2.226, static OTF, with `OFL.txt` beside it — this repository is
-public, so committing the binaries is redistribution and the licence has to
-travel with them. A test fails if it goes missing.
-
-Two things worth carrying forward. These are the only **CFF** outlines in the
-app, so pdf-lib writes a `FontFile3` rather than the `FontFile2` every other
-face takes — a branch nothing else exercises, now covered end to end. And
-Junicode is what exposed the `calt` half of the width bug: it substitutes
-contextual f-alternates that no code point reaches, which is not a ligature
-feature and so slipped past two comments about ligatures.
-
-The eight unused faces (Bold, SemiBold, their italics, four Cond) are kept
-and documented as unused — `FontStyle` is `regular | italic` and nothing asks
-for a weight. They are ~8 MB of dead weight in `dist/`; deleting them is safe
-and breaks no test.
+**Fix:** drop the `deleteRun` line. Report what the incoming book displaces —
+leaves, edits, images — before overwriting it.
 
 ---
 
-## Tier 3 — proving it at scale
+## Phase 1 — the editorial query channel
 
-### 7. A real book, end to end, against the live API
+Invariant I10 in [`TRACE-draft-to-store.md`](./TRACE-draft-to-store.md), and the
+only one still unmet.
 
-The vision pass has been exercised against the live API **once**, and never at
-book length. Everything else is verified by 572 tests and a headless Chromium
-run over an 8-page fixture. That is a good suite and it is not the same claim.
+The 1916 leaf prints `belleves`. Not OCR noise: at 600 DPI both strokes are
+ascender height, against the x-height dotless `i` of `skeptical` in the same
+line. The compositor set it wrong.
 
-What a full run would actually test, that the fixture cannot:
+**The standing rule is that such a thing is transcribed as printed and raised
+as a query for the editor** — never silently corrected, never silently kept.
+Whether a reprint fixes a compositor's error, keeps it, or notes it is the
+editor's call and nobody else's.
 
-- **Memory over hundreds of pages.** The render-consume-release discipline is
-  correct by construction, but "no canvas is retained" is a property no test
-  currently asserts. A 300-page book at 300 DPI is ~5.8 GB if the discipline
-  slips anywhere.
-- **Cost, measured rather than estimated.** The estimate is shown before the
-  user approves the spend. Nobody has compared it to a real invoice.
-- **Resume under real conditions** — a refresh 180 pages into a paid run.
-- **Whether the flag tiers are calibrated.** How many pages does Gate 2 actually
-  surface out of 300? If it is 40% the gate is noise; if it is 2 pages the
-  cross-checks are too quiet. This number cannot be guessed and it decides
-  whether the proof step is a pass or a spot-check.
+There is no channel for it. `uncertain` means "could not read", which is the
+wrong semantics; `Attention` is keyed to a page and is about revisiting a leaf.
+Today a query survives only by being mentioned in conversation, which is
+exactly the kind of thing that gets lost. Worse, `parsePageTranscription`
+silently drops any field it does not recognise, so an agent that does the right
+thing and attaches one gets a green report and no record.
 
-I would do this **before** Tier 2, because it is the only item here that can
-change the plan. The others are known quantities.
+**Shape:** a query carries the block, the exact quote, what the paper says,
+why it is being raised, and nothing else — no proposed fix, because the fix is
+the editor's. It belongs on the shelf as a file a person can read, beside
+`corrections.md`. The parser should refuse unknown fields so that silence
+becomes impossible.
 
-### 8. The physical proof loop
+**Size:** small. One core type, one parser change, one shelf writer, one
+section in the proof sheet.
 
-SPEC §10 is blunt that no digital check replaces one printed copy — gutter
-swallow, light faces at print size and muddy images only show on paper. This is
-the user's task, not the code's, but it belongs on the list because it is the
-last gate before a book is actually for sale.
+---
 
-**The differentiation requirement, from KDP's own policy.** A public-domain
-title that is already free in the store may only be published in a
-_differentiated_ version: an original translation, original annotations, or ten
-or more original illustrations — with `(Translated)`, `(Annotated)` or
-`(Illustrated)` in the title field and a bulleted summary of the originality at
-the top of the product description. A linked table of contents, formatting
-improvements and collections are named as _not_ differentiating.
+## Phase 2 — read _The Human Aura_
 
-This bears directly on what the app already does. The editor's own notes and
-authored front/back-matter sections (`src/core/edits`) are what makes an edition
-_annotated_; the layout engine, the TOC and the typography are explicitly not
-enough on their own. Illustrations cut from the scan are the original's, not
-original work, so they do not count toward the ten — only pictures the editor
-supplies would. Nothing in the app currently says any of this at the export
-gate, which is a gap worth closing: the KDP report checks trim, gutter, fonts
-and image DPI, and could equally count the editor's annotations and own
-illustrations against the thresholds above.
+88 leaves. This is the deliverable, and it is also the only way to exercise the
+half of the pipeline that has never run.
+
+It tests, by doing rather than by argument:
+
+- **the batching** (SPEC's Stage 5) — one subagent per handful of leaves, each
+  given the images, the draft and the previous batch's tail for the seam, each
+  returning a batch and dying. The property that made the old vision pass safe
+  was that it could not drift because it could not see far; this rebuilds it
+  deliberately, and it has never been run;
+- **the seam** — paragraphs crossing a leaf boundary, hyphens healed;
+- **checkpointing** — a session that dies loses one batch, not a book;
+- **the ledger** — findings raised, confirmed, refuted. A check nobody can
+  score is worse than no check, because it manufactures confidence.
+
+**Do it in three sittings, not one.** Leaves 0–29 first, then stop and look at
+what the checks caught before committing to the rest. If the sense pass
+proposes a hundred findings and sixty survive the pixels it is earning its
+place; if fifteen survive it should be tightened or dropped, and that is worth
+knowing after thirty leaves rather than after eighty-eight.
+
+---
+
+## Phase 3 — the checks, once there is a book to check
+
+Only meaningful after Phase 2. In order:
+
+1. `consistency` — free, deterministic, no adjudication needed.
+2. The sense pass, one chapter to a chunk, output findings and never text.
+3. Adjudication against the crop, the reader shown the crop **before** the
+   hypothesis.
+4. The sheet a person reads. Nothing reaches the book until then.
+5. Score it. Keep the ledger per book.
 
 ---
 
 ## Deliberately not doing
 
-Recorded so the next session does not re-litigate them.
-
-- **Background removal** (SPEC §6). The one op of eleven left out of the image
-  editor. The spec calls it best-effort and it is; without manual touch-up of
-  the selection it is a magic button that quietly eats part of a picture. Ships
-  only if the selection becomes editable, which is a much larger piece of UI
-  than the op.
-- **An index** (SPEC §7, already marked "optional/low-priority"). The original
-  scanned index carries the original edition's pagination and is discarded on
-  the same rule as the TOC. Generating a real one needs term selection, which is
-  editorial work no heuristic does — and a bad index is worse than none.
-- **Side-by-side hover-synced review panes** (SPEC §12 P2). The proof step does
-  this job leaf by leaf with the scan beside the text. The coordinate map exists
-  if it is ever wanted, but the flow no longer has a place for it.
-- **Windows install wizard, Docker packaging** (SPEC §12 P4, "later"). Both were
-  for the Electron design and there are no system binaries left to install.
-- **A find-replace dictionary** (SPEC §12 #10). The lexicon gate already fixes
-  a term book-wide from the evidence, which is the same outcome reached from the
-  right direction — "answer once, apply everywhere" rather than a regex the user
-  has to author blind.
+- **More review of the draft module.** Four passes have now been run over it.
+  The next fault will be found by a real page, not by a reader — that has been
+  true every single time.
+- **Widening the fixture set before there is a reason.** Twelve leaves across
+  two typographic regimes found every fault so far. Add leaves when a book
+  breaks, and add the leaf that broke.
+- **A second renderer, still.** Unchanged and for the unchanged reason.
+- **Tuning any threshold to make a page look better.** Every constant in
+  `src/core/draft` now carries the distribution it was set from. Measure, record
+  what the new value costs, or leave it.
 
 ---
 
-## Suggested order
+## The standing lesson from the review
 
-1. ~~**(3) dead scaffolding**, then **(1) saved profiles** and **(2) front-matter
-   templates**~~ — done.
-2. ~~**(6) Junicode**~~ — done.
-3. ~~**(4 + 5) Small caps and ligatures**~~ — done, and the honest outcome was
-   better than the "not with this embedder" this plan braced for.
-4. **(7) A real book against the live API** — all that is left, and the only
-   item that can still change the picture. It needs a key and real spend, so it
-   is the user's to run.
+Written down because it held every single time, without exception:
 
-Tier 1 was where the remaining _product_ was. Tier 2 was the _craft_. Tier 3 is
-the only place a surprise is still likely to come from.
+**Every fault reasoned about was diagnosed wrongly. Every fault measured was
+diagnosed correctly, first try.** The scramble was blamed on a tall box and was
+a 1×3-pixel speck; the paragraph split was blamed on a corrupted line top and
+was the indent rule; the folio threshold was set from taste at 6% and the real
+distribution had two heads at 4%. Three separate times, in one day, on code
+whose author had just written it.
+
+Print the boxes.

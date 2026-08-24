@@ -999,7 +999,8 @@ in `screenshots/`. Don't ship UI blind.
   is worth everything. A pass that had been allowed to emit text would have
   quietly corrected it and nothing downstream could have caught that.
 
-- **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — a book-length run
-  against the live API is all that remains, and it needs a key and real spend.
+- **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
+  run and no second book has been read. Two driver faults that would corrupt a
+  book mid-run, then the editorial-query channel, then _The Human Aura_.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and
   kept for why the layout engine is shaped the way it is.
