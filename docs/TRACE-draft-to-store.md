@@ -123,24 +123,31 @@ anything is returned; check whether a checkpoint survives a refusal.
 
 `src/core/draft/index.ts` → `toLines` (~177)
 
-- **C12.** A word joins the line whose vertical band it **overlaps most**, and
-  only if that overlap covers at least `SHARED_BAND` (0.35) of the word's own
-  height.
+- **C12.** A word joins the line whose **nearest word in x** it agrees with in
+  height, within `SAME_LINE` (0.6) of the body.
 - **C13.** Every open line is considered, not just the most recent.
-- **C14.** A line's band is the running **mean** of its words' edges, never
-  their union — a union lets one tall word widen a line until it swallows the
-  next.
+- **C14.** An **oversize** word — taller than `OVERSIZE` (1.8) times the body —
+  neither recruits other words nor opens a line of its own. It is placed on the
+  line it physically covers most, after the lines are built.
 
-**Why.** The first version clustered on distance from the _current_ line only.
-Words arrive sorted by top edge, so a word sitting a few pixels low — a
-quotation mark, a descender, a letter the scan thickened — fell outside the
-tolerance and opened a line of its own, which the next line's words then
-joined. The symptom was **the last word of every line appearing at the end of
-the line below it**, silently reordering the page. `test/draft.test.ts` has the
-regression.
+**Why local, and why in x.** Scans are skewed. On leaf 6 of the 328-page book
+one line's word centres drift from **902 to 934** across the measure — 32
+pixels against a 35-pixel body — so that line's last word sits nearer the _next_
+line's first word than its own line's first word. Every rule built on a
+whole-line average tears such a page apart and reassembles it wrong. Words
+adjacent in x share a baseline whatever the slope, so a local comparison needs
+no angle estimated and no line fitted.
 
-**How to break it:** construct a page whose lines are close enough to overlap
-across two real lines; construct a word taller than its line.
+**Why oversize words are placed last.** They are neither ordinary words nor
+lines. The `=` on `astral-world` leaf 6 is the `E` of `EVERY` as a three-line
+drop capital, 244 pixels against a 62-pixel body; the `:` on `tight-scramble`
+leaf 7 is the `d` of `beyond` in a box 3 pixels wide and **1 pixel tall**.
+Letting either open a band put its text mid-sentence, because a band centred
+between two lines sorts between them.
+
+**How to break it:** a page skewed the other way; a two-line drop capital; a
+marginal note; a superscript footnote marker; a table where columns are far
+apart in x.
 
 ### Hop B3 — the measure
 
@@ -154,9 +161,13 @@ across two real lines; construct a word taller than its line.
 
 `draftPage` (~384), with `isCentred` (~257), `isIndented` (~273)
 
-- **C16.** Three things break a block, and only three: a vertical gap wider
-  than `PARAGRAPH_GAP` × the page's own median gap; a first-line indent; a
-  change between centred and ranged-left.
+- **C16.** Three things break a block, and only three: a **baseline-to-baseline**
+  stride wider than `PARAGRAPH_GAP` (1.5) × the page's own; a first-line indent;
+  a change between centred and ranged-left. Measured top-to-top, never
+  bottom-to-top: on a tightly-set face the space between one line's bottom and
+  the next line's top is **negative** — −18 and −6 pixels on two real leaves,
+  because the boxes overlap — so a threshold built from it fires on every line.
+  That shattered four paragraphs into thirteen blocks.
 - **C17.** There is deliberately **no** "the previous line ended short" rule. It
   is right about most paragraph ends and wrong about every sentence finishing
   near the margin, and a wrongly _split_ paragraph is harder to see in a diff
@@ -170,14 +181,24 @@ across two real lines; construct a word taller than its line.
 
 `takeFurniture` (~286)
 
-- **C19.** A candidate must pass **all three** tests: set apart by
-  `FURNITURE_GAP` × the median gap; shorter than `FURNITURE_WIDTH` (60%) of the
-  measure; and **no taller than `DISPLAY_HEIGHT` (1.2) × the body**.
-- **C20.** Height is measured on the line's **tallest** word, not its median,
-  because a letterspaced display title comes back from OCR as a couple of real
-  words and a row of dashes, and a dash has almost no height.
-- **C21.** Every furniture decision, taken or declined, is reported in
-  `structural` **with the two numbers it turned on**.
+- **C19.** A **bare number set off at the margin** — `FOLIO_GAP`, 6% of the
+  measure of white space before it — is decisive: the head beside it is
+  furniture whatever its width or its size.
+- **C20.** Failing that, a candidate must be set apart, short, made mostly of
+  letters and digits, and no taller than `DISPLAY_HEIGHT` (1.35) times the body.
+- **C21.** A line reading `LESSON XIII.` is a chapter's number, never a running
+  head. At the **foot** of a leaf only a folio is taken — `FINIS.` is a
+  colophon and belongs in the text.
+- **C21a.** Every furniture decision speaks in `structural`, **taken or
+  declined**, with the numbers it turned on.
+
+**Measured:** the first version of this took four lines across twelve leaves
+and every one was wrong, while capturing **0 of 9** real running heads — so the
+original edition's folio went into the body text on every leaf. It is now 9 of
+9, with the folio split off, and the four wrong takes all declined by name.
+`test/draft-real.test.ts` pins each one, and checks the folios run in step with
+the leaves: within a book, folio minus leaf index is a constant, which one
+misread folio breaks.
 
 **Why.** A running head and a page's display heading sit in the same place —
 alone at the top, short, white space beneath — so position cannot separate

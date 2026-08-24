@@ -22,6 +22,15 @@
  * So a draft is explicitly *not* a transcription. It is the left-hand column of
  * one, and `structural` says out loud everywhere it guessed.
  *
+ * ## Everything here is measured against real pages
+ *
+ * Three geometric faults shipped from this file, and none of them was caught by
+ * tests built from hand-written boxes, because the faults live in the shape of
+ * real OCR output. The constants below are set from `test/fixtures/boxes` —
+ * twelve leaves off three scans, in two typographic regimes — and the numbers
+ * that justify each one are recorded beside it. Do not tune one to make a page
+ * come out nicer; measure it, and say what the new value costs.
+ *
  * Pure: no DOM, no I/O, no network.
  */
 
@@ -73,6 +82,10 @@ export interface DraftPage {
    * Not a warning list to be cleared: it is the reading order for whoever
    * checks the draft against the render, so the checking starts where the
    * draft is weakest instead of at the top of the page.
+   *
+   * **Every furniture decision speaks here, taken or declined**, with the
+   * numbers it turned on. Silence on a decline is what let twelve real running
+   * heads go into the body text with nothing to point at them.
    */
   structural: string[]
 }
@@ -91,16 +104,35 @@ export interface DraftOptions {
 const DEFAULTS = { uncertainBelow: 60 }
 
 /**
- * How much of a word's height must sit inside a line's band to join it.
+ * How far a word's centre may sit from its neighbour's and still be the same
+ * line, as a share of the body height.
  *
- * Low on purpose. A capital and a comma on the same baseline share far less
- * vertical extent than two lower-case letters do, and the cost of setting this
- * too high is a page torn into one-word lines.
+ * 0.6 because a skewed scan drifts a line's centre by most of a body height
+ * end to end, while the step to the *next* line is a full baseline stride —
+ * on these fixtures between 42 and 107 pixels against bodies of 32 to 62. The
+ * two are comfortably separated as long as the comparison is made locally.
  */
-const SHARED_BAND = 0.35
+const SAME_LINE = 0.6
 
-/** A line separated from its neighbour by more than this is a new block. */
-const PARAGRAPH_GAP = 1.6
+/**
+ * A line further from its neighbour than this many times the page's own
+ * baseline-to-baseline distance starts a new block.
+ *
+ * **Measured baseline to baseline, never top-of-line to bottom-of-the-last.**
+ * The gap between one line's bottom and the next line's top is *negative* on a
+ * tightly-set face — measured at −18 and −6 pixels on two leaves of the 328
+ * page book, because the boxes overlap — so a threshold built from it is
+ * negative too and every single line break fires. That shattered four
+ * paragraphs into thirteen blocks, and worse, it destroyed the input the
+ * synopsis parser needs, where a chapter's description arrived as six blocks
+ * instead of one. Top-to-top is stable across every fixture leaf: 106/105/107
+ * on one book, 50/50/50 on another, 80/80/80/81 on a third.
+ *
+ * 1.5 rather than something tighter because these books mark a new paragraph
+ * with an indent and no extra leading, so this rule should fire rarely — on a
+ * real blank line, a display heading, the space over a folio.
+ */
+const PARAGRAPH_GAP = 1.5
 
 /** Inset from the measure, both sides, before a line counts as centred. */
 const CENTRED_INSET = 0.05
@@ -114,36 +146,76 @@ const CENTRED_SLACK = 0.07
  * Equal insets are not enough on their own, and the case that proves it is
  * ordinary: a paragraph's indented first line that happens to break a word
  * early is inset on the left by the indent and on the right by the break, and
- * the two can match to the pixel. Requiring real slack as well separates a
- * centred display line — which is nearly always far short of the measure —
- * from a full line that merely starts and ends in the wrong places.
+ * the two can match to the pixel.
  */
 const CENTRED_SLACK_TOTAL = 0.15
 
 /** A first line indented by this much of the measure starts a paragraph. */
 const INDENT = 0.015
 
-/** Short enough, and set apart enough, to be a running head or a folio. */
+/**
+ * Short enough, and set apart enough, to be a running head or a folio.
+ *
+ * `FURNITURE_WIDTH` applies to the head *after the folio has been taken off
+ * it* — see `splitFurnitureLine`. Applied to the whole line it captured
+ * nothing at all: both books here set the head and the folio on one line, head
+ * centred and folio at the outer margin, so the line spans 72–95% of the
+ * measure. Against a 60% ceiling that is 0 of 6 real running heads taken, and
+ * the original edition's folio going into the body text on every leaf — which
+ * is precisely what the front-matter rule exists to prevent.
+ */
 const FURNITURE_WIDTH = 0.6
-const FURNITURE_GAP = 2
+const FURNITURE_GAP = 1.8
+
+/**
+ * White space before a bare number, as a share of the measure, for it to be a
+ * folio rather than a figure at the end of a sentence.
+ *
+ * The decisive piece of evidence for furniture, and the one that needs no
+ * threshold on the head at all. Measured: real running heads on these fixtures
+ * leave 8% to 34% of the measure before the folio; a line of prose leaves a
+ * word space.
+ */
+const FOLIO_GAP = 0.06
 
 /**
  * Taller than the body by this much, and the line is display type.
  *
  * The rule that stops a contents page losing its own title. A running head and
  * a chapter's display heading sit in the same place — alone at the top, short,
- * with white space under them — so position cannot tell them apart and the
- * first version of this swallowed "SYNOPSIS OF THE LESSONS" into
- * `furniture.runningHead`, taking the leaf's title off the page. What does
- * separate them is size: a running head is set at the body size or under it,
- * and a display line is set over it.
+ * with white space under them — so position cannot tell them apart. Size can.
  *
  * Measured on the line's *tallest* word rather than its median, because the
- * line this most matters for is often the one OCR read worst — a letterspaced
+ * line this most matters for is often the one OCR read worst: a letterspaced
  * display title comes back as a couple of real words and a row of dashes, and
  * a dash has almost no height at all.
+ *
+ * 1.35 rather than 1.2, which was set from nothing and rejected a real running
+ * head measured at 75 pixels against a 60-pixel body — a ratio of 1.25, well
+ * inside the noise a tall capital and a descender put on a single line. This
+ * test now only has to catch display type that carries **no folio at the
+ * margin**, since a folio outranks it entirely, so it can afford to be
+ * generous. The case it still exists for is a leaf's own title set alone at
+ * the top, which is set far larger than 1.35.
  */
-const DISPLAY_HEIGHT = 1.2
+const DISPLAY_HEIGHT = 1.35
+
+/**
+ * A word taller than this many times the body is not body text.
+ *
+ * A drop capital, a mis-segmented box spanning two lines, a speck of dirt read
+ * as a letter. Such a word may not *recruit* others onto its line — see
+ * `toLines` — and it is reported, because on a real leaf a three-line drop
+ * capital read as a stray `=` split one paragraph into three and took the
+ * initial letter off the page.
+ */
+const OVERSIZE = 1.8
+
+/** At least this many letters or digits before a line can be furniture. */
+const FURNITURE_MIN_ALNUM = 2
+
+/** And at least this share of its characters, or it is a printer's rule. */
+const FURNITURE_ALNUM_SHARE = 0.5
 
 const BARE_NUMBER = /^[\s.[\]()]*([0-9]{1,4}|[ivxlcdm]{1,7})[\s.[\]()]*$/i
 const CONTENTS_TITLE = /^\s*(synopsis|contents|table of contents)\b/i
@@ -156,83 +228,180 @@ function median(values: readonly number[]): number {
   return sorted.length % 2 === 1 ? sorted[half]! : (sorted[half - 1]! + sorted[half]!) / 2
 }
 
+const centreOf = (word: DraftWord): number => (word.bbox.y0 + word.bbox.y1) / 2
+
+const heightOf = (word: DraftWord): number => Math.max(1, word.bbox.y1 - word.bbox.y0)
+
+/** Letters and digits only — what a line has to have some of to be furniture. */
+function alnum(text: string): string {
+  return text.replace(/[^\p{L}\p{N}]/gu, '')
+}
+
 /**
  * Gather words onto the lines they were printed on.
  *
- * Each word joins the line whose vertical band it **overlaps most**, and only
- * where that overlap covers a fair part of the word's own height. Overlap
- * rather than distance, and every open line rather than just the last one,
- * because the first version of this did the opposite and scrambled the page:
- * words are fed in by their top edge, a word whose box sits a few pixels low —
- * a quotation mark, a descender, a letter the scan thickened — sorted after
- * its neighbours, fell outside the tolerance, and opened a line of its own,
- * which the *next* line's words then joined. The visible symptom was the last
- * word of every line appearing at the end of the line below it, and the
- * knock-on was worse: a line robbed of its final word looks inset on the
- * right, so it reads as centred, so it was called a heading.
+ * A word's candidate lines are every open band it overlaps by at least
+ * `SHARED_BAND` of its own height; among those it joins the one whose **centre
+ * is nearest**, not the one it overlaps most.
+ *
+ * Both halves of that are load-bearing, and each fixes a shipped bug.
+ *
+ * *Every open band, not the most recent.* Words arrive sorted by top edge, so a
+ * word whose box sits a few pixels low — a quotation mark, a descender, a
+ * letter the scan thickened — used to fall outside the tolerance of the
+ * current line and open a band of its own, which the next line's words then
+ * joined. The symptom was the last word of every line appearing at the end of
+ * the line below it.
+ *
+ * *Nearest centre, not greatest overlap.* Overlap is measured against the
+ * word's own height, so a **short word lying entirely inside a tall band scores
+ * a perfect 1.0** — and a tall band is exactly what a mis-segmented box makes.
+ * On leaf 7 of the 328-page book, Tesseract split `beyond` into `beyon` and a
+ * fragment it read as `:` whose box spans two lines; every small word inside
+ * that band preferred it to its own line. Centre distance is not fooled: the
+ * fragment's band is centred between two lines and therefore near neither.
  *
  * **Single-column matter only.** Two columns come back interleaved, because
  * nothing here knows a column from a wide line.
  */
-export function toLines(words: readonly DraftWord[], tolerance: number): DraftLine[] {
+export function toLines(words: readonly DraftWord[], bodyHeight: number): DraftLine[] {
   interface Band {
+    centre: number
     top: number
     bottom: number
     words: DraftWord[]
   }
-  const bands: Band[] = []
-  const byTop = [...words].sort((a, b) => a.bbox.y0 - b.bbox.y0)
+  const body = Math.max(1, bodyHeight)
+  const usable = [...words].sort((a, b) => a.bbox.y0 - b.bbox.y0)
 
-  for (const word of byTop) {
-    const height = Math.max(1, word.bbox.y1 - word.bbox.y0)
+  // Two passes, and the split is the whole of the fix.
+  //
+  // An oversize box — a drop capital, or one OCR ran across two lines — must
+  // neither recruit other words onto its line nor open a line of its own. The
+  // first would gather two real lines into one; the second is subtler and is
+  // what shipped: the box's centre falls *between* two lines, so its band
+  // sorts between them and its text surfaces mid-sentence. That is exactly
+  // `…prove beyon : doubt…`, where the `:` is the `d` of `beyond` in a box
+  // twice the body height.
+  //
+  // So the lines are built from body-sized words alone, and the oversize ones
+  // are then dropped onto whichever line they physically cover most.
+  const oversize = usable.filter((w) => heightOf(w) > body * OVERSIZE)
+  const ordinary = usable.filter((w) => heightOf(w) <= body * OVERSIZE)
+  const bands: Band[] = []
+
+  const midX = (w: DraftWord): number => (w.bbox.x0 + w.bbox.x1) / 2
+
+  for (const word of ordinary) {
+    const centre = centreOf(word)
+    const x = midX(word)
     let best: Band | null = null
-    let bestShare = 0
+    let nearest = Infinity
     for (const band of bands) {
-      const shared = Math.min(band.bottom, word.bbox.y1) - Math.max(band.top, word.bbox.y0)
-      const share = shared / height
-      if (share > bestShare) {
-        bestShare = share
+      // Compared against the band's word **nearest in x**, not against the
+      // band's average height on the page.
+      //
+      // Scans are skewed. Measured on leaf 6 of the 328-page book, one line's
+      // word centres drift from 902 to 934 across the measure — 32 pixels,
+      // against a 35-pixel body — so a line's last word sits nearer the *next*
+      // line's first word than its own line's first word. Any rule built on a
+      // whole-line average tears such a page apart and reassembles it wrong,
+      // which is what put a second "The" in front of "skeptical".
+      //
+      // Neighbouring words on a skewed line have near-identical centres
+      // whatever the slope, so a local comparison needs no angle estimated and
+      // no line fitted.
+      let closestInX: DraftWord | null = null
+      let closestGap = Infinity
+      for (const other of band.words) {
+        const gap = Math.abs(midX(other) - x)
+        if (gap < closestGap) {
+          closestGap = gap
+          closestInX = other
+        }
+      }
+      if (!closestInX) continue
+      const drop = Math.abs(centreOf(closestInX) - centre)
+      if (drop > body * SAME_LINE) continue
+      if (drop < nearest) {
+        nearest = drop
         best = band
       }
     }
-    if (best && bestShare >= SHARED_BAND) {
+    if (best) {
       best.words.push(word)
-      // The band is the running *mean* of its words, not their union: taking
-      // the union lets one tall word widen a line until it swallows the next.
-      best.top = best.words.reduce((sum, w) => sum + w.bbox.y0, 0) / best.words.length
-      best.bottom = best.words.reduce((sum, w) => sum + w.bbox.y1, 0) / best.words.length
+      best.top = Math.min(best.top, word.bbox.y0)
+      best.bottom = Math.max(best.bottom, word.bbox.y1)
+      best.centre = best.words.reduce((sum, w) => sum + centreOf(w), 0) / best.words.length
     } else {
-      bands.push({ top: word.bbox.y0, bottom: word.bbox.y1, words: [word] })
+      bands.push({ centre, top: word.bbox.y0, bottom: word.bbox.y1, words: [word] })
     }
   }
 
-  // `tolerance` survives as the last resort for a page whose boxes overlap
-  // nothing — a face set so loosely that consecutive lines share no pixels.
-  // Bands closer together than this are the same line after all.
+  // One line split in two — a word set high enough that it matched nothing.
+  // Merged only when the two bands overlap in x *and* their nearest words
+  // agree in height, for the same reason the matching above is local: on a
+  // skewed page two bands can differ by a whole body height end to end and
+  // still be one line.
   const merged: Band[] = []
-  for (const band of bands.sort((a, b) => (a.top + a.bottom) / 2 - (b.top + b.bottom) / 2)) {
+  for (const band of [...bands].sort((a, b) => a.centre - b.centre)) {
     const previous = merged[merged.length - 1]
-    const centre = (band.top + band.bottom) / 2
-    if (previous && Math.abs((previous.top + previous.bottom) / 2 - centre) < tolerance * 0.4) {
-      previous.words.push(...band.words)
-      previous.top = previous.words.reduce((s, w) => s + w.bbox.y0, 0) / previous.words.length
-      previous.bottom = previous.words.reduce((s, w) => s + w.bbox.y1, 0) / previous.words.length
-    } else {
-      merged.push(band)
+    if (previous) {
+      const near = previous.words.reduce(
+        (best, w) =>
+          Math.abs(midX(w) - midX(band.words[0]!)) < Math.abs(midX(best) - midX(band.words[0]!))
+            ? w
+            : best,
+        previous.words[0]!
+      )
+      if (Math.abs(centreOf(near) - centreOf(band.words[0]!)) < body * SAME_LINE) {
+        previous.words.push(...band.words)
+        previous.top = Math.min(previous.top, band.top)
+        previous.bottom = Math.max(previous.bottom, band.bottom)
+        previous.centre =
+          previous.words.reduce((s2, w) => s2 + centreOf(w), 0) / previous.words.length
+        continue
+      }
     }
+    merged.push(band)
   }
 
-  return merged.map((band) => {
-    const ordered = [...band.words].sort((a, b) => a.bbox.x0 - b.bbox.x0)
-    return {
-      text: ordered.map((w) => w.text).join(' '),
-      words: ordered,
-      top: Math.min(...ordered.map((w) => w.bbox.y0)),
-      bottom: Math.max(...ordered.map((w) => w.bbox.y1)),
-      left: Math.min(...ordered.map((w) => w.bbox.x0)),
-      right: Math.max(...ordered.map((w) => w.bbox.x1))
+  // Now the oversize ones, onto the line each covers most. Absolute shared
+  // extent rather than a ratio: the question is which line the box is sitting
+  // on, and a tall box overlaps a short line completely either way.
+  for (const word of oversize) {
+    let best: Band | null = null
+    let most = 0
+    for (const band of merged) {
+      const shared = Math.min(band.bottom, word.bbox.y1) - Math.max(band.top, word.bbox.y0)
+      if (shared > most) {
+        most = shared
+        best = band
+      }
     }
-  })
+    if (best) best.words.push(word)
+    else
+      merged.push({
+        centre: centreOf(word),
+        top: word.bbox.y0,
+        bottom: word.bbox.y1,
+        words: [word]
+      })
+  }
+
+  return merged
+    .sort((a, b) => a.centre - b.centre)
+    .map((band) => {
+      const ordered = [...band.words].sort((a, b) => a.bbox.x0 - b.bbox.x0)
+      return {
+        text: ordered.map((w) => w.text).join(' '),
+        words: ordered,
+        top: Math.min(...ordered.map((w) => w.bbox.y0)),
+        bottom: Math.max(...ordered.map((w) => w.bbox.y1)),
+        left: Math.min(...ordered.map((w) => w.bbox.x0)),
+        right: Math.max(...ordered.map((w) => w.bbox.x1))
+      }
+    })
 }
 
 interface Measure {
@@ -275,13 +444,89 @@ function isIndented(line: DraftLine, measure: Measure): boolean {
 }
 
 /**
+ * Pull a folio off the end of a running-head line.
+ *
+ * Older books set the head and the folio on one line — the head centred, the
+ * number out at the outer margin — so the *line* spans most of the measure
+ * while the head itself is short. Judging the whole line's width took none of
+ * them.
+ *
+ * Returns the head and the folio separately, or null when the line does not
+ * come apart that way.
+ */
+/** Whether a head with no folio beside it is short enough to be one. */
+function shortHead(head: string, line: DraftLine, measure: Measure): boolean {
+  if (head.trim() !== line.text.trim()) return true
+  return line.right - line.left <= measure.width * FURNITURE_WIDTH
+}
+
+function splitFurnitureLine(
+  line: DraftLine,
+  measure: Measure
+): { head: string; folio: string | null; folioGap: number } | null {
+  const words = line.words
+  if (words.length === 0) return null
+
+  const shortEnough = (from: number, to: number): boolean => {
+    const span = words.slice(from, to)
+    if (span.length === 0) return false
+    const width = Math.max(...span.map((w) => w.bbox.x1)) - Math.min(...span.map((w) => w.bbox.x0))
+    return width <= measure.width * FURNITURE_WIDTH
+  }
+
+  // The folio sits at one end or the other — verso books put it left, recto
+  // right, and a book alternates. Try both ends before giving up.
+  const first = words[0]!
+  const last = words[words.length - 1]!
+  // The white space between the folio and the head is the evidence that this
+  // is furniture at all — a running head is set with its folio out at the
+  // margin, while a line of prose that happens to end in a number does not
+  // leave a quarter of an inch before it.
+  if (words.length > 1 && BARE_NUMBER.test(last.text)) {
+    return {
+      head: words
+        .slice(0, -1)
+        .map((w) => w.text)
+        .join(' '),
+      folio: last.text.trim(),
+      folioGap: last.bbox.x0 - words[words.length - 2]!.bbox.x1
+    }
+  }
+  if (words.length > 1 && BARE_NUMBER.test(first.text)) {
+    return {
+      head: words
+        .slice(1)
+        .map((w) => w.text)
+        .join(' '),
+      folio: first.text.trim(),
+      folioGap: words[1]!.bbox.x0 - first.bbox.x1
+    }
+  }
+  // No folio on the line at all, but the head is short by itself.
+  if (shortEnough(0, words.length)) return { head: line.text, folio: null, folioGap: 0 }
+  return null
+}
+
+/**
  * Where the running head and the folio are, if the page prints them.
  *
- * A short line at the very top or bottom, set apart from the text block by a
- * clear gap, and **not set larger than the body**. All three tests are
- * required: a last line of a paragraph is set apart, a chapter's title is
- * short, and a page's display heading is both — so any two of them together
- * still take something off the leaf that belongs on it.
+ * Four tests, and a candidate must pass all of them. Each one is here because
+ * leaving it out took something off a leaf that belonged on it, measured
+ * across twelve real leaves where the first version of this took four lines
+ * and every one was wrong.
+ *
+ * - **Set apart** from the text block. A line snug against the body is body.
+ * - **Short**, after any folio is taken off it (see `splitFurnitureLine`).
+ * - **No taller than the body.** A display heading sits exactly where a running
+ *   head sits; only size separates them.
+ * - **Made of words.** `ON — —— ———` is a printer's rule that OCR mangled, and
+ *   `-_` is a speck on a back cover. Neither is a running head.
+ *
+ * Two more rules apply to what a candidate *says* rather than where it sits.
+ * A line reading `LESSON XIII.` is a chapter's number, not a running head —
+ * taking it strips the number off a "number over a name" chapter opening
+ * before `deriveChapters` ever sees it. And at the **foot** of a leaf only a
+ * folio is taken: `FINIS.` is the book's colophon and belongs in the text.
  */
 function takeFurniture(
   lines: DraftLine[],
@@ -291,39 +536,102 @@ function takeFurniture(
   said: string[]
 ): { runningHead?: string; folio?: string } {
   const furniture: { runningHead?: string; folio?: string } = {}
-  const detach = (at: 'first' | 'last'): DraftLine | null => {
-    if (lines.length < 3) return null
+
+  const consider = (at: 'first' | 'last'): void => {
+    if (lines.length < 3) return
+    const where = at === 'first' ? 'top' : 'foot'
     const line = at === 'first' ? lines[0]! : lines[lines.length - 1]!
     const neighbour = at === 'first' ? lines[1]! : lines[lines.length - 2]!
-    const between = at === 'first' ? neighbour.top - line.bottom : line.top - neighbour.bottom
-    if (between < gap * FURNITURE_GAP) return null
-    if (line.right - line.left > measure.width * FURNITURE_WIDTH) return null
-    const tallest = Math.max(...line.words.map((w) => w.bbox.y1 - w.bbox.y0))
-    if (tallest > bodyHeight * DISPLAY_HEIGHT) {
-      said.push(
-        `"${line.text.trim()}" sits where a running head sits but is set larger than the body ` +
-          `(${Math.round(tallest)} against ${Math.round(bodyHeight)}), so it was kept as text.`
-      )
-      return null
+    const text = line.text.trim()
+    const say = (why: string): void => {
+      said.push(`"${text}" sits at the ${where} of the leaf but was kept as text: ${why}`)
     }
-    if (at === 'first') lines.shift()
-    else lines.pop()
-    return line
+
+    const between = at === 'first' ? neighbour.top - line.bottom : line.top - neighbour.bottom
+    if (between < gap * FURNITURE_GAP) return
+
+    const letters = alnum(text)
+    if (
+      letters.length < FURNITURE_MIN_ALNUM ||
+      letters.length < text.length * FURNITURE_ALNUM_SHARE
+    ) {
+      say(
+        `it is mostly not letters or digits (${letters.length} of ${text.length}), so it reads as a printer's rule or a speck rather than a running head`
+      )
+      return
+    }
+
+    const split = splitFurnitureLine(line, measure)
+    // A bare number set off at the margin is what a folio *is*, and no line of
+    // prose does it. Where that is present the head beside it is a running
+    // head whatever its width or its size — which is what rescued
+    // "TELEPATHY vs. CLAIRVOYANCE 37" (91% of the measure) and
+    // "PSYCHIC, MAGNETIC HEALING 319" (75 pixels against a 60-pixel body),
+    // both real running heads that the width and display tests threw away.
+    const folioAtMargin =
+      split !== null && split.folio !== null && split.folioGap > measure.width * FOLIO_GAP
+
+    const tallest = Math.max(...line.words.map((w) => w.bbox.y1 - w.bbox.y0))
+    if (!folioAtMargin && tallest > bodyHeight * DISPLAY_HEIGHT) {
+      say(
+        `it is set larger than the body (${Math.round(tallest)} against ${Math.round(bodyHeight)}), so it is display type`
+      )
+      return
+    }
+
+    if (NUMBER_LINE.test(text)) {
+      say(
+        'it is a chapter number line, and taking it would strip the number off the chapter opening'
+      )
+      return
+    }
+
+    if (!split) {
+      say(
+        `it is too wide to be furniture (${Math.round(((line.right - line.left) / measure.width) * 100)}%` +
+          ' of the measure) and carries no folio set off at the margin'
+      )
+      return
+    }
+    if (!folioAtMargin && !shortHead(split.head, line, measure)) {
+      say(
+        `its head is ${Math.round(((line.right - line.left) / measure.width) * 100)}% of the measure` +
+          ' and no folio is set off at the margin beside it'
+      )
+      return
+    }
+
+    if (at === 'last') {
+      // Only a folio comes off the foot. A colophon, a catchword or a
+      // signature mark is text, and filing it as `runningHead` — which is what
+      // happened to `FINIS.` — both loses it and mislabels it.
+      if (BARE_NUMBER.test(text)) {
+        furniture.folio = text
+        lines.pop()
+        said.push(`"${text}" was taken off the foot as a folio.`)
+      } else {
+        say('only a folio is taken off the foot of a leaf; anything else there is text')
+      }
+      return
+    }
+
+    lines.shift()
+    if (split.folio) furniture.folio = split.folio
+    if (BARE_NUMBER.test(split.head)) {
+      furniture.folio = split.head.trim()
+      said.push(`"${text}" was taken off the top as a folio.`)
+    } else {
+      furniture.runningHead = split.head.trim()
+      said.push(
+        `"${text}" was taken off the top as a running head` +
+          (split.folio ? ` with the folio "${split.folio}"` : '') +
+          '. Check it is not the first line of the text.'
+      )
+    }
   }
 
-  for (const at of ['first', 'last'] as const) {
-    const line = detach(at)
-    if (!line) continue
-    const tallest = Math.max(...line.words.map((w) => w.bbox.y1 - w.bbox.y0))
-    if (BARE_NUMBER.test(line.text)) furniture.folio = line.text.trim()
-    else furniture.runningHead = line.text.trim()
-    said.push(
-      `"${line.text.trim()}" was taken off the ${at === 'first' ? 'top' : 'foot'} of the leaf as ` +
-        `${BARE_NUMBER.test(line.text) ? 'a folio' : 'a running head'}: it is short, set apart, ` +
-        `and no taller than the body (${Math.round(tallest)} against ${Math.round(bodyHeight)}). ` +
-        'Check it is not part of the text.'
-    )
-  }
+  consider('first')
+  consider('last')
   return furniture
 }
 
@@ -374,8 +682,8 @@ function uncertainSpans(lines: readonly DraftLine[], below: number): DraftSpan[]
 /**
  * A page of OCR words, drafted as a page of blocks.
  *
- * Three things break a block: a vertical gap wider than the page's own
- * leading, a first-line indent, and a line changing between centred and
+ * Three things break a block: a baseline-to-baseline distance wider than the
+ * page's own, a first-line indent, and a line changing between centred and
  * ranged left. Deliberately no "the previous line ended short" rule — it is
  * right about most paragraph ends and wrong about every sentence that happens
  * to finish near the margin, and a wrongly split paragraph is harder to see in
@@ -390,15 +698,33 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
     return { role: 'blank', blocks: [], uncertain: [], furniture: {}, structural: [] }
   }
 
-  const heights = usable.map((w) => w.bbox.y1 - w.bbox.y0)
-  const bodyHeight = median(heights)
-  const lines = toLines(usable, Math.max(1, bodyHeight * 0.5))
-  const gaps: number[] = []
-  for (let i = 1; i < lines.length; i++) gaps.push(lines[i]!.top - lines[i - 1]!.bottom)
-  const gap = Math.max(1, median(gaps))
+  const bodyHeight = median(usable.map(heightOf))
+  const lines = toLines(usable, bodyHeight)
+
+  // Baseline to baseline, never bottom-to-top. See PARAGRAPH_GAP.
+  const strides: number[] = []
+  for (let i = 1; i < lines.length; i++) strides.push(lines[i]!.top - lines[i - 1]!.top)
+  const stride = Math.max(1, median(strides))
+
+  // The set-apart test still wants the white space between two lines, which is
+  // the stride less the body. Derived rather than measured, because measuring
+  // it directly is what went negative.
+  const white = Math.max(1, stride - bodyHeight)
 
   const measure = measureOf(lines)
-  const furniture = takeFurniture(lines, measure, gap, bodyHeight, structural)
+  const furniture = takeFurniture(lines, measure, white, bodyHeight, structural)
+
+  const oversize = usable.filter((w) => heightOf(w) > bodyHeight * OVERSIZE)
+  if (oversize.length > 0) {
+    structural.push(
+      `${oversize.length} word(s) are far taller than the body — ` +
+        `${oversize
+          .slice(0, 4)
+          .map((w) => `"${w.text}"`)
+          .join(', ')}. A drop capital, or a box OCR ran across two lines. ` +
+        'The letters under one are usually wrong and are worth reading off the render.'
+    )
+  }
 
   const body = measureOf(lines)
   const blocks: DraftBlock[] = []
@@ -423,8 +749,7 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
     const line = lines[i]!
     const previous = lines[i - 1]
     if (previous) {
-      const between = line.top - previous.bottom
-      const wide = between > gap * PARAGRAPH_GAP
+      const wide = line.top - previous.top > stride * PARAGRAPH_GAP
       const indented = isIndented(line, body)
       const switched = isCentred(line, body) !== isCentred(previous, body)
       if (wide || indented || switched) flush()
