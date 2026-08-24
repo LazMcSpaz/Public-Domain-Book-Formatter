@@ -1071,7 +1071,11 @@ async function serve() {
                   'A batch must say which leaves it read; position in the array is not that.'
               )
             }
-            return { ...schema.parsePageTranscription(entry, at), pageIndex: at }
+            return {
+              ...schema.parsePageTranscription(entry, at),
+              pageIndex: at,
+              _draftNotes: schema.carriesDraftNotes(entry)
+            }
           })
 
           const held = existing?.run ?? null
@@ -1123,9 +1127,20 @@ async function serve() {
           // construction, and three of the four bugs found in them were the
           // same shape: a field claiming a check had happened, or a book was
           // finished, when neither was true. They are unit tests now.
+          // The draft's own annotations, stripped before anything is stored: a
+          // transcription is not the place for the list of things a draft
+          // guessed. Counted first, because a batch still carrying them has
+          // very likely not been checked against the render.
+          const unchecked = parsed.filter((p) => p._draftNotes).map((p) => p.pageIndex)
+          const clean = parsed.map((page) => {
+            const stripped = { ...page }
+            delete stripped._draftNotes
+            return stripped
+          })
+
           const merged = project.mergeBatchIntoRun({
             held,
-            parsed,
+            parsed: clean,
             key,
             fileName: file.name,
             pageCount,
@@ -1179,6 +1194,17 @@ async function serve() {
                 }),
             pageCountFrom: countFrom,
             matchedRunBy: foundBy,
+            queriesRaised: clean.reduce((n, p) => n + (p.queries?.length ?? 0), 0),
+            // Not a refusal — a reader may have checked a leaf and left the
+            // list alone — but a draft landed uncorrected is the one thing this
+            // door exists to make hard, so it is never silent.
+            ...(unchecked.length > 0
+              ? {
+                  stillCarriesDraftNotes: unchecked,
+                  check:
+                    "These leaves arrived with the draft's `structural` list still on them. Was the draft checked against the render?"
+                }
+              : {}),
             ocr: !cached
               ? 'NOT CHECKED — no cached reading on this device'
               : compared === seenLeaves
@@ -1856,6 +1882,48 @@ async function serve() {
         for (const k of keys) localStorage.removeItem(k)
         return { cleared: keys }
       })
+    },
+
+    /**
+     * The decisions waiting on the editor, as a sheet to read.
+     *
+     * Written to a file rather than printed, because a query that lives only in
+     * a session survives exactly as long as the session does — and the whole
+     * reason to raise one is that nobody should have to remember it. The shelf
+     * wants it at `books/<slug>/queries.md`; `queriesPath` says so.
+     *
+     * Nothing here proposes a fix. That is the point of the channel.
+     */
+    queries: async ([out = 'queries.md']) => {
+      const rendered = await page.evaluate(
+        async ([repo]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
+          const shelf = await import(`/@fs${repo}/src/core/sync/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+          const raised = queriesMod.collectQueries(run.transcriptions)
+          const title =
+            typeof run.identityAnswers?.title === 'string' && run.identityAnswers.title
+              ? run.identityAnswers.title
+              : run.fileName
+          return {
+            markdown: queriesMod.queriesMarkdown({ title, fileName: run.fileName }, raised),
+            raised: raised.length,
+            byKind: queriesMod.countQueries(raised),
+            leaves: [...new Set(raised.map((q) => q.pageIndex))],
+            shelfPath: shelf.queriesPath(newest.key)
+          }
+        },
+        [REPO]
+      )
+      const { writeFile } = await import('node:fs/promises')
+      await writeFile(resolve(REPO, out), rendered.markdown, 'utf8')
+      const report = { ...rendered }
+      delete report.markdown
+      return { wrote: out, ...report }
     },
 
     /**

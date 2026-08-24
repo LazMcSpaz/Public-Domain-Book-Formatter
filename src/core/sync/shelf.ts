@@ -149,6 +149,18 @@ export function aboutPath(key: string): string {
   return `${SHELF_ROOT}/${shelfSlug(key)}/about.json`
 }
 
+/**
+ * The editor's queries for one book, as Markdown beside its `book.json`.
+ *
+ * Markdown rather than JSON because it exists to be *read* — by a person, on a
+ * phone, in GitHub's own file view — and because a query that lives only in a
+ * chat session survives exactly as long as the session does, which is the one
+ * property it must not have.
+ */
+export function queriesPath(key: string): string {
+  return `${SHELF_ROOT}/${shelfSlug(key)}/queries.md`
+}
+
 /** What the catalogue card says. */
 export interface ShelfAbout {
   /** The file key the run is filed under, so opening it lands in the right place. */

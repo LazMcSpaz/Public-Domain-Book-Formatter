@@ -101,6 +101,61 @@ export interface UncertainSpan {
   reason: string
 }
 
+/**
+ * A decision that belongs to the editor, raised rather than taken.
+ *
+ * Not the same thing as an `UncertainSpan`, and the difference is the whole
+ * point: uncertainty means *nobody could read it*, while a query means **it was
+ * read perfectly well and what it says needs a person to rule on**.
+ *
+ * The case this exists for: a 1916 leaf prints `belleves`. Not OCR noise — at
+ * 600 DPI both strokes are ascender height, against the x-height dotless `i` of
+ * `skeptical` in the same line. The compositor set it wrong. Whether a reprint
+ * keeps a compositor's error, silently fixes it, or notes it is the editor's
+ * call and nobody else's, so the transcription carries the page as printed and
+ * the query carries the question.
+ *
+ * **There is deliberately no field for a proposed fix.** A reader who has been
+ * allowed to suggest one has been allowed to decide, because a suggestion sat
+ * beside a question is an answer in all but name. `quote` is what the paper
+ * says and `why` is why it is worth a ruling; the ruling is not this reader's
+ * to make.
+ */
+export interface EditorialQuery {
+  /**
+   * The words as printed, exactly as they appear in the transcription.
+   *
+   * A quotation and not an offset, for the reason the notes pass quotes too: an
+   * offset is a number nobody can check and one that goes stale the moment a
+   * correction changes the text by a letter.
+   */
+  quote: string
+  /** Why this needs a person. The argument, never the answer. */
+  why: string
+  kind: EditorialQueryKind
+}
+
+/**
+ * What kind of decision is being asked for.
+ *
+ * A closed list, and short. Each is a case where "faithful to the original" and
+ * "correct" genuinely disagree — which is the only reason to interrupt an
+ * editor at all.
+ */
+export type EditorialQueryKind =
+  /** The compositor set it wrong, and the page is unambiguous about it. */
+  | 'printers-error'
+  /** The book contradicts itself, and both readings are clear. */
+  | 'inconsistent'
+  /** Legible, but what it means for the edition is not obvious. */
+  | 'unclear'
+
+export const EDITORIAL_QUERY_KINDS: readonly EditorialQueryKind[] = [
+  'printers-error',
+  'inconsistent',
+  'unclear'
+]
+
 /** Text that is page furniture, not content — stripped from the body flow. */
 export interface PageFurniture {
   runningHead?: string
@@ -125,6 +180,10 @@ export interface PageTranscription {
   blocks: TranscribedBlock[]
   uncertain: UncertainSpan[]
   furniture: PageFurniture
+  /**
+   * Decisions raised for the editor, never taken. Absent on nearly every leaf.
+   */
+  queries?: EditorialQuery[]
   /** Present only for front-matter pages. */
   metadata?: ExtractedMetadata
 }
@@ -323,8 +382,72 @@ function isRecord(v: unknown): v is Record<string, unknown> {
  * Validate and normalize a raw reply. Throws on anything structurally wrong —
  * a bad page should fail loudly and be retried, never be quietly half-imported.
  */
+/**
+ * Fields a page may carry. Anything else is refused.
+ *
+ * The parser used to build a fresh object from the fields it knew and drop the
+ * rest without a word, which made silence the failure mode for exactly the
+ * thing that must never be silent: an editorial query attached to a leaf was
+ * discarded, and the report came back green. A reader doing the right thing got
+ * no record and no error.
+ *
+ * `words` and `structural` are on the list because `draft` writes them — see
+ * `carriesDraftNotes`, which is how a batch that was never corrected is
+ * noticed rather than refused.
+ */
+const PAGE_FIELDS = new Set([
+  'pageIndex',
+  'role',
+  'blocks',
+  'uncertain',
+  'furniture',
+  'queries',
+  'metadata',
+  'words',
+  'structural'
+])
+
+const BLOCK_FIELDS = new Set([
+  'kind',
+  'text',
+  'cells',
+  'headerRow',
+  'emphasis',
+  'strong',
+  'level',
+  'marker',
+  'continuesPrevious',
+  'continuesNext'
+])
+
+function refuseUnknown(raw: Record<string, unknown>, allowed: ReadonlySet<string>, where: string) {
+  const unknown = Object.keys(raw).filter((k) => !allowed.has(k))
+  if (unknown.length > 0) {
+    throw new Error(
+      `${where}: ${unknown.map((k) => `"${k}"`).join(', ')} ` +
+        `${unknown.length === 1 ? 'is not a field' : 'are not fields'} this schema has. ` +
+        'Refused rather than dropped, because a field silently discarded is how ' +
+        'an editorial query disappears with a green report beside it.'
+    )
+  }
+}
+
+/**
+ * Whether a page still carries the annotations `draft` put on it.
+ *
+ * A draft is the left-hand column of a transcription, not a transcription, and
+ * `structural` is the list of everything it guessed. A batch arriving with that
+ * list still attached has very likely not been checked against the render —
+ * which is not refusable, because a reader may have checked it and left the
+ * list alone, but is worth saying out loud.
+ */
+export function carriesDraftNotes(raw: unknown): boolean {
+  return isRecord(raw) && (Array.isArray(raw['structural']) || typeof raw['words'] === 'number')
+}
+
 export function parsePageTranscription(raw: unknown, pageIndex: number): PageTranscription {
   if (!isRecord(raw)) throw new Error(`Page ${pageIndex + 1}: reply was not an object`)
+  refuseUnknown(raw, PAGE_FIELDS, `Page ${pageIndex + 1}`)
 
   const role = raw['role']
   if (typeof role !== 'string' || !PAGE_ROLES.includes(role as PageRole)) {
@@ -336,6 +459,7 @@ export function parsePageTranscription(raw: unknown, pageIndex: number): PageTra
 
   const blocks: TranscribedBlock[] = rawBlocks.map((b, i) => {
     if (!isRecord(b)) throw new Error(`Page ${pageIndex + 1}: block ${i} is not an object`)
+    refuseUnknown(b, BLOCK_FIELDS, `Page ${pageIndex + 1}, block ${i}`)
     const kind = b['kind']
     const text = b['text']
     if (typeof kind !== 'string' || !BLOCK_KINDS.includes(kind as BlockKind)) {
@@ -378,6 +502,28 @@ export function parsePageTranscription(raw: unknown, pageIndex: number): PageTra
     reason: typeof u['reason'] === 'string' ? u['reason'] : 'unspecified'
   }))
 
+  // Strict, and throwing rather than dropping. A query exists to interrupt a
+  // person; one that is half-understood is worse than none, because it will be
+  // read as the whole of what was noticed.
+  const rawQueries = Array.isArray(raw['queries']) ? raw['queries'] : []
+  const queries: EditorialQuery[] = rawQueries.map((q, i) => {
+    const where = `Page ${pageIndex + 1}, query ${i + 1}`
+    if (!isRecord(q)) throw new Error(`${where}: not an object`)
+    refuseUnknown(q, new Set(['quote', 'why', 'kind']), where)
+    const quote = typeof q['quote'] === 'string' ? q['quote'].trim() : ''
+    if (!quote) throw new Error(`${where}: no quote — a query must say which words`)
+    const why = typeof q['why'] === 'string' ? q['why'].trim() : ''
+    if (!why) throw new Error(`${where}: no reason given`)
+    const kind = q['kind'] as EditorialQueryKind
+    if (!EDITORIAL_QUERY_KINDS.includes(kind)) {
+      throw new Error(
+        `${where}: "${String(q['kind'] ?? '')}" is not a kind of query. ` +
+          `One of ${EDITORIAL_QUERY_KINDS.join(', ')}.`
+      )
+    }
+    return { quote, why, kind }
+  })
+
   const rawFurniture = isRecord(raw['furniture']) ? raw['furniture'] : {}
   const furniture: PageFurniture = {}
   if (typeof rawFurniture['runningHead'] === 'string') {
@@ -390,7 +536,8 @@ export function parsePageTranscription(raw: unknown, pageIndex: number): PageTra
     role: role as PageRole,
     blocks,
     uncertain,
-    furniture
+    furniture,
+    ...(queries.length > 0 ? { queries } : {})
   }
 
   const rawMeta = raw['metadata']

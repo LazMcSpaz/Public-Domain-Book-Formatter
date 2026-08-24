@@ -248,6 +248,7 @@ node scripts/drive.mjs leaf 133      # any leaf, rendered
 node scripts/drive.mjs leaf 133 tight 600 0.3,0.24,0.2,0.03   # a crop of it, at any DPI
 node scripts/drive.mjs use <scan.pdf> # which book every later verb means
 node scripts/drive.mjs book          # what that is now; `book clear` forgets it
+node scripts/drive.mjs queries q.md  # decisions waiting on the editor, as a sheet
 node scripts/drive.mjs runs          # readings held here; `runs drop <n>` removes one
 node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` work it
 ```
@@ -259,6 +260,15 @@ reader producing text from an image alone has nothing to be wrong against.
 differ"_, which is the one shape of reading that cannot confabulate a paragraph.
 Its `structural` list says what it guessed rather than measured, and is the
 order to check things in.
+
+**A decision that is the editor's is raised, never taken.** A compositor's
+error, a place the book contradicts itself, a passage where "faithful to the
+original" and "correct" pull apart: transcribe it **as printed** and attach a
+`query` to the leaf (`src/core/queries`). Never silently correct it and never
+silently keep it. There is deliberately no field for a proposed fix — a
+suggestion beside a question is an answer in all but name, and the answer is
+the editor's. `parsePageTranscription` refuses any field it does not know, so a
+query can no longer be dropped with a green report beside it.
 
 **Before committing: typecheck + test + format:check + lint.**
 

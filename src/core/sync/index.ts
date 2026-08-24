@@ -11,6 +11,7 @@ export {
   SHELF_ROOT,
   VOICE_ROOT,
   aboutPath,
+  queriesPath,
   bookPath,
   imagePath,
   commitMessage,
