@@ -60,6 +60,7 @@ export const DECIDED_FIELDS = [
   'fileName',
   'savedAt',
   'pageCount',
+  'leafCount',
   'transcriptions',
   'complete'
 ] as const
@@ -74,8 +75,11 @@ export interface MergeBatchInput {
   /**
    * How many leaves the book has — **0 when nobody knows**.
    *
-   * Never pass a floor here. Report one if you like; storing one is what
-   * turned a barely-started book into a finished one.
+   * Never pass a floor here, and never pass `held.pageCount`: that field means
+   * the read count when the wizard wrote it and the book's length when the
+   * driver did, and there is no way to tell afterwards which. `held.leafCount`
+   * is the one that means only the second thing. Storing a wrong length is
+   * what turned a barely-started book into a finished one.
    */
   pageCount: number
   /** Opt-in, explicit: throw every other leaf away. */
@@ -105,6 +109,7 @@ export interface MergeBatchResult {
     key: string
     fileName: string
     pageCount: number
+    leafCount: number
     transcriptions: PageTranscription[]
     failures: readonly SavedFailure[]
     usage: SavedUsage
@@ -175,6 +180,7 @@ export function mergeBatchIntoRun(input: MergeBatchInput): MergeBatchResult {
       fileName,
       // 0 rather than a floor. See the note at the top of this file.
       pageCount,
+      leafCount: pageCount,
       transcriptions,
       // Everything below is the held run's, untouched. See CARRIED_FIELDS.
       failures: held?.failures ?? [],

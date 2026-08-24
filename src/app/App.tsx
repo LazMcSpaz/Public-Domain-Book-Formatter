@@ -1109,6 +1109,8 @@ export function App(): JSX.Element {
       setState((s) => ({
         ...s,
         pageCount: result.pageCount,
+        // The one place the scan is actually counted.
+        leafCount: result.pageCount,
         pagesProcessed: result.pageCount,
         lexicon: result.lexicon,
         classifications: [{ pageIndex: 0, role: 'title-page', selfReportedConfidence: 0 }],
@@ -1580,8 +1582,11 @@ export function App(): JSX.Element {
       const stored = await saveRun(
         createSavedRun({
           key,
-          fileName: file.name,
           pageCount: result.transcriptions.length,
+          // How long the book is, which is not the same number as how much of
+          // it has been read — see `SavedRun.leafCount`.
+          leafCount: state.leafCount,
+          fileName: file.name,
           transcriptions: result.transcriptions,
           failures: result.failures,
           usage: result.usage,
@@ -1842,6 +1847,9 @@ export function App(): JSX.Element {
               key: liveKey,
               fileName: file.name,
               pageCount: transcriptions.length,
+              // The book's length, not the checkpoint's. Writing the read
+              // count here is what made a resumed run report itself finished.
+              leafCount: state.leafCount,
               transcriptions,
               failures,
               usage,

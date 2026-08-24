@@ -39,12 +39,13 @@ import { FOOTINGS, type Fact } from '@core/harvest'
  * v5 → v6 added the proofreading corrections, v6 → v7 the pixels of any
  * pictures the editor supplied, v7 → v8 whether the paid pass reached the end,
  * v8 → v9 what the second reading concluded about the flagged spots, and
- * v9 → v10 the fact bank this book produced. None of them damages an older run — each is a complete transcription that simply
+ * v9 → v10 the fact bank this book produced, and v10 → v11 `leafCount`, how
+ * long the book actually is. None of them damages an older run — each is a complete transcription that simply
  * has none of the newer thing on it yet — so all upgrade in place rather than
  * being refused. That distinction is the whole reason a migration exists
  * instead of a version check.
  */
-export const CURRENT_SCHEMA_VERSION = 10
+export const CURRENT_SCHEMA_VERSION = 11
 
 /** A page the model could not read at all. Mirrors the runner's `PageFailure`. */
 export interface SavedFailure {
@@ -101,6 +102,29 @@ export interface SavedRun {
    * decode time so a phone photograph does not fill the store on its own.
    */
   images: { id: string; bytes: Uint8Array }[]
+  /**
+   * How many leaves the scan has — **0 when nobody knows**.
+   *
+   * Beside `pageCount` rather than replacing it, because the two halves of this
+   * codebase had been writing `pageCount` to mean different things and there is
+   * no way to tell afterwards which a stored record meant. The wizard writes
+   * `transcriptions.length` there when it checkpoints a partial reading — how
+   * many leaves have been *read* — while the driver and the shelf read it as
+   * the length of the book. Nothing warned, because both are plausible numbers
+   * of the same magnitude.
+   *
+   * That ambiguity is only harmless until something *decides* on it. Landing a
+   * batch against a checkpointed run took the read count for the book's length
+   * and reported `complete: true, stillMissing: 0` over sixteen leaves of a
+   * three-hundred-leaf book — and refused correctly-numbered batches with a
+   * message blaming the caller for counting from 1.
+   *
+   * So this field means one thing and says so, and a record written before it
+   * existed migrates to **0 — unknown** rather than to whatever `pageCount`
+   * happened to hold. Guessing there would bake the ambiguity in permanently,
+   * and unknown is a state everything downstream already handles.
+   */
+  leafCount: number
   /**
    * Whether the paid pass reached the end of the book.
    *
@@ -236,6 +260,8 @@ export function createSavedRun(init: {
   key: string
   fileName: string
   pageCount: number
+  /** How long the book is, 0 when unknown. See `SavedRun.leafCount`. */
+  leafCount?: number
   transcriptions: readonly PageTranscription[]
   failures: readonly SavedFailure[]
   usage: SavedUsage
@@ -255,6 +281,7 @@ export function createSavedRun(init: {
     fileName: init.fileName,
     savedAt: init.savedAt ?? new Date().toISOString(),
     pageCount: init.pageCount,
+    leafCount: init.leafCount ?? 0,
     transcriptions: [...init.transcriptions],
     failures: [...init.failures],
     usage: init.usage,
@@ -314,6 +341,10 @@ export function migrateSavedRun(raw: unknown): SavedRun {
     fileName: str(raw['fileName'], 'a book'),
     savedAt: str(raw['savedAt'], new Date(0).toISOString()),
     pageCount: num(raw['pageCount'], transcriptions.length),
+    // Never inherited from `pageCount`: a record written before v11 cannot say
+    // which of the two things that number meant, and a wrong length here is
+    // what makes a barely-started book report itself finished.
+    leafCount: num(raw['leafCount'], 0),
     // Inline markup is converted on the way back in, not only on the way out
     // of the model. A book transcribed before that conversion existed is sitting
     // in storage with `<em>` in its text, and it was paid for — healing it here

@@ -244,3 +244,47 @@ describe('a draft says what it guessed', () => {
     expect(page.structural.join(' ')).toContain('CLAIRVOYANCE')
   })
 })
+
+/**
+ * A full-measure line of prose that happens to end in something number-shaped
+ * must stay in the text.
+ *
+ * The width test used to be skipped the moment anything was peeled off the end
+ * of the line, and `BARE_NUMBER` accepted roman numerals case-insensitively —
+ * so `civil.`, `mild.`, `did.` and any year qualified, and a line of body text
+ * left the leaf as a running head.
+ */
+describe('a line of prose is not a running head because it ends in a number', () => {
+  const prose = (last: string): Placed[] => [
+    ...filler(0),
+    { text: last, line: 0, from: 54 },
+    ...filler(4),
+    ...filler(5),
+    ...filler(6)
+  ]
+
+  it('keeps a full-measure line ending in a year', () => {
+    const page = draftPage(words(prose('1893.')))
+    expect(page.furniture).toEqual({})
+    expect(page.structural.join(' ')).toMatch(/of the measure/)
+  })
+
+  it('keeps a full-measure line ending in a word spelled from roman numerals', () => {
+    expect(draftPage(words(prose('civil.'))).furniture).toEqual({})
+  })
+
+  it('still takes a short head with its folio set off at the margin', () => {
+    // The head is short and the folio sits well out from it — which is what a
+    // running head actually looks like.
+    const page = draftPage(
+      words([
+        { text: 'CRYSTAL GAZING', line: 0, from: 0 },
+        { text: '117', line: 0, from: 52 },
+        ...filler(4),
+        ...filler(5),
+        ...filler(6)
+      ])
+    )
+    expect(page.furniture).toEqual({ runningHead: 'CRYSTAL GAZING', folio: '117' })
+  })
+})

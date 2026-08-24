@@ -146,6 +146,52 @@ describe('a guessed leaf count is never stored', () => {
   })
 })
 
+/**
+ * The count the wizard writes into `pageCount` is how many leaves have been
+ * *read*. Taking it for the book length reported sixteen leaves of a three
+ * hundred leaf book as finished, and refused correctly-numbered batches with a
+ * message blaming the caller for counting from 1. `leafCount` means only the
+ * one thing, and an old record migrates to 0 rather than to a guess.
+ */
+describe('a checkpoint read count is never mistaken for the book length', () => {
+  const checkpointed = (): SavedRun =>
+    run({
+      // What `onCheckpoint` writes: sixteen leaves read of a 300-leaf book.
+      pageCount: 16,
+      leafCount: 300,
+      transcriptions: Array.from({ length: 16 }, (_, i) => leaf(i)),
+      complete: false
+    })
+
+  it('does not refuse a later batch as if the book ended at the checkpoint', () => {
+    const held = checkpointed()
+    expect(() =>
+      merge({ held, parsed: [leaf(20), leaf(21)], pageCount: held.leafCount })
+    ).not.toThrow()
+  })
+
+  it('does not call a barely-started book finished', () => {
+    const held = checkpointed()
+    const { report, init } = merge({ held, parsed: [leaf(16)], pageCount: held.leafCount })
+    expect(report.complete).toBe(false)
+    expect(init.complete).toBe(false)
+    expect(report.stillMissing).toBe(283)
+  })
+
+  it('carries the book length forward rather than the read count', () => {
+    const held = checkpointed()
+    const { init } = merge({ held, parsed: [leaf(16)], pageCount: held.leafCount })
+    expect(init.leafCount).toBe(300)
+  })
+
+  it('treats a record written before the field existed as unknown, not a guess', () => {
+    const old = { ...run(), leafCount: 0 }
+    const { report } = merge({ held: old, parsed: [leaf(400)], pageCount: old.leafCount })
+    expect(report.complete).toBe(false)
+    expect(report.pageCount).toBeNull()
+  })
+})
+
 describe('a batch that cannot mean one thing is refused', () => {
   it('refuses the same leaf twice', () => {
     expect(() => merge({ parsed: [leaf(3, 'one way'), leaf(3, 'another')] })).toThrow(

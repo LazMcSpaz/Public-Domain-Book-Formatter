@@ -172,11 +172,21 @@ const FURNITURE_GAP = 1.8
  * folio rather than a figure at the end of a sentence.
  *
  * The decisive piece of evidence for furniture, and the one that needs no
- * threshold on the head at all. Measured: real running heads on these fixtures
- * leave 8% to 34% of the measure before the folio; a line of prose leaves a
+ * threshold on the head at all.
+ *
+ * **Measured across every real running head in the fixtures:** 24.4, 25.9,
+ * 25.1, 21.0, 20.8, 19.9 and 13.1 per cent, plus two long-headed outliers at
+ * 4.3 and 4.0 — `TELEPATHY vs. CLAIRVOYANCE 37` and
+ * `PSYCHIC, MAGNETIC HEALING 319`, whose heads nearly fill the measure and
+ * leave the folio little room. A word space on these pages is about 1 per
+ * cent. So 3 clears every real head with margin and still sits three times a
  * word space.
+ *
+ * Set from that distribution rather than from taste, and it was 6 until the
+ * two outliers were measured — which is the difference between tuning a
+ * number until a page looks right and reading it off the pages.
  */
-const FOLIO_GAP = 0.06
+const FOLIO_GAP = 0.03
 
 /**
  * Taller than the body by this much, and the line is display type.
@@ -218,6 +228,18 @@ const FURNITURE_MIN_ALNUM = 2
 const FURNITURE_ALNUM_SHARE = 0.5
 
 const BARE_NUMBER = /^[\s.[\]()]*([0-9]{1,4}|[ivxlcdm]{1,7})[\s.[\]()]*$/i
+
+/**
+ * A folio printed beside a running head. **Digits only.**
+ *
+ * `BARE_NUMBER` accepts roman numerals case-insensitively, which is right for a
+ * folio standing alone on a line but disastrous beside a head: `civil.`,
+ * `mild.`, `did.` and `vivid.` are all ordinary words spelled from
+ * `i v x l c d m`, and taking one for a folio lifts a line of prose off the
+ * leaf. A roman folio does occur in front matter, where it stands alone and is
+ * still matched by `BARE_NUMBER`.
+ */
+const FOLIO_NUMBER = /^[\s.[\]()]*[0-9]{1,4}[\s.[\]()]*$/
 const CONTENTS_TITLE = /^\s*(synopsis|contents|table of contents)\b/i
 const NUMBER_LINE = /^\s*(lesson|chapter|part|book|section)\b[\s.]*[0-9ivxlcdm]*\s*\.?\s*$/i
 
@@ -396,8 +418,21 @@ export function toLines(words: readonly DraftWord[], bodyHeight: number): DraftL
       return {
         text: ordered.map((w) => w.text).join(' '),
         words: ordered,
-        top: Math.min(...ordered.map((w) => w.bbox.y0)),
-        bottom: Math.max(...ordered.map((w) => w.bbox.y1)),
+        // `top` and `bottom` come from the band, which was built from
+        // body-sized words alone — **not** from `ordered`, which includes any
+        // oversize word dropped on afterwards.
+        //
+        // Recomputing them over every word let a drop capital become the
+        // line's top: on a real chapter opening the `E` of `EVERY` is 244
+        // pixels against a 62-pixel body, which turned strides of 107 and 105
+        // into 3 and 209 and broke the opening paragraph in two at a
+        // line-wrap hyphen — `ad-` / `vanced`, which nothing downstream heals
+        // because hyphen healing only runs at page seams.
+        top: band.top,
+        bottom: band.bottom,
+        // Left and right *do* take the oversize word in, because a drop
+        // capital really is where the line begins and the measure should say
+        // so.
         left: Math.min(...ordered.map((w) => w.bbox.x0)),
         right: Math.max(...ordered.map((w) => w.bbox.x1))
       }
@@ -454,24 +489,29 @@ function isIndented(line: DraftLine, measure: Measure): boolean {
  * Returns the head and the folio separately, or null when the line does not
  * come apart that way.
  */
-/** Whether a head with no folio beside it is short enough to be one. */
-function shortHead(head: string, line: DraftLine, measure: Measure): boolean {
-  if (head.trim() !== line.text.trim()) return true
-  return line.right - line.left <= measure.width * FURNITURE_WIDTH
+/**
+ * Whether the head itself — not the line it came off — is short enough.
+ *
+ * Measured, never inferred from the fact that something was peeled off the
+ * end. The first version returned true the moment `splitFurnitureLine` took a
+ * token, so a full-measure line of prose ending in a year, or in one of the
+ * ordinary words spelled from roman numerals (`civil.`, `mild.`, `did.`),
+ * left the text flow as a running head.
+ */
+function shortHead(headWidth: number, measure: Measure): boolean {
+  return headWidth <= measure.width * FURNITURE_WIDTH
 }
 
 function splitFurnitureLine(
-  line: DraftLine,
-  measure: Measure
-): { head: string; folio: string | null; folioGap: number } | null {
+  line: DraftLine
+): { head: string; folio: string | null; folioGap: number; headWidth: number } | null {
   const words = line.words
   if (words.length === 0) return null
 
-  const shortEnough = (from: number, to: number): boolean => {
+  const widthOf = (from: number, to: number): number => {
     const span = words.slice(from, to)
-    if (span.length === 0) return false
-    const width = Math.max(...span.map((w) => w.bbox.x1)) - Math.min(...span.map((w) => w.bbox.x0))
-    return width <= measure.width * FURNITURE_WIDTH
+    if (span.length === 0) return Infinity
+    return Math.max(...span.map((w) => w.bbox.x1)) - Math.min(...span.map((w) => w.bbox.x0))
   }
 
   // The folio sits at one end or the other — verso books put it left, recto
@@ -482,29 +522,30 @@ function splitFurnitureLine(
   // is furniture at all — a running head is set with its folio out at the
   // margin, while a line of prose that happens to end in a number does not
   // leave a quarter of an inch before it.
-  if (words.length > 1 && BARE_NUMBER.test(last.text)) {
+  if (words.length > 1 && FOLIO_NUMBER.test(last.text)) {
     return {
       head: words
         .slice(0, -1)
         .map((w) => w.text)
         .join(' '),
       folio: last.text.trim(),
-      folioGap: last.bbox.x0 - words[words.length - 2]!.bbox.x1
+      folioGap: last.bbox.x0 - words[words.length - 2]!.bbox.x1,
+      headWidth: widthOf(0, words.length - 1)
     }
   }
-  if (words.length > 1 && BARE_NUMBER.test(first.text)) {
+  if (words.length > 1 && FOLIO_NUMBER.test(first.text)) {
     return {
       head: words
         .slice(1)
         .map((w) => w.text)
         .join(' '),
       folio: first.text.trim(),
-      folioGap: words[1]!.bbox.x0 - first.bbox.x1
+      folioGap: words[1]!.bbox.x0 - first.bbox.x1,
+      headWidth: widthOf(1, words.length)
     }
   }
-  // No folio on the line at all, but the head is short by itself.
-  if (shortEnough(0, words.length)) return { head: line.text, folio: null, folioGap: 0 }
-  return null
+  // No folio on the line at all.
+  return { head: line.text, folio: null, folioGap: 0, headWidth: widthOf(0, words.length) }
 }
 
 /**
@@ -561,7 +602,7 @@ function takeFurniture(
       return
     }
 
-    const split = splitFurnitureLine(line, measure)
+    const split = splitFurnitureLine(line)
     // A bare number set off at the margin is what a folio *is*, and no line of
     // prose does it. Where that is present the head beside it is a running
     // head whatever its width or its size — which is what rescued
@@ -586,16 +627,10 @@ function takeFurniture(
       return
     }
 
-    if (!split) {
+    if (!split) return
+    if (!folioAtMargin && !shortHead(split.headWidth, measure)) {
       say(
-        `it is too wide to be furniture (${Math.round(((line.right - line.left) / measure.width) * 100)}%` +
-          ' of the measure) and carries no folio set off at the margin'
-      )
-      return
-    }
-    if (!folioAtMargin && !shortHead(split.head, line, measure)) {
-      say(
-        `its head is ${Math.round(((line.right - line.left) / measure.width) * 100)}% of the measure` +
+        `its head is ${Math.round((split.headWidth / measure.width) * 100)}% of the measure` +
           ' and no folio is set off at the margin beside it'
       )
       return
@@ -727,6 +762,31 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
   }
 
   const body = measureOf(lines)
+
+  // The lines a drop capital pushes to the right.
+  //
+  // A three-line initial holds the next two or three lines off the margin, and
+  // an inset is exactly what the indent rule looks for — so a chapter opening
+  // broke into a fresh block at every line beside its own initial, splitting
+  // the first paragraph at a line-wrap hyphen (`ad-` / `vanced`) that nothing
+  // downstream heals, because hyphen healing only runs at page seams.
+  //
+  // Measured rather than assumed: a capital counts only if it is oversize *and*
+  // sits at the left margin, and only the lines its box actually spans are
+  // exempted.
+  const initials = usable.filter(
+    (w) => heightOf(w) > bodyHeight * OVERSIZE && w.bbox.x0 <= body.left + body.width * 0.05
+  )
+  const besideInitial = (line: DraftLine): boolean =>
+    initials.some((c) => line.top < c.bbox.y1 && line.bottom > c.bbox.y0)
+  if (initials.length > 0) {
+    structural.push(
+      `${initials.length} drop capital(s) at the left margin. The lines beside one are inset by ` +
+        'it, so they are not read as new paragraphs — and the letter under one is often ' +
+        'mis-read, so check the word it begins against the render.'
+    )
+  }
+
   const blocks: DraftBlock[] = []
   let run: DraftLine[] = []
 
@@ -750,7 +810,7 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
     const previous = lines[i - 1]
     if (previous) {
       const wide = line.top - previous.top > stride * PARAGRAPH_GAP
-      const indented = isIndented(line, body)
+      const indented = !besideInitial(line) && isIndented(line, body)
       const switched = isCentred(line, body) !== isCentred(previous, body)
       if (wide || indented || switched) flush()
     }

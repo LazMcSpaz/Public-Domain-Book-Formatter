@@ -927,7 +927,11 @@ async function serve() {
           // A floor stored is a floor read back next time as a known number,
           // which is how `complete: true` came out of a book sixteen leaves
           // into three hundred. `mergeBatchIntoRun` refuses to persist a guess.
-          let pageCount = held?.pageCount ?? 0
+          // `leafCount`, never `pageCount`. The wizard writes the *read* count
+          // into `pageCount` when it checkpoints a partial reading, and taking
+          // that for the book's length reported sixteen leaves of a
+          // three-hundred-leaf book as finished.
+          let pageCount = held?.leafCount ?? 0
           let countFrom = 'the run already on this device'
           if (!pageCount) {
             const source = await runStore.loadSourceFile(key)

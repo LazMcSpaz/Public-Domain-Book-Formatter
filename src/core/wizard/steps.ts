@@ -95,6 +95,18 @@ export interface WizardState {
    */
   fileSize: number
   pageCount: number
+  /**
+   * How many leaves the scan has, 0 until it has been counted.
+   *
+   * Separate from `pageCount`, which this file's own state overwrites with a
+   * transcription count when a saved book is reopened. Both numbers are
+   * plausible and the same magnitude, so nothing ever noticed — until
+   * something *decided* on it and reported a sixteen-leaf reading of a
+   * three-hundred-leaf book as finished.
+   *
+   * Set from the reading of the scan and from nothing else.
+   */
+  leafCount: number
   /** Pages rendered + OCR'd so far (drives recon progress). */
   pagesProcessed: number
   /** Harvested vocabulary, highest impact first. */
@@ -251,6 +263,7 @@ export function initialState(): WizardState {
   return {
     fileName: null,
     fileSize: 0,
+    leafCount: 0,
     pageCount: 0,
     pagesProcessed: 0,
     lexicon: [],
