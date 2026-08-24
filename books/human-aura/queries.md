@@ -9,5 +9,4 @@ question is an answer in all but name.
 
 Nothing is waiting on you.
 
-
 6 have been ruled on — see `rulings.md`.

@@ -2488,6 +2488,88 @@ async function serve() {
     },
 
     /**
+     * Raise a query on a leaf that has already been read.
+     *
+     * Queries were only ever attachable at the moment a leaf was transcribed,
+     * which is the one moment they are least likely to be noticed. Most of them
+     * turn up later — proofing the set page, or running the consistency checks
+     * over the assembled book — and until now there was nowhere to put one
+     * except a chat session, which is the one place a decision must not live.
+     *
+     * ```
+     * query 163 "the moment at which he awoke." printers-error "why this needs you"
+     * ```
+     *
+     * The quoted words must be on the leaf, checked here rather than trusted: a
+     * query whose quote is not in the book is one nobody can look up, and the
+     * sheet it lands on is read months later by someone with only the words.
+     *
+     * There is deliberately no argument for a proposed fix. A suggestion beside
+     * a question is an answer in all but name, and the answer is the editor's.
+     */
+    query: async ([leaf, quote, kind = 'unclear', why = '']) => {
+      const pageIndex = Number(leaf)
+      if (!Number.isInteger(pageIndex) || !quote || !why) {
+        throw new Error('query <leaf> <quote> <printers-error|inconsistent|unclear> <why>')
+      }
+      if (!['printers-error', 'inconsistent', 'unclear'].includes(kind)) {
+        throw new Error(`\`${kind}\` is not a kind of query.`)
+      }
+      return page.evaluate(
+        async ([repo, pageIndex, quote, kind, why]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+
+          const leafAt = run.transcriptions.find((t) => t.pageIndex === pageIndex)
+          if (!leafAt) throw new Error(`Leaf ${pageIndex} has not been read.`)
+
+          // Against the leaf's own blocks, and against them as stored rather
+          // than as assembled: a query names a place on a leaf, and the leaf is
+          // what somebody will go and look at.
+          const onTheLeaf = leafAt.blocks.map((b) => b.text).join(' ')
+          if (!onTheLeaf.includes(quote)) {
+            throw new Error(
+              `Those words are not on leaf ${pageIndex}. A query nobody can look up is worse ` +
+                'than none, so nothing was written.'
+            )
+          }
+          const already = (leafAt.queries ?? []).some((q) => q.quote === quote)
+          if (already) {
+            return { pageIndex, raised: false, why: 'That query is already on this leaf.' }
+          }
+
+          const transcriptions = run.transcriptions.map((t) =>
+            t.pageIndex === pageIndex
+              ? { ...t, queries: [...(t.queries ?? []), { quote, why, kind }] }
+              : t
+          )
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            transcriptions
+          })
+          const stored = await runStore.saveRun(next)
+          const raised = queriesMod.collectQueries(transcriptions)
+          return {
+            pageIndex,
+            raised: true,
+            stored: stored === true,
+            queriesOnThisBook: raised.length,
+            waiting: queriesMod.outstanding(raised, run.rulings ?? []).length,
+            next: 'Run `queries` to rewrite the sheet.'
+          }
+        },
+        [REPO, pageIndex, quote, kind, why]
+      )
+    },
+
+    /**
      * Record what the editor decided about a query.
      *
      * The other half of a channel that was, until now, one-way: the question
