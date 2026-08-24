@@ -1855,7 +1855,15 @@ async function serve() {
           const whole = newest
             ? await cacheMod.loadReconCache(newest.key, { dpi: recon.RECON_DPI, maxPages: null })
             : null
-          const part = newest ? await cacheMod.loadReconCheckpoint(newest.key) : null
+          // The same `wanted` the whole-reading load uses. Called without it,
+          // this threw on every book — a verb whose only job is to say what is
+          // on the device, failing to say anything.
+          const part = newest
+            ? await cacheMod.loadReconCheckpoint(newest.key, {
+                dpi: recon.RECON_DPI,
+                maxPages: null
+              })
+            : null
           return {
             runs: runs.map((r) => ({ key: r.key, pages: r.pageCount, savedAt: r.savedAt })),
             wholeReading: whole ? { words: whole.words.length } : null,
