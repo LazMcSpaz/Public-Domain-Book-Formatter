@@ -1065,9 +1065,19 @@ async function serve() {
         throw new Error('transcribe <scan.pdf> <pages.json> [merge|replace]')
       }
       const { readFile, stat } = await import('node:fs/promises')
-      const scan = resolve(REPO, scanPath)
-      const meta = await stat(scan)
-      const name = scanPath.split('/').pop()
+      // `-` means the book this session is working on, resolved the way every
+      // other verb resolves it. A scan loaded in an earlier session lives in
+      // the store and nowhere on this filesystem, so demanding a path made the
+      // one verb that lands work unusable on exactly the books that have any.
+      let file = null
+      if (scanPath !== '-') {
+        const meta = await stat(resolve(REPO, scanPath))
+        file = {
+          name: scanPath.split('/').pop(),
+          size: meta.size,
+          lastModified: Math.floor(meta.mtimeMs)
+        }
+      }
       const raw = JSON.parse(await readFile(resolve(REPO, pagesPath), 'utf8'))
       const pages = Array.isArray(raw) ? raw : (raw.pages ?? [])
       if (!Array.isArray(pages) || pages.length === 0) {
@@ -1075,7 +1085,7 @@ async function serve() {
       }
 
       return page.evaluate(
-        async ([repo, file, pages, replace]) => {
+        async ([repo, named, pages, replace]) => {
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const schema = await import(`/@fs${repo}/src/core/transcribe/index.ts`)
@@ -1092,13 +1102,30 @@ async function serve() {
           // triple alone put this batch in a run of its own that nothing would
           // ever open: no error, no book, and a session that believed it had
           // just filed a leaf.
-          const existing = await runStore.findRunForFile(file)
+          const current = named ? null : await window.__pdbfPickBook(runStore)
+          if (!named && !current) throw new Error('No book on this device to land this batch in.')
+          const file = named ?? {
+            name: current.fileName,
+            size: Number(current.key.split('\u0000')[1] ?? 0),
+            lastModified: Number(current.key.split('\u0000')[2] ?? 0)
+          }
+          // The *whole* run, not the summary `__pdbfPickBook` hands back.
+          // `held` is what every field of the held run is carried from, and a
+          // summary has no `transcriptions`, no `edits` and no `rulings` — so
+          // reading one here made the merge believe it was starting a fresh
+          // book and silently threw away twelve leaves, two corrections and
+          // three rulings. It reported `landed: 72` while doing it.
+          const existing = named
+            ? await runStore.findRunForFile(file)
+            : { run: await runStore.loadRun(current.key), key: current.key }
           const key = existing?.key ?? project.fileKey(file)
           const foundBy = !existing
             ? 'nothing on this device — this batch starts a new run'
-            : existing.key === project.fileKey(file)
-              ? 'name, size and date'
-              : 'name and size — the stored date differs'
+            : !named
+              ? 'the book this session is working on'
+              : existing.key === project.fileKey(file)
+                ? 'name, size and date'
+                : 'name and size — the stored date differs'
 
           // Parsed before anything is *written*, so a bad batch changes
           // nothing. The run lookup above runs first and is deliberately a
@@ -1122,6 +1149,19 @@ async function serve() {
           })
 
           const held = existing?.run ?? null
+
+          // The guard that would have caught the above, and catches the next
+          // one of its shape. A run exists at this key and yet nothing was
+          // read back from it: whatever is wrong, merging now writes a book
+          // with only this batch in it and calls that a merge.
+          if (!held && (await runStore.loadRunSummary(key))) {
+            throw new Error(
+              `A run is stored at this key and could not be read back, so merging ` +
+                `this batch would replace ${
+                  (await runStore.loadRunSummary(key))?.pageCount ?? 'every'
+                } leaf of it with the ${pages.length} here. Nothing was written.`
+            )
+          }
           // How long the book is, or 0 when nobody knows — never a floor.
           // A floor stored is a floor read back next time as a known number,
           // which is how `complete: true` came out of a book sixteen leaves
@@ -1257,12 +1297,7 @@ async function serve() {
             flagged: checked
           }
         },
-        [
-          REPO,
-          { name, size: meta.size, lastModified: Math.floor(meta.mtimeMs) },
-          pages,
-          mode === 'replace'
-        ]
+        [REPO, file, pages, mode === 'replace']
       )
     },
 

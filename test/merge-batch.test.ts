@@ -287,3 +287,32 @@ describe('merging and replacing', () => {
     expect(merge({ held: run(), parsed: [leaf(9)], pageCount: 300 }).report.discarded).toBe(0)
   })
 })
+
+/**
+ * The types say a summary cannot be passed here. To a JavaScript caller they
+ * say nothing at all, and `scripts/drive.mjs` passed one: a `SavedRunSummary`
+ * has a key and a fileName and no `transcriptions`, so every carried field read
+ * as absent. Twelve landed leaves, two corrections and three rulings went, and
+ * the report said `landed: 72` while it happened.
+ */
+describe('something run-shaped that is not a run', () => {
+  it('refuses a summary rather than treating it as an empty book', () => {
+    const summary = {
+      key: 'book.pdf 100 1',
+      fileName: 'book.pdf',
+      complete: false,
+      savedAt: '2026-08-24T00:00:00.000Z',
+      pageCount: 84,
+      failedPages: 0
+    }
+    expect(() => merge({ held: summary as unknown as SavedRun })).toThrow(/not a run/u)
+  })
+
+  it('still takes null, which is how a first batch starts a book', () => {
+    expect(() => merge({ held: null })).not.toThrow()
+  })
+
+  it('still takes a real run', () => {
+    expect(() => merge({ held: run() })).not.toThrow()
+  })
+})

@@ -158,6 +158,21 @@ const NAME_MISSING = 12
 export function mergeBatchIntoRun(input: MergeBatchInput): MergeBatchResult {
   const { held, parsed, key, fileName, pageCount, replace } = input
 
+  // A run, or nothing — never something run-shaped enough to pass.
+  //
+  // The types say this cannot happen and to a JavaScript caller they say
+  // nothing at all. `scripts/drive.mjs` handed this a `SavedRunSummary`, which
+  // has a key and a fileName and no `transcriptions`, so every carried field
+  // read as absent: twelve landed leaves, two corrections and three rulings
+  // were thrown away, and the merge reported `landed: 72` while doing it.
+  // Silence was the whole fault, so this is loud.
+  if (held !== null && !Array.isArray(held.transcriptions)) {
+    throw new Error(
+      'The run to merge into has no `transcriptions`, so it is not a run — a summary, ' +
+        'or a partly-built record. Merging would replace the whole book with this batch.'
+    )
+  }
+
   const seen = new Set<number>()
   for (const page of parsed) {
     if (seen.has(page.pageIndex)) {
