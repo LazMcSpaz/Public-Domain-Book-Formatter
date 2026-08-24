@@ -14,11 +14,9 @@ individually:
    Publishing Co., Chicago, 1916. Its title page calls it "Volume I of the
    Occult Manuals", so a series identity already exists in the source.
 2. **Clairvoyance and Occult Powers** — same author, 1916.
-3. A third Panchadasi title, not yet fixed. Candidates are *The Astral
-   World* and *Genuine Mediumship, or The Invisible Powers*. **Part of your
-   job is to tell me which third title makes the strongest commercial set** —
-   which is most searched for, least well served by existing editions, and
-   most coherent with the other two.
+3. **The Astral World: Its Scenes, Dwellers, and Phenomena** — same author.
+   Settled; it is the next in the series. 102 leaves of scan, so it falls
+   between the other two in length.
 
 These are careful editions, not scan-dumps: the text is transcribed from the
 original printing, checked against independent readings, compositor's errors
@@ -34,18 +32,24 @@ page counts from our own engine, body plus front matter, **before** the
 editor's introduction and glossary are added (those will add roughly 10–20
 pages to each):
 
-| Trim | Body size | The Human Aura | Clairvoyance |
-| --- | --- | --- | --- |
-| 6 × 9 | 11 pt | 50 | 244 |
-| 6 × 9 | 12 pt | 65 | 285 |
-| 5.5 × 8.5 | 11 pt | 61 | 286 |
-| 5.5 × 8.5 | 12 pt | 70 | 332 |
-| 5.25 × 8 | 12 pt | 75 | 380 |
-| 5 × 8 | 11 pt | 72 | 337 |
-| 5 × 8 | 12 pt | **81** | 388 |
+| Trim      | Body size | The Human Aura | Clairvoyance |
+| --------- | --------- | -------------- | ------------ |
+| 6 × 9     | 11 pt     | 50             | 244          |
+| 6 × 9     | 12 pt     | 65             | 285          |
+| 5.5 × 8.5 | 11 pt     | 61             | 286          |
+| 5.5 × 8.5 | 12 pt     | 70             | 332          |
+| 5.25 × 8  | 12 pt     | 75             | 380          |
+| 5 × 8     | 11 pt     | 72             | 337          |
+| 5 × 8     | 12 pt     | **81**         | 388          |
+
+_The Astral World_ has not been typeset yet, but its scan is 102 leaves
+against _The Human Aura_'s 88, so expect it to run about 15% longer than the
+Aura column above — roughly 95 pages at 5 × 8 / 12 pt, and about 58 at
+6 × 9 / 11 pt. It clears the spine threshold wherever the Aura does and fails
+wherever the Aura fails, so the Aura remains the binding constraint.
 
 **The binding constraint is the spine.** KDP will not print text on a spine
-below 79 pages. *The Human Aura* is a short book, and at 6 × 9 it cannot have
+below 79 pages. _The Human Aura_ is a short book, and at 6 × 9 it cannot have
 a printed spine at all. For a set meant to sit together on a shelf and be
 recognised as a set, that matters more than almost anything else — so please
 confirm the current KDP spine-text minimum and tell me if I have it wrong.
@@ -56,7 +60,7 @@ confirm the current KDP spine-text minimum and tell me if I have it wrong.
 
 - What trim sizes do the **existing** editions of these three titles actually
   use? List the ones you can verify, with page counts and prices.
-- What trim do the *better-regarded* public-domain occult reprints use —
+- What trim do the _better-regarded_ public-domain occult reprints use —
   the ones with real reviews and complaints about quality absent? Look at
   publishers who do this well and name them.
 - Is there a trim that reads as "serious edition" rather than "print-on-demand
@@ -77,7 +81,7 @@ know precisely what the bad ones do badly, from the evidence:
 - What do the few good editions charge, and what do they visibly do to earn it?
 - How are the good ones described — subtitle conventions, series naming, what
   goes in the A+ content and the description's first two lines?
-- Is there an existing matched *set* of Panchadasi or Atkinson titles on the
+- Is there an existing matched _set_ of Panchadasi or Atkinson titles on the
   market? If so, what does it look like and what does it charge? If not, say
   so — an unserved set is the opening.
 
@@ -117,5 +121,8 @@ know precisely what the bad ones do badly, from the evidence:
 - Whether "Swami Panchadasi" or "William Walker Atkinson" is the better name
   to put on the cover, by search volume and by what buyers of these titles
   seem to look for.
+- Whether the source's own series name — "The Occult Manuals", printed on
+  _The Human Aura_'s title page — is worth reviving as the set's name, or
+  whether something plainer sells better.
 - Whether these titles have any trademark or estate complications. They should
   all be public domain in the US (published 1915–1919), but confirm.
