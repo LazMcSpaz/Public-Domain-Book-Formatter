@@ -1715,11 +1715,32 @@ async function serve() {
             return { source: 'cache', text, words }
           }
           const engine = new ocrMod.OcrEngine()
-          const doc = await pdfMod.openPdf(file)
+          let doc = await pdfMod.openPdf(file)
           const leaves = doc.numPages
           const widened = []
+
+          // pdf.js keeps per-page state on the document, and `page.cleanup()`
+          // frees the page's own intermediates without emptying that. Over a
+          // few hundred leaves it accumulates until the renderer is killed —
+          // which is what took this down mid-sweep on leaf 110 of a 328-leaf
+          // book, and again at 280. Read one at a time, every one of those
+          // leaves is fine; it was never a bad leaf.
+          //
+          // So the document is closed and reopened every so often. The file is
+          // already in memory, so reopening costs a parse of the cross-reference
+          // table and nothing else, and it holds the working set flat the way
+          // `renderPage` already holds one page's pixels flat.
+          const RECYCLE_AFTER = 40
+          let sinceOpen = 0
+
           try {
             for (const n of list) {
+              if (sinceOpen >= RECYCLE_AFTER) {
+                await doc.destroy()
+                doc = await pdfMod.openPdf(file)
+                sinceOpen = 0
+              }
+              sinceOpen++
               if (n < 0 || n >= leaves) {
                 text[n] = ''
                 words[n] = null
@@ -1771,6 +1792,9 @@ async function serve() {
             }
           } finally {
             await engine.dispose()
+            // Never left open. This verb held a document for the life of the
+            // page and freed it only when the page died.
+            await doc.destroy()
           }
           // Said out loud: these words were read in a different frame from
           // every other leaf's, so their boxes do not line up with the cached
