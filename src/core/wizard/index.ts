@@ -40,3 +40,4 @@ export {
   type StepId,
   type WizardState
 } from './steps'
+export { parseDeepLink, deepLink, stepsBefore, type DeepLink } from './deep-link'

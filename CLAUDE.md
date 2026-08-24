@@ -248,6 +248,7 @@ node scripts/drive.mjs leaf 133      # any leaf, rendered
 node scripts/drive.mjs leaf 133 tight 600 0.3,0.24,0.2,0.03   # a crop of it, at any DPI
 node scripts/drive.mjs use <scan.pdf> # which book every later verb means
 node scripts/drive.mjs book          # what that is now; `book clear` forgets it
+node scripts/drive.mjs link review   # a URL that opens this book where decisions wait
 node scripts/drive.mjs queries q.md  # decisions waiting on the editor, as a sheet
 node scripts/drive.mjs runs          # readings held here; `runs drop <n>` removes one
 node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` work it

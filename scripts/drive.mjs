@@ -1885,6 +1885,55 @@ async function serve() {
     },
 
     /**
+     * A link that opens this book, on any device, where the decisions are.
+     *
+     * The whole point of the deployed app: the editor works from a phone, and
+     * without this, looking at one flagged word costs opening the app,
+     * connecting the shelf, finding the book, waiting for the scan to be
+     * fetched and re-read, answering the offer of the saved transcription, and
+     * walking gates that were settled days ago — to arrive at a screen that
+     * could have been the first one.
+     *
+     * The link names the book by its shelf slug and the place by its step, and
+     * it **answers nothing**: every question still outstanding is still asked
+     * when it gets there.
+     *
+     * `link review`, `link proof`, `link review 42` for one leaf.
+     */
+    link: async ([at = 'review', leaf]) => {
+      const site =
+        process.env.PDBF_SITE ?? 'https://lazmcspaz.github.io/Public-Domain-Book-Formatter/'
+      return page.evaluate(
+        async ([repo, base, where, whichLeaf]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const shelf = await import(`/@fs${repo}/src/core/sync/index.ts`)
+          const wizard = await import(`/@fs${repo}/src/core/wizard/index.ts`)
+          const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          const slug = shelf.shelfSlug(newest.key)
+          const raised = run ? queriesMod.collectQueries(run.transcriptions) : []
+          return {
+            url: wizard.deepLink(base, {
+              slug,
+              at: where,
+              ...(Number.isFinite(Number(whichLeaf)) ? { leaf: Number(whichLeaf) } : {})
+            }),
+            book: run?.fileName ?? newest.fileName,
+            slug,
+            queriesWaiting: raised.length,
+            // Said out loud because a link to a book the shelf has never seen
+            // opens the intake screen and looks broken.
+            onTheShelf:
+              'This only works once the book has been pushed to the shelf — `save` does that.'
+          }
+        },
+        [REPO, site, at, leaf ?? '']
+      )
+    },
+
+    /**
      * The decisions waiting on the editor, as a sheet to read.
      *
      * Written to a file rather than printed, because a query that lives only in
