@@ -74,3 +74,11 @@ export {
   type ReconStamp,
   type ReconWanted
 } from './recon-cache'
+export {
+  mergeBatchIntoRun,
+  CARRIED_FIELDS,
+  DECIDED_FIELDS,
+  type MergeBatchInput,
+  type MergeBatchResult,
+  type MergeReport
+} from './merge-batch'

@@ -85,6 +85,15 @@ export interface IllustrationCandidate {
 export interface WizardState {
   /** Source file name, once a PDF is loaded. */
   fileName: string | null
+  /**
+   * Its size in bytes, 0 until one is loaded.
+   *
+   * Beside the name because a name alone does not identify a book — two scans
+   * of the same title share one constantly, which is why `keyMatchesFile`
+   * requires both. A controller reading the gate needs the pair for the same
+   * reason.
+   */
+  fileSize: number
   pageCount: number
   /** Pages rendered + OCR'd so far (drives recon progress). */
   pagesProcessed: number
@@ -241,6 +250,7 @@ export interface WizardState {
 export function initialState(): WizardState {
   return {
     fileName: null,
+    fileSize: 0,
     pageCount: 0,
     pagesProcessed: 0,
     lexicon: [],

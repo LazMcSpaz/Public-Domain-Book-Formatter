@@ -923,73 +923,59 @@ async function serve() {
           })
 
           const held = existing?.run ?? null
-          const byIndex = new Map(
-            replace || !held ? [] : held.transcriptions.map((t) => [t.pageIndex, t])
-          )
-          for (const p of parsed) byIndex.set(p.pageIndex, p)
-          const transcriptions = [...byIndex.values()].sort((a, b) => a.pageIndex - b.pageIndex)
-
-          // The leaf count comes from the scan, not from the batches: a book is
-          // not three hundred pages long because three hundred have been read.
-          // Taken from the stored source file, which `load` and `open` both put
-          // there — and falling back to what has been read only when the scan is
-          // genuinely absent, which the report then says out loud rather than
-          // letting `stillMissing: 0` imply a finished book.
+          // How long the book is, or 0 when nobody knows — never a floor.
+          // A floor stored is a floor read back next time as a known number,
+          // which is how `complete: true` came out of a book sixteen leaves
+          // into three hundred. `mergeBatchIntoRun` refuses to persist a guess.
           let pageCount = held?.pageCount ?? 0
           let countFrom = 'the run already on this device'
-          let counted = pageCount > 0
           if (!pageCount) {
             const source = await runStore.loadSourceFile(key)
             if (source) {
               pageCount = (await pdfMod.openPdf(source)).numPages
               countFrom = 'the scan'
-              counted = true
             } else {
               // The open book, if it is this one. `open` hands the scan to the
               // app without storing it — only `load` stores — so a book being
               // worked on right now routinely has no source file in the store
-              // while the app itself knows perfectly well how many leaves it
-              // has. Matched on the file name, because the app is holding a
-              // `File` and this is the same path that was handed to it.
+              // while the app knows perfectly well how many leaves it has.
+              //
+              // Name *and* size. Name alone is what `keyMatchesFile` forbids in
+              // as many words — two scans of the same title share a name
+              // constantly — and matching on it here would take an eight-leaf
+              // sample's page count for a three-hundred-leaf book.
               const view = window.__pdbfAgent?.run
                 ? (await window.__pdbfAgent.run({ op: 'state' }))?.view
                 : null
-              if (view && view.fileName === file.name && view.pageCount > 0) {
+              if (
+                view &&
+                view.fileName === file.name &&
+                view.fileSize === file.size &&
+                view.pageCount > 0
+              ) {
                 pageCount = view.pageCount
                 countFrom = 'the book open in the app'
-                counted = true
               } else {
-                // Never `transcriptions.length`. A book is not one leaf long
-                // because one leaf has been read, and a count taken from the
-                // batches makes `stillMissing: 0` and `complete: true` come out
-                // of a book that has barely been started — the one wrong answer
-                // here, because it is the answer that stops anybody looking.
-                // The highest leaf read is a floor, and is reported as one.
-                pageCount = Math.max(...transcriptions.map((t) => t.pageIndex)) + 1
-                countFrom = 'the batches — nothing here knows the book, so this is a floor'
-                counted = false
+                countFrom = 'nothing here knows how long the book is'
               }
             }
           }
 
-          const run = project.createSavedRun({
+          // The merge, the carry-across and every number in the report are a
+          // pure function in core — `src/core/project/merge-batch.ts`. They
+          // lived here, inside `page.evaluate`, which made them untestable by
+          // construction, and three of the four bugs found in them were the
+          // same shape: a field claiming a check had happened, or a book was
+          // finished, when neither was true. They are unit tests now.
+          const merged = project.mergeBatchIntoRun({
+            held,
+            parsed,
             key,
             fileName: file.name,
             pageCount,
-            transcriptions,
-            failures: held?.failures ?? [],
-            // No API was called. Saying otherwise would put a number in the
-            // book file that nobody spent.
-            usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 },
-            modelId: 'in-session',
-            identityAnswers: held?.identityAnswers ?? {},
-            edits: held?.edits ?? [],
-            // A book is complete when every leaf has been read, and only then
-            // — and never when the leaf count itself was guessed.
-            complete: counted && transcriptions.length >= pageCount,
-            ...(held?.adjudicated ? { adjudicated: held.adjudicated } : {}),
-            ...(held?.facts ? { facts: held.facts } : {})
+            replace
           })
+          const run = project.createSavedRun(merged.init)
           const saved = await runStore.saveRun(run)
 
           // The independent witness. Cached OCR only: re-reading the scan here
@@ -1001,6 +987,10 @@ async function serve() {
           })
           const checked = []
           let compared = 0
+          // Distinct leaves, not batch entries: `parsed.length` counted an
+          // entry twice when a batch named a leaf twice, so `ocr` claimed three
+          // leaves checked where one had landed.
+          const seenLeaves = new Set(parsed.map((p) => p.pageIndex)).size
           if (cached) {
             for (const p of parsed) {
               const words = cached.words.filter((w) => w.pageIndex === p.pageIndex)
@@ -1020,24 +1010,24 @@ async function serve() {
             }
           }
 
-          const missing = []
-          for (let i = 0; i < pageCount; i++) if (!byIndex.has(i)) missing.push(i)
-
           return {
             saved,
-            landed: parsed.length,
-            transcribed: transcriptions.length,
-            pageCount,
+            // Never "landed" over a failed save. "Landed" means "is in the
+            // store", and saying it after `saveRun` returned false is the same
+            // untruth as reporting a check that never ran.
+            ...(saved
+              ? merged.report
+              : {
+                  landed: 0,
+                  why: 'The run could not be written — a full quota, or storage off. Nothing landed.'
+                }),
             pageCountFrom: countFrom,
-            complete: run.complete,
-            stillMissing: missing.length,
-            firstMissing: missing.slice(0, 12),
             matchedRunBy: foundBy,
             ocr: !cached
               ? 'NOT CHECKED — no cached reading on this device'
-              : compared === parsed.length
+              : compared === seenLeaves
                 ? `checked against the cached reading, all ${compared} leaf(s)`
-                : `NOT CHECKED on ${parsed.length - compared} of ${parsed.length} leaf(s) —` +
+                : `NOT CHECKED on ${seenLeaves - compared} of ${seenLeaves} leaf(s) —` +
                   ' the cached reading has no words for them',
             flagged: checked
           }

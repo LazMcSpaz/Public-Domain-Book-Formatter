@@ -29,6 +29,7 @@ export interface AgentSurfaceInput {
   step: StepId
   title: string
   fileName: string | null
+  fileSize?: number
   pageCount: number
   progress: { done: number; total: number; pct: number }
   questions: Question[]
@@ -129,6 +130,7 @@ function buildSnapshot(input: AgentSurfaceInput): ReturnType<typeof snapshot> {
     step: input.step,
     title: input.title,
     fileName: input.fileName,
+    fileSize: input.fileSize ?? 0,
     pageCount: input.pageCount,
     progress: input.progress,
     questions: input.questions,

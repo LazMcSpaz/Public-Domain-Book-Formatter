@@ -22,6 +22,7 @@
  * Browser-only.
  */
 import {
+  CURRENT_SCHEMA_VERSION,
   fileKey,
   keyMatchesFile,
   migrateAnnotationCheckpoint,
@@ -185,6 +186,15 @@ export async function saveRun(run: SavedRun): Promise<boolean> {
  * A record that fails to migrate is deleted rather than returned: it cannot be
  * restored and offering it again on every load would be a permanent, useless
  * question.
+ *
+ * **Except a record from a newer version of the app, which is never deleted.**
+ * That one is not broken — it is from the future, and `migrateSavedRun` says
+ * so in as many words: *"Update the app, or transcribe the book again."*
+ * Deleting it made the first half of that advice a lie, because by the time
+ * anyone read the message the transcription they were being sent back to was
+ * already gone. The reachable version of this is ordinary: roll a deployment
+ * back, open your book, lose what you paid for. `listRuns` has always skipped
+ * such records rather than removing them, so nothing surfaced the loss either.
  */
 export async function loadRun(key: string): Promise<SavedRun | null> {
   const raw = await withStore('readonly', (store) => promisify(store.get(key)))
@@ -192,9 +202,22 @@ export async function loadRun(key: string): Promise<SavedRun | null> {
   try {
     return migrateSavedRun(raw)
   } catch {
-    void deleteRun(key)
+    if (!fromTheFuture(raw)) void deleteRun(key)
     return null
   }
+}
+
+/**
+ * Whether a stored record was written by a version of the app newer than this.
+ *
+ * Read off the raw record rather than inferred from the error, because an
+ * error message is a string and this decides whether something the user paid
+ * for is destroyed.
+ */
+function fromTheFuture(raw: unknown): boolean {
+  if (typeof raw !== 'object' || raw === null) return false
+  const version = (raw as { schemaVersion?: unknown }).schemaVersion
+  return typeof version === 'number' && version > CURRENT_SCHEMA_VERSION
 }
 
 /**

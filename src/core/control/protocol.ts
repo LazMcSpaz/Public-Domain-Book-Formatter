@@ -195,6 +195,16 @@ export interface GateView {
   step: StepId
   title: string
   fileName: string | null
+  /**
+   * The scan's size in bytes, or 0 when no book is open.
+   *
+   * Carried beside the name because a name on its own does not identify a
+   * book: two scans of the same title share one constantly, and a controller
+   * matching on the name alone took an eight-leaf sample's page count for a
+   * three-hundred-leaf book. Same rule as `keyMatchesFile`, which has said so
+   * all along.
+   */
+  fileSize: number
   pageCount: number
   progress: { done: number; total: number; pct: number }
   questions: ViewQuestion[]
@@ -374,6 +384,7 @@ export interface SnapshotInput {
   step: StepId
   title: string
   fileName: string | null
+  fileSize?: number
   pageCount: number
   progress: { done: number; total: number; pct: number }
   questions: readonly Question[]
@@ -406,6 +417,7 @@ export function snapshot(input: SnapshotInput): Snapshot {
       step: input.step,
       title: input.title,
       fileName: input.fileName,
+      fileSize: input.fileSize ?? 0,
       pageCount: input.pageCount,
       progress: input.progress,
       questions,

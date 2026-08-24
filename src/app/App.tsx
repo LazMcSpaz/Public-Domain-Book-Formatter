@@ -850,6 +850,7 @@ export function App(): JSX.Element {
       voice: s.voice,
       harvestInterest: s.harvestInterest,
       fileName: file.name,
+      fileSize: file.size,
       completed: ['intake']
     }))
 
@@ -958,6 +959,7 @@ export function App(): JSX.Element {
       // them, exactly as the voice and the banked looks do.
       harvestInterest: s.harvestInterest,
       fileName: file.name,
+      fileSize: file.size,
       completed: ['intake']
     }))
 
@@ -3238,6 +3240,7 @@ export function App(): JSX.Element {
     step: step.id,
     title: step.title,
     fileName: state.fileName,
+    fileSize: state.fileSize,
     pageCount: state.pageCount,
     progress: progress(state),
     questions,
