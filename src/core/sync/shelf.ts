@@ -161,6 +161,19 @@ export function queriesPath(key: string): string {
   return `${SHELF_ROOT}/${shelfSlug(key)}/queries.md`
 }
 
+/**
+ * What the editor decided, as Markdown beside the queries.
+ *
+ * A separate file rather than a second half of `queries.md`, because the two
+ * are read on different occasions: the queries file is work to get through and
+ * empties as it is answered, while this one only ever grows and is what a
+ * session six months from now reads to find out what this edition already
+ * settled.
+ */
+export function rulingsPath(key: string): string {
+  return `${SHELF_ROOT}/${shelfSlug(key)}/rulings.md`
+}
+
 /** What the catalogue card says. */
 export interface ShelfAbout {
   /** The file key the run is filed under, so opening it lands in the right place. */

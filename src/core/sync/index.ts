@@ -12,6 +12,7 @@ export {
   VOICE_ROOT,
   aboutPath,
   queriesPath,
+  rulingsPath,
   bookPath,
   imagePath,
   commitMessage,

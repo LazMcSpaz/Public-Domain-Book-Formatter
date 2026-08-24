@@ -27,6 +27,9 @@
  * Pure: no DOM, no I/O.
  */
 import type { EditorialQuery, PageTranscription } from '@core/transcribe'
+import { outstanding, type Ruling } from './rulings'
+
+export * from './rulings'
 
 /** A query with the leaf it was raised on. */
 export interface RaisedQuery extends EditorialQuery {
@@ -76,8 +79,14 @@ function escapeCell(text: string): string {
  */
 export function queriesMarkdown(
   book: { title: string; fileName: string },
-  queries: readonly RaisedQuery[]
+  raised: readonly RaisedQuery[],
+  rulings: readonly Ruling[] = []
 ): string {
+  // A settled query is not a decision waiting, and leaving it on the sheet is
+  // how a sheet stops being read. What was decided is written down too, in
+  // `rulingsMarkdown` — this file is the work outstanding.
+  const queries = outstanding(raised, rulings)
+  const answered = raised.length - queries.length
   const lines: string[] = [
     `# Queries for the editor — ${book.title}`,
     '',
@@ -92,12 +101,24 @@ export function queriesMarkdown(
 
   if (queries.length === 0) {
     lines.push('Nothing is waiting on you.', '')
+    if (answered > 0) {
+      lines.push(
+        '',
+        `${answered} ${answered === 1 ? 'has' : 'have'} been ruled on \u2014 see ` +
+          '`rulings.md`.',
+        ''
+      )
+    }
     return lines.join('\n')
   }
 
   lines.push(
     `${queries.length} decision${queries.length === 1 ? '' : 's'} waiting, from ` +
-      `\`${book.fileName}\`.`,
+      `\`${book.fileName}\`.` +
+      (answered > 0
+        ? ` ${answered} other${answered === 1 ? '' : 's'} already ruled on \u2014 see ` +
+          '`rulings.md`.'
+        : ''),
     ''
   )
 

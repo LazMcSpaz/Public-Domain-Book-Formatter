@@ -56,6 +56,7 @@ export {
   INTRODUCTION_WORDS,
   buildIntroductionPrompt,
   draftIntroduction,
+  noteOnTheText,
   parseIntroduction,
   sampleBook,
   type IntroductionDraft,

@@ -302,11 +302,31 @@ async function serve() {
      */
     book: async ([action]) => {
       return page.evaluate(
-        async ([repo, clear]) => {
-          if (clear === 'clear') window.__pdbfBook = null
+        async ([repo, arg]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
-          const wanted = window.__pdbfBook ?? null
           const runs = await runStore.listRuns()
+          if (arg === 'clear') window.__pdbfBook = null
+          else if (arg) {
+            // Naming a book already stored here, which `use` cannot do: `use`
+            // adopts a file from disk, and a scan loaded in an earlier session
+            // is in the store and nowhere on this filesystem. Without this, a
+            // second book on the device makes every verb refuse and there is
+            // no way to answer it short of fetching the scan again.
+            const matches = runs.filter((r) => r.fileName === arg || r.key === arg)
+            if (matches.length === 0) {
+              throw new Error(
+                `No book here is called \`${arg}\`. Stored: ` +
+                  runs.map((r) => r.fileName).join(', ')
+              )
+            }
+            if (matches.length > 1) {
+              throw new Error(
+                `${matches.length} books here are called \`${arg}\`. Name one by its key instead.`
+              )
+            }
+            window.__pdbfBook = matches[0].key
+          }
+          const wanted = window.__pdbfBook ?? null
           return {
             current: wanted
               ? (runs.find((r) => r.key === wanted)?.fileName ?? wanted.split('\u0000')[0])
@@ -637,8 +657,11 @@ async function serve() {
         async ([repo, was]) => {
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
-          const keys = await runStore.listRuns()
-          const newest = keys.sort((a, b) => b.savedAt.localeCompare(a.savedAt))[0]
+          // Through the same resolver every other verb uses. Picking the
+          // most recently saved run was the last place left where "the current
+          // book" meant something different from what `book` reports — which
+          // is how an afternoon's reading once landed against the wrong scan.
+          const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No run in the store to save.')
           const run = await runStore.loadRun(newest.key)
           if (!run) throw new Error('That run could not be read back.')
@@ -1963,30 +1986,321 @@ async function serve() {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
           const shelf = await import(`/@fs${repo}/src/core/sync/index.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
           const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book on this device.')
           const run = await runStore.loadRun(newest.key)
           if (!run) throw new Error('That book has no reading stored here.')
           const raised = queriesMod.collectQueries(run.transcriptions)
+          const rulings = run.rulings ?? []
+          // A `corrected` ruling is a decision that has not happened until an
+          // edit lands. The gap between the two is where a book quietly keeps
+          // the error its editor is certain was fixed, so it is measured
+          // against the assembled text rather than assumed.
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const notYet = queriesMod.unapplied(rulings, doc.blocks.map((b) => b.text).join('\n'))
+          const waiting = queriesMod.outstanding(raised, rulings)
           const title =
             typeof run.identityAnswers?.title === 'string' && run.identityAnswers.title
               ? run.identityAnswers.title
               : run.fileName
+          const book = { title, fileName: run.fileName }
           return {
-            markdown: queriesMod.queriesMarkdown({ title, fileName: run.fileName }, raised),
+            markdown: queriesMod.queriesMarkdown(book, raised, rulings),
+            rulingsMarkdown: queriesMod.rulingsMarkdown(book, rulings),
             raised: raised.length,
-            byKind: queriesMod.countQueries(raised),
-            leaves: [...new Set(raised.map((q) => q.pageIndex))],
-            shelfPath: shelf.queriesPath(newest.key)
+            // What is actually left, which is the number a session should act
+            // on. `raised` counts the ones already settled too, and a report
+            // that only gave the total would send somebody back to decisions
+            // the editor has made.
+            waiting: waiting.length,
+            ruled: rulings.length,
+            byKind: queriesMod.countQueries(waiting),
+            // Non-empty means the book does not yet read the way the editor
+            // decided it should. Named rather than counted: a count here is
+            // something to nod at and a list is something to act on.
+            decidedButNotPrinted: notYet.map((r) => ({ leaf: r.pageIndex, quote: r.quote })),
+            leaves: [...new Set(waiting.map((q) => q.pageIndex))],
+            shelfPath: shelf.queriesPath(newest.key),
+            rulingsShelfPath: shelf.rulingsPath(newest.key)
           }
         },
         [REPO]
       )
       const { writeFile } = await import('node:fs/promises')
       await writeFile(resolve(REPO, out), rendered.markdown, 'utf8')
+      const rulingsOut = out.replace(/queries\.md$/u, 'rulings.md')
+      const alongside = rulingsOut === out ? `${out}.rulings.md` : rulingsOut
+      await writeFile(resolve(REPO, alongside), rendered.rulingsMarkdown, 'utf8')
       const report = { ...rendered }
       delete report.markdown
-      return { wrote: out, ...report }
+      delete report.rulingsMarkdown
+      return { wrote: out, wroteRulings: alongside, ...report }
+    },
+
+    /**
+     * Land a correction on one block, in the words `body` handed back.
+     *
+     * The one thing the driver could not do. A ruling that says a page should
+     * read differently is a decision that has not happened until an edit lands,
+     * and the only route to landing one was `save`, hand-editing the JSON, and
+     * `load`ing it back — three steps around a file, each of which can go wrong
+     * quietly, to change one word.
+     *
+     * ```
+     * correct p10b2 replace.txt          # the block's whole new text, from a file
+     * correct p11b2 --was radioative --now radio-active
+     * ```
+     *
+     * The `--was/--now` form is a **substitution within the block**, not a
+     * search of the book: it fails rather than guessing when the words appear
+     * more than once, because a correction that silently changed two places is
+     * indistinguishable from one that changed the right one. A `text` edit
+     * replaces a block *entirely*, so the whole string is always what is
+     * written — the substitution is a way of composing that string without
+     * retyping four hundred words, never a way of editing part of a block.
+     */
+    correct: async (argv) => {
+      const flag = (name) => {
+        const i = argv.indexOf(`--${name}`)
+        return i === -1 ? null : argv[i + 1]
+      }
+      const positional = argv.filter(
+        (a, i) => !a.startsWith('--') && !argv[i - 1]?.startsWith('--')
+      )
+      const blockId = positional[0]
+      const from = positional[1] ?? null
+      const was = flag('was')
+      const now = flag('now')
+      if (!blockId || (!from && was === null)) {
+        throw new Error('correct <blockId> <file> | correct <blockId> --was <text> --now <text>')
+      }
+
+      let replacement = null
+      if (from) {
+        const { readFile } = await import('node:fs/promises')
+        replacement = (await readFile(resolve(REPO, from), 'utf8')).replace(/\n+$/u, '')
+      }
+
+      return page.evaluate(
+        async ([repo, blockId, replacement, was, now]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const markup = await import(`/@fs${repo}/src/core/transcribe/markup.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+
+          // Against the book *as it stands*, edits included — the same text
+          // `body` hands back. A correction written against the raw pages
+          // would truncate every paragraph a seam had joined, and one written
+          // against the pristine text would silently undo an earlier fix.
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const block = doc.blocks.find((b) => b.id === blockId)
+          if (!block) throw new Error(`No block \`${blockId}\` in this book.`)
+          // With the `<i>` and `<b>` tags on, exactly as `body` hands it back
+          // and exactly as `applyEdits` reads it in — a correction typed
+          // against the bare text would strip every emphasis in the block.
+          const before = markup.withMarkup(block.text, block.emphasis, block.strong)
+
+          let text = replacement
+          if (text === null) {
+            const parts = before.split(was)
+            if (parts.length === 1) {
+              throw new Error(`\`${was}\` is not in block ${blockId}. Nothing was changed.`)
+            }
+            if (parts.length > 2) {
+              throw new Error(
+                `\`${was}\` appears ${parts.length - 1} times in block ${blockId}. ` +
+                  'Give the whole block instead, so which one is meant is not a guess.'
+              )
+            }
+            text = parts.join(now ?? '')
+          }
+          if (text === before) {
+            return { blockId, changed: false, why: 'That is what the block already says.' }
+          }
+
+          const edits = editsMod.withEdit(run.edits ?? [], { kind: 'text', blockId, text })
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            edits
+          })
+          const stored = await runStore.saveRun(next)
+          return {
+            blockId,
+            changed: true,
+            stored: stored === true,
+            before,
+            after: text,
+            edits: edits.length,
+            next: '`save` pushes it to the shelf; nothing has left this device yet.'
+          }
+        },
+        [REPO, blockId, replacement, was, now]
+      )
+    },
+
+    /**
+     * Record what the editor decided about a query.
+     *
+     * The other half of a channel that was, until now, one-way: the question
+     * reached a file on the shelf and the answer reached a chat session, which
+     * is the one place it must not live. A ruling made in conversation and
+     * nowhere else means the next session raises the same question, and the
+     * introduction has to be told from memory what the edition decided.
+     *
+     * ```
+     * rule 12 radioative corrected radioactive "A plain compositor's slip." mention
+     * rule 8 "the centre" as-printed - "Keep the mixed spelling."
+     * rule standing "British/American spelling" noted - "..." covers:centre,colors
+     * ```
+     *
+     * The `correction` argument is `-` for anything but `corrected`, and it is
+     * the one field a *query* is forbidden to have — a ruling is the answer, so
+     * it may carry one.
+     */
+    rule: async ([leaf, quote, decision, correction = '-', because = '', ...flags]) => {
+      if (!quote || !decision) {
+        throw new Error(
+          'rule <leaf|standing> <quote> <as-printed|corrected|noted> [correction|-] ' +
+            '[why] [mention] [covers:a,b] [kind:inconsistent]'
+        )
+      }
+      const kind = flags.find((f) => f.startsWith('kind:'))?.slice('kind:'.length)
+      if (kind && !['printers-error', 'inconsistent', 'unclear'].includes(kind)) {
+        throw new Error(`\`${kind}\` is not a kind of query.`)
+      }
+      const covers = flags
+        .filter((f) => f.startsWith('covers:'))
+        .flatMap((f) =>
+          f
+            .slice('covers:'.length)
+            .split(',')
+            .map((c) => c.trim())
+        )
+        .filter(Boolean)
+      const ruling = {
+        pageIndex: leaf === 'standing' ? null : Number(leaf),
+        quote,
+        decision,
+        correction: correction === '-' ? undefined : correction,
+        because: because || undefined,
+        covers: covers.length > 0 ? covers : undefined,
+        kind: kind || undefined,
+        mention: flags.includes('mention'),
+        decidedOn: new Date().toISOString().slice(0, 10)
+      }
+      if (ruling.pageIndex !== null && !Number.isInteger(ruling.pageIndex)) {
+        throw new Error(`\`${leaf}\` is not a leaf number, and not \`standing\`.`)
+      }
+      // Checked here rather than left to `parseRulings`, which drops what it
+      // does not recognise: a ruling silently discarded on the next reload
+      // looks exactly like one that was never made.
+      if (!['as-printed', 'corrected', 'noted'].includes(decision)) {
+        throw new Error(`\`${decision}\` is not a decision. Use as-printed, corrected or noted.`)
+      }
+      if (decision === 'corrected' && !ruling.correction) {
+        throw new Error('A `corrected` ruling has to say what the page should read.')
+      }
+      return page.evaluate(
+        async ([repo, proposed]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+
+          const raised = queriesMod.collectQueries(run.transcriptions)
+          // The kind comes off the *question* rather than the command line: a
+          // ruling that named a kind of its own could disagree with the query
+          // it answers, and a ruling that matches nothing settles nothing
+          // while looking exactly like one that does.
+          const asked = raised.find(
+            (q) =>
+              q.pageIndex === proposed.pageIndex &&
+              q.quote.trim().toLowerCase() === proposed.quote.trim().toLowerCase()
+          )
+          // A standing ruling has no one question to take it from, so it takes
+          // it from the questions its `covers` actually reach. Refused rather
+          // than guessed when they reach none or disagree — a standing ruling
+          // filed under a kind nothing asked about is a decision that has been
+          // made and will be asked for again.
+          const covered =
+            proposed.pageIndex !== null
+              ? []
+              : [
+                  ...new Set(
+                    raised
+                      .filter((q) =>
+                        (proposed.covers ?? []).some(
+                          (c) => c.trim() && q.quote.toLowerCase().includes(c.toLowerCase())
+                        )
+                      )
+                      .map((q) => q.kind)
+                  )
+                ]
+          const kind = asked?.kind ?? proposed.kind ?? (covered.length === 1 ? covered[0] : null)
+          if (!kind) {
+            throw new Error(
+              proposed.pageIndex === null
+                ? `Nothing this covers is a single kind of query (${covered.join(', ') || 'none matched'}). ` +
+                    'Say which with `kind:printers-error`, `kind:inconsistent` or `kind:unclear`.'
+                : `No query was raised on leaf ${proposed.pageIndex} with those words. ` +
+                    'Say which kind this is with `kind:...`, or check the quote against `queries`.'
+            )
+          }
+          const ruling = { ...proposed, kind }
+          for (const key of Object.keys(ruling)) {
+            if (ruling[key] === undefined) delete ruling[key]
+          }
+
+          // Replace rather than append when the same thing is ruled on twice:
+          // two rulings on one query is a file that says the edition decided
+          // two things, and nothing downstream could pick.
+          const kept = (run.rulings ?? []).filter(
+            (r) =>
+              !(
+                r.pageIndex === ruling.pageIndex &&
+                r.quote.trim().toLowerCase() === ruling.quote.trim().toLowerCase()
+              )
+          )
+          const rulings = [...kept, ruling]
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            rulings
+          })
+          const saved = await runStore.saveRun(next)
+          const waiting = queriesMod.outstanding(raised, rulings)
+          return {
+            recorded: ruling,
+            matchedAQuery: Boolean(asked),
+            rulings: rulings.length,
+            replaced: kept.length !== (run.rulings ?? []).length,
+            waiting: waiting.length,
+            stored: saved === true,
+            savedAt: next.savedAt,
+            next: 'Run `queries` to rewrite both sheets, then `save` to push them.'
+          }
+        },
+        [REPO, ruling]
+      )
     },
 
     /**
