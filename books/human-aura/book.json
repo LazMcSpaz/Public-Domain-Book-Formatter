@@ -1,7 +1,7 @@
 {
   "format": "public-domain-book-formatter/book",
   "version": 2,
-  "savedAt": "2026-08-24T17:21:09.661Z",
+  "savedAt": "2026-08-24T17:47:57.283Z",
   "runSchema": 12,
   "run": {
     "schemaVersion": 12,
@@ -205,7 +205,9 @@
           {
             "kind": "paragraph",
             "text": "The dictionaries define the word aura as: \"Any subtle, invisible emanation or exhalation.\" The English authorities, as a rule, attribute the origin of the word to a Latin term meaning \"air,\" but the Hindu authorities insist that it had its origin in the Sanscrit root Ar, meaning the spoke of a wheel, the significance being perceived when we remember the fact that the human aura radiates from the body of the individual in a manner similar to the radiation of the spokes of a wheel from the hub thereof. The Sanscrit origin of the",
-            "emphasis": [45],
+            "emphasis": [
+              45
+            ],
             "continuesNext": true
           }
         ],
@@ -481,7 +483,9 @@
           {
             "kind": "paragraph",
             "text": "Prana, but which may be thought of as Vital Essence, Life Power, etc.",
-            "emphasis": [0],
+            "emphasis": [
+              0
+            ],
             "continuesPrevious": true
           },
           {
@@ -2358,7 +2362,14 @@
         "kind": "inconsistent",
         "decision": "noted",
         "because": "The copy-text mixes the two — centre beside colors, in the same chapter. That is the book's own habit and not this edition's to tidy; it is kept as printed and told to the reader in the note on the text.",
-        "covers": ["centre", "colors", "color", "colour", "realise", "honour"],
+        "covers": [
+          "centre",
+          "colors",
+          "color",
+          "colour",
+          "realise",
+          "honour"
+        ],
         "decidedOn": "2026-08-24",
         "mention": true
       }
