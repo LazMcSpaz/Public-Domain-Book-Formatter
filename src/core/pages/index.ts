@@ -14,6 +14,7 @@ export {
   type PageClassification
 } from './page-roles'
 export {
+  isNumberLine,
   readSynopsis,
   synopsisKey,
   synopsisLooksSound,

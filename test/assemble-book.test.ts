@@ -776,3 +776,84 @@ describe('assembleBook — matching a description by chapter number', () => {
     expect(withOne[0]!.title).toBe('THE AURA KALEIDOSCOPE')
   })
 })
+
+/**
+ * What holds a heading run together is the number line.
+ *
+ * `CHAPTER XI.` is incomplete on its own and absorbs the title after it.
+ * `BOOK TWO — THE ASTRAL WORLD` is complete and absorbs nothing, which is what
+ * lets two manuals bound into one volume show as two groups in the contents.
+ *
+ * Levels are deliberately not the test: `LESSON III.` over
+ * `TELEPATHY EXPLAINED.` is tagged 1 over 2 in a book already published from
+ * here, and reading a deeper level as subordination split eleven lesson numbers
+ * away from their own titles.
+ */
+describe('deriveChapters — divisions above chapters', () => {
+  const heading = (text: string, level?: number): TranscribedBlock => ({
+    kind: 'heading',
+    text,
+    ...(level === undefined ? {} : { level })
+  })
+  const leaf = (blocks: TranscribedBlock[]): PageTranscription => ({
+    pageIndex: 0,
+    role: 'chapter-opening',
+    blocks,
+    uncertain: [],
+    furniture: {}
+  })
+
+  it('joins a number line to the title after it', () => {
+    const doc = assembleBook([
+      leaf([
+        heading('CHAPTER XI.'),
+        heading('ASTRAL ENTITIES.'),
+        { kind: 'paragraph', text: 'WITHOUT intending to go deeply.' }
+      ])
+    ])
+    expect(doc.chapters).toHaveLength(1)
+    expect(doc.chapters[0]!.title).toBe('ASTRAL ENTITIES.')
+    expect(doc.chapters[0]!.label).toBe('CHAPTER XI.')
+  })
+
+  it('joins one tagged a level deeper than its number, as a published book has it', () => {
+    const doc = assembleBook([
+      leaf([
+        heading('LESSON III.', 1),
+        heading('TELEPATHY EXPLAINED.', 2),
+        { kind: 'paragraph', text: 'The student will now.' }
+      ])
+    ])
+    expect(doc.chapters).toHaveLength(1)
+    expect(doc.chapters[0]!.title).toBe('TELEPATHY EXPLAINED.')
+  })
+
+  it('leaves a complete division standing above the chapter after it', () => {
+    const doc = assembleBook([
+      leaf([
+        heading('BOOK TWO — THE ASTRAL WORLD', 1),
+        heading('CHAPTER I.', 2),
+        heading('THE SEVEN PLANES.', 2),
+        { kind: 'paragraph', text: 'EVERY student of occultism.' }
+      ])
+    ])
+    expect(doc.chapters.map((c) => c.title)).toEqual([
+      'BOOK TWO — THE ASTRAL WORLD',
+      'THE SEVEN PLANES.'
+    ])
+    expect(doc.chapters[0]!.level).toBe(1)
+    expect(doc.chapters[1]!.level).toBe(2)
+    expect(doc.chapters[1]!.label).toBe('CHAPTER I.')
+  })
+
+  it('does not run two complete titles together', () => {
+    const doc = assembleBook([
+      leaf([
+        heading('THE END.'),
+        heading('THE SEVEN PLANES.'),
+        { kind: 'paragraph', text: 'EVERY student.' }
+      ])
+    ])
+    expect(doc.chapters.map((c) => c.title)).toEqual(['THE END.', 'THE SEVEN PLANES.'])
+  })
+})

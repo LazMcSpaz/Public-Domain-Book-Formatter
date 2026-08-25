@@ -17,6 +17,7 @@
 import type { ImageEditOp } from '@core/model'
 import {
   dispositionFor,
+  isNumberLine,
   readSynopsis,
   synopsisKey,
   synopsisLooksSound,
@@ -591,8 +592,27 @@ export function deriveChapters(blocks: readonly BookBlock[]): ChapterEntry[] {
   const chapters: ChapterEntry[] = []
   for (let i = 0; i < blocks.length; i++) {
     if (blocks[i]!.kind !== 'heading') continue
+    // A run of headings is one chapter opening: `CHAPTER XI.` over
+    // `ASTRAL ENTITIES.` is a number and its title, not two chapters.
+    //
+    // What holds the run together is the *number line*. It is incomplete on its
+    // own and belongs to the heading after it, so it absorbs one. A heading
+    // that is not a number line is complete in itself and absorbs nothing:
+    // `BOOK TWO — THE ASTRAL WORLD` stands above `CHAPTER I.` rather than
+    // joining it, which is what lets two manuals bound into one volume show as
+    // two groups in the contents.
+    //
+    // Levels are deliberately not the test. `LESSON III.` over
+    // `TELEPATHY EXPLAINED.` is tagged 1 over 2 in a book already published
+    // from here, and reading a deeper level as subordination split eleven
+    // lesson numbers away from their own titles.
     let end = i
-    while (end + 1 < blocks.length && blocks[end + 1]!.kind === 'heading') end++
+    while (
+      end + 1 < blocks.length &&
+      blocks[end + 1]!.kind === 'heading' &&
+      isNumberLine(blocks[end]!.text)
+    )
+      end++
     const first = blocks[i]!
     const last = blocks[end]!
     const label = blocks

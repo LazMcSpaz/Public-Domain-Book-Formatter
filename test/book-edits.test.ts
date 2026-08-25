@@ -1016,3 +1016,122 @@ describe('chapters survive an edit', () => {
     expect(out.chapters[0]!.label).toBe('LESSON I.')
   })
 })
+
+/**
+ * The channel that had no middle.
+ *
+ * `section` puts the editor's prose before the body or after it, and there was
+ * no way to put any inside. Binding two 1915 manuals into one volume needs
+ * exactly that: a divider saying "Book Two" between the last leaf of one and
+ * the first of the other. Without this the only place to put those words was a
+ * transcription, where they would have been a claim about what the paper says.
+ */
+describe('applyEdits — a block the editor wrote, inside the body', () => {
+  const divider = (afterBlockId: string | null): BookEdit => ({
+    kind: 'insert',
+    insertId: 'book-two',
+    afterBlockId,
+    blockKind: 'heading',
+    text: 'BOOK TWO',
+    level: 1
+  })
+
+  it('places it after the block it names', () => {
+    const doc = applyEdits(book(), [divider('p0b2')])
+    expect(doc.blocks.map((b) => b.text)).toEqual([
+      'Of the Air',
+      'The chirnrgeon examined the specimen.',
+      'A second paragraph.',
+      'BOOK TWO',
+      'A third, on the next leaf.'
+    ])
+  })
+
+  it('places it at the very front when it names nothing', () => {
+    expect(applyEdits(book(), [divider(null)]).blocks[0]!.text).toBe('BOOK TWO')
+  })
+
+  it('points at no leaf, because no leaf is behind it', () => {
+    const doc = applyEdits(book(), [divider('p0b2')])
+    expect(doc.blocks.find((b) => b.text === 'BOOK TWO')!.sourcePages).toEqual([])
+  })
+
+  it('becomes a chapter, so the contents lists the division', () => {
+    const doc = applyEdits(book(), [divider('p0b2')])
+    expect(doc.chapters.map((c) => c.title)).toContain('BOOK TWO')
+  })
+
+  it('breaks a run of headings, so the divider is not folded into the chapter after it', () => {
+    // The seam this exists for: one book ends on a heading and the next opens
+    // on one, and `deriveChapters` joins consecutive headings into a single
+    // chapter. A divider between them has to separate, not join.
+    const ended = assembleBook([
+      page(0, [{ kind: 'heading', text: 'THE END.' }]),
+      page(1, [
+        { kind: 'heading', text: 'CHAPTER I.' },
+        { kind: 'heading', text: 'THE SEVEN PLANES.' },
+        { kind: 'paragraph', text: 'EVERY student of occultism.' }
+      ])
+    ])
+    // The number-line rule already keeps `THE END.` out of the chapter after
+    // it, since it is a complete heading rather than a number awaiting a title.
+    expect(ended.chapters.map((c) => c.title)).toEqual(['THE END.', 'THE SEVEN PLANES.'])
+    const doc = applyEdits(ended, [
+      {
+        kind: 'insert',
+        insertId: 'book-two',
+        afterBlockId: 'p0b0',
+        blockKind: 'heading',
+        text: 'BOOK TWO',
+        level: 1
+      }
+    ])
+    expect(doc.chapters.map((c) => c.title)).toEqual(['THE END.', 'BOOK TWO', 'THE SEVEN PLANES.'])
+  })
+
+  it('is left out when its anchor is gone, rather than landing somewhere else', () => {
+    const doc = applyEdits(book(), [{ kind: 'drop', blockId: 'p0b2' }, divider('p0b2')])
+    expect(doc.blocks.map((b) => b.text)).not.toContain('BOOK TWO')
+  })
+
+  it('is left out when it is empty', () => {
+    const doc = applyEdits(book(), [
+      {
+        kind: 'insert',
+        insertId: 'book-two',
+        afterBlockId: 'p0b2',
+        blockKind: 'heading',
+        text: '   '
+      }
+    ])
+    expect(doc.blocks.map((b) => b.text)).not.toContain('   ')
+  })
+
+  it('reads its inline markup, as a written section does', () => {
+    const doc = applyEdits(book(), [
+      {
+        kind: 'insert',
+        insertId: 'book-two',
+        afterBlockId: 'p0b2',
+        blockKind: 'paragraph',
+        text: 'Book Two: <i>The Astral World</i>'
+      }
+    ])
+    const block = doc.blocks.find((b) => b.text.startsWith('Book Two'))!
+    expect(block.text).toBe('Book Two: The Astral World')
+    expect(block.emphasis).toBeDefined()
+  })
+
+  it('collapses by insertId, so re-wording one does not add a second', () => {
+    const list = withEdit(withEdit([], divider('p0b2')), {
+      kind: 'insert',
+      insertId: 'book-two',
+      afterBlockId: 'p0b2',
+      blockKind: 'heading',
+      text: 'BOOK TWO — THE ASTRAL WORLD',
+      level: 1
+    })
+    expect(list).toHaveLength(1)
+    expect(countEdited(list)).toBe(1)
+  })
+})
