@@ -25,7 +25,18 @@ done
 ```
 
 Behind and not ahead: the container rolled you back, `git reset --hard
-origin/main`, nothing is lost. Ahead: work exists only here, push it now.
+origin/main`, nothing is lost. Ahead: work exists only here, push it now. This
+is not a rare event — it happened seven times in the session that wrote this
+document, twice after a successful push, and once while the sync check itself
+was running.
+
+**Both repositories have to be present.** The formatter is the session's own
+checkout. The shelf is private and may not be attached: if
+`~/public-domain-books-storage` is missing, attach it with the `add_repo` tool
+(`owner: LazMcSpaz`, `repo: Public-Domain-Books-Storage`, `access: push`),
+clone it to that path if the tool says to, and then call `register_repo_root`
+so its own instructions load. Nothing else in this document works without it,
+because the books live there.
 
 Then read [`CLAUDE.md`](../CLAUDE.md), and in particular **"What has actually
 gone wrong"**. Every item in it cost real time on a real book.
