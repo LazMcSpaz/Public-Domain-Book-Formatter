@@ -1900,9 +1900,14 @@ async function serve() {
           const shelfSave = await import(`/@fs${repo}/src/platform/browser/shelf-save.ts`)
           const sync = await import(`/@fs${repo}/src/core/sync/index.ts`)
 
+          // `ShelfConfig` is `{ repo, branch, token }` and `repo` is the whole
+          // `owner/name`. This read `config.owner`, which the shape has never
+          // had: `connected` was therefore false for every browser that ever
+          // ran it, `repository` was always null, and `shelf push` refused a
+          // properly connected shelf with a message saying none was connected.
           const config = settings.loadShelf()
-          const connected = Boolean(config?.owner && config?.repo && config?.token)
-          const where = config?.owner ? `${config.owner}/${config.repo}` : null
+          const connected = Boolean(config?.repo && config?.token)
+          const where = config?.repo || null
           if (action !== 'push') {
             // The token is never in this reply, only whether there is one.
             return { connected, repository: where, branch: config?.branch ?? null }
