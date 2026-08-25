@@ -22,6 +22,7 @@
  * Pure: text in, proposals and findings out.
  */
 import { FACT_ITEM_SCHEMA } from '@core/harvest'
+import { parseInlineMarkup } from '@core/transcribe'
 import { ANNOTATION_KINDS, type AnnotationKind } from './voice'
 
 /** One note the pass suggests, before anybody has approved it. */
@@ -209,7 +210,17 @@ export function findAnchor(blockText: string, anchorText: string): number | null
  * capitalisation says nothing. Numbers are taken whole, so "1665" and "1,204"
  * each come out as one claim rather than as digits.
  */
-function claimsIn(text: string): string[] {
+function claimsIn(raw: string): string[] {
+  // Inline markup is notation, not prose, and it corrupts both halves of this.
+  // A title comes out as `Doctrine</i` rather than `Doctrine`, which is junk in
+  // the list a person has to read — and worse, the mangled token can never
+  // match the book, so a title the book *does* name is reported as an outside
+  // claim. `<b>Aerolite.</b>` breaks the sentence splitter for the same reason
+  // it broke the audit's: the full stop is followed by `<` and not a space, so
+  // the next word is no longer sentence-initial and its capital is read as a
+  // name. Stripped through the parser the book is set from, so this sees the
+  // words a reader will.
+  const text = parseInlineMarkup(raw).text
   const claims: string[] = []
 
   for (const match of text.matchAll(/\d[\d,.]*/gu)) {
@@ -240,7 +251,10 @@ function claimsIn(text: string): string[] {
  * asserting on their own authority, which is exactly the list to check.
  */
 export function outsideClaims(noteText: string, sourceText: string): string[] {
-  const haystack = loosen(sourceText).toLocaleLowerCase()
+  // Stripped on both sides. The book's own text carries `<i>` around a title
+  // exactly as a note does, and a claim taken from clean note text would never
+  // find it inside a tag.
+  const haystack = loosen(parseInlineMarkup(sourceText).text).toLocaleLowerCase()
   return claimsIn(noteText).filter((claim) => !haystack.includes(claim.toLocaleLowerCase()))
 }
 

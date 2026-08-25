@@ -252,6 +252,35 @@ describe('which assertions the book never made', () => {
     expect(outsideClaims('Surgery was then a manual trade.', source)).not.toContain('Surgery')
   })
 
+  it('reads a title through its markup rather than around it', () => {
+    // `<i>` is how a title travels in a note, and the extractor was taking the
+    // closing tag as part of the word: `The Secret Doctrine</i` is not a claim
+    // anybody can check, and because the mangled token matches nothing it was
+    // also reported as *outside* the book when the book names it.
+    const source = 'He quotes The Secret Doctrine at length in the third lesson.'
+    const claims = outsideClaims('The passage is from <i>The Secret Doctrine</i> of 1888.', source)
+    expect(claims.some((c) => c.includes('<') || c.includes('>'))).toBe(false)
+    expect(claims).not.toContain('Doctrine')
+    expect(claims).toContain('1888')
+  })
+
+  it('finds a title the book sets in italic', () => {
+    // The book's own text carries the tags too, so the haystack needs the same
+    // treatment or every italicised title in it reads as never mentioned.
+    const source = 'He quotes <i>The Secret Doctrine</i> at length.'
+    expect(outsideClaims('Blavatsky published The Secret Doctrine.', source)).not.toContain(
+      'Doctrine'
+    )
+  })
+
+  it('does not read the word after a bold headword as a name', () => {
+    // `<b>Aerolite.</b> A stony meteorite` puts the full stop against a `<`,
+    // so the sentence never ends and the next capital is no longer
+    // sentence-initial. A glossary is 126 headwords of exactly this shape.
+    const claims = outsideClaims('<b>Aerolite.</b> Stony meteorite, seen falling.', '')
+    expect(claims).not.toContain('Stony')
+  })
+
   it('leaves a note that asserts nothing outside the book unflagged', () => {
     expect(outsideClaims('A specimen the author examined with care.', source)).toEqual([])
   })
