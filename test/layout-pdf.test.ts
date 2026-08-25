@@ -74,6 +74,22 @@ function diskFontTable(): FontTable {
       }
       return (units / face.font.unitsPerEm) * sizePt
     },
+    inkExtents(text, ref, sizePt) {
+      const face = faceFor(ref)
+      const scale = sizePt / face.font.unitsPerEm
+      let pen = 0
+      let left = Infinity
+      let right = -Infinity
+      for (const glyph of face.font.layout(text, featuresFor(ref)).glyphs) {
+        const box = glyph.bbox
+        if (box && box.maxX > box.minX) {
+          left = Math.min(left, pen + box.minX * scale)
+          right = Math.max(right, pen + box.maxX * scale)
+        }
+        pen += glyph.advanceWidth * scale
+      }
+      return left === Infinity ? { left: 0, right: pen } : { left, right }
+    },
     metrics(ref, sizePt) {
       const face = faceFor(ref)
       const scale = sizePt / face.font.unitsPerEm

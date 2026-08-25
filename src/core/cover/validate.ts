@@ -14,7 +14,7 @@
 import type { ValidationCheck, ValidationLevel } from '@core/model'
 import { effectiveDpi } from '@core/image'
 import type { ComposedCover, CoverItem } from './compose'
-import { itemBounds } from './compose'
+import { itemBounds, PRESS_MARK_ID } from './compose'
 import {
   contains,
   overlaps,
@@ -204,7 +204,31 @@ export function validateCover(input: ValidateCoverInput): CoverValidationReport 
     checks.push({ id: 'cover-dpi', label: 'Cover art resolution', level, detail })
   }
 
-  // 7. Spine text, where there is any.
+  // 7. The press mark, at the resolution it prints.
+  //
+  // Its own check rather than folded into the art one, because the two fail for
+  // opposite reasons: cover art is usually too small for the size someone wants
+  // it, where a mark is tiny and the only way it goes wrong is a source with
+  // barely any pixels in it — a 48-pixel favicon dropped in as a colophon. A
+  // vector mark cannot fail this at all, which is the argument for supplying
+  // one.
+  {
+    const mark = composed.items.find((i) => i.kind === 'image' && i.id === PRESS_MARK_ID)
+    if (mark && mark.kind === 'image' && mark.widthPt > 0) {
+      const dpi = effectiveDpi(mark.srcWidth, mark.widthPt / 72)
+      checks.push({
+        id: 'press-mark',
+        label: "The press's mark",
+        level: dpi >= MIN_COVER_DPI ? 'ok' : 'warn',
+        detail:
+          dpi >= MIN_COVER_DPI
+            ? `The mark prints at ${Math.round(dpi)} DPI across ${(mark.widthPt / 72).toFixed(2)} in.`
+            : `The mark prints at ${Math.round(dpi)} DPI across ${(mark.widthPt / 72).toFixed(2)} in, below KDP's ${MIN_COVER_DPI}. Supply it as an SVG, or as a bitmap with more pixels — it is not enlarged here, because that would only invent them.`
+      })
+    }
+  }
+
+  // 8. Spine text, where there is any.
   {
     const spineRuns = textItems(composed).filter((i) => i.kind === 'text' && i.rotate === -90)
     const wanted = doc.look.spineText

@@ -242,6 +242,38 @@ export async function loadFonts(families: readonly string[]): Promise<FontTable>
       return (units / face.font.unitsPerEm) * sizePt
     },
 
+    inkExtents(text, ref, sizePt) {
+      const face = faceFor(ref)
+      if (!face || text.length === 0) {
+        return { left: 0, right: text.length * sizePt * 0.5 }
+      }
+
+      // Walk the run with a pen, exactly as the writer will, and take each
+      // glyph's own outline bounds rather than its advance box. The two differ
+      // by the side bearings, which is the whole reason this exists.
+      const run = face.font.layout(text, featuresFor(ref))
+      const scale = sizePt / face.font.unitsPerEm
+      let pen = 0
+      let left = Infinity
+      let right = -Infinity
+      for (const glyph of run.glyphs) {
+        const box = glyph.bbox
+        // A space has no outline; fontkit reports an empty or inverted box for
+        // it. Skipping it is right: a line centred on its ink should not count
+        // a trailing space, which is exactly the kind of thing that shifts a
+        // heading and cannot be seen.
+        if (box && box.maxX > box.minX) {
+          left = Math.min(left, pen + box.minX * scale)
+          right = Math.max(right, pen + box.maxX * scale)
+        }
+        pen += glyph.advanceWidth * scale
+      }
+      // Nothing but spaces: fall back to the advance box, which is the honest
+      // answer for a run with no ink in it.
+      if (left === Infinity) return { left: 0, right: pen }
+      return { left, right }
+    },
+
     metrics(ref, sizePt): FontMetrics {
       const face = faceFor(ref)
       if (!face) return { ascent: sizePt * 0.75, descent: sizePt * 0.25, lineGap: 0 }

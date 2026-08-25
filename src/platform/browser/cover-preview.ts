@@ -14,11 +14,12 @@
  * Browser-only.
  */
 import type { ComposedCover, CoverDocument } from '@core/cover'
-import { composeCover, validateCover, type CoverValidationReport } from '@core/cover'
+import { composeCover, PRESS_MARK_ID, validateCover, type CoverValidationReport } from '@core/cover'
 import { BUILTIN_ORNAMENTS } from '@core/ornament'
 import { fontTableFor } from './fonts'
 import { openPdf } from './pdf'
 import { renderCoverPdf, type CoverPdfResult } from './cover-pdf'
+import { renderPressMark } from './press-mark'
 
 export interface CoverPreview {
   /** A PNG object URL of the whole flat sheet. **Revoke it** — see `releaseCoverPreview`. */
@@ -55,10 +56,32 @@ export async function renderCoverPreview(
   checkCancelled(options.signal)
 
   const composed = composeCover(doc, { measurer: fonts, ornaments: BUILTIN_ORNAMENTS })
+
+  // The press mark is rendered here rather than supplied by the caller,
+  // because its pixels depend on where the composer put it: the size is read
+  // back off the placed rectangle so the device is drawn at the resolution it
+  // prints at, and tinted with the look's own accent.
+  const images = new Map(options.images ?? [])
+  const markItem = composed.items.find((i) => i.kind === 'image' && i.id === PRESS_MARK_ID)
+  if (markItem && markItem.kind === 'image' && doc.look.pressMark) {
+    const mark = await renderPressMark({
+      dataUrl: doc.look.pressMark.dataUrl,
+      widthIn: markItem.widthPt / 72,
+      heightIn: markItem.heightPt / 72,
+      color: doc.look.palette.accent
+    })
+    images.set(PRESS_MARK_ID, mark.bytes)
+    // The composer sized the item from the *source's* proportions; the raster
+    // may have fewer pixels than were asked for, and the writer crops by the
+    // source rectangle, so it has to be told what actually came back.
+    markItem.srcWidth = mark.widthPx
+    markItem.srcHeight = mark.heightPx
+  }
+
   const pdf = await renderCoverPdf(composed, fonts, {
     title: doc.content.title,
     author: doc.content.author,
-    ...(options.images ? { images: options.images } : {})
+    images
   })
   checkCancelled(options.signal)
 

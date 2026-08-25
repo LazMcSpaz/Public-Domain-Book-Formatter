@@ -32,7 +32,17 @@ import type { FontRef, TextMeasurer } from '@core/layout'
 import type { OrnamentArt } from '@core/ornament'
 import { sizeAfterOps } from '@core/image'
 import { worksLabel, type CoverDocument, type Hex } from './document'
-import { coverGeometry, contains, overlaps, pt, type CoverGeometry, type Rect } from './geometry'
+import {
+  contains,
+  coverGeometry,
+  MIN_PAGES_FOR_SPINE_TEXT,
+  overlaps,
+  pt,
+  SAFE_MARGIN_IN,
+  SPINE_TEXT_CLEARANCE_IN,
+  type CoverGeometry,
+  type Rect
+} from './geometry'
 
 /** A solid rectangle — grounds, bands, and the scrim under type over art. */
 export interface FillItem {
@@ -157,6 +167,27 @@ export interface ComposedCover {
   warnings: string[]
 }
 
+/**
+ * The id the press mark is placed under.
+ *
+ * A fixed id rather than one derived from the file, because the mark is a
+ * property of the look and the renderer has to find its pixels without knowing
+ * which book it is setting.
+ */
+export const PRESS_MARK_ID = '__press-mark__'
+
+/**
+ * The narrowest a press mark may print and still be a device.
+ *
+ * Worth knowing what this implies, because it is not obvious: a fold wide
+ * enough for a mark is always wide enough for text too. This needs roughly a
+ * hundred-page book, and KDP's own floor for spine text is seventy-nine — so
+ * "a mark on a spine too thin for type" is a case that cannot arise, and the
+ * two are still decided separately because that is a fact about today's
+ * numbers rather than a rule.
+ */
+export const MIN_MARK_WIDTH_IN = 0.2
+
 /** Title sizes are searched in this range, largest first. */
 const TITLE_MAX_PT = 64
 const TITLE_MIN_PT = 14
@@ -275,7 +306,16 @@ function applyCase(text: string, kind: CoverDocument['look']['titleCase']): stri
   return kind === 'upper' ? text.toUpperCase() : text
 }
 
-/** Lay a block of centred lines into `items`, returning the y below it. */
+/**
+ * Lay a block of centred lines into `items`, returning the y below it.
+ *
+ * Centred on the **ink**, not on the advance box. Every line on a cover is
+ * display type at 20 to 60 points, where the difference is visible: measured on
+ * a real sheet, `THE ASTRAL WORLD` and `THE HUMAN AURA` set at the same size
+ * and centred by advance landed 2.5 pixels — about 2.7 points — apart, because
+ * a `D` has a tight right side bearing and an `A` has a wide one. Nothing was
+ * wrong with the arithmetic; it was centring the wrong box.
+ */
 function centeredLines(
   items: CoverItem[],
   lines: readonly string[],
@@ -292,12 +332,17 @@ function centeredLines(
   let y = topPt
   for (const line of lines) {
     const width = measurer.widthOf(line, font, sizePt)
+    const ink = measurer.inkExtents(line, font, sizePt)
+    // Put the middle of the ink on the middle of the panel: the origin is the
+    // centre less half the ink span, less however far the ink starts from the
+    // origin.
+    const xPt = centreX - (ink.left + ink.right) / 2
     items.push({
       kind: 'text',
       text: line,
       font,
       sizePt,
-      xPt: centreX - width / 2,
+      xPt,
       yPt: y + metrics.ascent,
       color,
       widthPt: width,
@@ -679,29 +724,29 @@ function layFrontCover(
     const accentInk = overArt ? palette.overArt : palette.accent
     const labelFont = face(look.bodyFont, 'regular', measurer.hasSmallCaps(look.bodyFont))
     const labelSize = Math.max(9, Math.min(14, typeBox.widthPt * 0.03))
-    y = centeredLines(
-      items,
-      [worksLabel(works.length)],
-      geometry.front,
-      y,
-      labelFont,
-      labelSize,
-      accentInk,
-      measurer
-    )
-    y += labelSize * 0.8
+    // Announced only if the press wants it announced. Two titles with a rule
+    // under them and an italic conjunction between already read as two works;
+    // a label above them is a second, quieter way of saying the same thing,
+    // and stacked under a series line it is one small-capital line too many.
+    if (look.announceWorks) {
+      y = centeredLines(
+        items,
+        [worksLabel(works.length)],
+        geometry.front,
+        y,
+        labelFont,
+        labelSize,
+        accentInk,
+        measurer
+      )
+      y += labelSize * 0.8
+    }
 
+    // No rule above the titles. The pair is closed underneath and open at the
+    // top, so the series line above it reads as belonging to the cover rather
+    // than being boxed in with the titles.
     const ruleWidth = geometry.frontSafe.width * 0.62
-    y = drawRule(
-      items,
-      look.rule === 'none' ? 'none' : 'single',
-      geometry.front,
-      y,
-      ruleWidth,
-      accentInk,
-      null
-    )
-    y += labelSize * 1.1
+    y += labelSize * 0.5
 
     const fitted = fitTitlesTogether(
       works.map((w) =>
@@ -922,14 +967,58 @@ function laySpine(
   measurer: TextMeasurer
 ): void {
   const { look, content } = doc
+  const safe = geometry.spineSafe
+
+  // --- the press mark, at the foot ---------------------------------------
+  //
+  // Placed first because it takes space the text then has to work around, and
+  // drawn even on a spine too thin for text: a device three-eighths of an inch
+  // wide still reads as a publisher's mark where a line of type would not.
+  let markTopIn: number | null = null
+  const mark = look.pressMark
+  const usableWidth = geometry.spineIn - SPINE_TEXT_CLEARANCE_IN * 2
+  if (mark && usableWidth < MIN_MARK_WIDTH_IN) {
+    // Reported rather than dropped, which is the rule everywhere else here.
+    // Below about a fifth of an inch a device is a smudge with a shape it can
+    // no longer show, and shrinking it to fit would print exactly that.
+    warnings.push(
+      `The spine is ${geometry.spineIn.toFixed(3)} in, too narrow to print the press's mark ` +
+        `legibly, so it was left off. It needs about ${(MIN_MARK_WIDTH_IN + SPINE_TEXT_CLEARANCE_IN * 2).toFixed(2)} in of fold — ` +
+        'a little over a hundred pages.'
+    )
+  }
+  if (mark && usableWidth >= MIN_MARK_WIDTH_IN) {
+    const width = Math.min(usableWidth * 0.78, 0.42)
+    const height = width * (mark.heightPx / mark.widthPx)
+    // Never more than a fraction of the fold's length: a device that grows
+    // with the book would dominate the spine of a thin one.
+    const capped = Math.min(height, geometry.spine.height * 0.14)
+    const finalWidth = capped < height ? capped * (mark.widthPx / mark.heightPx) : width
+    const x = geometry.spine.x + (geometry.spine.width - finalWidth) / 2
+    const y = geometry.spine.y + geometry.spine.height - SAFE_MARGIN_IN - capped
+    items.push({
+      kind: 'image',
+      id: PRESS_MARK_ID,
+      xPt: pt(x),
+      yPt: pt(y),
+      widthPt: pt(finalWidth),
+      heightPt: pt(capped),
+      srcX: 0,
+      srcY: 0,
+      srcWidth: mark.widthPx,
+      srcHeight: mark.heightPx
+    })
+    markTopIn = y
+  }
+
   if (!look.spineText) return
   if (!geometry.spineTextAllowed) {
     warnings.push(
-      `At ${geometry.pageCount} pages the spine is too narrow for KDP to print text on it (they want ${'79'} pages or more), so it was left blank.`
+      `At ${geometry.pageCount} pages the spine is too narrow for KDP to print text on it ` +
+        `(they want ${MIN_PAGES_FOR_SPINE_TEXT} pages or more), so it was left blank.`
     )
     return
   }
-  const safe = geometry.spineSafe
   if (!safe || safe.width <= 0) {
     warnings.push('The spine is too narrow for text once clearance is allowed; it was left blank.')
     return
@@ -941,8 +1030,14 @@ function laySpine(
   const line = [content.title, content.author].filter((s) => s.trim()).join(' · ')
   if (!line.trim()) return
 
+  // The run of fold the text may occupy: down to the mark, if there is one,
+  // with a gap so the two do not touch.
+  const runTop = safe.y
+  const runBottom = markTopIn === null ? safe.y + safe.height : markTopIn - 0.12
+  const runLength = Math.max(0, runBottom - runTop)
+
   let size = Math.min(14, maxByThickness)
-  const maxLengthPt = pt(safe.height)
+  const maxLengthPt = pt(runLength)
   while (size > 6 && measurer.widthOf(line, font, size) > maxLengthPt) size -= 0.5
   if (measurer.widthOf(line, font, size) > maxLengthPt) {
     warnings.push('The spine text is longer than the spine; it was left off.')
@@ -954,7 +1049,7 @@ function laySpine(
   // Rotated −90°, the run starts at the top of the spine and reads downward.
   // x is the baseline's distance across the spine; centre the glyphs in it.
   const centreX = pt(geometry.spine.x + geometry.spine.width / 2)
-  const startY = pt(geometry.spine.y + geometry.spine.height / 2) - textLength / 2
+  const startY = pt(runTop + runLength / 2) - textLength / 2
 
   items.push({
     kind: 'text',

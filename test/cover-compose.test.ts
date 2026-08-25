@@ -11,6 +11,7 @@ import { BUILTIN_ORNAMENTS } from '@core/ornament'
 import {
   artFrame,
   blurbFrame,
+  PRESS_MARK_ID,
   composeCover,
   coverGeometry,
   defaultCover,
@@ -370,10 +371,9 @@ describe('a volume that binds two works', () => {
     expect(astral.sizePt).toBe(aura.sizePt)
   })
 
-  it('announces how many there are, and joins them with an italic “and”', () => {
+  it('joins the works with an italic “and”', () => {
     const { items } = composeCover(omnibus(), { measurer })
     const set = texts(items)
-    expect(set.some((t) => t.text === 'TWO WORKS')).toBe(true)
     const conjunction = set.find((t) => t.text === 'and')!
     expect(conjunction.font.style).toBe('italic')
     expect(conjunction.sizePt).toBeLessThan(
@@ -389,11 +389,34 @@ describe('a volume that binds two works', () => {
     expect(aura.font.style).toBe('regular')
   })
 
-  it('counts in words, and counts right', () => {
+  it('says nothing about the count unless the press asks it to', () => {
+    // Two titles under one rule with an italic `and` between already say it.
+    // A label above them, stacked under a series line, is one line of small
+    // capitals too many — so it is off unless a look turns it on.
+    const quiet = omnibus()
+    expect(
+      texts(composeCover(quiet, { measurer }).items).some((t) => t.text.includes('WORKS'))
+    ).toBe(false)
+  })
+
+  it('counts in words, and counts right, when it is asked to', () => {
     const three = omnibus()
+    three.look.announceWorks = true
     three.content.works = ['The Astral World', 'The Human Aura', 'The Inner Consciousness']
     const { items } = composeCover(three, { measurer })
     expect(texts(items).some((t) => t.text === 'THREE WORKS')).toBe(true)
+  })
+
+  it('puts no rule above the titles', () => {
+    // Closed underneath and open at the top, so the series line above reads as
+    // belonging to the cover rather than being boxed in with the titles.
+    const doc = omnibus()
+    const { items, geometry } = composeCover(doc, { measurer })
+    const rules = items.filter((i) => i.kind === 'rule' && i.xPt / 72 > geometry.front.x)
+    const firstTitle = texts(items).find((t) => t.text.toUpperCase().includes('ASTRAL'))!
+    for (const rule of rules) {
+      expect(rule.yPt).toBeGreaterThan(firstTitle.yPt)
+    }
   })
 
   it('leaves an ordinary book exactly as it was', () => {
@@ -414,5 +437,83 @@ describe('a volume that binds two works', () => {
         geometry.front.x + geometry.front.width - 0.25 + 1e-6
       )
     }
+  })
+})
+
+describe("the press's mark", () => {
+  const mark = {
+    dataUrl: 'data:image/png;base64,AAAA',
+    widthPx: 650,
+    heightPx: 650,
+    fileName: 'libri-vetus.png'
+  }
+
+  it('sits at the foot of the spine, clear of the trim', () => {
+    const doc = bookCover((d) => {
+      d.look.pressMark = mark
+    })
+    const { items, geometry } = composeCover(doc, { measurer })
+    const placed = items.find((i) => i.kind === 'image' && i.id === PRESS_MARK_ID)!
+    if (placed.kind !== 'image') throw new Error('unreachable')
+    const rect = itemBounds(placed)!
+    expect(rect.y + rect.height).toBeLessThanOrEqual(
+      geometry.spine.y + geometry.spine.height - 0.25 + 1e-6
+    )
+    // Centred across the fold, and inside it.
+    expect(rect.x).toBeGreaterThan(geometry.spine.x)
+    expect(rect.x + rect.width).toBeLessThan(geometry.spine.x + geometry.spine.width)
+    expect(rect.x + rect.width / 2).toBeCloseTo(geometry.spine.x + geometry.spine.width / 2, 6)
+  })
+
+  it('never distorts the device', () => {
+    const doc = bookCover((d) => {
+      d.look.pressMark = { ...mark, widthPx: 300, heightPx: 600 }
+    })
+    const { items } = composeCover(doc, { measurer })
+    const placed = items.find((i) => i.kind === 'image' && i.id === PRESS_MARK_ID)!
+    if (placed.kind !== 'image') throw new Error('unreachable')
+    expect(placed.heightPt / placed.widthPt).toBeCloseTo(2, 6)
+  })
+
+  it('makes room for itself — the spine text stops above it', () => {
+    const withMark = bookCover((d) => {
+      d.look.pressMark = mark
+    })
+    const without = bookCover()
+    const runOf = (doc: CoverDocument) => {
+      const { items } = composeCover(doc, { measurer })
+      const spine = texts(items).find((t) => t.rotate === -90)!
+      return { start: spine.yPt, length: spine.widthPt }
+    }
+    // The text is centred in what is left, so it starts higher up the fold.
+    expect(runOf(withMark).start).toBeLessThan(runOf(without).start)
+  })
+
+  it('is left off a spine too narrow to show it, and says so', () => {
+    // A 40-page book has a tenth of an inch of fold. Shrinking the device to
+    // fit would print a smudge with a shape it can no longer show, so it is
+    // reported instead — the same rule a dropped footnote gets.
+    const doc = bookCover((d) => {
+      d.pageCount = 40
+      d.look.pressMark = mark
+    })
+    const { items, warnings } = composeCover(doc, { measurer })
+    expect(items.some((i) => i.kind === 'image' && i.id === PRESS_MARK_ID)).toBe(false)
+    expect(warnings.join(' ')).toMatch(/too narrow to print the press's mark/)
+  })
+
+  it('prints once the fold is wide enough', () => {
+    const doc = bookCover((d) => {
+      d.pageCount = 140
+      d.look.pressMark = mark
+    })
+    const { items, warnings } = composeCover(doc, { measurer })
+    expect(items.some((i) => i.kind === 'image' && i.id === PRESS_MARK_ID)).toBe(true)
+    expect(warnings.join(' ')).not.toMatch(/press's mark/)
+  })
+
+  it('is absent when no press has one', () => {
+    const { items } = composeCover(bookCover(), { measurer })
+    expect(items.some((i) => i.kind === 'image')).toBe(false)
   })
 })

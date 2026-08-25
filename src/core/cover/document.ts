@@ -109,6 +109,45 @@ export interface CoverLook {
   spineText: boolean
   /** Whether the imprint prints at the foot of the front cover. */
   imprintOnFront: boolean
+  /**
+   * Whether an omnibus says how many works it holds, above the titles.
+   *
+   * A look decision rather than a book one: whether this press announces the
+   * count is a habit it should keep across a series, not something to be
+   * decided again per volume. Off by default — two titles under one rule with
+   * an italic *and* between them already say it, and a label above them stacked
+   * under a series line is one line of small capitals too many.
+   */
+  announceWorks: boolean
+  /**
+   * The press's own mark, printed at the foot of the spine.
+   *
+   * Part of the *look* and banked with it, because a colophon device belongs
+   * to the publisher rather than to any book — the whole point of it is that
+   * it is the same on everything they print. A look that lost its mark on
+   * volume two would not be the same look.
+   *
+   * Carried as a data URL rather than an id, and that is deliberate. Every
+   * other picture in this app is megabytes of scan and lives outside the
+   * document; a press mark is a couple of kilobytes and has to travel wherever
+   * the look travels, or banking one produces a series whose second volume is
+   * missing its device. `applyCoverLook` stays a total function because of it.
+   *
+   * SVG or PNG alike: it is rasterised at the size it prints, so vector source
+   * stays sharp on a fold three-eighths of an inch wide.
+   */
+  pressMark: PressMark | null
+}
+
+/** A supplied device, as bytes and the proportions to place it by. */
+export interface PressMark {
+  /** `data:image/svg+xml;base64,…` or `data:image/png;base64,…`. */
+  dataUrl: string
+  /** The source's own dimensions, for the aspect ratio. */
+  widthPx: number
+  heightPx: number
+  /** What it is, for the studio to show. */
+  fileName: string
 }
 
 /** Where a cover's picture came from — recorded, always, and printed on request. */
@@ -209,7 +248,9 @@ export function defaultLook(): CoverLook {
     rule: 'single',
     ornamentId: null,
     spineText: true,
-    imprintOnFront: false
+    imprintOnFront: false,
+    announceWorks: false,
+    pressMark: null
   }
 }
 
@@ -314,6 +355,31 @@ export function normalizeLook(raw: unknown): CoverLook {
     rule: oneOf(raw['rule'], ['none', 'single', 'double', 'ornamented'] as const, d.rule),
     ornamentId: typeof raw['ornamentId'] === 'string' ? raw['ornamentId'] : null,
     spineText: bool(raw['spineText'], d.spineText),
-    imprintOnFront: bool(raw['imprintOnFront'], d.imprintOnFront)
+    imprintOnFront: bool(raw['imprintOnFront'], d.imprintOnFront),
+    announceWorks: bool(raw['announceWorks'], d.announceWorks),
+    pressMark: normalizeMark(raw['pressMark'])
+  }
+}
+
+/**
+ * Read a stored mark back, or nothing.
+ *
+ * Strict about the data URL's scheme for one reason: this string is handed
+ * straight to an `Image`, and a look is a thing that can be shared between
+ * people. `data:` is the only scheme that cannot reach off the machine.
+ */
+function normalizeMark(raw: unknown): PressMark | null {
+  if (!isRecord(raw)) return null
+  const dataUrl = raw['dataUrl']
+  if (typeof dataUrl !== 'string' || !dataUrl.startsWith('data:image/')) return null
+  const width = raw['widthPx']
+  const height = raw['heightPx']
+  if (typeof width !== 'number' || typeof height !== 'number') return null
+  if (!(width > 0) || !(height > 0)) return null
+  return {
+    dataUrl,
+    widthPx: width,
+    heightPx: height,
+    fileName: str(raw['fileName'], 'the press mark')
   }
 }

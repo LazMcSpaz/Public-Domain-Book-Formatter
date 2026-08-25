@@ -53,6 +53,7 @@ import {
   forgetReplicateReach,
   generateCoverArt
 } from '../platform/browser/replicate'
+import { readMarkFile } from '../platform/browser/press-mark'
 import { coverHandoffPlates, takeCoverHandoffFacts } from './cover-handoff'
 
 /**
@@ -452,6 +453,19 @@ export function CoverStudio({ onClose }: { onClose: () => void }): JSX.Element {
     }
   }, [answers, doc.content.title, doc.look.palette, frame, modelSlug, token])
 
+  /**
+   * The press's mark, supplied once and banked with the look.
+   *
+   * Read into a data URL rather than kept as a file handle: the mark has to
+   * travel with the look to every later book, and a `File` does not survive a
+   * refresh, let alone a different device.
+   */
+  const onMarkFile = useCallback(async (file: File) => {
+    setArtError(null)
+    const mark = await readMarkFile(file)
+    setDoc((base) => ({ ...base, look: { ...base.look, pressMark: mark } }))
+  }, [])
+
   const onBank = useCallback(async () => {
     const saved = newSavedCoverLook({
       name: lookName || doc.content.series || 'A cover look',
@@ -579,6 +593,42 @@ export function CoverStudio({ onClose }: { onClose: () => void }): JSX.Element {
               ) : null}
             </CoverGroup>
           ))}
+
+          <section className="q">
+            <span className="prompt">The press's mark</span>
+            <div className="help">
+              Printed at the foot of the spine, in the accent colour. SVG or PNG — it is rendered at
+              the size it prints, so vector stays sharp on a fold this narrow. It is banked with the
+              look, because a colophon device belongs to the publisher rather than to a book.
+            </div>
+            <input
+              type="file"
+              accept="image/svg+xml,image/png,image/*"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (!file) return
+                onMarkFile(file).catch((error: unknown) => {
+                  setArtError(
+                    `That mark could not be read: ${error instanceof Error ? error.message : String(error)}`
+                  )
+                })
+              }}
+            />
+            {doc.look.pressMark ? (
+              <div className="help">
+                Using {doc.look.pressMark.fileName}.{' '}
+                <button
+                  type="button"
+                  className="linkish"
+                  onClick={() =>
+                    setDoc((base) => ({ ...base, look: { ...base.look, pressMark: null } }))
+                  }
+                >
+                  Remove it
+                </button>
+              </div>
+            ) : null}
+          </section>
 
           <section className="q">
             <span className="prompt">Keep this look for the rest of the set</span>

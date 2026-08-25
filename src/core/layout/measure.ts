@@ -27,6 +27,25 @@ export interface FontMetrics {
 export interface TextMeasurer {
   /** Advance width of `text` set in `font` at `sizePt`, in points. */
   widthOf(text: string, font: FontRef, sizePt: number): number
+  /**
+   * Where the *ink* of `text` starts and ends, relative to its origin.
+   *
+   * Not the same as the advance box, and the difference is what makes a
+   * centred line look off-centre. Advance width includes each glyph's side
+   * bearings, and those differ by letter: a line ending in `D` has a tight
+   * right bearing where one ending in `A` has a wide one, because the
+   * diagonal terminates early. Centre two such lines by advance and the ink
+   * lands two or three points apart — measured on a real cover, and visible.
+   *
+   * The same family of problem `optical.ts` solves for hanging punctuation,
+   * and answered the same way: measure what is drawn, not the box around it.
+   *
+   * Used by the cover composer, where every line is centred display type.
+   * The interior deliberately still centres its headings on the advance box —
+   * changing that would move type on pages this app has already set, for a
+   * refinement nobody has asked for there.
+   */
+  inkExtents(text: string, font: FontRef, sizePt: number): { left: number; right: number }
   metrics(font: FontRef, sizePt: number): FontMetrics
   /**
    * Whether this family carries real small capitals.
@@ -52,6 +71,13 @@ export interface TextMeasurer {
 export function fixedWidthMeasurer(emRatio = 0.5): TextMeasurer {
   return {
     widthOf: (text, _font, sizePt) => [...text].length * sizePt * emRatio,
+    // The fake has no outlines, so its ink *is* its advance box. That keeps
+    // every layout assertion an exact integer while still driving the code
+    // path a real font takes.
+    inkExtents: (text, _font, sizePt) => ({
+      left: 0,
+      right: [...text].length * sizePt * emRatio
+    }),
     metrics: (_font, sizePt) => ({
       ascent: sizePt * 0.75,
       descent: sizePt * 0.25,
@@ -72,6 +98,7 @@ export function fixedWidthMeasurer(emRatio = 0.5): TextMeasurer {
  */
 export function cachedMeasurer(inner: TextMeasurer): TextMeasurer {
   const widths = new Map<string, number>()
+  const extents = new Map<string, { left: number; right: number }>()
   const metrics = new Map<string, FontMetrics>()
   return {
     widthOf(text, font, sizePt) {
@@ -85,6 +112,20 @@ export function cachedMeasurer(inner: TextMeasurer): TextMeasurer {
         widths.set(key, w)
       }
       return w
+    },
+    inkExtents(text, font, sizePt) {
+      // Cached beside the widths and keyed the same way. A cover asks for the
+      // same title at a dozen sizes while `fitText` searches, and each ask
+      // walks the glyph outlines.
+      const key = ['ink', font.family, font.style, font.smallCaps ? 'sc' : '', sizePt, text].join(
+        '\u0000'
+      )
+      let e = extents.get(key)
+      if (e === undefined) {
+        e = inner.inkExtents(text, font, sizePt)
+        extents.set(key, e)
+      }
+      return e
     },
     metrics(font, sizePt) {
       const key = [font.family, font.style, sizePt].join('\u0000')
