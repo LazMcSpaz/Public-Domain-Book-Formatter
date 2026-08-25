@@ -1,4 +1,4 @@
-# Reading ledger — *The Astral World*
+# Reading ledger — _The Astral World_
 
 102 leaves of scan; 94 transcribed (leaves 2–95). Leaves 0–1 are the cover and
 the archive.org digitisation notice; 96–101 are the publisher's advertisements
@@ -7,23 +7,23 @@ none was transcribed.
 
 ## The readers
 
-| Reader | What it is | Independent of |
-| --- | --- | --- |
-| Ours | Tesseract off the 300-dpi render, shaped by `@core/draft`'s geometry, then corrected leaf by leaf against the pixels | — |
-| archive.org | ABBYY OCR of the same scan, one HTML file per leaf, supplied by the editor | our engine, not our pixels |
-| Typeset witness | An independently set modern edition, 16,376 words, supplied by the editor | our engine **and** our pixels |
+| Reader          | What it is                                                                                                           | Independent of                |
+| --------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
+| Ours            | Tesseract off the 300-dpi render, shaped by `@core/draft`'s geometry, then corrected leaf by leaf against the pixels | —                             |
+| archive.org     | ABBYY OCR of the same scan, one HTML file per leaf, supplied by the editor                                           | our engine, not our pixels    |
+| Typeset witness | An independently set modern edition, 16,376 words, supplied by the editor                                            | our engine **and** our pixels |
 
 Project Gutenberg was unreachable: this container's proxy answers 403 to every
 outside host, confirmed against `gutenberg.org` and `archive.org` alike.
 
 ## What each check raised, and what survived
 
-| Check | Raised | Confirmed | Refuted | Became a query |
-| --- | --- | --- | --- | --- |
-| `witness` — ours vs archive.org, 90 body leaves | 58 | 21 | 37 | 0 |
-| Three-way diff — ours vs the typeset witness | 91 runs | 12 | 79 | 0 |
-| `consistency` over the pristine text | 4 | 1 | 2 | 1 |
-| Reading every leaf against its render | — | 109 ops on 68 leaves | — | 6 |
+| Check                                           | Raised  | Confirmed            | Refuted | Became a query |
+| ----------------------------------------------- | ------- | -------------------- | ------- | -------------- |
+| `witness` — ours vs archive.org, 90 body leaves | 58      | 21                   | 37      | 0              |
+| Three-way diff — ours vs the typeset witness    | 91 runs | 12                   | 79      | 0              |
+| `consistency` over the pristine text            | 4       | 1                    | 2       | 1              |
+| Reading every leaf against its render           | —       | 109 ops on 68 leaves | —       | 6              |
 
 "Refuted" is overwhelmingly one thing and not an error rate: hyphenation and
 line-break artefacts of the comparison itself (`sub-planes` against `sub
@@ -39,13 +39,13 @@ Five substantive corrections were found by a witness and settled by the pixels,
 and would very likely have been missed by eye alone, because each is a real
 English word in a plausible place:
 
-| Leaf | OCR read | The paper says | Found by |
-| --- | --- | --- | --- |
-| 9 | `dc not lie` | `do not lie` | witness |
-| 28 | `advanced occuitists` | `advanced occultists` | witness |
-| 34 | `friends with thern` | `friends with them` | witness |
-| 47 | `Christian Church held` | `Christian Church hold` | typeset witness |
-| 85 | `various mames` | `various names` | witness |
+| Leaf | OCR read                | The paper says          | Found by        |
+| ---- | ----------------------- | ----------------------- | --------------- |
+| 9    | `dc not lie`            | `do not lie`            | witness         |
+| 28   | `advanced occuitists`   | `advanced occultists`   | witness         |
+| 34   | `friends with thern`    | `friends with them`     | witness         |
+| 47   | `Christian Church held` | `Christian Church hold` | typeset witness |
+| 85   | `various mames`         | `various names`         | witness         |
 
 Leaf 47 is the one that earns the third reader on its own: `held` and `hold` are
 both words, both scan, and nothing mechanical without a second opinion would
@@ -109,9 +109,35 @@ you believe the checks, not after.
 
 Eight, none of them settled here. Six printer's errors and two places the book
 contradicts itself. See `queries.md`. The eighth came out of writing the
-glossary rather than out of any check: the book sets *etheral* on two leaves and
-*ethereal* in full on two others, and the typeset witness disagreed with us on
-one of the four, so it went to a 500-dpi crop, which reads *ethereal*.
+glossary rather than out of any check: the book sets _etheral_ on two leaves and
+_ethereal_ in full on two others, and the typeset witness disagreed with us on
+one of the four, so it went to a 500-dpi crop, which reads _ethereal_.
+
+## The trim, measured rather than estimated
+
+Settled by the editor at **6 × 9, 12 pt**. Measured through the engine, with
+each book's editorial matter actually in it, which the research brief's table
+predates:
+
+| Volume                                                        | Pages at 6 × 9 / 12 pt | Spine (KDP needs 79) |
+| ------------------------------------------------------------- | ---------------------- | -------------------- |
+| _The Human Aura_ (88 leaves, no introduction or glossary yet) | 65                     | **short by 14**      |
+| _The Astral World_ (94 leaves, introduction + glossary in)    | 89                     | clears               |
+| _Clairvoyance_ (328 leaves, introduction + glossary in)       | 332                    | clears               |
+
+The Aura is the binding constraint for the set, as it always was. Its editorial
+matter does not exist yet; this book's introduction and glossary come to 5,400
+words and added 18 pages at this trim, so roughly 4,200 words of introduction
+and glossary would carry the Aura past 79. That is a modest requirement, and
+_Clairvoyance_'s glossary alone runs to 6,852 words.
+
+**Measuring this turned up a driver fault.** `load` wrote a run but did not make
+it current, so with two books on the device every later verb went on reading the
+one before. The first Aura measurement came back as _The Astral World_'s page
+count, to the page, twice — which is the only reason it was caught. Fixed in
+`scripts/drive.mjs`: `load` now adopts what it loaded and says so, the way
+`open` does. It is the same fault Phase 0 of `PLAN-next.md` was written to
+close, in the one verb that was missed.
 
 ## Rulings applied
 
