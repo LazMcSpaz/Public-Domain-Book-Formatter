@@ -72,3 +72,11 @@ export {
   type BiasKind,
   type ProseAudit
 } from './audit'
+export {
+  GLOSSARY_MARK,
+  checkGlossaryMarks,
+  headwordTerms,
+  type MarkableBlock,
+  type MarkReport,
+  type MarkVerdict
+} from './marks'

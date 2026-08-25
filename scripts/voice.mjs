@@ -223,7 +223,9 @@ try {
     const dashes = audit.findings.filter((f) => f.kind === 'dash')
     if (dashes.length > 0)
       console.log(`  DASHES: ${dashes.length} — none belong in this editor's prose`)
-    for (const kind of ['dismissal', 'banned']) {
+    // Every kind the audit can raise. A finding the report does not print is a
+    // check that says NEEDS A LOOK and will not say at what.
+    for (const kind of ['dismissal', 'banned', 'direction']) {
       for (const f of audit.findings.filter((x) => x.kind === kind)) {
         console.log(`  ${kind.toUpperCase()} “${f.match}” — ${f.sentence.slice(0, 110)}`)
       }

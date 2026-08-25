@@ -203,6 +203,49 @@ describe('auditing the editor’s prose for a thumb on the scale', () => {
     expect(audit.clean).toBe(false)
   })
 
+  /**
+   * The five that actually got through, verbatim.
+   *
+   * The rule was settled, applied by hand once, and then broke four more times
+   * across two glossaries — the fifth in a preamble announcing the practice as
+   * a feature. Each of these shipped to the shelf and was found by reading the
+   * file back, which is the only reason to trust the scan is aimed at a real
+   * thing rather than at a phrase somebody imagined.
+   */
+  it('catches a direction to the reader, in the words that got through', () => {
+    const shipped = [
+      'chiefly through Blavatsky and Leadbeater, which is where a reader should go for the fuller version.',
+      'The Key to Theosophy (1889), written as a dialogue for beginners, is where a reader should start.',
+      'where a writer is worth going on to, the entry says which of their books to start with.',
+      'The Ancient Wisdom (1897) is the clearest short statement of the system by anyone, and the best place to go from here.',
+      'Nothing here is offered as a verdict, and nothing here tells anyone what to read.'
+    ]
+    for (const line of shipped.slice(0, 4)) {
+      const audit = auditProse(line)
+      expect(audit.findings.filter((f) => f.kind === 'direction')).not.toHaveLength(0)
+      expect(audit.clean).toBe(false)
+    }
+    // The fifth is a different fault: not a direction but the method stated in
+    // the reader's prose, which reads as a defence of something nobody
+    // accused the editor of. It is banned phrasing rather than a direction.
+    const method = auditProse(shipped[4]!)
+    expect(method.findings.filter((f) => f.kind === 'banned')).not.toHaveLength(0)
+    expect(method.clean).toBe(false)
+  })
+
+  /**
+   * Naming a source is not directing anyone to it, and the scan has to know
+   * the difference or it fires on every entry that does its job.
+   */
+  it('leaves an identified source alone', () => {
+    const named = auditProse(
+      'The name is Eliphas Levi’s la lumiere astrale, from his Dogme et Rituel de la Haute Magie of 1856. ' +
+        'Annie Besant set the system out in The Ancient Wisdom in 1897. ' +
+        'Start with the hand held against something black, in a room with very little light in it.'
+    )
+    expect(named.findings.filter((f) => f.kind === 'direction')).toHaveLength(0)
+  })
+
   it('counts a sentence that does both jobs on both sides', () => {
     // The sentence where the asymmetry actually does its work — a doctrine and
     // a measurement in the same breath, one of them hedged.

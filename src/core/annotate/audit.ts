@@ -170,7 +170,15 @@ const DISMISSALS = [
   'imaginary'
 ]
 
-/** Phrasing the house rules and the voice card rule out. */
+/**
+ * Phrasing the house rules and the voice card rule out.
+ *
+ * The last group is the method stated in the reader's own prose. How an
+ * edition was made is between the editor and whoever makes it: a glossary
+ * that announces it will not tell you what to read raises a doubt about the
+ * editor that nothing on the page had raised, and reads as a defence of
+ * something nobody accused him of.
+ */
 const BANNED = [
   'fascinating',
   'intriguing',
@@ -179,7 +187,46 @@ const BANNED = [
   'worth noticing',
   'the present editor',
   'cf.',
-  'q.v.'
+  'q.v.',
+  'tells anyone what to read',
+  'is offered as a verdict',
+  'nothing here is offered'
+]
+
+/**
+ * Telling the reader where to go next, which is not this editor's to do.
+ *
+ * The rule and its line: naming the book a quotation comes from **identifies**
+ * it and is owed to the reader; "the best place to go from here" **directs**,
+ * and that choice is the reader's own. The one exception is a book set in this
+ * series, which may be mentioned as available, because that is a fact about
+ * what the reader already has to hand.
+ *
+ * Worth a mechanical scan because the rule was settled, applied once by hand,
+ * and then broke four more times across two glossaries — one of them in a
+ * preamble announcing the practice as a feature. A ruling that lives only in
+ * somebody's intention is a ruling that leaks back in.
+ *
+ * Anchored tightly. "Start with" is ordinary English about method — *start
+ * with the hand against something black* is the book's own first exercise —
+ * so only the reading senses are matched.
+ */
+const DIRECTIONS = [
+  'where a reader should',
+  'a reader should go',
+  'a reader should start',
+  'should go for the fuller',
+  'best place to go',
+  'go from here',
+  'the natural book',
+  'the natural place',
+  'to read next',
+  'read after this',
+  'books to start with',
+  'start with her',
+  'start with his',
+  'start with their',
+  'the obvious place to'
 ]
 
 /**
@@ -232,7 +279,7 @@ export const HEDGE_RATIO_LIMIT = 1.6
  */
 export const MIN_HEDGES = 3
 
-export type BiasKind = 'dismissal' | 'banned' | 'hedge' | 'dash'
+export type BiasKind = 'dismissal' | 'banned' | 'hedge' | 'dash' | 'direction'
 
 export interface BiasFinding {
   kind: BiasKind
@@ -456,6 +503,9 @@ export function auditProse(raw: string): ProseAudit {
         findings.push({ kind: 'dismissal', match, sentence })
       }
       for (const match of has(lower, BANNED)) findings.push({ kind: 'banned', match, sentence })
+      for (const match of has(lower, DIRECTIONS)) {
+        findings.push({ kind: 'direction', match, sentence })
+      }
       for (const match of sentence.match(DASH) ?? []) {
         findings.push({ kind: 'dash', match, sentence })
       }

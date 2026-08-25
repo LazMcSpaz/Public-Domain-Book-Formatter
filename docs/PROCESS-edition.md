@@ -197,14 +197,17 @@ container reverted in the middle of it, all of it was gone.
 
 ## Known gaps — read this before relying on any of it
 
-- **E7 is unmet.** Nothing checks that a glossary entry whose word appears in
-  the book has a mark on that word. This is the check that would have caught a
-  whole volume shipping without any marks, and it is deterministic: the
-  headwords are in the book file and the body is one `drive.mjs body` away.
-- **An editorial ruling can leak back in.** "Never tell the reader what to read
-  next" was settled, applied by hand, and then four fresh directions appeared
-  across two glossaries, one of them in a preamble announcing the practice as a
-  feature. A lexical scan in `auditProse` would catch the whole class.
+- **The mark check needs the body, so it is opt-in.** `--marks` wants what
+  `drive.mjs body` writes, because the marks live in the _assembled_ text and
+  that only exists in the browser. It is therefore the one invariant here that
+  a default run does not check. Ask for it.
+- **The mark check knows nothing about which occurrence should carry the mark.**
+  Any marked occurrence satisfies an entry, deliberately: these books introduce
+  a term in a run-in heading set in capitals and name it in the prose below,
+  and the circle belongs on the words. An entry whose headword differs from the
+  book's own wording — `Astral filament` against the book's bare `filament` —
+  is reported as a word the book never uses. That is a false quiet, not a false
+  alarm, and it is the safer way round.
 - **Nothing ties a book file to its scan.** `load` accepts any PDF. Reading
   `scan.path` out of the book file, or refusing a PDF whose digest does not
   match, would end the wrong-file class outright.

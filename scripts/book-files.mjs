@@ -11,6 +11,12 @@
  *
  *   node scripts/book-files.mjs <book-dir>            rewrite what is derivable
  *   node scripts/book-files.mjs <book-dir> --check    report drift, write nothing
+ *   node scripts/book-files.mjs <book-dir> --marks <body.json>
+ *                                                     and check the glossary
+ *                                                     marks against the body
+ *
+ * `--marks` wants what `drive.mjs body <out.json>` writes, because the marks
+ * live in the *assembled* text and that only exists in the browser.
  *
  * `--check` exits non-zero when anything is out of date, so it belongs in the
  * same list as the tests rather than in somebody's memory.
@@ -131,6 +137,32 @@ for (const [file, re, actual, what] of claimed) {
     stale += 1
     console.log(`  STALE   ${file}  says ${said} ${what}, book.json has ${actual}`)
   }
+}
+
+/**
+ * The mark on a word is the only thing telling a reader an entry exists, and
+ * nothing else in the program reports its absence. Needs the assembled body,
+ * so it is opt-in rather than part of the default run.
+ */
+const bodyArg = flags[flags.indexOf('--marks') + 1]
+if (flags.includes('--marks') && bodyArg && !bodyArg.startsWith('--')) {
+  const { checkGlossaryMarks } = await import('../src/core/annotate/marks.ts')
+  const body = JSON.parse(readFileSync(bodyArg, 'utf8'))
+  const heads = (glossary?.text ?? '')
+    .split('\n')
+    .map((p) => /^\s*<b>(.+?)<\/b>/.exec(p)?.[1])
+    .filter((h) => typeof h === 'string')
+  const report = checkGlossaryMarks(heads, body.edited ?? body)
+  console.log(
+    `  marks   ${report.marked.length} marked, ${report.unmarked.length} unmarked, ` +
+      `${report.absent.length} not used by the book`
+  )
+  for (const v of report.unmarked) {
+    stale += 1
+    console.log(`  UNMARKED  ${v.entry}  — "${v.term}" is in ${v.blockId} with no circle on it`)
+  }
+  for (const v of report.absent)
+    console.log(`  ok        ${v.entry}  — the book never uses the word`)
 }
 
 console.log(`${basename(dir)}: ${stale === 0 ? 'in step with book.json' : `${stale} out of date`}`)
