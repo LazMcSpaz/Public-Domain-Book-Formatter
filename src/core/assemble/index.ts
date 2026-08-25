@@ -5,6 +5,7 @@
 export {
   assembleBook,
   deriveChapters,
+  headingRunEnd,
   shouldJoin,
   joinText,
   bookWordCount,

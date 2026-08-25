@@ -22,6 +22,7 @@
  */
 import type { StyleProfile } from '@core/model'
 import { findOrnament, type OrnamentArt } from '@core/ornament'
+import { headingRunEnd } from '@core/assemble'
 import type { BookBlock, BookDocument, BookSection, Illustration } from '@core/assemble'
 import { effectiveDpi } from '@core/image'
 import {
@@ -1456,8 +1457,9 @@ export function layout(
   const consumed = new Set<number>()
   for (let i = 0; i < doc.blocks.length; i++) {
     if (doc.blocks[i]!.kind !== 'heading') continue
-    let end = i
-    while (end + 1 < doc.blocks.length && doc.blocks[end + 1]!.kind === 'heading') end++
+    // The assembler's rule, not a copy of it: a number line is set small above
+    // the title it belongs to, and a complete heading stands on its own.
+    const end = headingRunEnd(doc.blocks, i)
     if (end > i) {
       superscriptions.set(
         end,

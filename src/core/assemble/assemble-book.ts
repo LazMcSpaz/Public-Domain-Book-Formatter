@@ -588,31 +588,38 @@ export function assembleBook(
  *
  * A run of consecutive headings is one chapter. See {@link ChapterEntry.label}.
  */
+/**
+ * The last block of the heading run that starts at `from`.
+ *
+ * One implementation, because there were two and they drifted. The assembler
+ * used it to decide what a chapter is; the layout engine had its own copy to
+ * decide which headings are set small above a title, and only the first learned
+ * that a number line is what holds a run together. The result was a book whose
+ * contents listed a division and whose pages set that division as a
+ * superscription over the chapter beneath it, silently losing the chapter.
+ *
+ * A number line (`CHAPTER XI.`, `LESSON III.`) is incomplete on its own and
+ * absorbs the heading after it. A complete heading absorbs nothing.
+ */
+export function headingRunEnd(
+  blocks: readonly { kind: string; text: string }[],
+  from: number
+): number {
+  let end = from
+  while (
+    end + 1 < blocks.length &&
+    blocks[end + 1]!.kind === 'heading' &&
+    isNumberLine(blocks[end]!.text)
+  )
+    end++
+  return end
+}
+
 export function deriveChapters(blocks: readonly BookBlock[]): ChapterEntry[] {
   const chapters: ChapterEntry[] = []
   for (let i = 0; i < blocks.length; i++) {
     if (blocks[i]!.kind !== 'heading') continue
-    // A run of headings is one chapter opening: `CHAPTER XI.` over
-    // `ASTRAL ENTITIES.` is a number and its title, not two chapters.
-    //
-    // What holds the run together is the *number line*. It is incomplete on its
-    // own and belongs to the heading after it, so it absorbs one. A heading
-    // that is not a number line is complete in itself and absorbs nothing:
-    // `BOOK TWO — THE ASTRAL WORLD` stands above `CHAPTER I.` rather than
-    // joining it, which is what lets two manuals bound into one volume show as
-    // two groups in the contents.
-    //
-    // Levels are deliberately not the test. `LESSON III.` over
-    // `TELEPATHY EXPLAINED.` is tagged 1 over 2 in a book already published
-    // from here, and reading a deeper level as subordination split eleven
-    // lesson numbers away from their own titles.
-    let end = i
-    while (
-      end + 1 < blocks.length &&
-      blocks[end + 1]!.kind === 'heading' &&
-      isNumberLine(blocks[end]!.text)
-    )
-      end++
+    const end = headingRunEnd(blocks, i)
     const first = blocks[i]!
     const last = blocks[end]!
     const label = blocks
