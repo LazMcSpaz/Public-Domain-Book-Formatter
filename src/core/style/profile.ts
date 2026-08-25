@@ -137,7 +137,9 @@ export function normalizeStyleProfile(raw: unknown): StyleProfile {
         typeof rawOrn['chapterOpener'] === 'string' ? (rawOrn['chapterOpener'] as string) : null,
       sectionDivider:
         typeof rawOrn['sectionDivider'] === 'string' ? (rawOrn['sectionDivider'] as string) : null,
-      pageNumber: typeof rawOrn['pageNumber'] === 'string' ? (rawOrn['pageNumber'] as string) : null
+      pageNumber:
+        typeof rawOrn['pageNumber'] === 'string' ? (rawOrn['pageNumber'] as string) : null,
+      blankPage: typeof rawOrn['blankPage'] === 'string' ? (rawOrn['blankPage'] as string) : null
     },
     frontMatter: {
       titlePage: bool(rawFront['titlePage'], d.frontMatter.titlePage),

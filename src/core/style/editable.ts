@@ -31,7 +31,7 @@ import type {
   StyleProfile
 } from '@core/model'
 import type { Answers, ChoiceOption, Question } from '@core/wizard/questions'
-import { BUILTIN_ORNAMENTS } from '@core/ornament'
+import { BUILTIN_ORNAMENTS, type OrnamentKind } from '@core/ornament'
 
 /** The value meaning "no ornament here", since a choice cannot answer null. */
 export const NO_ORNAMENT = 'none'
@@ -92,10 +92,10 @@ const numberOptions = (values: number[], unit: string): ChoiceOption[] =>
   values.map((v) => ({ value: String(v), label: `${v}${unit}` }))
 
 /** Ornaments of one kind, plus the option of none. */
-function ornamentOptions(kind: 'chapter' | 'divider' | 'page'): ChoiceOption[] {
+function ornamentOptions(...kinds: OrnamentKind[]): ChoiceOption[] {
   return [
     { value: NO_ORNAMENT, label: 'None' },
-    ...BUILTIN_ORNAMENTS.filter((o) => o.kind === kind).map((o) => ({
+    ...BUILTIN_ORNAMENTS.filter((o) => kinds.includes(o.kind)).map((o) => ({
       value: o.id,
       label: o.name
     }))
@@ -355,6 +355,17 @@ export function styleQuestions(
       options: ornamentOptions('page')
     },
     {
+      id: 'ornamentBlank',
+      type: 'choice',
+      prompt: 'Mark on the blank page facing a chapter opening',
+      help:
+        'Chapters opening on a right-hand page leave a blank left-hand one, and a book of ' +
+        'short chapters can gain thirty of them. A small mark in the middle tells a reader ' +
+        'the leaf is meant to be empty rather than misbound, and that the book has not ended.',
+      defaultValue: orn.blankPage ?? NO_ORNAMENT,
+      options: ornamentOptions('chapter', 'divider')
+    },
+    {
       id: 'frontHalfTitle',
       type: 'confirm',
       prompt: 'Print a half-title leaf?',
@@ -446,7 +457,8 @@ export function applyStyleAnswers(profile: StyleProfile, answers: Answers): Styl
     ornaments: {
       chapterOpener: pickOrnament(answers, 'ornamentChapter', profile.ornaments.chapterOpener),
       sectionDivider: pickOrnament(answers, 'ornamentDivider', profile.ornaments.sectionDivider),
-      pageNumber: pickOrnament(answers, 'ornamentPage', profile.ornaments.pageNumber)
+      pageNumber: pickOrnament(answers, 'ornamentPage', profile.ornaments.pageNumber),
+      blankPage: pickOrnament(answers, 'ornamentBlank', profile.ornaments.blankPage)
     },
     frontMatter: {
       titlePage: pickBool(answers, 'frontTitlePage', profile.frontMatter.titlePage),

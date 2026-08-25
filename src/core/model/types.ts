@@ -230,6 +230,16 @@ export interface OrnamentChoices {
   chapterOpener: string | null
   sectionDivider: string | null
   pageNumber: string | null
+  /**
+   * A mark set in the middle of the blank verso a recto-opening chapter leaves
+   * behind.
+   *
+   * Those leaves are a consequence of `chaptersOpenRecto` rather than a choice,
+   * and a book of short chapters can gain thirty of them. Printers have always
+   * marked such a page, both because a wholly blank leaf reads as a fault in
+   * the binding and because it tells a reader the book has not ended.
+   */
+  blankPage: string | null
 }
 
 /**

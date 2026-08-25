@@ -90,7 +90,12 @@ describe('answers fold back onto the profile', () => {
     // sentinel and has to come back as null or the layout engine draws one.
     const withOrnament: StyleProfile = {
       ...base,
-      ornaments: { chapterOpener: 'chapter-flourish', sectionDivider: null, pageNumber: null }
+      ornaments: {
+        chapterOpener: 'chapter-flourish',
+        sectionDivider: null,
+        pageNumber: null,
+        blankPage: null
+      }
     }
     const next = applyStyleAnswers(withOrnament, { ornamentChapter: NO_ORNAMENT })
     expect(next.ornaments.chapterOpener).toBeNull()

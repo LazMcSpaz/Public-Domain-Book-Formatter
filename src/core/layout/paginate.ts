@@ -211,6 +211,15 @@ const CAPTION_SIZE_RATIO = 0.85
  */
 const SUPERSCRIPTION_SIZE_RATIO = 0.55
 
+/**
+ * How wide the mark on a blank verso is set, as a fraction of the measure.
+ *
+ * Smaller than a chapter's. That leaf carries nothing else, so the mark is
+ * doing the work of a dinkus rather than of a heading rule, and at the chapter
+ * width it reads as the top of a chapter opening that never arrives.
+ */
+const BLANK_PAGE_ORNAMENT_RATIO = 0.34
+
 /** How wide the title page's divider ornament is set, as a fraction of the measure. */
 const TITLE_ORNAMENT_WIDTH_RATIO = 0.3
 /** Blank slots between an illustration and the caption under it. */
@@ -285,7 +294,20 @@ interface FlowLine {
    * machinery like any other line, so it is carried to the next page with the
    * title it belongs to rather than being stranded by itself.
    */
-  ornament?: { art: OrnamentArt; widthPt: number }
+  ornament?: {
+    art: OrnamentArt
+    widthPt: number
+    /**
+     * Centre on the leaf rather than on the text block.
+     *
+     * The block is offset by the gutter, so on a verso it sits toward the
+     * outer edge and anything centred in it reads left of centre. That is
+     * right for an ornament under a heading, which belongs to the text, and
+     * wrong for the only mark on an otherwise empty leaf, which has nothing to
+     * belong to but the page.
+     */
+    onPage?: boolean
+  }
   /**
    * An illustration drawn at this slot. Like the ornament it flows through the
    * slot machinery, which is what keeps the text below it from being set on top
@@ -1629,6 +1651,18 @@ export function layout(
       // start at two.
       const blank = newPage(pages[pages.length - 1]?.section ?? flowSection)
       blank.suppressRunningHead = true
+      // A mark in the middle of it, when the style asks for one. Set on the
+      // page's own middle rather than the measure's, because there is nothing
+      // else on the leaf for it to sit against, and the folio is suppressed
+      // here so the text block's own centre would read low.
+      const mark = findOrnament(ctx.profile.ornaments.blankPage)
+      if (mark) {
+        const widthPt = ctx.measureWidth * BLANK_PAGE_ORNAMENT_RATIO
+        blank.lines.push({
+          slot: Math.floor(slotsPerPage / 2),
+          line: { runs: [], ornament: { art: mark, widthPt, onPage: true } }
+        })
+      }
     }
     page = newPage(flowSection)
     slot = 0
@@ -2008,12 +2042,12 @@ function finishPage(
     }
 
     if (line.ornament) {
-      const { art, widthPt } = line.ornament
+      const { art, widthPt, onPage } = line.ornament
       items.push({
         kind: 'ornament',
         // Centred in the measure, and hung from the top of its slot rather
         // than a baseline — it has no baseline to sit on.
-        xPt: frame.xPt + (frame.widthPt - widthPt) / 2,
+        xPt: onPage ? (ctx.trim.widthPt - widthPt) / 2 : frame.xPt + (frame.widthPt - widthPt) / 2,
         yPt: frame.yPt + slot * ctx.leading,
         scale: widthPt / art.width,
         art

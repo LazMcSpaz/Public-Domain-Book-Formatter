@@ -216,6 +216,56 @@ describe('layout — the body', () => {
     }
   })
 
+  it('marks the blank verso a recto-opening chapter leaves, when asked', () => {
+    const document = doc([
+      block('heading', 'Of the Air', 1),
+      block('paragraph', PROSE),
+      block('heading', 'Of Fire', 1),
+      block('paragraph', PROSE)
+    ])
+    const ornaments = { chapterOpener: null, sectionDivider: null, pageNumber: null }
+    const marked = run(document, {
+      chaptersOpenRecto: true,
+      ornaments: { ...ornaments, blankPage: 'chapter-asterism' }
+    })
+    const plain = run(document, {
+      chaptersOpenRecto: true,
+      ornaments: { ...ornaments, blankPage: null }
+    })
+
+    // A leaf carrying an ornament and no prose. The folio is allowed to be
+    // there: whether a blank verso prints its number is a separate decision
+    // this does not touch.
+    const isFolio = (l: PositionedLine) => l.runs.every((r) => /^[0-9ivxlc]+$/i.test(r.text))
+    const blanks = (book: LaidOutBook) =>
+      book.pages.filter(
+        (p) =>
+          p.items.some((i) => i.kind === 'ornament') &&
+          p.items.filter((i): i is PositionedLine => i.kind === 'line').every(isFolio)
+      )
+    expect(blanks(marked).length).toBeGreaterThan(0)
+    // Nothing but the mark on the leaf, and nothing at all without it — so the
+    // page count cannot change either way.
+    expect(blanks(plain)).toHaveLength(0)
+    expect(marked.pages.length).toBe(plain.pages.length)
+
+    const mark = blanks(marked)[0]!.items.find((i) => i.kind === 'ornament') as OrnamentItem
+    const trim = trimToPoints(defaultStyleProfile().trimSize)
+    // Down the middle of the leaf.
+    expect(Math.abs(mark.yPt - trim.heightPt / 2)).toBeLessThan(trim.heightPt / 6)
+
+    // And across the middle of the *leaf*, not of the text block. The block is
+    // offset by the gutter, so a mark centred in it reads left of centre on a
+    // verso — which is every page this rule applies to.
+    const page = blanks(marked)[0]!
+    const art = mark.art.width * mark.scale
+    expect(mark.xPt + art / 2).toBeCloseTo(trim.widthPt / 2, 6)
+    expect(page.frame.xPt + (page.frame.widthPt - art) / 2 + art / 2).not.toBeCloseTo(
+      trim.widthPt / 2,
+      1
+    )
+  })
+
   it('sets a section label over its title, the way a chapter number is set', () => {
     // "BOOK ONE" over "THE HUMAN AURA" — not run together on one line and left
     // to wrap wherever the measure falls.
@@ -729,7 +779,7 @@ describe('layout — the title page gives its type room', () => {
       {
         ...defaultStyleProfile(),
         frontMatter: { halfTitle: false, titlePage: true, copyrightPage: false },
-        ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null }
+        ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null, blankPage: null }
       },
       measurer,
       {
