@@ -37,7 +37,7 @@
  * about to be committed, and it is why the rule is here in core, where it is
  * tested, rather than in whichever transport happens to be running.
  */
-import type { AnswerValue, Answers, Evidence, Question, StepId } from '@core/wizard'
+import type { AnswerValue, Answers, Evidence, Question, StepId, TermVerdict } from '@core/wizard'
 
 /** Bump when a field changes meaning; both ends print it and can refuse. */
 export const CONTROL_VERSION = 1
@@ -318,13 +318,34 @@ export function parseCommand(raw: unknown): { command: Command } | { reason: str
     if (value === null) {
       return {
         reason:
-          'An answer must be a string, a boolean, an array of strings, or an object of ' +
-          'string to string.'
+          'An answer must be a string, a boolean, an array of strings, an object of ' +
+          'string to string, or a map of term verdicts.'
       }
     }
     return { command: { op: 'answer', id, value } }
   }
   return { reason: `Unknown command “${String(op)}”.` }
+}
+
+/**
+ * One verdict from the term grid, checked rather than cast.
+ *
+ * The only answer in the app that is not a string at its leaves, and therefore
+ * the only one this validator has to know the shape of. It is spelled out here
+ * instead of widening the object case to `unknown`, because "an object off the
+ * wire" is exactly what the rest of this module exists to refuse.
+ */
+function validVerdict(value: unknown): TermVerdict | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+  const entries = Object.entries(value as Record<string, unknown>)
+  const action = (value as { action?: unknown }).action
+  if (action === 'accept' || action === 'ignore') {
+    return entries.length === 1 ? ({ action } as TermVerdict) : null
+  }
+  if (action !== 'correct') return null
+  const text = (value as { text?: unknown }).text
+  if (typeof text !== 'string' || entries.length !== 2) return null
+  return { action, text }
 }
 
 /** The answer shapes the wizard accepts, checked to their leaves. */
@@ -335,8 +356,18 @@ function validAnswer(value: unknown): AnswerValue | null {
   }
   if (typeof value === 'object' && value !== null) {
     const entries = Object.entries(value as Record<string, unknown>)
-    if (!entries.every(([, v]) => typeof v === 'string')) return null
-    return Object.fromEntries(entries) as Record<string, string>
+    if (entries.every(([, v]) => typeof v === 'string')) {
+      return Object.fromEntries(entries) as Record<string, string>
+    }
+    // The term grid. A map of verdicts is all-or-nothing on purpose: half a
+    // grid of strings and half of objects is not a shape the wizard has, and
+    // guessing which half was meant is how a refusal becomes a silent partial
+    // answer. An unanswered grid accepts every row, so that failure is quiet.
+    const verdicts = entries.map(([k, v]) => [k, validVerdict(v)] as const)
+    if (verdicts.every(([, v]) => v !== null)) {
+      return Object.fromEntries(verdicts) as Record<string, TermVerdict>
+    }
+    return null
   }
   return null
 }

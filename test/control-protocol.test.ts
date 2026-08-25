@@ -247,6 +247,56 @@ describe('commands off the wire are untrusted', () => {
     })
   })
 
+  /**
+   * The term grid is the one gate whose answer is not a map of strings, and it
+   * was the one gate a controller could not answer. `validAnswer` took
+   * `Record<string, string>` and a verdict is `{ action: 'ignore' }`, so every
+   * attempt was refused — and refusing an answer is not refusing the question:
+   * an unanswered grid defaults to accepting every row, so OCR noise harvested
+   * off an advertisement plate went into the book's confirmed vocabulary with
+   * nothing said. Gate 1 promises "confirming a word here fixes it everywhere";
+   * from outside the tab it fixed nothing and rejected nothing.
+   */
+  it('takes a term verdict, which is the one answer that is not a string', () => {
+    expect(
+      parseCommand({ op: 'answer', id: 'terms', value: { ILL: { action: 'ignore' } } })
+    ).toEqual({
+      command: { op: 'answer', id: 'terms', value: { ILL: { action: 'ignore' } } }
+    })
+    expect(
+      parseCommand({
+        op: 'answer',
+        id: 'terms',
+        value: { belleves: { action: 'correct', text: 'believes' }, Law: { action: 'accept' } }
+      })
+    ).toEqual({
+      command: {
+        op: 'answer',
+        id: 'terms',
+        value: { belleves: { action: 'correct', text: 'believes' }, Law: { action: 'accept' } }
+      }
+    })
+  })
+
+  /**
+   * Widening the shape must not widen it to anything. A verdict is three
+   * actions and one optional string; everything else is still an object off
+   * the wire.
+   */
+  it('refuses a verdict that is not one', () => {
+    for (const value of [
+      { ILL: { action: 'delete' } },
+      { ILL: { action: 'correct' } },
+      { ILL: { action: 'accept', text: 'x' } },
+      { ILL: { action: 'ignore', extra: 'x' } },
+      { ILL: { action: 'correct', text: 3 } },
+      { ILL: {} }
+    ]) {
+      const parsed = parseCommand({ op: 'answer', id: 'terms', value })
+      expect('reason' in parsed, `should refuse ${JSON.stringify(value)}`).toBe(true)
+    }
+  })
+
   it('refuses everything else, with the reason', () => {
     for (const raw of [
       null,
