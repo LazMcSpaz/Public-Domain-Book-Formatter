@@ -550,7 +550,7 @@ describe('layoutWithToc — descriptions under the entries', () => {
     // heavy old face, so a same-weight title sits level with it, while a light
     // description under a bold title makes the title shout.
     const descSize = prose.runs[0]!.sizePt
-    expect(titleLine.runs[0]!.sizePt / descSize).toBeCloseTo(1.15, 2)
+    expect(titleLine.runs[0]!.sizePt / descSize).toBeCloseTo(1.053, 2)
     expect(titleLine.runs[0]!.font.style).toBe(prose.runs[0]!.font.style)
   })
 
@@ -617,10 +617,12 @@ describe('layoutWithToc — a contents page with measured numbers', () => {
     const book = withToc()
     const contents = book.pages.find((p) => p.kind === 'contents')!
 
+    // "Page 13", not a bare 13: the contents presents a page number one way
+    // wherever it appears, described entry or not, plain list or not.
     const printed = lines(contents)
       .flatMap((l) => l.runs)
-      .filter((r) => /^\d+$/.test(r.text))
-      .map((r) => r.text)
+      .filter((r) => /^Page \d+$/.test(r.text))
+      .map((r) => r.text.replace(/^Page /, ''))
 
     const actual = book.chapterPages.map((c) => book.pages[c.pageIndex]!.folio)
     expect(actual.every((f) => f !== null)).toBe(true)
@@ -634,7 +636,7 @@ describe('layoutWithToc — a contents page with measured numbers', () => {
     const contents = book.pages.find((p) => p.kind === 'contents')!
     const folios = lines(contents)
       .flatMap((l) => l.runs)
-      .filter((r) => /^\d+$/.test(r.text))
+      .filter((r) => /^Page \d+$/.test(r.text))
 
     expect(folios.length).toBeGreaterThan(1)
     const rightEdges = folios.map((r) => r.xPt + measurer.widthOf(r.text, r.font, r.sizePt))

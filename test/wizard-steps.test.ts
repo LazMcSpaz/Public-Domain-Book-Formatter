@@ -925,8 +925,12 @@ describe('export step', () => {
     expect(ids).toEqual([
       'title',
       'author',
+      'titlePageWorks',
+      'seriesLine',
+      'epigraph',
       'originalYear',
       'imprint',
+      'imprintLine',
       'copyrightHolder',
       'editionDate',
       'editionStatement',

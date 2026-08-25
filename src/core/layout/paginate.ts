@@ -64,9 +64,37 @@ import {
 } from './types'
 
 /** The edition facts the page furniture needs. */
+/**
+ * One work on a title page that carries more than one.
+ *
+ * A reprint that binds two books together has no way to say so otherwise: set
+ * from `title` alone it reads as a single book with a run-on name, which is
+ * what "The Human Aura and The Astral World" looked like. Each work gets its
+ * own line, its own rule under it, and its own subtitle, the way the originals
+ * were set.
+ */
+export interface TitlePageWork {
+  title: string
+  subtitle?: string | null
+}
+
 export interface LayoutEdition {
   title: string
   author: string
+  /**
+   * The three lines this period put above a title: what the book is one of,
+   * and the publisher's motto under it. Optional, and drawn only on a title
+   * page that has room — they belong inside the ruled border.
+   */
+  seriesLine?: string | null
+  epigraph?: string | null
+  /**
+   * The works bound in this volume. One or none means the title page is set
+   * from `title` as before; two or more are set in turn, joined by "and".
+   */
+  works?: TitlePageWork[]
+  /** A line under the imprint — what the imprint is for. */
+  imprintLine?: string | null
   imprint?: string | null
   copyrightHolder?: string | null
   isbn?: string | null
@@ -2291,6 +2319,22 @@ function furnitureLine(
  * fixed, the line count is decided by the titles alone, which are known before
  * any layout has been run at all.
  */
+/** The contents' description, and the number line, against the body size. */
+const SYNOPSIS_SCALE = 0.86
+
+/**
+ * How a page number reads in the contents, wherever it appears.
+ *
+ * One function because there are two places that print one — under a
+ * description, and on the last line of an entry that has none — and they had
+ * drifted: "Page 43" in one and a bare "xvii" in the other, on the same page.
+ * The editor's ruling is that a contents presents a page number one way and
+ * only one way, so the wording is not conditional on anything: not on whether
+ * the entry has a description, and not on whether the contents is a
+ * descriptive one at all.
+ */
+const folioLabel = (folio: string): string => `Page ${folio}`
+
 function buildContents(
   pages: PageBuilder[],
   newPage: (section: PageSection, opts?: Partial<PageBuilder>) => PageBuilder,
@@ -2400,8 +2444,13 @@ function buildContents(
   // level with it, while ours sets a light description under a bold title and
   // the title shouts. Sized against the label rather than against nothing: the
   // number line measures 0.87 of the title on the page at 600 dpi.
-  const entryTitleSize = sizePt * 0.86 * 1.15
-  const entryLabelSize = sizePt * 0.86 * 1.15 * 0.87
+  //
+  // The description's size is the unit: the number line is set at it exactly,
+  // and the title one step above. The step was 1.15 and still read too large
+  // over the number line — a ratio rather than a subtraction, because a point
+  // off a 12pt book is not the same decision as a point off a 10pt one.
+  const entryTitleSize = sizePt * SYNOPSIS_SCALE * 1.053
+  const entryLabelSize = sizePt * SYNOPSIS_SCALE
   const entryTitleFont: FontRef = { family: profile.bodyFont, style: 'regular' }
 
   toc.forEach((entry, i) => {
@@ -2449,7 +2498,7 @@ function buildContents(
     // Measured to the full width less the folio column, because nothing hangs
     // in the number's lane: an entry's folio belongs to its title line, and a
     // description running under it would collide with the digits.
-    const synopsisSize = sizePt * 0.86
+    const synopsisSize = sizePt * SYNOPSIS_SCALE
     // Full measure in a descriptive contents, and no indent: the description is
     // the widest thing on the page and the title is centred over it. Reserving
     // the folio's lane here is what made a title wider than the paragraph it
@@ -2513,13 +2562,22 @@ function buildContents(
       // where a reader looks for it when a title has wrapped. A descriptive
       // entry puts it after the description instead, so it does not squeeze the
       // title.
+      //
+      // Worded and sized the same either way. On a descriptive contents the
+      // entries with no description — the editor's own front matter, a book
+      // division — took the plain list's treatment, so a page of "Page 43" in
+      // the description's size was interrupted by a bare "xvii" in the body's,
+      // and the two read as different things on one page. They are the same
+      // thing, so they are set the same.
       if (
         (!descriptive || synopsisLines.length === 0) &&
         lineIndex === broken.length - 1 &&
         entry.folio
       ) {
-        const width = ctx.measurer.widthOf(entry.folio, body, sizePt)
-        runs.push({ text: entry.folio, font: body, sizePt, xPt: ctx.measureWidth - width })
+        const label = folioLabel(entry.folio)
+        const size = descriptive ? synopsisSize : sizePt
+        const width = ctx.measurer.widthOf(label, body, size)
+        runs.push({ text: label, font: body, sizePt: size, xPt: ctx.measureWidth - width })
       }
 
       page.lines.push({ slot: slot + lineIndex, line: { runs } })
@@ -2576,7 +2634,7 @@ function buildContents(
         page.suppressFolio = true
         slot = 0
       }
-      const label = entry.folio ? `Page ${entry.folio}` : ''
+      const label = entry.folio ? folioLabel(entry.folio) : ''
       const width = ctx.measurer.widthOf(label, body, synopsisSize)
       page.lines.push({
         slot,
@@ -2604,22 +2662,61 @@ function buildFrontMatter(
   const heading: FontRef = { family: profile.headingFont, style: 'regular' }
   const trim = trimToPoints(profile.trimSize)
 
+  /**
+   * How far to move a frame-centred line to centre it on the *leaf* instead.
+   *
+   * The text frame is offset by the gutter, so anything centred in it sits
+   * right of the middle of the paper. Nothing on an ordinary page reveals that
+   * — there is no reference to compare against — but the title page's border is
+   * drawn against the trim, and beside a box centred on the leaf a title
+   * centred on the frame reads as crooked. On a title page the leaf is the
+   * frame of reference, so that is what its type is centred on.
+   */
+  const trimOffset = (page: PageBuilder): number =>
+    trim.widthPt / 2 - (page.frame.xPt + page.frame.widthPt / 2)
+
   /** Set the entries centred from `startSlot`, and say which slot is next free. */
   const centred = (
     page: PageBuilder,
     startSlot: number,
-    entries: { text: string; sizePt: number; font: FontRef; gapAfter?: number }[]
+    entries: {
+      text: string
+      sizePt: number
+      font: FontRef
+      gapAfter?: number
+      /** Break inside a narrower measure, so a long line splits evenly. */
+      widthRatio?: number
+      /**
+       * Break so the lines come out near enough the same length. A title page
+       * is display setting: "ASTRAL COLORS AND THOUGHT / FORMS" is a line and
+       * an orphan, where the original reads "ASTRAL COLORS AND / THOUGHT
+       * FORMS" and every line of it is doing work.
+       */
+      balanced?: boolean
+    }[],
+    opts: { onTrim?: boolean } = {}
   ): number => {
     let slot = startSlot
+    const dx = opts.onTrim ? trimOffset(page) : 0
     for (const entry of entries) {
       if (entry.text.trim().length === 0) continue
+      const width = page.frame.widthPt * (entry.widthRatio ?? 1)
       const broken = breakParagraph(entry.text, {
         font: entry.font,
         sizePt: entry.sizePt,
         measurer: ctx.measurer,
-        lineWidths: page.frame.widthPt,
+        lineWidths: width,
         alignment: 'center'
       })
+      const inset = (page.frame.widthPt - width) / 2
+      const laid = entry.balanced
+        ? balancedLines(entry.text, {
+            font: entry.font,
+            sizePt: entry.sizePt,
+            measurer: ctx.measurer,
+            maxWidth: width
+          })
+        : broken
       // Slots are one *body* leading apart, and a title page sets type at up
       // to 1.6 times the body size. Advancing one slot a line put the second
       // line of a two-line title through the descenders of the first: on this
@@ -2627,7 +2724,7 @@ function buildFrontMatter(
       // Powers" collided, on the title page, which is the first thing anybody
       // opens. Room is taken from the size actually being set.
       const perLine = Math.max(1, Math.ceil(leadingFor(entry.sizePt) / ctx.leading))
-      for (const line of broken) {
+      for (const line of laid) {
         page.lines.push({
           slot,
           line: {
@@ -2635,7 +2732,7 @@ function buildFrontMatter(
               text: w.text,
               font: entry.font,
               sizePt: entry.sizePt,
-              xPt: w.xPt
+              xPt: w.xPt + inset + dx
             }))
           }
         })
@@ -2678,30 +2775,17 @@ function buildFrontMatter(
     const capped = profile.headingStyle.smallCaps
     const realSmallCaps = capped && ctx.measurer.hasSmallCaps(profile.headingFont)
     const titleFont: FontRef = realSmallCaps ? { ...heading, smallCaps: true } : heading
-    const titleText = capped && !realSmallCaps ? edition.title.toLocaleUpperCase() : edition.title
-    const start = Math.floor(slotsPerPage / 4)
-    const after = centred(page, start, [
-      {
-        text: titleText,
-        sizePt: profile.bodyFontSize * profile.headingStyle.scale,
-        font: titleFont,
-        gapAfter: 2
-      }
-    ])
-    // The divider ornament, between the title and the name under it.
-    //
-    // Until now it was offered in Settings, banked with the look, carried in
-    // every book file — and drawn nowhere at all, because the vision schema has
-    // no scene-break block for it to sit at. A title page is the one division
-    // every book of this period marks, and marking it is what the ornament was
-    // put in the library for.
-    // A border round the leaf and a pair of rules under the title, which is how
-    // this series was set. Four rules to a box: the engine draws one as a
-    // filled rectangle, so a tall narrow one is a side and a wide flat one is a
-    // top. Positioned against the *trim* rather than the text frame, because
-    // the frame is offset by the gutter and a box centred on it would sit
-    // visibly right of the middle of the leaf.
-    if (profile.frontMatter.titleBorder) {
+    const cap = (text: string): string =>
+      capped && !realSmallCaps ? text.toLocaleUpperCase() : text
+    const bordered = profile.frontMatter.titleBorder
+
+    // A border round the leaf, which is how this series was set. Four rules to
+    // a box: the engine draws one as a filled rectangle, so a tall narrow one
+    // is a side and a wide flat one is a top. Positioned against the *trim*
+    // rather than the text frame, because the frame is offset by the gutter and
+    // a box centred on it would sit visibly right of the middle of the leaf —
+    // which is also why everything set on this page is centred on the trim.
+    if (bordered) {
       const insetX = trim.widthPt * 0.1
       const insetY = trim.heightPt * 0.075
       const box = (pad: number, weight: number): void => {
@@ -2732,37 +2816,184 @@ function buildFrontMatter(
       box(4, 0.6)
     }
 
-    // Under the title: the period's pair of rules where a modern book would put
-    // an ornament, and the ornament stands down rather than sit beside them.
-    const divider = profile.frontMatter.titleBorder
-      ? null
-      : findOrnament(profile.ornaments.sectionDivider)
-    let afterDivider = after
-    if (profile.frontMatter.titleBorder) {
-      const w = ctx.measureWidth * 0.62
-      const x = (ctx.measureWidth - w) / 2
+    /** A pair of rules, the period's underline, centred on the leaf. */
+    const doubleRule = (slot: number, widthPt: number): void => {
+      const x = (trim.widthPt - widthPt) / 2 - page.frame.xPt
       page.lines.push({
-        slot: after - 1,
-        line: { runs: [], rule: { xPt: x, yPt: 0, widthPt: w, thicknessPt: 1.4 } }
+        slot,
+        line: { runs: [], rule: { xPt: x, yPt: 0, widthPt, thicknessPt: 1.4 } }
       })
       page.lines.push({
-        slot: after - 1,
-        line: { runs: [], rule: { xPt: x, yPt: 3.4, widthPt: w, thicknessPt: 0.6 } }
+        slot,
+        line: { runs: [], rule: { xPt: x, yPt: 3.4, widthPt, thicknessPt: 0.6 } }
       })
-      afterDivider = after + 1
-    } else if (divider) {
-      const widthPt = ctx.measureWidth * TITLE_ORNAMENT_WIDTH_RATIO
-      const heightPt = (widthPt * divider.height) / divider.width
-      page.lines.push({ slot: after, line: { runs: [], ornament: { art: divider, widthPt } } })
-      afterDivider = after + Math.max(1, Math.ceil(heightPt / ctx.leading)) + 2
     }
-    centred(page, afterDivider, [
-      { text: edition.author, sizePt: profile.bodyFontSize * 1.15, font: body, gapAfter: 0 }
-    ])
+
+    // Everything on this page is set inside a measure of its own, narrower
+    // than the text frame and struck from the *border* rather than from the
+    // margins. The frame's right edge falls within a couple of points of the
+    // inner rule, so type set to it ran up against the box; and the original
+    // insets its block from the border by about this much, which is why its
+    // subtitles break where they do ("ASTRAL COLORS AND / THOUGHT FORMS"). A
+    // narrower measure is therefore not only room but part of the composition.
+    const titleWidth = bordered ? trim.widthPt * 0.66 : page.frame.widthPt
+    const inMeasure = titleWidth / page.frame.widthPt
+
+    // What the book is one of, and the publisher's motto, above everything —
+    // where this series printed them, inside the border.
+    const smallPt = profile.bodyFontSize * 0.85
+    let slot = Math.floor(slotsPerPage / 12)
+    if (edition.seriesLine || edition.epigraph) {
+      slot = centred(
+        page,
+        slot,
+        [
+          {
+            text: cap(edition.seriesLine ?? ''),
+            sizePt: profile.bodyFontSize * 0.95,
+            font: body,
+            widthRatio: inMeasure
+          },
+          {
+            text: cap(edition.epigraph ?? ''),
+            sizePt: smallPt,
+            font: body,
+            widthRatio: inMeasure,
+            balanced: true
+          }
+        ],
+        { onTrim: true }
+      )
+      slot += 1
+    } else {
+      slot = Math.floor(slotsPerPage / 4)
+    }
+
+    const titlePt = profile.bodyFontSize * profile.headingStyle.scale
+    // At the body size on purpose: a slot is one *body* leading, so anything
+    // larger makes every wrapped line take two of them, and a two-line subtitle
+    // came out with a blank line down the middle of it.
+    const subtitlePt = profile.bodyFontSize
+    const works = edition.works ?? []
+
+    /**
+     * The width of the longest line the title actually sets on.
+     *
+     * Measuring the whole string assumes it fits on one line: a four-line
+     * title measured that way put a rule under it half as wide again as the
+     * widest line above it.
+     */
+    const widestLine = (text: string, font: FontRef, sizePt: number, maxWidth: number): number => {
+      const broken = breakParagraph(text, {
+        font,
+        sizePt,
+        measurer: ctx.measurer,
+        lineWidths: maxWidth,
+        alignment: 'center'
+      })
+      const widths = broken.map((line) => {
+        const first = line.words[0]
+        const last = line.words[line.words.length - 1]
+        if (!first || !last) return 0
+        return last.xPt + ctx.measurer.widthOf(last.text, font, sizePt) - first.xPt
+      })
+      return widths.length > 0 ? Math.max(...widths) : maxWidth
+    }
+
+    /** One work: its name, the rule under it, and its subtitle. */
+    const setWork = (from: number, work: TitlePageWork): number => {
+      const text = cap(work.title)
+      const after = centred(
+        page,
+        from,
+        [{ text, sizePt: titlePt, font: titleFont, gapAfter: 0, widthRatio: inMeasure }],
+        { onTrim: true }
+      )
+      // As wide as the title it underlines, which is what the originals do.
+      doubleRule(after, widestLine(text, titleFont, titlePt, titleWidth))
+      let next = after + 1
+      if (work.subtitle) {
+        next = centred(
+          page,
+          next,
+          [
+            {
+              text: cap(work.subtitle),
+              sizePt: subtitlePt,
+              font: body,
+              widthRatio: inMeasure,
+              balanced: true
+            }
+          ],
+          { onTrim: true }
+        )
+      }
+      return next
+    }
+
+    if (works.length > 1) {
+      // Two books bound as one. Set in turn with "and" between, each under its
+      // own rule, because a volume that prints them as one run-on title tells
+      // the reader it is one book — which is the thing this edition most needs
+      // not to say.
+      works.forEach((work, i) => {
+        if (i > 0) {
+          slot = centred(page, slot + 1, [{ text: 'and', sizePt: smallPt, font: body }], {
+            onTrim: true
+          })
+        }
+        slot = setWork(slot, work)
+      })
+    } else if (bordered) {
+      slot = setWork(slot, works[0] ?? { title: edition.title })
+    } else {
+      // No border: the title, then the divider ornament under it.
+      const text = cap(works[0]?.title ?? edition.title)
+      const after = centred(page, slot, [{ text, sizePt: titlePt, font: titleFont, gapAfter: 2 }], {
+        onTrim: true
+      })
+      const divider = findOrnament(profile.ornaments.sectionDivider)
+      if (divider) {
+        const widthPt = ctx.measureWidth * TITLE_ORNAMENT_WIDTH_RATIO
+        const heightPt = (widthPt * divider.height) / divider.width
+        page.lines.push({ slot: after, line: { runs: [], ornament: { art: divider, widthPt } } })
+        slot = after + Math.max(1, Math.ceil(heightPt / ctx.leading)) + 2
+      } else {
+        slot = after
+      }
+      const subtitle = works[0]?.subtitle
+      if (subtitle) {
+        slot = centred(page, slot, [{ text: cap(subtitle), sizePt: subtitlePt, font: body }], {
+          onTrim: true
+        })
+      }
+    }
+
+    // The author, well clear of the imprint at the foot. Named with "by" in
+    // front, because on a page that carries a publisher's name as well the two
+    // are otherwise just two lines of capitals and the reader has to guess
+    // which is which.
+    const footSlot = slotsPerPage - (edition.imprintLine?.trim() ? 5 : 3)
+    centred(
+      page,
+      Math.min(slot + 2, footSlot - 4),
+      [
+        { text: 'by', sizePt: smallPt, font: body, gapAfter: 0 },
+        { text: edition.author, sizePt: profile.bodyFontSize * 1.15, font: body, gapAfter: 0 }
+      ],
+      { onTrim: true }
+    )
     if (edition.imprint) {
-      centred(page, slotsPerPage - 3, [
-        { text: edition.imprint, sizePt: profile.bodyFontSize, font: body }
-      ])
+      const tagline = edition.imprintLine?.trim()
+      centred(
+        page,
+        footSlot,
+        [
+          { text: edition.imprint, sizePt: profile.bodyFontSize, font: body, gapAfter: 0 },
+          { text: tagline ?? '', sizePt: smallPt, font: { ...body, style: 'italic' } }
+        ],
+        { onTrim: true }
+      )
     }
   }
 

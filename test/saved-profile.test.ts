@@ -212,7 +212,8 @@ describe('appliedLook — which style the book is actually set in', () => {
       imprint: 'Blackthorn Press',
       copyrightHolder: 'A. Editor',
       publicDomainNotice: true,
-      annotatedNotice: false
+      annotatedNotice: false,
+      imprintLine: ''
     })
   })
 

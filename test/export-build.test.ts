@@ -38,6 +38,10 @@ const edition = (patch: Partial<EditionDetails> = {}): EditionDetails => ({
   editionDate: '2026',
   editionStatement: 'A new edition of the 1662 original.',
   notices: [],
+  seriesLine: null,
+  epigraph: null,
+  imprintLine: null,
+  works: [],
   ...patch
 })
 

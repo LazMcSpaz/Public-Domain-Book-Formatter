@@ -806,6 +806,89 @@ describe('layout — the title page gives its type room', () => {
 })
 
 /**
+ * A title page that carries two books, and one that is centred on the leaf.
+ *
+ * The border is drawn against the *trim*, because the text frame is offset by
+ * the gutter. Everything set on the page therefore has to be centred on the
+ * trim too — beside a box centred on the leaf, a title centred on the frame
+ * reads as crooked, and that is the one page where a reader has a straight
+ * edge to compare against.
+ */
+describe('layout — the bordered title page', () => {
+  const bordered = (edition: Partial<LayoutEdition>): LaidOutPage => {
+    const book = layout(
+      doc([block('paragraph', 'Body.')]),
+      {
+        ...defaultStyleProfile(),
+        frontMatter: {
+          halfTitle: false,
+          titlePage: true,
+          copyrightPage: false,
+          titleBorder: true
+        },
+        ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null, blankPage: null }
+      },
+      measurer,
+      { edition: { ...EDITION, ...edition } }
+    )
+    return book.pages.find((p) => p.kind === 'title')!
+  }
+
+  it('centres its type on the leaf, not on the gutter-shifted frame', () => {
+    const profile = defaultStyleProfile()
+    const trim = trimToPoints(profile.trimSize)
+    const page = bordered({ title: 'AIRS' })
+    const frame = page.frame
+    // The frame really is off-centre, or this test proves nothing.
+    expect(Math.abs(frame.xPt + frame.widthPt / 2 - trim.widthPt / 2)).toBeGreaterThan(1)
+
+    const title = textRuns(page).filter((r) => r.text === 'AIRS')
+    expect(title).toHaveLength(1)
+    const run = title[0]!
+    // `xPt` on a positioned run is already absolute on the leaf.
+    const mid = run.xPt + measurer.widthOf(run.text, run.font, run.sizePt) / 2
+    expect(mid).toBeCloseTo(trim.widthPt / 2, 0)
+  })
+
+  it('sets two works in turn, each under its own rule, with "and" between', () => {
+    const page = bordered({
+      title: 'The Human Aura and The Astral World',
+      works: [
+        { title: 'THE HUMAN AURA', subtitle: 'ASTRAL COLORS AND THOUGHT FORMS' },
+        { title: 'THE ASTRAL WORLD', subtitle: 'ITS SCENES, DWELLERS, AND PHENOMENA' }
+      ]
+    })
+    const text = textRuns(page)
+      .map((r) => r.text)
+      .join(' ')
+    // Each book named on its own, and the run-on title nowhere on the page.
+    expect(text).toContain('THE HUMAN AURA')
+    expect(text).toContain('THE ASTRAL WORLD')
+    expect(text).toContain('and')
+    expect(text).not.toContain('Human Aura and The Astral')
+
+    // A rule under each of them, over and above the four that make the border.
+    const rules = page.items.filter((i) => i.kind === 'rule')
+    expect(rules.length).toBeGreaterThanOrEqual(8 + 4)
+  })
+
+  it('prints the series line, the motto and the imprint tagline', () => {
+    const text = textRuns(
+      bordered({
+        seriesLine: 'Volumes I and II of the Occult Manuals',
+        epigraph: 'True occult knowledge gives you practical power and strength',
+        imprintLine: 'Rare and esoteric books, set for present-day readers'
+      })
+    )
+      .map((r) => r.text)
+      .join(' ')
+    expect(text.toLowerCase()).toContain('occult manuals')
+    expect(text.toLowerCase()).toContain('practical power')
+    expect(text.toLowerCase()).toContain('present-day readers')
+  })
+})
+
+/**
  * A division above a chapter, on the page as well as in the contents.
  *
  * The layout had its own copy of the heading-run rule, used to decide which

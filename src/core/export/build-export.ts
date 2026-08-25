@@ -15,6 +15,7 @@
 import type { KdpValidationReport, StyleProfile } from '@core/model'
 import type { BookDocument } from '@core/assemble'
 import { validateKdp } from '@core/typeset'
+import type { TitlePageWork } from '@core/layout'
 
 /** The edition details only the user can supply. */
 export interface EditionDetails {
@@ -28,6 +29,16 @@ export interface EditionDetails {
   editionStatement: string | null
   /** Extra copyright-page lines, e.g. the public-domain statement. */
   notices: string[]
+  /** The series line and motto this period set above a title. */
+  seriesLine: string | null
+  epigraph: string | null
+  /** A line under the imprint saying what the imprint is for. */
+  imprintLine: string | null
+  /**
+   * The works bound in this volume, when it is more than one. Fewer than two
+   * and the title page is set from `title`, as it always was.
+   */
+  works: TitlePageWork[]
 }
 
 export interface BuildExportInput {
@@ -169,8 +180,37 @@ export function editionFromAnswers(exportAnswers: Record<string, unknown>): Edit
     isbn: trimmedOrNull(exportAnswers['isbn']),
     editionDate: trimmedOrNull(exportAnswers['editionDate']),
     editionStatement: trimmedOrNull(exportAnswers['editionStatement']),
-    notices
+    notices,
+    seriesLine: trimmedOrNull(exportAnswers['seriesLine']),
+    epigraph: trimmedOrNull(exportAnswers['epigraph']),
+    imprintLine: trimmedOrNull(exportAnswers['imprintLine']),
+    works: parseTitlePageWorks(exportAnswers['titlePageWorks'])
   }
+}
+
+/**
+ * The works on a title page, one to a line, `Title | Subtitle`.
+ *
+ * A question cannot answer a list of records, and a repeating group is a lot of
+ * interface for something one reprint in twenty needs. The pipe is the notation
+ * a table block already uses for its cells in this codebase, so it is a
+ * convention the app has rather than one invented here.
+ *
+ * A single work is not a list: the title page has always been set from `title`
+ * and still is, so one line here changes nothing and two change everything.
+ */
+export function parseTitlePageWorks(raw: unknown): TitlePageWork[] {
+  if (typeof raw !== 'string') return []
+  return raw
+    .split('\n')
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+    .map((line) => {
+      const [title, ...rest] = line.split('|')
+      const subtitle = rest.join('|').trim()
+      return { title: (title ?? '').trim(), ...(subtitle ? { subtitle } : {}) }
+    })
+    .filter((work) => work.title.length > 0)
 }
 
 export function buildExport(input: BuildExportInput): BuildExportResult {

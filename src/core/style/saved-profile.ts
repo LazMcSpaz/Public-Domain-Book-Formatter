@@ -49,6 +49,15 @@ export interface ImprintFields {
    * library.
    */
   annotatedNotice: boolean
+  /**
+   * The line under the imprint on the title page.
+   *
+   * Banked for the same reason as the imprint itself: it says what the press
+   * is for, and that does not change between books. The series line and the
+   * motto above the *title* are deliberately not banked — those belong to the
+   * original publisher of one particular book.
+   */
+  imprintLine: string
 }
 
 /** A look the user banked, with the publisher identity that goes with it. */
@@ -101,7 +110,13 @@ export const BANKED_STYLE_KEYS: readonly (keyof StyleProfile)[] = [
 ]
 
 export function emptyImprint(): ImprintFields {
-  return { imprint: '', copyrightHolder: '', publicDomainNotice: true, annotatedNotice: false }
+  return {
+    imprint: '',
+    copyrightHolder: '',
+    publicDomainNotice: true,
+    annotatedNotice: false,
+    imprintLine: ''
+  }
 }
 
 function str(v: unknown, fallback: string): string {
@@ -178,7 +193,8 @@ export function migrateSavedProfile(raw: unknown): SavedStyleProfile | null {
       // False when absent: a look banked before annotated editions existed
       // describes a press that was not making them, and defaulting the other
       // way would print the claim on a book with nothing in it.
-      annotatedNotice: rawImprint['annotatedNotice'] === true
+      annotatedNotice: rawImprint['annotatedNotice'] === true,
+      imprintLine: str(rawImprint['imprintLine'], '')
     }
   }
 }

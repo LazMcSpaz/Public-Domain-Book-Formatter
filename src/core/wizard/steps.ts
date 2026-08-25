@@ -1955,6 +1955,36 @@ const exportStep: Step = {
         required: true
       },
       {
+        id: 'titlePageWorks',
+        type: 'text',
+        prompt: 'Is this volume more than one book?',
+        help:
+          'One work to a line, as “Title | Subtitle”. Leave it blank for an ordinary ' +
+          'book. Two or more and the title page sets each in turn, under its own rule, ' +
+          'with “and” between — because a volume that binds two books and prints them ' +
+          'as one run-on title tells the reader it is one book.',
+        defaultValue: '',
+        placeholder: 'THE HUMAN AURA | ASTRAL COLORS AND THOUGHT FORMS'
+      },
+      {
+        id: 'seriesLine',
+        type: 'text',
+        prompt: 'Series line, if the book is one of a set',
+        help:
+          'Printed above the title, inside the border. Read it off the original title ' +
+          'page where there is one — this period put it there.',
+        defaultValue: '',
+        placeholder: 'e.g. Volume I of the Occult Manuals'
+      },
+      {
+        id: 'epigraph',
+        type: 'text',
+        prompt: 'Motto under the series line',
+        help: 'The line the original publisher set under it, if any. Leave blank for none.',
+        defaultValue: '',
+        placeholder: 'e.g. True occult knowledge gives you practical power and strength'
+      },
+      {
         id: 'originalYear',
         type: 'text',
         prompt: 'Year of the original edition',
@@ -1972,6 +2002,18 @@ const exportStep: Step = {
           fromLook,
         defaultValue: banked.imprint,
         placeholder: 'e.g. Blackthorn Press'
+      },
+      {
+        id: 'imprintLine',
+        type: 'text',
+        prompt: 'A line under your imprint, on the title page',
+        help:
+          'What the imprint is for, in one line. It sets in italic under the imprint at ' +
+          'the foot of the title page, where the original printed its publisher’s ' +
+          'address.' +
+          fromLook,
+        defaultValue: banked.imprintLine,
+        placeholder: 'e.g. Rare and esoteric books, set for present-day readers'
       },
       {
         id: 'copyrightHolder',
