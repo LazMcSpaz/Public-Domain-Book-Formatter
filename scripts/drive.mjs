@@ -82,6 +82,21 @@ async function serve() {
   const browser = context
   const page = context.pages()[0] ?? (await context.newPage())
 
+  // The profile keeps IndexedDB, and it kept the HTTP cache with it.
+  //
+  // That is a trap with a long fuse. Edit a module in `src/core`, restart Vite,
+  // restart the driver, and the page still lays the book out with the code from
+  // before the edit, because Chromium served the module from its own disk cache
+  // and nothing in any report says so. It cost an afternoon here: the unit tests
+  // passed on the new code while every rendered page came out on the old.
+  //
+  // Cleared once at startup rather than by throwing the profile away, because
+  // the profile is holding the run, the scan and the recon checkpoint, which is
+  // the whole reason it is persistent.
+  const cdp = await context.newCDPSession(page)
+  await cdp.send('Network.clearBrowserCache')
+  await cdp.detach()
+
   /**
    * Which book a verb means, decided in one place.
    *

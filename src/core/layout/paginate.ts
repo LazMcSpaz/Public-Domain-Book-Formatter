@@ -541,6 +541,47 @@ function widthOfRun(run: TextRun, measurer: TextMeasurer | undefined, font: Font
 }
 
 /**
+ * Break a centred line so its parts come out even.
+ *
+ * A centred title broken at the full measure fills the first line and leaves
+ * whatever is left on the second, which on a contents page is routinely one or
+ * two words under a line four times as long. The fix printers have always used
+ * is to set the same number of lines in a narrower measure: the narrowest
+ * measure that still breaks into the same count is the balanced one.
+ *
+ * Binary search rather than trial widths, so the answer does not depend on how
+ * many steps somebody chose. Returns the breaks, never fewer lines than the
+ * natural setting and never more.
+ */
+function balancedLines(
+  text: string,
+  opts: { font: FontRef; sizePt: number; measurer: TextMeasurer; maxWidth: number }
+): BrokenLine[] {
+  const at = (width: number): BrokenLine[] =>
+    breakParagraph(text, {
+      font: opts.font,
+      sizePt: opts.sizePt,
+      measurer: opts.measurer,
+      lineWidths: Math.max(1, width),
+      alignment: 'center'
+    })
+
+  const natural = at(opts.maxWidth)
+  if (natural.length < 2) return natural
+
+  let tooNarrow = 0
+  let wide = opts.maxWidth
+  // Twelve halvings settles a 400pt measure to a tenth of a point, which is
+  // finer than any face's word space.
+  for (let i = 0; i < 12; i++) {
+    const mid = (tooNarrow + wide) / 2
+    if (at(mid).length <= natural.length) wide = mid
+    else tooNarrow = mid
+  }
+  return at(wide)
+}
+
+/**
  * The slots a chapter ornament occupies, the first carrying the art.
  *
  * Empty lines after it draw nothing but hold their slots, which is what keeps
@@ -2286,7 +2327,11 @@ function buildContents(
   // Only when the entries are centred. A flush-left list has no axis of its own
   // to agree with, and there a heading centred over the full measure is what a
   // printed contents looks like.
-  const axis = descriptive ? ctx.measureWidth - folioColumn : ctx.measureWidth
+  // A descriptive contents no longer reserves a lane for the folio: the number
+  // is set on a line of its own after each description, which is where the
+  // original of this book puts it, so the whole measure is available and the
+  // heading and the titles under it are centred on the same width.
+  const axis = descriptive ? ctx.measureWidth : ctx.measureWidth
 
   // The heading, set like a chapter title so the contents reads as part of the
   // same book rather than as an appendage — and small-capped by the same rule
@@ -2322,6 +2367,25 @@ function buildContents(
   }
   slot += CHAPTER_GAP_SLOTS
 
+  // How an entry is set in a descriptive contents, taken from the original of
+  // this book: the number small on a line of its own, the title under it, the
+  // description at full measure below, and the folio on a line after that.
+  //
+  // The sizes are the point of it. Set at the body size the titles came out
+  // larger than the paragraph they head and, with a lane reserved for the
+  // folio, wider than it too, so each one stuck out past both edges of its own
+  // description. In the original the title is barely larger than the
+  // description and never reaches the margin.
+  const entryTitleSize = sizePt * 0.92
+  const entryLabelSize = sizePt * 0.78
+  // Bold where the face has one, which is what the original sets these in. A
+  // face without a real bold falls back to italic rather than to a smeared
+  // regular, the same refusal small capitals get.
+  const entryTitleFont: FontRef = {
+    family: profile.bodyFont,
+    style: ctx.measurer.hasBold(profile.bodyFont) ? 'bold' : 'italic'
+  }
+
   toc.forEach((entry, i) => {
     const indent = Math.max(0, entry.level - 1) * sizePt
     // A title that wraps hangs its continuation, so the eye can tell a second
@@ -2329,15 +2393,35 @@ function buildContents(
     // centred setting: the second line is centred under the first, and an
     // indent on top of that would put it off axis.
     const hang = descriptive ? 0 : sizePt
-    const measure = Math.max(1, ctx.measureWidth - folioColumn - indent)
+    const measure = descriptive
+      ? Math.max(1, ctx.measureWidth - indent)
+      : Math.max(1, ctx.measureWidth - folioColumn - indent)
 
-    const broken = breakParagraph(entry.label ? `${entry.label} ${entry.title}` : entry.title, {
-      font: body,
-      sizePt,
-      measurer: ctx.measurer,
-      lineWidths: [measure, Math.max(1, measure - hang)],
-      alignment: descriptive ? 'center' : 'left'
-    })
+    const labelLines =
+      descriptive && entry.label
+        ? breakParagraph(entry.label, {
+            font: body,
+            sizePt: entryLabelSize,
+            measurer: ctx.measurer,
+            lineWidths: measure,
+            alignment: 'center'
+          })
+        : []
+
+    const broken = descriptive
+      ? balancedLines(entry.title, {
+          font: entryTitleFont,
+          sizePt: entryTitleSize,
+          measurer: ctx.measurer,
+          maxWidth: measure
+        })
+      : breakParagraph(entry.label ? `${entry.label} ${entry.title}` : entry.title, {
+          font: body,
+          sizePt,
+          measurer: ctx.measurer,
+          lineWidths: [measure, Math.max(1, measure - hang)],
+          alignment: 'left'
+        })
     if (broken.length === 0) return
 
     // The description, set smaller and indented under the entry — the shape an
@@ -2348,21 +2432,32 @@ function buildContents(
     // in the number's lane: an entry's folio belongs to its title line, and a
     // description running under it would collide with the digits.
     const synopsisSize = sizePt * 0.86
-    const synopsisIndent = indent + sizePt * 1.5
+    // Full measure in a descriptive contents, and no indent: the description is
+    // the widest thing on the page and the title is centred over it. Reserving
+    // the folio's lane here is what made a title wider than the paragraph it
+    // heads, and the folio is no longer on that line to need one.
+    const synopsisIndent = descriptive ? indent : indent + sizePt * 1.5
     const synopsisLines = entry.synopsis
       ? breakParagraph(entry.synopsis, {
           font: body,
           sizePt: synopsisSize,
           measurer: ctx.measurer,
-          lineWidths: [Math.max(1, ctx.measureWidth - folioColumn - synopsisIndent)],
-          alignment: 'left'
+          lineWidths: [
+            Math.max(
+              1,
+              descriptive
+                ? ctx.measureWidth - synopsisIndent
+                : ctx.measureWidth - folioColumn - synopsisIndent
+            )
+          ],
+          alignment: descriptive ? 'justify' : 'left'
         })
       : []
 
     // A blank line before each top-level entry after the first, so chapters
     // group visibly when there are sub-headings between them.
     const gapBefore = i > 0 && entry.level === 1 ? 1 : 0
-    if (slot + gapBefore + broken.length > slotsPerPage) {
+    if (slot + gapBefore + labelLines.length + broken.length > slotsPerPage) {
       page = newPage('front')
       page.kind = 'contents'
       page.suppressRunningHead = true
@@ -2372,17 +2467,39 @@ function buildContents(
       slot += gapBefore
     }
 
+    // The number line, small and centred above the title it belongs to.
+    for (const line of labelLines) {
+      page.lines.push({
+        slot,
+        line: {
+          runs: line.words.map((w) => ({
+            text: w.text,
+            font: body,
+            sizePt: entryLabelSize,
+            xPt: w.xPt + indent
+          }))
+        }
+      })
+      slot += 1
+    }
+
     broken.forEach((line, lineIndex) => {
       const runs: TextRun[] = line.words.map((w) => ({
         text: w.text,
-        font: body,
-        sizePt,
+        font: descriptive ? entryTitleFont : body,
+        sizePt: descriptive ? entryTitleSize : sizePt,
         xPt: w.xPt + indent + (lineIndex === 0 ? 0 : hang)
       }))
 
-      // The number aligns with the entry's *last* line, which is where a reader
-      // looks for it when a title has wrapped.
-      if (lineIndex === broken.length - 1 && entry.folio) {
+      // In a plain list the number sits on the entry's *last* line, which is
+      // where a reader looks for it when a title has wrapped. A descriptive
+      // entry puts it after the description instead, so it does not squeeze the
+      // title.
+      if (
+        (!descriptive || synopsisLines.length === 0) &&
+        lineIndex === broken.length - 1 &&
+        entry.folio
+      ) {
         const width = ctx.measurer.widthOf(entry.folio, body, sizePt)
         runs.push({ text: entry.folio, font: body, sizePt, xPt: ctx.measureWidth - width })
       }
@@ -2411,6 +2528,33 @@ function buildContents(
             sizePt: synopsisSize,
             xPt: w.xPt + synopsisIndent
           }))
+        }
+      })
+      slot += 1
+    }
+
+    // "Page 13", flush right on a line of its own under the description, which
+    // is where this book's own contents puts it. On the title line it needed a
+    // reserved lane, and that lane is what made every title narrower than the
+    // paragraph it heads.
+    // Only under a description. An entry with none — a written division, a
+    // back-matter section — would otherwise leave its number stranded a line
+    // below the title with nothing between them, which reads as a mistake. The
+    // number goes on the title line there, as it does in a plain list.
+    if (descriptive && entry.folio && synopsisLines.length > 0) {
+      if (slot >= slotsPerPage) {
+        page = newPage('front')
+        page.kind = 'contents'
+        page.suppressRunningHead = true
+        page.suppressFolio = true
+        slot = 0
+      }
+      const label = `Page ${entry.folio}`
+      const width = ctx.measurer.widthOf(label, body, synopsisSize)
+      page.lines.push({
+        slot,
+        line: {
+          runs: [{ text: label, font: body, sizePt: synopsisSize, xPt: ctx.measureWidth - width }]
         }
       })
       slot += 1

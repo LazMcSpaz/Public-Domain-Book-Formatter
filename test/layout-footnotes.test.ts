@@ -434,14 +434,54 @@ describe('layoutWithToc — descriptions under the entries', () => {
     expect(centred[0]).not.toBeCloseTo(centred[1]!, 3)
   })
 
+  /**
+   * The shape this book's own contents has, and the reason for it.
+   *
+   * Set with the number joined to the title and a lane reserved for the folio,
+   * every entry came out both larger and wider than the paragraph it heads, so
+   * it stuck out past both edges of its own description.
+   */
+  it('sets the number over the title, and the folio under the description', () => {
+    const contentsLines = withSynopses(true)
+      .pages.filter((p) => p.kind === 'contents')
+      .flatMap((c) => lines(c))
+    const at = (t: string) => contentsLines.findIndex((l) => l.runs.some((r) => r.text === t))
+
+    const label = at('Air') // "Of the Air" is the title; the label is above it
+    const folio = contentsLines.findIndex((l) => l.runs.some((r) => /^Page /.test(r.text)))
+    expect(label).toBeGreaterThanOrEqual(0)
+    expect(folio).toBeGreaterThan(label)
+
+    // The folio sits after the description, not beside the title.
+    const titleLine = contentsLines[label]!
+    expect(titleLine.runs.some((r) => /^Page |^\d+$/.test(r.text))).toBe(false)
+
+    // And no title reaches wider than the description it heads.
+    const width = (l: PositionedLine) => {
+      const last = l.runs[l.runs.length - 1]!
+      return (
+        last.xPt +
+        measurer.widthOf(last.text, last.font, last.sizePt) -
+        Math.min(...l.runs.map((r) => r.xPt))
+      )
+    }
+    const prose = contentsLines.find((l) => l.runs.some((r) => r.text === 'ancients'))!
+    expect(width(titleLine)).toBeLessThan(width(prose))
+    // Set smaller than the body, as the original has it.
+    expect(titleLine.runs[0]!.sizePt).toBeLessThan(defaultStyleProfile().bodyFontSize)
+  })
+
   it('still prints the folio each chapter opens on', () => {
     const book = withSynopses(true)
     const contents = book.pages.filter((p) => p.kind === 'contents')
+    // A descriptive contents sets the number as "Page 13" on a line of its own
+    // under the description, the way this book's own contents does, so the run
+    // carries the word as well as the digits.
     const printed = contents
       .flatMap((c) => lines(c))
       .flatMap((l) => l.runs)
-      .filter((r) => /^\d+$/.test(r.text))
-      .map((r) => r.text)
+      .filter((r) => /^(Page )?\d+$/.test(r.text))
+      .map((r) => r.text.replace(/^Page /, ''))
     const actual = book.chapterPages.map((c) => book.pages[c.pageIndex]!.folio)
     for (const folio of actual) expect(printed).toContain(folio)
   })
