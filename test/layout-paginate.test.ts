@@ -254,16 +254,24 @@ describe('layout — the body', () => {
     // Down the middle of the leaf.
     expect(Math.abs(mark.yPt - trim.heightPt / 2)).toBeLessThan(trim.heightPt / 6)
 
-    // And across the middle of the *leaf*, not of the text block. The block is
-    // offset by the gutter, so a mark centred in it reads left of centre on a
-    // verso — which is every page this rule applies to.
+    // And on the same axis as the folio under it. This asserted the opposite
+    // for a while: the mark was centred on the *leaf* on the reasoning that a
+    // text block offset by the gutter would throw it off centre. It does, and
+    // the folio is thrown off centre with it, because the folio belongs to the
+    // block too. Centred on the leaf the mark simply stopped lining up with the
+    // number below it, which is what a reader actually sees.
     const page = blanks(marked)[0]!
     const art = mark.art.width * mark.scale
-    expect(mark.xPt + art / 2).toBeCloseTo(trim.widthPt / 2, 6)
-    expect(page.frame.xPt + (page.frame.widthPt - art) / 2 + art / 2).not.toBeCloseTo(
-      trim.widthPt / 2,
-      1
-    )
+    const folioLine = page.items
+      .filter((i): i is PositionedLine => i.kind === 'line')
+      .find(isFolio)!
+    const digits = folioLine.runs[0]!
+    const folioMid = digits.xPt + measurer.widthOf(digits.text, digits.font, digits.sizePt) / 2
+    // To 2 places: the folio's own x is rounded to a thousandth of a point
+    // when it is set, and that rounding is the whole of the difference.
+    expect(mark.xPt + art / 2).toBeCloseTo(folioMid, 2)
+    // And that shared axis is not the middle of the leaf, or this proves nothing.
+    expect(folioMid).not.toBeCloseTo(trim.widthPt / 2, 1)
   })
 
   it('sets a section label over its title, the way a chapter number is set', () => {

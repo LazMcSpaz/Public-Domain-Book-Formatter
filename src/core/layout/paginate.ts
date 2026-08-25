@@ -325,16 +325,6 @@ interface FlowLine {
   ornament?: {
     art: OrnamentArt
     widthPt: number
-    /**
-     * Centre on the leaf rather than on the text block.
-     *
-     * The block is offset by the gutter, so on a verso it sits toward the
-     * outer edge and anything centred in it reads left of centre. That is
-     * right for an ornament under a heading, which belongs to the text, and
-     * wrong for the only mark on an otherwise empty leaf, which has nothing to
-     * belong to but the page.
-     */
-    onPage?: boolean
   }
   /**
    * An illustration drawn at this slot. Like the ornament it flows through the
@@ -1744,7 +1734,7 @@ export function layout(
         const widthPt = ctx.measureWidth * BLANK_PAGE_ORNAMENT_RATIO
         blank.lines.push({
           slot: Math.floor(slotsPerPage / 2),
-          line: { runs: [], ornament: { art: mark, widthPt, onPage: true } }
+          line: { runs: [], ornament: { art: mark, widthPt } }
         })
       }
     }
@@ -2126,12 +2116,12 @@ function finishPage(
     }
 
     if (line.ornament) {
-      const { art, widthPt, onPage } = line.ornament
+      const { art, widthPt } = line.ornament
       items.push({
         kind: 'ornament',
         // Centred in the measure, and hung from the top of its slot rather
         // than a baseline — it has no baseline to sit on.
-        xPt: onPage ? (ctx.trim.widthPt - widthPt) / 2 : frame.xPt + (frame.widthPt - widthPt) / 2,
+        xPt: frame.xPt + (frame.widthPt - widthPt) / 2,
         yPt: frame.yPt + slot * ctx.leading,
         scale: widthPt / art.width,
         art
