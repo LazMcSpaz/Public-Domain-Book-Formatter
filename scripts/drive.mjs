@@ -937,9 +937,27 @@ async function serve() {
         .filter((a) => !a.includes('='))
         .map(Number)
         .filter(Number.isFinite)
+      // `proof pdf=book.pdf` writes the file the export screen would download.
+      // The same bytes this verb has always built and thrown away: the design
+      // gate's whole claim is that the preview *is* the PDF, so a book anybody
+      // wants to read has to be gettable without opening the app.
+      const pdfOut = wanted.find((a) => a.startsWith('pdf='))?.slice(4) ?? null
+      // `answers=<book.json>` takes the look from the book file rather than
+      // from this browser. The app keeps a book's design answers in
+      // `localStorage`, which is per-device — so a book fetched from the shelf
+      // onto a machine that has never seen it proofs with the *defaults* and
+      // says nothing. It cost two wrong PDFs: Clairvoyance is set in Libre
+      // Caslon with drop capitals and ornamented openers, and came out in
+      // Crimson Pro with neither, 47 pages short.
+      const answersFrom = wanted.find((a) => a.startsWith('answers='))?.slice(8) ?? null
+      let fromFile = null
+      if (answersFrom) {
+        const { readFile } = await import('node:fs/promises')
+        fromFile = JSON.parse(await readFile(resolve(REPO, answersFrom), 'utf8')).answers ?? {}
+      }
       const tweaks = Object.fromEntries(
         wanted
-          .filter((a) => a.includes('='))
+          .filter((a) => a.includes('=') && !a.startsWith('pdf=') && !a.startsWith('answers='))
           .map((a) => {
             const [k, ...v] = a.split('=')
             const raw = v.join('=')
@@ -947,7 +965,7 @@ async function serve() {
           })
       )
       const result = await page.evaluate(
-        async ([repo, pageNumbers, tweaks]) => {
+        async ([repo, pageNumbers, tweaks, wantPdf, fromFile]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
           const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
@@ -967,7 +985,7 @@ async function serve() {
           // the engine rather than an answer nobody had given. Through
           // `editionFromAnswers`, which is what the export gate itself uses.
           const stored = localStorage.getItem(`pdbf.review.${newest.key}`)
-          const saved = stored ? JSON.parse(stored) : {}
+          const saved = fromFile ?? (stored ? JSON.parse(stored) : {})
           const meta = run.transcriptions.flatMap((t) => (t.metadata ? [t.metadata] : []))
           const exportMod = await import(`/@fs${repo}/src/core/export/index.ts`)
           const edition = exportMod.editionFromAnswers({
@@ -1039,10 +1057,25 @@ async function serve() {
             warnings: built.warnings.length,
             substitutions: built.substitutions,
             bytes: built.bytes.length,
+            // Never silent about this. A book proofed with the defaults looks
+            // finished and is not the book.
+            designFrom: fromFile
+              ? 'the book file'
+              : stored
+                ? 'this browser'
+                : 'DEFAULTS — this device has no design answers for this book',
+            // Base64 rather than an array of numbers: a three-hundred-page
+            // book is megabytes, and a JSON array of bytes is four characters
+            // for each of them.
+            ...(wantPdf
+              ? {
+                  pdf: btoa(Array.from(built.bytes, (b) => String.fromCharCode(b)).join(''))
+                }
+              : {}),
             shots
           }
         },
-        [REPO, shots, tweaks]
+        [REPO, shots, tweaks, pdfOut !== null, fromFile]
       )
       const { writeFile } = await import('node:fs/promises')
       const wrote = []
@@ -1052,7 +1085,14 @@ async function serve() {
         wrote.push(file)
       }
       delete result.shots
-      return { ...result, wrote }
+      let wrotePdf = null
+      if (pdfOut && result.pdf) {
+        const { writeFile } = await import('node:fs/promises')
+        await writeFile(resolve(REPO, pdfOut), Buffer.from(result.pdf, 'base64'))
+        wrotePdf = pdfOut
+      }
+      delete result.pdf
+      return { ...result, wrote, ...(wrotePdf ? { wrotePdf } : {}) }
     },
 
     /**
