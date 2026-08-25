@@ -8,6 +8,7 @@ export {
   headingRunEnd,
   shouldJoin,
   joinText,
+  hyphenatedCompounds,
   bookWordCount,
   seamCount,
   stripSoftHyphens,

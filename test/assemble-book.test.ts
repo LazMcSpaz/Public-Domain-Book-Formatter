@@ -3,6 +3,7 @@ import {
   assembleBook,
   shouldJoin,
   joinText,
+  hyphenatedCompounds,
   bookWordCount,
   seamCount,
   stripSoftHyphens,
@@ -55,6 +56,57 @@ describe('shouldJoin', () => {
 
   it('joins a hyphenated word even though it ends with punctuation-ish', () => {
     expect(shouldJoin(para('the chirur-'), para('geon his art'))).toBe(true)
+  })
+})
+
+/**
+ * A hyphen at a page break is usually the compositor's line-wrap and is healed
+ * away. Sometimes it is the word's own, and healing it corrupts the book's
+ * text in a way no per-page check can see: the two halves sit on different
+ * leaves, so each leaf reads correctly against its own render, both OCR engines
+ * agree, and nothing downstream ever compares the join to how the book spells
+ * that word everywhere else.
+ *
+ * *Thought Vibration* set `thought-` at the foot of page 22 and `habit` at the
+ * head of page 23, and the book prints `thought-habit` with the hyphen four
+ * times elsewhere. It assembled as `thoughthabit`, and it took a fourth
+ * independent witness to notice.
+ *
+ * The book's own usage is the witness that settles it, and assembly has the
+ * whole book in hand — which is exactly what a per-page reader does not.
+ */
+describe('a page-break hyphen the book itself keeps', () => {
+  it('collects the compounds the book sets with a hyphen mid-line', () => {
+    const set = hyphenatedCompounds([
+      'The force of the thought-habit, or motion-habit, carries it on.',
+      'a magnet-like power of attraction',
+      'nothing hyphenated here at all'
+    ])
+    expect(set.has('thought-habit')).toBe(true)
+    expect(set.has('motion-habit')).toBe(true)
+    expect(set.has('magnet-like')).toBe(true)
+    expect(set.size).toBe(3)
+  })
+
+  it('keeps the hyphen the book keeps, and heals the one it does not', () => {
+    const known = hyphenatedCompounds(['it imparts the thought-habit to the mind'])
+    expect(joinText('produces the thought-', 'habit, or motion-habit,', known)).toBe(
+      'produces the thought-habit, or motion-habit,'
+    )
+    // The ordinary case is untouched: `chirurgeon` is one word wherever the
+    // book sets it, so nothing vouches for the hyphen and it goes.
+    expect(joinText('the chirur-', 'geon his art', known)).toBe('the chirurgeon his art')
+  })
+
+  it('matches without regard to case or the punctuation that follows', () => {
+    const known = hyphenatedCompounds(['the sound-waves reach us'])
+    expect(joinText('of Sound-', 'Waves.', known)).toBe('of Sound-Waves.')
+  })
+
+  it('heals everything when nothing is known, which is what it did before', () => {
+    expect(joinText('produces the thought-', 'habit, or motion-habit,')).toBe(
+      'produces the thoughthabit, or motion-habit,'
+    )
   })
 })
 

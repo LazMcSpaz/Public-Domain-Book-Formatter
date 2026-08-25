@@ -361,13 +361,48 @@ export function shouldJoin(
   return endsOpen && startsLower
 }
 
-/** Join two block texts, healing a hyphen split across the page break. */
-export function joinText(previous: string, next: string): string {
+/**
+ * The compounds this book sets with a hyphen *mid-line*, as evidence.
+ *
+ * A block's text is already joined within its leaf, so any `word-word` inside
+ * one is a hyphen the compositor set on purpose rather than one he used to
+ * break a line. That makes the book its own witness for the only question a
+ * page seam raises: was the hyphen the word's, or the wrap's?
+ *
+ * The seam pair itself can never appear here, because its two halves are on
+ * different leaves and therefore in different blocks.
+ */
+export function hyphenatedCompounds(texts: readonly string[]): Set<string> {
+  const found = new Set<string>()
+  for (const text of texts) {
+    for (const m of text.matchAll(/[\p{L}]+-[\p{L}]+/gu)) found.add(m[0]!.toLowerCase())
+  }
+  return found
+}
+
+/**
+ * Join two block texts, healing a hyphen split across the page break.
+ *
+ * `known` is what the book itself spells with a hyphen. Without it every seam
+ * hyphen is healed away, which is right for `chirur-` + `geon` and wrong for
+ * `thought-` + `habit` — and wrong in the quietest way there is, because the
+ * two halves sit on different leaves, so each leaf reads correctly against its
+ * own render and no per-page check can ever see the join.
+ */
+export function joinText(previous: string, next: string, known?: ReadonlySet<string>): string {
   const left = previous.trimEnd()
   const right = next.trimStart()
   if (TRAILING_HYPHEN.test(left)) {
+    const stem = left.replace(/[-­]\s*$/, '')
+    const stemWord = /[\p{L}]+$/u.exec(stem)?.[0] ?? ''
+    const tailWord = /^[\p{L}]+/u.exec(right)?.[0] ?? ''
+    if (stemWord && tailWord && known?.has(`${stemWord}-${tailWord}`.toLowerCase())) {
+      // The book's own spelling. "thought-" + "habit" is thought-habit, not
+      // thoughthabit, and the book says so four times mid-line.
+      return `${stem}-${right}`
+    }
     // "chirur-" + "geon" → "chirurgeon". The hyphen was line-wrap, not spelling.
-    return left.replace(/[-­]\s*$/, '') + right
+    return stem + right
   }
   return `${left} ${right}`
 }
@@ -403,6 +438,15 @@ export function assembleBook(
   const skipped: BookDocument['skipped'] = []
 
   const ordered = [...transcriptions].sort((a, b) => a.pageIndex - b.pageIndex)
+
+  // The book's own hyphenated compounds, gathered before anything is joined —
+  // the witness that decides whether a hyphen at a page seam is the word's or
+  // the line-wrap's. Built from every leaf, including the ones dispositions
+  // will drop, because a compound is a fact about the book's spelling wherever
+  // it is set.
+  const ownCompounds = hyphenatedCompounds(
+    ordered.flatMap((page) => page.blocks.map((b) => b.text))
+  )
 
   const excluded = new Set(options.excludePages ?? [])
 
@@ -506,7 +550,7 @@ export function assembleBook(
             ...shiftEmphasis(block.strong, wordCount(previous.text))
           ]
         }
-        previous.text = stripSoftHyphens(joinText(previous.text, block.text))
+        previous.text = stripSoftHyphens(joinText(previous.text, block.text, ownCompounds))
         if (!previous.sourcePages.includes(page.pageIndex)) {
           previous.sourcePages.push(page.pageIndex)
         }
