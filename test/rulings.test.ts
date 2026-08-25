@@ -150,6 +150,34 @@ describe('rulings the book has not caught up with', () => {
     expect(unapplied([ruling()], 'radioactive here, radioative there')).toHaveLength(1)
   })
 
+  /**
+   * A correction that only *adds* something contains the printed form, so
+   * "is the old reading still there?" is meaningless — it always is. Asking
+   * anyway reported a landed correction as outstanding forever, which is how
+   * a check that exists to be believed stops being believed.
+   */
+  it('says nothing about a correction that only adds to what was printed', () => {
+    const closing = ruling({
+      pageIndex: 163,
+      quote: 'the moment at which he awoke.',
+      correction: 'the moment at which he awoke.\u201d'
+    })
+    expect(
+      unapplied([closing], 'dispatching a messenger, the moment at which he awoke.\u201d')
+    ).toEqual([])
+  })
+
+  it('still flags that correction when it never landed', () => {
+    const closing = ruling({
+      pageIndex: 163,
+      quote: 'the moment at which he awoke.',
+      correction: 'the moment at which he awoke.\u201d'
+    })
+    expect(
+      unapplied([closing], 'dispatching a messenger, the moment at which he awoke.')
+    ).toHaveLength(1)
+  })
+
   it('has no opinion about a ruling that changes nothing', () => {
     expect(unapplied([ruling({ decision: 'as-printed', correction: undefined })], '')).toEqual([])
   })

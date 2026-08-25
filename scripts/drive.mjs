@@ -2622,6 +2622,119 @@ async function serve() {
     },
 
     /**
+     * Amend a section the editor wrote — the introduction, a glossary.
+     *
+     * `correct` reaches the blocks of the *book*; nothing reached the prose
+     * this edition adds to it. That prose lives twice — as a `section` edit
+     * inside the book, which is what prints, and as Markdown on the shelf,
+     * which is what a person reads — and the two can drift. They did: a
+     * correction landed, the shelf's `introduction.md` was updated to say
+     * eighty-one, and the book went on printing eighty.
+     *
+     * ```
+     * section introduction --was "Eighty errors" --now "Eighty-one errors"
+     * section introduction --from intro.md          # replace it wholesale
+     * section                                       # list what there is
+     * ```
+     *
+     * A substitution refuses rather than guesses when the words appear more
+     * than once, for the same reason `correct` does.
+     */
+    section: async (argv) => {
+      const flag = (name) => {
+        const i = argv.indexOf(`--${name}`)
+        return i === -1 ? null : argv[i + 1]
+      }
+      const sectionId = argv.find(
+        (a) =>
+          !a.startsWith('--') &&
+          argv[argv.indexOf(a) - 1] !== '--was' &&
+          argv[argv.indexOf(a) - 1] !== '--now' &&
+          argv[argv.indexOf(a) - 1] !== '--from'
+      )
+      const from = flag('from')
+      const was = flag('was')
+      const now = flag('now')
+      let replacement = null
+      if (from) {
+        const { readFile } = await import('node:fs/promises')
+        replacement = (await readFile(resolve(REPO, from), 'utf8')).replace(/\n+$/u, '')
+      }
+
+      return page.evaluate(
+        async ([repo, sectionId, replacement, was, now]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+
+          const sections = (run.edits ?? []).filter((e) => e.kind === 'section')
+          if (!sectionId) {
+            return {
+              sections: sections.map((s) => ({
+                sectionId: s.sectionId,
+                title: s.title,
+                placement: s.placement,
+                words: String(s.text ?? '')
+                  .split(/\s+/u)
+                  .filter(Boolean).length
+              }))
+            }
+          }
+          const found = sections.find((s) => s.sectionId === sectionId)
+          if (!found) {
+            throw new Error(
+              `No section \`${sectionId}\`. There is: ${sections.map((s) => s.sectionId).join(', ') || 'none'}`
+            )
+          }
+
+          let text = replacement
+          if (text === null) {
+            if (was === null) throw new Error('Give `--from <file>` or `--was ... --now ...`.')
+            const parts = String(found.text ?? '').split(was)
+            if (parts.length === 1) {
+              throw new Error(`\`${was}\` is not in the ${sectionId}. Nothing was changed.`)
+            }
+            if (parts.length > 2) {
+              throw new Error(
+                `\`${was}\` appears ${parts.length - 1} times in the ${sectionId}. ` +
+                  'Give the whole section with `--from` instead.'
+              )
+            }
+            text = parts.join(now ?? '')
+          }
+          if (text === found.text) {
+            return { sectionId, changed: false, why: 'That is what it already says.' }
+          }
+
+          const edits = editsMod.withEdit(run.edits ?? [], { ...found, text })
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            edits
+          })
+          const stored = await runStore.saveRun(next)
+          return {
+            sectionId,
+            title: found.title,
+            changed: true,
+            stored: stored === true,
+            wordsBefore: String(found.text ?? '')
+              .split(/\s+/u)
+              .filter(Boolean).length,
+            wordsAfter: text.split(/\s+/u).filter(Boolean).length,
+            next: 'The Markdown on the shelf is a mirror — update it to match.'
+          }
+        },
+        [REPO, sectionId ?? '', replacement, was, now]
+      )
+    },
+
+    /**
      * Record what the editor decided about a query.
      *
      * The other half of a channel that was, until now, one-way: the question
