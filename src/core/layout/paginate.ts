@@ -2873,6 +2873,10 @@ function buildFrontMatter(
     // What the book is one of, and the publisher's motto, above everything —
     // where this series printed them, inside the border.
     const smallPt = profile.bodyFontSize * 0.85
+    // The motto belongs to the line above it, so it is set close under it and a
+    // step smaller — its own size rather than the page's general small, which
+    // also carries "by", "and" and the imprint tagline further down.
+    const mottoPt = profile.bodyFontSize * 0.77
     let slot = Math.floor(slotsPerPage / 12)
     if (edition.seriesLine || edition.epigraph) {
       slot = centred(
@@ -2883,11 +2887,12 @@ function buildFrontMatter(
             text: cap(edition.seriesLine ?? ''),
             sizePt: profile.bodyFontSize * 0.95,
             font: body,
-            widthRatio: inMeasure
+            widthRatio: inMeasure,
+            gapAfter: 0
           },
           {
             text: cap(edition.epigraph ?? ''),
-            sizePt: smallPt,
+            sizePt: mottoPt,
             font: body,
             widthRatio: inMeasure,
             balanced: true

@@ -936,18 +936,23 @@ describe('layout — the bordered title page', () => {
   })
 
   it('prints the series line, the motto and the imprint tagline', () => {
-    const text = textRuns(
+    const runs = textRuns(
       bordered({
         seriesLine: 'Volumes I and II of the Occult Manuals',
         epigraph: 'True occult knowledge gives you practical power and strength',
         imprintLine: 'Rare and esoteric books, set for present-day readers'
       })
     )
-      .map((r) => r.text)
-      .join(' ')
+    const text = runs.map((r) => r.text).join(' ')
     expect(text.toLowerCase()).toContain('occult manuals')
     expect(text.toLowerCase()).toContain('practical power')
     expect(text.toLowerCase()).toContain('present-day readers')
+
+    // The motto belongs to the series line above it, and says so by being a
+    // step smaller. Set at the same size the two read as one block of capitals
+    // with no order to it.
+    const sizeOf = (word: string) => runs.find((r) => r.text === word)!.sizePt
+    expect(sizeOf('MANUALS')).toBeGreaterThan(sizeOf('PRACTICAL'))
   })
 })
 
