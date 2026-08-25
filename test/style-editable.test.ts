@@ -74,7 +74,7 @@ describe('answers fold back onto the profile', () => {
       pageNumber: 'topOuter',
       headingStyle: { smallCaps: false, centered: false, scale: 1.8 },
       runningHeads: { verso: 'chapterTitle', recto: 'author' },
-      frontMatter: { titlePage: false, copyrightPage: true, halfTitle: true }
+      frontMatter: { titlePage: false, copyrightPage: true, halfTitle: true, titleBorder: false }
     }
     // Answer every question with its own default — the identity edit.
     const answers: Answers = {}
@@ -118,7 +118,7 @@ describe('the edited default is what a new book starts from', () => {
       ...defaultStyleProfile(),
       gutter: 0.32,
       pageNumber: 'topOuter',
-      frontMatter: { titlePage: true, copyrightPage: true, halfTitle: true }
+      frontMatter: { titlePage: true, copyrightPage: true, halfTitle: true, titleBorder: false }
     }
     const built = profileFromAnswers(
       { kind: 'novel', period: 'victorian', chapterOpener: 'plain', runningHeads: 'none' },

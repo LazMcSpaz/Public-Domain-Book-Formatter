@@ -2376,8 +2376,13 @@ function buildContents(
   // folio, wider than it too, so each one stuck out past both edges of its own
   // description. In the original the title is barely larger than the
   // description and never reaches the margin.
-  const entryTitleSize = sizePt * 0.92
-  const entryLabelSize = sizePt * 0.78
+  //
+  // Measured off the original at 600 dpi rather than guessed: its title's caps
+  // stand 1.22 times the description's and its number line 0.93 of them. Set at
+  // 1.07 the title read as emphasised body text rather than as a heading, which
+  // is what made the bold look like a blob instead of a step up.
+  const entryTitleSize = sizePt * 0.86 * 1.22
+  const entryLabelSize = sizePt * 0.86 * 0.93
   // Bold where the face has one, which is what the original sets these in. A
   // face without a real bold falls back to italic rather than to a smeared
   // regular, the same refusal small capitals get.
@@ -2573,6 +2578,7 @@ function buildFrontMatter(
 ): void {
   const body: FontRef = { family: profile.bodyFont, style: 'regular' }
   const heading: FontRef = { family: profile.headingFont, style: 'regular' }
+  const trim = trimToPoints(profile.trimSize)
 
   /** Set the entries centred from `startSlot`, and say which slot is next free. */
   const centred = (
@@ -2665,15 +2671,67 @@ function buildFrontMatter(
     // no scene-break block for it to sit at. A title page is the one division
     // every book of this period marks, and marking it is what the ornament was
     // put in the library for.
-    const divider = findOrnament(profile.ornaments.sectionDivider)
-    const afterDivider = divider
-      ? (() => {
-          const widthPt = ctx.measureWidth * TITLE_ORNAMENT_WIDTH_RATIO
-          const heightPt = (widthPt * divider.height) / divider.width
-          page.lines.push({ slot: after, line: { runs: [], ornament: { art: divider, widthPt } } })
-          return after + Math.max(1, Math.ceil(heightPt / ctx.leading)) + 2
-        })()
-      : after
+    // A border round the leaf and a pair of rules under the title, which is how
+    // this series was set. Four rules to a box: the engine draws one as a
+    // filled rectangle, so a tall narrow one is a side and a wide flat one is a
+    // top. Positioned against the *trim* rather than the text frame, because
+    // the frame is offset by the gutter and a box centred on it would sit
+    // visibly right of the middle of the leaf.
+    if (profile.frontMatter.titleBorder) {
+      const insetX = trim.widthPt * 0.1
+      const insetY = trim.heightPt * 0.075
+      const box = (pad: number, weight: number): void => {
+        const left = insetX + pad
+        const top = insetY + pad
+        const w = trim.widthPt - 2 * left
+        const h = trim.heightPt - 2 * top
+        const at = (xPt: number, yPt: number, widthPt: number, thicknessPt: number): void => {
+          page.lines.push({
+            slot: 0,
+            line: {
+              runs: [],
+              rule: {
+                xPt: xPt - page.frame.xPt,
+                yPt: yPt - page.frame.yPt,
+                widthPt,
+                thicknessPt
+              }
+            }
+          })
+        }
+        at(left, top, w, weight)
+        at(left, top + h - weight, w, weight)
+        at(left, top, weight, h)
+        at(left + w - weight, top, weight, h)
+      }
+      box(0, 1.6)
+      box(4, 0.6)
+    }
+
+    // Under the title: the period's pair of rules where a modern book would put
+    // an ornament, and the ornament stands down rather than sit beside them.
+    const divider = profile.frontMatter.titleBorder
+      ? null
+      : findOrnament(profile.ornaments.sectionDivider)
+    let afterDivider = after
+    if (profile.frontMatter.titleBorder) {
+      const w = ctx.measureWidth * 0.62
+      const x = (ctx.measureWidth - w) / 2
+      page.lines.push({
+        slot: after - 1,
+        line: { runs: [], rule: { xPt: x, yPt: 0, widthPt: w, thicknessPt: 1.4 } }
+      })
+      page.lines.push({
+        slot: after - 1,
+        line: { runs: [], rule: { xPt: x, yPt: 3.4, widthPt: w, thicknessPt: 0.6 } }
+      })
+      afterDivider = after + 1
+    } else if (divider) {
+      const widthPt = ctx.measureWidth * TITLE_ORNAMENT_WIDTH_RATIO
+      const heightPt = (widthPt * divider.height) / divider.width
+      page.lines.push({ slot: after, line: { runs: [], ornament: { art: divider, widthPt } } })
+      afterDivider = after + Math.max(1, Math.ceil(heightPt / ctx.leading)) + 2
+    }
     centred(page, afterDivider, [
       { text: edition.author, sizePt: profile.bodyFontSize * 1.15, font: body, gapAfter: 0 }
     ])

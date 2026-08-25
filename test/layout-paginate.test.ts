@@ -133,7 +133,7 @@ describe('layout — front matter', () => {
 
   it('honours the front-matter toggles', () => {
     const book = run(doc([block('paragraph', PROSE)]), {
-      frontMatter: { halfTitle: false, titlePage: true, copyrightPage: false }
+      frontMatter: { halfTitle: false, titlePage: true, copyrightPage: false, titleBorder: false }
     })
     // Capped, because the default profile caps its headings and a title page
     // set in upper and lower case beside capped chapter openings reads as two
@@ -778,7 +778,12 @@ describe('layout — the title page gives its type room', () => {
       doc([block('paragraph', 'Body.')]),
       {
         ...defaultStyleProfile(),
-        frontMatter: { halfTitle: false, titlePage: true, copyrightPage: false },
+        frontMatter: {
+          halfTitle: false,
+          titlePage: true,
+          copyrightPage: false,
+          titleBorder: false
+        },
         ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null, blankPage: null }
       },
       measurer,

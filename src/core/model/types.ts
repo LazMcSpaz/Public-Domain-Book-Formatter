@@ -345,6 +345,15 @@ export interface StyleProfile {
     titlePage: boolean
     copyrightPage: boolean
     halfTitle: boolean
+    /**
+     * Rule a border round the title page, and a double rule under the title.
+     *
+     * How this series was set in 1915: everything inside a box, the title
+     * stepped up from a small line above it and separated from the subtitle
+     * below by a pair of rules. It is a period convention rather than a
+     * default, so books that do not want it are unaffected.
+     */
+    titleBorder: boolean
   }
 }
 

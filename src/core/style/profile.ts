@@ -144,7 +144,8 @@ export function normalizeStyleProfile(raw: unknown): StyleProfile {
     frontMatter: {
       titlePage: bool(rawFront['titlePage'], d.frontMatter.titlePage),
       copyrightPage: bool(rawFront['copyrightPage'], d.frontMatter.copyrightPage),
-      halfTitle: bool(rawFront['halfTitle'], d.frontMatter.halfTitle)
+      halfTitle: bool(rawFront['halfTitle'], d.frontMatter.halfTitle),
+      titleBorder: bool(rawFront['titleBorder'], d.frontMatter.titleBorder)
     }
   }
 }

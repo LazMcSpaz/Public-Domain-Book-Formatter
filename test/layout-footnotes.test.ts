@@ -467,8 +467,13 @@ describe('layoutWithToc — descriptions under the entries', () => {
     }
     const prose = contentsLines.find((l) => l.runs.some((r) => r.text === 'ancients'))!
     expect(width(titleLine)).toBeLessThan(width(prose))
-    // Set smaller than the body, as the original has it.
-    expect(titleLine.runs[0]!.sizePt).toBeLessThan(defaultStyleProfile().bodyFontSize)
+
+    // A step above the description rather than level with it. Measured off the
+    // original at 600 dpi: its title's caps stand 1.22 times the description's.
+    // An earlier setting made the title barely larger and bold, which read as
+    // emphasised body text; the ratio is the thing to hold, not the size.
+    const descSize = prose.runs[0]!.sizePt
+    expect(titleLine.runs[0]!.sizePt / descSize).toBeCloseTo(1.22, 2)
   })
 
   it('still prints the folio each chapter opens on', () => {

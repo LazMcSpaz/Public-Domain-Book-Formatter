@@ -34,7 +34,7 @@ export const DEFAULT_STYLE_PROFILES: StyleProfile[] = [
     pageNumber: 'bottomCenter',
     contentsSynopsis: true,
     ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null, blankPage: null },
-    frontMatter: { titlePage: true, copyrightPage: true, halfTitle: true }
+    frontMatter: { titlePage: true, copyrightPage: true, halfTitle: true, titleBorder: false }
   },
   {
     id: 'compact-5x8',
@@ -58,7 +58,7 @@ export const DEFAULT_STYLE_PROFILES: StyleProfile[] = [
     pageNumber: 'bottomOuter',
     contentsSynopsis: true,
     ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null, blankPage: null },
-    frontMatter: { titlePage: true, copyrightPage: true, halfTitle: false }
+    frontMatter: { titlePage: true, copyrightPage: true, halfTitle: false, titleBorder: false }
   },
   {
     id: 'verse-6x9',
@@ -82,7 +82,7 @@ export const DEFAULT_STYLE_PROFILES: StyleProfile[] = [
     pageNumber: 'bottomCenter',
     contentsSynopsis: true,
     ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null, blankPage: null },
-    frontMatter: { titlePage: true, copyrightPage: true, halfTitle: true }
+    frontMatter: { titlePage: true, copyrightPage: true, halfTitle: true, titleBorder: false }
   }
 ]
 

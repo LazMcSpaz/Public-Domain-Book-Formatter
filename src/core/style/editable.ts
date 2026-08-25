@@ -366,6 +366,20 @@ export function styleQuestions(
       options: ornamentOptions('chapter', 'divider')
     },
     {
+      id: 'frontTitleBorder',
+      type: 'choice',
+      prompt: 'Rule a border round the title page?',
+      help:
+        'The way this period set a title page: everything inside a box, with a pair of rules ' +
+        'under the title. Reproduces the look of the original without reprinting its ' +
+        'publisher’s imprint as though it were yours.',
+      defaultValue: profile.frontMatter.titleBorder ? 'yes' : 'no',
+      options: [
+        { value: 'no', label: 'No border' },
+        { value: 'yes', label: 'Ruled border' }
+      ]
+    },
+    {
       id: 'frontHalfTitle',
       type: 'confirm',
       prompt: 'Print a half-title leaf?',
@@ -463,7 +477,8 @@ export function applyStyleAnswers(profile: StyleProfile, answers: Answers): Styl
     frontMatter: {
       titlePage: pickBool(answers, 'frontTitlePage', profile.frontMatter.titlePage),
       copyrightPage: pickBool(answers, 'frontCopyrightPage', profile.frontMatter.copyrightPage),
-      halfTitle: pickBool(answers, 'frontHalfTitle', profile.frontMatter.halfTitle)
+      halfTitle: pickBool(answers, 'frontHalfTitle', profile.frontMatter.halfTitle),
+      titleBorder: pickBool(answers, 'frontTitleBorder', profile.frontMatter.titleBorder)
     }
   }
 }
