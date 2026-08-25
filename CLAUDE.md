@@ -4,6 +4,12 @@ Guidance for AI assistants (and humans) working in this repo.
 
 ## What this is
 
+**Starting cold on a book?** Read [`docs/HANDOFF.md`](./docs/HANDOFF.md)
+first, then the process it points at:
+[`PROCESS-reading.md`](./docs/PROCESS-reading.md) for getting the text right
+and [`PROCESS-edition.md`](./docs/PROCESS-edition.md) for turning a read book
+into a printed one.
+
 A **browser** app (React + TypeScript + Vite) that turns public-domain books —
 scanned PDFs, or EPUBs that are already text — into print-ready **KDP**
 interiors. It renders and OCRs
