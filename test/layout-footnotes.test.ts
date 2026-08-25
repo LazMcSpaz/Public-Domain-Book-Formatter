@@ -355,6 +355,80 @@ describe('layoutWithToc — descriptions under the entries', () => {
     expect(text).toContain('Whether fire is a substance or a motion')
   })
 
+  /**
+   * The contents is built from the *raw* document, so it does not pass through
+   * the conversion `layout` applies to the body. That went unseen for as long
+   * as a contents was a column of capitalised titles — they have no quotes in
+   * them — and showed the moment the descriptions arrived, which are prose.
+   * A book whose body curls its quotes and whose contents does not is one book
+   * set two ways.
+   */
+  it('curls the quotes in a description, as the body does', () => {
+    const quoted = build([
+      page(0, [
+        { kind: 'heading', text: 'Of the Air', level: 1 },
+        { kind: 'paragraph', text: PROSE.repeat(8) }
+      ])
+    ])
+    quoted.chapters[0]!.synopsis =
+      'The man who has much to say about "horse sense." What the bellows is for.'
+    const book = layoutWithToc(
+      quoted,
+      { ...defaultStyleProfile(), contentsSynopsis: true },
+      measurer,
+      { edition: EDITION }
+    )
+    const text = flat(book)
+    expect(text).toContain('\u201chorse sense.\u201d')
+    expect(text).not.toContain('"horse sense."')
+  })
+
+  /**
+   * The property the whole two-pass scheme rests on, asserted end to end: a
+   * contents laid out with the folios blank must paginate the book exactly as
+   * the same contents with them filled in.
+   *
+   * It did not. The folio line under a description was emitted only when the
+   * number was known, so pass two ran a line per entry longer than pass one.
+   * On a short book that absorbs into the same leaf and nothing shows; on a
+   * book with enough described chapters it spills, `layoutWithToc` catches the
+   * length change and falls back to pass one — which has no numbers in it —
+   * and prints a contents page with no page numbers at all.
+   *
+   * So the fixture has to be big enough to spill. Two chapters would pass this
+   * test with the bug still in.
+   */
+  const many = build(
+    Array.from({ length: 40 }, (_, i) => ({
+      index: i,
+      blocks: [
+        { kind: 'heading' as const, text: `Chapter the ${i}`, level: 1 },
+        { kind: 'paragraph' as const, text: PROSE.repeat(8) }
+      ]
+    })).map((p) => page(p.index, p.blocks))
+  )
+  for (const chapter of many.chapters) {
+    chapter.synopsis =
+      'What the air is made of, and why the ancients thought otherwise. The bellows ' +
+      'and its uses. The nature of flame, and whether fire is a substance or a motion.'
+  }
+
+  it('prints the numbers on a contents long enough to spill', () => {
+    const book = layoutWithToc(
+      many,
+      { ...defaultStyleProfile(), contentsSynopsis: true },
+      measurer,
+      { edition: EDITION }
+    )
+    const contents = book.pages.filter((p) => p.kind === 'contents')
+    expect(contents.length).toBeGreaterThan(1)
+
+    // Every described entry carries its number, and the fallback never fired.
+    const printed = contents.map(textOf).join(' ')
+    expect(printed.match(/Page \d+/g) ?? []).toHaveLength(many.chapters.length)
+    expect(book.warnings.filter((w) => /without page numbers/.test(w.text))).toHaveLength(0)
+  })
+
   it('leaves them out when the style says not to', () => {
     const text = flat(withSynopses(false))
     expect(text).toContain('Of the Air')
@@ -468,12 +542,16 @@ describe('layoutWithToc — descriptions under the entries', () => {
     const prose = contentsLines.find((l) => l.runs.some((r) => r.text === 'ancients'))!
     expect(width(titleLine)).toBeLessThan(width(prose))
 
-    // A step above the description rather than level with it. Measured off the
-    // original at 600 dpi: its title's caps stand 1.22 times the description's.
-    // An earlier setting made the title barely larger and bold, which read as
-    // emphasised body text; the ratio is the thing to hold, not the size.
+    // A step above the description rather than level with it, and set in the
+    // *same* weight — which is what the original does. Its title reads as a
+    // heading because it is letterspaced, and this engine has no tracking, so
+    // size carries the whole distinction and a modest step is the honest
+    // substitute. Bold was tried and was wrong: the original's description is a
+    // heavy old face, so a same-weight title sits level with it, while a light
+    // description under a bold title makes the title shout.
     const descSize = prose.runs[0]!.sizePt
-    expect(titleLine.runs[0]!.sizePt / descSize).toBeCloseTo(1.22, 2)
+    expect(titleLine.runs[0]!.sizePt / descSize).toBeCloseTo(1.15, 2)
+    expect(titleLine.runs[0]!.font.style).toBe(prose.runs[0]!.font.style)
   })
 
   it('still prints the folio each chapter opens on', () => {

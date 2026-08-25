@@ -112,8 +112,31 @@ export function layoutWithToc(
   // describing a book that no longer exists. It cannot happen while the folio
   // column is fixed — but a silently wrong contents page is exactly the kind of
   // error a reader would trust, so the invariant is checked rather than assumed.
+  //
+  // And it *did* happen: a descriptive contents printed its folio line only
+  // once the number was known, so pass two ran a line per entry longer, and the
+  // combined volume's contents spilled onto another leaf. The guard caught it
+  // and did the safe thing — and the safe thing is pass one, which has no page
+  // numbers in it at all. The cause is fixed (the line is reserved in both
+  // passes now), but the fallback still has to say so: a contents page with no
+  // numbers is worse than a wrong one, because nothing about it looks wrong.
+  // Reported on the `warnings` channel, which otherwise carries overfull lines
+  // — a stretch of that meaning, and better than the alternative of shipping
+  // this in silence.
   if (second.pages.length !== first.pages.length) {
-    return first
+    const contentsPage = first.pages.findIndex((p) => p.kind === 'contents')
+    return {
+      ...first,
+      warnings: [
+        ...first.warnings,
+        {
+          pageIndex: contentsPage < 0 ? 0 : contentsPage,
+          text:
+            'The contents page is printing without page numbers: filling them in ' +
+            'changed the length of the book, so the numbered pass had to be discarded.'
+        }
+      ]
+    }
   }
 
   return second

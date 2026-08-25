@@ -28,6 +28,7 @@ describe('every field of a profile is reachable', () => {
       'frontHalfTitle',
       'frontTitlePage',
       'frontCopyrightPage',
+      'frontTitleBorder',
       'headingCentered'
     ]) {
       expect(editable, id).toContain(id)
@@ -74,7 +75,12 @@ describe('answers fold back onto the profile', () => {
       pageNumber: 'topOuter',
       headingStyle: { smallCaps: false, centered: false, scale: 1.8 },
       runningHeads: { verso: 'chapterTitle', recto: 'author' },
-      frontMatter: { titlePage: false, copyrightPage: true, halfTitle: true, titleBorder: false }
+      // Set true on purpose: a boolean that is false round-trips through a
+      // question whose answer is the wrong *type* anyway, because `pickBool`
+      // falls back to the profile and the profile says false. `titleBorder`
+      // shipped as a `choice` answering 'yes'/'no', this test passed, and the
+      // border silently never drew. Every flag here should be the non-default.
+      frontMatter: { titlePage: false, copyrightPage: true, halfTitle: true, titleBorder: true }
     }
     // Answer every question with its own default — the identity edit.
     const answers: Answers = {}
@@ -83,6 +89,40 @@ describe('answers fold back onto the profile', () => {
       answers[q.id] = q.defaultValue
     }
     expect(applyStyleAnswers(profile, answers)).toEqual(profile)
+  })
+
+  /**
+   * The identity edit above cannot catch a question whose answer is the wrong
+   * *type*: the reader ignores it and falls back to the profile, which is the
+   * value the answer was describing anyway, so the round trip looks clean.
+   * `frontTitleBorder` shipped as a `choice` answering 'yes'/'no' into
+   * `pickBool`, passed that test, and never drew a border on any book.
+   *
+   * The property that does catch it is transfer: questions built from profile
+   * A, answered with their own defaults and applied to profile B, must carry
+   * A's values across. A dropped answer leaves B's.
+   */
+  it('carries one profile\u2019s answers onto another', () => {
+    const a: StyleProfile = {
+      ...base,
+      dropCap: true,
+      hyphenate: false,
+      opticalMargins: false,
+      chaptersOpenRecto: false,
+      headingStyle: { ...base.headingStyle, smallCaps: true, centered: false },
+      frontMatter: {
+        titlePage: false,
+        copyrightPage: false,
+        halfTitle: false,
+        titleBorder: true
+      }
+    }
+    const answers: Answers = {}
+    for (const q of styleQuestions(a)) {
+      if (q.type === 'term-grid' || q.type === 'page-edit' || q.type === 'discrepancies') continue
+      answers[q.id] = q.defaultValue
+    }
+    expect(applyStyleAnswers(base, answers)).toEqual(a)
   })
 
   it('reads "none" back as no ornament', () => {

@@ -35,7 +35,7 @@ import {
 } from './break-lines'
 import { prepareFootnotes, type NoteReference, type PreparedNote } from './footnotes'
 import { anchorIllustrations } from './illustrations'
-import { withTypographicQuotes } from './quotes'
+import { typographicQuotes, withTypographicQuotes } from './quotes'
 import {
   bottomFolioBaseline,
   frameFor,
@@ -1464,7 +1464,22 @@ export function layout(
   // The contents comes last in the front matter, after any dedication, and
   // opens on a recto as a display page does.
   if (options.toc && options.toc.length > 0) {
-    buildContents(pages, newPage, profile, options.toc, ctx, slotsPerPage)
+    // The same presentation the body gets, and for the same reason. The entries
+    // are built from the *raw* document by `layoutWithToc`, so they never pass
+    // through the conversion above: the body curled its quotes and the contents
+    // did not. It went unseen while a contents was a column of capitalised
+    // titles, which have no quotes in them, and showed the moment the
+    // descriptions came back — they are prose, and this book's are full of
+    // quoted phrases. Idempotent, like the conversion it mirrors.
+    const toc = profile.typographicQuotes
+      ? options.toc.map((entry) => ({
+          ...entry,
+          title: typographicQuotes(entry.title),
+          ...(entry.label ? { label: typographicQuotes(entry.label) } : {}),
+          ...(entry.synopsis ? { synopsis: typographicQuotes(entry.synopsis) } : {})
+        }))
+      : options.toc
+    buildContents(pages, newPage, profile, toc, ctx, slotsPerPage)
   }
 
   // The body opens on a recto, so a lone verso here becomes a blank leaf.
@@ -2377,19 +2392,17 @@ function buildContents(
   // description. In the original the title is barely larger than the
   // description and never reaches the margin.
   //
-  // Measured off the original at 600 dpi rather than guessed: its title's caps
-  // stand 1.22 times the description's and its number line 0.93 of them. Set at
-  // 1.07 the title read as emphasised body text rather than as a heading, which
-  // is what made the bold look like a blob instead of a step up.
-  const entryTitleSize = sizePt * 0.86 * 1.22
-  const entryLabelSize = sizePt * 0.86 * 0.93
-  // Bold where the face has one, which is what the original sets these in. A
-  // face without a real bold falls back to italic rather than to a smeared
-  // regular, the same refusal small capitals get.
-  const entryTitleFont: FontRef = {
-    family: profile.bodyFont,
-    style: ctx.measurer.hasBold(profile.bodyFont) ? 'bold' : 'italic'
-  }
+  // Set in the *same* face and weight as the description, which is what the
+  // original does. The device that makes its title a heading is letterspacing,
+  // not weight — and this engine has no tracking, so the only lever left is
+  // size, and a modest step is the honest substitute. Bold was the wrong lever:
+  // the original's description is a heavy old face, so a same-weight title sits
+  // level with it, while ours sets a light description under a bold title and
+  // the title shouts. Sized against the label rather than against nothing: the
+  // number line measures 0.87 of the title on the page at 600 dpi.
+  const entryTitleSize = sizePt * 0.86 * 1.15
+  const entryLabelSize = sizePt * 0.86 * 1.15 * 0.87
+  const entryTitleFont: FontRef = { family: profile.bodyFont, style: 'regular' }
 
   toc.forEach((entry, i) => {
     const indent = Math.max(0, entry.level - 1) * sizePt
@@ -2546,7 +2559,16 @@ function buildContents(
     // back-matter section — would otherwise leave its number stranded a line
     // below the title with nothing between them, which reads as a mistake. The
     // number goes on the title line there, as it does in a plain list.
-    if (descriptive && entry.folio && synopsisLines.length > 0) {
+    //
+    // Reserved whether or not the number is known yet, which is the whole
+    // reason the two-pass scheme works: pass one leaves the folios blank, and
+    // if the line only appeared once they were filled in, pass two would be
+    // longer by a line per entry. It was — the combined volume's contents ran
+    // over onto another leaf, `layoutWithToc` caught the length change and fell
+    // back to pass one, and pass one has no numbers in it at all. A contents
+    // page with no page numbers, printed in silence. The guard was right; what
+    // was wrong was giving it something to catch.
+    if (descriptive && synopsisLines.length > 0) {
       if (slot >= slotsPerPage) {
         page = newPage('front')
         page.kind = 'contents'
@@ -2554,12 +2576,14 @@ function buildContents(
         page.suppressFolio = true
         slot = 0
       }
-      const label = `Page ${entry.folio}`
+      const label = entry.folio ? `Page ${entry.folio}` : ''
       const width = ctx.measurer.widthOf(label, body, synopsisSize)
       page.lines.push({
         slot,
         line: {
-          runs: [{ text: label, font: body, sizePt: synopsisSize, xPt: ctx.measureWidth - width }]
+          runs: label
+            ? [{ text: label, font: body, sizePt: synopsisSize, xPt: ctx.measureWidth - width }]
+            : []
         }
       })
       slot += 1

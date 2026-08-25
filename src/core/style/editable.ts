@@ -367,17 +367,13 @@ export function styleQuestions(
     },
     {
       id: 'frontTitleBorder',
-      type: 'choice',
+      type: 'confirm',
       prompt: 'Rule a border round the title page?',
       help:
         'The way this period set a title page: everything inside a box, with a pair of rules ' +
         'under the title. Reproduces the look of the original without reprinting its ' +
         'publisher’s imprint as though it were yours.',
-      defaultValue: profile.frontMatter.titleBorder ? 'yes' : 'no',
-      options: [
-        { value: 'no', label: 'No border' },
-        { value: 'yes', label: 'Ruled border' }
-      ]
+      defaultValue: profile.frontMatter.titleBorder
     },
     {
       id: 'frontHalfTitle',
