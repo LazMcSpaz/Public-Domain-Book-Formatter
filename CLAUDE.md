@@ -214,6 +214,138 @@ block's whole text with emphasis rendered back as `<i>` tags. `drive.mjs body`
 hands back exactly those strings. Writing one against a raw page silently
 truncates every paragraph the page seam joined — see `applyEdits`.
 
+### What has actually gone wrong
+
+Every item here cost real time on a real book. They are not hypotheticals, and
+each one is followed by the thing that catches it next time.
+
+**The remote is the source of truth, not the working copy.** This container
+reverts both checkouts without warning — it did it four times in one session,
+once _after_ the work had been pushed, leaving a local tree that looked like
+a week-old commit while the remote held everything. So push at every natural
+stopping point, and when something looks wrong, check which side is stale
+before assuming work was lost:
+
+```bash
+git rev-list --count origin/main..HEAD    # unpushed commits, 0 is good
+git merge-base --is-ancestor HEAD origin/main && echo "local is behind"
+git fetch origin main && git reset --hard FETCH_HEAD
+```
+
+**The PDF in a book's directory is the _export_. The scan is
+`scans/<sha256>.pdf`, and `book.json` names it in `scan.path`.** Handing
+`drive.mjs load` the exported book instead of the scan does not fail: it
+stores a run under a second key, and `leaf`, `ocr` and every crop then render
+the finished edition rather than the paper. Read the path out of the book file
+rather than reaching for the PDF sitting next to it, and check `drive.mjs
+runs` for keys that should not be there. `runs drop <n>` removes one.
+
+**A leaf's text is not a block's text.** Assembly joins paragraphs across page
+seams, so the raw transcription of leaf 120 ends mid-word and the block
+carries the whole paragraph. Diffing an edit against a transcription therefore
+reports changes that were never made and misses the ones that were.
+`drive.mjs body` hands back `pristine` and `edited` for exactly this. Block
+ids (`p120b3`) are _derived_ at assembly; the stored blocks have no id at all.
+
+**Editing a book file by hand.** Prove the round trip before rewriting one:
+`json.dumps(d, indent=1, ensure_ascii=False) + "\n"` is byte-identical for
+these files, and confirming that costs one command. If instead you are
+inserting a line by text match, anchor the search inside the object you mean —
+`"author"` occurs in `identityAnswers` and in `answers.export`, and the first
+match is not the one you want.
+
+**Restart both servers after any `src/core` edit, and verify what is
+_served_.** Vite's watcher is unreliable here and the driver's Chromium keeps
+its own HTTP cache. `curl` the module through `/@fs/...` and grep for a token
+from the change; `/src/...` returns `index.html` and will "confirm" anything.
+The first driver command after a restart often dies with `Target page,
+context or browser has been closed` — retry it. And `pkill -f vite` matches
+the shell running it, so kill from a detached script or by pid.
+
+### A test that passes before and after the fix is not a test
+
+This is the one that cost the most, because a green suite is exactly what
+stops you looking. Four separate times this session a new test passed against
+the _reinstated bug_. The habit that fixes it is cheap: reintroduce the fault,
+watch the test fail, put the fault back. Anything less is a test of your
+reasoning rather than of the code.
+
+The specific shapes it took, all worth recognising:
+
+- **A round trip is blind to a reader that ignores its input.** Answering
+  every question with its own default and applying it to the profile it came
+  from passes whether or not the answer is read, because the fallback _is_ the
+  value being described. `frontTitleBorder` shipped as a `choice` answering
+  `'yes'` into a reader that takes booleans, passed that test, and drew no
+  border on any book. The property that catches it is **transfer**: build the
+  questions from profile A, answer them with their defaults, apply them to
+  profile B, and require B to become A.
+- **The fixture has to be big enough to trip the fault.** Two chapters, then
+  fourteen, both passed with the contents bug still in; forty spilled onto
+  another leaf and failed. If the fault needs scale, build scale.
+- **Assert the invariant, not a proxy for it.** Counting laid-out items looked
+  like measuring length and was not: a blank reserved line advances the slot
+  and emits no item. The invariant was the page count, which is what the guard
+  itself compares.
+- **Check what the coordinates mean before comparing them.** A positioned
+  run's `xPt` is already absolute on the leaf, so adding the frame origin to
+  it produced a confident assertion about the wrong number.
+
+### Measuring, rather than looking
+
+Eyeballing a rendered crop gave three different answers about the same ratio,
+and one of them went into a comment and a test as though it were measured.
+There is no image library here, but a PNG is `zlib` plus five filter types and
+a scanline loop, which is about sixty lines of Node: decode the crop, sum the
+dark pixels per row, and read the ink bands off the numbers. Do that before
+writing a ratio down. The same rule the app applies to readings applies to
+proportions: propose from sense, accept from pixels.
+
+### The layout engine, where it surprises
+
+- **The slot grid is one _body_ leading.** Anything set larger occupies
+  several slots, so a subtitle at 1.1× the body silently doubled its own line
+  spacing. Sizes just above the body size are the dangerous ones.
+- **A rule hung on the grid falls a whole line from the type it underlines.**
+  Hang it from the baseline instead, at a fraction of the _type's_ size. And
+  hang it from the title's **last** line: on a title that wrapped, the first
+  line is in the middle of the words.
+- **Frame or trim, and never both.** The text frame is offset by the gutter.
+  The folio is centred on the frame, so anything meant to line up with it must
+  be too; the title-page border is struck from the trim, so the type inside it
+  must be. Every misalignment on a finished page this session was two things
+  measured from different origins.
+- **A breaker centres inside the width you hand it.** `balancedLines`
+  re-breaks at a _narrower_ width to even the lines out, so its output is
+  centred in a box that is not the measure. Re-centre each laid line explicitly
+  and the result stops depending on which breaker produced it.
+- **A two-pass scheme must reserve in pass one everything pass two emits.**
+  The contents printed its folio line only once the number was known, so pass
+  two ran a line per entry longer, the guard caught the length change, and the
+  safe fallback was pass one — which has no page numbers in it at all.
+- **A guard's fallback has to report.** That contents shipped with no numbers
+  and `warnings: 0` beside it. Silence is the failure mode, not the error.
+
+### The apparatus, book by book
+
+Two things that are supposed to be standing rules turned out to be habits, and
+habits skip.
+
+**A step done for one book is not done for the next.** _Clairvoyance_ carried
+85 glossary marks; the combined volume carried a 74-entry glossary and not one
+mark, and had no footnotes, and nothing anywhere said so. The book file, the
+export report and the KDP checks were all perfectly happy.
+
+**An editorial ruling leaks back in.** "Never tell the reader what to read
+next" was settled, applied once by hand, and then four fresh directions
+appeared across the two glossaries — one of them in the preamble, announcing
+the practice as a feature.
+
+Both are deterministic and neither is checked. Until they are, a book is not
+finished until someone has asked, in these words: does every glossary entry
+that names a word the book uses have a mark on that word? does any entry tell
+the reader where to go next? has this book got the apparatus the last one got?
+
 ## Commands
 
 ```bash
