@@ -216,6 +216,29 @@ describe('layout — the body', () => {
     }
   })
 
+  it('sets a two-line chapter title with room for its own size', () => {
+    // A part divider whose title wraps: "BOOK TWO — THE ASTRAL / WORLD" set
+    // its second line one *body* leading below the first, and a title sets at
+    // well over the body size, so WORLD was drawn through the line above it.
+    const long = 'BOOK TWO — THE ASTRAL WORLD OF THE INVISIBLE PLANES BEYOND'
+    const book = run(doc([block('heading', long, 1), block('paragraph', PROSE)]))
+    const page = book.pages.find((p) => textOf(p).includes('BOOK'))
+    expect(page).toBeDefined()
+
+    const titleLines = lines(page!).filter((l) => l.runs.some((r) => r.sizePt > 12))
+    expect(titleLines.length).toBeGreaterThan(1)
+
+    const sizePt = titleLines[0].runs[0].sizePt
+    for (let i = 1; i < titleLines.length; i++) {
+      // Far enough apart that the ascenders of one line clear the baseline of
+      // the one above it — measured against the leading the title's own size
+      // asks for, not against the body's.
+      expect(titleLines[i].baselinePt - titleLines[i - 1].baselinePt).toBeGreaterThanOrEqual(
+        leadingFor(sizePt) - 0.01
+      )
+    }
+  })
+
   it('never strands a heading at the foot of a page', () => {
     const book = run(
       doc([

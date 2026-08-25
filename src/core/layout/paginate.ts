@@ -534,6 +534,30 @@ function ornamentLines(art: OrnamentArt, ctx: BuildContext): FlowLine[] {
 }
 
 /**
+ * Lines set larger than the body, spaced so they cannot collide.
+ *
+ * Slots are one *body* leading apart, and a chapter title sets at up to twice
+ * the body size — so the second line of a two-line title was set through the
+ * first. "BOOK TWO — THE ASTRAL / WORLD" did exactly that on a real part
+ * divider, with WORLD struck through the line above it. The blank lines draw
+ * nothing and hold their slots, the same trick an ornament already uses, and
+ * none is added after the last line because the space *below* a heading is the
+ * caller's to decide.
+ *
+ * A no-op for anything set at the body size or smaller, which is every
+ * paragraph in the book — the fault is only ever in oversized type.
+ */
+function spacedForSize(lines: FlowLine[], sizePt: number, ctx: BuildContext): FlowLine[] {
+  const perLine = Math.max(1, Math.ceil(leadingFor(sizePt) / ctx.leading))
+  if (perLine === 1 || lines.length < 2) return lines
+  return lines.flatMap((line, i) =>
+    i === lines.length - 1
+      ? [line]
+      : [line, ...Array.from({ length: perLine - 1 }, (): FlowLine => ({ runs: [] }))]
+  )
+}
+
+/**
  * A division the editor wrote, as flowables.
  *
  * It opens like a chapter — on a recto, sunk down the page, with the running
@@ -885,31 +909,39 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
     // A chapter opener may carry a flourish under its title. It belongs to the
     // heading's own lines so the two can never be separated by a page break.
     const flourish = isChapter ? findOrnament(ctx.profile.ornaments.chapterOpener) : null
-    const lines = toFlowLines(
-      broken,
-      font,
+    const lines = spacedForSize(
+      toFlowLines(
+        broken,
+        font,
+        sizePt,
+        hang > 0 ? [indentLeft - hang, indentLeft] : [indentLeft],
+        markToNote,
+        ctx.profile.opticalMargins ? ctx.measurer : undefined,
+        spans
+      ),
       sizePt,
-      hang > 0 ? [indentLeft - hang, indentLeft] : [indentLeft],
-      markToNote,
-      ctx.profile.opticalMargins ? ctx.measurer : undefined,
-      spans
+      ctx
     )
 
     // "LESSON I." over "THE ASTRAL SENSES.", as one opening. Built here so a
     // page break can never fall between them.
     const above = (opts.superscription ?? []).flatMap((line) => {
       const size = sizePt * SUPERSCRIPTION_SIZE_RATIO
-      return toFlowLines(
-        breakParagraph(wantsSmallCaps && !realSmallCaps ? line.toLocaleUpperCase() : line, {
+      return spacedForSize(
+        toFlowLines(
+          breakParagraph(wantsSmallCaps && !realSmallCaps ? line.toLocaleUpperCase() : line, {
+            font,
+            sizePt: size,
+            measurer: ctx.measurer,
+            lineWidths: measure,
+            alignment: style.alignment
+          }),
           font,
-          sizePt: size,
-          measurer: ctx.measurer,
-          lineWidths: measure,
-          alignment: style.alignment
-        }),
-        font,
+          size,
+          [indentLeft]
+        ),
         size,
-        [indentLeft]
+        ctx
       )
     })
 
