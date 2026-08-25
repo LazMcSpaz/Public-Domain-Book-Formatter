@@ -3,6 +3,7 @@
  */
 export {
   dispositionFor,
+  ALL_PAGE_ROLES,
   isFrontMatter,
   roleLabel,
   emptyBookMetadata,

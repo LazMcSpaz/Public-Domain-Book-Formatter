@@ -8,7 +8,7 @@
  *
  * Pure: types, the JSON schema, and a strict parser. No I/O, no client.
  */
-import type { PageRole } from '@core/pages'
+import { ALL_PAGE_ROLES, type PageRole } from '@core/pages'
 import { parseInlineMarkup } from './markup'
 
 /** Structural role of a run of text within the page. */
@@ -188,26 +188,7 @@ export interface PageTranscription {
   metadata?: ExtractedMetadata
 }
 
-const PAGE_ROLES: readonly PageRole[] = [
-  'half-title',
-  'title-page',
-  'copyright',
-  'dedication',
-  'epigraph',
-  'preface',
-  'table-of-contents',
-  'list-of-illustrations',
-  'chapter-opening',
-  'body',
-  'part-divider',
-  'plate',
-  'index',
-  'appendix',
-  'glossary',
-  'colophon',
-  'blank',
-  'unknown'
-]
+const PAGE_ROLES: readonly PageRole[] = ALL_PAGE_ROLES
 
 /**
  * Every block kind, as data.

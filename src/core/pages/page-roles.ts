@@ -48,6 +48,17 @@ export type PageRole =
    * belongs on the copyright page, where `sourceNotice` sets it.
    */
   | 'digitization-notice'
+  /**
+   * The publisher's own list of its other titles, bound into the book.
+   *
+   * Common in this period and not describable by any other role here: it is
+   * not blank, it is not the scanner's, and it carries no stale pagination —
+   * it is simply matter a reprint has no business setting, being an offer of
+   * books nobody can buy. *Thought Vibration* binds eleven leaves of it, and
+   * until this existed the only way to keep them out of the body was to call
+   * them something they are not.
+   */
+  | 'advertisement'
   | 'unknown'
 
 /** What the pipeline does with a page's text once its role is known. */
@@ -73,6 +84,7 @@ const DISPOSITIONS: Record<PageRole, PageDisposition> = {
   index: 'discard',
   blank: 'discard',
   'digitization-notice': 'discard',
+  advertisement: 'discard',
   // Real content, but set apart from the main narrative flow.
   dedication: 'transcribe-aside',
   epigraph: 'transcribe-aside',
@@ -87,6 +99,18 @@ const DISPOSITIONS: Record<PageRole, PageDisposition> = {
   glossary: 'transcribe',
   unknown: 'transcribe'
 }
+
+/**
+ * Every role, as data, and the one list of them.
+ *
+ * The parser used to keep a second copy, which drifted: `digitization-notice`
+ * was added to the type for the leaf every archive.org scan carries and never
+ * added there, so the role written to describe a scanner's insert was the one
+ * role `parsePageTranscription` refused — and a batch that used it failed
+ * whole. Derived from `DISPOSITIONS` rather than written out again, because a
+ * list written out again is the fault repeating itself.
+ */
+export const ALL_PAGE_ROLES: readonly PageRole[] = Object.keys(DISPOSITIONS) as PageRole[]
 
 /** What to do with a page of this role. */
 export function dispositionFor(role: PageRole): PageDisposition {
