@@ -1,4 +1,4 @@
-# Reading ledger — _The Astral World_
+# Reading ledger — *The Astral World*
 
 102 leaves of scan; 94 transcribed (leaves 2–95). Leaves 0–1 are the cover and
 the archive.org digitisation notice; 96–101 are the publisher's advertisements
@@ -7,23 +7,23 @@ none was transcribed.
 
 ## The readers
 
-| Reader          | What it is                                                                                                           | Independent of                |
-| --------------- | -------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
-| Ours            | Tesseract off the 300-dpi render, shaped by `@core/draft`'s geometry, then corrected leaf by leaf against the pixels | —                             |
-| archive.org     | ABBYY OCR of the same scan, one HTML file per leaf, supplied by the editor                                           | our engine, not our pixels    |
-| Typeset witness | An independently set modern edition, 16,376 words, supplied by the editor                                            | our engine **and** our pixels |
+| Reader | What it is | Independent of |
+| --- | --- | --- |
+| Ours | Tesseract off the 300-dpi render, shaped by `@core/draft`'s geometry, then corrected leaf by leaf against the pixels | — |
+| archive.org | ABBYY OCR of the same scan, one HTML file per leaf, supplied by the editor | our engine, not our pixels |
+| Typeset witness | An independently set modern edition, 16,376 words, supplied by the editor | our engine **and** our pixels |
 
 Project Gutenberg was unreachable: this container's proxy answers 403 to every
 outside host, confirmed against `gutenberg.org` and `archive.org` alike.
 
 ## What each check raised, and what survived
 
-| Check                                           | Raised  | Confirmed            | Refuted | Became a query |
-| ----------------------------------------------- | ------- | -------------------- | ------- | -------------- |
-| `witness` — ours vs archive.org, 90 body leaves | 58      | 21                   | 37      | 0              |
-| Three-way diff — ours vs the typeset witness    | 91 runs | 12                   | 79      | 0              |
-| `consistency` over the pristine text            | 4       | 1                    | 2       | 1              |
-| Reading every leaf against its render           | —       | 109 ops on 68 leaves | —       | 6              |
+| Check | Raised | Confirmed | Refuted | Became a query |
+| --- | --- | --- | --- | --- |
+| `witness` — ours vs archive.org, 90 body leaves | 58 | 21 | 37 | 0 |
+| Three-way diff — ours vs the typeset witness | 91 runs | 12 | 79 | 0 |
+| `consistency` over the pristine text | 4 | 1 | 2 | 1 |
+| Reading every leaf against its render | — | 109 ops on 68 leaves | — | 6 |
 
 "Refuted" is overwhelmingly one thing and not an error rate: hyphenation and
 line-break artefacts of the comparison itself (`sub-planes` against `sub
@@ -39,13 +39,13 @@ Five substantive corrections were found by a witness and settled by the pixels,
 and would very likely have been missed by eye alone, because each is a real
 English word in a plausible place:
 
-| Leaf | OCR read                | The paper says          | Found by        |
-| ---- | ----------------------- | ----------------------- | --------------- |
-| 9    | `dc not lie`            | `do not lie`            | witness         |
-| 28   | `advanced occuitists`   | `advanced occultists`   | witness         |
-| 34   | `friends with thern`    | `friends with them`     | witness         |
-| 47   | `Christian Church held` | `Christian Church hold` | typeset witness |
-| 85   | `various mames`         | `various names`         | witness         |
+| Leaf | OCR read | The paper says | Found by |
+| --- | --- | --- | --- |
+| 9 | `dc not lie` | `do not lie` | witness |
+| 28 | `advanced occuitists` | `advanced occultists` | witness |
+| 34 | `friends with thern` | `friends with them` | witness |
+| 47 | `Christian Church held` | `Christian Church hold` | typeset witness |
+| 85 | `various mames` | `various names` | witness |
 
 Leaf 47 is the one that earns the third reader on its own: `held` and `hold` are
 both words, both scan, and nothing mechanical without a second opinion would
@@ -107,8 +107,11 @@ you believe the checks, not after.
 
 ## Queries raised
 
-Seven, none of them settled here. Six printer's errors and one place the book
-contradicts itself. See `queries.md`.
+Eight, none of them settled here. Six printer's errors and two places the book
+contradicts itself. See `queries.md`. The eighth came out of writing the
+glossary rather than out of any check: the book sets *etheral* on two leaves and
+*ethereal* in full on two others, and the typeset witness disagreed with us on
+one of the four, so it went to a 500-dpi crop, which reads *ethereal*.
 
 ## Rulings applied
 
