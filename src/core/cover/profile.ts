@@ -61,7 +61,8 @@ export const BANKED_COVER_KEYS: readonly (keyof CoverLook)[] = [
   'spineText',
   'imprintOnFront',
   'announceWorks',
-  'pressMark'
+  'pressMark',
+  'groundPattern'
 ]
 
 function str(v: unknown, fallback: string): string {

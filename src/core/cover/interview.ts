@@ -36,6 +36,7 @@ import {
   type PaperStock
 } from './geometry'
 import { ART_BRIEFS, BRIEF_LABEL, BRIEF_NOTE, SUGGESTED_ART_MODELS } from './art'
+import { GROUND_PATTERNS, PATTERN_LABEL, PATTERN_NOTE, type GroundPattern } from './patterns'
 import { describeSavedCoverLook, type SavedCoverLook } from './profile'
 
 /** A plate the app already cut out of this book's scan, offered as cover art. */
@@ -237,6 +238,22 @@ export function lookQuestions(state: CoverInterviewState): Question[] {
       group: 'palette',
       prompt: 'The accent — rules, bands and ornament',
       defaultValue: look.palette.accent
+    },
+    {
+      id: 'cover-ground-pattern',
+      type: 'choice',
+      group: 'ornament',
+      prompt: 'A texture across the whole wrap?',
+      help: 'Drawn as vector at a few per cent of the ink, so it runs across the back, the spine and the front as one field. Faint enough to be a surface rather than a decoration — and allover, so the fold has nothing to misregister.',
+      options: [
+        { value: '', label: 'None' },
+        ...GROUND_PATTERNS.map((p) => ({
+          value: p,
+          label: PATTERN_LABEL[p],
+          description: PATTERN_NOTE[p]
+        }))
+      ],
+      defaultValue: doc.look.groundPattern ?? ''
     },
     {
       id: 'cover-rule',
@@ -507,6 +524,9 @@ export function coverFromAnswers(
     titleCase: text(answers, 'cover-title-case', doc.look.titleCase),
     rule: text(answers, 'cover-rule', doc.look.rule),
     ornamentId: text(answers, 'cover-ornament', doc.look.ornamentId ?? '') || null,
+    groundPattern:
+      (text(answers, 'cover-ground-pattern', doc.look.groundPattern ?? '') as GroundPattern | '') ||
+      null,
     spineText: flag(answers, 'cover-spine-text', doc.look.spineText),
     palette: {
       ...doc.look.palette,

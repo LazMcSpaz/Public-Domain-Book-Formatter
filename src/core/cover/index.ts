@@ -12,6 +12,7 @@
  * the PDF" — and none of its recovery pipeline.
  */
 export * from './geometry'
+export * from './patterns'
 export * from './document'
 export * from './compose'
 export * from './validate'

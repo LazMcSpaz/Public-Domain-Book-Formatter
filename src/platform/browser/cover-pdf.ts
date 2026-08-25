@@ -234,8 +234,15 @@ export async function renderCoverPdf(
             y,
             scale: item.scale,
             ...(shape.stroke === undefined
-              ? { color: hexToRgb(item.color) }
-              : { borderColor: hexToRgb(item.color), borderWidth: shape.stroke * item.scale })
+              ? {
+                  color: hexToRgb(item.color),
+                  ...(item.opacity === undefined ? {} : { opacity: item.opacity })
+                }
+              : {
+                  borderColor: hexToRgb(item.color),
+                  borderWidth: shape.stroke * item.scale,
+                  ...(item.opacity === undefined ? {} : { borderOpacity: item.opacity })
+                })
           })
         }
         break

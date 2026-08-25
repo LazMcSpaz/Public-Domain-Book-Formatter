@@ -172,7 +172,13 @@ export function validateCover(input: ValidateCoverInput): CoverValidationReport 
 
   // 5. The barcode. KDP prints over this rectangle whatever is under it.
   {
-    const intruding = inkedBounds(composed).filter(({ rect }) => overlaps(rect, geometry.barcode))
+    // A ground pattern runs under everything by design, the barcode box
+    // included — KDP pastes a white rectangle over it and a seven per cent tint
+    // loses nothing. Flagging it would fire on every cover that has one and
+    // teach the reader to skip this check, which is the only way it can fail.
+    const intruding = inkedBounds(composed)
+      .filter(({ item }) => !(item.kind === 'ornament' && item.opacity !== undefined))
+      .filter(({ rect }) => overlaps(rect, geometry.barcode))
     checks.push({
       id: 'barcode',
       label: 'Barcode area',

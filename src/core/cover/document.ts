@@ -15,6 +15,7 @@
  * as `ImageItem` does in the layout engine, and for the same reasons.
  */
 import type { ImageEditOp } from '@core/model'
+import { GROUND_PATTERNS, type GroundPattern } from './patterns'
 import type { PaperStock } from './geometry'
 
 /**
@@ -137,6 +138,14 @@ export interface CoverLook {
    * stays sharp on a fold three-eighths of an inch wide.
    */
   pressMark: PressMark | null
+  /**
+   * A texture across the whole wrap, or none.
+   *
+   * Part of the look because it is the surface the series is printed on — the
+   * one element a reader takes in before they have read a word, and the one
+   * that must not change between volumes.
+   */
+  groundPattern: GroundPattern | null
 }
 
 /** A supplied device, as bytes and the proportions to place it by. */
@@ -250,7 +259,8 @@ export function defaultLook(): CoverLook {
     spineText: true,
     imprintOnFront: false,
     announceWorks: false,
-    pressMark: null
+    pressMark: null,
+    groundPattern: null
   }
 }
 
@@ -357,7 +367,10 @@ export function normalizeLook(raw: unknown): CoverLook {
     spineText: bool(raw['spineText'], d.spineText),
     imprintOnFront: bool(raw['imprintOnFront'], d.imprintOnFront),
     announceWorks: bool(raw['announceWorks'], d.announceWorks),
-    pressMark: normalizeMark(raw['pressMark'])
+    pressMark: normalizeMark(raw['pressMark']),
+    groundPattern: (GROUND_PATTERNS as readonly string[]).includes(raw['groundPattern'] as string)
+      ? (raw['groundPattern'] as GroundPattern)
+      : null
   }
 }
 

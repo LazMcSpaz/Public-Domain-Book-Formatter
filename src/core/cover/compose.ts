@@ -32,6 +32,7 @@ import type { FontRef, TextMeasurer } from '@core/layout'
 import type { OrnamentArt } from '@core/ornament'
 import { sizeAfterOps } from '@core/image'
 import { worksLabel, type CoverDocument, type Hex } from './document'
+import { groundPattern, PATTERN_OPACITY } from './patterns'
 import {
   contains,
   coverGeometry,
@@ -134,6 +135,14 @@ export interface CoverOrnamentItem {
   scale: number
   art: OrnamentArt
   color: Hex
+  /**
+   * 0–1. Only the ground pattern uses it.
+   *
+   * A texture across the whole wrap has to sit far enough back that the type in
+   * front of it loses nothing, and a press cannot resolve a tint much below
+   * five per cent — so this is a narrow, deliberate range rather than a knob.
+   */
+  opacity?: number
 }
 
 export type CoverItem =
@@ -501,6 +510,35 @@ export function composeCover(doc: CoverDocument, options: ComposeOptions): Compo
     heightPt: pt(geometry.fullHeightIn),
     color: palette.ground
   })
+
+  // The ground pattern, over the whole sheet and under everything else.
+  //
+  // Placed here — after the ground colour and before any panel — so it runs
+  // across the back, the spine and the front as one field. That is the point of
+  // it: an allover texture has no alignment to notice, which is what makes it
+  // survive a fold that creeps by an eighth of an inch.
+  if (look.groundPattern) {
+    const placements = groundPattern(
+      look.groundPattern,
+      pt(geometry.fullWidthIn),
+      pt(geometry.fullHeightIn),
+      ornament ?? options.ornaments?.[0] ?? null
+    )
+    if (placements.length === 0) {
+      warnings.push('The fleuron ground needs an ornament to repeat, and none was chosen.')
+    }
+    for (const place of placements) {
+      items.push({
+        kind: 'ornament',
+        xPt: place.xPt,
+        yPt: place.yPt,
+        scale: place.scale,
+        art: place.art,
+        color: palette.ink,
+        opacity: PATTERN_OPACITY[look.groundPattern]
+      })
+    }
+  }
 
   // Art dimensions after retouching — the op stack can crop, and the DPI check
   // must divide the pixels that survive, not the ones that arrived.

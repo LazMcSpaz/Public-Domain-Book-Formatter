@@ -517,3 +517,81 @@ describe("the press's mark", () => {
     expect(items.some((i) => i.kind === 'image')).toBe(false)
   })
 })
+
+describe('the ground pattern', () => {
+  function grounded(pattern: 'laid' | 'aura' | 'guilloche' | 'fleuron'): CoverDocument {
+    const doc = bookCover((d) => {
+      d.look.groundPattern = pattern
+      d.look.ornamentId = BUILTIN_ORNAMENTS[0]!.id
+    })
+    return doc
+  }
+
+  it('runs across the whole wrap, under everything else', () => {
+    const { items, geometry } = composeCover(grounded('aura'), {
+      measurer,
+      ornaments: BUILTIN_ORNAMENTS
+    })
+    const ground = items.filter((i) => i.kind === 'ornament' && i.opacity !== undefined)
+    expect(ground.length).toBeGreaterThan(0)
+    // Under the type: the ground is emitted before any text is set.
+    const firstText = items.findIndex((i) => i.kind === 'text')
+    const firstGround = items.findIndex((i) => i.kind === 'ornament' && i.opacity !== undefined)
+    expect(firstGround).toBeLessThan(firstText)
+    // And it spans the sheet rather than a panel.
+    const art = ground[0]!
+    if (art.kind !== 'ornament') throw new Error('unreachable')
+    expect(art.art.width).toBeCloseTo(geometry.fullWidthIn * 72, 4)
+  })
+
+  it('prints faint enough to be a surface, and not so faint the press loses it', () => {
+    for (const pattern of ['laid', 'aura', 'guilloche'] as const) {
+      const { items } = composeCover(grounded(pattern), { measurer, ornaments: BUILTIN_ORNAMENTS })
+      const ground = items.find((i) => i.kind === 'ornament' && i.opacity !== undefined)!
+      if (ground.kind !== 'ornament') throw new Error('unreachable')
+      // Below about five per cent a print-on-demand press either drops the tint
+      // or mottles it; above about a sixth it stops being a ground.
+      expect(ground.opacity!).toBeGreaterThanOrEqual(0.05)
+      expect(ground.opacity!).toBeLessThanOrEqual(0.16)
+    }
+  })
+
+  it('never draws a stroke too fine to survive the press', () => {
+    for (const pattern of ['laid', 'aura', 'guilloche'] as const) {
+      const { items } = composeCover(grounded(pattern), { measurer, ornaments: BUILTIN_ORNAMENTS })
+      const ground = items.find((i) => i.kind === 'ornament' && i.opacity !== undefined)!
+      if (ground.kind !== 'ornament') throw new Error('unreachable')
+      for (const shape of ground.art.shapes) {
+        if (shape.stroke !== undefined) expect(shape.stroke).toBeGreaterThanOrEqual(0.5)
+      }
+    }
+  })
+
+  it('repeats a shipped fleuron without touching its path data', () => {
+    // The bug this replaced rewrote coordinates in the `d` string and produced
+    // a field of horizontal dashes. The art now travels untouched.
+    const { items } = composeCover(grounded('fleuron'), {
+      measurer,
+      ornaments: BUILTIN_ORNAMENTS
+    })
+    const ground = items.filter((i) => i.kind === 'ornament' && i.opacity !== undefined)
+    expect(ground.length).toBeGreaterThan(20)
+    for (const item of ground) {
+      if (item.kind !== 'ornament') throw new Error('unreachable')
+      expect(item.art.shapes).toEqual(BUILTIN_ORNAMENTS[0]!.shapes)
+    }
+  })
+
+  it('says so when a fleuron ground has no fleuron to repeat', () => {
+    const doc = bookCover((d) => {
+      d.look.groundPattern = 'fleuron'
+    })
+    const { warnings } = composeCover(doc, { measurer })
+    expect(warnings.join(' ')).toMatch(/needs an ornament to repeat/)
+  })
+
+  it('is absent unless a look asks for one', () => {
+    const { items } = composeCover(bookCover(), { measurer, ornaments: BUILTIN_ORNAMENTS })
+    expect(items.some((i) => i.kind === 'ornament' && i.opacity !== undefined)).toBe(false)
+  })
+})
