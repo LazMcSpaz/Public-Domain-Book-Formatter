@@ -349,3 +349,70 @@ describe('a cover with no picture is still designed', () => {
     expect(author.yPt / 72).toBeLessThan(panelBottom)
   })
 })
+
+describe('a volume that binds two works', () => {
+  function omnibus(): CoverDocument {
+    const doc = defaultCover('6x9', 168)
+    doc.content.title = 'The Astral World and The Human Aura'
+    doc.content.works = ['The Astral World', 'The Human Aura']
+    doc.content.author = 'Swami Panchadasi'
+    doc.look.arrangement = 'typographic'
+    return doc
+  }
+
+  it('sets every work at the same size', () => {
+    // The point of the whole branch: two treatises bound together are two
+    // treatises. Setting the longer one smaller so it fits would say the
+    // shorter one matters more.
+    const { items } = composeCover(omnibus(), { measurer })
+    const astral = texts(items).find((t) => t.text.toUpperCase().includes('ASTRAL'))!
+    const aura = texts(items).find((t) => t.text.toUpperCase().includes('AURA'))!
+    expect(astral.sizePt).toBe(aura.sizePt)
+  })
+
+  it('announces how many there are, and joins them with an italic “and”', () => {
+    const { items } = composeCover(omnibus(), { measurer })
+    const set = texts(items)
+    expect(set.some((t) => t.text === 'TWO WORKS')).toBe(true)
+    const conjunction = set.find((t) => t.text === 'and')!
+    expect(conjunction.font.style).toBe('italic')
+    expect(conjunction.sizePt).toBeLessThan(
+      set.find((t) => t.text.toUpperCase().includes('ASTRAL'))!.sizePt
+    )
+  })
+
+  it('never subordinates the second work to the first', () => {
+    // The failure this branch exists to prevent: the second work in `subtitle`,
+    // which sets smaller and italic and is a false claim about the book.
+    const { items } = composeCover(omnibus(), { measurer })
+    const aura = texts(items).find((t) => t.text.toUpperCase().includes('AURA'))!
+    expect(aura.font.style).toBe('regular')
+  })
+
+  it('counts in words, and counts right', () => {
+    const three = omnibus()
+    three.content.works = ['The Astral World', 'The Human Aura', 'The Inner Consciousness']
+    const { items } = composeCover(three, { measurer })
+    expect(texts(items).some((t) => t.text === 'THREE WORKS')).toBe(true)
+  })
+
+  it('leaves an ordinary book exactly as it was', () => {
+    const single = omnibus()
+    single.content.works = []
+    single.content.title = 'The Astral World'
+    const { items } = composeCover(single, { measurer })
+    expect(texts(items).some((t) => t.text.includes('WORKS'))).toBe(false)
+    expect(texts(items).some((t) => t.text === 'and')).toBe(false)
+  })
+
+  it('keeps every line of type inside the safe area', () => {
+    const { items, geometry } = composeCover(omnibus(), { measurer })
+    for (const item of texts(items)) {
+      const rect = itemBounds(item)!
+      expect(rect.x).toBeGreaterThanOrEqual(geometry.backSafe.x - 1e-6)
+      expect(rect.x + rect.width).toBeLessThanOrEqual(
+        geometry.front.x + geometry.front.width - 0.25 + 1e-6
+      )
+    }
+  })
+})

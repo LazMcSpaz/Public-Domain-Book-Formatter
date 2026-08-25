@@ -31,7 +31,7 @@
 import type { FontRef, TextMeasurer } from '@core/layout'
 import type { OrnamentArt } from '@core/ornament'
 import { sizeAfterOps } from '@core/image'
-import type { CoverDocument, Hex } from './document'
+import { worksLabel, type CoverDocument, type Hex } from './document'
 import { coverGeometry, contains, overlaps, pt, type CoverGeometry, type Rect } from './geometry'
 
 /** A solid rectangle — grounds, bands, and the scrim under type over art. */
@@ -232,6 +232,43 @@ export function fitText(
   // Nothing fit. Set it at the floor and let the validator say so — silently
   // dropping words off a title is the one outcome worse than a tight cover.
   return { sizePt: minPt, lines: wrapText(text, box.widthPt, font, minPt, measurer) }
+}
+
+/**
+ * One size that fits *every* one of these, largest first.
+ *
+ * Equal weight is the whole point of an omnibus cover: two works bound together
+ * are two works, and setting the longer title smaller so it fits would say the
+ * shorter one matters more. So the size is the smallest of what each could take
+ * on its own, and they are all set at it.
+ */
+export function fitTitlesTogether(
+  titles: readonly string[],
+  box: { widthPt: number; heightPt: number },
+  maxLinesEach: number,
+  font: FontRef,
+  measurer: TextMeasurer,
+  maxPt = TITLE_MAX_PT,
+  minPt = TITLE_MIN_PT
+): { sizePt: number; lines: string[][] } {
+  const budget = box.heightPt / Math.max(1, titles.length)
+  let sizePt = maxPt
+  for (const title of titles) {
+    const fitted = fitText(
+      title,
+      { widthPt: box.widthPt, heightPt: budget },
+      maxLinesEach,
+      font,
+      measurer,
+      maxPt,
+      minPt
+    )
+    sizePt = Math.min(sizePt, fitted.sizePt)
+  }
+  return {
+    sizePt,
+    lines: titles.map((t) => wrapText(t, box.widthPt, font, sizePt, measurer))
+  }
 }
 
 function applyCase(text: string, kind: CoverDocument['look']['titleCase']): string {
@@ -620,8 +657,104 @@ function layFrontCover(
     y += size * 0.9
   }
 
-  // --- title -------------------------------------------------------------
-  if (titleText.trim()) {
+  /** The author, set below whatever came before it. */
+  const setAuthor = (relativeTo: number, titleSizePt: number): void => {
+    if (!content.author.trim()) return
+    const size = Math.max(11, titleSizePt * AUTHOR_RATIO)
+    const lines = wrapText(content.author, typeBox.widthPt, authorFont, size, measurer)
+    // On a typographic cover the author sits low, with the empty middle of the
+    // panel doing the work a picture would otherwise do.
+    const authorTop = arrangement === 'typographic' ? pt(safe.y + safe.height * 0.74) : relativeTo
+    centeredLines(items, lines, geometry.front, authorTop, authorFont, size, inkColor, measurer)
+  }
+
+  const works = content.works.map((w) => w.trim()).filter((w) => w.length > 0)
+
+  if (works.length >= 2) {
+    // --- an omnibus: every work at the same size ---------------------------
+    //
+    // Two treatises bound together are two treatises. Setting the longer title
+    // smaller so it fits would say the shorter one matters more, and putting
+    // the second in the subtitle would say it outright.
+    const accentInk = overArt ? palette.overArt : palette.accent
+    const labelFont = face(look.bodyFont, 'regular', measurer.hasSmallCaps(look.bodyFont))
+    const labelSize = Math.max(9, Math.min(14, typeBox.widthPt * 0.03))
+    y = centeredLines(
+      items,
+      [worksLabel(works.length)],
+      geometry.front,
+      y,
+      labelFont,
+      labelSize,
+      accentInk,
+      measurer
+    )
+    y += labelSize * 0.8
+
+    const ruleWidth = geometry.frontSafe.width * 0.62
+    y = drawRule(
+      items,
+      look.rule === 'none' ? 'none' : 'single',
+      geometry.front,
+      y,
+      ruleWidth,
+      accentInk,
+      null
+    )
+    y += labelSize * 1.1
+
+    const fitted = fitTitlesTogether(
+      works.map((w) =>
+        smallCaps ? w : applyCase(w, look.titleCase === 'small-caps' ? 'upper' : look.titleCase)
+      ),
+      { widthPt: typeBox.widthPt, heightPt: typeBox.heightPt * 0.56 },
+      2,
+      titleFont,
+      measurer
+    )
+
+    const conjunctionFont = face(look.bodyFont, 'italic')
+    const conjunctionSize = Math.max(10, fitted.sizePt * 0.4)
+    fitted.lines.forEach((lines, index) => {
+      if (index > 0) {
+        y += conjunctionSize * 0.45
+        y = centeredLines(
+          items,
+          ['and'],
+          geometry.front,
+          y,
+          conjunctionFont,
+          conjunctionSize,
+          inkColor,
+          measurer
+        )
+        y += conjunctionSize * 0.45
+      }
+      y = centeredLines(
+        items,
+        lines,
+        geometry.front,
+        y,
+        titleFont,
+        fitted.sizePt,
+        inkColor,
+        measurer
+      )
+    })
+
+    y += labelSize * 1.1
+    y = drawRule(
+      items,
+      look.rule === 'none' ? 'none' : 'single',
+      geometry.front,
+      y,
+      ruleWidth,
+      accentInk,
+      null
+    )
+    y += fitted.sizePt * 0.5
+    setAuthor(y, fitted.sizePt)
+  } else if (titleText.trim()) {
     const reserved = typeBox.heightPt * (content.subtitle.trim() ? 0.55 : 0.72)
     const fitted =
       look.titleSizePt !== null
@@ -685,14 +818,7 @@ function layFrontCover(
       y += size * 0.6
     }
 
-    if (content.author.trim()) {
-      const size = Math.max(11, fitted.sizePt * AUTHOR_RATIO)
-      const lines = wrapText(content.author, typeBox.widthPt, authorFont, size, measurer)
-      // On a typographic cover the author sits low, with the empty middle of
-      // the panel doing the work a picture would otherwise do.
-      const authorTop = arrangement === 'typographic' ? pt(safe.y + safe.height * 0.74) : y
-      centeredLines(items, lines, geometry.front, authorTop, authorFont, size, inkColor, measurer)
-    }
+    setAuthor(y, fitted.sizePt)
   }
 
   // --- imprint at the foot ------------------------------------------------

@@ -154,6 +154,25 @@ export function emptyArt(): CoverArt {
 /** One book's facts. Never banked. */
 export interface CoverContent {
   title: string
+  /**
+   * The works bound in this volume, when it holds more than one.
+   *
+   * Empty for an ordinary book, where the volume *is* the work and `title` says
+   * so. Two or more entries make it an omnibus, and the composer then sets them
+   * at **equal weight** with a rule between and a lowercase italic conjunction,
+   * which is what a publisher binding two treatises together actually did.
+   *
+   * The alternative — putting the second work in `subtitle` — is what this
+   * exists to prevent. A subtitle sets smaller and italic, which subordinates
+   * the second work to the first, and that is a claim about the book that is
+   * simply false. The other way it goes wrong is worse and is the reason the
+   * whole category reads as cheap: `2 BOOKS IN 1` on a banner. That is a
+   * bundle. This is an edition.
+   *
+   * `title` stays the volume's own name for metadata and the file name, so a
+   * listing and a cover can differ where they should.
+   */
+  works: string[]
   subtitle: string
   author: string
   /** Series or collection name, printed above the title when set. */
@@ -197,6 +216,7 @@ export function defaultLook(): CoverLook {
 export function emptyContent(): CoverContent {
   return {
     title: '',
+    works: [],
     subtitle: '',
     author: '',
     series: '',
@@ -214,6 +234,20 @@ export function defaultCover(trimSize = '6x9', pageCount = 0): CoverDocument {
     look: defaultLook(),
     content: emptyContent()
   }
+}
+
+/**
+ * How many works a volume announces, in words.
+ *
+ * Derived rather than typed. A field would be one more thing to keep in step
+ * with the list beside it, and the one failure mode — a cover reading "TWO
+ * WORKS" over three titles — is exactly the sort of small wrongness that makes
+ * a reader doubt everything else on the page.
+ */
+export function worksLabel(count: number): string {
+  const words = ['', '', 'Two', 'Three', 'Four', 'Five', 'Six']
+  const word = words[count] ?? String(count)
+  return `${word} Works`.toUpperCase()
 }
 
 /** A credit line for the art, in the words a reader would want. */

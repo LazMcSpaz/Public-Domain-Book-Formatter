@@ -300,6 +300,16 @@ export function contentQuestions(state: CoverInterviewState): Question[] {
       required: true
     },
     {
+      id: 'cover-works',
+      type: 'text',
+      group: 'words',
+      prompt: 'Does this volume bind more than one work?',
+      help: 'One title per line, and only when there really is more than one. They print at the same size with a rule around them, which is what a publisher binding two treatises together did — not “2 books in 1”, which is a bundle rather than an edition. Leave it empty for an ordinary book.',
+      defaultValue: c.works.join('\n'),
+      placeholder: 'The Astral World\nThe Human Aura',
+      multiline: true
+    },
+    {
       id: 'cover-subtitle',
       type: 'text',
       group: 'words',
@@ -506,9 +516,14 @@ export function coverFromAnswers(
     }
   })
 
+  const works = text(answers, 'cover-works', doc.content.works.join('\n'))
   doc.content = {
     ...doc.content,
     title: text(answers, 'cover-title', doc.content.title),
+    works: works
+      .split('\n')
+      .map((w) => w.trim())
+      .filter((w) => w.length > 0),
     subtitle: text(answers, 'cover-subtitle', doc.content.subtitle),
     author: text(answers, 'cover-author', doc.content.author),
     series: text(answers, 'cover-series', doc.content.series),
