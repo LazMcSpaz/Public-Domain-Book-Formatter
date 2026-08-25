@@ -576,13 +576,17 @@ function parseEdits(raw: unknown): BookEdit[] {
           typeof value['text'] === 'string'
         ) {
           const level = value['level']
+          const label = str(value['label'], '')
           out.push({
             kind: 'insert',
             insertId,
             afterBlockId: after,
             blockKind,
             text: value['text'],
-            ...(typeof level === 'number' ? { level } : {})
+            ...(typeof level === 'number' ? { level } : {}),
+            // Dropped when absent rather than stored empty, so an insert
+            // written before labels existed round-trips byte for byte.
+            ...(label.trim() ? { label } : {})
           })
         }
         break

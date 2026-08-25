@@ -1089,6 +1089,43 @@ describe('applyEdits — a block the editor wrote, inside the body', () => {
     expect(doc.chapters.map((c) => c.title)).toEqual(['THE END.', 'BOOK TWO', 'THE SEVEN PLANES.'])
   })
 
+  it('sets a label over a divider it is given one, and still separates', () => {
+    // The two cases a rule cannot tell apart, side by side. "BOOK TWO" alone
+    // must separate the book that ended from the chapter that opens; "BOOK TWO"
+    // *over* "THE ASTRAL WORLD" is one opening. Both are a heading the editor
+    // wrote followed by a heading, so the editor says which, and the run rule —
+    // which reads the words, because it has nothing else — is left for the
+    // openings that came off the leaf.
+    const ended = assembleBook([
+      page(0, [{ kind: 'heading', text: 'THE END.' }]),
+      page(1, [
+        { kind: 'heading', text: 'CHAPTER I.' },
+        { kind: 'heading', text: 'THE SEVEN PLANES.' },
+        { kind: 'paragraph', text: 'EVERY student of occultism.' }
+      ])
+    ])
+    const doc = applyEdits(ended, [
+      {
+        kind: 'insert',
+        insertId: 'book-two',
+        afterBlockId: 'p0b0',
+        blockKind: 'heading',
+        text: 'THE ASTRAL WORLD',
+        label: 'BOOK TWO',
+        level: 1
+      }
+    ])
+    expect(doc.chapters.map((c) => c.title)).toEqual([
+      'THE END.',
+      'THE ASTRAL WORLD',
+      'THE SEVEN PLANES.'
+    ])
+    const divider = doc.chapters.find((c) => c.title === 'THE ASTRAL WORLD')!
+    expect(divider.label).toBe('BOOK TWO')
+    // And the chapter after it keeps its own number rather than being absorbed.
+    expect(doc.chapters.find((c) => c.title === 'THE SEVEN PLANES.')!.label).toBe('CHAPTER I.')
+  })
+
   it('is left out when its anchor is gone, rather than landing somewhere else', () => {
     const doc = applyEdits(book(), [{ kind: 'drop', blockId: 'p0b2' }, divider('p0b2')])
     expect(doc.blocks.map((b) => b.text)).not.toContain('BOOK TWO')

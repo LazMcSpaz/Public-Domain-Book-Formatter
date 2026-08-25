@@ -1534,7 +1534,10 @@ export function layout(
       pushIllustrationsAfter(i)
       return
     }
-    const above = superscriptions.get(i)
+    // A run of headings off the leaf, or a label the editor put on one — the
+    // same line in the same place, arrived at two ways because only one of them
+    // is available to each.
+    const above = superscriptions.get(i) ?? (block.label?.trim() ? [block.label.trim()] : undefined)
     const runStart = above ? i - above.length : i
     const chapter = above ? runChapters.get(runStart) : undefined
     flowables.push(

@@ -79,6 +79,13 @@ export type BookEdit =
       blockKind: BlockKind
       text: string
       level?: number
+      /**
+       * A number line set small above a heading: "BOOK ONE" over "THE HUMAN
+       * AURA". Said rather than inferred — see `BookBlock.label`, which
+       * explains why a divider the editor wrote cannot use the run rule the
+       * book's own openings use.
+       */
+      label?: string
     }
   /**
    * Two paragraphs were run together. Splits at `at`, a character offset into
@@ -367,7 +374,8 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
       text: edit.text.replace(/\s+/gu, ' ').trim(),
       // Written, not read: there is no leaf behind it to point at.
       sourcePages: [],
-      ...(edit.blockKind === 'heading' ? { level: edit.level ?? 1 } : {})
+      ...(edit.blockKind === 'heading' ? { level: edit.level ?? 1 } : {}),
+      ...(edit.blockKind === 'heading' && edit.label?.trim() ? { label: edit.label.trim() } : {})
     })
     if (edit.afterBlockId === null) {
       blocks.unshift(block)

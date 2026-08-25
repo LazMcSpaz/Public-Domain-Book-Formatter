@@ -51,6 +51,21 @@ export interface BookBlock extends TranscribedBlock {
   id: string
   /** Pages this block's text came from (more than one when a seam was joined). */
   sourcePages: number[]
+  /**
+   * A number line set small above this heading: "BOOK ONE" over "THE HUMAN
+   * AURA".
+   *
+   * The book's own openings get this from a *run* of headings — "LESSON I."
+   * followed by "THE ASTRAL SENSES." is two lines on the leaf and one opening
+   * in the book — and `headingRunEnd` decides which is which by reading the
+   * first line. That inference is the only thing available when the words came
+   * off paper, and it cannot serve a heading the editor wrote: "BOOK TWO"
+   * standing alone before a chapter must *separate* the two books, while "BOOK
+   * TWO" over "THE ASTRAL WORLD" is one opening, and no rule can tell those
+   * apart from the text. So the editor says which, and this is where it is
+   * said.
+   */
+  label?: string
 }
 
 export interface Footnote {
@@ -665,11 +680,13 @@ export function deriveChapters(blocks: readonly BookBlock[]): ChapterEntry[] {
     const end = headingRunEnd(blocks, i)
     const first = blocks[i]!
     const last = blocks[end]!
-    const label = blocks
-      .slice(i, end)
-      .map((b) => b.text.trim())
-      .filter((t) => t.length > 0)
-      .join(' ')
+    const label =
+      last.label?.trim() ||
+      blocks
+        .slice(i, end)
+        .map((b) => b.text.trim())
+        .filter((t) => t.length > 0)
+        .join(' ')
     chapters.push({
       id: first.id,
       title: last.text.trim(),
