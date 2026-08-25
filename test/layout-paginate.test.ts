@@ -850,6 +850,44 @@ describe('layout — the bordered title page', () => {
     expect(mid).toBeCloseTo(trim.widthPt / 2, 0)
   })
 
+  /**
+   * Every line on the page, not just the title.
+   *
+   * The motto is broken to balance its lines, and the balancer re-breaks at
+   * whatever narrower width gives the same line count — so it centred the
+   * motto inside a box narrower than the measure and the whole block sat
+   * visibly left of the title under it. Two lines set by different breakers
+   * have to agree about where the middle is.
+   */
+  it('centres a balanced line on the same axis as the title', () => {
+    const profile = defaultStyleProfile()
+    const trim = trimToPoints(profile.trimSize)
+    const page = bordered({
+      title: 'AIRS',
+      // Long enough that it certainly wraps: the balancer only re-breaks a
+      // line it had to break in the first place, and a one-line motto would
+      // exercise nothing.
+      epigraph:
+        'True occult knowledge gives you practical power and strength, ' +
+        'and is worth the having for that reason alone'
+    })
+    const byLine = page.items.filter((i): i is PositionedLine => i.kind === 'line')
+    const spans = byLine
+      .filter((l) => l.runs.length > 0)
+      .map((l) => {
+        const first = l.runs[0]!
+        const last = l.runs[l.runs.length - 1]!
+        return (first.xPt + last.xPt + measurer.widthOf(last.text, last.font, last.sizePt)) / 2
+      })
+    expect(spans.length).toBeGreaterThan(3)
+    for (const mid of spans) expect(mid).toBeCloseTo(trim.widthPt / 2, 0)
+    const title = textRuns(page).find((r) => r.text === 'AIRS')!
+    expect(title.xPt + measurer.widthOf(title.text, title.font, title.sizePt) / 2).toBeCloseTo(
+      trim.widthPt / 2,
+      0
+    )
+  })
+
   it('sets two works in turn, each under its own rule, with "and" between', () => {
     const page = bordered({
       title: 'The Human Aura and The Astral World',
@@ -870,6 +908,31 @@ describe('layout — the bordered title page', () => {
     // A rule under each of them, over and above the four that make the border.
     const rules = page.items.filter((i) => i.kind === 'rule')
     expect(rules.length).toBeGreaterThanOrEqual(8 + 4)
+  })
+
+  /**
+   * A long title wraps, and the rule belongs under all of it.
+   *
+   * Hung from the title's own slot it drew through the middle of the words —
+   * under line one of four, striking out the three below it. The rule is the
+   * period's underline, and an underline goes under the last line.
+   */
+  it('hangs the rule below the last line of a title that wrapped', () => {
+    const page = bordered({
+      title: 'A Course of Advanced Lessons in Clairvoyance and Occult Powers'
+    })
+    const baselines = (page.items.filter((i): i is PositionedLine => i.kind === 'line') ?? [])
+      .filter((l) => l.runs.length > 0 && l.runs[0]!.sizePt > 13)
+      .map((l) => l.baselinePt)
+    expect(baselines.length).toBeGreaterThan(1)
+
+    const rules = page.items.filter((i) => i.kind === 'rule')
+    // The four of the border, plus the pair under the title.
+    const underTitle = rules
+      .map((r) => (r as { yPt: number }).yPt)
+      .filter((y) => y > Math.min(...baselines) && y < Math.max(...baselines) + 40)
+    expect(underTitle.length).toBe(2)
+    for (const y of underTitle) expect(y).toBeGreaterThan(Math.max(...baselines))
   })
 
   it('prints the series line, the motto and the imprint tagline', () => {

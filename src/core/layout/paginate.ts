@@ -2717,6 +2717,25 @@ function buildFrontMatter(
             maxWidth: width
           })
         : broken
+
+      /**
+       * Where a line has to start to sit in the middle of the measure.
+       *
+       * Not something to take on trust from the breaker: `balancedLines`
+       * re-breaks at whatever narrower width gives the same line count, and
+       * centres inside *that*, so a balanced motto came out centred on a box
+       * narrower than the one it was supposed to fill and sat visibly left of
+       * the title under it. Measuring each line and centring it here makes the
+       * result independent of which breaker produced it.
+       */
+      const centreOf = (line: BrokenLine): number => {
+        const first = line.words[0]
+        const last = line.words[line.words.length - 1]
+        if (!first || !last) return 0
+        const lineWidth =
+          last.xPt + ctx.measurer.widthOf(last.text, entry.font, entry.sizePt) - first.xPt
+        return (width - lineWidth) / 2 - first.xPt
+      }
       // Slots are one *body* leading apart, and a title page sets type at up
       // to 1.6 times the body size. Advancing one slot a line put the second
       // line of a two-line title through the descenders of the first: on this
@@ -2732,7 +2751,7 @@ function buildFrontMatter(
               text: w.text,
               font: entry.font,
               sizePt: entry.sizePt,
-              xPt: w.xPt + inset + dx
+              xPt: w.xPt + centreOf(line) + inset + dx
             }))
           }
         })
@@ -2816,16 +2835,28 @@ function buildFrontMatter(
       box(4, 0.6)
     }
 
-    /** A pair of rules, the period's underline, centred on the leaf. */
-    const doubleRule = (slot: number, widthPt: number): void => {
+    // Every line's baseline is one *body* ascent down its slot, whatever size
+    // it is set at, so this is what a rule has to clear to sit under a title.
+    const bodyAscent = ctx.measurer.metrics(body, profile.bodyFontSize).ascent
+
+    /**
+     * A pair of rules, the period's underline, centred on the leaf.
+     *
+     * `dropPt` is measured from the *baseline* of the line at `slot`, not from
+     * the top of the slot, because the slot grid is a body leading and the
+     * title is half as tall again: hung on the grid the rule fell most of a
+     * line clear of the words it underlines.
+     */
+    const doubleRule = (slot: number, widthPt: number, dropPt: number): void => {
       const x = (trim.widthPt - widthPt) / 2 - page.frame.xPt
+      const y = bodyAscent + dropPt
       page.lines.push({
         slot,
-        line: { runs: [], rule: { xPt: x, yPt: 0, widthPt, thicknessPt: 1.4 } }
+        line: { runs: [], rule: { xPt: x, yPt: y, widthPt, thicknessPt: 1.4 } }
       })
       page.lines.push({
         slot,
-        line: { runs: [], rule: { xPt: x, yPt: 3.4, widthPt, thicknessPt: 0.6 } }
+        line: { runs: [], rule: { xPt: x, yPt: y + 3.4, widthPt, thicknessPt: 0.6 } }
       })
     }
 
@@ -2877,13 +2908,19 @@ function buildFrontMatter(
     const works = edition.works ?? []
 
     /**
-     * The width of the longest line the title actually sets on.
+     * How wide the title's longest line is, and how many lines it takes.
      *
-     * Measuring the whole string assumes it fits on one line: a four-line
-     * title measured that way put a rule under it half as wide again as the
-     * widest line above it.
+     * Both, because assuming one line got both wrong. Measuring the whole
+     * string put a rule under a four-line title half as wide again as the
+     * widest line above it; hanging that rule from the title's first slot then
+     * drew it straight through the middle of the title, under line one of four.
      */
-    const widestLine = (text: string, font: FontRef, sizePt: number, maxWidth: number): number => {
+    const titleMetrics = (
+      text: string,
+      font: FontRef,
+      sizePt: number,
+      maxWidth: number
+    ): { widestPt: number; lineCount: number } => {
       const broken = breakParagraph(text, {
         font,
         sizePt,
@@ -2897,7 +2934,10 @@ function buildFrontMatter(
         if (!first || !last) return 0
         return last.xPt + ctx.measurer.widthOf(last.text, font, sizePt) - first.xPt
       })
-      return widths.length > 0 ? Math.max(...widths) : maxWidth
+      return {
+        widestPt: widths.length > 0 ? Math.max(...widths) : maxWidth,
+        lineCount: Math.max(1, broken.length)
+      }
     }
 
     /** One work: its name, the rule under it, and its subtitle. */
@@ -2909,9 +2949,14 @@ function buildFrontMatter(
         [{ text, sizePt: titlePt, font: titleFont, gapAfter: 0, widthRatio: inMeasure }],
         { onTrim: true }
       )
-      // As wide as the title it underlines, which is what the originals do.
-      doubleRule(after, widestLine(text, titleFont, titlePt, titleWidth))
-      let next = after + 1
+      // As wide as the title's longest line, hung under its *last* line, at the
+      // distance the originals leave: measured off the 1916 sheet at half the
+      // title's own size below the baseline, which is a fraction of the type
+      // rather than a whole line of the body grid.
+      const { widestPt, lineCount } = titleMetrics(text, titleFont, titlePt, titleWidth)
+      const perLine = Math.max(1, Math.ceil(leadingFor(titlePt) / ctx.leading))
+      doubleRule(from + (lineCount - 1) * perLine, widestPt, titlePt * 0.5)
+      let next = after
       if (work.subtitle) {
         next = centred(
           page,
@@ -2938,9 +2983,15 @@ function buildFrontMatter(
       // not to say.
       works.forEach((work, i) => {
         if (i > 0) {
-          slot = centred(page, slot + 1, [{ text: 'and', sizePt: smallPt, font: body }], {
-            onTrim: true
-          })
+          // Midway between the subtitle above and the title below: three slots
+          // clear on each side. One slot above and two below read as though it
+          // belonged to the book underneath it rather than joining the two.
+          slot = centred(
+            page,
+            slot + 1,
+            [{ text: 'and', sizePt: smallPt, font: body, gapAfter: 2 }],
+            { onTrim: true }
+          )
         }
         slot = setWork(slot, work)
       })
