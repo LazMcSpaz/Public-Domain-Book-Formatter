@@ -840,6 +840,27 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
         'sides. Verse, an epigraph and a centred caption look the same to this and are not headings.'
     )
   }
+  // Said out loud because nothing downstream will do anything about it, and it
+  // is invisible until a page is rendered. Lines are joined with a space, so a
+  // hyphen the compositor set at a line break survives as `ad- vanced` and
+  // *prints that way*: assembly's hyphen healing runs at page seams only. On
+  // the first real book through here that was 301 of them, past every check —
+  // both OCR engines break the lines in the same places, so no second reader
+  // disagrees, and a leaf read by eye looks right because the paper breaks
+  // there too.
+  //
+  // Not healed here, because the page cannot settle it: `counter-part` joins
+  // and `thought-transference` must keep its hyphen. Counting them is the most
+  // this can honestly do.
+  const wrapped = blocks.reduce((n, b) => n + [...b.text.matchAll(/\w+-\s+\w+/gu)].length, 0)
+  if (wrapped > 0) {
+    structural.push(
+      `${wrapped} line-break hyphen(s) are left as \`ad- vanced\`, and nothing downstream heals ` +
+        'them — hyphen healing runs at page seams only, so they print mid-line. Join the ones ' +
+        'that are one word and keep the hyphen on the ones that are two.'
+    )
+  }
+
   structural.push('The role, and every block kind, is a guess. The words are what OCR read.')
 
   return {

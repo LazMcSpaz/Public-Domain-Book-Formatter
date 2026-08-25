@@ -591,7 +591,22 @@ async function serve() {
         )
       }
 
-      const out = { ...loaded, scanStored: true }
+      // Current from here on, the way `open` is. Phase 0 gave the driver one
+      // notion of the current book and this verb was missed: `load` wrote a run
+      // and left `__pdbfBook` pointing at whichever book was current before, so
+      // with two books on the device every later verb went on reading the old
+      // one. It is the quiet version of the fault Phase 0 was about — no error,
+      // no warning, and a report that looks exactly like a real one. Caught by
+      // loading a second book and getting the first book's page count back,
+      // to the page, twice.
+      await page.evaluate(
+        ([key]) => {
+          window.__pdbfBook = key
+        },
+        [loaded.key]
+      )
+
+      const out = { ...loaded, scanStored: true, current: loaded.key.split('\u0000')[0] }
       return missing.length > 0 ? { ...out, missingImages: missing } : out
     },
 

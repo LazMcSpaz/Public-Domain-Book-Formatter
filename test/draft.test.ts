@@ -296,3 +296,43 @@ describe('a line of prose is not a running head because it ends in a number', ()
     expect(page.furniture).toEqual({ runningHead: 'CRYSTAL GAZING', folio: '117' })
   })
 })
+
+/**
+ * The fault the first real book showed, and the reason it says so rather than
+ * mending it.
+ *
+ * Lines are joined with a space, so a hyphen the compositor set at a line break
+ * survives as `ad- vanced` and prints that way: assembly's hyphen healing runs
+ * at page seams only. *The Astral World* carried 301 of them past every check,
+ * because both OCR engines break the lines in the same places and so no second
+ * reader disagrees, and because a leaf read against its render looks right —
+ * the paper breaks there too. Only a rendered page showed it.
+ */
+describe('line-break hyphens are counted and reported', () => {
+  const broken: Placed[] = [
+    ...filler(0),
+    { text: 'ad-', line: 0, from: 54 },
+    { text: 'vanced', line: 1, from: 0 },
+    ...filler(1, 7),
+    ...filler(2),
+    ...filler(3)
+  ]
+
+  it('names them, and says nothing downstream will heal them', () => {
+    const said = draftPage(words(broken)).structural.join(' ')
+    expect(said).toMatch(/1 line-break hyphen\(s\)/)
+    expect(said).toMatch(/print mid-line/)
+  })
+
+  it('says nothing when the leaf has none', () => {
+    const clean = draftPage(words([...filler(0), ...filler(1), ...filler(2)]))
+    expect(clean.structural.join(' ')).not.toMatch(/line-break hyphen/)
+  })
+
+  it('does not join them, because the page cannot settle which are one word', () => {
+    // `counter-part` joins and `thought-transference` keeps its hyphen, and
+    // nothing on the leaf says which is which. Counting is the honest limit.
+    const page = draftPage(words(broken))
+    expect(page.blocks.map((b) => b.text).join(' ')).toContain('ad- vanced')
+  })
+})
