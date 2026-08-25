@@ -10,6 +10,7 @@ import {
   stripLeadingMarker
 } from '@core/assemble'
 import type { PageTranscription, TranscribedBlock } from '@core/transcribe'
+import type { BookDocument } from '@core/assemble'
 import type { PageRole } from '@core/pages'
 
 function page(
@@ -855,5 +856,82 @@ describe('deriveChapters — divisions above chapters', () => {
       ])
     ])
     expect(doc.chapters.map((c) => c.title)).toEqual(['THE END.', 'THE SEVEN PLANES.'])
+  })
+})
+
+/**
+ * Two works bound into one volume, each with its own contents page.
+ *
+ * Both faults here appeared the first time two manuals were bound together, and
+ * neither is visible in a book with one contents page.
+ */
+describe('a volume that binds two works', () => {
+  const entry = (label: string, title: string, folio: number): TranscribedBlock[] => [
+    { kind: 'heading', text: `${label} ${title}.......... ${folio}` },
+    {
+      kind: 'paragraph',
+      text: `A description of ${title} long enough to count as a real one, of the kind these pages carry.`
+    }
+  ]
+  const contents = (n: number, ...blocks: TranscribedBlock[][]): PageTranscription => ({
+    pageIndex: n,
+    role: 'table-of-contents',
+    blocks: [{ kind: 'heading', text: 'CONTENTS' }, ...blocks.flat()],
+    uncertain: [],
+    furniture: {}
+  })
+  const opening = (n: number, label: string, title: string): PageTranscription => ({
+    pageIndex: n,
+    role: 'chapter-opening',
+    blocks: [
+      { kind: 'heading', text: label },
+      { kind: 'heading', text: title },
+      { kind: 'paragraph', text: 'The chapter begins here and runs on for a while.' }
+    ],
+    uncertain: [],
+    furniture: {}
+  })
+
+  const volume = (): BookDocument =>
+    assembleBook([
+      contents(0, entry('Chapter I.', 'Of the Aura', 5), entry('Chapter II.', 'Of Colour', 15)),
+      opening(1, 'CHAPTER I.', 'OF THE AURA'),
+      opening(2, 'CHAPTER II.', 'OF COLOUR'),
+      // The second work's contents. Its folios start again at 5.
+      contents(3, entry('Chapter I.', 'Of the Planes', 5), entry('Chapter II.', 'Of Regions', 12)),
+      opening(4, 'CHAPTER I.', 'OF THE PLANES'),
+      opening(5, 'CHAPTER II.', 'OF REGIONS')
+    ])
+
+  it('keeps both contents, whose folios ascend twice', () => {
+    // Read as one sequence the folios go 5, 15, 5, 12 and the parse was refused
+    // whole, so both works lost the analytical contents that is the only reason
+    // to read such a page at all.
+    const doc = volume()
+    expect(doc.chapters.filter((c) => c.synopsis)).toHaveLength(4)
+    expect(doc.synopsesUnmatched).toEqual([])
+  })
+
+  it('gives each work its own Chapter I rather than the last one read', () => {
+    const doc = volume()
+    const byTitle = new Map<string, string>(doc.chapters.map((c) => [c.title, c.synopsis ?? '']))
+    expect(byTitle.get('OF THE AURA')).toContain('Of the Aura')
+    expect(byTitle.get('OF THE PLANES')).toContain('Of the Planes')
+  })
+
+  it('still refuses a single ragged contents', () => {
+    // The guard that matters is unchanged: within one work the folios must
+    // ascend, because out of order means the page was stitched together wrongly.
+    const doc = assembleBook([
+      contents(
+        0,
+        entry('Chapter I.', 'Of the Aura', 5),
+        entry('Chapter II.', 'Of Colour', 40),
+        entry('Chapter III.', 'Of Light', 2),
+        entry('Chapter IV.', 'Of Shade', 60)
+      ),
+      opening(1, 'CHAPTER I.', 'OF THE AURA')
+    ])
+    expect(doc.chapters.filter((c) => c.synopsis)).toHaveLength(0)
   })
 })
