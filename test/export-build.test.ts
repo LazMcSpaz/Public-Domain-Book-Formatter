@@ -78,10 +78,36 @@ describe('publicDomainNotice', () => {
     const text = publicDomainNotice(null)
     expect(text).toContain('public domain')
     expect(text).not.toContain('first published in')
+    // The comma belongs to the clause the year sits in. Without this the
+    // copyright page of a volume of two works — which has no single original
+    // year — read "The original work, is in the public domain."
+    expect(text).toContain('The original work is in the public domain')
   })
 
   it('is explicit that only this edition is new', () => {
     expect(publicDomainNotice('1662')).toContain('typesetting and design are new')
+  })
+})
+
+describe('editionFromAnswers — the copyright page’s other two lines', () => {
+  it('says the edition is annotated only when the editor claims it', () => {
+    expect(editionFromAnswers({ annotatedNotice: true }).notices.join(' ')).toContain(
+      'annotated edition'
+    )
+    // A book with nothing added must not carry the claim, and the answer
+    // missing is not the same as the answer being yes.
+    expect(editionFromAnswers({}).notices.join(' ')).not.toContain('annotated edition')
+    expect(editionFromAnswers({ annotatedNotice: false }).notices.join(' ')).not.toContain(
+      'annotated edition'
+    )
+  })
+
+  it('prints the scanning library’s credit as given', () => {
+    const credit = 'Digitized by the Internet Archive from a University of California copy.'
+    expect(editionFromAnswers({ sourceNotice: credit }).notices).toContain(credit)
+    // Blank is "not given", not "given as blank" — an empty line on a
+    // copyright page is a hole nobody can explain later.
+    expect(editionFromAnswers({ sourceNotice: '   ' }).notices).toHaveLength(1)
   })
 })
 

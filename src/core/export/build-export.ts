@@ -89,9 +89,13 @@ export interface BuildExportResult {
  * saying so plainly is both accurate and what the source deserves.
  */
 export function publicDomainNotice(originalYear: string | null): string {
-  const origin = originalYear ? `first published in ${originalYear}, ` : ''
+  // The comma belongs to the clause the year sits in, so it goes with it. It
+  // used to be printed either way, which left "The original work, is in the
+  // public domain." on the copyright page of every book whose original year
+  // was not given — a volume of two works, which has no single one.
+  const origin = originalYear ? `, first published in ${originalYear},` : ''
   return (
-    `The original work, ${origin}is in the public domain. ` +
+    `The original work${origin} is in the public domain. ` +
     'This edition’s typesetting and design are new.'
   )
 }
