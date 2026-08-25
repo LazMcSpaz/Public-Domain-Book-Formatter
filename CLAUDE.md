@@ -341,10 +341,30 @@ next" was settled, applied once by hand, and then four fresh directions
 appeared across the two glossaries — one of them in the preamble, announcing
 the practice as a feature.
 
-Both are deterministic and neither is checked. Until they are, a book is not
-finished until someone has asked, in these words: does every glossary entry
-that names a word the book uses have a mark on that word? does any entry tell
-the reader where to go next? has this book got the apparatus the last one got?
+Both are deterministic and neither is fully checked yet. Until they are, a
+book is not finished until someone has asked, in these words: does every
+glossary entry that names a word the book uses have a mark on that word? does
+any entry tell the reader where to go next? has this book got the apparatus
+the last one got?
+
+**And the readable files are not the book.** `glossary.md` and
+`introduction.md` are views of `book.json`; `corrections.md` and `notes.md`
+make counted claims about it. All four are written once and then drift, which
+is not hypothetical: the reading directions were taken out of two glossaries
+and both books re-exported, and every one of them stayed in `glossary.md` for
+a reader to find, along with a mark count five short of the truth.
+`scripts/book-files.mjs <book-dir> --check` compares the four against the book
+and exits non-zero on drift, so it belongs beside the tests rather than in
+somebody's memory. Without `--check` it rewrites what is derivable, keeping
+the title and the one-line description a person wrote at the top of each file:
+those are the editor's sentences about this edition and no amount of reading
+`book.json` would recover them.
+
+**The order that keeps them together.** A change to a book is not one edit but
+four, and doing three of them is how the shelf ends up describing a book it no
+longer holds: write `book.json`, re-export the PDF, regenerate the readable
+files, then commit and push _all_ of it in one commit. A commit that carries a
+book file without its exports is a commit that has to be remembered later.
 
 ## Commands
 
@@ -384,6 +404,10 @@ node scripts/drive.mjs link review   # a URL that opens this book where decision
 node scripts/drive.mjs queries q.md  # decisions waiting on the editor, as a sheet
 node scripts/drive.mjs runs          # readings held here; `runs drop <n>` removes one
 node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` work it
+
+node scripts/book-files.mjs <book-dir> --check   # do the readable files still
+                                     #   describe the book? regenerates them
+                                     #   without --check
 ```
 
 **Reading a leaf is `draft` → look → correct → `transcribe`.** Never type a leaf
