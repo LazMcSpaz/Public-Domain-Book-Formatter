@@ -84,6 +84,20 @@ const TRAILING_FOLIO = /^(.*?)[.\u2026\s]{4,}\s*([0-9ivxlc]+)\s*$/i
 const NUMBER_LINE = /^\s*(lesson|chapter|part|book|section)\b[\s.]*[0-9ivxlcdm]*\s*\.?\s*$/i
 
 /**
+ * Whether a heading is a bare number line — `LESSON III.`, `CHAPTER IV` — as
+ * against a title that happens to begin with one of those words.
+ *
+ * Shared with `deriveChapters`, which needs the same distinction for a
+ * different reason: a number line belongs to the heading after it and the two
+ * are one chapter opening, while `BOOK TWO — THE ASTRAL WORLD` is complete in
+ * itself and stands above what follows. A second copy of this regex in the
+ * assembler is exactly the kind of thing that drifts.
+ */
+export function isNumberLine(text: string): boolean {
+  return NUMBER_LINE.test(text.trim())
+}
+
+/**
  * The same thing with the title after it on one line, which is how most
  * contents pages are set: `Chapter III. The Astral Colors`.
  *

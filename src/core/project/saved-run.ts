@@ -42,13 +42,14 @@ import { EDITORIAL_QUERY_KINDS } from '@core/transcribe'
  * pictures the editor supplied, v7 → v8 whether the paid pass reached the end,
  * v8 → v9 what the second reading concluded about the flagged spots, and
  * v9 → v10 the fact bank this book produced, v10 → v11 `leafCount`, how
- * long the book actually is, and v11 → v12 the editor's rulings on the queries
- * the reading raised. None of them damages an older run — each is a complete transcription that simply
+ * long the book actually is, v11 → v12 the editor's rulings on the queries
+ * the reading raised, and v12 → v13 the `insert` edit, a block the editor wrote
+ * standing inside the body rather than before or after it. None of them damages an older run — each is a complete transcription that simply
  * has none of the newer thing on it yet — so all upgrade in place rather than
  * being refused. That distinction is the whole reason a migration exists
  * instead of a version check.
  */
-export const CURRENT_SCHEMA_VERSION = 12
+export const CURRENT_SCHEMA_VERSION = 13
 
 /** A page the model could not read at all. Mirrors the runner's `PageFailure`. */
 export interface SavedFailure {
@@ -561,6 +562,31 @@ function parseEdits(raw: unknown): BookEdit[] {
       case 'drop':
         if (blockId) out.push({ kind: 'drop', blockId })
         break
+      case 'insert': {
+        // Same care as `retype`: the block kind is checked against the real
+        // list, because an unknown one reaches the layout engine's style table
+        // and is set as whatever its fallback happens to be.
+        const insertId = str(value['insertId'], '')
+        const after = value['afterBlockId']
+        const blockKind = BLOCK_KINDS.find((k) => k === value['blockKind'])
+        if (
+          insertId &&
+          blockKind &&
+          (after === null || typeof after === 'string') &&
+          typeof value['text'] === 'string'
+        ) {
+          const level = value['level']
+          out.push({
+            kind: 'insert',
+            insertId,
+            afterBlockId: after,
+            blockKind,
+            text: value['text'],
+            ...(typeof level === 'number' ? { level } : {})
+          })
+        }
+        break
+      }
       case 'split':
         if (blockId && typeof value['at'] === 'number') {
           out.push({ kind: 'split', blockId, at: value['at'] })

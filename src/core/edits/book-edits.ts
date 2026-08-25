@@ -58,6 +58,29 @@ export type BookEdit =
   /** It is not part of the book — a stray running head, a shelf mark. */
   | { kind: 'drop'; blockId: string }
   /**
+   * A block the editor wrote, standing in the body rather than before or after
+   * it — a part divider between two works bound together, a note on a gap in
+   * the copy-text, an editorial interpolation.
+   *
+   * `section` covers the same need at the front and the back and could not
+   * reach the middle, so binding two books into one volume had nowhere to put
+   * "Book Two" except into a transcription, where it would have been a claim
+   * about what the paper says. This is the channel that keeps the editor's
+   * words and the compositor's apart when they land on the same page.
+   *
+   * `afterBlockId` is the block it follows, or null for the very front of the
+   * body. `sourcePages` comes out empty, as a written section's blocks do:
+   * there is no leaf behind it to point at.
+   */
+  | {
+      kind: 'insert'
+      insertId: string
+      afterBlockId: string | null
+      blockKind: BlockKind
+      text: string
+      level?: number
+    }
+  /**
    * Two paragraphs were run together. Splits at `at`, a character offset into
    * the block's *current* text — after any `text` edit already applied to it.
    */
@@ -157,6 +180,15 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   const supplied = new Map<string, BookEdit & { kind: 'image' }>()
   /** Divisions the editor wrote, keyed so editing one replaces it. */
   const sections = new Map<string, BookEdit & { kind: 'section' }>()
+  /**
+   * Blocks the editor wrote into the body, keyed so re-wording one replaces it.
+   *
+   * Folded in after the per-block edits rather than during them, for the same
+   * reason the illustration anchors are: `afterBlockId` has to be resolved
+   * against the blocks as they finally stand, or an insert placed after a block
+   * that a later `merge` absorbs would land in the wrong place.
+   */
+  const inserted = new Map<string, BookEdit & { kind: 'insert' }>()
   /** Retouching per picture, keyed so adjusting a slider replaces the stack. */
   const retouched = new Map<string, ImageEditOp[]>()
   // Illustration anchors are held as an override map and folded in at the end,
@@ -201,6 +233,11 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
 
     if (edit.kind === 'retouch') {
       retouched.set(edit.illustrationId, edit.ops)
+      continue
+    }
+
+    if (edit.kind === 'insert') {
+      inserted.set(edit.insertId, edit)
       continue
     }
 
@@ -309,6 +346,31 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   // a stray running head means "this is not part of the book", and an empty
   // paragraph still takes a line and an indent on the page.
   blocks = blocks.filter((b) => b.text.trim().length > 0)
+
+  // The editor's own blocks go in after that filter, not before it: they are
+  // written rather than corrected, so an empty one is a mistake to keep visible
+  // rather than a deletion to honour. An insert whose anchor is gone is left
+  // out, the way an authored note on a vanished block is — the editor still has
+  // the words and can re-place them, which is not true of anything read off a
+  // leaf.
+  for (const edit of inserted.values()) {
+    if (edit.text.trim().length === 0) continue
+    const block = normalizeMarkup({
+      id: `ins/${edit.insertId}`,
+      kind: edit.blockKind,
+      text: edit.text.replace(/\s+/gu, ' ').trim(),
+      // Written, not read: there is no leaf behind it to point at.
+      sourcePages: [],
+      ...(edit.blockKind === 'heading' ? { level: edit.level ?? 1 } : {})
+    })
+    if (edit.afterBlockId === null) {
+      blocks.unshift(block)
+      continue
+    }
+    const at = blocks.findIndex((b) => b.id === edit.afterBlockId)
+    if (at < 0) continue
+    blocks.splice(at + 1, 0, block)
+  }
 
   const byId = new Set(blocks.map((b) => b.id))
 
@@ -483,6 +545,7 @@ export function blockOf(edit: BookEdit): string | null {
     edit.kind === 'anchor' ||
     edit.kind === 'image' ||
     edit.kind === 'section' ||
+    edit.kind === 'insert' ||
     edit.kind === 'retouch'
   ) {
     return null
@@ -498,6 +561,7 @@ export function countEdited(edits: readonly BookEdit[]): number {
     else if (edit.kind === 'note') touched.add(edit.noteId)
     else if (edit.kind === 'image') touched.add(edit.imageId)
     else if (edit.kind === 'section') touched.add(edit.sectionId)
+    else if (edit.kind === 'insert') touched.add(edit.insertId)
     else if (edit.kind === 'retouch') touched.add(edit.illustrationId)
     else touched.add(edit.blockId)
   }
@@ -547,6 +611,7 @@ export function withEdit(edits: readonly BookEdit[], edit: BookEdit): BookEdit[]
     edit.kind === 'note' ||
     edit.kind === 'image' ||
     edit.kind === 'section' ||
+    edit.kind === 'insert' ||
     edit.kind === 'retouch'
   if (!collapsible) return [...edits, edit]
 
@@ -567,6 +632,7 @@ function targetOf(edit: BookEdit): string {
   if (edit.kind === 'note') return edit.noteId
   if (edit.kind === 'image') return edit.imageId
   if (edit.kind === 'section') return edit.sectionId
+  if (edit.kind === 'insert') return edit.insertId
   if (edit.kind === 'retouch') return edit.illustrationId
   return edit.blockId
 }

@@ -17,6 +17,7 @@
 import type { ImageEditOp } from '@core/model'
 import {
   dispositionFor,
+  isNumberLine,
   readSynopsis,
   synopsisKey,
   synopsisLooksSound,
@@ -518,12 +519,33 @@ export function assembleBook(
   // Only attached when the parse comes back sound. A ragged one means the page
   // was not laid out the way the reader assumes, and printing a mangled
   // contents under the author's name is worse than printing a plain one.
-  const contentsBlocks = ordered
-    .filter((page) => page.role === 'table-of-contents')
-    .flatMap((page) => page.blocks.map((b) => ({ kind: b.kind, text: b.text })))
-  const synopses = readSynopsis(contentsBlocks)
+  //
+  // Read a *run* of contents leaves at a time rather than all of them at once.
+  // A volume that binds two works has two contents pages, and their folios
+  // ascend twice: *The Human Aura* runs 5 to 79 and *The Astral World* starts
+  // again at 5. Handed to `synopsisLooksSound` as one sequence that is not
+  // ascending, so the whole parse was refused and both books lost the
+  // analytical contents that is the one thing worth reading off such a page.
+  //
+  // Grouping by consecutive leaf keeps each work's contents a single work's
+  // contents, so the ascending rule stays exactly as strict as it was. It is
+  // the leaves that say where one ends: they are not adjacent.
+  const contentsRuns: PageTranscription[][] = []
+  for (const page of ordered) {
+    if (page.role !== 'table-of-contents') continue
+    const run = contentsRuns[contentsRuns.length - 1]
+    const last = run?.[run.length - 1]
+    if (run && last && page.pageIndex === last.pageIndex + 1) run.push(page)
+    else contentsRuns.push([page])
+  }
+  const synopses = contentsRuns.flatMap((run) => {
+    const parsed = readSynopsis(
+      run.flatMap((page) => page.blocks.map((b) => ({ kind: b.kind, text: b.text })))
+    )
+    return synopsisLooksSound(parsed) ? parsed : []
+  })
   const synopsesUnmatched: BookDocument['synopsesUnmatched'] = []
-  if (synopsisLooksSound(synopses)) {
+  if (synopses.length > 0) {
     const described = synopses.filter((e) => e.synopsis.length > 0)
     const byTitle = new Map(described.map((e) => [synopsisKey(e.title), e]))
     // The chapter *number*, as a second way in. A book can call a chapter two
@@ -537,12 +559,24 @@ export function assembleBook(
     // Titles first, because a book that repeats a number — a second series
     // starting again at I — would have two entries under it, and a title that
     // matches is unambiguous where a number might not be.
-    const byLabel = new Map(described.filter((e) => e.label).map((e) => [synopsisKey(e.label), e]))
+    //
+    // Every entry under a label, not one: a volume that binds two works has two
+    // Chapter Vs, and a map keyed by label kept only the second. That silently
+    // dropped three of *The Human Aura*'s descriptions — the three whose
+    // contents wording differs from the chapter's own heading, which are
+    // exactly the ones that have no title match to fall back on. Both lists are
+    // in document order, so taking the first unclaimed entry gives Book One's
+    // Chapter V to Book One.
+    const byLabel = new Map<string, SynopsisEntry[]>()
+    for (const entry of described) {
+      if (!entry.label) continue
+      const key = synopsisKey(entry.label)
+      byLabel.set(key, [...(byLabel.get(key) ?? []), entry])
+    }
     const claimed = new Set<SynopsisEntry>()
     for (const chapter of chapters) {
-      const found =
-        byTitle.get(synopsisKey(chapter.title)) ??
-        (chapter.label ? byLabel.get(synopsisKey(chapter.label)) : undefined)
+      const labelled = chapter.label ? (byLabel.get(synopsisKey(chapter.label)) ?? []) : []
+      const found = byTitle.get(synopsisKey(chapter.title)) ?? labelled.find((e) => !claimed.has(e))
       if (!found || claimed.has(found)) continue
       chapter.synopsis = found.synopsis
       claimed.add(found)
@@ -587,12 +621,38 @@ export function assembleBook(
  *
  * A run of consecutive headings is one chapter. See {@link ChapterEntry.label}.
  */
+/**
+ * The last block of the heading run that starts at `from`.
+ *
+ * One implementation, because there were two and they drifted. The assembler
+ * used it to decide what a chapter is; the layout engine had its own copy to
+ * decide which headings are set small above a title, and only the first learned
+ * that a number line is what holds a run together. The result was a book whose
+ * contents listed a division and whose pages set that division as a
+ * superscription over the chapter beneath it, silently losing the chapter.
+ *
+ * A number line (`CHAPTER XI.`, `LESSON III.`) is incomplete on its own and
+ * absorbs the heading after it. A complete heading absorbs nothing.
+ */
+export function headingRunEnd(
+  blocks: readonly { kind: string; text: string }[],
+  from: number
+): number {
+  let end = from
+  while (
+    end + 1 < blocks.length &&
+    blocks[end + 1]!.kind === 'heading' &&
+    isNumberLine(blocks[end]!.text)
+  )
+    end++
+  return end
+}
+
 export function deriveChapters(blocks: readonly BookBlock[]): ChapterEntry[] {
   const chapters: ChapterEntry[] = []
   for (let i = 0; i < blocks.length; i++) {
     if (blocks[i]!.kind !== 'heading') continue
-    let end = i
-    while (end + 1 < blocks.length && blocks[end + 1]!.kind === 'heading') end++
+    const end = headingRunEnd(blocks, i)
     const first = blocks[i]!
     const last = blocks[end]!
     const label = blocks

@@ -158,6 +158,53 @@ describe('migrateSavedRun — the corrections that came with v6', () => {
     expect(migrateSavedRun(JSON.parse(JSON.stringify(run()))).edits).toEqual([])
   })
 
+  it('keeps a block the editor wrote into the body, which v13 added', () => {
+    // The failure this exists for: `parseEdits` drops any kind it does not
+    // know, so adding one to the union without adding it here loses the edit
+    // on the way back in — silently, and only visible as a divider missing
+    // from a book that had one when it was saved.
+    const original = run({
+      edits: [
+        {
+          kind: 'insert',
+          insertId: 'book-two',
+          afterBlockId: 'p0b1',
+          blockKind: 'heading',
+          text: 'BOOK TWO — THE ASTRAL WORLD',
+          level: 1
+        },
+        {
+          kind: 'insert',
+          insertId: 'book-one',
+          afterBlockId: null,
+          blockKind: 'heading',
+          text: 'BOOK ONE — THE HUMAN AURA'
+        }
+      ]
+    })
+    expect(migrateSavedRun(JSON.parse(JSON.stringify(original))).edits).toEqual(original.edits)
+  })
+
+  it('drops a malformed insert rather than setting it as whatever the engine falls back to', () => {
+    const raw = JSON.parse(JSON.stringify(run())) as Record<string, unknown>
+    raw['edits'] = [
+      { kind: 'insert', insertId: 'a', afterBlockId: null, blockKind: 'heading', text: 'Kept' },
+      { kind: 'insert', insertId: '', afterBlockId: null, blockKind: 'heading', text: 'No id' },
+      {
+        kind: 'insert',
+        insertId: 'c',
+        afterBlockId: null,
+        blockKind: 'not-a-kind',
+        text: 'Bad kind'
+      },
+      { kind: 'insert', insertId: 'd', afterBlockId: 42, blockKind: 'heading', text: 'Bad anchor' },
+      { kind: 'insert', insertId: 'e', afterBlockId: null, blockKind: 'heading' }
+    ]
+    expect(migrateSavedRun(raw).edits).toEqual([
+      { kind: 'insert', insertId: 'a', afterBlockId: null, blockKind: 'heading', text: 'Kept' }
+    ])
+  })
+
   it('keeps the pixels of a picture the editor supplied', () => {
     // The one part of an illustration that cannot be re-derived: a crop is cut
     // out of the scan again for free, but a portrait off someone's disk is

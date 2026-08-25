@@ -10,6 +10,7 @@ import {
   stripLeadingMarker
 } from '@core/assemble'
 import type { PageTranscription, TranscribedBlock } from '@core/transcribe'
+import type { BookDocument } from '@core/assemble'
 import type { PageRole } from '@core/pages'
 
 function page(
@@ -774,5 +775,163 @@ describe('assembleBook — matching a description by chapter number', () => {
     const withOne = doc.chapters.filter((c) => c.synopsis)
     expect(withOne).toHaveLength(1)
     expect(withOne[0]!.title).toBe('THE AURA KALEIDOSCOPE')
+  })
+})
+
+/**
+ * What holds a heading run together is the number line.
+ *
+ * `CHAPTER XI.` is incomplete on its own and absorbs the title after it.
+ * `BOOK TWO — THE ASTRAL WORLD` is complete and absorbs nothing, which is what
+ * lets two manuals bound into one volume show as two groups in the contents.
+ *
+ * Levels are deliberately not the test: `LESSON III.` over
+ * `TELEPATHY EXPLAINED.` is tagged 1 over 2 in a book already published from
+ * here, and reading a deeper level as subordination split eleven lesson numbers
+ * away from their own titles.
+ */
+describe('deriveChapters — divisions above chapters', () => {
+  const heading = (text: string, level?: number): TranscribedBlock => ({
+    kind: 'heading',
+    text,
+    ...(level === undefined ? {} : { level })
+  })
+  const leaf = (blocks: TranscribedBlock[]): PageTranscription => ({
+    pageIndex: 0,
+    role: 'chapter-opening',
+    blocks,
+    uncertain: [],
+    furniture: {}
+  })
+
+  it('joins a number line to the title after it', () => {
+    const doc = assembleBook([
+      leaf([
+        heading('CHAPTER XI.'),
+        heading('ASTRAL ENTITIES.'),
+        { kind: 'paragraph', text: 'WITHOUT intending to go deeply.' }
+      ])
+    ])
+    expect(doc.chapters).toHaveLength(1)
+    expect(doc.chapters[0]!.title).toBe('ASTRAL ENTITIES.')
+    expect(doc.chapters[0]!.label).toBe('CHAPTER XI.')
+  })
+
+  it('joins one tagged a level deeper than its number, as a published book has it', () => {
+    const doc = assembleBook([
+      leaf([
+        heading('LESSON III.', 1),
+        heading('TELEPATHY EXPLAINED.', 2),
+        { kind: 'paragraph', text: 'The student will now.' }
+      ])
+    ])
+    expect(doc.chapters).toHaveLength(1)
+    expect(doc.chapters[0]!.title).toBe('TELEPATHY EXPLAINED.')
+  })
+
+  it('leaves a complete division standing above the chapter after it', () => {
+    const doc = assembleBook([
+      leaf([
+        heading('BOOK TWO — THE ASTRAL WORLD', 1),
+        heading('CHAPTER I.', 2),
+        heading('THE SEVEN PLANES.', 2),
+        { kind: 'paragraph', text: 'EVERY student of occultism.' }
+      ])
+    ])
+    expect(doc.chapters.map((c) => c.title)).toEqual([
+      'BOOK TWO — THE ASTRAL WORLD',
+      'THE SEVEN PLANES.'
+    ])
+    expect(doc.chapters[0]!.level).toBe(1)
+    expect(doc.chapters[1]!.level).toBe(2)
+    expect(doc.chapters[1]!.label).toBe('CHAPTER I.')
+  })
+
+  it('does not run two complete titles together', () => {
+    const doc = assembleBook([
+      leaf([
+        heading('THE END.'),
+        heading('THE SEVEN PLANES.'),
+        { kind: 'paragraph', text: 'EVERY student.' }
+      ])
+    ])
+    expect(doc.chapters.map((c) => c.title)).toEqual(['THE END.', 'THE SEVEN PLANES.'])
+  })
+})
+
+/**
+ * Two works bound into one volume, each with its own contents page.
+ *
+ * Both faults here appeared the first time two manuals were bound together, and
+ * neither is visible in a book with one contents page.
+ */
+describe('a volume that binds two works', () => {
+  const entry = (label: string, title: string, folio: number): TranscribedBlock[] => [
+    { kind: 'heading', text: `${label} ${title}.......... ${folio}` },
+    {
+      kind: 'paragraph',
+      text: `A description of ${title} long enough to count as a real one, of the kind these pages carry.`
+    }
+  ]
+  const contents = (n: number, ...blocks: TranscribedBlock[][]): PageTranscription => ({
+    pageIndex: n,
+    role: 'table-of-contents',
+    blocks: [{ kind: 'heading', text: 'CONTENTS' }, ...blocks.flat()],
+    uncertain: [],
+    furniture: {}
+  })
+  const opening = (n: number, label: string, title: string): PageTranscription => ({
+    pageIndex: n,
+    role: 'chapter-opening',
+    blocks: [
+      { kind: 'heading', text: label },
+      { kind: 'heading', text: title },
+      { kind: 'paragraph', text: 'The chapter begins here and runs on for a while.' }
+    ],
+    uncertain: [],
+    furniture: {}
+  })
+
+  const volume = (): BookDocument =>
+    assembleBook([
+      contents(0, entry('Chapter I.', 'Of the Aura', 5), entry('Chapter II.', 'Of Colour', 15)),
+      opening(1, 'CHAPTER I.', 'OF THE AURA'),
+      opening(2, 'CHAPTER II.', 'OF COLOUR'),
+      // The second work's contents. Its folios start again at 5.
+      contents(3, entry('Chapter I.', 'Of the Planes', 5), entry('Chapter II.', 'Of Regions', 12)),
+      opening(4, 'CHAPTER I.', 'OF THE PLANES'),
+      opening(5, 'CHAPTER II.', 'OF REGIONS')
+    ])
+
+  it('keeps both contents, whose folios ascend twice', () => {
+    // Read as one sequence the folios go 5, 15, 5, 12 and the parse was refused
+    // whole, so both works lost the analytical contents that is the only reason
+    // to read such a page at all.
+    const doc = volume()
+    expect(doc.chapters.filter((c) => c.synopsis)).toHaveLength(4)
+    expect(doc.synopsesUnmatched).toEqual([])
+  })
+
+  it('gives each work its own Chapter I rather than the last one read', () => {
+    const doc = volume()
+    const byTitle = new Map<string, string>(doc.chapters.map((c) => [c.title, c.synopsis ?? '']))
+    expect(byTitle.get('OF THE AURA')).toContain('Of the Aura')
+    expect(byTitle.get('OF THE PLANES')).toContain('Of the Planes')
+  })
+
+  it('still refuses a single ragged contents', () => {
+    // The guard that matters is unchanged: within one work the folios must
+    // ascend, because out of order means the page was stitched together wrongly.
+    const doc = assembleBook([
+      contents(
+        0,
+        entry('Chapter I.', 'Of the Aura', 5),
+        entry('Chapter II.', 'Of Colour', 40),
+        entry('Chapter III.', 'Of Light', 2),
+        entry('Chapter IV.', 'Of Shade', 60)
+      ),
+      opening(1, 'CHAPTER I.', 'OF THE AURA')
+    ])
+    expect(doc.chapters.filter((c) => c.synopsis)).toHaveLength(0)
   })
 })

@@ -15,6 +15,7 @@ import {
 import { BUILTIN_ORNAMENTS } from '@core/ornament'
 import { defaultStyleProfile } from '@core/style'
 import type { StyleProfile } from '@core/model'
+import { deriveChapters } from '@core/assemble'
 import type { BookBlock, BookDocument } from '@core/assemble'
 
 const measurer = fixedWidthMeasurer(0.5)
@@ -697,5 +698,48 @@ describe('layout — the title page gives its type room', () => {
     const leading = 11 * 1.32
     // The title wraps; every gap inside it is more than one body leading.
     expect(baselines[1]! - baselines[0]!).toBeGreaterThan(leading * 1.2)
+  })
+})
+
+/**
+ * A division above a chapter, on the page as well as in the contents.
+ *
+ * The layout had its own copy of the heading-run rule, used to decide which
+ * headings are set small above a title. It never learned that a number line is
+ * what holds a run together, so a volume of two books listed both divisions in
+ * its contents and then set `BOOK ONE` as a superscription over chapter one —
+ * swallowing that chapter out of `chapterPages` entirely. Both now call
+ * `headingRunEnd`.
+ */
+describe('a division and the chapter under it are two openings', () => {
+  const division = (): BookDocument => {
+    const blocks = [
+      block('heading', 'BOOK ONE — THE HUMAN AURA', 1),
+      block('heading', 'CHAPTER I.', 2),
+      block('heading', 'WHAT IS THE HUMAN AURA?', 2),
+      block('paragraph', PROSE),
+      block('heading', 'CHAPTER II.', 2),
+      block('heading', 'THE PRANA-AURA.', 2),
+      block('paragraph', PROSE)
+    ]
+    const d = doc(blocks)
+    return { ...d, chapters: deriveChapters(blocks) }
+  }
+
+  it('records the division and the chapter as separate openings', () => {
+    const book = run(division())
+    expect(book.chapterPages.map((c) => c.title)).toEqual([
+      'BOOK ONE — THE HUMAN AURA',
+      'WHAT IS THE HUMAN AURA?',
+      'THE PRANA-AURA.'
+    ])
+  })
+
+  it('still sets a number line small above the title it belongs to', () => {
+    const book = run(division())
+    // `CHAPTER I.` is drawn, but as a superscription rather than an opening of
+    // its own — it never reaches `chapterPages`.
+    expect(bookText(book)).toContain('CHAPTER I.')
+    expect(book.chapterPages.map((c) => c.title)).not.toContain('CHAPTER I.')
   })
 })
