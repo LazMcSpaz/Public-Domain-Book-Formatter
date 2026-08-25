@@ -135,6 +135,33 @@ describe('whether a parse is worth offering', () => {
   it('refuses a contents of one entry, which is not evidence of anything', () => {
     expect(synopsisLooksSound(good.slice(0, 1))).toBe(false)
   })
+
+  /**
+   * A contents that prints no page numbers at all is a different thing from one
+   * whose numbers came back ragged, and the folio rule could not tell them
+   * apart. *Thought Vibration* sets chapter, title and description and no
+   * folio anywhere, so every entry came back with `originalFolio: null`, the
+   * 60% rule failed, and Berry's analytical contents — the one piece of
+   * editorial work on the page — was dropped without a word.
+   *
+   * The ascending check exists to catch a parse the reader stitched together
+   * wrongly, and it still does wherever there are folios to check. Where there
+   * are none it has nothing to say, and the original numbers are discarded by
+   * this edition regardless: they were only ever a soundness signal, never
+   * content.
+   *
+   * The cost, recorded rather than forgotten: a contents whose folios were all
+   * *missed* by OCR now looks the same as one that prints none, and passes. The
+   * description rate is what still has to hold it up.
+   */
+  it('accepts a contents that prints no folios, and still refuses a mangled one', () => {
+    const noFolios = good.map((e) => ({ ...e, originalFolio: null }))
+    expect(synopsisLooksSound(noFolios)).toBe(true)
+
+    const bare = noFolios.map((e, i) => (i > 1 ? { ...e, synopsis: '' } : e))
+    expect(synopsisLooksSound(bare)).toBe(false)
+    expect(synopsisLooksSound(noFolios.slice(0, 1))).toBe(false)
+  })
 })
 
 describe('matching a description to the chapter the body prints', () => {

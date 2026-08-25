@@ -218,6 +218,15 @@ export function synopsisLooksSound(entries: readonly SynopsisEntry[]): boolean {
   const described = entries.filter((e) => e.synopsis.length > 40).length
   if (described < entries.length * 0.6) return false
   const folios = entries.map((e) => e.originalFolio).filter((n): n is number => n !== null)
+  // A contents that prints no page numbers at all — chapter, title, description
+  // and nothing else, which is how *Thought Vibration* sets its — is not the
+  // same thing as one whose numbers came back ragged, and treating the two
+  // alike dropped a whole analytical contents without a word. The ascending
+  // check catches a parse stitched together wrongly and still does wherever
+  // there are folios to check; where there are none it has nothing to say, and
+  // the original numbers are discarded by this edition in any case. What holds
+  // the parse up then is the description rate above.
+  if (folios.length === 0) return true
   if (folios.length < entries.length * 0.6) return false
   return folios.every((n, i) => i === 0 || n > folios[i - 1]!)
 }
