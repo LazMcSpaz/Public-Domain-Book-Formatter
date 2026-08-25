@@ -147,6 +147,30 @@ Only meaningful after Phase 2. In order:
 
 ---
 
+## What the third book actually showed
+
+_The Astral World_ is read, checked against two further witnesses, proofed and
+on the shelf. The full ledger is in [`LEDGER-astral-world.md`](./LEDGER-astral-world.md).
+Phase 2 is therefore done for a book, and the one thing it turned up that no
+amount of reading would have is worth repeating here:
+
+**301 line-break hyphens printed mid-line, and every check passed.** `draftPage`
+joins OCR lines with a space, so the compositor's `ad-` / `vanced` survives as
+`ad- vanced`, and assembly's hyphen healing runs at page _seams_ only. Both OCR
+engines break the lines in the same places, so no second reader disagreed; the
+leaf read against its render looked right, because the paper breaks there too;
+`consistency` was clean; the book was already pushed. The first rendered proof
+showed it immediately.
+
+`draftPage` now counts them and says so in `structural`, which is the most it
+can honestly do — `counter-part` joins and `thought-transference` must not, and
+nothing on the leaf settles which. Healing them needs a witness that sets the
+same words with its line breaks elsewhere, which is what the typeset third
+reading was for.
+
+**So: proof a rendered page before believing the checks, not after.** That is
+now true three times running.
+
 ## The standing lesson from the review
 
 Written down because it held every single time, without exception:
