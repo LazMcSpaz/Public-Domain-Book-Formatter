@@ -135,6 +135,12 @@ export type BookEdit =
       sectionId: string
       placement: 'front' | 'back'
       title: string
+      /**
+       * A number line set small over the title, as a chapter's is: "BOOK ONE"
+       * over "THE HUMAN AURA". Optional, because most divisions the editor
+       * writes — an introduction, an afterword — are named and not numbered.
+       */
+      label?: string
       text: string
     }
   /**
@@ -412,6 +418,7 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
       id: section.sectionId,
       placement: section.placement,
       title: section.title.trim() || 'Introduction',
+      ...(section.label?.trim() ? { label: section.label.trim() } : {}),
       blocks: paragraphsOf(section.text, section.sectionId)
     }))
     .filter((section) => section.blocks.length > 0)

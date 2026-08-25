@@ -61,7 +61,11 @@ export function layoutWithToc(
   const back = doc.sections.filter((x) => x.placement === 'back')
 
   const entries: TocLine[] = [
-    ...front.map((section) => ({ id: `${section.id}-title`, title: section.title })),
+    ...front.map((section) => ({
+      id: `${section.id}-title`,
+      title: section.title,
+      ...(section.label ? { label: section.label } : {})
+    })),
     ...doc.chapters.map((chapter) => ({
       id: chapter.id,
       title: chapter.title,
@@ -72,7 +76,11 @@ export function layoutWithToc(
       // consequence of the book having had them.
       ...(profile.contentsSynopsis && chapter.synopsis ? { synopsis: chapter.synopsis } : {})
     })),
-    ...back.map((section) => ({ id: `${section.id}-title`, title: section.title }))
+    ...back.map((section) => ({
+      id: `${section.id}-title`,
+      title: section.title,
+      ...(section.label ? { label: section.label } : {})
+    }))
   ].map((entry) => ({ level: 1, ...entry, folio: null }))
 
   // A collected-endnotes section is a chapter as far as the contents is

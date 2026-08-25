@@ -578,7 +578,14 @@ function sectionFlowables(
   const title = buildFlowable(
     { id: `${section.id}-title`, kind: 'heading', level: 1, text: section.title, sourcePages: [] },
     ctx,
-    { suppressFirstIndent: true, dropCap: false }
+    {
+      suppressFirstIndent: true,
+      dropCap: false,
+      // "BOOK ONE" over "THE HUMAN AURA", through the same superscription the
+      // body uses for "LESSON I." over a chapter title — one implementation, so
+      // a division and a chapter cannot open in two different ways.
+      ...(section.label?.trim() ? { superscription: [section.label.trim()] } : {})
+    }
   )
 
   const out: Flowable[] = [title]
@@ -2220,6 +2227,30 @@ function buildContents(
 
   let slot = CHAPTER_SINK_SLOTS
 
+  // An analytical contents centres its chapter titles, which is how these pages
+  // have been set since long before this book: the title sits over the
+  // paragraph that describes it, and the pair reads as one thing. A plain list
+  // of names and numbers does not — there the eye runs down a column of first
+  // letters, and centring would take that column away.
+  //
+  // Decided for the page rather than per entry. Some entries carry no
+  // description — a head inside a chapter, a back-matter section — and mixing
+  // centred titles with flush-left ones down one page looks like a mistake.
+  const descriptive = toc.some((entry) => entry.synopsis)
+
+  // The axis the page is centred on.
+  //
+  // An entry is centred over the measure *less* the folio column, because its
+  // number sits in that lane and a title centred through it would run into the
+  // digits. The heading was centred over the whole measure, so the two disagreed
+  // by half the folio column — 17pt on a 6×9 page, which is not subtle: CONTENTS
+  // sat visibly right of every title under it. One page, one axis.
+  //
+  // Only when the entries are centred. A flush-left list has no axis of its own
+  // to agree with, and there a heading centred over the full measure is what a
+  // printed contents looks like.
+  const axis = descriptive ? ctx.measureWidth - folioColumn : ctx.measureWidth
+
   // The heading, set like a chapter title so the contents reads as part of the
   // same book rather than as an appendage — and small-capped by the same rule
   // as one, real glyphs where the face has them and full capitals where it
@@ -2233,7 +2264,7 @@ function buildContents(
     font: titleFont,
     sizePt: titleSize,
     measurer: ctx.measurer,
-    lineWidths: ctx.measureWidth,
+    lineWidths: Math.max(1, axis),
     alignment: profile.headingStyle.centered ? 'center' : 'left'
   })) {
     page.lines.push({
@@ -2253,17 +2284,6 @@ function buildContents(
     slot += 1
   }
   slot += CHAPTER_GAP_SLOTS
-
-  // An analytical contents centres its chapter titles, which is how these pages
-  // have been set since long before this book: the title sits over the
-  // paragraph that describes it, and the pair reads as one thing. A plain list
-  // of names and numbers does not — there the eye runs down a column of first
-  // letters, and centring would take that column away.
-  //
-  // Decided for the page rather than per entry. Some entries carry no
-  // description — a head inside a chapter, a back-matter section — and mixing
-  // centred titles with flush-left ones down one page looks like a mistake.
-  const descriptive = toc.some((entry) => entry.synopsis)
 
   toc.forEach((entry, i) => {
     const indent = Math.max(0, entry.level - 1) * sizePt

@@ -39,6 +39,16 @@ export interface ImprintFields {
   copyrightHolder: string
   /** Whether the copyright page states that the original is public domain. */
   publicDomainNotice: boolean
+  /**
+   * Whether the copyright page states that this edition is annotated.
+   *
+   * Banked because it is a fact about the imprint rather than about the book:
+   * a press that publishes annotated reprints publishes them annotated. The
+   * *source* credit is deliberately not banked — it names where one particular
+   * copy was scanned, and riding it onto book two would credit the wrong
+   * library.
+   */
+  annotatedNotice: boolean
 }
 
 /** A look the user banked, with the publisher identity that goes with it. */
@@ -91,7 +101,7 @@ export const BANKED_STYLE_KEYS: readonly (keyof StyleProfile)[] = [
 ]
 
 export function emptyImprint(): ImprintFields {
-  return { imprint: '', copyrightHolder: '', publicDomainNotice: true }
+  return { imprint: '', copyrightHolder: '', publicDomainNotice: true, annotatedNotice: false }
 }
 
 function str(v: unknown, fallback: string): string {
@@ -164,7 +174,11 @@ export function migrateSavedProfile(raw: unknown): SavedStyleProfile | null {
       publicDomainNotice:
         typeof rawImprint['publicDomainNotice'] === 'boolean'
           ? rawImprint['publicDomainNotice']
-          : true
+          : true,
+      // False when absent: a look banked before annotated editions existed
+      // describes a press that was not making them, and defaulting the other
+      // way would print the claim on a book with nothing in it.
+      annotatedNotice: rawImprint['annotatedNotice'] === true
     }
   }
 }

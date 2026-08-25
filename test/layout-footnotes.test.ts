@@ -367,6 +367,36 @@ describe('layoutWithToc — descriptions under the entries', () => {
    * names and numbers does not — there the eye runs down a column of first
    * letters, and centring would take that column away.
    */
+  /**
+   * One page, one axis.
+   *
+   * An entry is centred over the measure *less* the folio column, because its
+   * number sits in that lane and a title centred through it would run into the
+   * digits. The heading was centred over the whole measure, so the two
+   * disagreed by half the folio column — 17pt on a 6×9 page, and CONTENTS sat
+   * visibly right of every title under it.
+   */
+  it('sets the heading on the same axis as the entries it heads', () => {
+    // The folio shares the entry's line and sits out in its own lane, so it is
+    // dropped before the axis is measured — it is furniture, not the title.
+    const mid = (l: PositionedLine) => {
+      const runs = l.runs.filter((r) => !/^[0-9ivxlc]+$/i.test(r.text))
+      const last = runs[runs.length - 1]!
+      const left = Math.min(...runs.map((r) => r.xPt))
+      return (left + last.xPt + measurer.widthOf(last.text, last.font, last.sizePt)) / 2
+    }
+    const contentsLines = withSynopses(true)
+      .pages.filter((p) => p.kind === 'contents')
+      .flatMap((c) => lines(c))
+    const heading = contentsLines.find((l) =>
+      l.runs.some((r) => /^Contents$|^CONTENTS$/.test(r.text))
+    )
+    const entry = contentsLines.find((l) => l.runs.some((r) => r.text === 'Air'))
+    expect(heading).toBeDefined()
+    expect(entry).toBeDefined()
+    expect(mid(heading!)).toBeCloseTo(mid(entry!), 0)
+  })
+
   it('centres the chapter titles when the descriptions are set', () => {
     const titleX = (book: LaidOutBook): number => {
       const run = book.pages

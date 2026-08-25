@@ -931,7 +931,9 @@ describe('export step', () => {
       'editionDate',
       'editionStatement',
       'isbn',
-      'publicDomainNotice'
+      'publicDomainNotice',
+      'annotatedNotice',
+      'sourceNotice'
     ])
   })
 

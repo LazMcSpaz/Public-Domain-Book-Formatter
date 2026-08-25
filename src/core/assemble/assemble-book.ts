@@ -214,6 +214,16 @@ export interface BookSection {
   id: string
   placement: 'front' | 'back'
   title: string
+  /**
+   * A number line set small over the title, as a chapter's is.
+   *
+   * "BOOK ONE" over "THE HUMAN AURA", not "BOOK ONE — THE HUMAN AURA" run
+   * together on one line and left to wrap wherever the measure happens to
+   * fall. The book's own chapters already open this way — "LESSON I." over
+   * "THE ASTRAL SENSES." — so a division that names itself the same way is set
+   * the same way, by the same code, rather than by a second convention.
+   */
+  label?: string
   blocks: BookBlock[]
 }
 

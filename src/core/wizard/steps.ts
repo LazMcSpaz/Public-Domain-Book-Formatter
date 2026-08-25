@@ -2022,6 +2022,30 @@ const exportStep: Step = {
           'Recommended. It is accurate, it tells readers what they are buying, and it ' +
           'makes clear that your claim covers only this edition.',
         defaultValue: banked.publicDomainNotice
+      },
+      {
+        id: 'annotatedNotice',
+        type: 'confirm',
+        prompt: 'State on the copyright page that this edition is annotated?',
+        help:
+          'For an edition that adds notes, an introduction or a glossary. A reader ' +
+          'holding the book cannot otherwise tell it from a scan run through a ' +
+          'formatter, and the line says what the apparatus is for — context, not ' +
+          'argument. Leave it off if you have added nothing.' +
+          fromLook,
+        defaultValue: banked.annotatedNotice
+      },
+      {
+        id: 'sourceNotice',
+        type: 'text',
+        prompt: 'Where was this copy scanned?',
+        help:
+          'The scanning library’s credit, printed on the copyright page as given. The ' +
+          'leaf it appears on belongs to the scan rather than to the book, so it is ' +
+          'left out of the body — this is where the provenance is kept. Blank if the ' +
+          'copy came from somewhere that asks for nothing.',
+        defaultValue: '',
+        placeholder: 'e.g. Digitized by the Internet Archive from a University of California copy.'
       }
     ]
   }

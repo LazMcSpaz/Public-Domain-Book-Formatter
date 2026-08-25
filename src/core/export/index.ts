@@ -6,6 +6,7 @@ export {
   buildExport,
   editionFromAnswers,
   publicDomainNotice,
+  ANNOTATED_NOTICE,
   safeFileName,
   type BuildExportInput,
   type BuildExportResult,

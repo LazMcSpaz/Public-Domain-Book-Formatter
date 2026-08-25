@@ -211,7 +211,8 @@ describe('appliedLook — which style the book is actually set in', () => {
     expect(appliedLook(atDesign([banked]), { profile: banked.id }).imprint).toEqual({
       imprint: 'Blackthorn Press',
       copyrightHolder: 'A. Editor',
-      publicDomainNotice: true
+      publicDomainNotice: true,
+      annotatedNotice: false
     })
   })
 

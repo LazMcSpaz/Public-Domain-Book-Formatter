@@ -37,6 +37,17 @@ export type PageRole =
   | 'colophon'
   // — neither —
   | 'blank'
+  /**
+   * A leaf the scanning library inserted, not a leaf of the book.
+   *
+   * Every archive.org scan carries one — "Digitized for X by the Internet
+   * Archive in 2007" — and it is neither the book's colophon nor blank. Read as
+   * a colophon it printed as a page of its own in a reprint that has nothing to
+   * do with the scanning, and dropped as blank the record of where the copy
+   * came from went with it. It is discarded from the body, and the credit
+   * belongs on the copyright page, where `sourceNotice` sets it.
+   */
+  | 'digitization-notice'
   | 'unknown'
 
 /** What the pipeline does with a page's text once its role is known. */
@@ -61,6 +72,7 @@ const DISPOSITIONS: Record<PageRole, PageDisposition> = {
   'list-of-illustrations': 'discard',
   index: 'discard',
   blank: 'discard',
+  'digitization-notice': 'discard',
   // Real content, but set apart from the main narrative flow.
   dedication: 'transcribe-aside',
   epigraph: 'transcribe-aside',

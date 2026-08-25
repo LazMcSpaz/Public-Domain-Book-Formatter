@@ -640,11 +640,15 @@ function parseEdits(raw: unknown): BookEdit[] {
           typeof value['title'] === 'string' &&
           typeof value['text'] === 'string'
         ) {
+          const label = str(value['label'], '')
           out.push({
             kind: 'section',
             sectionId,
             placement,
             title: value['title'],
+            // Dropped when absent rather than stored empty, so a section
+            // written before labels existed round-trips byte for byte.
+            ...(label.trim() ? { label } : {}),
             text: value['text']
           })
         }

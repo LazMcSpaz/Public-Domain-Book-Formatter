@@ -216,6 +216,32 @@ describe('layout — the body', () => {
     }
   })
 
+  it('sets a section label over its title, the way a chapter number is set', () => {
+    // "BOOK ONE" over "THE HUMAN AURA" — not run together on one line and left
+    // to wrap wherever the measure falls.
+    const document = doc([block('paragraph', PROSE)])
+    document.sections = [
+      {
+        id: 'book-one',
+        placement: 'front',
+        title: 'THE HUMAN AURA',
+        label: 'BOOK ONE',
+        blocks: [block('paragraph', 'The first division of the volume.')]
+      }
+    ]
+    const book = run(document)
+    const page = book.pages.find((p) => textOf(p).includes('HUMAN'))
+    expect(page).toBeDefined()
+
+    const all = lines(page!)
+    const label = all.findIndex((l) => l.runs.some((r) => r.text === 'ONE'))
+    const title = all.findIndex((l) => l.runs.some((r) => r.text === 'AURA'))
+    expect(label).toBeGreaterThanOrEqual(0)
+    // The label comes first, and is set smaller than the title it introduces.
+    expect(label).toBeLessThan(title)
+    expect(all[label]!.runs[0]!.sizePt).toBeLessThan(all[title]!.runs[0]!.sizePt)
+  })
+
   it('sets a two-line chapter title with room for its own size', () => {
     // A part divider whose title wraps: "BOOK TWO — THE ASTRAL / WORLD" set
     // its second line one *body* leading below the first, and a title sets at

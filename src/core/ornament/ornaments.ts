@@ -66,6 +66,29 @@ function rect(x: number, y: number, w: number, h: number): string {
 }
 
 /**
+ * A five-pointed star, as ten straight segments.
+ *
+ * The inner radius is the one that makes a star look like a printer's mark
+ * rather than a child's drawing: much above 0.42 and the points go stubby,
+ * much below and they go spidery and fill in at text size.
+ */
+function star(cx: number, cy: number, r: number): string {
+  const inner = r * 0.42
+  const points: string[] = []
+  for (let i = 0; i < 10; i++) {
+    const radius = i % 2 === 0 ? r : inner
+    const angle = -Math.PI / 2 + (i * Math.PI) / 5
+    points.push(
+      `${(cx + radius * Math.cos(angle)).toFixed(2)} ${(cy + radius * Math.sin(angle)).toFixed(2)}`
+    )
+  }
+  return `M ${points[0]} ${points
+    .slice(1)
+    .map((p) => `L ${p}`)
+    .join(' ')} Z`
+}
+
+/**
  * The shipped library.
  *
  * Hand-authored rather than lifted from a font or a clip-art set, so nothing
@@ -89,6 +112,75 @@ export const BUILTIN_ORNAMENTS: readonly OrnamentArt[] = [
       { d: 'M120 24 C100 24 84 18 72 24 C60 30 44 26 30 22', stroke: 1.6 },
       { d: 'M30 22 C26 21 24 24 27 26 C30 28 34 26 32 23', stroke: 1.6 },
       { d: circle(120, 9, 2.2) }
+    ]
+  },
+  {
+    id: 'chapter-rule',
+    name: 'Rule and Lozenge',
+    kind: 'chapter',
+    width: 240,
+    height: 24,
+    shapes: [
+      // The plainest of them, and the one that does not date a book: a hairline
+      // broken by a lozenge. Sets under any face and stays out of the way of a
+      // long title.
+      { d: rect(8, 11.4, 96, 1.2) },
+      { d: 'M120 6 L127 12 L120 18 L113 12 Z' },
+      { d: rect(136, 11.4, 96, 1.2) }
+    ]
+  },
+  {
+    id: 'chapter-leaves',
+    name: 'Aldus Leaf',
+    kind: 'chapter',
+    width: 240,
+    height: 30,
+    shapes: [
+      // The printer's aldus leaf, on a stem that tapers to a point either side.
+      // Drawn once and mirrored rather than stacked: the first attempt set two
+      // pairs of filled ellipses one above the other and they printed as a
+      // single black smear at this size, which is the whole risk with a solid
+      // ornament — it has to be read at a fifth of the height it is drawn at.
+      { d: 'M120 8 C126 12 128 16 120 22 C112 16 114 12 120 8 Z' },
+      { d: 'M114 15 C100 9 84 11 74 15 C84 21 100 22 114 15 Z' },
+      { d: 'M126 15 C140 9 156 11 166 15 C156 21 140 22 126 15 Z' },
+      { d: 'M74 15 C64 15 56 14 46 15 C56 16 64 15 74 15 Z' },
+      { d: 'M166 15 C176 15 184 14 194 15 C184 16 176 15 166 15 Z' }
+    ]
+  },
+  {
+    id: 'chapter-asterism',
+    name: 'Asterism',
+    kind: 'chapter',
+    width: 240,
+    height: 36,
+    shapes: [
+      // Three stars in a triangle — the mark a nineteenth-century compositor
+      // reached for, and the quietest thing here that is still an ornament
+      // rather than a rule.
+      //
+      // 240 wide like the others on purpose. The engine draws every ornament to
+      // the same fraction of the measure, so the viewBox is a *scale* and not a
+      // size: at 120 these came out twice the height of the flourish and read
+      // as three black stars nailed under the title.
+      star(120, 9, 7.5),
+      star(105, 25, 7.5),
+      star(135, 25, 7.5)
+    ].map((d) => ({ d }))
+  },
+  {
+    id: 'chapter-wave',
+    name: 'Wave and Points',
+    kind: 'chapter',
+    width: 240,
+    height: 28,
+    shapes: [
+      // A single drawn line rather than a ruled one, with a point at each end
+      // to stop it. Reads as hand-cut, which the flourish also does, but
+      // without the scrollwork — a lighter version of the same idea.
+      { d: 'M28 14 C56 4 84 24 120 14 C156 4 184 24 212 14', stroke: 1.3 },
+      { d: circle(24, 14, 2.2) },
+      { d: circle(216, 14, 2.2) }
     ]
   },
   {

@@ -96,6 +96,23 @@ export function publicDomainNotice(originalYear: string | null): string {
   )
 }
 
+/**
+ * What an annotated edition owes its reader on the copyright page.
+ *
+ * A public-domain reprint can be two very different things — a scan run
+ * through a formatter, or an edition somebody read and worked on — and a
+ * reader holding the book has no way to tell them apart from the outside. This
+ * says which one it is, and says what the apparatus is *for*, because notes
+ * added to a book of this kind could as easily be there to argue with it.
+ *
+ * The editor's claim to make, so it is an answer and not a fact the app
+ * asserts: a book with nothing added must not carry it.
+ */
+export const ANNOTATED_NOTICE =
+  'This is an annotated edition. The notes and the definitions are the ' +
+  'editor’s, added to give a present-day reader the context and the ' +
+  'information the book assumes its own reader already had.'
+
 /** A file name that survives every filesystem: ASCII, no separators, bounded. */
 export function safeFileName(title: string, extension: string): string {
   const stem =
@@ -131,6 +148,14 @@ export function editionFromAnswers(exportAnswers: Record<string, unknown>): Edit
   if (exportAnswers['publicDomainNotice'] !== false) {
     notices.push(publicDomainNotice(originalYear))
   }
+  if (exportAnswers['annotatedNotice'] === true) notices.push(ANNOTATED_NOTICE)
+  // Where this copy came from. Free text rather than a generated line, because
+  // a scanning library dictates its own wording and the credit is worth
+  // reprinting as given: the leaf it was read off is discarded from the body
+  // (`digitization-notice`), so without this the provenance leaves the book
+  // altogether.
+  const source = trimmedOrNull(exportAnswers['sourceNotice'])
+  if (source) notices.push(source)
 
   return {
     title: trimmedOrNull(exportAnswers['title']) ?? 'Untitled',
