@@ -90,6 +90,17 @@ entry instead, a difference of one word and one letter, and is the only place in
 the book where two disagreeing readings were made to agree rather than both
 kept.
 
+**The first drafts of those four notes were written for the wrong reader.** They
+explained the reasoning: that choosing one of chapter II's two names "would put a
+word into the book that is not in it", that a modern resetting "is evidence of a
+reading and not authority for one", that both machine readings of a defective
+page stopped at the same word. Every sentence of that is true and none of it is
+a reader's business. A note is read by somebody who has just opened the book and
+wants to know what happened to the page; the argument for the decision belongs
+in `rulings.md`, where an editor will look for it. The notes were rewritten to
+say what happened and stop, and the rule is now on the voice card so the next
+book does not have to learn it.
+
 **What is claimed for the three gaps, and what is not.** The notes say the fault
 is in the printing this edition follows, that it is not the scan's and not this
 reading's, and that the same fault falls at the end of three chapters, which
