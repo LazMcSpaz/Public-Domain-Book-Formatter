@@ -287,6 +287,44 @@ describe('layout — notes with no reference mark', () => {
     expect(book.pages[heading.pageIndex]!.folio).not.toBeNull()
   })
 
+  /**
+   * A run-in subhead is not an entry in an analytical contents.
+   *
+   * *Thought Vibration* sets AFFIRMATION and EXERCISE as centred heads inside
+   * three of its chapters. Marked level 2 they stop taking a recto opening and
+   * stop changing the running head, which is right, and they still arrived in
+   * the contents as bare centred lines with a page number and no description,
+   * between chapters that had one. They read as chapters whose descriptions had
+   * gone missing.
+   *
+   * A contents that sets a paragraph under each chapter has nowhere to put a
+   * subhead, and the chapter's own description already names them: chapter IV's
+   * ends "Affirmation and exercise." The plain contents is untouched, and can
+   * still indent them by level, which is what the indent is for.
+   */
+  it('leaves a subhead out of a contents that sets descriptions', () => {
+    const withSubhead = build([
+      page(0, [
+        { kind: 'heading', text: 'MIND BUILDING' },
+        { kind: 'paragraph', text: PROSE },
+        { kind: 'heading', text: 'AFFIRMATION', level: 2 },
+        { kind: 'paragraph', text: PROSE }
+      ])
+    ])
+    const analytical = { ...defaultStyleProfile(), contentsSynopsis: true }
+    const listed = layoutWithToc(withSubhead, analytical, measurer, { edition: EDITION })
+    const contents = textOf(listed.pages.find((p) => p.kind === 'contents')!).toUpperCase()
+    expect(contents).toContain('MIND BUILDING')
+    expect(contents).not.toContain('AFFIRMATION')
+
+    // And a plain contents still lists it, indented, which is what level is for.
+    const plain = { ...defaultStyleProfile(), contentsSynopsis: false }
+    const both = layoutWithToc(withSubhead, plain, measurer, { edition: EDITION })
+    expect(textOf(both.pages.find((p) => p.kind === 'contents')!).toUpperCase()).toContain(
+      'AFFIRMATION'
+    )
+  })
+
   it('gives a book with nothing but stranded notes a contents page anyway', () => {
     // No chapters, so the single-pass shortcut would otherwise skip the
     // contents — and the one section this book has would go unlisted.
