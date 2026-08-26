@@ -65,13 +65,13 @@ in `joinText`, so the next book does not need a fourth witness to catch it.
 The reset also corroborated four of the compositor's errors by silently mending
 all four, which is evidence that a modern editor read them the same way.
 
-## The queries
+## The queries, and how they were ruled
 
-Ten, none answered here. Five are compositor's slips read at 600 to 700 dpi:
-`In` capitalised inside a quotation, `aiong` and `graduaily` with an `i` sort
-where an `l` belongs, `ceatures` with the `r` never set, and `workig` broken
-across a line with the `n` never set. Two are the book naming the same chapter
-differently in its contents and at its head.
+Ten raised, ten ruled by the editor. Five are compositor's slips read at 600 to
+700 dpi: `In` capitalised inside a quotation, `aiong` and `graduaily` with an
+`i` sort where an `l` belongs, `ceatures` with the `r` never set, and `workig`
+broken across a line with the `n` never set. All five are mended. Two are the
+book naming the same chapter differently in its contents and at its head.
 
 **Three are worse, and they are the finding of this book.** Pages 35, 49 and 65
 break off in the middle of a sentence, and page 65 in the middle of a word with
@@ -80,14 +80,33 @@ the same word and the render shows nothing below the line. The copy-text is
 defective at three chapter endings. The modern reset supplies the missing words
 and is not authority for them.
 
+The rulings on those five, and on the two disagreeing chapter names, are in
+`rulings.md` on the shelf. Four were answered by telling the reader rather than
+by mending the page: the three defective endings keep their gaps and carry a
+footnote naming what the reset supplies, and chapter II keeps both of its names,
+`Power` in the contents and `Process` at its head, with a footnote on the
+chapter's first page. Chapter XI's head was brought into line with its contents
+entry instead, a difference of one word and one letter, and is the only place in
+the book where two disagreeing readings were made to agree rather than both
+kept.
+
+**What is claimed for the three gaps, and what is not.** The notes say the fault
+is in the printing this edition follows, that it is not the scan's and not this
+reading's, and that the same fault falls at the end of three chapters, which
+points at the making-up of the edition rather than at damage to one copy. They
+do **not** claim that other printings share it, because only one physical
+copy was available here: the Internet Archive's reading is of these same pixels,
+and the modern reset has the text. Anyone who can reach a second printing should
+check it and strengthen or withdraw the wording.
+
 ## The apparatus
 
 |                                            |                                                                                  |
 | ------------------------------------------ | -------------------------------------------------------------------------------- |
-| Glossary entries                           | 42                                                                               |
-| Entries carrying a mark                    | 41 (the forty-second is a name the book never uses)                              |
+| Glossary entries                           | 41                                                                               |
+| Entries carrying a mark                    | 40 (the forty-first is a name the book never uses)                               |
 | Entries the book uses and left unmarked    | **0**                                                                            |
-| Editor's footnotes                         | 20                                                                               |
+| Editor's footnotes                         | 24                                                                               |
 | Notes unplaced                             | 0                                                                                |
 | Notes asserting something outside the book | 16, listed in `notes.md`                                                         |
 | Author's own footnotes preserved           | 1                                                                                |
@@ -119,6 +138,16 @@ And two verbs that had no way to be reached at all: an editor could correct an
 introduction they could not write, and could not attach a note. Both books read
 before this one carry no notes, and nothing reported it, because the export
 counts what it was given.
+
+**A seventh, found only by counting.** One word carried two glossary marks:
+`Passive effort°°`, from the mark pass running twice over the same block. Every
+check was happy with it. `checkGlossaryMarks` asks whether each entry reaches a
+marked occurrence and a doubled circle answers yes; `book-files.mjs` counts the
+circles in the edits and had nothing to compare the number against. It surfaced
+only when the entry count and the circle count were put side by side: 41 entries,
+40 of them reachable, 41 circles. That comparison is not yet a check anywhere,
+and it should be — a circle in the running text that no entry accounts for is
+exactly the kind of fault a reader finds and a suite does not.
 
 ## What is not demonstrated
 

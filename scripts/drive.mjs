@@ -1712,7 +1712,12 @@ async function serve() {
               // chapter. Reported because a synopsis that failed to match is
               // silent otherwise: the contents still prints, just plainer, and
               // nothing says the prose was read and then dropped.
-              synopsis: c.synopsis ? `${c.synopsis.slice(0, 60)}…` : null
+              synopsis: c.synopsis ? `${c.synopsis.slice(0, 60)}…` : null,
+              // What the book's own contents called this chapter, where that
+              // is not what its head calls it. Reported for the same reason
+              // the synopsis is: the contents prints one name and the chapter
+              // another, deliberately, and nothing else would say so.
+              contentsTitle: c.contentsTitle ?? null
             })),
             // A description read off the original contents that no chapter
             // claimed. Silent otherwise: the contents still prints, only
