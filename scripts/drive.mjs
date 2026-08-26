@@ -2600,6 +2600,100 @@ async function serve() {
     },
 
     /**
+     * Attach one of the editor's own notes to the book.
+     *
+     * The footnote machinery has always been able to place, renumber and
+     * collect a note the editor wrote, and there has never been a way to write
+     * one from a session: the annotate module reached it through a paid API
+     * pass that no longer exists, and `correct` reaches the book's blocks but
+     * not this. So two books on the shelf carry none, and nothing anywhere said
+     * so — the export report counts what it was given.
+     *
+     * ```
+     * note p37b2 "The Miracles of Nature" "Elisha Gray (1835-1901) ..."
+     * ```
+     *
+     * The note hangs on **quoted words, never an offset**. That is the same
+     * rule the annotation pass was built on and for the same reason: an offset
+     * is a number nobody can check and it goes stale the moment a correction
+     * changes the block by one letter, while a quote either is in the block or
+     * is not. `findAnchor` locates it, and a quote it cannot find is refused
+     * rather than attached at a guess.
+     */
+    note: async ([blockId, quote, ...rest]) => {
+      const text = rest.join(' ')
+      if (!blockId || !quote || !text) {
+        throw new Error('note <blockId> <quote> <the note>')
+      }
+      return page.evaluate(
+        async ([repo, blockId, quote, text]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const markup = await import(`/@fs${repo}/src/core/transcribe/markup.ts`)
+          const schema = await import(`/@fs${repo}/src/core/annotate/schema.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+
+          // Against the book as it stands, edits included — the same text
+          // `body` hands back and the same text an offset has to index into.
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const block = doc.blocks.find((b) => b.id === blockId)
+          if (!block) throw new Error(`No block \`${blockId}\` in this book.`)
+          const withTags = markup.withMarkup(block.text, block.emphasis, block.strong)
+          const at = schema.findAnchor(withTags, quote)
+          if (at === null) {
+            throw new Error(
+              `Those words are not in block ${blockId}. A note anchored at a guess is worse ` +
+                'than none, so nothing was written.'
+            )
+          }
+          // Re-anchoring the same words replaces the note rather than refusing
+          // it: a note is written, read on the page and written again, and a
+          // verb that could only ever add one would leave the first draft in
+          // the book beside the second.
+          const already = (run.edits ?? []).find(
+            (e) => e.kind === 'note' && e.blockId === blockId && e.at === at
+          )
+          const noteId =
+            already?.noteId ??
+            `ed-${blockId}-${(run.edits ?? []).filter((e) => e.kind === 'note').length + 1}`
+          const edits = editsMod.withEdit(run.edits ?? [], {
+            kind: 'note',
+            noteId,
+            blockId,
+            at,
+            text
+          })
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            edits
+          })
+          const stored = await runStore.saveRun(next)
+          return {
+            blockId,
+            noteId,
+            added: !already,
+            replaced: Boolean(already),
+            stored: stored === true,
+            at,
+            after: withTags.slice(Math.max(0, at - 60), at),
+            notesOnThisBook: edits.filter((e) => e.kind === 'note').length
+          }
+        },
+        [REPO, blockId, quote, text]
+      )
+    },
+
+    /**
      * Raise a query on a leaf that has already been read.
      *
      * Queries were only ever attachable at the moment a leaf was transcribed,
@@ -2715,6 +2809,8 @@ async function serve() {
       const from = flag('from')
       const was = flag('was')
       const now = flag('now')
+      const placement = flag('create')
+      const title = flag('title')
       let replacement = null
       if (from) {
         const { readFile } = await import('node:fs/promises')
@@ -2722,7 +2818,7 @@ async function serve() {
       }
 
       return page.evaluate(
-        async ([repo, sectionId, replacement, was, now]) => {
+        async ([repo, sectionId, replacement, was, now, placement, title]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
@@ -2746,9 +2842,45 @@ async function serve() {
           }
           const found = sections.find((s) => s.sectionId === sectionId)
           if (!found) {
-            throw new Error(
-              `No section \`${sectionId}\`. There is: ${sections.map((s) => s.sectionId).join(', ') || 'none'}`
-            )
+            // Creating one, rather than amending. Until this existed the
+            // editor's own prose could be *corrected* from a session and never
+            // written from one, because the only writer was a paid annotation
+            // pass that no longer exists — which is why two books on this shelf
+            // carry an introduction and a glossary that had to be put there by
+            // hand, and one carries no notes at all.
+            if (placement === null) {
+              throw new Error(
+                `No section \`${sectionId}\`. There is: ` +
+                  `${sections.map((s) => s.sectionId).join(', ') || 'none'}. ` +
+                  'To write a new one, give `--create front|back --title "..." --from <file>`.'
+              )
+            }
+            if (placement !== 'front' && placement !== 'back') {
+              throw new Error('`--create` takes `front` or `back`.')
+            }
+            if (replacement === null) throw new Error('A new section needs `--from <file>`.')
+            const madeEdits = editsMod.withEdit(run.edits ?? [], {
+              kind: 'section',
+              sectionId,
+              placement,
+              title: title ?? sectionId,
+              text: replacement
+            })
+            const madeNext = project.createSavedRun({
+              ...run,
+              images: new Map(run.images.map((i) => [i.id, i.bytes])),
+              savedAt: new Date().toISOString(),
+              edits: madeEdits
+            })
+            const madeStored = await runStore.saveRun(madeNext)
+            return {
+              sectionId,
+              created: true,
+              placement,
+              title: title ?? sectionId,
+              stored: madeStored === true,
+              words: replacement.split(/\s+/u).filter(Boolean).length
+            }
           }
 
           let text = replacement
@@ -2790,7 +2922,7 @@ async function serve() {
             next: 'The Markdown on the shelf is a mirror — update it to match.'
           }
         },
-        [REPO, sectionId ?? '', replacement, was, now]
+        [REPO, sectionId ?? '', replacement, was, now, placement, title]
       )
     },
 
