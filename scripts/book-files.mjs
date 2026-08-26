@@ -126,7 +126,11 @@ const claim = (file, re) => {
 }
 const claimed = [
   ['notes.md', /(\d+)\s+footnotes/, notes.length, 'footnotes'],
-  ['notes.md', /(\d+)\s+words in the two books carry/, marks, 'glossary marks'],
+  // Tolerant of how the sentence is put, because it was not: the pattern was
+  // `words in the two books carry`, which is the wording of one combined volume
+  // on this shelf and of nothing else. Every other book phrased it naturally,
+  // the claim matched nothing, and the check passed by never running.
+  ['notes.md', /(\d+)\s+words[^.]{0,60}carry a small circle/, marks, 'glossary marks'],
   ['corrections.md', /A further (\d+) changes/, marks, 'glossary marks']
 ]
 for (const [file, re, actual, what] of claimed) {
