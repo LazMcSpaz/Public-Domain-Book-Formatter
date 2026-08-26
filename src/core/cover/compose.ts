@@ -32,7 +32,7 @@ import type { FontRef, TextMeasurer } from '@core/layout'
 import type { OrnamentArt } from '@core/ornament'
 import { sizeAfterOps } from '@core/image'
 import { worksLabel, type CoverDocument, type Hex } from './document'
-import { groundPattern, PATTERN_OPACITY } from './patterns'
+import { GROUND_IMAGE_ID, groundPattern, isImageGround, PATTERN_OPACITY } from './patterns'
 import {
   contains,
   coverGeometry,
@@ -78,6 +78,14 @@ export interface CoverImageItem {
   srcY: number
   srcWidth: number
   srcHeight: number
+  /**
+   * 0–1. Only a picture-backed ground uses it.
+   *
+   * The cover's artwork is never drawn at partial opacity — a faded plate is a
+   * mistake, not a treatment — so this exists for the one case where the
+   * picture *is* the texture.
+   */
+  opacity?: number
 }
 
 export interface CoverTextItem {
@@ -517,7 +525,26 @@ export function composeCover(doc: CoverDocument, options: ComposeOptions): Compo
   // across the back, the spine and the front as one field. That is the point of
   // it: an allover texture has no alignment to notice, which is what makes it
   // survive a fold that creeps by an eighth of an inch.
-  if (look.groundPattern) {
+  if (look.groundPattern && isImageGround(look.groundPattern)) {
+    // Out to every edge, so the trim cuts through the texture rather than
+    // past it — and across the fold, because an allover ground has no
+    // alignment to misregister.
+    items.push({
+      kind: 'image',
+      id: GROUND_IMAGE_ID,
+      xPt: 0,
+      yPt: 0,
+      widthPt: pt(geometry.fullWidthIn),
+      heightPt: pt(geometry.fullHeightIn),
+      srcX: 0,
+      srcY: 0,
+      // Filled in by the renderer once it knows what it rendered; the composer
+      // cannot know a vector source's pixel count because it does not have one.
+      srcWidth: 0,
+      srcHeight: 0,
+      opacity: PATTERN_OPACITY[look.groundPattern]
+    })
+  } else if (look.groundPattern) {
     const placements = groundPattern(
       look.groundPattern,
       pt(geometry.fullWidthIn),

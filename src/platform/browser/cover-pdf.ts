@@ -211,7 +211,8 @@ export async function renderCoverPdf(
           x: item.xPt,
           y: heightPt - item.yPt - item.heightPt,
           width: item.widthPt,
-          height: item.heightPt
+          height: item.heightPt,
+          ...(item.opacity === undefined ? {} : { opacity: item.opacity })
         })
         break
       }

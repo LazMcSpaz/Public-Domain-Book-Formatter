@@ -11,6 +11,10 @@ import { BUILTIN_ORNAMENTS } from '@core/ornament'
 import {
   artFrame,
   blurbFrame,
+  GROUND_IMAGE_ID,
+  groundPattern,
+  isImageGround,
+  PATTERN_OPACITY,
   PRESS_MARK_ID,
   composeCover,
   coverGeometry,
@@ -593,5 +597,55 @@ describe('the ground pattern', () => {
   it('is absent unless a look asks for one', () => {
     const { items } = composeCover(bookCover(), { measurer, ornaments: BUILTIN_ORNAMENTS })
     expect(items.some((i) => i.kind === 'ornament' && i.opacity !== undefined)).toBe(false)
+  })
+})
+
+describe('a picture-backed ground', () => {
+  function marbled(): CoverDocument {
+    return bookCover((d) => {
+      d.look.groundPattern = 'marbled'
+    })
+  }
+
+  it('covers the whole sheet, bleed included', () => {
+    const { items, geometry } = composeCover(marbled(), { measurer })
+    const ground = items.find((i) => i.kind === 'image' && i.id === GROUND_IMAGE_ID)!
+    if (ground.kind !== 'image') throw new Error('unreachable')
+    expect(ground.xPt).toBe(0)
+    expect(ground.yPt).toBe(0)
+    expect(ground.widthPt).toBeCloseTo(geometry.fullWidthIn * 72, 4)
+    expect(ground.heightPt).toBeCloseTo(geometry.fullHeightIn * 72, 4)
+  })
+
+  it('carries the opacity the pattern asks for', () => {
+    const { items } = composeCover(marbled(), { measurer })
+    const ground = items.find((i) => i.kind === 'image' && i.id === GROUND_IMAGE_ID)!
+    if (ground.kind !== 'image') throw new Error('unreachable')
+    expect(ground.opacity).toBe(PATTERN_OPACITY.marbled)
+  })
+
+  it('draws no paths — the picture is the pattern', () => {
+    // `drawSvgPath` writes one flat fill per path, so a traced raster with
+    // gradients in it would come out solid. It goes down the picture path
+    // instead, and `groundPattern` says so by returning nothing.
+    expect(groundPattern('marbled', 100, 100, BUILTIN_ORNAMENTS[0]!)).toEqual([])
+    expect(isImageGround('marbled')).toBe(true)
+    expect(isImageGround('guilloche')).toBe(false)
+  })
+
+  it('sits under everything else on the sheet', () => {
+    const { items } = composeCover(marbled(), { measurer })
+    const ground = items.findIndex((i) => i.kind === 'image' && i.id === GROUND_IMAGE_ID)
+    const firstText = items.findIndex((i) => i.kind === 'text')
+    expect(ground).toBeLessThan(firstText)
+  })
+
+  it('leaves its pixel count for the renderer to fill in', () => {
+    // A vector source has no pixel count; the size is decided by where it is
+    // placed, which only the renderer knows.
+    const { items } = composeCover(marbled(), { measurer })
+    const ground = items.find((i) => i.kind === 'image' && i.id === GROUND_IMAGE_ID)!
+    if (ground.kind !== 'image') throw new Error('unreachable')
+    expect(ground.srcWidth).toBe(0)
   })
 })

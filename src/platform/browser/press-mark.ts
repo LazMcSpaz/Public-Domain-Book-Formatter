@@ -38,6 +38,17 @@
 /** How finely the mark is rendered, in dots per inch of printed size. */
 const MARK_DPI = 600
 
+/**
+ * And the ground, which is far larger and needs no more than KDP asks.
+ *
+ * A full 6×9 wrap at 300 DPI is 3888 × 2775 — eleven megapixels, which is a
+ * substantial canvas but well within what a browser will hold. Going to 600
+ * here, as the mark does, would be forty-three megapixels for a texture
+ * printing at eight per cent, and the file it encoded to would start competing
+ * with KDP's forty-megabyte ceiling.
+ */
+const GROUND_DPI = 300
+
 export interface RenderMarkInput {
   /** `data:image/svg+xml;…` or `data:image/png;…` — whatever the user supplied. */
   dataUrl: string
@@ -115,6 +126,73 @@ export async function renderPressMark(
   const blob: Blob = await new Promise((resolve, reject) => {
     canvas.toBlob(
       (result) => (result ? resolve(result) : reject(new Error('Could not encode the press mark'))),
+      'image/png'
+    )
+  })
+  return { bytes: new Uint8Array(await blob.arrayBuffer()), widthPx, heightPx }
+}
+
+/**
+ * Render a picture-backed ground across the sheet, in one ink.
+ *
+ * Same treatment as the mark and for the same reasons — white knocked out so
+ * the cover's own ground shows through, coverage taken from the source's
+ * darkness so its shading survives — with two differences that come from it
+ * being a texture rather than a device.
+ *
+ * It **fills** rather than fits: the artwork is square and the wrap is half as
+ * wide again, so it is scaled to cover and centre-cropped. Letterboxing a
+ * ground would leave bands of bare cover at the edges, and stretching it would
+ * turn every swirl into an ellipse.
+ *
+ * And it is painted in the **ink**, not left in the source's own greys. That
+ * holds the sheet to the two-colour discipline the rest of the design runs on;
+ * a neutral grey texture under a warm black type is two blacks, which reads as
+ * a printing error rather than as a decision.
+ */
+export async function renderGroundImage(input: {
+  /** Where the artwork lives, e.g. `/patterns/marbled.svg`. */
+  src: string
+  widthIn: number
+  heightIn: number
+  /** `#rrggbb` — the ink the texture prints in. */
+  color: string
+}): Promise<{ bytes: Uint8Array; widthPx: number; heightPx: number }> {
+  const img = await loadMark(input.src)
+  const widthPx = Math.max(1, Math.round(input.widthIn * GROUND_DPI))
+  const heightPx = Math.max(1, Math.round(input.heightIn * GROUND_DPI))
+
+  const canvas = document.createElement('canvas')
+  canvas.width = widthPx
+  canvas.height = heightPx
+  const ctx = canvas.getContext('2d', { willReadFrequently: true })
+  if (!ctx) throw new Error('Could not acquire a 2D canvas context')
+
+  // Cover: the biggest centred crop of the source with the sheet's proportions.
+  const naturalW = img.naturalWidth || widthPx
+  const naturalH = img.naturalHeight || heightPx
+  const scale = Math.max(widthPx / naturalW, heightPx / naturalH)
+  const drawW = naturalW * scale
+  const drawH = naturalH * scale
+  ctx.drawImage(img, (widthPx - drawW) / 2, (heightPx - drawH) / 2, drawW, drawH)
+
+  const image = ctx.getImageData(0, 0, widthPx, heightPx)
+  const data = image.data
+  const [r, g, b] = parseHex(input.color)
+  for (let i = 0; i < data.length; i += 4) {
+    const alpha = data[i + 3]!
+    const luminance = (data[i]! * 0.299 + data[i + 1]! * 0.587 + data[i + 2]! * 0.114) / 255
+    const coverage = alpha === 0 ? 0 : (alpha / 255) * (1 - luminance)
+    data[i] = r
+    data[i + 1] = g
+    data[i + 2] = b
+    data[i + 3] = Math.round(coverage * 255)
+  }
+  ctx.putImageData(image, 0, 0)
+
+  const blob: Blob = await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (result) => (result ? resolve(result) : reject(new Error('Could not encode the ground'))),
       'image/png'
     )
   })

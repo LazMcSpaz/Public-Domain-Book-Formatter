@@ -29,15 +29,44 @@
  */
 import type { OrnamentArt, OrnamentShape } from '@core/ornament'
 
-export type GroundPattern = 'laid' | 'fleuron' | 'aura' | 'guilloche'
+export type GroundPattern = 'laid' | 'fleuron' | 'aura' | 'guilloche' | 'marbled'
 
-export const GROUND_PATTERNS: readonly GroundPattern[] = ['laid', 'fleuron', 'aura', 'guilloche']
+export const GROUND_PATTERNS: readonly GroundPattern[] = [
+  'laid',
+  'fleuron',
+  'aura',
+  'guilloche',
+  'marbled'
+]
+
+/**
+ * The id a picture-backed ground is placed under.
+ *
+ * Four of the five patterns are drawn here as paths and reach the PDF as
+ * vector. `marbled` cannot: it is a *trace of a raster* — seventeen hundred
+ * paths and seven gradients — and `drawSvgPath` writes path data with a single
+ * flat fill, so every gradient would be lost and the whole sheet would come out
+ * solid. It is therefore rendered by the browser, which is a far better SVG
+ * renderer than this app will ever contain, at the size it prints.
+ */
+export const GROUND_IMAGE_ID = '__ground__'
+
+/** Where a picture-backed ground's file lives, relative to the app. */
+export const GROUND_IMAGE_SRC: Readonly<Partial<Record<GroundPattern, string>>> = {
+  marbled: '/patterns/marbled.svg'
+}
+
+/** Whether this ground is a picture rather than drawn paths. */
+export function isImageGround(pattern: GroundPattern): boolean {
+  return GROUND_IMAGE_SRC[pattern] !== undefined
+}
 
 export const PATTERN_LABEL: Readonly<Record<GroundPattern, string>> = {
   laid: 'Laid paper — the chain and laid lines of a handmade sheet',
   fleuron: 'A diaper of fleurons — the printer’s own flowers, in a lattice',
   aura: 'Auric ovoids — the diagram from The Human Aura, as a field',
-  guilloche: 'Guilloche — the engine-turned rosette of a share certificate'
+  guilloche: 'Guilloche — the engine-turned rosette of a share certificate',
+  marbled: 'Marbled paper — the swirled endpaper of a bound book'
 }
 
 export const PATTERN_NOTE: Readonly<Record<GroundPattern, string>> = {
@@ -46,7 +75,9 @@ export const PATTERN_NOTE: Readonly<Record<GroundPattern, string>> = {
     'Period-correct and yours: the same fleurons the interior sets, so the book is patterned with its own ornament.',
   aura: 'From the book itself. Geometric, strange, and unmistakably this series — a texture that came out of the text rather than off a shelf.',
   guilloche:
-    'The engraved lathe-work of 1910s commercial printing — banknotes, share certificates, diplomas. Expensive-looking and entirely of the period.'
+    'The engraved lathe-work of 1910s commercial printing — banknotes, share certificates, diplomas. Expensive-looking and entirely of the period.',
+  marbled:
+    'The house pattern. Supplied as artwork rather than drawn here, so it prints as a picture at the resolution the sheet needs rather than as paths.'
 }
 
 /** How strongly a ground prints, as a fraction of the ink. */
@@ -54,7 +85,8 @@ export const PATTERN_OPACITY: Readonly<Record<GroundPattern, number>> = {
   laid: 0.07,
   fleuron: 0.08,
   aura: 0.09,
-  guilloche: 0.06
+  guilloche: 0.06,
+  marbled: 0.08
 }
 
 const TWO_PI = Math.PI * 2
@@ -194,6 +226,11 @@ export function groundPattern(
   heightPt: number,
   fleuron: OrnamentArt | null
 ): PatternPlacement[] {
+  // A picture-backed ground places no paths; the composer emits an image item
+  // for it instead. Returning nothing here rather than throwing keeps this a
+  // total function over the pattern list.
+  if (isImageGround(pattern)) return []
+
   if (pattern === 'fleuron') {
     if (!fleuron) return []
     const target = 30

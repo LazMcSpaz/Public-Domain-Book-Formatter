@@ -14,12 +14,19 @@
  * Browser-only.
  */
 import type { ComposedCover, CoverDocument } from '@core/cover'
-import { composeCover, PRESS_MARK_ID, validateCover, type CoverValidationReport } from '@core/cover'
+import {
+  composeCover,
+  GROUND_IMAGE_ID,
+  GROUND_IMAGE_SRC,
+  PRESS_MARK_ID,
+  validateCover,
+  type CoverValidationReport
+} from '@core/cover'
 import { BUILTIN_ORNAMENTS } from '@core/ornament'
 import { fontTableFor } from './fonts'
 import { openPdf } from './pdf'
 import { renderCoverPdf, type CoverPdfResult } from './cover-pdf'
-import { renderPressMark } from './press-mark'
+import { renderGroundImage, renderPressMark } from './press-mark'
 
 export interface CoverPreview {
   /** A PNG object URL of the whole flat sheet. **Revoke it** — see `releaseCoverPreview`. */
@@ -35,7 +42,15 @@ export interface CoverPreview {
 }
 
 export interface CoverPreviewOptions {
-  /** Pixels per point. 1 is legible for a whole sheet on screen; 2 for a close look. */
+  /**
+   * Pixels per point. Defaults to 2, which is 144 to the inch.
+   *
+   * The interior's preview uses 1 because it renders four pages and a book is
+   * long. A cover is a single sheet, and the things this gate exists to judge —
+   * a ground printing at eight per cent, a device three-eighths of an inch
+   * wide — simply are not visible at 72. Half the reason to look is lost at
+   * the lower number, and it costs 2.5 megapixels.
+   */
   scale?: number
   /** PNG bytes for the cover's picture, keyed by `CoverArt.id`. */
   images?: ReadonlyMap<string, Uint8Array>
@@ -78,6 +93,22 @@ export async function renderCoverPreview(
     markItem.srcHeight = mark.heightPx
   }
 
+  // The ground, likewise rendered from the placed rectangle: a vector source
+  // has no pixel count of its own, so the size is decided by where it goes.
+  const groundItem = composed.items.find((i) => i.kind === 'image' && i.id === GROUND_IMAGE_ID)
+  const groundSrc = doc.look.groundPattern ? GROUND_IMAGE_SRC[doc.look.groundPattern] : undefined
+  if (groundItem && groundItem.kind === 'image' && groundSrc) {
+    const ground = await renderGroundImage({
+      src: groundSrc,
+      widthIn: groundItem.widthPt / 72,
+      heightIn: groundItem.heightPt / 72,
+      color: doc.look.palette.ink
+    })
+    images.set(GROUND_IMAGE_ID, ground.bytes)
+    groundItem.srcWidth = ground.widthPx
+    groundItem.srcHeight = ground.heightPx
+  }
+
   const pdf = await renderCoverPdf(composed, fonts, {
     title: doc.content.title,
     author: doc.content.author,
@@ -95,7 +126,7 @@ export async function renderCoverPreview(
       : { pageCountMeasured: options.pageCountMeasured })
   })
 
-  const { url, widthPx, heightPx } = await rasterize(pdf.bytes, options.scale ?? 1, options.signal)
+  const { url, widthPx, heightPx } = await rasterize(pdf.bytes, options.scale ?? 2, options.signal)
 
   return {
     url,

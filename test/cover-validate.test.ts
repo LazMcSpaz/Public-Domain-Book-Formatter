@@ -196,3 +196,16 @@ describe('a cover nobody has finished yet', () => {
     expect(r.ready).toBe(true)
   })
 })
+
+describe('the ground is not an intruder', () => {
+  it('does not trip the barcode check, drawn or supplied', () => {
+    // A ground runs under everything by design. A check that fires on every
+    // cover carrying one teaches the reader to skip it.
+    for (const pattern of ['guilloche', 'marbled'] as const) {
+      const doc = cover((d) => {
+        d.look.groundPattern = pattern
+      })
+      expect(check(report(doc), 'barcode').level).toBe('ok')
+    }
+  })
+})

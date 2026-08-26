@@ -15,6 +15,7 @@ import type { ValidationCheck, ValidationLevel } from '@core/model'
 import { effectiveDpi } from '@core/image'
 import type { ComposedCover, CoverItem } from './compose'
 import { itemBounds, PRESS_MARK_ID } from './compose'
+import { GROUND_IMAGE_ID } from './patterns'
 import {
   contains,
   overlaps,
@@ -64,6 +65,18 @@ function textItems(composed: ComposedCover) {
 interface InkedBound {
   item: CoverItem
   rect: Rect
+}
+
+/**
+ * Whether an item is the ground rather than something placed on it.
+ *
+ * Both kinds count: a drawn ground is ornament paths at low opacity, and a
+ * picture-backed one is an image under a well-known id. Neither is a thing
+ * someone put in the barcode's way.
+ */
+function isGround(item: CoverItem): boolean {
+  if (item.kind === 'ornament') return item.opacity !== undefined
+  return item.kind === 'image' && item.id === GROUND_IMAGE_ID
 }
 
 function inkedBounds(composed: ComposedCover): InkedBound[] {
@@ -177,7 +190,7 @@ export function validateCover(input: ValidateCoverInput): CoverValidationReport 
     // loses nothing. Flagging it would fire on every cover that has one and
     // teach the reader to skip this check, which is the only way it can fail.
     const intruding = inkedBounds(composed)
-      .filter(({ item }) => !(item.kind === 'ornament' && item.opacity !== undefined))
+      .filter(({ item }) => !isGround(item))
       .filter(({ rect }) => overlaps(rect, geometry.barcode))
     checks.push({
       id: 'barcode',
