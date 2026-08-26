@@ -190,7 +190,13 @@ const BANNED = [
   'q.v.',
   'tells anyone what to read',
   'is offered as a verdict',
-  'nothing here is offered'
+  'nothing here is offered',
+  // The standard comfort formula of this genre. It quietly tells the reader
+  // the question does not matter. It does; this editor simply does not presume
+  // to settle it for them.
+  'whether or not you believe',
+  'dear reader',
+  'gentle reader'
 ]
 
 /**
@@ -238,7 +244,7 @@ const DIRECTIONS = [
  * everywhere after. Hyphens inside compounds are untouched — only a dash with
  * space around it, or an em dash anywhere, is the construction meant.
  */
-const DASH = /\u2014|\s\u2013\s/gu
+const DASH = /\u2014|\u2013/gu
 
 /**
  * How many sentences of each kind are needed before a ratio is reported.
@@ -279,7 +285,7 @@ export const HEDGE_RATIO_LIMIT = 1.6
  */
 export const MIN_HEDGES = 3
 
-export type BiasKind = 'dismissal' | 'banned' | 'hedge' | 'dash' | 'direction'
+export type BiasKind = 'dismissal' | 'banned' | 'hedge' | 'dash' | 'direction' | 'rhythm' | 'person'
 
 export interface BiasFinding {
   kind: BiasKind
@@ -351,6 +357,8 @@ export interface ProseAudit {
    */
   hedgedTeaching: BiasFinding[]
   /** True when nothing here needs a person to look at it. */
+  /** Three or more sentences running in one length band. Reported, not enforced. */
+  flatStretches: BiasFinding[]
   clean: boolean
 }
 
@@ -382,6 +390,40 @@ function readingOf(text: string): { grade: number; wordsPerSentence: number } {
 }
 
 /** Sentence-ish. Abbreviations make this approximate, and approximate is fine. */
+/**
+ * Which length band a sentence sits in.
+ *
+ * The rule is "never three consecutive sentences in the same length band", and
+ * the bands are set where they are because the editor's own model passage
+ * clears them. Calibrated against that passage rather than chosen: a band
+ * scheme that flags known-good prose is a check that gets switched off.
+ */
+function band(sentence: string): 'short' | 'medium' | 'long' {
+  const words = sentence.trim().split(/\s+/u).filter(Boolean).length
+  if (words <= 11) return 'short'
+  return words <= 26 ? 'medium' : 'long'
+}
+
+/**
+ * Three sentences running in the same band, which is the flat rhythm the voice
+ * exists to avoid. Reported per paragraph: a run cannot cross a paragraph
+ * break, because the break is itself a change of pace.
+ */
+function flatRuns(paragraph: string): string[] {
+  const sentences = sentencesOf(paragraph).filter((x) => x.trim().split(/\s+/u).length > 2)
+  const runs: string[] = []
+  let start = 0
+  for (let i = 1; i <= sentences.length; i++) {
+    if (i < sentences.length && band(sentences[i]!) === band(sentences[start]!)) continue
+    if (i - start >= 3) runs.push(sentences.slice(start, i).join(' '))
+    start = i
+  }
+  return runs
+}
+
+/** Does one man speak in this? The voice is first person singular throughout. */
+const FIRST_PERSON = /\b(I|I'm|I'd|I've|I'll|me|my|mine|myself)\b/u
+
 function sentencesOf(text: string): string[] {
   return text
     .replace(/[ \t]+/gu, ' ')
@@ -427,7 +469,20 @@ const has = (haystack: string, needles: readonly string[]): string[] =>
  * sentence mentioning both a gland and an aura counts for both sides, because
  * that is exactly the sentence where the asymmetry does its work.
  */
-export function auditProse(raw: string): ProseAudit {
+export interface AuditOptions {
+  /**
+   * Require the first person singular.
+   *
+   * True for the editor's own front matter, where one man is speaking and has
+   * to be in the room. False for a glossary, where the impersonal register is
+   * correct: nobody wants "I think an aerolite is a meteorite." The rule is
+   * about the introduction, so the caller says which kind of piece this is
+   * rather than the check guessing from the words.
+   */
+  firstPerson?: boolean
+}
+
+export function auditProse(raw: string, options: AuditOptions = {}): ProseAudit {
   // Inline markup is notation, not prose, and it wrecks the sentence splitter:
   // `<b>Aerolite.</b> A stony meteorite.` has its full stop followed by `<`
   // rather than a space, so the two sentences read as one. A glossary with 126
@@ -465,6 +520,10 @@ export function auditProse(raw: string): ProseAudit {
     // the first sentence long enough to be one.
     const sentences = sentencesOf(paragraph)
     const opening = sentences.findIndex((x) => x.split(/\s+/u).length > HEADWORD_WORDS)
+
+    for (const run of flatRuns(paragraph)) {
+      findings.push({ kind: 'rhythm', match: band(sentencesOf(run)[0] ?? run), sentence: run })
+    }
 
     let index = -1
     for (const sentence of sentences) {
@@ -530,7 +589,25 @@ export function auditProse(raw: string): ProseAudit {
     ? openTraditionHedged / openTradition / Math.max(openScienceHedged / openScience, 1e-9)
     : null
 
-  const serious = findings.some((f) => f.kind !== 'hedge')
+  // One man is speaking, and he has to be in the room. A piece of any length
+  // with no first person singular in it has slipped into the impersonal
+  // register this voice was written against, and that is not a phrase a lexical
+  // scan can catch: it is an absence.
+  if (options.firstPerson === true && total > 3 && !FIRST_PERSON.test(text)) {
+    findings.push({
+      kind: 'person',
+      match: 'no first person singular',
+      sentence: sentencesOf(text.replace(/\n\s*\n/gu, ' '))[0] ?? ''
+    })
+  }
+
+  // Rhythm is reported and not enforced, for the same reason the reading grade
+  // is. "Never three consecutive sentences in the same length band" is a rule
+  // for the writer, and the editor's own model passage breaks it: its first
+  // paragraph runs 14, 20, 19 and 17 words. Failing prose the editor himself
+  // would write is how a check gets switched off, so this one surfaces flat
+  // stretches for a person to judge and leaves the verdict alone.
+  const serious = findings.some((f) => f.kind !== 'hedge' && f.kind !== 'rhythm')
   const leaning = (r: number | null): boolean => r !== null && r > HEDGE_RATIO_LIMIT
   return {
     findings,
@@ -545,6 +622,7 @@ export function auditProse(raw: string): ProseAudit {
     openingHedges: { tradition: openTraditionHedged, science: openScienceHedged },
     openingRatio,
     hedgedTeaching: findings.filter((f) => f.kind === 'hedge' && f.tradition),
+    flatStretches: findings.filter((f) => f.kind === 'rhythm'),
     reading: readingOf(text),
     clean: !serious && !leaning(ratio) && !leaning(openingRatio)
   }

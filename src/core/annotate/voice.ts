@@ -126,6 +126,17 @@ export interface EditorVoice {
    */
   avoid: string[]
   exemplars: VoiceExemplar[]
+  /**
+   * Passages of the editor's own front matter, as models of the register.
+   *
+   * Separate from `exemplars`, which are notes: a note is forty words hanging
+   * off a quoted phrase, and an introduction is prose that has to carry a
+   * person for several pages. They are different jobs and a good example of
+   * one teaches very little about the other. This is the place for the second
+   * kind, and it is what the pass is shown when it writes an introduction, a
+   * glossary preamble, or anything else the editor signs rather than annotates.
+   */
+  proseSamples: string[]
 }
 
 /**
@@ -150,7 +161,8 @@ export const VOICE_KEYS: readonly (keyof EditorVoice)[] = [
   'maxWords',
   'guidance',
   'avoid',
-  'exemplars'
+  'exemplars',
+  'proseSamples'
 ]
 
 /**
@@ -166,6 +178,7 @@ export function defaultVoice(): EditorVoice {
   return {
     penName: '',
     about: '',
+    proseSamples: [],
     density: 'balanced',
     kinds: [...ANNOTATION_KINDS],
     maxWords: 45,
@@ -334,7 +347,12 @@ export function normalizeVoice(raw: unknown): EditorVoice {
         .slice(-MAX_EXEMPLARS)
     : []
 
+  const proseSamples = Array.isArray(raw['proseSamples'])
+    ? raw['proseSamples'].filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+    : base.proseSamples
+
   return {
+    proseSamples,
     penName: str(raw['penName'], base.penName),
     about: str(raw['about'], base.about),
     density:

@@ -272,3 +272,71 @@ describe('markup is not prose', () => {
     expect(auditProse(tagged).reading.grade).toBeCloseTo(auditProse(plain).reading.grade, 5)
   })
 })
+
+/**
+ * The register the voice card is written against, checked against itself.
+ *
+ * This passage is the editor's own, supplied as the model of the voice. It is
+ * ground truth: any rule that flags it is a rule calibrated wrongly, not prose
+ * calibrated wrongly. The sentence-length bands in particular were set to clear
+ * it rather than chosen out of the air.
+ */
+const MODEL = `It is for this reason that I include glossaries in every book I edit. As movements, faiths, science, and culture have changed over the years so have the meanings of the words they use. I do my best to find the commonality between the terms which are often confusing in our modern day. Theosophical language did that for me, and I hope that it may do the same for you.
+
+There is a further matter. Charles W. Leadbeater is not a figure without controversy. In 1906 he resigned from the Theosophical Society over accusations concerning advice he had given to boys in his care. The sexual nature of the situation led to intense suspicion of Leadbeater, though he claimed his conversations with the boys were misunderstood. He was readmitted two years later under Annie Besant, and the argument over it has never really stopped. I raise the point because it is often one of the first things discussed regarding Leadbeater, and will invariably paint the reader's perception of him when they learn of it. Like many other figures in esoteric and occult circles, his character is suspect. Fortunately, we endeavor to view the whole picture, to not cast out valuable insights and information due to their source. Regardless of your thoughts on Leadbeater, many concepts in this book are corroborated by others through their own experiences and experiments. Read them with an open mind and decide for yourself. True knowledge is not derived through judgement, but through discernment.
+
+Set from the 1895 Theosophical Publishing Society edition.`
+
+describe('the voice as the editor writes it', () => {
+  it('passes the editor’s own model passage', () => {
+    const audit = auditProse(MODEL)
+    // Nothing that counts as a fault. Rhythm is advisory and the model trips
+    // it, which is exactly why it is advisory.
+    expect(audit.findings.filter((f) => f.kind !== 'rhythm')).toEqual([])
+    expect(audit.clean).toBe(true)
+  })
+
+  it('hears three sentences running in the same length band', () => {
+    // Three short ones in a row. The rule is a rhythm rule, so the check is
+    // about the run and not about any one sentence in it.
+    const flat = auditProse(
+      'The book is short. It was set in 1915. The author used a pen name. ' +
+        'I have read it perhaps a dozen times over the years, and it still ' +
+        'gives up something on a careful reading that a quick one misses.'
+    )
+    expect(flat.flatStretches).toHaveLength(1)
+    // Reported, not enforced: the editor's own model passage breaks the rule,
+    // so it surfaces the stretch and leaves the verdict alone.
+    expect(flat.clean).toBe(true)
+  })
+
+  it('notices when the man speaking has left the room', () => {
+    // Only asked of the editor's front matter. A glossary is impersonal on
+    // purpose, and demanding an "I" of a definition would be nonsense.
+    const impersonal = auditProse(
+      'The volume collects two manuals of the period. Both were issued under a ' +
+        'pen name, and both were reprinted many times. The vocabulary is ' +
+        'Theosophical throughout. Readers of the day would have met most of it ' +
+        'elsewhere, and would not have needed the glossary that follows here.',
+      { firstPerson: true }
+    )
+    expect(impersonal.findings.filter((f) => f.kind === 'person')).toHaveLength(1)
+  })
+
+  it('catches the comfort formula and the archaic address', () => {
+    const soft = auditProse(
+      'Whether or not you believe in the astral body, dear reader, the exercises repay the attempt.'
+    )
+    const banned = soft.findings.filter((f) => f.kind === 'banned').map((f) => f.match)
+    expect(banned).toContain('whether or not you believe')
+    expect(banned).toContain('dear reader')
+  })
+
+  it('rules out an en dash as well as an em dash', () => {
+    expect(
+      auditProse(
+        'The aura, he says \u2013 and he is firm on it \u2013 has colour.'
+      ).findings.filter((f) => f.kind === 'dash')
+    ).not.toHaveLength(0)
+  })
+})

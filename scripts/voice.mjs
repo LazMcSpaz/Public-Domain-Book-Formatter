@@ -188,6 +188,21 @@ try {
       what = `${written.length} section(s) and note(s) in ${target}`
     }
     const audit = annotate.auditProse(prose)
+    // The first person is asked of the editor's front matter only. A glossary
+    // is impersonal on purpose, and the whole file concatenated together would
+    // pass on one "I" in a footnote.
+    let frontAudit = null
+    if (target.endsWith('.json')) {
+      const book = JSON.parse(raw)
+      const front = (book.run?.edits ?? book.edits ?? []).find(
+        (e) => e.kind === 'section' && e.placement === 'front'
+      )
+      if (front)
+        frontAudit = {
+          title: front.title,
+          ...annotate.auditProse(front.text, { firstPerson: true })
+        }
+    }
     const { tradition, science } = audit.sentences
     console.log(what)
     console.log(
@@ -243,6 +258,24 @@ try {
       for (const f of audit.findings.filter((x) => x.kind === 'hedge' && !x.tradition)) {
         console.log(`  hedge (science) “${f.match}” — ${f.sentence.slice(0, 110)}`)
       }
+    }
+    if (audit.flatStretches.length > 0) {
+      console.log(
+        `\n  ${audit.flatStretches.length} flat stretch(es), three or more sentences in one length band.`
+      )
+      console.log('  Reported, not enforced: the voice’s own model passage breaks this rule.')
+      for (const f of audit.flatStretches.slice(0, 5)) {
+        console.log(`    ${f.match}: ${f.sentence.slice(0, 100)}`)
+      }
+    }
+    if (frontAudit) {
+      const lost = frontAudit.findings.filter((f) => f.kind === 'person')
+      console.log(
+        lost.length > 0
+          ? `\n  “${frontAudit.title}” is not in the first person. One man is meant to be speaking.`
+          : `\n  “${frontAudit.title}” speaks in the first person.`
+      )
+      if (lost.length > 0) process.exitCode = 1
     }
     console.log(audit.clean ? '\n  CLEAN' : '\n  NEEDS A LOOK')
     // The exit code is the point: this belongs in a checklist, not in a habit.
