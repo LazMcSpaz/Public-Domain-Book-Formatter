@@ -150,6 +150,22 @@ export interface ChapterEntry {
    * contents, or when the parse was not sound enough to trust.
    */
   synopsis?: string
+  /**
+   * What the original contents called this chapter, when that is not what the
+   * chapter head calls it.
+   *
+   * The regenerated contents takes its titles from the chapter heads, so where
+   * a book disagrees with itself the contents' own wording was silently
+   * replaced by the head's. *Thought Vibration* lists "Thought-Waves and Their
+   * Power of Reproduction" and heads the chapter "Process of Reproduction",
+   * both set clearly in 1908, and which the publishers meant is not
+   * recoverable; printing one in both places puts a word into the book that is
+   * not in it.
+   *
+   * Set only when the two differ, judged by `synopsisKey`, so a book whose
+   * pages agree carries nothing extra.
+   */
+  contentsTitle?: string
   /** Index into `blocks` where the chapter starts. */
   blockIndex: number
   sourcePage: number
@@ -648,6 +664,9 @@ export function assembleBook(
       const found = byTitle.get(synopsisKey(chapter.title)) ?? labelled.find((e) => !claimed.has(e))
       if (!found || claimed.has(found)) continue
       chapter.synopsis = found.synopsis
+      if (found.title && synopsisKey(found.title) !== synopsisKey(chapter.title)) {
+        chapter.contentsTitle = found.title
+      }
       claimed.add(found)
     }
     for (const entry of described) {

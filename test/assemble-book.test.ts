@@ -796,6 +796,84 @@ describe('assembleBook — matching a description by chapter number', () => {
     expect(doc.synopsesUnmatched).toEqual([])
   })
 
+  /**
+   * Where the two names differ, the contents keeps its own.
+   *
+   * The regenerated contents takes its titles from the chapter heads, so a book
+   * that calls a chapter one thing in its contents and another at its head had
+   * the contents name silently replaced by the head's. *Thought Vibration*
+   * lists "Thought-Waves and Their Power of Reproduction" and heads the chapter
+   * "Process of Reproduction", both set clearly, and the editor's ruling was to
+   * keep both where the book puts them.
+   *
+   * `contentsTitle` is set only when the two actually differ, so a book whose
+   * pages agree carries nothing extra and nothing changes shape.
+   */
+  it('remembers what the contents called a chapter, when that differs', () => {
+    const doc = assembleBook([
+      contents,
+      page(
+        1,
+        [
+          { kind: 'heading', text: 'CHAPTER V.', level: 1 },
+          { kind: 'heading', text: 'THE AURIC KALEIDOSCOPE.', level: 1 },
+          para('Body.')
+        ],
+        'chapter-opening'
+      ),
+      page(2, [
+        { kind: 'heading', text: 'CHAPTER VI.', level: 1 },
+        { kind: 'heading', text: 'THOUGHT FORMS.', level: 1 },
+        para('Body.')
+      ])
+    ])
+    const differs = doc.chapters.find((c) => c.title === 'THE AURIC KALEIDOSCOPE.')!
+    expect(differs.contentsTitle).toBe('The Aura Kaleidoscope')
+
+    // A plural against a singular is a real difference and is recorded too:
+    // *Thought Vibration* had one of exactly this kind.
+    expect(doc.chapters.find((c) => c.title === 'THOUGHT FORMS.')!.contentsTitle).toBe(
+      'Thought Form'
+    )
+  })
+
+  /**
+   * Nothing extra where the pages agree. Case and pointing are not a difference
+   * in what a chapter is called, which is what `synopsisKey` is for, so a
+   * contents that sets the same name differently records nothing.
+   */
+  it('records nothing when the two names are the same name', () => {
+    const doc = assembleBook([
+      page(
+        0,
+        [
+          { kind: 'heading' as const, text: 'CONTENTS' },
+          { kind: 'heading' as const, text: 'Chapter V. The Auric Kaleidoscope............ 39' },
+          para('What the astral body is composed of. Also the etheric double, at length.'),
+          { kind: 'heading' as const, text: 'Chapter VI. Thought Forms............ 47' },
+          para('What a Thought Form is and what it is made of, described at some length.')
+        ],
+        'table-of-contents'
+      ),
+      page(
+        1,
+        [
+          { kind: 'heading', text: 'CHAPTER V.', level: 1 },
+          { kind: 'heading', text: 'THE AURIC KALEIDOSCOPE.', level: 1 },
+          para('Body.')
+        ],
+        'chapter-opening'
+      ),
+      page(2, [
+        { kind: 'heading', text: 'CHAPTER VI.', level: 1 },
+        { kind: 'heading', text: 'THOUGHT FORMS.', level: 1 },
+        para('Body.')
+      ])
+    ])
+    expect(doc.chapters.every((c) => c.contentsTitle === undefined)).toBe(true)
+    expect(doc.chapters.filter((c) => c.synopsis).length).toBe(2)
+  })
+
   /** Exact, not fuzzy: a number matches its own number and no other. */
   it('does not hand chapter VI’s description to chapter IV', () => {
     const doc = assembleBook([

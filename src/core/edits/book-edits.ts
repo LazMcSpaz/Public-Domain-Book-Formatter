@@ -539,12 +539,23 @@ function chaptersOf(
   blocks: readonly BookBlock[],
   before: BookDocument['chapters']
 ): BookDocument['chapters'] {
-  const synopses = new Map(
-    before.filter((c) => c.synopsis !== undefined).map((c) => [c.id, c.synopsis!])
+  // Everything the original contents gave a chapter, carried as a whole rather
+  // than field by field. Carrying `synopsis` by name was right when it was the
+  // only such field, and it is exactly how the next one added beside it gets
+  // lost: `contentsTitle` would have gone the same way, silently, on every
+  // correction. Anything else recovered from that page belongs in this list.
+  const recovered = new Map(
+    before.map((c) => [
+      c.id,
+      {
+        ...(c.synopsis !== undefined ? { synopsis: c.synopsis } : {}),
+        ...(c.contentsTitle !== undefined ? { contentsTitle: c.contentsTitle } : {})
+      }
+    ])
   )
   return deriveChapters(blocks).map((chapter) => {
-    const synopsis = synopses.get(chapter.id)
-    return synopsis === undefined ? chapter : { ...chapter, synopsis }
+    const from = recovered.get(chapter.id)
+    return from === undefined ? chapter : { ...chapter, ...from }
   })
 }
 

@@ -993,7 +993,8 @@ describe('chapters survive an edit', () => {
         level: 1,
         blockIndex: 0,
         sourcePage: 0,
-        synopsis: 'What the senses report, and what they leave out.'
+        synopsis: 'What the senses report, and what they leave out.',
+        contentsTitle: 'The Astral Senses of Man'
       }
     ],
     asides: [],
@@ -1007,6 +1008,25 @@ describe('chapters survive an edit', () => {
     const out = applyEdits(doc(), [])
     expect(out.chapters).toHaveLength(1)
     expect(out.chapters[0]!.synopsis).toBe('What the senses report, and what they leave out.')
+  })
+
+  /**
+   * And everything else read off that page with it.
+   *
+   * `chaptersOf` carried `synopsis` by name, which was the whole of what the
+   * contents gave a chapter when it was written. `contentsTitle` is the second
+   * thing it gives, and a list that carries one field by name loses the next
+   * one added beside it, silently, on every correction. That is the fault this
+   * whole block of tests exists for, one field later.
+   */
+  it('keeps the name the original contents used, too', () => {
+    const out = applyEdits(doc(), [])
+    expect(out.chapters[0]!.contentsTitle).toBe('The Astral Senses of Man')
+
+    const retyped = applyEdits(doc(), [
+      { kind: 'text', blockId: 'p0b1', text: 'THE ASTRAL SENSES' }
+    ])
+    expect(retyped.chapters[0]!.contentsTitle).toBe('The Astral Senses of Man')
   })
 
   it('still groups the run after a heading is retyped', () => {

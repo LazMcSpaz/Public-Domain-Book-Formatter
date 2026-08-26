@@ -325,6 +325,37 @@ describe('layout — notes with no reference mark', () => {
     )
   })
 
+  /**
+   * Where the book calls a chapter two things, each page keeps its own.
+   *
+   * The regenerated contents takes its titles from the chapter heads, so the
+   * contents' own wording was silently replaced by the head's. Printing one in
+   * both places puts a word into the book that is not in it, and which the
+   * publishers meant is not recoverable.
+   */
+  it('prints the name the original contents used, where that differs', () => {
+    const doc = build([
+      page(0, [
+        { kind: 'heading', text: 'THE PROCESS OF REPRODUCTION' },
+        { kind: 'paragraph', text: PROSE }
+      ])
+    ])
+    const named = {
+      ...doc,
+      chapters: doc.chapters.map((c) => ({
+        ...c,
+        contentsTitle: 'Thought-Waves and Their Power of Reproduction'
+      }))
+    }
+    const book = layoutWithToc(named, defaultStyleProfile(), measurer, { edition: EDITION })
+    const contents = textOf(book.pages.find((p) => p.kind === 'contents')!)
+    expect(contents).toContain('Power of Reproduction')
+    expect(contents).not.toContain('PROCESS OF REPRODUCTION')
+
+    // And the chapter itself still says what the chapter says.
+    expect(bookText(book)).toContain('THE PROCESS OF REPRODUCTION')
+  })
+
   it('gives a book with nothing but stranded notes a contents page anyway', () => {
     // No chapters, so the single-pass shortcut would otherwise skip the
     // contents — and the one section this book has would go unlisted.

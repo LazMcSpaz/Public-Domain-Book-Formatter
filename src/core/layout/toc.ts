@@ -76,7 +76,11 @@ export function layoutWithToc(
       .filter((chapter) => !profile.contentsSynopsis || (chapter.level ?? 1) === 1)
       .map((chapter) => ({
         id: chapter.id,
-        title: chapter.title,
+        // The name the book's own contents gave it, where the two pages
+        // disagree. Printing the chapter head in both places would replace the
+        // contents' wording with the head's, and which the publishers meant is
+        // not recoverable from the paper.
+        title: chapter.contentsTitle ?? chapter.title,
         ...(chapter.label ? { label: chapter.label } : {}),
         level: chapter.level,
         // Only when the style asks. The descriptions are long — twenty of them
