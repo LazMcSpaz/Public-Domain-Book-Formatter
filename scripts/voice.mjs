@@ -38,6 +38,7 @@
  *   node scripts/voice.mjs compile                  # the card as .claude/agents/etsu.md
  *   node scripts/voice.mjs brief <book-dir>         # the dossier, and ask for a shape
  *   node scripts/voice.mjs brief <book-dir> --stage write --outline o.md
+ *                                                   # --length brief|standard|full|<words>
  *   node scripts/voice.mjs audit book.json          # the bias pass, after the writing
  *   node scripts/voice.mjs check notes.json body.json
  *
@@ -638,7 +639,8 @@ try {
       context: typeof opts.context === 'string' ? opts.context : ''
     }
     const missing = ['title', 'author', 'originalYear'].filter((k) => !facts[k].trim())
-    const length = typeof opts.length === 'string' ? opts.length : 'standard'
+    const rawLength = typeof opts.length === 'string' ? opts.length : 'standard'
+    const length = /^\d+$/u.test(rawLength) ? Number(rawLength) : rawLength
     const { user } = annotate.buildIntroductionPrompt(doc, {
       voice,
       facts,

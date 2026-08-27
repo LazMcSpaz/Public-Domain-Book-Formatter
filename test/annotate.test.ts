@@ -19,6 +19,7 @@ import {
   draftIntroduction,
   apparatusOf,
   introductionOutlineTask,
+  introductionWords,
   parseIntroduction,
   sampleBook,
   proseBlock,
@@ -889,6 +890,33 @@ describe('the editor’s introduction', () => {
       const unmarked = withApparatus()
       expect(apparatusOf(unmarked).join('\n')).toContain('No glossary marks in the text.')
     })
+  })
+
+  // The three names were enough while a piece was drafted from a dial. The
+  // first real approved outline asked for 1,800 to 2,200 words and the prompt
+  // printed "aim for about 1400 words" three lines under it, which is a worse
+  // instruction than either number alone.
+  it('takes a word count as readily as one of its three sizes', () => {
+    expect(introductionWords('full')).toBe(1400)
+    expect(introductionWords(2200)).toBe(2200)
+    const { system } = buildIntroductionPrompt(bookOfChapters(), {
+      voice: defaultVoice(),
+      length: 2200
+    })
+    expect(system).toContain('2200 words')
+    expect(system).not.toContain('1400 words')
+  })
+
+  it('floors a nonsense length rather than refusing to render a briefing', () => {
+    expect(introductionWords(-50)).toBe(100)
+  })
+
+  it('says which number wins when a shape has been approved', () => {
+    const { system } = buildIntroductionPrompt(bookOfChapters(), {
+      voice: defaultVoice(),
+      outline: 'Three movements. Target 2,000 words.'
+    })
+    expect(system).toContain('including over any word count given below')
   })
 
   it('parses paragraphs into the shape a section edit already takes', () => {

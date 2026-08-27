@@ -58,13 +58,33 @@ export const INTRODUCTION_SCHEMA = {
   additionalProperties: false
 } as const
 
-/** How long an introduction runs, in words. */
-export type IntroductionLength = 'brief' | 'standard' | 'full'
+/**
+ * How long an introduction runs: one of three sizes, or a word count.
+ *
+ * The three names were enough while a piece was drafted in one shot from a
+ * dial the user turned. They stopped being enough the moment an approved
+ * outline could state its own target: the first real one asked for 1,800 to
+ * 2,200 words and two blocks besides, and the prompt printed "aim for about
+ * 1400 words" three lines under it. Telling a writer which of two numbers to
+ * obey is a worse instruction than either number alone.
+ */
+export type IntroductionLength = 'brief' | 'standard' | 'full' | number
 
-export const INTRODUCTION_WORDS: Record<IntroductionLength, number> = {
+export const INTRODUCTION_WORDS: Record<'brief' | 'standard' | 'full', number> = {
   brief: 350,
   standard: 700,
   full: 1400
+}
+
+/** The target in words, whichever way it was asked for. */
+export function introductionWords(length: IntroductionLength = 'standard'): number {
+  if (typeof length === 'number') {
+    // Floored rather than rejected: a caller asking for eighty words wants a
+    // paragraph, and a hard failure here would be a briefing that does not
+    // render over a number somebody typed.
+    return Math.max(100, Math.round(length))
+  }
+  return INTRODUCTION_WORDS[length]
 }
 
 /** How many extracts of the book to show, and how long each runs. */
@@ -189,7 +209,7 @@ export function noteOnTheText(rulings: readonly Ruling[]): string[] {
  * instead of to the book.
  */
 export function introductionOutlineTask(length: IntroductionLength = 'standard'): string {
-  const words = INTRODUCTION_WORDS[length]
+  const words = introductionWords(length)
   return [
     `FIRST, THE SHAPE. Do not write the introduction yet.`,
     ``,
@@ -246,7 +266,7 @@ export function introductionTask(
   length: IntroductionLength = 'standard',
   approvedOutline = ''
 ): string {
-  const words = INTRODUCTION_WORDS[length]
+  const words = introductionWords(length)
   const outline = approvedOutline.trim()
   return [
     ...(outline
@@ -257,7 +277,8 @@ export function introductionTask(
           ``,
           `It is approved, so do not redesign it. Where it and the rules below`,
           `disagree, the outline wins on *shape* — what goes in, in what order,`,
-          `at what length — and the rules win on everything else. If a movement`,
+          `at what length, including over any word count given below — and the`,
+          `rules win on everything else. If a movement`,
           `turns out not to be carried by the material, write the rest and say`,
           `so at the end under \`QUERIES:\`, rather than quietly filling it or`,
           `quietly dropping it.`,

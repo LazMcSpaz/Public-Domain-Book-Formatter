@@ -62,6 +62,7 @@ export {
   draftIntroduction,
   introductionOutlineTask,
   introductionTask,
+  introductionWords,
   noteOnTheText,
   parseIntroduction,
   sampleBook,
