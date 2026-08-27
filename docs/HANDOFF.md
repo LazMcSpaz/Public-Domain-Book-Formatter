@@ -84,7 +84,11 @@ shelf ends up describing a book it no longer holds.
   raising something already settled.
 - **The voice.** `voice/<pen-name>.json` carries the persona, the guidance and
   the avoid list. Read it before writing a word of introduction, note or
-  glossary. Two rules in it are easy to break by accident: never hedge an
+  glossary — or better, hand the facts to the `etsu` subagent
+  (`.claude/agents/etsu.md` in the formatter repo), which is the same card as a
+  system prompt and writes in the voice rather than being checked against it.
+  It is available from the start of a session and not before: an agent
+  definition added mid-session cannot be used until the next one. Two rules in it are easy to break by accident: never hedge an
   established teaching, and never tell the reader what to read next. Naming the
   book a quotation comes from identifies it; "the best place to go from here"
   directs, and that choice is the reader's.

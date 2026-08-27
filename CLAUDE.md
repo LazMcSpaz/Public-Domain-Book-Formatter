@@ -164,6 +164,22 @@ The editor's voice card (`voice/<pen-name>.json` on the shelf, and
 `scripts/voice.mjs` to read it) carries the same rules in the form the writing
 is actually done against. Read it before writing anything that goes in a book.
 
+**Better than reading it: write as him.** `.claude/agents/etsu.md` is the same
+card compiled into a subagent — the stance, the construction rules, the avoid
+list and a passage of the editor's own prose, in a system prompt. Brief it with
+the book's verified facts and it returns front matter written in the voice
+rather than checked against it afterwards, which is a different and better
+thing: a writer who has the rules cannot produce a draft that has to be argued
+back into them. The card and the agent say the same things on purpose, and the
+card stays the source — it is the file the app reads, and the one that travels
+with a shelf that has no formatter checkout beside it. The agent is how the
+writing gets done.
+
+It lives in the formatter repo rather than on the shelf because that is where a
+session that can run the checks is already standing, and because an agent
+definition is only loaded at the _start_ of a session: a card fetched mid-job
+can be read, but an agent added mid-job cannot be used until the next one.
+
 ### How a book gets read, and what checks it
 
 No API. Transcription and annotation both happen in a session, which changes
