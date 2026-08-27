@@ -11,6 +11,7 @@ import { BUILTIN_ORNAMENTS } from '@core/ornament'
 import {
   artFrame,
   blurbFrame,
+  contains,
   GROUND_IMAGE_ID,
   groundPattern,
   isImageGround,
@@ -647,5 +648,47 @@ describe('a picture-backed ground', () => {
     const ground = items.find((i) => i.kind === 'image' && i.id === GROUND_IMAGE_ID)!
     if (ground.kind !== 'image') throw new Error('unreachable')
     expect(ground.srcWidth).toBe(0)
+  })
+})
+
+describe('the back cover is set to a readable measure', () => {
+  it('sits an inch in from both trimmed edges of the back panel', () => {
+    const g = coverGeometry({ trimSize: '6x9', pageCount: 168, paper: 'bw-cream' })
+    const frame = blurbFrame(g)
+    expect(frame.x - g.back.x).toBeCloseTo(1, 6)
+    expect(g.back.x + g.back.width - (frame.x + frame.width)).toBeCloseTo(1, 6)
+    expect(frame.width).toBeCloseTo(4, 6)
+  })
+
+  it('narrows and centres rather than stretching on a wide trim', () => {
+    // An inch either side of an 8.5×11 still leaves six and a half inches,
+    // which is a hundred and thirteen characters a line and worse than the
+    // problem the inset was added to fix.
+    const g = coverGeometry({ trimSize: '8.5x11', pageCount: 200, paper: 'bw-white' })
+    const frame = blurbFrame(g)
+    expect(frame.width).toBeLessThan(g.back.width - 2)
+    const leftGap = frame.x - g.back.x
+    const rightGap = g.back.x + g.back.width - (frame.x + frame.width)
+    expect(leftGap).toBeCloseTo(rightGap, 6)
+  })
+
+  it('keeps the copy clear of the barcode and inside the safe area', () => {
+    const g = coverGeometry({ trimSize: '6x9', pageCount: 168, paper: 'bw-cream' })
+    const frame = blurbFrame(g)
+    expect(overlaps(frame, g.barcode)).toBe(false)
+    expect(contains(g.backSafe, frame)).toBe(true)
+  })
+
+  it('aligns the imprint with the copy above it', () => {
+    const doc = bookCover((d) => {
+      d.content.blurb = 'A paragraph of back-cover copy.'
+      d.content.imprint = 'Libri Vetus'
+    })
+    const { items, geometry } = composeCover(doc, { measurer })
+    const frame = blurbFrame(geometry)
+    const imprint = texts(items).find((t) => t.text === 'Libri Vetus')!
+    // Not the safe area: an imprint three quarters of an inch to the left of
+    // the only other text on the panel reads as having come adrift from it.
+    expect(imprint.xPt / 72).toBeCloseTo(frame.x, 6)
   })
 })

@@ -212,6 +212,29 @@ const SUBTITLE_RATIO = 0.42
 const AUTHOR_RATIO = 0.38
 
 const BLURB_PT = 10.5
+
+/**
+ * How far the back-cover copy sits in from each trimmed edge.
+ *
+ * Far more than the quarter inch the safe area requires, and not for safety.
+ * It is the **measure**. Set to the full safe width of a 6×9 back cover, this
+ * copy runs about ninety-five characters to the line, where comfortable
+ * reading is forty-five to seventy-five: the eye loses its place on the return
+ * sweep and the block reads as dense before a word of it has been taken in.
+ * An inch brings a 6×9 to roughly seventy.
+ */
+const BLURB_SIDE_INSET_IN = 1
+
+/**
+ * The widest the copy is allowed to set, whatever the trim.
+ *
+ * A fixed inset alone does not generalise: an inch either side of an 8.5×11
+ * back cover still leaves six and a half inches, which is a hundred and
+ * thirteen characters and worse than what this was meant to fix. So the inset
+ * is a floor and this is a ceiling, and on a wide trim the block is centred in
+ * what is left rather than stretched across it.
+ */
+const BLURB_MAX_MEASURE_IN = 4.6
 const IMPRINT_PT = 9
 const LEADING = 1.25
 
@@ -478,8 +501,16 @@ export function blurbFrame(geometry: CoverGeometry): Rect {
   // Back-cover copy set at the very top of the panel reads as a caption that
   // slid; every printed book puts it in the upper middle.
   const inset = geometry.backSafe.height * 0.12
+
+  // In from both trimmed edges by the inset, then narrowed further and centred
+  // if that still leaves too long a line to read.
+  const available = Math.max(0, geometry.back.width - BLURB_SIDE_INSET_IN * 2)
+  const width = Math.min(available, BLURB_MAX_MEASURE_IN)
+  const x = geometry.back.x + (geometry.back.width - width) / 2
+
   const safe = {
-    ...geometry.backSafe,
+    x,
+    width,
     y: geometry.backSafe.y + inset,
     height: geometry.backSafe.height - inset
   }
@@ -1014,7 +1045,10 @@ function layBackCover(
       text: content.imprint,
       font,
       sizePt: IMPRINT_PT,
-      xPt: pt(geometry.backSafe.x),
+      // Aligned with the copy above it, not with the safe area. An imprint
+      // sitting three quarters of an inch to the left of the only other text
+      // on the panel reads as having come adrift from it.
+      xPt: pt(frame.x),
       yPt: pt(geometry.backSafe.y + geometry.backSafe.height) - m.descent,
       color: palette.ink,
       widthPt: measurer.widthOf(content.imprint, font, IMPRINT_PT),
