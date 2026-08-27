@@ -19,13 +19,17 @@ import {
   draftIntroduction,
   parseIntroduction,
   sampleBook,
+  proseBlock,
   voiceBlock,
   withExemplar,
+  withProseSample,
   MAX_EXEMPLARS,
+  MAX_PROSE_SAMPLES,
   type AnnotationProposal,
   type CheckedProposal,
   type EditorVoice
 } from '@core/annotate'
+import { GLOSSARY_MARK } from '@core/annotate'
 import { applyEdits } from '@core/edits'
 import { initialState, STEPS, stepById, type WizardState } from '@core/wizard'
 import type { BookBlock, BookDocument } from '@core/assemble'
@@ -673,6 +677,13 @@ describe('the editor’s introduction', () => {
     expect(new Set(samples).size).toBe(samples.length)
   })
 
+  it('does not put this edition’s glossary marks in the author’s mouth', () => {
+    const marked = doc([block(`${long(1).trim()} the trolley-pole${GLOSSARY_MARK} again.`)])
+    const [sample] = sampleBook(marked, 1)
+    expect(sample).toBeDefined()
+    expect(sample).not.toContain(GLOSSARY_MARK)
+  })
+
   it('forbids the introduction that would fit any book of the period', () => {
     const { system } = buildIntroductionPrompt(bookOfChapters(), { voice: defaultVoice() })
     expect(system).toContain('Do not write the generic')
@@ -685,6 +696,73 @@ describe('the editor’s introduction', () => {
       length: 'brief'
     }).system
     expect(brief).toContain('350 words')
+  })
+
+  // The register is the one thing a card cannot state. Every rule in `about`,
+  // `guidance` and `avoid` describes how the editor sounds; only a passage of
+  // his own prose *is* how he sounds. The field held it, banked it and carried
+  // it between books, and `voiceBlock` never emitted it, so nothing this app
+  // ever wrote had seen a line of him.
+  it('shows the editor his own prose before asking for more of it', () => {
+    const voice: EditorVoice = {
+      ...defaultVoice(),
+      proseSamples: ['Set from the 1895 Theosophical Publishing Society edition.']
+    }
+    const { system } = buildIntroductionPrompt(bookOfChapters(), { voice })
+    expect(system).toContain('1895 Theosophical Publishing Society')
+  })
+
+  it('asks for the register and not the subject', () => {
+    const voice: EditorVoice = { ...defaultVoice(), proseSamples: ['A passage of his.'] }
+    const { system } = buildIntroductionPrompt(bookOfChapters(), { voice })
+    expect(system).toContain('Do not match its subject')
+  })
+
+  it('says nothing at all when the editor has published nothing yet', () => {
+    const { system } = buildIntroductionPrompt(bookOfChapters(), { voice: defaultVoice() })
+    expect(system).not.toContain('PROSE THIS EDITOR')
+  })
+
+  // The other half of the same distinction. A page of introduction in the
+  // cached half of the annotation prompt would teach a forty-word note
+  // nothing and be paid for on every chunk of every book.
+  it('keeps the front matter out of the notes prompt', () => {
+    const voice: EditorVoice = {
+      ...defaultVoice(),
+      proseSamples: ['Set from the 1895 Theosophical Publishing Society edition.']
+    }
+    expect(voiceBlock(voice)).not.toContain('1895 Theosophical')
+  })
+
+  it('keeps the newest few, and never the same passage twice', () => {
+    let voice = defaultVoice()
+    for (let i = 0; i < MAX_PROSE_SAMPLES + 2; i++) {
+      voice = withProseSample(voice, `Introduction number ${i}.`)
+    }
+    expect(voice.proseSamples).toHaveLength(MAX_PROSE_SAMPLES)
+    expect(voice.proseSamples.at(-1)).toContain(`number ${MAX_PROSE_SAMPLES + 1}`)
+    expect(voice.proseSamples[0]).not.toContain('number 0')
+
+    const before = voice.proseSamples.length
+    const oldest = voice.proseSamples[0]!
+    voice = withProseSample(voice, oldest)
+    expect(voice.proseSamples).toHaveLength(before)
+    expect(voice.proseSamples.at(-1)).toBe(oldest)
+    expect(voice.proseSamples.filter((s) => s === oldest)).toHaveLength(1)
+  })
+
+  it('shows only the newest few, however many the file carries', () => {
+    const many = Array.from({ length: MAX_PROSE_SAMPLES + 3 }, (_, i) => `Passage ${i}.`)
+    const card = proseBlock({ ...defaultVoice(), proseSamples: many })
+    expect(card).not.toContain('Passage 0.')
+    expect(card).toContain(`Passage ${MAX_PROSE_SAMPLES + 2}.`)
+  })
+
+  it('prints no empty passage line for a note banked without one', () => {
+    const voice = withExemplar(defaultVoice(), { passage: '', note: 'A note of his.' })
+    const card = voiceBlock(voice)
+    expect(card).toContain('Note: A note of his.')
+    expect(card).not.toContain('Passage:')
   })
 
   it('parses paragraphs into the shape a section edit already takes', () => {

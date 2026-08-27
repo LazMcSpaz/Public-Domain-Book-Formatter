@@ -6,9 +6,12 @@ Guidance for AI assistants (and humans) working in this repo.
 
 **Starting cold on a book?** Read [`docs/HANDOFF.md`](./docs/HANDOFF.md)
 first, then the process it points at:
-[`PROCESS-reading.md`](./docs/PROCESS-reading.md) for getting the text right
-and [`PROCESS-edition.md`](./docs/PROCESS-edition.md) for turning a read book
-into a printed one.
+[`PROCESS-reading.md`](./docs/PROCESS-reading.md) for getting the text right,
+[`PROCESS-edition.md`](./docs/PROCESS-edition.md) for turning a read book
+into a printed one, and
+[`PROCESS-writing.md`](./docs/PROCESS-writing.md) for the introduction, the
+notes and the glossary — the part that is written rather than recovered, and
+the part this session is worst placed to do itself.
 
 A **browser** app (React + TypeScript + Vite) that turns public-domain books —
 scanned PDFs, or EPUBs that are already text — into print-ready **KDP**
@@ -155,10 +158,12 @@ limits to make a draft pass; fix the draft, and re-run.
 
 **What the audit cannot see is flatness** — whether an entry is so dry nobody
 who read it would want to try anything. That needs a reader, and it is the
-other half of the pass. Read the doctrinal entries end to end and ask whether
-they sound like they were written by someone who finds the material alive.
-Pretending a word list could stand in for that would be the same error the
-module exists to catch.
+other half of the pass. `.claude/agents/first-reader.md` is that reader: it is
+shown the draft and deliberately **not** the voice card, because a reader
+holding the rules grades against the rules and misses the three paragraphs where
+their attention went. It reports findings and never prose, for the same reason
+the writer is never handed a sentence. Pretending a word list could stand in for
+it would be the same error the audit module exists to catch.
 
 The editor's voice card (`voice/<pen-name>.json` on the shelf, and
 `scripts/voice.mjs` to read it) carries the same rules in the form the writing
@@ -166,14 +171,28 @@ is actually done against. Read it before writing anything that goes in a book.
 
 **Better than reading it: write as him.** `.claude/agents/etsu.md` is the same
 card compiled into a subagent — the stance, the construction rules, the avoid
-list and a passage of the editor's own prose, in a system prompt. Brief it with
-the book's verified facts and it returns front matter written in the voice
-rather than checked against it afterwards, which is a different and better
-thing: a writer who has the rules cannot produce a draft that has to be argued
-back into them. The card and the agent say the same things on purpose, and the
-card stays the source — it is the file the app reads, and the one that travels
-with a shelf that has no formatter checkout beside it. The agent is how the
-writing gets done.
+list, the editor's own published front matter and his approved notes, in a
+system prompt. Brief it with the book's verified facts and it returns front
+matter written in the voice rather than checked against it afterwards, which is
+a different and better thing: a writer who has the rules cannot produce a draft
+that has to be argued back into them.
+
+The card stays the source — it is the file the app reads, and the one that
+travels with a shelf that has no formatter checkout beside it — and the agent
+is **generated from it** by `node scripts/voice.mjs compile`. It used to say in
+its own last paragraph that the two would drift and that a session would then
+write in a voice nobody approved, with nothing stopping it. Now nothing has to:
+an edit to the agent is lost on the next compile, and every exemplar the shelf
+has banked since the last one arrives with it.
+
+`node scripts/voice.mjs harvest` is the other half of that loop, and the reason
+it had to be built is worth stating plainly. `proseSamples` and `exemplars` were
+both designed to accrete from work the editor accepted, and both accrete at a
+_gate_ — so once the books were made in a conversation, neither ever did. Four
+published introductions and fifty-seven approved notes sat on the shelf while
+the card carried one hand-typed passage and an empty list, and `voiceBlock`
+never emitted the passage either. Every piece of prose this app has helped write
+was written by something that had never read a line of the editor.
 
 It lives in the formatter repo rather than on the shelf because that is where a
 session that can run the checks is already standing, and because an agent
@@ -431,6 +450,22 @@ node scripts/book-files.mjs <book-dir> --check   # do the readable files still
                                      #   describe the book? regenerates them
                                      #   without --check
 ```
+
+Writing the apparatus (see [`PROCESS-writing.md`](./docs/PROCESS-writing.md)):
+
+```bash
+node scripts/voice.mjs brief <book-dir> --out b.md  # the dossier a writer gets,
+                                     #   rendered by the module the API uses
+node scripts/voice.mjs audit <book.json>            # the bias pass, deterministic
+node scripts/voice.mjs harvest       # the shelf's approved work → the card
+node scripts/voice.mjs compile       # the card → .claude/agents/etsu.md
+node scripts/voice.mjs prose         # what front matter the writer has of its own
+```
+
+**The session never writes the prose and never patches it.** The `etsu` subagent
+writes; the audit and `first-reader` report findings; the findings go back to the
+writer. A sentence fixed here is a sentence in this session's voice, and a piece
+fixed twenty times here is in nobody's.
 
 **Reading a leaf is `draft` → look → correct → `transcribe`.** Never type a leaf
 out from the render: that is the generative act the whole design avoids, and a

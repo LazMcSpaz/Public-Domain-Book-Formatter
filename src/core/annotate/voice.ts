@@ -102,6 +102,24 @@ export interface VoiceExemplar {
  */
 export const MAX_EXEMPLARS = 6
 
+/**
+ * How many passages of the editor's own front matter ride along.
+ *
+ * A different number from `MAX_EXEMPLARS` and for a different reason. An
+ * exemplar is forty words and is paid for on every chunk of every book, so the
+ * cost of one more is charged hundreds of times. A prose sample is a page and
+ * is shown once, when a piece of front matter is written, so the constraint is
+ * not price but crowding: past a handful the writer is reading more of itself
+ * than of the book it is introducing, and starts producing another
+ * introduction to the same shelf rather than the first to this book.
+ *
+ * Four rather than three because one slot is routinely a short calibration
+ * passage banked by hand — the editor's own words about how he sounds, which
+ * runs a couple of hundred words where a published introduction runs two
+ * thousand. Three at the old cap meant two real introductions.
+ */
+export const MAX_PROSE_SAMPLES = 4
+
 export interface EditorVoice {
   /** The name the notes are signed with, e.g. a pen name. */
   penName: string
@@ -276,11 +294,67 @@ export function voiceBlock(voice: EditorVoice): string {
       `of explaining — not their subject matter:`
     )
     for (const ex of exemplars) {
-      parts.push(``, `Passage: ${ex.passage.trim()}`, `Note: ${ex.note.trim()}`)
+      // The passage line is dropped when there is none rather than printed
+      // empty. A note banked from a finished book has only the note: the
+      // words it hangs on live in the *assembled* block at a character
+      // offset, and the leaf's own text is not the block's text, so the
+      // passage is either recovered properly or left out. Printing
+      // `Passage:` with nothing after it would teach the pass that an
+      // exemplar normally has no passage, which is the opposite of true.
+      const passage = ex.passage.trim()
+      parts.push(``, ...(passage ? [`Passage: ${passage}`] : []), `Note: ${ex.note.trim()}`)
     }
   }
 
   return parts.join('\n')
+}
+
+/**
+ * The editor's own published front matter, as the calibration for writing more.
+ *
+ * Kept out of `voiceBlock` on purpose, and this is the whole distinction the
+ * two fields exist to draw. A note is forty words hanging off a quoted phrase;
+ * an introduction is prose that has to carry a person for several pages. They
+ * are different jobs, a good example of one teaches very little about the
+ * other, and putting a page of introduction into the cached half of every
+ * annotation prompt would buy nothing and be paid for on every chunk.
+ *
+ * The instruction says *register* rather than *subject* for the reason the
+ * exemplars say it: three introductions to books by the same author are three
+ * chances to write the fourth one about the third book.
+ */
+export function proseBlock(voice: EditorVoice): string {
+  const samples = voice.proseSamples
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(-MAX_PROSE_SAMPLES)
+  if (samples.length === 0) return ''
+
+  const parts: string[] = [
+    `PROSE THIS EDITOR HAS ALREADY PUT HIS NAME TO.`,
+    `This is the register. Everything above describes how he sounds; this is`,
+    `the only place you can hear it. Match its pace, its plainness, its`,
+    `willingness to raise an uncomfortable fact and then leave it alone, and`,
+    `its habit of varying how a paragraph lands.`,
+    `Do not match its subject and do not reuse its sentences.`,
+    `What is wanted is the same man writing about a different book.`
+  ]
+  for (const sample of samples) parts.push(``, `---`, ``, sample)
+  return parts.join('\n')
+}
+
+/**
+ * Bank a passage of accepted front matter.
+ *
+ * The same shape as `withExemplar`, and deliberately so: an introduction the
+ * editor let go out over his name is evidence of the voice he actually wants,
+ * as against the one he described in the card. Newest kept, duplicates dropped.
+ */
+export function withProseSample(voice: EditorVoice, sample: string): EditorVoice {
+  const text = sample.trim()
+  if (!text) return voice
+  const kept = voice.proseSamples.filter((s) => s.trim() !== text)
+  return { ...voice, proseSamples: [...kept, text].slice(-MAX_PROSE_SAMPLES) }
 }
 
 const KIND_GUIDANCE: Record<AnnotationKind, string> = {
@@ -348,7 +422,9 @@ export function normalizeVoice(raw: unknown): EditorVoice {
     : []
 
   const proseSamples = Array.isArray(raw['proseSamples'])
-    ? raw['proseSamples'].filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+    ? raw['proseSamples']
+        .filter((x): x is string => typeof x === 'string' && x.trim().length > 0)
+        .slice(-MAX_PROSE_SAMPLES)
     : base.proseSamples
 
   return {

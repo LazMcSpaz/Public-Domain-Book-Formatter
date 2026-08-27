@@ -32,15 +32,23 @@
  *   node scripts/voice.mjs avoid "Never do X" ...   # append refusals (--clear to empty)
  *   node scripts/voice.mjs learn --passage "..." --note "..."
  *   node scripts/voice.mjs learn-file accepted.json # [{ passage, note }, ...]
+ *   node scripts/voice.mjs harvest                  # bank the shelf's own accepted work
+ *   node scripts/voice.mjs prose                    # what front matter is banked
+ *   node scripts/voice.mjs prose --file piece.md    # bank one passage by hand
+ *   node scripts/voice.mjs compile                  # the card as .claude/agents/etsu.md
+ *   node scripts/voice.mjs brief <book-dir>         # the dossier a writer is handed
  *   node scripts/voice.mjs audit book.json          # the bias pass, after the writing
  *   node scripts/voice.mjs check notes.json body.json
+ *
+ * `harvest` → `compile` is the loop that makes the editor better: the shelf's
+ * approved work becomes the card, and the card becomes the writer.
  *
  * The shelf is $SHELF_DIR, or --shelf <dir>. The editor is --name <pen name>,
  * defaulting to whoever the file already names.
  */
 import { createServer } from 'vite'
 import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { basename, dirname, resolve } from 'node:path'
 
 const argv = process.argv.slice(2)
 const verb = argv[0]
@@ -76,7 +84,133 @@ async function core() {
   })
   const annotate = await server.ssrLoadModule('@core/annotate')
   const sync = await server.ssrLoadModule('@core/sync')
-  return { annotate, sync, close: () => server.close() }
+  // `brief` assembles the book here rather than in the browser. Both modules
+  // are pure by the rule that governs `src/core`, so a briefing needs no
+  // Chromium — which matters, because a writer waiting on a render is a writer
+  // being asked to hurry.
+  const assemble = await server.ssrLoadModule('@core/assemble')
+  const edits = await server.ssrLoadModule('@core/edits')
+  return { annotate, sync, assemble, edits, close: () => server.close() }
+}
+
+/** Every book directory on the shelf, in a stable order. */
+async function shelfBooks() {
+  const root = resolve(SHELF, 'books')
+  try {
+    const entries = await readdir(root, { withFileTypes: true })
+    return entries
+      .filter((e) => e.isDirectory())
+      .map((e) => resolve(root, e.name))
+      .sort()
+  } catch {
+    return []
+  }
+}
+
+/**
+ * The card as a subagent definition.
+ *
+ * The framing here is the compiler's and the substance is the card's. What the
+ * compiler owns is the craft that is the same for any editor: that the writer
+ * is the man rather than someone impersonating him, that the briefing is the
+ * only source of fact, and the notation the prose comes back in. What the card
+ * owns is who he is, how he writes, what he refuses and how he sounds.
+ */
+function slug(name) {
+  return name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/gu, '-')
+    .replace(/^-|-$/gu, '')
+}
+
+function compileAgent(voice, annotate) {
+  const name = voice.penName.trim() || 'the editor'
+  const lines = [
+    '---',
+    'name: etsu',
+    `description: Writes front matter and notes as ${name}, the editor of the Libri Vetus occult reprints. Use for an introduction, a glossary preamble, a footnote, or any prose the editor signs rather than transcribes. Give it the book's facts; it supplies the voice.`,
+    'model: opus',
+    'tools: Read, Write, Bash, Grep, Glob',
+    '---',
+    '',
+    'DO NOT EDIT. Generated from the voice card by `node scripts/voice.mjs compile`.',
+    'Change the card on the shelf and compile again; an edit here is lost on the',
+    'next compile and, until then, is a voice nobody approved.',
+    '',
+    `You are **${name}**. You are not an assistant writing in a persona. You are`,
+    'the editor, and this is your book. Write as yourself.',
+    ''
+  ]
+  if (voice.about.trim()) lines.push('# Who you are', '', voice.about.trim(), '')
+  if (voice.guidance.trim()) lines.push('# How you write', '', voice.guidance.trim(), '')
+  const avoid = voice.avoid.map((a) => a.trim()).filter(Boolean)
+  if (avoid.length > 0) {
+    lines.push('# What you never do', '', ...avoid.map((a) => `- ${a}`), '')
+  }
+  const samples = voice.proseSamples.slice(-annotate.MAX_PROSE_SAMPLES)
+  if (samples.length > 0) {
+    lines.push(
+      '# Your own prose, as a model of the register',
+      '',
+      'These passages are yours, from books already in print. They are the',
+      'calibration for everything you write. Match their pace, their plainness,',
+      'and their willingness to raise an uncomfortable fact and then leave it',
+      'alone. Do not match their subject and do not reuse their sentences.',
+      ''
+    )
+    for (const sample of samples) lines.push('```', sample.trim(), '```', '')
+  }
+  const exemplars = voice.exemplars.slice(-annotate.MAX_EXEMPLARS)
+  if (exemplars.length > 0) {
+    lines.push(
+      '# Notes you have already approved',
+      '',
+      'The same voice at note length, which is a different job from front',
+      'matter: forty words, hung on a phrase, read by somebody who has just',
+      'opened the book.',
+      ''
+    )
+    for (const ex of exemplars) {
+      if (ex.passage.trim()) lines.push(`> ${ex.passage.trim()}`, '')
+      lines.push(ex.note.trim(), '')
+    }
+  }
+  lines.push(
+    '# The job',
+    '',
+    "You will be given a briefing with the book's verified facts and, often, an",
+    'earlier draft you are replacing. Work **only** from what you are given. You',
+    'may reuse any fact in the briefing. You may not invent a date, a figure, a',
+    'name, a title or an incident that is not there. If you want a fact the',
+    'briefing does not carry, say so in a line at the end under `QUERIES:`',
+    'rather than reaching for something plausible.',
+    '',
+    'Where you are given findings on an earlier draft, they are places to look',
+    'and not sentences to paste. Rewrite the passage; never patch it. A patched',
+    "sentence is in the patcher's voice, and the whole point of your existing is",
+    'that the prose is in yours.',
+    '',
+    'Notation: the prose is plain text. Paragraphs are separated by a single',
+    'newline. Use `<i>` and `</i>` for italic, `<b>` and `</b>` for bold, and',
+    'nothing else. Book titles take italic. Do not use bold at all in short',
+    'front matter.',
+    '',
+    'Write the piece and nothing else. No preamble, no summary of what you did,',
+    'no offer to revise. The prose is the deliverable.',
+    '',
+    '# How this file is used',
+    '',
+    'Claude Code loads `.claude/agents/*.md` at session start, so a session that',
+    'has just compiled this cannot invoke `etsu` as an agent type. Point a',
+    'general-purpose agent at this path and tell it to read the file and adopt',
+    'it; from the next session on, `etsu` is available by name.',
+    '',
+    `The voice itself lives on the shelf, at \`voice/${slug(name)}.json\`, which is`,
+    "what the app's own annotation pass reads. This file is that card compiled",
+    'into a system prompt.',
+    ''
+  )
+  return lines.join('\n')
 }
 
 /**
@@ -118,7 +252,7 @@ async function save(path, voice) {
   return path
 }
 
-const { annotate, sync, close } = await core()
+const { annotate, sync, assemble, edits, close } = await core()
 try {
   const path = await voiceFile(sync, typeof opts.name === 'string' ? opts.name : '')
   const voice = await load(annotate, path)
@@ -298,6 +432,196 @@ try {
     const lost = checked.filter((c) => c.at === null).length
     const flagged = checked.filter((c) => c.outsideClaims.length > 0).length
     console.log(`\n${checked.length} note(s): ${lost} unplaced, ${flagged} with claims to check.`)
+  } else if (verb === 'harvest') {
+    // The corpus the shelf has been accumulating and nothing has ever read.
+    //
+    // `exemplars` was designed to accrete from accepted notes and `proseSamples`
+    // from accepted front matter, and both accrete only where there is a gate to
+    // accept at. The books are made in a conversation now, so nothing ever
+    // called `withExemplar`: four published books, ninety-odd approved notes and
+    // four introductions sat on the shelf while the card carried an empty list
+    // and one passage. This is the missing hand.
+    //
+    // It reads `book.json` and never the readable files. `introduction.md` is a
+    // *view* of the book and drifts from it; banking a view would teach the
+    // editor a version of his own prose that is not the one in print.
+    const dirs = opts._.length > 0 ? opts._.map((d) => resolve(d)) : await shelfBooks()
+    if (dirs.length === 0) throw new Error(`No books under ${resolve(SHELF, 'books')}.`)
+
+    let next = voice
+    const banked = []
+    const offeredProse = []
+    for (const dir of dirs) {
+      let book
+      try {
+        book = JSON.parse(await readFile(resolve(dir, 'book.json'), 'utf8'))
+      } catch {
+        console.log(`  ${basename(dir)}: no book.json, skipped`)
+        continue
+      }
+      const edits = book.run?.edits ?? book.edits ?? []
+      const front = edits.filter((e) => e.kind === 'section' && e.placement === 'front')
+      const notes = edits.filter((e) => e.kind === 'note' && (e.text ?? '').trim())
+      for (const f of front) offeredProse.push((f.text ?? '').trim())
+      // Banked without the passage. A note's anchor is a character offset into
+      // an *assembled* block, and a leaf's text is not a block's text, so the
+      // words it hangs on cannot be recovered from the book file alone. The
+      // register is what an exemplar teaches, and the register is in the note.
+      for (const n of notes) next = annotate.withExemplar(next, { passage: '', note: n.text })
+      banked.push({ dir: basename(dir), front: front.length, notes: notes.length })
+    }
+
+    // A passage already banked that no book on the shelf contains was put there
+    // by hand, and a hand-banked passage is the editor telling the writer how to
+    // sound rather than a by-product of a book going out. It outranks anything
+    // harvested and is fed last so the cap cannot reach it.
+    //
+    // This is not hypothetical. The first run of this verb dropped the only
+    // sample of the editor's own unpublished hand — three published
+    // introductions pushed it out — and said `3 of 4 kept` while doing it. The
+    // cap was right and the report was true; what was missing was any way to
+    // tell one kind of passage from the other.
+    const handBanked = voice.proseSamples.filter((s) => !offeredProse.includes(s.trim()))
+    for (const text of [...offeredProse, ...handBanked]) {
+      next = annotate.withProseSample(next, text)
+    }
+    const crowdedOut =
+      handBanked.length - next.proseSamples.filter((s) => handBanked.includes(s)).length
+
+    for (const b of banked) {
+      console.log(`  ${b.dir}: ${b.front} front, ${b.notes} note(s)`)
+    }
+    // What the caps dropped, said out loud. A guard that silently keeps three
+    // of eleven is a guard that reads as "everything was taken".
+    const offeredNotes = banked.reduce((n, b) => n + b.notes, 0)
+    console.log(
+      `\n${next.proseSamples.length} of ${offeredProse.length + handBanked.length} passage(s) kept ` +
+        `(cap ${annotate.MAX_PROSE_SAMPLES}; ${handBanked.length} banked by hand and kept first), ` +
+        `${next.exemplars.length} of ${offeredNotes} note(s) kept (cap ${annotate.MAX_EXEMPLARS}).`
+    )
+    console.log('Otherwise kept are the newest offered, which is the order the books were read in.')
+    // What a cap dropped, by its opening words, because a passage that fell off
+    // the end is a decision and reads exactly like nothing having happened.
+    for (const text of offeredProse) {
+      if (!next.proseSamples.includes(text)) {
+        console.log(`  dropped: ${text.slice(0, 70).replace(/\s+/gu, ' ')}…`)
+      }
+    }
+    if (crowdedOut > 0) {
+      console.error(
+        `\n${crowdedOut} hand-banked passage(s) no longer fit. Raise the cap or drop one on purpose.`
+      )
+      process.exitCode = 1
+    }
+    if (opts.dry) console.log('\n--dry: nothing written.')
+    else console.log(`→ ${await save(path, next)}`)
+  } else if (verb === 'prose') {
+    // One passage, by hand, for prose accepted in a conversation rather than
+    // landed in a book — a glossary preamble, a piece the editor rewrote.
+    if (opts.clear) {
+      const next = annotate.normalizeVoice({ ...voice, proseSamples: [] })
+      console.log(`0 passage(s)\n→ ${await save(path, next)}`)
+    } else if (typeof opts.file === 'string') {
+      const text = (await readFile(resolve(opts.file), 'utf8')).trim()
+      const next = annotate.withProseSample(voice, text)
+      console.log(`${next.proseSamples.length} passage(s)\n→ ${await save(path, next)}`)
+    } else {
+      if (voice.proseSamples.length === 0) console.log('No prose banked. Run `harvest`.')
+      for (const [i, s] of voice.proseSamples.entries()) {
+        const words = s.split(/\s+/u).filter(Boolean).length
+        console.log(`${i + 1}. ${words} words — ${s.slice(0, 90).replace(/\s+/gu, ' ')}…`)
+      }
+    }
+  } else if (verb === 'brief') {
+    // The dossier a writer is handed, rendered by the module the API path uses.
+    //
+    // This is the whole of it. There is no second briefing builder here and
+    // there must not be: `buildIntroductionPrompt` already decides what a
+    // writer may see — the book's shape, evenly spaced extracts so no chapter
+    // dominates, the rulings the editor marked `mention` — and a hand-typed
+    // briefing is a second implementation of that judgement that will be
+    // thinner every time somebody is in a hurry.
+    //
+    // The voice is deliberately *not* in it. The compiled agent is the card;
+    // sending the card again would put two copies in one context, and two
+    // copies are two things that can disagree.
+    const dir = resolve(opts._[0] ?? '.')
+    const book = JSON.parse(await readFile(resolve(dir, 'book.json'), 'utf8'))
+    const run = book.run ?? book
+    const doc = edits.applyEdits(assemble.assembleBook(run.transcriptions ?? []), run.edits ?? [])
+    // Where the title lives depends on how far through the flow the book got.
+    // Of the five books on this shelf, two carry it in `identityAnswers`, two
+    // in the export answers and one nowhere at all — so all of them are read,
+    // and what is still missing is *said*. A briefing that quietly omits the
+    // year is a briefing that invites the writer to supply one.
+    const id = run.identityAnswers ?? {}
+    const exported = book.answers?.export ?? {}
+    const facts = {
+      title: exported.title || id.title || '',
+      author: exported.author || id.author || '',
+      originalYear: exported.originalYear || id.year || '',
+      context: typeof opts.context === 'string' ? opts.context : ''
+    }
+    const missing = ['title', 'author', 'originalYear'].filter((k) => !facts[k].trim())
+    const length = typeof opts.length === 'string' ? opts.length : 'standard'
+    const { user } = annotate.buildIntroductionPrompt(doc, {
+      voice,
+      facts,
+      length,
+      brief: typeof opts.want === 'string' ? opts.want : '',
+      rulings: run.rulings ?? []
+    })
+
+    const out = [
+      `# Briefing: ${facts.title || basename(dir)}`,
+      ``,
+      `Everything you may use is below. Every fact in it is verified against the`,
+      `book. Nothing outside it is. If you want something that is not here, ask`,
+      `for it under QUERIES rather than reaching for something plausible.`,
+      ...(missing.length > 0
+        ? [
+            ``,
+            `NOT RECORDED IN THIS BOOK FILE: ${missing.join(', ')}.`,
+            `Do not supply any of them from what you know of the work. Ask for`,
+            `each under QUERIES; somebody will read it off the title page.`
+          ]
+        : []),
+      ``,
+      annotate.introductionTask(length),
+      ``,
+      `---`,
+      ``,
+      user
+    ].join('\n')
+
+    if (typeof opts.out === 'string') {
+      await writeFile(resolve(opts.out), `${out}\n`)
+      console.log(`${out.split(/\s+/u).length} words → ${resolve(opts.out)}`)
+    } else console.log(out)
+    if (missing.length > 0) {
+      console.error(`\nNOT IN THE BOOK FILE: ${missing.join(', ')}. Read them off the title page.`)
+      process.exitCode = 1
+    }
+  } else if (verb === 'compile') {
+    // The card, as a system prompt.
+    //
+    // `.claude/agents/etsu.md` said in its own last paragraph that the two
+    // would drift and that a session would then write in a voice nobody
+    // approved. Nothing stopped it, so this does: the agent is generated, the
+    // card is the source, and every exemplar the shelf has banked since the
+    // last compile arrives with it.
+    const target = resolve(typeof opts.out === 'string' ? opts.out : '.claude/agents/etsu.md')
+    const text = compileAgent(voice, annotate)
+    await mkdir(dirname(target), { recursive: true })
+    await writeFile(target, text)
+    console.log(
+      `${voice.penName || 'the editor'}: ${voice.avoid.length} refusal(s), ` +
+        `${voice.proseSamples.length} passage(s), ${Math.min(voice.exemplars.length, annotate.MAX_EXEMPLARS)} note(s)`
+    )
+    console.log(`→ ${target}`)
+    console.log(
+      'Claude Code loads agents at session start. A session that just compiled this cannot use it.'
+    )
   } else {
     throw new Error(`Unknown verb: ${verb}`)
   }

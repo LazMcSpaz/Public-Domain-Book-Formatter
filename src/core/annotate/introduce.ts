@@ -13,7 +13,9 @@
  * ## What it is shown
  *
  * The book's own structure — title, author, year, its chapter headings in order
- * — and a *sample* of the prose rather than the whole of it. Sampling is not
+ * — a *sample* of the prose rather than the whole of it, and the editor's own
+ * front matter from books already published, which is the only place the
+ * register is shown rather than described. Sampling is not
  * economising: an introduction is written from the shape of a book and its
  * texture, and a model given three hundred pages writes a summary of the last
  * twenty. Evenly spaced extracts give it the shape and the voice of the work
@@ -25,8 +27,9 @@ import type { BookDocument } from '@core/assemble'
 import { callModel, type ApiUsage, type ClientConfig } from '@core/transcribe'
 import type { BookFacts } from '@core/harvest'
 import { toMention, type Ruling } from '@core/queries'
+import { GLOSSARY_MARK } from './marks'
 import { outsideClaims } from './schema'
-import { voiceBlock, type EditorVoice } from './voice'
+import { proseBlock, voiceBlock, type EditorVoice } from './voice'
 
 /** A drafted introduction, before the user has seen it. */
 export interface IntroductionDraft {
@@ -73,6 +76,11 @@ const SAMPLE_WORDS = 120
  * Spread across the whole book rather than taken from the front, because the
  * opening pages of an old book are the least representative part of it — they
  * are where the dedication and the throat-clearing live.
+ *
+ * The glossary marks come out. They are this edition's apparatus rather than
+ * the book's words, and an extract is shown so the writer can hear the author:
+ * a `trolley-pole°` in the sample is a degree sign the writer did not put there
+ * and may well copy into a quotation.
  */
 export function sampleBook(
   doc: BookDocument,
@@ -85,7 +93,9 @@ export function sampleBook(
   const step = Math.max(1, Math.floor(prose.length / count))
   const samples: string[] = []
   for (let i = 0; i < prose.length && samples.length < count; i += step) {
-    samples.push(prose[i]!.text.split(/\s+/u).slice(0, words).join(' '))
+    samples.push(
+      prose[i]!.text.replaceAll(GLOSSARY_MARK, '').split(/\s+/u).slice(0, words).join(' ')
+    )
   }
   return samples
 }
@@ -144,21 +154,23 @@ export function noteOnTheText(rulings: readonly Ruling[]): string[] {
   return lines
 }
 
-/** The instruction. Exported so a test can read it without a network. */
-export function buildIntroductionPrompt(
-  doc: BookDocument,
-  options: Omit<IntroductionOptions, 'client'>
-): { system: string; user: string } {
-  const facts = options.facts ?? {}
-  const words = INTRODUCTION_WORDS[options.length ?? 'standard']
-
-  const system = [
-    `You are writing the editor's introduction to a new edition of a`,
-    `public-domain book. It is the first thing the reader meets, and it is the`,
-    `main reason this edition exists rather than a straight reprint.`,
-    ``,
-    voiceBlock(options.voice),
-    ``,
+/**
+ * What the job is, with nothing in it about who is doing it.
+ *
+ * Split out from the prompt because the writing no longer always happens
+ * through the API. When it happens in a session, the voice is already the
+ * writer's system prompt — the compiled agent *is* the card — and the only
+ * thing left to hand over is the book and the task. Sending the card again in
+ * that case is not merely wasteful: it invites the two copies to disagree,
+ * which is the one failure the compiled agent exists to prevent.
+ *
+ * So the task is written once and both doors use it. `buildIntroductionPrompt`
+ * puts the voice in front of it for the API; `voice.mjs brief` leaves the voice
+ * out because the agent already has it.
+ */
+export function introductionTask(length: IntroductionLength = 'standard'): string {
+  const words = INTRODUCTION_WORDS[length]
+  return [
     `WHAT AN INTRODUCTION HAS TO DO:`,
     `Say what the book is and what reading it is like. Place it in its moment —`,
     `who wrote it, when, into what argument or fashion or need. Say what a`,
@@ -177,6 +189,28 @@ export function buildIntroductionPrompt(
     ``,
     `Aim for about ${words} words, in paragraphs. Give it a title: "Introduction"`,
     `unless the book calls for something better.`
+  ].join('\n')
+}
+
+/** The instruction. Exported so a test can read it without a network. */
+export function buildIntroductionPrompt(
+  doc: BookDocument,
+  options: Omit<IntroductionOptions, 'client'>
+): { system: string; user: string } {
+  const facts = options.facts ?? {}
+  const prose = proseBlock(options.voice)
+
+  const system = [
+    `You are writing the editor's introduction to a new edition of a`,
+    `public-domain book. It is the first thing the reader meets, and it is the`,
+    `main reason this edition exists rather than a straight reprint.`,
+    ``,
+    voiceBlock(options.voice),
+    ``,
+    introductionTask(options.length ?? 'standard'),
+    // Last, because it is the thing to have most recently read before writing,
+    // and because a rule about a register is worth much less than a page of it.
+    ...(prose ? [``, prose] : [])
   ].join('\n')
 
   const parts: string[] = []
