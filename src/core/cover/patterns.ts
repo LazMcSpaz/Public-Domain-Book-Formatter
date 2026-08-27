@@ -14,9 +14,11 @@
  * ## The three things that make a faint texture print
  *
  * 1. **It cannot be too faint.** A tint below about 5% of the ink is at the
- *    edge of what a print-on-demand press resolves; it either vanishes or
- *    mottles. `PATTERN_OPACITY` sits above that floor on purpose, and the
- *    lightest option here is still 6%.
+ *    edge of what a print-on-demand press resolves; below it a tint either
+ *    vanishes or mottles, and mottling is much the worse of the two. Nothing
+ *    in `PATTERN_OPACITY` goes under that line. Sitting *on* it, as the house
+ *    marble does, is a deliberate choice for the faintest possible ground and
+ *    is the one value here that only a printed proof can confirm.
  * 2. **The strokes cannot be hairlines.** A 0.2pt rule at 8% opacity breaks up
  *    into dots. Nothing here draws below 0.5pt.
  * 3. **It must not need to line up across the spine.** The cover wraps a fold
@@ -86,7 +88,10 @@ export const PATTERN_OPACITY: Readonly<Record<GroundPattern, number>> = {
   fleuron: 0.08,
   aura: 0.09,
   guilloche: 0.06,
-  marbled: 0.08
+  // Set at the floor by request. Everything above still applies: this is the
+  // lightest a print-on-demand press can be relied on to hold, not a safe
+  // middle, and it is the one number here that a proof copy should settle.
+  marbled: 0.05
 }
 
 const TWO_PI = Math.PI * 2
