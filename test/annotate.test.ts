@@ -17,6 +17,8 @@ import {
   runAnnotation,
   buildIntroductionPrompt,
   draftIntroduction,
+  apparatusOf,
+  introductionOutlineTask,
   parseIntroduction,
   sampleBook,
   proseBlock,
@@ -763,6 +765,101 @@ describe('the editor’s introduction', () => {
     const card = voiceBlock(voice)
     expect(card).toContain('Note: A note of his.')
     expect(card).not.toContain('Passage:')
+  })
+
+  // The shape is settled before there are twelve hundred words of it, because
+  // a finished introduction is very hard to argue with and an outline costs a
+  // line to change.
+  it('asks for the shape before the prose, and refuses to be given prose', () => {
+    const task = introductionOutlineTask('standard')
+    expect(task).toContain('Do not write the introduction yet')
+    expect(task).toContain('THE OPENING')
+    expect(task).toContain('WHAT IS LEFT OUT')
+    expect(task).toContain('QUERIES')
+    // An outline in finished sentences is a draft in disguise: it gets
+    // approved on how it sounds, which is the judgement being deferred.
+    expect(task).toContain('Write the outline as notes')
+  })
+
+  it('sizes the outline to the length the editor chose', () => {
+    expect(introductionOutlineTask('brief')).toContain('350 words')
+    expect(introductionOutlineTask('full')).toContain('1400 words')
+  })
+
+  it('writes to the shape the editor approved, not the one it proposed', () => {
+    const approved = 'Open on the blacksmith. Three movements. Close on the note on the text.'
+    const { system } = buildIntroductionPrompt(bookOfChapters(), {
+      voice: defaultVoice(),
+      outline: approved
+    })
+    expect(system).toContain(approved)
+    expect(system).toContain('do not redesign it')
+    // A movement the material will not carry is reported, never quietly
+    // filled and never quietly dropped — the footnote rule, applied to shape.
+    expect(system).toContain('quietly filling it')
+  })
+
+  it('still drafts in one shot when no shape was approved', () => {
+    const { system } = buildIntroductionPrompt(bookOfChapters(), { voice: defaultVoice() })
+    expect(system).not.toContain('HAS APPROVED THIS SHAPE')
+    expect(system).toContain('WHAT AN INTRODUCTION HAS TO DO')
+  })
+
+  // The writer was being asked to tell the reader what the apparatus is and
+  // given none of it, so the first outline that came back asked under QUERIES
+  // whether there was a glossary and how many notes there were. All of it is
+  // sitting in the assembled document.
+  describe('what this edition carries', () => {
+    function withApparatus(): BookDocument {
+      const built = bookOfChapters()
+      return {
+        ...built,
+        footnotes: [
+          { id: 'n1', originalMarker: '1', text: 'A note.', pageIndex: 0, orphaned: false },
+          { id: 'n2', originalMarker: '2', text: 'Another.', pageIndex: 1, orphaned: false }
+        ],
+        sections: [
+          {
+            id: 's1',
+            placement: 'back',
+            title: 'Glossary',
+            blocks: [
+              { ...block('This glossary explains the vocabulary.'), strong: [] },
+              { ...block('Akasha. The subtlest of the elements.'), strong: [0] },
+              { ...block('Fohat. The energy that builds.'), strong: [0] }
+            ]
+          }
+        ]
+      }
+    }
+
+    it('counts the notes and the glossary entries rather than trusting a memory', () => {
+      const lines = apparatusOf(withApparatus())
+      expect(lines.join('\n')).toContain('2 footnotes')
+      // An entry is a block whose bold starts at word 0. The preamble has no
+      // bold and must not be counted as one.
+      expect(lines.join('\n')).toContain('glossary of 2 entries')
+    })
+
+    it('says the apparatus is absent rather than leaving the writer to guess', () => {
+      const lines = apparatusOf(bookOfChapters()).join('\n')
+      expect(lines).toContain('No footnotes.')
+      expect(lines).toContain('No glossary.')
+    })
+
+    it('counts the glossary marks in the running text', () => {
+      const marked = { ...bookOfChapters() }
+      marked.blocks = [block(`A trolley-pole${GLOSSARY_MARK} and an aura${GLOSSARY_MARK}.`)]
+      expect(apparatusOf(marked).join('\n')).toContain('2 words in the running text')
+    })
+
+    // The failure this is against is already on the shelf: one volume carried
+    // 85 marks and 23 notes, the next a 74-entry glossary with no marks at all,
+    // and nothing anywhere said so.
+    it('reports a glossary whose words were never marked', () => {
+      const unmarked = withApparatus()
+      expect(apparatusOf(unmarked).join('\n')).toContain('No glossary marks in the text.')
+    })
   })
 
   it('parses paragraphs into the shape a section edit already takes', () => {

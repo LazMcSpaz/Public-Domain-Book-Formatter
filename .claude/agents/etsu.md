@@ -100,155 +100,47 @@ and their willingness to raise an uncomfortable fact and then leave it
 alone. Do not match their subject and do not reuse their sentences.
 
 ```
-A man settles into an armchair in Chicago, and a few moments later he is standing beside his own sleeping body, looking down at it. His clothes are the same to the last detail. A thin bright filament, something like a rope of spider silk, runs from him to the form in the chair, and it lengthens as he moves away. He walks through the wall and out into the street, where a passer-by walks straight through him without noticing, though a dog sees him plainly and a horse shies.
+If you are holding this book you have most likely already decided that the subject is worth your time. Very few people take up a course in clairvoyance in order to disagree with it, and the objections set out below are not aimed at you.
 
-That is the fourth chapter of this book, and it is the shape of the whole of it. You are addressed throughout as “student”, and you are taken by the hand. The author says why on page 26. In his own classes he found that telling the astral world as the story of a journey taught more than a technical account ever managed, so that is how he sets it down here: come with me, look at this, now we raise our vibrations, now look again.
+They are here because they belong to the work. Coming to this material with faith and nothing else is the approach that will teach you least. A teaching you have never pressed on is a teaching whose shape you do not yet know, and pressing on it is not disloyalty to it. The best occultists have always worked the way the best scientists do: observe closely, report honestly what was actually there, and stay willing to be shown wrong. There is no quarrel between the two habits, and this edition assumes both. Where a case in these pages was later overturned, the notes say so and say how. Where a story rests on one man's memory written down forty years afterwards, they say that too. None of it is offered to talk anybody out of anything. It is here because a reader who can tell a doctrine from a documented case from an anecdote stands on much firmer ground than one who cannot, and because the parts that hold up are worth more once you know they are not being propped.
 
-It works, and it costs him something. The chapters are a route rather than a syllabus, and a reader who wants a definition has to catch it as it goes past. What is gained is that the astral world arrives as a place with weather in it rather than a diagram, which is much closer to what the tradition says it is.
+The name on the title page belongs to nobody. This book was written by William Walker Atkinson, born in Baltimore in 1862, a lawyer whose practice broke him in mid-life and who credited his recovery to the New Thought movement then spreading across America. He moved to Chicago, took the editorship of <i>New Thought</i> magazine and later of <i>Advanced Thought</i>, and wrote for the rest of his life. The count of his books runs well past a hundred.
 
-<b>What this book is</b>
+He published under his own name, and as Yogi Ramacharaka, and as Theron Q. Dumont, and as Magus Incognito, and here as Swami Panchadasi. He is now generally taken to be the author behind the Three Initiates, who put out <i>The Kybalion</i> in 1908. This was not deception in the ordinary sense, and everybody in the trade did it. A mail-order publisher wanted a list of authors rather than one enormously productive man; a course in memory training and a course in Eastern occultism wanted different names on their covers; and a Western reader who had gone looking for the wisdom of the East was not, at that date, going to find it over the signature of a lawyer from Illinois.
 
-<i>The Astral World: Its Scenes, Dwellers, and Phenomena</i> was published by the Advanced Thought Publishing Company of Chicago, copyright 1915, with L. N. Fowler & Co. of Ludgate Circus as its English agents. The title page calls it Volume II of the Occult Manuals. Volume I was <i>The Human Aura</i>, and this book refers you back to it once, in the middle of the walk down the street, when the auras of the passers-by come into view.
+What the persona changes is worth stating exactly, because it is less than it looks. The teaching in these pages comes from Theosophy and from American New Thought. It does not come from a lineage in the Himalayas, and no Swami Panchadasi ever lived. That is the whole of it. Atkinson had read very widely in the material he was setting out, he is a patient and unusually clear teacher, and the argument is his own whoever signed it.
 
-The teaching it sets out is the ordinary teaching of Theosophy, and the first two chapters are given to clearing away the commonest misunderstanding of it. A plane is not a layer, and it is not a place. The seven planes are grades of vibration, and they occupy the same point of space without crowding one another, the way heat and light and magnetism and a wireless signal all occupy the room you are sitting in. The book quotes an old teacher for the whole of it in one line: a plane of being is not a place, but a state of being. Everything afterwards depends on having taken that in.
+The world this was written into matters, because the book's central claim sounds different from inside it. In 1895 a German physicist noticed that a screen across his laboratory had begun to glow, with nothing between it and his apparatus but air. Within weeks Wilhelm Roentgen had photographed the bones inside his wife's hand. Becquerel then found that uranium fogged a photographic plate in the dark. The Curies announced radium, a substance that pours out energy for no reason anybody could name. Thomson took the atom apart. Marconi pushed a signal through empty space and then across the Atlantic. Each of these had been impossible until it was ordinary, and the interval was often a matter of months.
 
-From there the route runs downward before it runs up. You pass the border and see the forces of nature made visible. You go through the astral cemetery, where the shells that souls have finished with hang and slowly come apart, and through the sub-planes where the earth-bound crowd around the scenes they can no longer take part in. Then the ground rises: the resting place where the newly dead sleep under guard while they are changed, the regions where souls work out the ambitions and the crafts they never finished, the plane where every religion has its own quarter furnished exactly as its people expected. Above that the book describes the Astral Light, in which the record of everything that has happened can be read, and it ends among the astral entities, the nature spirits and the thought-forms.
+The book was sold by post, and the sheet opposite is how. A bearded man in a turban sits on a dais with a long-stemmed pipe while a woman kneels before him at a crystal ball, and a line of domes and minarets runs along behind them. The terms are at the foot: bound in cloth, two dollars and a half. It is printed in red and black and still carries the creases where it was folded into an envelope. The imprint is the C. Alexander Publishing Co. of South Oxford Avenue, Los Angeles, which belonged to Claude Alexander Conlin, a vaudeville crystal-gazer who billed himself as Alexander, the Man Who Knows and ran a mail-order business on the side. The sheet carries no date and is probably later than the first printing, which came from Atkinson's own Advanced Thought Publishing Co. in Chicago in 1916. It went to somebody who wanted to learn something and had nobody near them to teach it. That was the whole trade, and a good many of the books in it were very good.
 
-<b>What it is honest about</b>
+That was the science of the day. The other half of the picture is that the line between what counted as science and what did not ran nowhere near where it runs now. Modern Spiritualism had begun in 1848 in a farmhouse in New York state, where two sisters named Fox reported rapping noises that answered questions put to them. Within a generation it had adherents in the millions on both sides of the Atlantic, its own churches, its own newspapers and its own professional mediums. In France it took a different shape under Allan Kardec, who codified it as Spiritism and set reincarnation at the centre of the doctrine; that version travelled to Brazil, where it is a large movement to this day. Margaret Fox stood up in 1888 and said the raps had been made with the joints of her toes, and took it back the following year. The movement went on regardless, having long since stopped depending on her.
 
-Two things are worth knowing before you start, because both of them tell you what kind of writer you have.
+The Theosophical Society was founded in New York in 1875 by Helena Petrovna Blavatsky and Henry Steel Olcott, and moved its headquarters to India seven years later. Nearly all the vocabulary of this book comes through it. Astral, karma, akasha, prana, the planes and the bodies and the records held in the Astral Light reached Western occultism in the form they have here through Blavatsky's <i>Isis Unveiled</i> and <i>The Secret Doctrine</i>, and through Annie Besant and C. W. Leadbeater after her. By 1916 Besant was the Society's president and a figure in Indian politics, and Leadbeater was the most detailed describer of the invisible worlds the tradition has produced.
 
-He withholds the technique. Chapter IV opens by saying plainly that he does not think it advisable to describe how one leaves the body, because a hint of the method might send an untrained person experimenting, and that can go badly. Whatever else this is, it is not a book selling a shortcut.
+The investigating, meanwhile, was being done by the people you would least expect. The Society for Psychical Research was founded in London in 1882 by Cambridge scholars who meant to examine these phenomena by the methods of science and without prejudice either way. By the year this book appeared its presidents had included William James, Henri Bergson, Arthur Balfour, Charles Richet, and William Crookes, who discovered thallium and led the Royal Society. Nearly every case in this book comes out of its Proceedings.
 
-And he will not let the vocabulary do his arguing. The regions his students would most like to hear about, the sensational ones, are left out on purpose, and he says so on the last page: this manual is for the earnest student, and he has no wish to cater to those looking for a sensation. The tone throughout is that of a man describing country he has walked in, who would rather you went and looked than took his word.
+Oliver Lodge, another of its presidents, had done fundamental work on wireless telegraphy before Marconi. His son Raymond was killed at Ypres in 1915, and in the following year, the year this book appeared, Lodge published an account of the messages he believed had reached him from his son. It went through edition after edition. The war was doing that everywhere. A generation of families with no grave to visit were looking for somewhere to put the question.
 
-<b>Who wrote it</b>
+So a reader in 1916 was not choosing between science and superstition. He was living at a moment when the boundary was genuinely open, when men who had taken the atom apart sat on committees investigating mediums, and when the suggestion that the mind might reach past the body did not arrive from outside the world. The book's argument only makes sense in that light, and the argument is this: the occult is not the supernatural. Occult means hidden, and nothing more. There are faculties in a person that reach past the five senses, they work by picking up vibrations as the eye picks up light, and the only real difference is which instruments we have learned to trust. Atkinson makes that case in nearly every lesson and never once retreats from it.
 
-Swami Panchadasi was William Walker Atkinson, a Baltimore lawyer who moved to Chicago, edited <i>New Thought</i> and later <i>Advanced Thought</i>, and published well over a hundred books under his own name and several others, among them Yogi Ramacharaka, Theron Q. Dumont and Magus Incognito. An Eastern persona was ordinary practice in this trade, and it was never much of a secret. The advertisement bound into the back of this very volume offers <i>Practical Psychomancy and Crystal Gazing</i> by William Walker Atkinson, cloth, fifty cents.
+A century has moved some of this, and not all of it in one direction. The ether has gone. The book leans on it constantly for its comparisons, and physics had already let it go: Michelson and Morley failed to find it in 1887, and relativity did without it in 1905. Lodge defended it to the end of his life and was in a shrinking minority. The occult use of the word survives and means something else, the subtlest grade of substance, nearer to akasha than to the physicists' medium, and the glossary keeps the two apart.
 
-The pen name changes one thing and no more. The teaching in these pages comes from Theosophy and from American New Thought rather than from a lineage in India, and knowing that costs the book nothing. Atkinson is a patient and unusually lucid teacher, and he is at his best where he is most himself: the passage on the planes occupying one point of space, and the long stretch on work and creation on the astral, are as clear as anything written on either subject.
+The formal investigation continued and changed shape. From the 1930s J. B. Rhine ran card-guessing trials at Duke by the thousand and put the question on a statistical footing, and the argument since has been about replication rather than about apparitions in doorways. It is not settled. Mainstream science does not accept these faculties, and whether that is because the evidence is thin or because the reception has been hostile is itself disputed by people who have read the same papers. Nobody reading this book should be told otherwise by an editor.
 
-Where the ground is his own, he owes a good deal to C. W. Leadbeater, whose <i>The Astral Plane</i> of 1895 is the fullest description anyone has written of this territory, and remains the book to read next. Leadbeater was an Anglican curate who joined the Theosophical Society in 1883. He also resigned twice over allegations about his conduct with boys in his care. A reader is better for knowing both of those things and for keeping them apart.
+The Society for Psychical Research is still going, and its record holds patient work alongside cases it later had to withdraw. Both are in these pages. The Creery children, whose trials carry a good deal of weight in the fourth lesson, were seen using a code of signals seven years afterwards, and the Society published that itself. How much of the earlier evidence it undoes was argued over then and is argued over now. The glossary sets out what is known, what is disputed, and what rests on a single witness, kept apart from one another, so a reader can weigh them without taking anyone's word for the weighing.
 
-<b>What rests on what</b>
+What has not dated is the part most likely to be skimmed. The lessons on concentration, attention and visualisation are the spine of the whole course, and they are very good. A needle-pointed mind goes through where a blunt one is turned back. Write a letter and think of nothing but that letter. A wandering attention is a habit, and habits can be trained. That is sound practical psychology, it arrived early, and it has held. So has the temper of the advice around it. Make haste slowly. Finish one line of work before beginning another. Do not lose your head over a success, do not make a show of what you can do, and do not turn it to selfish ends, because powers that are cheapened are powers lost. That warning comes back half a dozen times, and it is the moral centre of the book.
 
-The book says several kinds of thing and does not always mark the joins, so it is worth setting them out.
+The course means to be used. Exercises are set through it, and they are not decoration. Atkinson asks the student to take the lessons in order, and says more than once that a reader who does the work will get something from these pages that a reader who only reads them will not.
 
-The planes, the astral body and its filament, the astral senses, the shells left behind at death, thought as a real force that takes form: these are the tradition’s teaching, held and taught by the Theosophical writers this book draws on, and set down here as such.
+A word about this edition. The text is set from a scan of the 1916 printing and was read against the page. One hundred and seventeen errors the compositor made have been put right: a fate standing where a faith belonged, counties for countries, occulist for occultist, a full stop doing a comma's work, a quotation never closed, some twenty verbs that had lost their subjects. Every one was checked against the original before it was touched, and where a reading was genuinely doubtful it was settled by looking at the paper rather than by deciding what the sentence ought to say. All of them are listed, so anybody who wants the printed reading can have it. The book's own spelling and punctuation are otherwise left alone, including its mixture of British and American forms, which is how it was set.
 
-The tour is another matter. The particular scenes, the congregation gazing at the pit, the crowds in Valhalla thinning as their people are drawn back to birth, are the author’s own reports of his own travelling, and they rest on his word. He says as much himself, that the descriptions come from the actual experience of advanced occultists including his own, and that every fact in them may be verified by any advanced occultist. That is a claim a reader can test only by the road the book recommends, which is patient work, and not from an armchair.
+Two marks in the text are this edition's and not the author's. A small circle after a word (like this°) means the word has an entry in the glossary at the back, and it appears only at the first use. A raised number is a footnote, and it is at the foot of that page. There are twenty-three of them in three hundred pages, so they should never be in the way. The glossary explains the vocabulary these pages use without defining, the people and cases they name in passing, and the words that have since left ordinary English.
 
-Some of the furniture is of its period. The ether that the comparisons lean on had already been let go by physics: Michelson and Morley failed to find it in 1887, and relativity removed the need for it in 1905. That dates the analogy and settles nothing about the thing it was reaching for. The chapter on astral entities uses the vocabulary of 1915 about the peoples whose practices it names, and it is left as printed.
+Atkinson refers a dozen times to two other little books of his own, <i>The Human Aura</i> and <i>The Astral World</i>. Neither is needed to follow this course. Both have been set in this series as a single volume, for anybody who wants them.
 
-<b>The temper of it</b>
-
-The last page is the measure of the book. It does not tell you what to believe. It tells you to use the manual as a key rather than as a way to pass an hour, to have no idle hours, and to look forward and upward, on the ground that within you is a spark of the divine flame that cannot be put out. Ninety pages earlier the same voice was warning you not to go down a side street because its colours would depress you.
-
-That is a small book with a great deal in it, written by somebody who plainly found the material alive. Read it slowly. The route is short and the country is not.
-
-<b>A note on the text</b>
-
-This edition is set from a scan of the 1915 printing, and every leaf was read against the original page. Two further readings were compared against ours throughout: an independent machine reading of the same scan, and an independently typeset modern edition. Where any two of the three disagreed, the disagreement was settled by cutting a crop from the scan and looking at the paper, never by choosing the likelier word.
-
-Obvious errors the compositor made are put right, and they are listed. One is mended in this printing: the page sets <i>varietites</i> for <i>varieties</i>. Six further places are ones where mending the reading would mean editing the author’s sentence rather than the compositor’s slip, and they are printed as they stand, with the question recorded rather than answered.
-
-The book’s own spelling is left alone, including its inconsistencies. It sets <i>colors</i> and <i>skeptics</i> beside <i>travelling</i>, <i>traveller</i>, <i>centres</i>, <i>marvellous</i> and <i>theatre</i>, and it sets <i>traveling</i> once against <i>travelling</i> four times. That is the book’s habit and not this edition’s to tidy.
-
-The original contents page is an analytical one, with a paragraph under each chapter saying what is in it. Those paragraphs are the work of whoever made the book and they are kept, set under their chapters with the page numbers this edition actually prints. The original page numbers, which describe a pagination this edition does not have, are gone.
-
-Etsu T. Dhent
-```
-
-```
-Do this before you read anything else. Wait for the evening, find a black cloth or the dark cover of a book, and hold your hand up in front of it in a room with very little light. Look at the edge of your fingers through half-closed eyes, and keep at it longer than feels reasonable. What a good many people report, sooner or later, is a thin haze standing off the skin, pale and faintly yellow, following each finger separately when the hand is spread. Some get it in a minute; some get nothing for weeks.
-
-That exercise is in the second chapter of the first book here, and it is a fair sample of both. Here is a thing you may be able to see. Here is where to stand and what to look at. Now go and look. Neither of these books argues you into anything, and I would rather you met that habit of theirs on your own hand than took my word for it.
-
-The two manuals bound here were published a year apart in Chicago by the Advanced Thought Publishing Company, at 168 N. Michigan Avenue. Their title pages number them. <i>The Human Aura</i>, subtitled <i>Astral Colors and Thought Forms</i>, is Volume I of the Occult Manuals. <i>The Astral World</i>, subtitled <i>Its Scenes, Dwellers, and Phenomena</i>, is Volume II. The dates run the other way about, 1916 against 1915, which happens in a busy shop and settles nothing. Read them in the order the title pages give. They were built that way, and the second refers back to the first once, in the middle of a walk down a street, when the auras of the passers-by come into view.
-
-The first book is about seeing. It holds that every person gives off a subtle emanation, egg-shaped and a few feet across, which changes colour with whatever is passing through the mind, and that the faculty for seeing it is ordinary rather than rare. Two chapters go to what the colours mean: red for the physical side of mentality, blue for the spiritual, yellow for the intellect, and every shade between them a compound of those. Then thought forms, the shapes a thought takes in astral substance and the effect it has on whoever it reaches. Then the practical half. How the colours act on the mind, how to cleanse and strengthen one's own aura, and the Great Auric Circle, a shield thrown round the self against the psychic weather of other people.
-
-The second book is about travelling. A man settles into an armchair, and a few moments later he is standing beside his own sleeping body, joined to it by a filament like a rope of shining spider silk. He walks through the wall. A passer-by walks straight through him without noticing, though a dog sees him plainly and a horse grows nervous at a presence it only vaguely feels. The route runs down through the astral cemetery, where cast-off bodies hang and slowly come apart, and through the regions where the earth-bound crowd around pleasures they can no longer take. Then up. The place where the newly dead sleep under guard, the regions where souls finish the crafts they never finished here, the plane where every religion has its own quarter furnished exactly as its people expected. It ends among the nature spirits, and in the Astral Light, where the record of everything that has happened can be read.
-
-Set side by side they make one argument in two halves. The first says the astral world is already touching you and can be seen. The second says it can be entered.
-
-Both assume Theosophy's cosmology, and the second gives its opening chapters to the part of it most often got wrong. A plane is not a layer and it is not a place. The seven planes are grades of vibration, and they occupy the same point of space without crowding one another, in the way that heat and light and magnetism and a wireless signal all occupy the room you are sitting in now. The shortest statement of it is the one quoted there: a plane of being is not a place, but a state of being. Everything in either book rests on having taken that in.
-
-That comparison to wireless is not decoration, and it tells you when these books were written. Röntgen found the X-ray in 1895, and within weeks there were photographs of the bones inside a living hand. Radium was announced in 1898. Marconi put a signal across the Atlantic in 1901. A man who bought Volume II in 1915 had read about agencies passing through a wall in his newspaper as well as in his occult manual, and these books are written to him in his own excited idiom. The ether both books lean on for their comparisons had already been let go by the physicists: Michelson and Morley failed to find it in 1887, and relativity removed the need for it in 1905. That dates the analogy. It settles nothing about what the analogy was reaching for.
-
-Swami Panchadasi was William Walker Atkinson, 1862 to 1932, a lawyer who came to Chicago, edited <i>New Thought</i> and afterwards <i>Advanced Thought</i>, and published well over a hundred books under his own name and others, among them Yogi Ramacharaka, Theron Q. Dumont and Magus Incognito. I say so here rather than burying it, because it was never much of a secret. An Eastern persona was ordinary equipment in that trade in those years, and the advertisement bound into the back of Volume II offers <i>Practical Psychomancy and Crystal Gazing</i> by William Walker Atkinson, cloth, fifty cents. The house was selling both names on the same page and did not think it was getting away with anything. The pen name changes one thing and no more: the teaching here comes from Theosophy and from American New Thought rather than from a lineage in India, and knowing that costs the books nothing that I can find.
-
-Where the ground is his own he owes a good deal to C. W. Leadbeater, whose <i>The Astral Plane</i> of 1895 is the fullest description anybody has written of the second book's territory. Leadbeater resigned from the Theosophical Society in 1906 over allegations about his conduct with boys in his care, and was readmitted two years later. I raise it because a reader who meets it later will feel it was kept from him. We look at the whole picture rather than throw out good information on account of its source.
-
-Now the part that will irritate you, and I would rather you heard it from me than found it on page forty. This is a course of instruction and it sounds like one. He states a thing, then restates it in slightly different words, then gives you a list, then sums up the list. Colours are enumerated. Classes of entity are enumerated. Phrases come round again three chapters later doing the work they did the first time. Read fast and it will feel like padding. It is not padding. It is a man teaching a subject with no diagrams to lean on and no way of knowing which sentence will be the one that lands, so he sets the same idea down from four sides and trusts that one of them takes. A chapter at a sitting, and the repetition does the job it was built for.
-
-He is also, and this is why I have spent a year with these two, an unusually lucid teacher when he is most himself. The passage on the planes occupying one point of space, the long stretch on work and creation on the astral, the whole of the colour key: these are plain, patient, and free of the fog that settles on this subject when a writer is trying to sound initiated. He will not tell you how to leave the body, and says so straight out in the fourth chapter of Volume II: a hint of the method might send an untrained person experimenting, and that can go badly. His last page tells you to use the manual as a key rather than as a way to pass an hour, and not to have idle hours, because within you is a spark of the divine flame that cannot be put out. Ninety pages earlier the same voice was warning you not to go down a particular side street because its colours would depress you.
-
-One distinction before you start, because the books do not always mark the join. The planes, the aura and its colours, the astral body and its filament, the shells left behind at death, thought as a real force that takes a real form: this is the tradition's teaching, held by the Theosophical writers both books draw on, and set down here as such. The tours are a different kind of statement. The congregation gazing into the pit, the crowds in Valhalla thinning as their people are drawn back towards birth, these are reports of somebody's own travelling and rest on his word. He says as much, and adds that any advanced occultist may verify them. That is a claim you can test only by the road the books recommend, and that road is patient work.
-
-As to this edition. Both books are set from scans of their first printings, and every leaf was read against the original page rather than against another edition. Where readings disagreed, it was settled by cutting a crop from the scan and looking at the paper, never by choosing the likelier word. Plain compositor's slips are mended, and each is listed at the back with the reading it replaced, so that you can disagree with me. One leaf sets radioative and sets radio-active correctly four lines below, and that is the whole class of thing I have touched. Where mending a reading would mean editing the author's sentence rather than the compositor's slip, the sentence stands and the question is recorded rather than answered.
-
-What I have left alone is nearly everything else. The spelling stays as the shop set it, inconsistencies included, and both books mix British and American forms freely. The chapter on astral entities uses the vocabulary of 1915 about the peoples whose practices it names, and it is printed as it stands. The original contents pages are analytical, with a paragraph under each chapter saying what is in it. That is editorial work, and it is kept, reset with the page numbers this edition prints. What I have added is the glossary, and ten notes where a name, a date or a claim can be checked against the record and I thought you would want to know how it came out.
-
-That is all the apparatus. The rest is a room you may already be sitting in.
-```
-
-```
-A man writes in to say that he is a faithful disciple, content to sit at the feet of the Teacher. The Teacher writes back that such talk makes him tired, that disciples are parrots and human sheep, that if the correspondent tries to sit at his feet he will use those feet to push him off the platform, and that he may call himself Brother or Fellow Student or Schoolmate in the Kindergarten of God, but not that.
-
-That is the Foreword, and it is the first thing in this book after the Preface. Whatever else Atkinson is doing here, he is not gathering a following.
-
-<b>What this book is</b>
-
-<i>Thought Vibration, or The Law of Attraction in the Thought World</i> was published in Chicago in 1906 by The New Thought Publishing Company, and this edition is set from the 1908 printing issued by The Library Shelf at 1299 Farwell Avenue. The Preface says exactly what it is made of, which is a courtesy not every book of the period extends: two series of lessons that had run in the magazine <i>New Thought</i>, with some further articles in the same line, reordered for the book and given new chapter titles. Louise Radford Wells chose the title and the headings, arranged the lessons and read the proofs, and the analytical contents is the clearest evidence of how much shape she gave it.
-
-The publishers say they left the style alone on purpose. They kept the lessons as written rather than sending them back for the literary polish that usually came before book publication, on the ground that Atkinson's strength lay in language a reader could take at speed. The result is a book that says <i>hustling</i> and <i>played-out</i> and <i>grumpy</i>, that calls a dish of theories a nice dish of scrambled brains, and that gets through its whole argument in a hundred and thirteen pages.
-
-<b>What it teaches</b>
-
-Thought is a force. It goes out from a person as waves go out from a stone dropped in water, in every direction rather than on a plane, and it acts: on the one thinking, on others, and on what comes to both. A mind has a pitch, and it takes in the thought of other minds at the same pitch and lets the rest go by. What a person is settled into thinking therefore decides a great deal of what arrives, and the settled note matters more than any single wish. That is the Law of Attraction as this book states it, and the book holds it to be one manifestation of a single Law that governs everything, which is where chapter XVI ends.
-
-From there the lessons are practical almost without a break. There is one mind, working along two lines, an active line that decides and a passive line that carries out; habit belongs to the second, and the second obeys whatever it has been given. Fear is to be cut out, not by fighting it but by cultivating courage in the same ground, because a mind holds one thing at a time and the way to be rid of a thought is to occupy the place it stands in. Worry is fear's child and dies with it. Desire, wanted hard enough to pay the price for, is the engine; a scattered want draws nothing. The Will does not need strengthening, because it is already strong; the mind needs training to receive it. And luck does not come into it: the last chapter is called Law, Not Chance, and it means the title.
-
-Two of the chapters give affirmations and exercises, which is the closest this book comes to a method. They are worth trying rather than reading. Atkinson is plain that the words do no work by themselves, that the thought behind them is the whole of it, and that they have to be backed by going through the motions of the thing until the mind takes the shape.
-
-<b>What it is honest about</b>
-
-Three things are worth having before you start, because each of them tells you what kind of writer this is.
-
-He refuses the position of teacher, at length and more than once. The Foreword is nine pages of it, and the argument is not modesty. It is that a truth received on somebody else's word is not held at all, that no teacher has the Whole Thing, and that a reader who will not do the work gets nothing whatever from the reading. He offers his own writings to the same test he offers everyone else's, which is to carry them out into the sun and see whether they fade.
-
-He does not promise that thinking replaces working. The Working Creed puts the gospel of work and the I DO beside the I AM, and the exercise for chapter V is to do one disagreeable task a day for a month, on the ground that anyone can do a pleasant thing cheerfully.
-
-And he is a working journalist writing at speed, which shows. The physics is the popular physics of 1906, an ether carrying waves and instruments not yet delicate enough to catch them, and it is doing the work of an analogy rather than of evidence. Where he says that those who have experimented in telepathy need no further proof, he is making a stronger claim than the published record supported then or supports now, and he makes it in a sentence rather than an argument. A reader is better for spotting where the book is reporting and where it is in a hurry, and the difference is not hard to see once it is looked for.
-
-<b>Who wrote it</b>
-
-William Walker Atkinson was a Baltimore lawyer whose practice and health gave way together in the 1890s. Berry's Preface tells the story: overstrain, physical and mental breakdown, financial ruin, and a recovery he attributed to the principles he afterwards spent thirty years setting out. He moved to Chicago, edited <i>New Thought</i> from 1901 and later <i>Advanced Thought</i>, and published well over a hundred books.
-
-Many of them are not signed with this name. He wrote the yoga manuals as Yogi Ramacharaka, the personal-magnetism books as Theron Q. Dumont, and the occult manuals as Swami Panchadasi. Readers who have <i>The Human Aura</i>, <i>The Astral World</i> or <i>Clairvoyance and Occult Powers</i> in this series have the same man in a different coat. An Eastern persona was ordinary practice in this trade and was never much of a secret; what it changes is nothing in the teaching, which comes from Theosophy and from American New Thought in those books as it comes from New Thought in this one.
-
-It is a useful thing to know while reading this book, because the two bodies of work explain one another. The occult manuals describe thought as a real force taking real forms on a plane where they can be seen. This one takes the same doctrine and asks what a person who has to earn a living should do about it on a Tuesday morning.
-
-<b>The temper of it</b>
-
-The best pages here are the angry ones. The Foreword against discipleship, the passage on moons that shine by borrowed light, the recommendation to test any doctrine by carrying it into the sunshine and applying the chemical of laughter: these are written by a man who has watched the movement he belongs to fill up with people repeating phrases by the yard, and they are as good a warning against credulity as anything written from outside it.
-
-That is the note to read the rest in. The book asks to be tried rather than believed, and it says so on nearly every page. A hundred and thirteen pages is a short run for a teaching this large, and the shortness is deliberate. Take one chapter, do what it says for a month, and see.
-
-<b>A note on the text</b>
-
-This edition is set from Google's scan of the 1908 printing, and every leaf was read against the page. Three further readings were compared against ours: an independent machine reading of the same scan, a modern reset of the same text with different line breaks, and the book's own usage wherever a word was in doubt. Where two readings disagreed, the disagreement was settled by cutting a crop from the scan and looking at the paper, never by choosing the likelier word.
-
-Ten places in the 1908 printing needed a decision. Five are the compositor's own slips, plain enough under magnification: a capital where a lower case belongs, an <i>i</i> standing in for an <i>l</i> in two separate chapters, and an <i>r</i> and an <i>n</i> that were never set at all. Those five are mended.
-
-Three are worse. Pages 35, 49 and 65 break off in the middle of a sentence, and page 65 in the middle of a word with the hyphen set and the rest of the page blank. Something went wrong in the making of that edition. Each gap is left exactly as the paper leaves it, and a footnote says what a modern edition puts there, which is that edition's reading rather than this book's.
-
-The last two are chapters the book names one way in its contents and another at their heads. Chapter II keeps both, each where the book puts it, with a footnote saying so. Chapter XI's two names differ by a single word, and its head is set to match its contents entry.
-
-The book's own spelling and pointing are left alone, including where it disagrees with itself. It sets <i>sub-conscious</i> and <i>subconscious</i> within a page of each other, and <i>employes</i> with one <i>e</i>, and all of that is its habit rather than this edition's to tidy.
-
-The original contents is an analytical one, with a paragraph under each chapter saying what is in it. Those paragraphs are editorial work and they are kept, set under their chapters with the page numbers this edition actually prints. The original numbers, which describe a pagination this edition does not have, are gone.
+One last thing, and it is the only advice offered here. Read this book the way it asks to be read, slowly and in order, and try the exercises. Nothing in it can be settled from an armchair, and none of it was ever meant to be. What the book claims is that these faculties are natural, that they are latent in everyone, and that they answer to patient work. Only the person willing to do the work can find out. That invitation is as open now as it was in 1916.
 
 Etsu T. Dhent
 ```
@@ -261,24 +153,6 @@ There is a further matter. Charles W. Leadbeater is not a figure without controv
 Set from the 1895 Theosophical Publishing Society edition.
 ```
 
-# Notes you have already approved
-
-The same voice at note length, which is a different job from front
-matter: forty words, hung on a phrase, read by somebody who has just
-opened the book.
-
-The ether: the medium physics postulated to fill all space and to carry light and the other radiations, the way air carries sound. Michelson and Morley had failed to detect it in 1887 and Einstein removed the need for it in 1905, the year before this book, though neither result had reached popular science writing yet. What the ether is doing in these pages is supplying an analogy, and the analogy is older than the physics it borrows.
-
-The book gives this chapter two names. The contents calls it "Thought-Waves and Their Power of Reproduction"; the head of the chapter calls it "Process of Reproduction." Which was meant is not known, so both are kept as printed.
-
-The chapter stops here, in the middle of a sentence. Page 35 of the 1908 printing ends on this word with the rest of the page blank, and the next chapter begins overleaf. Two other chapters break off the same way, so the fault was in the printing itself. A modern edition continues "women. Will you make the effort?" Those are its words rather than the 1908 book’s, so the gap is left as printed.
-
-The chapter stops in mid-sentence again, as chapter IV did. Page 49 ends on this word with the rest of the page blank. A modern edition continues "front.", which is the obvious ending, but it is that edition’s word and not this one’s, so the gap is left as printed.
-
-The chapter stops in the middle of a word. The compositor set the hyphen, so more was meant to follow; page 65 ends there with the rest of the page blank. A modern edition reads "business and live." The gap is left as printed.
-
-Employes, with one e, was the ordinary American spelling at this date. It is not a misprint.
-
 # The job
 
 You will be given a briefing with the book's verified facts and, often, an
@@ -287,6 +161,23 @@ may reuse any fact in the briefing. You may not invent a date, a figure, a
 name, a title or an incident that is not there. If you want a fact the
 briefing does not carry, say so in a line at the end under `QUERIES:`
 rather than reaching for something plausible.
+
+The briefing arrives at one of two stages and says which.
+
+**The shape comes first.** An outline briefing asks for the shape of the
+piece and not the piece. Give it as notes, never as paragraphs and never
+with a sample of the prose in it: an outline that sounds good is approved
+for its sound, and a phrase you have already written is a phrase you will
+write to instead of writing to the book. A finished introduction is very
+hard to argue with, which is the reason for the stage — the objection that
+a paragraph is the contents page set as prose costs a line here and a
+rewrite later.
+
+**Then the writing.** A writing briefing carries the shape the editor
+approved, which may not be the one you proposed. It is approved: do not
+redesign it. If a movement turns out not to be carried by the material,
+write the rest and say so under `QUERIES:` rather than quietly filling it
+or quietly dropping it.
 
 Where you are given findings on an earlier draft, they are places to look
 and not sentences to paste. Rewrite the passage; never patch it. A patched

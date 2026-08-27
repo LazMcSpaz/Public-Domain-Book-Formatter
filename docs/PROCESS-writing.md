@@ -42,14 +42,16 @@ nobody's.
 
 ## Invariants
 
-| #   | Invariant                                                           | How to attack it                                                                                          |
-| --- | ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
-| W1  | The agent and the voice card say the same things.                   | `node scripts/voice.mjs compile` and `git diff` — a non-empty diff means drift.                           |
-| W2  | The editor's own approved work reaches the writer.                  | `node scripts/voice.mjs prose` and `card` — an empty list is a writer with no model of itself.            |
-| W3  | Every fact the piece asserts came from the briefing.                | `node scripts/voice.mjs check <proposals.json> <body.json>`; and for a section, the `outsideClaims` list. |
-| W4  | The prose does not lean, and does not tell the reader what to read. | `node scripts/voice.mjs audit <book.json>` exits non-zero when it wants a person.                         |
-| W5  | Somebody has read it as a reader rather than as a checker.          | The `first-reader` findings exist for this draft. There is no script for this and there cannot be.        |
-| W6  | No sentence in the piece was written by the session.                | Not automatable. It is a habit, and the reason it is written down here.                                   |
+| #   | Invariant                                                                | How to attack it                                                                                                               |
+| --- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
+| W1  | The agent and the voice card say the same things.                        | `node scripts/voice.mjs compile` and `git diff` — a non-empty diff means drift.                                                |
+| W2  | The editor's own approved work reaches the writer.                       | `node scripts/voice.mjs prose` and `card` — an empty list is a writer with no model of itself.                                 |
+| W2b | Nothing teaches the voice that the editor has not said he stands behind. | `harvest` names its books; there is no flag for the whole shelf. Read `prose` and ask of each entry: would he sign this today? |
+| W2c | The shape was approved before the prose existed.                         | An outline for this piece exists and the editor changed or accepted it. `brief` asks for one by default.                       |
+| W3  | Every fact the piece asserts came from the briefing.                     | `node scripts/voice.mjs check <proposals.json> <body.json>`; and for a section, the `outsideClaims` list.                      |
+| W4  | The prose does not lean, and does not tell the reader what to read.      | `node scripts/voice.mjs audit <book.json>` exits non-zero when it wants a person.                                              |
+| W5  | Somebody has read it as a reader rather than as a checker.               | The `first-reader` findings exist for this draft. There is no script for this and there cannot be.                             |
+| W6  | No sentence in the piece was written by the session.                     | Not automatable. It is a habit, and the reason it is written down here.                                                        |
 
 ---
 
@@ -76,21 +78,60 @@ Add what only a person knows:
 - `--want "..."` for a theme the editor wants drawn out.
 - `--context "..."` for anything the app never learned.
 
-## Stage 13b — The writer writes
+## Stage 13b — The shape, and the editor approves it
 
-Give the `etsu` subagent the briefing and nothing else. It has the voice
-already; that is what it is.
+`brief` asks for an outline by default. This is the gate, and it is where the
+editor's judgement is worth most per second spent.
 
-For a **revision**, give it the briefing, the current draft, and the findings.
-Never give it a rewritten passage, and never give it a sentence to use. Its own
-prompt says findings are places to look and not sentences to paste, and the
-reason it says so is that a model handed a candidate sentence will use it.
+A finished introduction is very hard to argue with. It has a rhythm, the
+sentences are good, and the objection that its third paragraph is the contents
+page set as prose arrives after the work is done and reads like a demand to
+throw it away. The same objection against an outline costs a line. So the shape
+is settled first, by the person whose book it is, and the writing happens once
+against something approved.
+
+What comes back is notes and never prose: the opening's concrete thing, the
+movements with the material each rests on quoted from the briefing and the
+register each is in, **what is being left out and why**, the close, and any
+`QUERIES:`. The left-out list is the half that is usually missing and the half
+the editor cannot reconstruct later — it is the one place he sees the material
+that was declined on his behalf.
+
+Read it, change it, and hand the changed version back. It is his outline now,
+not the writer's proposal.
+
+```bash
+node scripts/voice.mjs brief <book-dir> --length full --out outline-brief.md
+# → etsu → outline.md → the editor edits outline.md
+node scripts/voice.mjs brief <book-dir> --length full --stage write \
+  --outline outline.md --out write-brief.md
+```
+
+`--stage write` refuses to run without an outline. A piece genuinely too small
+to want one takes `--outline none`, which is a decision somebody made rather
+than a step that quietly did not happen.
+
+## Stage 13c — The writer writes
+
+Give the `etsu` subagent the writing briefing and nothing else. It has the
+voice already; that is what it is.
+
+The approved shape is in the briefing and the writer is told not to redesign
+it. If a movement turns out not to be carried by the material it writes the
+rest and says so under `QUERIES:` — never quietly filling it and never quietly
+dropping it, which is the footnote rule applied to shape.
+
+For a **revision**, give it the writing briefing, the current draft, and the
+findings. Never give it a rewritten passage, and never give it a sentence to
+use. Its own prompt says findings are places to look and not sentences to
+paste, and the reason it says so is that a model handed a candidate sentence
+will use it.
 
 What comes back is prose and nothing else. If it comes back with a `QUERIES:`
 line, that is a fact it wanted and the briefing did not carry. Answer it from
 the book or from the scan. Do not answer it from what you know.
 
-## Stage 13c — The deterministic pass
+## Stage 13d — The deterministic pass
 
 ```bash
 node scripts/voice.mjs audit <book.json>          # or any file of prose
@@ -102,7 +143,7 @@ not a list of faults: no lexicon can tell an established teaching from a
 contested claim, and each one is a decision for a person. **Do not tune the
 limits to make a draft pass.** Fix the draft, by sending it back to the writer.
 
-## Stage 13d — The reader
+## Stage 13e — The reader
 
 ```
 Agent(subagent_type: "first-reader", prompt: <the draft>)
@@ -121,7 +162,7 @@ the same reason the writer is never handed a sentence.
 A short report is a good outcome. A reader that always finds six problems is a
 reader nobody can use, and its own prompt says so.
 
-## Stage 13e — Round trip, and stop
+## Stage 13f — Round trip, and stop
 
 Findings go back to the writer, which returns a fresh piece. Audit again, read
 again. Two rounds is normal. If a third round is not converging — each pass
@@ -129,7 +170,7 @@ producing new findings rather than fewer — stop and say so, rather than
 grinding. That is the same rule the PR loop uses for a review bot whose findings
 stop converging, and it means the same thing: the brief is wrong, not the draft.
 
-## Stage 13f — Bank what was accepted
+## Stage 13g — Bank what was accepted
 
 This is the step that skips, and it is the one that makes the next book better.
 
@@ -138,9 +179,18 @@ node scripts/voice.mjs harvest      # the shelf's own approved work → the card
 node scripts/voice.mjs compile      # the card → the agent
 ```
 
-`harvest` reads `book.json` and never `introduction.md`, because the readable
-files are views and drift. A passage banked by hand outranks a harvested one
-and is kept first; anything a cap drops is named on the way past.
+**`harvest` makes you name the books, and there is no flag for all of them.**
+That is the whole point of the verb. A book going out is not the editor
+approving its prose: of the four introductions on this shelf he stands behind
+one and has the other three down for rewriting, and a card built from all four
+teaches the writer to produce more of what is being rewritten — while looking,
+from the outside, exactly like a voice improving. Nothing measures that. Front
+matter and notes are named separately (`--notes`), because an introduction you
+would sign and a note you would sign are two different judgements.
+
+It reads `book.json` and never `introduction.md`, because the readable files
+are views and drift. A passage banked by hand outranks a harvested one and is
+kept first; anything a cap drops is named on the way past.
 
 Then commit **the card and the agent together**. They are one artefact in two
 files and a commit carrying one of them is a commit that has to be remembered
@@ -188,6 +238,23 @@ whose modifiers hung on the wrong noun; and the fact that the introduction
 never names the author once. None of those is reachable by a word list, and the
 last one is the sort of thing that goes to print. Run both. Neither is the
 check.
+
+**The writer was asked to describe an apparatus it had never been shown.** An
+introduction is where the reader is told there is a glossary, that a small
+circle means an entry, how many notes there are. The briefing carried none of
+it, and the first outline came back asking under `QUERIES` whether there was a
+glossary at all. Every one of those numbers was in the assembled document.
+`apparatusOf` counts them — and says "No footnotes" and "No glossary marks in
+the text" out loud, because the failure already on this shelf is a volume that
+carried a 74-entry glossary with not one mark on a word and nothing anywhere
+saying so.
+
+**`harvest` treated shipped as approved.** Its first version took the whole
+shelf, which is the same mistake in a different place as writing the prose in a
+build session: it substituted something measurable for the judgement that
+actually decides. Four introductions were on the shelf, the editor stands
+behind one, and a card built from all four would have taught his rewrite list
+back to him with every sign of the voice getting better.
 
 **The anagram lived only in the agent.** "The pen name is an anagram of 'The
 Student'" was in `.claude/agents/etsu.md` and not on the card, so the app's own

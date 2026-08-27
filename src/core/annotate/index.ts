@@ -56,9 +56,11 @@ export {
 export { learnVoice, proposalsToEdits, type AcceptedProposal } from './apply'
 export {
   INTRODUCTION_SCHEMA,
+  apparatusOf,
   INTRODUCTION_WORDS,
   buildIntroductionPrompt,
   draftIntroduction,
+  introductionOutlineTask,
   introductionTask,
   noteOnTheText,
   parseIntroduction,

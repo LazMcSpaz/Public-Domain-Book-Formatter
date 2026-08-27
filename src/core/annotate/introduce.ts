@@ -108,6 +108,16 @@ export interface IntroductionOptions {
   /** Anything the user wants said — a theme to draw out, a reason for the edition. */
   brief?: string
   /**
+   * A shape the editor has already approved, from the outline stage.
+   *
+   * Optional, and its absence means one-shot drafting — which is what the API
+   * path has always done and what the batch door would have to do. When it is
+   * present the writing stops being a proposal about *what the piece is* and
+   * becomes a proposal about how to say it, which is the only half a model
+   * should be deciding on its own.
+   */
+  outline?: string
+  /**
    * What this edition decided about its copy-text, so the introduction can end
    * with a note on the text.
    *
@@ -155,6 +165,69 @@ export function noteOnTheText(rulings: readonly Ruling[]): string[] {
 }
 
 /**
+ * What an outline has to settle, before there are twelve hundred words of it.
+ *
+ * A finished introduction is very hard to argue with. It has a rhythm, the
+ * sentences are good, and the objection that it spends its third paragraph
+ * paraphrasing the contents page arrives after the work is done and reads like
+ * a demand to throw it away. The same objection against an outline costs a line
+ * and thirty seconds. So the shape is settled first, by the person whose book
+ * it is, and the writing happens once against something approved.
+ *
+ * That is the interview rule this app was built on, turned on the one piece of
+ * work it had never been applied to: ask at the moment the answer is cheap, and
+ * with the evidence to hand. It is also propose-and-accept in its ordinary
+ * form — the writer proposes a shape, the editor accepts one — and it puts the
+ * decision that most needs a person in the one place a person can make it
+ * quickly.
+ *
+ * The outline is **not written in prose**, and the instruction says so twice.
+ * An outline in finished sentences is a draft wearing a disguise: it gets
+ * approved on how it sounds, which is exactly the judgement being deferred, and
+ * the writer then has its own phrasing in front of it and writes to that
+ * instead of to the book.
+ */
+export function introductionOutlineTask(length: IntroductionLength = 'standard'): string {
+  const words = INTRODUCTION_WORDS[length]
+  return [
+    `FIRST, THE SHAPE. Do not write the introduction yet.`,
+    ``,
+    `Propose an outline for the editor to approve or change. Set out:`,
+    ``,
+    `1. THE OPENING. Name the concrete thing it starts on — an incident, an`,
+    `   object, an exercise, a sentence off the page. Say which extract or fact`,
+    `   in the briefing it comes from. Not the words you will use: the thing.`,
+    `2. THE MOVEMENTS, in order. For each one, three lines and no more:`,
+    `   - what it does for the reader;`,
+    `   - the specific material it rests on, quoted from the briefing, so the`,
+    `     editor can see whether there is enough there to carry it;`,
+    `   - which register it is in — what the record shows, what the tradition`,
+    `     holds, or my own view — because a movement that cannot be assigned to`,
+    `     one of the three is a movement that will blur them.`,
+    `3. WHAT IS LEFT OUT, and why. A briefing always carries more than a piece`,
+    `   can hold, and the material you decline is a decision the editor may`,
+    `   want to reverse. This is the half of an outline that is usually`,
+    `   missing and it is the half he cannot reconstruct later.`,
+    `4. THE CLOSE. What the last paragraph does, and what the note on the text`,
+    `   has to say.`,
+    `5. WHAT YOU ARE MISSING. Anything you need that the briefing does not`,
+    `   carry, under \`QUERIES:\`. Raise it here rather than after the writing,`,
+    `   when it costs a line instead of a rewrite.`,
+    ``,
+    `About ${words} words of finished prose is the target, so size the movements`,
+    `to fit it and say roughly how long each runs. Three long movements beat`,
+    `seven short ones: a piece with a movement per topic reads as a list, and`,
+    `the commonest failure in this kind of writing is a paragraph that is the`,
+    `contents page set as prose.`,
+    ``,
+    `Write the outline as notes. Not paragraphs, not finished sentences, and`,
+    `no sample of the prose — a phrase you have already written is a phrase you`,
+    `will write to instead of writing to the book, and an outline that sounds`,
+    `good gets approved for its sound. The editor is approving a shape.`
+  ].join('\n')
+}
+
+/**
  * What the job is, with nothing in it about who is doing it.
  *
  * Split out from the prompt because the writing no longer always happens
@@ -168,9 +241,28 @@ export function noteOnTheText(rulings: readonly Ruling[]): string[] {
  * puts the voice in front of it for the API; `voice.mjs brief` leaves the voice
  * out because the agent already has it.
  */
-export function introductionTask(length: IntroductionLength = 'standard'): string {
+export function introductionTask(
+  length: IntroductionLength = 'standard',
+  approvedOutline = ''
+): string {
   const words = INTRODUCTION_WORDS[length]
+  const outline = approvedOutline.trim()
   return [
+    ...(outline
+      ? [
+          `THE EDITOR HAS APPROVED THIS SHAPE. Write to it.`,
+          ``,
+          outline,
+          ``,
+          `It is approved, so do not redesign it. Where it and the rules below`,
+          `disagree, the outline wins on *shape* — what goes in, in what order,`,
+          `at what length — and the rules win on everything else. If a movement`,
+          `turns out not to be carried by the material, write the rest and say`,
+          `so at the end under \`QUERIES:\`, rather than quietly filling it or`,
+          `quietly dropping it.`,
+          ``
+        ]
+      : []),
     `WHAT AN INTRODUCTION HAS TO DO:`,
     `Say what the book is and what reading it is like. Place it in its moment —`,
     `who wrote it, when, into what argument or fashion or need. Say what a`,
@@ -192,6 +284,87 @@ export function introductionTask(length: IntroductionLength = 'standard'): strin
   ].join('\n')
 }
 
+/**
+ * What this edition has added to the book, counted rather than remembered.
+ *
+ * An introduction is where a reader is told what the apparatus is — how many
+ * notes there are, that a small circle means a glossary entry, that the
+ * original contents was kept and reset. The writer was being asked to say all
+ * of that and given none of it, so the first outline that came back asked for
+ * it under `QUERIES`: is there a glossary, are there footnotes, how many, and
+ * is the list of corrections exhaustive. Every one of those is sitting in the
+ * assembled document.
+ *
+ * Counted here, once, rather than left to a person to recall — because the
+ * failure this catches is already on the shelf. One volume carried 85 glossary
+ * marks and 23 notes; the next carried a 74-entry glossary with no marks at
+ * all and no footnotes, and the book file, the export report and the KDP checks
+ * were all perfectly happy. An introduction is the one place a reader would
+ * have caught it, and it can only do that if the writer is told the truth.
+ *
+ * A count is given only where it can be taken exactly. "About a hundred notes"
+ * is worse than no number, because the writer will print it.
+ */
+export function apparatusOf(doc: BookDocument): string[] {
+  const lines: string[] = []
+  const chapters = doc.chapters.filter((c) => c.level === 1).length
+  const words = doc.blocks.reduce((n, b) => n + b.text.split(/\s+/u).filter(Boolean).length, 0)
+  lines.push(
+    `The body runs about ${Math.round(words / 1000)},000 words in ${chapters} chapter${
+      chapters === 1 ? '' : 's'
+    }.`
+  )
+
+  const back = doc.sections.filter((s) => s.placement === 'back')
+  for (const section of back) {
+    // An entry opens with its headword in bold. `book-files.mjs` counts the
+    // same thing by matching `<b>` on the section *edit*, where the markup is
+    // still text; by the time a block is assembled the bold is a list of word
+    // indices, so the same convention is read as "bold starting at word 0".
+    // Counting it the other way here silently returned zero and printed "a
+    // division at the back" over a seventy-four entry glossary.
+    const entries = section.blocks.filter((b) => b.strong?.includes(0)).length
+    lines.push(
+      entries > 0
+        ? `A ${section.title.toLowerCase()} of ${entries} entries at the back, which is this edition's and not the author's.`
+        : `A division at the back titled "${section.title}", which is this edition's and not the author's.`
+    )
+  }
+
+  const marks = doc.blocks.reduce(
+    (n, b) => n + [...b.text].filter((c) => c === GLOSSARY_MARK).length,
+    0
+  )
+  if (marks > 0) {
+    lines.push(
+      `${marks} words in the running text carry a small circle (like this${GLOSSARY_MARK}),` +
+        ` marking the first use of a word the glossary defines.`
+    )
+  }
+
+  if (doc.footnotes.length > 0) {
+    lines.push(
+      `${doc.footnotes.length} footnote${doc.footnotes.length === 1 ? '' : 's'},` +
+        ` set at the foot of the page the reference falls on.`
+    )
+  }
+  if (doc.illustrations.length > 0) {
+    lines.push(
+      `${doc.illustrations.length} illustration${doc.illustrations.length === 1 ? '' : 's'},` +
+        ` cut from the scan and set to the measure.`
+    )
+  }
+
+  // Said out loud, because "no notes" is a fact about the edition the writer
+  // must not fill in the other way, and because a book that should have had
+  // them and has none is the thing somebody needs to notice.
+  if (doc.footnotes.length === 0) lines.push(`No footnotes.`)
+  if (marks === 0 && back.length > 0) lines.push(`No glossary marks in the text.`)
+  if (back.length === 0) lines.push(`No glossary.`)
+
+  return lines
+}
+
 /** The instruction. Exported so a test can read it without a network. */
 export function buildIntroductionPrompt(
   doc: BookDocument,
@@ -207,7 +380,7 @@ export function buildIntroductionPrompt(
     ``,
     voiceBlock(options.voice),
     ``,
-    introductionTask(options.length ?? 'standard'),
+    introductionTask(options.length ?? 'standard', options.outline ?? ''),
     // Last, because it is the thing to have most recently read before writing,
     // and because a rule about a register is worth much less than a page of it.
     ...(prose ? [``, prose] : [])
@@ -227,6 +400,13 @@ export function buildIntroductionPrompt(
   if (options.brief?.trim()) {
     parts.push(``, `The editor wants this introduction to:`, options.brief.trim())
   }
+
+  parts.push(
+    ``,
+    `WHAT THIS EDITION CARRIES. Say so in the introduction, and get the`,
+    `numbers right; these are counted from the book as it now stands.`,
+    ...apparatusOf(doc).map((line) => `- ${line}`)
+  )
 
   parts.push(...noteOnTheText(options.rulings ?? []))
 

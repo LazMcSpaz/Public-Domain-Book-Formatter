@@ -36,7 +36,8 @@
  *   node scripts/voice.mjs prose                    # what front matter is banked
  *   node scripts/voice.mjs prose --file piece.md    # bank one passage by hand
  *   node scripts/voice.mjs compile                  # the card as .claude/agents/etsu.md
- *   node scripts/voice.mjs brief <book-dir>         # the dossier a writer is handed
+ *   node scripts/voice.mjs brief <book-dir>         # the dossier, and ask for a shape
+ *   node scripts/voice.mjs brief <book-dir> --stage write --outline o.md
  *   node scripts/voice.mjs audit book.json          # the bias pass, after the writing
  *   node scripts/voice.mjs check notes.json body.json
  *
@@ -185,6 +186,23 @@ function compileAgent(voice, annotate) {
     'briefing does not carry, say so in a line at the end under `QUERIES:`',
     'rather than reaching for something plausible.',
     '',
+    'The briefing arrives at one of two stages and says which.',
+    '',
+    '**The shape comes first.** An outline briefing asks for the shape of the',
+    'piece and not the piece. Give it as notes, never as paragraphs and never',
+    'with a sample of the prose in it: an outline that sounds good is approved',
+    'for its sound, and a phrase you have already written is a phrase you will',
+    'write to instead of writing to the book. A finished introduction is very',
+    'hard to argue with, which is the reason for the stage — the objection that',
+    'a paragraph is the contents page set as prose costs a line here and a',
+    'rewrite later.',
+    '',
+    '**Then the writing.** A writing briefing carries the shape the editor',
+    'approved, which may not be the one you proposed. It is approved: do not',
+    'redesign it. If a movement turns out not to be carried by the material,',
+    'write the rest and say so under `QUERIES:` rather than quietly filling it',
+    'or quietly dropping it.',
+    '',
     'Where you are given findings on an earlier draft, they are places to look',
     'and not sentences to paste. Rewrite the passage; never patch it. A patched',
     "sentence is in the patcher's voice, and the whole point of your existing is",
@@ -251,6 +269,9 @@ async function save(path, voice) {
   await writeFile(path, `${JSON.stringify(voice, null, 2)}\n`)
   return path
 }
+
+/** A refusal meant for a person: printed as its message, never as a stack. */
+class Refusal extends Error {}
 
 const { annotate, sync, assemble, edits, close } = await core()
 try {
@@ -450,15 +471,36 @@ try {
     // `exemplars` was designed to accrete from accepted notes and `proseSamples`
     // from accepted front matter, and both accrete only where there is a gate to
     // accept at. The books are made in a conversation now, so nothing ever
-    // called `withExemplar`: four published books, ninety-odd approved notes and
+    // called `withExemplar`: four published books, fifty-seven approved notes and
     // four introductions sat on the shelf while the card carried an empty list
     // and one passage. This is the missing hand.
     //
     // It reads `book.json` and never the readable files. `introduction.md` is a
     // *view* of the book and drifts from it; banking a view would teach the
     // editor a version of his own prose that is not the one in print.
-    const dirs = opts._.length > 0 ? opts._.map((d) => resolve(d)) : await shelfBooks()
-    if (dirs.length === 0) throw new Error(`No books under ${resolve(SHELF, 'books')}.`)
+    //
+    // **The books have to be named.** The first version of this verb took the
+    // whole shelf, and that quietly asserted the thing this file most needed to
+    // get right: that a book going out is the editor approving its prose. It is
+    // not. Of the four introductions on this shelf the editor stands behind one
+    // and has the other three down for rewriting, and a card built from all four
+    // teaches the writer to produce more of what is being rewritten — while
+    // looking, from the outside, exactly like a voice improving. There is no
+    // measurement that catches that. Only the editor knows, so only the editor
+    // says.
+    const dirs = opts._.map((d) => resolve(d))
+    if (dirs.length === 0) {
+      const available = await shelfBooks()
+      console.error('Name the books whose prose you approve. Shipping one is not approving it.\n')
+      for (const d of available) console.error(`  ${basename(d)}`)
+      console.error(
+        `\n  node scripts/voice.mjs harvest <book-dir> [<book-dir>...] [--notes]\n` +
+          `  --notes also banks that book's notes. Front matter and notes are\n` +
+          `  approved separately, because an introduction you would sign and a\n` +
+          `  note you would sign are two different judgements.`
+      )
+      throw new Refusal('')
+    }
 
     let next = voice
     const banked = []
@@ -475,6 +517,7 @@ try {
       const front = edits.filter((e) => e.kind === 'section' && e.placement === 'front')
       const notes = edits.filter((e) => e.kind === 'note' && (e.text ?? '').trim())
       for (const f of front) offeredProse.push((f.text ?? '').trim())
+      if (!opts.notes) notes.length = 0
       // Banked without the passage. A note's anchor is a character offset into
       // an *assembled* block, and a leaf's text is not a block's text, so the
       // words it hangs on cannot be recovered from the book file alone. The
@@ -584,8 +627,34 @@ try {
       rulings: run.rulings ?? []
     })
 
+    // Outline first, and it is the default rather than the option, because a
+    // flow that has to be remembered is a flow that skips — which is how this
+    // shelf ended up with a book carrying no glossary marks and nothing
+    // anywhere saying so.
+    const stage = typeof opts.stage === 'string' ? opts.stage : 'outline'
+    if (stage !== 'outline' && stage !== 'write') {
+      throw new Refusal(`--stage is outline or write, not ${stage}.`)
+    }
+    let approved = ''
+    if (stage === 'write') {
+      if (typeof opts.outline !== 'string') {
+        throw new Refusal(
+          'Writing needs an approved outline: --outline <file>.\n' +
+            'Run the outline stage first and let the editor change it. If a piece\n' +
+            'is genuinely small enough not to want one, say so with --outline none.'
+        )
+      }
+      approved =
+        opts.outline === 'none' ? '' : (await readFile(resolve(opts.outline), 'utf8')).trim()
+    }
+
+    const task =
+      stage === 'outline'
+        ? annotate.introductionOutlineTask(length)
+        : annotate.introductionTask(length, approved)
+
     const out = [
-      `# Briefing: ${facts.title || basename(dir)}`,
+      `# Briefing: ${facts.title || basename(dir)}${stage === 'outline' ? ' (outline stage)' : ''}`,
       ``,
       `Everything you may use is below. Every fact in it is verified against the`,
       `book. Nothing outside it is. If you want something that is not here, ask`,
@@ -599,7 +668,7 @@ try {
           ]
         : []),
       ``,
-      annotate.introductionTask(length),
+      task,
       ``,
       `---`,
       ``,
@@ -637,6 +706,10 @@ try {
   } else {
     throw new Error(`Unknown verb: ${verb}`)
   }
+} catch (err) {
+  if (!(err instanceof Refusal)) throw err
+  if (err.message) console.error(err.message)
+  process.exitCode = 2
 } finally {
   await close()
 }

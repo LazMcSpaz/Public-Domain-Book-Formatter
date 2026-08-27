@@ -454,13 +454,28 @@ node scripts/book-files.mjs <book-dir> --check   # do the readable files still
 Writing the apparatus (see [`PROCESS-writing.md`](./docs/PROCESS-writing.md)):
 
 ```bash
-node scripts/voice.mjs brief <book-dir> --out b.md  # the dossier a writer gets,
-                                     #   rendered by the module the API uses
+node scripts/voice.mjs brief <book-dir> --out b.md  # the dossier, and ask for a
+                                     #   shape; rendered by the module the API uses
+node scripts/voice.mjs brief <book-dir> --stage write --outline outline.md
+                                     #   the same dossier, once a shape is approved
 node scripts/voice.mjs audit <book.json>            # the bias pass, deterministic
-node scripts/voice.mjs harvest       # the shelf's approved work → the card
+node scripts/voice.mjs harvest <book-dir> [--notes] # work the editor stands
+                                     #   behind → the card. Named, never the shelf
 node scripts/voice.mjs compile       # the card → .claude/agents/etsu.md
 node scripts/voice.mjs prose         # what front matter the writer has of its own
 ```
+
+**The shape is approved before the prose exists.** A finished introduction is
+very hard to argue with; the objection that its third paragraph is the contents
+page set as prose costs a line against an outline and a rewrite against a draft.
+So `brief` asks for an outline by default and `--stage write` refuses to run
+without one.
+
+**A book going out is not the editor approving its prose.** `harvest` makes you
+name the books, and there is no flag for the whole shelf: a card built from
+everything published teaches the writer to produce more of whatever is on the
+rewrite list, while looking from the outside exactly like a voice improving.
+Nothing measures that, so only the editor says.
 
 **The session never writes the prose and never patches it.** The `etsu` subagent
 writes; the audit and `first-reader` report findings; the findings go back to the
