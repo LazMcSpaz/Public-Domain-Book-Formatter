@@ -307,6 +307,54 @@ export function introductionTask(
 }
 
 /**
+ * Chapters, told apart from the divisions they sit under.
+ *
+ * A combined volume opens "BOOK ONE." over "THE HUMAN AURA" and then runs
+ * "CHAPTER I." to "CHAPTER X.", and the whole lot arrives as level-one
+ * entries, because on the page that is what they are. Counting them all gave
+ * 23 for a book whose contents page prints 21, and the writer printed 23
+ * because it was told to — then said so, which is the only reason this was
+ * found.
+ *
+ * The rule is the label's stem: the word in front of the numeral. Twenty-one
+ * entries say CHAPTER and two say BOOK, so CHAPTER is what a chapter is called
+ * here and BOOK is something else. That travels to LESSON, PART and SECTION
+ * without knowing any of those words, and a book whose headings carry no
+ * labels at all has one group and loses nothing.
+ *
+ * A tie is not resolved and must not be: two stems in equal number is a book
+ * whose structure this cannot read, and it counts everything rather than
+ * guessing which half to discard.
+ */
+function countChapters(top: readonly { label?: string; title: string }[]): {
+  chapters: number
+  divisions: string[]
+} {
+  const stemOf = (label: string): string =>
+    label
+      .replace(/[.\s]+$/u, '')
+      .replace(/\s+[IVXLCDM\d]+$/iu, '')
+      .trim()
+      .toLocaleUpperCase()
+
+  const counts = new Map<string, number>()
+  for (const c of top) {
+    const stem = c.label?.trim() ? stemOf(c.label) : ''
+    if (stem) counts.set(stem, (counts.get(stem) ?? 0) + 1)
+  }
+  if (counts.size < 2) return { chapters: top.length, divisions: [] }
+
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1])
+  if (ranked[0]![1] === ranked[1]![1]) return { chapters: top.length, divisions: [] }
+
+  const chapterStem = ranked[0]![0]
+  const divisions = top
+    .filter((c) => c.label?.trim() && stemOf(c.label) !== chapterStem)
+    .map((c) => c.title)
+  return { chapters: top.length - divisions.length, divisions }
+}
+
+/**
  * What this edition has added to the book, counted rather than remembered.
  *
  * An introduction is where a reader is told what the apparatus is — how many
@@ -329,13 +377,23 @@ export function introductionTask(
  */
 export function apparatusOf(doc: BookDocument): string[] {
   const lines: string[] = []
-  const chapters = doc.chapters.filter((c) => c.level === 1).length
+  const top = doc.chapters.filter((c) => c.level === 1)
+  const { chapters, divisions } = countChapters(top)
   const words = doc.blocks.reduce((n, b) => n + b.text.split(/\s+/u).filter(Boolean).length, 0)
   lines.push(
     `The body runs about ${Math.round(words / 1000)},000 words in ${chapters} chapter${
       chapters === 1 ? '' : 's'
     }.`
   )
+  // Named, not silently subtracted. A count that quietly drops two headings is
+  // a count nobody can check against the contents page, and the writer would
+  // have printed whichever number it was handed.
+  if (divisions.length > 0) {
+    lines.push(
+      `Those sit under ${divisions.length} division${divisions.length === 1 ? '' : 's'}` +
+        ` (${divisions.join(', ')}), which are not chapters and are not counted as any.`
+    )
+  }
 
   const back = doc.sections.filter((s) => s.placement === 'back')
   for (const section of back) {

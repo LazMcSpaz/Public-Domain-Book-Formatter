@@ -871,6 +871,91 @@ describe('the editor’s introduction', () => {
       expect(lines.join('\n')).toContain('glossary of 2 entries')
     })
 
+    // Caught by the writer, not by a test. A combined volume opens "BOOK ONE."
+    // over "THE HUMAN AURA" and then runs CHAPTER I to X, and all of it arrives
+    // as level-one entries. The count said 23 where the contents page prints
+    // 21; the writer printed 23 because it was told to, and said so.
+    it('tells a chapter from the division it sits under', () => {
+      const built = bookOfChapters()
+      const combined = {
+        ...built,
+        chapters: [
+          {
+            id: 'd1',
+            title: 'THE HUMAN AURA',
+            label: 'BOOK ONE.',
+            level: 1,
+            blockIndex: 0,
+            sourcePage: 0
+          },
+          {
+            id: 'c1',
+            title: 'WHAT IS THE AURA?',
+            label: 'CHAPTER I.',
+            level: 1,
+            blockIndex: 1,
+            sourcePage: 1
+          },
+          {
+            id: 'c2',
+            title: 'THE PRANA-AURA.',
+            label: 'CHAPTER II.',
+            level: 1,
+            blockIndex: 2,
+            sourcePage: 2
+          },
+          {
+            id: 'd2',
+            title: 'THE ASTRAL WORLD',
+            label: 'BOOK TWO.',
+            level: 1,
+            blockIndex: 3,
+            sourcePage: 3
+          },
+          {
+            id: 'c3',
+            title: 'THE SEVEN PLANES.',
+            label: 'CHAPTER I.',
+            level: 1,
+            blockIndex: 4,
+            sourcePage: 4
+          }
+        ]
+      }
+      const lines = apparatusOf(combined).join('\n')
+      expect(lines).toContain('3 chapters')
+      // Named rather than silently subtracted: a count that quietly drops two
+      // headings cannot be checked against the contents page.
+      expect(lines).toContain('2 divisions (THE HUMAN AURA, THE ASTRAL WORLD)')
+    })
+
+    it('counts every heading when the labels do not separate into two kinds', () => {
+      const built = bookOfChapters()
+      const flat = {
+        ...built,
+        chapters: [
+          { id: 'a', title: 'ONE', label: 'LESSON I.', level: 1, blockIndex: 0, sourcePage: 0 },
+          { id: 'b', title: 'TWO', label: 'LESSON II.', level: 1, blockIndex: 1, sourcePage: 1 }
+        ]
+      }
+      expect(apparatusOf(flat).join('\n')).toContain('2 chapters')
+      expect(apparatusOf(flat).join('\n')).not.toContain('division')
+    })
+
+    // Two stems in equal number is a structure this cannot read, and guessing
+    // which half to discard is worse than counting both.
+    it('does not guess when two labels are equally common', () => {
+      const built = bookOfChapters()
+      const tied = {
+        ...built,
+        chapters: [
+          { id: 'a', title: 'ONE', label: 'BOOK I.', level: 1, blockIndex: 0, sourcePage: 0 },
+          { id: 'b', title: 'TWO', label: 'CHAPTER I.', level: 1, blockIndex: 1, sourcePage: 1 }
+        ]
+      }
+      expect(apparatusOf(tied).join('\n')).toContain('2 chapters')
+    })
+
     it('says the apparatus is absent rather than leaving the writer to guess', () => {
       const lines = apparatusOf(bookOfChapters()).join('\n')
       expect(lines).toContain('No footnotes.')
