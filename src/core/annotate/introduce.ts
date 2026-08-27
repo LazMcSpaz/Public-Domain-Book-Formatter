@@ -12,10 +12,11 @@
  *
  * ## What it is shown
  *
- * The book's own structure — title, author, year, its chapter headings in order
- * — a *sample* of the prose rather than the whole of it, and the editor's own
- * front matter from books already published, which is the only place the
- * register is shown rather than described. Sampling is not
+ * The book's own structure — title, author, year, its chapters in order with
+ * the analytical description the original contents set under each — a *sample*
+ * of the prose rather than the whole of it, and the editor's own front matter
+ * from books already published, which is the only place the register is shown
+ * rather than described. Sampling is not
  * economising: an introduction is written from the shape of a book and its
  * texture, and a model given three hundred pages writes a summary of the last
  * twenty. Evenly spaced extracts give it the shape and the voice of the work
@@ -392,9 +393,41 @@ export function buildIntroductionPrompt(
   if (facts.originalYear?.trim()) parts.push(`First published: ${facts.originalYear.trim()}`)
   if (facts.context?.trim()) parts.push(`The editor says of this work: ${facts.context.trim()}`)
 
-  const chapters = doc.chapters.filter((c) => c.level === 1).map((c) => c.title)
+  // Each chapter with the analytical description the original contents page
+  // set under it, where there is one.
+  //
+  // This was the single largest thing wrong with a briefing, and it is
+  // measurable rather than a matter of taste. The editor's own approved
+  // introduction names about sixty proper nouns per thousand words; a draft
+  // written from the old briefing managed six, because the eight extracts
+  // between them offered four usable names. The synopses of one book here
+  // carry Cazotte, Napoleon, Julius Caesar, Swedenborg, Perceval, the Fox
+  // sisters, the Society for Psychical Research and the Creery Experiments,
+  // along with "two hundred and ten successes out of a possible three hundred
+  // and eighty-two" — which is to say, nearly every concrete thing that
+  // approved introduction is built out of. `synopsis.ts` recovers them, the
+  // contents prints them, and the writer was shown a list of titles.
+  //
+  // They are also the safest material in the briefing. A synopsis is the
+  // book's own words about itself, so a writer using one is quoting rather
+  // than remembering, which is the whole shape this design is built around.
+  const chapters = doc.chapters.filter((c) => c.level === 1)
   if (chapters.length > 0) {
-    parts.push(``, `Its chapters, in order:`, ...chapters.map((t) => `- ${t}`))
+    const described = chapters.filter((c) => c.synopsis?.trim()).length
+    parts.push(``, `Its chapters, in order:`)
+    if (described > 0) {
+      parts.push(
+        `Under ${described} of them is the description the original contents page`,
+        `set there. Those are the book's own words about itself, so anything in`,
+        `one is attested and you may use it. They are also where the names, the`,
+        `figures and the cases are: the body of an old book will mention a person`,
+        `once in passing where its synopsis lists him.`
+      )
+    }
+    for (const c of chapters) {
+      parts.push(`- ${c.title}`)
+      if (c.synopsis?.trim()) parts.push(`    ${c.synopsis.trim()}`)
+    }
   }
 
   if (options.brief?.trim()) {

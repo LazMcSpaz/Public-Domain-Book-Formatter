@@ -670,6 +670,35 @@ describe('the editor’s introduction', () => {
     expect(user).toContain('alembick')
   })
 
+  // The largest thing that was wrong with a briefing, and it was measurable.
+  // Four accepted introductions run 46 to 67 names and figures per thousand
+  // words; a draft written from a briefing of chapter *titles* came back at 7.
+  // The analytical contents is where an old book keeps its names, and
+  // `synopsis.ts` had already recovered it.
+  it('gives the writer the analytical contents, not a list of titles', () => {
+    const built = bookOfChapters()
+    const described = {
+      ...built,
+      chapters: built.chapters.map((c, i) =>
+        i === 1
+          ? { ...c, synopsis: 'The celebrated Creery Experiments, and how Cazotte foretold it.' }
+          : c
+      )
+    }
+    const { user } = buildIntroductionPrompt(described, { voice: defaultVoice() })
+    expect(user).toContain('Creery Experiments')
+    expect(user).toContain('Cazotte')
+    // Said to be the book's own words, because that is what makes them safe
+    // to use under a rule that forbids inventing a name.
+    expect(user).toContain("the book's own words about itself")
+  })
+
+  it('says nothing about descriptions when the contents had none', () => {
+    const { user } = buildIntroductionPrompt(bookOfChapters(), { voice: defaultVoice() })
+    expect(user).toContain('Its chapters, in order:')
+    expect(user).not.toContain("the book's own words about itself")
+  })
+
   it('samples across the whole book, not just its opening', () => {
     // The first pages of an old book are its least representative: that is
     // where the dedication and the throat-clearing live.

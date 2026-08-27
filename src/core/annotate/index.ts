@@ -73,6 +73,8 @@ export { estimateAnnotationCost, type AnnotationCostInputs } from './cost'
 export {
   HEDGE_RATIO_LIMIT,
   MIN_SENTENCES,
+  PLACEHOLDER_OPENER_BASELINE,
+  PLACEHOLDER_OPENER_LIMIT,
   auditProse,
   type BiasFinding,
   type BiasKind,

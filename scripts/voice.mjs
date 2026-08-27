@@ -402,6 +402,26 @@ try {
     console.log(
       `  reading: grade ${r.grade.toFixed(1)}, ${r.wordsPerSentence.toFixed(1)} words/sentence`
     )
+    const c = audit.concreteness
+    console.log(
+      `  concreteness: ${c.perThousand.toFixed(0)} names and figures per 1000 words ` +
+        `(${c.properNouns} names, ${c.numerals} numerals; the editor's own runs about 67)`
+    )
+    const ph = audit.placeholders
+    if (ph.findings.length > 0) {
+      const verdict = ph.overLimit ? 'OVER' : 'within'
+      console.log(
+        `  placeholder openers: ${ph.findings.length} (${(ph.rate * 100).toFixed(0)}%, ${verdict}; ` +
+          `the editor's own runs ${(annotate.PLACEHOLDER_OPENER_BASELINE * 100).toFixed(0)}%, ` +
+          `limit ${(annotate.PLACEHOLDER_OPENER_LIMIT * 100).toFixed(0)}%)`
+      )
+      // Listed only when over, because below the limit the construction is
+      // doing its job and a list of eleven good sentences trains a person to
+      // stop reading the report.
+      if (ph.overLimit) {
+        for (const f of ph.findings) console.log(`    “${f.match}” — ${f.sentence.slice(0, 100)}`)
+      }
+    }
     const dashes = audit.findings.filter((f) => f.kind === 'dash')
     if (dashes.length > 0)
       console.log(`  DASHES: ${dashes.length} — none belong in this editor's prose`)

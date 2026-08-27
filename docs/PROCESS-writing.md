@@ -42,16 +42,17 @@ nobody's.
 
 ## Invariants
 
-| #   | Invariant                                                                | How to attack it                                                                                                               |
-| --- | ------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------ |
-| W1  | The agent and the voice card say the same things.                        | `node scripts/voice.mjs compile` and `git diff` — a non-empty diff means drift.                                                |
-| W2  | The editor's own approved work reaches the writer.                       | `node scripts/voice.mjs prose` and `card` — an empty list is a writer with no model of itself.                                 |
-| W2b | Nothing teaches the voice that the editor has not said he stands behind. | `harvest` names its books; there is no flag for the whole shelf. Read `prose` and ask of each entry: would he sign this today? |
-| W2c | The shape was approved before the prose existed.                         | An outline for this piece exists and the editor changed or accepted it. `brief` asks for one by default.                       |
-| W3  | Every fact the piece asserts came from the briefing.                     | `node scripts/voice.mjs check <proposals.json> <body.json>`; and for a section, the `outsideClaims` list.                      |
-| W4  | The prose does not lean, and does not tell the reader what to read.      | `node scripts/voice.mjs audit <book.json>` exits non-zero when it wants a person.                                              |
-| W5  | Somebody has read it as a reader rather than as a checker.               | The `first-reader` findings exist for this draft. There is no script for this and there cannot be.                             |
-| W6  | No sentence in the piece was written by the session.                     | Not automatable. It is a habit, and the reason it is written down here.                                                        |
+| #   | Invariant                                                                    | How to attack it                                                                                                                                                          |
+| --- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| W1  | The agent and the voice card say the same things.                            | `node scripts/voice.mjs compile` and `git diff` — a non-empty diff means drift.                                                                                           |
+| W2  | The editor's own approved work reaches the writer.                           | `node scripts/voice.mjs prose` and `card` — an empty list is a writer with no model of itself.                                                                            |
+| W2b | Nothing teaches the voice that the editor has not said he stands behind.     | `harvest` names its books; there is no flag for the whole shelf. Read `prose` and ask of each entry: would he sign this today?                                            |
+| W2d | The writer was given the book's own names and figures, not a list of titles. | `brief` prints each chapter's recovered synopsis. `audit` prints names and figures per thousand words: far below the editor's own is a question about the briefing first. |
+| W2c | The shape was approved before the prose existed.                             | An outline for this piece exists and the editor changed or accepted it. `brief` asks for one by default.                                                                  |
+| W3  | Every fact the piece asserts came from the briefing.                         | `node scripts/voice.mjs check <proposals.json> <body.json>`; and for a section, the `outsideClaims` list.                                                                 |
+| W4  | The prose does not lean, and does not tell the reader what to read.          | `node scripts/voice.mjs audit <book.json>` exits non-zero when it wants a person.                                                                                         |
+| W5  | Somebody has read it as a reader rather than as a checker.                   | The `first-reader` findings exist for this draft. There is no script for this and there cannot be.                                                                        |
+| W6  | No sentence in the piece was written by the session.                         | Not automatable. It is a habit, and the reason it is written down here.                                                                                                   |
 
 ---
 
@@ -248,6 +249,39 @@ glossary at all. Every one of those numbers was in the assembled document.
 the text" out loud, because the failure already on this shelf is a volume that
 carried a 74-entry glossary with not one mark on a word and nothing anywhere
 saying so.
+
+**The briefing was starving the writer of everything concrete, and only a
+number found it.** The editor's accepted introductions run 46 to 67 names and
+figures per thousand words; a draft of one of those same books came back at 7.
+That reads as a failure of the writer and was not. `buildIntroductionPrompt`
+was printing `c.title` and dropping `c.synopsis` — the analytical contents,
+recovered by `synopsis.ts`, set under every chapter by the layout engine, and
+carrying Cazotte, Napoleon, Julius Caesar, Swedenborg, Perceval, the Fox
+sisters, the Society for Psychical Research, the Creery Experiments and "two
+hundred and ten successes out of a possible three hundred and eighty-two". The
+body of an old book mentions a man once in passing where its synopsis lists
+him, so that page is where the names are; the writer was shown twenty-two
+titles and four usable proper nouns. It is also the _safest_ material in a
+briefing, being the book's own words about itself.
+
+Same shape again: recovered, stored, laid out, and never put in front of the
+writer. The lesson is the one `proseSamples` taught — of any field on a book,
+ask which function shows this to a model.
+
+**The placeholder tic is a rate, not a word list.** Four accepted introductions
+open 8 to 11% of their sentences on "It is", "There is", "This is", "What X
+is"; the machine draft opened 17%. The construction is not the fault — one of
+the editor's own best lines is "That is the whole of it." — the proportion is,
+which is why it is measured against his own baseline and kept out of the fault
+list, where somebody would eventually tune it until it stopped firing.
+
+**And one check does not discriminate.** Flat stretches, over the same five
+files: 7, 3, 6, 7 for the accepted introductions against 5 for the machine
+draft. It separates nothing. It is already marked reported-and-not-enforced,
+and the honest options are to re-baseline it against paragraph shape, which is
+what a reader actually complained about, or to drop it. It has not been
+changed here, because a check nobody can score is worse than no check, and that
+applies to this one.
 
 **`harvest` treated shipped as approved.** Its first version took the whole
 shelf, which is the same mistake in a different place as writing the prose in a

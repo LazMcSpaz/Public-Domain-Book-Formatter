@@ -285,7 +285,8 @@ export const HEDGE_RATIO_LIMIT = 1.6
  */
 export const MIN_HEDGES = 3
 
-export type BiasKind = 'dismissal' | 'banned' | 'hedge' | 'dash' | 'direction' | 'rhythm' | 'person'
+export type BiasKind =
+  'dismissal' | 'banned' | 'hedge' | 'dash' | 'direction' | 'rhythm' | 'person' | 'placeholder'
 
 export interface BiasFinding {
   kind: BiasKind
@@ -359,8 +360,113 @@ export interface ProseAudit {
   /** True when nothing here needs a person to look at it. */
   /** Three or more sentences running in one length band. Reported, not enforced. */
   flatStretches: BiasFinding[]
+  /**
+   * Sentences opening on a placeholder subject, and the rate.
+   *
+   * `overLimit` is the flag; the list is the reading. See
+   * `PLACEHOLDER_OPENER_BASELINE` for where the number came from.
+   */
+  placeholders: { findings: BiasFinding[]; rate: number; overLimit: boolean }
+  /**
+   * Names and figures per thousand words. Reported, never enforced.
+   *
+   * See `concretenessOf`. A piece far below the editor's own sixty is a
+   * question about what the writer was given before it is one about the prose.
+   */
+  concreteness: { properNouns: number; numerals: number; perThousand: number }
   clean: boolean
 }
+
+/**
+ * How much of the prose is made of things with names.
+ *
+ * Reported and never enforced, because there is no correct density: a book
+ * that names nobody cannot have an introduction that names anybody, and
+ * forcing the number would be an instruction to invent. It is here because it
+ * is the measurement that found the largest fault in this whole arrangement.
+ *
+ * The editor's own accepted introduction runs about sixty proper nouns per
+ * thousand words — Röntgen, the Curies, Marconi, the Fox sisters, Kardec,
+ * Blavatsky, Crookes, Oliver Lodge, Ypres, Rhine, the Creery children, an
+ * address on South Oxford Avenue. A draft of the same book came back at six.
+ * That looked like a failure of the writer and was not: the briefing had been
+ * handing over a list of chapter titles while `synopsis.ts` sat on the
+ * analytical contents, which is where an old book keeps its names and its
+ * figures. Nothing in the audit could see that, and the number is the only
+ * reason it was found. So it is printed on every run, and a piece that comes
+ * back an order of magnitude below the editor's own is a question about the
+ * briefing before it is a question about the prose.
+ *
+ * A proper noun is a capitalised word that is not opening its sentence. That
+ * over-counts a title-cased phrase and under-counts a name at the head of a
+ * sentence, which is fine for a quantity being read as "six or sixty".
+ */
+function concretenessOf(text: string): {
+  properNouns: number
+  numerals: number
+  perThousand: number
+} {
+  const sentences = sentencesOf(text.replace(/\n\s*\n/gu, ' '))
+  let properNouns = 0
+  for (const sentence of sentences) {
+    for (const word of sentence.split(/\s+/u).slice(1)) {
+      if (/^[A-Z][a-z]{2,}/u.test(word)) properNouns += 1
+    }
+  }
+  const words = text.split(/\s+/u).filter(Boolean)
+  const numerals = words.filter((w) => /\d/u.test(w)).length
+  return {
+    properNouns,
+    numerals,
+    perThousand: words.length > 0 ? (1000 * (properNouns + numerals)) / words.length : 0
+  }
+}
+
+/**
+ * Sentences that open on a placeholder subject instead of on something.
+ *
+ * "It is", "There is", "This is", "What X is is" — the constructions that put
+ * a grammatical placeholder where a subject belongs, and defer the actual
+ * content past a copula. Every one of them can be rewritten with the thing
+ * itself in front. "It is a fair warning of what is actually here" against
+ * "That warning is fair"; "What reading it is like is the ordinary experience
+ * of being taught by a careful man" against "Reading it is being taught by a
+ * careful man".
+ *
+ * Not banned, and the limit is not zero. The editor's own approved
+ * introduction uses eleven of them in a hundred and twenty-three sentences,
+ * and one of them — "That is the whole of it." — is the best sentence in its
+ * paragraph. Used deliberately the construction slows a line down and lands
+ * it. Used by default it is the most recognisable tic in machine-written
+ * English, and a draft written to the same briefing came back at nearly twice
+ * the rate.
+ *
+ * So this is a rate against a measured baseline rather than a lexical ban,
+ * which is the same shape as the hedge ratio and for the same reason: the
+ * words are not the fault, the proportion is.
+ */
+const PLACEHOLDER_OPENER =
+  /^(it (is|was|would be|has been)|there (is|are|was|were|has been|have been)|this is|these are|that is|what [^.?!]{2,60} is)\b/iu
+
+/**
+ * The rate in the front matter this editor has accepted, measured on the files.
+ *
+ * All four introductions on the shelf, counted by this function: 9%, 8%, 9%,
+ * 11%. They cluster tightly, which is what makes the number worth having — one
+ * file would be an anecdote. A draft written to the same briefing came back at
+ * 17%, outside all of them.
+ *
+ * Kept as a number rather than as "sparingly" because a card that says "vary
+ * hard" and "prefer the concrete" is giving adjectives to something countable,
+ * and a writer given an adjective cannot tell whether it has complied.
+ */
+export const PLACEHOLDER_OPENER_BASELINE = 0.09
+
+/** How far past the baseline is worth a person's attention. */
+export const PLACEHOLDER_OPENER_LIMIT = 0.15
+
+/** Below this many sentences the rate says nothing. */
+const MIN_PLACEHOLDER_SENTENCES = 25
 
 /**
  * Syllables, by the usual heuristic: vowel groups, with a silent final e.
@@ -491,6 +597,15 @@ export function auditProse(raw: string, options: AuditOptions = {}): ProseAudit 
   // the audit sees exactly the words a reader will.
   const text = parseInlineMarkup(raw).text
   const findings: BiasFinding[] = []
+  /**
+   * Held apart from `findings`, which is the list of things that are wrong.
+   *
+   * At the editor's own rate this construction is not wrong — it is one of the
+   * ways he lands a line — so a report that filed it beside a banned phrase
+   * would be a report somebody eventually tunes until it stops firing. The
+   * rate is the finding; the sentences are the reading.
+   */
+  const placeholderFindings: BiasFinding[] = []
   let traditionSentences = 0
   let scienceSentences = 0
   let traditionHedges = 0
@@ -568,8 +683,14 @@ export function auditProse(raw: string, options: AuditOptions = {}): ProseAudit 
       for (const match of sentence.match(DASH) ?? []) {
         findings.push({ kind: 'dash', match, sentence })
       }
+      const placeholder = sentence.match(PLACEHOLDER_OPENER)
+      if (placeholder) {
+        placeholderFindings.push({ kind: 'placeholder', match: placeholder[0], sentence })
+      }
     }
   }
+
+  const placeholderRate = total > 0 ? placeholderFindings.length / total : 0
 
   const enough =
     traditionSentences >= MIN_SENTENCES &&
@@ -623,7 +744,16 @@ export function auditProse(raw: string, options: AuditOptions = {}): ProseAudit 
     openingRatio,
     hedgedTeaching: findings.filter((f) => f.kind === 'hedge' && f.tradition),
     flatStretches: findings.filter((f) => f.kind === 'rhythm'),
+    placeholders: {
+      findings: placeholderFindings,
+      rate: placeholderRate,
+      // Silent on a short piece, for the same reason the hedge ratio is: a
+      // rate built from three sentences flags good prose, and a check that
+      // does that gets switched off.
+      overLimit: total >= MIN_PLACEHOLDER_SENTENCES && placeholderRate > PLACEHOLDER_OPENER_LIMIT
+    },
     reading: readingOf(text),
+    concreteness: concretenessOf(text),
     clean: !serious && !leaning(ratio) && !leaning(openingRatio)
   }
 }
