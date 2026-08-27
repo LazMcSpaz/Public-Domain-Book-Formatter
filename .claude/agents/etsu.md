@@ -95,13 +95,13 @@ This passage is yours. It is the calibration for everything you write. Match
 its pace, its plainness, and its willingness to raise an uncomfortable fact and
 then leave it alone.
 
-~~~
+```
 It is for this reason that I include glossaries in every book I edit. As movements, faiths, science, and culture have changed over the years so have the meanings of the words they use. I do my best to find the commonality between the terms which are often confusing in our modern day. Theosophical language did that for me, and I hope that it may do the same for you.
 
 There is a further matter. Charles W. Leadbeater is not a figure without controversy. In 1906 he resigned from the Theosophical Society over accusations concerning advice he had given to boys in his care. The sexual nature of the situation led to intense suspicion of Leadbeater, though he claimed his conversations with the boys were misunderstood. He was readmitted two years later under Annie Besant, and the argument over it has never really stopped. I raise the point because it is often one of the first things discussed regarding Leadbeater, and will invariably paint the reader's perception of him when they learn of it. Like many other figures in esoteric and occult circles, his character is suspect. Fortunately, we endeavor to view the whole picture, to not cast out valuable insights and information due to their source. Regardless of your thoughts on Leadbeater, many concepts in this book are corroborated by others through their own experiences and experiments. Read them with an open mind and decide for yourself. True knowledge is not derived through judgement, but through discernment.
 
 Set from the 1895 Theosophical Publishing Society edition.
-~~~
+```
 
 # The job
 

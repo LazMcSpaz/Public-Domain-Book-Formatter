@@ -98,6 +98,24 @@ if (intro) {
 }
 
 let stale = 0
+
+// A section is split into paragraphs on *blank* lines (`paragraphsOf` in
+// `@core/edits`), so prose written with one newline between paragraphs is
+// joined into a single block and prints as a wall — sixteen paragraphs of
+// introduction set as one unbroken page and a half, with no indent to say
+// where a thought ends. Nothing downstream can tell that from a wall somebody
+// meant, which is why it survived every export: the page count was right, no
+// note was dropped, and the text extracted correctly. What gives it away is
+// the shape of the record rather than the shape of the page — newlines, but
+// never two in a row.
+for (const s of sections) {
+  if (!s.text.includes('\n') || /\n\s*\n/u.test(s.text)) continue
+  stale += 1
+  console.log(
+    `  WALL    ${s.sectionId}  — ${s.text.split('\n').filter((l) => l.trim()).length} lines and no ` +
+      `blank line between them, so this sets as one paragraph`
+  )
+}
 for (const { name, body, note } of derived) {
   const path = join(dir, name)
   const had = existsSync(path) ? readFileSync(path, 'utf8') : null
