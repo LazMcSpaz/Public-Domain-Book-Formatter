@@ -263,7 +263,19 @@ try {
     // What the model is actually told, as against what the file says. These
     // differ in ways worth seeing: an empty `about` contributes no line at all,
     // and only the last MAX_EXEMPLARS make the trip.
+    //
+    // Both halves, because the whole point of this verb is that it shows what
+    // reaches a model and there are two prompts. The prose samples go only to
+    // the introduction and the exemplars go to both; a `card` that printed one
+    // block would be the same quiet omission that kept `proseSamples` out of
+    // every prompt for as long as the field existed.
     console.log(annotate.voiceBlock(voice))
+    const prose = annotate.proseBlock(voice)
+    console.log(
+      prose
+        ? `\n--- and, when the editor is writing front matter rather than notes ---\n\n${prose}`
+        : '\n(No front matter banked, so nothing extra reaches the introduction. Run `harvest`.)'
+    )
   } else if (verb === 'set') {
     const [field, ...rest] = opts._
     // `--file` because `about` and `guidance` are paragraphs, and a paragraph

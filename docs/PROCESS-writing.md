@@ -179,6 +179,16 @@ everything and anything dropped is named.
 edition's apparatus, not the book's words, and a writer quoting a phrase would
 have carried the degree sign into print.
 
+**The reader found what the audit was structurally unable to find.** On the
+first real draft the audit came back CLEAN — one hedge to read, five flat
+stretches reported and not enforced, grade 9.6. The reader, given the same
+draft and no rules, came back with a paragraph that was a contents page set as
+prose and that it had stopped reading a third of the way into; six sentences
+whose modifiers hung on the wrong noun; and the fact that the introduction
+never names the author once. None of those is reachable by a word list, and the
+last one is the sort of thing that goes to print. Run both. Neither is the
+check.
+
 **The anagram lived only in the agent.** "The pen name is an anagram of 'The
 Student'" was in `.claude/agents/etsu.md` and not on the card, so the app's own
 prompt never had it and the first compile would have deleted it. Anything true
