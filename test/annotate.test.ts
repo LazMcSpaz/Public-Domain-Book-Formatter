@@ -17,15 +17,22 @@ import {
   runAnnotation,
   buildIntroductionPrompt,
   draftIntroduction,
+  apparatusOf,
+  introductionOutlineTask,
+  introductionWords,
   parseIntroduction,
   sampleBook,
+  proseBlock,
   voiceBlock,
   withExemplar,
+  withProseSample,
   MAX_EXEMPLARS,
+  MAX_PROSE_SAMPLES,
   type AnnotationProposal,
   type CheckedProposal,
   type EditorVoice
 } from '@core/annotate'
+import { GLOSSARY_MARK } from '@core/annotate'
 import { applyEdits } from '@core/edits'
 import { initialState, STEPS, stepById, type WizardState } from '@core/wizard'
 import type { BookBlock, BookDocument } from '@core/assemble'
@@ -664,6 +671,35 @@ describe('the editor’s introduction', () => {
     expect(user).toContain('alembick')
   })
 
+  // The largest thing that was wrong with a briefing, and it was measurable.
+  // Four accepted introductions run 46 to 67 names and figures per thousand
+  // words; a draft written from a briefing of chapter *titles* came back at 7.
+  // The analytical contents is where an old book keeps its names, and
+  // `synopsis.ts` had already recovered it.
+  it('gives the writer the analytical contents, not a list of titles', () => {
+    const built = bookOfChapters()
+    const described = {
+      ...built,
+      chapters: built.chapters.map((c, i) =>
+        i === 1
+          ? { ...c, synopsis: 'The celebrated Creery Experiments, and how Cazotte foretold it.' }
+          : c
+      )
+    }
+    const { user } = buildIntroductionPrompt(described, { voice: defaultVoice() })
+    expect(user).toContain('Creery Experiments')
+    expect(user).toContain('Cazotte')
+    // Said to be the book's own words, because that is what makes them safe
+    // to use under a rule that forbids inventing a name.
+    expect(user).toContain("the book's own words about itself")
+  })
+
+  it('says nothing about descriptions when the contents had none', () => {
+    const { user } = buildIntroductionPrompt(bookOfChapters(), { voice: defaultVoice() })
+    expect(user).toContain('Its chapters, in order:')
+    expect(user).not.toContain("the book's own words about itself")
+  })
+
   it('samples across the whole book, not just its opening', () => {
     // The first pages of an old book are its least representative: that is
     // where the dedication and the throat-clearing live.
@@ -671,6 +707,13 @@ describe('the editor’s introduction', () => {
     const samples = sampleBook(built, 3)
     expect(samples.length).toBeGreaterThan(1)
     expect(new Set(samples).size).toBe(samples.length)
+  })
+
+  it('does not put this edition’s glossary marks in the author’s mouth', () => {
+    const marked = doc([block(`${long(1).trim()} the trolley-pole${GLOSSARY_MARK} again.`)])
+    const [sample] = sampleBook(marked, 1)
+    expect(sample).toBeDefined()
+    expect(sample).not.toContain(GLOSSARY_MARK)
   })
 
   it('forbids the introduction that would fit any book of the period', () => {
@@ -685,6 +728,280 @@ describe('the editor’s introduction', () => {
       length: 'brief'
     }).system
     expect(brief).toContain('350 words')
+  })
+
+  // The register is the one thing a card cannot state. Every rule in `about`,
+  // `guidance` and `avoid` describes how the editor sounds; only a passage of
+  // his own prose *is* how he sounds. The field held it, banked it and carried
+  // it between books, and `voiceBlock` never emitted it, so nothing this app
+  // ever wrote had seen a line of him.
+  it('shows the editor his own prose before asking for more of it', () => {
+    const voice: EditorVoice = {
+      ...defaultVoice(),
+      proseSamples: ['Set from the 1895 Theosophical Publishing Society edition.']
+    }
+    const { system } = buildIntroductionPrompt(bookOfChapters(), { voice })
+    expect(system).toContain('1895 Theosophical Publishing Society')
+  })
+
+  it('asks for the register and not the subject', () => {
+    const voice: EditorVoice = { ...defaultVoice(), proseSamples: ['A passage of his.'] }
+    const { system } = buildIntroductionPrompt(bookOfChapters(), { voice })
+    expect(system).toContain('Do not match its subject')
+  })
+
+  it('says nothing at all when the editor has published nothing yet', () => {
+    const { system } = buildIntroductionPrompt(bookOfChapters(), { voice: defaultVoice() })
+    expect(system).not.toContain('PROSE THIS EDITOR')
+  })
+
+  // The other half of the same distinction. A page of introduction in the
+  // cached half of the annotation prompt would teach a forty-word note
+  // nothing and be paid for on every chunk of every book.
+  it('keeps the front matter out of the notes prompt', () => {
+    const voice: EditorVoice = {
+      ...defaultVoice(),
+      proseSamples: ['Set from the 1895 Theosophical Publishing Society edition.']
+    }
+    expect(voiceBlock(voice)).not.toContain('1895 Theosophical')
+  })
+
+  it('keeps the newest few, and never the same passage twice', () => {
+    let voice = defaultVoice()
+    for (let i = 0; i < MAX_PROSE_SAMPLES + 2; i++) {
+      voice = withProseSample(voice, `Introduction number ${i}.`)
+    }
+    expect(voice.proseSamples).toHaveLength(MAX_PROSE_SAMPLES)
+    expect(voice.proseSamples.at(-1)).toContain(`number ${MAX_PROSE_SAMPLES + 1}`)
+    expect(voice.proseSamples[0]).not.toContain('number 0')
+
+    const before = voice.proseSamples.length
+    const oldest = voice.proseSamples[0]!
+    voice = withProseSample(voice, oldest)
+    expect(voice.proseSamples).toHaveLength(before)
+    expect(voice.proseSamples.at(-1)).toBe(oldest)
+    expect(voice.proseSamples.filter((s) => s === oldest)).toHaveLength(1)
+  })
+
+  it('shows only the newest few, however many the file carries', () => {
+    const many = Array.from({ length: MAX_PROSE_SAMPLES + 3 }, (_, i) => `Passage ${i}.`)
+    const card = proseBlock({ ...defaultVoice(), proseSamples: many })
+    expect(card).not.toContain('Passage 0.')
+    expect(card).toContain(`Passage ${MAX_PROSE_SAMPLES + 2}.`)
+  })
+
+  it('prints no empty passage line for a note banked without one', () => {
+    const voice = withExemplar(defaultVoice(), { passage: '', note: 'A note of his.' })
+    const card = voiceBlock(voice)
+    expect(card).toContain('Note: A note of his.')
+    expect(card).not.toContain('Passage:')
+  })
+
+  // The shape is settled before there are twelve hundred words of it, because
+  // a finished introduction is very hard to argue with and an outline costs a
+  // line to change.
+  it('asks for the shape before the prose, and refuses to be given prose', () => {
+    const task = introductionOutlineTask('standard')
+    expect(task).toContain('Do not write the introduction yet')
+    expect(task).toContain('THE OPENING')
+    expect(task).toContain('WHAT IS LEFT OUT')
+    expect(task).toContain('QUERIES')
+    // An outline in finished sentences is a draft in disguise: it gets
+    // approved on how it sounds, which is the judgement being deferred.
+    expect(task).toContain('Write the outline as notes')
+  })
+
+  it('sizes the outline to the length the editor chose', () => {
+    expect(introductionOutlineTask('brief')).toContain('350 words')
+    expect(introductionOutlineTask('full')).toContain('1400 words')
+  })
+
+  it('writes to the shape the editor approved, not the one it proposed', () => {
+    const approved = 'Open on the blacksmith. Three movements. Close on the note on the text.'
+    const { system } = buildIntroductionPrompt(bookOfChapters(), {
+      voice: defaultVoice(),
+      outline: approved
+    })
+    expect(system).toContain(approved)
+    expect(system).toContain('do not redesign it')
+    // A movement the material will not carry is reported, never quietly
+    // filled and never quietly dropped — the footnote rule, applied to shape.
+    expect(system).toContain('quietly filling it')
+  })
+
+  it('still drafts in one shot when no shape was approved', () => {
+    const { system } = buildIntroductionPrompt(bookOfChapters(), { voice: defaultVoice() })
+    expect(system).not.toContain('HAS APPROVED THIS SHAPE')
+    expect(system).toContain('WHAT AN INTRODUCTION HAS TO DO')
+  })
+
+  // The writer was being asked to tell the reader what the apparatus is and
+  // given none of it, so the first outline that came back asked under QUERIES
+  // whether there was a glossary and how many notes there were. All of it is
+  // sitting in the assembled document.
+  describe('what this edition carries', () => {
+    function withApparatus(): BookDocument {
+      const built = bookOfChapters()
+      return {
+        ...built,
+        footnotes: [
+          { id: 'n1', originalMarker: '1', text: 'A note.', pageIndex: 0, orphaned: false },
+          { id: 'n2', originalMarker: '2', text: 'Another.', pageIndex: 1, orphaned: false }
+        ],
+        sections: [
+          {
+            id: 's1',
+            placement: 'back',
+            title: 'Glossary',
+            blocks: [
+              { ...block('This glossary explains the vocabulary.'), strong: [] },
+              { ...block('Akasha. The subtlest of the elements.'), strong: [0] },
+              { ...block('Fohat. The energy that builds.'), strong: [0] }
+            ]
+          }
+        ]
+      }
+    }
+
+    it('counts the notes and the glossary entries rather than trusting a memory', () => {
+      const lines = apparatusOf(withApparatus())
+      expect(lines.join('\n')).toContain('2 footnotes')
+      // An entry is a block whose bold starts at word 0. The preamble has no
+      // bold and must not be counted as one.
+      expect(lines.join('\n')).toContain('glossary of 2 entries')
+    })
+
+    // Caught by the writer, not by a test. A combined volume opens "BOOK ONE."
+    // over "THE HUMAN AURA" and then runs CHAPTER I to X, and all of it arrives
+    // as level-one entries. The count said 23 where the contents page prints
+    // 21; the writer printed 23 because it was told to, and said so.
+    it('tells a chapter from the division it sits under', () => {
+      const built = bookOfChapters()
+      const combined = {
+        ...built,
+        chapters: [
+          {
+            id: 'd1',
+            title: 'THE HUMAN AURA',
+            label: 'BOOK ONE.',
+            level: 1,
+            blockIndex: 0,
+            sourcePage: 0
+          },
+          {
+            id: 'c1',
+            title: 'WHAT IS THE AURA?',
+            label: 'CHAPTER I.',
+            level: 1,
+            blockIndex: 1,
+            sourcePage: 1
+          },
+          {
+            id: 'c2',
+            title: 'THE PRANA-AURA.',
+            label: 'CHAPTER II.',
+            level: 1,
+            blockIndex: 2,
+            sourcePage: 2
+          },
+          {
+            id: 'd2',
+            title: 'THE ASTRAL WORLD',
+            label: 'BOOK TWO.',
+            level: 1,
+            blockIndex: 3,
+            sourcePage: 3
+          },
+          {
+            id: 'c3',
+            title: 'THE SEVEN PLANES.',
+            label: 'CHAPTER I.',
+            level: 1,
+            blockIndex: 4,
+            sourcePage: 4
+          }
+        ]
+      }
+      const lines = apparatusOf(combined).join('\n')
+      expect(lines).toContain('3 chapters')
+      // Named rather than silently subtracted: a count that quietly drops two
+      // headings cannot be checked against the contents page.
+      expect(lines).toContain('2 divisions (THE HUMAN AURA, THE ASTRAL WORLD)')
+    })
+
+    it('counts every heading when the labels do not separate into two kinds', () => {
+      const built = bookOfChapters()
+      const flat = {
+        ...built,
+        chapters: [
+          { id: 'a', title: 'ONE', label: 'LESSON I.', level: 1, blockIndex: 0, sourcePage: 0 },
+          { id: 'b', title: 'TWO', label: 'LESSON II.', level: 1, blockIndex: 1, sourcePage: 1 }
+        ]
+      }
+      expect(apparatusOf(flat).join('\n')).toContain('2 chapters')
+      expect(apparatusOf(flat).join('\n')).not.toContain('division')
+    })
+
+    // Two stems in equal number is a structure this cannot read, and guessing
+    // which half to discard is worse than counting both.
+    it('does not guess when two labels are equally common', () => {
+      const built = bookOfChapters()
+      const tied = {
+        ...built,
+        chapters: [
+          { id: 'a', title: 'ONE', label: 'BOOK I.', level: 1, blockIndex: 0, sourcePage: 0 },
+          { id: 'b', title: 'TWO', label: 'CHAPTER I.', level: 1, blockIndex: 1, sourcePage: 1 }
+        ]
+      }
+      expect(apparatusOf(tied).join('\n')).toContain('2 chapters')
+    })
+
+    it('says the apparatus is absent rather than leaving the writer to guess', () => {
+      const lines = apparatusOf(bookOfChapters()).join('\n')
+      expect(lines).toContain('No footnotes.')
+      expect(lines).toContain('No glossary.')
+    })
+
+    it('counts the glossary marks in the running text', () => {
+      const marked = { ...bookOfChapters() }
+      marked.blocks = [block(`A trolley-pole${GLOSSARY_MARK} and an aura${GLOSSARY_MARK}.`)]
+      expect(apparatusOf(marked).join('\n')).toContain('2 words in the running text')
+    })
+
+    // The failure this is against is already on the shelf: one volume carried
+    // 85 marks and 23 notes, the next a 74-entry glossary with no marks at all,
+    // and nothing anywhere said so.
+    it('reports a glossary whose words were never marked', () => {
+      const unmarked = withApparatus()
+      expect(apparatusOf(unmarked).join('\n')).toContain('No glossary marks in the text.')
+    })
+  })
+
+  // The three names were enough while a piece was drafted from a dial. The
+  // first real approved outline asked for 1,800 to 2,200 words and the prompt
+  // printed "aim for about 1400 words" three lines under it, which is a worse
+  // instruction than either number alone.
+  it('takes a word count as readily as one of its three sizes', () => {
+    expect(introductionWords('full')).toBe(1400)
+    expect(introductionWords(2200)).toBe(2200)
+    const { system } = buildIntroductionPrompt(bookOfChapters(), {
+      voice: defaultVoice(),
+      length: 2200
+    })
+    expect(system).toContain('2200 words')
+    expect(system).not.toContain('1400 words')
+  })
+
+  it('floors a nonsense length rather than refusing to render a briefing', () => {
+    expect(introductionWords(-50)).toBe(100)
+  })
+
+  it('says which number wins when a shape has been approved', () => {
+    const { system } = buildIntroductionPrompt(bookOfChapters(), {
+      voice: defaultVoice(),
+      outline: 'Three movements. Target 2,000 words.'
+    })
+    expect(system).toContain('including over any word count given below')
   })
 
   it('parses paragraphs into the shape a section edit already takes', () => {

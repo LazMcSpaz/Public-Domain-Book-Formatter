@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { HEDGE_RATIO_LIMIT, auditProse } from '@core/annotate'
+import { HEDGE_RATIO_LIMIT, PLACEHOLDER_OPENER_LIMIT, auditProse } from '@core/annotate'
 
 /**
  * The check that exists because the writer cannot be asked.
@@ -330,6 +330,95 @@ describe('the voice as the editor writes it', () => {
     const banned = soft.findings.filter((f) => f.kind === 'banned').map((f) => f.match)
     expect(banned).toContain('whether or not you believe')
     expect(banned).toContain('dear reader')
+  })
+
+  /**
+   * The tic, measured on both sides rather than banned.
+   *
+   * The editor's own approved introduction opens 11 of its 123 sentences on a
+   * placeholder subject, and one of them — "That is the whole of it." — is the
+   * best sentence in its paragraph. A draft written to the same briefing came
+   * back at 17%. So the fault is the proportion and not the words, which is
+   * the same shape as the hedge ratio.
+   */
+  describe('sentences that open on a placeholder instead of on something', () => {
+    /** Enough sentences to clear the floor, at the editor's own rate. */
+    function atRate(placeholders: number, total: number): string {
+      const dummy = 'It is a fair warning of what is here.'
+      const real = 'Atkinson set the lesson down in Chicago in 1916.'
+      return [
+        ...Array.from({ length: placeholders }, () => dummy),
+        ...Array.from({ length: total - placeholders }, () => real)
+      ].join(' ')
+    }
+
+    it('passes prose at the rate the editor writes at', () => {
+      const audit = auditProse(atRate(3, 40))
+      expect(audit.placeholders.rate).toBeLessThan(PLACEHOLDER_OPENER_LIMIT)
+      expect(audit.placeholders.overLimit).toBe(false)
+    })
+
+    it('flags prose that leans on it', () => {
+      const audit = auditProse(atRate(16, 40))
+      expect(audit.placeholders.overLimit).toBe(true)
+      expect(audit.placeholders.findings.length).toBe(16)
+    })
+
+    it('catches the constructions, not just "It is"', () => {
+      const matched = (sentence: string): boolean =>
+        auditProse(sentence).placeholders.findings.length > 0
+      expect(matched('There are two sorts of statement in these pages.')).toBe(true)
+      expect(matched('This is a course of lessons.')).toBe(true)
+      expect(matched('That is not a story about seeing anything.')).toBe(true)
+      expect(matched('What reading it is like is the experience of being taught.')).toBe(true)
+      // The subject is doing the work, so the sentence is not the tic.
+      expect(matched('It tells you what your legs will do.')).toBe(false)
+      expect(matched('Atkinson makes that case in nearly every lesson.')).toBe(false)
+    })
+
+    // A rate built from three sentences flags good prose, and a check that
+    // does that gets switched off — the same floor the hedge ratio keeps.
+    it('says nothing about a piece too short to have a rate', () => {
+      const audit = auditProse('It is a short note. There is nothing else to it.')
+      expect(audit.placeholders.findings).toHaveLength(2)
+      expect(audit.placeholders.overLimit).toBe(false)
+    })
+  })
+
+  /**
+   * The measurement that found the largest fault in the whole arrangement.
+   *
+   * Four accepted introductions run 67, 48, 46 and 58 names and figures per
+   * thousand words. A draft of one of those same books came back at 7. That
+   * read as a failure of the writer and was not: the briefing was handing over
+   * a list of chapter titles while the analytical contents, which is where an
+   * old book keeps its names, sat recovered and unused. Nothing else in the
+   * audit could see it.
+   */
+  describe('how much of the prose is made of things with names', () => {
+    it('counts names and figures, and does not count a sentence’s first word', () => {
+      const c = auditProse(
+        'Marconi pushed a signal across the Atlantic in 1901. Radium was announced in 1898.'
+      ).concreteness
+      // Marconi and Radium open their sentences and are not counted; Atlantic
+      // is. Over- and under-counting both, which is fine for a quantity read
+      // as "six or sixty".
+      expect(c.properNouns).toBe(1)
+      expect(c.numerals).toBe(2)
+      expect(c.perThousand).toBeGreaterThan(150)
+    })
+
+    it('reports an abstract piece as thin rather than as wrong', () => {
+      const abstract = auditProse(
+        'The book is about seeing. It holds that the faculty is ordinary rather than rare. ' +
+          'The argument is patient and it does not press the reader.'
+      )
+      expect(abstract.concreteness.perThousand).toBe(0)
+      // Reported, never enforced: a book that names nobody cannot have an
+      // introduction that names anybody, and a limit here would be an
+      // instruction to invent.
+      expect(abstract.clean).toBe(true)
+    })
   })
 
   it('rules out an en dash as well as an em dash', () => {

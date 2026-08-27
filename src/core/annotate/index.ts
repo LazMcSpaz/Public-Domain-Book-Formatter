@@ -14,12 +14,15 @@
 export {
   ANNOTATION_KINDS,
   MAX_EXEMPLARS,
+  MAX_PROSE_SAMPLES,
   VOICE_KEYS,
   NOTES_PER_THOUSAND_WORDS,
   defaultVoice,
   normalizeVoice,
+  proseBlock,
   voiceBlock,
   withExemplar,
+  withProseSample,
   type AnnotationKind,
   type EditorVoice,
   type NoteDensity,
@@ -53,9 +56,13 @@ export {
 export { learnVoice, proposalsToEdits, type AcceptedProposal } from './apply'
 export {
   INTRODUCTION_SCHEMA,
+  apparatusOf,
   INTRODUCTION_WORDS,
   buildIntroductionPrompt,
   draftIntroduction,
+  introductionOutlineTask,
+  introductionTask,
+  introductionWords,
   noteOnTheText,
   parseIntroduction,
   sampleBook,
@@ -67,6 +74,8 @@ export { estimateAnnotationCost, type AnnotationCostInputs } from './cost'
 export {
   HEDGE_RATIO_LIMIT,
   MIN_SENTENCES,
+  PLACEHOLDER_OPENER_BASELINE,
+  PLACEHOLDER_OPENER_LIMIT,
   auditProse,
   type BiasFinding,
   type BiasKind,

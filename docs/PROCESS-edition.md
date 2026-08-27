@@ -116,6 +116,11 @@ The part that makes a reprint worth publishing, and the part that skips.
   does not. A note is not a definition; definitions are the glossary's job.
 - **The introduction**, in the editor's voice.
 
+How each of those is actually written — brief, write, audit, read, revise from
+findings, bank — is [`PROCESS-writing.md`](./PROCESS-writing.md). It is a
+separate document because it is the one stage where the session doing the work
+is the wrong instrument for it.
+
 **A step done for one book is not done for the next.** One volume here carried
 85 marks and 23 notes; the next carried a 74-entry glossary, no marks at all
 and no notes, and every report was perfectly happy about it. Until E7 is
