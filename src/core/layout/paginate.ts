@@ -2313,6 +2313,17 @@ function furnitureLine(
 const SYNOPSIS_SCALE = 0.86
 
 /**
+ * How many lines of a description must follow its chapter head onto the page.
+ *
+ * A contents page is scanned rather than read, so a chapter number and title
+ * at the foot of a leaf with the description overleaf is worse here than the
+ * same break in the body would be: what the eye is hunting for is the heading,
+ * and it finds one standing over nothing. Two is the ordinary orphan count,
+ * and a description shorter than two lines goes over whole.
+ */
+const DESCRIPTION_ORPHAN_LINES = 2
+
+/**
  * How a page number reads in the contents, wherever it appears.
  *
  * One function because there are two places that print one — under a
@@ -2514,7 +2525,17 @@ function buildContents(
     // A blank line before each top-level entry after the first, so chapters
     // group visibly when there are sub-headings between them.
     const gapBefore = i > 0 && entry.level === 1 ? 1 : 0
-    if (slot + gapBefore + labelLines.length + broken.length > slotsPerPage) {
+    // The number, the title and the first lines of the description are one
+    // block: a chapter head at the foot of a leaf with its description
+    // overleaf reads as a heading with nothing under it, which on a contents
+    // page is exactly the thing a reader is scanning for. Two lines is the
+    // ordinary orphan count, and a description shorter than that goes whole.
+    //
+    // Safe for the two-pass scheme: every term here — the label, the title,
+    // the description — is the same in both passes. Only the folio differs,
+    // and the folio is not in this test.
+    const keepUnder = Math.min(synopsisLines.length, DESCRIPTION_ORPHAN_LINES)
+    if (slot + gapBefore + labelLines.length + broken.length + keepUnder > slotsPerPage) {
       page = newPage('front')
       page.kind = 'contents'
       page.suppressRunningHead = true
@@ -2576,29 +2597,12 @@ function buildContents(
 
     // The description flows and may cross onto the next contents leaf, which is
     // ordinary for a page of this kind — the alternative is a page broken early
-    // to keep an entry whole and a contents full of white space.
-    for (const line of synopsisLines) {
-      if (slot >= slotsPerPage) {
-        page = newPage('front')
-        page.kind = 'contents'
-        page.suppressRunningHead = true
-        page.suppressFolio = true
-        slot = 0
-      }
-      page.lines.push({
-        slot,
-        line: {
-          runs: line.words.map((w) => ({
-            text: w.text,
-            font: body,
-            sizePt: synopsisSize,
-            xPt: w.xPt + synopsisIndent
-          }))
-        }
-      })
-      slot += 1
-    }
-
+    // to keep an entry whole and a contents full of white space. What may not
+    // cross is the join at its foot: the last line of the description and the
+    // "Page 13" under it are one thing, and a number alone at the head of a
+    // leaf reads as a mistake rather than as a page turn. So the two are placed
+    // from one list, and the last pair is kept together.
+    //
     // "Page 13", flush right on a line of its own under the description, which
     // is where this book's own contents puts it. On the title line it needed a
     // reserved lane, and that lane is what made every title narrower than the
@@ -2616,26 +2620,38 @@ function buildContents(
     // back to pass one, and pass one has no numbers in it at all. A contents
     // page with no page numbers, printed in silence. The guard was right; what
     // was wrong was giving it something to catch.
+    const tail: TextRun[][] = synopsisLines.map((line) =>
+      line.words.map((w) => ({
+        text: w.text,
+        font: body,
+        sizePt: synopsisSize,
+        xPt: w.xPt + synopsisIndent
+      }))
+    )
     if (descriptive && synopsisLines.length > 0) {
-      if (slot >= slotsPerPage) {
+      const label = entry.folio ? folioLabel(entry.folio) : ''
+      const width = ctx.measurer.widthOf(label, body, synopsisSize)
+      tail.push(
+        label
+          ? [{ text: label, font: body, sizePt: synopsisSize, xPt: ctx.measureWidth - width }]
+          : []
+      )
+    }
+
+    tail.forEach((runs, k) => {
+      // Two slots at the second-to-last line, so the last one cannot be left
+      // on its own overleaf. One everywhere else.
+      const needs = k === tail.length - 2 ? 2 : 1
+      if (slot + needs > slotsPerPage) {
         page = newPage('front')
         page.kind = 'contents'
         page.suppressRunningHead = true
         page.suppressFolio = true
         slot = 0
       }
-      const label = entry.folio ? folioLabel(entry.folio) : ''
-      const width = ctx.measurer.widthOf(label, body, synopsisSize)
-      page.lines.push({
-        slot,
-        line: {
-          runs: label
-            ? [{ text: label, font: body, sizePt: synopsisSize, xPt: ctx.measureWidth - width }]
-            : []
-        }
-      })
+      page.lines.push({ slot, line: { runs } })
       slot += 1
-    }
+    })
   })
 }
 

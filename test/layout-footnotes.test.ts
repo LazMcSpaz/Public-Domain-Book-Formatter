@@ -429,6 +429,53 @@ describe('layoutWithToc — descriptions under the entries', () => {
     expect(book.warnings.filter((w) => /without page numbers/.test(w.text))).toHaveLength(0)
   })
 
+  /**
+   * The fault a proof copy showed and no test did: "CHAPTER VI." over
+   * "DISEMBODIED SOULS." at the foot of one leaf, with every word of its
+   * description overleaf.
+   *
+   * A contents page is scanned rather than read, so this is worse here than
+   * the same break in the body would be — what the eye is hunting for is the
+   * heading, and it finds one standing over nothing. The break test kept the
+   * number and the title together and then let the description start wherever
+   * it liked.
+   */
+  it('never leaves a chapter head at the foot of a leaf with its description overleaf', () => {
+    const book = layoutWithToc(
+      many,
+      { ...defaultStyleProfile(), contentsSynopsis: true },
+      measurer,
+      { edition: EDITION }
+    )
+    const contents = book.pages.filter((p) => p.kind === 'contents')
+    // More than one leaf, which is the only condition under which this can go
+    // wrong at all.
+    expect(contents.length).toBeGreaterThan(1)
+
+    const isTitle = (l: PositionedLine): boolean => l.runs.some((r) => r.text === 'Chapter')
+    const isFolio = (l: PositionedLine): boolean =>
+      l.runs.length === 1 && /^Page$/.test(l.runs[0]!.text)
+
+    let heads = 0
+    for (const leaf of contents) {
+      const ls = lines(leaf)
+      ls.forEach((l, k) => {
+        if (!isTitle(l)) return
+        heads += 1
+        // Two lines of description under it, on this leaf, and neither of them
+        // the next entry's own head.
+        const under = ls.slice(k + 1, k + 3)
+        expect(under).toHaveLength(2)
+        for (const u of under) expect(isTitle(u)).toBe(false)
+      })
+      // And the number is never stranded at the head of a leaf, which is the
+      // same fault at the other end of the entry.
+      if (ls.length > 0) expect(isFolio(ls[0]!)).toBe(false)
+    }
+    // Every chapter accounted for, so this is not passing on an empty loop.
+    expect(heads).toBe(many.chapters.length)
+  })
+
   it('leaves them out when the style says not to', () => {
     const text = flat(withSynopses(false))
     expect(text).toContain('Of the Air')
