@@ -99,6 +99,23 @@ if (intro) {
 
 let stale = 0
 
+// `notes.md` is written by hand and holds each note's prose verbatim, so it
+// drifts the moment a note is revised in the book file — and it drifts
+// silently, because the count at the top stays right while the words under it
+// go stale. That is the same failure the reading directions had: a file that
+// still says the true number of a thing it now describes wrongly. Assembling
+// the book to rebuild the file whole needs a browser-free vite load and is a
+// bigger job; checking that every note's own words are in there needs neither.
+const notesPath = join(dir, 'notes.md')
+if (notes.length > 0 && existsSync(notesPath)) {
+  const written = readFileSync(notesPath, 'utf8')
+  for (const n of notes) {
+    if (written.includes(md(n.text))) continue
+    stale += 1
+    console.log(`  DRIFTED notes.md  is missing the note on ${n.blockId} as the book now words it`)
+  }
+}
+
 // A section is split into paragraphs on *blank* lines (`paragraphsOf` in
 // `@core/edits`), so prose written with one newline between paragraphs is
 // joined into a single block and prints as a wall — sixteen paragraphs of

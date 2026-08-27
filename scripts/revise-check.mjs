@@ -235,7 +235,15 @@ for (const [i, n] of after.entries()) {
   if (opens !== closes) fault(n.noteId, `${opens} <i> against ${closes} </i>`)
 
   // The one that matters.
-  const added = [...claims(n.text)].filter((c) => !claims(old).has(c) && !old.includes(c))
+  // Case-insensitively against the old text, because "fifteen" at the head of a
+  // sentence is "Fifteen" and "Marconi had" is "Marconi's": a check that
+  // reports those alongside a real invention is a check whose output stops
+  // being read, and the repo's own rule is that a check nobody can score is
+  // worse than none. A name is the same name in either case.
+  const lower = old.toLowerCase()
+  const added = [...claims(n.text)].filter(
+    (c) => !lower.includes(c.toLowerCase().replace(/’s$|'s$/u, ''))
+  )
   for (const c of added) fault(n.noteId, `asserts "${c}", which the note it revises does not`)
 }
 for (const n of before)
