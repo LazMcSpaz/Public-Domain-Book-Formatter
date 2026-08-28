@@ -968,32 +968,59 @@ const proofScan = await page.locator('.proof-scan img').count()
 // --- the galley: the proof step's other face --------------------------------
 // The whole volume as one scrolling column. It writes the same edit list as
 // the sheet, so a word typed here has to land as an ordinary correction — and
-// a memo left here is for the assistant, never for the page.
+// be autosaved, undoable, and commented on, the way a word processor's user
+// expects without ever having been told.
 console.log('5c2a. the galley')
-await page.locator('.proof-view-toggle button', { hasText: 'whole book' }).click()
+await page.locator('.proof-view-toggle button', { hasText: 'Edit the book' }).click()
 await page.waitForSelector('.galley-page', { timeout: 30000 })
 const galleyPassages = await page.locator('.galley-readonly').count()
 // Italics set as type rather than shown as tags — the point of the surface.
 const galleyItalics = await page.locator('.galley-page i').count()
+const galleyOutline = await page.locator('.galley-outline button').count()
+const galleyWords = await page
+  .locator('.galley-words')
+  .innerText()
+  .catch(() => '')
 await shot('05c2a0-galley')
 
-// Click into a paragraph and type. The commit is a `text` edit against the
-// assembled block, so the read-only view must carry the words afterwards.
+// Click into a paragraph and type; commit from the one toolbar at the top.
 // The *last* paragraph, deliberately: the correction-counter check further
 // down types into the first block and measures the count *rising*, so an
 // edit already sitting on that block from here would flatten its rise.
 await page.locator('.galley-readonly.galley-paragraph').last().click()
 await page.waitForSelector('.galley-editable[contenteditable]', { timeout: 5000 })
 await page.keyboard.type(' GALLEYFIX ')
-await page.locator('.galley-tools .galley-done').click()
+await page.locator('.galley-toolbar .galley-done').click()
 await page.waitForTimeout(400)
 const galleyTyped = await page.locator('.galley-readonly', { hasText: 'GALLEYFIX' }).count()
 
-// A memo. Filling it blurs the passage, which commits and closes it — the
-// chip stays, amber, saying out loud that it never prints.
+// Autosave: typing must reach IndexedDB without anyone pressing anything, and
+// the indicator must *say* so — it is the contract that makes the claim safe.
+let galleyAutosaved = ''
+for (let i = 0; i < 20; i++) {
+  galleyAutosaved = await page
+    .locator('.proof-autosave')
+    .innerText()
+    .catch(() => '')
+  if (/saved/i.test(galleyAutosaved)) break
+  await page.waitForTimeout(400)
+}
+
+// Undo takes the typed edit back out; redo restores it. Both work from the
+// committed history, not the browser's field-level undo.
+await page.locator('.proof-undo').click()
+await page.waitForTimeout(300)
+const galleyUndone =
+  (await page.locator('.galley-readonly', { hasText: 'GALLEYFIX' }).count()) === 0
+await page.locator('.proof-redo').click()
+await page.waitForTimeout(300)
+const galleyRedone = (await page.locator('.galley-readonly', { hasText: 'GALLEYFIX' }).count()) > 0
+
+// A comment for the assistant. Filling it blurs the passage, which commits
+// and closes it — the chip stays, amber, saying out loud that it never prints.
 await page.locator('.galley-readonly.galley-paragraph').first().click()
 await page.waitForSelector('.galley-editable[contenteditable]', { timeout: 5000 })
-await page.locator('.galley-tools button', { hasText: 'For the assistant' }).click()
+await page.locator('.galley-toolbar button', { hasText: 'Comment' }).click()
 await page
   .locator('.galley-memo textarea')
   .first()
@@ -1003,7 +1030,7 @@ const galleyMemos = await page.locator('.galley-memo').count()
 await shot('05c2a1-galley-memo')
 
 // Back to the leaf view: everything below navigates the sheet by leaf number.
-await page.locator('.proof-view-toggle button', { hasText: 'Leaf by leaf' }).click()
+await page.locator('.proof-view-toggle button', { hasText: 'Check against the scan' }).click()
 await page.waitForSelector('.proof-bar', { timeout: 10000 })
 
 // Italics are content the original prints and this edition has to. A textarea
@@ -1193,7 +1220,6 @@ await page
 await page.waitForTimeout(300)
 const sectionsWritten = await page.locator('.proof-section').count()
 await shot('05c2d-proof-introduction')
-
 // The image-editing mode: SPEC §6's "real instrument". The controls have to
 // reach the pixels that get embedded, or they are decoration.
 const editors = await page.locator('.editor').count()
@@ -1297,6 +1323,19 @@ const proofOverflow = await page.evaluate(
 )
 await page.setViewportSize({ width: 1360, height: 900 })
 await page.waitForTimeout(300)
+
+// The introduction is a division, so the galley's outline now has something
+// to point at — the fixture body deliberately has no headings of its own
+// (see "every heading in the contents is the editor's own", below), which is
+// why the outline was rightly absent on the first visit.
+await page.locator('.proof-view-toggle button', { hasText: 'Edit the book' }).click()
+await page.waitForSelector('.galley-page', { timeout: 15000 })
+const galleyOutlineAfter = await page.locator('.galley-outline button').count()
+const galleyShowsIntro = await page
+  .locator('.galley-section-title', { hasText: 'Introduction' })
+  .count()
+await page.locator('.proof-view-toggle button', { hasText: 'Check against the scan' }).click()
+await page.waitForSelector('.proof-bar', { timeout: 10000 })
 
 // --- the editor's own notes -------------------------------------------------
 // The first thing the app *writes* rather than recovers. The API is stubbed
@@ -3013,7 +3052,9 @@ console.log(`  advanced past the structure gate to: ${afterStructure}`)
 console.log(`  proof sheet: ${proofBoxes} editable block(s), ${proofScan} scan(s) beside them`)
 console.log(
   `  the galley: ${galleyPassages} passage(s), ${galleyItalics} italic run(s) set as type, ` +
-    `typed edit landed: ${galleyTyped > 0}, memos left: ${galleyMemos}`
+    `${galleyOutline}→${galleyOutlineAfter} outline entries, "${galleyWords}", typed edit landed: ${galleyTyped > 0}, ` +
+    `autosave said: "${galleyAutosaved}", undo/redo: ${galleyUndone}/${galleyRedone}, ` +
+    `comments left: ${galleyMemos}`
 )
 console.log(
   `  reopening skips the reading: ${coldOpenMs} ms cold -> ${warmOpenMs} ms warm` +
@@ -3235,8 +3276,14 @@ const finalChecks = [
   ['typing on the proof sheet counted as a correction', correctionCounted],
   ['the galley shows the whole book', galleyPassages > 0],
   ['the galley sets italics as type', galleyItalics > 0],
+  ['the galley has an outline once the book has divisions', galleyOutlineAfter > 0],
+  ['a division written on the sheet appears in the galley', galleyShowsIntro > 0],
+  ['and counts the words', /\d/.test(galleyWords)],
   ['typing in the galley landed as an edit', galleyTyped > 0],
-  ['a memo for the assistant was left, and shown as never printing', galleyMemos === 1],
+  ['typing was autosaved, and said so', /saved/i.test(galleyAutosaved)],
+  ['undo took the typed edit back out', galleyUndone],
+  ['redo put it back', galleyRedone],
+  ['a comment for the assistant was left, and shown as never printing', galleyMemos === 1],
   ['a note was proposed', annotations === 1],
   ['a supplied picture was taken', suppliedPictures === 1],
   ['an introduction was written', sectionsWritten === 1],

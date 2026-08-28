@@ -104,6 +104,29 @@ outcome is recorded. Both go through the run store the way `body` and
   it is a second door onto the same edit list, not a replacement.
 - `drive.mjs memos`, as above.
 
+### Stage 1½ — what a word-processor user expects without being told (done)
+
+Chosen by asking one question of the surface: where would someone who has
+used Google Docs plenty, and this app never, trip first?
+
+- **Autosave, said out loud.** Corrections used to persist only on _leaving_
+  the proof step — an evening of galley editing lost to a crashed tab. Edits
+  now save a moment after typing stops, and the indicator ("Saving…" / "All
+  changes saved on this device" / a visible failure) claims nothing the write
+  has not confirmed. `persistRun` reports success instead of swallowing it,
+  and writes the scan once per session rather than beside every save.
+- **Undo across the book.** Ctrl+Z / Ctrl+Shift+Z and buttons, over the
+  committed edit list — history is a stack of previous lists, coalesced so a
+  keystroke is not an undo step, bounded at 200. Inside an open passage the
+  browser's own undo covers the typing in progress; ours picks up at commit.
+- **An outline to navigate by** — divisions and chapters, from the same
+  derivation the contents page uses, click to jump. And a word count.
+- **Docs vocabulary.** The toggle is "Edit the book" / "Check against the
+  scan"; the memo is presented as a _comment_ ("goes to your assistant —
+  never printed"); the kind dropdown is labelled "Paragraph style". One
+  sticky toolbar at the top acts on the open passage, where a word-processor
+  user's eyes already are. The view chosen is remembered per book.
+
 ### Stage 2 — the true page beside the text
 
 - Run `layout()` against the current style answers after a typing pause and

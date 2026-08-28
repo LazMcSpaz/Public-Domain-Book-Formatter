@@ -214,6 +214,8 @@ export function App(): JSX.Element {
   const fileDataRef = useRef<File | null>(null)
   // Identifies the open file, so a paid run can be found again on a later visit.
   const fileKeyRef = useRef<string | null>(null)
+  /** The book whose scan this session has already written — see `persistRun`. */
+  const scanSavedRef = useRef<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   /**
    * The banked look this session is using — either one the user reused at the
@@ -422,9 +424,85 @@ export function App(): JSX.Element {
    * Which face of the proof step is up: the leaf-by-leaf sheet (text beside
    * its scan — the right shape for checking a transcription against paper) or
    * the book editor (the whole volume as one scrolling column — the right
-   * shape for working on the prose). Both write the same edit list.
+   * shape for working on the prose). Both write the same edit list. The choice
+   * is remembered per book, the way the review place is: someone deep in an
+   * editing pass should land back in the editor, not at leaf one.
    */
   const [proofView, setProofView] = useState<'leaves' | 'book'>('leaves')
+  const chooseProofView = useCallback((view: 'leaves' | 'book'): void => {
+    setProofView(view)
+    const key = fileKeyRef.current
+    if (!key) return
+    try {
+      localStorage.setItem(`pdbf.proofview.${key}`, view)
+    } catch {
+      /* a full store loses a convenience, not work */
+    }
+  }, [])
+
+  /**
+   * Undo across the book, over the committed edit list.
+   *
+   * A word-processor user presses Ctrl+Z within their first five minutes, and
+   * the edit-list architecture makes honouring it nearly free: history is a
+   * stack of previous lists, and undo re-derives the book from an earlier one.
+   * Changes are *coalesced* — the sheet and the galley both push a record per
+   * keystroke, and an undo that stepped back a letter at a time would be
+   * worse than none — so anything within a short breath is one undo step.
+   *
+   * Held in a ref, with only the sizes in state: the stacks are read and
+   * written in event handlers, and `StrictMode` double-invokes state updaters,
+   * which would push every snapshot twice.
+   */
+  const editsRef = useRef<BookEdit[]>([])
+  editsRef.current = edits
+  const historyRef = useRef<{ past: BookEdit[][]; future: BookEdit[][] }>({ past: [], future: [] })
+  const lastEditAtRef = useRef(0)
+  const [historySizes, setHistorySizes] = useState({ past: 0, future: 0 })
+  const syncHistorySizes = (): void =>
+    setHistorySizes({
+      past: historyRef.current.past.length,
+      future: historyRef.current.future.length
+    })
+
+  const changeEdits = useCallback((next: BookEdit[]): void => {
+    const cur = editsRef.current
+    if (next === cur) return
+    const h = historyRef.current
+    const now = Date.now()
+    if (h.past.length === 0 || now - lastEditAtRef.current > 900) {
+      h.past.push(cur)
+      // Bounded: two hundred coalesced steps is an evening of editing, and an
+      // unbounded stack of lists would hold every version of the book at once.
+      if (h.past.length > 200) h.past.shift()
+    }
+    lastEditAtRef.current = now
+    h.future = []
+    syncHistorySizes()
+    setEdits(next)
+  }, [])
+
+  const undoEdits = useCallback((): void => {
+    const h = historyRef.current
+    const prev = h.past.pop()
+    if (prev === undefined) return
+    h.future.push(editsRef.current)
+    // The next change starts a fresh record rather than merging into the one
+    // just restored — undo, type, undo must not eat the restored state.
+    lastEditAtRef.current = 0
+    syncHistorySizes()
+    setEdits(prev)
+  }, [])
+
+  const redoEdits = useCallback((): void => {
+    const h = historyRef.current
+    const next = h.future.pop()
+    if (next === undefined) return
+    h.past.push(editsRef.current)
+    lastEditAtRef.current = 0
+    syncHistorySizes()
+    setEdits(next)
+  }, [])
 
   const step = activeStep(state)
   const [answers, setAnswers] = useState<Answers>({})
@@ -703,6 +781,39 @@ export function App(): JSX.Element {
 
   /** The proof step has no questions, so the shell renders its sheet instead. */
   const isProofing = step.id === 'proof' && state.document !== null
+
+  // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y over the committed edits, anywhere on the
+  // proof step that is not a text field — inside one, the browser's own undo
+  // applies to the typing in progress and ours picks up once it commits.
+  useEffect(() => {
+    if (!isProofing) return
+    const onKey = (e: KeyboardEvent): void => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      const key = e.key.toLowerCase()
+      if (key !== 'z' && key !== 'y') return
+      const target = e.target as HTMLElement | null
+      if (target?.closest('input, textarea, select, [contenteditable]')) return
+      e.preventDefault()
+      if (key === 'y' || e.shiftKey) redoEdits()
+      else undoEdits()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [isProofing, undoEdits, redoEdits])
+
+  // Land back in the view the last session used — someone deep in an editing
+  // pass reopens into the editor, not at leaf one of the sheet.
+  useEffect(() => {
+    if (!isProofing) return
+    const key = fileKeyRef.current
+    if (!key) return
+    try {
+      const saved = localStorage.getItem(`pdbf.proofview.${key}`)
+      if (saved === 'book' || saved === 'leaves') setProofView(saved)
+    } catch {
+      /* a lost preference is not worth an error */
+    }
+  }, [isProofing])
 
   /**
    * A readable render of one leaf, for the proof sheet.
@@ -1627,14 +1738,14 @@ export function App(): JSX.Element {
       images: ReadonlyMap<string, Uint8Array> = new Map(),
       complete = true,
       adjudicated: Record<string, AdjudicatedSpot> = {}
-    ): Promise<void> => {
+    ): Promise<boolean> => {
       const key = fileKeyRef.current
       const file = fileDataRef.current
-      if (!key || !file || result.transcriptions.length === 0) return
+      if (!key || !file || result.transcriptions.length === 0) return false
 
       if (result.cancelled) {
         const existing = await loadRunSummary(key)
-        if (existing && existing.pageCount >= result.transcriptions.length) return
+        if (existing && existing.pageCount >= result.transcriptions.length) return false
       }
 
       const stored = await saveRun(
@@ -1661,7 +1772,7 @@ export function App(): JSX.Element {
           'The transcription could not be saved in this browser, so closing the tab ' +
             'will lose it. Finish the book in this session, or free up storage and try again.'
         )
-        return
+        return false
       }
 
       // The scan goes in after the run, never with it. It is two orders of
@@ -1674,12 +1785,62 @@ export function App(): JSX.Element {
       // yet — which happens when a finished run is reused and the transcribe
       // gate never came up — and keeping it then is the harmless default, since
       // the question is still there to change later.
-      if (loadPrefs().keepScans !== false && (await saveSourceFile(key, file))) {
+      // Once per book per session, not once per save: autosave re-persists the
+      // run after every pause in typing, and re-writing a scan two orders of
+      // magnitude larger than the run alongside each of those would turn a
+      // cheap save into a heavy one. A failed write leaves the ref unset, so
+      // it is retried on the next save rather than given up on.
+      if (
+        loadPrefs().keepScans !== false &&
+        scanSavedRef.current !== key &&
+        (await saveSourceFile(key, file))
+      ) {
+        scanSavedRef.current = key
         setReopenable((keys) => (keys.includes(key) ? keys : [...keys, key]))
       }
+      return true
     },
     []
   )
+
+  /**
+   * Autosave, said out loud.
+   *
+   * The galley invites an evening of continuous editing, and a word-processor
+   * user's deepest habit is never saving — the corrections used to be
+   * persisted only on *leaving* the proof step, so a crashed tab or a locked
+   * phone cost everything since. Saved a moment after typing stops (a write
+   * per keystroke would hammer IndexedDB for nothing), and the indicator is
+   * the contract: "saved" is claimed only when the write has come back true,
+   * and a failure is shown rather than swallowed.
+   */
+  const [autosave, setAutosave] = useState<'idle' | 'saving' | 'saved' | 'failed'>('idle')
+  const everEditedRef = useRef(false)
+  useEffect(() => {
+    if (!isProofing) return
+    const run = transcriptionRef.current
+    if (!run) return
+    // Nothing to record until something has been edited — but once something
+    // has, an edit list emptied by undo must be written too, or a refresh
+    // would resurrect the change that was just undone.
+    if (edits.length === 0 && !everEditedRef.current) return
+    everEditedRef.current = true
+    setAutosave('saving')
+    const timer = setTimeout(() => {
+      persistRun(
+        run,
+        state.answers['gate-identity'] ?? {},
+        loadPrefs().modelId,
+        edits,
+        suppliedBytesRef.current,
+        true,
+        state.adjudicated
+      )
+        .then((ok) => setAutosave(ok ? 'saved' : 'failed'))
+        .catch(() => setAutosave('failed'))
+    }, 1200)
+    return () => clearTimeout(timer)
+  }, [edits, isProofing, persistRun, state.answers, state.adjudicated])
 
   /**
    * The fact bank as files, named after the book the export screen is about.
@@ -2678,13 +2839,24 @@ export function App(): JSX.Element {
   const finishProof = useCallback(async () => {
     const run = transcriptionRef.current
     if (run && edits.length > 0) {
-      await persistRun(run, state.answers['gate-identity'] ?? {}, loadPrefs().modelId, edits)
+      // With the supplied pictures and the second reading's verdicts, the same
+      // way the autosave writes them — leaving the step must never store less
+      // than a pause in typing does.
+      await persistRun(
+        run,
+        state.answers['gate-identity'] ?? {},
+        loadPrefs().modelId,
+        edits,
+        suppliedBytesRef.current,
+        true,
+        state.adjudicated
+      )
       // An evening of proofreading is the other thing in this app that cannot
       // be had again cheaply. It goes to the shelf as soon as it is saved here.
       void saveToShelf(`${edits.length} correction(s) from the proof step`)
     }
     complete()
-  }, [edits, state.answers, persistRun, complete, saveToShelf])
+  }, [edits, state.answers, state.adjudicated, persistRun, complete, saveToShelf])
 
   /**
    * The annotation pass, and the introduction if one was asked for.
@@ -3891,33 +4063,64 @@ export function App(): JSX.Element {
         {/* --- proofreading, which is a workbench rather than a set of questions --- */}
         {!exported && !progressInfo && !runProgress && !pendingCost && isProofing ? (
           <>
-            <div className="proof-view-toggle" role="tablist" aria-label="How to proofread">
-              <button
-                type="button"
-                role="tab"
-                aria-selected={proofView === 'leaves'}
-                className={proofView === 'leaves' ? 'selected' : ''}
-                onClick={() => setProofView('leaves')}
-              >
-                Leaf by leaf, beside the scan
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={proofView === 'book'}
-                className={proofView === 'book' ? 'selected' : ''}
-                onClick={() => setProofView('book')}
-              >
-                The whole book, as prose
-              </button>
+            <div className="proof-head">
+              <div className="proof-view-toggle" role="tablist" aria-label="How to proofread">
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={proofView === 'book'}
+                  className={proofView === 'book' ? 'selected' : ''}
+                  onClick={() => chooseProofView('book')}
+                >
+                  Edit the book
+                </button>
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={proofView === 'leaves'}
+                  className={proofView === 'leaves' ? 'selected' : ''}
+                  onClick={() => chooseProofView('leaves')}
+                >
+                  Check against the scan
+                </button>
+              </div>
+              <span className="proof-history">
+                <button
+                  type="button"
+                  className="proof-undo"
+                  disabled={historySizes.past === 0}
+                  title="Undo (Ctrl+Z)"
+                  onClick={undoEdits}
+                >
+                  ↶ Undo
+                </button>
+                <button
+                  type="button"
+                  className="proof-redo"
+                  disabled={historySizes.future === 0}
+                  title="Redo (Ctrl+Shift+Z)"
+                  onClick={redoEdits}
+                >
+                  ↷ Redo
+                </button>
+              </span>
+              <span className={`proof-autosave ${autosave}`} role="status">
+                {autosave === 'saving'
+                  ? 'Saving…'
+                  : autosave === 'saved'
+                    ? 'All changes saved on this device'
+                    : autosave === 'failed'
+                      ? 'Could not save — your changes exist only in this tab'
+                      : ''}
+              </span>
             </div>
             {proofView === 'book' ? (
-              <BookEditor document={correctedDocument!} edits={edits} onChange={setEdits} />
+              <BookEditor document={correctedDocument!} edits={edits} onChange={changeEdits} />
             ) : (
               <ProofSheet
                 document={state.document!}
                 edits={edits}
-                onChange={setEdits}
+                onChange={changeEdits}
                 resolveScan={(pageIndex) => reconRef.current?.thumbnails.get(pageIndex)}
                 loadScan={loadProofScan}
                 addImage={addSuppliedImage}

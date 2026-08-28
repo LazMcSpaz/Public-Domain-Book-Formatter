@@ -1963,9 +1963,47 @@ mark.claim {
 
 /* ---------- the book editor ---------- */
 
+.proof-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin: 0 0 14px;
+}
+.proof-history {
+  display: inline-flex;
+  gap: 4px;
+}
+.proof-history button {
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+}
+.proof-history button:disabled {
+  color: var(--muted);
+  background: var(--bg);
+  cursor: default;
+}
+.proof-autosave {
+  margin-left: auto;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+.proof-autosave.saved {
+  color: var(--ok);
+}
+.proof-autosave.failed {
+  color: var(--warn);
+  font-weight: 600;
+}
+
 .proof-view-toggle {
   display: inline-flex;
-  margin: 0 0 14px;
   border: 1px solid var(--line);
   border-radius: 6px;
   overflow: hidden;
@@ -2000,7 +2038,6 @@ mark.claim {
   max-width: 46em;
 }
 .galley-memo-count {
-  margin-left: auto;
   flex-shrink: 0;
   font-size: 0.8rem;
   color: var(--accent);
@@ -2016,6 +2053,8 @@ mark.claim {
   padding: 40px clamp(20px, 8%, 72px);
   max-width: 44em;
   margin: 0 auto;
+  flex: 1 1 auto;
+  min-width: 0;
   font-size: 1.05rem;
   line-height: 1.65;
 }
@@ -2110,17 +2149,25 @@ mark.claim {
 .galley-active .galley-block {
   margin-bottom: 0;
 }
-.galley-tools {
+.galley-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   gap: 6px;
-  margin-bottom: 8px;
+  padding: 8px 10px;
+  margin-bottom: 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  box-shadow: 0 1px 4px rgba(35, 32, 27, 0.06);
   font-size: 0.8rem;
   font-family: ui-serif, Georgia, serif;
 }
-.galley-tools select,
-.galley-tools button {
+.galley-toolbar select,
+.galley-toolbar button {
   font: inherit;
   font-size: 0.78rem;
   padding: 3px 9px;
@@ -2130,11 +2177,82 @@ mark.claim {
   color: var(--ink);
   cursor: pointer;
 }
-.galley-tools .galley-done {
+.galley-toolbar select:disabled,
+.galley-toolbar button:disabled {
+  color: var(--muted);
+  background: var(--bg);
+  cursor: default;
+}
+.galley-toolbar .galley-done {
   margin-left: auto;
   background: var(--accent);
   border-color: var(--accent);
   color: #fff;
+}
+.galley-toolbar .galley-done:disabled {
+  background: var(--bg);
+  border-color: var(--line);
+  color: var(--muted);
+}
+.galley-toolbar-note {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.galley-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+}
+.galley-outline {
+  position: sticky;
+  top: 56px;
+  flex: 0 0 200px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-right: 6px;
+}
+.galley-outline button {
+  font: inherit;
+  font-size: 0.8rem;
+  text-align: left;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.galley-outline button:hover {
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+.galley-outline .galley-outline-division {
+  font-style: italic;
+}
+@media (max-width: 900px) {
+  .galley-outline {
+    display: none;
+  }
+}
+.galley-counts {
+  margin-left: auto;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+.galley-words {
+  font-size: 0.75rem;
+  color: var(--muted);
 }
 .galley-kind-note {
   font-size: 0.75rem;

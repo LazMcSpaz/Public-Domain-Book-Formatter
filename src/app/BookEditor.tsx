@@ -24,7 +24,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { BookDocument } from '@core/assemble'
 import type { BlockKind } from '@core/transcribe'
-import { withMarkup } from '@core/transcribe'
+import { withMarkup, wordCount } from '@core/transcribe'
 import {
   htmlOfMarkup,
   markupOfNodes,
@@ -196,6 +196,40 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
     }
     return out
   }, [doc])
+
+  /**
+   * The outline, for a column that is otherwise one long scroll: divisions set
+   * before the body, the chapters, divisions after — the same list the
+   * contents page is built from, so it cannot disagree with the book.
+   */
+  const outline = useMemo(() => {
+    const entries: { id: string; label: string; kind: 'division' | 'chapter' }[] = []
+    for (const s of doc.sections.filter((x) => x.placement === 'front')) {
+      const first = s.blocks[0]
+      if (first) entries.push({ id: first.id, label: s.title, kind: 'division' })
+    }
+    for (const c of doc.chapters) {
+      entries.push({
+        id: c.id,
+        label: c.label ? `${c.label} · ${c.title}` : c.title,
+        kind: 'chapter'
+      })
+    }
+    for (const s of doc.sections.filter((x) => x.placement === 'back')) {
+      const first = s.blocks[0]
+      if (first) entries.push({ id: first.id, label: s.title, kind: 'division' })
+    }
+    return entries
+  }, [doc])
+
+  const words = useMemo(() => passages.reduce((n, p) => n + wordCount(p.text), 0), [passages])
+
+  /** The one toolbar, so a blur into it must not close the passage it acts on. */
+  const toolbarRef = useRef<HTMLDivElement | null>(null)
+
+  const jumpTo = (id: string): void => {
+    document.getElementById(`g-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   const memosByBlock = useMemo(() => {
     const out = new Map<string, MemoEdit[]>()
@@ -381,253 +415,287 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
     return <div className="galley empty">There is no text to edit.</div>
   }
 
+  const bodyActive = activePassage !== null && activePassage.origin.type === 'body'
+  const richActive = activePassage !== null && !editsAsPlainText(activePassage.kind)
+
   return (
     <div className="galley">
       <div className="galley-bar">
         <span className="galley-hint">
-          Click into a passage to edit it. Enter breaks a paragraph; everything downstream reflows.
-          Italic and bold are content; size and spacing belong to the design.
+          Click into a passage and type, as in any document. Enter starts a new paragraph and the
+          whole book reflows — line and page breaks are the design&rsquo;s to decide, so italic and
+          bold are yours here and size and spacing are not. Ctrl+F finds text anywhere: the whole
+          book is on this one page.
         </span>
-        {openMemoCount > 0 ? (
-          <span className="galley-memo-count">
-            {openMemoCount} note{openMemoCount === 1 ? '' : 's'} for the assistant
-          </span>
+        <span className="galley-counts">
+          {openMemoCount > 0 ? (
+            <span className="galley-memo-count">
+              {openMemoCount} comment{openMemoCount === 1 ? '' : 's'} for your assistant
+            </span>
+          ) : null}
+          <span className="galley-words">{words.toLocaleString()} words</span>
+        </span>
+      </div>
+
+      {/* One toolbar at the top, where a word processor keeps it, acting on
+          whichever passage is open. Every button that must not steal focus
+          from the editable prevents its own mousedown. */}
+      <div className="galley-toolbar" ref={toolbarRef}>
+        <select
+          value={bodyActive ? activePassage!.kind : 'paragraph'}
+          disabled={!bodyActive}
+          aria-label="Paragraph style"
+          title="Paragraph style — how every passage of this kind is set"
+          onChange={(e) => {
+            if (!activePassage) return
+            // What was typed commits first, or restyling would re-seed the
+            // editor over unsaved words.
+            commitActive(activePassage)
+            push({
+              kind: 'retype',
+              blockId: activePassage.id,
+              blockKind: e.target.value as BlockKind,
+              ...(e.target.value === 'heading' ? { level: activePassage.level ?? 1 } : {})
+            })
+          }}
+        >
+          {KINDS.map((k) => (
+            <option key={k.value} value={k.value}>
+              {k.label}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={!richActive}
+          title="Italic (Ctrl+I) — as the book prints it"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => document.execCommand('italic')}
+        >
+          <i>I</i>
+        </button>
+        <button
+          type="button"
+          disabled={!richActive}
+          title="Bold (Ctrl+B) — a glossary headword, a heading word"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => document.execCommand('bold')}
+        >
+          <b>B</b>
+        </button>
+        <button
+          type="button"
+          disabled={!bodyActive}
+          title="A footnote of your own at the cursor — printed at the foot of its page"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => activePassage && addFootnote(activePassage)}
+        >
+          Footnote
+        </button>
+        <button
+          type="button"
+          disabled={activePassage === null}
+          title="A comment at the cursor — it goes to your assistant and is never printed"
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => activePassage && leaveMemo(activePassage)}
+        >
+          Comment
+        </button>
+        <button
+          type="button"
+          disabled={!bodyActive}
+          title="Not part of the book"
+          onClick={() => {
+            if (!activePassage) return
+            const dropped = activePassage
+            setActive(null)
+            push({ kind: 'drop', blockId: dropped.id })
+          }}
+        >
+          Remove
+        </button>
+        <button
+          type="button"
+          className="galley-done"
+          disabled={activePassage === null}
+          onClick={() => {
+            if (activePassage) commitActive(activePassage)
+            setActive(null)
+          }}
+        >
+          Done
+        </button>
+        {activePassage === null ? (
+          <span className="galley-toolbar-note">Click a passage to edit it</span>
         ) : null}
       </div>
 
-      <div className="galley-page">
-        {passages.map((passage) => {
-          const heading = sectionTitles.get(passage.id)
-          const isActive = active?.id === passage.id
-          const memos = memosByBlock.get(passage.id) ?? []
-          const notes = notesByBlock.get(passage.id) ?? []
+      <div className="galley-body">
+        {outline.length > 0 ? (
+          <nav className="galley-outline" aria-label="Book outline">
+            {outline.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                className={`galley-outline-${entry.kind}`}
+                onClick={() => jumpTo(entry.id)}
+              >
+                {entry.label}
+              </button>
+            ))}
+          </nav>
+        ) : null}
 
-          return (
-            <div key={passage.id} className="galley-passage">
-              {heading ? <div className="galley-section-title">{heading.title}</div> : null}
-              {passage.label ? <div className="galley-label">{passage.label}</div> : null}
+        <div className="galley-page">
+          {passages.map((passage) => {
+            const heading = sectionTitles.get(passage.id)
+            const isActive = active?.id === passage.id
+            const memos = memosByBlock.get(passage.id) ?? []
+            const notes = notesByBlock.get(passage.id) ?? []
 
-              {isActive ? (
-                <div className="galley-active">
-                  <div className="galley-tools">
-                    {passage.origin.type === 'body' ? (
-                      <select
-                        value={passage.kind}
-                        aria-label="What this is"
-                        onChange={(e) => {
-                          // What was typed commits first, or retyping the kind
-                          // would re-seed the editor over unsaved words.
-                          commitActive(passage)
-                          push({
-                            kind: 'retype',
-                            blockId: passage.id,
-                            blockKind: e.target.value as BlockKind,
-                            ...(e.target.value === 'heading' ? { level: passage.level ?? 1 } : {})
-                          })
-                        }}
-                      >
-                        {KINDS.map((k) => (
-                          <option key={k.value} value={k.value}>
-                            {k.label}
-                          </option>
-                        ))}
-                      </select>
+            return (
+              <div key={passage.id} id={`g-${passage.id}`} className="galley-passage">
+                {heading ? <div className="galley-section-title">{heading.title}</div> : null}
+                {passage.label ? <div className="galley-label">{passage.label}</div> : null}
+
+                {isActive ? (
+                  <div className="galley-active">
+                    {editsAsPlainText(passage.kind) ? (
+                      <textarea
+                        className={`galley-editable galley-plain galley-${passage.kind}`}
+                        defaultValue={passage.text}
+                        autoFocus
+                        rows={Math.max(3, passage.text.split('\n').length + 1)}
+                        aria-label={`Text of ${passage.id}`}
+                        onBlur={(e) => commitText(passage, e.target.value.replace(/\n+$/u, ''))}
+                      />
                     ) : (
-                      <span className="galley-kind-note">your own writing</span>
-                    )}
-                    {!editsAsPlainText(passage.kind) ? (
-                      <>
-                        <button
-                          type="button"
-                          title="Italic — as the book prints it"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => document.execCommand('italic')}
-                        >
-                          <i>I</i>
-                        </button>
-                        <button
-                          type="button"
-                          title="Bold — a glossary headword, a heading word"
-                          onMouseDown={(e) => e.preventDefault()}
-                          onClick={() => document.execCommand('bold')}
-                        >
-                          <b>B</b>
-                        </button>
-                      </>
-                    ) : null}
-                    {passage.origin.type === 'body' ? (
-                      <button
-                        type="button"
-                        title="A footnote of your own at the cursor — printed at the foot of its page"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => addFootnote(passage)}
-                      >
-                        Footnote
-                      </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      title="A note for the assistant at the cursor — never printed"
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => leaveMemo(passage)}
-                    >
-                      For the assistant
-                    </button>
-                    {passage.origin.type === 'body' ? (
-                      <button
-                        type="button"
-                        title="Not part of the book"
-                        onClick={() => {
-                          setActive(null)
-                          push({ kind: 'drop', blockId: passage.id })
+                      <div
+                        ref={editableRef}
+                        className={`galley-editable ${readonlyClass(passage.kind, passage.level)}`}
+                        contentEditable
+                        suppressContentEditableWarning
+                        spellCheck
+                        role="textbox"
+                        aria-label={`Text of ${passage.id}`}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault()
+                            splitAtCaret(passage)
+                            return
+                          }
+                          if (
+                            e.key === 'Backspace' &&
+                            editableRef.current &&
+                            caretOffset(editableRef.current) === 0 &&
+                            (editableRef.current.ownerDocument.defaultView?.getSelection()
+                              ?.isCollapsed ??
+                              true)
+                          ) {
+                            e.preventDefault()
+                            mergeIntoPrevious(passage)
+                          }
                         }}
+                        onBlur={(e) => {
+                          // Leaving for the toolbar keeps the passage open — it
+                          // is about to act on it; leaving for anywhere else
+                          // commits it.
+                          const next = e.relatedTarget as Node | null
+                          if (next && (toolbarRef.current?.contains(next) ?? false)) return
+                          commitActive(passage)
+                          // Functional, because a mousedown on another passage
+                          // has already queued that passage as active and this
+                          // blur lands after it — clearing unconditionally would
+                          // close the passage the user just clicked into.
+                          setActive((cur) => (cur && cur.id !== passage.id ? cur : null))
+                        }}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div
+                    className={`galley-readonly ${readonlyClass(passage.kind, passage.level)}`}
+                    onMouseDown={(e) => {
+                      // The default action would move focus to the body *after*
+                      // the effect above focuses the freshly-mounted editable —
+                      // blurring it, which commits and closes the passage the
+                      // same instant it opened. Measured, not hypothetical: the
+                      // event trace is mousedown → focusin → focusout.
+                      e.preventDefault()
+                      const at = offsetAtPoint(e.currentTarget, e.clientX, e.clientY)
+                      // Commit whatever passage was open before switching.
+                      if (activePassage) commitActive(activePassage)
+                      setActive({ id: passage.id, caret: at })
+                    }}
+                    // Safe: `htmlOfMarkup` escapes everything but its own <i>/<b>.
+                    dangerouslySetInnerHTML={{ __html: htmlOfMarkup(passage.text) }}
+                  />
+                )}
+
+                {notes.map((note) => (
+                  <div key={note.noteId} className="proof-annotation galley-note">
+                    <span className="proof-annotation-bar">
+                      <span className="proof-annotation-label">
+                        Your footnote, after “{snippet(passage.text, note.at)}”
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          onChange(
+                            edits.filter((e) => e.kind !== 'note' || e.noteId !== note.noteId)
+                          )
+                        }
                       >
                         Remove
                       </button>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="galley-done"
-                      onClick={() => {
-                        commitActive(passage)
-                        setActive(null)
-                      }}
-                    >
-                      Done
-                    </button>
-                  </div>
-
-                  {editsAsPlainText(passage.kind) ? (
-                    <textarea
-                      className={`galley-editable galley-plain galley-${passage.kind}`}
-                      defaultValue={passage.text}
-                      autoFocus
-                      rows={Math.max(3, passage.text.split('\n').length + 1)}
-                      aria-label={`Text of ${passage.id}`}
-                      onBlur={(e) => commitText(passage, e.target.value.replace(/\n+$/u, ''))}
-                    />
-                  ) : (
-                    <div
-                      ref={editableRef}
-                      className={`galley-editable ${readonlyClass(passage.kind, passage.level)}`}
-                      contentEditable
-                      suppressContentEditableWarning
-                      spellCheck
-                      role="textbox"
-                      aria-label={`Text of ${passage.id}`}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          e.preventDefault()
-                          splitAtCaret(passage)
-                          return
-                        }
-                        if (
-                          e.key === 'Backspace' &&
-                          editableRef.current &&
-                          caretOffset(editableRef.current) === 0 &&
-                          (editableRef.current.ownerDocument.defaultView?.getSelection()
-                            ?.isCollapsed ??
-                            true)
-                        ) {
-                          e.preventDefault()
-                          mergeIntoPrevious(passage)
-                        }
-                      }}
-                      onBlur={(e) => {
-                        // Clicking the toolbar keeps the passage open; leaving
-                        // for anywhere else commits it.
-                        const next = e.relatedTarget as Node | null
-                        if (next && e.currentTarget.closest('.galley-active')?.contains(next)) {
-                          return
-                        }
-                        commitActive(passage)
-                        // Functional, because a mousedown on another passage
-                        // has already queued that passage as active and this
-                        // blur lands after it — clearing unconditionally would
-                        // close the passage the user just clicked into.
-                        setActive((cur) => (cur && cur.id !== passage.id ? cur : null))
-                      }}
-                    />
-                  )}
-                </div>
-              ) : (
-                <div
-                  className={`galley-readonly ${readonlyClass(passage.kind, passage.level)}`}
-                  onMouseDown={(e) => {
-                    // The default action would move focus to the body *after*
-                    // the effect below focuses the freshly-mounted editable —
-                    // blurring it, which commits and closes the passage the
-                    // same instant it opened. Measured, not hypothetical: the
-                    // event trace is mousedown → focusin → focusout.
-                    e.preventDefault()
-                    const at = offsetAtPoint(e.currentTarget, e.clientX, e.clientY)
-                    // Commit whatever passage was open before switching.
-                    if (activePassage) commitActive(activePassage)
-                    setActive({ id: passage.id, caret: at })
-                  }}
-                  // Safe: `htmlOfMarkup` escapes everything but its own <i>/<b>.
-                  dangerouslySetInnerHTML={{ __html: htmlOfMarkup(passage.text) }}
-                />
-              )}
-
-              {notes.map((note) => (
-                <div key={note.noteId} className="proof-annotation galley-note">
-                  <span className="proof-annotation-bar">
-                    <span className="proof-annotation-label">
-                      Your footnote, after “{snippet(passage.text, note.at)}”
                     </span>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        onChange(edits.filter((e) => e.kind !== 'note' || e.noteId !== note.noteId))
-                      }
-                    >
-                      Remove
-                    </button>
-                  </span>
-                  <textarea
-                    value={note.text}
-                    spellCheck
-                    rows={2}
-                    placeholder="Your note — set at the foot of the page this falls on."
-                    aria-label="Your footnote"
-                    onChange={(e) => push({ ...note, text: e.target.value })}
-                  />
-                </div>
-              ))}
-
-              {memos.map((memo) => (
-                <div key={memo.memoId} className={`galley-memo${memo.resolved ? ' resolved' : ''}`}>
-                  <span className="proof-annotation-bar">
-                    <span className="proof-annotation-label">
-                      {memo.resolved
-                        ? 'For the assistant — answered'
-                        : `For the assistant, at “${snippet(passage.text, memo.at)}” — never printed`}
-                    </span>
-                    <button type="button" onClick={() => onChange(clearMemo(edits, memo.memoId))}>
-                      {memo.resolved ? 'Clear' : 'Withdraw'}
-                    </button>
-                  </span>
-                  {memo.resolved ? (
-                    <>
-                      <p className="galley-memo-ask">“{memo.text}”</p>
-                      <p className="galley-memo-outcome">{memo.resolved}</p>
-                    </>
-                  ) : (
                     <textarea
-                      value={memo.text}
+                      value={note.text}
                       spellCheck
                       rows={2}
-                      placeholder="What should the assistant look at here? This never reaches the printed book."
-                      aria-label="Note for the assistant"
-                      onChange={(e) => push({ ...memo, text: e.target.value })}
+                      placeholder="Your note — set at the foot of the page this falls on."
+                      aria-label="Your footnote"
+                      onChange={(e) => push({ ...note, text: e.target.value })}
                     />
-                  )}
-                </div>
-              ))}
-            </div>
-          )
-        })}
+                  </div>
+                ))}
+
+                {memos.map((memo) => (
+                  <div
+                    key={memo.memoId}
+                    className={`galley-memo${memo.resolved ? ' resolved' : ''}`}
+                  >
+                    <span className="proof-annotation-bar">
+                      <span className="proof-annotation-label">
+                        {memo.resolved
+                          ? 'Comment — answered by your assistant'
+                          : `Comment for your assistant, at “${snippet(passage.text, memo.at)}” — never printed`}
+                      </span>
+                      <button type="button" onClick={() => onChange(clearMemo(edits, memo.memoId))}>
+                        {memo.resolved ? 'Clear' : 'Withdraw'}
+                      </button>
+                    </span>
+                    {memo.resolved ? (
+                      <>
+                        <p className="galley-memo-ask">“{memo.text}”</p>
+                        <p className="galley-memo-outcome">{memo.resolved}</p>
+                      </>
+                    ) : (
+                      <textarea
+                        value={memo.text}
+                        spellCheck
+                        rows={2}
+                        placeholder="What should your assistant look at here? Comments never reach the printed book."
+                        aria-label="Comment for your assistant"
+                        onChange={(e) => push({ ...memo, text: e.target.value })}
+                      />
+                    )}
+                  </div>
+                ))}
+              </div>
+            )
+          })}
+        </div>
       </div>
     </div>
   )

@@ -1215,7 +1215,15 @@ in `screenshots/`. Don't ship UI blind.
   in; `memos resolve` records what was done and the memo stays, outcome
   attached, until the editor clears it — resolution is a ledger, not a
   deletion. A memo asking for prose gets a proposal in its resolution, never
-  a landed edit.
+  a landed edit. On screen a memo is presented as a **comment**, because
+  that is the word-processor concept it maps to. And the surface behaves the
+  way a Docs user assumes without being told: edits **autosave** a moment
+  after typing stops, with an indicator that claims nothing the write has
+  not confirmed; **Ctrl+Z / Ctrl+Shift+Z** undo and redo over the committed
+  edit list, coalesced so a keystroke is not a step; an **outline** of
+  divisions and chapters (the contents derivation) navigates the column; one
+  sticky toolbar at the top acts on the open passage; and the view chosen —
+  "Edit the book" or "Check against the scan" — is remembered per book.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the editorial-query channel, then _The Human Aura_.
