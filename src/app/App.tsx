@@ -782,14 +782,53 @@ export function App(): JSX.Element {
   /** The proof step has no questions, so the shell renders its sheet instead. */
   const isProofing = step.id === 'proof' && state.document !== null
 
+  /**
+   * Save immediately — Ctrl+S, and the step before a shelf push.
+   *
+   * Deferred one tick on purpose: a Ctrl+S inside an open passage commits the
+   * typing first, and that commit is a state update React has not applied
+   * when the key event reaches the window. Reading the edits through the ref
+   * after a tick saves the list *with* the words just committed, so the
+   * indicator never claims saved for typing that was left behind. Rebuilt
+   * every render (and reached through a ref) so the closure is never stale.
+   */
+  const saveEditsNow = (): void => {
+    const run = transcriptionRef.current
+    if (!run) return
+    everEditedRef.current = true
+    setAutosave('saving')
+    setTimeout(() => {
+      persistRun(
+        run,
+        state.answers['gate-identity'] ?? {},
+        loadPrefs().modelId,
+        editsRef.current,
+        suppliedBytesRef.current,
+        true,
+        state.adjudicated
+      )
+        .then((ok) => setAutosave(ok ? 'saved' : 'failed'))
+        .catch(() => setAutosave('failed'))
+    }, 60)
+  }
+  const saveEditsNowRef = useRef(saveEditsNow)
+  saveEditsNowRef.current = saveEditsNow
+
   // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y over the committed edits, anywhere on the
   // proof step that is not a text field — inside one, the browser's own undo
-  // applies to the typing in progress and ours picks up once it commits.
+  // applies to the typing in progress and ours picks up once it commits. And
+  // Ctrl+S, which a word-processor user will press, saves at once instead of
+  // opening the browser's save-page dialog.
   useEffect(() => {
     if (!isProofing) return
     const onKey = (e: KeyboardEvent): void => {
       if (!(e.ctrlKey || e.metaKey)) return
       const key = e.key.toLowerCase()
+      if (key === 's' && !e.altKey) {
+        e.preventDefault()
+        saveEditsNowRef.current()
+        return
+      }
       if (key !== 'z' && key !== 'y') return
       const target = e.target as HTMLElement | null
       if (target?.closest('input, textarea, select, [contenteditable]')) return
@@ -800,6 +839,16 @@ export function App(): JSX.Element {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [isProofing, undoEdits, redoEdits])
+
+  /**
+   * Whether a shelf is connected, checked on arrival at the proof step.
+   *
+   * Autosave protects the work from a crashed tab; the shelf is what protects
+   * it from a lost browser profile, and until now it was only written when a
+   * step finished. The button makes the second layer reachable mid-pass.
+   */
+  const shelfOn = useMemo(() => isProofing && shelfReady(loadShelf()), [isProofing])
+  const [shelfSavedAt, setShelfSavedAt] = useState<string | null>(null)
 
   // Land back in the view the last session used — someone deep in an editing
   // pass reopens into the editor, not at leaf one of the sheet.
@@ -1340,6 +1389,7 @@ export function App(): JSX.Element {
         })
         if (result.scan === null && fileDataRef.current) setShelfNote(result.note)
         setShelfNote(`Saved to ${config.repo}: ${what}.`)
+        setShelfSavedAt(new Date().toISOString())
       } catch (err) {
         // Never fatal. The book is safe on this device either way, and a shelf
         // that cannot be written to is a worse day, not a lost one.
@@ -4113,6 +4163,43 @@ export function App(): JSX.Element {
                       ? 'Could not save — your changes exist only in this tab'
                       : ''}
               </span>
+              {shelfOn ? (
+                <>
+                  <button
+                    type="button"
+                    className="proof-shelf"
+                    disabled={shelfBusy}
+                    title="This device holds a copy; the shelf is the one that survives it"
+                    onClick={() => {
+                      void (async () => {
+                        // The run is written first, so the shelf receives the
+                        // list as it stands rather than as it stood at the
+                        // last pause in typing.
+                        const run = transcriptionRef.current
+                        if (run) {
+                          await persistRun(
+                            run,
+                            state.answers['gate-identity'] ?? {},
+                            loadPrefs().modelId,
+                            edits,
+                            suppliedBytesRef.current,
+                            true,
+                            state.adjudicated
+                          )
+                        }
+                        await saveToShelf('your corrections, from the editor')
+                      })()
+                    }}
+                  >
+                    {shelfBusy ? 'Saving to the shelf…' : 'Save to the shelf'}
+                  </button>
+                  <span className="proof-shelf-note">
+                    {shelfSavedAt
+                      ? `on the shelf ${describeAge(shelfSavedAt)}`
+                      : 'this device only, until pushed'}
+                  </span>
+                </>
+              ) : null}
             </div>
             {proofView === 'book' ? (
               <BookEditor document={correctedDocument!} edits={edits} onChange={changeEdits} />

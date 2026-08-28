@@ -367,11 +367,23 @@ async function serve() {
             window.__pdbfBook = matches[0].key
           }
           const wanted = window.__pdbfBook ?? null
+          // Comments waiting on the assistant, said here so a session starting
+          // cold sees them without having to think to ask — the memo channel
+          // only works if reading it is part of finding out where you are.
+          const run = wanted ? await runStore.loadRun(wanted) : null
+          const memos = (run?.edits ?? []).filter((e) => e.kind === 'memo')
           return {
             current: wanted
               ? (runs.find((r) => r.key === wanted)?.fileName ?? wanted.split('\u0000')[0])
               : null,
             scanStored: wanted ? Boolean(await runStore.loadSourceFile(wanted)) : false,
+            commentsOpen: memos.filter((m) => !m.resolved).length,
+            commentsAnswered: memos.filter((m) => m.resolved).length,
+            ...(memos.some((m) => !m.resolved)
+              ? {
+                  next: '`memos` lists what the editor asked for; sweep them before anything else.'
+                }
+              : {}),
             stored: runs.map((r) => r.fileName)
           }
         },
@@ -2691,6 +2703,124 @@ async function serve() {
           }
         },
         [REPO, blockId, replacement, was, now]
+      )
+    },
+
+    /**
+     * Find — and optionally replace — across the whole book.
+     *
+     * The recurring OCR misreading is the case this exists for: the same
+     * wrong word appears dozens of times in one scan, and `correct` fixes one
+     * block at a time. Without `--now` this is a dry run and only reports the
+     * matches, each with context; with it, every match is replaced — body
+     * blocks as ordinary `text` edits, written divisions by rewriting their
+     * own record — and the count per block is reported so nothing changes in
+     * silence. The search reads through the notation the way a person reads
+     * the page, and the replacement keeps the emphasis around it
+     * (`@core/edits/sweep`).
+     *
+     * ```
+     * sweep --was "belleves"                     # where is it? free, changes nothing
+     * sweep --was "belleves" --now "believes"    # fix them all
+     * sweep --was "Occulist" --now "Oculist" --case
+     * ```
+     */
+    sweep: async (argv) => {
+      const flag = (name) => {
+        const i = argv.indexOf(`--${name}`)
+        return i === -1 ? null : argv[i + 1]
+      }
+      const was = flag('was')
+      const now = flag('now')
+      const matchCase = argv.includes('--case')
+      if (!was) throw new Error('sweep --was <text> [--now <text>] [--case]')
+
+      return page.evaluate(
+        async ([repo, was, now, matchCase]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const markup = await import(`/@fs${repo}/src/core/transcribe/markup.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+
+          // Against the book as it stands, the same text `body` hands back.
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+
+          const found = []
+          let edits = run.edits ?? []
+          let replaced = 0
+
+          for (const block of doc.blocks) {
+            const text = markup.withMarkup(block.text, block.emphasis, block.strong)
+            const matches = editsMod.findMatches(text, was, matchCase)
+            if (matches.length === 0) continue
+            found.push({
+              blockId: block.id,
+              pages: block.sourcePages,
+              matches: matches.map((m) => m.context)
+            })
+            if (now !== null) {
+              const swept = editsMod.sweepText(text, was, now, matchCase)
+              edits = editsMod.withEdit(edits, {
+                kind: 'text',
+                blockId: block.id,
+                text: swept.text
+              })
+              replaced += swept.count
+            }
+          }
+
+          // Written divisions hold their own text; swept in place, once each.
+          for (const edit of run.edits ?? []) {
+            if (edit.kind !== 'section') continue
+            const matches = editsMod.findMatches(edit.text, was, matchCase)
+            if (matches.length === 0) continue
+            found.push({
+              section: edit.sectionId,
+              title: edit.title,
+              matches: matches.map((m) => m.context)
+            })
+            if (now !== null) {
+              const swept = editsMod.sweepText(edit.text, was, now, matchCase)
+              edits = editsMod.withEdit(edits, { ...edit, text: swept.text })
+              replaced += swept.count
+            }
+          }
+
+          if (now === null || found.length === 0) {
+            return {
+              dryRun: now === null,
+              was,
+              matches: found.reduce((n, f) => n + f.matches.length, 0),
+              found
+            }
+          }
+
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            edits
+          })
+          const stored = await runStore.saveRun(next)
+          return {
+            was,
+            now,
+            replaced,
+            in: found.length,
+            stored: stored === true,
+            found,
+            next: '`shelf push` sends it to the shelf; nothing has left this device yet.'
+          }
+        },
+        [REPO, was, now, matchCase]
       )
     },
 

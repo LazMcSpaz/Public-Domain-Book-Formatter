@@ -429,6 +429,9 @@ node scripts/drive.mjs memos         # notes the editor left for the assistant, 
                                      #   "<what was done>"` answers one — the memo
                                      #   stays, outcome attached, until the editor
                                      #   clears it
+node scripts/drive.mjs sweep --was "belleves"   # find across the whole book; free
+node scripts/drive.mjs sweep --was "belleves" --now "believes"   # fix them all,
+                                     #   emphasis kept, every change reported
 node scripts/drive.mjs runs          # readings held here; `runs drop <n>` removes one
 node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` work it
 
@@ -1224,6 +1227,19 @@ in `screenshots/`. Don't ship UI blind.
   divisions and chapters (the contents derivation) navigates the column; one
   sticky toolbar at the top acts on the open passage; and the view chosen —
   "Edit the book" or "Check against the scan" — is remembered per book.
+  **Find & replace** works across the whole book (Ctrl+H, or the toolbar):
+  the search reads through the notation the way a person reads the page, the
+  replacement keeps the emphasis around it — a match crossing a run's edge is
+  re-balanced rather than silently stripping the marking from words outside
+  it (`src/core/edits/sweep.ts`) — and a Replace All is one undo step.
+  `drive.mjs sweep` is the same machinery from the conversation, dry-run by
+  default. **Ctrl+S saves at once** (committing the open passage first);
+  where a shelf is connected, a **Save to the shelf** button sits beside the
+  autosave indicator, because device storage protects against a crashed tab
+  and only the shelf protects against a lost browser. An introduction or
+  afterword can be **added, written and renamed in the galley** itself, and
+  `drive.mjs book` reports open comments so a session starting cold sees the
+  editor's asks without thinking to look.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the editorial-query channel, then _The Human Aura_.

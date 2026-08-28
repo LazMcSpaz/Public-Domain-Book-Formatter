@@ -26,10 +26,12 @@ import type { BookDocument } from '@core/assemble'
 import type { BlockKind } from '@core/transcribe'
 import { withMarkup, wordCount } from '@core/transcribe'
 import {
+  findMatches,
   htmlOfMarkup,
   markupOfNodes,
   memosOf,
   clearMemo,
+  sweepText,
   withEdit,
   type BookEdit,
   type MemoEdit
@@ -164,6 +166,30 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
   const [active, setActive] = useState<{ id: string; caret: number } | null>(null)
   const editableRef = useRef<HTMLDivElement | null>(null)
 
+  /** Find & replace: what is being looked for, and where the walk stands. */
+  const [find, setFind] = useState<{
+    open: boolean
+    query: string
+    replace: string
+    matchCase: boolean
+    /** Index of the match last jumped to; -1 before the first jump. */
+    cursor: number
+    /** How many the last Replace All landed, shown until the query changes. */
+    replaced?: number
+  }>({ open: false, query: '', replace: '', matchCase: false, cursor: -1 })
+
+  /** The passage briefly highlighted after a jump, so the eye lands with it. */
+  const [flashId, setFlashId] = useState<string | null>(null)
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const flash = (id: string): void => {
+    if (flashTimer.current) clearTimeout(flashTimer.current)
+    setFlashId(id)
+    flashTimer.current = setTimeout(() => setFlashId(null), 1400)
+  }
+
+  /** The division whose title is being renamed, if any. */
+  const [editingTitle, setEditingTitle] = useState<string | null>(null)
+
   const passages = useMemo(() => {
     const ofSection = (placement: 'front' | 'back'): Passage[] =>
       doc.sections
@@ -176,6 +202,23 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
             origin: { type: 'section' as const, sectionId: s.id, index }
           }))
         )
+    // A division with nothing written yet has no blocks in the document — the
+    // engine refuses to set an empty one — so a freshly added introduction
+    // would be invisible here, with nowhere to type its first word. It gets a
+    // placeholder passage, sourced from its own record.
+    const inDoc = new Set(doc.sections.map((s) => s.id))
+    const placeholders = (placement: 'front' | 'back'): Passage[] =>
+      edits
+        .filter(
+          (e): e is BookEdit & { kind: 'section' } =>
+            e.kind === 'section' && e.placement === placement && !inDoc.has(e.sectionId)
+        )
+        .map((e) => ({
+          id: `${e.sectionId}/b0`,
+          kind: 'paragraph' as const,
+          text: '',
+          origin: { type: 'section' as const, sectionId: e.sectionId, index: 0 }
+        }))
     const body: Passage[] = doc.blocks.map((b) => ({
       id: b.id,
       kind: b.kind,
@@ -184,8 +227,14 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
       ...(b.level !== undefined ? { level: b.level } : {}),
       origin: { type: 'body' as const }
     }))
-    return [...ofSection('front'), ...body, ...ofSection('back')]
-  }, [doc])
+    return [
+      ...ofSection('front'),
+      ...placeholders('front'),
+      ...body,
+      ...ofSection('back'),
+      ...placeholders('back')
+    ]
+  }, [doc, edits])
 
   const sectionTitles = useMemo(() => {
     // The first passage of each division carries its title, shown above it.
@@ -194,8 +243,14 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
       const first = section.blocks[0]
       if (first) out.set(first.id, { sectionId: section.id, title: section.title })
     }
+    const inDoc = new Set(doc.sections.map((s) => s.id))
+    for (const e of edits) {
+      if (e.kind === 'section' && !inDoc.has(e.sectionId)) {
+        out.set(`${e.sectionId}/b0`, { sectionId: e.sectionId, title: e.title })
+      }
+    }
     return out
-  }, [doc])
+  }, [doc, edits])
 
   /**
    * The outline, for a column that is otherwise one long scroll: divisions set
@@ -229,6 +284,83 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
 
   const jumpTo = (id: string): void => {
     document.getElementById(`g-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
+
+  /** Every place the query occurs, passage by passage, in reading order. */
+  const matches = useMemo(() => {
+    if (!find.open || find.query.length === 0) return []
+    const out: { passageId: string; context: string }[] = []
+    for (const p of passages) {
+      for (const m of findMatches(p.text, find.query, find.matchCase)) {
+        out.push({ passageId: p.id, context: m.context })
+      }
+    }
+    return out
+  }, [passages, find.open, find.query, find.matchCase])
+
+  const goToMatch = (delta: number): void => {
+    if (matches.length === 0) return
+    const from = find.cursor === -1 && delta < 0 ? 0 : find.cursor
+    const next = (((from + delta) % matches.length) + matches.length) % matches.length
+    setFind((f) => ({ ...f, cursor: next }))
+    const m = matches[next]!
+    jumpTo(m.passageId)
+    flash(m.passageId)
+  }
+
+  /**
+   * Replace every match, as one change.
+   *
+   * A batch of the same records a hand edit produces — `text` edits for body
+   * passages, a rewritten record for each division — handed over in a single
+   * `onChange`, so the whole sweep is one undo step and one autosave.
+   */
+  const replaceAll = (): void => {
+    if (find.query.length === 0) return
+    let next = edits
+    const sectionsDone = new Set<string>()
+    let total = 0
+    for (const p of passages) {
+      if (p.origin.type === 'body') {
+        const swept = sweepText(p.text, find.query, find.replace, find.matchCase)
+        if (swept.count === 0) continue
+        next = withEdit(next, { kind: 'text', blockId: p.id, text: swept.text })
+        total += swept.count
+      } else if (!sectionsDone.has(p.origin.sectionId)) {
+        sectionsDone.add(p.origin.sectionId)
+        const section = sectionEditOf(p.origin.sectionId)
+        if (!section) continue
+        // The whole record at once rather than paragraph by paragraph, so a
+        // division is rewritten exactly once however many parts matched.
+        const swept = sweepText(section.text, find.query, find.replace, find.matchCase)
+        if (swept.count === 0) continue
+        next = withEdit(next, { ...section, text: swept.text })
+        total += swept.count
+      }
+    }
+    if (next !== edits) onChange(next)
+    setFind((f) => ({ ...f, cursor: -1, replaced: total }))
+  }
+
+  /** A fresh division, ready to be written into right here. */
+  const addSection = (placement: 'front' | 'back'): void => {
+    onChange([
+      ...edits,
+      {
+        kind: 'section',
+        sectionId: mintId('sec'),
+        placement,
+        title: placement === 'front' ? 'Introduction' : 'Afterword',
+        text: ''
+      }
+    ])
+  }
+
+  const renameSection = (sectionId: string, title: string): void => {
+    setEditingTitle(null)
+    const section = sectionEditOf(sectionId)
+    if (!section || title.trim().length === 0 || title === section.title) return
+    push({ ...section, title: title.trim() })
   }
 
   const memosByBlock = useMemo(() => {
@@ -406,6 +538,20 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
     // keystroke's re-render would reset the caret the user is typing at.
   }, [active?.id])
 
+  // Ctrl+H opens find & replace, the shortcut a word-processor user reaches
+  // for. Ctrl+F is left to the browser on purpose: the whole book is one
+  // page, so native find genuinely works here, highlights and all.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'h') {
+        e.preventDefault()
+        setFind((f) => ({ ...f, open: true }))
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
+
   const readonlyClass = (kind: BlockKind, level?: number): string => {
     if (kind === 'heading') return `galley-block galley-heading level-${level ?? 1}`
     return `galley-block galley-${kind}`
@@ -516,6 +662,13 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
         </button>
         <button
           type="button"
+          title="Find & replace across the whole book (Ctrl+H)"
+          onClick={() => setFind((f) => ({ ...f, open: !f.open }))}
+        >
+          Find &amp; replace
+        </button>
+        <button
+          type="button"
           className="galley-done"
           disabled={activePassage === null}
           onClick={() => {
@@ -529,6 +682,67 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
           <span className="galley-toolbar-note">Click a passage to edit it</span>
         ) : null}
       </div>
+
+      {find.open ? (
+        <div className="galley-findbar">
+          <input
+            type="text"
+            value={find.query}
+            placeholder="Find in the book"
+            aria-label="Find in the book"
+            autoFocus
+            onChange={(e) =>
+              setFind((f) => {
+                const { replaced: _replaced, ...rest } = f
+                return { ...rest, query: e.target.value, cursor: -1 }
+              })
+            }
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') goToMatch(e.shiftKey ? -1 : 1)
+            }}
+          />
+          <input
+            type="text"
+            value={find.replace}
+            placeholder="Replace with"
+            aria-label="Replace with"
+            onChange={(e) => setFind((f) => ({ ...f, replace: e.target.value }))}
+          />
+          <label className="galley-find-case">
+            <input
+              type="checkbox"
+              checked={find.matchCase}
+              onChange={(e) => setFind((f) => ({ ...f, matchCase: e.target.checked, cursor: -1 }))}
+            />
+            Match case
+          </label>
+          <span className="galley-find-count">
+            {find.replaced !== undefined
+              ? `Replaced ${find.replaced}`
+              : find.query.length === 0
+                ? ''
+                : matches.length === 0
+                  ? 'No matches'
+                  : `${matches.length} match${matches.length === 1 ? '' : 'es'}`}
+          </span>
+          <button type="button" disabled={matches.length === 0} onClick={() => goToMatch(-1)}>
+            ‹
+          </button>
+          <button type="button" disabled={matches.length === 0} onClick={() => goToMatch(1)}>
+            ›
+          </button>
+          <button type="button" disabled={matches.length === 0} onClick={replaceAll}>
+            Replace all
+          </button>
+          <button
+            type="button"
+            title="Close"
+            onClick={() => setFind((f) => ({ ...f, open: false }))}
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
 
       <div className="galley-body">
         {outline.length > 0 ? (
@@ -554,8 +768,35 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
             const notes = notesByBlock.get(passage.id) ?? []
 
             return (
-              <div key={passage.id} id={`g-${passage.id}`} className="galley-passage">
-                {heading ? <div className="galley-section-title">{heading.title}</div> : null}
+              <div
+                key={passage.id}
+                id={`g-${passage.id}`}
+                className={`galley-passage${flashId === passage.id ? ' flash' : ''}`}
+              >
+                {heading ? (
+                  editingTitle === heading.sectionId ? (
+                    <input
+                      type="text"
+                      className="galley-section-title-input"
+                      defaultValue={heading.title}
+                      autoFocus
+                      aria-label="Title of this division"
+                      onBlur={(e) => renameSection(heading.sectionId, e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') e.currentTarget.blur()
+                        if (e.key === 'Escape') setEditingTitle(null)
+                      }}
+                    />
+                  ) : (
+                    <div
+                      className="galley-section-title"
+                      title="Click to rename this division"
+                      onClick={() => setEditingTitle(heading.sectionId)}
+                    >
+                      {heading.title}
+                    </div>
+                  )
+                ) : null}
                 {passage.label ? <div className="galley-label">{passage.label}</div> : null}
 
                 {isActive ? (
@@ -567,6 +808,15 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
                         autoFocus
                         rows={Math.max(3, passage.text.split('\n').length + 1)}
                         aria-label={`Text of ${passage.id}`}
+                        onKeyDown={(e) => {
+                          if (
+                            (e.ctrlKey || e.metaKey) &&
+                            !e.altKey &&
+                            e.key.toLowerCase() === 's'
+                          ) {
+                            commitText(passage, e.currentTarget.value.replace(/\n+$/u, ''))
+                          }
+                        }}
                         onBlur={(e) => commitText(passage, e.target.value.replace(/\n+$/u, ''))}
                       />
                     ) : (
@@ -582,6 +832,24 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
                           if (e.key === 'Enter') {
                             e.preventDefault()
                             splitAtCaret(passage)
+                            return
+                          }
+                          if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === 'm') {
+                            // Docs' comment shortcut, honoured here.
+                            e.preventDefault()
+                            leaveMemo(passage)
+                            return
+                          }
+                          if (
+                            (e.ctrlKey || e.metaKey) &&
+                            !e.altKey &&
+                            e.key.toLowerCase() === 's'
+                          ) {
+                            // What is being typed commits, then the event
+                            // reaches the window listener that saves — a
+                            // Ctrl+S that left the open passage behind would
+                            // claim saved for words that were not.
+                            commitActive(passage)
                             return
                           }
                           if (
@@ -611,6 +879,20 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
                         }}
                       />
                     )}
+                  </div>
+                ) : passage.text.length === 0 ? (
+                  // A division with nothing written yet. The placeholder is
+                  // chrome, not content — it renders as an invitation and
+                  // commits as nothing.
+                  <div
+                    className="galley-readonly galley-block galley-placeholder"
+                    onMouseDown={(e) => {
+                      e.preventDefault()
+                      if (activePassage) commitActive(activePassage)
+                      setActive({ id: passage.id, caret: 0 })
+                    }}
+                  >
+                    Write here — this division is still empty.
                   </div>
                 ) : (
                   <div
@@ -695,6 +977,19 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
               </div>
             )
           })}
+
+          {/* Where a document ends is where a Docs user looks for "add more".
+              An introduction or an afterword is set as a division of the book,
+              listed in the contents — the same records the sheet's buttons
+              make. */}
+          <div className="galley-add">
+            <button type="button" onClick={() => addSection('front')}>
+              ＋ Write an introduction
+            </button>
+            <button type="button" onClick={() => addSection('back')}>
+              ＋ Write an afterword
+            </button>
+          </div>
         </div>
       </div>
     </div>

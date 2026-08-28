@@ -23,6 +23,7 @@ export {
   type MemoEdit
 } from './memos'
 export { htmlOfMarkup, markupOfNodes, type RichNode } from './rich-text'
+export { findMatches, sweepText, type SweepMatch } from './sweep'
 export {
   proofSheet,
   nextFlaggedPage,

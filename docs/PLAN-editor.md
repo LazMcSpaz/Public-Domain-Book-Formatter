@@ -127,6 +127,31 @@ used Google Docs plenty, and this app never, trip first?
   sticky toolbar at the top acts on the open passage, where a word-processor
   user's eyes already are. The view chosen is remembered per book.
 
+### Stage 1¾ — the low-hanging fruit (done)
+
+- **Find & replace across the whole book** (Ctrl+H, or the toolbar). The
+  search reads through the notation the way a person reads the page; the
+  replacement keeps the emphasis around it, and a match crossing a run's
+  edge is re-balanced rather than silently stripping the marking from words
+  outside it (`src/core/edits/sweep.ts`, both directions fault-injected in
+  its tests). Replace All is one `onChange` — one undo step, one autosave.
+  `drive.mjs sweep` is the same machinery from the conversation, dry-run
+  unless `--now` is given, every change reported.
+- **Ctrl+S saves at once** — committing the open passage first, deferred a
+  tick so the indicator never claims saved for typing left behind — and
+  where a shelf is connected, **Save to the shelf** sits beside the
+  indicator with the time of the last push: the device protects against a
+  crashed tab, only the shelf protects against a lost browser.
+- **Writing lives in the galley**: an introduction or afterword is added at
+  the end of the column, written into a placeholder the engine's
+  empty-section filter would otherwise hide, and renamed by clicking its
+  title. Same records as the sheet's buttons.
+- **The comment loop is self-driving**: `drive.mjs book` reports open
+  comments so a cold session sees the editor's asks at the first look, the
+  handoff doc makes the sweep part of the ritual, and Ctrl+Alt+M — Docs'
+  comment shortcut — leaves one at the caret.
+- The galley fits a phone, measured by the harness rather than assumed.
+
 ### Stage 2 — the true page beside the text
 
 - Run `layout()` against the current style answers after a typing pause and

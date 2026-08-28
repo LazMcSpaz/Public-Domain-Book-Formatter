@@ -41,6 +41,16 @@ because the books live there.
 Then read [`CLAUDE.md`](../CLAUDE.md), and in particular **"What has actually
 gone wrong"**. Every item in it cost real time on a real book.
 
+**And check for the editor's comments before doing anything else to the
+book.** The book editor lets the editor leave comments addressed to the
+assistant — "this page breaks badly", "check this against the scan" —
+anchored where they were noticed, so their editing pass never stalls. They
+are work waiting on you, left specifically for a session like this one.
+`drive.mjs book` reports how many are open; `drive.mjs memos` lists each with
+the text it sits in; `memos resolve <id> "<what was done>"` records the
+outcome, which stays attached until the editor clears it. A comment asking
+for prose gets a _proposal_ in its resolution, never a landed edit.
+
 ## 2. Two repositories, and which is the truth
 
 - **The formatter** (`~/Public-Domain-Book-Formatter`, public) is the app and

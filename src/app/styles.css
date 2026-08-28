@@ -2319,3 +2319,129 @@ textarea.galley-plain {
   color: var(--muted);
   padding: 24px;
 }
+
+/* ---------- find & replace, and writing in the galley ---------- */
+
+.galley-findbar {
+  position: sticky;
+  top: 52px;
+  z-index: 4;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  margin: -8px 0 14px;
+  border: 1px solid var(--line);
+  border-top: none;
+  border-radius: 0 0 6px 6px;
+  background: var(--panel);
+  font-size: 0.8rem;
+}
+.galley-findbar input[type='text'] {
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  min-width: 11em;
+}
+.galley-findbar button {
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+.galley-findbar button:disabled {
+  color: var(--muted);
+  background: var(--bg);
+  cursor: default;
+}
+.galley-find-case {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+}
+.galley-find-count {
+  margin-left: auto;
+  color: var(--muted);
+}
+
+.galley-passage.flash > .galley-readonly,
+.galley-passage.flash > .galley-active {
+  animation: galley-flash 1.4s ease-out;
+}
+@keyframes galley-flash {
+  0%,
+  40% {
+    background: var(--accent-soft);
+  }
+  100% {
+    background: transparent;
+  }
+}
+
+.galley-placeholder {
+  color: var(--muted);
+  font-style: italic;
+}
+.galley-editable:empty {
+  min-height: 1.6em;
+}
+.galley-section-title-input {
+  display: block;
+  margin: 1.6em auto 0.9em;
+  font: inherit;
+  font-size: 1.15em;
+  text-align: center;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  padding: 2px 8px;
+}
+.galley-add {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 2.5em;
+  padding-top: 1.2em;
+  border-top: 1px solid var(--line);
+}
+.galley-add button {
+  font: inherit;
+  font-size: 0.82rem;
+  padding: 5px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.galley-add button:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.proof-shelf {
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 5px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  color: var(--ink);
+  cursor: pointer;
+}
+.proof-shelf:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+.proof-shelf-note {
+  font-size: 0.75rem;
+  color: var(--muted);
+}

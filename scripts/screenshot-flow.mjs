@@ -1016,6 +1016,40 @@ await page.locator('.proof-redo').click()
 await page.waitForTimeout(300)
 const galleyRedone = (await page.locator('.galley-readonly', { hasText: 'GALLEYFIX' }).count()) > 0
 
+// Find & replace, across the whole book. The search reads through the
+// notation; the replacement is one undo step, which the undo below proves.
+await page.locator('.galley-toolbar button', { hasText: 'Find & replace' }).click()
+await page.locator('.galley-findbar input[aria-label="Find in the book"]').fill('GALLEYFIX')
+await page.waitForTimeout(300)
+const findCount = await page.locator('.galley-find-count').innerText()
+await page.locator('.galley-findbar input[aria-label="Replace with"]').fill('GALLEYFIXED')
+await page.locator('.galley-findbar button', { hasText: 'Replace all' }).click()
+await page.waitForTimeout(400)
+const galleyReplaced =
+  (await page.locator('.galley-readonly', { hasText: 'GALLEYFIXED' }).count()) > 0
+const replacedSaid = await page.locator('.galley-find-count').innerText()
+await shot('05c2a2-galley-replace')
+// One undo step takes the whole sweep back out.
+await page.locator('.proof-undo').click()
+await page.waitForTimeout(300)
+const sweepUndone =
+  (await page.locator('.galley-readonly', { hasText: 'GALLEYFIXED' }).count()) === 0 &&
+  (await page.locator('.galley-readonly', { hasText: 'GALLEYFIX' }).count()) > 0
+await page.locator('.galley-findbar button[title="Close"]').click()
+
+// Ctrl+S: the word-processor reflex saves at once instead of opening the
+// browser's save-page dialog.
+await page.keyboard.press('Control+s')
+let ctrlSSaved = ''
+for (let i = 0; i < 10; i++) {
+  ctrlSSaved = await page
+    .locator('.proof-autosave')
+    .innerText()
+    .catch(() => '')
+  if (/saved/i.test(ctrlSSaved)) break
+  await page.waitForTimeout(300)
+}
+
 // A comment for the assistant. Filling it blurs the passage, which commits
 // and closes it — the chip stays, amber, saying out loud that it never prints.
 await page.locator('.galley-readonly.galley-paragraph').first().click()
@@ -1334,6 +1368,34 @@ const galleyOutlineAfter = await page.locator('.galley-outline button').count()
 const galleyShowsIntro = await page
   .locator('.galley-section-title', { hasText: 'Introduction' })
   .count()
+
+// An afterword added, written and named without leaving the galley — the
+// records are the same ones the sheet's buttons make.
+await page.locator('.galley-add button', { hasText: 'afterword' }).click()
+await page.waitForTimeout(300)
+await page.locator('.galley-placeholder').first().click()
+await page.waitForSelector('.galley-editable[contenteditable]', { timeout: 5000 })
+await page.keyboard.type('A closing word from the editor of this edition.')
+await page.locator('.galley-toolbar .galley-done').click()
+await page.waitForTimeout(400)
+const galleyAfterword = await page
+  .locator('.galley-section-title', { hasText: 'Afterword' })
+  .count()
+const galleyAfterwordText = await page
+  .locator('.galley-readonly', { hasText: 'A closing word' })
+  .count()
+await shot('05c2a4-galley-afterword')
+
+// The galley on a phone: the outline hides, the column must not overflow.
+await page.setViewportSize({ width: 390, height: 844 })
+await page.waitForTimeout(400)
+const galleyOverflow = await page.evaluate(
+  () => document.documentElement.scrollWidth - document.documentElement.clientWidth
+)
+await shot('05c2a5-galley-phone')
+await page.setViewportSize({ width: 1360, height: 900 })
+await page.waitForTimeout(300)
+
 await page.locator('.proof-view-toggle button', { hasText: 'Check against the scan' }).click()
 await page.waitForSelector('.proof-bar', { timeout: 10000 })
 
@@ -3054,7 +3116,9 @@ console.log(
   `  the galley: ${galleyPassages} passage(s), ${galleyItalics} italic run(s) set as type, ` +
     `${galleyOutline}→${galleyOutlineAfter} outline entries, "${galleyWords}", typed edit landed: ${galleyTyped > 0}, ` +
     `autosave said: "${galleyAutosaved}", undo/redo: ${galleyUndone}/${galleyRedone}, ` +
-    `comments left: ${galleyMemos}`
+    `find: "${findCount}" → "${replacedSaid}", sweep undone: ${sweepUndone}, ` +
+    `ctrl+s: "${ctrlSSaved}", afterword in galley: ${galleyAfterword}/${galleyAfterwordText}, ` +
+    `phone overflow: ${galleyOverflow}px, comments left: ${galleyMemos}`
 )
 console.log(
   `  reopening skips the reading: ${coldOpenMs} ms cold -> ${warmOpenMs} ms warm` +
@@ -3283,6 +3347,15 @@ const finalChecks = [
   ['typing was autosaved, and said so', /saved/i.test(galleyAutosaved)],
   ['undo took the typed edit back out', galleyUndone],
   ['redo put it back', galleyRedone],
+  ['find counted its matches', /1 match/.test(findCount)],
+  ['replace all landed and said how many', galleyReplaced && /Replaced 1/.test(replacedSaid)],
+  ['the whole sweep is one undo step', sweepUndone],
+  ['Ctrl+S saved and said so', /saved/i.test(ctrlSSaved)],
+  [
+    'an afterword was written entirely in the galley',
+    galleyAfterword > 0 && galleyAfterwordText > 0
+  ],
+  ['the galley fits a phone', galleyOverflow <= 0],
   ['a comment for the assistant was left, and shown as never printing', galleyMemos === 1],
   ['a note was proposed', annotations === 1],
   ['a supplied picture was taken', suppliedPictures === 1],
