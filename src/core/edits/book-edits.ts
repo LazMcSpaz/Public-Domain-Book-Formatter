@@ -151,6 +151,27 @@ export type BookEdit =
       text: string
     }
   /**
+   * A note the editor leaves *for the assistant* — "this page breaks badly",
+   * "check this word against the scan" — anchored the way an authored note is,
+   * and never printed.
+   *
+   * The editorial query is a decision flowing to the person because the
+   * judgment is theirs; this is the same channel pointed the other way,
+   * because the work is mechanical. It lives in the edit list so it travels
+   * in the saved run and the book file and survives reflow like any note, and
+   * `applyEdits` skips it entirely: there is no path from a memo to the
+   * layout engine, so it cannot reach a printed page even by a bug in a
+   * filter — a note to the assistant in a book for sale is the one failure
+   * this channel must make impossible, and it is impossible by construction.
+   *
+   * `resolved` is what was done about it, written by the assistant and read
+   * by the editor. A memo is cleared by the editor, never silently by the
+   * work being done: a note that vanishes reports nothing, where a note that
+   * says "fixed by tightening the epigraph spacing, re-exported" can be
+   * checked in ten seconds.
+   */
+  | { kind: 'memo'; memoId: string; blockId: string; at: number; text: string; resolved?: string }
+  /**
    * Retouching for one picture — crop, straighten, levels, and the rest.
    *
    * The ops are held here rather than applied, so the original pixels are never
@@ -224,6 +245,11 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   }
 
   for (const edit of edits) {
+    // A memo is a message, not a correction: it changes nothing about the
+    // book and must not be able to. Skipped here rather than filtered by any
+    // caller, so there is no way to assemble a document with a memo in it.
+    if (edit.kind === 'memo') continue
+
     if (edit.kind === 'anchor') {
       anchors.set(edit.illustrationId, edit.afterBlockId)
       continue
@@ -572,6 +598,9 @@ export function blockOf(edit: BookEdit): string | null {
 export function countEdited(edits: readonly BookEdit[]): number {
   const touched = new Set<string>()
   for (const edit of edits) {
+    // A memo changes nothing — counting one would report a book as corrected
+    // that has only been commented on.
+    if (edit.kind === 'memo') continue
     if (edit.kind === 'anchor') touched.add(edit.illustrationId)
     else if (edit.kind === 'note') touched.add(edit.noteId)
     else if (edit.kind === 'image') touched.add(edit.imageId)
@@ -627,6 +656,7 @@ export function withEdit(edits: readonly BookEdit[], edit: BookEdit): BookEdit[]
     edit.kind === 'image' ||
     edit.kind === 'section' ||
     edit.kind === 'insert' ||
+    edit.kind === 'memo' ||
     edit.kind === 'retouch'
   if (!collapsible) return [...edits, edit]
 
@@ -648,6 +678,7 @@ function targetOf(edit: BookEdit): string {
   if (edit.kind === 'image') return edit.imageId
   if (edit.kind === 'section') return edit.sectionId
   if (edit.kind === 'insert') return edit.insertId
+  if (edit.kind === 'memo') return edit.memoId
   if (edit.kind === 'retouch') return edit.illustrationId
   return edit.blockId
 }

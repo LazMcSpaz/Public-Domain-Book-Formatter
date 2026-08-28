@@ -424,6 +424,11 @@ node scripts/drive.mjs use <scan.pdf> # which book every later verb means
 node scripts/drive.mjs book          # what that is now; `book clear` forgets it
 node scripts/drive.mjs link review   # a URL that opens this book where decisions wait
 node scripts/drive.mjs queries q.md  # decisions waiting on the editor, as a sheet
+node scripts/drive.mjs memos         # notes the editor left for the assistant, with
+                                     #   the text each sits in; `memos resolve <id>
+                                     #   "<what was done>"` answers one — the memo
+                                     #   stays, outcome attached, until the editor
+                                     #   clears it
 node scripts/drive.mjs runs          # readings held here; `runs drop <n>` removes one
 node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` work it
 
@@ -1190,6 +1195,27 @@ in `screenshots/`. Don't ship UI blind.
   is worth everything. A pass that had been allowed to emit text would have
   quietly corrected it and nothing downstream could have caught that.
 
+- **Also done**: **the book as a book, and a channel back to the assistant**
+  ([`docs/PLAN-editor.md`](./docs/PLAN-editor.md) — stage 1 of it). The proof
+  step gained a second face: the whole volume as one scrolling column
+  (`src/app/BookEditor.tsx`) — divisions, body, divisions — set in a book
+  face with italics shown as italics, click into a passage and type. Enter is
+  a paragraph break (the `split` edit), Backspace at the start is a `merge`,
+  Ctrl+I and a hand-typed `<i>` are the same tag (`src/core/edits/rich-text.ts`
+  carries the notation both ways across a `contenteditable`, and
+  `normalizeMarkup` stays the one reader). Deliberately absent: manual line
+  and page breaks, per-block size and spacing — the engine decides those from
+  rules, and rules survive reflow where hand breaks rot. Only the passage
+  being edited is an editor; the rest is cheap read-only markup, which is what
+  lets a long book scroll as one column. And the **memo** — the `queries`
+  channel pointed the other way: a note the editor leaves _for the assistant_
+  ("this page breaks badly", "check this against the scan"), anchored like a
+  footnote and structurally unable to print, because `applyEdits` has no path
+  from one to a page. `drive.mjs memos` lists them with the text each sits
+  in; `memos resolve` records what was done and the memo stays, outcome
+  attached, until the editor clears it — resolution is a ledger, not a
+  deletion. A memo asking for prose gets a proposal in its resolution, never
+  a landed edit.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the editorial-query channel, then _The Human Aura_.

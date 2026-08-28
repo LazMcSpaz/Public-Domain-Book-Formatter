@@ -177,6 +177,7 @@ import { ExportResult } from './ExportResult'
 import { NoteReview } from './NoteReview'
 import { PreviewPane } from './PreviewPane'
 import { ProofSheet } from './ProofSheet'
+import { BookEditor } from './BookEditor'
 
 /** A cache key that changes whenever the stack that produced the pixels does. */
 function retouchKey(id: string, ops: readonly unknown[]): string {
@@ -417,6 +418,13 @@ export function App(): JSX.Element {
    * Everything downstream reads `correctedDocument`, never `state.document`.
    */
   const [edits, setEdits] = useState<BookEdit[]>([])
+  /**
+   * Which face of the proof step is up: the leaf-by-leaf sheet (text beside
+   * its scan — the right shape for checking a transcription against paper) or
+   * the book editor (the whole volume as one scrolling column — the right
+   * shape for working on the prose). Both write the same edit list.
+   */
+  const [proofView, setProofView] = useState<'leaves' | 'book'>('leaves')
 
   const step = activeStep(state)
   const [answers, setAnswers] = useState<Answers>({})
@@ -3883,20 +3891,44 @@ export function App(): JSX.Element {
         {/* --- proofreading, which is a workbench rather than a set of questions --- */}
         {!exported && !progressInfo && !runProgress && !pendingCost && isProofing ? (
           <>
-            <ProofSheet
-              document={state.document!}
-              edits={edits}
-              onChange={setEdits}
-              resolveScan={(pageIndex) => reconRef.current?.thumbnails.get(pageIndex)}
-              loadScan={loadProofScan}
-              addImage={addSuppliedImage}
-              imagePreview={previewOf}
-              pictures={retouchablePictures}
-              findings={state.findings}
-              uncertainties={state.uncertainties}
-              reviewedPages={reviewedPagesRef.current}
-              attention={attentionRef.current}
-            />
+            <div className="proof-view-toggle" role="tablist" aria-label="How to proofread">
+              <button
+                type="button"
+                role="tab"
+                aria-selected={proofView === 'leaves'}
+                className={proofView === 'leaves' ? 'selected' : ''}
+                onClick={() => setProofView('leaves')}
+              >
+                Leaf by leaf, beside the scan
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={proofView === 'book'}
+                className={proofView === 'book' ? 'selected' : ''}
+                onClick={() => setProofView('book')}
+              >
+                The whole book, as prose
+              </button>
+            </div>
+            {proofView === 'book' ? (
+              <BookEditor document={correctedDocument!} edits={edits} onChange={setEdits} />
+            ) : (
+              <ProofSheet
+                document={state.document!}
+                edits={edits}
+                onChange={setEdits}
+                resolveScan={(pageIndex) => reconRef.current?.thumbnails.get(pageIndex)}
+                loadScan={loadProofScan}
+                addImage={addSuppliedImage}
+                imagePreview={previewOf}
+                pictures={retouchablePictures}
+                findings={state.findings}
+                uncertainties={state.uncertainties}
+                reviewedPages={reviewedPagesRef.current}
+                attention={attentionRef.current}
+              />
+            )}
             <div className="actions">
               <button type="button" className="primary" onClick={advance}>
                 Looks right — continue

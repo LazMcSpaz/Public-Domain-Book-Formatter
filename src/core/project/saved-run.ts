@@ -43,13 +43,15 @@ import { EDITORIAL_QUERY_KINDS } from '@core/transcribe'
  * v8 → v9 what the second reading concluded about the flagged spots, and
  * v9 → v10 the fact bank this book produced, v10 → v11 `leafCount`, how
  * long the book actually is, v11 → v12 the editor's rulings on the queries
- * the reading raised, and v12 → v13 the `insert` edit, a block the editor wrote
- * standing inside the body rather than before or after it. None of them damages an older run — each is a complete transcription that simply
+ * the reading raised, v12 → v13 the `insert` edit, a block the editor wrote
+ * standing inside the body rather than before or after it, and v13 → v14 the
+ * `memo` edit, a note the editor leaves in the document for the assistant.
+ * None of them damages an older run — each is a complete transcription that simply
  * has none of the newer thing on it yet — so all upgrade in place rather than
  * being refused. That distinction is the whole reason a migration exists
  * instead of a version check.
  */
-export const CURRENT_SCHEMA_VERSION = 13
+export const CURRENT_SCHEMA_VERSION = 14
 
 /** A page the model could not read at all. Mirrors the runner's `PageFailure`. */
 export interface SavedFailure {
@@ -667,6 +669,29 @@ function parseEdits(raw: unknown): BookEdit[] {
           typeof value['text'] === 'string'
         ) {
           out.push({ kind: 'note', noteId, blockId, at: value['at'], text: value['text'] })
+        }
+        break
+      }
+      case 'memo': {
+        const memoId = str(value['memoId'], '')
+        if (
+          memoId &&
+          blockId &&
+          typeof value['at'] === 'number' &&
+          typeof value['text'] === 'string'
+        ) {
+          const resolved = value['resolved']
+          out.push({
+            kind: 'memo',
+            memoId,
+            blockId,
+            at: value['at'],
+            text: value['text'],
+            // Dropped when absent rather than stored empty, so an open memo
+            // round-trips byte for byte and `openMemos` keeps meaning "no
+            // outcome recorded".
+            ...(typeof resolved === 'string' && resolved ? { resolved } : {})
+          })
         }
         break
       }

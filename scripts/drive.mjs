@@ -2489,6 +2489,101 @@ async function serve() {
     },
 
     /**
+     * The notes the editor left for the assistant, and what became of each.
+     *
+     * The reverse of `queries`: a query is a decision waiting on the *editor*,
+     * because the judgment is theirs; a memo is work waiting on the
+     * *assistant* — "this page breaks badly", "check this word against the
+     * scan" — left in the document so an editing pass never stalls on
+     * something outside the word processor's vocabulary. A memo never prints:
+     * `applyEdits` has no path from one to a page.
+     *
+     * Resolution is a ledger, not a deletion. `resolve` records what was done
+     * and the memo stays, outcome attached, for the editor to read; `clear`
+     * removes one and is the editor's move — use it only when they say so, or
+     * when withdrawing a memo of your own. A memo that asks for prose gets a
+     * *proposal* in its resolution, never a landed edit: a decision that is
+     * the editor's is raised, not taken, in both directions.
+     *
+     * ```
+     * memos                                    # the sheet, as JSON
+     * memos resolve mm123 "Widow fixed by …; re-exported and checked p. 214."
+     * memos clear mm123                        # the editor has seen it
+     * ```
+     */
+    memos: async ([action, memoId, ...outcomeParts]) => {
+      if (action === 'resolve' || action === 'clear') {
+        const outcome = outcomeParts.join(' ').trim()
+        if (!memoId || (action === 'resolve' && !outcome)) {
+          throw new Error('memos resolve <memoId> <what was done> | memos clear <memoId>')
+        }
+        return page.evaluate(
+          async ([repo, action, memoId, outcome]) => {
+            const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+            const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+            const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+            const newest = await window.__pdbfPickBook(runStore)
+            if (!newest) throw new Error('No book on this device.')
+            const run = await runStore.loadRun(newest.key)
+            if (!run) throw new Error('That book has no reading stored here.')
+            const held = editsMod.memosOf(run.edits ?? []).find((m) => m.memoId === memoId)
+            // Refused rather than silently a no-op: `resolveMemo` on a missing
+            // id changes nothing, and a session that believes it answered a
+            // memo nobody can find has done work into the void.
+            if (!held) throw new Error(`No memo \`${memoId}\` on this book.`)
+            const edits =
+              action === 'resolve'
+                ? editsMod.resolveMemo(run.edits ?? [], memoId, outcome)
+                : editsMod.clearMemo(run.edits ?? [], memoId)
+            const next = project.createSavedRun({
+              ...run,
+              images: new Map(run.images.map((i) => [i.id, i.bytes])),
+              savedAt: new Date().toISOString(),
+              edits
+            })
+            const stored = await runStore.saveRun(next)
+            return {
+              memoId,
+              [action === 'resolve' ? 'resolved' : 'cleared']: true,
+              stored: stored === true,
+              ...(action === 'resolve' ? { outcome, ask: held.text } : {}),
+              next: '`shelf push` sends it to the shelf; nothing has left this device yet.'
+            }
+          },
+          [REPO, action, memoId, outcome]
+        )
+      }
+      if (action !== undefined) {
+        throw new Error('memos | memos resolve <memoId> <what was done> | memos clear <memoId>')
+      }
+      return page.evaluate(
+        async ([repo]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+          // Against the book as it stands, sections included — a memo on a
+          // glossary entry is anchored in a block that exists nowhere else.
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const sheet = editsMod.memoSheet(doc, run.edits ?? [])
+          return {
+            book: run.fileName,
+            open: sheet.filter((m) => !m.resolved).length,
+            answered: sheet.filter((m) => m.resolved).length,
+            memos: sheet
+          }
+        },
+        [REPO]
+      )
+    },
+
+    /**
      * Land a correction on one block, in the words `body` handed back.
      *
      * The one thing the driver could not do. A ruling that says a page should

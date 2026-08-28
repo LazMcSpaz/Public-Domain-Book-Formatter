@@ -14,6 +14,8 @@ import { STEPS, defaultAnswers, initialState, type Answers, type StepId } from '
 import { assembleBook } from '@core/assemble'
 import { describeProfile, profileFromAnswers, type DesignAnswers } from '@core/design'
 import { buildExport, editionFromAnswers } from '@core/export'
+import { applyEdits, type BookEdit } from '@core/edits'
+import { BookEditor } from './BookEditor'
 import { QuestionView } from './QuestionView'
 import { ExportResult } from './ExportResult'
 import { PreviewPane } from './PreviewPane'
@@ -96,6 +98,28 @@ export function DevPreview(): JSX.Element {
   const [stepId, setStepId] = useState<StepId>('design')
   const [answers, setAnswers] = useState<Answers>({})
 
+  /**
+   * The galley, previewed the same way the gates are: it sits behind a paid
+   * run, so without this every look at it would cost a walk through the whole
+   * flow. Seeded with a division so the editor's-own-writing path shows too.
+   */
+  const [galley, setGalley] = useState(false)
+  const [galleyEdits, setGalleyEdits] = useState<BookEdit[]>(() => [
+    {
+      kind: 'section',
+      sectionId: 'gl',
+      placement: 'back',
+      title: 'Glossary',
+      text:
+        '<b>Alembick.</b> The upper vessel of a still, wherein the vapour is condensed.\n\n' +
+        '<b>Athanor.</b> A digesting furnace, so built that one charge of coals keeps an even heat.'
+    }
+  ])
+  const galleyDocument = useMemo(
+    () => (galley ? applyEdits(sampleState('proof').document!, galleyEdits) : null),
+    [galley, galleyEdits]
+  )
+
   const step = STEPS.find((s) => s.id === stepId)!
   // Mirrors App.tsx: in-progress answers feed back into question generation so
   // help text that describes an earlier answer stays current.
@@ -174,8 +198,9 @@ export function DevPreview(): JSX.Element {
           {STEPS.filter((s) => s.isGate).map((s) => (
             <li
               key={s.id}
-              className={s.id === stepId ? 'active gate' : 'gate'}
+              className={s.id === stepId && !galley ? 'active gate' : 'gate'}
               onClick={() => {
+                setGalley(false)
                 setStepId(s.id)
                 setAnswers({})
               }}
@@ -184,63 +209,79 @@ export function DevPreview(): JSX.Element {
               <span className="label">{s.title}</span>
             </li>
           ))}
+          <li className={galley ? 'active gate' : 'gate'} onClick={() => setGalley(true)}>
+            <span className="dot" />
+            <span className="label">The galley</span>
+          </li>
         </ol>
       </nav>
 
       <main className="main">
-        <div className="step-head">
-          <h2>{step.title}</h2>
-          <p>{step.blurb}</p>
-        </div>
+        {galley && galleyDocument ? (
+          <>
+            <div className="step-head">
+              <h2>The galley</h2>
+              <p>The whole book as one column, over a sample state. Dev only.</p>
+            </div>
+            <BookEditor document={galleyDocument} edits={galleyEdits} onChange={setGalleyEdits} />
+          </>
+        ) : (
+          <>
+            <div className="step-head">
+              <h2>{step.title}</h2>
+              <p>{step.blurb}</p>
+            </div>
 
-        {questions.map((q) => (
-          <QuestionView
-            key={q.id}
-            question={q}
-            value={current[q.id]}
-            onChange={(v) => setAnswers((a) => ({ ...a, [q.id]: v }))}
-            resolveEvidence={(src) => (src.startsWith('page:') ? undefined : src)}
-          />
-        ))}
+            {questions.map((q) => (
+              <QuestionView
+                key={q.id}
+                question={q}
+                value={current[q.id]}
+                onChange={(v) => setAnswers((a) => ({ ...a, [q.id]: v }))}
+                resolveEvidence={(src) => (src.startsWith('page:') ? undefined : src)}
+              />
+            ))}
 
-        {summary ? (
-          <div className="summary">
-            <span className="summary-label">Your edition will be set as</span>
-            <b>{summary}</b>
-          </div>
-        ) : null}
+            {summary ? (
+              <div className="summary">
+                <span className="summary-label">Your edition will be set as</span>
+                <b>{summary}</b>
+              </div>
+            ) : null}
 
-        {designProfile ? (
-          <PreviewPane book={state.document} profile={designProfile} edition={edition} />
-        ) : null}
+            {designProfile ? (
+              <PreviewPane book={state.document} profile={designProfile} edition={edition} />
+            ) : null}
 
-        {/* The export gate's answers produce a real build, so the screen after
+            {/* The export gate's answers produce a real build, so the screen after
             it can be seen without a paid transcription run first. */}
-        {stepId === 'export' ? (
-          <ExportResult
-            result={buildExport({
-              document: state.document!,
-              profile: exportProfile,
-              edition: editionFromAnswers(current as Record<string, unknown>),
-              estimatedPageCount: 240,
-              ...(interior
-                ? {
-                    typeset: {
-                      pageCount: interior.pageCount,
-                      warnings: interior.warnings.map(
-                        (w) => `Page ${w.pageIndex + 1}: a line runs past the margin`
-                      ),
-                      notesPlaced: interior.notesPlaced,
-                      notesCollected: interior.notesCollected,
-                      notesDropped: interior.notesDropped
-                    }
-                  }
-                : {})
-            })}
-            pdf={interior ? { bytes: interior.bytes, pageCount: interior.pageCount } : null}
-            note={interior ? null : 'Building the interior…'}
-          />
-        ) : null}
+            {stepId === 'export' ? (
+              <ExportResult
+                result={buildExport({
+                  document: state.document!,
+                  profile: exportProfile,
+                  edition: editionFromAnswers(current as Record<string, unknown>),
+                  estimatedPageCount: 240,
+                  ...(interior
+                    ? {
+                        typeset: {
+                          pageCount: interior.pageCount,
+                          warnings: interior.warnings.map(
+                            (w) => `Page ${w.pageIndex + 1}: a line runs past the margin`
+                          ),
+                          notesPlaced: interior.notesPlaced,
+                          notesCollected: interior.notesCollected,
+                          notesDropped: interior.notesDropped
+                        }
+                      }
+                    : {})
+                })}
+                pdf={interior ? { bytes: interior.bytes, pageCount: interior.pageCount } : null}
+                note={interior ? null : 'Building the interior…'}
+              />
+            ) : null}
+          </>
+        )}
       </main>
     </div>
   )

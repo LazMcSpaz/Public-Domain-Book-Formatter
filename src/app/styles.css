@@ -1960,3 +1960,244 @@ mark.claim {
 .agent-bridge .actions {
   margin: 0;
 }
+
+/* ---------- the book editor ---------- */
+
+.proof-view-toggle {
+  display: inline-flex;
+  margin: 0 0 14px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.proof-view-toggle button {
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 6px 14px;
+  border: none;
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+}
+.proof-view-toggle button + button {
+  border-left: 1px solid var(--line);
+}
+.proof-view-toggle button.selected {
+  background: var(--accent-soft);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.galley-bar {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.galley-hint {
+  font-size: 0.8rem;
+  color: var(--muted);
+  max-width: 46em;
+}
+.galley-memo-count {
+  margin-left: auto;
+  flex-shrink: 0;
+  font-size: 0.8rem;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* The column reads like a galley: the book face, a book measure. It sets type,
+   it does not claim to be the page — the page is the PDF. */
+.galley-page {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 40px clamp(20px, 8%, 72px);
+  max-width: 44em;
+  margin: 0 auto;
+  font-size: 1.05rem;
+  line-height: 1.65;
+}
+
+.galley-passage {
+  position: relative;
+}
+
+.galley-section-title {
+  margin: 1.6em 0 0.9em;
+  text-align: center;
+  font-variant: small-caps;
+  letter-spacing: 0.08em;
+  font-size: 1.15em;
+}
+.galley-label {
+  text-align: center;
+  font-size: 0.8em;
+  letter-spacing: 0.14em;
+  color: var(--muted);
+  margin-top: 1.4em;
+}
+
+.galley-block {
+  margin: 0 0 0.9em;
+  white-space: pre-wrap;
+}
+.galley-heading {
+  text-align: center;
+  font-weight: 600;
+  margin: 1.4em 0 0.9em;
+}
+.galley-heading.level-1 {
+  font-size: 1.3em;
+  letter-spacing: 0.04em;
+}
+.galley-heading.level-2 {
+  font-size: 1.15em;
+}
+.galley-heading.level-3 {
+  font-size: 1.05em;
+}
+.galley-blockquote {
+  margin: 0.9em 2em;
+  font-size: 0.95em;
+}
+.galley-verse {
+  margin: 0.9em 2.5em;
+  white-space: pre-wrap;
+}
+.galley-epigraph {
+  margin: 0.9em 2.5em;
+  font-style: italic;
+  text-align: center;
+}
+.galley-caption {
+  text-align: center;
+  font-size: 0.9em;
+  color: var(--muted);
+}
+.galley-list-item {
+  margin: 0 0 0.35em 1.8em;
+}
+.galley-footnote {
+  font-size: 0.88em;
+  margin: 0.6em 0 0.6em 1.2em;
+  border-left: 2px solid var(--line);
+  padding-left: 0.8em;
+}
+.galley-table {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82em;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.galley-readonly {
+  cursor: text;
+  border-radius: 3px;
+}
+.galley-readonly:hover {
+  background: var(--accent-soft);
+}
+
+.galley-active {
+  margin: 0 -10px 0.9em;
+  padding: 8px 10px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  background: #fffdf8;
+}
+.galley-active .galley-block {
+  margin-bottom: 0;
+}
+.galley-tools {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+  font-family: ui-serif, Georgia, serif;
+}
+.galley-tools select,
+.galley-tools button {
+  font: inherit;
+  font-size: 0.78rem;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+.galley-tools .galley-done {
+  margin-left: auto;
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.galley-kind-note {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-style: italic;
+}
+.galley-editable {
+  outline: none;
+}
+.galley-editable:focus {
+  outline: none;
+}
+textarea.galley-plain {
+  width: 100%;
+  font: inherit;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 8px;
+  resize: vertical;
+}
+
+/* A memo is the editor talking to the assistant: visibly not part of the book,
+   visibly never printed. Amber while open, settled once answered. */
+.galley-memo {
+  margin: 8px 0 12px 24px;
+  padding: 8px;
+  border-left: 3px dashed var(--warn);
+  background: #fdf6ec;
+  border-radius: 0 4px 4px 0;
+  font-size: 0.85rem;
+}
+.galley-memo .proof-annotation-label {
+  color: var(--warn);
+}
+.galley-memo.resolved {
+  border-left-color: var(--ok);
+  background: #f0f6f1;
+}
+.galley-memo.resolved .proof-annotation-label {
+  color: var(--ok);
+}
+.galley-memo textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 6px;
+  resize: vertical;
+}
+.galley-memo-ask {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-style: italic;
+}
+.galley-memo-outcome {
+  margin: 0;
+}
+.galley-note textarea {
+  width: 100%;
+}
+
+.galley.empty {
+  color: var(--muted);
+  padding: 24px;
+}

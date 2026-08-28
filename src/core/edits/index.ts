@@ -14,6 +14,16 @@ export {
   type BookEdit
 } from './book-edits'
 export {
+  clearMemo,
+  memoSheet,
+  memosOf,
+  openMemos,
+  resolveMemo,
+  type MemoContext,
+  type MemoEdit
+} from './memos'
+export { htmlOfMarkup, markupOfNodes, type RichNode } from './rich-text'
+export {
   proofSheet,
   nextFlaggedPage,
   type ProofBlock,
