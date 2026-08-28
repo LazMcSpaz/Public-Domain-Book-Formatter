@@ -22,6 +22,7 @@
  * standing in — and commits on blur, Enter, or the toolbar's Done.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { footnoteMarkerPattern, type Footnote } from '@core/assemble'
 import type { BookDocument } from '@core/assemble'
 import type { BlockKind } from '@core/transcribe'
 import { withMarkup, wordCount } from '@core/transcribe'
@@ -161,6 +162,49 @@ function snippet(text: string, at: number): string {
 const mintId = (prefix: string): string =>
   `${prefix}${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`
 
+/**
+ * One of the book's own footnotes, editable where it is read.
+ *
+ * Uncontrolled, committing on blur, for the same reason the verse textarea
+ * is: the text goes through `normalizeMarkup` on the way in, and a controlled
+ * box that round-tripped every keystroke would close the `<i>` a hand was
+ * halfway through typing. Keyed on the note's current text by the caller, so
+ * an undo remounts it with the reverted words while an untouched box never
+ * remounts under a caret.
+ */
+function NoteChip({
+  note,
+  label,
+  onCommit,
+  onRemove
+}: {
+  note: Footnote
+  label: string
+  onCommit: (text: string) => void
+  onRemove: () => void
+}): JSX.Element {
+  const current = withMarkup(note.text, note.emphasis, note.strong)
+  return (
+    <div className="proof-annotation galley-note galley-fn">
+      <span className="proof-annotation-bar">
+        <span className="proof-annotation-label">{label}</span>
+        <button type="button" onClick={onRemove}>
+          Remove note
+        </button>
+      </span>
+      <textarea
+        defaultValue={current}
+        spellCheck
+        rows={Math.max(2, Math.ceil(current.length / 70))}
+        aria-label={label}
+        onBlur={(e) => {
+          if (e.target.value !== current) onCommit(e.target.value)
+        }}
+      />
+    </div>
+  )
+}
+
 export function BookEditor({ document: doc, edits, onChange }: BookEditorProps): JSX.Element {
   /** The passage open for editing, and the caret to restore when it mounts. */
   const [active, setActive] = useState<{ id: string; caret: number } | null>(null)
@@ -253,6 +297,36 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
   }, [doc, edits])
 
   /**
+   * The book's own footnotes, placed under the passage their marker sits in.
+   *
+   * A note is read where its reference is, so that is where it is edited —
+   * the Docs shape, and the first time these notes are editable at all:
+   * assembly pulls them out of the block flow, so no block edit could reach
+   * them. Placement is found the way the engine finds it, by the printed
+   * marker (`footnoteMarkerPattern`), over the blocks as they now stand; a
+   * note whose marker is nowhere goes to the endnotes group at the foot of
+   * the column, named rather than hidden, exactly as the engine collects it.
+   */
+  const printedNotes = useMemo(() => {
+    const byBlock = new Map<string, Footnote[]>()
+    const unplaced: Footnote[] = []
+    for (const note of doc.footnotes) {
+      // The editor's own notes are edits and edit as such; this is the book's.
+      if (!note.originalMarker) continue
+      const pattern = footnoteMarkerPattern(note.originalMarker)
+      const host = pattern ? doc.blocks.find((b) => pattern.test(b.text)) : undefined
+      if (!host) {
+        unplaced.push(note)
+        continue
+      }
+      const list = byBlock.get(host.id) ?? []
+      list.push(note)
+      byBlock.set(host.id, list)
+    }
+    return { byBlock, unplaced }
+  }, [doc])
+
+  /**
    * The outline, for a column that is otherwise one long scroll: divisions set
    * before the body, the chapters, divisions after — the same list the
    * contents page is built from, so it cannot disagree with the book.
@@ -286,7 +360,7 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
     document.getElementById(`g-${id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
 
-  /** Every place the query occurs, passage by passage, in reading order. */
+  /** Every place the query occurs — passages first, then the notes. */
   const matches = useMemo(() => {
     if (!find.open || find.query.length === 0) return []
     const out: { passageId: string; context: string }[] = []
@@ -295,8 +369,25 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
         out.push({ passageId: p.id, context: m.context })
       }
     }
+    // The notes too — a footnote-editing pass is exactly when the same wrong
+    // word recurs. A placed note jumps to the passage its marker sits in; an
+    // unplaced one to the endnotes group.
+    const anchorOf = new Map<string, string>()
+    for (const [blockId, list] of printedNotes.byBlock) {
+      for (const note of list) anchorOf.set(note.id, blockId)
+    }
+    for (const note of doc.footnotes) {
+      const text = withMarkup(note.text, note.emphasis, note.strong)
+      for (const m of findMatches(text, find.query, find.matchCase)) {
+        out.push({
+          passageId:
+            anchorOf.get(note.id) ?? (note.anchor ? note.anchor.blockId : 'notes-unplaced'),
+          context: m.context
+        })
+      }
+    }
     return out
-  }, [passages, find.open, find.query, find.matchCase])
+  }, [passages, doc, printedNotes, find.open, find.query, find.matchCase])
 
   const goToMatch = (delta: number): void => {
     if (matches.length === 0) return
@@ -337,6 +428,24 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
         next = withEdit(next, { ...section, text: swept.text })
         total += swept.count
       }
+    }
+    // The book's own notes, and the editor's. Neither is a block, so each is
+    // swept through its own record — a `note-text` correction for a printed
+    // note, the `note` edit itself for an authored one.
+    for (const note of doc.footnotes) {
+      if (!note.originalMarker) continue
+      const text = withMarkup(note.text, note.emphasis, note.strong)
+      const swept = sweepText(text, find.query, find.replace, find.matchCase)
+      if (swept.count === 0) continue
+      next = withEdit(next, { kind: 'note-text', noteId: note.id, text: swept.text })
+      total += swept.count
+    }
+    for (const edit of edits) {
+      if (edit.kind !== 'note') continue
+      const swept = sweepText(edit.text, find.query, find.replace, find.matchCase)
+      if (swept.count === 0) continue
+      next = withEdit(next, { ...edit, text: swept.text })
+      total += swept.count
     }
     if (next !== edits) onChange(next)
     setFind((f) => ({ ...f, cursor: -1, replaced: total }))
@@ -942,6 +1051,16 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
                   </div>
                 ))}
 
+                {(printedNotes.byBlock.get(passage.id) ?? []).map((note) => (
+                  <NoteChip
+                    key={`${note.id}:${note.text}`}
+                    note={note}
+                    label={`Note ${note.originalMarker} — the book's own, printed at the foot of its page`}
+                    onCommit={(text) => push({ kind: 'note-text', noteId: note.id, text })}
+                    onRemove={() => push({ kind: 'note-text', noteId: note.id, text: '' })}
+                  />
+                ))}
+
                 {memos.map((memo) => (
                   <div
                     key={memo.memoId}
@@ -977,6 +1096,26 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
               </div>
             )
           })}
+
+          {printedNotes.unplaced.length > 0 ? (
+            <div className="galley-endnotes" id="g-notes-unplaced">
+              <div className="galley-section-title">Notes the book could not place</div>
+              <p className="galley-endnotes-hint">
+                Their printed markers appear nowhere in the text, so the engine collects them as
+                endnotes rather than losing them. Put the marker back in the passage it belongs to,
+                or edit the note here.
+              </p>
+              {printedNotes.unplaced.map((note) => (
+                <NoteChip
+                  key={`${note.id}:${note.text}`}
+                  note={note}
+                  label={`Note ${note.originalMarker} — from leaf ${note.pageIndex + 1}, collected as an endnote`}
+                  onCommit={(text) => push({ kind: 'note-text', noteId: note.id, text })}
+                  onRemove={() => push({ kind: 'note-text', noteId: note.id, text: '' })}
+                />
+              ))}
+            </div>
+          ) : null}
 
           {/* Where a document ends is where a Docs user looks for "add more".
               An introduction or an afterword is set as a division of the book,

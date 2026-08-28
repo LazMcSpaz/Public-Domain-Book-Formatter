@@ -165,9 +165,18 @@ used Google Docs plenty, and this app never, trip first?
 
 ### Stage 3 — the two structured views
 
-- **The notes browser**: every footnote in book order, rich-text editable,
-  each with the sentence it hangs on and a jump to its place; endnotes and
-  unplaced notes listed under the same roof with their state named.
+- **The notes browser** (done, and in-place rather than as a separate list):
+  the book's own footnotes were the one kind of text no edit could reach —
+  assembly pulls them out of the block flow, so they were neither blocks nor
+  the editor's own writing. The `note-text` edit (`{ noteId, text }`, schema
+  v15) closes that: applied by `applyEdits` over the assembled notes,
+  notation read by the house convention, an emptied note removed like an
+  emptied block. In the galley each printed note is edited _under the
+  passage its marker sits in_ — found the way the engine finds it, by
+  `footnoteMarkerPattern` over the blocks as they stand — and a note whose
+  marker is nowhere sits in a named endnotes group at the foot of the
+  column, exactly as the engine collects it. Find & replace and `drive.mjs
+sweep` reach the notes too, printed and authored alike.
 - **The glossary editor**: the back section that is a glossary, entry per
   row — headword, definition — serialising back to the same section text
   (`<b>` headword, blank-line paragraphs), with each entry's mark coverage

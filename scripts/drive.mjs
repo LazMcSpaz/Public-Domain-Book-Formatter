@@ -2794,6 +2794,42 @@ async function serve() {
             }
           }
 
+          // The book's own footnotes — not blocks, so swept through the
+          // `note-text` record that exists for exactly this reach.
+          for (const note of doc.footnotes) {
+            if (!note.originalMarker) continue
+            const text = markup.withMarkup(note.text, note.emphasis, note.strong)
+            const matches = editsMod.findMatches(text, was, matchCase)
+            if (matches.length === 0) continue
+            found.push({
+              note: note.id,
+              marker: note.originalMarker,
+              matches: matches.map((m) => m.context)
+            })
+            if (now !== null) {
+              const swept = editsMod.sweepText(text, was, now, matchCase)
+              edits = editsMod.withEdit(edits, {
+                kind: 'note-text',
+                noteId: note.id,
+                text: swept.text
+              })
+              replaced += swept.count
+            }
+          }
+
+          // And the editor's own notes, swept through their own records.
+          for (const edit of run.edits ?? []) {
+            if (edit.kind !== 'note') continue
+            const matches = editsMod.findMatches(edit.text, was, matchCase)
+            if (matches.length === 0) continue
+            found.push({ authoredNote: edit.noteId, matches: matches.map((m) => m.context) })
+            if (now !== null) {
+              const swept = editsMod.sweepText(edit.text, was, now, matchCase)
+              edits = editsMod.withEdit(edits, { ...edit, text: swept.text })
+              replaced += swept.count
+            }
+          }
+
           if (now === null || found.length === 0) {
             return {
               dryRun: now === null,

@@ -151,6 +151,22 @@ export type BookEdit =
       text: string
     }
   /**
+   * The book's own footnote, corrected.
+   *
+   * Footnotes leave the block flow at assembly — that is how the engine sets
+   * them at the foot of their page — which left them the one kind of text in
+   * the book no edit could reach: not a block, so `text` cannot name them,
+   * and not the editor's own writing, so `note` cannot either. `noteId` is
+   * the assembled note's id (`fn1`, `fn2`, …), positional over the
+   * transcription the same way a block id is, and stable for the same
+   * reason: the transcription is frozen once read.
+   *
+   * `<i>`/`<b>` are read by the same convention as everywhere else. An empty
+   * text removes the note — the rule blocks already follow: clearing it
+   * means "this is not part of the book", and it is undoable like any edit.
+   */
+  | { kind: 'note-text'; noteId: string; text: string }
+  /**
    * A note the editor leaves *for the assistant* — "this page breaks badly",
    * "check this word against the scan" — anchored the way an authored note is,
    * and never printed.
@@ -210,6 +226,8 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   // Notes the editor wrote, keyed so a later edit to the same one replaces it
   // rather than adding a second note at the same spot.
   const authored = new Map<string, BookEdit & { kind: 'note' }>()
+  /** Corrections to the book's own footnotes, keyed so re-editing replaces. */
+  const noteTexts = new Map<string, string>()
   /** Pictures the editor added, keyed so re-captioning one replaces it. */
   const supplied = new Map<string, BookEdit & { kind: 'image' }>()
   /** Divisions the editor wrote, keyed so editing one replaces it. */
@@ -257,6 +275,11 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
 
     if (edit.kind === 'note') {
       authored.set(edit.noteId, edit)
+      continue
+    }
+
+    if (edit.kind === 'note-text') {
+      noteTexts.set(edit.noteId, edit.text)
       continue
     }
 
@@ -419,7 +442,27 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   // than kept as an orphan: unlike a scanned note, nothing was lost by dropping
   // it, because the editor still has what they wrote and can put it back.
   const blockById = new Map(blocks.map((b) => [b.id, b]))
-  const footnotes = [...doc.footnotes]
+  // The book's own notes, with any corrections in. Through `normalizeMarkup`
+  // for the same reason a block's text edit is: the tags typed are the
+  // emphasis meant, and retyping invalidates the word indices of the old
+  // wording. A note emptied is removed — the rule blocks already follow.
+  const footnotes = doc.footnotes
+    .map((note) => {
+      const corrected = noteTexts.get(note.id)
+      if (corrected === undefined) return note
+      const marked = normalizeMarkup<TranscribedBlock>({
+        kind: 'paragraph',
+        text: corrected.replace(/\s+/gu, ' ').trim()
+      })
+      const { emphasis: _emphasis, strong: _strong, ...rest } = note
+      return {
+        ...rest,
+        text: marked.text,
+        ...(marked.emphasis?.length ? { emphasis: marked.emphasis } : {}),
+        ...(marked.strong?.length ? { strong: marked.strong } : {})
+      }
+    })
+    .filter((note) => note.text.trim().length > 0)
   for (const note of authored.values()) {
     const block = blockById.get(note.blockId)
     if (!block || note.text.trim().length === 0) continue
@@ -587,6 +630,7 @@ export function blockOf(edit: BookEdit): string | null {
     edit.kind === 'image' ||
     edit.kind === 'section' ||
     edit.kind === 'insert' ||
+    edit.kind === 'note-text' ||
     edit.kind === 'retouch'
   ) {
     return null
@@ -602,6 +646,7 @@ export function countEdited(edits: readonly BookEdit[]): number {
     // that has only been commented on.
     if (edit.kind === 'memo') continue
     if (edit.kind === 'anchor') touched.add(edit.illustrationId)
+    else if (edit.kind === 'note-text') touched.add(edit.noteId)
     else if (edit.kind === 'note') touched.add(edit.noteId)
     else if (edit.kind === 'image') touched.add(edit.imageId)
     else if (edit.kind === 'section') touched.add(edit.sectionId)
@@ -657,6 +702,7 @@ export function withEdit(edits: readonly BookEdit[], edit: BookEdit): BookEdit[]
     edit.kind === 'section' ||
     edit.kind === 'insert' ||
     edit.kind === 'memo' ||
+    edit.kind === 'note-text' ||
     edit.kind === 'retouch'
   if (!collapsible) return [...edits, edit]
 
@@ -675,6 +721,7 @@ export function withEdit(edits: readonly BookEdit[], edit: BookEdit): BookEdit[]
 function targetOf(edit: BookEdit): string {
   if (edit.kind === 'anchor') return edit.illustrationId
   if (edit.kind === 'note') return edit.noteId
+  if (edit.kind === 'note-text') return edit.noteId
   if (edit.kind === 'image') return edit.imageId
   if (edit.kind === 'section') return edit.sectionId
   if (edit.kind === 'insert') return edit.insertId

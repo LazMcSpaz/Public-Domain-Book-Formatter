@@ -44,14 +44,16 @@ import { EDITORIAL_QUERY_KINDS } from '@core/transcribe'
  * v9 → v10 the fact bank this book produced, v10 → v11 `leafCount`, how
  * long the book actually is, v11 → v12 the editor's rulings on the queries
  * the reading raised, v12 → v13 the `insert` edit, a block the editor wrote
- * standing inside the body rather than before or after it, and v13 → v14 the
- * `memo` edit, a note the editor leaves in the document for the assistant.
+ * standing inside the body rather than before or after it, v13 → v14 the
+ * `memo` edit, a note the editor leaves in the document for the assistant,
+ * and v14 → v15 the `note-text` edit, a correction to one of the book's own
+ * footnotes.
  * None of them damages an older run — each is a complete transcription that simply
  * has none of the newer thing on it yet — so all upgrade in place rather than
  * being refused. That distinction is the whole reason a migration exists
  * instead of a version check.
  */
-export const CURRENT_SCHEMA_VERSION = 14
+export const CURRENT_SCHEMA_VERSION = 15
 
 /** A page the model could not read at all. Mirrors the runner's `PageFailure`. */
 export interface SavedFailure {
@@ -669,6 +671,13 @@ function parseEdits(raw: unknown): BookEdit[] {
           typeof value['text'] === 'string'
         ) {
           out.push({ kind: 'note', noteId, blockId, at: value['at'], text: value['text'] })
+        }
+        break
+      }
+      case 'note-text': {
+        const noteId = str(value['noteId'], '')
+        if (noteId && typeof value['text'] === 'string') {
+          out.push({ kind: 'note-text', noteId, text: value['text'] })
         }
         break
       }

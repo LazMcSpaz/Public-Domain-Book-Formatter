@@ -1239,7 +1239,12 @@ in `screenshots/`. Don't ship UI blind.
   and only the shelf protects against a lost browser. An introduction or
   afterword can be **added, written and renamed in the galley** itself, and
   `drive.mjs book` reports open comments so a session starting cold sees the
-  editor's asks without thinking to look.
+  editor's asks without thinking to look. **The book's own footnotes are
+  editable at last**: assembly pulls them out of the block flow, so no edit
+  could reach them until the `note-text` edit (SavedRun v15). In the galley
+  each printed note sits under the passage its marker is in — located the
+  way the engine locates it — with unplaced ones in a named endnotes group,
+  and the sweep covers notes as well as blocks and divisions.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the editorial-query channel, then _The Human Aura_.

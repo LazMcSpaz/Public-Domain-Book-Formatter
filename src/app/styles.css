@@ -2445,3 +2445,29 @@ textarea.galley-plain {
   font-size: 0.75rem;
   color: var(--muted);
 }
+
+/* ---------- the book's own notes, in the galley ---------- */
+
+.galley-fn {
+  border-left-style: solid;
+}
+.galley-fn textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 6px;
+  resize: vertical;
+}
+.galley-endnotes {
+  margin-top: 2.5em;
+  padding-top: 1.2em;
+  border-top: 1px solid var(--line);
+}
+.galley-endnotes-hint {
+  font-size: 0.85rem;
+  color: var(--muted);
+  text-align: center;
+  margin: 0 0 1em;
+}

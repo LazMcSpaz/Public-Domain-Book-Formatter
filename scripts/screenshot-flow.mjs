@@ -651,9 +651,21 @@ const seeded = await page.evaluate(
               // paragraph would throw it away without a word.
               text:
                 i === 6
-                  ? `Restored page ${i + 1}, the <i>alembick</i> being set.`
+                  ? `Restored page ${i + 1}, the <i>alembick</i>* being set.`
                   : `Restored page ${i + 1}.`
             },
+            // A printed footnote, so the galley has one of the book's own
+            // notes to edit — they are not blocks, and until `note-text`
+            // existed nothing could reach them.
+            ...(i === 6
+              ? [
+                  {
+                    kind: 'footnote',
+                    marker: '*',
+                    text: '* The receiver must be luted at the joynts.'
+                  }
+                ]
+              : []),
             // The fixture prints a figure with a caption on this leaf. The
             // caption has to be in the transcription for assembly to have
             // anything to take out of the flow and give to the picture.
@@ -1062,6 +1074,20 @@ await page
 await page.waitForTimeout(300)
 const galleyMemos = await page.locator('.galley-memo').count()
 await shot('05c2a1-galley-memo')
+
+// The book's own footnote, editable under the passage its marker sits in.
+const galleyFnChips = await page.locator('.galley-fn').count()
+const fnBox = page.locator('.galley-fn textarea').first()
+await fnBox.fill('The receiver must be <i>well</i> luted at the joynts.')
+// Commits on blur, like the verse editor.
+await page.locator('.galley-hint').click()
+await page.waitForTimeout(400)
+const fnEdited = await page
+  .locator('.galley-fn textarea')
+  .first()
+  .inputValue()
+  .catch(() => '')
+await shot('05c2a1b-galley-footnote')
 
 // Back to the leaf view: everything below navigates the sheet by leaf number.
 await page.locator('.proof-view-toggle button', { hasText: 'Check against the scan' }).click()
@@ -3117,7 +3143,8 @@ console.log(
     `${galleyOutline}→${galleyOutlineAfter} outline entries, "${galleyWords}", typed edit landed: ${galleyTyped > 0}, ` +
     `autosave said: "${galleyAutosaved}", undo/redo: ${galleyUndone}/${galleyRedone}, ` +
     `find: "${findCount}" → "${replacedSaid}", sweep undone: ${sweepUndone}, ` +
-    `ctrl+s: "${ctrlSSaved}", afterword in galley: ${galleyAfterword}/${galleyAfterwordText}, ` +
+    `ctrl+s: "${ctrlSSaved}", footnote chips: ${galleyFnChips} (edited: "${fnEdited}"), ` +
+    `afterword in galley: ${galleyAfterword}/${galleyAfterwordText}, ` +
     `phone overflow: ${galleyOverflow}px, comments left: ${galleyMemos}`
 )
 console.log(
@@ -3355,6 +3382,8 @@ const finalChecks = [
     'an afterword was written entirely in the galley',
     galleyAfterword > 0 && galleyAfterwordText > 0
   ],
+  ['the book\u2019s own footnote is editable under its passage', galleyFnChips === 1],
+  ['and the correction stuck, notation and all', /<i>well<\/i> luted/.test(fnEdited)],
   ['the galley fits a phone', galleyOverflow <= 0],
   ['a comment for the assistant was left, and shown as never printing', galleyMemos === 1],
   ['a note was proposed', annotations === 1],
