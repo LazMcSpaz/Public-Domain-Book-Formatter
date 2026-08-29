@@ -82,3 +82,35 @@ describe('note-text — correcting the book’s own footnotes', () => {
     expect(stored.edits).toEqual([{ kind: 'note-text', noteId: 'fn1', text: 'Kept.' }])
   })
 })
+
+describe('assembly keeps the emphasis the reading recovered in a footnote', () => {
+  it('shifts the word indices past the stripped marker', () => {
+    // "1." is word 0 and is stripped; the italics sat on words 3–4 and must
+    // land on words 2–3 of the stripped text — not be dropped, which printed
+    // every footnote's book titles in roman, and not stay put, which would
+    // italicise the wrong words.
+    const doc = assembleBook([
+      page(0, [
+        { kind: 'paragraph', text: 'The vessel1 is described.' },
+        {
+          kind: 'footnote',
+          marker: '1',
+          text: '1. See Croll, Basilica Chymica, lib. ii.',
+          emphasis: [3, 4]
+        }
+      ])
+    ])
+    const note = doc.footnotes[0]!
+    expect(note.text).toBe('See Croll, Basilica Chymica, lib. ii.')
+    expect(note.emphasis).toEqual([2, 3])
+  })
+
+  it('drops an index that pointed at the marker itself', () => {
+    const doc = assembleBook([
+      page(0, [
+        { kind: 'footnote', marker: '*', text: '* Wholly italic note.', emphasis: [0, 1, 2, 3] }
+      ])
+    ])
+    expect(doc.footnotes[0]!.emphasis).toEqual([0, 1, 2])
+  })
+})

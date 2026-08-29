@@ -22,7 +22,10 @@
  * standing in — and commits on blur, Enter, or the toolbar's Done.
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { footnoteMarkerPattern, type Footnote } from '@core/assemble'
+import { PageBrowser } from './PageBrowser'
+import { footnoteMarkerPattern, type Footnote, type Illustration } from '@core/assemble'
+import { anchorIllustrations } from '@core/layout'
+import { checkGlossaryMarks, glossaryHeadwords, withGlossaryMark } from '@core/annotate'
 import type { BookDocument } from '@core/assemble'
 import type { BlockKind } from '@core/transcribe'
 import { withMarkup, wordCount } from '@core/transcribe'
@@ -43,6 +46,16 @@ export interface BookEditorProps {
   document: BookDocument
   edits: BookEdit[]
   onChange: (edits: BookEdit[]) => void
+  /**
+   * The page each block opens on, measured by the layout engine — what the
+   * "— p. 47 —" markers are drawn from. Null while no layout has run; the
+   * markers are then simply absent, and nothing pretends.
+   */
+  blockPages?: { blockId: string; pageIndex: number; folio: string | null }[] | null
+  /** The laid-out book itself, for the page view. `tick` changes per layout. */
+  interior?: { bytes: Uint8Array; pageCount: number; tick: number } | null
+  /** True while a fresh layout is being measured — the markers may be a moment behind. */
+  layoutBusy?: boolean
 }
 
 /**
@@ -159,6 +172,24 @@ function snippet(text: string, at: number): string {
   return words.length > 0 ? `…${words}` : 'the start'
 }
 
+/** A picture's place in the column — a card, never the pixels. */
+function PictureCard({ picture }: { picture: Illustration }): JSX.Element {
+  return (
+    <div className="galley-picture">
+      <span aria-hidden="true">▣</span>
+      <span className="galley-picture-what">
+        {picture.origin === 'supplied'
+          ? 'A picture of your own'
+          : `Picture cut from leaf ${picture.pageIndex + 1}`}
+        {picture.caption ? <i> — {picture.caption}</i> : null}
+      </span>
+      <span className="galley-picture-hint">
+        set here by the engine · picture tools are in “Check against the scan”
+      </span>
+    </div>
+  )
+}
+
 const mintId = (prefix: string): string =>
   `${prefix}${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`
 
@@ -205,7 +236,14 @@ function NoteChip({
   )
 }
 
-export function BookEditor({ document: doc, edits, onChange }: BookEditorProps): JSX.Element {
+export function BookEditor({
+  document: doc,
+  edits,
+  onChange,
+  blockPages,
+  interior,
+  layoutBusy
+}: BookEditorProps): JSX.Element {
   /** The passage open for editing, and the caret to restore when it mounts. */
   const [active, setActive] = useState<{ id: string; caret: number } | null>(null)
   const editableRef = useRef<HTMLDivElement | null>(null)
@@ -352,6 +390,86 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
   }, [doc])
 
   const words = useMemo(() => passages.reduce((n, p) => n + wordCount(p.text), 0), [passages])
+
+  /**
+   * Which passages a page turn falls before, from the engine's own measure.
+   *
+   * A marker is drawn where a passage opens on a *different* page from the
+   * one before it — the first marked passage names the page the body starts
+   * on. Blocks the map does not know (a fresh placeholder, a passage edited
+   * since the last layout) simply carry no marker until the next measure.
+   */
+  const pageMarkers = useMemo(() => {
+    if (!blockPages || blockPages.length === 0)
+      return new Map<string, { pageIndex: number; folio: string | null }>()
+    const byBlock = new Map(blockPages.map((e) => [e.blockId, e]))
+    const out = new Map<string, { pageIndex: number; folio: string | null }>()
+    let lastPage: number | null = null
+    for (const p of passages) {
+      const entry = byBlock.get(p.id)
+      if (!entry) continue
+      if (entry.pageIndex !== lastPage) {
+        out.set(p.id, { pageIndex: entry.pageIndex, folio: entry.folio })
+        lastPage = entry.pageIndex
+      }
+    }
+    return out
+  }, [blockPages, passages])
+
+  /** The page view: open on a page, or null while editing. */
+  const [printPage, setPrintPage] = useState<number | null>(null)
+
+  /**
+   * Does every glossary entry the book uses carry its mark? Checked here, in
+   * the surface where it would be fixed — one volume on this shelf shipped a
+   * 74-entry glossary and not one circle, with every report happy about it.
+   * The mark is a character in the text, so placing one is an ordinary text
+   * edit; which occurrence deserves it stays the editor's call.
+   */
+  const glossaryMarks = useMemo(() => {
+    const sections = edits.filter(
+      (e): e is BookEdit & { kind: 'section' } => e.kind === 'section' && /glossar/i.test(e.title)
+    )
+    if (sections.length === 0) return null
+    const heads = sections.flatMap((section) => glossaryHeadwords(section.text))
+    if (heads.length === 0) return null
+    return {
+      report: checkGlossaryMarks(heads, doc.blocks),
+      sectionIds: new Set(sections.map((section) => section.sectionId))
+    }
+  }, [edits, doc])
+
+  /**
+   * Where each picture falls in the reading order — the engine's own
+   * anchoring, so a card here and the plate on the page cannot disagree.
+   * Cards, not pictures: the pixels live in the scan view with the tools that
+   * act on them, and a book being edited around invisible plates was how a
+   * paragraph got split through one. `-1` is "before the first block".
+   */
+  const picturesAfter = useMemo(() => {
+    if (doc.illustrations.length === 0) {
+      return { byPassage: new Map<string, Illustration[]>(), atFront: [] as Illustration[] }
+    }
+    const anchored = anchorIllustrations(doc.blocks, doc.illustrations)
+    const byPassage = new Map<string, Illustration[]>()
+    for (const [index, list] of anchored) {
+      if (index < 0) continue
+      const block = doc.blocks[index]
+      if (block) byPassage.set(block.id, list)
+    }
+    return { byPassage, atFront: anchored.get(-1) ?? [] }
+  }, [doc])
+
+  const markEntry = (verdict: { blockId: string | null; term: string }): void => {
+    if (!verdict.blockId) return
+    const passage = passages.find((x) => x.id === verdict.blockId)
+    if (!passage) return
+    const marked = withGlossaryMark(passage.text, verdict.term)
+    if (marked === null) return
+    push({ kind: 'text', blockId: passage.id, text: marked })
+    jumpTo(passage.id)
+    flash(passage.id)
+  }
 
   /** The one toolbar, so a blur into it must not close the passage it acts on. */
   const toolbarRef = useRef<HTMLDivElement | null>(null)
@@ -689,6 +807,7 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
             </span>
           ) : null}
           <span className="galley-words">{words.toLocaleString()} words</span>
+          {layoutBusy ? <span className="galley-measuring">measuring pages…</span> : null}
         </span>
       </div>
 
@@ -778,6 +897,24 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
         </button>
         <button
           type="button"
+          disabled={!interior}
+          title={
+            interior
+              ? 'The real pages, rendered from the engine\u2019s own output'
+              : 'The pages are still being measured'
+          }
+          onClick={() => {
+            if (!interior) return
+            // Open on the page of the passage being edited, or the first
+            // marked page — the view answers "where am I?", not "page one".
+            const at = activePassage ? pageMarkers.get(activePassage.id)?.pageIndex : undefined
+            setPrintPage(at ?? [...pageMarkers.values()][0]?.pageIndex ?? 0)
+          }}
+        >
+          See the pages
+        </button>
+        <button
+          type="button"
           className="galley-done"
           disabled={activePassage === null}
           onClick={() => {
@@ -853,7 +990,27 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
         </div>
       ) : null}
 
-      <div className="galley-body">
+      {printPage !== null && interior ? (
+        <div className="galley-print">
+          <div className="galley-print-bar">
+            <span>
+              The pages as the engine sets them — {interior.pageCount} in all
+              {layoutBusy ? ', measuring again\u2026' : ''}
+            </span>
+            <button type="button" onClick={() => setPrintPage(null)}>
+              Back to editing
+            </button>
+          </div>
+          <PageBrowser
+            key={interior.tick}
+            bytes={interior.bytes}
+            pageCount={interior.pageCount}
+            initialPage={printPage}
+          />
+        </div>
+      ) : null}
+
+      <div className="galley-body" hidden={printPage !== null && interior !== null}>
         {outline.length > 0 ? (
           <nav className="galley-outline" aria-label="Book outline">
             {outline.map((entry) => (
@@ -870,11 +1027,16 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
         ) : null}
 
         <div className="galley-page">
+          {picturesAfter.atFront.map((picture) => (
+            <PictureCard key={picture.id} picture={picture} />
+          ))}
           {passages.map((passage) => {
             const heading = sectionTitles.get(passage.id)
             const isActive = active?.id === passage.id
             const memos = memosByBlock.get(passage.id) ?? []
             const notes = notesByBlock.get(passage.id) ?? []
+
+            const marker = pageMarkers.get(passage.id)
 
             return (
               <div
@@ -882,6 +1044,17 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
                 id={`g-${passage.id}`}
                 className={`galley-passage${flashId === passage.id ? ' flash' : ''}`}
               >
+                {marker ? (
+                  <div className={`galley-pagebreak${layoutBusy ? ' stale' : ''}`}>
+                    <button
+                      type="button"
+                      title="Measured by the engine that prints the page — click to see it"
+                      onClick={() => setPrintPage(marker.pageIndex)}
+                    >
+                      — {marker.folio ? `p. ${marker.folio}` : `leaf ${marker.pageIndex + 1}`} —
+                    </button>
+                  </div>
+                ) : null}
                 {heading ? (
                   editingTitle === heading.sectionId ? (
                     <input
@@ -907,6 +1080,41 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
                   )
                 ) : null}
                 {passage.label ? <div className="galley-label">{passage.label}</div> : null}
+
+                {heading && glossaryMarks?.sectionIds.has(heading.sectionId) ? (
+                  <div className="galley-glossary-marks">
+                    <span className="galley-marks-summary">
+                      {glossaryMarks.report.marked.length} entr
+                      {glossaryMarks.report.marked.length === 1 ? 'y' : 'ies'} marked in the body ·{' '}
+                      {glossaryMarks.report.unmarked.length} unmarked ·{' '}
+                      {glossaryMarks.report.absent.length} never used by the book
+                    </span>
+                    {glossaryMarks.report.unmarked.map((verdict) => (
+                      <span key={verdict.entry} className="galley-marks-row">
+                        <b>{verdict.entry}</b>
+                        <button
+                          type="button"
+                          title="Scroll to where the book uses this word"
+                          onClick={() => {
+                            if (verdict.blockId) {
+                              jumpTo(verdict.blockId)
+                              flash(verdict.blockId)
+                            }
+                          }}
+                        >
+                          Show
+                        </button>
+                        <button
+                          type="button"
+                          title="Put the circle on that use — an ordinary edit, undoable"
+                          onClick={() => markEntry(verdict)}
+                        >
+                          Mark it
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
 
                 {isActive ? (
                   <div className="galley-active">
@@ -1092,6 +1300,9 @@ export function BookEditor({ document: doc, edits, onChange }: BookEditorProps):
                       />
                     )}
                   </div>
+                ))}
+                {(picturesAfter.byPassage.get(passage.id) ?? []).map((picture) => (
+                  <PictureCard key={picture.id} picture={picture} />
                 ))}
               </div>
             )

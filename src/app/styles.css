@@ -2471,3 +2471,131 @@ textarea.galley-plain {
   text-align: center;
   margin: 0 0 1em;
 }
+
+/* ---------- the measured pages, in and beside the galley ---------- */
+
+.galley-pagebreak {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0.4em 0 0.6em;
+}
+.galley-pagebreak::before,
+.galley-pagebreak::after {
+  content: '';
+  flex: 1;
+  border-top: 1px dashed var(--line);
+}
+.galley-pagebreak button {
+  font: inherit;
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0 4px;
+}
+.galley-pagebreak button:hover {
+  color: var(--accent);
+}
+.galley-pagebreak.stale button {
+  opacity: 0.45;
+}
+.galley-measuring {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-style: italic;
+}
+.galley-print {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+  padding: 12px;
+}
+.galley-print-bar {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.galley-print-bar button {
+  margin-left: auto;
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+.galley-body[hidden] {
+  display: none;
+}
+
+/* ---------- glossary mark coverage, at the glossary's head ---------- */
+
+.galley-glossary-marks {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  margin: -0.3em 0 1em;
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+.galley-marks-summary {
+  width: 100%;
+  text-align: center;
+}
+.galley-marks-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--panel);
+}
+.galley-marks-row b {
+  color: var(--warn);
+  font-weight: 600;
+}
+.galley-marks-row button {
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fff;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+/* ---------- pictures, as cards in the galley ---------- */
+
+.galley-picture {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 8px;
+  margin: 0.6em 0 0.9em;
+  padding: 8px 12px;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.galley-picture-what {
+  color: var(--ink);
+}
+.galley-picture-hint {
+  margin-left: auto;
+  font-size: 0.72rem;
+  font-style: italic;
+}

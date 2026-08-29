@@ -39,6 +39,8 @@ export interface Interior {
   warnings: LayoutWarning[]
   /** Where each chapter opens, and the folio the contents page printed for it. */
   chapterPages: { title: string; level: number; pageIndex: number }[]
+  /** The page each block opens on, with its printed folio — measured, not estimated. */
+  blockPages: { blockId: string; pageIndex: number; folio: string | null }[]
   /** How many footnotes were set at the foot of a page. */
   notesPlaced: number
   /** Notes gathered into a back-matter section for want of a reference mark. */
@@ -119,6 +121,7 @@ export async function renderInterior(
     embeddedFamilies: pdf.embeddedFamilies,
     warnings: book.warnings,
     chapterPages: book.chapterPages,
+    blockPages: book.blockPages,
     notesPlaced: book.notesPlaced,
     notesCollected: book.notesCollected,
     notesDropped: book.notesDropped,

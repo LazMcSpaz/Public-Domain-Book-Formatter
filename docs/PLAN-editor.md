@@ -152,16 +152,27 @@ used Google Docs plenty, and this app never, trip first?
   comment shortcut — leaves one at the caret.
 - The galley fits a phone, measured by the harness rather than assumed.
 
-### Stage 2 — the true page beside the text
+### Stage 2 — the true page beside the text (done)
 
-- Run `layout()` against the current style answers after a typing pause and
-  annotate the edit view with the measured page turns ("— p. 47 —"), from the
-  engine, never estimated. Requires the design-gate answers to be available
-  at the proof step; when they are not yet answered, the markers are simply
-  absent, and nothing pretends.
-- A print-view toggle: the exported pages scrolled in `PageBrowser`, with
-  click-through — a paragraph in the print view jumps to itself in the edit
-  view, and back. The lightbox rule applies: evidence you can actually read.
+- The engine lays the book out after a pause in typing and reports, for every
+  block, the page its first line landed on and the folio that page prints
+  (`LaidOutBook.blockPages` — recorded as lines are _placed_, the same hook
+  the chapter record uses, and fault-injected in its tests). The galley draws
+  "— p. 3 —" between the passages where a measured page begins; the markers
+  dim while a fresh measure runs, and are simply absent before the first.
+  Before the design gate, the shipped defaults stand in, and the markers move
+  when the design does.
+- "See the pages", or a click on any marker, opens the real pages — the same
+  `PageBrowser` the export uses, rendering the engine's own bytes, opened on
+  the page in question. One renderer, still: the galley never draws a page,
+  it reports what the engine measured and shows what the engine wrote.
+- Picture cards: every illustration stands at its anchor in the column — the
+  engine's own `anchorIllustrations`, so the card and the plate cannot
+  disagree — as a card naming its origin and caption. The pixels and their
+  tools stay in the scan view; the card exists so a paragraph is never again
+  split through an invisible plate.
+- Remaining from the original sketch: click-through from a _page_ back to its
+  passage. The markers give the other direction.
 
 ### Stage 3 — the two structured views
 
@@ -177,11 +188,16 @@ used Google Docs plenty, and this app never, trip first?
   marker is nowhere sits in a named endnotes group at the foot of the
   column, exactly as the engine collects it. Find & replace and `drive.mjs
 sweep` reach the notes too, printed and authored alike.
-- **The glossary editor**: the back section that is a glossary, entry per
-  row — headword, definition — serialising back to the same section text
-  (`<b>` headword, blank-line paragraphs), with each entry's mark coverage
-  (`@core/annotate/marks`) shown beside it, so "does the body mark this
-  word?" is answered where it would be fixed.
+- **The glossary editor** (the coverage half is done): a panel at the
+  glossary's head reports every entry's mark coverage — marked, unmarked,
+  never used — with a jump to each unmarked use and a one-click "Mark it"
+  that places the circle there as an ordinary text edit
+  (`withGlossaryMark`), undoable like everything else. `glossaryHeadwords`
+  is the one extraction rule, shared with `book-files.mjs --marks` so the
+  shelf report and the editor cannot drift. Which occurrence deserves the
+  mark stays the editor's call; the button only carries it out where they
+  pointed. Still open: entry-per-row structured editing, if prose editing
+  of the section proves clumsy on a real glossary pass.
 
 ### Stage 4 — polish that waits for use
 

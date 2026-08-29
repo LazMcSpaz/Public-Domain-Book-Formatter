@@ -221,6 +221,13 @@ export interface LaidOutBook {
    * introduction was added.
    */
   chapterPages: { id: string; title: string; level: number; pageIndex: number }[]
+  /**
+   * The page each block opens on, with the folio that page prints (null on a
+   * page that prints none). Measured by the engine as the lines are placed —
+   * this is what lets an editing view say "page 47 begins here" without a
+   * second renderer estimating anything.
+   */
+  blockPages: { blockId: string; pageIndex: number; folio: string | null }[]
   /** Fonts actually used, so an embedder knows what to subset. */
   fontsUsed: FontRef[]
   /** Lines that would not fit their measure. Empty is the good case, and real. */

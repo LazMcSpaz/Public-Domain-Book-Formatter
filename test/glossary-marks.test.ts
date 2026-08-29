@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { checkGlossaryMarks, headwordTerms, type MarkableBlock } from '@core/annotate'
+import {
+  checkGlossaryMarks,
+  glossaryHeadwords,
+  headwordTerms,
+  withGlossaryMark,
+  type MarkableBlock
+} from '@core/annotate'
 
 /**
  * The check that would have caught a whole volume shipping with no marks.
@@ -115,5 +121,35 @@ describe('every entry the book uses should carry a mark', () => {
     )
     expect(report.marked.map((v) => v.entry)).toEqual(['Sub-plane.'])
     expect(report.unmarked.map((v) => v.entry)).toEqual(['Thought-form.'])
+  })
+})
+
+describe('glossaryHeadwords — the one extraction rule', () => {
+  it('reads the bolded opening of each entry line', () => {
+    const heads = glossaryHeadwords(
+      '<b>Alembick.</b> The upper vessel.\n\n<b>Athanor.</b> A furnace.\n\nA paragraph with no headword.'
+    )
+    expect(heads).toEqual(['Alembick.', 'Athanor.'])
+  })
+})
+
+describe('withGlossaryMark — placing the circle where the editor pointed', () => {
+  it('marks the first unmarked use, directly after the words', () => {
+    expect(withGlossaryMark('The alembick being set.', 'Alembick')).toBe('The alembick° being set.')
+  })
+
+  it('reads through the notation and marks inside the run', () => {
+    expect(withGlossaryMark('the <i>astral body</i> appears', 'astral body')).toBe(
+      'the <i>astral body°</i> appears'
+    )
+  })
+
+  it('skips a use that already carries the mark', () => {
+    expect(withGlossaryMark('aura° and aura again', 'aura')).toBe('aura° and aura° again')
+  })
+
+  it('returns null when the term has no unmarked use here', () => {
+    expect(withGlossaryMark('nothing of the kind', 'aura')).toBeNull()
+    expect(withGlossaryMark('the aura° alone', 'aura')).toBeNull()
   })
 })

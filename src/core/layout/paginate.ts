@@ -271,6 +271,12 @@ const PLATE_HEIGHT_RATIO = 0.62
  */
 interface Flowable {
   lines: FlowLine[]
+  /**
+   * The block this was built from, so the layout can report which page each
+   * block opens on — the fact the editor's page markers are drawn from. The
+   * one engine measures; nothing else estimates.
+   */
+  blockId?: string
   /** Empty slots before this item; dropped when it lands at the top of a page. */
   spaceBefore: number
   spaceAfter: number
@@ -1040,6 +1046,7 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
         ...lines,
         ...(flourish ? ornamentLines(flourish, ctx) : [])
       ],
+      blockId: block.id,
       spaceBefore: style.spaceBefore,
       spaceAfter: style.spaceAfter,
       startsChapter: isChapter,
@@ -1053,10 +1060,18 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
     }
   }
 
-  return buildDropCapFlowable(text, font, sizePt, indentLeft, measure, ctx, style, {
-    attachments,
-    markToNote
-  })
+  return withBlockId(
+    block.id,
+    buildDropCapFlowable(text, font, sizePt, indentLeft, measure, ctx, style, {
+      attachments,
+      markToNote
+    })
+  )
+}
+
+/** A flowable stamped with the block it came from. */
+function withBlockId(blockId: string, flow: Flowable): Flowable {
+  return { ...flow, blockId }
 }
 
 /**
@@ -1371,6 +1386,8 @@ export function layout(
 
   const pages: PageBuilder[] = []
   const chapterPages: LaidOutBook['chapterPages'] = []
+  /** First page each block opens on — recorded as its first line is placed. */
+  const blockPagesMap = new Map<string, number>()
   const warnings: LayoutWarning[] = []
 
   // --- footnote geometry ---------------------------------------------------
@@ -1626,7 +1643,7 @@ export function layout(
       return
     }
     if (block.kind === 'table') {
-      flowables.push(...buildTableFlowables(block, ctx))
+      flowables.push(...buildTableFlowables(block, ctx).map((f) => ({ ...f, blockId: block.id })))
       pushIllustrationsAfter(i)
       return
     }
@@ -1912,6 +1929,17 @@ export function layout(
         })
       }
 
+      // The block's opening page is only known once its first line is placed
+      // — the same reasoning as the chapter record below.
+      if (
+        take > 0 &&
+        placed === 0 &&
+        flow.blockId !== undefined &&
+        !blockPagesMap.has(flow.blockId)
+      ) {
+        blockPagesMap.set(flow.blockId, current().index)
+      }
+
       if (flow.chapter && !headingRecorded) {
         headingRecorded = true
         chapterPages.push({
@@ -2056,6 +2084,11 @@ export function layout(
     widthPt: trim.widthPt,
     heightPt: trim.heightPt,
     chapterPages,
+    blockPages: [...blockPagesMap].map(([blockId, pageIndex]) => ({
+      blockId,
+      pageIndex,
+      folio: folioFor(pages[pageIndex]!, frontMatterPageCount)
+    })),
     fontsUsed: collectFonts(laidOut),
     warnings,
     notesPlaced: placedIds.size,

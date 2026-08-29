@@ -739,9 +739,10 @@ describe('layout — divisions the editor wrote', () => {
   })
 
   it('changes nothing about a book that has no sections', () => {
-    expect(JSON.stringify(run(doc([block('paragraph', PROSE)])))).toBe(
-      JSON.stringify(run(doc([block('paragraph', PROSE)])))
-    )
+    // One block used twice: the ids now reach the output through blockPages,
+    // so two freshly minted blocks would differ by name alone.
+    const b = block('paragraph', PROSE)
+    expect(JSON.stringify(run(doc([b])))).toBe(JSON.stringify(run(doc([{ ...b }]))))
   })
 })
 
@@ -1004,5 +1005,48 @@ describe('a division and the chapter under it are two openings', () => {
     // its own — it never reaches `chapterPages`.
     expect(bookText(book)).toContain('CHAPTER I.')
     expect(book.chapterPages.map((c) => c.title)).not.toContain('CHAPTER I.')
+  })
+})
+
+describe('blockPages — which page each block opens on, measured', () => {
+  it('records every body block once, in ascending page order, with the printed folio', () => {
+    const blocks = [
+      block('heading', 'Chapter I', 1),
+      block('paragraph', PROSE.repeat(3)),
+      block('paragraph', PROSE.repeat(3)),
+      block('paragraph', PROSE.repeat(3))
+    ]
+    const book = run({ ...doc(blocks), chapters: deriveChapters(blocks) })
+
+    const byId = new Map(book.blockPages.map((e) => [e.blockId, e]))
+    for (const b of blocks) expect(byId.has(b.id)).toBe(true)
+
+    // Reading order and page order agree: a later block never opens on an
+    // earlier page.
+    const pagesInOrder = blocks.map((b) => byId.get(b.id)!.pageIndex)
+    for (let i = 1; i < pagesInOrder.length; i++) {
+      expect(pagesInOrder[i]!).toBeGreaterThanOrEqual(pagesInOrder[i - 1]!)
+    }
+
+    // Each paragraph is a page and a half of prose, so the four blocks cannot
+    // all open on one page — the fixture is big enough to trip a mapping that
+    // stamped everything with the first page.
+    expect(new Set(pagesInOrder).size).toBeGreaterThan(1)
+
+    // The folio is the number the page actually prints: the first body page
+    // prints "1", whatever its index after the front matter.
+    const first = byId.get(blocks[0]!.id)!
+    expect(first.folio).toBe('1')
+    expect(first.pageIndex).toBeGreaterThan(0)
+  })
+
+  it('records the page a split paragraph *starts* on', () => {
+    const blocks = [block('heading', 'Chapter I', 1), block('paragraph', PROSE.repeat(2))]
+    const book = run({ ...doc(blocks), chapters: deriveChapters(blocks) })
+    const para = book.blockPages.find((e) => e.blockId === blocks[1]!.id)!
+    const heading = book.blockPages.find((e) => e.blockId === blocks[0]!.id)!
+    // The long paragraph spills over pages, but its record is where it began —
+    // the same page its heading opened.
+    expect(para.pageIndex).toBe(heading.pageIndex)
   })
 })

@@ -28,11 +28,15 @@
 /** The only tags the notation prints — see `withMarkup`. */
 const NOTATION_TAG = /<\/?[bi]>/y
 
-interface PlainMap {
+export interface PlainMap {
   /** The text with the tags removed — what a reader searches. */
   plain: string
   /** For each plain character, its index in the markup string. */
   toMarkup: number[]
+}
+
+export function mapPlainText(markup: string): PlainMap {
+  return mapPlain(markup)
 }
 
 function mapPlain(markup: string): PlainMap {

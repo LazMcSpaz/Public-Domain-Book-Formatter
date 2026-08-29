@@ -1244,7 +1244,21 @@ in `screenshots/`. Don't ship UI blind.
   could reach them until the `note-text` edit (SavedRun v15). In the galley
   each printed note sits under the passage its marker is in — located the
   way the engine locates it — with unplaced ones in a named endnotes group,
-  and the sweep covers notes as well as blocks and divisions.
+  and the sweep covers notes as well as blocks and divisions. (The same pass
+  fixed a live defect: assembly dropped the emphasis the reading recovered in
+  a footnote, so their book titles had printed in roman all along.) **The
+  galley shows the measured pages**: the engine lays the book out after a
+  pause in typing and reports which page each block opens on
+  (`LaidOutBook.blockPages`), the column draws "— p. 3 —" where a page
+  begins, and "See the pages" (or any marker) opens the engine's own bytes in
+  the page browser — one renderer, still. **Glossary mark coverage lives at
+  the glossary's head**: marked / unmarked / never-used per entry, jump to
+  the unmarked use, and a one-click circle placed as an ordinary text edit —
+  `glossaryHeadwords` is the one extraction rule, shared with
+  `book-files.mjs`. And **every picture stands at its anchor as a card** in
+  the column (the engine's own anchoring), so nobody splits a paragraph
+  through an invisible plate; the pixels and their tools stay in the scan
+  view.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the editorial-query channel, then _The Human Aura_.

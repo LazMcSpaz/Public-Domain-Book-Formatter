@@ -9,7 +9,7 @@
  * Mounted only under `import.meta.env.DEV` (see main.tsx) — it is tree-shaken
  * out of the production bundle, and it never touches the API.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { STEPS, defaultAnswers, initialState, type Answers, type StepId } from '@core/wizard'
 import { assembleBook } from '@core/assemble'
 import { describeProfile, profileFromAnswers, type DesignAnswers } from '@core/design'
@@ -120,6 +120,45 @@ export function DevPreview(): JSX.Element {
     [galley, galleyEdits]
   )
 
+  const edition = useMemo(() => ({ title: 'The Alchemist His Practise', author: 'Anonymous' }), [])
+
+  /** The style the export screen is previewed with. Fixed, not interviewed. */
+  const exportProfile = useMemo(
+    () =>
+      profileFromAnswers({
+        kind: 'novel',
+        period: 'early-modern',
+        chapterOpener: 'drop-cap',
+        runningHeads: 'author-title'
+      }),
+    []
+  )
+
+  // The measured pages behind the galley preview, so the page markers and the
+  // page view can be looked at without a paid run — same path the app takes.
+  const [galleyInterior, setGalleyInterior] = useState<Interior | null>(null)
+  const galleyTickRef = useRef(0)
+  useEffect(() => {
+    if (!galley || !galleyDocument) {
+      setGalleyInterior(null)
+      return
+    }
+    let live = true
+    void renderInterior(galleyDocument, exportProfile, { edition, orphanNotes: 'collect' })
+      .then((built) => {
+        if (live) {
+          galleyTickRef.current += 1
+          setGalleyInterior(built)
+        }
+      })
+      .catch(() => {
+        if (live) setGalleyInterior(null)
+      })
+    return () => {
+      live = false
+    }
+  }, [galley, galleyDocument, exportProfile, edition])
+
   const step = STEPS.find((s) => s.id === stepId)!
   // Mirrors App.tsx: in-progress answers feed back into question generation so
   // help text that describes an earlier answer stays current.
@@ -150,20 +189,6 @@ export function DevPreview(): JSX.Element {
   )
 
   const summary = designProfile ? describeProfile(designProfile) : null
-
-  const edition = useMemo(() => ({ title: 'The Alchemist His Practise', author: 'Anonymous' }), [])
-
-  /** The style the export screen is previewed with. Fixed, not interviewed. */
-  const exportProfile = useMemo(
-    () =>
-      profileFromAnswers({
-        kind: 'novel',
-        period: 'early-modern',
-        chapterOpener: 'drop-cap',
-        runningHeads: 'author-title'
-      }),
-    []
-  )
 
   // The export gate builds a real interior here too, so this screen exercises
   // the same path the paid flow does rather than a mock of it — including the
@@ -223,7 +248,22 @@ export function DevPreview(): JSX.Element {
               <h2>The galley</h2>
               <p>The whole book as one column, over a sample state. Dev only.</p>
             </div>
-            <BookEditor document={galleyDocument} edits={galleyEdits} onChange={setGalleyEdits} />
+            <BookEditor
+              document={galleyDocument}
+              edits={galleyEdits}
+              onChange={setGalleyEdits}
+              blockPages={galleyInterior?.blockPages ?? null}
+              interior={
+                galleyInterior
+                  ? {
+                      bytes: galleyInterior.bytes,
+                      pageCount: galleyInterior.pageCount,
+                      tick: galleyTickRef.current
+                    }
+                  : null
+              }
+              layoutBusy={false}
+            />
           </>
         ) : (
           <>

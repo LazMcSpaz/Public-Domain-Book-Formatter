@@ -1,3 +1,5 @@
+import { mapPlainText } from '../edits/sweep'
+
 /**
  * Does every glossary entry the book actually uses have a mark on it?
  *
@@ -134,4 +136,40 @@ export function checkGlossaryMarks(
   }
 
   return report
+}
+
+/**
+ * The headwords of a glossary section, by the one rule everything reads them
+ * with: a paragraph opening `<b>Headword.</b>` names an entry. The same regex
+ * `book-files.mjs` checks the shelf with — one rule, or the galley and the
+ * shelf report would drift into disagreeing about what the glossary holds.
+ */
+export function glossaryHeadwords(sectionText: string): string[] {
+  return sectionText
+    .split('\n')
+    .map((line) => /^\s*<b>(.+?)<\/b>/.exec(line)?.[1])
+    .filter((h): h is string => typeof h === 'string')
+}
+
+/**
+ * The text with the glossary mark placed on the first unmarked use of a term.
+ *
+ * The mark is a character in the text, so placing one is an ordinary `text`
+ * edit — undoable, autosaved, swept like anything else. The search reads
+ * through the `<i>`/`<b>` notation the way the reader reads the page, and the
+ * splice lands the circle directly after the matched words, inside whatever
+ * run they sit in. Returns null when the term has no unmarked use here —
+ * which occurrence deserves the mark stays the editor's call; this only
+ * carries it out where they pointed.
+ */
+export function withGlossaryMark(markupText: string, term: string): string | null {
+  const { plain, toMarkup } = mapPlainText(markupText)
+  const re = pattern(term)
+  for (const hit of plain.matchAll(re)) {
+    if (hit[0].endsWith(GLOSSARY_MARK)) continue
+    const end = (hit.index ?? 0) + hit[0].length
+    const spliceAt = end - 1 < toMarkup.length ? toMarkup[end - 1]! + 1 : markupText.length
+    return markupText.slice(0, spliceAt) + GLOSSARY_MARK + markupText.slice(spliceAt)
+  }
+  return null
 }

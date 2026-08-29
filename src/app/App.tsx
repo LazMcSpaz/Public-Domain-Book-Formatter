@@ -841,6 +841,66 @@ export function App(): JSX.Element {
   }, [isProofing, undoEdits, redoEdits])
 
   /**
+   * The measured pages behind the galley — Stage 2 of the editor plan.
+   *
+   * The engine lays the book out after a pause in typing, and the galley
+   * annotates the column with where each page begins and can show the real
+   * pages. Everything shown is measured by the one engine that prints: the
+   * markers come from `blockPages`, the page view renders the actual bytes.
+   * When the design gate has not been reached, the shipped defaults stand in
+   * — the same look the design preview would open with — and nothing
+   * pretends otherwise: the markers move when the design does.
+   */
+  const [proofInterior, setProofInterior] = useState<{
+    bytes: Uint8Array
+    pageCount: number
+    blockPages: { blockId: string; pageIndex: number; folio: string | null }[]
+    tick: number
+  } | null>(null)
+  const [proofLayoutBusy, setProofLayoutBusy] = useState(false)
+  const layoutTickRef = useRef(0)
+  useEffect(() => {
+    if (!isProofing || proofView !== 'book' || !correctedDocument) return
+    let live = true
+    setProofLayoutBusy(true)
+    // Long enough that a typing burst costs one layout, not one per pause for
+    // breath; a full book is a real render, and the markers can be a moment
+    // behind the keystrokes without misleading anyone — the busy flag says so.
+    const timer = setTimeout(() => {
+      const profile = appliedLook(state, state.answers['design'] ?? {}).style
+      void renderInterior(correctedDocument, profile, {
+        edition: previewEdition,
+        orphanNotes: 'collect',
+        images: drawableImageBytes()
+      })
+        .then((interior) => {
+          if (!live) return
+          layoutTickRef.current += 1
+          setProofInterior({
+            bytes: interior.bytes,
+            pageCount: interior.pageCount,
+            blockPages: interior.blockPages,
+            tick: layoutTickRef.current
+          })
+        })
+        .catch(() => {
+          // A failed layout keeps the last good markers on screen; the busy
+          // flag clearing without a new tick is the honest report.
+          if (live) return
+        })
+        .finally(() => {
+          if (live) setProofLayoutBusy(false)
+        })
+    }, 1800)
+    return () => {
+      live = false
+      clearTimeout(timer)
+    }
+    // `state` feeds the style profile; during the proof step it changes
+    // rarely, and the debounce absorbs what it does.
+  }, [isProofing, proofView, correctedDocument, previewEdition, drawableImageBytes, state])
+
+  /**
    * Whether a shelf is connected, checked on arrival at the proof step.
    *
    * Autosave protects the work from a crashed tab; the shelf is what protects
@@ -4202,7 +4262,22 @@ export function App(): JSX.Element {
               ) : null}
             </div>
             {proofView === 'book' ? (
-              <BookEditor document={correctedDocument!} edits={edits} onChange={changeEdits} />
+              <BookEditor
+                document={correctedDocument!}
+                edits={edits}
+                onChange={changeEdits}
+                blockPages={proofInterior?.blockPages ?? null}
+                interior={
+                  proofInterior
+                    ? {
+                        bytes: proofInterior.bytes,
+                        pageCount: proofInterior.pageCount,
+                        tick: proofInterior.tick
+                      }
+                    : null
+                }
+                layoutBusy={proofLayoutBusy}
+              />
             ) : (
               <ProofSheet
                 document={state.document!}

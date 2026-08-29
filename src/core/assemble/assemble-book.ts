@@ -474,10 +474,22 @@ export function assembleBook(
       // Footnotes leave the body flow entirely and are re-attached at typeset time.
       if (block.kind === 'footnote') {
         const marker = block.marker ?? '*'
+        const raw = stripSoftHyphens(block.text.trim())
+        const text = stripLeadingMarker(raw, marker)
+        // Emphasis is word indices, and stripping the marker removes leading
+        // words — so the indices shift back by however many were removed, or
+        // the italics the reading recovered land on the wrong words. They
+        // used to be dropped here entirely, which printed every footnote's
+        // book titles in roman and said nothing.
+        const shift = wordCount(raw) - wordCount(text)
+        const emphasis = block.emphasis?.map((i) => i - shift).filter((i) => i >= 0)
+        const strong = block.strong?.map((i) => i - shift).filter((i) => i >= 0)
         footnotes.push({
           id: `fn${footnotes.length + 1}`,
           originalMarker: marker,
-          text: stripLeadingMarker(stripSoftHyphens(block.text.trim()), marker),
+          text,
+          ...(emphasis?.length ? { emphasis } : {}),
+          ...(strong?.length ? { strong } : {}),
           pageIndex: page.pageIndex,
           orphaned: false
         })

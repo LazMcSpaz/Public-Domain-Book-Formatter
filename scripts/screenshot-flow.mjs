@@ -989,6 +989,10 @@ const galleyPassages = await page.locator('.galley-readonly').count()
 // Italics set as type rather than shown as tags — the point of the surface.
 const galleyItalics = await page.locator('.galley-page i').count()
 const galleyOutline = await page.locator('.galley-outline button').count()
+// The pictures the structure gate accepted appear as cards at their anchors —
+// a book edited around invisible plates is how a paragraph gets split through
+// one.
+const galleyPictures = await page.locator('.galley-picture').count()
 const galleyWords = await page
   .locator('.galley-words')
   .innerText()
@@ -1074,6 +1078,18 @@ await page
 await page.waitForTimeout(300)
 const galleyMemos = await page.locator('.galley-memo').count()
 await shot('05c2a1-galley-memo')
+
+// The measured pages: markers from the engine's own layout, and the real
+// pages behind a click. They arrive after the debounce and the render.
+await page.waitForSelector('.galley-pagebreak', { timeout: 60000 })
+const galleyMarkers = await page.locator('.galley-pagebreak button').count()
+await page.locator('.galley-pagebreak button').first().click()
+await page.waitForSelector('.galley-print .browser-leaf img', { timeout: 60000 })
+const galleyPrintOpen = await page.locator('.galley-print-bar span').innerText()
+await shot('05c2a1a-galley-pages')
+await page.locator('.galley-print-bar button', { hasText: 'Back to editing' }).click()
+await page.waitForTimeout(300)
+const galleyBackToEdit = await page.locator('.galley-page').isVisible()
 
 // The book's own footnote, editable under the passage its marker sits in.
 const galleyFnChips = await page.locator('.galley-fn').count()
@@ -3140,9 +3156,10 @@ console.log(`  advanced past the structure gate to: ${afterStructure}`)
 console.log(`  proof sheet: ${proofBoxes} editable block(s), ${proofScan} scan(s) beside them`)
 console.log(
   `  the galley: ${galleyPassages} passage(s), ${galleyItalics} italic run(s) set as type, ` +
-    `${galleyOutline}→${galleyOutlineAfter} outline entries, "${galleyWords}", typed edit landed: ${galleyTyped > 0}, ` +
+    `${galleyOutline}→${galleyOutlineAfter} outline entries, ${galleyPictures} picture card(s), "${galleyWords}", typed edit landed: ${galleyTyped > 0}, ` +
     `autosave said: "${galleyAutosaved}", undo/redo: ${galleyUndone}/${galleyRedone}, ` +
     `find: "${findCount}" → "${replacedSaid}", sweep undone: ${sweepUndone}, ` +
+    `page markers: ${galleyMarkers} ("${galleyPrintOpen}", back: ${galleyBackToEdit}), ` +
     `ctrl+s: "${ctrlSSaved}", footnote chips: ${galleyFnChips} (edited: "${fnEdited}"), ` +
     `afterword in galley: ${galleyAfterword}/${galleyAfterwordText}, ` +
     `phone overflow: ${galleyOverflow}px, comments left: ${galleyMemos}`
@@ -3377,6 +3394,12 @@ const finalChecks = [
   ['find counted its matches', /1 match/.test(findCount)],
   ['replace all landed and said how many', galleyReplaced && /Replaced 1/.test(replacedSaid)],
   ['the whole sweep is one undo step', sweepUndone],
+  ['the galley marks where each measured page begins', galleyMarkers > 0],
+  ['the pictures stand at their anchors as cards', galleyPictures > 0],
+  [
+    'a marker opens the real page, and editing resumes',
+    /pages as the engine sets them/.test(galleyPrintOpen) && galleyBackToEdit
+  ],
   ['Ctrl+S saved and said so', /saved/i.test(ctrlSSaved)],
   [
     'an afterword was written entirely in the galley',

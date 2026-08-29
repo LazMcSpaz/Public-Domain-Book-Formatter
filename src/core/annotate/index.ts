@@ -78,5 +78,7 @@ export {
   headwordTerms,
   type MarkableBlock,
   type MarkReport,
-  type MarkVerdict
+  type MarkVerdict,
+  glossaryHeadwords,
+  withGlossaryMark
 } from './marks'

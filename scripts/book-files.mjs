@@ -181,12 +181,11 @@ for (const [file, re, actual, what] of claimed) {
  */
 const bodyArg = flags[flags.indexOf('--marks') + 1]
 if (flags.includes('--marks') && bodyArg && !bodyArg.startsWith('--')) {
-  const { checkGlossaryMarks } = await import('../src/core/annotate/marks.ts')
+  const { checkGlossaryMarks, glossaryHeadwords } = await import('../src/core/annotate/marks.ts')
   const body = JSON.parse(readFileSync(bodyArg, 'utf8'))
-  const heads = (glossary?.text ?? '')
-    .split('\n')
-    .map((p) => /^\s*<b>(.+?)<\/b>/.exec(p)?.[1])
-    .filter((h) => typeof h === 'string')
+  // Through the same extractor the galley's coverage panel uses — one rule,
+  // or the shelf report and the editor would drift into disagreeing.
+  const heads = glossaryHeadwords(glossary?.text ?? '')
   const report = checkGlossaryMarks(heads, body.edited ?? body)
   console.log(
     `  marks   ${report.marked.length} marked, ${report.unmarked.length} unmarked, ` +
