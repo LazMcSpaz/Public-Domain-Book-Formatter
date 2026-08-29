@@ -418,6 +418,32 @@ export function BookEditor({
 
   /** The page view: open on a page, or null while editing. */
   const [printPage, setPrintPage] = useState<number | null>(null)
+  /** The page it is showing now, kept fresh by the browser's own paging. */
+  const [printShown, setPrintShown] = useState(0)
+
+  /**
+   * From a page back to the words that open it — the reverse of the markers.
+   * The passage is the last one whose measured opening is at or before the
+   * shown page: the block whose text this page is setting.
+   */
+  const editShownPage = (): void => {
+    let target: string | null = null
+    let best = -1
+    for (const entry of blockPages ?? []) {
+      if (entry.pageIndex <= printShown && entry.pageIndex > best) {
+        best = entry.pageIndex
+        target = entry.blockId
+      }
+    }
+    setPrintPage(null)
+    if (target === null) return
+    const id = target
+    // After the column is back on screen; a jump to a hidden element is a no-op.
+    setTimeout(() => {
+      jumpTo(id)
+      flash(id)
+    }, 60)
+  }
 
   /**
    * Does every glossary entry the book uses carry its mark? Checked here, in
@@ -459,6 +485,16 @@ export function BookEditor({
     }
     return { byPassage, atFront: anchored.get(-1) ?? [] }
   }, [doc])
+
+  /** A fresh entry at the glossary's foot, ready to be renamed and written. */
+  const addGlossaryEntry = (sectionId: string): void => {
+    const section = sectionEditOf(sectionId)
+    if (!section) return
+    push({
+      ...section,
+      text: `${section.text.trim()}\n\n<b>New entry.</b> Its definition.`.trim()
+    })
+  }
 
   const markEntry = (verdict: { blockId: string | null; term: string }): void => {
     if (!verdict.blockId) return
@@ -700,6 +736,31 @@ export function BookEditor({
         words.slice(0, wordsBefore).join(' '),
         words.slice(wordsBefore).join(' ')
       )
+    })
+    setActive(null)
+  }
+
+  /** Delete at the very end: pull the next passage up into this one. */
+  const mergeWithNext = (passage: Passage): void => {
+    if (passage.origin.type === 'body') {
+      const index = doc.blocks.findIndex((b) => b.id === passage.id)
+      if (index < 0 || index >= doc.blocks.length - 1) return
+      const markup = committedMarkup(passage.kind)
+      let next = edits
+      if (markup !== null && markup !== passage.text) {
+        next = withEdit(next, { kind: 'text', blockId: passage.id, text: markup })
+      }
+      // `merge` joins the named block with the one after it — exactly this.
+      onChange([...next, { kind: 'merge', blockId: passage.id }])
+      setActive(null)
+      return
+    }
+    const { sectionId, index } = passage.origin
+    const section = sectionEditOf(sectionId)
+    if (!section || index >= partsOf(section.text).length - 1) return
+    const markup = committedMarkup(passage.kind) ?? passage.text
+    rewriteSectionPart({ sectionId, index }, (parts) => {
+      parts.splice(index, 2, `${markup} ${parts[index + 1]}`.replace(/\s+/gu, ' ').trim())
     })
     setActive(null)
   }
@@ -997,6 +1058,13 @@ export function BookEditor({
               The pages as the engine sets them — {interior.pageCount} in all
               {layoutBusy ? ', measuring again\u2026' : ''}
             </span>
+            <button
+              type="button"
+              title="Jump to the passage this page is setting"
+              onClick={editShownPage}
+            >
+              Edit this page
+            </button>
             <button type="button" onClick={() => setPrintPage(null)}>
               Back to editing
             </button>
@@ -1006,6 +1074,7 @@ export function BookEditor({
             bytes={interior.bytes}
             pageCount={interior.pageCount}
             initialPage={printPage}
+            onPage={setPrintShown}
           />
         </div>
       ) : null}
@@ -1037,6 +1106,26 @@ export function BookEditor({
             const notes = notesByBlock.get(passage.id) ?? []
 
             const marker = pageMarkers.get(passage.id)
+
+            // A glossary entry wears its coverage where it is edited: marked,
+            // unmarked, or an entry for a word the book never uses.
+            let entryStatus: { cls: string; text: string } | null = null
+            if (
+              passage.origin.type === 'section' &&
+              glossaryMarks?.sectionIds.has(passage.origin.sectionId)
+            ) {
+              const head = glossaryHeadwords(passage.text)[0]
+              if (head) {
+                const r = glossaryMarks.report
+                if (r.marked.some((v) => v.entry === head)) {
+                  entryStatus = { cls: 'ok', text: '° marked in the body' }
+                } else if (r.unmarked.some((v) => v.entry === head)) {
+                  entryStatus = { cls: 'warn', text: 'not yet marked in the body' }
+                } else if (r.absent.some((v) => v.entry === head)) {
+                  entryStatus = { cls: 'mute', text: 'the book never uses this word' }
+                }
+              }
+            }
 
             return (
               <div
@@ -1089,6 +1178,14 @@ export function BookEditor({
                       {glossaryMarks.report.unmarked.length} unmarked ·{' '}
                       {glossaryMarks.report.absent.length} never used by the book
                     </span>
+                    <button
+                      type="button"
+                      className="galley-marks-add"
+                      title="A fresh entry at the glossary's foot — click it there to write it"
+                      onClick={() => addGlossaryEntry(heading.sectionId)}
+                    >
+                      ＋ Add an entry
+                    </button>
                     {glossaryMarks.report.unmarked.map((verdict) => (
                       <span key={verdict.entry} className="galley-marks-row">
                         <b>{verdict.entry}</b>
@@ -1170,6 +1267,19 @@ export function BookEditor({
                             return
                           }
                           if (
+                            e.key === 'Delete' &&
+                            editableRef.current &&
+                            caretOffset(editableRef.current) ===
+                              (editableRef.current.textContent ?? '').length &&
+                            (editableRef.current.ownerDocument.defaultView?.getSelection()
+                              ?.isCollapsed ??
+                              true)
+                          ) {
+                            e.preventDefault()
+                            mergeWithNext(passage)
+                            return
+                          }
+                          if (
                             e.key === 'Backspace' &&
                             editableRef.current &&
                             caretOffset(editableRef.current) === 0 &&
@@ -1230,6 +1340,10 @@ export function BookEditor({
                     dangerouslySetInnerHTML={{ __html: htmlOfMarkup(passage.text) }}
                   />
                 )}
+
+                {entryStatus ? (
+                  <div className={`galley-entry-status ${entryStatus.cls}`}>{entryStatus.text}</div>
+                ) : null}
 
                 {notes.map((note) => (
                   <div key={note.noteId} className="proof-annotation galley-note">

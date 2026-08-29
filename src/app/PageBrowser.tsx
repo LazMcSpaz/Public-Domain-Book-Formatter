@@ -26,15 +26,29 @@ export interface PageBrowserProps {
   pageCount: number
   /** Where to open. Defaults to the first page. */
   initialPage?: number
+  /**
+   * Told whenever the shown page changes, so a caller can offer a way back —
+   * "edit the passage this page sets" needs to know which page is up.
+   */
+  onPage?: (page: number) => void
 }
 
-export function PageBrowser({ bytes, pageCount, initialPage = 0 }: PageBrowserProps): JSX.Element {
+export function PageBrowser({
+  bytes,
+  pageCount,
+  initialPage = 0,
+  onPage
+}: PageBrowserProps): JSX.Element {
   const [page, setPage] = useState(Math.min(Math.max(0, initialPage), pageCount - 1))
   const [url, setUrl] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   /** What the number box holds while it is being typed into. */
   const [typed, setTyped] = useState(String(page + 1))
+
+  useEffect(() => {
+    onPage?.(page)
+  }, [page, onPage])
 
   // The Blob is made once for the whole component rather than per page: it is a
   // book-sized copy of the bytes, and remaking it on every step would churn

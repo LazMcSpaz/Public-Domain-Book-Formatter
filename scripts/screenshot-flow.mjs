@@ -1087,9 +1087,13 @@ await page.locator('.galley-pagebreak button').first().click()
 await page.waitForSelector('.galley-print .browser-leaf img', { timeout: 60000 })
 const galleyPrintOpen = await page.locator('.galley-print-bar span').innerText()
 await shot('05c2a1a-galley-pages')
-await page.locator('.galley-print-bar button', { hasText: 'Back to editing' }).click()
-await page.waitForTimeout(300)
-const galleyBackToEdit = await page.locator('.galley-page').isVisible()
+// The reverse of the markers: from the shown page back to the passage that
+// opens it, landed with a flash so the eye follows.
+await page.locator('.galley-print-bar button', { hasText: 'Edit this page' }).click()
+await page.waitForTimeout(500)
+const galleyBackToEdit =
+  (await page.locator('.galley-page').isVisible()) &&
+  (await page.locator('.galley-passage.flash').count()) > 0
 
 // The book's own footnote, editable under the passage its marker sits in.
 const galleyFnChips = await page.locator('.galley-fn').count()

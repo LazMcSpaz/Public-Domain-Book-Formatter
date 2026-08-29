@@ -171,8 +171,9 @@ used Google Docs plenty, and this app never, trip first?
   disagree — as a card naming its origin and caption. The pixels and their
   tools stay in the scan view; the card exists so a paragraph is never again
   split through an invisible plate.
-- Remaining from the original sketch: click-through from a _page_ back to its
-  passage. The markers give the other direction.
+- And the reverse of the markers: "Edit this page" in the page view jumps
+  back to the passage whose text the shown page is setting, landed with a
+  flash. Both directions now exist.
 
 ### Stage 3 — the two structured views
 
@@ -199,14 +200,30 @@ sweep` reach the notes too, printed and authored alike.
   pointed. Still open: entry-per-row structured editing, if prose editing
   of the section proves clumsy on a real glossary pass.
 
-### Stage 4 — polish that waits for use
+### Stage 4 — what remained, settled
 
-- Selection across blocks (today the unit of editing is the block, which
-  matches the edit model; crossing a boundary means merge first).
-- Search within the editor; jump from a verification finding or query to its
-  block.
-- Memos on regions rather than points, if points prove too coarse on a real
-  book.
+- **Selection across blocks — retired, deliberately.** The unit of editing
+  is the passage, which is what keeps a three-hundred-page book scrollable
+  (one live editor, everything else cheap markup) and what matches the edit
+  model (every change names one block). The boundary operations are complete
+  instead: Backspace at a passage's start merges it up, Delete at its end
+  pulls the next one in, and Enter splits — so any cross-boundary edit is a
+  merge away, in either direction. A multi-block editable region would trade
+  the memory discipline and the edit-list honesty for one gesture; not worth
+  it until a real pass proves otherwise.
+- **Undo across a reload — deliberate.** The history stack is session-local;
+  the durable layers are autosave (the device) and the shelf (git, which
+  keeps every version forever). "Undo what I did yesterday" is a question
+  for the shelf's history, through the assistant.
+- **Search within the editor** — done (find & replace, and native Ctrl+F
+  works because the whole book is one page). Jump from a finding or query to
+  its block stays open, and cheap, when wanted.
+- **Memos on regions rather than points** — still waiting on a real book to
+  prove points too coarse.
+- **The structured glossary rows** — settled as: prose editing with bold
+  shown as bold, plus the coverage panel, per-entry status chips, and "Add
+  an entry". Entry-per-row forms would be a second representation of the
+  same text; the panel gives the structure without the drift.
 
 ## What was deliberately not built
 

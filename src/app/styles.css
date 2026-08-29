@@ -2599,3 +2599,32 @@ textarea.galley-plain {
   font-size: 0.72rem;
   font-style: italic;
 }
+
+.galley-entry-status {
+  font-size: 0.72rem;
+  margin: -0.6em 0 0.9em;
+  font-style: italic;
+}
+.galley-entry-status.ok {
+  color: var(--ok);
+}
+.galley-entry-status.warn {
+  color: var(--warn);
+}
+.galley-entry-status.mute {
+  color: var(--muted);
+}
+.galley-marks-add {
+  font: inherit;
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.galley-marks-add:hover {
+  color: var(--ink);
+  border-color: var(--accent);
+}
