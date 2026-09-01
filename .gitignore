@@ -15,3 +15,4 @@ public/*.pdf
 public/*.epub
 !public/test-*.pdf
 !public/test-*.epub
+.scratch/
