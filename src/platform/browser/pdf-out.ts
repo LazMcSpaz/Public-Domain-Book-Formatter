@@ -242,13 +242,19 @@ function drawPage(
       // the engine's convention too — so only the page flip is needed here.
       const y = page.heightPt - item.yPt
       for (const shape of item.art.shapes) {
+        // A traced ornament paints its layers over one another — the blot, the
+        // holes knocked out of it in white, the half-tone specks in grey — so
+        // the ink level is the shape's, not the renderer's. Drawn ornaments say
+        // nothing and get black, which is what they were before this existed.
+        const g = shape.grey ?? 0
+        const ink = rgb(g, g, g)
         pdfPage.drawSvgPath(shape.d, {
           x: item.xPt,
           y,
           scale: item.scale,
           ...(shape.stroke === undefined
-            ? { color: rgb(0, 0, 0) }
-            : { borderColor: rgb(0, 0, 0), borderWidth: shape.stroke * item.scale })
+            ? { color: ink }
+            : { borderColor: ink, borderWidth: shape.stroke * item.scale })
         })
       }
       continue

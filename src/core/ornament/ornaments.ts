@@ -13,6 +13,7 @@
  *
  * Pure data, and the two helpers that build it.
  */
+import { INK_BLOT_HEIGHT, INK_BLOT_SHAPES, INK_BLOT_WIDTH } from './inkblot'
 
 /** One drawable path within an ornament. */
 export interface OrnamentShape {
@@ -23,6 +24,22 @@ export interface OrnamentShape {
    * which is the common case — most of these are solid shapes.
    */
   stroke?: number
+  /**
+   * How dark this shape prints: 0 is black, 1 is the white of the paper.
+   * Omitted means black, which is what every drawn flourish here wants.
+   *
+   * It exists for the one kind of ornament that is *traced* rather than
+   * drawn. A printer's flourish is a few deliberate curves and is solid ink
+   * throughout; an ink splotch photographed off a typescript is a blot with
+   * ragged holes in it and a spray of half-tone specks around the edge, and a
+   * tracer renders that as layers painted over one another — the blot, then
+   * the holes in white, then the specks in grey. Drawn without this field
+   * every layer prints black, the holes fill in, and a splotch that should
+   * look like ink on paper comes out as a solid lozenge.
+   *
+   * Grey rather than colour on purpose: these books print in one ink.
+   */
+  grey?: number
 }
 
 /** Where an ornament is allowed to appear. */
@@ -35,7 +52,7 @@ export interface OrnamentArt {
   /** The viewBox, so a renderer can scale the whole thing to a target width. */
   width: number
   height: number
-  shapes: OrnamentShape[]
+  shapes: readonly OrnamentShape[]
 }
 
 /**
@@ -236,6 +253,16 @@ export const BUILTIN_ORNAMENTS: readonly OrnamentArt[] = [
       { d: 'M20 16 C16 15.4 14.8 14.6 13.6 12.8 C15.8 12.4 17.4 13.2 20 16 Z' },
       { d: circle(12, 12, 1.4) }
     ]
+  },
+  {
+    // The odd one out: traced off a typescript rather than drawn, layered, and
+    // grey in places. See `inkblot.ts` for why it is a separate file.
+    id: 'chapter-inkblot',
+    name: 'Typewriter Ink Blot',
+    kind: 'chapter',
+    width: INK_BLOT_WIDTH,
+    height: INK_BLOT_HEIGHT,
+    shapes: INK_BLOT_SHAPES
   }
 ]
 

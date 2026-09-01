@@ -703,3 +703,65 @@ describe('renderPdf — Crimson Pro, the face that broke on a real book', () => 
     expect(pdf.unwritableGlyphs).toEqual([])
   })
 })
+
+/**
+ * The layered ornament, which is the one kind that cannot be drawn in one ink.
+ *
+ * Every ornament in the shipped library is a few deliberate curves and is
+ * solid black throughout, so the renderer drew every shape `rgb(0,0,0)` and
+ * nothing was wrong. A blot traced off a typescript is not that: the tracer
+ * paints the mass of ink, then knocks the ragged holes back out of it in
+ * white, then fringes it with half-tone specks in grey. Painted all black it
+ * is a solid lozenge — the holes fill in and the fringe with them.
+ *
+ * The assertion is differential rather than absolute. Searching one file for a
+ * white fill proves little, because the writer is free to emit one for its own
+ * reasons; the same book rendered with and without the blot, differing by
+ * exactly these greys, can only differ because the blot carried them.
+ */
+describe('renderPdf — a traced ornament keeps its own ink levels', () => {
+  const withOpener = async (chapterOpener: string | null) => {
+    const fonts = diskFontTable()
+    const profile = defaultStyleProfile()
+    const book = layout(
+      {
+        ...DOCUMENT,
+        blocks: [block('heading', 'Of the Air', 1), block('paragraph', 'The lesson begins here.')]
+      },
+      { ...profile, dropCap: false, ornaments: { ...profile.ornaments, chapterOpener } },
+      fonts,
+      { edition: EDITION, hyphenate: englishHyphenator() }
+    )
+    const pdf = await renderPdf(book, fonts, { title: EDITION.title, author: EDITION.author })
+    return pdf.bytes
+  }
+
+  /** The grey levels of every non-stroking fill the file sets. */
+  const fills = (bytes: Uint8Array): number[] => {
+    const out: number[] = []
+    const rg = /(-?[\d.]+) (-?[\d.]+) (-?[\d.]+) rg/gu
+    let m: RegExpExecArray | null
+    const all = pdfDictionaries(bytes)
+    while ((m = rg.exec(all)) !== null) {
+      const [r, g, b] = [Number(m[1]), Number(m[2]), Number(m[3])]
+      // Only true greys — the blot is one ink, and a coloured fill would be
+      // something else entirely.
+      if (r === g && g === b) out.push(r)
+    }
+    return out
+  }
+
+  it('draws the blot in more than one ink, white holes and all', async () => {
+    const blank = new Set(fills(await withOpener(null)))
+    const blotted = fills(await withOpener('chapter-inkblot'))
+
+    // What the blot added, over and above whatever the page sets anyway.
+    const added = [...new Set(blotted)].filter((g) => !blank.has(g))
+
+    // A knocked-out hole: without a per-shape ink level this is black, and
+    // the blot prints as a solid lozenge.
+    expect(added.some((g) => g > 0.9)).toBe(true)
+    // And a half-tone speck: a genuine mid grey, neither paper nor ink.
+    expect(added.some((g) => g > 0.2 && g < 0.8)).toBe(true)
+  })
+})
