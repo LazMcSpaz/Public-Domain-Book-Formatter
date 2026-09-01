@@ -9,7 +9,7 @@
 import { describe, it, expect } from 'vitest'
 import { BUILTIN_ORNAMENTS, findOrnament } from '@core/ornament'
 
-const blot = findOrnament('chapter-inkblot', BUILTIN_ORNAMENTS)
+const blot = findOrnament('ink-bottle', BUILTIN_ORNAMENTS)
 
 /** Every coordinate in a path, as x/y pairs — M, L and C all take pairs. */
 function coordinates(d: string): { xs: number[]; ys: number[] } {

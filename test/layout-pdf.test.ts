@@ -753,7 +753,7 @@ describe('renderPdf — a traced ornament keeps its own ink levels', () => {
 
   it('draws the blot in more than one ink, white holes and all', async () => {
     const blank = new Set(fills(await withOpener(null)))
-    const blotted = fills(await withOpener('chapter-inkblot'))
+    const blotted = fills(await withOpener('ink-bottle'))
 
     // What the blot added, over and above whatever the page sets anyway.
     const added = [...new Set(blotted)].filter((g) => !blank.has(g))

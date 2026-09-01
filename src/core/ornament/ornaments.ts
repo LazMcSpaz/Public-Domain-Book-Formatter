@@ -13,7 +13,7 @@
  *
  * Pure data, and the two helpers that build it.
  */
-import { INK_BLOT_HEIGHT, INK_BLOT_SHAPES, INK_BLOT_WIDTH } from './inkblot'
+import { INK_BOTTLE_HEIGHT, INK_BOTTLE_SHAPES, INK_BOTTLE_WIDTH } from './ink-bottle'
 
 /** One drawable path within an ornament. */
 export interface OrnamentShape {
@@ -255,14 +255,18 @@ export const BUILTIN_ORNAMENTS: readonly OrnamentArt[] = [
     ]
   },
   {
-    // The odd one out: traced off a typescript rather than drawn, layered, and
-    // grey in places. See `inkblot.ts` for why it is a separate file.
-    id: 'chapter-inkblot',
-    name: 'Typewriter Ink Blot',
+    // The odd one out twice over: traced rather than drawn — layered, and grey
+    // in places, which is what `OrnamentShape.grey` exists for — and a
+    // publisher's device rather than a flourish. Its home is the spine of a
+    // cover, and there is no cover machinery here yet, so it is offered where
+    // a device can at least be *placed* rather than sat in the file unreachable.
+    // See `ink-bottle.ts`.
+    id: 'ink-bottle',
+    name: 'Ink Bottle (imprint device)',
     kind: 'chapter',
-    width: INK_BLOT_WIDTH,
-    height: INK_BLOT_HEIGHT,
-    shapes: INK_BLOT_SHAPES
+    width: INK_BOTTLE_WIDTH,
+    height: INK_BOTTLE_HEIGHT,
+    shapes: INK_BOTTLE_SHAPES
   }
 ]
 
