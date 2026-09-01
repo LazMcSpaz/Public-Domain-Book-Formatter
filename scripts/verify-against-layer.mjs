@@ -62,9 +62,23 @@ for (const leaf of batch) {
     console.log(`leaf ${leaf.pageIndex}: no such page in the scan`)
     continue
   }
-  const layerText = (await (await doc.getPage(page)).getTextContent()).items
-    .map((i) => ('str' in i ? i.str : ''))
-    .join('')
+  // Join on geometry, not blindly. pdf.js hands back runs with no space
+  // between them, so concatenating produces `inthis` and `damnableadvice` and
+  // the comparison then reports a perfect reading as 85%. A number that wrong
+  // hides the real 85% when it comes, so the gap between one run's end and the
+  // next one's start decides whether a space goes in.
+  const items = (await (await doc.getPage(page)).getTextContent()).items.filter((i) => 'str' in i)
+  let layerText = ''
+  let prevEnd = null
+  let prevY = null
+  for (const it of items) {
+    const x = it.transform[4]
+    const y = it.transform[5]
+    if (prevEnd !== null && (Math.abs(y - prevY) > 1 || x - prevEnd > 0.8)) layerText += ' '
+    layerText += it.str
+    prevEnd = x + (it.width ?? 0)
+    prevY = y
+  }
   const layer = new Set(words(layerText))
   const mine = new Set(words(leaf.blocks.map((b) => b.text).join(' ')))
 
