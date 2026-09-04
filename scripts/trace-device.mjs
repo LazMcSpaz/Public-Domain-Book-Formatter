@@ -161,8 +161,15 @@ const [, , inPath, outPath, ...rest] = process.argv
 const epsAt = rest.indexOf('--epsilon')
 const EPS = epsAt >= 0 ? Number(rest[epsAt + 1]) : 0.6
 
+// Otsu picks the split between two populations, which is what you want on a
+// photograph. On an image that has already been thresholded it has only two
+// values to separate and returns 0, so nothing counts as ink and the trace
+// comes back empty. --threshold overrides it for pre-thresholded input.
+const thAt = rest.indexOf('--threshold')
+const TH = thAt >= 0 ? Number(rest[thAt + 1]) : null
+
 const { width, height, gray } = decode(inPath)
-const t = otsu(gray)
+const t = TH ?? otsu(gray)
 const W = width + 2,
   H = height + 2 // pad so shapes touching the edge still close
 const ink = new Uint8Array(W * H)
