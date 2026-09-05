@@ -30,20 +30,52 @@ import { chromium } from 'playwright'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { PDFDocument, PDFName } from 'pdf-lib'
 
-const [scan, ...rest] = process.argv.slice(2)
-if (!scan) {
+const argv = process.argv.slice(2)
+// --leaf N. This was hard-coded to leaf 0 and silently cropped the wrong page:
+// asked for two drawings on leaf 3 of a seventeen-leaf typescript it returned
+// two crops of leaf 0, at the right sizes and with no complaint. A tool that
+// answers the wrong question in the right shape is worse than one that fails.
+const leafAt = argv.indexOf('--leaf')
+const leafNo = leafAt >= 0 ? Number(argv[leafAt + 1]) : 0
+// --mask x,y,w,h paints a rectangle of the CROP white, and may be repeated.
+// A typescript wraps its text around a drawing, so on leaf 3 of manuscript 43
+// no rectangle isolates the great circle: cropping wide enough to keep its
+// left arc keeps three fragments of the paragraph beside it. Masking only ever
+// removes, never adds, and every box used is recorded beside the picture.
+const masks = []
+let rest0 = argv
+for (;;) {
+  const at = rest0.indexOf('--mask')
+  if (at < 0) break
+  const box = (rest0[at + 1] || '').split(',').map(Number)
+  if (box.length !== 4 || box.some((n) => !Number.isFinite(n))) {
+    console.error("--mask wants x,y,w,h in the crop's own pixels")
+    process.exit(2)
+  }
+  masks.push(box)
+  rest0 = rest0.filter((_, i) => i !== at && i !== at + 1)
+}
+rest0 = leafAt >= 0 ? rest0.filter((_, i) => i !== leafAt && i !== leafAt + 1) : rest0
+const [scan, ...rest] = rest0
+if (!scan || !Number.isInteger(leafNo) || leafNo < 0) {
   console.error(
-    'usage: node scripts/native-crop.mjs <scan.pdf> <x> <y> <w> <h> <out.png> [scale] [threshold] [erode]'
+    'usage: node scripts/native-crop.mjs [--leaf N] <scan.pdf> <x> <y> <w> <h> <out.png>' +
+      ' [scale] [threshold] [erode]'
   )
-  console.error('       node scripts/native-crop.mjs <scan.pdf> --info')
+  console.error('       node scripts/native-crop.mjs [--leaf N] <scan.pdf> --info')
   process.exit(2)
 }
 
 const doc = await PDFDocument.load(readFileSync(scan), { ignoreEncryption: true })
-const page = doc.getPages()[0]
+const pages = doc.getPages()
+if (leafNo >= pages.length) {
+  console.error(`leaf ${leafNo}: the scan has ${pages.length}`)
+  process.exit(1)
+}
+const page = pages[leafNo]
 const xobjects = page.node.Resources().lookup(PDFName.of('XObject'))
 if (!xobjects) {
-  console.error('no image XObject on leaf 0 — this page is not a single scanned raster')
+  console.error(`no image XObject on leaf ${leafNo} — this page is not a single scanned raster`)
   process.exit(1)
 }
 
@@ -59,7 +91,7 @@ for (const [, ref] of xobjects.entries()) {
 
 const { width: ptW, height: ptH } = page.getSize()
 console.log(
-  `embedded image ${image.w} x ${image.h} (${image.filter}), page ${ptW} x ${ptH} pt` +
+  `leaf ${leafNo}: embedded image ${image.w} x ${image.h} (${image.filter}), page ${ptW} x ${ptH} pt` +
     ` — about ${Math.round(image.w / (ptW / 72))} dpi`
 )
 if (rest[0] === '--info') process.exit(0)
@@ -80,7 +112,7 @@ const tab = await browser.newPage()
 await tab.setContent('<html><body></body></html>')
 
 const dataUrl = await tab.evaluate(
-  async ([b64, x, y, w, h, scale, threshold, erode]) => {
+  async ([b64, x, y, w, h, scale, threshold, erode, masks]) => {
     const img = new Image()
     img.src = 'data:image/jpeg;base64,' + b64
     await img.decode()
@@ -91,6 +123,10 @@ const dataUrl = await tab.evaluate(
     ctx.imageSmoothingEnabled = scale !== 1
     ctx.imageSmoothingQuality = 'high'
     ctx.drawImage(img, x, y, w, h, 0, 0, canvas.width, canvas.height)
+    // painted before any thresholding, so a mask cannot leave a grey edge
+    ctx.fillStyle = '#fff'
+    for (const [mx, my, mw, mh] of masks)
+      ctx.fillRect(mx * scale, my * scale, mw * scale, mh * scale)
 
     if (threshold > 0) {
       const frame = ctx.getImageData(0, 0, canvas.width, canvas.height)
@@ -134,7 +170,17 @@ const dataUrl = await tab.evaluate(
     }
     return canvas.toDataURL('image/png')
   },
-  [b64, Number(x), Number(y), Number(w), Number(h), Number(scale), Number(threshold), Number(erode)]
+  [
+    b64,
+    Number(x),
+    Number(y),
+    Number(w),
+    Number(h),
+    Number(scale),
+    Number(threshold),
+    Number(erode),
+    masks
+  ]
 )
 
 writeFileSync(out, Buffer.from(dataUrl.split(',')[1], 'base64'))
