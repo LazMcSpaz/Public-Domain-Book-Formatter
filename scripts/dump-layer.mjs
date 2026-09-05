@@ -33,9 +33,17 @@
  */
 import { readFileSync } from 'node:fs'
 
-const [scan, ...leaves] = process.argv.slice(2)
+const args = process.argv.slice(2)
+// --geom prefixes each line with its left edge and width, in points. On a
+// TYPESET source the layer is clean but the paragraphing is not in it: pdf.js
+// hands back lines, and a book's paragraph breaks live in the indent of a first
+// line and the short measure of a last one. Without those two numbers a reader
+// has to guess where paragraphs begin, which is exactly the kind of guess this
+// project does not make. Costs nothing on a typescript, where it is ignored.
+const geom = args.includes('--geom')
+const [scan, ...leaves] = args.filter((a) => a !== '--geom')
 if (!scan || leaves.length === 0) {
-  console.error('usage: node scripts/dump-layer.mjs <scan.pdf> <leaf> [leaf...]')
+  console.error('usage: node scripts/dump-layer.mjs [--geom] <scan.pdf> <leaf> [leaf...]')
   process.exit(2)
 }
 
@@ -62,7 +70,7 @@ for (const leaf of leaves.map(Number)) {
     const x = it.transform[4]
     const y = it.transform[5]
     if (!cur || Math.abs(y - cur.y) > 2) {
-      cur = { y, parts: [], end: null }
+      cur = { y, x0: x, parts: [], end: null }
       lines.push(cur)
     }
     if (cur.end !== null && x - cur.end > 0.8) cur.parts.push(' ')
@@ -73,6 +81,9 @@ for (const leaf of leaves.map(Number)) {
   if (lines.length === 0) console.log('(the scan has no text layer for this page)')
   for (const l of lines) {
     const t = l.parts.join('').replace(/\s+/g, ' ').trim()
-    if (t) console.log(t)
+    if (!t) continue
+    if (geom)
+      console.log(`${l.x0.toFixed(0).padStart(4)} ${(l.end - l.x0).toFixed(0).padStart(4)}  ${t}`)
+    else console.log(t)
   }
 }
