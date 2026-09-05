@@ -48,7 +48,15 @@ if (!scan || leaves.length === 0) {
 }
 
 const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs')
+// pdf.js writes its font warnings to STDOUT, so on a scan whose embedded fonts
+// it cannot resolve they land in the middle of the dumped text. That is not
+// cosmetic: this file is used as a draft and as one side of a collation, and
+// "Ensure that the standardFontDataUrl API parameter is provided" reads as
+// thirty words of the document. `verbosity: 0` is ERRORS only, which is the
+// fix at source; overriding console.warn is not, because the warnings are
+// raised during getPage as well as during load.
 const doc = await pdfjs.getDocument({
+  verbosity: 0,
   data: new Uint8Array(readFileSync(scan)),
   useSystemFonts: false
 }).promise
