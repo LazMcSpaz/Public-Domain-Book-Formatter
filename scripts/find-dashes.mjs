@@ -43,7 +43,19 @@ const opt = (n, d) => {
   return v
 }
 const scale = Number(opt('--scale', '4'))
-const minEm = Number(opt('--min', '0.85'))
+const minEm = Number(opt('--min', '0.9'))
+// The upper bound is loose on purpose. An em dash is one em by definition and
+// most of this book's measure 1.05-1.15, but nine confirmed ones run to 1.56,
+// and a bound tight enough to exclude the three false positives in that tail
+// would have excluded those nine as well.
+//
+// So this tool PROPOSES and the pixels accept: its output is a candidate list,
+// and each candidate is confirmed against a crop before anything is written to
+// a transcription. That is the same rule the rest of this project runs on, and
+// it is a better use of a threshold than tuning one until it is right about
+// every mark in a book it has seen once.
+const maxEm = Number(opt('--max', '2'))
+const asJson = argv.includes('--json') && argv.splice(argv.indexOf('--json'), 1)
 const loose = argv.includes('--loose') && argv.splice(argv.indexOf('--loose'), 1)
 const [scan, ...leaves] = argv
 if (!scan || !leaves.length) {
@@ -69,7 +81,7 @@ await page.addScriptTag({ content: pdfSrc, type: 'module' })
 await page.waitForFunction(() => !!window.pdfjsLib)
 
 const found = await page.evaluate(
-  async ({ workerSrc, b64, leaves, scale, minEm, loose }) => {
+  async ({ workerSrc, b64, leaves, scale, minEm, maxEm, loose }) => {
     const pdfjs = window.pdfjsLib
     pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(
       new Blob([workerSrc], { type: 'text/javascript' })
@@ -78,6 +90,28 @@ const found = await page.evaluate(
       data: Uint8Array.from(atob(b64), (c) => c.charCodeAt(0)),
       useSystemFonts: false
     }).promise
+    // The em, once, for the whole book.
+    //
+    // It began as each line's own first item, which is an OCR estimate and
+    // wanders — 8.5 to 10.2 on one leaf here — so the same dash measured 1.04
+    // em on one line and 0.79 on another and the second fell under the
+    // threshold. A page median fixed that and broke something else: on a leaf
+    // with a display heading and few body lines the median follows the heading,
+    // and a real dash there dropped out entirely.
+    //
+    // A book has one body size. Pooling every line in the job and taking the
+    // median finds it, costs one cheap pass of getTextContent (the rendering is
+    // what is expensive), and cannot be pulled about by one page's furniture.
+    const pool = []
+    for (const leaf of leaves) {
+      if (leaf < 0 || leaf >= doc.numPages) continue
+      const tc = await (await doc.getPage(leaf + 1)).getTextContent()
+      for (const it of tc.items)
+        if ('str' in it && it.str.trim()) pool.push(Math.abs(it.transform[0]) || 10)
+    }
+    pool.sort((a, b) => a - b)
+    const bookEm = (pool[Math.floor(pool.length / 2)] || 10) * scale
+
     const out = []
     for (const leaf of leaves) {
       if (leaf < 0 || leaf >= doc.numPages) continue
@@ -106,16 +140,21 @@ const found = await page.evaluate(
           // the first version's threshold 0 and matched every pixel on the
           // page. The font size is in the transform's horizontal scale and is
           // always there, so that is what the ratio is taken against.
-          cur = { y, size: Math.abs(it.transform[0]) || 10, text: '' }
+          cur = { y, size: Math.abs(it.transform[0]) || 10, text: '', runs: [] }
           lines.push(cur)
         }
         cur.text += it.str
+        // Kept with their x span so a dash can be told what words it sits
+        // between. Finding the dash is only half the job: putting it back in a
+        // transcription needs to know where, and the layer is what knows.
+        cur.runs.push({
+          str: it.str,
+          x0: it.transform[4] * scale,
+          x1: (it.transform[4] + (it.width ?? 0)) * scale
+        })
       }
       for (const l of lines) {
-        // The em is the font size; the test is a ratio, so it holds at any
-        // render scale and on any book. The floor stops a degenerate size from
-        // matching the whole page, which is how this failed first time.
-        const em = l.size * scale
+        const em = bookEm
         const min = Math.max(8, Math.round(em * minEm))
         const top = Math.round((pageH - l.y - l.size) * scale)
         const bot = Math.round((pageH - l.y) * scale)
@@ -128,31 +167,128 @@ const found = await page.evaluate(
             else {
               if (run >= min) {
                 const x0 = x - run
-                // paper above and below over the same span: a dash floats,
-                // where a letter stroke joins something and an underline sits
-                // under ink.
-                const probe = Math.max(4, Math.round(em * 0.2))
-                let clear = true
-                for (let k = x0; k < x && clear; k++)
-                  if (dark(k, y - probe) || dark(k, y + probe)) clear = false
-                if (clear || loose) hits.push({ x0, w: run, y, ratio: +(run / em).toFixed(2) })
+                // A dash is THIN. That is the discriminator, and it took
+                // three wrong ones to get to it.
+                //
+                // The first test asked for paper a fixed fraction of an em
+                // above and below; that distance landed inside the ink of a
+                // dash that printed thick, and lost it. Measuring the mark's
+                // own extent and probing just past it lost eighteen more, all
+                // confirmed dashes. Making the probe adaptive inverted the test
+                // altogether — a letter is tall, so its probe reaches past the
+                // glyph and every crossbar came back clear.
+                //
+                // What separates them is not clearance at any distance but how
+                // much ink stands over the run's own columns. A dash is a few
+                // pixels of it. An `f` bar or a `t` bar has a stem through it,
+                // an underline has a word above it. Sampled across the run
+                // rather than at one column, because one column can fall in the
+                // gap between two letters and read thin anywhere.
+                let thick = 0
+                for (let s = 1; s <= 5; s++) {
+                  const col = x0 + Math.round((run * s) / 6)
+                  let up = y
+                  let down = y
+                  while (up > 1 && dark(col, up - 1)) up--
+                  while (down < c.height - 2 && dark(col, down + 1)) down++
+                  thick = Math.max(thick, down - up + 1)
+                }
+                const clear = thick <= Math.max(4, em * 0.22) && (loose || run <= em * maxEm)
+                if (clear || loose)
+                  hits.push({ x0, w: run, y, thick, ratio: +(run / em).toFixed(2) })
               }
               run = 0
             }
           }
         }
-        // one dash can ink several rows; keep one per cluster
-        const kept = []
-        for (const h of hits.sort((a, b) => a.x0 - b.x0))
-          if (!kept.some((k) => Math.abs(k.x0 - h.x0) < 8)) kept.push(h)
-        for (const k of kept) out.push({ leaf, ...k, line: l.text.trim() })
+        // One dash inks several rows, and the run is a pixel or two wider on
+        // some of them. Keyed on the left edge alone it came back twice on a
+        // line where those edges differed by more than the tolerance, so hits
+        // are merged when their spans OVERLAP and the widest is kept — the
+        // widest row being the one that measures the mark rather than a
+        // partly-inked edge of it.
+        // Rows are clustered by overlap and the cluster reports its MEDIAN
+        // row. Not the widest: on the rows where a dash's ink meets the letter
+        // beside it the run measures half again as long, and taking the widest
+        // moved ten dashes out of the dash band and into the group this tool
+        // calls something else. Not the narrowest either, which is a partly
+        // inked edge. The median row is the one that measures the mark.
+        const clusters = []
+        for (const h of hits.sort((a, b) => a.x0 - b.x0)) {
+          const into = clusters.find((c) => c.some((k) => h.x0 < k.x0 + k.w && k.x0 < h.x0 + h.w))
+          if (into) into.push(h)
+          else clusters.push([h])
+        }
+        const kept = clusters.map((c) => {
+          const byW = [...c].sort((a, b) => a.w - b.w)
+          return byW[Math.floor(byW.length / 2)]
+        })
+        const li = lines.indexOf(l)
+        for (const k of kept) {
+          // The words either side.
+          //
+          // Finding the dash is half the job; putting it back in a
+          // transcription needs to know where it goes. The layer knows, but not
+          // conveniently: its items are runs of arbitrary length — a whole
+          // line, a single word, or a lone space exactly where a dash was — so
+          // there is no item boundary to read the answer off.
+          //
+          // So the line is treated as one string with a position for every
+          // character: each run's characters are spread across its own x span,
+          // and a dash's centre falls either inside a run or in the gap between
+          // two. That is one mechanism instead of a case for each shape, and
+          // the cases were what kept producing confident wrong answers —
+          // neighbours taken from the lines above and below when a dash sat at
+          // the end of a run.
+          //
+          // The index is then snapped to the nearest space or hyphen, because
+          // the digitiser writes an em dash as a wide space or as a hyphen and
+          // never as a dash. Which of the two it wrote is reported, since it
+          // says what the transcription inherited.
+          const cx = k.x0 + k.w / 2
+          const text = l.runs.map((r) => r.str).join('')
+          let idx = null
+          let acc = 0
+          for (const r of l.runs) {
+            if (cx < r.x0) {
+              idx = acc
+              break
+            }
+            if (cx <= r.x1) {
+              const f = (cx - r.x0) / Math.max(1, r.x1 - r.x0)
+              idx = acc + Math.round(f * r.str.length)
+              break
+            }
+            acc += r.str.length
+          }
+          if (idx === null) idx = acc
+          let at = -1
+          for (let d = 0; d <= 8 && at < 0; d++)
+            for (const i of [idx - d, idx + d])
+              if (at < 0 && i >= 0 && i < text.length && ' -'.includes(text[i])) at = i
+          const sep = at >= 0 ? text[at] : ' '
+          const cut = at >= 0 ? at : idx
+          const lastWord = (t) => t.trim().split(/\s+/).filter(Boolean).pop() || ''
+          const firstWord = (t) => t.trim().split(/\s+/).filter(Boolean)[0] || ''
+          let before = lastWord(text.slice(0, cut))
+          let after = firstWord(text.slice(at >= 0 ? at + 1 : cut))
+          if (!before) before = lastWord(li > 0 ? lines[li - 1].text : '')
+          if (!after) after = firstWord(li + 1 < lines.length ? lines[li + 1].text : '')
+          out.push({ leaf, ...k, line: l.text.trim(), before, after, sep })
+        }
       }
     }
     return out
   },
-  { workerSrc, b64, leaves: leaves.map(Number), scale, minEm, loose: !!loose }
+  { workerSrc, b64, leaves: leaves.map(Number), scale, minEm, maxEm, loose: !!loose }
 )
 await browser.close()
-for (const f of found)
-  console.log(`leaf ${f.leaf}  x${f.x0} y${f.y}  ${f.w}px (${f.ratio} em)  ${f.line}`)
-console.log(`-- ${found.length} rule(s) in ${leaves.length} leaf/leaves`)
+if (asJson) console.log(JSON.stringify(found, null, 1))
+else {
+  for (const f of found)
+    console.log(
+      `leaf ${f.leaf}  ${f.w}px (${f.ratio} em)  ` +
+        `${f.before} ][${f.sep === '-' ? '-' : ' '}][ ${f.after}   ${f.line}`
+    )
+  console.log(`-- ${found.length} rule(s) in ${leaves.length} leaf/leaves`)
+}
