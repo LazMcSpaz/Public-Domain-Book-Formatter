@@ -454,6 +454,34 @@ const book = {
 }
 
 writeFileSync(outPath, JSON.stringify(book, null, 1) + '\n')
+
+// The catalogue card, beside the book and written from it. A few hundred bytes
+// so the intake screen can put a title and a page count on a button without
+// downloading four megabytes of book — and written here rather than by hand
+// because a card typed once is a card that is wrong by the third rebuild.
+//
+// `scanPath` is null on purpose and is the one field a collected volume cannot
+// answer: there are thirteen scans and this names one. Anything that wants
+// pixels wants the individual document, which is on the shelf with its own scan
+// beside it.
+writeFileSync(
+  join(bookDir, 'about.json'),
+  JSON.stringify(
+    {
+      key: run.key,
+      fileName: EDITION.title,
+      savedAt: run.savedAt,
+      pageCount: transcriptions.length,
+      notes: run.edits.filter((e) => e.kind === 'note').length,
+      corrections: run.edits.filter((e) => e.kind === 'text').length,
+      facts: run.facts.length,
+      complete: true,
+      scanPath: null
+    },
+    null,
+    2
+  ) + '\n'
+)
 console.log(
   `${documents.length} documents, ${transcriptions.length} leaves, ${words.toLocaleString()} words`
 )
