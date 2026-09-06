@@ -50,6 +50,12 @@ const opt = (name, fallback) => {
   return v
 }
 const find = opt('--find', null)
+// --band top,height as fractions of the page. `--find` is better where it
+// works, but it depends on the scan's text layer holding the words — and on a
+// typescript the layer is often too damaged to hold anything searchable, which
+// is exactly where a crop is most wanted. This is the fallback that needs
+// nothing but the page.
+const band = opt('--band', null)
 const context = Number(opt('--context', '2'))
 const [scan, leafArg, out, scaleArg = '3'] = argv
 if (!scan || leafArg === undefined || !out) {
@@ -83,7 +89,7 @@ await page.setContent(`<!doctype html><body style="margin:0"><canvas id=c></canv
 await page.addScriptTag({ content: pdfSrc, type: 'module' })
 await page.waitForFunction(() => !!window.pdfjsLib)
 const size = await page.evaluate(
-  async ({ workerSrc, b64, leaf, scale, find, context }) => {
+  async ({ workerSrc, b64, leaf, scale, find, context, band: bandArg }) => {
     const pdfjs = window.pdfjsLib
     pdfjs.GlobalWorkerOptions.workerSrc = URL.createObjectURL(
       new Blob([workerSrc], { type: 'text/javascript' })
@@ -99,7 +105,15 @@ const size = await page.evaluate(
     await pg.render({ canvasContext: c.getContext('2d'), viewport }).promise
 
     let band = null
-    if (find) {
+    if (bandArg) {
+      const [top, height] = bandArg.split(',').map(Number)
+      band = {
+        y: Math.max(0, Math.round(top * c.height)),
+        h: Math.round(height * c.height),
+        line: `band ${bandArg}`
+      }
+      band.h = Math.min(band.h, c.height - band.y)
+    } else if (find) {
       // Group the layer into lines on the baseline, as dump-layer.mjs does.
       const items = (await pg.getTextContent()).items.filter((i) => 'str' in i)
       const lines = []
@@ -149,7 +163,7 @@ const size = await page.evaluate(
     }
     return { w: c.width, h: c.height, pages: doc.numPages, band }
   },
-  { workerSrc, b64, leaf, scale, find, context }
+  { workerSrc, b64, leaf, scale, find, context, band }
 )
 if (size.missing) {
   console.error(`leaf ${leaf}: the scan's text layer does not hold "${find}" — nothing rendered`)
