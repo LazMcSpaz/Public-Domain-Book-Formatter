@@ -25,6 +25,12 @@ import type { BookBlock, BookDocument } from '@core/assemble'
 
 const measurer = fixedWidthMeasurer(0.5)
 
+/** A paragraph of body text, so a table's size can be compared with the prose
+ * it interrupts. */
+const PROSE =
+  'The chirurgeon examined the specimen with extraordinary care and reported ' +
+  'his findings to the assembled company that evening. '
+
 const EDITION: LayoutEdition = {
   title: 'A Treatise of Airs',
   author: 'Robert Boyle',
@@ -252,6 +258,88 @@ describe('a table on the page', () => {
     const book = run(doc([tableBlock([['i', 'ii']])]))
     const page = book.pages.find((p) => lines(p).some((l) => l.runs.some((r) => r.text === 'i')))!
     expect(runsSaying(book, 'i')[0]!.xPt).toBeGreaterThan(page.frame.xPt)
+  })
+})
+
+/**
+ * A table wider than the measure at any size the body is set in.
+ *
+ * Manuscript 43 of Hall's lectures sets a seven-column diagram — `Adi · Spirit ·
+ * Consciousness · Heaven · Will · Fire` and two rows like it — and on a 4.5-inch
+ * measure the columns were squeezed to the floor, `Consciousness` could not be
+ * broken to fit one, and the row printed on top of itself. Four pages of a
+ * collected volume came out as overprinted mush, warned about correctly and
+ * unreadable.
+ *
+ * So the table is set down until its widest word fits, which is what a
+ * compositor does. Two properties: it fits, and nothing outside the table
+ * changes size to make it.
+ */
+describe('a table wider than the page can hold at body size', () => {
+  // Every column carries a word too long to break, so the table cannot be made
+  // to fit by moving room between columns — the fixture has to be wide enough
+  // to trip the fault, and a milder one passed with it still in.
+  const WIDE = [
+    [
+      'Providence',
+      'Foundation',
+      'Illuminate',
+      'Revelation',
+      'Perception',
+      'Refinement',
+      'Attainment'
+    ],
+    [
+      'Reflection',
+      'Aspiration',
+      'Meditation',
+      'Correction',
+      'Suggestion',
+      'Enterprise',
+      'Attraction'
+    ],
+    [
+      'Obligation',
+      'Expression',
+      'Impression',
+      'Conception',
+      'Projection',
+      'Experience',
+      'Compassion'
+    ]
+  ]
+  const book = run(
+    doc([{ kind: 'paragraph', id: 'p0b1', text: PROSE, sourcePages: [0] }, tableBlock(WIDE)])
+  )
+  const tableRuns = WIDE.flat().flatMap((cell) => runsSaying(book, cell))
+
+  it('sets every cell of it, and none of them off the page', () => {
+    expect(tableRuns.length).toBeGreaterThanOrEqual(WIDE.flat().length)
+    const page = book.pages.find((p) =>
+      lines(p).some((l) => l.runs.some((r) => r.text === 'Illuminate'))
+    )!
+    const right = page.frame.xPt + page.frame.widthPt
+    for (const line of lines(page)) {
+      for (const r of line.runs) {
+        expect(r.xPt).toBeGreaterThanOrEqual(page.frame.xPt - 0.01)
+        // The word itself has to end inside the frame, not merely start there:
+        // an overfull row starts every cell in the right place and runs the
+        // long ones straight through their neighbours.
+        expect(r.xPt + measurer.widthOf(r.text, r.font, r.sizePt)).toBeLessThanOrEqual(right + 0.01)
+      }
+    }
+  })
+
+  it('does it by setting the table smaller, and leaves the prose alone', () => {
+    const bodySize = runsSaying(book, 'chirurgeon')[0]!.sizePt
+    const cellSize = runsSaying(book, 'Illuminate')[0]!.sizePt
+    // Against the size a table that FITS is set at, not against the body:
+    // every table is set below the body size, so comparing with the prose
+    // passed whether or not anything had been squeezed.
+    const fits = runsSaying(run(doc([tableBlock([['i', 'ii']])])), 'i')[0]!.sizePt
+    expect(cellSize).toBeLessThan(fits)
+    // A floor: small enough to fit, never small enough to be unreadable.
+    expect(cellSize).toBeGreaterThan(bodySize * 0.5)
   })
 })
 

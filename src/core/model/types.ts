@@ -339,6 +339,22 @@ export interface StyleProfile {
    * contents had no descriptions to recover.
    */
   contentsSynopsis: boolean
+  /**
+   * How deep the contents goes: 1 lists chapters only, 2 lists their
+   * sub-headings under them, and so on.
+   *
+   * A book whose headings are all one level cannot tell the difference, which
+   * is why this went unnoticed until a collected volume was set. Manly Hall's
+   * Manuscript Lectures are thirty-two chapters carrying a hundred and fifty
+   * headings off the typescripts — section titles, but also `Manly P. Hall.`
+   * under a title, `(To be continued.)` at a foot, and a numbered step in a
+   * list. Listed to the last level that is a four-leaf contents nobody can use;
+   * listed to the first it is thirty-two lines and does its job.
+   *
+   * A depth rather than a switch, because the middle answer is a real one: a
+   * book of long chapters with genuine section titles wants both levels.
+   */
+  contentsDepth: number
   ornaments: OrnamentChoices
   /** Front-matter visual toggles. */
   frontMatter: {

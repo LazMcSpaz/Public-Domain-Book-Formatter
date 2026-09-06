@@ -223,6 +223,22 @@ const TABLE_SIZE_RATIO = 0.92
 const TABLE_GUTTER_EMS = 1.4
 /** The narrowest a column may be squeezed, in ems, before it is left to overflow. */
 const TABLE_MIN_COLUMN_EMS = 2.5
+/**
+ * How far a table may be set down to make its widest word fit the measure.
+ *
+ * A seven-column diagram out of a 1920s typescript is wider than a 4.5-inch
+ * measure at any size a body face is set in, and until this was here the engine
+ * squeezed each column to `TABLE_MIN_COLUMN_EMS`, could not break a word like
+ * `Consciousness` to fit, and printed the row on top of itself: four pages of
+ * one collected volume came out as overprinted mush, correctly reported and
+ * unreadable. Setting the table smaller is what a compositor does, and it is
+ * reversible — nothing else on the page moves.
+ *
+ * The floor is a fraction of the table's own size, so a table cannot shrink to
+ * a size nobody could read to avoid an honest warning. Below it the row is set
+ * at the floor and reported as before.
+ */
+const TABLE_MIN_SIZE_RATIO = 0.6
 const TABLE_RULE_THICKNESS = 0.5
 /** How far a table's rule sits below the baseline it hangs from, in ems. */
 const TABLE_RULE_DROP_EMS = 0.34
@@ -1112,12 +1128,26 @@ function naturalWidth(
  * did, in proportion to what they asked for. That is what keeps a column of
  * years from being squeezed to the same width as a column of sentences.
  */
-function fitColumns(natural: readonly number[], available: number, minWidth: number): number[] {
+function fitColumns(
+  natural: readonly number[],
+  available: number,
+  /**
+   * The narrowest each column may be, one per column: its widest unbreakable
+   * word, or the bare minimum where that is narrower.
+   *
+   * A single figure for every column was not enough. The fair share is the same
+   * for all of them, so a column of one-word labels and a column of long names
+   * were squeezed alike, and the long one overflowed however much room the
+   * table had spare. A floor per column is what makes the surplus land where it
+   * is needed.
+   */
+  mins: readonly number[]
+): number[] {
   const total = natural.reduce((a, b) => a + b, 0)
   if (total <= available) return [...natural]
 
   const fair = available / natural.length
-  const widths = natural.map((n) => Math.max(minWidth, Math.min(n, fair)))
+  const widths = natural.map((n, i) => Math.max(mins[i] ?? 0, Math.min(n, fair)))
   const wanting = natural.map((n, i) => ({ n, i })).filter(({ n }) => n > fair)
   const surplus = available - widths.reduce((a, b) => a + b, 0)
   if (surplus > 0 && wanting.length > 0) {
@@ -1147,7 +1177,7 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
   const rows = (block.cells ?? []).filter((row) => row.length > 0)
   if (rows.length === 0) return []
 
-  const sizePt = ctx.profile.bodyFontSize * TABLE_SIZE_RATIO
+  const baseSizePt = ctx.profile.bodyFontSize * TABLE_SIZE_RATIO
   const family = ctx.profile.bodyFont
   const bodyFont: FontRef = { family, style: 'regular' }
   // Column heads are set in italic: it is the one contrast available in every
@@ -1160,6 +1190,37 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
   const columns = Math.max(...rows.map((row) => row.length))
   const cellAt = (row: readonly string[], c: number): string => (row[c] ?? '').trim()
 
+  /** The widest single word in a column: the narrowest it can be set without
+   * a word running past its edge, since a cell breaks between words and no
+   * further. */
+  const widestWord = (c: number, size: number): number => {
+    let widest = 0
+    rows.forEach((row, r) => {
+      for (const word of cellAt(row, c).split(/\s+/)) {
+        if (word) widest = Math.max(widest, ctx.measurer.widthOf(word, fontFor(r), size))
+      }
+    })
+    return widest
+  }
+
+  // The narrowest the whole table can be set at a given size, and then the
+  // largest size at which that fits the measure. Advances scale with the size,
+  // so one step lands exactly on it rather than converging towards it.
+  const minsAt = (size: number): number[] =>
+    Array.from({ length: columns }, (_, c) =>
+      Math.max(widestWord(c, size), size * TABLE_MIN_COLUMN_EMS)
+    )
+  const inkAt = (size: number): number =>
+    minsAt(size).reduce((a, b) => a + b, 0) + size * TABLE_GUTTER_EMS * (columns - 1)
+  const needed = inkAt(baseSizePt)
+  const sizePt =
+    needed <= ctx.measureWidth
+      ? baseSizePt
+      : Math.max(
+          baseSizePt * TABLE_MIN_SIZE_RATIO,
+          baseSizePt * (ctx.measureWidth / Math.max(needed, 1))
+        )
+
   const natural: number[] = []
   for (let c = 0; c < columns; c++) {
     let widest = 0
@@ -1171,7 +1232,7 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
 
   const gutter = sizePt * TABLE_GUTTER_EMS
   const available = Math.max(1, ctx.measureWidth - gutter * (columns - 1))
-  const widths = fitColumns(natural, available, sizePt * TABLE_MIN_COLUMN_EMS)
+  const widths = fitColumns(natural, available, minsAt(sizePt))
 
   // A table narrower than the measure is centred in it.
   const tableWidth = widths.reduce((a, b) => a + b, 0) + gutter * (columns - 1)

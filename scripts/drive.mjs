@@ -27,7 +27,7 @@
 import { chromium } from 'playwright'
 import { createServer } from 'node:http'
 import { mkdir, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { resolve, dirname } from 'node:path'
 
 const PORT = Number(process.env.DRIVE_PORT ?? 7788)
 const URL_BASE = process.env.APP_URL ?? 'http://localhost:5173'
@@ -269,6 +269,148 @@ async function serve() {
       const file = `${OUT}/${name}.png`
       await page.screenshot({ path: file, fullPage: true })
       return { wrote: file }
+    },
+
+    /**
+     * Lay out a book file and write the interior PDF.
+     *
+     *   drive.mjs pdf <book.json> <out.pdf> [--profile <name>]
+     *
+     * The engine is the app's own, run in the app's browser — `renderInterior`,
+     * the same call the export screen makes, through `layoutWithToc` so the
+     * contents carries measured page numbers rather than the original
+     * edition's.
+     *
+     * A verb rather than a Node script, and that is the whole point. The book
+     * faces resolve as browser URLs and the measurer sums the advances of the
+     * glyphs `fontkit.layout()` returns, which is the same call pdf-lib makes
+     * to encode text. Measuring anywhere else is how WYSIWYG breaks, and a
+     * second engine that laid a book out without Chromium would make the
+     * design gate's approval mean nothing. One renderer draws the page.
+     *
+     * The bytes come back base64 over the wire, which for a five-hundred-page
+     * book is tens of megabytes and takes a moment. That is the cost of not
+     * having a second implementation, and it is the right way round.
+     */
+    pdf: async ([bookPath, outPath, ...rest]) => {
+      if (!bookPath || !outPath)
+        return { error: 'usage: pdf <book.json> <out.pdf> [--profile <name>]' }
+      const { readFile } = await import('node:fs/promises')
+      const bookAt = resolve(REPO, bookPath)
+      const file = JSON.parse(await readFile(bookAt, 'utf8'))
+      const at = rest.indexOf('--profile')
+      const profileName = at >= 0 ? rest[at + 1] : null
+
+      // Pictures. A book file carries each one either inline as base64 or as a
+      // path into the shelf beside it, and the second is the usual case — a
+      // picture rewritten inline on every save grows the repository by all of
+      // it again each time. Both are read here, because a book that lays out
+      // with the space reserved and every plate reported missing is not a book.
+      const shelfRoot = dirname(dirname(dirname(bookAt)))
+      const images = []
+      for (const image of file.images ?? []) {
+        if (typeof image?.base64 === 'string') {
+          images.push([image.id, [...Buffer.from(image.base64, 'base64')]])
+        } else if (typeof image?.path === 'string') {
+          try {
+            images.push([image.id, [...(await readFile(resolve(shelfRoot, image.path)))]])
+          } catch (err) {
+            return { error: `picture ${image.id}: ${image.path} — ${err.message}` }
+          }
+        }
+      }
+
+      const reply = await page.evaluate(
+        async ([repo, run, fallbackTitle, profileName, answers, imageEntries]) => {
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const style = await import(`/@fs${repo}/src/core/style/index.ts`)
+          const design = await import(`/@fs${repo}/src/core/design/index.ts`)
+          const exportGate = await import(`/@fs${repo}/src/core/export/index.ts`)
+          const interior = await import(`/@fs${repo}/src/platform/browser/interior.ts`)
+
+          const edits = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          // Through `applyEdits`, exactly as the app does. The stored
+          // transcription is the pristine reading; every correction, note,
+          // written division, supplied picture and re-anchoring since is an
+          // edit over it, and laying out the raw document quietly prints the
+          // book as it was before any of that was done.
+          const doc = edits.applyEdits(assemble.assembleBook(run.transcriptions), run.edits ?? [])
+          // Through `editionFromAnswers`, not by spreading the answers, because
+          // the copyright page's notices are DERIVED from them: the
+          // public-domain line is composed from `originalYear`, and the
+          // annotated and source lines are switched on by answers of their own.
+          // Handed the raw object the page printed a copyright line and an
+          // edition statement and silently left all three off.
+          const built = exportGate.editionFromAnswers(answers.export ?? {})
+          // `editionFromAnswers` says 'Untitled' when it has no title, which is
+          // right for the gate and wrong here: the run's own file name is at
+          // least the book's working name.
+          const edition = built.title === 'Untitled' ? { ...built, title: fallbackTitle } : built
+          // The book's own design answers, exactly as the design gate would
+          // build them — so a book laid out here and the same book laid out in
+          // the app are the same book. A named profile overrides, for looking
+          // at one in another dress.
+          //
+          // Two steps, not one, and the second is easy to leave out: the five
+          // interview questions build the profile and the per-book tweaks —
+          // the trim size, the body size, the ornaments, the title border,
+          // whether chapters open recto — are answers in the SAME object,
+          // applied over it by `applyStyleAnswers`. Calling only the first
+          // silently laid this collection out at the default trim with no
+          // border on its title page, and nothing said so.
+          const profile = profileName
+            ? (style.DEFAULT_STYLE_PROFILES.find((p) => p.name === profileName) ??
+              style.defaultStyleProfile())
+            : answers.design
+              ? style.applyStyleAnswers(
+                  design.profileFromAnswers(answers.design, answers.design.font),
+                  answers.design
+                )
+              : style.defaultStyleProfile()
+
+          const out = await interior.renderInterior(doc, profile, {
+            edition,
+            images: new Map(imageEntries.map(([id, bytes]) => [id, Uint8Array.from(bytes)])),
+            // A note with no reference mark in the book is collected at the
+            // back rather than dropped — the footnote rule, and the answer the
+            // structure gate defaults to for a book that has any.
+            orphanNotes: 'collect'
+          })
+          let binary = ''
+          for (const byte of out.bytes) binary += String.fromCharCode(byte)
+          return {
+            base64: btoa(binary),
+            pageCount: out.pageCount,
+            sectionPages: out.sectionPages,
+            warnings: out.warnings ?? [],
+            notesDropped: out.notesDropped ?? [],
+            missingImages: out.missingImages ?? [],
+            imagesPlaced: (out.imagesPlaced ?? []).length,
+            imagesDropped: out.imagesDropped ?? [],
+            notesPlaced: out.notesPlaced ?? 0,
+            notesCollected: out.notesCollected ?? 0,
+            chapters: doc.chapters.filter((c) => (c.level ?? 1) === 1).length,
+            blocks: doc.blocks.length,
+            profile: profile.name
+          }
+        },
+        [
+          REPO,
+          file.run,
+          // A book file that has never been through the export gate has no
+          // title but the run's own file name, which is an internal key and
+          // not a book's name. It is a fallback and it shows.
+          file.run.fileName,
+          profileName,
+          file.answers ?? {},
+          images
+        ]
+      )
+      if (reply?.error) return reply
+      const target = resolve(REPO, outPath)
+      await writeFile(target, Buffer.from(reply.base64, 'base64'))
+      delete reply.base64
+      return { wrote: target, ...reply }
     },
 
     /** Load a book. The 8-page fixture unless another path is named. */

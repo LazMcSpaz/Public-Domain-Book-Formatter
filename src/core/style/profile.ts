@@ -132,6 +132,7 @@ export function normalizeStyleProfile(raw: unknown): StyleProfile {
     chaptersOpenRecto: bool(raw['chaptersOpenRecto'], d.chaptersOpenRecto),
     pageNumber: oneOf(raw['pageNumber'], PAGE_NUMBER_POSITIONS, d.pageNumber),
     contentsSynopsis: bool(raw['contentsSynopsis'], d.contentsSynopsis),
+    contentsDepth: num(raw['contentsDepth'], d.contentsDepth),
     ornaments: {
       chapterOpener:
         typeof rawOrn['chapterOpener'] === 'string' ? (rawOrn['chapterOpener'] as string) : null,

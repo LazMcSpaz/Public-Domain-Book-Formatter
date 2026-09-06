@@ -33,6 +33,7 @@ export const DEFAULT_STYLE_PROFILES: StyleProfile[] = [
     chaptersOpenRecto: true,
     pageNumber: 'bottomCenter',
     contentsSynopsis: true,
+    contentsDepth: 2,
     ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null, blankPage: null },
     frontMatter: { titlePage: true, copyrightPage: true, halfTitle: true, titleBorder: false }
   },
@@ -57,6 +58,7 @@ export const DEFAULT_STYLE_PROFILES: StyleProfile[] = [
     chaptersOpenRecto: true,
     pageNumber: 'bottomOuter',
     contentsSynopsis: true,
+    contentsDepth: 2,
     ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null, blankPage: null },
     frontMatter: { titlePage: true, copyrightPage: true, halfTitle: false, titleBorder: false }
   },
@@ -81,6 +83,7 @@ export const DEFAULT_STYLE_PROFILES: StyleProfile[] = [
     chaptersOpenRecto: true,
     pageNumber: 'bottomCenter',
     contentsSynopsis: true,
+    contentsDepth: 2,
     ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null, blankPage: null },
     frontMatter: { titlePage: true, copyrightPage: true, halfTitle: true, titleBorder: false }
   }

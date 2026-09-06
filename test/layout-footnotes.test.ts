@@ -306,6 +306,77 @@ describe('layout — notes with no reference mark', () => {
 })
 
 /**
+ * How deep the contents goes.
+ *
+ * A book whose headings are all one level cannot tell the difference, which is
+ * why nothing here noticed until a collected volume was set: thirty-two
+ * chapters carrying a hundred and fifty sub-headings off the original
+ * typescripts, and a contents that ran to four leaves and listed `Manly P.
+ * Hall.` and `(To be continued.)` among the chapter titles.
+ *
+ * Two properties, and only the first is obvious. The entries are filtered, so a
+ * deeper heading is left out of the list — and it is still a heading on the
+ * page, still opens where it opened, so the body may not move. And the filter
+ * runs on the shared entry list rather than inside either pass, which is what
+ * keeps the two-pass scheme honest.
+ */
+describe('layoutWithToc — how deep the contents goes', () => {
+  const nested = build(
+    Array.from({ length: 12 }, (_, i) =>
+      page(i, [
+        { kind: 'heading' as const, text: `Chapter the ${i}`, level: 1 },
+        { kind: 'paragraph' as const, text: PROSE.repeat(4) },
+        { kind: 'heading' as const, text: `A section of ${i}`, level: 2 },
+        { kind: 'paragraph' as const, text: PROSE.repeat(4) }
+      ])
+    )
+  )
+  const atDepth = (depth: number): LaidOutBook =>
+    layoutWithToc(nested, { ...defaultStyleProfile(), contentsDepth: depth }, measurer, {
+      edition: EDITION
+    })
+  const contentsText = (book: LaidOutBook): string =>
+    book.pages
+      .filter((p) => p.kind === 'contents')
+      .map(textOf)
+      .join(' ')
+
+  it('lists the sections when it is asked for two levels', () => {
+    const text = contentsText(atDepth(2))
+    expect(text).toContain('Chapter the 3')
+    expect(text).toContain('A section of 3')
+  })
+
+  it('leaves them out at one, and lists every chapter still', () => {
+    const text = contentsText(atDepth(1))
+    expect(text).toContain('Chapter the 3')
+    expect(text).not.toContain('A section of')
+    expect(text.match(/Page \d+/g) ?? []).toHaveLength(
+      nested.chapters.filter((c) => (c.level ?? 1) === 1).length
+    )
+  })
+
+  it('still sets the sections on the page — only the list is shorter', () => {
+    // Set in capitals, as a heading is.
+    const body = bookText(atDepth(1))
+    expect(body).toContain('A SECTION OF 3')
+  })
+
+  it('measures its numbers at either depth, and never falls back', () => {
+    for (const depth of [1, 2]) {
+      const book = atDepth(depth)
+      expect(book.warnings.filter((w) => /without page numbers/.test(w.text))).toHaveLength(0)
+      // The numbers describe this book: the chapter really opens on the folio
+      // the contents prints for it.
+      const listed = contentsText(book)
+      const chapter = book.chapterPages.find((c) => c.title === 'Chapter the 5')!
+      const folio = book.pages[chapter.pageIndex]!.folio
+      expect(listed).toContain(`Chapter the 5 Page ${folio}`)
+    }
+  })
+})
+
+/**
  * An analytical contents: the chapter's own description under its entry.
  *
  * Recovered from the scanned contents, which is otherwise discarded — and

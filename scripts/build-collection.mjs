@@ -83,16 +83,19 @@
  *
  * ## The title that would print twice
  *
- * Five documents open with their own title heading, so the volume would set the
- * edition's title and then the paper's immediately under it. Where the two are
- * the same words — compared on letters and digits alone, since `BUDDHA, THE
- * DIVINE WANDERER.` and *Buddha, the Divine Wanderer* differ only in case and a
- * full stop — the paper's is dropped as already carried.
+ * Many documents open with their own title heading, so the volume would set the
+ * edition's title and the paper's immediately under it: *The Masters, Part I*
+ * and then `THE MASTERS.` The paper's is dropped where it **says nothing the
+ * edition's title does not** — compared on letters and digits alone, a leading
+ * `The` ignored, so `THE ATTAINMENT OF WISDOM.` and *Attainment of Wisdom* are
+ * one heading and `THE MASTERS.` is contained in *The Masters, Part I*.
  *
- * Where they are not the same words it is **kept**, as a sub-heading, and
- * reported. `FUNDAMENTAL ERRORS IN MODERN OCCULTISM.` is not the edition's
- * *Errors of Modern Occultism and Their Remedy*, and dropping a heading that
- * says something different would be losing text to tidy a page.
+ * A heading that adds something is **kept**, set under the title as a
+ * sub-heading, and reported. `THE FOURTH DIMENSION AND THE THIRD EYE.` names
+ * the third eye where the edition's title does not; `A TALK TO THOSE WHO
+ * ASPIRE TO BE TEACHERS.` is a different sentence altogether. Dropping either
+ * would be losing text to tidy a page, and the rule is containment rather than
+ * similarity for exactly that reason.
  */
 import { readFileSync, writeFileSync, readdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -191,6 +194,82 @@ for (const doc of documents) {
   }
 }
 
+/**
+ * What a leaf's role means once its document is a chapter of something larger.
+ *
+ * Each reading was made of a document standing on its own, so its roles are
+ * that document's: manuscript 36 has a dedication leaf, a contents leaf and a
+ * NOTE; manuscript 37 opens with an INTRODUCTION and divides itself with two
+ * part titles. Read as a book those are front matter and are handled as front
+ * matter — and inside a collected volume that is simply wrong, because there is
+ * one book here and its front matter is the volume's.
+ *
+ * Left alone it does real damage, and did: `dedication` is `transcribe-aside`,
+ * so manuscript 36's dedication to H. P. B. was hoisted out of its chapter and
+ * set as twenty-odd pages of the VOLUME's front matter, one typed line to a
+ * page, before the reader had reached lecture one. `table-of-contents` is
+ * `discard`, which silently emptied two chapters.
+ *
+ * So every leaf of a document is body, except the wrappers. The wrappers keep
+ * their roles because assembly is right about those: a printed cover is a
+ * source of metadata and a blank leaf is a blank leaf, whichever book it is in.
+ *
+ * The discarded contents leaves are worth naming, because the rule that
+ * discards a scanned contents is about *pagination* — the original's numbers
+ * are not this edition's — and neither of these carries a page number. Hall's
+ * Scientific Series leaf lists what the bundle contained; manuscript 36's lists
+ * its own nine parts. Both are text he wrote, and one of them is a whole
+ * chapter of this volume.
+ */
+const WRAPPER_ROLES = new Set([
+  'title-page',
+  'half-title',
+  'copyright',
+  'blank',
+  'digitization-notice'
+])
+const roleInCollection = (role) => (WRAPPER_ROLES.has(role) ? role : 'body')
+
+/**
+ * The two hand-drawn diagrams, and where each goes.
+ *
+ * They are `supplied` pictures rather than scan crops, and `illustrations.md`
+ * on the shelf says why: Hall's typist wrapped the body text round both, so no
+ * rectangle isolates either and each had to be cut with masks the app's cutter
+ * cannot take. A supplied picture has no source leaf, so an anchor is the only
+ * thing that says where it belongs.
+ *
+ * `after` is the index, in the leaf's own block list, of the block the picture
+ * follows — the paragraph that introduces it, which is where the reading put
+ * the caption describing it. The caption block itself is consumed: it is a
+ * description of the drawing, and with the drawing on the page it belongs under
+ * it rather than in the flow as a short paragraph of prose. That is the same
+ * thing assembly does with a caption on a leaf a scan picture was cut from.
+ */
+const PLATES = {
+  'manuscript-43.json': [
+    {
+      leaf: 3,
+      after: 0,
+      caption: 1,
+      id: 'd74b8b1ecbf24dd8e6628e1510dcb6fec25851362615120f841ec1483d772745',
+      width: 1176,
+      height: 925
+    },
+    {
+      leaf: 3,
+      after: 4,
+      caption: 5,
+      id: '529c87c974aacd9cc5c7623ea648322afeb7308eb9afc0147f51075e93e2f6bc',
+      width: 885,
+      height: 1450
+    }
+  ]
+}
+
+/** The image edits the plates become, filled in as the leaves are renumbered. */
+const imageEdits = []
+
 const transcriptions = []
 let next = 0
 const contents = []
@@ -220,26 +299,59 @@ for (const doc of documents) {
   transcriptions.push(opening)
   contents.push({ at: opening.pageIndex, number: doc.number ?? null, title, from: doc.file })
 
-  const bare = (t) => t.toLowerCase().replace(/[^a-z0-9]+/g, '')
+  const bare = (t) =>
+    t
+      .replace(/^\s*the\s+/i, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '')
   let carried = false
   for (const page of [...doc.pages].sort((a, b) => a.pageIndex - b.pageIndex)) {
+    // The role this leaf has in the volume, not the one it had in its own
+    // document — and the test below has to use it. Asking the reading's role
+    // instead exempted every document whose first text leaf came back
+    // `chapter-opening` (manuscript 24 and eight others) from both the drop and
+    // the report of what was kept: they set their title twice and nothing said
+    // so, which is the worse half.
+    const role = roleInCollection(page.role)
+    const plates = (PLATES[doc.file] ?? []).filter((p) => p.leaf === page.pageIndex)
+    const captionsTaken = new Set(plates.map((p) => p.caption))
+    const leafIndex = next
     const blocks = []
-    for (const b of page.blocks) {
+    for (const [i, b] of page.blocks.entries()) {
+      // A caption a plate is taking travels on the picture instead.
+      if (captionsTaken.has(i)) continue
+      for (const plate of plates) {
+        if (plate.after !== i) continue
+        imageEdits.push({
+          kind: 'image',
+          imageId: plate.id,
+          // `p{leaf}b{index}` is how assembly names a block, and the index is
+          // the block's place in the leaf's own list *as handed to it* — so it
+          // is counted here, after the captions have been taken out, not from
+          // the reading's own numbering.
+          afterBlockId: `p${leafIndex}b${blocks.length}`,
+          sourceWidth: plate.width,
+          sourceHeight: plate.height,
+          caption: page.blocks[plate.caption]?.text ?? ''
+        })
+      }
       if (b.kind !== 'heading') {
         blocks.push(b)
         continue
       }
-      if (!carried && page.role === 'body' && bare(b.text) === bare(title)) {
+      // Dropped only when the paper's heading is contained in the edition's
+      // title: it then says nothing that is not already being set above it.
+      if (!carried && role === 'body' && bare(title).includes(bare(b.text))) {
         carried = true
         continue
       }
       blocks.push({ ...b, level: 2 })
     }
-    transcriptions.push({ ...page, pageIndex: next++, blocks })
+    transcriptions.push({ ...page, pageIndex: next++, role, blocks })
   }
   if (!carried) {
     const first = doc.pages
-      .filter((p) => p.role === 'body')
+      .filter((p) => roleInCollection(p.role) === 'body')
       .sort((a, b) => a.pageIndex - b.pageIndex)[0]?.blocks[0]
     if (first?.kind === 'heading') kept.push(`${title}  <-  ${first.text}`)
   }
@@ -250,6 +362,57 @@ const words = transcriptions.reduce(
     n + p.blocks.reduce((m, b) => m + (b.text ?? '').split(/\s+/).filter(Boolean).length, 0),
   0
 )
+
+// The edition and the look. Both live here rather than being answered at the
+// gates, because a collected volume is never taken through the wizard: it is
+// built from thirty-two readings that were each taken through their own.
+//
+// The design is the imprint's, matched to the last book set under it, so a
+// reader who has one on the shelf recognises the other. What is deliberately
+// NOT copied from that book is `dropCap`: these are lecture transcripts, and a
+// three-line initial over a paragraph that opens `In our last talk we were
+// considering...` sets a talk up as scripture.
+const EDITION = {
+  title: 'The Collected Manuscript Lectures',
+  author: 'Manly Palmer Hall',
+  originalYear: '1923–1925',
+  imprint: 'Libri Vetus',
+  imprintLine: 'Rare and esoteric books, set afresh for the present-day reader.',
+  copyrightHolder: 'Libri Vetus',
+  editionDate: '2026',
+  editionStatement:
+    'First collected edition. The lectures were issued singly, in typescript, and have not been gathered before.',
+  isbn: '',
+  publicDomainNotice: true,
+  // Off until the notes are in. The line says the notes and the definitions are
+  // the editor's, and today there are none — a claim on the copyright page that
+  // the book does not keep. Turn it back on with them.
+  annotatedNotice: false,
+  sourceNotice:
+    'Gathered from thirteen surviving sources — printed wrappers, born-digital scans and photographs of the original typescripts — and read leaf by leaf against them. Twenty-seven of the forty-six numbered manuscripts survive; the nineteen that do not are listed rather than passed over.'
+}
+
+const DESIGN = {
+  kind: 'nonfiction',
+  period: 'victorian',
+  chapterOpener: 'ornamented',
+  runningHeads: 'chapter',
+  font: 'libre-caslon',
+  dropCap: false,
+  runningHeadVerso: 'author',
+  chaptersOpenRecto: true,
+  trimSize: '6x9',
+  bodyFontSize: '12',
+  ornamentChapter: 'chapter-rule',
+  // Chapters only. The sub-headings are the typescripts' own display lines and
+  // there are a hundred and fifty of them: real section titles, but also a
+  // byline under a title, `(To be continued.)` at a foot, and the numbered
+  // steps of a list. Listed, they made a four-leaf contents in which the
+  // thirty-two lectures were hard to find.
+  contentsDepth: '1',
+  ornamentBlank: 'chapter-asterism',
+  frontTitleBorder: true
+}
 
 const run = {
   schemaVersion: 15,
@@ -263,10 +426,18 @@ const run = {
   usage: { inputTokens: 0, outputTokens: 0, costUsd: 0 },
   modelId: 'read-by-hand',
   identityAnswers: {},
-  edits: [],
+  edits: imageEdits,
   images: [],
   facts: []
 }
+
+/** Each plate as the book file names it: an id and a path into the shelf's own
+ * `images/`, never base64 inline. A picture rewritten inline on every save
+ * grows the repository by all of it again each time. */
+const PLATE_FILES = imageEdits.map((edit) => ({
+  id: edit.imageId,
+  path: `images/${edit.imageId}.png`
+}))
 
 const book = {
   format: 'public-domain-book-formatter/book',
@@ -274,11 +445,10 @@ const book = {
   savedAt: run.savedAt,
   runSchema: run.schemaVersion,
   run,
-  answers: {},
+  answers: { export: EDITION, design: DESIGN },
   voice: null,
   notesCheckpoint: null,
-  images: [],
-  imagePaths: {},
+  images: PLATE_FILES,
   // Thirteen scans, and this field names one. See the note at the head.
   scan: null
 }

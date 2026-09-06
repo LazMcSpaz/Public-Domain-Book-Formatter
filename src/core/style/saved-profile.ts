@@ -105,6 +105,7 @@ export const BANKED_STYLE_KEYS: readonly (keyof StyleProfile)[] = [
   'chaptersOpenRecto',
   'pageNumber',
   'contentsSynopsis',
+  'contentsDepth',
   'ornaments',
   'frontMatter'
 ]

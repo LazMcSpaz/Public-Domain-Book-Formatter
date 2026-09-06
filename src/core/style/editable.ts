@@ -287,6 +287,21 @@ export function styleQuestions(
         ]
       : []),
     {
+      id: 'contentsDepth',
+      type: 'choice',
+      prompt: 'How much of the book does the contents list?',
+      help:
+        'Sub-headings make a contents longer and, on a book that has a great many of them, ' +
+        'less useful: they are set off the original’s own display lines, which include a ' +
+        'byline under a title and a note at the foot of a page as well as real section titles.',
+      defaultValue: String(profile.contentsDepth),
+      options: [
+        { value: '1', label: 'Chapters only' },
+        { value: '2', label: 'Chapters and their sections' },
+        { value: '3', label: 'Three levels' }
+      ]
+    },
+    {
       id: 'chaptersOpenRecto',
       type: 'confirm',
       prompt: 'Start every chapter on a right-hand page?',
@@ -464,6 +479,7 @@ export function applyStyleAnswers(profile: StyleProfile, answers: Answers): Styl
     opticalMargins: pickBool(answers, 'opticalMargins', profile.opticalMargins),
     pageNumber: pick(answers, 'pageNumber', profile.pageNumber) as PageNumberPosition,
     contentsSynopsis: pickBool(answers, 'contentsSynopsis', profile.contentsSynopsis),
+    contentsDepth: pickNumber(answers, 'contentsDepth', profile.contentsDepth),
     ornaments: {
       chapterOpener: pickOrnament(answers, 'ornamentChapter', profile.ornaments.chapterOpener),
       sectionDivider: pickOrnament(answers, 'ornamentDivider', profile.ornaments.sectionDivider),

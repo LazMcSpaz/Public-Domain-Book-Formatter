@@ -66,16 +66,22 @@ export function layoutWithToc(
       title: section.title,
       ...(section.label ? { label: section.label } : {})
     })),
-    ...doc.chapters.map((chapter) => ({
-      id: chapter.id,
-      title: chapter.title,
-      ...(chapter.label ? { label: chapter.label } : {}),
-      level: chapter.level,
-      // Only when the style asks. The descriptions are long — twenty of them
-      // turn a one-leaf contents into four — so this is a preference and not a
-      // consequence of the book having had them.
-      ...(profile.contentsSynopsis && chapter.synopsis ? { synopsis: chapter.synopsis } : {})
-    })),
+    ...doc.chapters
+      // Deeper headings are still headings on the page and still get their
+      // running head; they are only left out of the list. The filter is on the
+      // ENTRIES, so both passes see the same one and the guard below still
+      // holds.
+      .filter((chapter) => (chapter.level ?? 1) <= profile.contentsDepth)
+      .map((chapter) => ({
+        id: chapter.id,
+        title: chapter.title,
+        ...(chapter.label ? { label: chapter.label } : {}),
+        level: chapter.level,
+        // Only when the style asks. The descriptions are long — twenty of them
+        // turn a one-leaf contents into four — so this is a preference and not a
+        // consequence of the book having had them.
+        ...(profile.contentsSynopsis && chapter.synopsis ? { synopsis: chapter.synopsis } : {})
+      })),
     ...back.map((section) => ({
       id: `${section.id}-title`,
       title: section.title,
