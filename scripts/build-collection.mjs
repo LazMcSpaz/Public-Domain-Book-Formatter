@@ -97,8 +97,12 @@
  * would be losing text to tidy a page, and the rule is containment rather than
  * similarity for exactly that reason.
  */
-import { readFileSync, writeFileSync, readdirSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { readFileSync, writeFileSync, readdirSync, existsSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { join, resolve, dirname } from 'node:path'
+
+/** This checkout, so the glossary step can be run from anywhere. */
+const REPO = resolve(dirname(new URL(import.meta.url).pathname), '..')
 
 const argv = process.argv.slice(2)
 const opt = (name, fallback) => {
@@ -482,6 +486,25 @@ writeFileSync(
     2
   ) + '\n'
 )
+// The apparatus, rebuilt with the book rather than remembered afterwards.
+//
+// This is the failure `CLAUDE.md` names in as many words: a step done for one
+// book is not done for the next, and one volume on this shelf shipped a
+// 74-entry glossary with not a single circle on a word in the body. A build
+// that writes the book file and leaves the glossary to a second command anyone
+// might forget has the same shape. So it runs here, and it is the same
+// `@core/annotate` the galley and `book-files.mjs` use, through vite-node,
+// rather than a second copy of the marking rule living in this file.
+const glossaryFile = join(bookDir, 'glossary.md')
+if (existsSync(glossaryFile)) {
+  console.log('\nglossary:')
+  execFileSync(
+    'npx',
+    ['vite-node', join(REPO, 'scripts/apply-glossary.ts'), outPath, glossaryFile],
+    { cwd: REPO, stdio: 'inherit' }
+  )
+}
+
 console.log(
   `${documents.length} documents, ${transcriptions.length} leaves, ${words.toLocaleString()} words`
 )
