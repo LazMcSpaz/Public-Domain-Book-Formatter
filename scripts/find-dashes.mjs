@@ -262,10 +262,20 @@ const found = await page.evaluate(
             acc += r.str.length
           }
           if (idx === null) idx = acc
-          let at = -1
-          for (let d = 0; d <= 8 && at < 0; d++)
-            for (const i of [idx - d, idx + d])
-              if (at < 0 && i >= 0 && i < text.length && ' -'.includes(text[i])) at = i
+          // A hyphen beats a space when both are in reach. The layer writes a
+          // dash either way, but a space is ambiguous with an ordinary word
+          // space where a hyphen carrying an em of ink is not — and the
+          // proportional estimate is good to a character or two, not better, so
+          // on `God-or Brahma` it snapped to the space after the token and
+          // named the wrong gap. The dash was real; the place was not, and a
+          // dash put back in the wrong place is worse than one left out.
+          const near = (want) => {
+            for (let d = 0; d <= 8; d++)
+              for (const i of [idx - d, idx + d])
+                if (i >= 0 && i < text.length && text[i] === want) return i
+            return -1
+          }
+          const at = near('-') >= 0 ? near('-') : near(' ')
           const sep = at >= 0 ? text[at] : ' '
           const cut = at >= 0 ? at : idx
           const lastWord = (t) => t.trim().split(/\s+/).filter(Boolean).pop() || ''
