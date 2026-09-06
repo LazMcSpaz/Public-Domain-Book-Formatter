@@ -193,7 +193,16 @@ const found = await page.evaluate(
                   while (down < c.height - 2 && dark(col, down + 1)) down++
                   thick = Math.max(thick, down - up + 1)
                 }
-                const clear = thick <= Math.max(4, em * 0.22) && (loose || run <= em * maxEm)
+                // A dash sits at mid x-height; an underline sits BELOW the
+                // baseline. Without this the tool is unusable on a typescript,
+                // where the underlining is heavy: manuscript 27 returned 84
+                // rules on nine leaves and nearly every one was a rule under a
+                // word. Thinness alone cannot tell them apart, because an
+                // underline is thin and is separated from its word by paper, so
+                // walking up from it stops at once.
+                const overBaseline = y <= bot - em * 0.12
+                const clear =
+                  thick <= Math.max(4, em * 0.22) && overBaseline && (loose || run <= em * maxEm)
                 if (clear || loose)
                   hits.push({ x0, w: run, y, thick, ratio: +(run / em).toFixed(2) })
               }
