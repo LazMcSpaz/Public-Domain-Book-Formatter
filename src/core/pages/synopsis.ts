@@ -80,8 +80,21 @@ const FOLIO_LINE = /^\s*page\s+([0-9ivxlc]+)\s*\.?\s*$/i
  */
 const TRAILING_FOLIO = /^(.*?)[.\u2026\s]{4,}\s*([0-9ivxlc]+)\s*$/i
 
-/** A number line rather than a title: "LESSON I", "CHAPTER 4", "PART TWO". */
-const NUMBER_LINE = /^\s*(lesson|chapter|part|book|section)\b[\s.]*[0-9ivxlcdm]*\s*\.?\s*$/i
+/**
+ * A number line rather than a title: "LESSON I", "CHAPTER 4", "SECTION 2".
+ *
+ * Numerals only. A number spelled out — "PART TWO" — is not matched and never
+ * was, though this comment used to give it as an example.
+ *
+ * `lecture` and an optional qualifier before it were added for a collected
+ * volume whose instalments are called *Manuscript Lecture No. 3* — the same
+ * shape as *Lesson III*, naming a position in a series and nothing else, and
+ * the same thing wanted of it: that it be set small above the title it belongs
+ * to rather than standing as a chapter of its own. `No.` is optional for the
+ * same reason: a series writes its number with or without it.
+ */
+const NUMBER_LINE =
+  /^\s*(?:\w+\s+)?(lesson|chapter|part|book|section|lecture)\b[\s.]*(?:no\.?|number)?[\s.]*[0-9ivxlcdm]*\s*\.?\s*$/i
 
 /**
  * Whether a heading is a bare number line — `LESSON III.`, `CHAPTER IV` — as

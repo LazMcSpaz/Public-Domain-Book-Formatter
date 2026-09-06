@@ -196,6 +196,31 @@ describe('assembleBook', () => {
    * leaf, and — with chapters opening recto — cost two extra leaves per lesson,
    * the first carrying a number and nothing else.
    */
+  /**
+   * A series can call its instalments what it likes. Manly Hall's are
+   * "Manuscript Lecture No. 3", which is the same shape as "Lesson III" — a
+   * position in a series and nothing else — and wants the same treatment: set
+   * small above the title it belongs to, not standing as a chapter of its own.
+   *
+   * Without this, a collected volume of 32 lectures derived 64 chapters, each
+   * number line taking a chapter's ornament, its sinkage, its own page break
+   * and a line in the contents.
+   */
+  it('takes a series label with its own wording as a number line', () => {
+    const doc = assembleBook([
+      page(0, [
+        { kind: 'heading', text: 'MANUSCRIPT LECTURE No. 3' },
+        { kind: 'heading', text: 'Teacher and Pupil, Part I' },
+        para('The teacher must first be a student.')
+      ])
+    ])
+    expect(doc.chapters).toHaveLength(1)
+    expect(doc.chapters[0]).toMatchObject({
+      title: 'Teacher and Pupil, Part I',
+      label: 'MANUSCRIPT LECTURE No. 3'
+    })
+  })
+
   it('takes a run of consecutive headings as one chapter', () => {
     const doc = assembleBook([
       page(0, [
