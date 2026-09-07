@@ -14,7 +14,8 @@
     "test": "vitest run",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "format:check": "prettier --check .",
+    "check:install": "PUBLIC_BASE=/Public-Domain-Book-Formatter/ vite build && node scripts/check-install.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

@@ -8,6 +8,21 @@
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='13' font-size='14'%3E%F0%9F%93%96%3C/text%3E%3C/svg%3E"
     />
     <title>Public-Domain Book Reprint Tool</title>
+    <!-- Installed to a Home Screen this is an app: its own icon, no browser
+         chrome, its own place in the app switcher — and, on iOS, exempt from
+         the eviction that clears a website's storage after a stretch without a
+         visit. That exemption is why the manifest matters here rather than
+         being a nicety: the reading queue is the one thing on the device whose
+         loss cannot be repaired by running something again. -->
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png" />
+    <meta name="theme-color" content="#23201b" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <!-- Superseded by the line above everywhere except iOS, which still reads
+         only this one. Both, therefore, rather than the modern one alone. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Reprint" />
   </head>
   <body>
     <div id="root"></div>

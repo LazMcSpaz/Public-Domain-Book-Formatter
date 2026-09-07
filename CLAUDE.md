@@ -402,6 +402,10 @@ npm run build        # typecheck + vite build → dist/
 node scripts/make-test-book.mjs      # regenerate the 8-page test fixture
 node scripts/make-test-epub.mjs      # regenerate the EPUB fixture
 node scripts/make-test-digital.mjs   # regenerate the born-digital PDF fixture
+node scripts/make-icons.mjs          # the app's icons, from the house fleuron
+npm run check:install                # build under the Pages sub-path, then ask the
+                                     #   one question a service worker cannot be read
+                                     #   for: does it open with the network gone?
 node scripts/screenshot-flow.mjs     # drive the wizard headlessly, screenshot each screen
 ```
 

@@ -1,6 +1,7 @@
 import { StrictMode, Suspense, lazy, useEffect, useState } from 'react'
 import { createRoot } from 'react-dom/client'
 import { App } from './App'
+import { prepareInstall } from '../platform/browser/install'
 import { Settings } from './Settings'
 import './styles.css'
 
@@ -41,6 +42,11 @@ function Root(): JSX.Element {
   }
   return <App />
 }
+
+// Asked for once, at start-up, and never awaited: an app that waited on a
+// service worker to draw its first screen would be an app that does not open
+// when the worker cannot be registered.
+void prepareInstall()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
