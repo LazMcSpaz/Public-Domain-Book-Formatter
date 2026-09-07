@@ -1247,8 +1247,8 @@ const proof: Step = {
   id: 'proof',
   title: 'Read it through',
   blurb:
-    'Your book beside the scan it came from. Fix anything that was read wrong. ' +
-    'Italics show as <i>…</i>, so you can see what the original stressed and change it.',
+    'The book, before it is worth choosing a typeface for. Read it through and mark ' +
+    'what wants a note, edit the prose, or set any leaf beside the scan it came from.',
   isGate: true,
   canEnter: (s) => s.completed.includes('gate-structure') && s.document !== null,
   questions: () => []

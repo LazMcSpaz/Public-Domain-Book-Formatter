@@ -196,6 +196,11 @@ describe('the harvest locates every highlight against the book as it stands', ()
     expect(row!.passage).toContain('«a candle flame»')
     expect(row!.passage).toContain('The student is asked')
     expect(row!.sourcePages).toEqual([0])
+    // No ellipsis at the head: the mark is near the start of the paragraph and
+    // every word before it is shown, so there is nothing being elided.
+    expect(row!.passage.startsWith('…')).toBe(false)
+    // And one at the tail, where the paragraph does run on.
+    expect(row!.passage.endsWith('…')).toBe(true)
   })
 
   it('follows the words when a later correction moved them, and says the offset was stale', () => {
@@ -236,6 +241,15 @@ describe('the harvest locates every highlight against the book as it stands', ()
     const earlier = mark({ highlightId: 'h1', quote: 'The student', from: 0, to: 11 })
     const doc = applyEdits(book(), [later, earlier])
     expect(highlightSheet(doc, [later, earlier]).map((r) => r.highlightId)).toEqual(['h1', 'h2'])
+  })
+
+  it('writes an ellipsis only where the paragraph really does run on', () => {
+    // An ellipsis is a claim that there is more of this passage to read. One
+    // printed against the end sends the reader of the sheet looking for text
+    // that is not there.
+    const short = mark({ quote: 'A second leaf', blockId: 'p1b0', from: 0, to: 13 })
+    const [row] = highlightSheet(applyEdits(book(), [short]), [short])
+    expect(row!.passage).toBe('«A second leaf», with nothing marked on it.')
   })
 
   it('is empty for a book nobody has read yet', () => {

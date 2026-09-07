@@ -23,6 +23,8 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { PageBrowser } from './PageBrowser'
+import { caretOffset, offsetAtPoint, setCaret } from './dom-offsets'
+import { outlineOf, passagesOf, sectionTitlesOf, type Passage } from './passages'
 import { footnoteMarkerPattern, type Footnote, type Illustration } from '@core/assemble'
 import { anchorIllustrations } from '@core/layout'
 import { checkGlossaryMarks, glossaryHeadwords, withGlossaryMark } from '@core/annotate'
@@ -56,24 +58,19 @@ export interface BookEditorProps {
   interior?: { bytes: Uint8Array; pageCount: number; tick: number } | null
   /** True while a fresh layout is being measured — the markers may be a moment behind. */
   layoutBusy?: boolean
-}
-
-/**
- * One editable unit of the column.
- *
- * A body passage is a real block and edits target its id. A section passage is
- * one paragraph of a division the editor wrote: its block exists only in the
- * assembled document, so editing it rewrites the owning `section` edit's text
- * at that paragraph's index instead.
- */
-interface Passage {
-  id: string
-  kind: BlockKind
-  /** Current text, markup on — the string an edit must be written in terms of. */
-  text: string
-  label?: string
-  level?: number
-  origin: { type: 'body' } | { type: 'section'; sectionId: string; index: number }
+  /**
+   * Land on this block when the galley opens, the way "Edit this page" lands
+   * from the page view: scrolled to and flashed, so the eye finds it.
+   *
+   * The reading view's way out. A reader who has just seen an errant full stop
+   * should not have to find it again in three hundred pages, and the mechanism
+   * is the one the galley already uses rather than a second one — an id and a
+   * flash, so a landing from outside and a landing from inside look the same.
+   *
+   * A *changing* value, not a one-shot: asking for the same block twice in a
+   * session must land twice, so the caller stamps it.
+   */
+  landOn?: { blockId: string; tick: number } | null
 }
 
 const KINDS: { value: BlockKind; label: string }[] = [
@@ -96,74 +93,6 @@ const partsOf = (text: string): string[] =>
     .split(/\n\s*\n/u)
     .map((part) => part.replace(/\s+/gu, ' ').trim())
     .filter((part) => part.length > 0)
-
-/** Plain-text caret offset of the current selection inside `root`. */
-function caretOffset(root: HTMLElement): number {
-  const sel = root.ownerDocument.defaultView?.getSelection()
-  if (!sel || sel.rangeCount === 0) return 0
-  const range = sel.getRangeAt(0)
-  if (!root.contains(range.startContainer)) return 0
-  const pre = range.cloneRange()
-  pre.selectNodeContents(root)
-  pre.setEnd(range.startContainer, range.startOffset)
-  return pre.toString().length
-}
-
-/** Put the caret at a plain-text offset inside `root`. */
-function setCaret(root: HTMLElement, offset: number): void {
-  const sel = root.ownerDocument.defaultView?.getSelection()
-  if (!sel) return
-  let remaining = offset
-  const walk = (node: Node): boolean => {
-    if (node.nodeType === 3) {
-      const length = node.nodeValue?.length ?? 0
-      if (remaining <= length) {
-        sel.collapse(node, remaining)
-        return true
-      }
-      remaining -= length
-      return false
-    }
-    for (const child of Array.from(node.childNodes)) if (walk(child)) return true
-    return false
-  }
-  if (!walk(root)) sel.collapse(root, root.childNodes.length)
-}
-
-/**
- * Where in a passage's plain text a click landed, so opening it for editing
- * puts the caret under the pointer rather than at the start.
- */
-function offsetAtPoint(root: HTMLElement, x: number, y: number): number {
-  const doc = root.ownerDocument as Document & {
-    caretRangeFromPoint?: (x: number, y: number) => Range | null
-    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null
-  }
-  let node: Node | null = null
-  let offset = 0
-  if (typeof doc.caretRangeFromPoint === 'function') {
-    const range = doc.caretRangeFromPoint(x, y)
-    if (range) {
-      node = range.startContainer
-      offset = range.startOffset
-    }
-  } else if (typeof doc.caretPositionFromPoint === 'function') {
-    const position = doc.caretPositionFromPoint(x, y)
-    if (position) {
-      node = position.offsetNode
-      offset = position.offset
-    }
-  }
-  if (!node || !root.contains(node)) return 0
-  const range = doc.createRange()
-  range.selectNodeContents(root)
-  try {
-    range.setEnd(node, offset)
-  } catch {
-    return 0
-  }
-  return range.toString().length
-}
 
 /** The last few words before a point, so a memo chip can say where it sits. */
 function snippet(text: string, at: number): string {
@@ -242,7 +171,8 @@ export function BookEditor({
   onChange,
   blockPages,
   interior,
-  layoutBusy
+  layoutBusy,
+  landOn
 }: BookEditorProps): JSX.Element {
   /** The passage open for editing, and the caret to restore when it mounts. */
   const [active, setActive] = useState<{ id: string; caret: number } | null>(null)
@@ -272,67 +202,22 @@ export function BookEditor({
   /** The division whose title is being renamed, if any. */
   const [editingTitle, setEditingTitle] = useState<string | null>(null)
 
-  const passages = useMemo(() => {
-    const ofSection = (placement: 'front' | 'back'): Passage[] =>
-      doc.sections
-        .filter((s) => s.placement === placement)
-        .flatMap((s) =>
-          s.blocks.map((b, index) => ({
-            id: b.id,
-            kind: b.kind,
-            text: withMarkup(b.text, b.emphasis, b.strong),
-            origin: { type: 'section' as const, sectionId: s.id, index }
-          }))
-        )
-    // A division with nothing written yet has no blocks in the document — the
-    // engine refuses to set an empty one — so a freshly added introduction
-    // would be invisible here, with nowhere to type its first word. It gets a
-    // placeholder passage, sourced from its own record.
-    const inDoc = new Set(doc.sections.map((s) => s.id))
-    const placeholders = (placement: 'front' | 'back'): Passage[] =>
-      edits
-        .filter(
-          (e): e is BookEdit & { kind: 'section' } =>
-            e.kind === 'section' && e.placement === placement && !inDoc.has(e.sectionId)
-        )
-        .map((e) => ({
-          id: `${e.sectionId}/b0`,
-          kind: 'paragraph' as const,
-          text: '',
-          origin: { type: 'section' as const, sectionId: e.sectionId, index: 0 }
-        }))
-    const body: Passage[] = doc.blocks.map((b) => ({
-      id: b.id,
-      kind: b.kind,
-      text: withMarkup(b.text, b.emphasis, b.strong),
-      ...(b.label ? { label: b.label } : {}),
-      ...(b.level !== undefined ? { level: b.level } : {}),
-      origin: { type: 'body' as const }
-    }))
-    return [
-      ...ofSection('front'),
-      ...placeholders('front'),
-      ...body,
-      ...ofSection('back'),
-      ...placeholders('back')
-    ]
-  }, [doc, edits])
+  // Landing from another view. Deferred a tick because the column has only just
+  // been mounted, and a jump to an element that is not on screen yet is a no-op
+  // that fails silently — which is how "Edit this passage" would have looked
+  // like a button that does nothing.
+  useEffect(() => {
+    if (!landOn) return
+    const timer = setTimeout(() => {
+      jumpTo(landOn.blockId)
+      flash(landOn.blockId)
+    }, 60)
+    return () => clearTimeout(timer)
+  }, [landOn])
 
-  const sectionTitles = useMemo(() => {
-    // The first passage of each division carries its title, shown above it.
-    const out = new Map<string, { sectionId: string; title: string }>()
-    for (const section of doc.sections) {
-      const first = section.blocks[0]
-      if (first) out.set(first.id, { sectionId: section.id, title: section.title })
-    }
-    const inDoc = new Set(doc.sections.map((s) => s.id))
-    for (const e of edits) {
-      if (e.kind === 'section' && !inDoc.has(e.sectionId)) {
-        out.set(`${e.sectionId}/b0`, { sectionId: e.sectionId, title: e.title })
-      }
-    }
-    return out
-  }, [doc, edits])
+  const passages = useMemo(() => passagesOf(doc, edits), [doc, edits])
+
+  const sectionTitles = useMemo(() => sectionTitlesOf(doc, edits), [doc, edits])
 
   /**
    * The book's own footnotes, placed under the passage their marker sits in.
@@ -364,30 +249,7 @@ export function BookEditor({
     return { byBlock, unplaced }
   }, [doc])
 
-  /**
-   * The outline, for a column that is otherwise one long scroll: divisions set
-   * before the body, the chapters, divisions after — the same list the
-   * contents page is built from, so it cannot disagree with the book.
-   */
-  const outline = useMemo(() => {
-    const entries: { id: string; label: string; kind: 'division' | 'chapter' }[] = []
-    for (const s of doc.sections.filter((x) => x.placement === 'front')) {
-      const first = s.blocks[0]
-      if (first) entries.push({ id: first.id, label: s.title, kind: 'division' })
-    }
-    for (const c of doc.chapters) {
-      entries.push({
-        id: c.id,
-        label: c.label ? `${c.label} · ${c.title}` : c.title,
-        kind: 'chapter'
-      })
-    }
-    for (const s of doc.sections.filter((x) => x.placement === 'back')) {
-      const first = s.blocks[0]
-      if (first) entries.push({ id: first.id, label: s.title, kind: 'division' })
-    }
-    return entries
-  }, [doc])
+  const outline = useMemo(() => outlineOf(doc), [doc])
 
   const words = useMemo(() => passages.reduce((n, p) => n + wordCount(p.text), 0), [passages])
 

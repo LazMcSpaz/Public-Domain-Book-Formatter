@@ -36,7 +36,13 @@ export {
   type MemoContext,
   type MemoEdit
 } from './memos'
-export { htmlOfMarkup, markupOfNodes, plainOffsetOf, type RichNode } from './rich-text'
+export {
+  htmlOfMarkup,
+  htmlWithSpans,
+  markupOfNodes,
+  type RichNode,
+  type TextSpan
+} from './rich-text'
 export { findMatches, sweepText, type SweepMatch } from './sweep'
 export {
   proofSheet,

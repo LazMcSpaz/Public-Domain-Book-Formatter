@@ -2628,3 +2628,184 @@ textarea.galley-plain {
   color: var(--ink);
   border-color: var(--accent);
 }
+
+/* --- the reading view -------------------------------------------------------
+   The book to read and to mark. Wider leading than the galley and no toolbar:
+   this is the one surface here whose job is to be read for an hour rather than
+   worked in, and every control it does not have is a control that cannot be
+   pressed by a thumb resting on the page. */
+
+.reading {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.reading-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px 16px;
+  padding: 8px 2px;
+}
+.reading-count {
+  font-weight: 600;
+}
+.reading-tally {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.reading-chip {
+  font-size: 0.78rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+}
+.reading-hint {
+  font-size: 0.82rem;
+  color: var(--muted);
+  flex: 1 1 12em;
+}
+
+.reading-layout {
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+}
+
+/* Set for reading rather than for editing: a shorter measure and more leading.
+   The face and the frame are the galley's, because it is the same column. */
+.reading-page {
+  max-width: 36em;
+  font-size: 1.12rem;
+  line-height: 1.85;
+}
+.reading-passage .galley-block {
+  cursor: text;
+  /* iOS: let a drag select words instead of scrolling the page away. */
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* A mark is a tint under the words, never a change to them. The four are told
+   apart by hue, but the hue is a rendering of the tag and never a second
+   vocabulary — nobody remembers what yellow meant six months later, so the
+   colour always appears beside its name in the bar and the note. */
+.reading-mark {
+  background: none;
+  color: inherit;
+  border-radius: 2px;
+  padding: 0.05em 0;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  cursor: pointer;
+}
+.reading-mark.tag-note,
+.reading-chip.tag-note {
+  background: color-mix(in srgb, #f5c518 30%, transparent);
+}
+.reading-mark.tag-intro,
+.reading-chip.tag-intro {
+  background: color-mix(in srgb, #4a9eda 26%, transparent);
+}
+.reading-mark.tag-glossary,
+.reading-chip.tag-glossary {
+  background: color-mix(in srgb, #63c07a 28%, transparent);
+}
+.reading-mark.tag-comment {
+  background: color-mix(in srgb, #d98cc4 30%, transparent);
+}
+/* Overlapping marks carry every class covering them, so a stretch marked twice
+   reads as both rather than as whichever happened to be listed first. */
+.reading-mark.tag-note.tag-intro {
+  background: linear-gradient(
+    color-mix(in srgb, #f5c518 30%, transparent),
+    color-mix(in srgb, #4a9eda 26%, transparent)
+  );
+}
+
+/* The way out of the reading surface sits in the popover, not on the page: a
+   per-paragraph control shown on hover is not there at all on the device this
+   view is for. */
+.reading-popover .reading-fix {
+  margin-left: 6px;
+  border-left: 1px solid var(--line);
+  padding-left: 12px;
+  color: var(--muted);
+}
+
+/* The popover follows the selection, so it must not be clipped by the column.
+   Fixed rather than absolute for the same reason the term grid's peek is
+   portalled: the thing it hangs off scrolls. */
+.reading-popover {
+  position: fixed;
+  transform: translate(-50%, -100%);
+  z-index: 40;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 6px 24px rgb(0 0 0 / 22%);
+  max-width: min(94vw, 34em);
+}
+.reading-popover button {
+  font-size: 0.82rem;
+  padding: 8px 10px;
+  border-radius: 6px;
+  /* A finger, not a pointer: below about this the button is missed as often as
+     it is hit, and a missed button here clears the selection. */
+  min-height: 40px;
+}
+
+.reading-note {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  z-index: 41;
+  width: min(94vw, 34em);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgb(0 0 0 / 26%);
+}
+.reading-note-what {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.reading-note blockquote {
+  margin: 0;
+  font-style: italic;
+  font-size: 0.9rem;
+  max-height: 5em;
+  overflow-y: auto;
+}
+.reading-note textarea {
+  width: 100%;
+  min-height: 4.5em;
+  resize: vertical;
+}
+.reading-note-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 860px) {
+  .reading-layout {
+    flex-direction: column;
+  }
+  .reading-page {
+    padding: 24px 18px;
+    max-width: 100%;
+  }
+}

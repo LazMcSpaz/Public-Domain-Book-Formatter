@@ -147,83 +147,106 @@ function serialize(nodes: ArrayLike<RichNode>, insideI: boolean, insideB: boolea
   return out
 }
 
-/**
- * Where a point in the rendered DOM falls in the block's **plain text**.
- *
- * The one piece of arithmetic the reading surface needs, and the one worth
- * keeping out of a component. Three coordinate systems meet at a selection and
- * they are all different numbers for the same place:
- *
- *  1. the *notation* (`withMarkup`), which is what an edit is written in and
- *     which contains `<i>` and `<b>`;
- *  2. the *plain text* (`parseInlineMarkup(raw).text`), which is what a reader
- *     sees and where every anchor in this app is measured — a note's `at`, a
- *     `split`, a memo, a highlight's `from` and `to`;
- *  3. the *rendered HTML* from `htmlOfMarkup`, where the finger actually lands
- *     and whose offsets count tag characters.
- *
- * A range hands back a node and an offset within it, which is (3). Summing the
- * lengths of every text node before it gives (2) directly — and exactly, not
- * approximately, because the escaping `htmlOfMarkup` does is undone by the
- * parser: `&amp;` is five characters of HTML and one character of text node,
- * and it is the text node this counts.
- *
- * Returns null when the point is not inside `root` at all, which is what a
- * selection dragged out of the passage looks like, rather than a plausible
- * number measured from the wrong origin.
- */
-export function plainOffsetOf(
-  root: RichNode,
-  target: RichNode,
-  offsetInTarget: number
-): number | null {
-  let seen = 0
-  let found: number | null = null
-
-  const walk = (node: RichNode): boolean => {
-    if (node === target) {
-      found =
-        node.nodeType === 3
-          ? // A text node's offset is a count of *characters*, so it adds.
-            seen + clamp(offsetInTarget, (node.nodeValue ?? '').length)
-          : // An element's offset is a count of *children* — which is what a
-            // selection landing on a tag boundary hands back, and reading it as
-            // characters would put the anchor a plausible distance from where
-            // the finger actually was. So the answer is the element's start
-            // plus the text in the children before that index.
-            seen + textLength(node.childNodes, clamp(offsetInTarget, node.childNodes.length))
-      return true
-    }
-    if (node.nodeType === 3) {
-      seen += (node.nodeValue ?? '').length
-      return false
-    }
-    for (let i = 0; i < node.childNodes.length; i += 1) {
-      if (walk(node.childNodes[i]!)) return true
-    }
-    return false
-  }
-
-  if (root === target) {
-    return textLength(root.childNodes, clamp(offsetInTarget, root.childNodes.length))
-  }
-  for (let i = 0; i < root.childNodes.length; i += 1) {
-    if (walk(root.childNodes[i]!)) return found
-  }
-  return null
+/** A stretch of a passage to tint, in the block's *plain-text* coordinates. */
+export interface TextSpan {
+  from: number
+  to: number
+  /** What kind of tint. Becomes a class, so the surface decides the colour. */
+  key: string
+  /** Which record this stretch belongs to, for a click on it. */
+  id: string
 }
 
-const clamp = (value: number, max: number): number => Math.max(0, Math.min(max, value))
+/**
+ * The notation as HTML, with stretches of it tinted.
+ *
+ * The reading view shows the book with the editor's marks on it, and the two
+ * things it has to combine are measured differently: emphasis is word indices
+ * into the notation, and a highlight is a character range in the plain text.
+ * Neither can be applied to the other's output by hand without getting the
+ * coordinates wrong, which is why this is one function rather than a component
+ * splicing strings.
+ *
+ * It builds on `htmlOfMarkup` rather than beside it — still one renderer for
+ * the book's own emphasis — and walks its output counting *plain text*: a tag
+ * is not characters, and `&amp;` is one character and not five.
+ *
+ * Two rules keep the result valid HTML:
+ *
+ *  - a tint closes before any tag and reopens after it, so a highlight that
+ *    starts inside an italic run and ends outside it emits two well-nested
+ *    `<mark>`s rather than one that crosses `</i>`;
+ *  - **overlapping tints split at every boundary**, each stretch carrying every
+ *    record covering it. One winning and the other vanishing would tell the
+ *    editor a passage is marked once when it is marked twice, and the second
+ *    mark would then be invisible until the harvest contradicted the page.
+ */
+export function htmlWithSpans(raw: string, spans: readonly TextSpan[]): string {
+  const html = htmlOfMarkup(raw)
+  if (spans.length === 0) return html
 
-/** The characters in the first `count` children, tags not being characters. */
-function textLength(nodes: ArrayLike<RichNode>, count: number): number {
-  let total = 0
-  for (let i = 0; i < count; i += 1) {
-    const node = nodes[i]!
-    total +=
-      node.nodeType === 3
-        ? (node.nodeValue ?? '').length
-        : textLength(node.childNodes, node.childNodes.length)
+  /** Every record covering a character, as a stable key and an id list. */
+  const coverAt = (at: number): { key: string; ids: string } | null => {
+    const over = spans.filter((s) => at >= s.from && at < s.to)
+    if (over.length === 0) return null
+    return {
+      key: [...new Set(over.map((s) => s.key))].sort().join(' '),
+      ids: over.map((s) => s.id).join(' ')
+    }
   }
-  return total
+
+  interface Cover {
+    key: string
+    ids: string
+  }
+  let out = ''
+  let plain = 0
+  // Held in an object because the two helpers below assign it: TypeScript does
+  // not track assignments made inside a closure, so a bare `let` initialised to
+  // null stays narrowed to null everywhere it is read.
+  const state: { open: Cover | null } = { open: null }
+  const close = (): void => {
+    if (state.open) out += '</mark>'
+    state.open = null
+  }
+  const openTo = (cover: Cover | null): void => {
+    if (cover) out += `<mark class="reading-mark ${cover.key}" data-marks="${cover.ids}">`
+    state.open = cover
+  }
+
+  for (let i = 0; i < html.length;) {
+    if (html[i] === '<') {
+      const end = html.indexOf('>', i)
+      // `htmlOfMarkup` emits only its own well-formed tags, so an unclosed `<`
+      // cannot happen; treating one as text rather than throwing keeps this
+      // total if that ever stops being true.
+      const stop = end === -1 ? html.length : end + 1
+      const was = state.open
+      close()
+      out += html.slice(i, stop)
+      if (was) openTo(was)
+      i = stop
+      continue
+    }
+    let token = html[i]!
+    let step = 1
+    if (token === '&') {
+      const end = html.indexOf(';', i)
+      if (end !== -1 && end - i <= 6) {
+        token = html.slice(i, end + 1)
+        step = token.length
+      }
+    }
+    const cover = coverAt(plain)
+    const open = state.open
+    if (cover?.key !== open?.key || cover?.ids !== open?.ids) {
+      close()
+      openTo(cover)
+    }
+    out += token
+    plain += 1
+    i += step
+  }
+  close()
+  return out
 }

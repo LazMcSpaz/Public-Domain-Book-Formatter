@@ -178,6 +178,7 @@ import { NoteReview } from './NoteReview'
 import { PreviewPane } from './PreviewPane'
 import { ProofSheet } from './ProofSheet'
 import { BookEditor } from './BookEditor'
+import { BookReader } from './BookReader'
 
 /** A cache key that changes whenever the stack that produced the pixels does. */
 function retouchKey(id: string, ops: readonly unknown[]): string {
@@ -201,6 +202,17 @@ function lostNote(lost: readonly string[]): string {
     } missing rather than wrong — nothing is drawn in ${lost.length === 1 ? 'its' : 'their'} place.`
   )
 }
+
+/**
+ * Which face of the proofing workbench is open.
+ *
+ * `leaves` is the proof sheet (one leaf beside its scan), `book` the galley
+ * (the whole volume as one editable column), `reading` the reader (the same
+ * column, unable to change a word, where the passages that want a footnote get
+ * marked). All three write the same edit list, which is what stops them
+ * disagreeing about what the book is.
+ */
+type ProofView = 'leaves' | 'book' | 'reading'
 
 export function App(): JSX.Element {
   const [state, setState] = useState<WizardState>(initialState)
@@ -427,9 +439,16 @@ export function App(): JSX.Element {
    * shape for working on the prose). Both write the same edit list. The choice
    * is remembered per book, the way the review place is: someone deep in an
    * editing pass should land back in the editor, not at leaf one.
+   *
+   * `reading` is the third: the book to *read*, before either the notes or the
+   * introduction is written, marking the passages that want one. It writes the
+   * same edit list as the other two and can change no text at all — see
+   * `BookReader`, and `docs/PLAN-reading.md` for why that is the point.
    */
-  const [proofView, setProofView] = useState<'leaves' | 'book'>('leaves')
-  const chooseProofView = useCallback((view: 'leaves' | 'book'): void => {
+  const [proofView, setProofView] = useState<ProofView>('leaves')
+  /** Where the galley should land when it next opens — the reader's way out. */
+  const [landOn, setLandOn] = useState<{ blockId: string; tick: number } | null>(null)
+  const chooseProofView = useCallback((view: ProofView): void => {
     setProofView(view)
     const key = fileKeyRef.current
     if (!key) return
@@ -918,7 +937,7 @@ export function App(): JSX.Element {
     if (!key) return
     try {
       const saved = localStorage.getItem(`pdbf.proofview.${key}`)
-      if (saved === 'book' || saved === 'leaves') setProofView(saved)
+      if (saved === 'book' || saved === 'leaves' || saved === 'reading') setProofView(saved)
     } catch {
       /* a lost preference is not worth an error */
     }
@@ -4187,6 +4206,15 @@ export function App(): JSX.Element {
                 <button
                   type="button"
                   role="tab"
+                  aria-selected={proofView === 'reading'}
+                  className={proofView === 'reading' ? 'selected' : ''}
+                  onClick={() => chooseProofView('reading')}
+                >
+                  Read the book
+                </button>
+                <button
+                  type="button"
+                  role="tab"
                   aria-selected={proofView === 'leaves'}
                   className={proofView === 'leaves' ? 'selected' : ''}
                   onClick={() => chooseProofView('leaves')}
@@ -4261,7 +4289,24 @@ export function App(): JSX.Element {
                 </>
               ) : null}
             </div>
-            {proofView === 'book' ? (
+            {proofView === 'reading' ? (
+              <BookReader
+                document={correctedDocument!}
+                edits={edits}
+                onChange={changeEdits}
+                {...(fileKeyRef.current ? { bookKey: fileKeyRef.current } : {})}
+                onEditPassage={(blockId) => {
+                  // The deliberate way out of a read-only surface. The galley
+                  // opens *on the passage* rather than at the top, through the
+                  // same landing the page view uses, because a reader who has
+                  // just seen an errant full stop should not then have to find
+                  // it again in three hundred pages. Stamped, so asking for the
+                  // same block twice in a session lands twice.
+                  setLandOn({ blockId, tick: Date.now() })
+                  chooseProofView('book')
+                }}
+              />
+            ) : proofView === 'book' ? (
               <BookEditor
                 document={correctedDocument!}
                 edits={edits}
@@ -4277,6 +4322,7 @@ export function App(): JSX.Element {
                     : null
                 }
                 layoutBusy={proofLayoutBusy}
+                landOn={landOn}
               />
             ) : (
               <ProofSheet

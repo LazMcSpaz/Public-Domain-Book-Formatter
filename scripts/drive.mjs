@@ -2604,6 +2604,79 @@ async function serve() {
     },
 
     /**
+     * Drag over words in the reading view, as a finger would.
+     *
+     * The one gesture that surface has, and the one thing no other verb could
+     * reach: `click` presses a button, and a highlight begins with a selection
+     * rather than with a press. Without this the reading view could only be
+     * looked at, never worked — and a UI checked by looking at a screenshot of
+     * its empty state is a UI shipped blind.
+     *
+     * ```
+     * select p2b0 5 19        # characters 5 to 19 of that passage
+     * select p2b0 "candle flame"   # or the words themselves
+     * ```
+     *
+     * Offsets are in the passage's **plain text**, which is where every anchor
+     * in this app is measured — the same coordinates a highlight stores, so
+     * what this selects is what gets marked.
+     */
+    select: async ([blockId, a, b]) => {
+      if (!blockId) throw new Error('select <blockId> <from> <to> | select <blockId> "<words>"')
+      const result = await page.evaluate(
+        ([blockId, a, b]) => {
+          const host = document.querySelector(`[data-passage="${CSS.escape(blockId)}"]`)
+          if (!host) {
+            throw new Error(`No passage \`${blockId}\` on screen. The reading view has to be open.`)
+          }
+          const text = host.textContent ?? ''
+          let from = Number(a)
+          let to = Number(b)
+          if (!Number.isFinite(from) || b === undefined) {
+            const words = String(a ?? '')
+            from = text.indexOf(words)
+            if (from === -1) throw new Error(`\`${words}\` is not in that passage.`)
+            to = from + words.length
+          }
+
+          // Walk to the text node holding each offset: a range is addressed by
+          // node and offset, and the passage's own offsets are a sum across
+          // every text node in it.
+          const point = (at) => {
+            let seen = 0
+            const walker = document.createTreeWalker(host, NodeFilter.SHOW_TEXT)
+            let node = walker.nextNode()
+            while (node) {
+              const length = node.nodeValue?.length ?? 0
+              if (seen + length >= at) return { node, offset: at - seen }
+              seen += length
+              node = walker.nextNode()
+            }
+            return null
+          }
+          const start = point(from)
+          const end = point(to)
+          if (!start || !end) throw new Error('That range is past the end of the passage.')
+
+          const range = document.createRange()
+          range.setStart(start.node, start.offset)
+          range.setEnd(end.node, end.offset)
+          const sel = window.getSelection()
+          sel.removeAllRanges()
+          sel.addRange(range)
+          // `selectionchange` is what the surface listens on, and it does not
+          // fire for a selection made from script in every engine — so it is
+          // dispatched here rather than hoped for.
+          document.dispatchEvent(new Event('selectionchange'))
+          return { blockId, from, to, selected: sel.toString() }
+        },
+        [blockId, a, b]
+      )
+      await page.waitForTimeout(200)
+      return result
+    },
+
+    /**
      * The reading: every passage the editor marked, as a sheet or as a brief.
      *
      * ```

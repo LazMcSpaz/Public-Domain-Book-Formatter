@@ -95,14 +95,38 @@ export function highlightCounts(edits: readonly BookEdit[]): Record<HighlightTag
 /** How many words either side of the quote the sheet shows. */
 const CONTEXT_WORDS = 12
 
-/** The marked words with a little either side, so a highlight reads as a place. */
+/**
+ * The marked words with a little either side, so a highlight reads as a place.
+ *
+ * The context is *sliced* out of the passage rather than rebuilt from its
+ * words. Splitting on whitespace and re-joining looks equivalent and is not: it
+ * detaches punctuation from the word it belongs to, so a mark ending mid
+ * sentence comes back as `«a candle flame» , the student` — which is not what
+ * the book says, in a file whose whole purpose is to show the editor what the
+ * book says.
+ *
+ * The ellipsis is a claim that there is more of this paragraph, so it is
+ * written only where there is. One printed against the end of a passage sends
+ * the reader of the sheet looking for text that is not there.
+ */
 function passageAround(text: string, from: number, to: number): string {
-  const before = text.slice(0, from).split(/\s+/u).filter(Boolean).slice(-CONTEXT_WORDS)
-  const after = text.slice(to).split(/\s+/u).filter(Boolean).slice(0, CONTEXT_WORDS)
-  const marked = text.slice(from, to).trim()
-  const head = before.length > 0 ? `…${before.join(' ')} ` : ''
-  const tail = after.length > 0 ? ` ${after.join(' ')}…` : ''
-  return `${head}«${marked}»${tail}`
+  const head = text.slice(0, from)
+  const tail = text.slice(to)
+  const headWords = [...head.matchAll(/\S+/gu)]
+  const tailWords = [...tail.matchAll(/\S+/gu)]
+
+  const headFrom =
+    headWords.length > CONTEXT_WORDS ? headWords[headWords.length - CONTEXT_WORDS]!.index : 0
+  const lastTail = tailWords[Math.min(CONTEXT_WORDS, tailWords.length) - 1]
+  const tailTo = lastTail ? lastTail.index + lastTail[0].length : 0
+
+  const before = head.slice(headFrom).trimStart()
+  const after = tail.slice(0, tailTo)
+  return (
+    `${headWords.length > CONTEXT_WORDS ? '…' : ''}${before}` +
+    `«${text.slice(from, to).trim()}»` +
+    `${after}${tailWords.length > CONTEXT_WORDS ? '…' : ''}`
+  )
 }
 
 /**

@@ -429,6 +429,9 @@ node scripts/drive.mjs memos         # notes the editor left for the assistant, 
                                      #   "<what was done>"` answers one — the memo
                                      #   stays, outcome attached, until the editor
                                      #   clears it
+node scripts/drive.mjs select p12b3 "a candle flame"   # drag over words in the
+                                     #   reading view, as a finger would — the one
+                                     #   gesture no other verb could reach
 node scripts/drive.mjs reading       # every passage the editor marked while reading,
                                      #   located by its words against the book as it
                                      #   stands; `--tag intro` is one pass's brief,
@@ -1290,6 +1293,31 @@ in `screenshots/`. Don't ship UI blind.
   paragraph deleted every highlight in it, silently. Stage 2, the reading
   surface, is next; until it exists a reading is made and read from the
   conversation.
+- **Also done**: **the reading pass, stage 2** — the surface. A third view
+  beside "Edit the book" and "Check against the scan": **"Read the book"**, the
+  same column the galley builds (`passagesOf`, extracted and shared, so a mark
+  can never land on a paragraph the editor was not looking at) with **no way to
+  change a word in it** — no `contenteditable`, no toolbar, no find and replace.
+  Two hundred pages of reading on a touch screen with a caret in the words is an
+  evening of accidental edits. Drag over words and a popover offers the three
+  tags, a comment, and **"Fix it here"**, which hands the passage to the galley
+  and lands on it. That last one was a per-paragraph button first, shown on
+  hover — wrong twice over, because the device this view is for has no hover, so
+  it was either chrome on every paragraph of a book being read or nothing at
+  all; dragging over the words is what a reader does anyway on seeing an errant
+  full stop, so the offer belongs on that. Marks are drawn by `htmlWithSpans`,
+  which tints stretches of the notation _without_ letting a tint cross an `<i>`
+  and splits overlapping marks at every boundary — one winning would say a
+  passage is marked once when it is marked twice. The tints are located by
+  `findQuote` against the passage as it stands, never by the stored offsets,
+  for the reason the record gives. Two shared modules came out of it rather than
+  a second copy of anything: `dom-offsets.ts`, where the three coordinate
+  systems are reconciled once through `Range.toString()` — a pure
+  re-implementation was written for this and thrown away, being longer than the
+  browser's own and wrong in its first version — and `passages.ts`, the column
+  itself. Verified in the browser rather than by reading the diff:
+  `drive.mjs select` drags over words the way a finger does, and the round trip
+  from gesture to `drive.mjs reading` was driven end to end.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

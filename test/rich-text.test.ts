@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { htmlOfMarkup, markupOfNodes, plainOffsetOf, type RichNode } from '@core/edits'
+import { htmlOfMarkup, htmlWithSpans, markupOfNodes, type RichNode } from '@core/edits'
 import { normalizeMarkup, type TranscribedBlock } from '@core/transcribe'
 
 /** A text node, as the DOM would hand it over. */
@@ -93,62 +93,59 @@ describe('the round trip', () => {
   })
 })
 
-describe("plainOffsetOf — where a finger landed, in the book's own coordinates", () => {
-  // `Read <i>the whole book</i> twice.` as the DOM holds it after rendering.
-  const root = el('div', [text('Read '), el('i', [text('the whole book')]), text(' twice.')])
-  const PLAIN = 'Read the whole book twice.'
+describe("htmlWithSpans — the book with the editor's marks on it", () => {
+  const span = (from: number, to: number, id = 'h1', key = 'tag-note') => ({ from, to, key, id })
 
-  it('maps a point in the first text node straight through', () => {
-    expect(plainOffsetOf(root, root.childNodes[0]!, 4)).toBe(4)
-    expect(PLAIN.slice(0, 4)).toBe('Read')
+  it('tints a stretch of plain text at the offsets it was marked at', () => {
+    // "Read the whole book twice." — marking "whole book".
+    expect(htmlWithSpans('Read the whole book twice.', [span(9, 19)])).toBe(
+      'Read the <mark class="reading-mark tag-note" data-marks="h1">whole book</mark> twice.'
+    )
   })
 
-  it('carries the count across an italic run, whose tags are not characters', () => {
-    // The trap the whole function exists for. In the rendered HTML this point
-    // is at 22, because `<i>` is three characters there. In the plain text —
-    // which is where every anchor in this app is measured — it is 19.
-    const inside = (root.childNodes[1] as RichNode).childNodes[0]!
-    expect(plainOffsetOf(root, inside, 'the whole book'.length)).toBe(19)
-    expect(PLAIN.slice(5, 19)).toBe('the whole book')
+  it('leaves the passage exactly as htmlOfMarkup left it when nothing is marked', () => {
+    const raw = 'Read <i>the whole book</i> twice.'
+    expect(htmlWithSpans(raw, [])).toBe(htmlOfMarkup(raw))
   })
 
-  it('counts text nodes before the point, not tags', () => {
-    expect(plainOffsetOf(root, root.childNodes[2]!, ' twice.'.length)).toBe(PLAIN.length)
+  it('counts the plain text, not the tags, when emphasis is in the way', () => {
+    // The trap. In the rendered HTML "twice" starts at 29 because `<i>` and
+    // `</i>` are seven characters there; in the plain text it starts at 20,
+    // which is where the highlight was made.
+    const out = htmlWithSpans('Read <i>the whole book</i> twice.', [span(20, 25)])
+    expect(out).toContain('>twice</mark>')
+    expect(out).toContain('<i>the whole book</i>')
   })
 
-  it('counts an escaped character once, because it counts the text node', () => {
-    // `htmlOfMarkup` writes `&amp;`, five characters of HTML. The DOM hands
-    // back a text node holding one, and the book's plain text has one.
-    const amp = el('div', [text('Salt & fire')])
-    expect(plainOffsetOf(amp, amp.childNodes[0]!, 6)).toBe(6)
-    expect(htmlOfMarkup('Salt & fire')).toContain('&amp;')
+  it('closes the tint before a tag and reopens after, so nothing crosses </i>', () => {
+    // A highlight running from inside an italic run to outside it. One <mark>
+    // spanning </i> would be invalid HTML and the browser would repair it
+    // somewhere the editor did not mark.
+    const out = htmlWithSpans('Read <i>the whole book</i> twice.', [span(14, 25)])
+    expect(out).not.toMatch(/<mark[^>]*>[^<]*<\/i>/u)
+    expect(out.match(/<mark/gu)).toHaveLength(2)
+    expect(out).toContain('</i>')
   })
 
-  it('reads an offset into an element as a count of children, not characters', () => {
-    // What a selection landing on a tag boundary hands back: the container is
-    // the element and the offset is a child index. Selecting the whole
-    // italicised phrase ends at <i> child 1 — which is character 19, the end of
-    // "the whole book", and not character 6. Reading it as characters would put
-    // the anchor a plausible-looking distance from where the finger was, which
-    // is the exact fault CLAUDE.md names: coordinates compared before checking
-    // what they mean.
-    const italic = root.childNodes[1]!
-    expect(plainOffsetOf(root, italic, 0)).toBe(5)
-    expect(plainOffsetOf(root, italic, 1)).toBe(19)
-    expect(PLAIN.slice(5, 19)).toBe('the whole book')
+  it('splits at every boundary so two overlapping marks are both visible', () => {
+    // One winning would tell the editor a passage is marked once when it is
+    // marked twice, and the second would stay invisible until the harvest
+    // contradicted the page.
+    const out = htmlWithSpans('Read the whole book twice.', [
+      span(0, 14, 'h1', 'tag-note'),
+      span(9, 19, 'h2', 'tag-intro')
+    ])
+    expect(out).toContain('data-marks="h1"')
+    expect(out).toContain('data-marks="h1 h2"')
+    expect(out).toContain('data-marks="h2"')
+    expect(out).toContain('tag-intro tag-note')
   })
 
-  it('reads an offset into the passage itself the same way', () => {
-    // Safari hands back the container element for a selection that spans whole
-    // children, so the root is a legitimate target and not an edge case.
-    expect(plainOffsetOf(root, root, 0)).toBe(0)
-    expect(plainOffsetOf(root, root, 2)).toBe(19)
-    expect(plainOffsetOf(root, root, 3)).toBe(PLAIN.length)
-  })
-
-  it('returns null for a point outside the passage, rather than a plausible number', () => {
-    // A drag that left the block. The honest answer is "not here" — a number
-    // measured from the wrong origin is the fault CLAUDE.md names outright.
-    expect(plainOffsetOf(root, text('somewhere else'), 3)).toBeNull()
+  it('counts an escaped character once, because a reader sees one', () => {
+    // `&amp;` is five characters of HTML and one of text. Counting the HTML
+    // would slide every mark after an ampersand four characters right.
+    const out = htmlWithSpans('Salt & fire, twice.', [span(13, 18)])
+    expect(out).toContain('&amp;')
+    expect(out).toContain('>twice</mark>')
   })
 })
