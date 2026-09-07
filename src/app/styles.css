@@ -2803,10 +2803,18 @@ textarea.galley-plain {
 @media (max-width: 860px) {
   .reading-layout {
     flex-direction: column;
+    /* `align-items: flex-start` on the row layout shrinks a column child to
+       its content, so stacking without resetting it squeezed the whole book
+       into a strip about ninety pixels wide — on exactly the screen size this
+       view exists for. Found by looking at a render, not at the rule. */
+    align-items: stretch;
   }
   .reading-page {
-    padding: 24px 18px;
-    max-width: 100%;
+    /* The padding gives way, the measure does not. Letting `max-width` go to
+       100% here put 750px — something like a hundred characters — on a line at
+       tablet width, which is the width this view is *for*. A measure is a
+       reading decision, not a desktop luxury. */
+    padding: 24px 16px;
   }
 }
 
@@ -2829,4 +2837,86 @@ textarea.galley-plain {
   font-size: 0.8rem;
   color: var(--muted);
   flex-basis: 100%;
+}
+
+/* --- the shelf as the front page ------------------------------------------
+   The books come first and the scan intake last. The old order was the order
+   the app was built in, and it is wrong for every session after the first —
+   badly so on a tablet, where opening a new scan is the one thing nobody
+   does. */
+
+.shelf {
+  margin: 0 0 22px;
+}
+.shelf-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.shelf-refresh {
+  font-size: 0.78rem;
+  padding: 3px 10px;
+}
+
+.shelf-books {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(auto-fill, minmax(17em, 1fr));
+}
+
+.shelf-book {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.shelf-book-name {
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+.shelf-book-what {
+  font-size: 0.82rem;
+  color: var(--muted);
+}
+.shelf-book-when {
+  font-size: 0.76rem;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+.shelf-book .actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: auto;
+}
+/* A finger, not a pointer. */
+.shelf-book .actions button {
+  min-height: 40px;
+  padding: 0 14px;
+}
+
+.shelf-none .actions {
+  margin-top: 8px;
+}
+
+/* The intake, demoted: still the whole target, no longer the headline. */
+.drop.quiet {
+  padding: 18px;
+  background: none;
+  opacity: 0.75;
+}
+.drop.quiet strong {
+  font-size: 1rem;
+}
+.drop.quiet:hover {
+  opacity: 1;
 }

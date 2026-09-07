@@ -183,6 +183,14 @@ export interface ShelfAbout {
   pageCount: number
   notes: number
   corrections: number
+  /**
+   * Passages marked while reading.
+   *
+   * Optional on the way in: every card written before the reading pass existed
+   * has no such field, and a listing that refused those would hide the books
+   * already on the shelf.
+   */
+  marked: number
   facts: number
   /** Whether the paid pass reached the end of the book. */
   complete: boolean
@@ -209,6 +217,7 @@ export function parseAbout(text: string): ShelfAbout | null {
     pageCount: n('pageCount'),
     notes: n('notes'),
     corrections: n('corrections'),
+    marked: n('marked'),
     facts: n('facts'),
     complete: v['complete'] !== false,
     scanPath: typeof v['scanPath'] === 'string' ? v['scanPath'] : null

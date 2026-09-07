@@ -1359,6 +1359,31 @@ in `screenshots/`. Don't ship UI blind.
   Deliberately not built: a native shell. The editor reads by dragging a finger
   on text, so Pencil input — the only thing of the three a native wrapper would
   add that this pass could use — is not wanted.
+- **Also done**: **the shelf is the front page, and a book can be opened to
+  _read_ without its scan.** Two halves of the same thing. The intake screen led
+  with "drop a scanned PDF" and listed the shelf below it — the order the app
+  was built in, wrong for every session after the first and badly wrong on a
+  tablet, where opening a new scan is the one thing nobody does. The shelf now
+  comes first as cards (leaves, marks, notes, corrections, when it was saved),
+  the device's own books next, and the intake last. And **`readFromShelf`
+  fetches `book.json` and the editor's pictures and stops** — no scan, no
+  recon, no Tesseract — marking the recovery half of the flow done (every
+  question it asks was answered when the book was read, and none can be
+  answered again without the paper) and landing in the reading view. That route
+  was written into the plan as a Stage 3 item and had not in fact been built:
+  until now every door into a book fetched the scan and started OCR, which on a
+  three-hundred-leaf book is tens of megabytes over cellular and ten minutes of
+  Tesseract before a word can be marked. What it gives up is _said_: the scan
+  tab reads "Scan not on this device" and is disabled, rather than opening a
+  view with no pixels in it. Two faults came out of looking at renders rather
+  than at rules — below 860px the reading column collapsed to about ninety
+  pixels wide, because stacking a flex row that sets `align-items: flex-start`
+  shrinks its children to content; and once that was fixed the measure ran to
+  750px, something like a hundred characters on a line, at exactly the width
+  this view exists for. Measured at three widths now: 41, 68 and 56 characters.
+  `summarizeBookFile` also stopped counting marks and comments as corrections,
+  which would have reported a book with two hundred reading marks as two
+  hundred corrections.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

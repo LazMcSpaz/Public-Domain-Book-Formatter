@@ -321,7 +321,9 @@ export interface Step {
 const intake: Step = {
   id: 'intake',
   title: 'Open a book',
-  blurb: 'Drop in the book you want to reprint — a scanned PDF, or an EPUB.',
+  blurb:
+    'Your shelf first — open a book you have already read, to read it through or work on it. ' +
+    'A new book starts from a scanned PDF or an EPUB at the foot of the page.',
   isGate: false,
   canEnter: () => true,
   questions: () => []

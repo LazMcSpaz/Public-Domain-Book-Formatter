@@ -454,6 +454,16 @@ export function App(): JSX.Element {
    * `BookReader`, and `docs/PLAN-reading.md` for why that is the point.
    */
   const [proofView, setProofView] = useState<ProofView>('leaves')
+  /**
+   * Whether the pixels are on this device.
+   *
+   * False for a book opened to *read*, which deliberately leaves the scan on
+   * the shelf. The scan view is then an empty promise, and an empty promise is
+   * worse than a closed door: the whole app is built on never deciding a
+   * reading without the paper, so a view that shows no paper and says nothing
+   * is the one shape it must not take.
+   */
+  const [scanOnDevice, setScanOnDevice] = useState(true)
   /** Where the galley should land when it next opens — the reader's way out. */
   const [landOn, setLandOn] = useState<{ blockId: string; tick: number } | null>(null)
   const chooseProofView = useCallback((view: ProofView): void => {
@@ -945,11 +955,17 @@ export function App(): JSX.Element {
     if (!key) return
     try {
       const saved = localStorage.getItem(`pdbf.proofview.${key}`)
-      if (saved === 'book' || saved === 'leaves' || saved === 'reading') setProofView(saved)
+      // Never back into the scan view when there is no scan. This effect runs
+      // *after* the render that opened the book, so a book opened to read on a
+      // tablet — with the pixels deliberately left on the shelf — would
+      // otherwise be dropped into an empty view by a preference set months ago
+      // on a machine that had them.
+      if (saved === 'leaves' && !scanOnDevice) setProofView('reading')
+      else if (saved === 'book' || saved === 'leaves' || saved === 'reading') setProofView(saved)
     } catch {
       /* a lost preference is not worth an error */
     }
-  }, [isProofing])
+  }, [isProofing, scanOnDevice])
 
   /**
    * A readable render of one leaf, for the proof sheet.
@@ -1112,6 +1128,7 @@ export function App(): JSX.Element {
     }))
 
     try {
+      setScanOnDevice(true)
       fileDataRef.current = file
       fileKeyRef.current = fileKey(file)
       setProgress({ page: 0, total: 1, phase: 'rendering' })
@@ -1221,6 +1238,7 @@ export function App(): JSX.Element {
     }))
 
     try {
+      setScanOnDevice(true)
       fileDataRef.current = file
       fileKeyRef.current = fileKey(file)
 
@@ -1585,6 +1603,44 @@ export function App(): JSX.Element {
   const landAt = useRef<StepId | null>(link.at)
   const openedFromLink = useRef(false)
 
+  /**
+   * Ask the shelf what it holds.
+   *
+   * Callable, not only an effect: the front page is now the shelf, and a
+   * listing fetched once at start-up goes stale the moment a book is saved
+   * from another device — which on a tablet is the ordinary case rather than
+   * the exception.
+   */
+  const refreshShelf = useCallback(async (): Promise<void> => {
+    const config = loadShelf()
+    if (!shelfReady(config)) return
+    setShelfBusy(true)
+    try {
+      setShelfBooks(await readShelf(config))
+      setShelfNote(null)
+    } catch (err) {
+      setShelfNote(
+        `Could not read ${config.repo} (${err instanceof Error ? err.message : String(err)}).`
+      )
+    } finally {
+      setShelfBusy(false)
+    }
+  }, [])
+
+  /**
+   * A title to put on a card, from the file name the book was read under.
+   *
+   * The catalogue card carries no title of its own — the real one is settled at
+   * the export gate, long after the card is first written — so this is the file
+   * name made readable rather than a claim about the book. Dashes and
+   * underscores become spaces and the extension goes; nothing else is guessed.
+   */
+  const titleOfBook = (fileName: string): string =>
+    fileName
+      .replace(/\.(pdf|epub)$/i, '')
+      .replace(/[_-]+/g, ' ')
+      .trim() || fileName
+
   /** What is on the shelf, listed once at start-up when one is configured. */
   useEffect(() => {
     const config = loadShelf()
@@ -1832,6 +1888,118 @@ export function App(): JSX.Element {
       adjudicated: spotsFromStored(saved.adjudicated)
     })
   }, [complete, stateFromTranscriptions])
+
+  /**
+   * Open a book from the shelf **to read**, without the scan.
+   *
+   * The reading pass needs `book.json` and nothing else: no pixels, no OCR, no
+   * layout. That is what makes it the one pass worth doing on a tablet, and
+   * until now nothing enforced it — every route into a book fetched the scan
+   * and started recon, which on a three-hundred-leaf book is tens of megabytes
+   * over cellular and ten minutes of Tesseract before a word can be marked.
+   *
+   * So this is a *different door*, not a flag on the old one. It brings the
+   * book down, marks the recovery half of the flow as done — every question it
+   * asks was answered when the book was read, and none of them can be answered
+   * again without the paper — and lands in the reading view.
+   *
+   * What it gives up is said rather than hidden: the scan view has no scan, so
+   * a passage cannot be checked against the paper on this device. Marking a
+   * comment for the assistant is the way to raise one from here.
+   */
+  const readFromShelf = useCallback(
+    async (about: ShelfAbout): Promise<void> => {
+      const config = loadShelf()
+      if (!shelfReady(config)) return
+      setShelfBusy(true)
+      setShelfNote(`Fetching “${about.fileName}” to read…`)
+      try {
+        const json = await fetchBook(config, about.key)
+        if (!json) {
+          setShelfNote(`The shelf lists “${about.fileName}” but the book file is not there.`)
+          return
+        }
+        const file = parseBookFile(json)
+
+        // The editor's own pictures, which the galley shows as cards at their
+        // anchors. Small, and named rather than carried, so this is a handful
+        // of kilobytes — unlike the scan, which is the whole point of not
+        // fetching it here.
+        const lost: string[] = []
+        for (const [id, path] of Object.entries(file.imagePaths)) {
+          const bytes = await getBytes(config, path)
+          if (bytes) file.run.images.push({ id, bytes: new Uint8Array(bytes) })
+          else lost.push(path)
+        }
+
+        if (!(await saveRun(file.run))) {
+          setShelfNote(
+            'The book came down from the shelf but would not fit in this browser’s storage. ' +
+              'Free some space and try again.'
+          )
+          return
+        }
+        saveReviewProgress(file.run.key, file.answers)
+        if (file.voice?.penName !== undefined) saveVoice(file.voice)
+        if (file.notesCheckpoint) await saveAnnotationCheckpoint(file.notesCheckpoint)
+        setSavedRuns(await listRuns())
+
+        // No `fileDataRef`: there is deliberately no file behind this session,
+        // and anything that reaches for pixels has to find nothing rather than
+        // find the wrong book's.
+        fileDataRef.current = null
+        fileKeyRef.current = file.run.key
+        setScanOnDevice(false)
+        if (reconRef.current) releaseRecon(reconRef.current)
+        reconRef.current = null
+        transcriptionRef.current = {
+          transcriptions: file.run.transcriptions,
+          findings: [],
+          failures: file.run.failures,
+          usage: file.run.usage,
+          cancelled: false
+        } as unknown as RunResult
+        suppliedBytesRef.current = new Map(file.run.images.map((i) => [i.id, i.bytes]))
+        setEdits(file.run.edits)
+        setError(null)
+        setAnswers({})
+
+        setState((s) => ({
+          ...s,
+          ...stateFromTranscriptions(file.run.transcriptions, file.run.failures),
+          fileName: file.run.fileName,
+          fileSize: 0,
+          savedRun: null,
+          adjudicated: spotsFromStored(file.run.adjudicated),
+          // Everything the recovery half decides was decided when this book was
+          // read, and none of it can be revisited without the paper. Marked
+          // done rather than walked through with nothing to ask — the same
+          // reasoning, and the same list, the EPUB path uses one gate earlier.
+          completed: [
+            'intake',
+            'recon',
+            'gate-identity',
+            'transcribe',
+            'gate-uncertainties',
+            'gate-structure'
+          ]
+        }))
+        chooseProofView('reading')
+        setShelfNote(
+          `“${file.run.fileName}” is open to read. The scan was not fetched, so “Check against ` +
+            'the scan” has no pixels on this device — leave a comment on a passage instead.' +
+            (lost.length > 0 ? lostNote(lost) : '')
+        )
+      } catch (err) {
+        setShelfNote(
+          `Could not open that book (${err instanceof Error ? err.message : String(err)}).`
+        )
+      } finally {
+        setShelfBusy(false)
+      }
+    },
+    [chooseProofView, stateFromTranscriptions]
+  )
 
   /**
    * The second half of the link: land where the decision is.
@@ -3802,65 +3970,99 @@ export function App(): JSX.Element {
         {/* --- intake --- */}
         {step.id === 'intake' && !progressInfo ? (
           <>
-            <div
-              className={`drop ${dragOver ? 'over' : ''}`}
-              onDragOver={(e) => {
-                e.preventDefault()
-                setDragOver(true)
-              }}
-              onDragLeave={() => setDragOver(false)}
-              onDrop={onDrop}
-              onClick={() => fileInput.current?.click()}
-            >
-              <strong>Drop a scanned PDF or an EPUB here</strong>
-              <span>
-                or click to choose a file — the whole book, one file. An EPUB is already text, so it
-                skips the reading entirely and costs nothing.
-              </span>
-            </div>
-
             {shelfNote ? <div className="resume-note">{shelfNote}</div> : null}
 
-            {shelfBooks.length > 0 ? (
-              <div className="q">
-                <span className="prompt">Books on your shelf</span>
-                <div className="help">
-                  Kept in your own repository — the transcription, every correction, the notes and
-                  the introduction, the pictures and the fact bank. Opening one brings the whole
-                  thing to this device, scan and all when the shelf has it.
+            {/* The shelf comes first, and the scan intake last.
+                
+                The old order was the order the app was built in — drop a scan,
+                and your books somewhere below that. It is the wrong order for
+                every session after the first, and badly wrong on a tablet,
+                where opening a new scan is the one thing nobody does: the
+                reading pass wants a book that has already been read. */}
+            {shelfReady(loadShelf()) ? (
+              <div className="shelf">
+                <div className="shelf-head">
+                  <span className="prompt">Your shelf</span>
+                  <button
+                    type="button"
+                    className="shelf-refresh"
+                    disabled={shelfBusy}
+                    onClick={() => void refreshShelf()}
+                  >
+                    {shelfBusy ? 'Fetching…' : 'Refresh'}
+                  </button>
                 </div>
-                <ul className="notes">
-                  {shelfBooks.map((book) => (
-                    <li key={book.key}>
-                      <strong>{book.fileName}</strong> — {book.pageCount} page
-                      {book.pageCount === 1 ? '' : 's'}
-                      {book.complete ? '' : ' read so far, stopped partway'}
-                      {book.corrections > 0 ? `, ${book.corrections} correction(s)` : ''}
-                      {book.notes > 0 ? `, ${book.notes} note(s)` : ''}
-                      {book.facts > 0 ? `, ${book.facts} bank entr(ies)` : ''} ·{' '}
-                      {describeAge(book.savedAt)}
-                      <div className="actions">
-                        <button
-                          type="button"
-                          className="primary"
-                          disabled={shelfBusy}
-                          onClick={() => void openFromShelf(book)}
-                        >
-                          {book.scanPath ? 'Open this book' : 'Bring the work to this device'}
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                {shelfBooks.length === 0 ? (
+                  <div className="help">
+                    Nothing on {loadShelf().repo} yet, or it has not been listed. A book reaches the
+                    shelf when you save one from the workbench.
+                  </div>
+                ) : (
+                  <ul className="shelf-books">
+                    {shelfBooks.map((book) => (
+                      <li key={book.key} className="shelf-book">
+                        <div className="shelf-book-name">{titleOfBook(book.fileName)}</div>
+                        <div className="shelf-book-what">
+                          {book.pageCount} leaves
+                          {book.complete ? '' : ' · read only partway'}
+                          {book.marked > 0 ? ` · ${book.marked} marked` : ''}
+                          {book.notes > 0 ? ` · ${book.notes} notes` : ''}
+                          {book.corrections > 0 ? ` · ${book.corrections} corrections` : ''}
+                        </div>
+                        <div className="shelf-book-when">{describeAge(book.savedAt)}</div>
+                        <div className="actions">
+                          {/* Read is the primary action, and it is the one that
+                              does not fetch the scan — tens of megabytes and
+                              ten minutes of OCR that a reading pass never
+                              looks at. */}
+                          <button
+                            type="button"
+                            className="primary"
+                            disabled={shelfBusy}
+                            onClick={() => void readFromShelf(book)}
+                          >
+                            Read
+                          </button>
+                          <button
+                            type="button"
+                            disabled={shelfBusy}
+                            onClick={() => void openFromShelf(book)}
+                            title={
+                              book.scanPath
+                                ? 'Brings the scan down as well, so passages can be checked against the paper'
+                                : 'The scan is not on the shelf for this book'
+                            }
+                          >
+                            {book.scanPath ? 'Open with the scan' : 'Open the work'}
+                          </button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
-            ) : null}
+            ) : (
+              <div className="q shelf-none">
+                <span className="prompt">No shelf connected</span>
+                <div className="help">
+                  A shelf is a git repository of your own holding every book whole — the
+                  transcription, the corrections, the notes and the reading. Without one, books live
+                  in this browser only, and clearing its data loses them.
+                </div>
+                <div className="actions">
+                  <button type="button" onClick={() => (window.location.hash = '#settings')}>
+                    Connect a shelf
+                  </button>
+                </div>
+              </div>
+            )}
 
             {savedRuns.length > 0 ? (
               <div className="q">
-                <span className="prompt">Books you have already paid to have read</span>
+                <span className="prompt">On this device</span>
                 <div className="help">
-                  These transcriptions are saved in this browser. Open the same PDF again and the
-                  reading picks up where it left off — you are not charged twice.
+                  Transcriptions saved in this browser. Open the same file again and the reading
+                  picks up where it left off — you are not charged twice.
                 </div>
                 <ul className="notes">
                   {savedRuns.map((run) => (
@@ -3874,7 +4076,6 @@ export function App(): JSX.Element {
                         <div className="actions">
                           <button
                             type="button"
-                            className="primary"
                             onClick={() => void reopenSaved(run.key, run.fileName)}
                           >
                             Open this book again
@@ -3882,7 +4083,7 @@ export function App(): JSX.Element {
                         </div>
                       ) : (
                         <div className="help">
-                          The scan itself is not stored for this one — choose the same PDF above and
+                          The scan itself is not stored for this one — choose the same PDF below and
                           it will find the transcription.
                         </div>
                       )}
@@ -3891,6 +4092,23 @@ export function App(): JSX.Element {
                 </ul>
               </div>
             ) : null}
+
+            <div
+              className={`drop quiet ${dragOver ? 'over' : ''}`}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDragOver(true)
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={onDrop}
+              onClick={() => fileInput.current?.click()}
+            >
+              <strong>Start a new book</strong>
+              <span>
+                Drop a scanned PDF or an EPUB, or click to choose one — the whole book, one file. An
+                EPUB is already text, so it skips the reading entirely and costs nothing.
+              </span>
+            </div>
           </>
         ) : null}
 
@@ -4319,9 +4537,17 @@ export function App(): JSX.Element {
                   role="tab"
                   aria-selected={proofView === 'leaves'}
                   className={proofView === 'leaves' ? 'selected' : ''}
+                  disabled={!scanOnDevice}
+                  title={
+                    scanOnDevice
+                      ? undefined
+                      : 'This book was opened to read, so the scan was left on the shelf. ' +
+                        'Open it with the scan to check a passage against the paper — or leave ' +
+                        'a comment on the passage from the reading view.'
+                  }
                   onClick={() => chooseProofView('leaves')}
                 >
-                  Check against the scan
+                  {scanOnDevice ? 'Check against the scan' : 'Scan not on this device'}
                 </button>
               </div>
               <span className="proof-history">

@@ -151,6 +151,7 @@ export async function pushBookToShelf(
       pageCount: summary.pageCount,
       notes: summary.notes,
       corrections: summary.corrections,
+      marked: summary.marked,
       facts: summary.facts,
       complete: summary.complete,
       scanPath: scan?.path ?? null

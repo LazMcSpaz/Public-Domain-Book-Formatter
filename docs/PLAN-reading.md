@@ -284,6 +284,31 @@ URL. The editor has settled what the storage model should be, and it is not the
 one the app has: **the repository is where the reading lives, and the device
 only holds what has not got there yet.**
 
+### The front page, and reading without the scan
+
+Two halves of one thing, and both were late: this was written into the stage as
+"a reading route that never fetches the scan… enforced rather than hoped for",
+and the stage was marked done with only the manifest, the worker and the outbox
+built. Until it existed, every door into a book fetched the scan and started
+recon — tens of megabytes over cellular and ten minutes of Tesseract before a
+word could be marked, for pixels the reading pass never looks at.
+
+`readFromShelf` fetches `book.json` and the editor's own pictures and stops. It
+marks the recovery half of the flow done — every question it asks was answered
+when the book was read, and none of them can be answered again without the
+paper — and lands in the reading view.
+
+The shelf is the front page it is reached from. The intake screen used to lead
+with "drop a scanned PDF" and list the shelf below it, which is the order the
+app was built in rather than the order it is used in: after the first session
+the book already exists, and on a tablet a new scan is the one thing nobody
+opens. Books first, as cards; the device's own next; the intake last.
+
+What this gives up is **said on the surface**, not discovered: the scan tab
+reads "Scan not on this device" and is disabled. A view that shows no pixels
+and says nothing would be the one shape this app must not take, given that
+every gate in it promises never to decide without the paper.
+
 ### The outbox, and why it can be a simple queue
 
 A highlight is written to a local queue the instant it is made, and the queue is

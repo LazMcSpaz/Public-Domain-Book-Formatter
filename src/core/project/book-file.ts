@@ -52,6 +52,7 @@
  * platform layer.
  */
 import type { EditorVoice } from '@core/annotate'
+import { correctsTheBook } from '@core/edits'
 import { CURRENT_SCHEMA_VERSION, migrateSavedRun, type SavedRun } from './saved-run'
 import { migrateAnnotationCheckpoint, type AnnotationCheckpoint } from './annotation-checkpoint'
 
@@ -326,6 +327,8 @@ export interface BookFileSummary {
   pageCount: number
   notes: number
   corrections: number
+  /** Passages marked while reading — see `highlight` in `@core/edits`. */
+  marked: number
   facts: number
   images: number
   complete: boolean
@@ -337,7 +340,11 @@ export function summarizeBookFile(file: BookFile): BookFileSummary {
     savedAt: file.savedAt,
     pageCount: file.run.pageCount,
     notes: file.run.edits.filter((e) => e.kind === 'note').length,
-    corrections: file.run.edits.length,
+    // Only the edits that change the book. Counting every record would report
+    // a book with two hundred reading marks on it as two hundred corrections,
+    // which is the same class of false report `countEdited` exists to prevent.
+    corrections: file.run.edits.filter(correctsTheBook).length,
+    marked: file.run.edits.filter((e) => e.kind === 'highlight').length,
     facts: file.run.facts.length,
     // Named and carried alike: the count is what the book *has*, not how this
     // particular file happens to hold it.
