@@ -7,17 +7,56 @@ a reading app on an iPad, and the highlights made there cannot come back out.
 So the reading is done twice — once for real, once from memory at the moment a
 note has to be written — and the second one is the one the book is built from.
 
-Nothing underneath has to change for this either. A highlight is an anchored
-record in the edit list that cannot print, which is what a `memo` already is;
-the galley already renders the whole book as one scrolling column; the shelf
-already carries the edit list in `book.json`. What is missing is a **record**
-for a marked passage, a **harvest** that turns an evening's reading into the
-brief for the annotation pass, and a **surface** that is comfortable to read
-three hundred pages in.
+Nothing underneath has to change for this. A highlight is an anchored record in
+the edit list that cannot print, which is what a `memo` already is; the galley
+already renders the whole book as one scrolling column; the shelf already
+carries the edit list in `book.json`. What is missing is a **record** for a
+marked passage, a **harvest** that turns an evening's reading into the brief
+for the annotation pass, and a **surface** that is comfortable to read three
+hundred pages in.
+
+## Why, measured
+
+The editor's complaint is that the notes and the introductions are not good
+enough. That is a judgment, but there is a fact underneath it, and it was worth
+finding before building anything.
+
+_Clairvoyance and Occult Powers_ carries **23 footnotes across 328 leaves** —
+one every fourteen leaves, with a 45-leaf stretch carrying none. They are
+evenly spread front to back, so this is not the summarise-the-last-twenty
+drift. What they are hung on is the finding:
+
+> Roentgen. Marconi. Crookes. The Society for Psychical Research. The Creery
+> sisters. Kant. Leadbeater. Vodou. The pineal gland. The willing game. The
+> _Strathmore_. Michelson and Morley. Oliver Lodge. Cazotte. Spencer Perceval.
+> The mango trick. Elliott Coues. Dion Fortune. Kahuna. Christian Science.
+
+**Twenty-two of the twenty-three are hung on a proper name.** Every one is a
+named entity a model recognises on sight and can write a paragraph about
+without being asked twice. The notes are individually good — accurate, in
+voice, properly hedged where they should be. They are also, as a set, a list of
+the things the annotator already knew.
+
+What is not there is everything a _reader_ stops at: an argument that does not
+follow, a term used forty pages before it is defined, an exercise whose
+instructions cannot be carried out as written, a claim that contradicts one
+three lessons earlier, a passage that is simply hard. None of those is a named
+entity, none of them can be found by scanning for hooks, and none of them got
+a note.
+
+The introduction has the same shape for the same reason: it is written from the
+book's structure plus evenly spaced extracts, because a model handed three
+hundred pages summarises the last twenty. Evenly spaced extracts are a
+sampling of the book. They are not a reading of it.
+
+**So the deficiency is not in the writing. It is in the selection, and
+selection is the editor's to make.** That is the whole argument for this plan,
+and it is the thing to score it against: if the next book's notes are still
+nine-tenths proper names, the reading pass did not work.
 
 ## Why this is not a memo, and not a note
 
-Three anchored things now, and the difference between them is who is waiting.
+Four anchored things now, and the difference between them is who is waiting.
 
 |               | addressed to             | waits on            | prints |
 | ------------- | ------------------------ | ------------------- | ------ |
@@ -32,11 +71,38 @@ coming back to, and its whole value is that there will be two hundred of them
 in document order when the notes pass starts. Resolving them one at a time is
 the wrong shape; harvesting them all at once is the right one.
 
-It is also a **range** where a memo is a point. `PLAN-editor.md` Stage 4 parked
-that ("memos on regions rather than points — still waiting on a real book to
-prove points too coarse"), and this is the real book proving it. A footnote
-hangs off a point, so `note` stays a point. A highlight is the words, because
-without the words the harvest is a list of offsets nobody can read.
+A highlight is also a **range** where a memo is a point. `PLAN-editor.md`
+Stage 4 parked that ("memos on regions rather than points — still waiting on a
+real book to prove points too coarse"), and this is the real book proving it —
+so **memos gain an optional range here too**, on the same machinery, rather
+than two anchoring schemes existing side by side. A footnote hangs off a point,
+so `note` stays a point. A highlight is the words, because without the words
+the harvest is a list of numbers nobody can read.
+
+### The fourth button is a comment, not a fourth tag
+
+An earlier draft had a `check` tag. It was wrong, and the table above is why.
+"There is an errant full stop in the middle of this sentence" is mechanical,
+checkable work addressed to the assistant and waiting on a resolution — which
+is the definition of a memo, a channel that already exists, is already swept by
+`drive.mjs memos`, and already records what was done. A fourth tag would have
+been a second inbox to sweep, and CLAUDE.md is explicit about what happens to
+an apparatus with two of anything: it gets done for one book and skipped for
+the next.
+
+So the reading surface offers four buttons over three record types, and the
+editor need not care which is which:
+
+| button                   | record                    |
+| ------------------------ | ------------------------- |
+| **Needs a note**         | highlight, tag `note`     |
+| **For the introduction** | highlight, tag `intro`    |
+| **A term to define**     | highlight, tag `glossary` |
+| **Comment**              | memo, with a range        |
+
+"Comment" is the word the galley already uses for a memo, chosen in Stage 1½
+for being the word a Google Docs user already has. The reading surface uses it
+for the same reason.
 
 ## The line, restated once
 
@@ -48,18 +114,26 @@ it at export" is not impossible.
 
 **A highlight is not a note, and promotion is an act.** It is tempting to make
 a `note`-tagged highlight simply _become_ a footnote — one less step, and the
-tag already says so. That would be wrong. A place worth marking at reading
-speed is not the same as a place worth annotating, the marked passage is not
-the note's prose, and everything that makes an annotation trustworthy here —
-the voice card, `checkProposals` against the book's own text, `auditProse` —
-sits in the annotation pass that a promoted highlight would walk straight past.
-So the harvest _briefs_ the notes pass. It does not seed it.
+tag already says so. That would be wrong, and the editor confirmed the reading
+that makes it wrong: a highlight is _a place needing more attention_, not a
+verdict. The marked passage is not the note's prose, and everything that makes
+an annotation trustworthy here — the voice card, `checkProposals` against the
+book's own text, `auditProse` — sits in the annotation pass that a promoted
+highlight would walk straight past. So the harvest _briefs_ the notes pass. It
+does not seed it.
 
-**The same rule about text, again.** The reading pass has no pixels in front
-of it. So a highlight tagged `check` says _this looks wrong_ and records the
-words as the book currently has them; it never carries a proposed correction,
-for the same reason a query has no field for one. Propose from sense, accept
-from pixels, and the accepting happens later with the crop.
+**Reading mode cannot edit, and the way out is deliberate.** Two hundred pages
+of reading on a touch screen with a caret in the text is an evening of
+accidental edits. But an errant full stop is a five-second fix and making the
+editor file a comment about it would be silly, so the passage carries an
+explicit **"Edit this passage"** that leaves reading mode and opens it in the
+galley. Deliberate, reachable, and impossible to trigger by resting a thumb on
+the page — which is exactly the property asked for.
+
+**The same rule about text, again.** The reading pass has no pixels in front of
+it. So a comment left while reading records the words as the book currently has
+them and never carries a proposed correction as though it were settled: propose
+from sense, accept from pixels, and the accepting happens later with the crop.
 
 ## The record
 
@@ -76,7 +150,7 @@ A new kind in `BookEdit` (`src/core/edits/book-edits.ts`), beside `memo`:
     from: number
     to: number
     /** What the highlight is for. Closed set; the parser refuses anything else. */
-    tag: 'note' | 'intro' | 'glossary' | 'check'
+    tag: 'note' | 'intro' | 'glossary'
     /** The editor's words about it. Optional: a bare highlight is legitimate. */
     text?: string
     /** ISO date, so a reading session can be seen as a session. */
@@ -84,7 +158,11 @@ A new kind in `BookEdit` (`src/core/edits/book-edits.ts`), beside `memo`:
   }
 ```
 
-The places it has to be handled are known exactly, because `memo` maps them:
+and `memo` gains `quote`, `to` — all three optional, so every memo already on
+the shelf stays valid and a memo left at a caret in the galley is unchanged.
+
+The places these have to be handled are known exactly, because `memo` maps
+them:
 
 - `applyEdits` — `continue`, with the reason in a comment (`book-edits.ts:265`).
 - `countEdited` — skipped; a highlight corrects nothing (`:645`).
@@ -98,21 +176,27 @@ The places it has to be handled are known exactly, because `memo` maps them:
 
 ### Anchored by the quote, disambiguated by the offset
 
-Offsets alone rot. Every `text`, `split` or `merge` edit made after a reading
-session slides every offset in that block, silently, and a highlight then names
-words nobody marked. Quotes alone are ambiguous: a word highlighted twice in one
-paragraph has two homes and the search finds the first.
+An **offset** is just a character count: "this note hangs 721 characters into
+that paragraph". It is how `note`, `split` and `memo` all say where they are
+today, and on its own it rots. Every `text`, `split` or `merge` edit made after
+a reading session shifts the characters in that block, so a highlight recorded
+at 721 silently comes to name whatever now sits at 721 — which may be the
+middle of a different sentence. Nothing warns.
+
+Storing only the marked words fixes that but introduces the opposite fault: a
+word highlighted twice in one paragraph has two homes and the search finds the
+first.
 
 So **both**, with a stated precedence: the quote locates the highlight, the
-offset picks the occurrence when the quote appears more than once, and when the
-two disagree the quote wins and the disagreement is _reported_ in the harvest.
-That is `findAnchor`'s existing posture (`src/core/annotate/schema.ts:167`) —
-collapse whitespace, one case-insensitive retry, and no fuzzier than that,
-because a loose match landing on the wrong sentence is the failure the function
-exists to avoid.
+offset only picks the occurrence when the quote appears more than once, and
+when the two disagree the quote wins and the disagreement is _reported_ in the
+harvest. That is `findAnchor`'s existing posture
+(`src/core/annotate/schema.ts:167`) — collapse whitespace, one
+case-insensitive retry, and no fuzzier than that, because a loose match landing
+on the wrong sentence is the failure the function exists to avoid.
 
 `findAnchor` returns only the far end, because a note hangs after its words.
-A highlight needs both ends. **One implementation:** generalise it to
+A range needs both. **One implementation:** generalise it to
 `findQuote(blockText, quote, near?) → { from, to } | null`, and let
 `findAnchor` be its `.to`. Two searchers that can disagree about where a quote
 is, is exactly the class of drift this repository keeps closing.
@@ -120,7 +204,7 @@ is, is exactly the class of drift this repository keeps closing.
 ### The coordinates, which mean three different things
 
 The trap named in CLAUDE.md — _check what the coordinates mean before comparing
-them_ — is live here, and it has three coordinate systems in one gesture:
+them_ — is live here, and there are three coordinate systems in one gesture:
 
 1. the **notation** string (`withMarkup`), which is what `body` hands back and
    what a `text` edit must be written in, and which contains `<i>` and `<b>`;
@@ -131,7 +215,7 @@ them_ — is live here, and it has three coordinate systems in one gesture:
 
 A highlight's `quote`, `from` and `to` are all in (2), and the surface's job is
 to map a DOM range in (3) back to (2). Storing a quote with `<i>` in it would
-make `findAnchor` fail on exactly the passages worth marking, since an
+make `findQuote` fail on exactly the passages worth marking, since an
 italicised book title is what a glossary highlight most often is.
 
 ## Stage 1 — the record and the harvest, with no UI at all
@@ -142,7 +226,8 @@ session can be conducted from the conversation before there is anywhere to
 click. It is also the half that makes an iPad session _recoverable_, which
 matters more than the half that makes it pleasant.
 
-- The edit kind and its ten touch points, above.
+- The edit kind, the memo range, and their touch points, above.
+- `findQuote`, with `findAnchor` reduced to a call of it.
 - `src/core/edits/highlights.ts`, modelled on `memos.ts`:
   `highlightsOf`, `highlightSheet(doc, edits)` returning each highlight in
   document order with the passage it sits in, its source leaves, and its
@@ -166,43 +251,48 @@ A third view beside "Edit the book" and "Check against the scan":
 **"Read the book"**. The same scrolling column `BookEditor` already builds —
 divisions, body, divisions, set in a book face with italics as italics — but:
 
-- **read-only.** Not "editable but you probably won't"; a passage cannot be
-  entered. Two hundred pages of reading on a touch screen with a caret in it is
-  an evening of accidental edits, and the whole point is a mode where the only
-  gesture is marking.
-- **select, then choose a tag.** Four buttons, and a field for the note.
-  Existing highlights render as background tints, split at every boundary so
-  overlapping ones are both visible rather than one silently winning.
-- **wider leading, a measure that reads, no toolbar** — the outline stays,
+- **read-only**, with "Edit this passage" as the deliberate way out, above.
+- **select, then choose**: the four buttons of the table, and a field for the
+  editor's words. Existing highlights render as background tints, split at
+  every boundary so overlapping ones are both visible rather than one silently
+  winning.
+- **wider leading, a measure that reads, no toolbar.** The outline stays,
   because navigating a book you are reading is the one control that earns its
-  place. Progress is where you left off, remembered per book like the view is.
+  place. Where you left off is remembered per book, as the chosen view already
+  is.
 - **Ctrl+H does nothing here, and neither does Ctrl+I.** A reading mode that
   can change the text is an editing mode with the buttons hidden.
 
 The harvest is reachable from the head of the column: how many highlights, by
 tag, and a jump to each.
 
-## Stage 3 — the iPad
+## Stage 3 — the iPad, and what "an actual app" means
 
-Less than it looks, because `.github/workflows/deploy.yml` already publishes
-the app to GitHub Pages on every push to `main`. It is a static client-side SPA
-with no server and no Electron, so it already runs in Safari at a URL. What is
-missing is three things, none of them a second codebase:
+`.github/workflows/deploy.yml` already publishes the app to GitHub Pages on
+every push to `main`, and Pages is enabled, so it already runs in Safari at a
+URL. Three things stand between that and an app:
 
-- **A web app manifest and an icon**, so "Add to Home Screen" gives a standalone
-  app rather than a browser tab. This is not cosmetic: Safari deletes
-  script-writable storage for sites without recent interaction, and home-screen
-  apps are exempt. To be _measured_ on the device, not taken from
-  documentation — the same posture as the batch-endpoint probe.
+- **A web app manifest and an icon.** Added to the Home Screen, the app then
+  launches from an icon with no browser chrome, holds its own place in the app
+  switcher, and appears in Spotlight — which is what "an actual app" means to
+  everyone except the App Store. It also matters for a harder reason: Safari
+  deletes script-writable storage for sites without recent interaction, and
+  installed web apps are exempt. To be **measured on the device**, not taken
+  from documentation — the same posture as the batch-endpoint probe.
 - **A reading route that never fetches the scan.** The reading pass needs
   `book.json` and nothing else: no PDF render, no Tesseract, no layout. That is
   what makes this the cheapest pass to put on a tablet, and it should be
   enforced rather than hoped for.
-- **A shelf push at the end of a session, offered rather than assumed.** Given
-  the eviction rule above, an evening of reading notes living only in Safari's
-  IndexedDB is precisely the laborious-and-unrecoverable thing the shelf exists
-  to protect. The device protects against a crashed tab; only git protects
-  against a browser that quietly cleaned itself up.
+- **A service worker,** so a book opens on a train. Reading is the one pass
+  with no reason to need the network once the book is down.
+
+**What is deliberately not done is a native shell.** Capacitor or Tauri around
+this same web app, an Apple developer account and a release pipeline buys App
+Store presence, Files-app integration and Pencil input, and costs a second
+build to keep working. Nothing in the reading pass needs any of the three. If
+Pencil annotation turns out to be the thing that makes reading on the iPad
+pleasant, that is the argument for reopening it, and it should be reopened on
+that evidence rather than on the wish for an icon.
 
 Two things to measure rather than assume, both Safari-specific: whether the
 native selection callout (Copy / Look Up) can be lived with beside a custom
@@ -219,21 +309,22 @@ the forty passages the editor actually stopped at is being told what the book
 is about by someone who read it. Same for `--tag note` and the footnote pass,
 and `--tag glossary` and the headword list.
 
-Score it, as everything here is scored: highlights raised, notes written from
-them, notes written from nothing. If the intro is written from the harvest the
-pass is earning its place; if it is written from the text anyway, the tags are
-wrong and should be changed or dropped.
+Score it against the finding at the top of this plan. Not "are the notes good"
+— they were already good, one at a time — but **what are they hung on**. If the
+next book's notes are again nine-tenths proper names, the harvest was not used
+and the pass has not earned its place.
 
 ## What is deliberately not built
 
 - **Promotion of a highlight into a note in one click.** Above: the annotation
-  pass has checks that a promoted highlight would bypass.
+  pass has checks that a promoted highlight would bypass, and a highlight is a
+  place needing attention rather than a verdict.
 - **Highlight colours as a second vocabulary.** The tag is the meaning. A
   colour is a rendering of the tag, not an independent axis, or in six months
   nobody remembers what yellow meant.
-- **Free-text tags.** Four, closed, refused by the parser if unknown. The fact
+- **Free-text tags.** Three, closed, refused by the parser if unknown. The fact
   bank's accreting vocabulary is right for a corpus nobody has seen yet; this
-  is four known jobs.
+  is three known jobs, and the fourth button is a channel that already exists.
 - **Highlights spanning blocks.** Same reasoning as the retired cross-block
   selection: the unit is the passage, and two highlights are two highlights.
 - **A separate reading app, or reading store.** The edit list is the whole of

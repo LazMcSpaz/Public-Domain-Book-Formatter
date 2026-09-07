@@ -21,6 +21,7 @@ import { withMarkup } from '@core/transcribe'
 import { Lightbox } from './Lightbox'
 import {
   blockOf,
+  correctsTheBook,
   countEdited,
   nextFlaggedPage,
   proofSheet,
@@ -230,10 +231,12 @@ export function ProofSheet({
   }, [edits])
 
   const push = (edit: BookEdit): void => onChange(withEdit(edits, edit))
-  // Notes and memos survive an undo of the block's corrections: they are the
-  // editor's own writing, not a correction to be reverted.
+  // Notes, memos and highlights survive an undo of the block's corrections:
+  // they are the editor's own writing, not a correction to be reverted.
   const undo = (blockId: string): void =>
-    onChange(edits.filter((e) => e.kind === 'note' || e.kind === 'memo' || blockOf(e) !== blockId))
+    onChange(
+      edits.filter((e) => e.kind === 'note' || !correctsTheBook(e) || blockOf(e) !== blockId)
+    )
   const removeNote = (noteId: string): void =>
     onChange(edits.filter((e) => e.kind !== 'note' || e.noteId !== noteId))
 
@@ -395,9 +398,10 @@ export function ProofSheet({
               currentText.get(block.id) ?? withMarkup(block.text, block.emphasis, block.strong)
             const kind = currentKind.get(block.id) ?? block.kind
             const isDropped = dropped.has(block.id)
-            // A memo is a message about the block, not a change to it, so one
-            // on its own must not offer an Undo that has nothing to undo.
-            const edited = edits.some((e) => e.kind !== 'memo' && blockOf(e) === block.id)
+            // A memo or a highlight is a message about the block, not a change
+            // to it, so one on its own must not offer an Undo that has nothing
+            // to undo.
+            const edited = edits.some((e) => correctsTheBook(e) && blockOf(e) === block.id)
 
             return (
               <div key={block.id} className={`proof-block${isDropped ? ' dropped' : ''}`}>

@@ -153,19 +153,32 @@ function loosen(text: string): string {
   return text.replace(/\s+/gu, ' ').trim()
 }
 
+/** A quoted phrase's place in a block, in the block's own coordinates. */
+export interface QuoteSpan {
+  /** The offset of the first character of the match. */
+  from: number
+  /** The offset just past its last character — where a note's mark would go. */
+  to: number
+}
+
 /**
  * Find where a quoted phrase sits in a block, in the block's own coordinates.
  *
- * The note's mark goes *after* the phrase it refers to, the way a printer sets
- * one, so the offset returned is the end of the match.
- *
  * Matching is done on a whitespace-collapsed copy and mapped back, because the
- * text handed to the model has already been reflowed and a quotation that
+ * text handed to a reader has already been reflowed and a quotation that
  * crossed a line break in the original would otherwise never match. Returns
  * null rather than a guess when the phrase is not there.
+ *
+ * `near` disambiguates, and only that. A phrase occurring twice in one
+ * paragraph has two homes, and taking the first is a coin toss that lands on
+ * the wrong sentence half the time; a highlight carries the offset it was made
+ * at, so the occurrence nearest that offset is the one meant. It is a
+ * tie-breaker and never a search: an occurrence far from `near` is still
+ * returned when it is the only one, because the words are the evidence and the
+ * offset is only a hint that goes stale under every later edit.
  */
-export function findAnchor(blockText: string, anchorText: string): number | null {
-  const needle = loosen(anchorText)
+export function findQuote(blockText: string, quoteText: string, near?: number): QuoteSpan | null {
+  const needle = loosen(quoteText)
   if (!needle) return null
 
   // Walk the source once, building the collapsed form and remembering where
@@ -189,18 +202,52 @@ export function findAnchor(blockText: string, anchorText: string): number | null
     map.push(i)
   }
 
-  let at = collapsed.indexOf(needle)
-  if (at === -1) {
-    // A quote the model tidied — case changed, or a long-s normalised. One
-    // case-insensitive retry, and no fuzzier than that: a loose match that
-    // lands on the wrong sentence is the failure this function exists to avoid.
-    at = collapsed.toLocaleLowerCase().indexOf(needle.toLocaleLowerCase())
-    if (at === -1) return null
+  // A quote the model tidied — case changed, or a long-s normalised. One
+  // case-insensitive retry, and no fuzzier than that: a loose match that
+  // lands on the wrong sentence is the failure this function exists to avoid.
+  let hay = collapsed
+  let pin = needle
+  if (!hay.includes(pin)) {
+    hay = collapsed.toLocaleLowerCase()
+    pin = needle.toLocaleLowerCase()
+    if (!hay.includes(pin)) return null
   }
 
-  const endCollapsed = at + needle.length - 1
-  const endSource = map[endCollapsed]
-  return endSource === undefined ? null : endSource + 1
+  // Every occurrence, so `near` can choose between them.
+  const starts: number[] = []
+  for (let at = hay.indexOf(pin); at !== -1; at = hay.indexOf(pin, at + 1)) {
+    starts.push(at)
+  }
+
+  let chosen = starts[0]!
+  if (near !== undefined && starts.length > 1) {
+    let best = Number.POSITIVE_INFINITY
+    for (const at of starts) {
+      const distance = Math.abs((map[at] ?? 0) - near)
+      if (distance < best) {
+        best = distance
+        chosen = at
+      }
+    }
+  }
+
+  const from = map[chosen]
+  const endSource = map[chosen + pin.length - 1]
+  if (from === undefined || endSource === undefined) return null
+  return { from, to: endSource + 1 }
+}
+
+/**
+ * Where a note's mark goes: just past the phrase it refers to, the way a
+ * printer sets one.
+ *
+ * One implementation with `findQuote`, deliberately. Two searchers that could
+ * disagree about where a quote is would be a fault nothing catches — the note
+ * lands in one place and the harvest reports another — and the only difference
+ * between them is which end of the match is wanted.
+ */
+export function findAnchor(blockText: string, anchorText: string): number | null {
+  return findQuote(blockText, anchorText)?.to ?? null
 }
 
 /**

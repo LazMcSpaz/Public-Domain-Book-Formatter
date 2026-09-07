@@ -23,7 +23,7 @@
  * Pure: types, versioning and migration. The store is in the platform layer.
  */
 import { BLOCK_KINDS, type PageTranscription } from '@core/transcribe'
-import type { BookEdit } from '@core/edits'
+import { HIGHLIGHT_TAGS, isHighlightTag, type BookEdit } from '@core/edits'
 import { normalizeMarkup } from '@core/transcribe'
 import type { ImageEditOp } from '@core/model'
 import { FOOTINGS, type Fact } from '@core/harvest'
@@ -47,13 +47,15 @@ import { EDITORIAL_QUERY_KINDS } from '@core/transcribe'
  * standing inside the body rather than before or after it, v13 → v14 the
  * `memo` edit, a note the editor leaves in the document for the assistant,
  * and v14 → v15 the `note-text` edit, a correction to one of the book's own
- * footnotes.
+ * footnotes, and v15 → v16 the `highlight` edit — a passage the editor marked
+ * while reading, before annotating — together with the optional range a memo
+ * left on a selection now carries.
  * None of them damages an older run — each is a complete transcription that simply
  * has none of the newer thing on it yet — so all upgrade in place rather than
  * being refused. That distinction is the whole reason a migration exists
  * instead of a version check.
  */
-export const CURRENT_SCHEMA_VERSION = 15
+export const CURRENT_SCHEMA_VERSION = 16
 
 /** A page the model could not read at all. Mirrors the runner's `PageFailure`. */
 export interface SavedFailure {
@@ -690,6 +692,8 @@ function parseEdits(raw: unknown): BookEdit[] {
           typeof value['text'] === 'string'
         ) {
           const resolved = value['resolved']
+          const quote = value['quote']
+          const to = value['to']
           out.push({
             kind: 'memo',
             memoId,
@@ -699,7 +703,60 @@ function parseEdits(raw: unknown): BookEdit[] {
             // Dropped when absent rather than stored empty, so an open memo
             // round-trips byte for byte and `openMemos` keeps meaning "no
             // outcome recorded".
-            ...(typeof resolved === 'string' && resolved ? { resolved } : {})
+            ...(typeof resolved === 'string' && resolved ? { resolved } : {}),
+            // The range, when the memo was left on a selection. Absent on every
+            // memo written before v16 and on every one left at a caret, which
+            // is why both halves are optional rather than defaulted: a `to`
+            // equal to `at` would claim an empty selection was made.
+            ...(typeof quote === 'string' && quote ? { quote } : {}),
+            ...(typeof to === 'number' ? { to } : {})
+          })
+        }
+        break
+      }
+      case 'highlight': {
+        const highlightId = str(value['highlightId'], '')
+        const quote = str(value['quote'], '')
+        const tag = value['tag']
+        if (
+          highlightId &&
+          blockId &&
+          quote &&
+          typeof value['from'] === 'number' &&
+          typeof value['to'] === 'number'
+        ) {
+          // The one place in this parser that throws rather than skipping.
+          //
+          // Everything else here drops a malformed record because it can be
+          // re-derived or re-typed: a lost `retype` is one dropdown. An
+          // evening's reading cannot be re-derived by running anything again,
+          // and a tag this build does not recognise means the file was written
+          // by a build that knew something this one does not. Dropping it would
+          // return a book that looks whole and is quietly missing the editor's
+          // reading, which is exactly the silence `migrateSavedRun` refuses to
+          // produce elsewhere.
+          if (!isHighlightTag(tag)) {
+            throw new Error(
+              `A highlight on ${blockId} carries the tag ${JSON.stringify(tag)}, which this ` +
+                `app does not recognise (it knows ${HIGHLIGHT_TAGS.join(', ')}). ` +
+                'Update the app rather than opening the book here, or the reading it ' +
+                'records will be lost.'
+            )
+          }
+          const text = value['text']
+          out.push({
+            kind: 'highlight',
+            highlightId,
+            blockId,
+            quote,
+            from: value['from'],
+            to: value['to'],
+            tag,
+            madeAt: str(value['madeAt'], ''),
+            // Dropped when absent, so a bare highlight — a mark with no words
+            // against it, which is a legitimate thing to leave — round-trips
+            // as one rather than gaining an empty note.
+            ...(typeof text === 'string' && text ? { text } : {})
           })
         }
         break

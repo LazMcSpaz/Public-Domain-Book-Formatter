@@ -429,6 +429,10 @@ node scripts/drive.mjs memos         # notes the editor left for the assistant, 
                                      #   "<what was done>"` answers one — the memo
                                      #   stays, outcome attached, until the editor
                                      #   clears it
+node scripts/drive.mjs reading       # every passage the editor marked while reading,
+                                     #   located by its words against the book as it
+                                     #   stands; `--tag intro` is one pass's brief,
+                                     #   `--json` hands it to a writing agent
 node scripts/drive.mjs sweep --was "belleves"   # find across the whole book; free
 node scripts/drive.mjs sweep --was "belleves" --now "believes"   # fix them all,
                                      #   emphasis kept, every change reported
@@ -1259,8 +1263,36 @@ in `screenshots/`. Don't ship UI blind.
   the column (the engine's own anchoring), so nobody splits a paragraph
   through an invisible plate; the pixels and their tools stay in the scan
   view.
+- **Also done**: **the reading pass, stage 1** — the record and the harvest
+  ([`docs/PLAN-reading.md`](./docs/PLAN-reading.md)). The pass that chooses the
+  footnotes and finds the introduction's material happened in a reading app
+  whose highlights could not come back, so the book was read twice and built
+  from the second, remembered reading. What that cost is measurable rather than
+  felt: of the 23 footnotes in _Clairvoyance_, **22 hang on a proper name** —
+  Roentgen, Marconi, Crookes, the SPR, Kant — because a reader scanning a page
+  for annotation opportunities finds the entities it already knows, and the
+  places a person actually stops (an argument that does not follow, a term used
+  long before it is defined, an exercise that cannot be carried out as written)
+  are not entities. The deficiency was never in the writing; it was in the
+  selection, and selection is the editor's. A `highlight` edit carries one
+  marked passage — a range, one of three closed tags, the editor's words — and
+  **cannot print by construction**, `applyEdits` skipping it exactly as it skips
+  a memo. It is anchored by its **words**, not its offset: every later
+  correction shifts the characters in a block, so a highlight recorded at 721
+  would silently come to name whatever now sits there, and the offset survives
+  only as a tie-breaker between two occurrences of the same phrase. `findAnchor`
+  is now `findQuote`'s far end rather than a second searcher. A highlight whose
+  passage was retyped is reported `lost` with its words intact and never
+  dropped, because a reading is the one artefact here that cannot be produced
+  again by running something. Extracting `correctsTheBook` — one named rule for
+  "a message about the book, not a change to it" — found a live defect on the
+  way: the proof sheet's Undo filtered on `blockOf`, so reverting a corrected
+  paragraph deleted every highlight in it, silently. Stage 2, the reading
+  surface, is next; until it exists a reading is made and read from the
+  conversation.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
-  book mid-run, then the editorial-query channel, then _The Human Aura_.
+  book mid-run, then the reading surface, then _The Human Aura_ — read with
+  somewhere to put the reading.
   [`docs/PLAN-layout-preview.md`](./docs/PLAN-layout-preview.md) is closed and
   kept for why the layout engine is shaped the way it is.

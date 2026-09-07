@@ -35,6 +35,7 @@ const book = JSON.parse(readFileSync(join(dir, 'book.json'), 'utf8'))
 const edits = book.run?.edits ?? []
 const sections = edits.filter((e) => e.kind === 'section')
 const notes = edits.filter((e) => e.kind === 'note')
+const highlights = edits.filter((e) => e.kind === 'highlight')
 const marks = edits
   .filter((e) => e.kind === 'text')
   .reduce((n, e) => n + [...(e.text ?? '')].filter((c) => c === '°').length, 0)
@@ -116,6 +117,29 @@ if (notes.length > 0 && existsSync(notesPath)) {
   }
 }
 
+// `reading.md` is the same case as `notes.md`, and for the same reason: each
+// row quotes the *assembled* body with a dozen words either side, and that only
+// exists in the browser — `drive.mjs reading reading.md` is what writes it,
+// from the one renderer in `@core/edits`. What is checkable without a browser
+// is that every passage the editor marked is still named in the file, and that
+// the count at the top is true. Both go stale the moment a reading session
+// happens and the file is not rewritten, which is the ordinary way this drifts.
+const readingPath = join(dir, 'reading.md')
+if (highlights.length > 0 && existsSync(readingPath)) {
+  const written = readFileSync(readingPath, 'utf8')
+  for (const h of highlights) {
+    if (written.includes(md(h.quote))) continue
+    stale += 1
+    console.log(`  DRIFTED reading.md  is missing the passage marked on ${h.blockId}`)
+  }
+} else if (highlights.length > 0) {
+  stale += 1
+  console.log(
+    `  MISSING reading.md  — ${highlights.length} passages are marked in book.json and ` +
+      'nothing on the shelf says so. `drive.mjs reading reading.md` writes it.'
+  )
+}
+
 // A section is split into paragraphs on *blank* lines (`paragraphsOf` in
 // `@core/edits`), so prose written with one newline between paragraphs is
 // joined into a single block and prints as a wall — sixteen paragraphs of
@@ -162,7 +186,10 @@ const claim = (file, re) => {
 const claimed = [
   ['notes.md', /(\d+)\s+footnotes/, notes.length, 'footnotes'],
   ['notes.md', /(\d+)\s+words in the two books carry/, marks, 'glossary marks'],
-  ['corrections.md', /A further (\d+) changes/, marks, 'glossary marks']
+  ['corrections.md', /A further (\d+) changes/, marks, 'glossary marks'],
+  // Written unfiltered, so this is the whole reading rather than one tag's
+  // brief — `reading --tag intro` is for handing to a writer, not for the shelf.
+  ['reading.md', /(\d+)\s+passages marked/, highlights.length, 'marked passages']
 ]
 for (const [file, re, actual, what] of claimed) {
   const said = claim(file, re)

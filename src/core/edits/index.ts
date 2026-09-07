@@ -9,10 +9,24 @@ export {
   applyEdits,
   blockOf,
   countEdited,
+  correctsTheBook,
   withEdit,
   withCorrections,
-  type BookEdit
+  HIGHLIGHT_TAGS,
+  isHighlightTag,
+  type BookEdit,
+  type HighlightTag
 } from './book-edits'
+export {
+  clearHighlight,
+  highlightCounts,
+  highlightSheet,
+  highlightsOf,
+  readingMarkdown,
+  type AnchorState,
+  type HighlightContext,
+  type HighlightEdit
+} from './highlights'
 export {
   clearMemo,
   memoSheet,

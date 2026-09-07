@@ -372,6 +372,11 @@ async function serve() {
           // only works if reading it is part of finding out where you are.
           const run = wanted ? await runStore.loadRun(wanted) : null
           const memos = (run?.edits ?? []).filter((e) => e.kind === 'memo')
+          // The reading, for the same reason as the comments: a session that
+          // starts cold and does not think to ask will write the notes off the
+          // text rather than off the passages the editor stopped at, which is
+          // the whole defect the reading pass exists to fix.
+          const marked = (run?.edits ?? []).filter((e) => e.kind === 'highlight')
           return {
             current: wanted
               ? (runs.find((r) => r.key === wanted)?.fileName ?? wanted.split('\u0000')[0])
@@ -379,11 +384,14 @@ async function serve() {
             scanStored: wanted ? Boolean(await runStore.loadSourceFile(wanted)) : false,
             commentsOpen: memos.filter((m) => !m.resolved).length,
             commentsAnswered: memos.filter((m) => m.resolved).length,
+            marked: marked.length,
             ...(memos.some((m) => !m.resolved)
               ? {
                   next: '`memos` lists what the editor asked for; sweep them before anything else.'
                 }
-              : {}),
+              : marked.length > 0
+                ? { next: '`reading` is what the editor marked; brief the notes pass from it.' }
+                : {}),
             stored: runs.map((r) => r.fileName)
           }
         },
@@ -2593,6 +2601,101 @@ async function serve() {
         },
         [REPO]
       )
+    },
+
+    /**
+     * The reading: every passage the editor marked, as a sheet or as a brief.
+     *
+     * ```
+     * reading                       # the whole reading, as Markdown on stdout
+     * reading --tag intro           # one tag, which is one pass's brief
+     * reading --json                # the rows, for handing to a writing agent
+     * reading out.md                # written to a file instead
+     * ```
+     *
+     * This is what the reading pass is *for*. Of the 23 footnotes in the first
+     * book published here, 22 hang on a proper name, because a reader scanning
+     * for annotation opportunities finds the entities it already knows — and
+     * the places a person actually stops are not entities. `--tag intro`
+     * replaces the evenly spaced extracts the introduction used to be written
+     * from, which sample a book rather than read it.
+     *
+     * Every row is located against the book *as it stands*, by its words rather
+     * than by the offset it was made at, and says which of the three anchor
+     * states it is in. Nothing is dropped: a highlight whose passage was
+     * retyped since it was marked comes back flagged, because the editor's
+     * reading is the one artefact here that cannot be produced again by
+     * running something.
+     */
+    reading: async (argv) => {
+      const tagIndex = argv.indexOf('--tag')
+      const tag = tagIndex === -1 ? null : (argv[tagIndex + 1] ?? null)
+      const asJson = argv.includes('--json')
+      const out = argv.find((a, i) => !a.startsWith('--') && argv[i - 1] !== '--tag') ?? null
+
+      const result = await page.evaluate(
+        async ([repo, tag]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+          if (tag && !editsMod.isHighlightTag(tag)) {
+            throw new Error(
+              `\`${tag}\` is not a tag. Known: ${editsMod.HIGHLIGHT_TAGS.join(', ')}.`
+            )
+          }
+          // Against the book as it stands, sections included — the same
+          // document the memo sheet is built from, for the same reason.
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const all = editsMod.highlightSheet(doc, run.edits ?? [])
+          const sheet = tag ? all.filter((h) => h.tag === tag) : all
+          const title =
+            typeof run.identityAnswers?.title === 'string' && run.identityAnswers.title
+              ? run.identityAnswers.title
+              : run.fileName
+          return {
+            book: run.fileName,
+            marked: all.length,
+            byTag: editsMod.highlightCounts(run.edits ?? []),
+            // Said on every run, not only when it is non-zero: a count that
+            // appears when there is bad news and vanishes otherwise is a count
+            // nobody learns to look for.
+            lostAnchors: all.filter((h) => h.anchor === 'lost').length,
+            movedAnchors: all.filter((h) => h.anchor === 'moved').length,
+            markdown: editsMod.readingMarkdown({ title, fileName: run.fileName }, sheet),
+            rows: sheet
+          }
+        },
+        [REPO, tag]
+      )
+
+      const body = asJson ? JSON.stringify(result.rows, null, 2) : result.markdown
+      if (out) {
+        const { writeFile } = await import('node:fs/promises')
+        await writeFile(resolve(REPO, out), body.endsWith('\n') ? body : `${body}\n`, 'utf8')
+      }
+      const counts = {
+        book: result.book,
+        marked: result.marked,
+        byTag: result.byTag,
+        lostAnchors: result.lostAnchors,
+        movedAnchors: result.movedAnchors
+      }
+      return {
+        ...counts,
+        ...(tag ? { tag } : {}),
+        ...(out ? { written: out } : { sheet: asJson ? result.rows : result.markdown }),
+        next:
+          result.marked === 0
+            ? 'Nothing marked yet. The reading view is where highlights are made.'
+            : '`shelf push` puts the reading on the shelf; nothing has left this device yet.'
+      }
     },
 
     /**

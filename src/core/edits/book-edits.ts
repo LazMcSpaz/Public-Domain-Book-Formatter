@@ -50,6 +50,24 @@ import type { BookBlock, BookDocument, Illustration } from '@core/assemble'
  * someone notices the page looks hand-typed. Presentation belongs to the style
  * profile, which applies it to every block of a kind at once.
  */
+/**
+ * What a highlight is for.
+ *
+ * Three, closed, and refused by the parser if unknown. Each names a pass that
+ * already exists and will be briefed from the harvest: the footnotes, the
+ * introduction, the glossary. A fourth value for "the assistant should look at
+ * this" was drafted and dropped — that is an ask awaiting a resolution, which
+ * is a `memo`, and a second inbox to sweep is how an apparatus gets done for
+ * one book and skipped for the next.
+ */
+export const HIGHLIGHT_TAGS = ['note', 'intro', 'glossary'] as const
+export type HighlightTag = (typeof HIGHLIGHT_TAGS)[number]
+
+/** Whether a value is one of the three. The parser's guard, and the driver's. */
+export function isHighlightTag(value: unknown): value is HighlightTag {
+  return typeof value === 'string' && (HIGHLIGHT_TAGS as readonly string[]).includes(value)
+}
+
 export type BookEdit =
   /** The pass misread it. `text` replaces the block's text entirely. */
   | { kind: 'text'; blockId: string; text: string }
@@ -186,7 +204,88 @@ export type BookEdit =
    * says "fixed by tightening the epigraph spacing, re-exported" can be
    * checked in ten seconds.
    */
-  | { kind: 'memo'; memoId: string; blockId: string; at: number; text: string; resolved?: string }
+  | {
+      kind: 'memo'
+      memoId: string
+      blockId: string
+      at: number
+      text: string
+      resolved?: string
+      /**
+       * The words it is about, when it was left on a selection rather than at
+       * a caret. Optional, because a memo left in the galley is a point and
+       * every memo already on a shelf is one.
+       *
+       * When present it is the *durable* anchor and `at`/`to` are hints — see
+       * `highlight`, which explains why, and `findQuote`, which is the one
+       * implementation both use.
+       */
+      quote?: string
+      /** The far end of that selection, in the same coordinates as `at`. */
+      to?: number
+    }
+  /**
+   * A passage the editor marked while *reading* the book, before annotating it.
+   *
+   * The reading pass is where the footnotes are chosen and where the
+   * introduction gets its material, and until this record existed it happened
+   * in another application whose highlights could not come back — so the book
+   * was read twice and built from the second, remembered reading. What that
+   * cost is measurable: of the 23 footnotes in the first book published here,
+   * 22 hang on a proper name, because a reader scanning for annotation
+   * opportunities finds the entities it already knows and not the places a
+   * person actually stopped.
+   *
+   * Like a memo it can never print — `applyEdits` skips the kind entirely, so
+   * there is no path from one to the layout engine — but it is not a memo, and
+   * the difference is who is waiting. A memo is an ask, open until somebody
+   * answers it, and its resolution is a ledger. A highlight asks nothing and
+   * waits on nobody; its value is that there will be two hundred of them in
+   * document order when the notes pass starts, so they are *harvested* rather
+   * than resolved one at a time.
+   *
+   * It is not a note either, and it must not become one automatically. A
+   * highlight is a place needing more attention, not a verdict: the marked
+   * passage is not the note's prose, and the checks that make an annotation
+   * trustworthy here — the voice card, `checkProposals`, `auditProse` — all sit
+   * in the annotation pass that a promoted highlight would walk straight past.
+   * The harvest briefs that pass. It does not seed it.
+   */
+  | {
+      kind: 'highlight'
+      highlightId: string
+      blockId: string
+      /**
+       * The marked words, as *plain* text — the notation stripped.
+       *
+       * This is the durable anchor. An offset alone rots: every `text`, `split`
+       * or `merge` edit made after a reading session shifts the characters in
+       * the block, so a highlight recorded at 721 silently comes to name
+       * whatever now sits at 721, and nothing warns. The words survive that.
+       *
+       * Plain rather than notation because `findQuote` searches the plain text,
+       * and a stored `<i>` would make the search fail on exactly the passages
+       * worth marking — an italicised book title is what a glossary highlight
+       * most often is.
+       */
+      quote: string
+      /**
+       * Where the words were when they were marked, in the block's plain text.
+       *
+       * A hint, and only a hint. It disambiguates which occurrence was meant
+       * when the quote appears more than once in one paragraph; where the two
+       * disagree the quote wins, and the harvest reports the disagreement
+       * rather than resolving it in silence.
+       */
+      from: number
+      to: number
+      /** What the highlight is for. Closed: the parser refuses anything else. */
+      tag: HighlightTag
+      /** The editor's words about it. Optional — a bare highlight is a mark. */
+      text?: string
+      /** ISO 8601, so an evening's reading can be read back as a session. */
+      madeAt: string
+    }
   /**
    * Retouching for one picture — crop, straighten, levels, and the rest.
    *
@@ -264,9 +363,12 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
 
   for (const edit of edits) {
     // A memo is a message, not a correction: it changes nothing about the
-    // book and must not be able to. Skipped here rather than filtered by any
-    // caller, so there is no way to assemble a document with a memo in it.
-    if (edit.kind === 'memo') continue
+    // book and must not be able to. A highlight is the editor's reading,
+    // which is the same. Skipped here rather than filtered by any caller, so
+    // there is no way to assemble a document with either in it — the one
+    // failure both channels must make impossible is appearing in a book for
+    // sale, and "we filter it at export" is not impossible.
+    if (!correctsTheBook(edit)) continue
 
     if (edit.kind === 'anchor') {
       anchors.set(edit.illustrationId, edit.afterBlockId)
@@ -638,13 +740,35 @@ export function blockOf(edit: BookEdit): string | null {
   return edit.blockId
 }
 
+/**
+ * Whether an edit changes the book, as against being a *message about* it.
+ *
+ * Two kinds are messages: a `memo`, addressed to the assistant, and a
+ * `highlight`, the editor's own reading. Neither prints, neither corrects
+ * anything, and every place that asks "has this block been edited?" or "revert
+ * this block" has to exclude both — `applyEdits`, `countEdited`, the proof
+ * sheet's Undo, and its edited badge.
+ *
+ * Named once rather than written out at each of them, because the version
+ * where it was written out at each of them had already gone wrong twice by the
+ * time this was extracted: the proof sheet's Undo filtered on `blockOf`, so
+ * reverting a corrected paragraph deleted every highlight in it without saying
+ * so, and its badge reported a merely-highlighted block as edited. A rule kept
+ * in four places is a rule that is applied in three, which is the shape of
+ * every apparatus fault recorded in CLAUDE.md.
+ */
+export function correctsTheBook(edit: BookEdit): boolean {
+  return edit.kind !== 'memo' && edit.kind !== 'highlight'
+}
+
 /** How many blocks an edit list actually changes, for telling the user. */
 export function countEdited(edits: readonly BookEdit[]): number {
   const touched = new Set<string>()
   for (const edit of edits) {
-    // A memo changes nothing — counting one would report a book as corrected
-    // that has only been commented on.
-    if (edit.kind === 'memo') continue
+    // A message about the book is not a change to it: counting one would
+    // report a book as corrected that has only been commented on, and an
+    // evening of reading would report three hundred blocks as edited.
+    if (!correctsTheBook(edit)) continue
     if (edit.kind === 'anchor') touched.add(edit.illustrationId)
     else if (edit.kind === 'note-text') touched.add(edit.noteId)
     else if (edit.kind === 'note') touched.add(edit.noteId)
@@ -702,6 +826,7 @@ export function withEdit(edits: readonly BookEdit[], edit: BookEdit): BookEdit[]
     edit.kind === 'section' ||
     edit.kind === 'insert' ||
     edit.kind === 'memo' ||
+    edit.kind === 'highlight' ||
     edit.kind === 'note-text' ||
     edit.kind === 'retouch'
   if (!collapsible) return [...edits, edit]
@@ -726,6 +851,10 @@ function targetOf(edit: BookEdit): string {
   if (edit.kind === 'section') return edit.sectionId
   if (edit.kind === 'insert') return edit.insertId
   if (edit.kind === 'memo') return edit.memoId
+  // By the highlight, never by the block: an evening's reading puts a dozen in
+  // one paragraph, and keying them by the block would make each one erase the
+  // last. The same reason a note is keyed by the note.
+  if (edit.kind === 'highlight') return edit.highlightId
   if (edit.kind === 'retouch') return edit.illustrationId
   return edit.blockId
 }

@@ -29,10 +29,12 @@ export {
   ANNOTATION_SCHEMA,
   checkProposals,
   findAnchor,
+  findQuote,
   outsideClaims,
   parseAnnotations,
   type AnnotationProposal,
-  type CheckedProposal
+  type CheckedProposal,
+  type QuoteSpan
 } from './schema'
 export {
   CHUNK_WORDS,

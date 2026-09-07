@@ -132,15 +132,25 @@ Only meaningful after Phase 2. In order:
 
 ---
 
-## Phase 4 — the reading pass
+## Phase 4 — the reading pass, promoted ahead of the next book
 
-[`PLAN-reading.md`](./PLAN-reading.md). The pass that chooses the footnotes and
-finds the introduction's material happens today in a reading app whose
-highlights cannot come back, so the book is read twice and built from the
-second, remembered reading. A `highlight` edit — a range, a tag, the editor's
-words, unable to print by construction — plus a harvest that briefs the
-annotation pass, and the surface to make it on. Ordered after a book because
-the harvest is only worth having when there is a book waiting to be annotated.
+[`PLAN-reading.md`](./PLAN-reading.md), and it is now the next thing built,
+before any further book is read.
+
+The reason is measured rather than felt. _Clairvoyance and Occult Powers_
+carries 23 footnotes across 328 leaves, and **22 of the 23 are hung on a proper
+name** — Roentgen, Marconi, Crookes, the SPR, Kant, Leadbeater, Christian
+Science. Individually good; as a set, a list of the things the annotator
+already knew. What a reader stops at — an argument that does not follow, a term
+used long before it is defined, an exercise that cannot be carried out as
+written — is not a named entity, cannot be found by scanning for hooks, and got
+no notes at all. The introduction has the same shape for the same reason: it is
+written from evenly spaced extracts, which is a sampling of a book rather than
+a reading of one.
+
+So the deficiency is in the selection, and selection is the editor's. Reading
+_The Human Aura_ before there is a way to record that reading would spend the
+book and leave the defect in place.
 
 ---
 
