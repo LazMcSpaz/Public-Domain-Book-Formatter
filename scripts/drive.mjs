@@ -26,8 +26,8 @@
  */
 import { chromium } from 'playwright'
 import { createServer } from 'node:http'
-import { mkdir, writeFile } from 'node:fs/promises'
-import { resolve } from 'node:path'
+import { access, mkdir, writeFile } from 'node:fs/promises'
+import { dirname, resolve } from 'node:path'
 
 const PORT = Number(process.env.DRIVE_PORT ?? 7788)
 const URL_BASE = process.env.APP_URL ?? 'http://localhost:5173'
@@ -500,7 +500,6 @@ async function serve() {
      */
     load: async ([bookPath, scanPath]) => {
       const { readFile, stat } = await import('node:fs/promises')
-      const { dirname } = await import('node:path')
       const bookFile = resolve(REPO, bookPath)
       const json = await readFile(bookFile, 'utf8')
       const scan = resolve(REPO, scanPath)
@@ -728,10 +727,12 @@ async function serve() {
         bookPath && bookPath !== '-'
           ? JSON.parse(await readFile(resolve(REPO, bookPath), 'utf8'))
           : { run: {}, answers: {}, voice: {}, notesCheckpoint: null, scan: null }
-      const json = await page.evaluate(
+      const result = await page.evaluate(
         async ([repo, was]) => {
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const sync = await import(`/@fs${repo}/src/core/sync/index.ts`)
+          const shelf = await import(`/@fs${repo}/src/platform/browser/shelf.ts`)
           // Through the same resolver every other verb uses. Picking the
           // most recently saved run was the last place left where "the current
           // book" meant something different from what `book` reports — which
@@ -750,21 +751,74 @@ async function serve() {
           } catch {
             /* a review record that will not parse is not worth losing the book over */
           }
-          return project.serializeBookFile({
-            run: {
-              ...run,
-              key: was.run.key ?? run.key,
-              fileName: was.run.fileName ?? run.fileName
-            },
-            answers,
-            voice: was.voice ?? {},
-            notesCheckpoint: was.notesCheckpoint ?? null,
-            scan: was.scan ?? null
-          })
+          // Pictures go *beside* the book under their own digest, not inside
+          // it. `serializeBookFile` writes them inline when it is given no
+          // paths, which is right for a download — one file, nowhere else for
+          // the pixels to be — and wrong here, because this destination is a
+          // directory in a repository. Left inline, one advertisement plate
+          // made `clairvoyance/book.json` 29.8 MB against 788 KB of book, and
+          // git keeps every version, so each save wrote the whole plate again.
+          //
+          // The digest and the path come from the app's own `digestOf` and
+          // `imagePath`, so a picture written here and the same picture pushed
+          // to a shelf get the same name rather than two conventions that
+          // agree until one of them changes.
+          // Chunked, because `String.fromCharCode(...bytes)` spreads every byte
+          // as an argument and a 21 MB plate overflows the call stack — which
+          // fails as a RangeError in the middle of a save rather than as
+          // anything that names a picture.
+          const toBase64 = (bytes) => {
+            let binary = ''
+            for (let i = 0; i < bytes.length; i += 0x8000) {
+              binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+            }
+            return btoa(binary)
+          }
+          const imagePaths = {}
+          const pictures = []
+          for (const image of run.images ?? []) {
+            const bytes =
+              image.bytes instanceof Uint8Array ? image.bytes : new Uint8Array(image.bytes)
+            const path = sync.imagePath(await shelf.digestOf(bytes.buffer))
+            imagePaths[image.id] = path
+            pictures.push({ path, base64: toBase64(bytes) })
+          }
+          return {
+            json: project.serializeBookFile({
+              run: {
+                ...run,
+                key: was.run.key ?? run.key,
+                fileName: was.run.fileName ?? run.fileName
+              },
+              answers,
+              voice: was.voice ?? {},
+              notesCheckpoint: was.notesCheckpoint ?? null,
+              scan: was.scan ?? null,
+              imagePaths
+            }),
+            pictures
+          }
         },
         [REPO, original]
       )
+      const { json, pictures } = result
       const path = resolve(REPO, out)
+      // Written once and skipped ever after, the scan's own rule: the bytes are
+      // named by their content, so a picture already on disk under that name is
+      // that picture and rewriting it would only churn the repository.
+      const written = []
+      for (const picture of pictures) {
+        const target = resolve(dirname(path), picture.path)
+        try {
+          await access(target)
+          continue
+        } catch {
+          /* not there yet */
+        }
+        await mkdir(dirname(target), { recursive: true })
+        await writeFile(target, Buffer.from(picture.base64, 'base64'))
+        written.push(picture.path)
+      }
       await writeFile(path, json)
       const parsed = JSON.parse(json)
       const verdicts = parsed.answers?.['gate-uncertainties'] ?? {}
@@ -773,6 +827,13 @@ async function serve() {
       )
       return {
         wrote: path,
+        bytes: Buffer.byteLength(json),
+        // Named rather than counted, and the ones already there are named too:
+        // "3 pictures" beside a book file that is still tens of megabytes says
+        // nothing about whether they were carried or referenced, which is the
+        // only thing this report exists to answer.
+        pictures: pictures.map((p) => p.path),
+        picturesWritten: written,
         edits: (parsed.run?.edits ?? []).length,
         leavesJudged: Object.keys(verdicts).filter((id) => /^page-\d+$/.test(id)).length,
         leavesRetyped: fixes.length,
