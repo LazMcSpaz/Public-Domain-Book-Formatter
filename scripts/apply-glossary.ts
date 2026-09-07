@@ -160,11 +160,17 @@ function blocksFor(entry: string): Candidate[] {
  * Before the word: `called`, `known as`, `referred to as`. After it: an
  * apposition (`, the Divine Man`), a copula (`is one of the higher grades`), or
  * a translation (`translated means`).
+ *
+ * The comma is required for the apposition and it was not, at first. Without it
+ * `From the days of Atlantis° the great teachers of the soul sciences` counted
+ * as an explanation, and the circle was pushed off a perfectly bare use onto a
+ * later one. A definite article after a word is not a gloss; a comma and then a
+ * definite article usually is.
  */
 const GLOSS_BEFORE =
   /\b(called|named|termed|known as|referred to as|we call|the word)\s+(?:a|an|the)?\s*[“"']?$/i
 const GLOSS_AFTER =
-  /^[”"']?\s*(?:[,:]?\s*(?:the|a|an|or|is|are|was|were|which is|which are|meaning)\b|\((?!\d)|(?:means|meant|translated)\b)/i
+  /^[”"']?\s*(?:[,:]\s*(?:the|a|an|or)\b|[,:]?\s*(?:is|are|was|were|which is|which are|means|meant|meaning|translated)\b|\((?!\d))/i
 function glossedAt(text: string, at: number, term: string): boolean {
   // Two offsets, and both were wrong first time round.
   //
@@ -202,8 +208,38 @@ const stubborn: string[] = []
 const already = checkGlossaryMarks(heads, doc.blocks)
 const wanted = heads.filter((h) => !already.marked.some((v) => v.entry === h))
 
+/**
+ * Every occurrence a circle was refused, and why.
+ *
+ * The editor asked to see them, and the sheet has to be written by the code
+ * that makes the decision rather than by a second reading of the book, or the
+ * two drift and the sheet starts describing a book that is not the one printed.
+ */
+interface Refusal {
+  entry: string
+  blockId: string
+  why: 'the book explains it here' | 'another circle stands within half a line'
+  context: string
+}
+const refusals: Refusal[] = []
+/**
+ * One line per occurrence, not one per time it was looked at. The four tiers
+ * walk the same candidates again, so a use refused for crowding on the first
+ * round is refused for crowding again on the second, and the sheet listed every
+ * one of them twice.
+ */
+const refuse = (r: Refusal): void => {
+  if (refusals.some((x) => x.entry === r.entry && x.blockId === r.blockId)) return
+  refusals.push(r)
+}
+/** Where each entry's circle ended up. */
+const chosen = new Map<string, string>()
+/** How many uses each entry has, so the sheet can say what was left unmarked. */
+const uses = new Map<string, number>()
+
 for (const entry of wanted) {
   const candidates = blocksFor(entry)
+  uses.set(entry, candidates.length)
   if (candidates.length === 0) continue
   let done = false
   // Four tiers, in this order, and the order is the whole of the rule: a use in
@@ -233,11 +269,43 @@ for (const entry of wanted) {
       const plain = after.replace(/<[^>]+>/g, '')
       const plainAt = after.slice(0, at).replace(/<[^>]+>/g, '').length
       const others = [...plain.matchAll(/°/g)].map((m) => m.index ?? 0).filter((i) => i !== plainAt)
-      if (others.some((i) => Math.abs(i - plainAt) < MIN_GAP)) continue
-      if (!allowGlossed && glossedAt(plain, plainAt, cand.term)) continue
+      const show = (): string =>
+        plain
+          .slice(Math.max(0, plainAt - 90), plainAt + 110)
+          .replace(/\s+/g, ' ')
+          .trim()
+      if (others.some((i) => Math.abs(i - plainAt) < MIN_GAP)) {
+        refuse({
+          entry,
+          blockId: cand.id,
+          why: 'another circle stands within half a line',
+          context: show()
+        })
+        continue
+      }
+      if (!allowGlossed && glossedAt(plain, plainAt, cand.term)) {
+        // Only on the round that refuses them; the later round comes back to
+        // the same occurrence and takes it, and one line in the sheet is
+        // enough for one occurrence.
+        refuse({
+          entry,
+          blockId: cand.id,
+          why: 'the book explains it here',
+          context: show()
+        })
+        continue
+      }
       pending.set(cand.id, after)
       placed += 1
       if (cand.id !== candidates[0]!.id) moved += 1
+      // An occurrence refused on the first round because the book explains it
+      // there, and then taken on the second because nothing better existed, is
+      // not a refusal. It is where the circle went.
+      for (let i = refusals.length - 1; i >= 0; i--) {
+        const r = refusals[i]!
+        if (r.entry === entry && r.blockId === cand.id) refusals.splice(i, 1)
+      }
+      chosen.set(entry, cand.id)
       done = true
       break
     }
@@ -250,6 +318,74 @@ for (const entry of wanted) {
   }
 }
 for (const [blockId, text] of pending) edits.push({ kind: 'text', blockId, text })
+
+/**
+ * The sheet of refusals, written beside the book for the editor to rule on.
+ *
+ * Not a log. It is the answer to a question a person asked about a printed
+ * book, so it is Markdown and it carries the words either side of every place a
+ * circle was refused, because a decision nobody can read is a decision nobody
+ * can overturn.
+ */
+const reportAt = process.argv[4]
+if (reportAt) {
+  const leafOf = (id: string): string => /^p(\d+)/.exec(id)?.[1] ?? '?'
+  const lines: string[] = [
+    '# Where the circles went, and where they were refused',
+    '',
+    'Written by `scripts/apply-glossary.ts` on every build, so it cannot drift',
+    'from the book it describes. A circle after a word means that word has a',
+    'glossary entry. One circle per entry is enough, so most uses of a marked',
+    'word carry none and are not listed here; what is listed is every occurrence',
+    'the placing rule **refused**, and every entry that got no circle at all.',
+    '',
+    'The rule, in order: a use in running prose the book does not explain on the',
+    'spot; a use in prose it does explain; a short line it does not explain; a',
+    'short line it does. Within all of that, no two circles may stand within half',
+    'a line of each other.',
+    ''
+  ]
+
+  const unmarked = [...already.absent.map((v) => v.entry), ...crowded, ...stubborn]
+  lines.push(`## Entries carrying no circle anywhere (${unmarked.length})`, '')
+  for (const entry of already.absent) {
+    lines.push(
+      `**${entry.entry}** The book uses the word, but only in a heading or a`,
+      'caption, and a circle there would travel into the running head and the',
+      'contents.',
+      ''
+    )
+  }
+  for (const entry of [...crowded, ...stubborn]) {
+    const mine = refusals.filter((r) => r.entry === entry)
+    lines.push(`**${entry}** ${uses.get(entry) ?? 0} use(s), every one refused:`, '')
+    for (const r of mine) lines.push(`- leaf ${leafOf(r.blockId)} · ${r.why} · …${r.context}…`)
+    lines.push('')
+  }
+
+  const byEntry = new Map<string, Refusal[]>()
+  for (const r of refusals) {
+    if (unmarked.includes(r.entry)) continue
+    byEntry.set(r.entry, [...(byEntry.get(r.entry) ?? []), r])
+  }
+  const refusedCount = [...byEntry.values()].reduce((n, v) => n + v.length, 0)
+  lines.push(
+    `## Occurrences refused on entries that were circled elsewhere (${refusedCount})`,
+    '',
+    'The circle for each of these went to another use of the same word. The',
+    'passage below is the one it was taken off.',
+    ''
+  )
+  for (const [entry, list] of [...byEntry].sort()) {
+    lines.push(`**${entry}** circled on leaf ${leafOf(chosen.get(entry) ?? '')}`, '')
+    for (const r of list) lines.push(`- leaf ${leafOf(r.blockId)} · ${r.why} · …${r.context}…`)
+    lines.push('')
+  }
+  writeFileSync(reportAt, lines.join('\n'))
+  console.log(
+    `${refusedCount} refused occurrence(s) and ${unmarked.length} unmarked entries -> ${reportAt}`
+  )
+}
 
 book.run.edits = edits
 writeFileSync(bookPath, JSON.stringify(book, null, 1) + '\n')

@@ -500,7 +500,13 @@ if (existsSync(glossaryFile)) {
   console.log('\nglossary:')
   execFileSync(
     'npx',
-    ['vite-node', join(REPO, 'scripts/apply-glossary.ts'), outPath, glossaryFile],
+    [
+      'vite-node',
+      join(REPO, 'scripts/apply-glossary.ts'),
+      outPath,
+      glossaryFile,
+      join(bookDir, 'glossary-marks.md')
+    ],
     { cwd: REPO, stdio: 'inherit' }
   )
 }
