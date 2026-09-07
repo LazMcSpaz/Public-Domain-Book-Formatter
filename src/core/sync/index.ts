@@ -27,3 +27,13 @@ export {
   type ShelfConfig,
   type ShelfEntry
 } from './shelf'
+export {
+  commutes,
+  entriesBetween,
+  mergeOutbox,
+  summarize,
+  type MergeResult,
+  type OutboxConflict,
+  type OutboxEntry,
+  type OutboxSummary
+} from './outbox'

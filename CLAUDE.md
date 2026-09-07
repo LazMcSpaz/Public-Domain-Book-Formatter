@@ -406,6 +406,9 @@ node scripts/make-icons.mjs          # the app's icons, from the house fleuron
 npm run check:install                # build under the Pages sub-path, then ask the
                                      #   one question a service worker cannot be read
                                      #   for: does it open with the network gone?
+npm run check:outbox                 # with the dev server up: does a mark made
+                                     #   offline reach the shelf when the connection
+                                     #   comes back? The shelf is stubbed in the page.
 node scripts/screenshot-flow.mjs     # drive the wizard headlessly, screenshot each screen
 ```
 
@@ -1322,6 +1325,40 @@ in `screenshots/`. Don't ship UI blind.
   itself. Verified in the browser rather than by reading the diff:
   `drive.mjs select` drags over words the way a finger does, and the round trip
   from gesture to `drive.mjs reading` was driven end to end.
+- **Also done**: **the reading pass, stage 3 — the tablet.** The editor's rule
+  for it is that **the shelf is where the reading lives and the device only
+  holds what has not got there yet**, which is three things. A **manifest, an
+  icon and iOS's own meta tags**, so Add to Home Screen gives an app with its
+  own icon and its own place in the app switcher — and, on iOS, exemption from
+  the eviction that clears a website's storage after a stretch without a visit,
+  which is why this is not a nicety: the queue is the one thing on the device
+  whose loss cannot be repaired by running something again. A **service
+  worker**, whose rules matter more than its code: cross-origin passes through
+  untouched (the shelf is `api.github.com`, and a cached answer from it is a
+  book quietly out of date), navigations are network-first so a deployed fix is
+  not blocked by a pinned index, and hashed assets are cache-first because the
+  build names them by content. And the **outbox** — every change queued the
+  instant it is made and flushed whenever there is a connection. What makes the
+  queue safe is a property that fell out of the edit list rather than one
+  anyone designed for: **highlights commute**, each keyed by its own id and
+  collapsed by `withEdit`, so two devices marking one book cannot conflict and
+  a re-sent flush is a no-op. So the queue holds **edits, never the book**: a
+  flush fetches the current file, folds the queue into _its_ edit list and
+  writes it back once, and anything done from another session survives. A
+  `text` edit does not commute, so each entry carries what it was made against
+  and a flush that finds the shelf changed underneath **reports** it rather
+  than resolving it. Two faults came out of measuring rather than reasoning:
+  the first service worker registered cleanly, cached the shell and opened
+  offline as a **blank page**, because a first visit fetches its modules before
+  the worker takes control — the index is now read at install time and the
+  assets it names cached with it; and two overlapping flushes wrote the book
+  file **three times for two flushes**, which is a commit that says nothing at
+  best and a lost update at worst, so flushes are chained per book.
+  `npm run check:install` and `npm run check:outbox` are those two
+  measurements, kept, and both were fault-injected against the bug they found.
+  Deliberately not built: a native shell. The editor reads by dragging a finger
+  on text, so Pencil input — the only thing of the three a native wrapper would
+  add that this pass could use — is not wanted.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

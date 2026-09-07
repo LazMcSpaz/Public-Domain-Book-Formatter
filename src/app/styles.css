@@ -2809,3 +2809,24 @@ textarea.galley-plain {
     max-width: 100%;
   }
 }
+
+/* What has been changed here and has not reached the shelf. Not styled as an
+   error — being offline is the ordinary case on the device this is for — but
+   never invisible either, because the device is the layer that can be cleared
+   without warning. */
+.proof-outbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--warn);
+}
+.proof-outbox button {
+  font-size: 0.75rem;
+  padding: 3px 9px;
+}
+.proof-outbox-note {
+  font-size: 0.8rem;
+  color: var(--muted);
+  flex-basis: 100%;
+}

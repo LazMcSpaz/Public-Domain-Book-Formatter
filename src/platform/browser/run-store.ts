@@ -35,23 +35,26 @@ import {
   type SavedRunSummary
 } from '@core/project'
 import { migrateSavedProfile, type SavedStyleProfile } from '@core/style'
+import type { OutboxEntry } from '@core/sync'
 
 const DB_NAME = 'pdbf'
 /**
  * v2 added the `profiles` store (banked looks, SPEC §7); v3 added `files`, the
  * source PDF itself; v4 added `recon`, the free-but-slow reading of it; v5
  * added `batches`, the tickets for books submitted and not yet collected; v6
- * added `notes`, what an interrupted annotation pass had already bought. The
+ * added `notes`, what an interrupted annotation pass had already bought; v7
+ * added `outbox`, the changes made here that the shelf has not taken yet. The
  * upgrade handler below creates whichever stores are missing rather than
  * switching on the old version, so a database at any version arrives complete.
  */
-const DB_VERSION = 6
+const DB_VERSION = 7
 const STORE = 'runs'
 const PROFILE_STORE = 'profiles'
 const FILE_STORE = 'files'
 const RECON_STORE = 'recon'
 const BATCH_STORE = 'batches'
 const NOTES_STORE = 'notes'
+const OUTBOX_STORE = 'outbox'
 
 /**
  * How many books' transcriptions to keep, oldest evicted first.
@@ -113,6 +116,18 @@ function openDb(): Promise<IDBDatabase | null> {
         // chunks while a book is being read, and a write here must never be
         // able to disturb the transcription it sits beside.
         db.createObjectStore(NOTES_STORE, { keyPath: 'key' })
+      }
+      if (!db.objectStoreNames.contains(OUTBOX_STORE)) {
+        // What has been marked on this device and has not reached the shelf.
+        //
+        // Keyed by the queued change rather than by the book, because there are
+        // many per book and a flush clears the ones it managed to send. Like
+        // the batch tickets and pointedly unlike everything else here, it is
+        // **never capped and never evicted**: every other store holds something
+        // that costs time to replace, and this holds a reading, which cannot be
+        // produced again by running anything.
+        const store = db.createObjectStore(OUTBOX_STORE, { keyPath: 'id' })
+        store.createIndex('bookKey', 'bookKey')
       }
     }
     request.onsuccess = () => resolve(request.result)
@@ -621,4 +636,68 @@ export async function listRuns(): Promise<SavedRunSummary[]> {
     }
   }
   return runs.sort((a, b) => b.savedAt.localeCompare(a.savedAt))
+}
+
+/**
+ * Queue one change for the shelf, and report whether the queue took it.
+ *
+ * Reported rather than assumed, and awaited *before* the interface says the
+ * mark was made: the batch ticket's rule, for the same reason. A highlight the
+ * editor watched appear, that no store ever accepted, is worse than one that
+ * visibly failed — the first is discovered a fortnight later with the reading
+ * gone.
+ */
+export async function queueForShelf(entry: OutboxEntry): Promise<boolean> {
+  const done = await withStore(
+    'readwrite',
+    async (store) => {
+      await promisify(store.put(entry))
+      return true
+    },
+    OUTBOX_STORE
+  )
+  return done === true
+}
+
+/** Everything waiting to go up for one book, oldest first. */
+export async function outboxFor(bookKey: string): Promise<OutboxEntry[]> {
+  const rows = await withStore(
+    'readonly',
+    async (store) => {
+      const index = store.index('bookKey')
+      return (await promisify(index.getAll(bookKey))) as OutboxEntry[]
+    },
+    OUTBOX_STORE
+  )
+  return (rows ?? []).sort((a, b) => a.madeAt.localeCompare(b.madeAt))
+}
+
+/** Everything waiting, across every book — what the interface counts. */
+export async function outboxAll(): Promise<OutboxEntry[]> {
+  const rows = await withStore(
+    'readonly',
+    async (store) => (await promisify(store.getAll())) as OutboxEntry[],
+    OUTBOX_STORE
+  )
+  return (rows ?? []).sort((a, b) => a.madeAt.localeCompare(b.madeAt))
+}
+
+/**
+ * Forget the entries a flush actually landed.
+ *
+ * Only ever called with what `mergeOutbox` reported as `applied`, and only
+ * after the shelf has answered. A conflicted entry stays queued: it is a change
+ * the editor made that nobody has taken, and dropping it to tidy the queue is
+ * the one thing that would make this channel worse than no channel.
+ */
+export async function clearQueued(ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return
+  await withStore(
+    'readwrite',
+    async (store) => {
+      for (const id of ids) await promisify(store.delete(id))
+      return true
+    },
+    OUTBOX_STORE
+  )
 }

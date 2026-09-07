@@ -107,6 +107,8 @@ import {
 } from '../platform/browser/run-store'
 import { collectBookBatch, submitBookBatch } from '../platform/browser/batch-run'
 import { fetchBook, getBytes, readShelf } from '../platform/browser/shelf'
+import { flushOutbox } from '../platform/browser/shelf-outbox'
+import { outboxFor, queueForShelf } from '../platform/browser/run-store'
 import { pushBookToShelf } from '../platform/browser/shelf-save'
 import { canReachBatchApi } from '../platform/browser/batch-reach'
 import { cropWordsFromPage } from '../platform/browser/word-crops'
@@ -118,7 +120,13 @@ import {
   type AdjudicatedSpot
 } from '@core/adjudicate'
 import { newSavedProfile, styleQuestions, type SavedStyleProfile } from '@core/style'
-import { type ShelfAbout, shelfSlug } from '@core/sync'
+import {
+  entriesBetween,
+  summarize as summarizeOutbox,
+  type OutboxSummary,
+  type ShelfAbout,
+  shelfSlug
+} from '@core/sync'
 import {
   bodyKeyFor,
   checkpointComplete,
@@ -1970,6 +1978,100 @@ export function App(): JSX.Element {
     }, 1200)
     return () => clearTimeout(timer)
   }, [edits, isProofing, persistRun, state.answers, state.adjudicated])
+
+  /**
+   * The outbox: what has been changed here and has not reached the shelf.
+   *
+   * The device protects against a crashed tab; only the shelf protects against
+   * a browser that quietly cleaned itself up — and on a tablet that is the
+   * likelier of the two. So every change is queued for the shelf beside being
+   * autosaved, and the queue is emptied whenever there is a connection.
+   *
+   * Queued from the *difference* between the edit list before and after, so
+   * every surface feeds it by doing what it already does and none of them has
+   * to remember to. One entry per target rather than per keystroke, which is
+   * why this can ride the same debounce as the autosave without the queue
+   * growing without bound.
+   */
+  const [outbox, setOutbox] = useState<OutboxSummary>({ waiting: 0, marks: 0, oldest: null })
+  const [outboxNote, setOutboxNote] = useState<string | null>(null)
+  const lastQueuedRef = useRef<BookEdit[]>([])
+  const shelfConfig = useMemo(() => (isProofing ? loadShelf() : null), [isProofing])
+
+  const emptyOutbox = useCallback(async (): Promise<void> => {
+    const config = shelfConfig
+    const key = fileKeyRef.current
+    if (!config || !shelfReady(config) || !key) return
+    try {
+      const result = await flushOutbox(config, key)
+      setOutbox(summarizeOutbox(await outboxFor(key)))
+      // Reported when there is something to report and silent when a flush
+      // simply had nothing to do — an indicator that speaks on every tick is
+      // one nobody reads.
+      setOutboxNote(result.idle ? null : result.note)
+    } catch (err) {
+      setOutboxNote(
+        `Could not reach the shelf (${err instanceof Error ? err.message : String(err)}). ` +
+          'Your changes are still on this device.'
+      )
+    }
+  }, [shelfConfig])
+
+  useEffect(() => {
+    if (!isProofing) return
+    const key = fileKeyRef.current
+    if (!key) return
+    // Nothing is queued when there is no shelf to queue *for*. A count of
+    // changes "on this device only" beside a button that cannot do anything
+    // would be true and useless; the device is the only home by the editor's
+    // own choice until they connect a repository, and Settings is where that
+    // is said.
+    if (!shelfConfig || !shelfReady(shelfConfig)) return
+    const previous = lastQueuedRef.current
+    if (previous === edits) return
+    const timer = setTimeout(() => {
+      void (async () => {
+        const entries = entriesBetween(
+          previous,
+          edits,
+          await outboxFor(key),
+          key,
+          new Date().toISOString()
+        )
+        lastQueuedRef.current = edits
+        // Awaited before the count is shown, the batch ticket's rule: a change
+        // reported as queued that no store accepted is discovered a fortnight
+        // later with the work gone.
+        for (const entry of entries) await queueForShelf(entry)
+        setOutbox(summarizeOutbox(await outboxFor(key)))
+        void emptyOutbox()
+      })()
+    }, 1200)
+    return () => clearTimeout(timer)
+  }, [edits, isProofing, emptyOutbox, shelfConfig])
+
+  // Back online: send what has been waiting. This is the only moment a queue
+  // can be emptied — iOS does not run a closed web app's code and Safari has no
+  // background sync, so nothing here happens while the app is shut, and the
+  // indicator says so rather than implying otherwise.
+  useEffect(() => {
+    if (!isProofing) return
+    const onOnline = (): void => void emptyOutbox()
+    window.addEventListener('online', onOnline)
+    return () => window.removeEventListener('online', onOnline)
+  }, [isProofing, emptyOutbox])
+
+  // And on arriving at the workbench, for a session picking up where a locked
+  // phone left off.
+  useEffect(() => {
+    if (!isProofing) return
+    const key = fileKeyRef.current
+    if (!key) return
+    void (async () => {
+      setOutbox(summarizeOutbox(await outboxFor(key)))
+      await emptyOutbox()
+    })()
+  }, [isProofing, emptyOutbox])
 
   /**
    * The fact bank as files, named after the book the export screen is about.
@@ -4251,6 +4353,29 @@ export function App(): JSX.Element {
                       ? 'Could not save — your changes exist only in this tab'
                       : ''}
               </span>
+              {/* What is on this device only, said in those words. The device
+                  protects against a crashed tab and only the shelf protects
+                  against a browser that cleaned itself up, so a count that is
+                  not zero is a thing the editor should know rather than a
+                  detail. Nothing here implies a background sync: there is none
+                  to have on iOS, and a promise that the queue goes up on its
+                  own would be discovered false with a reading already gone. */}
+              {outbox.waiting > 0 ? (
+                <span className="proof-outbox" role="status">
+                  <strong>
+                    {outbox.waiting} {outbox.waiting === 1 ? 'change' : 'changes'} on this device
+                    only
+                  </strong>
+                  <button type="button" onClick={() => void emptyOutbox()}>
+                    Send to the shelf
+                  </button>
+                </span>
+              ) : null}
+              {outboxNote ? (
+                <span className="proof-outbox-note" role="status">
+                  {outboxNote}
+                </span>
+              ) : null}
               {shelfOn ? (
                 <>
                   <button

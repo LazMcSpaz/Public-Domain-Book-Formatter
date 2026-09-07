@@ -816,6 +816,19 @@ export function withCorrections(
  * meaningless. Splits and merges are *not* collapsed — two splits of one
  * paragraph are two different corrections.
  */
+/**
+ * Whether two edits are about the same thing — the pair `withEdit` collapses on.
+ *
+ * Kind *and* target, because a `text` and a `split` on one block are both about
+ * that block and are not the same change. Named here so the outbox asks the
+ * same question when it merges a queued edit against a shelf that has moved
+ * under it; a second copy of this rule is how two devices would come to
+ * disagree about whether they had made the same edit.
+ */
+export function sameTarget(a: BookEdit, b: BookEdit): boolean {
+  return a.kind === b.kind && editTarget(a) === editTarget(b)
+}
+
 export function withEdit(edits: readonly BookEdit[], edit: BookEdit): BookEdit[] {
   const collapsible =
     edit.kind === 'text' ||
@@ -831,8 +844,8 @@ export function withEdit(edits: readonly BookEdit[], edit: BookEdit): BookEdit[]
     edit.kind === 'retouch'
   if (!collapsible) return [...edits, edit]
 
-  const target = targetOf(edit)
-  const kept = edits.filter((e) => e.kind !== edit.kind || targetOf(e) !== target)
+  const target = editTarget(edit)
+  const kept = edits.filter((e) => e.kind !== edit.kind || editTarget(e) !== target)
   return [...kept, edit]
 }
 
@@ -843,7 +856,7 @@ export function withEdit(edits: readonly BookEdit[], edit: BookEdit): BookEdit[]
  * on one paragraph are two annotations, and keying them by the block would make
  * writing the second one erase the first.
  */
-function targetOf(edit: BookEdit): string {
+export function editTarget(edit: BookEdit): string {
   if (edit.kind === 'anchor') return edit.illustrationId
   if (edit.kind === 'note') return edit.noteId
   if (edit.kind === 'note-text') return edit.noteId

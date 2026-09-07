@@ -218,7 +218,7 @@ to map a DOM range in (3) back to (2). Storing a quote with `<i>` in it would
 make `findQuote` fail on exactly the passages worth marking, since an
 italicised book title is what a glossary highlight most often is.
 
-## Stage 1 — the record and the harvest, with no UI at all
+## Stage 1 — the record and the harvest, with no UI at all — **done**
 
 Deliberately first, and deliberately complete without a browser. It is pure
 core plus a driver verb, so it is fully unit-testable, and it means a reading
@@ -245,7 +245,7 @@ matters more than the half that makes it pleasant.
   `corrections.md` — the readable file, per the rule that a repository is a
   shelf. It makes counted claims, so `--check` covers it and reports drift.
 
-## Stage 2 — the reading surface
+## Stage 2 — the reading surface — **done**
 
 A third view beside "Edit the book" and "Check against the scan":
 **"Read the book"**. The same scrolling column `BookEditor` already builds —
@@ -276,7 +276,7 @@ divisions, body, divisions, set in a book face with italics as italics — but:
 The harvest is reachable from the head of the column: how many highlights, by
 tag, and a jump to each.
 
-## Stage 3 — the iPad: the shelf as the only durable place
+## Stage 3 — the iPad: the shelf as the only durable place — **done**
 
 `.github/workflows/deploy.yml` already publishes the app to GitHub Pages on
 every push to `main`, and Pages is enabled, so it already runs in Safari at a
@@ -356,6 +356,31 @@ native selection callout (Copy / Look Up) can be lived with beside the popover,
 and whether a three-hundred-page column scrolls acceptably on the actual device.
 Both are answers, not opinions, and both change the design if they come back
 wrong.
+
+## What measuring turned up that reasoning had not
+
+Both faults in stage 3 were invisible to inspection and obvious the moment
+something was actually run, which is the standing lesson of this repository
+holding for the fourth and fifth time.
+
+- **The service worker opened offline as a blank page.** It registered cleanly,
+  reported an active worker and a correct scope, and cached the shell. On a
+  first visit the page fetches its modules _before_ the worker takes control, so
+  the worker never saw them; a second online visit would have papered over it,
+  which is the kind of failure that looks like the feature working. The index is
+  now read at install time and the assets it names are cached with it — the page
+  states its own dependencies, so there is no list to drift out of step with the
+  build. `scripts/check-install.mjs` is that measurement, kept.
+- **Two overlapping flushes wrote the book file three times for two flushes.**
+  The automatic flush after a change and a press of "Send to the shelf" both
+  read a non-empty queue. Two identical writes are a commit that says nothing on
+  a shelf whose point is that git keeps every version; two different ones are a
+  lost update, since each reads the blob sha before the other has written.
+  Flushes are chained per book, and `scripts/check-outbox.mjs` asserts one write
+  per flush.
+
+Both checks were fault-injected against the bug that prompted them: each fails
+with its fault reinstated and passes without it.
 
 ## Stage 4 — the payoff
 

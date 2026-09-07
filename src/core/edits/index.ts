@@ -10,6 +10,8 @@ export {
   blockOf,
   countEdited,
   correctsTheBook,
+  editTarget,
+  sameTarget,
   withEdit,
   withCorrections,
   HIGHLIGHT_TAGS,
