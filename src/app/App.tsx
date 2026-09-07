@@ -464,6 +464,27 @@ export function App(): JSX.Element {
    * is the one shape it must not take.
    */
   const [scanOnDevice, setScanOnDevice] = useState(true)
+  /**
+   * The step rail, open or shut.
+   *
+   * Shut by default while reading, and only while reading. The rail is how you
+   * find out where you are in making a book; it is not something you consult
+   * once a chapter, and on a tablet it was taking a quarter of the screen from
+   * the one thing that view exists to show. Everywhere else it stays as it was.
+   */
+  const [railOpen, setRailOpen] = useState(false)
+
+  /**
+   * The edit list as the outbox last saw it.
+   *
+   * **Seeded whenever a book is loaded**, never left empty. The diff is taken
+   * against this, so a fresh `[]` makes every edit the book already had look
+   * newly made: opening a read book with 73 corrections on it queued all 73 and
+   * wrote them back to the shelf as "a reading session", a commit that says
+   * nothing and re-sends `text` edits with no base to judge them against.
+   * Measured on a real book, on the device.
+   */
+  const lastQueuedRef = useRef<BookEdit[]>([])
   /** Where the galley should land when it next opens — the reader's way out. */
   const [landOn, setLandOn] = useState<{ blockId: string; tick: number } | null>(null)
   const chooseProofView = useCallback((view: ProofView): void => {
@@ -1867,6 +1888,7 @@ export function App(): JSX.Element {
     // that cannot be regenerated from the scan: an hour spent reading a book
     // against its scan is an hour, and a refresh must not cost it.
     setEdits(saved.edits)
+    lastQueuedRef.current = saved.edits
     // And the pixels of any pictures the editor supplied, which are the one
     // part of an illustration that cannot be re-derived from the scan.
     const restoredImages = new Map(suppliedBytesRef.current)
@@ -1961,6 +1983,7 @@ export function App(): JSX.Element {
         } as unknown as RunResult
         suppliedBytesRef.current = new Map(file.run.images.map((i) => [i.id, i.bytes]))
         setEdits(file.run.edits)
+        lastQueuedRef.current = file.run.edits
         setError(null)
         setAnswers({})
 
@@ -2046,7 +2069,12 @@ export function App(): JSX.Element {
     ): Promise<boolean> => {
       const key = fileKeyRef.current
       const file = fileDataRef.current
-      if (!key || !file || result.transcriptions.length === 0) return false
+      // The file is needed for the *scan*, not for the run. Requiring one here
+      // made every autosave fail for a book opened to read — which has no file
+      // behind it on purpose — so an evening of marking lived in the tab and
+      // the indicator said so in orange, correctly and uselessly.
+      const fileName = file?.name ?? state.fileName
+      if (!key || !fileName || result.transcriptions.length === 0) return false
 
       if (result.cancelled) {
         const existing = await loadRunSummary(key)
@@ -2060,7 +2088,7 @@ export function App(): JSX.Element {
           // How long the book is, which is not the same number as how much of
           // it has been read — see `SavedRun.leafCount`.
           leafCount: state.leafCount,
-          fileName: file.name,
+          fileName,
           transcriptions: result.transcriptions,
           failures: result.failures,
           usage: result.usage,
@@ -2096,6 +2124,7 @@ export function App(): JSX.Element {
       // cheap save into a heavy one. A failed write leaves the ref unset, so
       // it is retried on the next save rather than given up on.
       if (
+        file &&
         loadPrefs().keepScans !== false &&
         scanSavedRef.current !== key &&
         (await saveSourceFile(key, file))
@@ -2105,7 +2134,7 @@ export function App(): JSX.Element {
       }
       return true
     },
-    []
+    [state.fileName, state.leafCount]
   )
 
   /**
@@ -2163,7 +2192,6 @@ export function App(): JSX.Element {
    */
   const [outbox, setOutbox] = useState<OutboxSummary>({ waiting: 0, marks: 0, oldest: null })
   const [outboxNote, setOutboxNote] = useState<string | null>(null)
-  const lastQueuedRef = useRef<BookEdit[]>([])
   const shelfConfig = useMemo(() => (isProofing ? loadShelf() : null), [isProofing])
 
   const emptyOutbox = useCallback(async (): Promise<void> => {
@@ -3920,8 +3948,22 @@ export function App(): JSX.Element {
    */
   const goingViaBatch = currentAnswers['runMode'] === 'batch'
 
+  /** Reading is the one mode that takes the screen for itself. */
+  const readingMode = isProofing && proofView === 'reading'
+
   return (
-    <div className="shell">
+    <div className={`shell${readingMode ? ' reading-mode' : ''}${railOpen ? ' rail-open' : ''}`}>
+      {readingMode ? (
+        <button
+          type="button"
+          className="rail-toggle"
+          aria-expanded={railOpen}
+          aria-label={railOpen ? 'Hide the steps' : 'Show the steps'}
+          onClick={() => setRailOpen((open) => !open)}
+        >
+          {railOpen ? '✕' : '☰'}
+        </button>
+      ) : null}
       <nav className="rail">
         <h1>
           Book Reprint Tool

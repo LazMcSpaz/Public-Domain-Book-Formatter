@@ -2735,36 +2735,52 @@ textarea.galley-plain {
   color: var(--muted);
 }
 
-/* The popover follows the selection, so it must not be clipped by the column.
-   Fixed rather than absolute for the same reason the term grid's peek is
-   portalled: the thing it hangs off scrolls. */
-.reading-popover {
+/* The mark buttons live on the bottom edge, not on the selection.
+   iOS draws its own edit menu where the words are and gives no way to suppress
+   it, so anything anchored to the selection is something the system covers.
+   This does not fight it: the system's menu stays by the words, ours sits on an
+   edge the system never uses, and both are readable at once. */
+.reading-actions {
   position: fixed;
-  transform: translate(-50%, -100%);
+  left: 0;
+  right: 0;
+  bottom: 0;
   z-index: 40;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  padding: 6px;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
   background: var(--panel);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: 0 6px 24px rgb(0 0 0 / 22%);
-  max-width: min(94vw, 34em);
+  border-top: 1px solid var(--line);
+  box-shadow: 0 -6px 24px rgb(0 0 0 / 14%);
 }
-.reading-popover button {
-  font-size: 0.82rem;
-  padding: 8px 10px;
+.reading-actions-quote {
+  flex-basis: 100%;
+  font-style: italic;
+  font-size: 0.85rem;
+  color: var(--muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.reading-actions button {
+  font-size: 0.85rem;
+  padding: 0 12px;
   border-radius: 6px;
-  /* A finger, not a pointer: below about this the button is missed as often as
+  /* A finger, not a pointer: below about this a button is missed as often as
      it is hit, and a missed button here clears the selection. */
-  min-height: 40px;
+  min-height: 44px;
+}
+.reading-actions .reading-fix {
+  margin-left: auto;
+  color: var(--muted);
 }
 
 .reading-note {
   position: fixed;
   left: 50%;
-  bottom: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom));
   transform: translateX(-50%);
   z-index: 41;
   width: min(94vw, 34em);
@@ -2919,4 +2935,167 @@ textarea.galley-plain {
 }
 .drop.quiet:hover {
   opacity: 1;
+}
+
+/* --- reading mode: the screen belongs to the book -------------------------
+   Everything the app needs to show *about* making a book is chrome while the
+   book is being read. The rail goes, the step heading goes, the contents comes
+   only when asked for, and what is left is the column. */
+
+.reading-mode .rail {
+  display: none;
+}
+.reading-mode.rail-open .rail {
+  display: block;
+}
+.reading-mode .step-head,
+.reading-mode .proof-history,
+.reading-mode .step-actions {
+  display: none;
+}
+.reading-mode .pane,
+.reading-mode main {
+  padding-top: 14px;
+}
+/* Room for the rail toggle, which is fixed to the corner the tabs start in.
+   Without this it sits on top of "Edit the book" — the first thing a render
+   showed, and the kind of thing no rule reads wrong. */
+.reading-mode .proof-head {
+  padding-left: 50px;
+}
+.reading-mode.rail-open .proof-head {
+  padding-left: 0;
+}
+
+/* The one control that has to stay reachable with the rail shut. Small, on the
+   edge, and out of the measure. */
+.rail-toggle {
+  position: fixed;
+  top: calc(8px + env(safe-area-inset-top));
+  left: 8px;
+  z-index: 45;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  border-radius: 8px;
+  font-size: 1rem;
+  opacity: 0.55;
+}
+.rail-toggle:hover,
+.rail-toggle:focus-visible {
+  opacity: 1;
+}
+.reading-mode.rail-open .rail-toggle {
+  left: 268px;
+}
+
+.reading-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-left: auto;
+}
+.reading-controls button.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.reading-themes {
+  display: inline-flex;
+  gap: 4px;
+}
+.reading-themes .swatch {
+  width: 26px;
+  height: 26px;
+  min-height: 0;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--line);
+}
+.reading-themes .swatch.on {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+.reading-themes .swatch.paper {
+  background: #fbfaf7;
+}
+.reading-themes .swatch.sepia {
+  background: #f0e4cc;
+}
+.reading-themes .swatch.dark {
+  background: #23211d;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* With the rail shut the outline is an overlay rather than a column, because
+   at tablet width a second column is the measure gone. */
+.reading-mode .galley-outline {
+  /* The galley hides its outline outright below 900px. Reading mode asks for it
+     explicitly, so it has to say `display` — the overlay rules alone left the
+     narrow-width `display: none` standing and the Contents button toggled
+     something nobody could see. */
+  display: block;
+  position: fixed;
+  top: calc(56px + env(safe-area-inset-top));
+  left: 8px;
+  bottom: 8px;
+  z-index: 44;
+  width: min(20em, 78vw);
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: 0 8px 30px rgb(0 0 0 / 22%);
+  padding: 10px;
+}
+
+/* --- how the page is lit --------------------------------------------------
+   Set on the document root, so `body` paints the ground: a theme scoped to the
+   column would leave a dark page sitting in a cream frame. Only the tokens
+   move; nothing here knows about any particular component. */
+
+:root[data-reading='sepia'] {
+  --bg: #f0e4cc;
+  --panel: #f7eed9;
+  --ink: #3a3226;
+  --muted: #756a55;
+  --line: #ddcfae;
+  --accent-soft: #eadfc4;
+}
+
+:root[data-reading='dark'] {
+  --bg: #1a1917;
+  --panel: #23211d;
+  --ink: #ddd6c9;
+  --muted: #9a9184;
+  --line: #3a362f;
+  --accent: #c89a63;
+  --accent-soft: #2e2a23;
+  --ok: #7bb98a;
+  --warn: #e0a35c;
+}
+/* The marks are tints *under* text, so they have to be re-mixed against a dark
+   ground — the light values wash out to invisible and take the second half of
+   an overlapping mark with them. */
+:root[data-reading='dark'] .reading-mark.tag-note {
+  background: color-mix(in srgb, #f5c518 26%, transparent);
+}
+:root[data-reading='dark'] .reading-mark.tag-intro {
+  background: color-mix(in srgb, #6bb6f5 26%, transparent);
+}
+:root[data-reading='dark'] .reading-mark.tag-glossary {
+  background: color-mix(in srgb, #74d18d 24%, transparent);
+}
+:root[data-reading='dark'] .reading-mark.tag-comment {
+  background: color-mix(in srgb, #e79ad4 26%, transparent);
 }

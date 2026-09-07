@@ -82,6 +82,34 @@ const TAG_LABEL: Record<HighlightTag, string> = {
 const mintId = (prefix: string): string =>
   `${prefix}${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`
 
+/**
+ * What the page is made of, while reading.
+ *
+ * Not a preference buried in Settings: an evening's reading happens in whatever
+ * light the room has, and the choice belongs beside the text it changes. Three,
+ * because a fourth would be a variation on one of them — paper, the app's own
+ * ground; sepia, warmer and lower in contrast for a long sitting; and dark, for
+ * reading at night without lighting the room.
+ */
+const THEMES = [
+  { id: 'paper', label: 'Paper' },
+  { id: 'sepia', label: 'Sepia' },
+  { id: 'dark', label: 'Dark' }
+] as const
+type ReadingTheme = (typeof THEMES)[number]['id']
+
+const THEME_STORAGE = 'pdbf.reading.theme'
+
+function storedTheme(): ReadingTheme {
+  try {
+    const held = window.localStorage.getItem(THEME_STORAGE)
+    if (THEMES.some((t) => t.id === held)) return held as ReadingTheme
+  } catch {
+    /* a browser refusing storage reads on paper, which is the default anyway */
+  }
+  return 'paper'
+}
+
 /** The plain text of a passage — what a highlight's offsets are measured in. */
 const plainOf = (markup: string): string => parseInlineMarkup(markup).text
 
@@ -91,8 +119,6 @@ interface Pending {
   from: number
   to: number
   quote: string
-  /** Where to put the popover, in viewport coordinates. */
-  at: { top: number; left: number }
 }
 
 export function BookReader({
@@ -109,6 +135,33 @@ export function BookReader({
   const marked = counts.note + counts.intro + counts.glossary
 
   const [pending, setPending] = useState<Pending | null>(null)
+  /**
+   * The contents, hidden until asked for.
+   *
+   * A book being read wants the page, not the apparatus around it. The outline
+   * is the one control worth having while reading — and worth having *on
+   * request*, because on a tablet it was taking a third of the width from the
+   * thing it points into.
+   */
+  const [outlineOpen, setOutlineOpen] = useState(false)
+  const [theme, setTheme] = useState<ReadingTheme>(storedTheme)
+
+  // On the document root rather than on this component's own markup: `body`
+  // paints the ground, so a theme scoped to the column would leave a dark page
+  // sitting in a cream frame. Removed when the reading view is left, because
+  // the rest of the app is not a book.
+  useEffect(() => {
+    const root = window.document.documentElement
+    root.dataset['reading'] = theme
+    try {
+      window.localStorage.setItem(THEME_STORAGE, theme)
+    } catch {
+      /* a lost preference is not worth an error */
+    }
+    return () => {
+      delete root.dataset['reading']
+    }
+  }, [theme])
   /** The mark whose note is open for typing, if any. */
   const [openNote, setOpenNote] = useState<string | null>(null)
   const columnRef = useRef<HTMLDivElement | null>(null)
@@ -181,14 +234,12 @@ export function BookReader({
         setPending(null)
         return
       }
-      const rect = range.getBoundingClientRect()
       setPending({
         passageId: (host as HTMLElement).dataset['passage'] ?? '',
         from: span.from,
         to: span.to,
         // The words, not the offsets: this is the durable anchor.
-        quote: range.toString(),
-        at: { top: rect.top, left: rect.left + rect.width / 2 }
+        quote: range.toString()
       })
     }
     window.document.addEventListener('selectionchange', onSelect)
@@ -339,20 +390,46 @@ export function BookReader({
             ))}
           </span>
         ) : null}
-        <span className="reading-hint">
-          Marks are yours. They never print, and they brief the notes and the introduction.
+        <span className="reading-controls">
+          {outline.length > 0 ? (
+            <button
+              type="button"
+              aria-pressed={outlineOpen}
+              className={outlineOpen ? 'on' : ''}
+              onClick={() => setOutlineOpen((open) => !open)}
+            >
+              Contents
+            </button>
+          ) : null}
+          <span className="reading-themes" role="group" aria-label="How the page is lit">
+            {THEMES.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                className={`swatch ${t.id}${theme === t.id ? ' on' : ''}`}
+                aria-pressed={theme === t.id}
+                title={t.label}
+                onClick={() => setTheme(t.id)}
+              >
+                <span className="sr-only">{t.label}</span>
+              </button>
+            ))}
+          </span>
         </span>
       </div>
 
       <div className="reading-layout">
-        {outline.length > 0 ? (
+        {outline.length > 0 && outlineOpen ? (
           <nav className="galley-outline" aria-label="Outline">
             {outline.map((entry) => (
               <button
                 key={entry.id}
                 type="button"
                 className={entry.kind === 'division' ? 'galley-outline-division' : ''}
-                onClick={() => jumpTo(entry.id)}
+                onClick={() => {
+                  jumpTo(entry.id)
+                  setOutlineOpen(false)
+                }}
               >
                 {entry.label}
               </button>
@@ -373,13 +450,16 @@ export function BookReader({
         </div>
       </div>
 
+      {/* A bar at the foot of the screen, not a popover on the selection. iOS
+          draws its own edit menu — Copy, Look Up, Translate — right where a
+          selection is, and there is no supported way to suppress it, so a
+          popover anchored to the words is a popover the system covers. It was
+          covered on the first real page read on the device. Nothing here can
+          win that fight, so this stops having it: the system's menu stays by
+          the words, and ours sits on an edge the system never uses. */}
       {pending ? (
-        <div
-          className="reading-popover"
-          style={{ top: `${Math.max(8, pending.at.top - 8)}px`, left: `${pending.at.left}px` }}
-          role="dialog"
-          aria-label="What is this passage for?"
-        >
+        <div className="reading-actions" role="dialog" aria-label="What is this passage for?">
+          <div className="reading-actions-quote">“{pending.quote}”</div>
           {BUTTONS.map((b) => (
             <button
               key={b.tag}

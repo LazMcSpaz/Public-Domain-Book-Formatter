@@ -1384,6 +1384,27 @@ in `screenshots/`. Don't ship UI blind.
   `summarizeBookFile` also stopped counting marks and comments as corrections,
   which would have reported a book with two hundred reading marks as two
   hundred corrections.
+- **Also done**: **reading mode takes the screen, and two faults the device
+  found.** Read on a real iPad, the view was a column of text with a quarter of
+  the screen given to the step rail, a heading about making books, and a
+  contents list beside the thing it points into. In the reading view the rail
+  is shut (a ☰ opens it), the step heading is gone, and the contents is an
+  overlay behind a **Contents** button that closes itself on a jump. Three
+  grounds — paper, sepia, dark — set as tokens on the document root, because
+  `body` paints the ground and a theme scoped to the column leaves a dark page
+  in a cream frame; the mark tints are re-mixed for the dark ground, where the
+  light values wash out to invisible. And the mark buttons moved from a popover
+  on the selection to **a bar on the bottom edge**: iOS draws its own edit menu
+  where the words are, with no supported way to suppress it, and it covered
+  ours on the first real page. Nothing can win that fight, so this stops having
+  it. The two faults were both saves. `persistRun` required
+  `fileDataRef.current`, which a book opened to read has none of by design, so
+  **every autosave failed** and an evening of marking lived in the tab — the
+  indicator said so in orange, correctly and uselessly. And the outbox's
+  `lastQueuedRef` started empty rather than level with the book just loaded, so
+  opening a read book queued all 73 of its existing edits and wrote them back
+  to the shelf as "a reading session" — a commit that says nothing, re-sending
+  `text` edits with no base to judge them against.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with
