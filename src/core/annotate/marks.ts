@@ -93,16 +93,22 @@ function pattern(term: string): RegExp {
 /**
  * Every entry, against the body the reader will hold.
  *
- * Only paragraphs are searched. A mark on a chapter heading would travel into
- * the running head and the contents, which is not a place for a footnote-sized
- * circle, so a term the book uses only in a heading counts as absent and the
- * report says so.
+ * Only running prose is searched, which is a paragraph or a list item. A mark
+ * on a chapter heading would travel into the running head and the contents,
+ * which is not a place for a footnote-sized circle, so a term the book uses
+ * only in a heading counts as absent and the report says so.
+ *
+ * A list item is prose and belongs here: Manly Hall's lecture on the faculties
+ * of the mind sets every one of them as a list item, and `cochineal` occurs in
+ * this whole collection exactly once, inside one of them. Under the older rule
+ * that entry was reported as naming a word the book never uses, which is a
+ * false report of the one thing this check exists to find.
  */
 export function checkGlossaryMarks(
   headwords: readonly string[],
   blocks: readonly MarkableBlock[]
 ): MarkReport {
-  const prose = blocks.filter((block) => block.kind === 'paragraph')
+  const prose = blocks.filter((block) => block.kind === 'paragraph' || block.kind === 'list-item')
   const report: MarkReport = { marked: [], unmarked: [], absent: [] }
 
   for (const entry of headwords) {

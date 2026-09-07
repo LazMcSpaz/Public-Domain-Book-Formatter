@@ -50,6 +50,31 @@ describe('every entry the book uses should carry a mark', () => {
   })
 
   /**
+   * A list item is running prose and takes a circle like any other.
+   *
+   * Manly Hall's lecture on the faculties of the mind sets all forty-three of
+   * them as list items, and `cochineal` occurs once in the whole collected
+   * volume, inside one of them. Under the paragraphs-only rule that entry was
+   * reported as naming a word the book never uses, which is a false report of
+   * the one thing this check exists to find.
+   */
+  it('marks a word whose only use is in a list item', () => {
+    const report = checkGlossaryMarks(
+      ['Cochineal.'],
+      [
+        { id: 'p1b0', kind: 'heading', text: 'THE PERCEPTIVE FACULTIES' },
+        {
+          id: 'p1b1',
+          kind: 'list-item',
+          text: 'Color - The ability to tell cochineal carmine from vermillion.'
+        }
+      ]
+    )
+    expect(report.absent).toHaveLength(0)
+    expect(report.unmarked.map((v) => v.blockId)).toEqual(['p1b1'])
+  })
+
+  /**
    * A term the book uses only in a chapter heading counts as absent. A mark
    * there would travel into the running head and the contents, which is no
    * place for a circle.

@@ -52,7 +52,7 @@ const raw = readFileSync(glossaryPath, 'utf8')
  */
 const lines = raw.split('\n')
 const titleLine = lines.findIndex((l) => /^#\s/.test(l))
-const body = lines
+const markdownBody = lines
   .slice(titleLine + 1)
   .join('\n')
   .replace(/^\s*\*[^\n]*\*\s*$/m, '') // the italic count line, which is derived
@@ -60,6 +60,26 @@ const body = lines
   .trim()
 
 const title = titleLine >= 0 ? lines[titleLine]!.replace(/^#\s*/, '').trim() : 'Glossary'
+
+/**
+ * The readable file is Markdown and the section is the app's own notation, so
+ * the emphasis has to cross over. `book-files.mjs` writes `**Headword.**` and
+ * `*title*` out of `<b>` and `<i>`; this reads them back.
+ *
+ * That direction matters more than it looks. `glossary.md` is a **view** of
+ * `book.json`, regenerated from it, and if this only understood `<b>` then the
+ * first regeneration would leave a file the next build could not read: the
+ * glossary would vanish out of the book on a rebuild and the report would say
+ * zero entries. Reading both notations makes the file a round trip, and
+ * `book-files.mjs --check` is then a real check on the pair rather than on one
+ * of them.
+ *
+ * Bold before italic, since `**` would otherwise be eaten as two `*`.
+ */
+const body = markdownBody
+  .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+  .replace(/(^|[^*])\*([^*\n]+?)\*(?!\*)/g, '$1<i>$2</i>')
+
 const heads = glossaryHeadwords(body)
 if (heads.length === 0) {
   console.error(`${glossaryPath}: no entries found. An entry is a line opening <b>Headword.</b>`)
