@@ -96,47 +96,158 @@ edits.push({ kind: 'section', sectionId: 'glossary', placement: 'back', title, t
 const doc = applyEdits(assembleBook(book.run.transcriptions), edits)
 
 /**
- * Which occurrence gets the circle.
+ * Where a circle belongs, which is not simply the first place the word occurs.
  *
- * `checkGlossaryMarks` reports the first use it finds, and on these books the
- * first use is often a run-in heading the reading recorded as a short
- * paragraph: `The Undines`, `The Gnomes`, `Part Two`. A footnote-sized circle
- * on a line that reads as a section title is wrong, and `marks.ts` says so.
+ * Two things go wrong if you take the first use, and both were in the finished
+ * book before anybody looked at the pages.
  *
- * So the search runs twice over the same rule rather than a second rule being
- * written here: once over blocks long enough to be running prose, and once over
- * everything for the entries the first pass could not place. Narrowing the
- * corpus is the only difference between the two.
+ * **The first use is usually the one the author glosses.** A writer introduces
+ * a term and explains it in the same breath, so marking the first use sends the
+ * reader to the back of a six-hundred-page book from the exact sentence that
+ * has just told them what the word means. `The Arhat° is one of the higher
+ * grades of the Eastern path`. `seven creative rays called Dhyan Chohans°. The
+ * sum of these radio-active forces is Fohat°`. `he is called Gob° which is the
+ * basis for the word goblin`. The reader who needs the entry is the one who
+ * meets the word bare, two hundred pages later.
+ *
+ * **And circles bunch.** `The steps are: solution, filtration, evaporation,
+ * distillation, separation, rectification°, calcination°, commixation°,
+ * putrefaction°, inhibition°, fermentation, fixation°, multiplication, and
+ * projection°` is seven circles in one line, which reads as a rash rather than
+ * as a pointer.
+ *
+ * So the candidates for one entry are gathered in order, and the first that is
+ * neither glossed nor crowded takes the circle. Gathering is done by asking
+ * `checkGlossaryMarks` the same question over a shrinking corpus rather than by
+ * writing a second search here: the block it names is removed and the question
+ * is put again.
  */
 const PROSE_WORDS = 8
 const prose = doc.blocks.filter((b) => b.text.trim().split(/\s+/).length >= PROSE_WORDS)
-const inProse = checkGlossaryMarks(heads, prose)
-const everywhere = checkGlossaryMarks(heads, doc.blocks)
-const placeable = new Map(
-  [...everywhere.marked, ...everywhere.unmarked].map((v) => [v.entry, v] as const)
-)
-for (const v of [...inProse.marked, ...inProse.unmarked]) placeable.set(v.entry, v)
-const report = {
-  marked: [...placeable.values()].filter((v) => v.marked),
-  unmarked: [...placeable.values()].filter((v) => !v.marked),
-  absent: everywhere.absent
+const short = doc.blocks.filter((b) => b.text.trim().split(/\s+/).length < PROSE_WORDS)
+
+interface Candidate {
+  id: string
+  term: string
+  tier: 'prose' | 'short'
 }
+
+/** Every block carrying a term, prose first, in the order they occur. */
+function blocksFor(entry: string): Candidate[] {
+  const found: Candidate[] = []
+  for (const [tier, corpus] of [
+    ['prose', prose],
+    ['short', short]
+  ] as const) {
+    let left = corpus
+    for (let i = 0; i < 8; i++) {
+      const r = checkGlossaryMarks([entry], left)
+      const v = [...r.marked, ...r.unmarked][0]
+      if (!v?.blockId) break
+      found.push({ id: v.blockId, term: v.term, tier })
+      left = left.filter((b) => b.id !== v.blockId)
+    }
+  }
+  return found
+}
+
+/**
+ * Is the word explained where it stands?
+ *
+ * A lexical test, and it is allowed to be wrong: a false positive moves the
+ * circle to another use of the same word, which costs nothing. What it must not
+ * do is miss the shapes an author actually glosses in, so it looks both ways.
+ * Before the word: `called`, `known as`, `referred to as`. After it: an
+ * apposition (`, the Divine Man`), a copula (`is one of the higher grades`), or
+ * a translation (`translated means`).
+ */
+const GLOSS_BEFORE =
+  /\b(called|named|termed|known as|referred to as|we call|the word)\s+(?:a|an|the)?\s*[“"']?$/i
+const GLOSS_AFTER =
+  /^[”"']?\s*(?:[,:]?\s*(?:the|a|an|or|is|are|was|were|which is|which are|meaning)\b|\((?!\d)|(?:means|meant|translated)\b)/i
+function glossedAt(text: string, at: number, term: string): boolean {
+  // Two offsets, and both were wrong first time round.
+  //
+  // `at` is the index of the circle itself, so the text that FOLLOWS the word
+  // starts one character later; reading from `at` put the circle at the head of
+  // every candidate string and no pattern ever matched.
+  //
+  // And the text that PRECEDES the word ends where the word begins, not where
+  // the circle does. `are called Chelas°` was tested against a string ending in
+  // "Chelas", so the `called` pattern could not see itself, and the commonest
+  // gloss shape in this book went undetected. The word is stripped off the end
+  // by its own token count, which handles `astral body` as well as `Chela`.
+  const words = term.trim().split(/[\s-]+/).length
+  const before = text.slice(0, at).replace(new RegExp(`(?:[A-Za-z'’]+[\\s-]*){0,${words}}$`), '')
+  return GLOSS_BEFORE.test(before) || GLOSS_AFTER.test(text.slice(at + 1))
+}
+
+/**
+ * Two circles closer together than this read as one blot rather than two marks.
+ *
+ * Half a line, not a line and a half. The fault being fixed is a rash of seven
+ * circles inside one row of a list, where they stand fifteen characters apart;
+ * two glossed words in the same flowing sentence are not that, and pushing the
+ * second of them onto some worse occurrence elsewhere costs more than it saves.
+ */
+const MIN_GAP = 60
 
 const byId = new Map(doc.blocks.map((b) => [b.id, b]))
 const pending = new Map<string, string>()
 let placed = 0
+let moved = 0
+const crowded: string[] = []
 const stubborn: string[] = []
-for (const verdict of report.unmarked) {
-  const block = verdict.blockId ? byId.get(verdict.blockId) : undefined
-  if (!block) continue
-  const current = pending.get(block.id) ?? withMarkup(block.text, block.emphasis, block.strong)
-  const marked = withGlossaryMark(current, verdict.term)
-  if (marked === null) {
-    stubborn.push(verdict.entry)
-    continue
+
+const already = checkGlossaryMarks(heads, doc.blocks)
+const wanted = heads.filter((h) => !already.marked.some((v) => v.entry === h))
+
+for (const entry of wanted) {
+  const candidates = blocksFor(entry)
+  if (candidates.length === 0) continue
+  let done = false
+  // Four tiers, in this order, and the order is the whole of the rule: a use in
+  // running prose that is not glossed; a glossed one in prose; a short line that
+  // is not glossed; a short line that is. A word the book uses once and explains
+  // on the spot still deserves its circle, because a pointer beside a definition
+  // beats no pointer at all. What must not happen is the third tier beating the
+  // second, which is what happened when this was two rounds: the Arhat's circle
+  // left the sentence that defines it and landed on the run-in heading `The
+  // Arhat.` two lines above, which is the one place `marks.ts` says a circle
+  // must never go.
+  for (const [tier, allowGlossed] of [
+    ['prose', false],
+    ['prose', true],
+    ['short', false],
+    ['short', true]
+  ] as const) {
+    for (const cand of candidates.filter((c) => c.tier === tier)) {
+      const block = byId.get(cand.id)
+      if (!block) continue
+      const before = pending.get(cand.id) ?? withMarkup(block.text, block.emphasis, block.strong)
+      const after = withGlossaryMark(before, cand.term)
+      if (after === null) continue
+      // Where core put it, read off the two strings rather than guessed.
+      let at = 0
+      while (at < before.length && before[at] === after[at]) at += 1
+      const plain = after.replace(/<[^>]+>/g, '')
+      const plainAt = after.slice(0, at).replace(/<[^>]+>/g, '').length
+      const others = [...plain.matchAll(/°/g)].map((m) => m.index ?? 0).filter((i) => i !== plainAt)
+      if (others.some((i) => Math.abs(i - plainAt) < MIN_GAP)) continue
+      if (!allowGlossed && glossedAt(plain, plainAt, cand.term)) continue
+      pending.set(cand.id, after)
+      placed += 1
+      if (cand.id !== candidates[0]!.id) moved += 1
+      done = true
+      break
+    }
+    if (done) break
   }
-  pending.set(block.id, marked)
-  placed += 1
+  if (!done) {
+    // Every use of it sits within a line and a half of another circle.
+    if (candidates.length > 0) crowded.push(entry)
+    else stubborn.push(entry)
+  }
 }
 for (const [blockId, text] of pending) edits.push({ kind: 'text', blockId, text })
 
@@ -144,10 +255,16 @@ book.run.edits = edits
 writeFileSync(bookPath, JSON.stringify(book, null, 1) + '\n')
 
 console.log(`${heads.length} entries, set as back matter titled ${JSON.stringify(title)}`)
-console.log(`${report.marked.length} already carried a circle; ${placed} placed here`)
 console.log(
-  `${report.absent.length} entries name a word the book never uses in prose ` +
+  `${already.marked.length} already carried a circle; ${placed} placed here, ` +
+    `${moved} of them moved off the passage that explains the word`
+)
+console.log(
+  `${already.absent.length} entries name a word the book never uses in prose ` +
     `(a heading-only use counts as absent, and that is deliberate)`
 )
-for (const entry of report.absent) console.log(`   unused  ${entry.entry}`)
+for (const entry of already.absent) console.log(`   unused  ${entry.entry}`)
+for (const entry of crowded) {
+  console.log(`   crowded  ${entry} — every use of it sits beside another circle`)
+}
 for (const entry of stubborn) console.log(`   COULD NOT MARK  ${entry}`)
