@@ -132,6 +132,18 @@ Only meaningful after Phase 2. In order:
 
 ---
 
+## Phase 4 — the reading pass
+
+[`PLAN-reading.md`](./PLAN-reading.md). The pass that chooses the footnotes and
+finds the introduction's material happens today in a reading app whose
+highlights cannot come back, so the book is read twice and built from the
+second, remembered reading. A `highlight` edit — a range, a tag, the editor's
+words, unable to print by construction — plus a harvest that briefs the
+annotation pass, and the surface to make it on. Ordered after a book because
+the harvest is only worth having when there is a book waiting to be annotated.
+
+---
+
 ## Deliberately not doing
 
 - **More review of the draft module.** Four passes have now been run over it.
