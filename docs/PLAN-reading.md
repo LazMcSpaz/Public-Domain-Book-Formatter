@@ -252,10 +252,20 @@ A third view beside "Edit the book" and "Check against the scan":
 divisions, body, divisions, set in a book face with italics as italics — but:
 
 - **read-only**, with "Edit this passage" as the deliberate way out, above.
-- **select, then choose**: the four buttons of the table, and a field for the
-  editor's words. Existing highlights render as background tints, split at
-  every boundary so overlapping ones are both visible rather than one silently
-  winning.
+- **select with a finger, which is the whole of the gesture.** The editor reads
+  by dragging on text, not with a Pencil, so this is the platform's own
+  selection and nothing else: no custom hit-testing, no canvas overlay, no
+  handwriting layer. What the surface adds is a popover on `selectionchange`
+  offering the four buttons of the table and a field for the editor's words.
+  Pencil annotation is not built and is not planned — see Stage 3.
+- **the DOM range mapped back to plain-text offsets**, which is the one piece of
+  real work in this stage and the one the coordinates section above is about.
+  The block renders through `htmlOfMarkup`, so a range's own offsets are the
+  HTML's; walking the block's text nodes and summing their lengths up to the
+  range gives the offset in the plain text, which is where `quote`, `from` and
+  `to` live.
+- **existing highlights as background tints**, split at every boundary so two
+  overlapping ones are both visible rather than one silently winning.
 - **wider leading, a measure that reads, no toolbar.** The outline stays,
   because navigating a book you are reading is the one control that earns its
   place. Where you left off is remembered per book, as the chosen view already
@@ -266,39 +276,86 @@ divisions, body, divisions, set in a book face with italics as italics — but:
 The harvest is reachable from the head of the column: how many highlights, by
 tag, and a jump to each.
 
-## Stage 3 — the iPad, and what "an actual app" means
+## Stage 3 — the iPad: the shelf as the only durable place
 
 `.github/workflows/deploy.yml` already publishes the app to GitHub Pages on
 every push to `main`, and Pages is enabled, so it already runs in Safari at a
-URL. Three things stand between that and an app:
+URL. The editor has settled what the storage model should be, and it is not the
+one the app has: **the repository is where the reading lives, and the device
+only holds what has not got there yet.**
 
-- **A web app manifest and an icon.** Added to the Home Screen, the app then
-  launches from an icon with no browser chrome, holds its own place in the app
-  switcher, and appears in Spotlight — which is what "an actual app" means to
-  everyone except the App Store. It also matters for a harder reason: Safari
-  deletes script-writable storage for sites without recent interaction, and
-  installed web apps are exempt. To be **measured on the device**, not taken
-  from documentation — the same posture as the batch-endpoint probe.
-- **A reading route that never fetches the scan.** The reading pass needs
-  `book.json` and nothing else: no PDF render, no Tesseract, no layout. That is
-  what makes this the cheapest pass to put on a tablet, and it should be
-  enforced rather than hoped for.
-- **A service worker,** so a book opens on a train. Reading is the one pass
-  with no reason to need the network once the book is down.
+### The outbox, and why it can be a simple queue
 
-**What is deliberately not done is a native shell.** Capacitor or Tauri around
-this same web app, an Apple developer account and a release pipeline buys App
-Store presence, Files-app integration and Pencil input, and costs a second
-build to keep working. Nothing in the reading pass needs any of the three. If
-Pencil annotation turns out to be the thing that makes reading on the iPad
-pleasant, that is the argument for reopening it, and it should be reopened on
-that evidence rather than on the wish for an icon.
+A highlight is written to a local queue the instant it is made, and the queue is
+flushed to the shelf whenever the app is open and online. What makes that safe
+is a property that falls out of the edit list rather than one anyone designed
+for: **highlights commute.** Each is an independent record keyed by its own
+`highlightId`, changes nothing else, and is collapsed by `withEdit` on that id.
+So two devices adding highlights to one book cannot conflict, and re-sending a
+batch whose response was lost is a no-op rather than a duplicate.
+
+That is why the queue holds **edits, never the book**. A flush fetches the
+current `book.json` off the shelf, appends the queued records to its edit list
+and writes it back once — so a reading session is _one_ commit, and anything
+done to the book from another session in the meantime survives. A queue holding
+a snapshot of the whole book would instead overwrite whatever else had happened,
+which on this shelf means silently discarding an afternoon's annotation.
+
+A `text` edit made through "Edit this passage" does **not** commute: two devices
+retyping one block genuinely conflict. So a queued text edit carries the block's
+text as it stood when it was made, and a flush that finds the shelf's copy
+changed underneath **reports it** rather than resolving it. Same rule as
+everywhere: the editor decides, and silence is the failure mode.
+
+### What must be said out loud rather than implied
+
+- **The push happens when the app is next open with a connection.** iOS does not
+  run a closed web app's code, and Safari has no Background Sync, so a promise
+  of "it will go up later on its own" would be a lie the editor only discovers
+  when a reading is gone. The indicator says how many passages are still only on
+  this device, and says it in those words.
+- **`navigator.storage.persist()`, and the Home Screen.** The queue is the one
+  thing here whose loss cannot be repaired by running something again, and
+  Safari evicts script-writable storage for sites without recent interaction —
+  installed web apps being exempt. So installation is not a nicety in this
+  design; it is what protects the queue. To be **measured on the device**, not
+  taken from documentation.
+- **The queue is written before the highlight is acknowledged on screen.** The
+  batch ticket's rule, for the same reason: a mark the editor saw appear and
+  that no store ever accepted is worse than one that visibly failed.
+
+### The size problem this exposed, which is not the reading's fault
+
+_Clairvoyance_'s `book.json` is **29.8 MB, of which 28.9 MB is one inline
+base64 advertisement plate**; the book itself is 788 KB. Pictures are supposed
+to go to `images/<digest>.png` and be named by the book file, written once —
+that rule exists precisely because git keeps every version — and this book
+predates it or slipped past it.
+
+It matters here because a flush rewrites the book file, and forty times 29.8 MB
+of history for a fortnight's reading is a repository nobody wants. With the
+plate externalised the same flush is 788 KB and one commit a session, which is
+ordinary. **So re-saving that book through the current image path is a
+prerequisite for reading it on a tablet**, and it is worth doing regardless: it
+is a live defect on the shelf today, making every save of that book forty times
+larger than it needs to be.
+
+### What is deliberately not done: a native shell
+
+Capacitor or Tauri around this same web app, an Apple developer account and a
+release pipeline buys App Store presence, Files-app integration and Pencil
+input, and costs a second build to keep working. The editor reads by dragging a
+finger on text, so Pencil input — the only one of the three the reading pass
+could use — is not wanted. A Home Screen install gives the icon, the app
+switcher, Spotlight, offline and the storage exemption, which is the rest of
+what "an actual app" means. Reopen this only if handwriting turns out to be how
+the reading actually wants to be done.
 
 Two things to measure rather than assume, both Safari-specific: whether the
-native selection callout (Copy / Look Up) can be lived with beside a custom
-popover, and whether a three-hundred-page column scrolls acceptably on the
-actual device. Both are answers, not opinions, and both change the design if
-they come back wrong.
+native selection callout (Copy / Look Up) can be lived with beside the popover,
+and whether a three-hundred-page column scrolls acceptably on the actual device.
+Both are answers, not opinions, and both change the design if they come back
+wrong.
 
 ## Stage 4 — the payoff
 

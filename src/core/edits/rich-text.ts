@@ -146,3 +146,84 @@ function serialize(nodes: ArrayLike<RichNode>, insideI: boolean, insideB: boolea
   }
   return out
 }
+
+/**
+ * Where a point in the rendered DOM falls in the block's **plain text**.
+ *
+ * The one piece of arithmetic the reading surface needs, and the one worth
+ * keeping out of a component. Three coordinate systems meet at a selection and
+ * they are all different numbers for the same place:
+ *
+ *  1. the *notation* (`withMarkup`), which is what an edit is written in and
+ *     which contains `<i>` and `<b>`;
+ *  2. the *plain text* (`parseInlineMarkup(raw).text`), which is what a reader
+ *     sees and where every anchor in this app is measured — a note's `at`, a
+ *     `split`, a memo, a highlight's `from` and `to`;
+ *  3. the *rendered HTML* from `htmlOfMarkup`, where the finger actually lands
+ *     and whose offsets count tag characters.
+ *
+ * A range hands back a node and an offset within it, which is (3). Summing the
+ * lengths of every text node before it gives (2) directly — and exactly, not
+ * approximately, because the escaping `htmlOfMarkup` does is undone by the
+ * parser: `&amp;` is five characters of HTML and one character of text node,
+ * and it is the text node this counts.
+ *
+ * Returns null when the point is not inside `root` at all, which is what a
+ * selection dragged out of the passage looks like, rather than a plausible
+ * number measured from the wrong origin.
+ */
+export function plainOffsetOf(
+  root: RichNode,
+  target: RichNode,
+  offsetInTarget: number
+): number | null {
+  let seen = 0
+  let found: number | null = null
+
+  const walk = (node: RichNode): boolean => {
+    if (node === target) {
+      found =
+        node.nodeType === 3
+          ? // A text node's offset is a count of *characters*, so it adds.
+            seen + clamp(offsetInTarget, (node.nodeValue ?? '').length)
+          : // An element's offset is a count of *children* — which is what a
+            // selection landing on a tag boundary hands back, and reading it as
+            // characters would put the anchor a plausible distance from where
+            // the finger actually was. So the answer is the element's start
+            // plus the text in the children before that index.
+            seen + textLength(node.childNodes, clamp(offsetInTarget, node.childNodes.length))
+      return true
+    }
+    if (node.nodeType === 3) {
+      seen += (node.nodeValue ?? '').length
+      return false
+    }
+    for (let i = 0; i < node.childNodes.length; i += 1) {
+      if (walk(node.childNodes[i]!)) return true
+    }
+    return false
+  }
+
+  if (root === target) {
+    return textLength(root.childNodes, clamp(offsetInTarget, root.childNodes.length))
+  }
+  for (let i = 0; i < root.childNodes.length; i += 1) {
+    if (walk(root.childNodes[i]!)) return found
+  }
+  return null
+}
+
+const clamp = (value: number, max: number): number => Math.max(0, Math.min(max, value))
+
+/** The characters in the first `count` children, tags not being characters. */
+function textLength(nodes: ArrayLike<RichNode>, count: number): number {
+  let total = 0
+  for (let i = 0; i < count; i += 1) {
+    const node = nodes[i]!
+    total +=
+      node.nodeType === 3
+        ? (node.nodeValue ?? '').length
+        : textLength(node.childNodes, node.childNodes.length)
+  }
+  return total
+}

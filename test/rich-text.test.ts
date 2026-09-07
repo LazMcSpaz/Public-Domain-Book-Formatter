@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { htmlOfMarkup, markupOfNodes, type RichNode } from '@core/edits'
+import { htmlOfMarkup, markupOfNodes, plainOffsetOf, type RichNode } from '@core/edits'
 import { normalizeMarkup, type TranscribedBlock } from '@core/transcribe'
 
 /** A text node, as the DOM would hand it over. */
@@ -90,5 +90,65 @@ describe('the round trip', () => {
     expect(block.text).toBe('The Corpus Hermeticum names it.')
     expect(block.emphasis).toEqual([1, 2])
     expect(block.strong).toEqual([1, 2])
+  })
+})
+
+describe("plainOffsetOf — where a finger landed, in the book's own coordinates", () => {
+  // `Read <i>the whole book</i> twice.` as the DOM holds it after rendering.
+  const root = el('div', [text('Read '), el('i', [text('the whole book')]), text(' twice.')])
+  const PLAIN = 'Read the whole book twice.'
+
+  it('maps a point in the first text node straight through', () => {
+    expect(plainOffsetOf(root, root.childNodes[0]!, 4)).toBe(4)
+    expect(PLAIN.slice(0, 4)).toBe('Read')
+  })
+
+  it('carries the count across an italic run, whose tags are not characters', () => {
+    // The trap the whole function exists for. In the rendered HTML this point
+    // is at 22, because `<i>` is three characters there. In the plain text —
+    // which is where every anchor in this app is measured — it is 19.
+    const inside = (root.childNodes[1] as RichNode).childNodes[0]!
+    expect(plainOffsetOf(root, inside, 'the whole book'.length)).toBe(19)
+    expect(PLAIN.slice(5, 19)).toBe('the whole book')
+  })
+
+  it('counts text nodes before the point, not tags', () => {
+    expect(plainOffsetOf(root, root.childNodes[2]!, ' twice.'.length)).toBe(PLAIN.length)
+  })
+
+  it('counts an escaped character once, because it counts the text node', () => {
+    // `htmlOfMarkup` writes `&amp;`, five characters of HTML. The DOM hands
+    // back a text node holding one, and the book's plain text has one.
+    const amp = el('div', [text('Salt & fire')])
+    expect(plainOffsetOf(amp, amp.childNodes[0]!, 6)).toBe(6)
+    expect(htmlOfMarkup('Salt & fire')).toContain('&amp;')
+  })
+
+  it('reads an offset into an element as a count of children, not characters', () => {
+    // What a selection landing on a tag boundary hands back: the container is
+    // the element and the offset is a child index. Selecting the whole
+    // italicised phrase ends at <i> child 1 — which is character 19, the end of
+    // "the whole book", and not character 6. Reading it as characters would put
+    // the anchor a plausible-looking distance from where the finger was, which
+    // is the exact fault CLAUDE.md names: coordinates compared before checking
+    // what they mean.
+    const italic = root.childNodes[1]!
+    expect(plainOffsetOf(root, italic, 0)).toBe(5)
+    expect(plainOffsetOf(root, italic, 1)).toBe(19)
+    expect(PLAIN.slice(5, 19)).toBe('the whole book')
+  })
+
+  it('reads an offset into the passage itself the same way', () => {
+    // Safari hands back the container element for a selection that spans whole
+    // children, so the root is a legitimate target and not an edge case.
+    expect(plainOffsetOf(root, root, 0)).toBe(0)
+    expect(plainOffsetOf(root, root, 2)).toBe(19)
+    expect(plainOffsetOf(root, root, 3)).toBe(PLAIN.length)
+  })
+
+  it('returns null for a point outside the passage, rather than a plausible number', () => {
+    // A drag that left the block. The honest answer is "not here" — a number
+    // measured from the wrong origin is the fault CLAUDE.md names outright.
+    expect(plainOffsetOf(root, text('somewhere else'), 3)).toBeNull()
   })
 })
