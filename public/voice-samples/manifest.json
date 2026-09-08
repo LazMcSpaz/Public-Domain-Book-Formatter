@@ -17,14 +17,14 @@
    }
   ],
   "seconds": 14.875,
-  "factor": 0.31657142857142856
+  "factor": 0.4606386554621849
  },
  {
   "kind": "passage",
   "key": "vocabulary",
   "title": "This book's vocabulary",
-  "text": "The acarshick Records, the astral tube, and the eethurrick double are not the same thing. Prana flows through the plexi; the medulla oblongata is not the pineal gland. clair-awdience, sighkommetry, telekinesis and thought-transference are four different faculties, and the siddees are not a fifth.",
-  "name": "vocabulary-bm_george-482476f4",
+  "text": "The acarshick Records, the astral tube, and the eethurrick double are not the same thing. Prana flows through the plexi; the meh-doola oblongata is not the pineal gland. clair-awdience, sighkommetry, telekinesis and thought-transference are four different faculties, and the siddees are not a fifth.",
+  "name": "vocabulary-bm_george-59dc8a2c",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -32,12 +32,12 @@
     "phonemes": "ðɪ ɐkˈɑːʃɪk ɹˈɛkɔːdz, ðɪ ˈastɹəl tjˈuːb, and ðɪ ˈiːθəɹˌɪk dˈʌbəl ɑː nˌɒt ðə sˈeɪm θˈɪŋ."
    },
    {
-    "text": "Prana flows through the plexi; the medulla oblongata is not the pineal gland. clair-awdience, sighkommetry, telekinesis and thought-transference are four different faculties, and the siddees are not a fifth.",
-    "phonemes": "pɹˈɑːnə flˈəʊz θɹuː ðə plˈɛksi; ðə mˈɛdʌləɹ ˌɒblɒŋɡˈɑːtəɹ ɪz nˌɒt ðə pˈɪniəl ɡlˈand. klˈeəɹˈɔːdiəns, saɪkˈɒmətɹi, tˌɛlɪkənˈiːsɪs and θˈɔːttɹansfˈɜːɹəns ɑː fˈɔː dˈɪfɹənt fˈakəltiz, and ðə sˈɪdiːz ɑː nˌɒtə fˈɪfθ."
+    "text": "Prana flows through the plexi; the meh-doola oblongata is not the pineal gland. clair-awdience, sighkommetry, telekinesis and thought-transference are four different faculties, and the siddees are not a fifth.",
+    "phonemes": "pɹˈɑːnə flˈəʊz θɹuː ðə plˈɛksi; ðə mˈɛdˈuːləɹ ˌɒblɒŋɡˈɑːtəɹ ɪz nˌɒt ðə pˈɪniəl ɡlˈand. klˈeəɹˈɔːdiəns, saɪkˈɒmətɹi, tˌɛlɪkənˈiːsɪs and θˈɔːttɹansfˈɜːɹəns ɑː fˈɔː dˈɪfɹənt fˈakəltiz, and ðə sˈɪdiːz ɑː nˌɒtə fˈɪfθ."
    }
   ],
-  "seconds": 20.2,
-  "factor": 0.2658910891089109
+  "seconds": 20.275,
+  "factor": 0.4328483353884094
  },
  {
   "kind": "passage",
@@ -65,7 +65,7 @@
    }
   ],
   "seconds": 16.375,
-  "factor": 0.26180152671755724
+  "factor": 0.4284580152671756
  },
  {
   "kind": "passage",
@@ -85,7 +85,7 @@
    }
   ],
   "seconds": 21.9,
-  "factor": 0.26054794520547947
+  "factor": 0.43584474885844754
  },
  {
   "kind": "pronunciation",
@@ -103,7 +103,7 @@
    }
   ],
   "seconds": 1.475,
-  "factor": 0.2671186440677966
+  "factor": 0.44677966101694916
  },
  {
   "kind": "pronunciation",
@@ -121,7 +121,7 @@
    }
   ],
   "seconds": 1.4,
-  "factor": 0.26285714285714284
+  "factor": 0.4378571428571429
  },
  {
   "kind": "pronunciation",
@@ -139,7 +139,7 @@
    }
   ],
   "seconds": 1.525,
-  "factor": 0.26622950819672137
+  "factor": 0.44983606557377054
  },
  {
   "kind": "pronunciation",
@@ -157,7 +157,7 @@
    }
   ],
   "seconds": 1.2,
-  "factor": 0.26666666666666666
+  "factor": 0.43833333333333335
  },
  {
   "kind": "pronunciation",
@@ -175,7 +175,7 @@
    }
   ],
   "seconds": 1.525,
-  "factor": 0.2655737704918033
+  "factor": 0.44983606557377054
  },
  {
   "kind": "pronunciation",
@@ -193,7 +193,7 @@
    }
   ],
   "seconds": 1.45,
-  "factor": 0.2675862068965517
+  "factor": 0.4420689655172414
  },
  {
   "kind": "pronunciation",
@@ -211,7 +211,7 @@
    }
   ],
   "seconds": 1.425,
-  "factor": 0.2652631578947368
+  "factor": 0.4357894736842105
  },
  {
   "kind": "pronunciation",
@@ -229,7 +229,7 @@
    }
   ],
   "seconds": 1.5,
-  "factor": 0.25933333333333336
+  "factor": 0.4326666666666667
  },
  {
   "kind": "pronunciation",
@@ -247,7 +247,7 @@
    }
   ],
   "seconds": 1.75,
-  "factor": 0.26857142857142857
+  "factor": 0.456
  },
  {
   "kind": "pronunciation",
@@ -265,7 +265,7 @@
    }
   ],
   "seconds": 1.775,
-  "factor": 0.26366197183098594
+  "factor": 0.4366197183098592
  },
  {
   "kind": "pronunciation",
@@ -283,7 +283,7 @@
    }
   ],
   "seconds": 1.475,
-  "factor": 0.2671186440677966
+  "factor": 0.4413559322033898
  },
  {
   "kind": "pronunciation",
@@ -301,7 +301,7 @@
    }
   ],
   "seconds": 1.35,
-  "factor": 0.26666666666666666
+  "factor": 0.4385185185185185
  },
  {
   "kind": "pronunciation",
@@ -319,7 +319,7 @@
    }
   ],
   "seconds": 1.35,
-  "factor": 0.26740740740740737
+  "factor": 0.44518518518518513
  },
  {
   "kind": "pronunciation",
@@ -337,7 +337,7 @@
    }
   ],
   "seconds": 1.325,
-  "factor": 0.2679245283018868
+  "factor": 0.44150943396226416
  },
  {
   "kind": "pronunciation",
@@ -355,7 +355,7 @@
    }
   ],
   "seconds": 1.825,
-  "factor": 0.2619178082191781
+  "factor": 0.43068493150684933
  },
  {
   "kind": "pronunciation",
@@ -373,7 +373,7 @@
    }
   ],
   "seconds": 1.95,
-  "factor": 0.2641025641025641
+  "factor": 0.4338461538461538
  },
  {
   "kind": "pronunciation",
@@ -391,7 +391,7 @@
    }
   ],
   "seconds": 1.6,
-  "factor": 0.26249999999999996
+  "factor": 0.44249999999999995
  },
  {
   "kind": "pronunciation",
@@ -409,42 +409,42 @@
    }
   ],
   "seconds": 1.675,
-  "factor": 0.26686567164179104
+  "factor": 0.45373134328358206
  },
  {
-  "kind": "candidate",
+  "kind": "pronunciation",
   "key": "medulla",
   "title": "medulla",
-  "text": "The medoola oblongata is not the pineal gland.",
-  "sounds": "MEH-doo-luh — one stress, so it runs on into oblongata like a word",
-  "why": "Wanted: meh-doo-luh. Two spellings reach it, and they differ only in how hard the second syllable is hit.",
-  "name": "try-medulla-1-597907cf",
+  "text": "medulla",
+  "side": "before",
+  "sounds": "meh-DOO-luh",
+  "name": "word-medulla-before-412be648",
   "voice": "bm_george",
   "phonemes": [
    {
-    "text": "The medoola oblongata is not the pineal gland.",
-    "phonemes": "ðə mˈɛduːləɹ ˌɒblɒŋɡˈɑːtəɹ ɪz nˌɒt ðə pˈɪniəl ɡlˈand."
+    "text": "medulla",
+    "phonemes": "mˈɛdʌlə"
    }
   ],
-  "seconds": 4.125,
-  "factor": 0.263030303030303
+  "seconds": 1.45,
+  "factor": 0.4441379310344828
  },
  {
-  "kind": "candidate",
+  "kind": "pronunciation",
   "key": "medulla",
   "title": "medulla",
-  "text": "The meh-doola oblongata is not the pineal gland.",
-  "sounds": "MEH-DOO-luh — both syllables hit, more deliberate",
-  "why": "Wanted: meh-doo-luh. Two spellings reach it, and they differ only in how hard the second syllable is hit.",
-  "name": "try-medulla-2-2dec3273",
+  "text": "meh-doola",
+  "side": "after",
+  "sounds": "meh-DOO-luh",
+  "name": "word-medulla-after-93580ea6",
   "voice": "bm_george",
   "phonemes": [
    {
-    "text": "The meh-doola oblongata is not the pineal gland.",
-    "phonemes": "ðə mˈɛdˈuːləɹ ˌɒblɒŋɡˈɑːtəɹ ɪz nˌɒt ðə pˈɪniəl ɡlˈand."
+    "text": "meh-doola",
+    "phonemes": "mˈɛdˈuːlə"
    }
   ],
-  "seconds": 4.175,
-  "factor": 0.2625149700598803
+  "seconds": 1.525,
+  "factor": 0.439344262295082
  }
 ]
