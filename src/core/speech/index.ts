@@ -15,3 +15,12 @@ export {
   type Pronunciation,
   type PronunciationDrift
 } from './pronounce'
+export {
+  readChapter,
+  chapterBlocks,
+  chapterNotes,
+  expectedSeconds,
+  type ReadingScript,
+  type SpokenPiece,
+  type UnreadBlock
+} from './script'

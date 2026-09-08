@@ -27,31 +27,19 @@
  * would pay for it to run a test suite that never speaks. The workflow installs
  * it when it needs it.
  */
-import { createHash } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
-import { createServer } from 'vite'
-
-const REPO = resolve(import.meta.dirname, '..')
-
-/**
- * The real modules, transformed by vite so `@core` means what it means.
- *
- * The same door `scripts/voice.mjs` uses, and for the same reason: a second copy
- * of the chapter-number rule here would be a book that said "lesson roman eight"
- * depending on which script rendered it.
- */
-async function core() {
-  const server = await createServer({
-    root: REPO,
-    configFile: resolve(REPO, 'vite.config.ts'),
-    server: { middlewareMode: true },
-    appType: 'custom',
-    logLevel: 'error'
-  })
-  const speech = await server.ssrLoadModule('@core/speech')
-  return { speech, close: () => server.close() }
-}
+import {
+  argOf,
+  clipName,
+  core,
+  dialectOf,
+  hasFlag,
+  listFile,
+  loadVoice,
+  speak,
+  wav
+} from './voice-lib.mjs'
 
 /**
  * The passages, which are this shelf's own rather than invented ones.
@@ -113,99 +101,6 @@ export const PASSAGES = {
   }
 }
 
-/** Float samples to a 16-bit mono WAV. The one audio format nothing argues with. */
-export function wav(samples, rate) {
-  const buffer = Buffer.alloc(44 + samples.length * 2)
-  buffer.write('RIFF', 0, 'ascii')
-  buffer.writeUInt32LE(36 + samples.length * 2, 4)
-  buffer.write('WAVEfmt ', 8, 'ascii')
-  buffer.writeUInt32LE(16, 16)
-  buffer.writeUInt16LE(1, 20)
-  buffer.writeUInt16LE(1, 22)
-  buffer.writeUInt32LE(rate, 24)
-  buffer.writeUInt32LE(rate * 2, 28)
-  buffer.writeUInt16LE(2, 32)
-  buffer.writeUInt16LE(16, 34)
-  buffer.write('data', 36, 'ascii')
-  buffer.writeUInt32LE(samples.length * 2, 40)
-  for (let i = 0; i < samples.length; i += 1) {
-    const v = Math.max(-1, Math.min(1, samples[i]))
-    buffer.writeInt16LE(Math.round(v < 0 ? v * 0x8000 : v * 0x7fff), 44 + i * 2)
-  }
-  return buffer
-}
-
-/**
- * Peak, loudness and anything that is not a number.
- *
- * The same reading the probe takes, and here for the same reason: a stretch that
- * comes back outside the range sound is made of must be reported, never written
- * into a book's audio and discovered by the listener. Silence is the failure
- * mode.
- */
-export function levels(samples) {
-  let peak = 0
-  let sum = 0
-  let broken = 0
-  for (const v of samples) {
-    if (!Number.isFinite(v)) {
-      broken += 1
-      continue
-    }
-    const size = Math.abs(v)
-    if (size > peak) peak = size
-    sum += v * v
-  }
-  return { peak, rms: samples.length > 0 ? Math.sqrt(sum / samples.length) : 0, broken }
-}
-
-/** One passage, spoken in pieces, joined, with what each piece was read as. */
-export async function say(tts, TextSplitterStream, text, voice) {
-  const splitter = new TextSplitterStream()
-  splitter.push(text)
-  splitter.close()
-  const pieces = []
-  const phonemes = []
-  let rate = 24000
-  for await (const piece of tts.stream(splitter, { voice })) {
-    pieces.push(piece.audio.audio)
-    phonemes.push({ text: piece.text.trim(), phonemes: piece.phonemes.trim() })
-    rate = piece.audio.sampling_rate
-  }
-  const total = pieces.reduce((n, p) => n + p.length, 0)
-  const samples = new Float32Array(total)
-  let at = 0
-  for (const piece of pieces) {
-    samples.set(piece, at)
-    at += piece.length
-  }
-  return { samples, rate, phonemes, seconds: total / rate, sound: levels(samples) }
-}
-
-/**
- * An argument, treating an empty one as absent.
- *
- * Deliberate rather than incidental: a workflow input that was not filled in
- * arrives as `--voices ''`, and the sensible reading of that is "you did not
- * choose", not "render no voices at all".
- */
-function argOf(name, fallback = null) {
-  const at = process.argv.indexOf(`--${name}`)
-  return at >= 0 && process.argv[at + 1] ? process.argv[at + 1] : fallback
-}
-const hasFlag = (name) => process.argv.includes(`--${name}`)
-
-/** Kokoro's own rule: an `a` voice is American, a `b` voice British. */
-const dialectOf = (voice) => (voice.startsWith('b') ? 'en' : 'en-us')
-
-async function listFile(name) {
-  try {
-    return JSON.parse(await readFile(resolve(REPO, `voice/${name}.json`), 'utf8'))
-  } catch {
-    return []
-  }
-}
-
 /**
  * Respellings that are approved, and respellings that are only proposed.
  *
@@ -228,7 +123,7 @@ if (asked !== null) {
 
 if (hasFlag('check')) {
   const { phonemize } = await import('phonemizer')
-  const { speech, close } = await core()
+  const { speech, close } = await core('speech')
   const list = await listFile('pronunciations')
   const drifted = await speech.checkPronunciations(list, async (text, dialect) =>
     (await phonemize(text, dialect)).join(' ')
@@ -258,7 +153,7 @@ const out = resolve(argOf('out', 'samples'))
 const voices = argOf('voices', 'bm_george').split(',')
 const only = argOf('text')
 
-const { speech, close } = await core()
+const { speech, close } = await core('speech')
 const list = await listFile('pronunciations')
 
 /**
@@ -279,40 +174,18 @@ function speakable(lines, dialect) {
     .join('\n')
 }
 
-const { KokoroTTS, TextSplitterStream } = await import('kokoro-js')
 console.log('Loading Kokoro…')
-const t0 = Date.now()
-const tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX', {
-  dtype: 'fp32',
-  device: 'cpu'
-})
-console.log(`Loaded in ${((Date.now() - t0) / 1000).toFixed(1)}s.`)
+const model = await loadVoice()
+console.log(`Loaded in ${model.seconds.toFixed(1)}s.`)
 
 await mkdir(out, { recursive: true })
 const rendered = []
-
-/**
- * A clip's file name, carrying a digest of exactly what was said.
- *
- * Not decoration. These files are served from the same origin as the app, whose
- * service worker caches same-origin assets cache-first and keeps them — so a
- * name that means one thing today and another thing tomorrow is a phone playing
- * last week's audio under this week's label, with nothing on screen to say so.
- * `try-medulla-1.mp3` was exactly that: a bare word in one render and a whole
- * sentence in the next. Naming by content makes the trap impossible rather than
- * remembered, and it is the same rule the shelf already uses for scans and
- * pictures.
- */
-function clipName(base, text, voice) {
-  const digest = createHash('sha256').update(`${voice}\u0000${text}`).digest('hex')
-  return `${base}-${digest.slice(0, 8)}`
-}
 
 /** Render one stretch, refusing to write anything that is not sound. */
 async function render(base, text, voice, record) {
   const name = clipName(base, text, voice)
   const started = Date.now()
-  const result = await say(tts, TextSplitterStream, text, voice)
+  const result = await speak(model, text, voice)
   const took = (Date.now() - started) / 1000
   if (result.sound.broken > 0 || result.sound.peak > 1.5 || result.sound.peak < 0.01) {
     throw new Error(

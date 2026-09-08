@@ -10,7 +10,7 @@ on:
   # made with that token does not trigger other workflows, so without this the
   # samples sit in the repository and never reach the page.
   workflow_run:
-    workflows: [Voice samples]
+    workflows: [Voice samples, Read a chapter]
     types: [completed]
 
 permissions:
