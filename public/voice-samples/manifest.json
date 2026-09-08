@@ -4,88 +4,64 @@
   "key": "ordinary",
   "title": "Ordinary prose",
   "text": "There are faculties in a person that reach past the five senses. They work by picking up vibrations, exactly as the eye picks up light, and the only real difference is which instruments we have learned to trust.",
-  "name": "ordinary-bm_george-6517cb9a",
+  "name": "ordinary-bm_george-999b7258",
   "voice": "bm_george",
   "phonemes": [
    {
-    "text": "There are faculties in a person that reach past the five senses.",
-    "phonemes": "ðeəɹˌɑː fˈakəltiz ɪn ɐ pˈɜːsən ðat ɹˈiːtʃ pˈast ðə fˈaɪv sˈɛnsɪz."
-   },
-   {
-    "text": "They work by picking up vibrations, exactly as the eye picks up light, and the only real difference is which instruments we have learned to trust.",
-    "phonemes": "ðeɪ wˈɜːk baɪ pˈɪkɪŋ ˌʌp vaɪbɹˈeɪʃənz, ɛɡzˈaktli az ðɪ ˈaɪ pˈɪks ˌʌp lˈaɪt, and ðɪ ˈəʊnli ɹˈiəl dˈɪfɹəns ɪz wˌɪtʃ ˈɪnstɹəmənts wiː hav lˈɜːnd tə tɹˈʌst."
+    "text": "There are faculties in a person that reach past the five senses. They work by picking up vibrations, exactly as the eye picks up light, and the only real difference is which instruments we have learned to trust.",
+    "phonemes": "ðeəɹˌɑː fˈakəltiz ɪn ɐ pˈɜːsən ðat ɹˈiːtʃ pˈast ðə fˈaɪv sˈɛnsɪz ðeɪ wˈɜːk baɪ pˈɪkɪŋ ˌʌp vaɪbɹˈeɪʃənz ɛɡzˈaktli az ðɪ ˈaɪ pˈɪks ˌʌp lˈaɪt and ðɪ ˈəʊnli ɹˈiəl dˈɪfɹəns ɪz wˌɪtʃ ˈɪnstɹəmənts wiː hav lˈɜːnd tə tɹˈʌst"
    }
   ],
-  "seconds": 14.875,
-  "factor": 0.4606386554621849
+  "seconds": 14.1,
+  "factor": 0.4956028368794327
  },
  {
   "kind": "passage",
   "key": "vocabulary",
   "title": "This book's vocabulary",
   "text": "The acarshick Records, the astral tube, and the eethurrick double are not the same thing. Prana flows through the plexi; the meh-doola oblongata is not the pineal gland. clair-awdience, sighkommetry, telekinesis and thought-transference are four different faculties, and the siddees are not a fifth.",
-  "name": "vocabulary-bm_george-59dc8a2c",
+  "name": "vocabulary-bm_george-5c80f60e",
   "voice": "bm_george",
   "phonemes": [
    {
-    "text": "The acarshick Records, the astral tube, and the eethurrick double are not the same thing.",
-    "phonemes": "ðɪ ɐkˈɑːʃɪk ɹˈɛkɔːdz, ðɪ ˈastɹəl tjˈuːb, and ðɪ ˈiːθəɹˌɪk dˈʌbəl ɑː nˌɒt ðə sˈeɪm θˈɪŋ."
-   },
-   {
-    "text": "Prana flows through the plexi; the meh-doola oblongata is not the pineal gland. clair-awdience, sighkommetry, telekinesis and thought-transference are four different faculties, and the siddees are not a fifth.",
-    "phonemes": "pɹˈɑːnə flˈəʊz θɹuː ðə plˈɛksi; ðə mˈɛdˈuːləɹ ˌɒblɒŋɡˈɑːtəɹ ɪz nˌɒt ðə pˈɪniəl ɡlˈand. klˈeəɹˈɔːdiəns, saɪkˈɒmətɹi, tˌɛlɪkənˈiːsɪs and θˈɔːttɹansfˈɜːɹəns ɑː fˈɔː dˈɪfɹənt fˈakəltiz, and ðə sˈɪdiːz ɑː nˌɒtə fˈɪfθ."
+    "text": "The acarshick Records, the astral tube, and the eethurrick double are not the same thing. Prana flows through the plexi; the meh-doola oblongata is not the pineal gland. clair-awdience, sighkommetry, telekinesis and thought-transference are four different faculties, and the siddees are not a fifth.",
+    "phonemes": "ðɪ ɐkˈɑːʃɪk ɹˈɛkɔːdz ðɪ ˈastɹəl tjˈuːb and ðɪ ˈiːθəɹˌɪk dˈʌbəl ɑː nˌɒt ðə sˈeɪm θˈɪŋ pɹˈɑːnə flˈəʊz θɹuː ðə plˈɛksi ðə mˈɛdˈuːləɹ ˌɒblɒŋɡˈɑːtəɹ ɪz nˌɒt ðə pˈɪniəl ɡlˈand klˈeəɹˈɔːdiəns saɪkˈɒmətɹi tˌɛlɪkənˈiːsɪs and θˈɔːttɹansfˈɜːɹəns ɑː fˈɔː dˈɪfɹənt fˈakəltiz and ðə sˈɪdiːz ɑː nˌɒtə fˈɪfθ"
    }
   ],
-  "seconds": 20.275,
-  "factor": 0.4328483353884094
+  "seconds": 19.1,
+  "factor": 0.43455497382198954
  },
  {
   "kind": "passage",
   "key": "chapter",
   "title": "A chapter opening, as the book sets it",
   "text": "LESSON Eight\nCLAIRVOYANT REVERIE\nThe higher forms of Clairvoyance, and how they may be cultivated and acquired. Trance conditions are not essential to the highest Clairvoyance, although often connected therewith.",
-  "name": "chapter-bm_george-19f4563e",
+  "name": "chapter-bm_george-50813aa6",
   "voice": "bm_george",
   "phonemes": [
    {
-    "text": "LESSON Eight",
-    "phonemes": "lˈɛsən ˈeɪt"
-   },
-   {
-    "text": "CLAIRVOYANT REVERIE",
-    "phonemes": "klˈeəvɔɪənt ɹˈɛvəɹi"
-   },
-   {
-    "text": "The higher forms of Clairvoyance, and how they may be cultivated and acquired.",
-    "phonemes": "ðə hˈaɪə fˈɔːmz ɒv klˈeəvɔɪəns, and hˌaʊ ðeɪ mˈeɪ biː kˈʌltɪvˌeɪtɪd and ɐkwˈaɪəd."
-   },
-   {
-    "text": "Trance conditions are not essential to the highest Clairvoyance, although often connected therewith.",
-    "phonemes": "tɹˈans kəndˈɪʃənz ɑː nˌɒt ɪsˈɛnʃəl tə ðə hˈaɪɪst klˈeəvɔɪəns, ɔːlðˈəʊ ˈɒfən kənˈɛktɪd ðeəwˈɪð."
+    "text": "LESSON Eight CLAIRVOYANT REVERIE The higher forms of Clairvoyance, and how they may be cultivated and acquired. Trance conditions are not essential to the highest Clairvoyance, although often connected therewith.",
+    "phonemes": "lˈɛsən ˈeɪt klˈeəvɔɪənt ɹˈɛvəɹi ðə hˈaɪə fˈɔːmz ɒv klˈeəvɔɪəns and hˌaʊ ðeɪ mˈeɪ biː kˈʌltɪvˌeɪtɪd and ɐkwˈaɪəd tɹˈans kəndˈɪʃənz ɑː nˌɒt ɪsˈɛnʃəl tə ðə hˈaɪɪst klˈeəvɔɪəns ɔːlðˈəʊ ˈɒfən kənˈɛktɪd ðeəwˈɪð"
    }
   ],
-  "seconds": 16.375,
-  "factor": 0.4284580152671756
+  "seconds": 14.125,
+  "factor": 0.43150442477876105
  },
  {
   "kind": "passage",
   "key": "names",
   "title": "Names and dates",
   "text": "Madame Blavatsky founded the Theosophical Society in 1875. Heinrich shockah, Felix veek dah-zeer, Jacques kuh-zott and Johann Heinrich Jung-Stilling are all cited by Panchadasi; so are Sir William Crookes, Wilhelm Conrad rentghen, 1845 to 1923, and the S.P.R.",
-  "name": "names-bm_george-ee717b77",
+  "name": "names-bm_george-d820f8d4",
   "voice": "bm_george",
   "phonemes": [
    {
-    "text": "Madame Blavatsky founded the Theosophical Society in 1875.",
-    "phonemes": "mˈadəm blavˈatski fˈaʊndɪd ðə θiːəsˈɒfɪkəl səsˈaɪəti ɪn ˈeɪtiːn sˈɛvənti fˈaɪv."
-   },
-   {
-    "text": "Heinrich shockah, Felix veek dah-zeer, Jacques kuh-zott and Johann Heinrich Jung-Stilling are all cited by Panchadasi; so are Sir William Crookes, Wilhelm Conrad rentghen, 1845 to 1923, and the S.P.R.",
-    "phonemes": "hˈaɪnɹɪtʃ ʃˈɒkə, fˈiːlɪks vˈiːk dˈɑːzˈiə, ʒˈak kˈʌzˈɒt and jˈəʊhan hˈaɪnɹɪtʃ jˈʊŋstˈɪlɪŋ ɑːɹ ˈɔːl sˈaɪtɪd baɪ pˌantʃɐdˈɑːsi; sˌəʊ ɑː sˌɜː wˈɪliəm kɹˈʊks, wˈɪlhɛlm kˈɒnɹad ɹˈɛntɡən, ˈeɪtiːn fˈɔːti fˈaɪv tə nˈaɪntiːn twˈɛnti θɹˈiː, and ðɪ ˈɛspˈiːˈɑː."
+    "text": "Madame Blavatsky founded the Theosophical Society in 1875. Heinrich shockah, Felix veek dah-zeer, Jacques kuh-zott and Johann Heinrich Jung-Stilling are all cited by Panchadasi; so are Sir William Crookes, Wilhelm Conrad rentghen, 1845 to 1923, and the S.P.R.",
+    "phonemes": "mˈadəm blavˈatski fˈaʊndɪd ðə θiːəsˈɒfɪkəl səsˈaɪəti ɪn wˈɒn θˈaʊzənd ˈeɪthˈʌndɹɪdən sˈɛvənti fˈaɪv hˈaɪnɹɪtʃ ʃˈɒkə fˈiːlɪks vˈiːk dˈɑːzˈiə ʒˈak kˈʌzˈɒt and jˈəʊhan hˈaɪnɹɪtʃ jˈʊŋstˈɪlɪŋ ɑːɹ ˈɔːl sˈaɪtɪd baɪ pˌantʃɐdˈɑːsi sˌəʊ ɑː sˌɜː wˈɪliəm kɹˈʊks wˈɪlhɛlm kˈɒnɹad ɹˈɛntɡən wˈɒn θˈaʊzənd ˈeɪthˈʌndɹɪdən fˈɔːti fˈaɪv tə nˈaɪntiːnhˈʌndɹɪdən twˈɛnti θɹˈiː and ðɪ ˌɛspˌiːˈɑː"
    }
   ],
-  "seconds": 21.9,
-  "factor": 0.43584474885844754
+  "seconds": 20.475,
+  "factor": 0.44009768009768
  },
  {
   "kind": "pronunciation",
@@ -94,7 +70,7 @@
   "text": "Siddhis",
   "side": "before",
   "sounds": "SID-eez",
-  "name": "word-siddhis-before-a31fd0bb",
+  "name": "word-siddhis-before-7cd62736",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -103,7 +79,7 @@
    }
   ],
   "seconds": 1.475,
-  "factor": 0.44677966101694916
+  "factor": 0.4413559322033898
  },
  {
   "kind": "pronunciation",
@@ -112,7 +88,7 @@
   "text": "siddees",
   "side": "after",
   "sounds": "SID-eez",
-  "name": "word-siddhis-after-8d78083c",
+  "name": "word-siddhis-after-2b136cb3",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -121,7 +97,7 @@
    }
   ],
   "seconds": 1.4,
-  "factor": 0.4378571428571429
+  "factor": 0.44428571428571434
  },
  {
   "kind": "pronunciation",
@@ -130,7 +106,7 @@
   "text": "Zschokke",
   "side": "before",
   "sounds": "SHOK-uh",
-  "name": "word-zschokke-before-aa8e4f73",
+  "name": "word-zschokke-before-fb9906f5",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -139,7 +115,7 @@
    }
   ],
   "seconds": 1.525,
-  "factor": 0.44983606557377054
+  "factor": 0.4426229508196722
  },
  {
   "kind": "pronunciation",
@@ -148,7 +124,7 @@
   "text": "shockah",
   "side": "after",
   "sounds": "SHOK-uh",
-  "name": "word-zschokke-after-f757c172",
+  "name": "word-zschokke-after-f5c05f3f",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -157,7 +133,7 @@
    }
   ],
   "seconds": 1.2,
-  "factor": 0.43833333333333335
+  "factor": 0.48083333333333333
  },
  {
   "kind": "pronunciation",
@@ -166,7 +142,7 @@
   "text": "Roentgen",
   "side": "before",
   "sounds": "RENT-gen, with a hard g",
-  "name": "word-roentgen-before-2b7af235",
+  "name": "word-roentgen-before-94c46dea",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -175,7 +151,7 @@
    }
   ],
   "seconds": 1.525,
-  "factor": 0.44983606557377054
+  "factor": 0.44393442622950824
  },
  {
   "kind": "pronunciation",
@@ -184,7 +160,7 @@
   "text": "rentghen",
   "side": "after",
   "sounds": "RENT-gen, with a hard g",
-  "name": "word-roentgen-after-6d4ac282",
+  "name": "word-roentgen-after-a6c472dc",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -193,7 +169,7 @@
    }
   ],
   "seconds": 1.45,
-  "factor": 0.4420689655172414
+  "factor": 0.45103448275862074
  },
  {
   "kind": "pronunciation",
@@ -202,7 +178,7 @@
   "text": "Akashic",
   "side": "before",
   "sounds": "uh-KAH-shik",
-  "name": "word-akashic-before-fa25ed48",
+  "name": "word-akashic-before-ea24ea07",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -211,7 +187,7 @@
    }
   ],
   "seconds": 1.425,
-  "factor": 0.4357894736842105
+  "factor": 0.44
  },
  {
   "kind": "pronunciation",
@@ -220,7 +196,7 @@
   "text": "acarshick",
   "side": "after",
   "sounds": "uh-KAH-shik",
-  "name": "word-akashic-after-904d3614",
+  "name": "word-akashic-after-20b4f094",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -229,7 +205,7 @@
    }
   ],
   "seconds": 1.5,
-  "factor": 0.4326666666666667
+  "factor": 0.4486666666666667
  },
  {
   "kind": "pronunciation",
@@ -238,7 +214,7 @@
   "text": "psychometry",
   "side": "before",
   "sounds": "sy-KOM-uh-tree",
-  "name": "word-psychometry-before-4ed084b5",
+  "name": "word-psychometry-before-ccedfd8d",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -247,7 +223,7 @@
    }
   ],
   "seconds": 1.75,
-  "factor": 0.456
+  "factor": 0.4382857142857143
  },
  {
   "kind": "pronunciation",
@@ -256,7 +232,7 @@
   "text": "sighkommetry",
   "side": "after",
   "sounds": "sy-KOM-uh-tree",
-  "name": "word-psychometry-after-daf9d3e3",
+  "name": "word-psychometry-after-d2a17362",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -265,7 +241,7 @@
    }
   ],
   "seconds": 1.775,
-  "factor": 0.4366197183098592
+  "factor": 0.4394366197183099
  },
  {
   "kind": "pronunciation",
@@ -274,7 +250,7 @@
   "text": "etheric",
   "side": "before",
   "sounds": "EE-thuh-rik",
-  "name": "word-etheric-before-918ee8c1",
+  "name": "word-etheric-before-7888a47d",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -283,7 +259,7 @@
    }
   ],
   "seconds": 1.475,
-  "factor": 0.4413559322033898
+  "factor": 0.4406779661016949
  },
  {
   "kind": "pronunciation",
@@ -292,7 +268,7 @@
   "text": "eethurrick",
   "side": "after",
   "sounds": "EE-thuh-rik",
-  "name": "word-etheric-after-ab403e5e",
+  "name": "word-etheric-after-02d54210",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -301,7 +277,7 @@
    }
   ],
   "seconds": 1.35,
-  "factor": 0.4385185185185185
+  "factor": 0.44370370370370366
  },
  {
   "kind": "pronunciation",
@@ -310,7 +286,7 @@
   "text": "Cazotte",
   "side": "before",
   "sounds": "kuh-ZOT",
-  "name": "word-cazotte-before-cd9a1f3c",
+  "name": "word-cazotte-before-b36b4235",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -319,7 +295,7 @@
    }
   ],
   "seconds": 1.35,
-  "factor": 0.44518518518518513
+  "factor": 0.4422222222222222
  },
  {
   "kind": "pronunciation",
@@ -328,7 +304,7 @@
   "text": "kuh-zott",
   "side": "after",
   "sounds": "kuh-ZOT",
-  "name": "word-cazotte-after-04171701",
+  "name": "word-cazotte-after-91930a87",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -337,7 +313,7 @@
    }
   ],
   "seconds": 1.325,
-  "factor": 0.44150943396226416
+  "factor": 0.44679245283018865
  },
  {
   "kind": "pronunciation",
@@ -346,7 +322,7 @@
   "text": "Vicq d'Azyr",
   "side": "before",
   "sounds": "veek dah-ZEER",
-  "name": "word-vicq-d-azyr-before-ed1ea258",
+  "name": "word-vicq-d-azyr-before-998691de",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -355,7 +331,7 @@
    }
   ],
   "seconds": 1.825,
-  "factor": 0.43068493150684933
+  "factor": 0.4383561643835617
  },
  {
   "kind": "pronunciation",
@@ -364,7 +340,7 @@
   "text": "veek dah-zeer",
   "side": "after",
   "sounds": "veek dah-ZEER",
-  "name": "word-vicq-d-azyr-after-37e11bee",
+  "name": "word-vicq-d-azyr-after-052da9e1",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -373,7 +349,7 @@
    }
   ],
   "seconds": 1.95,
-  "factor": 0.4338461538461538
+  "factor": 0.45282051282051283
  },
  {
   "kind": "pronunciation",
@@ -382,7 +358,7 @@
   "text": "Clairaudience",
   "side": "before",
   "sounds": "klair-AW-dee-ence",
-  "name": "word-clairaudience-before-709b8559",
+  "name": "word-clairaudience-before-d4ee2466",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -391,7 +367,7 @@
    }
   ],
   "seconds": 1.6,
-  "factor": 0.44249999999999995
+  "factor": 0.45125
  },
  {
   "kind": "pronunciation",
@@ -400,7 +376,7 @@
   "text": "clair-awdience",
   "side": "after",
   "sounds": "klair-AW-dee-ence",
-  "name": "word-clairaudience-after-4a0810e3",
+  "name": "word-clairaudience-after-07fca785",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -409,7 +385,7 @@
    }
   ],
   "seconds": 1.675,
-  "factor": 0.45373134328358206
+  "factor": 0.4417910447761194
  },
  {
   "kind": "pronunciation",
@@ -418,7 +394,7 @@
   "text": "medulla",
   "side": "before",
   "sounds": "meh-DOO-luh",
-  "name": "word-medulla-before-412be648",
+  "name": "word-medulla-before-ef400785",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -427,7 +403,7 @@
    }
   ],
   "seconds": 1.45,
-  "factor": 0.4441379310344828
+  "factor": 0.443448275862069
  },
  {
   "kind": "pronunciation",
@@ -436,7 +412,7 @@
   "text": "meh-doola",
   "side": "after",
   "sounds": "meh-DOO-luh",
-  "name": "word-medulla-after-93580ea6",
+  "name": "word-medulla-after-e91ed4c4",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -445,6 +421,114 @@
    }
   ],
   "seconds": 1.525,
-  "factor": 0.439344262295082
+  "factor": 0.4419672131147542
+ },
+ {
+  "kind": "pronunciation",
+  "key": "occultists",
+  "title": "occultists",
+  "text": "occultists",
+  "side": "before",
+  "sounds": "uh-CULT-ists",
+  "name": "word-occultists-before-d222c5fb",
+  "voice": "bm_george",
+  "phonemes": [
+   {
+    "text": "occultists",
+    "phonemes": "ˈɒkəltˌɪsts"
+   }
+  ],
+  "seconds": 1.55,
+  "factor": 0.4941935483870968
+ },
+ {
+  "kind": "pronunciation",
+  "key": "occultists",
+  "title": "occultists",
+  "text": "acultists",
+  "side": "after",
+  "sounds": "uh-CULT-ists",
+  "name": "word-occultists-after-3a1823c9",
+  "voice": "bm_george",
+  "phonemes": [
+   {
+    "text": "acultists",
+    "phonemes": "ɐkˈʌltɪsts"
+   }
+  ],
+  "seconds": 1.55,
+  "factor": 0.4432258064516129
+ },
+ {
+  "kind": "pronunciation",
+  "key": "occultist",
+  "title": "occultist",
+  "text": "occultist",
+  "side": "before",
+  "sounds": "uh-CULT-ist",
+  "name": "word-occultist-before-cdb92632",
+  "voice": "bm_george",
+  "phonemes": [
+   {
+    "text": "occultist",
+    "phonemes": "ˈɒkəltˌɪst"
+   }
+  ],
+  "seconds": 1.625,
+  "factor": 0.43876923076923074
+ },
+ {
+  "kind": "pronunciation",
+  "key": "occultist",
+  "title": "occultist",
+  "text": "acultist",
+  "side": "after",
+  "sounds": "uh-CULT-ist",
+  "name": "word-occultist-after-fe050b28",
+  "voice": "bm_george",
+  "phonemes": [
+   {
+    "text": "acultist",
+    "phonemes": "ɐkˈʌltɪst"
+   }
+  ],
+  "seconds": 1.575,
+  "factor": 0.44317460317460317
+ },
+ {
+  "kind": "pronunciation",
+  "key": "presents",
+  "title": "presents",
+  "text": "presents",
+  "side": "before",
+  "sounds": "pre-ZENTS, the verb — never the gifts",
+  "name": "word-presents-before-f208409a",
+  "voice": "bm_george",
+  "phonemes": [
+   {
+    "text": "presents",
+    "phonemes": "pɹˈɛzənts"
+   }
+  ],
+  "seconds": 1.325,
+  "factor": 0.4490566037735849
+ },
+ {
+  "kind": "pronunciation",
+  "key": "presents",
+  "title": "presents",
+  "text": "prezents",
+  "side": "after",
+  "sounds": "pre-ZENTS, the verb — never the gifts",
+  "name": "word-presents-after-a84fa267",
+  "voice": "bm_george",
+  "phonemes": [
+   {
+    "text": "prezents",
+    "phonemes": "pɹɪzˈɛnts"
+   }
+  ],
+  "seconds": 1.3,
+  "factor": 0.45230769230769224
  }
 ]
