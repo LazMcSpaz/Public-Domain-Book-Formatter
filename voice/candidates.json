@@ -1,18 +1,1 @@
-[
-  {
-    "word": "medulla",
-    "dialect": "en",
-    "why": "Wanted: meh-doo-luh. Two spellings reach it, and they differ only in how hard the second syllable is hit.",
-    "tries": [
-      {
-        "say": "medoola",
-        "sounds": "MEH-doo-luh — one stress, so it runs on into oblongata like a word"
-      },
-      {
-        "say": "meh-doola",
-        "sounds": "MEH-DOO-luh — both syllables hit, more deliberate"
-      }
-    ],
-    "inSentence": "The {} oblongata is not the pineal gland."
-  }
-]
+[]
