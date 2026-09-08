@@ -217,6 +217,15 @@
           }
         }
         bits.push(`WebGPU: ${gpu}`)
+        // Whether the WASM backend may use more than one core. Without the
+        // two isolation headers a page is held to a single thread, and a single
+        // thread is most of the difference between 5.8x slower than listening
+        // and keeping ahead. GitHub Pages sends no headers of its own; a
+        // service worker can add them, so this is worth knowing before anyone
+        // writes one.
+        bits.push(
+          `Cross-origin isolated: ${crossOriginIsolated ? 'yes — threads available' : 'no — one core only'}`
+        )
         bits.push(`MediaSession: ${'mediaSession' in navigator ? 'yes' : 'no'}`)
         bits.push(`Wake Lock: ${'wakeLock' in navigator ? 'yes' : 'no'}`)
         show('device', bits.join('\n'))
