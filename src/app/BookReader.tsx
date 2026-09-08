@@ -32,7 +32,7 @@
  * same `withEdit`, so it travels in the saved run and in `book.json` and is
  * undone by the same Ctrl+Z as everything else.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { outlineOf, passagesOf, sectionTitlesOf, type Passage } from './passages'
 import { selectionSpan } from './dom-offsets'
 import type { BookDocument } from '@core/assemble'
@@ -50,6 +50,8 @@ import {
   type TextSpan
 } from '@core/edits'
 import { findQuote } from '@core/annotate'
+import type { ReadingStyle } from '@core/style'
+import { loadBookFace } from '../platform/browser/web-fonts'
 
 export interface BookReaderProps {
   /** The book as it stands — `applyEdits` output, sections and all. */
@@ -64,6 +66,15 @@ export interface BookReaderProps {
   onEditPassage: (blockId: string) => void
   /** Identifies the book, so where you left off is remembered per book. */
   bookKey?: string
+  /**
+   * The book's own design, so the column is set the way the book will print.
+   *
+   * Not the page — a reflowing column cannot break where Knuth–Plass broke, and
+   * nothing here pretends it can. What it carries is the *design*: the face,
+   * the measure in ems, the leading ratio, the indent, the chapter opening. See
+   * `readingStyle`, which explains where that line is drawn and why.
+   */
+  style?: ReadingStyle | null
 }
 
 /** What each button says, and what it is for. */
@@ -126,7 +137,8 @@ export function BookReader({
   edits,
   onChange,
   onEditPassage,
-  bookKey
+  bookKey,
+  style
 }: BookReaderProps): JSX.Element {
   const passages = useMemo(() => passagesOf(doc, edits), [doc, edits])
   const sectionTitles = useMemo(() => sectionTitlesOf(doc, edits), [doc, edits])
@@ -145,6 +157,15 @@ export function BookReader({
    */
   const [outlineOpen, setOutlineOpen] = useState(false)
   const [theme, setTheme] = useState<ReadingTheme>(storedTheme)
+
+  // The faces the PDF embeds, handed to CSS. Not awaited: the column names the
+  // family first and its fallback behind it, so the text is readable from the
+  // first frame and re-sets itself when the real file arrives.
+  useEffect(() => {
+    if (!style) return
+    void loadBookFace(style.bodyFontName)
+    void loadBookFace(style.headingFontName)
+  }, [style])
 
   // On the document root rather than on this component's own markup: `body`
   // paints the ground, so a theme scoped to the column would leave a dark page
@@ -437,14 +458,51 @@ export function BookReader({
           </nav>
         ) : null}
 
-        <div className="galley-page reading-page" ref={columnRef}>
-          {passages.map((passage) => (
+        <div
+          className={`galley-page reading-page${style ? ' set-as-printed' : ''}${
+            style?.hyphenate ? ' hyphenate' : ''
+          }${style?.headingCentered ? ' headings-centered' : ''}${
+            style?.headingSmallCaps ? ' headings-small-caps' : ''
+          }`}
+          ref={columnRef}
+          style={
+            style
+              ? ({
+                  '--book-body': style.bodyFamily,
+                  '--book-heading': style.headingFamily,
+                  '--book-leading': String(style.lineHeight),
+                  // The printed measure, in ems of the body size — the number
+                  // that makes a paragraph break at the same *words* it will on
+                  // paper. Capped by the screen, never stretched past it.
+                  '--book-measure': `${style.measureEms.toFixed(2)}em`,
+                  '--book-indent': `${style.indentEms}em`,
+                  '--book-gap': `${style.spacingEms}em`,
+                  '--book-heading-scale': String(style.headingScale)
+                } as CSSProperties)
+              : undefined
+          }
+        >
+          {passages.map((passage, index) => (
             <PassageView
               key={passage.id}
               passage={passage}
               title={sectionTitles.get(passage.id)?.title ?? null}
               spans={spansByPassage.get(passage.id) ?? []}
               onOpenMark={setOpenNote}
+              // Two different things, conflated in the first version and
+              // separated by reading the engine rather than by taste. The
+              // paginator suppresses the first-line indent after *any* heading
+              // (`suppressFirstIndent: afterHeading`) and takes the drop cap
+              // from a *chapter* heading, which is one at level 1. A column
+              // that indented where the page does not is a column set in a
+              // different design from the book.
+              afterHeading={passages[index - 1]?.kind === 'heading'}
+              opensChapter={
+                (style?.dropCap ?? false) &&
+                passage.kind === 'paragraph' &&
+                passages[index - 1]?.kind === 'heading' &&
+                (passages[index - 1]?.level ?? 1) === 1
+              }
             />
           ))}
         </div>
@@ -559,12 +617,16 @@ function PassageView({
   passage,
   title,
   spans,
-  onOpenMark
+  onOpenMark,
+  afterHeading,
+  opensChapter
 }: {
   passage: Passage
   title: string | null
   spans: TextSpan[]
   onOpenMark: (id: string) => void
+  afterHeading: boolean
+  opensChapter: boolean
 }): JSX.Element {
   const html = useMemo(() => htmlWithSpans(passage.text, spans), [passage.text, spans])
   const className =
@@ -578,7 +640,9 @@ function PassageView({
       {passage.label ? <div className="galley-label">{passage.label}</div> : null}
       <div
         data-passage={passage.id}
-        className={`galley-block ${className}`}
+        className={`galley-block ${className}${afterHeading ? ' after-heading' : ''}${
+          opensChapter ? ' opens-chapter' : ''
+        }`}
         onClick={(e) => {
           const mark = (e.target as HTMLElement).closest('.reading-mark')
           const first = mark?.getAttribute('data-marks')?.split(' ')[0]

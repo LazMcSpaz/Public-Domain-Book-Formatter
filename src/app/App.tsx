@@ -119,7 +119,7 @@ import {
   spotsFromStored,
   type AdjudicatedSpot
 } from '@core/adjudicate'
-import { newSavedProfile, styleQuestions, type SavedStyleProfile } from '@core/style'
+import { newSavedProfile, readingStyle, styleQuestions, type SavedStyleProfile } from '@core/style'
 import {
   entriesBetween,
   summarize as summarizeOutbox,
@@ -3948,6 +3948,20 @@ export function App(): JSX.Element {
    */
   const goingViaBatch = currentAnswers['runMode'] === 'batch'
 
+  /**
+   * The book's own design, for the reading column.
+   *
+   * Live, so choosing a face at the design gate and coming back to read shows
+   * the book as it will be set. Before that gate it is the shipped default,
+   * which is what the galley's page markers already stand on: the design is not
+   * settled yet, and a column set in *some* book's design reads better than one
+   * set in none.
+   */
+  const readingLook = useMemo(
+    () => (isProofing ? readingStyle(appliedLook(state, {}).style) : null),
+    [isProofing, state]
+  )
+
   /** Reading is the one mode that takes the screen for itself. */
   const readingMode = isProofing && proofView === 'reading'
 
@@ -4688,6 +4702,7 @@ export function App(): JSX.Element {
                 edits={edits}
                 onChange={changeEdits}
                 {...(fileKeyRef.current ? { bookKey: fileKeyRef.current } : {})}
+                style={readingLook}
                 onEditPassage={(blockId) => {
                   // The deliberate way out of a read-only surface. The galley
                   // opens *on the passage* rather than at the top, through the

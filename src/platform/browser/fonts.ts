@@ -115,6 +115,20 @@ export const LAYOUT_FEATURES: TypeFeatures = {
   hlig: false
 }
 
+/**
+ * Where each face's file is, by family and style.
+ *
+ * Exported so the reading column can be set in the *same files* the PDF embeds,
+ * registered as CSS faces. Two lists of font URLs — one for pdf-lib, one for
+ * the browser — would be two lists to keep in step, and the day they drifted a
+ * reader would be reading a book set in a face the book is not printed in.
+ * Junicode is included: it is vendored rather than bundled, so its paths are
+ * relative to the app's base and are resolved by the caller.
+ */
+export function faceUrls(family: string): Partial<Record<FontStyle, string>> {
+  return family === 'Junicode' ? JUNICODE_URLS : (FONT_URLS[family] ?? {})
+}
+
 /** Every family the app can set a book in, in the order the interview offers them. */
 export function availableFamilies(): string[] {
   return [...Object.keys(FONT_URLS), 'Junicode']

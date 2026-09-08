@@ -3099,3 +3099,80 @@ textarea.galley-plain {
 :root[data-reading='dark'] .reading-mark.tag-comment {
   background: color-mix(in srgb, #e79ad4 26%, transparent);
 }
+
+/* --- the column, set the way the book will print --------------------------
+   Not the page: a reflowing column cannot break lines where Knuth–Plass broke
+   them or pages where the paginator broke them, and nothing here pretends it
+   can — the page is the PDF, and "See the pages" is where a break is judged.
+   What this carries is the *design*: the face, the measure in ems, the leading
+   ratio, the indent, the chapter opening. Every value comes from the profile
+   or from the engine's own constants (see `readingStyle`). */
+
+.reading-page.set-as-printed {
+  font-family: var(--book-body);
+  line-height: var(--book-leading);
+  /* The printed measure, capped by the screen. A paragraph then breaks at the
+     same words it will on paper, which is what makes a screen read like the
+     book rather than merely look like it. */
+  max-width: min(100%, var(--book-measure));
+}
+.reading-page.set-as-printed .galley-block {
+  text-align: justify;
+  text-wrap: pretty;
+}
+.reading-page.set-as-printed.hyphenate .galley-block {
+  hyphens: auto;
+  -webkit-hyphens: auto;
+}
+/* The indent does the work; spacing as well as an indent reads as a
+   manuscript, which is why a book normally sets `paragraphSpacingEms` to zero
+   and this follows it rather than adding a comfortable gap of its own. */
+.reading-page.set-as-printed .galley-paragraph {
+  margin: 0 0 var(--book-gap);
+  text-indent: var(--book-indent);
+}
+/* The indent is suppressed after a heading, which is what the paginator does
+   (`suppressFirstIndent: afterHeading`) — read out of the engine rather than
+   taken from typographic habit, because a column that indents where the page
+   does not is set in a different design from the book. The sibling selector
+   cannot see it: each passage is wrapped, so the heading and the paragraph
+   after it are not adjacent in the DOM, and the class is decided in the column
+   where the order is known. */
+.reading-page.set-as-printed .galley-block.after-heading,
+.reading-page.set-as-printed .reading-passage:first-child .galley-paragraph {
+  text-indent: 0;
+}
+.reading-page.set-as-printed .galley-heading {
+  font-family: var(--book-heading);
+  text-align: left;
+  font-weight: 400;
+  text-transform: none;
+  font-variant-caps: normal;
+}
+.reading-page.set-as-printed.headings-centered .galley-heading {
+  text-align: center;
+}
+/* Real small capitals where the face has them, and the same refusal the engine
+   makes where it does not: capitals rather than a synthesised smear. */
+.reading-page.set-as-printed.headings-small-caps .galley-heading {
+  font-variant-caps: small-caps;
+  font-feature-settings: 'smcp' 1;
+  letter-spacing: 0.04em;
+}
+.reading-page.set-as-printed .galley-heading.level-1 {
+  font-size: calc(1em * var(--book-heading-scale));
+}
+.reading-page.set-as-printed .galley-blockquote,
+.reading-page.set-as-printed .galley-verse {
+  font-family: var(--book-body);
+}
+
+/* The drop capital, where the design asks for one. Sized off the leading so it
+   sits on the third baseline, which is how the engine sets it. */
+.reading-page.set-as-printed .galley-block.opens-chapter::first-letter {
+  float: left;
+  font-size: calc(3em * var(--book-leading) / 1.32);
+  line-height: 0.82;
+  padding: 0.05em 0.06em 0 0;
+  font-family: var(--book-heading);
+}
