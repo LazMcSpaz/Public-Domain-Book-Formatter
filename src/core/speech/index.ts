@@ -26,3 +26,4 @@ export {
   type UnreadBlock
 } from './script'
 export { packSentences, CHUNK_BUDGET, MODEL_LIMIT, type Measured, type Packed } from './chunk'
+export { planOpening, musicGainAt, type Opening, type OpeningOptions } from './opening'

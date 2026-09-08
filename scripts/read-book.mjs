@@ -38,8 +38,10 @@ import {
   dialectOf,
   hasFlag,
   join,
+  layMusicUnder,
   listFile,
   loadVoice,
+  readWav,
   refuse,
   silence,
   speak,
@@ -55,6 +57,14 @@ if (!bookPath || bookPath.startsWith('--')) {
 const chapterNumber = Number(argOf('chapter', '1'))
 const voice = argOf('voice', 'bm_george')
 const out = resolve(argOf('out', 'audio'))
+// A bed under the chapter opening. Already mono at the reading's own rate:
+// resampling it here would be a routine written in an afternoon standing in
+// for one ffmpeg already does properly, and the difference is a bed that
+// sounds slightly wrong for reasons nobody can find.
+const musicPath = argOf('music')
+// How much to read. The whole chapter unless asked otherwise, because a
+// preview is for hearing a decision and a book is for listening to.
+const paragraphLimit = Number(argOf('paragraphs', '0'))
 
 const { project, assemble, edits, speech, close } = await core(
   'project',
@@ -86,6 +96,30 @@ if (chapterNumber < 1 || chapterNumber > doc.chapters.length) {
 
 const list = (await listFile('pronunciations')).filter((p) => p.dialect === dialectOf(voice))
 const script = speech.readChapter(doc, chapterNumber - 1, list)
+
+// A preview: the opening and the first paragraphs of it. The heading is kept
+// whole — it is the thing the music sits under — and the count is of
+// paragraphs, since that is what a person asks for.
+if (paragraphLimit > 0) {
+  const kept = []
+  let paragraphs = 0
+  for (const piece of script.pieces) {
+    if (piece.kind === 'paragraph') {
+      if (paragraphs >= paragraphLimit) break
+      paragraphs += 1
+    }
+    if (piece.kind === 'note' || piece.kind === 'note-intro') break
+    kept.push(piece)
+  }
+  // A pause at the end is the gap before a paragraph that is not coming.
+  while (kept.length > 0 && kept.at(-1).kind === 'pause') kept.pop()
+  script.pieces = kept
+  script.words = kept
+    .filter((p) => p.text !== undefined)
+    .reduce((n, p) => n + p.text.split(/\s+/u).filter(Boolean).length, 0)
+}
+
+// After any trimming, so a preview is not measured against the whole chapter.
 const expected = speech.expectedSeconds(script)
 
 const label = [script.label, script.title].filter(Boolean).join(' — ')
@@ -120,6 +154,10 @@ console.log(`Loaded in ${model.seconds.toFixed(1)}s.`)
 const parts = []
 const spoken = []
 const truncated = []
+// Where the voice stops saying the title, in samples — which is what the music
+// is timed from. Not the pause after it: that beat is breathing room, and
+// counting it would start the fade a second and a bit late on every chapter.
+let headingSamples = 0
 let rate = 24000
 const started = Date.now()
 
@@ -128,6 +166,7 @@ for (const [index, piece] of script.pieces.entries()) {
     parts.push(silence(piece.seconds ?? 0, rate))
     continue
   }
+  const before = parts.reduce((n, p) => n + p.length, 0)
   const result = await speak({ ...model, speech }, piece.text, voice)
   const why = refuse(result.sound)
   if (why !== null) {
@@ -144,6 +183,7 @@ for (const [index, piece] of script.pieces.entries()) {
   }
   rate = result.rate
   parts.push(result.samples)
+  if (piece.kind === 'heading') headingSamples = before + result.samples.length
   spoken.push({
     kind: piece.kind,
     id: piece.id,
@@ -154,8 +194,9 @@ for (const [index, piece] of script.pieces.entries()) {
   process.stdout.write(`\r  ${spoken.length}/${script.pieces.filter((p) => p.text).length} read`)
 }
 
-const samples = join(parts)
-const seconds = samples.length / rate
+let voiced = join(parts)
+const seconds = voiced.length / rate
+const headingEnds = headingSamples / rate
 const took = (Date.now() - started) / 1000
 console.log(
   `\nRead ${seconds.toFixed(0)}s of audio in ${took.toFixed(0)}s (x${(took / seconds).toFixed(2)}).`
@@ -180,12 +221,33 @@ if (drift > 0.25) {
   )
 }
 
+// The bed, laid under and timed from the words rather than from a constant.
+let opening = null
+if (musicPath !== null) {
+  const music = readWav(await readFile(resolve(musicPath)), rate)
+  opening = speech.planOpening({
+    musicSeconds: music.samples.length / rate,
+    headingSeconds: headingEnds
+  })
+  console.log(
+    `Music: ${(music.samples.length / rate).toFixed(1)}s under a ${headingEnds.toFixed(1)}s ` +
+      `opening — voice at ${opening.voiceAt}s, fading from ${opening.fadeAt.toFixed(1)}s, ` +
+      `gone by ${opening.goneAt.toFixed(1)}s.`
+  )
+  // Said rather than left to be noticed: a bed that ran out mid-note is heard
+  // as a fault in the recording rather than in the timing.
+  if (opening.short) {
+    console.log('  ! There was not enough music to leave after the title; the fade was pulled in.')
+  }
+  voiced = layMusicUnder(voiced, music.samples, opening, speech.musicGainAt, rate)
+}
+
 const stem = clipName(
   `chapter-${String(chapterNumber).padStart(2, '0')}`,
   script.pieces.map((p) => p.text ?? `[${p.seconds}]`).join('\n'),
   voice
 )
-await writeFile(resolve(out, `${stem}.wav`), wav(samples, rate))
+await writeFile(resolve(out, `${stem}.wav`), wav(voiced, rate))
 await writeFile(
   resolve(out, `${stem}.json`),
   `${JSON.stringify(
@@ -198,6 +260,7 @@ await writeFile(
       seconds,
       expectedSeconds: expected,
       words: script.words,
+      opening,
       unread: script.unread,
       truncated,
       pieces: spoken

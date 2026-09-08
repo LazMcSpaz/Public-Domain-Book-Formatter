@@ -116,6 +116,77 @@ export function clipName(base, text, voice) {
   return `${base}-${digest.slice(0, 8)}`
 }
 
+/**
+ * A 16-bit PCM WAV read back as samples.
+ *
+ * Deliberately narrow: it refuses anything but mono 16-bit PCM at the rate
+ * asked for, rather than resampling or downmixing quietly. A bed silently
+ * resampled by a routine written in an afternoon is a bed that sounds slightly
+ * wrong for reasons nobody can find, and `ffmpeg` is already in the workflow
+ * and does it properly.
+ */
+export function readWav(buffer, expectRate) {
+  if (buffer.toString('ascii', 0, 4) !== 'RIFF' || buffer.toString('ascii', 8, 12) !== 'WAVE') {
+    throw new Error('not a WAV file')
+  }
+  let at = 12
+  let format = null
+  while (at + 8 <= buffer.length) {
+    const id = buffer.toString('ascii', at, at + 4)
+    const size = buffer.readUInt32LE(at + 4)
+    const body = at + 8
+    if (id === 'fmt ') {
+      format = {
+        encoding: buffer.readUInt16LE(body),
+        channels: buffer.readUInt16LE(body + 2),
+        rate: buffer.readUInt32LE(body + 4),
+        bits: buffer.readUInt16LE(body + 14)
+      }
+    } else if (id === 'data') {
+      if (format === null) throw new Error('the WAV has audio before it says what shape it is')
+      const { encoding, channels, rate, bits } = format
+      if (encoding !== 1 || bits !== 16)
+        throw new Error(`only 16-bit PCM, not ${bits}-bit (${encoding})`)
+      if (channels !== 1) throw new Error(`only mono, not ${channels} channels`)
+      if (expectRate !== undefined && rate !== expectRate) {
+        throw new Error(`this is ${rate} samples a second and the reading is ${expectRate}`)
+      }
+      const count = Math.floor(Math.min(size, buffer.length - body) / 2)
+      const samples = new Float32Array(count)
+      for (let i = 0; i < count; i += 1) samples[i] = buffer.readInt16LE(body + i * 2) / 32768
+      return { samples, rate }
+    }
+    at = body + size + (size % 2)
+  }
+  throw new Error('the WAV has no audio in it')
+}
+
+/**
+ * Music laid under the start of a reading, leaving when the title does.
+ *
+ * The gain curve is decided in `@core/speech` and only applied here: the shape
+ * of an opening is arithmetic over seconds and belongs where it can be tested
+ * without a sound card, and this is the twenty lines that cannot be.
+ */
+export function layMusicUnder(voice, music, plan, gainAt, rate) {
+  const offset = Math.round(plan.voiceAt * rate)
+  const total = Math.max(voice.length + offset, music.length)
+  const out = new Float32Array(total)
+  for (let i = 0; i < music.length; i += 1) {
+    const gain = gainAt(i / rate, plan)
+    if (gain <= 0) break
+    out[i] = music[i] * gain
+  }
+  for (let i = 0; i < voice.length; i += 1) out[offset + i] += voice[i]
+  // The sum of two things that each peaked near the ceiling can clip, and a
+  // clipped opening is the first thing anybody hears. Scaled back as a whole
+  // rather than clamped per sample, which is distortion by another name.
+  let peak = 0
+  for (const v of out) peak = Math.max(peak, Math.abs(v))
+  if (peak > 0.99) for (let i = 0; i < out.length; i += 1) out[i] *= 0.99 / peak
+  return out
+}
+
 /** Silence, as samples. Pauses are part of the text, not an absence of it. */
 export function silence(seconds, rate = 24000) {
   return new Float32Array(Math.max(0, Math.round(seconds * rate)))
