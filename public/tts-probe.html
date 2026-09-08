@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Reading aloud — what this phone can do</title>
+    <style>
+      :root {
+        --bg: #fbfaf7;
+        --panel: #fff;
+        --ink: #23201b;
+        --muted: #6f675c;
+        --line: #e0d9cc;
+        --accent: #8a5a2b;
+        --ok: #3f7d4e;
+        --bad: #b5651d;
+        font-family: ui-serif, Georgia, serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        padding: 20px 16px 64px;
+        background: var(--bg);
+        color: var(--ink);
+        line-height: 1.5;
+        max-width: 40em;
+        margin-inline: auto;
+      }
+      h1 {
+        font-size: 1.3rem;
+        margin: 0 0 4px;
+      }
+      .lede {
+        color: var(--muted);
+        font-size: 0.92rem;
+        margin: 0 0 24px;
+      }
+      section {
+        background: var(--panel);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 14px 16px;
+        margin: 0 0 16px;
+      }
+      h2 {
+        font-size: 1rem;
+        margin: 0 0 2px;
+      }
+      .why {
+        color: var(--muted);
+        font-size: 0.85rem;
+        margin: 0 0 12px;
+      }
+      button {
+        font: inherit;
+        font-size: 0.95rem;
+        min-height: 44px;
+        padding: 0 16px;
+        margin: 0 6px 6px 0;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--panel);
+        color: var(--ink);
+      }
+      button.primary {
+        background: var(--accent);
+        border-color: var(--accent);
+        color: #fff;
+      }
+      button:disabled {
+        opacity: 0.5;
+      }
+      .out {
+        white-space: pre-wrap;
+        font-family: ui-monospace, Menlo, monospace;
+        font-size: 0.8rem;
+        background: #f4efe6;
+        border-radius: 6px;
+        padding: 10px;
+        margin-top: 10px;
+        overflow-x: auto;
+      }
+      .verdict {
+        font-weight: 600;
+      }
+      .verdict.ok {
+        color: var(--ok);
+      }
+      .verdict.bad {
+        color: var(--bad);
+      }
+      ol {
+        padding-left: 1.2em;
+      }
+      code {
+        background: #f4efe6;
+        padding: 0 3px;
+        border-radius: 3px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Reading aloud: what this phone can do</h1>
+    <p class="lede">
+      Three measurements. They decide whether the book can be read to you with the screen off, and
+      whether it has to carry its own voice to do it. Run them on the phone you would actually
+      listen on. Nothing here is saved or sent anywhere.
+    </p>
+
+    <section>
+      <h2>1 · The system voice, with the screen off</h2>
+      <p class="why">
+        The cheap answer. Android has good voices built in and a web page can ask for them — but a
+        page that stops talking when the screen locks is no use for listening. This speaks for about
+        two minutes. <strong>Start it, lock the phone, and wait.</strong>
+      </p>
+      <button class="primary" id="speak">Speak, then lock the screen</button>
+      <button id="speak-stop">Stop</button>
+      <div class="out" id="speak-out">Not run yet.</div>
+    </section>
+
+    <section>
+      <h2>2 · Ordinary audio, with the screen off</h2>
+      <p class="why">
+        If test 1 stops, this is the way round it: the app makes the sound itself and plays it as
+        audio, which phones do keep playing. A soft pulse once a second for three minutes, with
+        lock-screen controls. <strong>Start it, lock the phone, and wait.</strong>
+      </p>
+      <button class="primary" id="tone">Play, then lock the screen</button>
+      <button id="tone-stop">Stop</button>
+      <div class="out" id="tone-out">Not run yet.</div>
+    </section>
+
+    <section>
+      <h2>3 · A voice the book carries with it</h2>
+      <p class="why">
+        Only needed if test 1 failed and test 2 passed. Downloads a small neural voice (Kokoro,
+        about 90&nbsp;MB the first time, then kept on the phone) and times it. What matters is the
+        last number: below 1 means it speaks faster than you listen, so it can keep ahead. Then
+        judge the voice for yourself.
+      </p>
+      <button class="primary" id="kokoro">Download the voice and time it</button>
+      <button id="kokoro-play" disabled>Play what it said</button>
+      <div class="out" id="kokoro-out">Not run yet.</div>
+    </section>
+
+    <section>
+      <h2>What to tell me</h2>
+      <ol>
+        <li>Did test 1 keep speaking with the screen off?</li>
+        <li>Did test 2 keep pulsing with the screen off, and did lock-screen controls appear?</li>
+        <li>
+          The numbers from test 3, and whether the voice is good enough to listen to for an hour.
+        </li>
+      </ol>
+      <div class="out" id="device">…</div>
+    </section>
+
+    <script type="module">
+      const show = (id, text, verdict) => {
+        const el = document.getElementById(id)
+        el.textContent = text
+        el.className = `out${verdict ? ` ${verdict}` : ''}`
+      }
+      const stamp = () => new Date().toLocaleTimeString()
+
+      // --- device ---------------------------------------------------------
+      ;(async () => {
+        const bits = [`user agent: ${navigator.userAgent}`]
+        bits.push(`screen: ${window.screen.width}×${window.screen.height} @${devicePixelRatio}`)
+        bits.push(`cores: ${navigator.hardwareConcurrency ?? 'unknown'}`)
+        bits.push(`memory hint: ${navigator.deviceMemory ?? 'unknown'} GB`)
+        let gpu = 'no navigator.gpu'
+        if (navigator.gpu) {
+          try {
+            const adapter = await navigator.gpu.requestAdapter()
+            gpu = adapter ? 'yes — WebGPU adapter available' : 'navigator.gpu but no adapter'
+          } catch (err) {
+            gpu = `navigator.gpu threw: ${err.message}`
+          }
+        }
+        bits.push(`WebGPU: ${gpu}`)
+        bits.push(`MediaSession: ${'mediaSession' in navigator ? 'yes' : 'no'}`)
+        bits.push(`Wake Lock: ${'wakeLock' in navigator ? 'yes' : 'no'}`)
+        show('device', bits.join('\n'))
+      })()
+
+      // --- 1 · system voice ------------------------------------------------
+      // Chained one sentence at a time rather than one long utterance: a long
+      // one is cut off after a while in several engines, and that would look
+      // exactly like the screen-off failure this is trying to measure.
+      const LINES = Array.from(
+        { length: 24 },
+        (_, i) =>
+          `Sentence ${i + 1}. The student is asked to sit before a candle flame and watch it steadily, longer than feels reasonable.`
+      )
+      let speakIndex = 0
+      let speaking = false
+      const speakNext = () => {
+        if (!speaking || speakIndex >= LINES.length) {
+          if (speaking) show('speak-out', `Finished all ${LINES.length} sentences at ${stamp()}.`)
+          speaking = false
+          return
+        }
+        const u = new SpeechSynthesisUtterance(LINES[speakIndex])
+        u.rate = 1
+        u.onstart = () =>
+          show(
+            'speak-out',
+            `Speaking sentence ${speakIndex + 1} of ${LINES.length} — started ${stamp()}.\n` +
+              `Lock the screen now. Come back and read this line: if it has moved past sentence ` +
+              `${speakIndex + 2}, the system voice survives the screen going off.`
+          )
+        u.onend = () => {
+          speakIndex += 1
+          speakNext()
+        }
+        u.onerror = (e) => show('speak-out', `Stopped with an error: ${e.error}`, 'bad')
+        speechSynthesis.speak(u)
+      }
+      document.getElementById('speak').onclick = () => {
+        if (!('speechSynthesis' in window)) {
+          show('speak-out', 'This browser has no speechSynthesis at all.', 'bad')
+          return
+        }
+        speechSynthesis.cancel()
+        speakIndex = 0
+        speaking = true
+        speakNext()
+      }
+      document.getElementById('speak-stop').onclick = () => {
+        speaking = false
+        speechSynthesis.cancel()
+        show('speak-out', `Stopped at sentence ${speakIndex + 1}.`)
+      }
+
+      // --- 2 · ordinary audio ---------------------------------------------
+      /** A WAV of `seconds` of a soft pulse — something audible but not shrill. */
+      function pulseWav(seconds, rate = 22050) {
+        const n = seconds * rate
+        const data = new Float32Array(n)
+        for (let i = 0; i < n; i += 1) {
+          const t = i / rate
+          const beat = t % 1
+          // A short decaying blip at the top of each second.
+          const env = beat < 0.35 ? Math.exp(-beat * 12) : 0
+          data[i] = Math.sin(2 * Math.PI * 320 * t) * env * 0.28
+        }
+        return wavBlob(data, rate)
+      }
+
+      /** Float samples to a 16-bit mono WAV blob. */
+      function wavBlob(samples, rate) {
+        const buffer = new ArrayBuffer(44 + samples.length * 2)
+        const view = new DataView(buffer)
+        const ascii = (at, s) => {
+          for (let i = 0; i < s.length; i += 1) view.setUint8(at + i, s.charCodeAt(i))
+        }
+        ascii(0, 'RIFF')
+        view.setUint32(4, 36 + samples.length * 2, true)
+        ascii(8, 'WAVEfmt ')
+        view.setUint32(16, 16, true)
+        view.setUint16(20, 1, true)
+        view.setUint16(22, 1, true)
+        view.setUint32(24, rate, true)
+        view.setUint32(28, rate * 2, true)
+        view.setUint16(32, 2, true)
+        view.setUint16(34, 16, true)
+        ascii(36, 'data')
+        view.setUint32(40, samples.length * 2, true)
+        for (let i = 0; i < samples.length; i += 1) {
+          const v = Math.max(-1, Math.min(1, samples[i]))
+          view.setInt16(44 + i * 2, v < 0 ? v * 0x8000 : v * 0x7fff, true)
+        }
+        return new Blob([buffer], { type: 'audio/wav' })
+      }
+
+      const audio = new Audio()
+      audio.loop = true
+      let toneStarted = null
+      document.getElementById('tone').onclick = async () => {
+        try {
+          audio.src = URL.createObjectURL(pulseWav(180))
+          await audio.play()
+          toneStarted = Date.now()
+          // Lock-screen controls. Without this the phone may not treat the page
+          // as something playing, which is half of what this test is asking.
+          if ('mediaSession' in navigator) {
+            navigator.mediaSession.metadata = new MediaMetadata({
+              title: 'Background audio test',
+              artist: 'Book Reprint Tool',
+              album: 'Reading aloud probe'
+            })
+            navigator.mediaSession.setActionHandler('pause', () => {
+              audio.pause()
+              navigator.mediaSession.playbackState = 'paused'
+            })
+            navigator.mediaSession.setActionHandler('play', () => {
+              void audio.play()
+              navigator.mediaSession.playbackState = 'playing'
+            })
+            navigator.mediaSession.playbackState = 'playing'
+          }
+          show(
+            'tone-out',
+            `Playing from ${stamp()}. Lock the screen now.\n` +
+              'Two things to notice: does the pulse keep going, and do controls appear on the ' +
+              'lock screen? Come back and press Stop — it will say how long it actually ran.'
+          )
+        } catch (err) {
+          show('tone-out', `Would not play: ${err.message}`, 'bad')
+        }
+      }
+      document.getElementById('tone-stop').onclick = () => {
+        audio.pause()
+        const ran = toneStarted ? Math.round((Date.now() - toneStarted) / 1000) : 0
+        show(
+          'tone-out',
+          `Stopped. It ran for ${ran} seconds of wall clock.\n` +
+            `Audio position reached ${audio.currentTime.toFixed(1)} seconds.\n` +
+            'If those two roughly agree, the audio kept playing while the screen was off. ' +
+            'If the position is far behind the clock, it was suspended.'
+        )
+      }
+
+      // --- 3 · a carried voice ---------------------------------------------
+      const SAMPLE =
+        'There are faculties in a person that reach past the five senses. They work by picking up ' +
+        'vibrations, exactly as the eye picks up light, and the only real difference is which ' +
+        'instruments we have learned to trust.'
+      let spoken = null
+      document.getElementById('kokoro').onclick = async (e) => {
+        const button = e.currentTarget
+        button.disabled = true
+        const log = []
+        const say = (line) => {
+          log.push(line)
+          show('kokoro-out', log.join('\n'))
+        }
+        try {
+          say('Fetching the library…')
+          const t0 = performance.now()
+          const { KokoroTTS } = await import('https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm')
+          say(`Library ready in ${((performance.now() - t0) / 1000).toFixed(1)}s.`)
+
+          let device = 'wasm'
+          if (navigator.gpu) {
+            try {
+              if (await navigator.gpu.requestAdapter()) device = 'webgpu'
+            } catch {
+              /* stay on wasm */
+            }
+          }
+          say(`Using ${device}. Downloading the voice — about 90 MB the first time…`)
+
+          const t1 = performance.now()
+          const tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX', {
+            dtype: device === 'webgpu' ? 'fp32' : 'q8',
+            device
+          })
+          const load = (performance.now() - t1) / 1000
+          say(`Voice loaded in ${load.toFixed(1)}s.`)
+
+          say('Speaking a sample…')
+          const t2 = performance.now()
+          const result = await tts.generate(SAMPLE, { voice: 'af_heart' })
+          const synth = (performance.now() - t2) / 1000
+
+          // The library has changed shape across versions, so take whichever of
+          // these it offers rather than assuming one.
+          let blob = null
+          let seconds = null
+          if (typeof result?.toBlob === 'function') blob = result.toBlob()
+          if (result?.audio && result?.sampling_rate) {
+            seconds = result.audio.length / result.sampling_rate
+            if (!blob) blob = wavBlob(result.audio, result.sampling_rate)
+          }
+          if (!blob) throw new Error('the library returned something this page did not recognise')
+
+          spoken = URL.createObjectURL(blob)
+          document.getElementById('kokoro-play').disabled = false
+          const factor = seconds ? synth / seconds : null
+          say(
+            `Spoke ${seconds ? seconds.toFixed(1) + 's of audio ' : ''}in ${synth.toFixed(1)}s.` +
+              (factor
+                ? `\nReal-time factor ${factor.toFixed(2)} — ${
+                    factor < 1
+                      ? 'faster than you listen, so it can stay ahead of you.'
+                      : 'slower than you listen, so a chapter would have to be prepared first.'
+                  }`
+                : '')
+          )
+          say('\nNow press "Play what it said" and judge the voice.')
+        } catch (err) {
+          say(`\nFailed: ${err?.message ?? err}`)
+          say(
+            'Tell me this message. It probably means the library moved, and it is a small fix — ' +
+              'it does not mean the phone cannot do it.'
+          )
+        } finally {
+          button.disabled = false
+        }
+      }
+      document.getElementById('kokoro-play').onclick = () => {
+        if (spoken) void new Audio(spoken).play()
+      }
+    </script>
+  </body>
+</html>
