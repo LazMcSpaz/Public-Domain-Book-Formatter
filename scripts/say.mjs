@@ -27,6 +27,7 @@
  * would pay for it to run a test suite that never speaks. The workflow installs
  * it when it needs it.
  */
+import { createHash } from 'node:crypto'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { createServer } from 'vite'
@@ -290,8 +291,26 @@ console.log(`Loaded in ${((Date.now() - t0) / 1000).toFixed(1)}s.`)
 await mkdir(out, { recursive: true })
 const rendered = []
 
+/**
+ * A clip's file name, carrying a digest of exactly what was said.
+ *
+ * Not decoration. These files are served from the same origin as the app, whose
+ * service worker caches same-origin assets cache-first and keeps them — so a
+ * name that means one thing today and another thing tomorrow is a phone playing
+ * last week's audio under this week's label, with nothing on screen to say so.
+ * `try-medulla-1.mp3` was exactly that: a bare word in one render and a whole
+ * sentence in the next. Naming by content makes the trap impossible rather than
+ * remembered, and it is the same rule the shelf already uses for scans and
+ * pictures.
+ */
+function clipName(base, text, voice) {
+  const digest = createHash('sha256').update(`${voice}\u0000${text}`).digest('hex')
+  return `${base}-${digest.slice(0, 8)}`
+}
+
 /** Render one stretch, refusing to write anything that is not sound. */
-async function render(name, text, voice, record) {
+async function render(base, text, voice, record) {
+  const name = clipName(base, text, voice)
   const started = Date.now()
   const result = await say(tts, TextSplitterStream, text, voice)
   const took = (Date.now() - started) / 1000

@@ -34,15 +34,11 @@ on:
 
 permissions:
   contents: write
-  pages: write
-  id-token: write
 
 # Its own group, and deliberately not the Deploy workflow's. Sharing `pages`
 # looked like the careful choice and was the opposite: Deploy sets
 # `cancel-in-progress`, and the same push starts both, so this run was cancelled
-# one second after it began. The two can still both reach Pages, but this one
-# takes minutes of rendering first and checks out main afterwards, so it
-# publishes second and publishes the newer thing.
+# one second after it began.
 concurrency:
   group: voice-samples
 
@@ -109,32 +105,10 @@ jobs:
           git diff --cached --quiet && echo 'Nothing changed.' && exit 0
           git commit -m 'Voice samples, rendered off the device'
           git push
-
-  # Publishing happens here rather than being left to the Deploy workflow: a
-  # push made with GITHUB_TOKEN does not trigger other workflows, so the samples
-  # would sit in the repository and never reach the page they exist to be played
-  # from.
-  publish:
-    needs: render
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: main
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm run build
-        env:
-          PUBLIC_BASE: /${{ github.event.repository.name }}/
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
-      - id: deployment
-        uses: actions/deploy-pages@v4
+          # Deploy takes it from here, on `workflow_run`. This job used to build
+          # and publish Pages itself, and it broke: `upload-pages-artifact`
+          # retried a 21 MB upload, registered three artifacts named
+          # `github-pages`, and `deploy-pages` refused to choose between them —
+          # so the audio reached the repository and never reached the page it
+          # exists to be played from, which is the failure that looks most like
+          # success.
