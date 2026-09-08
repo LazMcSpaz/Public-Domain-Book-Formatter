@@ -119,6 +119,7 @@ console.log(`Loaded in ${model.seconds.toFixed(1)}s.`)
 
 const parts = []
 const spoken = []
+const truncated = []
 let rate = 24000
 const started = Date.now()
 
@@ -127,12 +128,19 @@ for (const [index, piece] of script.pieces.entries()) {
     parts.push(silence(piece.seconds ?? 0, rate))
     continue
   }
-  const result = await speak(model, piece.text, voice)
+  const result = await speak({ ...model, speech }, piece.text, voice)
   const why = refuse(result.sound)
   if (why !== null) {
     // Stops rather than skipping. A chapter with one paragraph missing sounds
     // exactly like a chapter, and nothing downstream can tell.
     throw new Error(`piece ${index} (${piece.kind}, ${piece.id ?? '—'}): ${why}`)
+  }
+  // The tokenizer truncates at the model's limit with no error, so a sentence
+  // that cannot fit even alone loses its tail into a book nobody will re-read.
+  // Named here rather than counted, because a count is not something anyone can
+  // act on.
+  for (const long of result.tooLong ?? []) {
+    truncated.push({ id: piece.id, phonemes: long.cost, text: long.text })
   }
   rate = result.rate
   parts.push(result.samples)
@@ -152,6 +160,14 @@ const took = (Date.now() - started) / 1000
 console.log(
   `\nRead ${seconds.toFixed(0)}s of audio in ${took.toFixed(0)}s (x${(took / seconds).toFixed(2)}).`
 )
+
+if (truncated.length > 0) {
+  console.log(`\n${truncated.length} sentences are longer than the model reads in one pass:`)
+  for (const long of truncated) {
+    console.log(`  ${long.id ?? '—'} (${long.phonemes} phonemes): ${long.text.slice(0, 90)}…`)
+  }
+  console.log('  Their tails will be missing. Split them in the book, or shorten them.')
+}
 
 // Measured against what the words predicted. A chapter that comes back at half
 // its expected length has lost something, and without this the only way to find
@@ -183,6 +199,7 @@ await writeFile(
       expectedSeconds: expected,
       words: script.words,
       unread: script.unread,
+      truncated,
       pieces: spoken
     },
     null,

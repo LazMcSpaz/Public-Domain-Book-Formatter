@@ -185,7 +185,7 @@ const rendered = []
 async function render(base, text, voice, record) {
   const name = clipName(base, text, voice)
   const started = Date.now()
-  const result = await speak(model, text, voice)
+  const result = await speak({ ...model, speech }, text, voice)
   const took = (Date.now() - started) / 1000
   if (result.sound.broken > 0 || result.sound.peak > 1.5 || result.sound.peak < 0.01) {
     throw new Error(

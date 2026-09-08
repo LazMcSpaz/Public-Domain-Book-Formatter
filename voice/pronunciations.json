@@ -68,5 +68,26 @@
     "expect": "mˈɛdˈuːlə",
     "dialect": "en",
     "sounds": "meh-DOO-luh"
+  },
+  {
+    "word": "occultists",
+    "say": "acultists",
+    "expect": "ɐkˈʌltɪsts",
+    "dialect": "en",
+    "sounds": "uh-CULT-ists"
+  },
+  {
+    "word": "occultist",
+    "say": "acultist",
+    "expect": "ɐkˈʌltɪst",
+    "dialect": "en",
+    "sounds": "uh-CULT-ist"
+  },
+  {
+    "word": "presents",
+    "say": "prezents",
+    "expect": "pɹɪzˈɛnts",
+    "dialect": "en",
+    "sounds": "pre-ZENTS, the verb — never the gifts"
   }
 ]
