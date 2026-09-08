@@ -124,9 +124,11 @@
     <section>
       <h2>2 · Ordinary audio, with the screen off</h2>
       <p class="why">
-        If test 1 stops, this is the way round it: the app makes the sound itself and plays it as
-        audio, which phones do keep playing. A soft pulse once a second for three minutes, with
-        lock-screen controls. <strong>Start it, lock the phone, and wait.</strong>
+        Two questions, not one. Does the sound survive the screen going off — and does the app's own
+        code keep running while it does? The second decides whether speech can be made as you listen
+        or has to be prepared first, and no amount of the first answers it. A soft pulse once a
+        second for three minutes, with lock-screen controls.
+        <strong>Start it, lock the phone for a minute or two, come back and press Stop.</strong>
       </p>
       <button class="primary" id="tone">Play, then lock the screen</button>
       <button id="tone-stop">Stop</button>
@@ -280,11 +282,24 @@
       const audio = new Audio()
       audio.loop = true
       let toneStarted = null
+      // Playback surviving the screen going off does not mean *JavaScript*
+      // survives it, and the design turns on the difference: if timers are
+      // throttled while backgrounded, the app cannot make the next stretch of
+      // speech while the current one plays, and every stretch has to be
+      // prepared before listening starts. This counts once a second and is
+      // compared against the clock — the only way to tell from inside the page.
+      let ticks = 0
+      let ticker = null
       document.getElementById('tone').onclick = async () => {
         try {
           audio.src = URL.createObjectURL(pulseWav(180))
           await audio.play()
           toneStarted = Date.now()
+          ticks = 0
+          window.clearInterval(ticker)
+          ticker = window.setInterval(() => {
+            ticks += 1
+          }, 1000)
           // Lock-screen controls. Without this the phone may not treat the page
           // as something playing, which is half of what this test is asking.
           if ('mediaSession' in navigator) {
@@ -315,13 +330,28 @@
       }
       document.getElementById('tone-stop').onclick = () => {
         audio.pause()
+        window.clearInterval(ticker)
         const ran = toneStarted ? Math.round((Date.now() - toneStarted) / 1000) : 0
+        const kept = ran > 0 ? Math.round((ticks / ran) * 100) : 0
+        // Judged only over a long enough run. The first tick lands a second in,
+        // so a six-second run reads 83% with nothing throttled at all — and a
+        // check that gives a confident wrong answer is worse than no check. A
+        // throttled phone gives a handful of ticks a minute, so over half a
+        // minute the two cases are nowhere near each other.
+        const verdict =
+          ran < 30
+            ? 'too short to judge — let it run at least half a minute with the screen off.'
+            : kept > 50
+              ? 'code kept running, so speech can be made while you listen.'
+              : 'code was throttled, so each stretch must be prepared before it plays.'
         show(
           'tone-out',
-          `Stopped. It ran for ${ran} seconds of wall clock.\n` +
-            `Audio position reached ${audio.currentTime.toFixed(1)} seconds.\n` +
-            'If those two roughly agree, the audio kept playing while the screen was off. ' +
-            'If the position is far behind the clock, it was suspended.'
+          `Wall clock: ${ran}s.\n` +
+            `Audio reached: ${audio.currentTime.toFixed(1)}s — ` +
+            `${ran > 5 && Math.abs(audio.currentTime - ran) < ran * 0.15 ? 'kept playing.' : ran <= 5 ? 'too short to judge.' : 'was suspended.'}\n` +
+            `Timer ticks: ${ticks} in ${ran}s (${kept}%) — ${verdict}\n\n` +
+            'The second line is whether the sound survives. The third is whether the app can ' +
+            'think while it plays, which is a different question and decides how this is built.'
         )
       }
 
