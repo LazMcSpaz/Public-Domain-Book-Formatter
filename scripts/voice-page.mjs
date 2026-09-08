@@ -27,11 +27,38 @@ const escape = (s) =>
 
 const passages = new Map()
 const words = new Map()
+const undecided = new Map()
+const binOf = { pronunciation: words, candidate: undecided }
 for (const clip of rendered) {
-  const into = clip.kind === 'pronunciation' ? words : passages
+  const into = binOf[clip.kind] ?? passages
   if (!into.has(clip.key)) into.set(clip.key, { ...clip, clips: [] })
   into.get(clip.key).clips.push(clip)
 }
+
+/**
+ * Words with no answer yet, read every way they might be said.
+ *
+ * Nothing here is applied to a book. A candidate becomes a pronunciation by
+ * being moved between two files, which is a thing a person does after hearing
+ * it — never something that happens because a default was left alone.
+ */
+const candidateRows = [...undecided.values()]
+  .map(
+    (word) => `      <div class="clip pair">
+        <h3 class="word">${escape(word.title)}</h3>
+        <p class="said">${escape(word.why ?? '')}</p>
+${word.clips
+  .map(
+    (clip) => `        <div class="side">
+          <h3>${escape(clip.sounds ?? clip.text)}</h3>
+          <audio controls preload="none" src="${escape(`${clip.name}.${extension}`)}"></audio>
+          <div class="phon">${escape(clip.phonemes.map((p) => p.phonemes).join(' '))}</div>
+        </div>`
+  )
+  .join('\n')}
+      </div>`
+  )
+  .join('\n')
 
 /**
  * The words, as pairs to be judged rather than a list to be believed.
@@ -156,6 +183,18 @@ ${
         &mdash; tell me which ones to keep and which to drop.
       </p>
 ${wordRows}
+    </section>`
+}
+${
+  candidateRows.length === 0
+    ? ''
+    : `    <section>
+      <h2>Still to decide</h2>
+      <p class="said">
+        No spelling gives this exactly, so these are the near misses. Nothing here is applied to
+        a book &mdash; tell me which one to use, or to leave the word as printed.
+      </p>
+${candidateRows}
     </section>`
 }
   </body>

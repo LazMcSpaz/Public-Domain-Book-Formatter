@@ -1,0 +1,13 @@
+[
+  {
+    "word": "medulla",
+    "dialect": "en",
+    "why": "The phonemizer says MED-uh-luh; the word is muh-DULL-uh. No spelling produces that exactly, so these are the near misses.",
+    "tries": [
+      { "say": "medulla", "sounds": "as printed — MED-uh-luh, the stress on the wrong syllable" },
+      { "say": "mih-dulla", "sounds": "MIH-DULL-uh — right vowels, but both syllables stressed" },
+      { "say": "me-dulla", "sounds": "mee-DULL-uh — the one that was wrong before" },
+      { "say": "midullia", "sounds": "mid-ULL-ee-uh — right stress, an extra syllable on the end" }
+    ]
+  }
+]

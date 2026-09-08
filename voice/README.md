@@ -29,6 +29,18 @@ and `node scripts/say.mjs --check` reports when it no longer does.
 Nothing here verifies itself. The check is a separate pass over the same file,
 which is the arrangement every other gate in this repository uses.
 
+## Two files, and why
+
+`pronunciations.json` is what has been approved by ear and is applied to every
+book. `candidates.json` is what has only been proposed: a word with no good
+answer yet, and the near misses to choose between. Nothing in the candidates
+file changes how a book is read.
+
+They are two files rather than a flag on one because the difference is what they
+are allowed to do. A proposal that could be applied by forgetting to look at a
+field is not a proposal. Promoting one is a person moving an entry across, after
+hearing it.
+
 ## Adding one
 
 Measure first. `node scripts/say.mjs --phonemes "candidate"` prints what a

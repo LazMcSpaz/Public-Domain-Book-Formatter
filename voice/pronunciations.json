@@ -42,13 +42,6 @@
     "sounds": "EE-thuh-rik"
   },
   {
-    "word": "medulla",
-    "say": "me-dulla",
-    "expect": "mˌiːdˈʌlə",
-    "dialect": "en",
-    "sounds": "mee-DULL-uh"
-  },
-  {
     "word": "Cazotte",
     "say": "kuh-zott",
     "expect": "kˈʌzˈɒt",

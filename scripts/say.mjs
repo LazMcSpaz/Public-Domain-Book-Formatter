@@ -197,13 +197,22 @@ const hasFlag = (name) => process.argv.includes(`--${name}`)
 /** Kokoro's own rule: an `a` voice is American, a `b` voice British. */
 const dialectOf = (voice) => (voice.startsWith('b') ? 'en' : 'en-us')
 
-async function pronunciations() {
+async function listFile(name) {
   try {
-    return JSON.parse(await readFile(resolve(REPO, 'voice/pronunciations.json'), 'utf8'))
+    return JSON.parse(await readFile(resolve(REPO, `voice/${name}.json`), 'utf8'))
   } catch {
     return []
   }
 }
+
+/**
+ * Respellings that are approved, and respellings that are only proposed.
+ *
+ * Two files rather than a flag on one, because the difference is what they are
+ * allowed to do: an approved entry changes how a book is read, and a candidate
+ * changes nothing at all until someone has heard it. A proposal that could be
+ * applied by forgetting to look at a field is not a proposal.
+ */
 
 // --- the two doors that cost nothing ------------------------------------
 
@@ -219,7 +228,7 @@ if (asked !== null) {
 if (hasFlag('check')) {
   const { phonemize } = await import('phonemizer')
   const { speech, close } = await core()
-  const list = await pronunciations()
+  const list = await listFile('pronunciations')
   const drifted = await speech.checkPronunciations(list, async (text, dialect) =>
     (await phonemize(text, dialect)).join(' ')
   )
@@ -249,7 +258,7 @@ const voices = argOf('voices', 'bm_george').split(',')
 const only = argOf('text')
 
 const { speech, close } = await core()
-const list = await pronunciations()
+const list = await listFile('pronunciations')
 
 /**
  * A passage as it should be spoken: chapter numbers in words, listed words
@@ -346,6 +355,29 @@ if (!only) {
       side: 'after',
       sounds: entry.sounds
     })
+  }
+}
+
+// Words still being decided about, read every way they might be said. These are
+// never applied to a passage — that is the whole difference between the two
+// files — so what they change is nothing until one of them is moved across.
+if (!only) {
+  const candidates = await listFile('candidates')
+  const voice = voices.find((v) => dialectOf(v) === 'en') ?? voices[0]
+  for (const candidate of candidates.filter((c) => c.dialect === dialectOf(voice))) {
+    const slug = candidate.word.toLowerCase().replace(/[^a-z0-9]+/gu, '-')
+    let n = 0
+    for (const attempt of candidate.tries) {
+      n += 1
+      await render(`try-${slug}-${n}`, attempt.say, voice, {
+        kind: 'candidate',
+        key: slug,
+        title: candidate.word,
+        text: attempt.say,
+        sounds: attempt.sounds,
+        why: candidate.why
+      })
+    }
   }
 }
 
