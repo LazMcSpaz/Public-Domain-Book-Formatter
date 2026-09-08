@@ -75,6 +75,9 @@ jobs:
       # version of everything.
       - name: Encode
         run: |
+          # Not on the runner image any more — it used to be, and assuming it
+          # still was cost a full render that had already succeeded.
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg
           mkdir -p public/voice-samples
           rm -f public/voice-samples/*.mp3
           for f in rendered/*.wav; do

@@ -151,6 +151,13 @@ export async function say(tts, TextSplitterStream, text, voice) {
   return { samples, rate, phonemes, seconds: total / rate, sound: levels(samples) }
 }
 
+/**
+ * An argument, treating an empty one as absent.
+ *
+ * Deliberate rather than incidental: a workflow input that was not filled in
+ * arrives as `--voices ''`, and the sensible reading of that is "you did not
+ * choose", not "render no voices at all".
+ */
 function argOf(name, fallback = null) {
   const at = process.argv.indexOf(`--${name}`)
   return at >= 0 && process.argv[at + 1] ? process.argv[at + 1] : fallback
