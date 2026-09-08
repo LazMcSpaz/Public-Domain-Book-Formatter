@@ -91,6 +91,23 @@
       .verdict.bad {
         color: var(--bad);
       }
+      .pick {
+        margin: 0 0 10px;
+        font-size: 0.9rem;
+        color: var(--muted);
+      }
+      .pick select {
+        font: inherit;
+        font-size: 0.95rem;
+        min-height: 44px;
+        margin-left: 6px;
+        padding: 0 8px;
+        max-width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--panel);
+        color: var(--ink);
+      }
       ol {
         padding-left: 1.2em;
       }
@@ -139,11 +156,26 @@
       <h2>3 · A voice the book carries with it</h2>
       <p class="why">
         Only needed if test 1 failed and test 2 passed. Downloads a small neural voice (Kokoro,
-        about 90&nbsp;MB the first time, then kept on the phone) and times it. What matters is the
-        last number: below 1 means it speaks faster than you listen, so it can keep ahead. Then
-        judge the voice for yourself.
+        about 90&nbsp;MB the first time, then kept on the phone) and times it.
+        <strong>Try the safe way first.</strong> It does the work on the processor, which every
+        phone has and none gets wrong. The fast way hands it to the graphics chip, which is quicker
+        where it works and produces noise where it does not — so if one of them screeches, that is
+        the answer and the other one is the one to build on.
       </p>
-      <button class="primary" id="kokoro">Download the voice and time it</button>
+      <p class="pick">
+        <label for="kokoro-voice">Voice</label>
+        <select id="kokoro-voice">
+          <option value="af_heart">Heart — American, female (best graded)</option>
+          <option value="af_bella">Bella — American, female</option>
+          <option value="af_nicole">Nicole — American, female, close-miked</option>
+          <option value="am_michael">Michael — American, male</option>
+          <option value="am_fenrir">Fenrir — American, male</option>
+          <option value="bf_emma">Emma — British, female</option>
+          <option value="bm_george">George — British, male</option>
+        </select>
+      </p>
+      <button class="primary" id="kokoro-cpu">Safe way (processor)</button>
+      <button id="kokoro-gpu">Fast way (graphics chip)</button>
       <button id="kokoro-play" disabled>Play what it said</button>
       <div class="out" id="kokoro-out">Not run yet.</div>
     </section>
@@ -154,7 +186,8 @@
         <li>Did test 1 keep speaking with the screen off?</li>
         <li>Did test 2 keep pulsing with the screen off, and did lock-screen controls appear?</li>
         <li>
-          The numbers from test 3, and whether the voice is good enough to listen to for an hour.
+          The whole of test 3's report from the safe way, and whether the voice is good enough to
+          listen to for an hour. If the safe way screeches too, try the fast way and send both.
         </li>
       </ol>
       <div class="out" id="device">…</div>
@@ -360,80 +393,171 @@
         'There are faculties in a person that reach past the five senses. They work by picking up ' +
         'vibrations, exactly as the eye picks up light, and the only real difference is which ' +
         'instruments we have learned to trust.'
+      const WORDS = SAMPLE.split(/\s+/u).length
+      // The bundled web build rather than the CDN's rewritten one. It carries
+      // its own copy of Transformers.js and the phonemizer, so a fault here is
+      // the model or the phone rather than a dependency the CDN re-resolved.
+      const LIBRARY = 'https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/dist/kokoro.web.js'
+      const MODEL = 'onnx-community/Kokoro-82M-v1.0-ONNX'
+
+      /**
+       * What the samples are, as numbers — which is how a screech is told from
+       * speech without anyone having to describe a sound in words.
+       *
+       * Speech is mostly quiet with occasional peaks, so its loudness sits well
+       * below its peak and a fifth or so of it is near silence. Noise fills the
+       * range: its loudness runs to about 0.7 of its peak and almost none of it
+       * is quiet. The two cases are nowhere near each other, which is what makes
+       * this worth measuring rather than arguing about.
+       */
+      function levels(samples) {
+        let peak = 0
+        let sum = 0
+        let broken = 0
+        for (let i = 0; i < samples.length; i += 1) {
+          const v = samples[i]
+          if (!Number.isFinite(v)) {
+            broken += 1
+            continue
+          }
+          const size = Math.abs(v)
+          if (size > peak) peak = size
+          sum += v * v
+        }
+        const rms = samples.length > 0 ? Math.sqrt(sum / samples.length) : 0
+        let quiet = 0
+        const floor = peak * 0.01
+        for (let i = 0; i < samples.length; i += 1) {
+          if (Math.abs(samples[i]) <= floor) quiet += 1
+        }
+        return {
+          peak,
+          rms,
+          broken,
+          ratio: peak > 0 ? rms / peak : 0,
+          quiet: samples.length > 0 ? quiet / samples.length : 0
+        }
+      }
+
       let spoken = null
-      document.getElementById('kokoro').onclick = async (e) => {
-        const button = e.currentTarget
-        button.disabled = true
+      const playButton = document.getElementById('kokoro-play')
+
+      async function speak(device, dtype) {
+        const buttons = ['kokoro-cpu', 'kokoro-gpu'].map((id) => document.getElementById(id))
+        buttons.forEach((b) => (b.disabled = true))
         const log = []
         const say = (line) => {
           log.push(line)
           show('kokoro-out', log.join('\n'))
         }
+        const voice = document.getElementById('kokoro-voice').value
         try {
+          // Asked before anything is fetched: a phone with no adapter should be
+          // told so in a moment rather than after ninety megabytes.
+          if (device === 'webgpu') {
+            const adapter = navigator.gpu ? await navigator.gpu.requestAdapter() : null
+            if (!adapter) throw new Error('this phone offers no WebGPU adapter — use the safe way')
+          }
           say('Fetching the library…')
           const t0 = performance.now()
-          const { KokoroTTS } = await import('https://cdn.jsdelivr.net/npm/kokoro-js@1.2.1/+esm')
+          const { KokoroTTS, TextSplitterStream } = await import(LIBRARY)
           say(`Library ready in ${((performance.now() - t0) / 1000).toFixed(1)}s.`)
 
-          let device = 'wasm'
-          if (navigator.gpu) {
-            try {
-              if (await navigator.gpu.requestAdapter()) device = 'webgpu'
-            } catch {
-              /* stay on wasm */
-            }
-          }
-          say(`Using ${device}. Downloading the voice — about 90 MB the first time…`)
+          say(
+            `Running on the ${device === 'webgpu' ? 'graphics chip' : 'processor'} ` +
+              `(${device}, ${dtype}). Downloading the voice — about 90 MB the first time…`
+          )
 
           const t1 = performance.now()
-          const tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX', {
-            dtype: device === 'webgpu' ? 'fp32' : 'q8',
-            device
-          })
-          const load = (performance.now() - t1) / 1000
-          say(`Voice loaded in ${load.toFixed(1)}s.`)
+          const tts = await KokoroTTS.from_pretrained(MODEL, { dtype, device })
+          say(`Voice loaded in ${((performance.now() - t1) / 1000).toFixed(1)}s.`)
 
-          say('Speaking a sample…')
+          // The streaming door rather than `generate`, for two reasons. It hands
+          // back the phonemes the text was turned into, which is the one place
+          // a fault in the reading of the words shows up as something readable
+          // rather than as a noise; and it is the shape the built version needs
+          // anyway, a piece at a time, so this times what would actually run.
+          say(`Speaking, in pieces, as "${voice}"…`)
+          // The splitter is fed and closed by hand rather than handing
+          // `stream` the string: given a string it builds a splitter, pushes the
+          // text and never closes it, so the loop drains what has been split and
+          // then waits for a sentence nobody will ever add. Read in the library,
+          // not guessed — and a hang here would have looked exactly like a phone
+          // too slow to do this at all.
+          const splitter = new TextSplitterStream()
+          splitter.push(SAMPLE)
+          splitter.close()
+          const pieces = []
+          let rate = null
           const t2 = performance.now()
-          const result = await tts.generate(SAMPLE, { voice: 'af_heart' })
-          const synth = (performance.now() - t2) / 1000
-
-          // The library has changed shape across versions, so take whichever of
-          // these it offers rather than assuming one.
-          let blob = null
-          let seconds = null
-          if (typeof result?.toBlob === 'function') blob = result.toBlob()
-          if (result?.audio && result?.sampling_rate) {
-            seconds = result.audio.length / result.sampling_rate
-            if (!blob) blob = wavBlob(result.audio, result.sampling_rate)
+          for await (const piece of tts.stream(splitter, { voice })) {
+            pieces.push(piece.audio.audio)
+            rate = piece.audio.sampling_rate
+            const words = piece.text.trim().split(/\s+/u).slice(0, 6).join(' ')
+            say(`  · ${words}… → ${piece.phonemes.trim().slice(0, 90)}`)
           }
-          if (!blob) throw new Error('the library returned something this page did not recognise')
+          const synth = (performance.now() - t2) / 1000
+          if (pieces.length === 0) throw new Error('the library returned no audio at all')
 
-          spoken = URL.createObjectURL(blob)
-          document.getElementById('kokoro-play').disabled = false
-          const factor = seconds ? synth / seconds : null
+          const total = pieces.reduce((n, p) => n + p.length, 0)
+          const samples = new Float32Array(total)
+          let at = 0
+          for (const piece of pieces) {
+            samples.set(piece, at)
+            at += piece.length
+          }
+          const seconds = total / rate
+          const sound = levels(samples)
+
+          if (spoken) URL.revokeObjectURL(spoken)
+          spoken = URL.createObjectURL(wavBlob(samples, rate))
+          playButton.disabled = false
+
+          say('')
           say(
-            `Spoke ${seconds ? seconds.toFixed(1) + 's of audio ' : ''}in ${synth.toFixed(1)}s.` +
-              (factor
-                ? `\nReal-time factor ${factor.toFixed(2)} — ${
-                    factor < 1
-                      ? 'faster than you listen, so it can stay ahead of you.'
-                      : 'slower than you listen, so a chapter would have to be prepared first.'
-                  }`
-                : '')
+            `Sound: ${rate} samples a second, ${total.toLocaleString()} of them, ${seconds.toFixed(1)}s.`
           )
-          say('\nNow press "Play what it said" and judge the voice.')
+          say(
+            `Levels: peak ${sound.peak.toFixed(2)}, loudness ${sound.rms.toFixed(3)} ` +
+              `(${(sound.ratio * 100).toFixed(0)}% of peak), ` +
+              `${(sound.quiet * 100).toFixed(0)}% near silence, ${sound.broken} broken samples.`
+          )
+          say(
+            `Pace: ${(WORDS / seconds).toFixed(1)} words a second — two to three is ordinary speech.`
+          )
+          const factor = synth / seconds
+          say(
+            `Made ${seconds.toFixed(1)}s of sound in ${synth.toFixed(1)}s — real-time factor ` +
+              `${factor.toFixed(2)}, ${
+                factor < 1
+                  ? 'faster than you listen, so it can stay ahead of you.'
+                  : 'slower than you listen, so a chapter would have to be prepared first.'
+              }`
+          )
+          say('')
+          // Said before it is played, so the numbers are not read in the light
+          // of what it sounded like.
+          if (sound.broken > 0) {
+            say('This came back with samples that are not numbers, so the backend is wrong here.')
+          } else if (sound.peak < 0.01) {
+            say('This came back silent.')
+          } else if (sound.ratio > 0.45 && sound.quiet < 0.05) {
+            say('These levels are noise rather than speech — expect a screech. Try the other way.')
+          } else {
+            say('These levels look like speech. Play it and judge the voice.')
+          }
+          say('Press "Play what it said".')
         } catch (err) {
           say(`\nFailed: ${err?.message ?? err}`)
-          say(
-            'Tell me this message. It probably means the library moved, and it is a small fix — ' +
-              'it does not mean the phone cannot do it.'
-          )
+          say('Tell me this message — it does not mean the phone cannot do it.')
         } finally {
-          button.disabled = false
+          buttons.forEach((b) => (b.disabled = false))
         }
       }
-      document.getElementById('kokoro-play').onclick = () => {
+
+      document.getElementById('kokoro-cpu').onclick = () => speak('wasm', 'q8')
+      document.getElementById('kokoro-gpu').onclick = () => speak('webgpu', 'fp32')
+      playButton.onclick = () => {
         if (spoken) void new Audio(spoken).play()
       }
     </script>
