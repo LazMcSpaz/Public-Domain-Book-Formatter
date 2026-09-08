@@ -1,0 +1,79 @@
+name: Voice samples
+
+# Renders the sample passages aloud and publishes them as a page of play
+# buttons.
+#
+# It runs here rather than on the device because the device cannot do it: a
+# phone reads this model 5.8 times slower than listening, synthesis runs on the
+# main thread so the tab locks solid for the length of the job, and the graphics
+# chip on the one phone that matters returns numbers nine orders of magnitude
+# outside the range sound is made of. All three measured, none guessed. So the
+# reading is done on a real processor and the phone plays a file — which is the
+# arrangement the book's own audio will use.
+#
+# `kokoro-js` is installed here rather than in package.json: it drags
+# onnxruntime-node behind it, and every `npm ci` in CI would pay for it to run a
+# test suite that never speaks.
+on:
+  workflow_dispatch:
+    inputs:
+      voices:
+        description: Voices to render, comma separated
+        default: af_heart,af_bella,bm_george
+      text:
+        description: One passage of your own, instead of the prepared ones
+        default: ''
+
+permissions:
+  contents: write
+
+concurrency:
+  group: voice-samples
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      # The weights are ~320 MB and do not change; a second run should not
+      # fetch them again.
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: kokoro-82m-v1.0-onnx
+
+      - run: npm i --no-save kokoro-js
+
+      - name: Read the passages aloud
+        run: |
+          node scripts/say.mjs --out rendered \
+            --voices '${{ inputs.voices }}' \
+            ${{ inputs.text && format('--text ''{0}''', inputs.text) || '' }}
+
+      # Speech at 64k mono is indistinguishable from the WAV and a twentieth of
+      # the size, which matters because this is committed and git keeps every
+      # version of everything.
+      - name: Encode
+        run: |
+          mkdir -p public/voice-samples
+          rm -f public/voice-samples/*.mp3
+          for f in rendered/*.wav; do
+            ffmpeg -nostdin -loglevel error -y -i "$f" -codec:a libmp3lame -b:a 64k -ac 1 \
+              "public/voice-samples/$(basename "${f%.wav}").mp3"
+          done
+          cp rendered/manifest.json public/voice-samples/manifest.json
+          node scripts/voice-page.mjs public/voice-samples mp3
+          ls -la public/voice-samples
+
+      - name: Publish
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          git add public/voice-samples
+          git diff --cached --quiet && echo 'Nothing changed.' && exit 0
+          git commit -m 'Voice samples, rendered off the device'
+          git push

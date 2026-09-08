@@ -173,6 +173,9 @@
         phone has and none gets wrong. The fast way hands it to the graphics chip, which is quicker
         where it works and produces noise where it does not — so if one of them screeches, that is
         the answer and the other one is the one to build on.
+        <strong>This locks the screen while it works.</strong> Synthesis runs on the page&rsquo;s
+        only thread, so nothing scrolls and a reload will not get in until it has finished &mdash;
+        wait it out rather than fighting it.
       </p>
       <p class="pick">
         <label for="kokoro-voice">Voice</label>
@@ -194,6 +197,12 @@
         chapter opening is set out exactly as the book sets it. Read the phonemes as well as
         listening: they say what it thought the word was.
         <strong>Type anything of your own in the box.</strong>
+        <strong>This locks the screen while it works.</strong> Synthesis runs on the page&rsquo;s
+        only thread, so nothing scrolls and a reload will not get in until it has finished &mdash;
+        wait it out rather than fighting it. For judging a voice rather than timing one, use the
+        rendered samples page instead:
+        <a href="./voice-samples/">the same passages, read on a real processor</a>, as a page of
+        play buttons.
       </p>
       <p class="pick">
         <button id="hard-vocabulary">This book&rsquo;s vocabulary</button>
