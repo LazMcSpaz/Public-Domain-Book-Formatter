@@ -4,7 +4,7 @@
   "key": "ordinary",
   "title": "Ordinary prose",
   "text": "There are faculties in a person that reach past the five senses. They work by picking up vibrations, exactly as the eye picks up light, and the only real difference is which instruments we have learned to trust.",
-  "name": "ordinary-bm_george",
+  "name": "ordinary-bm_george-6517cb9a",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -17,14 +17,14 @@
    }
   ],
   "seconds": 14.875,
-  "factor": 0.46541176470588236
+  "factor": 0.31657142857142856
  },
  {
   "kind": "passage",
   "key": "vocabulary",
   "title": "This book's vocabulary",
   "text": "The acarshick Records, the astral tube, and the eethurrick double are not the same thing. Prana flows through the plexi; the medulla oblongata is not the pineal gland. clair-awdience, sighkommetry, telekinesis and thought-transference are four different faculties, and the siddees are not a fifth.",
-  "name": "vocabulary-bm_george",
+  "name": "vocabulary-bm_george-482476f4",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -37,14 +37,14 @@
    }
   ],
   "seconds": 20.2,
-  "factor": 0.5276732673267327
+  "factor": 0.2658910891089109
  },
  {
   "kind": "passage",
   "key": "chapter",
   "title": "A chapter opening, as the book sets it",
   "text": "LESSON Eight\nCLAIRVOYANT REVERIE\nThe higher forms of Clairvoyance, and how they may be cultivated and acquired. Trance conditions are not essential to the highest Clairvoyance, although often connected therewith.",
-  "name": "chapter-bm_george",
+  "name": "chapter-bm_george-19f4563e",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -65,14 +65,14 @@
    }
   ],
   "seconds": 16.375,
-  "factor": 0.42741984732824423
+  "factor": 0.26180152671755724
  },
  {
   "kind": "passage",
   "key": "names",
   "title": "Names and dates",
   "text": "Madame Blavatsky founded the Theosophical Society in 1875. Heinrich shockah, Felix veek dah-zeer, Jacques kuh-zott and Johann Heinrich Jung-Stilling are all cited by Panchadasi; so are Sir William Crookes, Wilhelm Conrad rentghen, 1845 to 1923, and the S.P.R.",
-  "name": "names-bm_george",
+  "name": "names-bm_george-ee717b77",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -85,7 +85,7 @@
    }
   ],
   "seconds": 21.9,
-  "factor": 0.4305479452054795
+  "factor": 0.26054794520547947
  },
  {
   "kind": "pronunciation",
@@ -94,7 +94,7 @@
   "text": "Siddhis",
   "side": "before",
   "sounds": "SID-eez",
-  "name": "word-siddhis-before",
+  "name": "word-siddhis-before-a31fd0bb",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -103,7 +103,7 @@
    }
   ],
   "seconds": 1.475,
-  "factor": 0.4454237288135593
+  "factor": 0.2671186440677966
  },
  {
   "kind": "pronunciation",
@@ -112,7 +112,7 @@
   "text": "siddees",
   "side": "after",
   "sounds": "SID-eez",
-  "name": "word-siddhis-after",
+  "name": "word-siddhis-after-8d78083c",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -121,7 +121,7 @@
    }
   ],
   "seconds": 1.4,
-  "factor": 0.4342857142857143
+  "factor": 0.26285714285714284
  },
  {
   "kind": "pronunciation",
@@ -130,7 +130,7 @@
   "text": "Zschokke",
   "side": "before",
   "sounds": "SHOK-uh",
-  "name": "word-zschokke-before",
+  "name": "word-zschokke-before-aa8e4f73",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -139,7 +139,7 @@
    }
   ],
   "seconds": 1.525,
-  "factor": 0.4472131147540984
+  "factor": 0.26622950819672137
  },
  {
   "kind": "pronunciation",
@@ -148,7 +148,7 @@
   "text": "shockah",
   "side": "after",
   "sounds": "SHOK-uh",
-  "name": "word-zschokke-after",
+  "name": "word-zschokke-after-f757c172",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -157,7 +157,7 @@
    }
   ],
   "seconds": 1.2,
-  "factor": 0.48166666666666663
+  "factor": 0.26666666666666666
  },
  {
   "kind": "pronunciation",
@@ -166,7 +166,7 @@
   "text": "Roentgen",
   "side": "before",
   "sounds": "RENT-gen, with a hard g",
-  "name": "word-roentgen-before",
+  "name": "word-roentgen-before-2b7af235",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -175,7 +175,7 @@
    }
   ],
   "seconds": 1.525,
-  "factor": 0.4524590163934426
+  "factor": 0.2655737704918033
  },
  {
   "kind": "pronunciation",
@@ -184,7 +184,7 @@
   "text": "rentghen",
   "side": "after",
   "sounds": "RENT-gen, with a hard g",
-  "name": "word-roentgen-after",
+  "name": "word-roentgen-after-6d4ac282",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -193,7 +193,7 @@
    }
   ],
   "seconds": 1.45,
-  "factor": 0.4386206896551724
+  "factor": 0.2675862068965517
  },
  {
   "kind": "pronunciation",
@@ -202,7 +202,7 @@
   "text": "Akashic",
   "side": "before",
   "sounds": "uh-KAH-shik",
-  "name": "word-akashic-before",
+  "name": "word-akashic-before-fa25ed48",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -211,7 +211,7 @@
    }
   ],
   "seconds": 1.425,
-  "factor": 0.4350877192982456
+  "factor": 0.2652631578947368
  },
  {
   "kind": "pronunciation",
@@ -220,7 +220,7 @@
   "text": "acarshick",
   "side": "after",
   "sounds": "uh-KAH-shik",
-  "name": "word-akashic-after",
+  "name": "word-akashic-after-904d3614",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -229,7 +229,7 @@
    }
   ],
   "seconds": 1.5,
-  "factor": 0.432
+  "factor": 0.25933333333333336
  },
  {
   "kind": "pronunciation",
@@ -238,7 +238,7 @@
   "text": "psychometry",
   "side": "before",
   "sounds": "sy-KOM-uh-tree",
-  "name": "word-psychometry-before",
+  "name": "word-psychometry-before-4ed084b5",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -247,7 +247,7 @@
    }
   ],
   "seconds": 1.75,
-  "factor": 0.43942857142857145
+  "factor": 0.26857142857142857
  },
  {
   "kind": "pronunciation",
@@ -256,7 +256,7 @@
   "text": "sighkommetry",
   "side": "after",
   "sounds": "sy-KOM-uh-tree",
-  "name": "word-psychometry-after",
+  "name": "word-psychometry-after-daf9d3e3",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -265,7 +265,7 @@
    }
   ],
   "seconds": 1.775,
-  "factor": 0.4326760563380282
+  "factor": 0.26366197183098594
  },
  {
   "kind": "pronunciation",
@@ -274,7 +274,7 @@
   "text": "etheric",
   "side": "before",
   "sounds": "EE-thuh-rik",
-  "name": "word-etheric-before",
+  "name": "word-etheric-before-918ee8c1",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -283,7 +283,7 @@
    }
   ],
   "seconds": 1.475,
-  "factor": 0.4406779661016949
+  "factor": 0.2671186440677966
  },
  {
   "kind": "pronunciation",
@@ -292,7 +292,7 @@
   "text": "eethurrick",
   "side": "after",
   "sounds": "EE-thuh-rik",
-  "name": "word-etheric-after",
+  "name": "word-etheric-after-ab403e5e",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -301,7 +301,7 @@
    }
   ],
   "seconds": 1.35,
-  "factor": 0.43555555555555553
+  "factor": 0.26666666666666666
  },
  {
   "kind": "pronunciation",
@@ -310,7 +310,7 @@
   "text": "Cazotte",
   "side": "before",
   "sounds": "kuh-ZOT",
-  "name": "word-cazotte-before",
+  "name": "word-cazotte-before-cd9a1f3c",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -319,7 +319,7 @@
    }
   ],
   "seconds": 1.35,
-  "factor": 0.4503703703703703
+  "factor": 0.26740740740740737
  },
  {
   "kind": "pronunciation",
@@ -328,7 +328,7 @@
   "text": "kuh-zott",
   "side": "after",
   "sounds": "kuh-ZOT",
-  "name": "word-cazotte-after",
+  "name": "word-cazotte-after-04171701",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -337,7 +337,7 @@
    }
   ],
   "seconds": 1.325,
-  "factor": 0.4422641509433962
+  "factor": 0.2679245283018868
  },
  {
   "kind": "pronunciation",
@@ -346,7 +346,7 @@
   "text": "Vicq d'Azyr",
   "side": "before",
   "sounds": "veek dah-ZEER",
-  "name": "word-vicq-d-azyr-before",
+  "name": "word-vicq-d-azyr-before-ed1ea258",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -355,7 +355,7 @@
    }
   ],
   "seconds": 1.825,
-  "factor": 0.43068493150684933
+  "factor": 0.2619178082191781
  },
  {
   "kind": "pronunciation",
@@ -364,7 +364,7 @@
   "text": "veek dah-zeer",
   "side": "after",
   "sounds": "veek dah-ZEER",
-  "name": "word-vicq-d-azyr-after",
+  "name": "word-vicq-d-azyr-after-37e11bee",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -373,7 +373,7 @@
    }
   ],
   "seconds": 1.95,
-  "factor": 0.43128205128205127
+  "factor": 0.2641025641025641
  },
  {
   "kind": "pronunciation",
@@ -382,7 +382,7 @@
   "text": "Clairaudience",
   "side": "before",
   "sounds": "klair-AW-dee-ence",
-  "name": "word-clairaudience-before",
+  "name": "word-clairaudience-before-709b8559",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -391,7 +391,7 @@
    }
   ],
   "seconds": 1.6,
-  "factor": 0.43624999999999997
+  "factor": 0.26249999999999996
  },
  {
   "kind": "pronunciation",
@@ -400,7 +400,7 @@
   "text": "clair-awdience",
   "side": "after",
   "sounds": "klair-AW-dee-ence",
-  "name": "word-clairaudience-after",
+  "name": "word-clairaudience-after-4a0810e3",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -409,7 +409,7 @@
    }
   ],
   "seconds": 1.675,
-  "factor": 0.4453731343283582
+  "factor": 0.26686567164179104
  },
  {
   "kind": "candidate",
@@ -418,7 +418,7 @@
   "text": "The medoola oblongata is not the pineal gland.",
   "sounds": "MEH-doo-luh — one stress, so it runs on into oblongata like a word",
   "why": "Wanted: meh-doo-luh. Two spellings reach it, and they differ only in how hard the second syllable is hit.",
-  "name": "try-medulla-1",
+  "name": "try-medulla-1-597907cf",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -427,7 +427,7 @@
    }
   ],
   "seconds": 4.125,
-  "factor": 0.42763636363636365
+  "factor": 0.263030303030303
  },
  {
   "kind": "candidate",
@@ -436,7 +436,7 @@
   "text": "The meh-doola oblongata is not the pineal gland.",
   "sounds": "MEH-DOO-luh — both syllables hit, more deliberate",
   "why": "Wanted: meh-doo-luh. Two spellings reach it, and they differ only in how hard the second syllable is hit.",
-  "name": "try-medulla-2",
+  "name": "try-medulla-2-2dec3273",
   "voice": "bm_george",
   "phonemes": [
    {
@@ -445,6 +445,6 @@
    }
   ],
   "seconds": 4.175,
-  "factor": 0.4263473053892216
+  "factor": 0.2625149700598803
  }
 ]
