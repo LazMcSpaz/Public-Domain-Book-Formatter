@@ -419,6 +419,9 @@
        * is quiet. The two cases are nowhere near each other, which is what makes
        * this worth measuring rather than arguing about.
        */
+      /* extract:levels — the block below is lifted verbatim by
+         test/tts-levels.test.ts, so that what is checked is what is shipped.
+         Keep both markers, and keep it free of anything but arithmetic. */
       function levels(samples) {
         let peak = 0
         let sum = 0
@@ -447,6 +450,45 @@
           quiet: samples.length > 0 ? quiet / samples.length : 0
         }
       }
+
+      /**
+       * What those numbers mean, in the order the cases have to be ruled out.
+       *
+       * The order is the whole of it, and getting it wrong is how this check
+       * gave a confident wrong answer on a real phone: WebGPU came back with a
+       * peak of 1,162,480,256 and every sample near silence beside it, and the
+       * ratio test — built for noise, which fills the range — read that as
+       * quiet, well-behaved speech and said so. A check that does that is worse
+       * than no check, because it stops anyone looking.
+       *
+       * So the impossible cases are ruled out before the plausible ones. Audio
+       * samples live between -1 and 1; anything past that is a backend that has
+       * blown up rather than a loud passage, and no ratio computed from those
+       * numbers means anything at all.
+       */
+      function verdictOf(sound) {
+        if (sound.broken > 0) {
+          return 'This came back with samples that are not numbers, so the backend is wrong here.'
+        }
+        if (sound.peak > 1.5) {
+          return (
+            'This came back far outside the range sound is made of, so the backend blew up ' +
+            'rather than spoke. Expect a screech. Try the other way.'
+          )
+        }
+        if (sound.peak < 0.01) return 'This came back silent.'
+        if (sound.quiet > 0.9) {
+          return 'All but a fraction of this is silence, so nothing was really said.'
+        }
+        if (sound.ratio > 0.45 && sound.quiet < 0.05) {
+          return 'These levels are noise rather than speech — expect a screech. Try the other way.'
+        }
+        return 'These levels look like speech. Play it and judge the voice.'
+      }
+      /* end extract:levels */
+
+      /** Three places for ordinary sound; exponent form for numbers that are not. */
+      const format = (n) => (Math.abs(n) >= 1000 ? n.toExponential(2) : n.toFixed(3))
 
       let spoken = null
       const playButton = document.getElementById('kokoro-play')
@@ -527,7 +569,7 @@
             `Sound: ${rate} samples a second, ${total.toLocaleString()} of them, ${seconds.toFixed(1)}s.`
           )
           say(
-            `Levels: peak ${sound.peak.toFixed(2)}, loudness ${sound.rms.toFixed(3)} ` +
+            `Levels: peak ${format(sound.peak)}, loudness ${format(sound.rms)} ` +
               `(${(sound.ratio * 100).toFixed(0)}% of peak), ` +
               `${(sound.quiet * 100).toFixed(0)}% near silence, ${sound.broken} broken samples.`
           )
@@ -546,15 +588,7 @@
           say('')
           // Said before it is played, so the numbers are not read in the light
           // of what it sounded like.
-          if (sound.broken > 0) {
-            say('This came back with samples that are not numbers, so the backend is wrong here.')
-          } else if (sound.peak < 0.01) {
-            say('This came back silent.')
-          } else if (sound.ratio > 0.45 && sound.quiet < 0.05) {
-            say('These levels are noise rather than speech — expect a screech. Try the other way.')
-          } else {
-            say('These levels look like speech. Play it and judge the voice.')
-          }
+          say(verdictOf(sound))
           say('Press "Play what it said".')
         } catch (err) {
           say(`\nFailed: ${err?.message ?? err}`)
