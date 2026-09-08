@@ -24,8 +24,26 @@
  * follows.
  */
 import type { BookDocument, BookBlock, Footnote } from '@core/assemble'
+import { GLOSSARY_MARK } from '@core/annotate'
 import { speakHeadingNumbers } from './roman'
 import { applyPronunciations, type Pronunciation } from './pronounce'
+
+/**
+ * Marks printed for the eye, taken out before anything is said.
+ *
+ * The glossary circle is the one that matters here and it is not a decoration
+ * to be tidied — it is a degree sign, and measured on this shelf's own text
+ * `occultism°` is read as **"occultism degrees"**. A book that marks a hundred
+ * headwords would gain a hundred spoken words that are not in it, each one
+ * sounding like the author wrote it.
+ *
+ * Only marks that exist to be *looked* at belong here. Nothing that a reader
+ * would say out loud is removed, because a reading that quietly drops words is
+ * the failure this whole module is arranged against.
+ */
+export function withoutSilentMarks(text: string): string {
+  return text.replaceAll(GLOSSARY_MARK, '')
+}
 
 /** One thing to say, or one silence to leave. */
 export interface SpokenPiece {
@@ -121,7 +139,7 @@ export function readChapter(
   const pieces: SpokenPiece[] = []
   const unread: UnreadBlock[] = []
 
-  const said = (text: string) => applyPronunciations(text, pronunciations)
+  const said = (text: string) => applyPronunciations(withoutSilentMarks(text), pronunciations)
   const heading = (text: string) => said(speakHeadingNumbers(text))
 
   let lastWasHeading = false

@@ -20,6 +20,7 @@ export {
   chapterBlocks,
   chapterNotes,
   expectedSeconds,
+  withoutSilentMarks,
   type ReadingScript,
   type SpokenPiece,
   type UnreadBlock

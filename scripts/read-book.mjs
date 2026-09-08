@@ -71,9 +71,16 @@ const file = project.parseBookFile(await readFile(resolve(bookPath), 'utf8'))
 const doc = edits.applyEdits(assemble.assembleBook(file.run.transcriptions), file.run.edits ?? [])
 
 if (chapterNumber < 1 || chapterNumber > doc.chapters.length) {
+  // The list, not just the refusal: in a combined volume the entries are not
+  // the chapters — "BOOK ONE. THE HUMAN AURA" is a divider, and chapter one of
+  // that book is the second entry.
   console.error(`This book has ${doc.chapters.length} chapters; asked for ${chapterNumber}.`)
   doc.chapters.forEach((c, i) => console.error(`  ${i + 1}. ${c.label ?? ''} ${c.title}`.trim()))
   await close()
+  // `exit` rather than a code: esbuild's service is still waiting on this
+  // process and prints a fatal-looking deadlock under the chapter list if it
+  // is left to unwind. A scary error after a successful listing is the kind of
+  // noise that stops people reading the useful half.
   process.exit(2)
 }
 

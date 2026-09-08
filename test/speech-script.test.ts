@@ -6,7 +6,13 @@
  * and the listener has no way to know anything was there.
  */
 import { describe, expect, it } from 'vitest'
-import { chapterBlocks, chapterNotes, expectedSeconds, readChapter } from '@core/speech'
+import {
+  chapterBlocks,
+  chapterNotes,
+  expectedSeconds,
+  readChapter,
+  withoutSilentMarks
+} from '@core/speech'
 import type { Pronunciation } from '@core/speech'
 import type { BookDocument } from '@core/assemble'
 
@@ -198,6 +204,37 @@ describe('readChapter', () => {
     })
     expect(chapterNotes(book, chapterBlocks(book, 0)).map((n) => n.id)).toEqual(['n1'])
     expect(chapterNotes(book, chapterBlocks(book, 1)).map((n) => n.id)).toEqual(['n2'])
+  })
+})
+
+describe('withoutSilentMarks', () => {
+  it('takes out the glossary circle, which is a degree sign', () => {
+    // Measured on this shelf's own text: `occultism°` is read as
+    // "occultism degrees", so a book marking a hundred headwords gains a
+    // hundred spoken words the author never wrote.
+    expect(withoutSilentMarks('the student of occultism° by some one')).toBe(
+      'the student of occultism by some one'
+    )
+  })
+
+  it('leaves alone everything a reader would actually say', () => {
+    const line = 'He wrote — in 1875 — of "the aura," its colors, and Vicq d\'Azyr.'
+    expect(withoutSilentMarks(line)).toBe(line)
+  })
+})
+
+describe('readChapter, on marked text', () => {
+  it('never hands a glossary mark to the voice', () => {
+    const book = bookOf({
+      blocks: [
+        block('p1b0', 'heading', 'CHAPTER I.'),
+        block('p1b1', 'paragraph', 'The dictionaries define the word aura\u00b0 as an emanation.')
+      ],
+      chapters: [{ id: 'p1b0', title: 'A', level: 1 }] as BookDocument['chapters']
+    })
+    const said = readChapter(book, 0).pieces.filter((p) => p.text)
+    expect(said.some((p) => (p.text ?? '').includes('\u00b0'))).toBe(false)
+    expect(said[1].text).toBe('The dictionaries define the word aura as an emanation.')
   })
 })
 
