@@ -15,6 +15,14 @@ name: Voice samples
 # onnxruntime-node behind it, and every `npm ci` in CI would pay for it to run a
 # test suite that never speaks.
 on:
+  # Also on a push that changes the renderer or the passages, because a sample
+  # set that does not follow the thing it is a sample of is worse than none.
+  push:
+    branches: [main]
+    paths:
+      - scripts/say.mjs
+      - scripts/voice-page.mjs
+      - .github/workflows/voice-samples.yml
   workflow_dispatch:
     inputs:
       voices:
@@ -26,9 +34,13 @@ on:
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
+# The same group the Deploy workflow uses, so the two cannot publish over each
+# other.
 concurrency:
-  group: voice-samples
+  group: pages
 
 jobs:
   render:
@@ -77,3 +89,32 @@ jobs:
           git diff --cached --quiet && echo 'Nothing changed.' && exit 0
           git commit -m 'Voice samples, rendered off the device'
           git push
+
+  # Publishing happens here rather than being left to the Deploy workflow: a
+  # push made with GITHUB_TOKEN does not trigger other workflows, so the samples
+  # would sit in the repository and never reach the page they exist to be played
+  # from.
+  publish:
+    needs: render
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          PUBLIC_BASE: /${{ github.event.repository.name }}/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - id: deployment
+        uses: actions/deploy-pages@v4
