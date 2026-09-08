@@ -17,13 +17,13 @@
    }
   ],
   "seconds": 14.875,
-  "factor": 0.4696470588235294
+  "factor": 0.46319327731092436
  },
  {
   "kind": "passage",
   "key": "vocabulary",
   "title": "This book's vocabulary",
-  "text": "The acarshick Records, the astral tube, and the eethurrick double are not the same thing. Prana flows through the plexi; the me-dulla oblongata is not the pineal gland. clair-awdience, sighkommetry, telekinesis and thought-transference are four different faculties, and the siddees are not a fifth.",
+  "text": "The acarshick Records, the astral tube, and the eethurrick double are not the same thing. Prana flows through the plexi; the medulla oblongata is not the pineal gland. clair-awdience, sighkommetry, telekinesis and thought-transference are four different faculties, and the siddees are not a fifth.",
   "name": "vocabulary-bm_george",
   "voice": "bm_george",
   "phonemes": [
@@ -32,12 +32,12 @@
     "phonemes": "ðɪ ɐkˈɑːʃɪk ɹˈɛkɔːdz, ðɪ ˈastɹəl tjˈuːb, and ðɪ ˈiːθəɹˌɪk dˈʌbəl ɑː nˌɒt ðə sˈeɪm θˈɪŋ."
    },
    {
-    "text": "Prana flows through the plexi; the me-dulla oblongata is not the pineal gland. clair-awdience, sighkommetry, telekinesis and thought-transference are four different faculties, and the siddees are not a fifth.",
-    "phonemes": "pɹˈɑːnə flˈəʊz θɹuː ðə plˈɛksi; ðə mˌiːdˈʌləɹ ˌɒblɒŋɡˈɑːtəɹ ɪz nˌɒt ðə pˈɪniəl ɡlˈand. klˈeəɹˈɔːdiəns, saɪkˈɒmətɹi, tˌɛlɪkənˈiːsɪs and θˈɔːttɹansfˈɜːɹəns ɑː fˈɔː dˈɪfɹənt fˈakəltiz, and ðə sˈɪdiːz ɑː nˌɒtə fˈɪfθ."
+    "text": "Prana flows through the plexi; the medulla oblongata is not the pineal gland. clair-awdience, sighkommetry, telekinesis and thought-transference are four different faculties, and the siddees are not a fifth.",
+    "phonemes": "pɹˈɑːnə flˈəʊz θɹuː ðə plˈɛksi; ðə mˈɛdʌləɹ ˌɒblɒŋɡˈɑːtəɹ ɪz nˌɒt ðə pˈɪniəl ɡlˈand. klˈeəɹˈɔːdiəns, saɪkˈɒmətɹi, tˌɛlɪkənˈiːsɪs and θˈɔːttɹansfˈɜːɹəns ɑː fˈɔː dˈɪfɹənt fˈakəltiz, and ðə sˈɪdiːz ɑː nˌɒtə fˈɪfθ."
    }
   ],
-  "seconds": 20.3,
-  "factor": 0.43660098522167484
+  "seconds": 20.2,
+  "factor": 0.4350990099009901
  },
  {
   "kind": "passage",
@@ -65,7 +65,7 @@
    }
   ],
   "seconds": 16.375,
-  "factor": 0.4301068702290076
+  "factor": 0.42632061068702287
  },
  {
   "kind": "passage",
@@ -85,7 +85,7 @@
    }
   ],
   "seconds": 21.9,
-  "factor": 0.432648401826484
+  "factor": 0.42840182648401826
  },
  {
   "kind": "pronunciation",
@@ -103,7 +103,7 @@
    }
   ],
   "seconds": 1.475,
-  "factor": 0.4393220338983051
+  "factor": 0.4420338983050847
  },
  {
   "kind": "pronunciation",
@@ -121,7 +121,7 @@
    }
   ],
   "seconds": 1.4,
-  "factor": 0.4842857142857144
+  "factor": 0.4357142857142857
  },
  {
   "kind": "pronunciation",
@@ -139,7 +139,7 @@
    }
   ],
   "seconds": 1.525,
-  "factor": 0.4550819672131147
+  "factor": 0.44590163934426236
  },
  {
   "kind": "pronunciation",
@@ -157,7 +157,7 @@
    }
   ],
   "seconds": 1.2,
-  "factor": 0.44583333333333336
+  "factor": 0.5066666666666667
  },
  {
   "kind": "pronunciation",
@@ -175,7 +175,7 @@
    }
   ],
   "seconds": 1.525,
-  "factor": 0.439344262295082
+  "factor": 0.43737704918032794
  },
  {
   "kind": "pronunciation",
@@ -193,7 +193,7 @@
    }
   ],
   "seconds": 1.45,
-  "factor": 0.4406896551724138
+  "factor": 0.43793103448275866
  },
  {
   "kind": "pronunciation",
@@ -211,7 +211,7 @@
    }
   ],
   "seconds": 1.425,
-  "factor": 0.4357894736842105
+  "factor": 0.43719298245614036
  },
  {
   "kind": "pronunciation",
@@ -229,7 +229,7 @@
    }
   ],
   "seconds": 1.5,
-  "factor": 0.442
+  "factor": 0.436
  },
  {
   "kind": "pronunciation",
@@ -247,7 +247,7 @@
    }
   ],
   "seconds": 1.75,
-  "factor": 0.44057142857142856
+  "factor": 0.4468571428571429
  },
  {
   "kind": "pronunciation",
@@ -265,7 +265,7 @@
    }
   ],
   "seconds": 1.775,
-  "factor": 0.4354929577464789
+  "factor": 0.44788732394366204
  },
  {
   "kind": "pronunciation",
@@ -283,7 +283,7 @@
    }
   ],
   "seconds": 1.475,
-  "factor": 0.4420338983050847
+  "factor": 0.46440677966101696
  },
  {
   "kind": "pronunciation",
@@ -301,43 +301,7 @@
    }
   ],
   "seconds": 1.35,
-  "factor": 0.4392592592592592
- },
- {
-  "kind": "pronunciation",
-  "key": "medulla",
-  "title": "medulla",
-  "text": "medulla",
-  "side": "before",
-  "sounds": "mee-DULL-uh",
-  "name": "word-medulla-before",
-  "voice": "bm_george",
-  "phonemes": [
-   {
-    "text": "medulla",
-    "phonemes": "mˈɛdʌlə"
-   }
-  ],
-  "seconds": 1.45,
-  "factor": 0.43931034482758624
- },
- {
-  "kind": "pronunciation",
-  "key": "medulla",
-  "title": "medulla",
-  "text": "me-dulla",
-  "side": "after",
-  "sounds": "mee-DULL-uh",
-  "name": "word-medulla-after",
-  "voice": "bm_george",
-  "phonemes": [
-   {
-    "text": "me-dulla",
-    "phonemes": "mˌiːdˈʌlə"
-   }
-  ],
-  "seconds": 1.475,
-  "factor": 0.4366101694915254
+  "factor": 0.437037037037037
  },
  {
   "kind": "pronunciation",
@@ -355,7 +319,7 @@
    }
   ],
   "seconds": 1.35,
-  "factor": 0.4407407407407407
+  "factor": 0.43629629629629624
  },
  {
   "kind": "pronunciation",
@@ -373,7 +337,7 @@
    }
   ],
   "seconds": 1.325,
-  "factor": 0.4392452830188679
+  "factor": 0.4369811320754717
  },
  {
   "kind": "pronunciation",
@@ -391,7 +355,7 @@
    }
   ],
   "seconds": 1.825,
-  "factor": 0.43890410958904114
+  "factor": 0.4301369863013699
  },
  {
   "kind": "pronunciation",
@@ -409,7 +373,7 @@
    }
   ],
   "seconds": 1.95,
-  "factor": 0.4338461538461538
+  "factor": 0.4348717948717949
  },
  {
   "kind": "pronunciation",
@@ -427,7 +391,7 @@
    }
   ],
   "seconds": 1.6,
-  "factor": 0.43875
+  "factor": 0.43749999999999994
  },
  {
   "kind": "pronunciation",
@@ -445,6 +409,78 @@
    }
   ],
   "seconds": 1.675,
-  "factor": 0.43402985074626865
+  "factor": 0.44298507462686565
+ },
+ {
+  "kind": "candidate",
+  "key": "medulla",
+  "title": "medulla",
+  "text": "medulla",
+  "sounds": "as printed — MED-uh-luh, the stress on the wrong syllable",
+  "why": "The phonemizer says MED-uh-luh; the word is muh-DULL-uh. No spelling produces that exactly, so these are the near misses.",
+  "name": "try-medulla-1",
+  "voice": "bm_george",
+  "phonemes": [
+   {
+    "text": "medulla",
+    "phonemes": "mˈɛdʌlə"
+   }
+  ],
+  "seconds": 1.45,
+  "factor": 0.43793103448275866
+ },
+ {
+  "kind": "candidate",
+  "key": "medulla",
+  "title": "medulla",
+  "text": "mih-dulla",
+  "sounds": "MIH-DULL-uh — right vowels, but both syllables stressed",
+  "why": "The phonemizer says MED-uh-luh; the word is muh-DULL-uh. No spelling produces that exactly, so these are the near misses.",
+  "name": "try-medulla-2",
+  "voice": "bm_george",
+  "phonemes": [
+   {
+    "text": "mih-dulla",
+    "phonemes": "mˈɪdˈʌlə"
+   }
+  ],
+  "seconds": 1.475,
+  "factor": 0.43796610169491523
+ },
+ {
+  "kind": "candidate",
+  "key": "medulla",
+  "title": "medulla",
+  "text": "me-dulla",
+  "sounds": "mee-DULL-uh — the one that was wrong before",
+  "why": "The phonemizer says MED-uh-luh; the word is muh-DULL-uh. No spelling produces that exactly, so these are the near misses.",
+  "name": "try-medulla-3",
+  "voice": "bm_george",
+  "phonemes": [
+   {
+    "text": "me-dulla",
+    "phonemes": "mˌiːdˈʌlə"
+   }
+  ],
+  "seconds": 1.475,
+  "factor": 0.4413559322033898
+ },
+ {
+  "kind": "candidate",
+  "key": "medulla",
+  "title": "medulla",
+  "text": "midullia",
+  "sounds": "mid-ULL-ee-uh — right stress, an extra syllable on the end",
+  "why": "The phonemizer says MED-uh-luh; the word is muh-DULL-uh. No spelling produces that exactly, so these are the near misses.",
+  "name": "try-medulla-4",
+  "voice": "bm_george",
+  "phonemes": [
+   {
+    "text": "midullia",
+    "phonemes": "mɪdˈʌliə"
+   }
+  ],
+  "seconds": 1.575,
+  "factor": 0.4323809523809524
  }
 ]
