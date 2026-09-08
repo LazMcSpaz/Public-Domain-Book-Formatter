@@ -1,0 +1,72 @@
+[
+  {
+    "word": "Siddhis",
+    "say": "siddees",
+    "expect": "sˈɪdiːz",
+    "dialect": "en",
+    "sounds": "SID-eez"
+  },
+  {
+    "word": "Zschokke",
+    "say": "shockah",
+    "expect": "ʃˈɒkə",
+    "dialect": "en",
+    "sounds": "SHOK-uh"
+  },
+  {
+    "word": "Roentgen",
+    "say": "rentghen",
+    "expect": "ɹˈɛntɡən",
+    "dialect": "en",
+    "sounds": "RENT-gen, with a hard g"
+  },
+  {
+    "word": "Akashic",
+    "say": "acarshick",
+    "expect": "ɐkˈɑːʃɪk",
+    "dialect": "en",
+    "sounds": "uh-KAH-shik"
+  },
+  {
+    "word": "psychometry",
+    "say": "sighkommetry",
+    "expect": "saɪkˈɒmətɹi",
+    "dialect": "en",
+    "sounds": "sy-KOM-uh-tree"
+  },
+  {
+    "word": "etheric",
+    "say": "eethurrick",
+    "expect": "ˈiːθəɹˌɪk",
+    "dialect": "en",
+    "sounds": "EE-thuh-rik"
+  },
+  {
+    "word": "medulla",
+    "say": "me-dulla",
+    "expect": "mˌiːdˈʌlə",
+    "dialect": "en",
+    "sounds": "mee-DULL-uh"
+  },
+  {
+    "word": "Cazotte",
+    "say": "kuh-zott",
+    "expect": "kˈʌzˈɒt",
+    "dialect": "en",
+    "sounds": "kuh-ZOT"
+  },
+  {
+    "word": "Vicq d'Azyr",
+    "say": "veek dah-zeer",
+    "expect": "vˈiːk dˈɑːzˈiə",
+    "dialect": "en",
+    "sounds": "veek dah-ZEER"
+  },
+  {
+    "word": "Clairaudience",
+    "say": "clair-awdience",
+    "expect": "klˈeəɹˈɔːdiəns",
+    "dialect": "en",
+    "sounds": "klair-AW-dee-ence"
+  }
+]

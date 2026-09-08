@@ -3,78 +3,112 @@
  * Render passages aloud with Kokoro, off the device.
  *
  * The first slice of the plan the measurements forced. A phone reads this model
- * at 5.8 times slower than listening, and the graphics chip on the one phone
- * that matters returns numbers nine orders of magnitude outside the range sound
- * is made of — so nothing is synthesised on the device. It is rendered once,
- * somewhere with a real processor, and the device plays a file.
+ * 5.8 times slower than listening, and the graphics chip on the one phone that
+ * matters returns numbers nine orders of magnitude outside the range sound is
+ * made of — so nothing is synthesised on the device. It is rendered once,
+ * somewhere with a real processor, and the device plays a file. That is the same
+ * bargain the scan and the transcription already strike: do the expensive thing
+ * once, keep it on the shelf, let the device be a cache.
  *
- * That is the same bargain the scan and the transcription already strike: do
- * the expensive thing once, keep it on the shelf, let the device be a cache.
+ * Three doors, and two of them cost nothing:
  *
- * This is the renderer at its smallest — text in, WAV out, with the phonemes
- * reported beside each piece, because the phonemes are the only place a
- * mispronounced word shows up as something readable rather than as a noise. It
- * is what the sample set is built with, and it is what the book renderer will
- * be built on.
+ *   node scripts/say.mjs --phonemes "acarshick"   # what a spelling will do
+ *   node scripts/say.mjs --check                  # has any respelling drifted?
+ *   node scripts/say.mjs --out samples/           # render, which needs the model
  *
- *   npm i --no-save kokoro-js
- *   node scripts/say.mjs --out samples/            # the prepared passages
- *   node scripts/say.mjs --text "Akashic." --out . # anything
+ * The first two need only the phonemizer, so a respelling can be hunted down in
+ * seconds instead of by waiting on a render and listening to it. That is the
+ * whole reason they exist: the phonemes say what a spelling *will* do, and only
+ * the ear says whether that is right, so the cheap question should never be
+ * answered by the expensive one.
  *
  * `kokoro-js` is deliberately not in package.json: it drags onnxruntime-node
  * behind it, which is a couple of hundred megabytes, and every `npm ci` in CI
  * would pay for it to run a test suite that never speaks. The workflow installs
  * it when it needs it.
  */
-import { mkdir, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
+import { createServer } from 'vite'
+
+const REPO = resolve(import.meta.dirname, '..')
+
+/**
+ * The real modules, transformed by vite so `@core` means what it means.
+ *
+ * The same door `scripts/voice.mjs` uses, and for the same reason: a second copy
+ * of the chapter-number rule here would be a book that said "lesson roman eight"
+ * depending on which script rendered it.
+ */
+async function core() {
+  const server = await createServer({
+    root: REPO,
+    configFile: resolve(REPO, 'vite.config.ts'),
+    server: { middlewareMode: true },
+    appType: 'custom',
+    logLevel: 'error'
+  })
+  const speech = await server.ssrLoadModule('@core/speech')
+  return { speech, close: () => server.close() }
+}
 
 /**
  * The passages, which are this shelf's own rather than invented ones.
  *
- * The vocabulary is drawn from the 126 headwords of the glossary already
- * printed in *Clairvoyance*; the chapter opening is set out exactly as the book
- * sets it, because a Roman numeral standing alone is both the thing an English
- * phonemizer is least likely to get right and the thing every chapter on this
- * shelf opens with. The last one is the same hard words respelt beside
- * themselves, so a respelling can be judged against the default by ear.
+ * The vocabulary is drawn from the 126 headwords of the glossary already printed
+ * in *Clairvoyance*. The chapter opening carries its lines marked as headings
+ * rather than guessed at from their capitals — a stand-in for the block kinds the
+ * book renderer will have, and explicit here because a heuristic that the real
+ * thing will not use is a sample that does not represent it.
  */
 export const PASSAGES = {
   ordinary: {
     title: 'Ordinary prose',
-    text:
-      'There are faculties in a person that reach past the five senses. They work by picking ' +
-      'up vibrations, exactly as the eye picks up light, and the only real difference is ' +
-      'which instruments we have learned to trust.'
+    lines: [
+      {
+        text:
+          'There are faculties in a person that reach past the five senses. They work by ' +
+          'picking up vibrations, exactly as the eye picks up light, and the only real ' +
+          'difference is which instruments we have learned to trust.'
+      }
+    ]
   },
   vocabulary: {
     title: "This book's vocabulary",
-    text:
-      'The Akashic Records, the astral tube, and the etheric double are not the same thing. ' +
-      'Prana flows through the plexi; the medulla oblongata is not the pineal gland. ' +
-      'Clairaudience, psychometry, telekinesis and thought-transference are four different ' +
-      'faculties, and the Siddhis are not a fifth.'
+    lines: [
+      {
+        text:
+          'The Akashic Records, the astral tube, and the etheric double are not the same ' +
+          'thing. Prana flows through the plexi; the medulla oblongata is not the pineal ' +
+          'gland. Clairaudience, psychometry, telekinesis and thought-transference are four ' +
+          'different faculties, and the Siddhis are not a fifth.'
+      }
+    ]
   },
   chapter: {
     title: 'A chapter opening, as the book sets it',
-    text:
-      'LESSON VIII\nCLAIRVOYANT REVERIE\nThe higher forms of Clairvoyance, and how they may ' +
-      'be cultivated and acquired. Trance conditions are not essential to the highest ' +
-      'Clairvoyance, although often connected therewith.'
+    lines: [
+      { heading: true, text: 'LESSON VIII' },
+      { heading: true, text: 'CLAIRVOYANT REVERIE' },
+      {
+        text:
+          'The higher forms of Clairvoyance, and how they may be cultivated and acquired. ' +
+          'Trance conditions are not essential to the highest Clairvoyance, although often ' +
+          'connected therewith.'
+      }
+    ]
   },
   names: {
     title: 'Names and dates',
-    text:
-      'Madame Blavatsky founded the Theosophical Society in 1875. Heinrich Zschokke, Felix ' +
-      "Vicq d'Azyr, Jacques Cazotte and Johann Heinrich Jung-Stilling are all cited by " +
-      'Panchadasi; so are Sir William Crookes, Wilhelm Conrad Roentgen, 1845 to 1923, and ' +
-      'the S.P.R.'
-  },
-  respelt: {
-    title: 'The same words, respelt',
-    text:
-      'Akashic. Ah-KASH-ick. Prana. PRAH-na. Siddhis. SID-eez. Zschokke. SHOCK-uh. ' +
-      "Vicq d'Azyr. Veek dah-ZEER. Blavatsky. Bla-VAT-skee. Panchadasi. Pan-cha-DAH-see."
+    lines: [
+      {
+        text:
+          'Madame Blavatsky founded the Theosophical Society in 1875. Heinrich Zschokke, ' +
+          "Felix Vicq d'Azyr, Jacques Cazotte and Johann Heinrich Jung-Stilling are all " +
+          'cited by Panchadasi; so are Sir William Crookes, Wilhelm Conrad Roentgen, 1845 ' +
+          'to 1923, and the S.P.R.'
+      }
+    ]
   }
 }
 
@@ -103,10 +137,10 @@ export function wav(samples, rate) {
 /**
  * Peak, loudness and anything that is not a number.
  *
- * The same reading the probe takes, and here for the same reason: a stretch
- * that comes back outside the range sound is made of must be reported, never
- * written into a book's audio and discovered by the listener. Silence is the
- * failure mode.
+ * The same reading the probe takes, and here for the same reason: a stretch that
+ * comes back outside the range sound is made of must be reported, never written
+ * into a book's audio and discovered by the listener. Silence is the failure
+ * mode.
  */
 export function levels(samples) {
   let peak = 0
@@ -121,11 +155,7 @@ export function levels(samples) {
     if (size > peak) peak = size
     sum += v * v
   }
-  return {
-    peak,
-    rms: samples.length > 0 ? Math.sqrt(sum / samples.length) : 0,
-    broken
-  }
+  return { peak, rms: samples.length > 0 ? Math.sqrt(sum / samples.length) : 0, broken }
 }
 
 /** One passage, spoken in pieces, joined, with what each piece was read as. */
@@ -162,10 +192,82 @@ function argOf(name, fallback = null) {
   const at = process.argv.indexOf(`--${name}`)
   return at >= 0 && process.argv[at + 1] ? process.argv[at + 1] : fallback
 }
+const hasFlag = (name) => process.argv.includes(`--${name}`)
+
+/** Kokoro's own rule: an `a` voice is American, a `b` voice British. */
+const dialectOf = (voice) => (voice.startsWith('b') ? 'en' : 'en-us')
+
+async function pronunciations() {
+  try {
+    return JSON.parse(await readFile(resolve(REPO, 'voice/pronunciations.json'), 'utf8'))
+  } catch {
+    return []
+  }
+}
+
+// --- the two doors that cost nothing ------------------------------------
+
+const asked = argOf('phonemes')
+if (asked !== null) {
+  const { phonemize } = await import('phonemizer')
+  for (const dialect of ['en', 'en-us']) {
+    console.log(`${dialect.padEnd(6)} ${(await phonemize(asked, dialect)).join(' ')}`)
+  }
+  process.exit(0)
+}
+
+if (hasFlag('check')) {
+  const { phonemize } = await import('phonemizer')
+  const { speech, close } = await core()
+  const list = await pronunciations()
+  const drifted = await speech.checkPronunciations(list, async (text, dialect) =>
+    (await phonemize(text, dialect)).join(' ')
+  )
+  await close()
+  if (drifted.length === 0) {
+    console.log(`${list.length} respellings still say what they were approved for.`)
+    process.exit(0)
+  }
+  // Never a warning to scroll past. A respelling that has stopped meaning what
+  // it meant is a word mispronounced through a whole book, and the person who
+  // approved it by ear is the only one who can approve the replacement.
+  for (const entry of drifted) {
+    console.error(
+      `${entry.word}: "${entry.say}" now says ${entry.actual}, not ${entry.expected} as approved.`
+    )
+  }
+  process.exit(1)
+}
+
+// --- rendering ----------------------------------------------------------
 
 const out = resolve(argOf('out', 'samples'))
-const voices = argOf('voices', 'af_heart,af_bella,bm_george').split(',')
+// George, chosen by ear. The other voices stay one flag away rather than in the
+// default: a re-render is for hearing a change, and rendering two voices nobody
+// picked triples it.
+const voices = argOf('voices', 'bm_george').split(',')
 const only = argOf('text')
+
+const { speech, close } = await core()
+const list = await pronunciations()
+
+/**
+ * A passage as it should be spoken: chapter numbers in words, listed words
+ * respelt.
+ *
+ * The numbers rule runs on headings only, because `I` is also the commonest
+ * pronoun in English and an occult shelf is exactly where a chapter called
+ * "I AM THAT I AM" turns up.
+ */
+function speakable(lines, dialect) {
+  const usable = list.filter((entry) => entry.dialect === dialect)
+  return lines
+    .map((line) => {
+      const said = line.heading ? speech.speakHeadingNumbers(line.text) : line.text
+      return speech.applyPronunciations(said, usable)
+    })
+    .join('\n')
+}
 
 const { KokoroTTS, TextSplitterStream } = await import('kokoro-js')
 console.log('Loading Kokoro…')
@@ -177,39 +279,76 @@ const tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX
 console.log(`Loaded in ${((Date.now() - t0) / 1000).toFixed(1)}s.`)
 
 await mkdir(out, { recursive: true })
-const passages = only ? { typed: { title: 'Typed', text: only } } : PASSAGES
 const rendered = []
 
-for (const voice of voices) {
-  for (const [key, passage] of Object.entries(passages)) {
-    const name = `${key}-${voice}`
-    const started = Date.now()
-    const result = await say(tts, TextSplitterStream, passage.text, voice)
-    const took = (Date.now() - started) / 1000
-    // Never written out without being looked at. A blown-up stretch played to a
-    // listener is the one failure nothing downstream can catch.
-    if (result.sound.broken > 0 || result.sound.peak > 1.5 || result.sound.peak < 0.01) {
-      throw new Error(
-        `${name} came back outside the range sound is made of ` +
-          `(peak ${result.sound.peak}, ${result.sound.broken} broken) — refusing to write it`
-      )
-    }
-    await writeFile(resolve(out, `${name}.wav`), wav(result.samples, result.rate))
-    rendered.push({
-      key,
-      voice,
-      title: passage.title,
-      text: passage.text,
-      phonemes: result.phonemes,
-      seconds: result.seconds,
-      factor: took / result.seconds
-    })
-    console.log(
-      `${name}: ${result.seconds.toFixed(1)}s of sound in ${took.toFixed(1)}s ` +
-        `(x${(took / result.seconds).toFixed(2)}), peak ${result.sound.peak.toFixed(2)}`
+/** Render one stretch, refusing to write anything that is not sound. */
+async function render(name, text, voice, record) {
+  const started = Date.now()
+  const result = await say(tts, TextSplitterStream, text, voice)
+  const took = (Date.now() - started) / 1000
+  if (result.sound.broken > 0 || result.sound.peak > 1.5 || result.sound.peak < 0.01) {
+    throw new Error(
+      `${name} came back outside the range sound is made of ` +
+        `(peak ${result.sound.peak}, ${result.sound.broken} broken) — refusing to write it`
     )
+  }
+  await writeFile(resolve(out, `${name}.wav`), wav(result.samples, result.rate))
+  rendered.push({
+    ...record,
+    name,
+    voice,
+    phonemes: result.phonemes,
+    seconds: result.seconds,
+    factor: took / result.seconds
+  })
+  console.log(
+    `${name}: ${result.seconds.toFixed(1)}s of sound in ${took.toFixed(1)}s ` +
+      `(x${(took / result.seconds).toFixed(2)}), peak ${result.sound.peak.toFixed(2)}`
+  )
+}
+
+const passages = only ? { typed: { title: 'Typed', lines: [{ text: only }] } } : PASSAGES
+
+for (const voice of voices) {
+  const dialect = dialectOf(voice)
+  for (const [key, passage] of Object.entries(passages)) {
+    const text = speakable(passage.lines, dialect)
+    await render(`${key}-${voice}`, text, voice, {
+      kind: 'passage',
+      key,
+      title: passage.title,
+      text
+    })
+  }
+}
+
+// Every listed word, twice: as the book prints it and as the list respells it.
+// The decision this exists for is the editor's — some of these do not need
+// correcting — and it cannot be made from phonemes, only from hearing the two
+// beside each other.
+if (!only) {
+  const voice = voices.find((v) => dialectOf(v) === 'en') ?? voices[0]
+  for (const entry of list.filter((e) => e.dialect === dialectOf(voice))) {
+    const slug = entry.word.toLowerCase().replace(/[^a-z0-9]+/gu, '-')
+    await render(`word-${slug}-before`, entry.word, voice, {
+      kind: 'pronunciation',
+      key: slug,
+      title: entry.word,
+      text: entry.word,
+      side: 'before',
+      sounds: entry.sounds
+    })
+    await render(`word-${slug}-after`, entry.say, voice, {
+      kind: 'pronunciation',
+      key: slug,
+      title: entry.word,
+      text: entry.say,
+      side: 'after',
+      sounds: entry.sounds
+    })
   }
 }
 
 await writeFile(resolve(out, 'manifest.json'), `${JSON.stringify(rendered, null, 1)}\n`)
-console.log(`\n${rendered.length} passages written to ${out}.`)
+console.log(`\n${rendered.length} clips written to ${out}.`)
+await close()

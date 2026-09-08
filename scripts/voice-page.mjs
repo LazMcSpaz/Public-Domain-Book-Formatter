@@ -26,10 +26,40 @@ const escape = (s) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 
 const passages = new Map()
+const words = new Map()
 for (const clip of rendered) {
-  if (!passages.has(clip.key)) passages.set(clip.key, { ...clip, clips: [] })
-  passages.get(clip.key).clips.push(clip)
+  const into = clip.kind === 'pronunciation' ? words : passages
+  if (!into.has(clip.key)) into.set(clip.key, { ...clip, clips: [] })
+  into.get(clip.key).clips.push(clip)
 }
+
+/**
+ * The words, as pairs to be judged rather than a list to be believed.
+ *
+ * Which of these need correcting is the editor's decision and cannot be made
+ * from phonemes — several of the ones the phonemizer gets "wrong" are wrong in a
+ * way nobody would notice or mind. So each is played twice, as printed and as
+ * respelt, and the list is a proposal until someone has heard both.
+ */
+const wordRows = [...words.values()]
+  .map((word) => {
+    const before = word.clips.find((c) => c.side === 'before')
+    const after = word.clips.find((c) => c.side === 'after')
+    const clip = (c, label) =>
+      c === undefined
+        ? ''
+        : `        <div class="side">
+          <h3>${escape(label)}</h3>
+          <audio controls preload="none" src="${escape(`${c.name}.${extension}`)}"></audio>
+          <div class="phon">${escape(c.phonemes.map((p) => p.phonemes).join(' '))}</div>
+        </div>`
+    return `      <div class="clip pair">
+        <h3 class="word">${escape(word.title)} &mdash; ${escape(word.sounds ?? '')}</h3>
+${clip(before, 'As printed')}
+${clip(after, 'Respelt')}
+      </div>`
+  })
+  .join('\n')
 
 const sections = [...passages.values()]
   .map(
@@ -40,7 +70,7 @@ ${passage.clips
   .map(
     (clip) => `      <div class="clip">
         <h3>${escape(clip.voice)} · ${clip.seconds.toFixed(1)}s</h3>
-        <audio controls preload="none" src="${escape(`${clip.key}-${clip.voice}.${extension}`)}"></audio>
+        <audio controls preload="none" src="${escape(`${clip.name}.${extension}`)}"></audio>
         <div class="phon">${clip.phonemes
           .map((p) => `${escape(p.text)}\n  → ${escape(p.phonemes)}`)
           .join('\n\n')}</div>
@@ -88,6 +118,9 @@ const html = `<!doctype html>
       h3 { font-size: 0.85rem; margin: 0 0 6px; color: var(--muted); font-weight: 600; }
       .said { font-size: 0.95rem; margin: 0 0 14px; }
       .clip { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 12px; }
+      .pair .word { font-size: 0.95rem; color: var(--ink); margin-bottom: 8px; }
+      .side { margin: 0 0 10px; }
+      .side h3 { margin: 0 0 4px; }
       audio { width: 100%; }
       .phon {
         white-space: pre-wrap;
@@ -111,6 +144,20 @@ const html = `<!doctype html>
     </p>
 
 ${sections}
+
+${
+  wordRows.length === 0
+    ? ''
+    : `    <section>
+      <h2>Words to decide about</h2>
+      <p class="said">
+        Each is read twice: as the book prints it, then as the pronunciation list respells it.
+        Several of these are only slightly wrong, and slightly wrong may be better left alone
+        &mdash; tell me which ones to keep and which to drop.
+      </p>
+${wordRows}
+    </section>`
+}
   </body>
 </html>
 `

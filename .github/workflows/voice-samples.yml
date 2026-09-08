@@ -27,7 +27,7 @@ on:
     inputs:
       voices:
         description: Voices to render, comma separated
-        default: af_heart,af_bella,bm_george
+        default: bm_george
       text:
         description: One passage of your own, instead of the prepared ones
         default: ''
@@ -62,10 +62,23 @@ jobs:
           path: ~/.cache/huggingface
           key: kokoro-82m-v1.0-onnx
 
+      # The repo's own dependencies as well as the model's: the chapter-number
+      # rule and the pronunciation list live in `src/core/speech`, and the
+      # renderer loads them through vite so it cannot drift from what the app
+      # does. A second copy of those rules here would be a book that said
+      # "lesson roman eight" depending on which door rendered it.
+      - run: npm ci
       - run: npm i --no-save kokoro-js
+
+      # Free, and first: a respelling that has stopped meaning what it meant is a
+      # word mispronounced through a whole book, and there is no reason to spend
+      # three minutes of synthesis finding that out.
+      - name: Do the respellings still say what they were approved for?
+        run: node scripts/say.mjs --check
 
       - name: Read the passages aloud
         run: |
+          rm -rf rendered
           node scripts/say.mjs --out rendered \
             --voices '${{ inputs.voices }}' \
             ${{ inputs.text && format('--text ''{0}''', inputs.text) || '' }}
