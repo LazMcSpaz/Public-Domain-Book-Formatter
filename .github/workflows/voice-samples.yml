@@ -37,10 +37,14 @@ permissions:
   pages: write
   id-token: write
 
-# The same group the Deploy workflow uses, so the two cannot publish over each
-# other.
+# Its own group, and deliberately not the Deploy workflow's. Sharing `pages`
+# looked like the careful choice and was the opposite: Deploy sets
+# `cancel-in-progress`, and the same push starts both, so this run was cancelled
+# one second after it began. The two can still both reach Pages, but this one
+# takes minutes of rendering first and checks out main afterwards, so it
+# publishes second and publishes the newer thing.
 concurrency:
-  group: pages
+  group: voice-samples
 
 jobs:
   render:
