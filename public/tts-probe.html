@@ -96,6 +96,18 @@
         font-size: 0.9rem;
         color: var(--muted);
       }
+      textarea {
+        font: inherit;
+        font-size: 0.95rem;
+        width: 100%;
+        padding: 8px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: var(--panel);
+        color: var(--ink);
+        margin: 0 0 10px;
+        resize: vertical;
+      }
       .pick select {
         font: inherit;
         font-size: 0.95rem;
@@ -164,20 +176,39 @@
       </p>
       <p class="pick">
         <label for="kokoro-voice">Voice</label>
-        <select id="kokoro-voice">
-          <option value="af_heart">Heart — American, female (best graded)</option>
-          <option value="af_bella">Bella — American, female</option>
-          <option value="af_nicole">Nicole — American, female, close-miked</option>
-          <option value="am_michael">Michael — American, male</option>
-          <option value="am_fenrir">Fenrir — American, male</option>
-          <option value="bf_emma">Emma — British, female</option>
-          <option value="bm_george">George — British, male</option>
-        </select>
+        <select id="kokoro-voice"></select>
       </p>
       <button class="primary" id="kokoro-cpu">Safe way (processor)</button>
       <button id="kokoro-gpu">Fast way (graphics chip)</button>
       <button id="kokoro-play" disabled>Play what it said</button>
       <div class="out" id="kokoro-out">Not run yet.</div>
+    </section>
+
+    <section>
+      <h2>4 · Hard words, and how a chapter opens</h2>
+      <p class="why">
+        The voice being pleasant is one thing; the voice being right about
+        <em>Akashic</em>, <em>Zschokke</em> and <em>LESSON&nbsp;VIII</em> is another, and it is the
+        one that decides whether a reading is listenable. Every passage below is this shelf's own —
+        the vocabulary comes from the glossary already printed in <em>Clairvoyance</em>, and the
+        chapter opening is set out exactly as the book sets it. Read the phonemes as well as
+        listening: they say what it thought the word was.
+        <strong>Type anything of your own in the box.</strong>
+      </p>
+      <p class="pick">
+        <button id="hard-vocabulary">This book&rsquo;s vocabulary</button>
+        <button id="hard-chapter">A chapter opening</button>
+        <button id="hard-names">Names and dates</button>
+        <button id="hard-respelt">The same words, respelt</button>
+      </p>
+      <textarea id="hard-text" rows="5" aria-label="Text to read aloud"></textarea>
+      <p class="pick">
+        <label for="hard-voice">Voice</label>
+        <select id="hard-voice"></select>
+      </p>
+      <button class="primary" id="hard-speak">Read this aloud</button>
+      <button id="hard-play" disabled>Play what it said</button>
+      <div class="out" id="hard-out">Not run yet.</div>
     </section>
 
     <section>
@@ -188,6 +219,10 @@
         <li>
           The whole of test 3's report from the safe way, and whether the voice is good enough to
           listen to for an hour. If the safe way screeches too, try the fast way and send both.
+        </li>
+        <li>
+          From test 4: which words it gets wrong, and whether respelling them fixes it. The phoneme
+          lines are as useful to me as the sound.
         </li>
       </ol>
       <div class="out" id="device">…</div>
@@ -490,18 +525,41 @@
       /** Three places for ordinary sound; exponent form for numbers that are not. */
       const format = (n) => (Math.abs(n) >= 1000 ? n.toExponential(2) : n.toFixed(3))
 
-      let spoken = null
-      const playButton = document.getElementById('kokoro-play')
+      /** The voices worth offering, and the one list both pickers are built from. */
+      const VOICES = [
+        ['af_heart', 'Heart — American, female (best graded)'],
+        ['af_bella', 'Bella — American, female'],
+        ['af_nicole', 'Nicole — American, female, close-miked'],
+        ['am_michael', 'Michael — American, male'],
+        ['am_fenrir', 'Fenrir — American, male'],
+        ['bf_emma', 'Emma — British, female'],
+        ['bm_george', 'George — British, male']
+      ]
+      for (const id of ['kokoro-voice', 'hard-voice']) {
+        const select = document.getElementById(id)
+        for (const [value, label] of VOICES) {
+          select.append(new Option(label, value))
+        }
+      }
 
-      async function speak(device, dtype) {
-        const buttons = ['kokoro-cpu', 'kokoro-gpu'].map((id) => document.getElementById(id))
-        buttons.forEach((b) => (b.disabled = true))
+      /**
+       * One reading, wherever it was asked for.
+       *
+       * The model is loaded once per backend and kept: the second passage
+       * through it should cost what a book would cost, not another download.
+       */
+      const loaded = new Map()
+      const heard = new Map()
+
+      async function speak({ device, dtype, text, voice, out, play, buttons }) {
+        const controls = buttons.map((id) => document.getElementById(id))
+        controls.forEach((b) => (b.disabled = true))
         const log = []
         const say = (line) => {
           log.push(line)
-          show('kokoro-out', log.join('\n'))
+          show(out, log.join('\n'))
         }
-        const voice = document.getElementById('kokoro-voice').value
+        const words = text.trim().split(/\s+/u).length
         try {
           // Asked before anything is fetched: a phone with no adapter should be
           // told so in a moment rather than after ninety megabytes.
@@ -509,34 +567,40 @@
             const adapter = navigator.gpu ? await navigator.gpu.requestAdapter() : null
             if (!adapter) throw new Error('this phone offers no WebGPU adapter — use the safe way')
           }
-          say('Fetching the library…')
-          const t0 = performance.now()
-          const { KokoroTTS, TextSplitterStream } = await import(LIBRARY)
-          say(`Library ready in ${((performance.now() - t0) / 1000).toFixed(1)}s.`)
-
-          say(
-            `Running on the ${device === 'webgpu' ? 'graphics chip' : 'processor'} ` +
-              `(${device}, ${dtype}). Downloading the voice — about 90 MB the first time…`
-          )
-
-          const t1 = performance.now()
-          const tts = await KokoroTTS.from_pretrained(MODEL, { dtype, device })
-          say(`Voice loaded in ${((performance.now() - t1) / 1000).toFixed(1)}s.`)
+          const key = `${device}:${dtype}`
+          if (!loaded.has(key)) {
+            say('Fetching the library…')
+            const t0 = performance.now()
+            const { KokoroTTS, TextSplitterStream } = await import(LIBRARY)
+            say(`Library ready in ${((performance.now() - t0) / 1000).toFixed(1)}s.`)
+            say(
+              `Running on the ${device === 'webgpu' ? 'graphics chip' : 'processor'} ` +
+                `(${device}, ${dtype}). Downloading the voice — about 90 MB the first time…`
+            )
+            const t1 = performance.now()
+            const tts = await KokoroTTS.from_pretrained(MODEL, { dtype, device })
+            say(`Voice loaded in ${((performance.now() - t1) / 1000).toFixed(1)}s.`)
+            loaded.set(key, { tts, TextSplitterStream })
+          } else {
+            say(`Already loaded on the ${device === 'webgpu' ? 'graphics chip' : 'processor'}.`)
+          }
+          const { tts, TextSplitterStream } = loaded.get(key)
 
           // The streaming door rather than `generate`, for two reasons. It hands
-          // back the phonemes the text was turned into, which is the one place
-          // a fault in the reading of the words shows up as something readable
+          // back the phonemes the text was turned into, which is the one place a
+          // fault in the reading of the words shows up as something readable
           // rather than as a noise; and it is the shape the built version needs
           // anyway, a piece at a time, so this times what would actually run.
+          //
+          // The splitter is fed and closed by hand rather than handing `stream`
+          // the string: given a string it builds a splitter, pushes the text and
+          // never closes it, so the loop drains what has been split and then
+          // waits for a sentence nobody will ever add. Read in the library, not
+          // guessed — and a hang here would have looked exactly like a phone too
+          // slow to do this at all.
           say(`Speaking, in pieces, as "${voice}"…`)
-          // The splitter is fed and closed by hand rather than handing
-          // `stream` the string: given a string it builds a splitter, pushes the
-          // text and never closes it, so the loop drains what has been split and
-          // then waits for a sentence nobody will ever add. Read in the library,
-          // not guessed — and a hang here would have looked exactly like a phone
-          // too slow to do this at all.
           const splitter = new TextSplitterStream()
-          splitter.push(SAMPLE)
+          splitter.push(text)
           splitter.close()
           const pieces = []
           let rate = null
@@ -544,8 +608,8 @@
           for await (const piece of tts.stream(splitter, { voice })) {
             pieces.push(piece.audio.audio)
             rate = piece.audio.sampling_rate
-            const words = piece.text.trim().split(/\s+/u).slice(0, 6).join(' ')
-            say(`  · ${words}… → ${piece.phonemes.trim().slice(0, 90)}`)
+            const opening = piece.text.trim().split(/\s+/u).slice(0, 6).join(' ')
+            say(`  · ${opening}… → ${piece.phonemes.trim().slice(0, 160)}`)
           }
           const synth = (performance.now() - t2) / 1000
           if (pieces.length === 0) throw new Error('the library returned no audio at all')
@@ -560,13 +624,16 @@
           const seconds = total / rate
           const sound = levels(samples)
 
-          if (spoken) URL.revokeObjectURL(spoken)
-          spoken = URL.createObjectURL(wavBlob(samples, rate))
-          playButton.disabled = false
+          const previous = heard.get(play)
+          if (previous) URL.revokeObjectURL(previous)
+          const url = URL.createObjectURL(wavBlob(samples, rate))
+          heard.set(play, url)
+          document.getElementById(play).disabled = false
 
           say('')
           say(
-            `Sound: ${rate} samples a second, ${total.toLocaleString()} of them, ${seconds.toFixed(1)}s.`
+            `Sound: ${rate} samples a second, ${total.toLocaleString()} of them, ` +
+              `${seconds.toFixed(1)}s.`
           )
           say(
             `Levels: peak ${format(sound.peak)}, loudness ${format(sound.rms)} ` +
@@ -574,35 +641,109 @@
               `${(sound.quiet * 100).toFixed(0)}% near silence, ${sound.broken} broken samples.`
           )
           say(
-            `Pace: ${(WORDS / seconds).toFixed(1)} words a second — two to three is ordinary speech.`
+            `Pace: ${(words / seconds).toFixed(1)} words a second — two to three is ordinary speech.`
           )
           const factor = synth / seconds
           say(
             `Made ${seconds.toFixed(1)}s of sound in ${synth.toFixed(1)}s — real-time factor ` +
-              `${factor.toFixed(2)}, ${
-                factor < 1
-                  ? 'faster than you listen, so it can stay ahead of you.'
-                  : 'slower than you listen, so a chapter would have to be prepared first.'
-              }`
+              `${factor.toFixed(2)}.`
           )
           say('')
-          // Said before it is played, so the numbers are not read in the light
-          // of what it sounded like.
+          // Said before it is played, so the numbers are not read in the light of
+          // what it sounded like.
           say(verdictOf(sound))
-          say('Press "Play what it said".')
         } catch (err) {
           say(`\nFailed: ${err?.message ?? err}`)
           say('Tell me this message — it does not mean the phone cannot do it.')
         } finally {
-          buttons.forEach((b) => (b.disabled = false))
+          controls.forEach((b) => (b.disabled = false))
         }
       }
 
-      document.getElementById('kokoro-cpu').onclick = () => speak('wasm', 'q8')
-      document.getElementById('kokoro-gpu').onclick = () => speak('webgpu', 'fp32')
-      playButton.onclick = () => {
-        if (spoken) void new Audio(spoken).play()
+      const playFrom = (id) => () => {
+        const url = heard.get(id)
+        if (url) void new Audio(url).play()
       }
+
+      const TIMED = ['kokoro-cpu', 'kokoro-gpu']
+      document.getElementById('kokoro-cpu').onclick = () =>
+        speak({
+          device: 'wasm',
+          dtype: 'q8',
+          text: SAMPLE,
+          voice: document.getElementById('kokoro-voice').value,
+          out: 'kokoro-out',
+          play: 'kokoro-play',
+          buttons: TIMED
+        })
+      document.getElementById('kokoro-gpu').onclick = () =>
+        speak({
+          device: 'webgpu',
+          dtype: 'fp32',
+          text: SAMPLE,
+          voice: document.getElementById('kokoro-voice').value,
+          out: 'kokoro-out',
+          play: 'kokoro-play',
+          buttons: TIMED
+        })
+      document.getElementById('kokoro-play').onclick = playFrom('kokoro-play')
+
+      // --- 4 · the words this book actually uses ---------------------------
+      /**
+       * The passages are the book's own, not invented ones.
+       *
+       * The vocabulary is taken from the 126 headwords of the glossary already
+       * printed in *Clairvoyance*, and the chapter opening is set out exactly as
+       * the book sets it — a lesson number on one line and a title under it,
+       * both in capitals — because a Roman numeral standing alone is the thing
+       * an English phonemizer is least likely to get right and the thing this
+       * shelf's books open every chapter with.
+       */
+      const PASSAGES = {
+        'hard-vocabulary':
+          'The Akashic Records, the astral tube, and the etheric double are not the same ' +
+          'thing. Prana flows through the plexi; the medulla oblongata is not the pineal ' +
+          'gland. Clairaudience, psychometry, telekinesis and thought-transference are four ' +
+          'different faculties, and the Siddhis are not a fifth.',
+        'hard-chapter':
+          'LESSON VIII\nCLAIRVOYANT REVERIE\nThe higher forms of Clairvoyance, and how they ' +
+          'may be cultivated and acquired. Trance conditions are not essential to the highest ' +
+          'Clairvoyance, although often connected therewith.',
+        'hard-names':
+          'Madame Blavatsky founded the Theosophical Society in 1875. Heinrich Zschokke, ' +
+          "Felix Vicq d'Azyr, Jacques Cazotte and Johann Heinrich Jung-Stilling are all cited " +
+          'by Panchadasi; so are Sir William Crookes, Wilhelm Conrad Roentgen, 1845 to 1923, ' +
+          'and the S.P.R.',
+        'hard-respelt':
+          'Akashic. Ah-KASH-ick. Prana. PRAH-na. Siddhis. SID-eez. Zschokke. SHOCK-uh. ' +
+          "Vicq d'Azyr. Veek dah-ZEER. Blavatsky. Bla-VAT-skee. Panchadasi. " +
+          'Pan-cha-DAH-see.'
+      }
+      const passageBox = document.getElementById('hard-text')
+      passageBox.value = PASSAGES['hard-vocabulary']
+      for (const [id, text] of Object.entries(PASSAGES)) {
+        document.getElementById(id).onclick = () => {
+          passageBox.value = text
+          show('hard-out', 'Loaded. Press "Read this aloud".')
+        }
+      }
+      document.getElementById('hard-speak').onclick = () => {
+        const text = passageBox.value.trim()
+        if (!text) {
+          show('hard-out', 'Nothing to read.')
+          return
+        }
+        return speak({
+          device: 'wasm',
+          dtype: 'q8',
+          text,
+          voice: document.getElementById('hard-voice').value,
+          out: 'hard-out',
+          play: 'hard-play',
+          buttons: ['hard-speak']
+        })
+      }
+      document.getElementById('hard-play').onclick = playFrom('hard-play')
     </script>
   </body>
 </html>
