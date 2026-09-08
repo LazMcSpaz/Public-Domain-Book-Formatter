@@ -17,7 +17,7 @@
    }
   ],
   "seconds": 14.875,
-  "factor": 0.46319327731092436
+  "factor": 0.46541176470588236
  },
  {
   "kind": "passage",
@@ -37,7 +37,7 @@
    }
   ],
   "seconds": 20.2,
-  "factor": 0.4350990099009901
+  "factor": 0.5276732673267327
  },
  {
   "kind": "passage",
@@ -65,7 +65,7 @@
    }
   ],
   "seconds": 16.375,
-  "factor": 0.42632061068702287
+  "factor": 0.42741984732824423
  },
  {
   "kind": "passage",
@@ -85,7 +85,7 @@
    }
   ],
   "seconds": 21.9,
-  "factor": 0.42840182648401826
+  "factor": 0.4305479452054795
  },
  {
   "kind": "pronunciation",
@@ -103,7 +103,7 @@
    }
   ],
   "seconds": 1.475,
-  "factor": 0.4420338983050847
+  "factor": 0.4454237288135593
  },
  {
   "kind": "pronunciation",
@@ -121,7 +121,7 @@
    }
   ],
   "seconds": 1.4,
-  "factor": 0.4357142857142857
+  "factor": 0.4342857142857143
  },
  {
   "kind": "pronunciation",
@@ -139,7 +139,7 @@
    }
   ],
   "seconds": 1.525,
-  "factor": 0.44590163934426236
+  "factor": 0.4472131147540984
  },
  {
   "kind": "pronunciation",
@@ -157,7 +157,7 @@
    }
   ],
   "seconds": 1.2,
-  "factor": 0.5066666666666667
+  "factor": 0.48166666666666663
  },
  {
   "kind": "pronunciation",
@@ -175,7 +175,7 @@
    }
   ],
   "seconds": 1.525,
-  "factor": 0.43737704918032794
+  "factor": 0.4524590163934426
  },
  {
   "kind": "pronunciation",
@@ -193,7 +193,7 @@
    }
   ],
   "seconds": 1.45,
-  "factor": 0.43793103448275866
+  "factor": 0.4386206896551724
  },
  {
   "kind": "pronunciation",
@@ -211,7 +211,7 @@
    }
   ],
   "seconds": 1.425,
-  "factor": 0.43719298245614036
+  "factor": 0.4350877192982456
  },
  {
   "kind": "pronunciation",
@@ -229,7 +229,7 @@
    }
   ],
   "seconds": 1.5,
-  "factor": 0.436
+  "factor": 0.432
  },
  {
   "kind": "pronunciation",
@@ -247,7 +247,7 @@
    }
   ],
   "seconds": 1.75,
-  "factor": 0.4468571428571429
+  "factor": 0.43942857142857145
  },
  {
   "kind": "pronunciation",
@@ -265,7 +265,7 @@
    }
   ],
   "seconds": 1.775,
-  "factor": 0.44788732394366204
+  "factor": 0.4326760563380282
  },
  {
   "kind": "pronunciation",
@@ -283,7 +283,7 @@
    }
   ],
   "seconds": 1.475,
-  "factor": 0.46440677966101696
+  "factor": 0.4406779661016949
  },
  {
   "kind": "pronunciation",
@@ -301,7 +301,7 @@
    }
   ],
   "seconds": 1.35,
-  "factor": 0.437037037037037
+  "factor": 0.43555555555555553
  },
  {
   "kind": "pronunciation",
@@ -319,7 +319,7 @@
    }
   ],
   "seconds": 1.35,
-  "factor": 0.43629629629629624
+  "factor": 0.4503703703703703
  },
  {
   "kind": "pronunciation",
@@ -337,7 +337,7 @@
    }
   ],
   "seconds": 1.325,
-  "factor": 0.4369811320754717
+  "factor": 0.4422641509433962
  },
  {
   "kind": "pronunciation",
@@ -355,7 +355,7 @@
    }
   ],
   "seconds": 1.825,
-  "factor": 0.4301369863013699
+  "factor": 0.43068493150684933
  },
  {
   "kind": "pronunciation",
@@ -373,7 +373,7 @@
    }
   ],
   "seconds": 1.95,
-  "factor": 0.4348717948717949
+  "factor": 0.43128205128205127
  },
  {
   "kind": "pronunciation",
@@ -391,7 +391,7 @@
    }
   ],
   "seconds": 1.6,
-  "factor": 0.43749999999999994
+  "factor": 0.43624999999999997
  },
  {
   "kind": "pronunciation",
@@ -409,78 +409,42 @@
    }
   ],
   "seconds": 1.675,
-  "factor": 0.44298507462686565
+  "factor": 0.4453731343283582
  },
  {
   "kind": "candidate",
   "key": "medulla",
   "title": "medulla",
-  "text": "medulla",
-  "sounds": "as printed — MED-uh-luh, the stress on the wrong syllable",
-  "why": "The phonemizer says MED-uh-luh; the word is muh-DULL-uh. No spelling produces that exactly, so these are the near misses.",
+  "text": "The medoola oblongata is not the pineal gland.",
+  "sounds": "MEH-doo-luh — one stress, so it runs on into oblongata like a word",
+  "why": "Wanted: meh-doo-luh. Two spellings reach it, and they differ only in how hard the second syllable is hit.",
   "name": "try-medulla-1",
   "voice": "bm_george",
   "phonemes": [
    {
-    "text": "medulla",
-    "phonemes": "mˈɛdʌlə"
+    "text": "The medoola oblongata is not the pineal gland.",
+    "phonemes": "ðə mˈɛduːləɹ ˌɒblɒŋɡˈɑːtəɹ ɪz nˌɒt ðə pˈɪniəl ɡlˈand."
    }
   ],
-  "seconds": 1.45,
-  "factor": 0.43793103448275866
+  "seconds": 4.125,
+  "factor": 0.42763636363636365
  },
  {
   "kind": "candidate",
   "key": "medulla",
   "title": "medulla",
-  "text": "mih-dulla",
-  "sounds": "MIH-DULL-uh — right vowels, but both syllables stressed",
-  "why": "The phonemizer says MED-uh-luh; the word is muh-DULL-uh. No spelling produces that exactly, so these are the near misses.",
+  "text": "The meh-doola oblongata is not the pineal gland.",
+  "sounds": "MEH-DOO-luh — both syllables hit, more deliberate",
+  "why": "Wanted: meh-doo-luh. Two spellings reach it, and they differ only in how hard the second syllable is hit.",
   "name": "try-medulla-2",
   "voice": "bm_george",
   "phonemes": [
    {
-    "text": "mih-dulla",
-    "phonemes": "mˈɪdˈʌlə"
+    "text": "The meh-doola oblongata is not the pineal gland.",
+    "phonemes": "ðə mˈɛdˈuːləɹ ˌɒblɒŋɡˈɑːtəɹ ɪz nˌɒt ðə pˈɪniəl ɡlˈand."
    }
   ],
-  "seconds": 1.475,
-  "factor": 0.43796610169491523
- },
- {
-  "kind": "candidate",
-  "key": "medulla",
-  "title": "medulla",
-  "text": "me-dulla",
-  "sounds": "mee-DULL-uh — the one that was wrong before",
-  "why": "The phonemizer says MED-uh-luh; the word is muh-DULL-uh. No spelling produces that exactly, so these are the near misses.",
-  "name": "try-medulla-3",
-  "voice": "bm_george",
-  "phonemes": [
-   {
-    "text": "me-dulla",
-    "phonemes": "mˌiːdˈʌlə"
-   }
-  ],
-  "seconds": 1.475,
-  "factor": 0.4413559322033898
- },
- {
-  "kind": "candidate",
-  "key": "medulla",
-  "title": "medulla",
-  "text": "midullia",
-  "sounds": "mid-ULL-ee-uh — right stress, an extra syllable on the end",
-  "why": "The phonemizer says MED-uh-luh; the word is muh-DULL-uh. No spelling produces that exactly, so these are the near misses.",
-  "name": "try-medulla-4",
-  "voice": "bm_george",
-  "phonemes": [
-   {
-    "text": "midullia",
-    "phonemes": "mɪdˈʌliə"
-   }
-  ],
-  "seconds": 1.575,
-  "factor": 0.4323809523809524
+  "seconds": 4.175,
+  "factor": 0.4263473053892216
  }
 ]
