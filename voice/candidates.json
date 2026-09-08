@@ -2,12 +2,17 @@
   {
     "word": "medulla",
     "dialect": "en",
-    "why": "The phonemizer says MED-uh-luh; the word is muh-DULL-uh. No spelling produces that exactly, so these are the near misses.",
+    "why": "Wanted: meh-doo-luh. Two spellings reach it, and they differ only in how hard the second syllable is hit.",
     "tries": [
-      { "say": "medulla", "sounds": "as printed — MED-uh-luh, the stress on the wrong syllable" },
-      { "say": "mih-dulla", "sounds": "MIH-DULL-uh — right vowels, but both syllables stressed" },
-      { "say": "me-dulla", "sounds": "mee-DULL-uh — the one that was wrong before" },
-      { "say": "midullia", "sounds": "mid-ULL-ee-uh — right stress, an extra syllable on the end" }
-    ]
+      {
+        "say": "medoola",
+        "sounds": "MEH-doo-luh — one stress, so it runs on into oblongata like a word"
+      },
+      {
+        "say": "meh-doola",
+        "sounds": "MEH-DOO-luh — both syllables hit, more deliberate"
+      }
+    ],
+    "inSentence": "The {} oblongata is not the pineal gland."
   }
 ]

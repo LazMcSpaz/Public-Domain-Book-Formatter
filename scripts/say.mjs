@@ -369,11 +369,14 @@ if (!only) {
     let n = 0
     for (const attempt of candidate.tries) {
       n += 1
-      await render(`try-${slug}-${n}`, attempt.say, voice, {
+      const said = candidate.inSentence
+        ? candidate.inSentence.replace('{}', attempt.say)
+        : attempt.say
+      await render(`try-${slug}-${n}`, said, voice, {
         kind: 'candidate',
         key: slug,
         title: candidate.word,
-        text: attempt.say,
+        text: said,
         sounds: attempt.sounds,
         why: candidate.why
       })
