@@ -1405,6 +1405,28 @@ in `screenshots/`. Don't ship UI blind.
   opening a read book queued all 73 of its existing edits and wrote them back
   to the shelf as "a reading session" — a commit that says nothing, re-sending
   `text` edits with no base to judge them against.
+- **Also done**: **the reading column is set in the book's own design**
+  (`src/core/style/reading.ts`). It was a generic serif at a generic size, which
+  is a different book from the one being made. It now takes its face, leading
+  ratio, first-line indent, paragraph spacing, heading scale and centring, and
+  its **measure in ems** from the `StyleProfile` — and its faces from the _same
+  font files pdf-lib embeds_, registered as CSS faces off `fonts.ts`'s own list
+  rather than a second set of declarations that would agree until somebody
+  changed one. The measure is the number that matters: a column given the
+  printed page's ems breaks a paragraph at the same _words_ it will on paper,
+  which is what makes a screen read like the book rather than merely look like
+  it, and it comes from `frameFor` so it cannot drift the day a margin changes.
+  **Not a second renderer, and it does not claim to be the page** — a reflowing
+  column cannot break lines where Knuth–Plass broke them or pages where the
+  paginator broke them, and the PDF remains the only thing here that draws one.
+  What crosses is the _design_, not the layout: the line `PLAN-editor.md`
+  already draws for the galley's page markers, where data from the engine is
+  honest and an approximation of it is not. Where a rule was needed it was read
+  out of the engine rather than taken from habit — the indent is suppressed
+  after _any_ heading because `suppressFirstIndent: afterHeading` is what the
+  paginator does, and the drop cap belongs to a chapter heading, which is one
+  at level 1. The first version conflated those and indented where the page
+  does not.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with
