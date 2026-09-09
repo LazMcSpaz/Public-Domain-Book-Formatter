@@ -99,7 +99,7 @@ ${passage.clips
         <h3>${escape(clip.voice)} · ${clip.seconds.toFixed(1)}s</h3>
         <audio controls preload="none" src="${escape(`${clip.name}.${extension}`)}"></audio>
         <div class="phon">${clip.phonemes
-          .map((p) => `${escape(p.text)}\n  → ${escape(p.phonemes)}`)
+          .map((p) => `${escape(p.words)}\n  → ${escape(p.phonemes)}`)
           .join('\n\n')}</div>
       </div>`
   )

@@ -10,6 +10,8 @@ import {
   chapterBlocks,
   chapterNotes,
   expectedSeconds,
+  looksLikeLabel,
+  looksOrnamental,
   readChapter,
   withoutSilentMarks
 } from '@core/speech'
@@ -235,6 +237,112 @@ describe('readChapter, on marked text', () => {
     const said = readChapter(book, 0).pieces.filter((p) => p.text)
     expect(said.some((p) => (p.text ?? '').includes('\u00b0'))).toBe(false)
     expect(said[1].text).toBe('The dictionaries define the word aura as an emanation.')
+  })
+})
+
+describe('looksLikeLabel', () => {
+  it('recognises a line that titles the lines under it', () => {
+    // Both measured in *The Human Aura*, each opening a group of four items.
+    expect(looksLikeLabel('Nervous System—')).toBe(true)
+    expect(looksLikeLabel('Blood and Organs—')).toBe(true)
+    expect(looksLikeLabel('In cases of feverishness:')).toBe(true)
+  })
+
+  it('leaves ordinary prose alone, however it ends', () => {
+    // A paragraph breaking off on a dash is ordinary in prose of this period,
+    // which is why a label has to be short as well.
+    expect(
+      looksLikeLabel(
+        'He turned to the window, and what he saw there he could never afterwards describe—'
+      )
+    ).toBe(false)
+    expect(looksLikeLabel('Nervous System.')).toBe(false)
+    expect(looksLikeLabel('Cooling and soothing: Grass greens.')).toBe(false)
+    expect(looksLikeLabel('Stimulating and exciting: Reds (bright).')).toBe(false)
+  })
+})
+
+describe('looksOrnamental', () => {
+  it('knows a printer break from a word', () => {
+    // Read aloud, this row is "asterisk asterisk asterisk" — measured, and it
+    // appears three times in the last chapter of this book.
+    expect(looksOrnamental('* * * * * * * *')).toBe(true)
+    expect(looksOrnamental('***')).toBe(true)
+    expect(looksOrnamental('THE END.')).toBe(false)
+    expect(looksOrnamental('I.')).toBe(false)
+    expect(looksOrnamental('')).toBe(false)
+  })
+})
+
+describe('readChapter, on a table of labelled items', () => {
+  const book = bookOf({
+    blocks: [
+      block('p1b0', 'heading', 'TABLE OF HEALING COLORS.'),
+      block('p1b1', 'paragraph', 'Nervous System—'),
+      block('p1b2', 'paragraph', 'Cooling and soothing: Shades of violet.'),
+      block('p1b3', 'paragraph', '* * * * * * * *'),
+      block('p1b4', 'paragraph', 'And the chapter goes on.')
+    ],
+    chapters: [{ id: 'p1b0', title: 'A', level: 1 }] as BookDocument['chapters']
+  })
+
+  it('reads the label as a title rather than as another item', () => {
+    const script = readChapter(book, 0)
+    const label = script.pieces.find((p) => p.kind === 'label')
+    expect(label?.text).toBe('Nervous System—')
+    const at = script.pieces.indexOf(label!)
+    // More silence before it than after: it opens a group, and the first item
+    // under it should sound attached rather than equal.
+    expect(script.pieces[at - 1].seconds).toBeGreaterThan(script.pieces[at + 1].seconds!)
+  })
+
+  it('turns a printer ornament into the silence it means', () => {
+    const script = readChapter(book, 0)
+    const spoken = script.pieces.filter((p) => p.text !== undefined).map((p) => p.text)
+    expect(spoken.some((t) => t?.includes('*'))).toBe(false)
+    // Accounted for rather than dropped: it is still a piece, carrying its id.
+    const ornament = script.pieces.find((p) => p.id === 'p1b3')
+    expect(ornament?.kind).toBe('pause')
+    expect(ornament?.seconds).toBeGreaterThan(1)
+  })
+
+  it('never leaves two silences in a row', () => {
+    // They stack: a label and its first item came out with 0.45s and then 0.6s,
+    // a second of silence where the point was to make the item sound attached.
+    const script = readChapter(book, 0)
+    for (let i = 1; i < script.pieces.length; i += 1) {
+      const pair = [script.pieces[i - 1].kind, script.pieces[i].kind]
+      expect(pair).not.toEqual(['pause', 'pause'])
+    }
+  })
+
+  it('still accounts for every block', () => {
+    const script = readChapter(book, 0)
+    const accounted = new Set([
+      ...script.pieces.flatMap((p) => (p.id ? [p.id] : [])),
+      ...script.unread.map((u) => u.id)
+    ])
+    expect([...accounted].sort()).toEqual(['p1b0', 'p1b1', 'p1b2', 'p1b3', 'p1b4'])
+  })
+})
+
+describe('the whole shape of a chapter', () => {
+  it('never leaves two silences in a row, in ordinary prose either', () => {
+    const script = readChapter(TWO_CHAPTERS, 0)
+    for (let i = 1; i < script.pieces.length; i += 1) {
+      expect([script.pieces[i - 1].kind, script.pieces[i].kind]).not.toEqual(['pause', 'pause'])
+    }
+  })
+
+  it('opens a chapter with its number and title a short breath apart', () => {
+    // A number line over a title is one opening, not two: the gap between them
+    // is set rather than widened by whatever came before.
+    const script = readChapter(TWO_CHAPTERS, 0)
+    const [first, between, second] = script.pieces
+    expect(first.kind).toBe('heading')
+    expect(between.kind).toBe('pause')
+    expect(second.kind).toBe('heading')
+    expect(between.seconds).toBeLessThan(1)
   })
 })
 

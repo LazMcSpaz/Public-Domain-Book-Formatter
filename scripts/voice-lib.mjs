@@ -259,7 +259,21 @@ export async function speak({ tts, TextSplitterStream, speech }, text, voice, sp
     const audio = await tts.generate(chunk, { voice, speed })
     parts.push(audio.audio)
     rate = audio.sampling_rate
-    phonemes.push({ text: chunk.trim(), phonemes: (await phonemize(chunk, dialect)).join(' ') })
+    // The words, and deliberately not the punctuation. Kokoro splits on its own
+    // punctuation set — `;:,.!?¡¿—…"«»“”(){}[]` — passes those marks through
+    // untouched and phonemizes only what is between them, so the string the
+    // model is given keeps every dash and ellipsis. A direct call to the
+    // phonemizer, which is what this is, strips them.
+    //
+    // Read in the library rather than measured through it, and worth writing
+    // down because measuring through it says the opposite: every one of a
+    // comma, a semicolon, a colon and an em dash comes back as the same
+    // phonemes, which reads as "the mark is lost" when the mark is simply not
+    // this function's business.
+    phonemes.push({
+      words: chunk.trim(),
+      phonemes: (await phonemize(chunk, dialect)).join(' ')
+    })
   }
   const samples = join(parts)
   return {

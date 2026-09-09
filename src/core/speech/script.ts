@@ -45,9 +45,43 @@ export function withoutSilentMarks(text: string): string {
   return text.replaceAll(GLOSSARY_MARK, '')
 }
 
+/**
+ * A line that titles the lines under it.
+ *
+ * Measured in *The Human Aura*: "Nervous System—" and "Blood and Organs—" each
+ * open a group of four items, and the dash is already silent, so what makes
+ * them read as an interruption rather than a title is nothing to do with the
+ * words. It is the pacing — an ordinary paragraph gap either side puts them on
+ * the same level as the items they are naming.
+ *
+ * Deliberately narrow. A paragraph that ends in a dash mid-thought is ordinary
+ * in prose of this period, so a label has to be short as well, and must not end
+ * the way a sentence ends.
+ */
+export function looksLikeLabel(text: string): boolean {
+  const trimmed = text.trim()
+  if (/[.!?]["'’”]?$/u.test(trimmed)) return false
+  if (!/[—–:-]$/u.test(trimmed)) return false
+  return trimmed.split(/\s+/u).filter(Boolean).length <= 6
+}
+
+/**
+ * A printer's ornament: a row of stars marking a break, and not a word.
+ *
+ * Measured, because it does not look like a problem until it is heard: the
+ * three rows of `* * * * * * * *` in the last chapter are read aloud as
+ * **"asterisk asterisk asterisk"**. What the row means is a pause, so a pause
+ * is what it becomes — which is a translation of the mark rather than a
+ * dropping of it.
+ */
+export function looksOrnamental(text: string): boolean {
+  const trimmed = text.trim()
+  return trimmed.length > 0 && !/[\p{L}\p{N}]/u.test(trimmed)
+}
+
 /** One thing to say, or one silence to leave. */
 export interface SpokenPiece {
-  kind: 'heading' | 'paragraph' | 'note-intro' | 'note' | 'pause'
+  kind: 'heading' | 'label' | 'paragraph' | 'note-intro' | 'note' | 'pause'
   /** What to say. Absent on a pause. */
   text?: string
   /** How long to say nothing for. Absent on anything else. */
@@ -85,7 +119,13 @@ const PAUSE = {
   /** Before the notes at the end of a chapter. */
   beforeNotes: 1.6,
   /** Between one note and the next. */
-  betweenNotes: 0.5
+  betweenNotes: 0.5,
+  /** Before a line that titles what follows — it opens a group. */
+  beforeLabel: 1,
+  /** After one, and shorter, so the first item under it sounds attached. */
+  afterLabel: 0.45,
+  /** A printer's ornament, which means a break and is not a word. */
+  ornament: 1.5
 }
 
 /** Block kinds that are read as ordinary prose. */
@@ -142,17 +182,26 @@ export function readChapter(
   const said = (text: string) => applyPronunciations(withoutSilentMarks(text), pronunciations)
   const heading = (text: string) => said(speakHeadingNumbers(text))
 
-  let lastWasHeading = false
+  // One silence between two things, never two.
+  //
+  // Emitting a gap after a piece *and* before the next one stacks them: a label
+  // followed by its first item came out with 0.45s and then 0.6s, which is a
+  // second of silence where the point was to make the item sound attached. So
+  // the gap is carried forward and written once, immediately before whatever it
+  // precedes.
+  let gap = 0
   for (const block of blocks) {
     const text = block.text.trim()
     if (text.length === 0) {
       unread.push({ id: block.id, kind: block.kind, why: 'the block is empty' })
       continue
     }
-    if (block.kind === 'heading') {
-      if (pieces.length > 0) pieces.push({ kind: 'pause', seconds: PAUSE.overTitle })
-      pieces.push({ kind: 'heading', text: heading(text), id: block.id })
-      lastWasHeading = true
+    if (looksOrnamental(text)) {
+      // The ornament *is* the silence, so it replaces the gap rather than
+      // adding to it. It carries its own id, which is how it stays accounted
+      // for without being spoken.
+      pieces.push({ kind: 'pause', seconds: PAUSE.ornament, id: block.id })
+      gap = 0
       continue
     }
     if (block.kind === 'table') {
@@ -161,7 +210,7 @@ export function readChapter(
       unread.push({ id: block.id, kind: block.kind, why: 'a table cannot be read aloud as prose' })
       continue
     }
-    if (!PROSE.has(block.kind)) {
+    if (block.kind !== 'heading' && !PROSE.has(block.kind)) {
       unread.push({
         id: block.id,
         kind: block.kind,
@@ -169,17 +218,26 @@ export function readChapter(
       })
       continue
     }
+
+    const isHeading = block.kind === 'heading'
+    const isLabel = !isHeading && looksLikeLabel(text)
+    // A number line over a title is one opening, not two, so the gap between
+    // them is set rather than widened by whatever came before.
+    if (isHeading) gap = pieces.length > 0 ? PAUSE.overTitle : 0
+    else if (isLabel) gap = Math.max(gap, PAUSE.beforeLabel)
+
+    if (gap > 0) pieces.push({ kind: 'pause', seconds: gap })
     pieces.push({
-      kind: 'pause',
-      seconds: lastWasHeading ? PAUSE.afterHeading : PAUSE.paragraph
+      kind: isHeading ? 'heading' : isLabel ? 'label' : 'paragraph',
+      text: isHeading ? heading(text) : said(text),
+      id: block.id
     })
-    pieces.push({ kind: 'paragraph', text: said(text), id: block.id })
-    lastWasHeading = false
+    gap = isHeading ? PAUSE.afterHeading : isLabel ? PAUSE.afterLabel : PAUSE.paragraph
   }
 
   const notes = chapterNotes(doc, blocks)
   if (notes.length > 0) {
-    pieces.push({ kind: 'pause', seconds: PAUSE.beforeNotes })
+    pieces.push({ kind: 'pause', seconds: Math.max(gap, PAUSE.beforeNotes) })
     pieces.push({
       kind: 'note-intro',
       // Announced rather than run on. A note read straight after the last
