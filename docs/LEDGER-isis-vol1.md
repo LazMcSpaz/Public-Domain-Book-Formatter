@@ -457,6 +457,16 @@ the honest fix is a rule that knows a book has more than one language in it, and
 guessing a new threshold from these 46 would be exactly the tuning-to-pass the
 process forbids.
 
+Eight of the 21 `unclosed-quote` findings went away for a reason that is not a
+tuning: **verse and tables do not have quotations to close.** Printing
+convention opens every line of quoted verse and closes only the last, and in a
+column of figures a repeated `“` is the ditto mark. Exempted by block _kind_,
+which is a fact about what those things are rather than a guess about how much
+noise to tolerate — the same line set as prose is still reported, and that is
+tested. The **13 that remain are real prose with a mark that never closes**,
+and they are worth a pass: a closing mark OCR lost is the sort of thing that
+prints and is found by a reader.
+
 `missing-chapter` firing on a forward reference is an artefact of running the
 check over a **partly read** book, which is worth doing anyway — it caught the
 doubling three chapters before the book is finished — and is not a fault.
