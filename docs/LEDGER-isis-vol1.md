@@ -385,6 +385,46 @@ same fault — this fount's old-style **8** read as a **3**.
 At this rate the remaining 595 leaves are about **7.7M tokens**, against 15.5M
 at the Chapter I rate.
 
+### Chapter IV, and the trap that nearly cost a chapter
+
+| Batch | Leaves |  Tokens | Per leaf | Tool calls |
+| ----- | -----: | ------: | -------: | ---------: |
+| A     |     13 | 188,939 |   14,534 |         22 |
+| B     |     13 | 167,663 |   12,897 |         24 |
+
+**13,715 a leaf**, `--check` clean on both, `flagged: []` on both, and the
+volume's numbering disputed one folio (168 → 110) which the reader settled
+against the render.
+
+What this chapter turned up is not about the reading. Three readers across two
+chapters had raised the same query — a lone figure at the foot of every
+sixteenth leaf — so the rule for it was written and committed and went green:
+signature `n` sits on folio `sheet × (n − 1) + 1`, so the figure and the folio
+check each other and no sheet size has to be assumed. Then the next chapter was
+drafted and **no signature was taken**.
+
+The rule was right. `npm test` was running it. The driver was not: the restart
+script started vite only when port 5173 was silent, so it had never restarted
+vite at all, and the process from the start of the session was still serving
+from an in-memory transform cache holding every module as it stood before each
+`src/core` edit since. `curl` on the canonical `/@fs/…` URL came back without a
+function that had been on disk for an hour; the same URL with `?v=<timestamp>`
+came back with it.
+
+**A whole chapter had been drafted by the old code and looked entirely fine**,
+which is the only reason this is survivable: a draft is an input to a reader
+who checks it against the render, never a thing that lands. The lesson is in
+CLAUDE.md now, along with the cheap test — if the plain URL and the
+cache-busted one disagree, the code is right and the server is stale.
+
+Two more rules came out of the same pass. The signature mark: six in this
+volume, on folios 33, 49, 65, 81, 97 and 113, every one giving a sheet of 16,
+and the one on folio 33 is leaf 91 — in the fixture since before any of this,
+with a stray `3` nobody had noticed. And a head that _measures_ as display type
+because one speck of dirt on the line is tall: leaf 202 reads
+`: 144 THE VEIL OF ISIS.`, 39 pixels against a 27-pixel body, and only the
+folio it carries says it is furniture.
+
 ### Where the rest of the cost is
 
 At 150 DPI a leaf's render is about 1,280 tokens, so at two turns the images are
