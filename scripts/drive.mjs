@@ -2777,6 +2777,7 @@ async function serve() {
           return {
             markdown: queriesMod.queriesMarkdown(book, raised, rulings),
             rulingsMarkdown: queriesMod.rulingsMarkdown(book, rulings),
+            reviewMarkdown: queriesMod.reviewMarkdown(book, raised, rulings),
             raised: raised.length,
             // What is actually left, which is the number a session should act
             // on. `raised` counts the ones already settled too, and a report
@@ -2791,7 +2792,8 @@ async function serve() {
             decidedButNotPrinted: notYet.map((r) => ({ leaf: r.pageIndex, quote: r.quote })),
             leaves: [...new Set(waiting.map((q) => q.pageIndex))],
             shelfPath: shelf.queriesPath(newest.key),
-            rulingsShelfPath: shelf.rulingsPath(newest.key)
+            rulingsShelfPath: shelf.rulingsPath(newest.key),
+            reviewShelfPath: shelf.rulingsPath(newest.key).replace(/rulings\.md$/u, 'review.md')
           }
         },
         [REPO]
@@ -2801,10 +2803,20 @@ async function serve() {
       const rulingsOut = out.replace(/queries\.md$/u, 'rulings.md')
       const alongside = rulingsOut === out ? `${out}.rulings.md` : rulingsOut
       await writeFile(resolve(REPO, alongside), rendered.rulingsMarkdown, 'utf8')
+      // The third sheet, for somebody checking the edition rather than working
+      // through it: every query in book order with what became of it. The other
+      // two are complementary halves — `queries.md` empties as it is answered
+      // and `rulings.md` only ever grows — so a settled question is on one and
+      // off the other, which is right for doing the work and wrong for auditing
+      // it.
+      const reviewOut = out.replace(/queries\.md$/u, 'review.md')
+      const review = reviewOut === out ? `${out}.review.md` : reviewOut
+      await writeFile(resolve(REPO, review), rendered.reviewMarkdown, 'utf8')
       const report = { ...rendered }
       delete report.markdown
       delete report.rulingsMarkdown
-      return { wrote: out, wroteRulings: alongside, ...report }
+      delete report.reviewMarkdown
+      return { wrote: out, wroteRulings: alongside, wroteReview: review, ...report }
     },
 
     /**

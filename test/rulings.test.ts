@@ -5,6 +5,7 @@ import {
   settled,
   unapplied,
   rulingsMarkdown,
+  reviewMarkdown,
   toMention,
   queriesMarkdown,
   type RaisedQuery,
@@ -417,5 +418,69 @@ describe('the note on the text', () => {
     const text = noteOnTheText(rulings).join('\n')
     expect(text).toContain('do not name them')
     expect(text).toContain('Do not list the individual places')
+  })
+})
+
+/**
+ * The sheet an independent reader is handed.
+ *
+ * `queries.md` empties as it is answered and `rulings.md` only ever grows, so a
+ * settled question is on one and off the other. That is right for working
+ * through them and wrong for checking the work — an auditor wants every query
+ * the reading raised, in book order, with what became of it, without holding
+ * two files open and matching them by hand.
+ */
+describe('the review sheet', () => {
+  const raised: RaisedQuery[] = [
+    query({ pageIndex: 12, quote: 'radioative' }),
+    query({ pageIndex: 40, quote: 'practiced deception', kind: 'inconsistent' }),
+    query({ pageIndex: 63, quote: 'a passage nobody has ruled on' })
+  ]
+  const rulings: Ruling[] = [
+    ruling({ because: 'The compositor dropped the c.' }),
+    {
+      pageIndex: null,
+      quote: 'practiced / practised',
+      kind: 'inconsistent',
+      decision: 'as-printed',
+      covers: ['practiced', 'practised'],
+      because: 'Both were current in 1877.',
+      decidedOn: '2026-08-24'
+    }
+  ]
+  const sheet = reviewMarkdown({ title: 'The Astral World', fileName: 'a.pdf' }, raised, rulings)
+
+  it('counts what is settled and what is not', () => {
+    expect(sheet).toContain('3 raised, 2 settled, 1 still waiting.')
+  })
+
+  it('carries every query, settled or not, in leaf order', () => {
+    const leaves = [...sheet.matchAll(/^\| (\d+) \|/gmu)].map((m) => Number(m[1]))
+    expect(leaves).toEqual([12, 40, 63])
+  })
+
+  it('puts the corrected reading beside the words it was made about', () => {
+    expect(sheet).toMatch(/\| 12 \|.*`radioative`.*Set right.*`radioactive`.*dropped the c/u)
+  })
+
+  it('marks a query still waiting rather than leaving the row blank', () => {
+    expect(sheet).toMatch(/\| 63 \|.*\*\*waiting\*\*/u)
+  })
+
+  /**
+   * A standing ruling settles a query without appearing against any one leaf,
+   * so an auditor reading down the leaves would find the decision and never
+   * find where it came from.
+   */
+  it('says when a query was settled by a standing ruling, and lists it', () => {
+    expect(sheet).toMatch(/\| 40 \|.*standing ruling/u)
+    expect(sheet).toContain('## Standing rulings')
+    expect(sheet).toContain('Both were current in 1877.')
+  })
+
+  it('says so plainly when nothing was raised', () => {
+    expect(reviewMarkdown({ title: 'A', fileName: 'a.pdf' }, [], [])).toContain(
+      'Nothing was raised'
+    )
   })
 })

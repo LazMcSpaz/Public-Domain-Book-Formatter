@@ -262,3 +262,86 @@ export function toMention(rulings: readonly Ruling[]): {
     corrected: wanted.filter((r) => r.decision === 'corrected')
   }
 }
+
+/**
+ * Every query in one place with what became of it — the sheet an independent
+ * reader is handed.
+ *
+ * `queries.md` empties as it is answered and `rulings.md` only ever grows, and
+ * between them a question that was settled is on one sheet while the question
+ * it answered is off the other. That is right for working through them and
+ * wrong for checking the work: somebody auditing an edition wants **every**
+ * query the reading raised, in book order, with what the page says, what was
+ * decided, what it now reads, and the reasoning — without holding two files
+ * open and matching them up by hand.
+ *
+ * Derived from the run, so it cannot drift from the book the way a written
+ * summary would. What it deliberately does *not* do is judge: it puts the
+ * decision beside the words it was made about and leaves the reading to a
+ * person.
+ */
+export function reviewMarkdown(
+  book: { title: string; fileName: string },
+  raised: readonly RaisedQuery[],
+  rulings: readonly Ruling[]
+): string {
+  const byLeaf = [...raised].sort((a, b) => a.pageIndex - b.pageIndex)
+  const settledCount = byLeaf.filter((q) => answerFor(q, rulings) !== null).length
+
+  const lines: string[] = [
+    `# Every editorial query, and what became of it — ${book.title}`,
+    '',
+    'For review. Each query is a place the reading found where being faithful to',
+    'the 1877 setting and being correct pull apart. **The reading never decided',
+    'one of these**; it transcribed the page as printed and raised the question.',
+    'What is decided here was decided by the editor, or by a ruling the editor',
+    'made on a case like it — and where that is so, the reasoning says which.',
+    '',
+    `${byLeaf.length} raised, ${settledCount} settled, ${byLeaf.length - settledCount} still waiting.`,
+    ''
+  ]
+
+  if (byLeaf.length === 0) {
+    lines.push('Nothing was raised.', '')
+    return lines.join('\n')
+  }
+
+  lines.push(
+    '| Leaf | As printed | Decided | Now reads | Why it was raised | Why it was decided that way |',
+    '| ---: | --- | --- | --- | --- | --- |'
+  )
+  for (const query of byLeaf) {
+    const ruling = answerFor(query, rulings)
+    const decision = ruling === null ? '**waiting**' : HEADING[ruling.decision]
+    const reads =
+      ruling?.decision === 'corrected' && ruling.correction ? `\`${cell(ruling.correction)}\`` : '—'
+    const standing = ruling !== null && ruling.pageIndex === null ? ' *(standing ruling)*' : ''
+    lines.push(
+      `| ${query.pageIndex} | \`${cell(query.quote)}\` | ${decision}${standing} | ${reads} | ` +
+        `${cell(query.why)} | ${cell(ruling?.because ?? '')} |`
+    )
+  }
+  lines.push('')
+
+  const standing = rulings.filter((r) => r.pageIndex === null)
+  if (standing.length > 0) {
+    lines.push(
+      '## Standing rulings',
+      '',
+      'Decisions that answer a class rather than a spot, listed because they',
+      'settle queries above without appearing against any one leaf.',
+      '',
+      '| Covers | Decided | Why |',
+      '| --- | --- | --- |'
+    )
+    for (const ruling of standing) {
+      lines.push(
+        `| \`${cell((ruling.covers ?? [ruling.quote]).join('`, `'))}\` | ` +
+          `${HEADING[ruling.decision]} | ${cell(ruling.because ?? '')} |`
+      )
+    }
+    lines.push('')
+  }
+
+  return lines.join('\n')
+}
