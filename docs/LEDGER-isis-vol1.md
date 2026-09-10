@@ -811,3 +811,37 @@ without being tested, because it explained the evidence I had at the time. It
 took the editor's pasted text to make me look at where the intruding words
 actually live in this book, which is one `sweep` and thirty seconds. **A
 mechanism is a claim about the world and wants pixels like any other reading.**
+
+### The figure sweep, scored — and what the book actually carries
+
+Four leaves had plates raised by readers who happened to notice them. Nothing
+had asked the volume the question. Three signals were built and each was scored
+against the plates already known, rather than trusted:
+
+| Signal                                                        | Candidates | Of the 3 known plates |
+| ------------------------------------------------------------- | ---------: | --------------------- |
+| Ink density (`detectIllustrations`, already run during recon) |         35 | **1** — 564 only      |
+| OCR junk the readers deleted between draft and done           |          9 | **2** — 520, 564      |
+| Contact sheet, all 628 leaves tiled 36 to a page              |  18 sheets | **3** — all           |
+
+The automatic pair miss **leaf 193**, and the miss is structural rather than a
+threshold to tune: `detectRegions` looks for a rectangle with no _words_ in it,
+and 193's Travancore amulet has the text run round it in a narrow eleven-line
+column. It leaves no junk blocks either, because OCR reads that text perfectly
+well. It is invisible to both and unmistakable at a twentieth of full size.
+
+**The sweep found no plate the reading had missed.** The volume carries three
+figures — 193, 520, 564 — plus the two display sorts on 630, and that is all.
+Everything else the sheets flagged was checked against a render and was not a
+figure: 565 and 388 were adjacent-cell confusions (for 564 and 387), and 90,
+155, 318 and 678 are a table and three verse blocks, **every one of them already
+correctly typed** in the book file — leaf 90's yuga table carries its `cells`,
+and it was landed by hand in Chapter I before the batch machinery existed.
+
+What the sweep cannot claim is a census. All three controls are half- or
+quarter-page figures, which is what survives the reduction; a small inline cut
+or a two-line diagram might not, and the honest statement is that this is a
+floor. Against that: every leaf was also read against its own render by a batch
+reader, and from leaf 551 those readers were asked to raise figures explicitly.
+Three independent passes and no fourth plate is as close to settled as this gets
+without turning the paper.
