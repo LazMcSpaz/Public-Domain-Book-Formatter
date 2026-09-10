@@ -145,3 +145,59 @@ export function folioOffset(sightings: readonly FolioSighting[], minimum = 5): F
 export function folioFor(pageIndex: number, offset: number): number {
   return pageIndex - offset
 }
+
+/**
+ * Gathering sizes a book is actually made of.
+ *
+ * A signature mark is the printer's, not the author's: it numbers the folded
+ * sheets so a binder can put them in order, and it sits alone at the foot of
+ * the first leaf of each gathering. No reprint carries one, and until now every
+ * one of them arrived as a block of body text and then as a query — three
+ * identical questions to the editor across two chapters of *Isis Unveiled*,
+ * about a figure that is not part of the book.
+ *
+ * **Powers of two, because a gathering is made by folding.** A sheet folded
+ * once, twice, three or four times gives 4, 8, 16 or 32 pages. Books gathered
+ * in 12s and 24s exist — a 12mo is cut and inset rather than simply folded —
+ * and they are deliberately not here: including 24 made `signatureSheet(97, 5)`
+ * a signature, which on a book gathered in 16s is an ordinary numeral being
+ * taken out of the text. A 12mo needs this list extended, and needs evidence
+ * from its own leaves before it is.
+ */
+const SHEETS = [4, 8, 16, 32]
+
+/**
+ * The sheet size that would make this figure the signature of this folio, or
+ * null.
+ *
+ * **The mark checks itself, so nothing has to be assumed or voted.** Signature
+ * `n` sits on the first leaf of gathering `n`, which is folio
+ * `sheet × (n − 1) + 1` — so a figure `n` on folio `p` implies a sheet of
+ * exactly `(p − 1) / (n − 1)`, and it is a signature only if that division is
+ * whole *and* lands on a size a book is really gathered in. A stray numeral
+ * almost never satisfies both.
+ *
+ * Measured across 90 drafted leaves of *Isis Unveiled* Vol. I: five lone
+ * figures at the foot, on folios 49, 65, 81, 97 and 113, reading 4, 5, 6, 7 and
+ * 8 — every one of them giving a sheet of 16, and no other leaf producing a
+ * candidate at all.
+ *
+ * Signature 1 is the exception and is refused: it sits on folio 1, `(p − 1)`
+ * and `(n − 1)` are both zero, and the arithmetic says nothing. A lone `1` at
+ * the foot of the first leaf could be anything, so it stays text.
+ */
+export function signatureSheet(folio: number, figure: number): number | null {
+  if (!Number.isInteger(folio) || !Number.isInteger(figure)) return null
+  if (figure < 2 || folio < 2) return null
+  const span = folio - 1
+  if (span % (figure - 1) !== 0) return null
+  const sheet = span / (figure - 1)
+  return SHEETS.includes(sheet) ? sheet : null
+}
+
+/** Is this line the printer's signature mark for the gathering this leaf opens? */
+export function looksLikeSignature(text: string, folio: number): number | null {
+  const trimmed = text.trim()
+  if (!/^\d{1,2}$/u.test(trimmed)) return null
+  return signatureSheet(folio, Number(trimmed))
+}

@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { asFolio, folioFor, folioOffset, namesFolio } from '@core/draft'
+import {
+  asFolio,
+  folioFor,
+  folioOffset,
+  looksLikeSignature,
+  namesFolio,
+  signatureSheet
+} from '@core/draft'
 
 describe('reading a number off a scan', () => {
   it('takes a plain number', () => {
@@ -89,5 +96,65 @@ describe("voting the volume's own numbering", () => {
 
   it('predicts a leaf’s folio from the offset it voted', () => {
     expect(folioFor(101, 58)).toBe(43)
+  })
+})
+
+/**
+ * The printer's signature mark, which checks its own arithmetic.
+ *
+ * Signature `n` sits on the first leaf of gathering `n`, at folio
+ * `sheet × (n − 1) + 1`. So a figure on a folio implies exactly one sheet size,
+ * and it is a signature only if that size is one a book is really gathered in.
+ * Nothing has to be assumed and nothing has to be voted.
+ *
+ * The five in *Isis Unveiled* Vol. I are folios 49, 65, 81, 97 and 113 reading
+ * 4, 5, 6, 7 and 8 — every one of them giving 16, and no other leaf in 90
+ * drafted producing a candidate at all.
+ */
+describe("the printer's signature mark", () => {
+  it('reads the sheet size off the figure and the folio', () => {
+    expect(signatureSheet(49, 4)).toBe(16)
+    expect(signatureSheet(65, 5)).toBe(16)
+    expect(signatureSheet(97, 7)).toBe(16)
+    expect(signatureSheet(113, 8)).toBe(16)
+  })
+
+  it('takes a book gathered in eights just as readily', () => {
+    expect(signatureSheet(9, 2)).toBe(8)
+    expect(signatureSheet(33, 5)).toBe(8)
+  })
+
+  /**
+   * The list is powers of two because a gathering is made by folding. Books
+   * gathered in 12s and 24s exist and are deliberately out: with 24 in the
+   * list, `signatureSheet(97, 5)` came back a signature, and on a book gathered
+   * in 16s that is an ordinary numeral being taken out of the text.
+   */
+  it('does not admit a gathering size no fold produces', () => {
+    expect(signatureSheet(97, 5)).toBeNull() // 24s
+    expect(signatureSheet(37, 4)).toBeNull() // 12s
+  })
+
+  /** A figure whose arithmetic does not land on a real gathering is a numeral. */
+  it('refuses a figure that implies no real sheet', () => {
+    expect(signatureSheet(21, 3)).toBeNull() // would need sheets of 10
+    expect(signatureSheet(50, 4)).toBeNull() // 49 does not divide by 3
+  })
+
+  /**
+   * Signature 1 sits on folio 1, where both differences are zero and the
+   * arithmetic says nothing at all. A lone `1` at the foot of the first leaf
+   * could be anything, so it stays text.
+   */
+  it('refuses the first gathering, where the arithmetic is empty', () => {
+    expect(signatureSheet(1, 1)).toBeNull()
+    expect(signatureSheet(17, 1)).toBeNull()
+  })
+
+  it('is only a signature if it is a lone figure', () => {
+    expect(looksLikeSignature('7', 97)).toBe(16)
+    expect(looksLikeSignature('7.', 97)).toBeNull()
+    expect(looksLikeSignature('page 7', 97)).toBeNull()
+    expect(looksLikeSignature('147', 97)).toBeNull()
   })
 })

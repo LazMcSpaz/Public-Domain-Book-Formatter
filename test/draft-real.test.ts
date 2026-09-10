@@ -535,7 +535,11 @@ describe('the volume’s numbering settles the furniture a leaf cannot', () => {
     for (const pageIndex of [91, 99, 200, 300, 400, 650]) {
       const plain = drafted(pageIndex)
       const guided = drafted(pageIndex, pageIndex - 58)
-      expect(guided.furniture, `leaf ${pageIndex}`).toEqual(plain.furniture)
+      // Leaf 91 is the one leaf here the folio *does* change: its lone `3` is
+      // the signature for gathering 3, which nothing without a folio can know.
+      const rest = { ...guided.furniture }
+      delete rest.signature
+      expect(rest, `leaf ${pageIndex}`).toEqual(plain.furniture)
       expect(guided.blocks.length, `leaf ${pageIndex}`).toBe(plain.blocks.length)
     }
   })
@@ -586,6 +590,68 @@ describe('the foot of a leaf does not call a footnote body text', () => {
         },
         `leaf ${leaf.pageIndex}`
       ).toEqual(want)
+    }
+  })
+})
+
+/**
+ * The printer's signature mark, on the two leaves of this volume that carry
+ * one in the fixture.
+ *
+ * It arrived as a block of body text and then as a query on every sixteenth
+ * leaf — three identical questions to the editor across two chapters, about a
+ * figure that is not part of the book. It is the binder's.
+ */
+describe("a signature mark is the printer's, not the book's", () => {
+  const isis = fixtures.find((f) => f.name.includes('isis'))!
+  const leafAt = (pageIndex: number) => isis.fixture.leaves.find((l) => l.pageIndex === pageIndex)!
+  const drafted = (pageIndex: number, expectedFolio?: number) =>
+    draftPage(
+      toWords(leafAt(pageIndex).words),
+      expectedFolio === undefined ? {} : { expectedFolio }
+    )
+
+  it('takes the lone figure off the foot and says the arithmetic', () => {
+    for (const [pageIndex, folio, mark] of [
+      // Leaf 91 was in this fixture long before the rule was, as the
+      // footnote-heavy leaf that decides `bodyTypeSize`. Its lone `3` at the
+      // foot went unnoticed for exactly as long, and is folio 33 — the first
+      // leaf of gathering 3. Confirmed on the render at 900 DPI.
+      [91, 33, '3'],
+      [155, 97, '7'],
+      [171, 113, '8']
+    ] as const) {
+      const plain = drafted(pageIndex)
+      expect(plain.furniture.signature, `leaf ${pageIndex} without a folio`).toBeUndefined()
+      expect(
+        plain.blocks.map((b) => b.text).join(' '),
+        `leaf ${pageIndex} without a folio`
+      ).toContain(mark)
+
+      const guided = drafted(pageIndex, folio)
+      expect(guided.furniture.signature, `leaf ${pageIndex}`).toBe(mark)
+      expect(guided.structural.join(' '), `leaf ${pageIndex}`).toMatch(
+        /signature mark.*gathered in\s+16s/su
+      )
+      expect(
+        guided.blocks[guided.blocks.length - 1]!.text.trim().endsWith(mark),
+        `leaf ${pageIndex}: the mark is still in the text`
+      ).toBe(false)
+    }
+  })
+
+  /**
+   * The rule may only take a figure whose arithmetic lands. Every other leaf of
+   * the fixture has a folio in hand and must come back with no signature at
+   * all — otherwise it is eating numerals out of the book.
+   */
+  it('takes nothing off any other leaf', () => {
+    for (const leaf of isis.fixture.leaves) {
+      if ([91, 155, 171].includes(leaf.pageIndex)) continue
+      expect(
+        drafted(leaf.pageIndex, leaf.pageIndex - 58).furniture.signature,
+        `leaf ${leaf.pageIndex}`
+      ).toBeUndefined()
     }
   })
 })

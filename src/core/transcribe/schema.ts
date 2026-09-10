@@ -172,6 +172,16 @@ export interface PageFurniture {
    * accounted-for, and never printed.
    */
   stamp?: string[]
+  /**
+   * The printer's signature mark for the gathering this leaf opens.
+   *
+   * A lone figure at the foot of every sixteenth leaf, put there so a binder
+   * could put the folded sheets in order. It is the printer's and not the
+   * book's, no reprint carries one, and it is recorded here for the same reason
+   * the scanner's stamp is: OCR read it off the leaf, so a transcription that
+   * accounted for it nowhere would read as a leaf with a word missing.
+   */
+  signature?: string
 }
 
 /** Bibliographic fields read off front matter (title page, imprint). */
@@ -363,7 +373,8 @@ export const PAGE_SCHEMA = {
       properties: {
         runningHead: { type: 'string' },
         folio: { type: 'string' },
-        stamp: { type: 'array', items: { type: 'string' } }
+        stamp: { type: 'array', items: { type: 'string' } },
+        signature: { type: 'string' }
       },
       required: [],
       additionalProperties: false
@@ -543,6 +554,9 @@ export function parsePageTranscription(raw: unknown, pageIndex: number): PageTra
     furniture.runningHead = rawFurniture['runningHead']
   }
   if (typeof rawFurniture['folio'] === 'string') furniture.folio = rawFurniture['folio']
+  if (typeof rawFurniture['signature'] === 'string' && rawFurniture['signature'].trim() !== '') {
+    furniture.signature = rawFurniture['signature']
+  }
   if (Array.isArray(rawFurniture['stamp'])) {
     const stamp = rawFurniture['stamp'].filter((t): t is string => typeof t === 'string')
     if (stamp.length > 0) furniture.stamp = stamp
@@ -609,6 +623,7 @@ export function checkableText(page: PageTranscription): string {
   const furniture = [
     page.furniture?.runningHead,
     page.furniture?.folio,
+    page.furniture?.signature,
     ...(page.furniture?.stamp ?? [])
   ]
     .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)

@@ -52,7 +52,7 @@ export interface DraftLine {
   right: number
 }
 
-import { namesFolio, asFolio } from './folios'
+import { namesFolio, asFolio, looksLikeSignature } from './folios'
 import { healWrappedHyphens, tally, type HyphenVerdict, type Vocabulary } from './hyphens'
 
 export interface DraftBlock {
@@ -78,7 +78,7 @@ export interface DraftPage {
   blocks: DraftBlock[]
   /** Runs of words OCR itself was unsure of, as spans to look at. */
   uncertain: DraftSpan[]
-  furniture: { runningHead?: string; folio?: string; stamp?: string[] }
+  furniture: { runningHead?: string; folio?: string; stamp?: string[]; signature?: string }
   /**
    * What the draft guessed rather than measured, in plain language.
    *
@@ -781,8 +781,8 @@ function takeFurniture(
   said: string[],
   expectedFolio?: number,
   claimedByNotes?: (line: DraftLine) => boolean
-): { runningHead?: string; folio?: string } {
-  const furniture: { runningHead?: string; folio?: string } = {}
+): { runningHead?: string; folio?: string; signature?: string } {
+  const furniture: { runningHead?: string; folio?: string; signature?: string } = {}
 
   const consider = (at: 'first' | 'last'): void => {
     if (lines.length < 3) return
@@ -802,6 +802,33 @@ function takeFurniture(
     // not true. Asked before anything can speak, because the head-width and
     // display tests reach a footnote before the foot branch does.
     if (at === 'last' && claimedByNotes?.(line)) return
+
+    // The printer's signature mark, which is neither the book's text nor its
+    // folio: a lone figure at the foot of the first leaf of a gathering, put
+    // there for the binder. It arrived as a block of body text and then as a
+    // query on every sixteenth leaf until this existed — three identical
+    // questions to the editor across two chapters, about a figure that is not
+    // part of the book.
+    //
+    // Asked before the standoff test, because a signature is identified by
+    // its arithmetic and not by where it sits: on leaves 155 and 171 of this
+    // volume the figure stands too close to the last line to pass, and the
+    // gap test declined it in silence. The arithmetic checks itself; see
+    // `signatureSheet`.
+    if (at === 'last' && expectedFolio !== undefined) {
+      const sheet = looksLikeSignature(text, expectedFolio)
+      if (sheet !== null && asFolio(text) !== String(expectedFolio)) {
+        furniture.signature = text
+        lines.pop()
+        said.push(
+          `"${text}" was taken off the foot as the printer's signature mark. Folio ` +
+            `${expectedFolio} is the first leaf of gathering ${text} in a book gathered in ` +
+            `${sheet}s, so the figure and the folio agree — and a signature is the binder's, ` +
+            "not the book's. Check the render if the book really does print a figure there."
+        )
+        return
+      }
+    }
 
     // The volume corroborating this line. A head that carries the number the
     // numbering predicts is furniture however narrowly it misses a geometric

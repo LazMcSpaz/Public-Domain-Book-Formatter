@@ -372,6 +372,27 @@ describe('a folio at the foot is never mistaken for a footnote', () => {
     expect(drafted.blocks.some((b) => b.kind === 'footnote')).toBe(false)
   })
 
+  /**
+   * The negative the real fixtures cannot supply: a lone figure at the foot
+   * whose arithmetic does not land. Every leaf of both real books that carries
+   * one is a genuine signature, so nothing there can tell "a signature" from
+   * "any lone figure at the foot" — and the second would eat numerals out of
+   * the book on every leaf that happens to end in one.
+   */
+  it('leaves a lone figure whose arithmetic does not land', () => {
+    // Folio 50, figure 4: a signature 4 would sit on `sheet × 3 + 1`, and 49
+    // does not divide by 3 at all.
+    const drafted = draftPage(withFootFolio('4'), { expectedFolio: 50 })
+    expect(drafted.furniture.signature).toBeUndefined()
+    expect(drafted.blocks.map((b) => b.text).join(' ')).toContain('4')
+  })
+
+  it('takes one whose arithmetic does land', () => {
+    // Folio 49, figure 4: 48 / 3 = 16, a book gathered in sixteens.
+    const drafted = draftPage(withFootFolio('4'), { expectedFolio: 49 })
+    expect(drafted.furniture.signature).toBe('4')
+  })
+
   it('still takes a real note at the foot as a note', () => {
     const drafted = draftPage(
       words([
