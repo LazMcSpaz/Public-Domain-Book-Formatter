@@ -107,3 +107,89 @@ describe('the leaf reports what assembly could not settle', () => {
     expect(found).toEqual([])
   })
 })
+
+/**
+ * A note that runs over onto the next leaf.
+ *
+ * The page prints the marker once, at the head of the note, and does not repeat
+ * it on the continuation — so the runover arrives with no marker and no mark in
+ * its text. Filed as a note of its own it becomes a second note under the `*`
+ * fallback: the reader gets the note in two pieces, and the orphan half prints
+ * as a collected endnote at the back of the book, alone and meaning nothing.
+ *
+ * Three of 240 notes across five chapters of *Isis Unveiled* Vol. I.
+ */
+describe('a footnote that runs over onto the next leaf', () => {
+  const leaf = (pageIndex: number, blocks: PageTranscription['blocks']): PageTranscription => ({
+    pageIndex,
+    role: 'body',
+    blocks,
+    uncertain: [],
+    furniture: {}
+  })
+
+  it('joins the continuation to the note it continues', () => {
+    const doc = assembleBook([
+      leaf(12, [
+        { kind: 'paragraph', text: 'The body of leaf twelve, with a mark on it.*' },
+        { kind: 'footnote', marker: '*', text: '* See Gibbon, who observes that the' }
+      ]),
+      leaf(13, [
+        { kind: 'footnote', text: 'decline was long in coming.' },
+        { kind: 'paragraph', text: 'The body of leaf thirteen.' }
+      ])
+    ])
+    expect(doc.footnotes).toHaveLength(1)
+    expect(doc.footnotes[0]!.text).toBe(
+      'See Gibbon, who observes that the decline was long in coming.'
+    )
+    expect(doc.footnotes[0]!.originalMarker).toBe('*')
+  })
+
+  it('carries the continuation’s emphasis across the join, shifted', () => {
+    const doc = assembleBook([
+      leaf(12, [
+        { kind: 'paragraph', text: 'Body.*' },
+        { kind: 'footnote', marker: '*', text: '* See the' }
+      ]),
+      leaf(13, [{ kind: 'footnote', text: 'Decline and Fall, vol. ii.', emphasis: [0, 1, 2] }])
+    ])
+    // "See the Decline and Fall, vol. ii." — the three italic words are 2, 3, 4.
+    expect(doc.footnotes[0]!.emphasis).toEqual([2, 3, 4])
+  })
+
+  /**
+   * The narrowness is the safety. Only the **first** note on a leaf can be a
+   * runover; a markerless note with others above it on the same leaf is some
+   * other thing, and leaf 216 of this volume is exactly that. It stays its own
+   * note and `verifyPage` goes on flagging it, which is the right answer for a
+   * case nobody has looked at.
+   */
+  it('does not join a markerless note that has notes above it on its own leaf', () => {
+    const doc = assembleBook([
+      leaf(12, [
+        { kind: 'paragraph', text: 'Body.*' },
+        { kind: 'footnote', marker: '*', text: '* First note.' }
+      ]),
+      leaf(13, [
+        { kind: 'paragraph', text: 'More body.†' },
+        { kind: 'footnote', marker: '†', text: '† Second note.' },
+        { kind: 'footnote', text: 'A third thing with no mark at all.' }
+      ])
+    ])
+    expect(doc.footnotes).toHaveLength(3)
+    expect(doc.footnotes[2]!.text).toBe('A third thing with no mark at all.')
+  })
+
+  it('does not join a note that opens with a mark of its own', () => {
+    const doc = assembleBook([
+      leaf(12, [
+        { kind: 'paragraph', text: 'Body.*' },
+        { kind: 'footnote', marker: '*', text: '* First note.' }
+      ]),
+      leaf(13, [{ kind: 'footnote', text: '† A second note, marked on the page.' }])
+    ])
+    expect(doc.footnotes).toHaveLength(2)
+    expect(doc.footnotes[1]!.originalMarker).toBe('†')
+  })
+})

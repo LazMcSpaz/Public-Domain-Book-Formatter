@@ -463,6 +463,8 @@ export function assembleBook(
     // beats deleting a line of the book on a guess.
     const pictures = byPage.get(page.pageIndex) ?? []
     let nextPicture = 0
+    // Whether this leaf has produced a note yet, for the seam rule below.
+    let noteOnThisLeaf = false
 
     for (const [blockIndex, block] of page.blocks.entries()) {
       if (block.kind === 'caption' && nextPicture < pictures.length) {
@@ -473,6 +475,54 @@ export function assembleBook(
 
       // Footnotes leave the body flow entirely and are re-attached at typeset time.
       if (block.kind === 'footnote') {
+        // **A note running over from the leaf before carries no mark**, because
+        // the page prints the marker once and does not repeat it at the top of
+        // the continuation. Filed as a note of its own it becomes a second
+        // note with the `*` fallback — so the reader gets the note in two
+        // pieces, and the orphan half prints as a collected endnote at the back
+        // of the book, on its own, meaning nothing. Measured on *Isis Unveiled*
+        // Vol. I: three of 240 notes across five chapters.
+        //
+        // Narrow on purpose, and it errs toward reporting. Only the **first**
+        // note on a leaf can be a runover — a markerless note with two notes
+        // above it on the same leaf is some other thing, and leaf 216 of this
+        // volume has exactly that. It stays a note of its own and `verifyPage`
+        // goes on flagging it, which is the right answer for a case nobody has
+        // looked at.
+        const previousNote = footnotes[footnotes.length - 1]
+        if (
+          !noteOnThisLeaf &&
+          previousNote !== undefined &&
+          previousNote.pageIndex < page.pageIndex &&
+          !block.marker &&
+          printedMarker(block.text) === null
+        ) {
+          noteOnThisLeaf = true
+          const joined = stripSoftHyphens(joinText(previousNote.text, block.text))
+          // Word indices again, and the same trap the marker strip has: the
+          // continuation's emphasis is counted from its own first word, so it
+          // has to be shifted past everything already in the note.
+          //
+          // Measured against the *joined* text rather than the note's old word
+          // count, because `joinText` heals a hyphen across the seam — which
+          // merges two words into one and moves every index after it by one.
+          const shift = wordCount(joined) - wordCount(block.text)
+          if (block.emphasis?.length) {
+            previousNote.emphasis = [
+              ...(previousNote.emphasis ?? []),
+              ...block.emphasis.map((i) => i + shift)
+            ]
+          }
+          if (block.strong?.length) {
+            previousNote.strong = [
+              ...(previousNote.strong ?? []),
+              ...block.strong.map((i) => i + shift)
+            ]
+          }
+          previousNote.text = joined
+          continue
+        }
+        noteOnThisLeaf = true
         // The declared marker, or the one the note's own text opens with, or
         // `*` — in that order. The bare `*` fallback used to come second and
         // mislabelled every note whose transcriber left the mark in the text
