@@ -5,18 +5,25 @@
  * one used to be a page of throwaway shell in every session — which is how the
  * two things that actually decide the bill got forgotten. Both are measured:
  *
- * **Tell the reader to open its renders in blocks of at most eight, then write
- * once.** Over one chapter of *Isis Unveiled*, the same six leaves cost 29,216
- * tokens a leaf read one at a time and 22,519 read all at once, and the
- * expensive one found nothing the cheap one missed. Every turn re-sends the
- * accumulated context, so cost per leaf tracks *tool calls per leaf* almost
- * exactly and batch size barely matters beside it.
+ * **Tell the reader to open its renders three at a time.** Over one chapter of
+ * *Isis Unveiled*, the same six leaves cost 29,216 tokens a leaf read one at a
+ * time and 22,519 read all at once, and the expensive one found nothing the
+ * cheap one missed — every turn re-sends the accumulated context, so cost per
+ * leaf tracks *tool calls per leaf*. That measurement is why the brief once
+ * said "open them all in one block", and it was the wrong conclusion from a
+ * right number, because it left out what a failure costs.
  *
- * **The render-loading turn times out, intermittently, and it is not a size
- * threshold.** On one chapter four batches died at exactly that line — three of
- * them opening fourteen images and one opening *seven* — while other batches of
- * six, seven, ten, twelve, thirteen and fourteen came through. Size raises the
- * risk and does not decide it, so there is no safe number to pick.
+ * **The render-loading turn times out, and it is not a size threshold.** Six
+ * batches of this volume died at exactly that line — three opening fourteen
+ * images, three opening *seven* — while batches of six, seven, ten, twelve,
+ * thirteen and fourteen came through. Size raises the risk and does not decide
+ * it. What settles the question is that the timeout is unrecoverable: it ends
+ * the reader where it stands and the batch is lost whole, so the old fallback
+ * ("if that times out, open two smaller groups") was advice nobody could take.
+ * Three at a time is four or five turns on a fourteen-leaf batch rather than
+ * one — not the fourteen that full leaf-by-leaf interleaving costs, which is
+ * what the 30% figure was measured against — and a batch that has to be read
+ * again from nothing costs all of it.
  *
  * What that means in practice: **keep the batch at the cheap size and expect to
  * relaunch one now and then.** Nothing is lost when it happens — the agent dies
@@ -59,6 +66,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { resolve, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { driftVerdict } from './lib/drift.mjs'
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -177,26 +185,36 @@ function checkBatch(donePath, draftPath) {
           .join(' ')
       )
       const now = words(page.blocks.map((b) => b.text).join(' '))
-      const drift = was === 0 ? 0 : (now - was) / was
-      const loud = Math.abs(drift) > 0.05
+      // Two thresholds, not one: the proportion decides what is reported and
+      // the word count decides what blocks. `scripts/lib/drift.mjs` says why,
+      // and it is a separate module so the rule can be tested without running
+      // the CLI.
+      const { drift, moved, reported, blocking } = driftVerdict(was, now)
+      const pct = `${(drift * 100).toFixed(1)}%`
       console.log(
-        `  leaf ${n}: ${was}w -> ${now}w (${(drift * 100).toFixed(1)}%) ` +
+        `  leaf ${n}: ${was}w -> ${now}w (${pct}) ` +
           `blocks ${draft.get(n).blocks.length}->${page.blocks.length} ` +
           `notes ${page.blocks.filter((b) => b.kind === 'footnote').length} ` +
-          `q ${(page.queries ?? []).length}${loud ? '   <<< drift' : ''}`
+          `q ${(page.queries ?? []).length}${reported ? '   <<< drift' : ''}`
       )
-      if (loud) {
-        // In words as well as per cent, because the two say different things
-        // and only one of them is actionable. Leaf 310 of *Isis Unveiled* moved
-        // 8.1% and that was nine words — a rule line OCR read as `me A TT Te`,
-        // rightly deleted, on a short leaf where nine words is a twelfth of it.
-        // The percentage is what catches a dropped paragraph; the count is what
-        // tells you in one glance that this is not one.
+      // In words as well as per cent, because the two say different things and
+      // only one of them is actionable. The percentage is what catches a
+      // dropped paragraph; the count is what tells you in one glance that this
+      // is not one.
+      const line =
+        `leaf ${n}: ${pct} word drift against the draft ` + `(${moved} words, ${was} to ${now})`
+      if (blocking) {
         problems.push(
-          `leaf ${n}: ${(drift * 100).toFixed(1)}% word drift against the draft ` +
-            `(${now - was} words, ${was} to ${now}) — a reader correcting a page does not ` +
-            'usually move it that far. Look before landing it.'
+          `${line} — a reader correcting a page does not usually move it that far. ` +
+            'Look before landing it.'
         )
+      } else if (reported) {
+        // Reported and not blocking. A short leaf scores a large percentage on
+        // a handful of words — lifting a running head into `furniture` moves
+        // four — and refusing a batch for that trains everyone to pass the
+        // flag. Silence would be worse than either, so it goes in the list a
+        // person reads before landing.
+        notes.push(`${line} — too few words to be a dropped passage, on a short leaf.`)
       }
     }
   }
