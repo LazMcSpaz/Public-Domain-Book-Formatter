@@ -814,9 +814,22 @@ function escapeRegExp(s: string): string {
  * note was filed under a mark the page never printed. Reading it off the text
  * is not a guess; it is the same act as reading it off the page.
  *
- * A bare digit is only a marker when something follows it that a number would
- * not — `1662 was the year` opens no note. Symbols need no such guard: no note
- * begins with a dagger by accident.
+ * A bare digit is only a marker when **punctuation** follows it. Whitespace is
+ * not enough, and that was measured the hard way: leaf 275 of *Isis Unveiled*
+ * carries the note `1 Kings, i. 1-4, 15.` under a printed `*`, and a rule that
+ * took "digit, then a space" read its marker as `1` — so `verifyPage` reported
+ * a contradiction that was not there, and a note with no declared field would
+ * have been filed under a mark the page never printed. `1 Kings`,
+ * `2 Corinthians` and `1 vol.` are all commoner at the head of a citation than
+ * a note numbered `1 ` with no point after it.
+ *
+ * What that costs is a note that really does print `1 See Croll` with no
+ * punctuation, which falls back to the `*` default — the behaviour before any
+ * of this existed. Worth it: this book prints no numbered notes at all (`*`,
+ * `†`, `‡`, `§`, `‖`, `¶` and their doubles, across 273 of them), so the rule
+ * only ever fires here on something that is not a marker.
+ *
+ * Symbols need no such guard: no note begins with a dagger by accident.
  */
 export function printedMarker(text: string): string | null {
   const trimmed = text.trim()
@@ -826,7 +839,7 @@ export function printedMarker(text: string): string | null {
   if (superscript) {
     return [...superscript[1]!].map((d) => String(SUPERSCRIPT_DIGITS.indexOf(d))).join('')
   }
-  const digits = /^(\d{1,3})(?:[.)\]:]|\s)/u.exec(trimmed)
+  const digits = /^(\d{1,3})[.)\]:]/u.exec(trimmed)
   return digits ? digits[1]! : null
 }
 

@@ -10,10 +10,23 @@ describe('the mark a note opens with', () => {
     expect(printedMarker('‡ Ibid.')).toBe('‡')
   })
 
-  it('reads a digit only when something follows it that a number would not', () => {
+  it('reads a digit only when punctuation follows it', () => {
     expect(printedMarker('1. See Croll, lib. ii.')).toBe('1')
     expect(printedMarker('12) Ibid.')).toBe('12')
     expect(printedMarker('1662 was the year of the plague')).toBeNull()
+  })
+
+  /**
+   * Whitespace after the digit is not enough, and this is why. Leaf 275 of
+   * *Isis Unveiled* carries the note `1 Kings, i. 1-4, 15.` under a printed
+   * `*`. Reading its marker as `1` made `verifyPage` report a contradiction
+   * that was not there — and a note with no declared field would have been
+   * filed under a mark the page never printed.
+   */
+  it('does not read the first word of a citation as a marker', () => {
+    expect(printedMarker('1 Kings, i. 1-4, 15.')).toBeNull()
+    expect(printedMarker('2 Corinthians xii.')).toBeNull()
+    expect(printedMarker('1 vol., Paris, 1855.')).toBeNull()
   })
 
   it('reads a superscript back to its digit', () => {
@@ -191,5 +204,27 @@ describe('a footnote that runs over onto the next leaf', () => {
     ])
     expect(doc.footnotes).toHaveLength(2)
     expect(doc.footnotes[1]!.originalMarker).toBe('†')
+  })
+})
+
+/**
+ * The real leaf the digit rule was tightened for.
+ */
+describe('a note that opens with the name of a book of the Bible', () => {
+  it('is not a contradiction', () => {
+    const found = verifyPage(
+      {
+        pageIndex: 275,
+        role: 'body',
+        furniture: {},
+        uncertain: [],
+        blocks: [
+          { kind: 'paragraph', text: 'the warmth of the young Abishag ; * and the medical' },
+          { kind: 'footnote', marker: '*', text: '1 Kings, i. 1-4, 15.' }
+        ]
+      },
+      [{ text: 'abishag', confidence: 95 }]
+    ).filter((f) => f.code === 'footnote-marker' || f.code === 'orphan-footnote')
+    expect(found).toEqual([])
   })
 })
