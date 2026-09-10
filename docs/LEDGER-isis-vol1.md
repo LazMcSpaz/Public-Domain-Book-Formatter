@@ -556,3 +556,59 @@ through as `fig`), and leaf 59 is a chapter opening that prints no head at all.
 
 **About 228 of the roughly 526 corrections made on this chapter — 43% — were
 decidable without eyes.** They were done by hand, in agents, at token cost.
+
+### Chapters VI and VII, and two rules the leaves corrected
+
+**A markerless footnote paragraph continues the note above it, wherever it
+sits.** The join was written narrow: only the _first_ note on a leaf could be a
+runover, on the reasoning that a markerless note with a note above it on the
+same leaf was some other thing. Leaf 216 was named in the code as the case
+nobody had looked at. Leaf 287 forced the look — it sets one `*` note in five
+paragraphs, the mark on the first, the body carrying exactly one reference — and
+under the narrow rule that one leaf produced one note and **four orphan `*`
+endnotes** at the back of the book, out of order and meaning nothing. Rendered
+and read, leaf 216 turns out to be the same shape: a third paragraph under its
+`†`, not a third note. The narrowness was caution rather than a finding.
+
+Scored across the 226 leaves read at the time: **284 notes, 10 markerless** — 5
+runovers the old rule already joined, and 5 later-on-leaf, every one of them on
+those two leaves. So widening the rule removes five orphans and creates no join
+anywhere else in the volume. It still errs toward reporting: `verifyPage` flags
+a note with no mark anywhere whether or not assembly joins it, so a reader who
+drops a marker by mistake is caught by the check rather than by silence.
+
+What this costs is honest and worth writing down: a `Footnote` holds one `text`,
+so a note of five printed paragraphs is set as one. The page indents each
+paragraph; the book will not. Ten continuation paragraphs across 284 notes is
+small enough to accept for now, and it is a layout feature — `breakNote` breaks
+the note once — rather than an assembly one.
+
+**The hyphen rule's abstention was vindicated, not faulted.** Leaf 289 came off
+the drafter as `Green- Will's`, and the render reads `Greenhill's` — OCR had
+misread `hill's` as `Will's`. The rule looked up `GreenWill's` and
+`Green-Will's`, found neither attested anywhere in the volume, declined to
+settle it, and left it character for character; the reader with the image fixed
+it. That is the rule doing exactly what it is for, and it leaves the
+**181 / 216 with 0 disagreements** figure above standing. Worth recording
+because the batch report described it as a compound the rule had got wrong, and
+it was not: the rule never ruled on it.
+
+### Six batches lost at one turn, and the advice that could not be taken
+
+The batch brief said "open your renders in one block", with a fallback: "if that
+request times out, open them in two smaller groups instead." The fallback was
+advice nobody could act on. The timeout does not come back as an error to
+recover from — it ends the reader where it stands, and the batch is lost whole.
+Both readers sent at leaves 242–248 and 249–255 died with the same last words:
+_"Now I'll open all seven renders in one block."_
+
+Six batches of this volume have now died at exactly that turn — three opening
+fourteen images, three opening seven — against successes at every size from six
+to fourteen. So it is not a size threshold, as an earlier note in this ledger
+came close to calling it. It is a risk that rises with the pixels in one
+request, and the only lever that lowers it is how many go up at once.
+
+The brief now says three at a time, always. The 30% figure the one-block rule
+was built on was measured against full leaf-by-leaf interleaving — fourteen
+turns for a fourteen-leaf batch; groups of three is four or five. A batch that
+has to be read again from nothing costs all of it.
