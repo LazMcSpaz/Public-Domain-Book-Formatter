@@ -290,6 +290,11 @@ see far**. That property is rebuilt on purpose:
   `structural` lines repeat verbatim on every leaf. Taking both out puts the
   draft at 80% of its size, and it is in context for every turn.
 - **Checkpoint every batch.** A session that dies loses one batch, not a book.
+  This is not hypothetical: on Chapter VI of _Isis Unveiled_ a batch died on an
+  API timeout just after opening its renders and before writing anything, so the
+  output path did not exist and the other two batches were untouched. Relaunch
+  it and say in the brief that nothing was written, so the reader starts from
+  the beginning rather than looking for a half-finished file.
 
 `scripts/batch.mjs` does all of the above from a drafted chapter — it splits it,
 writes the lean per-batch draft and a brief carrying the seam, the disputed
