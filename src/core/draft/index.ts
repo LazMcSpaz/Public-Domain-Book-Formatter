@@ -52,6 +52,8 @@ export interface DraftLine {
   right: number
 }
 
+import { healWrappedHyphens, tally, type HyphenVerdict, type Vocabulary } from './hyphens'
+
 export interface DraftBlock {
   kind: 'paragraph' | 'heading' | 'caption' | 'footnote'
   text: string
@@ -88,6 +90,14 @@ export interface DraftPage {
    * heads go into the body text with nothing to point at them.
    */
   structural: string[]
+  /**
+   * Every line-break hyphen on the leaf and what the book made of it.
+   *
+   * Empty when no vocabulary was supplied, which is not the same as "there were
+   * none" — `structural` says which of the two it is. The `unsettled` ones are
+   * the list worth a person's eyes and the only part of this that needs any.
+   */
+  hyphens: HyphenVerdict[]
 }
 
 export interface DraftOptions {
@@ -99,6 +109,16 @@ export interface DraftOptions {
    * flags a third of the page is a list nobody reads.
    */
   uncertainBelow?: number
+  /**
+   * The book's own words, for settling a line-break hyphen.
+   *
+   * Optional, and the behaviour without one is exactly what it was: count the
+   * breaks and say they are left alone, because the page genuinely cannot
+   * settle them. With one — recon has OCR'd every leaf whether or not it has
+   * been read, so the whole volume's vocabulary is free — `ad- vanced` and
+   * `thought- transference` stop being the same two marks. See `./hyphens`.
+   */
+  vocabulary?: Vocabulary
 }
 
 const DEFAULTS = { uncertainBelow: 60 }
@@ -923,6 +943,7 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
       blocks: [],
       uncertain: [],
       furniture: {},
+      hyphens: [],
       // Never an empty `structural`. A leaf with no words is either genuinely
       // blank or a leaf nothing read — a cache with no entry for it, an OCR
       // pass that failed, a page handed here by mistake — and the two are
@@ -1124,13 +1145,38 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
   // Not healed here, because the page cannot settle it: `counter-part` joins
   // and `thought-transference` must keep its hyphen. Counting them is the most
   // this can honestly do.
-  const wrapped = blocks.reduce((n, b) => n + [...b.text.matchAll(/\w+-\s+\w+/gu)].length, 0)
-  if (wrapped > 0) {
-    structural.push(
-      `${wrapped} line-break hyphen(s) are left as \`ad- vanced\`, and nothing downstream heals ` +
-        'them — hyphen healing runs at page seams only, so they print mid-line. Join the ones ' +
-        'that are one word and keep the hyphen on the ones that are two.'
-    )
+  //
+  // With a vocabulary the book settles most of them and this speaks for each
+  // outcome; without one the count is still said out loud, because a break left
+  // alone *prints* as `ad- vanced` and is invisible until a page is rendered.
+  const hyphens: HyphenVerdict[] = []
+  if (options.vocabulary) {
+    for (const block of blocks) {
+      const { text, verdicts } = healWrappedHyphens(block.text, options.vocabulary)
+      block.text = text
+      hyphens.push(...verdicts)
+    }
+    const counted = tally(hyphens)
+    if (hyphens.length > 0) {
+      structural.push(
+        `${hyphens.length} line-break hyphen(s): ${counted.join} joined and ${counted.keep} kept ` +
+          "on the book's own vocabulary, " +
+          (counted.unsettled === 0
+            ? 'none left over.'
+            : `${counted.unsettled} left as \`ad- vanced\` because the book attests both forms or ` +
+              'neither. Those are the ones to look at; the rest are a lookup, not a guess.')
+      )
+    }
+  } else {
+    const wrapped = blocks.reduce((n, b) => n + [...b.text.matchAll(/\w+-\s+\w+/gu)].length, 0)
+    if (wrapped > 0) {
+      structural.push(
+        `${wrapped} line-break hyphen(s) are left as \`ad- vanced\`, and nothing downstream heals ` +
+          'them — hyphen healing runs at page seams only, so they print mid-line. Join the ones ' +
+          'that are one word and keep the hyphen on the ones that are two. Hand `draft` the ' +
+          "book's vocabulary and most of them settle themselves."
+      )
+    }
   }
 
   structural.push('The role, and every block kind, is a guess. The words are what OCR read.')
@@ -1138,8 +1184,11 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
   return {
     role: guessRole(lines),
     blocks,
+    hyphens,
     uncertain: uncertainSpans(lines, uncertainBelow),
     furniture,
     structural
   }
 }
+
+export * from './hyphens'

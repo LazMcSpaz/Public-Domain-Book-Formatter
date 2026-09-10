@@ -2358,14 +2358,37 @@ async function serve() {
             dpi: recon.RECON_DPI,
             maxPages: null
           })
+          // The book's own vocabulary, which is what settles a line-break
+          // hyphen: `ad-`/`vanced` and `thought-`/`transference` are the same
+          // two marks on the page and different words in the book. Built here
+          // rather than passed in because the evidence is already on this
+          // device and weighing a chapter against itself is much weaker than
+          // weighing it against the volume — recon has OCR'd all of it whether
+          // or not any of it has been read.
+          //
+          // Leaves already transcribed go in first and matter more: they have
+          // been corrected against the pixels, where the cache is raw OCR. Both
+          // are used, because a book barely started has almost no transcription
+          // and would otherwise get no rule at all.
+          const run = await runStore.loadRun(newest.key)
+          const readAlready = (run?.transcriptions ?? []).flatMap((t) =>
+            (t.blocks ?? []).map((b) => b.text)
+          )
+          const vocabulary = cached
+            ? draftMod.buildVocabulary([...readAlready, cached.words.map((w) => w.text).join(' ')])
+            : null
           const draftOf = (pageIndex, words) => ({
             pageIndex,
             words: words.length,
-            ...draftMod.draftPage(words)
+            ...draftMod.draftPage(words, vocabulary ? { vocabulary } : {})
           })
           if (cached) {
             return {
               read: 'the cached reading',
+              // Said out loud: a draft weighed against 60,000 of the book's own
+              // words and one weighed against nothing are different drafts, and
+              // the second leaves every hyphen for a person.
+              vocabulary: vocabulary.size,
               pages: list.map((n) =>
                 draftOf(
                   n,
@@ -2406,12 +2429,25 @@ async function serve() {
       return {
         wrote: out,
         read: drafted.read,
+        // How much of the book the hyphen rule had to weigh against, said out
+        // loud: a draft settled on 60,000 of the book's own words and one
+        // settled on nothing are different drafts, and only one of them leaves
+        // every break for a person.
+        vocabulary: drafted.vocabulary ?? 'none — every line-break hyphen is left for a reader',
         leaves: drafted.pages.map((d) => ({
           pageIndex: d.pageIndex,
           role: d.role,
           blocks: d.blocks.length,
           words: d.words,
-          uncertain: d.uncertain.length
+          uncertain: d.uncertain.length,
+          // Named as three numbers rather than one: the ones left over are the
+          // only ones anybody has to look at, and burying them in a total is
+          // how a report stops being read.
+          hyphens: {
+            joined: d.hyphens.filter((h) => h.decision === 'join').length,
+            kept: d.hyphens.filter((h) => h.decision === 'keep').length,
+            unsettled: d.hyphens.filter((h) => h.decision === 'unsettled').length
+          }
         })),
         next: `Check each against \`leaf <n>\`, correct the text, then \`transcribe\`.`
       }

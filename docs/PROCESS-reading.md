@@ -103,14 +103,51 @@ module adds is the geometry OCR measured and was throwing away:
   than the measure**;
 - a short, detached, **body-sized** line at the head or foot taken as a running
   head or folio — size is what separates a running head from a display title;
-- consecutive low-confidence words gathered into `uncertain` spans.
+- consecutive low-confidence words gathered into `uncertain` spans;
+- **line-break hyphens settled against the book's own vocabulary** (`./hyphens`).
+
+**The hyphen rule, because it is most of the hand work.** A compositor breaking
+`advanced` sets `ad-` and `vanced`; a compositor breaking `thought-transference`
+sets `thought-` and `transference`. On the paper they are the same two marks, so
+`draft` used to count them and leave every one for a person — 217 in one chapter
+of _Isis Unveiled_, and invisible until a page is rendered, because both OCR
+engines break the lines in the same place and no second reader disagrees.
+
+The page cannot settle it. **The book can**: a volume that breaks `advanced`
+across a line has set the whole word somewhere in three hundred pages, and one
+that sets `thought-transference` sets it whole somewhere too. So
+
+- joined form attested, hyphenated not → **join**
+- hyphenated attested, joined not → **keep**
+- both, or neither → **unsettled**, left character for character and reported
+
+`drive.mjs draft` builds the vocabulary from every cached leaf of the volume
+plus every leaf already corrected, and says how many words that was. With no
+cache there is no vocabulary and the behaviour is exactly what it was — count
+them and say so.
+
+**Measured** on Chapter I of _Isis Unveiled_, against a vocabulary built from the
+655 leaves outside the chapter with no transcription in it (27,653 words —
+strictly less evidence than the shipped path gets): **181 of 216 settled, and
+all 181 match what a reader with the images landed. 0 disagreements.** The 35
+abstentions are the right ones: proper names the volume sets once, and OCR
+damage like `sev- ral` and `mytho- gical` that is not a word either way.
+
+This is not the forbidden thing. Nothing here is a reading and nothing here is
+a model: OCR read the characters, and whether a mark at a line end is a hyphen
+the word owns or one the measure imposed is a typographic join — exactly what
+`joinText` has always done unconditionally at page seams. This only stops that
+join being a guess, and it abstains rather than guessing, which is the property
+that makes an automatic rule safe to run at all.
 
 **Result.** A JSON array in the exact shape `transcribe` takes, plus per-leaf:
 
 - `role` — a guess, and the field most likely to be wrong;
 - `structural` — **what was guessed rather than measured**, in plain language,
   including the measurement behind every furniture decision. This is the
-  reading order for Stage 3, not a warning list to clear.
+  reading order for Stage 3, not a warning list to clear;
+- `hyphens` — every line-break hyphen and what the book made of it, with the
+  words that decided each. The `unsettled` ones are the only ones needing eyes.
 
 **Nothing believes a draft.** It is not saved anywhere, nothing downstream
 reads a draft file, and the only way its contents reach the store is by being
@@ -307,13 +344,19 @@ cannot settle; an inconsistency the book itself contains; anything where
    calls `deleteRun(key)` before writing the shelf's copy, as does `seed`. If
    the device holds work the book file does not, loading discards it silently.
    This has not been tested against a divergent pair and should be.
-1. **There is no channel for an editorial query.** This is invariant I10 and it
-   is currently unmet. `uncertain` means "could not read", which is the wrong
-   semantics; `Attention` is keyed to a page and is about revisiting a leaf,
-   not about a decision with a crop and a reading attached. Today a query
-   survives only by being mentioned in conversation, which is exactly the kind
-   of thing that gets lost. **The right shape is probably a file on the shelf a
-   person can read**, keyed to block and quote.
+1. ~~**There is no channel for an editorial query.**~~ **Closed.**
+   `src/core/queries` is that channel and it took the shape this gap predicted:
+   a query is attached to a leaf with its words and its reason and **no field
+   for a proposed fix**, and `queries.md` on the shelf is what a person reads.
+   The editor's answer comes back as a `Ruling` (`queries/rulings.ts`), which
+   _is_ allowed a corrected reading because a ruling is the answer, and
+   `rulings.md` is the record a session six months later reads instead of being
+   told from memory. `unapplied()` is the deterministic cross-check between what
+   the editor decided and what the book prints. **Run end to end on Chapter I of
+   _Isis Unveiled_: 14 raised, 12 ruled, 7 corrections landed, and the check
+   caught three of its own false alarms on the way** — it was reading
+   `doc.blocks` and calling that the book, which leaves out every footnote and
+   strips the markup. `bookText` is now the one rule for what counts as the book.
 2. **`draft` handles single-column matter only.** Two columns come back
    interleaved. It does not detect this and should.
 3. **A leaf OCR barely read produces a poor draft and says so only indirectly**
@@ -322,9 +365,18 @@ cannot settle; an inconsistency the book itself contains; anything where
 4. **`transcribe` sets `usage: 0` and `modelId: 'in-session'`.** Honest — no
    API was called — but it means the run carries no record of how a leaf was
    read.
-5. **Stage 5 has not been run at book scale.** Everything above Stage 4 is
-   proven on one real leaf and on fixtures. The batching, seam handling and
-   checkpointing are designed but not exercised over hundreds of leaves.
+5. **Stage 5 has been run at chapter scale, not book scale.** 38 leaves of
+   _Isis Unveiled_ Vol. I in 6 batched subagents: the batching, the seam tail
+   and the checkpointing all held, and `transcribe` merged every batch by
+   `pageIndex`. What that run measured is in `LEDGER-isis-vol1.md` and the
+   number to argue with before running the rest is there too — **968,799 tokens
+   for 37 leaves, about 26k a leaf**, which projects to roughly 17M for the
+   remaining 655. That is the case for Stage 2 doing more, not for more agents.
+   Two things the run found about the agents themselves: three of six claimed
+   evidence they did not have ("confirmed at 8×" while holding one flat 150-DPI
+   PNG) — the readings held up under spot-checks and the warrant did not — and
+   six `orphan-footnote` findings came from marks left in note text with no
+   `marker` field. Both are reasons the checks after a batch are not optional.
 6. **The recon cache is often absent** (it needs the keep-data answer), so
    verbs fall back to reading leaves afresh. Check that every fallback says
    which reading it used.
@@ -345,8 +397,19 @@ cannot settle; an inconsistency the book itself contains; anything where
 | The pixels overrule sense                        | `belleves` confirmed against `skeptical` at 600 DPI                                                   |
 | The suite is green                               | 1340 tests, 51 files; typecheck, lint and format clean                                                |
 
-**Not demonstrated:** Stages 5–9 end to end on a real book; the fact bank and
-annotation paths under the no-API model; anything at book scale.
+**Also demonstrated, on Chapter I of _Isis Unveiled_ Vol. I (38 leaves):**
+
+| Claim                                                      | Evidence                                                                                  |
+| ---------------------------------------------------------- | ----------------------------------------------------------------------------------------- |
+| Stage 5 batches, seams and checkpoints hold over a chapter | 6 subagents, 38 leaves, merged by `pageIndex`; `transcribed: 38`, `flagged: []`           |
+| Stage 9 has a channel that survives the session            | 14 queries raised, 12 ruled, `rulings.md` on the shelf                                    |
+| A ruling that has not landed is caught                     | `unapplied` reported 3 of 7 outstanding — and all 3 were the check's own fault, now fixed |
+| The book settles its own line-break hyphens                | 181 of 216, 0 disagreements, on the volume's OCR outside the chapter                      |
+| A book with no shelf token still reaches the shelf         | `save - <dir>/book.json` then `card <dir>`; `books/isis-vol1-vjj34f/` on the storage repo |
+
+**Not demonstrated:** Stages 7 and 8 (read for sense, adjudicate) on a real
+book; the fact bank and annotation paths under the no-API model; anything at
+whole-book scale.
 
 ---
 

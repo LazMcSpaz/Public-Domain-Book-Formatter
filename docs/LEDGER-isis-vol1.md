@@ -297,10 +297,25 @@ it looks plausible.
 
 | Rule                                                                                                              |                                      Settled | Disagreed | Abstained |
 | ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------: | --------: | --------: |
-| Heal a line-break hyphen when the joined form occurs elsewhere in the book, keep it when the hyphenated form does |                                **210 / 217** |     **0** |         7 |
+| Heal a line-break hyphen when the joined form occurs elsewhere in the book, keep it when the hyphenated form does |                                **181 / 216** |     **0** |        35 |
 | Accept a near-miss running head when its number equals the folio the volume's offset predicts                     |                                   **9 / 12** |     **0** |         3 |
 | Flag a folio that disagrees with the volume's offset                                                              |                                    **2 / 2** |         0 |         — |
 | Drop the printer's signature mark on every folio ≡ 1 (mod 16)                                                     | 2 / 2 in chapter, 3 / 3 predicted outside it |         0 |         — |
+
+**The hyphen figure is a correction of an earlier one in this ledger, which
+said 210 of 217 with 7 abstentions.** That number was measured with a
+vocabulary that included the chapter's own corrected transcriptions — so the
+readers' decisions were in the evidence, and the rule was largely agreeing with
+itself. The figure above is measured the other way: the vocabulary is the
+volume's OCR from the 655 leaves **outside** this chapter and no transcription
+at all, 27,653 words. On that evidence the rule settles 181 of 216 candidates
+and **every one of the 181 matches what a reader with the images landed**; the
+35 it abstains on are left character for character.
+
+That is a floor, not the shipped behaviour: `drive.mjs draft` weighs a leaf
+against every cached leaf of the volume _and_ every leaf already corrected,
+which on this book is 28,647 words and settles more — `Carpen- ter's` is
+unsettled on the strict vocabulary and joined on the real one.
 
 The offset is not assumed: it is voted by the leaves whose furniture the draft
 took confidently — 24 of 26 agree on `leaf = folio + 58` in pageIndex terms —

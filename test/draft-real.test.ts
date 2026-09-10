@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { draftPage, type DraftWord } from '@core/draft'
+import { buildVocabulary, draftPage, type DraftWord } from '@core/draft'
 
 /**
  * The draft module, against word boxes measured off real scans.
@@ -378,5 +378,85 @@ describe('a furniture line declined by a hair says so', () => {
     const said = draft.structural.find((s) => s.includes('BARRACHIAS'))
     expect(said, 'the decline was silent').toBeDefined()
     expect(said).toMatch(/close, so check the render/u)
+  })
+})
+
+/**
+ * The line-break hyphen, on leaves that really carry them.
+ *
+ * `draft` used to count these and leave them: 217 in one chapter of this
+ * volume, every one a hand correction, and every one invisible until a page was
+ * rendered because both OCR engines break the lines in the same place. The page
+ * cannot settle `ad-`/`vanced` against `thought-`/`transference`; the book can,
+ * and these fixtures carry both kinds plus the third — OCR damage that is not a
+ * word at all and must be left alone.
+ *
+ * The vocabulary is built from the fixtures' own OCR (which credits no joined
+ * form, by construction) plus the whole words being attested, one at a time, so
+ * each assertion names the evidence it turns on.
+ */
+describe('the book settles a line-break hyphen the page cannot', () => {
+  const isis = fixtures.find((f) => f.name.includes('isis'))!
+  const leafAt = (pageIndex: number) => isis.fixture.leaves.find((l) => l.pageIndex === pageIndex)!
+  const ocrOf = (pageIndex: number) =>
+    leafAt(pageIndex)
+      .words.map(([t]) => t)
+      .join(' ')
+  const draftOf = (pageIndex: number, attested: string[]) =>
+    draftPage(toWords(leafAt(pageIndex).words), {
+      vocabulary: buildVocabulary([ocrOf(pageIndex), attested.join(' ')])
+    })
+
+  it('joins a word the book sets whole somewhere else', () => {
+    const text = draftOf(91, ['immensely', 'Alexandria'])
+      .blocks.map((b) => b.text)
+      .join(' ')
+    expect(text).toContain('immensely')
+    expect(text).toContain('Alexandria')
+    expect(text).not.toContain('im- mensely')
+  })
+
+  /**
+   * The case that makes an unconditional join wrong, and the reason assembly's
+   * seam healing — which always strips the hyphen — is a guess.
+   */
+  it('keeps the hyphen on a compound the book sets hyphenated', () => {
+    const drafted = draftOf(650, ['World-Mountain'])
+    const text = drafted.blocks.map((b) => b.text).join(' ')
+    expect(text).toContain('World-Mountain')
+    expect(drafted.hyphens.find((h) => h.left === 'World')?.decision).toBe('keep')
+  })
+
+  /**
+   * `sev- ral` and `mytho- gical` are OCR damage: neither half joins to a word
+   * this book contains. Guessing them would be exactly the confident invention
+   * the propose/accept rule exists to stop, and they are left character for
+   * character so a reader still sees the break.
+   */
+  it('leaves OCR damage alone, and says it did', () => {
+    const drafted = draftOf(91, ['immensely', 'Alexandria'])
+    const text = drafted.blocks.map((b) => b.text).join(' ')
+    expect(text).toContain('sev- ral')
+    expect(text).toContain('mytho- gical')
+    expect(drafted.hyphens.filter((h) => h.decision === 'unsettled').length).toBeGreaterThan(1)
+    expect(drafted.structural.join(' ')).toMatch(/left as `ad- vanced`/)
+  })
+
+  /** `P- 97` is a page reference. A figure is never half of a broken word. */
+  it('never treats a hyphen before a figure as a break', () => {
+    const drafted = draftOf(91, ['immensely'])
+    expect(drafted.hyphens.some((h) => h.right === '97')).toBe(false)
+  })
+
+  /**
+   * Without a vocabulary the behaviour is exactly what it was — count them and
+   * say so. A book barely started has nothing to weigh against, and a rule that
+   * quietly did less evidence than it claimed would be worse than no rule.
+   */
+  it('changes nothing when it is given no vocabulary, and says why', () => {
+    const drafted = draftPage(toWords(leafAt(91).words))
+    expect(drafted.hyphens).toEqual([])
+    expect(drafted.blocks.map((b) => b.text).join(' ')).toContain('im- mensely')
+    expect(drafted.structural.join(' ')).toMatch(/line-break hyphen\(s\) are left/)
   })
 })
