@@ -462,10 +462,33 @@ node scripts/drive.mjs sweep --was "belleves" --now "believes"   # fix them all,
 node scripts/drive.mjs runs          # readings held here; `runs drop <n>` removes one
 node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` work it
 
+node scripts/drive.mjs figures f.md   # every picture the reading already found,
+                                     #   leaf by leaf — a shortlist, not a check
+node scripts/contact-sheets.mjs <renders> <out>  # the whole book, small, many to
+                                     #   a sheet: the only thing that answers
+                                     #   "is there a picture we have missed?"
+
 node scripts/book-files.mjs <book-dir> --check   # do the readable files still
                                      #   describe the book? regenerates them
                                      #   without --check
 ```
+
+**Ask a book whether it has pictures, once, rather than hoping a reader looks
+up.** `detectIllustrations` runs over every leaf during recon and its candidates
+sit in the recon cache; until `figures` existed nothing could read them, so on
+_Isis Unveiled_ Vol. I a plate reached the book only when a reader happened to
+notice one, and five hundred leaves went by without the question being put.
+
+Neither automatic signal is a check, and both were scored rather than trusted.
+The ink test finds 1 of that volume's 3 plates; a scan for the OCR junk a plate
+leaves behind finds 2 of 3. The miss is structural — `detectRegions` wants a
+rectangle with no _words_ in it, and a figure with text run around it has words
+on every side. Leaf 193 is exactly that and escapes both.
+
+What does work is looking: 628 leaves tiled into 18 sheets, where a shape among
+even grey columns is unmistakable. Be honest about its reach — a half-page
+figure survives the reduction and a two-line diagram may not, so a clean sweep
+is a floor rather than a census.
 
 **Reading a leaf is `draft` → look → correct → `transcribe`.** Never type a leaf
 out from the render: that is the generative act the whole design avoids, and a
