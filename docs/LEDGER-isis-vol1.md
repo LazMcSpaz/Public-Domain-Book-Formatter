@@ -157,25 +157,136 @@ batches. That is the number to argue with before running it.
 
 ## Still open
 
-- 14 editorial queries, waiting on the editor; `queries.md` on the shelf.
+- **2** editorial queries waiting on the editor, of the 14 raised: the Gibbon
+  note that closes on a comma (70), and the comma set where a full stop is
+  expected between two sentences (86). The other twelve are ruled;
+  `rulings.md` on the shelf is the record.
 - 13 `uncertain` spans left deliberately, each with a reason on the leaf.
-- The book has not been saved to the shelf, so this reading exists only in the
-  container's IndexedDB.
+- The figure on leaf 67 prints without the rule the compositor set under it.
+  See **The underscored figure**, below.
 
 ## The editor's rulings on Chapter I
 
-| Query                                                                                                              | Ruling                                                                                                                     |
-| ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
-| `Nothwithstanding` (63), `PYTHOGOREAN` (65), `Schleirmacher`/`Stalbaüm` (66), `Northen` (89), `helicocentric` (89) | Editor agrees these are compositor's slips. **The remedy is not yet stated** — see below.                                  |
-| `symbolology` (95)                                                                                                 | **Leave as printed**, and note it. Watch for the form recurring elsewhere in the volume before treating it as a slip.      |
-| `con sideration` (84)                                                                                              | **One word.** The division hyphen is taken to have faded; join it.                                                         |
-| `nature : the one active ;` (70)                                                                                   | The semicolon is **taken as a comma**, matching the pointing of the second half of the same construction.                  |
-| `practiced` / `practised` (76)                                                                                     | **No change.** Record occurrences as the volume is read; if the book is consistent with itself there is nothing to decide. |
-| `Terra legit carnem` (95), Felt's prospectus (80)                                                                  | **Keep as printed.** Not enough to rule on.                                                                                |
+Twelve of the fourteen queries are settled and recorded on the run itself, so a
+session six months from now reads them rather than being told from memory. The
+sheet is `rulings.md` beside the book; this is the summary.
 
-The five misspellings are recorded as slips but **no remedy has been applied**:
-"carry as printed", "mend silently" and "mend with a note" are three different
-editions and the ruling has to name one. Nothing is changed until it does.
+**Set right** — seven corrections, applied as ordinary `text` edits and verified
+by the deterministic check (`unapplied`) that compares what the editor decided
+against what the book prints:
+
+| Leaf | As printed                  | Reads                         |
+| ---- | --------------------------- | ----------------------------- |
+| 63   | `Nothwithstanding`          | `Notwithstanding`             |
+| 66   | `Stalbaüm`, `Schleirmacher` | `Stallbaum`, `Schleiermacher` |
+| 67   | `sacred number 4 the most`  | `sacred number 4, the most`   |
+| 70   | `the one active ; or male`  | `the one active, or male`     |
+| 84   | `take in con sideration`    | `take in consideration`       |
+| 89   | `the Northen Hemisphere`    | `the Northern Hemisphere`     |
+| 89   | `helicocentric system`      | `heliocentric system`         |
+
+The two on leaf 89 are inside footnote `fn48`, which is worth saying because it
+is what found a fault in the check — see below.
+
+**Kept as printed** — five, four of them spots and one standing:
+
+| Leaf       | Words                       | Why                                                                                  |
+| ---------- | --------------------------- | ------------------------------------------------------------------------------------ |
+| 65         | `THE PYTHOGOREAN NUMERALS.` | See below: it cannot print, and mending it would break a check.                      |
+| 95         | `symbolology`               | Both forms were in print in 1877. Kept and watched; a recurrence makes it standing.  |
+| 95         | `Terra legit carnem …`      | Not enough is settled about the couplet to depart from the sheet.                    |
+| 80         | Felt's prospectus           | It may be Felt's own circular quoted verbatim.                                       |
+| _standing_ | `practiced` / `practised`   | Both were current. The edition follows the sheet word by word; tracked, not imposed. |
+
+### The running head that could not have printed
+
+The query on leaf 65 said reproducing `PYTHOGOREAN` "will look to a reader like
+our own misspelling". That was wrong, and it was wrong in the direction that
+costs something: the editor ruled on a premise the code does not support.
+
+`runningHeadText` (`layout/paginate.ts`) takes a head from the edition title, the
+author, or `page.chapterTitle`. It has never read `furniture.runningHead`. The
+scanned head is a **record of the sheet** and a witness for the OCR cross-check —
+`checkableText` counts it as transcribed so a leaf is not flagged for words OCR
+found — so mending it would print nothing different and would make that check
+disagree with the paper. Kept as printed, and the reason is on the ruling.
+
+The lesson is narrow and worth keeping: a query has to say what the reader will
+actually see, and "will look to a reader like…" is a claim about the engine that
+can be checked before it is written.
+
+### The underscored figure on leaf 67
+
+The editor asked whether the treatment the compositor gave the `4` could be kept
+without the line spacing coming out wrong. Measured off the pixels rather than
+described from the render:
+
+| Measured on the 300-DPI leaf                     | The `4` | The page's own folio `9` | Body roman `t` |
+| ------------------------------------------------ | ------: | -----------------------: | -------------: |
+| Median dark run across the glyph (stroke weight) |     4.0 |                      4.0 |            2.0 |
+| Box height                                       |    32.8 |                     29.8 |           20.8 |
+
+So the figure is **not display type**. It is a text figure at body size in the
+fount's own weight — identical to the folio, which nobody would call display —
+and it reads heavy beside `number` only because figures in this face are twice
+the stroke of the lowercase. Its box (y 1264–1297) is the same vertical extent
+as `by` (1264–1298) and `replaced` (1263–1298) on the same line.
+
+What is actually distinctive is a **rule under it**: about 4 px thick and 20 px
+wide, centred under the numeral, sitting 3–6 px below the baseline, inked as
+solid as the type, and inside the figure's own OCR box — which is why Tesseract
+read the whole thing as `4` at 86%.
+
+**So the line spacing is not the obstacle, and would not have been.** The trap
+CLAUDE.md records — "the slot grid is one _body_ leading, anything set larger
+occupies several slots" — is about a **block** set larger, a title or a
+subtitle. Inside a paragraph the engine has exactly one mechanism for a span set
+differently from its host: `Attachment` (`layout/break-lines.ts`), which carries
+its own `sizePt` and `risePt`, is measured at its own size so the breaker gets
+the line length right, and touches the slot grid not at all. A footnote's
+reference mark rides it today. An inline run at body size costs nothing in
+spacing, and the paper is at body size.
+
+The obstacle is a different one and should be recorded as itself: **the book has
+no underline.** `<i>` and `<b>` are the whole inline notation, and `<b>` in EB
+Garamond draws a real bold — which would print a lie about a figure that is not
+bold. Adding a third inline kind is the same shape of change `strong` was: 28
+files, 101 references, through parsing, seam-carry, retype, splice, the breaker,
+`drawPage`, the reading column and the sweep. Worth doing when a book needs it;
+not worth doing for one numeral.
+
+**The figure therefore prints plain, and the rule is recorded here rather than
+silently dropped.** The comma the editor approved is in.
+
+### What applying the rulings found
+
+`unapplied` is the deterministic cross-check between what the editor decided and
+what the book prints — the one thing standing between "we agreed to fix that"
+and a book that quietly keeps the error. Applying these twelve rulings ran it
+for the first time on a book with rulings in it, and **three of the seven
+corrections came back as outstanding after they had landed**.
+
+None of them was a bad correction. The check's one caller handed it
+`doc.blocks.map((b) => b.text)` and called that the book, which it is not:
+assembly pulls footnotes out of the block flow (so both leaf-89 corrections were
+invisible), divisions the editor wrote are not blocks, and a block's `text` has
+its emphasis stripped out into word indices (so the leaf-67 correction, which
+carries an `<i>`, could not be found at all).
+
+Fixed by putting the rule for what counts as the book in one place —
+`bookText` in `@core/assemble` — and making `unapplied` take the document rather
+than a string, so no caller gets to decide. The three tests were run against the
+reinstated bug and fail. This is the `deriveChapters` shape again: a second copy
+of a rule agrees with the first until the day it doesn't.
+
+One thing it left behind, worth someone's attention rather than a fix here: a
+query raised through `drive.mjs query` is refused unless its words are on the
+leaf, while a query arriving inside a transcription reply is not checked at all.
+The leaf-67 query's quote was written in a notation the book never uses
+(`<i>Tetractys</i>.` against the book's `<i>Tetractys.</i>`), which is how the
+first ruling on it was recorded unfindable. A query nobody can look up is worse
+than none — the driver's own words — and `parsePageTranscription` has the page's
+blocks in hand when it accepts one.
 
 ## What of this chapter's reading was deterministic
 

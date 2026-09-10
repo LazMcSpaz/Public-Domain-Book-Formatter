@@ -2127,6 +2127,62 @@ async function serve() {
     },
 
     /**
+     * Write the rest of a shelf directory beside a `book.json` already saved
+     * there — the catalogue card and the two editorial sheets.
+     *
+     * `shelf push` needs a token in the browser, and a token must never travel
+     * through this driver. A session working in a container therefore puts a
+     * book up the other way: `save - <shelf>/books/<slug>/book.json` writes the
+     * book and its pictures, and this writes the three files that go beside it.
+     *
+     * Everything here comes out of the app's own functions — `catalogueCard`,
+     * `editorialSheets`, and `sync`'s path rules — because a shelf whose
+     * directories were written two ways would list the same book differently
+     * depending on which door it went up through. The card is built from the
+     * `book.json` **on disk** rather than from the run in this browser, so it
+     * cannot describe a file that is not there.
+     */
+    card: async ([dir]) => {
+      if (!dir) throw new Error('card <shelf-book-directory>')
+      const { readFile, writeFile } = await import('node:fs/promises')
+      const where = resolve(REPO, dir)
+      const json = await readFile(resolve(where, 'book.json'), 'utf8')
+      const built = await page.evaluate(
+        async ([repo, json]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const shelfSave = await import(`/@fs${repo}/src/platform/browser/shelf-save.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const parsed = project.parseBookFile(json)
+          const key = parsed.run.key
+          const run = await runStore.loadRun(key)
+          if (!run) {
+            throw new Error(
+              `That book file is filed under a key this browser has no run for (${key}). ` +
+                'The sheets are built from the run, so nothing was written.'
+            )
+          }
+          return {
+            card: shelfSave.catalogueCard(key, json, parsed.scan?.path ?? null),
+            sheets: shelfSave.editorialSheets(run)
+          }
+        },
+        [REPO, json]
+      )
+      const wrote = []
+      await writeFile(resolve(where, 'about.json'), `${JSON.stringify(built.card, null, 1)}\n`)
+      wrote.push('about.json')
+      for (const [name, text] of [
+        ['queries.md', built.sheets.queries],
+        ['rulings.md', built.sheets.rulings]
+      ]) {
+        if (!text) continue
+        await writeFile(resolve(where, name), text.endsWith('\n') ? text : `${text}\n`)
+        wrote.push(name)
+      }
+      return { directory: where, wrote, card: built.card }
+    },
+
+    /**
      * Our reading of every leaf set beside somebody else's, and the places
      * the two could not agree.
      *
