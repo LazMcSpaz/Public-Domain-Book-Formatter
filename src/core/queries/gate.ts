@@ -21,10 +21,22 @@
  * that reason. A screen that arrived with one of the assistant's options
  * already filled in would hand back through the UI what the schema refuses.
  *
- * `ChoiceQuestion.defaultValue` is therefore left undefined here and the
- * question is `required`, so `defaultAnswers` seeds nothing and the step cannot
- * be completed until a person has chosen. It costs a tap per query. The editor
- * ruled on it directly rather than it being inferred.
+ * `ChoiceQuestion.defaultValue` is therefore left undefined here, so
+ * `defaultAnswers` seeds nothing and no answer exists until a person makes one.
+ * The editor ruled on it directly rather than it being inferred.
+ *
+ * ## And nothing is `required`, which is the other half of the same promise
+ *
+ * The first version marked the decision `required`, meaning to say "you must
+ * choose before this counts". What `required` actually governs is the *step*:
+ * seventy-nine required questions is a gate that cannot be left until all
+ * seventy-nine are settled, which is the exact opposite of the partial work
+ * this gate exists to keep. A query the editor wants to think about must be
+ * skippable.
+ *
+ * Skipping is safe because `rulingsFromAnswers` files nothing for a query with
+ * no decision: an untouched screen leaves the query outstanding, which is true,
+ * and it will be waiting at this gate the next time.
  *
  * What the assistant *may* do is say why the question is hard, which is what
  * the query's own `why` already carries, and offer a wording for a correction —
@@ -122,8 +134,9 @@ export function queryQuestions(
         label: d.label,
         description: d.description
       })),
-      // No `defaultValue`. See the note at the top of this file.
-      required: true,
+      // No `defaultValue`, and not `required`. See the note at the top of
+      // this file: nothing is chosen for the editor, and a query they want to
+      // think about can be left and will be waiting here next time.
       group: key
     }
     const correction: Question = {

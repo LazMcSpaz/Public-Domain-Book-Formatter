@@ -28,6 +28,7 @@ import { TYPICAL_FLAG_RATE, estimateAdjudicationCost } from '@core/adjudicate'
 import type { BookDocument } from '@core/assemble'
 import { defaultVoice, type EditorVoice } from '@core/annotate'
 import type { AdjudicatedSpot } from '@core/adjudicate'
+import { outstanding, queryKey, queryQuestions, type RaisedQuery, type Ruling } from '@core/queries'
 import {
   BODY_FONTS,
   fontForPeriod,
@@ -45,7 +46,7 @@ import {
 } from '@core/style'
 import type { StyleProfile } from '@core/model'
 import { bookWordCount, seamCount } from '@core/assemble'
-import type { Answers, PageEditRow, Question, TermRow } from './questions'
+import type { Answers, Evidence, PageEditRow, Question, TermRow } from './questions'
 
 export type StepId =
   | 'intake'
@@ -54,6 +55,7 @@ export type StepId =
   | 'transcribe'
   | 'gate-uncertainties'
   | 'gate-structure'
+  | 'gate-queries'
   | 'proof'
   | 'annotate'
   | 'design'
@@ -202,6 +204,24 @@ export interface WizardState {
    */
   pageText: Record<number, string>
   /**
+   * The queries the reading raised, and what the editor has already ruled.
+   *
+   * Both, because the gate shows what is *outstanding* and that is a function
+   * of the two — the same `outstanding()` the Markdown sheet uses, so a query
+   * cannot be waiting on one and settled on the other.
+   */
+  queries: RaisedQuery[]
+  rulings: Ruling[]
+  /**
+   * A crop of the leaf a query sits on, by query key.
+   *
+   * A `ref` the shell resolves, never an object URL, and cut only for the
+   * queries actually on screen: a `blob:` that resolves to nothing outside the
+   * tab that minted it looks exactly like evidence, and rendering six hundred
+   * leaves to open one gate is a minute of nothing.
+   */
+  queryCropFor?: (key: string) => string | undefined
+  /**
    * Text OCR read that the transcription does not have, per page.
    *
    * The gate used to report a *count* of missing words and offer one remedy
@@ -298,6 +318,8 @@ export function initialState(): WizardState {
     voice: defaultVoice(),
     notesCheckpoint: null,
     harvestInterest: '',
+    queries: [],
+    rulings: [],
     answers: {},
     completed: []
   }
@@ -1245,6 +1267,42 @@ const gateStructure: Step = {
  * correction re-lays the book out for free, so the page count the design gate
  * previews is the corrected book's.
  */
+/**
+ * The queries, one at a time, with the pixels beside each.
+ *
+ * A query is raised and never taken, and a ruling is the answer. Between them
+ * there was only a Markdown sheet on the shelf: the editor read it, decided,
+ * and then had to get the decision back into the book through a chat session.
+ * Seventy-nine of those is an evening of dictation, and a decision that never
+ * makes the trip is a book that keeps an error its editor settled weeks ago.
+ *
+ * It sits before the proof step because a query is about what the *book* says,
+ * and proofing text whose readings are still in question is work done twice.
+ *
+ * A gate with nothing waiting asks nothing and is walked through, which is the
+ * ordinary behaviour of every gate here — a book whose queries are all ruled
+ * on, or that raised none, should not be stopped to be told so.
+ */
+const gateQueries: Step = {
+  id: 'gate-queries',
+  title: 'Decisions waiting on you',
+  blurb:
+    'Places where the book is unclear, contradicts itself, or where being faithful ' +
+    'and being correct pull apart. Each one is yours to settle, with the leaf beside it.',
+  isGate: true,
+  canEnter: (s) => s.completed.includes('gate-structure') && s.document !== null,
+  questions: (s) =>
+    queryQuestions(s.queries, s.rulings, {
+      crops: Object.fromEntries(
+        outstanding(s.queries, s.rulings).flatMap((q) => {
+          const key = queryKey(q)
+          const src = s.queryCropFor?.(key)
+          return src ? [[key, { kind: 'image', src, alt: `Leaf ${q.pageIndex}` } as Evidence]] : []
+        })
+      )
+    })
+}
+
 const proof: Step = {
   id: 'proof',
   title: 'Read it through',
@@ -1252,7 +1310,7 @@ const proof: Step = {
     'The book, before it is worth choosing a typeface for. Read it through and mark ' +
     'what wants a note, edit the prose, or set any leaf beside the scan it came from.',
   isGate: true,
-  canEnter: (s) => s.completed.includes('gate-structure') && s.document !== null,
+  canEnter: (s) => s.completed.includes('gate-queries') && s.document !== null,
   questions: () => []
 }
 
@@ -2102,6 +2160,7 @@ export const STEPS: readonly Step[] = [
   transcribe,
   gateUncertainties,
   gateStructure,
+  gateQueries,
   proof,
   annotate,
   design,

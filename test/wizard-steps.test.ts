@@ -792,8 +792,16 @@ describe('the proof step', () => {
       }
     ])
 
-  it('is where the flow lands once the structure is confirmed', () => {
-    expect(activeStep(afterStructure(doc())).id).toBe('proof')
+  /**
+   * The query gate now stands between the two, so the flow lands there first
+   * and reaches the proof step once it has been walked. A query is about what
+   * the *book* says, and proofing text whose readings are still in question is
+   * work done twice — which is the whole reason it sits where it does.
+   */
+  it('is where the flow lands once the queries have been walked', () => {
+    expect(activeStep(afterStructure(doc())).id).toBe('gate-queries')
+    const past = afterStructure(doc())
+    expect(activeStep({ ...past, completed: [...past.completed, 'gate-queries'] }).id).toBe('proof')
   })
 
   it('asks nothing — proofreading is a workbench, not a question', () => {
@@ -804,8 +812,12 @@ describe('the proof step', () => {
   })
 
   it('does not open before there is a book to read', () => {
-    expect(stepById('proof').canEnter(afterStructure(null))).toBe(false)
-    expect(stepById('proof').canEnter(afterStructure(doc()))).toBe(true)
+    const walked = (d: WizardState['document']): WizardState => {
+      const s = afterStructure(d)
+      return { ...s, completed: [...s.completed, 'gate-queries'] }
+    }
+    expect(stepById('proof').canEnter(walked(null))).toBe(false)
+    expect(stepById('proof').canEnter(walked(doc()))).toBe(true)
   })
 
   it('comes before the design gate, so the text is right before it is dressed', () => {

@@ -46,8 +46,20 @@ export interface DeepLink {
  * person for a person, and a URL that has to be spelled with the step
  * machine's internal id is a URL nobody will write by hand.
  */
+/**
+ * Short names a person can type, and the one that moved.
+ *
+ * `review` pointed at `gate-uncertainties` — the gate that asks whether a
+ * *transcription* is good enough to keep — because when the alias was written
+ * that was the only place a decision waited. `drive.mjs link review` is
+ * documented as "a URL that opens this book where decisions wait", and the
+ * decisions that actually wait on the editor are the queries. So it points
+ * there, and the transcription gate keeps its own name.
+ */
 const ALIASES: Record<string, StepId> = {
-  review: 'gate-uncertainties',
+  review: 'gate-queries',
+  queries: 'gate-queries',
+  uncertainties: 'gate-uncertainties',
   proof: 'proof',
   structure: 'gate-structure',
   identity: 'gate-identity'

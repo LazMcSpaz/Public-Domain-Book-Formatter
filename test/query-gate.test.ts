@@ -38,17 +38,26 @@ describe('the queries, as a gate', () => {
    * because a suggestion beside a question is an answer in all but name and
    * `EditorialQuery` is forbidden a proposed fix for that exact reason.
    *
-   * The test is not "the default is empty" but "nothing is seeded and the step
-   * will not close" — a default of `''` would seed an answer, and `required`
-   * would then be satisfied by a blank string on some future reading of it.
+   * The test is "nothing is seeded", not "the default is empty": a default of
+   * `''` would seed an answer, and an answer that exists is one a later reader
+   * of the state cannot tell from a decision.
    */
-  it('chooses nothing for the editor, and will not let the step close until they do', () => {
+  it('chooses nothing for the editor', () => {
     const qs = queryQuestions([query()], [])
-    const seeded = defaultAnswers(qs)
     const key = queryKey(query())
-    expect(seeded[`${key}-decision`]).toBeUndefined()
-    expect(missingRequired(qs, seeded)).toEqual([`${key}-decision`])
-    expect(missingRequired(qs, { ...seeded, [`${key}-decision`]: 'as-printed' })).toEqual([])
+    expect(defaultAnswers(qs)[`${key}-decision`]).toBeUndefined()
+  })
+
+  /**
+   * The other half of the same promise, and a trap the first version walked
+   * into. Marking the decision `required` reads as "you must choose before this
+   * counts"; what it governs is the *step*, so seventy-nine required questions
+   * is a gate that cannot be left until all seventy-nine are settled — the
+   * exact opposite of the partial work this gate exists to keep.
+   */
+  it('lets the editor leave one undecided and come back to it', () => {
+    const qs = queryQuestions([query(), query({ pageIndex: 99, quote: 'another' })], [])
+    expect(missingRequired(qs, defaultAnswers(qs))).toEqual([])
   })
 
   /** A wording may be offered, but only as text to type over. */
