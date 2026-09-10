@@ -895,10 +895,19 @@ function takeFurniture(
 
     const tallest = Math.max(...line.words.map((w) => w.bbox.y1 - w.bbox.y0))
     if (!folioAtMargin && tallest > bodyHeight * DISPLAY_HEIGHT) {
-      say(
-        `it is set larger than the body (${Math.round(tallest)} against ${Math.round(bodyHeight)}), so it is display type`
+      if (!corroborated) {
+        say(
+          `it is set larger than the body (${Math.round(tallest)} against ${Math.round(bodyHeight)}), so it is display type`
+        )
+        return
+      }
+      // A running head measures as display type when one speck on the line is
+      // tall: leaf 202 of this volume reads `: 144 THE VEIL OF ISIS.`, and the
+      // stray colon — a mark of dirt, not type — put the line at 39 against a
+      // 27-pixel body. The folio is the better evidence and it is exact.
+      rescue(
+        `it measures ${Math.round(tallest)} against a ${Math.round(bodyHeight)} body, which reads as display type`
       )
-      return
     }
 
     if (NUMBER_LINE.test(text)) {

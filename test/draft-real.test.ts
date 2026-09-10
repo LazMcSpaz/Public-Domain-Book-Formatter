@@ -501,6 +501,18 @@ describe('the volume’s numbering settles the furniture a leaf cannot', () => {
     expect(guided.structural.join(' ')).toMatch(/taken anyway/)
   })
 
+  /**
+   * Leaf 202: `: 144 THE VEIL OF ISIS.` — a speck of dirt read as a colon puts
+   * the line at 39 pixels against a 27-pixel body, so it measures as display
+   * type. The folio it carries is the better evidence and it is exact.
+   */
+  it('rescues a head that measures as display type but carries the folio', () => {
+    expect(drafted(202).furniture.runningHead).toBeUndefined()
+    const guided = drafted(202, 144)
+    expect(guided.furniture.runningHead).toContain('THE VEIL OF ISIS.')
+    expect(guided.furniture.folio).toBe('144')
+  })
+
   /** Leaf 109: the head runs to 73% of the measure and its `51` reads `5I`. */
   it('rescues a head too wide for the width test, and takes the folio off it', () => {
     expect(drafted(109).furniture.runningHead).toBeUndefined()

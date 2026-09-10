@@ -284,6 +284,19 @@ The first driver command after a restart often dies with `Target page,
 context or browser has been closed` — retry it. And `pkill -f vite` matches
 the shell running it, so kill from a detached script or by pid.
 
+**"Restart" means kill vite, not check whether the port answers.** A restart
+script that starts vite only when :5173 is silent never restarts it at all, so
+the process that came up at the start of a session is still serving hours
+later — with an **in-memory transform cache** holding every module as it was
+before each `src/core` edit since. Measured: `curl` on the canonical
+`/@fs/…/draft/index.ts` came back without a function that had been on disk,
+committed, and green under `npm test` for an hour, while the same URL with
+`?v=<timestamp>` came back with it. A whole chapter was drafted by the old
+code and looked entirely fine, because a draft is only ever an input to a
+reader who checks it against the render. The cache-busting parameter is also
+the cheap way to tell this apart from a real bug: **if the plain URL and the
+busted URL disagree, the code is right and the server is stale.**
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what
