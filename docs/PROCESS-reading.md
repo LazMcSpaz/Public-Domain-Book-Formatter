@@ -281,12 +281,17 @@ see far**. That property is rebuilt on purpose:
   a leaf, opens the next and writes again pays for the first render eleven more
   times.
 - **Eight is a ceiling, and it is also measured.** **Fourteen images in a single
-  tool block times the request out.** Two batches of fourteen died at exactly
-  that point on one chapter — each having read its brief, its draft and nothing
-  else — while a third of the same size survived, so fourteen is marginal and
-  eight is the size that has never failed. Two blocks of eight still costs two
-  turns, which keeps nearly all of the saving. `scripts/batch.mjs` writes the
-  cap into every brief.
+  tool block times the request out.** Four attempts at fourteen on one chapter,
+  **three dead at exactly that point** — each having read its brief, its draft
+  and nothing else, and one of them a relaunch of a batch that had already died
+  there. Only the first survived. Eight has never failed. Two blocks of eight
+  still costs two turns, which keeps nearly all of the saving, and
+  `scripts/batch.mjs` writes the cap into every brief.
+- **Size still pays, up to that ceiling.** The seven-leaf batches the timeouts
+  forced came in at **20,614 tokens a leaf** against ~13,000 for thirteen-leaf
+  ones: the brief, the method document and the setup are paid once per agent
+  whatever its size. So turns dominate, and per-agent overhead is the second
+  term — twelve or thirteen leaves opened in two blocks, not seven in one.
 - **Batch size is not the lever; turns are.** Cost per leaf tracks _tool calls
   per leaf_ almost exactly. A batch of twelve that ignored the instruction (84
   calls) cost more per leaf than a batch of ten that followed it (18 calls).

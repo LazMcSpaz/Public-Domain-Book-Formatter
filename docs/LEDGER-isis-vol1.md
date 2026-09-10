@@ -471,6 +471,32 @@ prints and is found by a reader.
 check over a **partly read** book, which is worth doing anyway — it caught the
 doubling three chapters before the book is finished — and is not a fault.
 
+### Where the batch size actually settles
+
+Chapter VI made the earlier reading of this sharper, and corrected part of it.
+
+**Fourteen images in one tool block times the request out.** Four attempts at
+fourteen leaves on this chapter, **three dead at exactly the same line** —
+_"now I'll open all 14 renders in one block"_ — each having read its brief, its
+draft and nothing else. One of the three was a relaunch of a batch that had
+already died there. Only the first attempt survived, so fourteen is not
+impossible, only unreliable, and eight has never failed.
+
+**And batch size does pay, which the Chapter II experiment understated.** The
+seven-leaf batches the timeouts forced came in at **20,614 tokens a leaf**,
+against about 13,000 for thirteen-leaf ones. The brief, the shared method
+document and the setup are paid once per agent whatever its size, so a small
+batch amortises them over fewer leaves. The ledger said "batch size is not the
+lever; turns are", and that was half right stated as a whole: **turns dominate,
+and per-agent overhead is the second term.**
+
+So the shape is twelve or thirteen leaves, opened in two blocks of at most
+eight, written once. `scripts/batch.mjs` puts the cap in every brief.
+
+Nothing was lost in any of the three failures: no output file existed and the
+batches already landed were untouched, which is what checkpointing per batch is
+for.
+
 ### Where the rest of the cost is
 
 At 150 DPI a leaf's render is about 1,280 tokens, so at two turns the images are

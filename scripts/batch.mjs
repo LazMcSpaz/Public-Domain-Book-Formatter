@@ -13,10 +13,10 @@
  * exactly and batch size barely matters beside it.
  *
  * The cap is the other half, and it is measured too: **fourteen images in one
- * tool block times the request out.** Two batches of fourteen died at exactly
- * that point, having done nothing else, while a third survived — so fourteen is
- * marginal and eight is the size that has never failed. Two blocks of eight
- * still costs two turns, which keeps nearly all of the saving.
+ * tool block times the request out.** Four attempts at fourteen on one chapter,
+ * three of them dead at exactly that point having done nothing else — including
+ * a relaunch of one that had already died there. Eight has never failed. Two
+ * blocks of eight still costs two turns, which keeps nearly all of the saving.
  *
  * **Give the reader a lean draft.** `structural` and the settled `hyphens` are
  * the parent's record, not the reader's material: the hyphens have already been
@@ -310,9 +310,10 @@ against their drafts, then write the whole batch in one file write.
 Two things are measured here and neither is a preference. Interleaving reading
 and writing leaf by leaf costs about 30% more for the same leaves and finds
 nothing extra, because every turn re-sends the whole accumulated context. And
-**fourteen images in a single tool block times the request out** — it took two
-batches of one chapter down at exactly that point, each of them having done
-nothing yet. Eight is the size that has never failed.
+**fourteen images in a single tool block times the request out** — it took
+three batches of one chapter down at exactly that point, each of them having
+done nothing yet. Four attempts at fourteen, three dead. Eight has never
+failed.
 
 ## The seam
 ${
