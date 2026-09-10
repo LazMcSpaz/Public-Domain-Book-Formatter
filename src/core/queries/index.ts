@@ -30,6 +30,7 @@ import type { EditorialQuery, PageTranscription } from '@core/transcribe'
 import { outstanding, type Ruling } from './rulings'
 
 export * from './rulings'
+export * from './gate'
 
 /** A query with the leaf it was raised on. */
 export interface RaisedQuery extends EditorialQuery {

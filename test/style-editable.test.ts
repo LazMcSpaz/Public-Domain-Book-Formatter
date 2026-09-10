@@ -86,6 +86,11 @@ describe('answers fold back onto the profile', () => {
     const answers: Answers = {}
     for (const q of styleQuestions(profile)) {
       if (q.type === 'term-grid' || q.type === 'page-edit' || q.type === 'discrepancies') continue
+      // A choice may decline to recommend (the query gate does), and "answer it
+      // with its own default" means nothing for one that has none. No style
+      // question is of that kind, so this skips nothing here and keeps the
+      // transfer test honest if one ever is.
+      if (q.defaultValue === undefined) continue
       answers[q.id] = q.defaultValue
     }
     expect(applyStyleAnswers(profile, answers)).toEqual(profile)
@@ -120,6 +125,11 @@ describe('answers fold back onto the profile', () => {
     const answers: Answers = {}
     for (const q of styleQuestions(a)) {
       if (q.type === 'term-grid' || q.type === 'page-edit' || q.type === 'discrepancies') continue
+      // A choice may decline to recommend (the query gate does), and "answer it
+      // with its own default" means nothing for one that has none. No style
+      // question is of that kind, so this skips nothing here and keeps the
+      // transfer test honest if one ever is.
+      if (q.defaultValue === undefined) continue
       answers[q.id] = q.defaultValue
     }
     expect(applyStyleAnswers(base, answers)).toEqual(a)
