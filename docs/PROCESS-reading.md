@@ -272,13 +272,21 @@ see far**. That property is rebuilt on purpose:
 - **One subagent per handful of leaves**, given the images, the draft, and the
   tail of the previous batch for the seam. It returns a batch and dies. The
   parent never holds a page image.
-- **Tell it to open every render in one block, then write once.** This is the
-  single cheapest instruction in the whole process and it is measured, not a
-  preference: over one chapter of _Isis Unveiled_, the same six leaves cost
-  **29,216 tokens a leaf** read one at a time and **22,519** read all at once,
-  and the expensive one found nothing the cheap one missed. Every turn re-sends
-  the accumulated context, so a reader that opens a render, writes a leaf, opens
-  the next and writes again pays for the first render eleven more times.
+- **Tell it to open its renders in blocks of at most eight, then write once.**
+  This is the single cheapest instruction in the whole process and it is
+  measured, not a preference: over one chapter of _Isis Unveiled_, the same six
+  leaves cost **29,216 tokens a leaf** read one at a time and **22,519** read
+  all at once, and the expensive one found nothing the cheap one missed. Every
+  turn re-sends the accumulated context, so a reader that opens a render, writes
+  a leaf, opens the next and writes again pays for the first render eleven more
+  times.
+- **Eight is a ceiling, and it is also measured.** **Fourteen images in a single
+  tool block times the request out.** Two batches of fourteen died at exactly
+  that point on one chapter — each having read its brief, its draft and nothing
+  else — while a third of the same size survived, so fourteen is marginal and
+  eight is the size that has never failed. Two blocks of eight still costs two
+  turns, which keeps nearly all of the saving. `scripts/batch.mjs` writes the
+  cap into every brief.
 - **Batch size is not the lever; turns are.** Cost per leaf tracks _tool calls
   per leaf_ almost exactly. A batch of twelve that ignored the instruction (84
   calls) cost more per leaf than a batch of ten that followed it (18 calls).
