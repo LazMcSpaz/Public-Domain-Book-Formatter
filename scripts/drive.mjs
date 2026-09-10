@@ -1865,6 +1865,72 @@ async function serve() {
      * transcription: where the two agree the page says it, and where they
      * differ the place is worth a picture.
      */
+    /**
+     * OCR's word boxes for named leaves, as measurements.
+     *
+     * `ocr` hands back what a leaf says; this hands back where each word sits
+     * and how tall it is, which is what a rule in `@core/draft` has to be set
+     * from. Every constant in that module is supposed to come off real pages
+     * rather than off a guess, and until this verb existed there was no way to
+     * read those numbers out of a book without a one-off `page.evaluate`.
+     */
+    words: async ([...ns]) => {
+      const list = ns.map(Number)
+      return page.evaluate(
+        async ([repo, leaves]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
+          const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const cached = await cacheMod.loadReconCache(newest.key, {
+            dpi: recon.RECON_DPI,
+            maxPages: null
+          })
+          if (!cached) throw new Error('No cached reading on this device.')
+          // Which leaves the cache actually covers, because an empty array
+          // means two opposite things: a leaf with no words on it, and a leaf
+          // the reading has not reached yet. `ocr` counts its words for the
+          // same reason. Reporting one as the other is how a measurement gets
+          // taken off a leaf nothing has read.
+          const covered = new Set(cached.words.map((w) => w.pageIndex))
+          const out = {}
+          const absent = []
+          for (const n of leaves) {
+            if (!covered.has(n)) {
+              absent.push(n)
+              continue
+            }
+            out[n] = cached.words
+              .filter((w) => w.pageIndex === n)
+              .map((w) => ({
+                text: w.text,
+                confidence: w.confidence,
+                x0: Math.round(w.bbox.x0),
+                y0: Math.round(w.bbox.y0),
+                x1: Math.round(w.bbox.x1),
+                y1: Math.round(w.bbox.y1)
+              }))
+          }
+          return {
+            read: 'the cached reading',
+            leavesInCache: covered.size,
+            ...(absent.length > 0
+              ? {
+                  notInTheCache: absent,
+                  warning:
+                    'Those leaves are not in the cached reading at all — either the ' +
+                    'reading has not reached them or nothing read them. They are not ' +
+                    'leaves with no words on them.'
+                }
+              : {}),
+            words: out
+          }
+        },
+        [REPO, list]
+      )
+    },
+
     ocr: async ([...ns]) => {
       // `ocr 37 fresh` re-reads the pixels instead of the cache, which is how
       // to tell a leaf the cache has no words for from a leaf Tesseract cannot
