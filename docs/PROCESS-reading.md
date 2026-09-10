@@ -347,6 +347,18 @@ node scripts/drive.mjs consistency out.json
 ways, a doubled word or line, a quotation that never closes, a cross-reference
 to a chapter that is not there.
 
+**Count the notes too.** `drive.mjs notes` reports how many the book has, on how
+many leaves, under which markers, and — the number that matters — how many are
+**orphaned**, meaning the marker appears nowhere in the body so the engine
+cannot place it and prints it at the back as a collected endnote. Assembly takes
+footnotes _out_ of the block flow, so `body` cannot see them and a book could
+lose half its apparatus to a marker convention with every other report here
+staying green. On the first 190 leaves of _Isis Unveiled_: **273 notes across
+131 leaves, none orphaned**, under nine distinct markers including the doubled
+`**`, `††` and `‡‡` a leaf uses for its sixth note and beyond. Named leaves, not
+a total: a run of orphans on one leaf is a marker sequence assigned in the wrong
+order and wants a person, where a scatter of ones is ordinary.
+
 Nothing here proposes a reading, so nothing needs adjudicating — only looking.
 
 **Tuning is measured, not felt.** The name-variant check at an edit distance of

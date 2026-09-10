@@ -1531,6 +1531,71 @@ async function serve() {
      * Runs over the *assembled* document, because a doubled line and a name
      * variant both live at page seams and a raw leaf cannot show you a seam.
      */
+    /**
+     * The note apparatus, counted.
+     *
+     * "A note that cannot be placed is reported, never dropped" is the rule,
+     * and until now nothing in this driver could say how many there were or how
+     * many were adrift — `body` hands back blocks and divisions, and assembly
+     * takes footnotes *out* of the block flow, so a book could lose half its
+     * notes to a marker convention and every report here would stay green.
+     * CLAUDE.md's standing question — has this book got the apparatus the last
+     * one got? — had no way to be asked.
+     *
+     * Orphaned means the note's marker appears nowhere in the body, so the
+     * engine cannot place it and prints it as a collected endnote at the back.
+     * A handful is normal in a book whose reference marks OCR mangles; a run of
+     * them on one leaf usually means the markers on that leaf were assigned in
+     * the wrong order, and the leaf numbers are here so somebody can go and
+     * look rather than nod at a total.
+     */
+    notes: async ([out = '']) => {
+      const found = await page.evaluate(
+        async ([repo]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const run = await runStore.loadRun(newest.key)
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          return doc.footnotes.map((n) => ({
+            id: n.id,
+            marker: n.originalMarker,
+            pageIndex: n.pageIndex,
+            orphaned: n.orphaned,
+            words: n.text.split(/\s+/u).filter(Boolean).length,
+            opening: n.text.slice(0, 60)
+          }))
+        },
+        [REPO]
+      )
+      if (out) {
+        const { writeFile } = await import('node:fs/promises')
+        await writeFile(resolve(REPO, out), JSON.stringify(found, null, 1))
+      }
+      const orphaned = found.filter((n) => n.orphaned)
+      const byMarker = {}
+      for (const n of found) byMarker[n.marker] = (byMarker[n.marker] ?? 0) + 1
+      const perLeaf = {}
+      for (const n of orphaned) perLeaf[n.pageIndex] = (perLeaf[n.pageIndex] ?? 0) + 1
+      return {
+        ...(out ? { wrote: out } : {}),
+        notes: found.length,
+        leavesWithNotes: new Set(found.map((n) => n.pageIndex)).size,
+        byMarker,
+        orphaned: orphaned.length,
+        // Named, not counted. A run of orphans on one leaf is a marker sequence
+        // gone wrong and is worth a person; a scatter of ones is ordinary.
+        orphanedLeaves: Object.entries(perLeaf)
+          .map(([leaf, n]) => ({ leaf: Number(leaf), notes: n }))
+          .sort((a, b) => b.notes - a.notes || a.leaf - b.leaf)
+      }
+    },
+
     consistency: async ([out = 'consistency.json', which = 'edited']) => {
       // `consistency out.json pristine` runs over the transcription before any
       // correction. That is the *normal* occasion for these checks — they exist
