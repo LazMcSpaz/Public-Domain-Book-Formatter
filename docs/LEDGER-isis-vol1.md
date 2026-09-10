@@ -161,3 +161,44 @@ batches. That is the number to argue with before running it.
 - 13 `uncertain` spans left deliberately, each with a reason on the leaf.
 - The book has not been saved to the shelf, so this reading exists only in the
   container's IndexedDB.
+
+## The editor's rulings on Chapter I
+
+| Query                                                                                                              | Ruling                                                                                                                     |
+| ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- |
+| `Nothwithstanding` (63), `PYTHOGOREAN` (65), `Schleirmacher`/`Stalbaüm` (66), `Northen` (89), `helicocentric` (89) | Editor agrees these are compositor's slips. **The remedy is not yet stated** — see below.                                  |
+| `symbolology` (95)                                                                                                 | **Leave as printed**, and note it. Watch for the form recurring elsewhere in the volume before treating it as a slip.      |
+| `con sideration` (84)                                                                                              | **One word.** The division hyphen is taken to have faded; join it.                                                         |
+| `nature : the one active ;` (70)                                                                                   | The semicolon is **taken as a comma**, matching the pointing of the second half of the same construction.                  |
+| `practiced` / `practised` (76)                                                                                     | **No change.** Record occurrences as the volume is read; if the book is consistent with itself there is nothing to decide. |
+| `Terra legit carnem` (95), Felt's prospectus (80)                                                                  | **Keep as printed.** Not enough to rule on.                                                                                |
+
+The five misspellings are recorded as slips but **no remedy has been applied**:
+"carry as printed", "mend silently" and "mend with a note" are three different
+editions and the ruling has to name one. Nothing is changed until it does.
+
+## What of this chapter's reading was deterministic
+
+Measured after the fact, against what the readers actually decided. Every one
+of these is a pure function over data the app already holds, and each was
+checked by asking whether the rule agrees with the reader rather than whether
+it looks plausible.
+
+| Rule                                                                                                              |                                      Settled | Disagreed | Abstained |
+| ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------: | --------: | --------: |
+| Heal a line-break hyphen when the joined form occurs elsewhere in the book, keep it when the hyphenated form does |                                **210 / 217** |     **0** |         7 |
+| Accept a near-miss running head when its number equals the folio the volume's offset predicts                     |                                   **9 / 12** |     **0** |         3 |
+| Flag a folio that disagrees with the volume's offset                                                              |                                    **2 / 2** |         0 |         — |
+| Drop the printer's signature mark on every folio ≡ 1 (mod 16)                                                     | 2 / 2 in chapter, 3 / 3 predicted outside it |         0 |         — |
+
+The offset is not assumed: it is voted by the leaves whose furniture the draft
+took confidently — 24 of 26 agree on `leaf = folio + 58` in pageIndex terms —
+and the two that dissent are precisely the two misread folios. The check and
+the correction fall out of the same count.
+
+The three hyphens and three heads the rules abstain on are the right ones to
+abstain on: on leaves 69 and 95 OCR mangled the folio past reading (`37` came
+through as `fig`), and leaf 59 is a chapter opening that prints no head at all.
+
+**About 228 of the roughly 526 corrections made on this chapter — 43% — were
+decidable without eyes.** They were done by hand, in agents, at token cost.
