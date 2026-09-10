@@ -195,9 +195,30 @@ export function signatureSheet(folio: number, figure: number): number | null {
   return SHEETS.includes(sheet) ? sheet : null
 }
 
+/**
+ * The letters OCR substitutes for a **figure standing alone**, and only those.
+ *
+ * Deliberately narrower than `AS_DIGITS`, which is generous because the folio
+ * case already knows the one number it is looking for. A signature has no such
+ * anchor — the arithmetic is checked *after* the fold — so a generous fold
+ * would let a short word at the foot become a mark: `Is` folds to `15` under
+ * the wide set, and 15 is the signature of folio 225 in a book gathered in
+ * 16s, so a widow line reading "Is" would be eaten out of the text.
+ *
+ * These two are the ones that actually happen to lining figures: leaf 219 of
+ * *Isis Unveiled* Vol. I prints the signature `11` and OCR reads it `II`.
+ */
+const FIGURE_LETTERS: Record<string, string> = { I: '1', l: '1', i: '1', O: '0', o: '0' }
+
 /** Is this line the printer's signature mark for the gathering this leaf opens? */
 export function looksLikeSignature(text: string, folio: number): number | null {
   const trimmed = text.trim()
-  if (!/^\d{1,2}$/u.test(trimmed)) return null
-  return signatureSheet(folio, Number(trimmed))
+  if (trimmed.length < 1 || trimmed.length > 2) return null
+  let digits = ''
+  for (const ch of trimmed) {
+    if (ch >= '0' && ch <= '9') digits += ch
+    else if (FIGURE_LETTERS[ch] !== undefined) digits += FIGURE_LETTERS[ch]
+    else return null
+  }
+  return signatureSheet(folio, Number(digits))
 }

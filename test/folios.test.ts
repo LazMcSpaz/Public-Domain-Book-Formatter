@@ -157,4 +157,21 @@ describe("the printer's signature mark", () => {
     expect(looksLikeSignature('page 7', 97)).toBeNull()
     expect(looksLikeSignature('147', 97)).toBeNull()
   })
+
+  /** Leaf 219 of Isis Vol. I prints `11` and OCR reads it `II`. */
+  it('reads a lining figure back through the letters OCR gives it', () => {
+    expect(looksLikeSignature('II', 161)).toBe(16)
+    expect(looksLikeSignature('1I', 161)).toBe(16)
+  })
+
+  /**
+   * The fold here is narrower than the folio's on purpose. A signature has no
+   * expected value to be checked against before the fold, so a generous one
+   * would eat a short word: `Is` folds to `15` under the folio's set, and 15 is
+   * the signature of folio 225 in a book gathered in 16s.
+   */
+  it('does not fold a word into a figure', () => {
+    expect(looksLikeSignature('Is', 225)).toBeNull()
+    expect(looksLikeSignature('So', 785)).toBeNull()
+  })
 })

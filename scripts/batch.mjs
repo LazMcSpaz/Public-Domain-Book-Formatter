@@ -93,6 +93,7 @@ function checkBatch(donePath, draftPath) {
     'table'
   ])
   const problems = []
+  const notes = []
 
   if (draft) {
     const back = new Set(done.map((p) => p.pageIndex))
@@ -126,10 +127,21 @@ function checkBatch(donePath, draftPath) {
       }
       if (block.kind === 'footnote') {
         const printed = /^\s*([*\u2020\u2021\u00a7\u00b6\u2016])/u.exec(block.text)
-        if (!block.marker) problems.push(`leaf ${n} block ${i}: footnote with no marker`)
-        else if (printed && printed[1] !== block.marker.trim()) {
+        if (block.marker && printed && printed[1] !== block.marker.trim()) {
           problems.push(
             `leaf ${n} block ${i}: filed under "${block.marker}" but opens "${printed[1]}"`
+          )
+        } else if (!block.marker) {
+          // Not a problem, and it was one for an afternoon. **A note continued
+          // from the leaf before prints no marker**, because the page does not
+          // repeat it — so a markerless note at the head of a leaf's foot is
+          // ordinary and blocking the batch on it is wrong. `verifyPage`
+          // reports it low, which is the right weight; this only says it out
+          // loud so the one case that *is* a mistake — a reader who left the
+          // mark in the text and forgot the field — is visible.
+          notes.push(
+            `leaf ${n} block ${i}: footnote with no marker (a note continued from the leaf ` +
+              `before prints none): ${JSON.stringify(block.text.slice(0, 50))}`
           )
         }
       }
@@ -159,8 +171,12 @@ function checkBatch(donePath, draftPath) {
     }
   }
 
+  if (notes.length > 0) {
+    console.log(`\n${notes.length} thing(s) worth an eye, none of them blocking:`)
+    for (const note of notes) console.log(`  ${note}`)
+  }
   if (problems.length === 0) {
-    console.log(`\n${done.length} leaf/leaves, nothing to report. Land it.`)
+    console.log(`\n${done.length} leaf/leaves, nothing to stop it. Land it.`)
     return 0
   }
   console.log(`\n${problems.length} problem(s):`)
