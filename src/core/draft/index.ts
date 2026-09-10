@@ -779,7 +779,8 @@ function takeFurniture(
   gap: number,
   bodyHeight: number,
   said: string[],
-  expectedFolio?: number
+  expectedFolio?: number,
+  claimedByNotes?: (line: DraftLine) => boolean
 ): { runningHead?: string; folio?: string } {
   const furniture: { runningHead?: string; folio?: string } = {}
 
@@ -792,6 +793,15 @@ function takeFurniture(
     const say = (why: string): void => {
       said.push(`"${text}" sits at the ${where} of the leaf but was kept as text: ${why}`)
     }
+
+    // A footnote at the foot is neither furniture nor "kept as text": the note
+    // pass runs after this and lifts it into a `footnote` block. Every decline
+    // below would say otherwise, and on six leaves of one chapter of *Isis
+    // Unveiled* that put a reader's eye on a line that was already right —
+    // which is the failure mode this file exists to avoid, a report that is
+    // not true. Asked before anything can speak, because the head-width and
+    // display tests reach a footnote before the foot branch does.
+    if (at === 'last' && claimedByNotes?.(line)) return
 
     // The volume corroborating this line. A head that carries the number the
     // numbering predicts is furniture however narrowly it misses a geometric
@@ -1076,7 +1086,25 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
     white,
     bodyHeight,
     structural,
-    options.expectedFolio
+    options.expectedFolio,
+    // The note pass's own two tests, asked here rather than restated: set at
+    // or under the footnote size, and made of letters. It runs later, so at
+    // this point the line is still at the foot and looks like furniture.
+    (line) => {
+      const text = line.text.trim()
+      const size = typeSize(line)
+      return (
+        size !== null &&
+        size <= bodySize * FOOTNOTE_SIZE &&
+        alnum(text).length >= FURNITURE_MIN_ALNUM &&
+        // A folio is never a note, and `FOOTNOTE_MARK` would take one: it
+        // reads a digit followed by anything, so the bare folio "12" matches
+        // as marker `1` and text `2`. Excluded by name, because a folio
+        // swallowed here is a folio the leaf loses in silence.
+        !BARE_NUMBER.test(text) &&
+        FOOTNOTE_MARK.test(text)
+      )
+    }
   )
   // Recorded, not discarded. `checkableText` counts a leaf's furniture as
   // transcribed, so a stamp that vanished here would read downstream as words

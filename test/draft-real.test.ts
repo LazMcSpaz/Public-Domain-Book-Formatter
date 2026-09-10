@@ -540,3 +540,52 @@ describe('the volume’s numbering settles the furniture a leaf cannot', () => {
     }
   })
 })
+
+/**
+ * A report that is not true is the failure mode this module exists to avoid,
+ * and the foot of a leaf produced one on six leaves of one chapter: a footnote
+ * line drew `"* W. Crookes, F.R.S. …" sits at the foot of the leaf but was kept
+ * as text`, while the note pass — which runs after the furniture pass — was
+ * lifting exactly that line into a `footnote` block. It sent a reader to look
+ * at six lines that were already right.
+ */
+describe('the foot of a leaf does not call a footnote body text', () => {
+  const isis = fixtures.find((f) => f.name.includes('isis'))!
+
+  it('says nothing about a line the note pass is about to take', () => {
+    const leaf = isis.fixture.leaves.find((l) => l.pageIndex === 101)!
+    const d = draftPage(toWords(leaf.words))
+    expect(d.blocks.filter((b) => b.kind === 'footnote')).toHaveLength(1)
+    expect(d.structural.filter((s) => /sits at the foot/.test(s))).toEqual([])
+  })
+
+  it('leaves every other leaf’s blocks and folio exactly as they were', () => {
+    // The guard suppresses a message and must change nothing else. These are
+    // the readings from before it existed, written down so a future edit to it
+    // cannot quietly move a folio or a block boundary.
+    const expected: Record<number, { notes: number; folio?: string; blocks: number }> = {
+      91: { notes: 0, folio: '33', blocks: 4 },
+      99: { notes: 0, folio: '41', blocks: 2 },
+      101: { notes: 1, blocks: 4 },
+      109: { notes: 0, blocks: 5 },
+      126: { notes: 3, folio: '63', blocks: 6 },
+      200: { notes: 1, folio: '142', blocks: 7 },
+      300: { notes: 3, folio: '242', blocks: 5 },
+      400: { notes: 3, folio: '342', blocks: 6 },
+      650: { notes: 3, folio: '592', blocks: 11 }
+    }
+    for (const leaf of isis.fixture.leaves) {
+      const want = expected[leaf.pageIndex]
+      if (!want) continue
+      const d = draftPage(toWords(leaf.words))
+      expect(
+        {
+          notes: d.blocks.filter((b) => b.kind === 'footnote').length,
+          ...(d.furniture.folio === undefined ? {} : { folio: d.furniture.folio }),
+          blocks: d.blocks.length
+        },
+        `leaf ${leaf.pageIndex}`
+      ).toEqual(want)
+    }
+  })
+})

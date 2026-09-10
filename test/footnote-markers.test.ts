@@ -29,7 +29,8 @@ const page = (blocks: PageTranscription['blocks']): PageTranscription => ({
   pageIndex: 12,
   role: 'body',
   blocks,
-  uncertain: []
+  uncertain: [],
+  furniture: {}
 })
 
 /**
