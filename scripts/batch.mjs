@@ -141,10 +141,18 @@ function checkBatch(donePath, draftPath) {
         // Symbols only, never a digit. A note that opens `1 Kings, i. 1-4`
         // is citing a book of the Bible, not carrying the marker `1` — see
         // `printedMarker`, which learned the same lesson from leaf 275.
-        const printed = /^\s*([*\u2020\u2021\u00a7\u00b6\u2016])/u.exec(block.text)
-        if (block.marker && printed && printed[1] !== block.marker.trim()) {
+        //
+        // A **doubled** mark is one marker: past six notes a leaf starts again
+        // with `**`, `††`, `‡‡`, and leaf 358 of *Isis Unveiled* Vol. I uses all
+        // three. Matching a single symbol read `** With the Gnostics` as `*` and
+        // refused a sound batch three times over. Only a repeat of the same
+        // symbol counts, and only two — `printedMarker` says why, and this
+        // pattern is a copy of it because that module is TypeScript and this is
+        // a Node script. Change one and change the other.
+        const printed = /^\s*([*\u2020\u2021\u00a7\u00b6\u2016])\1?/u.exec(block.text)
+        if (block.marker && printed && printed[0].trim() !== block.marker.trim()) {
           problems.push(
-            `leaf ${n} block ${i}: filed under "${block.marker}" but opens "${printed[1]}"`
+            `leaf ${n} block ${i}: filed under "${block.marker}" but opens "${printed[0].trim()}"`
           )
         } else if (!block.marker) {
           // Not a problem, and it was one for an afternoon. **A note continued

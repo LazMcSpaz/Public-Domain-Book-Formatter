@@ -829,11 +829,23 @@ function escapeRegExp(s: string): string {
  * only ever fires here on something that is not a marker.
  *
  * Symbols need no such guard: no note begins with a dagger by accident.
+ *
+ * **A doubled mark is one marker, not the first of two.** When a leaf runs past
+ * the six symbols the printer starts again with `**`, `††`, `‡‡`; leaf 358 of
+ * this volume carries nine notes and uses all three. Matching a single symbol
+ * read `** With the Gnostics` as the marker `*` — which on that leaf is already
+ * taken, so the note would have been filed under a mark another note owns, the
+ * body's `**` reference would have reached nothing, and `stripLeadingMarker`
+ * would have left the second asterisk sitting in the text. Only a repeat of the
+ * *same* symbol counts (`*†` is two marks that have run together, not one), and
+ * only two of them: this tradition doubles and does not treble, and inventing a
+ * third tier on no evidence is the kind of guess the rest of this file exists
+ * to avoid.
  */
 export function printedMarker(text: string): string | null {
   const trimmed = text.trim()
-  const symbol = /^([*\u2020\u2021\u00a7\u00b6\u2016])/u.exec(trimmed)
-  if (symbol) return symbol[1]!
+  const symbol = /^([*\u2020\u2021\u00a7\u00b6\u2016])\1?/u.exec(trimmed)
+  if (symbol) return symbol[0]!
   const superscript = new RegExp(`^(${SUPERSCRIPT_CLASS}{1,3})`, 'u').exec(trimmed)
   if (superscript) {
     return [...superscript[1]!].map((d) => String(SUPERSCRIPT_DIGITS.indexOf(d))).join('')

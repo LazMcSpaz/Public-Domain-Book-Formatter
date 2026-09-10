@@ -10,6 +10,32 @@ describe('the mark a note opens with', () => {
     expect(printedMarker('‡ Ibid.')).toBe('‡')
   })
 
+  /**
+   * Leaf 358 of *Isis Unveiled* Vol. I carries nine notes, so the printer runs
+   * past the six symbols and starts again doubled. Matching a single symbol
+   * read `** With the Gnostics` as `*` — a mark another note on that same leaf
+   * already owns, so the note would have been filed under it, the body's `**`
+   * reference would have reached nothing, and `stripLeadingMarker` would have
+   * left the second asterisk in the text.
+   */
+  it('reads a doubled mark as one marker', () => {
+    expect(printedMarker('** With the Gnostics, Christ was identical')).toBe('**')
+    expect(printedMarker('†† “Codex Nazaræus,” i. 135.')).toBe('††')
+    expect(printedMarker('‡‡ Ibid.')).toBe('‡‡')
+  })
+
+  /**
+   * Only a repeat of the *same* symbol. `*†` at the head of a note is two marks
+   * that have run together — most likely two notes a reader filed as one — and
+   * calling it a single marker would hide that rather than report it. And only
+   * two: this tradition doubles and does not treble, so a third tier would be
+   * invented rather than read.
+   */
+  it('does not join two different marks, or take a third', () => {
+    expect(printedMarker('*† Two notes run together')).toBe('*')
+    expect(printedMarker('*** Ibid.')).toBe('**')
+  })
+
   it('reads a digit only when punctuation follows it', () => {
     expect(printedMarker('1. See Croll, lib. ii.')).toBe('1')
     expect(printedMarker('12) Ibid.')).toBe('12')
