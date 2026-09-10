@@ -675,3 +675,40 @@ What both have in common is worth naming: a check can be **noisy** and still be
 read, and a check that is **silent** cannot be. The `æ Æ` report is what got
 anybody to look at a rule that had been failing to fire for three hundred
 leaves.
+
+### The unclosed quotations, measured — and a hypothesis that did not survive it
+
+`unclosed-quote` had climbed to thirty findings and was on the list of checks to
+tighten or drop. The hypothesis was that it is an artefact of the unit: a
+nineteenth-century printer sets an opening mark at the head of _every_ paragraph
+of a long quotation and closes only the last, so a check that balances marks
+within one block would report every paragraph but the last, forever, and the
+right fix would be to balance across blocks instead.
+
+The measurement says no, and says it cleanly. Over the 1,385 blocks assembled
+from the 422 leaves read so far:
+
+- **Not one finding has a next block that opens with a quotation mark.** Zero of
+  thirty. The convention the hypothesis rests on is not what this book does.
+- **Every balanced quotation closes inside its own block** — all 47 of them, span
+  zero. So the block _is_ the right unit here, and the check is asking the right
+  question.
+- **The book never closes a quotation it did not open.** Zero negative crossings
+  in 1,385 blocks, which is what a check reporting noise would not look like.
+- What is left is a **surplus of 65 opening marks** with nothing to close them.
+
+So the thirty findings are thirty places where a quotation opens and never
+closes, and the check is earning its place rather than crying wolf. What it
+cannot say is whose fault each one is: the 1877 compositor's, or this reading's
+— OCR renders the opening `“` as `¢`, `«`, `*` or `‘‘` on nearly every leaf and
+the readers restore it constantly, so a restored open whose close was missed
+looks exactly like a printer's omission. That is a question for the crops, and
+it is a pass of its own rather than something to settle from the count.
+
+Recorded here mainly because the hypothesis was wrong and the measurement was
+cheap. Scoring a check is what tells you whether to keep it, and this one was on
+its way to being dropped on an argument nobody had tested.
+
+**The two `doubled-word` findings are both false positives and both fine**: `is
+is` in a correctly quoted proverb ("that which is is that which was"), and `Sing
+Sing, N. Y.` in a citation. Two on 422 leaves is a rate worth paying.

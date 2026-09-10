@@ -29,7 +29,7 @@
    76
   ],
   "found": "heretic",
-  "against": "hermetic (38 uses against 1)",
+  "against": "hermetic (40 uses against 1)",
   "context": "…almost deified by his countrymen and afterward treated as a heretic, remarks, that the more absurd and void of sense the Talmud…"
  },
  {
@@ -39,7 +39,7 @@
    83
   ],
   "found": "Parsis",
-  "against": "Paris (13 uses against 1)",
+  "against": "Paris (17 uses against 1)",
   "context": "…, who derive their name from it. The Mobeds, priests of the Parsis—the ancient Ghebers—are named, even at the present day, Mag…"
  },
  {
@@ -80,19 +80,8 @@
    98
   ],
   "found": "victis",
-  "against": "victims (8 uses against 1)",
+  "against": "victims (10 uses against 1)",
   "context": "…dogma was branded at once an iconoclast and an infidel. Væ victis ! . . . . Science has conquered. But in its turn the victor…"
- },
- {
-  "kind": "stray-spelling",
-  "blockId": "p98b5",
-  "pages": [
-   98,
-   99
-  ],
-  "found": "froth",
-  "against": "forth (24 uses against 1)",
-  "context": "…ological phenomena. They judge by its surface, covered with froth and scum. But they might with equal propriety deny that the…"
  },
  {
   "kind": "name-variant",
@@ -111,8 +100,18 @@
    111
   ],
   "found": "occurence",
-  "against": "occurrence (7 uses against 1)",
+  "against": "occurrence (9 uses against 1)",
   "context": "…ral disquisitions beneficent, though the latter is of rarer occurence. Who are those spirits, what those powers or intelligences…"
+ },
+ {
+  "kind": "name-variant",
+  "blockId": "p122b1",
+  "pages": [
+   122
+  ],
+  "found": "Magnes",
+  "against": "Magnus (5 uses against 2)",
+  "context": "…ereal light,” or the “ Milk of the Celestial Virgin,” the “ Magnes,” and many other names. But our modern learned men will nei…"
  },
  {
   "kind": "name-variant",
@@ -131,7 +130,7 @@
    132
   ],
   "found": "compete",
-  "against": "complete (8 uses against 1)",
+  "against": "complete (12 uses against 1)",
   "context": "…ssional wizard, either of the North, South or West, who can compete with anything approaching success, with these untutored, na…"
  },
  {
@@ -162,7 +161,7 @@
    151
   ],
   "found": "Infinito",
-  "against": "Infinite (3 uses against 1)",
+  "against": "Infinite (4 uses against 1)",
   "context": "…heories of the author of the Causa Principio et Uno, or the Infinito Universo e Mondi. Both Bruno, who confesses that the source…"
  },
  {
@@ -285,8 +284,18 @@
    183
   ],
   "found": "Germans",
-  "against": "Germany (5 uses against 1)",
+  "against": "Germany (6 uses against 1)",
   "context": "…e Parsees ; the Hermes-fire ; the Elmes-fire of the ancient Germans ; the lightning of Cybelè ; the burning torch of Apollo ; t…"
+ },
+ {
+  "kind": "name-variant",
+  "blockId": "p187b2",
+  "pages": [
+   187
+  ],
+  "found": "Magnes",
+  "against": "Magnus (5 uses against 2)",
+  "context": "…theurgists “the living fire,” † the “Spirit of Light,” and Magnes. This last appellation indicates its magnetic properties an…"
  },
  {
   "kind": "stray-spelling",
@@ -295,7 +304,7 @@
    187
   ],
   "found": "magus",
-  "against": "magnus (4 uses against 1)",
+  "against": "magnus (5 uses against 1)",
   "context": "…ion of the Hermetists to be the correct one. The word Magh, magus, is derived from the Sanskrit Mahaji, the great or wise (th…"
  },
  {
@@ -315,7 +324,7 @@
    190
   ],
   "found": "apples",
-  "against": "applies (4 uses against 1)",
+  "against": "applies (5 uses against 1)",
   "context": "…o Hades (the subterranean garden), and plucking the “golden apples” from the “tree of life,” slays the dragon.‡ The rough Tita…"
  },
  {
@@ -328,16 +337,6 @@
   "found": "…om the bonds of the earth ; for if their will does not free “ them from this fatal attraction, they will be absorbed in t…",
   "against": "2 opening marks against 1 closing",
   "context": "…tal attraction, they will be absorbed in the current by the force which has produced them, and will return to the central and eternal fire.”"
- },
- {
-  "kind": "stray-spelling",
-  "blockId": "p201b2",
-  "pages": [
-   201
-  ],
-  "found": "complied",
-  "against": "compiled (5 uses against 1)",
-  "context": "…tizer what they desired, for their own mental requests were complied with perfect fidelity."
  },
  {
   "kind": "name-variant",
@@ -356,7 +355,7 @@
    228
   ],
   "found": "Magnum",
-  "against": "Magnus (4 uses against 1)",
+  "against": "Magnus (5 uses against 1)",
   "context": "…developed, and still more carefully elaborated. The Magnale Magnum, the means by which the secret magnetic property “enables o…"
  },
  {
@@ -419,7 +418,7 @@
    247
   ],
   "found": "Tyndalls",
-  "against": "Tyndall’s (5 uses against 1)",
+  "against": "Tyndall’s (6 uses against 1)",
   "context": "…ying loose on the threshold of the “ chasm ” not one of our Tyndalls would stoop to pick it up."
  },
  {
@@ -429,18 +428,8 @@
    247
   ],
   "found": "tyndalls",
-  "against": "tyndall's (5 uses against 1)",
+  "against": "tyndall's (6 uses against 1)",
   "context": "…ying loose on the threshold of the “ chasm ” not one of our Tyndalls would stoop to pick it up."
- },
- {
-  "kind": "stray-spelling",
-  "blockId": "p247b2",
-  "pages": [
-   247
-  ],
-  "found": "cotemporary",
-  "against": "contemporary (5 uses against 1)",
-  "context": "…ther ! Although so far in advance of anything propounded by cotemporary philosophers, what the intelligent explorers of the Unseen…"
  },
  {
   "kind": "unclosed-quote",
@@ -469,7 +458,7 @@
    273
   ],
   "found": "Medicina",
-  "against": "Medicine (3 uses against 1)",
+  "against": "Medicine (5 uses against 1)",
   "context": "Maxwell, in his Medicina Magnetica, expounds the following propositions, all which a…"
  },
  {
@@ -484,14 +473,15 @@
   "context": "…ivate life is but the aggregative phantasms of thinking throblets, rushing in their rising onward to the central heart of eternal death !” †"
  },
  {
-  "kind": "missing-chapter",
-  "blockId": "p293b1",
+  "kind": "name-variant",
+  "blockId": "p299b2",
   "pages": [
-   293
+   299,
+   300
   ],
-  "found": "chapter xi",
-  "against": "the book prints I, II, III, IV, V, VI, VII, VIII, IX, X",
-  "context": "In chapter xi., which is entirely devoted to the wonderful achievements o…"
+  "found": "Naturæ",
+  "against": "Nature (4 uses against 1)",
+  "context": "…hth century, and we invite any one to read his De Divisione Naturæ, who would convince himself of this truth. Science tells th…"
  },
  {
   "kind": "unclosed-quote",
@@ -573,7 +563,7 @@
    326
   ],
   "found": "crete",
-  "against": "create (13 uses against 1)",
+  "against": "create (15 uses against 1)",
   "context": "…e planet to become extremely flattened at the poles; and in Crete the personified god Jupiter was represented without ears. T…"
  },
  {
@@ -593,7 +583,7 @@
    333
   ],
   "found": "bride",
-  "against": "bridge (7 uses against 1)",
+  "against": "bridge (8 uses against 1)",
   "context": "…ncy of a faith crushed under the sense of original sin; the bride robes herself in white ; red inflames the anger of certain…"
  },
  {
@@ -644,7 +634,7 @@
    352
   ],
   "found": "waned",
-  "against": "warned (4 uses against 1)",
+  "against": "warned (5 uses against 1)",
   "context": "…ations, waxed in power, attained the climax of development, waned, and became extinct; and mankind, when the end of the lower…"
  },
  {
@@ -654,7 +644,7 @@
    358
   ],
   "found": "principes",
-  "against": "principles (37 uses against 1)",
+  "against": "principles (41 uses against 1)",
   "context": "…let us call the ‘powers’ into existence. The genii are the Principes, the ‘sons of Light,’ but thou art the ‘Messenger of Life.’…"
  },
  {
@@ -697,6 +687,16 @@
   "found": "Buddhism",
   "against": "Buddhist (10 uses against 2)",
   "context": "…orld-religions—Christianity, Judaism, Brahmanism, Paganism, Buddhism, proceeds from this one source : Truth is known but to the…"
+ },
+ {
+  "kind": "name-variant",
+  "blockId": "p379b10",
+  "pages": [
+   379
+  ],
+  "found": "Magnétisme",
+  "against": "Magnetisme (3 uses against 1)",
+  "context": "In Dr. Morin’s Journal de Magnétisme, published a few years since in"
  },
  {
   "kind": "stray-spelling",
@@ -756,7 +756,7 @@
    417
   ],
   "found": "patent",
-  "against": "patient (12 uses against 1)",
+  "against": "patient (15 uses against 1)",
   "context": "…to produce spiritual appearances on the stage, and sold his patent in 1863, in Paris, for the sum of 20,000 francs. The phanto…"
  },
  {
@@ -770,16 +770,6 @@
   "context": "…m witchcraft, as we find it recorded in the works of Cotton Mather, Calef, Upham, and others, furnishes a curious corroboratio…"
  },
  {
-  "kind": "stray-spelling",
-  "blockId": "p426b1",
-  "pages": [
-   426
-  ],
-  "found": "earths",
-  "against": "earth's (8 uses against 1)",
-  "context": "“ Man lives on many earths before he reaches this. Myriads of worlds swarm in space wh…"
- },
- {
   "kind": "unclosed-quote",
   "blockId": "p429b3",
   "pages": [
@@ -789,5 +779,87 @@
   "found": "…psy. . . . We rather incline to the opinion,” says Figuier, “ that it was a disease sui generis, and in order to have an…",
   "against": "4 opening marks against 3 closing",
   "context": "…in order to have an appropriate name for such a disease, we must be satisfied with the one of the Trembling Convulsionaires of Cevennes.” *"
+ },
+ {
+  "kind": "stray-spelling",
+  "blockId": "p432b0",
+  "pages": [
+   432
+  ],
+  "found": "cries",
+  "against": "crimes (6 uses against 1)",
+  "context": "…380). “But, so far from that occurring, the Convulsionaire cries out, with an expression of perfect rapture in her face, ‘Oh…"
+ },
+ {
+  "kind": "stray-spelling",
+  "blockId": "p436b2",
+  "pages": [
+   436
+  ],
+  "found": "anciens",
+  "against": "ancients (90 uses against 1)",
+  "context": "…é. Pour comprendre l’histoire, il faut etudier les symboles anciens, les signes sacrés du sacerdoce, et l’art de guerir dans le…"
+ },
+ {
+  "kind": "stray-spelling",
+  "blockId": "p443b1",
+  "pages": [
+   443,
+   444
+  ],
+  "found": "potions",
+  "against": "portions (6 uses against 1)",
+  "context": "…t a curative or morbific potency greater than his pills and potions. He calls it the vis medicatrix naturæ, and his first endea…"
+ },
+ {
+  "kind": "doubled-word",
+  "blockId": "p448b6",
+  "pages": [
+   448
+  ],
+  "found": "Sing Sing",
+  "against": "the same word twice",
+  "context": "…ical literature is the monograph of G. J. Fisher, M. D., of Sing Sing, N. Y., entitled Diploteratology ; an Essay on Compound Hum…"
+ },
+ {
+  "kind": "unclosed-quote",
+  "blockId": "p459b1",
+  "pages": [
+   459
+  ],
+  "found": "…to measure their behavior by. “ Surely we ought,” says he, “to be very cautious before we dismiss any branch of knowledg…",
+  "against": "6 opening marks against 5 closing",
+  "context": "…urely we ought,” says he, “to be very cautious before we dismiss any branch of knowledge or train of thought as essentially unprofitable.” †"
+ },
+ {
+  "kind": "unclosed-quote",
+  "blockId": "p460b2",
+  "pages": [
+   460
+  ],
+  "found": "…al law to suit special emergencies. Says John Stuart Mill,† “If we do not already believe in supernatural agencies, no mi…",
+  "against": "1 opening marks against 0 closing",
+  "context": "…y as an extraordinary fact, may be satisfactorily certified by our senses or by testimony ; but nothing can ever prove that it is a miracle."
+ },
+ {
+  "kind": "name-variant",
+  "blockId": "p469b2",
+  "pages": [
+   469,
+   470
+  ],
+  "found": "Academics",
+  "against": "Academies (4 uses against 1)",
+  "context": "There was a period of time when the learned Academics made themselves particularly merry at the simple enunciatio…"
+ },
+ {
+  "kind": "stray-spelling",
+  "blockId": "p480b1",
+  "pages": [
+   480
+  ],
+  "found": "decent",
+  "against": "descent (7 uses against 1)",
+  "context": "…liar with all that could happen under natural law, and some decent excuse for the contemptuous tone which marks all of Huxley’…"
  }
 ]
