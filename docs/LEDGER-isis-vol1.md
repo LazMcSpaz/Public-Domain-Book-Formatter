@@ -632,3 +632,46 @@ than of the volume.
 
 The tally in the table above (2 / 2 in Chapter I) therefore reads **14 / 14**
 across the volume so far, with no disagreement.
+
+### Two checks that were quietly wrong, and the leaves that found them
+
+Both were live defects rather than tuning questions, and neither would have been
+visible without a long book of this particular kind going through them.
+
+**A doubled reference mark is one marker.** Past six notes a leaf starts the
+symbols again — `**`, `††`, `‡‡` — and leaf 358 carries nine notes and uses all
+three. Both places that read a mark off a note's own text matched a single
+symbol. In `--check` that was a false refusal: it stopped a sound batch and
+called three notes misfiled when they were filed right. In `printedMarker` it
+had not fired yet and was worse: a note with no declared marker opening `** With
+the Gnostics` would be filed under `*`, a mark another note on that leaf already
+owns, so the body's `**` reference reaches nothing and the note prints as an
+orphan endnote — with `stripLeadingMarker`, handed `*`, leaving the second
+asterisk in the text. Only a repeat of the same symbol counts and only two of
+them: `*†` is two notes a reader has run together and should be reported, not
+merged, and this tradition doubles without trebling. The doc comment had claimed
+the doubles all along; the regex never implemented them.
+
+Scored over the 372 leaves read at the time: **556 notes, 0 orphaned**, and
+`**` × 4, `††` × 2, `‡‡` × 2 — eight notes that the single-symbol rule would
+have misfiled the moment a reader left the field off.
+
+**The doubled-word check could not see a word beginning with a ligature.**
+JavaScript's `\b` is defined against `\w`, which is `[A-Za-z0-9_]` and nothing
+else; the `u` flag does not widen it. So a boundary falls in the _middle_ of
+every word this book spells `dæmon`, `Timæus`, `fœtus` or `élan`, and the check
+was wrong in both directions on one page.
+
+The false positive is what surfaced it — `Amphitheatri Sapientiæ Æternæ` came
+back as the doubled word `æ Æ`, the trailing ligature of one word matching the
+leading ligature of the next across a boundary that should not exist. The false
+negative is the one that mattered: `Æneid Æneid`, `Œdipus Œdipus`, `œuvre œuvre`
+and `élan élan` matched nothing at all, there being no `\b` before a leading
+`Æ`. A word doubled across a page seam is the exact artefact this check exists
+for, and on a volume that names the Æneid, Œdipus, Ægypt and dæmons on nearly
+every leaf it would have gone through in silence.
+
+What both have in common is worth naming: a check can be **noisy** and still be
+read, and a check that is **silent** cannot be. The `æ Æ` report is what got
+anybody to look at a rule that had been failing to fire for three hundred
+leaves.
