@@ -473,7 +473,16 @@ export function assembleBook(
 
       // Footnotes leave the body flow entirely and are re-attached at typeset time.
       if (block.kind === 'footnote') {
-        const marker = block.marker ?? '*'
+        // The declared marker, or the one the note's own text opens with, or
+        // `*` — in that order. The bare `*` fallback used to come second and
+        // mislabelled every note whose transcriber left the mark in the text
+        // and omitted the field: the page's `†` stayed in the text, the note
+        // was filed as `*`, and `markOrphanFootnotes` then looked for a mark
+        // the body does not carry. Where the field disagrees with the text,
+        // the field still wins here and `verifyPage` reports the disagreement
+        // — assembly must stay total, and a contradiction inside one leaf is
+        // something for a person rather than something to resolve silently.
+        const marker = block.marker ?? printedMarker(block.text) ?? '*'
         const raw = stripSoftHyphens(block.text.trim())
         const text = stripLeadingMarker(raw, marker)
         // Emphasis is word indices, and stripping the marker removes leading
@@ -744,6 +753,33 @@ function escapeRegExp(s: string): string {
  * The marker must be followed by punctuation or whitespace, so "1662 was the
  * year" is never mistaken for a marker plus text.
  */
+/**
+ * The reference mark a note's own text opens with, or null.
+ *
+ * The printed page repeats the marker at the head of the note, so a note whose
+ * text begins `† See Gibbon` is telling you what its marker is. That matters
+ * because a reader transcribing a leaf can put the mark in the text and forget
+ * the field, and the fallback for a missing field used to be `*` — so on six
+ * notes in one chapter of *Isis Unveiled* the `†` stayed in the text and the
+ * note was filed under a mark the page never printed. Reading it off the text
+ * is not a guess; it is the same act as reading it off the page.
+ *
+ * A bare digit is only a marker when something follows it that a number would
+ * not — `1662 was the year` opens no note. Symbols need no such guard: no note
+ * begins with a dagger by accident.
+ */
+export function printedMarker(text: string): string | null {
+  const trimmed = text.trim()
+  const symbol = /^([*\u2020\u2021\u00a7\u00b6\u2016])/u.exec(trimmed)
+  if (symbol) return symbol[1]!
+  const superscript = new RegExp(`^(${SUPERSCRIPT_CLASS}{1,3})`, 'u').exec(trimmed)
+  if (superscript) {
+    return [...superscript[1]!].map((d) => String(SUPERSCRIPT_DIGITS.indexOf(d))).join('')
+  }
+  const digits = /^(\d{1,3})(?:[.)\]:]|\s)/u.exec(trimmed)
+  return digits ? digits[1]! : null
+}
+
 export function stripLeadingMarker(text: string, marker: string): string {
   const trimmed = text.trim()
   const m = marker.trim()

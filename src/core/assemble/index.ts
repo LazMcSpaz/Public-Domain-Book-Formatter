@@ -13,6 +13,7 @@ export {
   stripSoftHyphens,
   footnoteMarkerPattern,
   stripLeadingMarker,
+  printedMarker,
   type BookDocument,
   type BookBlock,
   type Footnote,

@@ -23,6 +23,7 @@
  * Pure: no model calls, no I/O.
  */
 import type { OcrWordLike } from './types'
+import { printedMarker } from '@core/assemble'
 import { dispositionFor } from '@core/pages'
 import type { PageTranscription } from './schema'
 import { checkableText } from './schema'
@@ -40,6 +41,7 @@ export type VerificationCode =
   | 'seam-broken'
   | 'duplicate-page'
   | 'furniture-missing'
+  | 'footnote-marker'
 
 export type Severity = 'high' | 'medium' | 'low'
 
@@ -180,14 +182,62 @@ export function verifyPage(
     })
   }
 
-  // A footnote block with no marker can't be re-linked to its reference.
-  const orphanNotes = page.blocks.filter((b) => b.kind === 'footnote' && !b.marker)
-  if (orphanNotes.length > 0) {
+  // A footnote and the mark it is filed under, which are three different
+  // situations and used to be one.
+  //
+  // The page repeats the marker at the head of the note, so a note whose text
+  // opens `† See Gibbon` says what its mark is. Assembly reads that when the
+  // field is absent (`printedMarker`), which it did not used to: the fallback
+  // was a bare `*`, and on six notes in one chapter of *Isis Unveiled* the `†`
+  // stayed in the text while the note was filed under a mark the page never
+  // printed. So a missing field is now recoverable and says so, a missing field
+  // with nothing in the text to read is the real orphan, and a field that
+  // **disagrees** with the text is a contradiction inside one leaf — which
+  // nothing can resolve without looking, because either the transcriber typed
+  // the wrong field or read the wrong mark off the page.
+  const notes = page.blocks.filter((b) => b.kind === 'footnote')
+  const noMarkAtAll = notes.filter((b) => !b.marker && printedMarker(b.text) === null)
+  const recovered = notes.filter((b) => !b.marker && printedMarker(b.text) !== null)
+  const contradicted = notes.filter((b) => {
+    if (!b.marker) return false
+    const printed = printedMarker(b.text)
+    return printed !== null && printed !== b.marker.trim()
+  })
+
+  if (noMarkAtAll.length > 0) {
     findings.push({
       code: 'orphan-footnote',
       severity: 'low',
       pageIndex: page.pageIndex,
-      message: `${orphanNotes.length} footnote(s) have no reference marker to link back to.`
+      message:
+        `${noMarkAtAll.length} footnote(s) have no reference marker to link back to, and ` +
+        'their text does not open with one either.'
+    })
+  }
+  if (recovered.length > 0) {
+    findings.push({
+      code: 'orphan-footnote',
+      severity: 'low',
+      pageIndex: page.pageIndex,
+      message:
+        `${recovered.length} footnote(s) declared no marker, so it was read off the front of ` +
+        `the note's own text (${recovered
+          .map((b) => `"${printedMarker(b.text)}"`)
+          .join(', ')}). Check that is the mark the page prints.`
+    })
+  }
+  if (contradicted.length > 0) {
+    findings.push({
+      code: 'footnote-marker',
+      severity: 'medium',
+      pageIndex: page.pageIndex,
+      message:
+        `${contradicted.length} footnote(s) are filed under one mark and open with another — ` +
+        contradicted
+          .map((b) => `declared "${b.marker}", printed "${printedMarker(b.text)}"`)
+          .join('; ') +
+        '. One of the two is wrong and the page settles which.',
+      words: contradicted.map((b) => b.text.slice(0, 40))
     })
   }
 
