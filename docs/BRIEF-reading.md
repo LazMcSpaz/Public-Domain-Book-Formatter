@@ -19,6 +19,19 @@ against, and that is the one unrecoverable failure for a public-domain reprint.
 If you cannot read a word on the render, **leave the draft's reading and say so
 in `uncertain`**. Do not supply a plausible word.
 
+## Open the renders a few at a time
+
+**Never open more than three renders in one message.** A page of this book is a
+megabyte or so of pixels, and a request carrying seven of them times out on the
+server rather than failing cleanly — measured twice on the same seven leaves, in
+both cases at the exact turn that opened them. The batch is then lost whole and
+has to be read again from nothing.
+
+Read them in groups of three or fewer: open a group, check those leaves against
+their drafts, write what you found, and only then open the next group. It costs
+one extra turn per group and it is the difference between a batch that lands and
+a batch that dies at the first turn.
+
 ## What is already settled — do not redo it
 
 The draft has had two deterministic passes over it. Both are measured, both

@@ -319,17 +319,23 @@ ${leaves.map((l) => l.pageIndex).join(', ')} — ${leaves.length} of them.
 
 ## How to work
 
-**Open your renders in one block**, before you write anything, then read them
-all against their drafts and write the whole batch in one file write. This is
-measured, not a preference: interleaving reading and writing leaf by leaf costs
-about 30% more for the same leaves and finds nothing extra, because every turn
-re-sends the whole accumulated context.
+**Open your renders three at a time, never more.** Open a group of three, read
+those leaves against their drafts, write down what you found, and only then open
+the next group. Write the whole batch in one file write at the end.
 
-**If that request times out, open them in two smaller groups instead.** It
-happens now and then and it is not your fault — four batches of one chapter died
-at exactly that step, three opening fourteen images and one opening seven, while
-batches of every size between six and fourteen came through. Nothing is lost
-when it happens.
+This used to read "open them all in one block, and if that times out open two
+smaller groups", and the second half of that sentence was advice nobody could
+take: the timeout does not come back as an error to recover from, it ends the
+reader where it stands and the batch is lost whole. Six batches of this volume
+died at exactly that turn — three opening fourteen images, three opening seven —
+against successes at every size from six to fourteen, so it is not a size
+threshold but a risk that rises with the pixels in one request.
+
+The cost of the safer order is real and smaller than it looks: reading in groups
+of three is four or five turns for a fourteen-leaf batch rather than one, not
+the fourteen that full leaf-by-leaf interleaving costs, and it is that
+interleaving the 30% figure was measured against. A batch that has to be read
+again from nothing costs all of it.
 
 ## The seam
 ${
