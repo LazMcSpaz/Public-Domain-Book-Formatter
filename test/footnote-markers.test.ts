@@ -172,13 +172,16 @@ describe('a footnote that runs over onto the next leaf', () => {
   })
 
   /**
-   * The narrowness is the safety. Only the **first** note on a leaf can be a
-   * runover; a markerless note with others above it on the same leaf is some
-   * other thing, and leaf 216 of this volume is exactly that. It stays its own
-   * note and `verifyPage` goes on flagging it, which is the right answer for a
-   * case nobody has looked at.
+   * The same shape lower down a leaf, which the rule used to decline.
+   *
+   * Leaf 216 of this volume sets a `*` note, a `†` note, and then a third
+   * paragraph with no mark — a further paragraph of the `†` note, not a third
+   * note. Leaf 287 is the case that forced the look: one `*` note in five
+   * paragraphs, the mark on the first, and the body carrying exactly one
+   * reference. Under the old rule that leaf produced one note and four orphan
+   * `*` endnotes at the back of the book.
    */
-  it('does not join a markerless note that has notes above it on its own leaf', () => {
+  it('joins a markerless note that has notes above it on its own leaf', () => {
     const doc = assembleBook([
       leaf(12, [
         { kind: 'paragraph', text: 'Body.*' },
@@ -187,11 +190,41 @@ describe('a footnote that runs over onto the next leaf', () => {
       leaf(13, [
         { kind: 'paragraph', text: 'More body.†' },
         { kind: 'footnote', marker: '†', text: '† Second note.' },
-        { kind: 'footnote', text: 'A third thing with no mark at all.' }
+        { kind: 'footnote', text: 'A further paragraph of it, with no mark at all.' }
       ])
     ])
-    expect(doc.footnotes).toHaveLength(3)
-    expect(doc.footnotes[2]!.text).toBe('A third thing with no mark at all.')
+    expect(doc.footnotes).toHaveLength(2)
+    expect(doc.footnotes[1]!.originalMarker).toBe('†')
+    expect(doc.footnotes[1]!.text).toBe(
+      'Second note. A further paragraph of it, with no mark at all.'
+    )
+  })
+
+  /**
+   * Leaf 287 itself, in miniature: one mark in the body, one in the notes, and
+   * four paragraphs under it carrying none. The count is the assertion — under
+   * the narrow rule this was five notes, four of them orphans, and the orphans
+   * are what print at the back of the book meaning nothing.
+   */
+  it('gathers every markerless paragraph of one note, not just the first', () => {
+    const doc = assembleBook([
+      leaf(12, [
+        { kind: 'paragraph', text: 'Tritenheim left their recipes for it.*' },
+        { kind: 'footnote', marker: '*', text: '* Sublime them into flowers.' },
+        { kind: 'footnote', text: 'The other is as follows :' },
+        { kind: 'footnote', text: 'Affuse over it strong wine vinegar.' },
+        { kind: 'footnote', text: 'These are the eternal lights of Tritenheimus.' },
+        { kind: 'footnote', text: 'We may add that we have ourselves seen a lamp.' }
+      ])
+    ])
+    expect(doc.footnotes).toHaveLength(1)
+    expect(doc.footnotes[0]!.originalMarker).toBe('*')
+    expect(doc.footnotes[0]!.text).toBe(
+      'Sublime them into flowers. The other is as follows : ' +
+        'Affuse over it strong wine vinegar. ' +
+        'These are the eternal lights of Tritenheimus. ' +
+        'We may add that we have ourselves seen a lamp.'
+    )
   })
 
   it('does not join a note that opens with a mark of its own', () => {

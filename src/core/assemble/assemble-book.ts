@@ -463,8 +463,6 @@ export function assembleBook(
     // beats deleting a line of the book on a guess.
     const pictures = byPage.get(page.pageIndex) ?? []
     let nextPicture = 0
-    // Whether this leaf has produced a note yet, for the seam rule below.
-    let noteOnThisLeaf = false
 
     for (const [blockIndex, block] of page.blocks.entries()) {
       if (block.kind === 'caption' && nextPicture < pictures.length) {
@@ -475,29 +473,31 @@ export function assembleBook(
 
       // Footnotes leave the body flow entirely and are re-attached at typeset time.
       if (block.kind === 'footnote') {
-        // **A note running over from the leaf before carries no mark**, because
-        // the page prints the marker once and does not repeat it at the top of
-        // the continuation. Filed as a note of its own it becomes a second
-        // note with the `*` fallback — so the reader gets the note in two
-        // pieces, and the orphan half prints as a collected endnote at the back
-        // of the book, on its own, meaning nothing. Measured on *Isis Unveiled*
-        // Vol. I: three of 240 notes across five chapters.
+        // **A note paragraph with no mark on it continues the note above.** The
+        // page prints the marker once, at the head of the note, and every
+        // further paragraph of that note — whether it falls lower on the same
+        // leaf or at the top of the next one — is set with a first-line indent
+        // and nothing else. Filed as a note of its own it becomes a second note
+        // with the `*` fallback, so the reader gets the note in pieces and the
+        // orphan halves print as collected endnotes at the back of the book,
+        // out of order and meaning nothing.
         //
-        // Narrow on purpose, and it errs toward reporting. Only the **first**
-        // note on a leaf can be a runover — a markerless note with two notes
-        // above it on the same leaf is some other thing, and leaf 216 of this
-        // volume has exactly that. It stays a note of its own and `verifyPage`
-        // goes on flagging it, which is the right answer for a case nobody has
-        // looked at.
+        // This started narrower — only the *first* note on a leaf could be a
+        // runover — on the reasoning that a markerless note with a note above
+        // it on the same leaf was some other thing, and leaf 216 of this volume
+        // was cited as the case nobody had looked at. Leaf 287 forced the look,
+        // and both leaves turn out to be the same shape: 287 sets one `*` note
+        // in five paragraphs, with the mark on the first and the body carrying
+        // exactly one reference; 216 sets a third paragraph under its `†`. The
+        // narrow rule was caution, not a finding, and the two pages it was
+        // cautious about both say the same thing.
+        //
+        // It still errs toward reporting: `verifyPage` flags a note with no
+        // mark anywhere whether or not assembly joins it, so a reader who drops
+        // a marker by mistake is caught by the check rather than by the silence
+        // this rule would otherwise create.
         const previousNote = footnotes[footnotes.length - 1]
-        if (
-          !noteOnThisLeaf &&
-          previousNote !== undefined &&
-          previousNote.pageIndex < page.pageIndex &&
-          !block.marker &&
-          printedMarker(block.text) === null
-        ) {
-          noteOnThisLeaf = true
+        if (previousNote !== undefined && !block.marker && printedMarker(block.text) === null) {
           const joined = stripSoftHyphens(joinText(previousNote.text, block.text))
           // Word indices again, and the same trap the marker strip has: the
           // continuation's emphasis is counted from its own first word, so it
@@ -522,7 +522,6 @@ export function assembleBook(
           previousNote.text = joined
           continue
         }
-        noteOnThisLeaf = true
         // The declared marker, or the one the note's own text opens with, or
         // `*` — in that order. The bare `*` fallback used to come second and
         // mislabelled every note whose transcriber left the mark in the text
