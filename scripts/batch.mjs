@@ -178,9 +178,16 @@ function checkBatch(donePath, draftPath) {
           `q ${(page.queries ?? []).length}${loud ? '   <<< drift' : ''}`
       )
       if (loud) {
+        // In words as well as per cent, because the two say different things
+        // and only one of them is actionable. Leaf 310 of *Isis Unveiled* moved
+        // 8.1% and that was nine words — a rule line OCR read as `me A TT Te`,
+        // rightly deleted, on a short leaf where nine words is a twelfth of it.
+        // The percentage is what catches a dropped paragraph; the count is what
+        // tells you in one glance that this is not one.
         problems.push(
-          `leaf ${n}: ${(drift * 100).toFixed(1)}% word drift against the draft — a reader ` +
-            'correcting a page does not move it that far'
+          `leaf ${n}: ${(drift * 100).toFixed(1)}% word drift against the draft ` +
+            `(${now - was} words, ${was} to ${now}) — a reader correcting a page does not ` +
+            'usually move it that far. Look before landing it.'
         )
       }
     }
