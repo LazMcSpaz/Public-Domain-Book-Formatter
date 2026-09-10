@@ -29,7 +29,7 @@
  * which is what the render helpers here already produce.
  */
 import { chromium } from 'playwright'
-import { readdirSync, statSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
+import { readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 /** Playwright's own download is skipped in this image; this is what is here. */

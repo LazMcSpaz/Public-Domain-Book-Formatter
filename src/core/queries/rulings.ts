@@ -127,6 +127,38 @@ export function answerFor(query: RaisedQuery, rulings: readonly Ruling[]): Rulin
   )
 }
 
+/**
+ * Where a ruling sits: the leaf and the words, or the class a standing ruling
+ * names. Two rulings with the same target are the same decision made twice.
+ */
+export function rulingTarget(ruling: Ruling): string {
+  return `${ruling.pageIndex ?? 'standing'}:${ruling.quote.trim().toLowerCase()}`
+}
+
+/** Whether two rulings answer the same question. */
+export function sameRuling(a: Ruling, b: Ruling): boolean {
+  return a.pageIndex === b.pageIndex && sameWords(a.quote, b.quote)
+}
+
+/**
+ * The list with this ruling in it, replacing an earlier ruling on the same
+ * query **where that one stood**.
+ *
+ * `withEdit` removes and re-appends, because an edit list is applied in order
+ * and the later one has to win. Rulings are not applied in order — nothing
+ * reads two rulings on one query — so moving one to the end would only make a
+ * diff out of nothing, on a shelf whose whole point is that git keeps every
+ * version. Ruling on a query a second time is the editor changing their mind,
+ * and the later answer is the one that counts.
+ */
+export function withRuling(rulings: readonly Ruling[], ruling: Ruling): Ruling[] {
+  const at = rulings.findIndex((r) => sameRuling(r, ruling))
+  if (at < 0) return [...rulings, ruling]
+  const out = [...rulings]
+  out[at] = ruling
+  return out
+}
+
 /** The queries still waiting on a person. */
 export function outstanding(
   queries: readonly RaisedQuery[],

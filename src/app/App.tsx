@@ -108,6 +108,15 @@ import {
 import { collectBookBatch, submitBookBatch } from '../platform/browser/batch-run'
 import { fetchBook, getBytes, readShelf } from '../platform/browser/shelf'
 import { flushOutbox } from '../platform/browser/shelf-outbox'
+import {
+  collectQueries,
+  queryKey,
+  rulingTarget,
+  rulingsFromAnswers,
+  sameRuling,
+  withRuling,
+  type Ruling
+} from '@core/queries'
 import { outboxFor, queueForShelf } from '../platform/browser/run-store'
 import { pushBookToShelf } from '../platform/browser/shelf-save'
 import { canReachBatchApi } from '../platform/browser/batch-reach'
@@ -291,6 +300,18 @@ export function App(): JSX.Element {
    */
   const attentionRef = useRef<Attention[]>([])
   const transcriptionRef = useRef<RunResult | null>(null)
+  /**
+   * The rulings as they stand, for the saves that run outside a render.
+   *
+   * `persistRun` is built once and called from an autosave timer; reading
+   * `state.rulings` through its closure would persist whatever the list was
+   * when the callback was made. Everything that changes the list writes here
+   * too.
+   */
+  const rulingsRef = useRef<Ruling[]>([])
+
+  /** Which leaf each query sits on, by the key its questions are grouped under. */
+  const queryPagesRef = useRef<Map<string, number>>(new Map())
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
   const [pendingCost, setPendingCost] = useState<string | null>(null)
   /**
@@ -577,6 +598,14 @@ export function App(): JSX.Element {
     () => ({ ...state, answers: { ...state.answers, [step.id]: answers } }),
     [state, step.id, answers]
   )
+  // Which leaf each query sits on, for the crop the query gate shows. Filled
+  // during the render that builds the questions rather than in an effect,
+  // because an effect runs *after* — and a gate whose evidence turns up on the
+  // second render is a gate that opens with none.
+  useMemo(() => {
+    queryPagesRef.current = new Map(state.queries.map((q) => [queryKey(q), q.pageIndex]))
+  }, [state.queries])
+
   const questions = useMemo(() => step.questions(liveState), [step, liveState])
 
   // Reset answers to the recommended defaults whenever the gate changes.
@@ -1035,6 +1064,25 @@ export function App(): JSX.Element {
     },
     []
   )
+
+  /**
+   * The leaf a query sits on, as evidence at the query gate.
+   *
+   * A `page:` ref rather than a URL, resolved by `resolveEvidence` to the
+   * thumbnail already in hand and by `enlargeEvidence` to a render big enough
+   * to read — which is the whole promise: nobody rules on a compositor's error
+   * without looking at what the compositor set.
+   *
+   * `undefined` when there is no reading on this device, which is a book opened
+   * from the shelf without its scan. The gate still asks — a ruling is the
+   * words and the reasoning, and both are on screen — and it does not show an
+   * `<img>` pointing at nothing, which would look exactly like evidence.
+   */
+  const queryCropFor = useCallback((key: string): string | undefined => {
+    if (!reconRef.current) return undefined
+    const page = queryPagesRef.current.get(key)
+    return page === undefined ? undefined : `page:${page}`
+  }, [])
 
   const resolveEvidence = useCallback((src: string): string | undefined => {
     const m = /^page:(\d+)$/.exec(src)
@@ -1798,6 +1846,16 @@ export function App(): JSX.Element {
           }))
         ),
         failedPages: failures.map((f) => f.pageIndex),
+        // The decisions the reading raised and refused to take. Derived here
+        // with everything else the transcriptions imply, so a book reopened
+        // tomorrow arrives at the query gate with the same list a freshly-read
+        // one does — the rulings are the half that is *stored*, because they
+        // are the editor's and nothing can recompute them.
+        queries: collectQueries(transcriptions),
+        // Stable, and reading the map above through a ref: putting a function
+        // rebuilt each render into the state would set the state from the
+        // render that read it.
+        queryCropFor,
         // What was read off each page, for the uncertainty gate to show beside
         // the scan. Built here rather than at the gate because this is the one
         // place both a fresh run and a restored one pass through, and a gate
@@ -1902,8 +1960,12 @@ export function App(): JSX.Element {
         'gate-identity': { ...(s.answers['gate-identity'] ?? {}), ...restored }
       }
     }))
+    // The rulings come back with the run for the same reason the corrections
+    // do, and more so: a query is a decision, and nothing can recompute one.
+    rulingsRef.current = [...saved.rulings]
     complete({
       ...stateFromTranscriptions(saved.transcriptions, saved.failures),
+      rulings: [...saved.rulings],
       // The verdicts come back with the run. They were paid for alongside it,
       // and a reopened book that has forgotten them shows the gate every spot
       // as though nobody had ever looked.
@@ -1984,6 +2046,7 @@ export function App(): JSX.Element {
         suppliedBytesRef.current = new Map(file.run.images.map((i) => [i.id, i.bytes]))
         setEdits(file.run.edits)
         lastQueuedRef.current = file.run.edits
+        rulingsRef.current = [...file.run.rulings]
         setError(null)
         setAnswers({})
 
@@ -1993,6 +2056,7 @@ export function App(): JSX.Element {
           fileName: file.run.fileName,
           fileSize: 0,
           savedRun: null,
+          rulings: [...file.run.rulings],
           adjudicated: spotsFromStored(file.run.adjudicated),
           // Everything the recovery half decides was decided when this book was
           // read, and none of it can be revisited without the paper. Marked
@@ -2004,7 +2068,14 @@ export function App(): JSX.Element {
             'gate-identity',
             'transcribe',
             'gate-uncertainties',
-            'gate-structure'
+            'gate-structure',
+            // The queries *could* be ruled on here — a ruling needs the words
+            // and the reasoning, and the crop of the leaf is a help rather
+            // than a requirement. But this route promises the reading view and
+            // must land there, so the gate is stepped past and reached the
+            // other way: `link review` opens the book with its scan, which is
+            // the door that gate was built for.
+            'gate-queries'
           ]
         }))
         chooseProofView('reading')
@@ -2097,7 +2168,13 @@ export function App(): JSX.Element {
           edits: corrections,
           images,
           complete,
-          adjudicated
+          adjudicated,
+          // The editor's answers to the queries. Read through a ref rather
+          // than from `state`, because this callback is deliberately built
+          // once and an autosave firing with a stale closure would write a
+          // sitting's rulings back out of the run — the one record here that
+          // no amount of re-reading the scan could reproduce.
+          rulings: rulingsRef.current
         })
       )
       if (!stored) {
@@ -2190,9 +2267,20 @@ export function App(): JSX.Element {
    * why this can ride the same debounce as the autosave without the queue
    * growing without bound.
    */
-  const [outbox, setOutbox] = useState<OutboxSummary>({ waiting: 0, marks: 0, oldest: null })
+  const [outbox, setOutbox] = useState<OutboxSummary>({
+    waiting: 0,
+    marks: 0,
+    rulings: 0,
+    oldest: null
+  })
   const [outboxNote, setOutboxNote] = useState<string | null>(null)
-  const shelfConfig = useMemo(() => (isProofing ? loadShelf() : null), [isProofing])
+  /** What became of the last press of Next at the query gate. */
+  const [rulingNote, setRulingNote] = useState<string | null>(null)
+  // The proof step and the query gate are the two places a change is made that
+  // the shelf should hear about. Everything before them is the recovery half,
+  // which is re-derivable from the scan and belongs on the device.
+  const wantsShelf = isProofing || step.id === 'gate-queries'
+  const shelfConfig = useMemo(() => (wantsShelf ? loadShelf() : null), [wantsShelf])
 
   const emptyOutbox = useCallback(async (): Promise<void> => {
     const config = shelfConfig
@@ -2212,6 +2300,86 @@ export function App(): JSX.Element {
       )
     }
   }, [shelfConfig])
+
+  /**
+   * File what the editor has just ruled — on this device, and on the shelf.
+   *
+   * Called on every press of Next at the query gate, which is what the editor
+   * asked for in those words: seventy-nine decisions is several sittings, and a
+   * sitting kept only at the end is a sitting a locked phone can take. The
+   * device store protects against a crashed tab; only the shelf protects
+   * against a browser that quietly cleaned itself up.
+   *
+   * ## Why the rulings do not reach `state` until the gate is left
+   *
+   * `queryQuestions` shows what is *outstanding*, so folding a ruling into
+   * `state.rulings` as it is made would take its screen out of the list under
+   * the editor: the pager would shorten as they worked, and going back to
+   * change an answer made ten minutes ago would find the query gone. So a
+   * sitting's rulings live in the ref — which is what is persisted and queued,
+   * so nothing is at risk — and join the state when the gate is finished.
+   *
+   * Only what actually changed is filed. Every Next re-reads the whole answer
+   * set, so without this the last press of a long sitting would re-queue every
+   * ruling in it.
+   */
+  const fileRulings = useCallback(async (): Promise<void> => {
+    const raised = state.queries
+    if (raised.length === 0) return
+    const made = rulingsFromAnswers(raised, currentAnswers, new Date().toISOString().slice(0, 10))
+    const before = rulingsRef.current
+    const fresh = made.filter((ruling) => {
+      const had = before.find((p) => sameRuling(p, ruling))
+      return !had || JSON.stringify(had) !== JSON.stringify(ruling)
+    })
+    if (fresh.length === 0) return
+
+    let next = before
+    for (const ruling of fresh) next = withRuling(next, ruling)
+    rulingsRef.current = next
+
+    // The device first: it is the store that cannot fail for want of a
+    // connection, and `persistRun` reads the ref that was just set.
+    const run = transcriptionRef.current
+    let kept = false
+    if (run) {
+      kept = await persistRun(
+        run,
+        state.answers['gate-identity'] ?? {},
+        loadPrefs().modelId,
+        editsRef.current,
+        suppliedBytesRef.current,
+        true,
+        state.adjudicated
+      )
+    }
+    // Claims nothing the write has not confirmed — the autosave indicator's
+    // rule, and the reason a failure here is worth a sentence rather than a
+    // silence.
+    const count = `${fresh.length} ${fresh.length === 1 ? 'ruling' : 'rulings'}`
+    if (!kept) {
+      setRulingNote(
+        `${count} could not be saved on this device. Do not close the tab — ` +
+          'free up storage and press Next again.'
+      )
+      return
+    }
+    setRulingNote(`${count} saved on this device.`)
+
+    const key = fileKeyRef.current
+    const config = shelfConfig
+    if (!key || !config || !shelfReady(config)) return
+    const madeAt = new Date().toISOString()
+    // One entry per query, keyed by the query, so ruling twice in a sitting
+    // replaces rather than queues twice. Awaited before anything is reported,
+    // the batch ticket's rule: a change said to be queued that no store took is
+    // discovered a fortnight later with the work gone.
+    for (const ruling of fresh) {
+      await queueForShelf({ id: `ruling:${rulingTarget(ruling)}`, bookKey: key, ruling, madeAt })
+    }
+    setOutbox(summarizeOutbox(await outboxFor(key)))
+    await emptyOutbox()
+  }, [state, currentAnswers, persistRun, shelfConfig, emptyOutbox])
 
   useEffect(() => {
     if (!isProofing) return
@@ -3755,6 +3923,16 @@ export function App(): JSX.Element {
       void finishProof()
       return
     }
+    if (step.id === 'gate-queries') {
+      // File the last screen's answer before leaving, then fold the sitting's
+      // rulings into the state — which is where `queryQuestions` reads them, so
+      // this is the moment the settled queries leave the gate.
+      void (async () => {
+        await fileRulings()
+        complete({ rulings: [...rulingsRef.current] })
+      })()
+      return
+    }
     if (step.id === 'annotate') {
       const doc = state.document
       const wantsNotes = (currentAnswers['annotateBook'] ?? 'yes') === 'yes'
@@ -3855,6 +4033,7 @@ export function App(): JSX.Element {
     finishStructure,
     finishProof,
     finishDesign,
+    fileRulings,
     useSavedRun,
     collectBatch,
     abandonBatch
@@ -4762,6 +4941,16 @@ export function App(): JSX.Element {
           <div className="resume-note">{checkNote}</div>
         ) : null}
 
+        {/* What became of the last press of Next. Shown at the query gate only,
+            and only once something has been ruled: an indicator that speaks
+            before there is anything to say is one nobody reads. */}
+        {rulingNote && step.id === 'gate-queries' ? (
+          <div className="resume-note" role="status">
+            {rulingNote}
+            {outboxNote ? ` ${outboxNote}` : ''}
+          </div>
+        ) : null}
+
         {/* --- gates --- */}
         {!exported &&
         !progressInfo &&
@@ -4791,6 +4980,9 @@ export function App(): JSX.Element {
               onPlace={(next) => {
                 setPlace(next)
                 if (fileKeyRef.current) saveReviewPlace(fileKeyRef.current, step.id, next)
+                // Every press of Next saves the ruling just made — the editor
+                // asked for this by name, so that partial work is kept.
+                if (step.id === 'gate-queries') void fileRulings()
               }}
             >
               {(atEnd) =>

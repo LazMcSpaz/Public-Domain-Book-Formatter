@@ -27,7 +27,7 @@
 import { chromium } from 'playwright'
 import { createServer } from 'node:http'
 import { access, mkdir, writeFile } from 'node:fs/promises'
-import { createReadStream, statSync } from 'node:fs'
+import { createReadStream, statSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
 const PORT = Number(process.env.DRIVE_PORT ?? 7788)

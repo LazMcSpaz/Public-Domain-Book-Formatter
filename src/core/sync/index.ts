@@ -30,10 +30,14 @@ export {
 export {
   commutes,
   entriesBetween,
+  isRuling,
   mergeOutbox,
   summarize,
+  type EditEntry,
   type MergeResult,
   type OutboxConflict,
   type OutboxEntry,
-  type OutboxSummary
+  type OutboxSummary,
+  type RulingEntry,
+  type ShelfState
 } from './outbox'
