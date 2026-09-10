@@ -288,6 +288,60 @@ first ruling on it was recorded unfindable. A query nobody can look up is worse
 than none — the driver's own words — and `parsePageTranscription` has the page's
 blocks in hand when it accepts one.
 
+## Chapter II, and what the batch shape costs
+
+The chapter was read as **four arms of one experiment**, because the question
+after Chapter I was whether the agents could be made cheaper and nobody had
+measured anything. All four had the same brief except for one paragraph, and the
+draft they were given had already had the hyphen rule and the numbering rule
+run over it.
+
+| Arm | Leaves | How the brief told it to work  |  Tokens |   Per leaf | Tool calls | Per leaf |
+| --- | -----: | ------------------------------ | ------: | ---------: | ---------: | -------: |
+| A   |      6 | one leaf at a time             | 175,295 | **29,216** |         71 |     11.8 |
+| B   |      6 | every render first, then write | 135,111 | **22,519** |         15 |      2.5 |
+| C   |     12 | every render first, then write | 224,225 | **18,685** |         84 |      7.0 |
+| D   |     10 | every render first, then write | 163,472 | **16,347** |         18 |      1.8 |
+
+Chapter I, for comparison, ran at about **26,000 a leaf** — six agents of six,
+each working a leaf at a time, on a draft with neither rule applied.
+
+**What the numbers actually say is that batch size is not the lever; turns
+are.** Cost per leaf tracks tool calls per leaf almost exactly, and the two
+lines cross: C is a bigger batch than B and dearer per leaf than D, because C
+did not follow the instruction — 84 calls for twelve leaves against D's 18 for
+ten. Every turn re-sends the whole accumulated context, so a reader that opens
+a render, writes a leaf, opens the next render and writes again is paying for
+the first render eleven more times.
+
+The paragraph that produced that difference is one sentence long. Arm A was
+told to work a leaf at a time; B, C and D were told to open every render in a
+single block and then write once. **Same six leaves, A against B: 29,216 a leaf
+against 22,519, and nothing found by the expensive one that the cheap one
+missed.**
+
+Chapter II came to **698,103 tokens for 34 leaves — 20,532 a leaf**, against
+Chapter I's ~26,000, and that is with half the arms deliberately or accidentally
+running the dear way. At D's rate the remaining 621 leaves of the volume are on
+the order of **10.2M tokens against 17.2M** at the Chapter I rate.
+
+What did _not_ change is accuracy. Every arm landed with `flagged: []` except
+one leaf of C, word counts moved between −3.4% and +2.2% against the draft, and
+the schema validator found nothing in any of the four. Two of the arms fixed
+folios the numbering rule had disputed — leaf 120 to 62 and leaf 126 to 68, both
+against the render, both confirming what the check had predicted.
+
+### Where the rest of the cost is
+
+At 150 DPI a leaf's render is about 1,280 tokens, so at two turns the images are
+about 2,600 of D's 16,347. The rest is the brief, the draft, the reply and the
+reading. The draft is the part worth attacking: measured on Chapter III's first
+batch, `blocks` is 50% of it, `structural` 18%, the settled `hyphens` 16% and
+`uncertain` 12%. The hyphens are pure noise to a reader — they have already been
+applied to the text, and the unsettled ones are named in the brief — and two
+`structural` lines repeat verbatim on every leaf. Taking those out puts the
+draft at **80%** of its size, which is what Chapter III is being read against.
+
 ## What of this chapter's reading was deterministic
 
 Measured after the fact, against what the readers actually decided. Every one

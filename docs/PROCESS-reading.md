@@ -272,6 +272,23 @@ see far**. That property is rebuilt on purpose:
 - **One subagent per handful of leaves**, given the images, the draft, and the
   tail of the previous batch for the seam. It returns a batch and dies. The
   parent never holds a page image.
+- **Tell it to open every render in one block, then write once.** This is the
+  single cheapest instruction in the whole process and it is measured, not a
+  preference: over one chapter of _Isis Unveiled_, the same six leaves cost
+  **29,216 tokens a leaf** read one at a time and **22,519** read all at once,
+  and the expensive one found nothing the cheap one missed. Every turn re-sends
+  the accumulated context, so a reader that opens a render, writes a leaf, opens
+  the next and writes again pays for the first render eleven more times.
+- **Batch size is not the lever; turns are.** Cost per leaf tracks _tool calls
+  per leaf_ almost exactly. A batch of twelve that ignored the instruction (84
+  calls) cost more per leaf than a batch of ten that followed it (18 calls).
+  Ten to thirteen leaves is a reasonable size; the brief is what decides the
+  bill.
+- **Give the reader a lean draft.** `structural` and the settled `hyphens` are
+  the parent's record, not the reader's material — the hyphens have already been
+  applied to the text and the unsettled ones belong in the brief by name, and two
+  `structural` lines repeat verbatim on every leaf. Taking both out puts the
+  draft at 80% of its size, and it is in context for every turn.
 - **Checkpoint every batch.** A session that dies loses one batch, not a book.
 
 ---
