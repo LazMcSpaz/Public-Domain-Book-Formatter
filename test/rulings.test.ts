@@ -183,6 +183,75 @@ describe('rulings the book has not caught up with', () => {
   })
 
   /**
+   * The real leaf, and the reason the comparison is made in both notations.
+   *
+   * Leaf 285 of *Isis Unveiled* Vol. I prints `on acount of the
+   * <i>desecration.</i>`. The query was raised by a reader working from the
+   * render, in plain prose, and the ruling was written from the query — so the
+   * word was mended, the edit landed, and the check went on reporting the
+   * ruling outstanding because the tags sat inside the quoted phrase.
+   */
+  it('finds a correction whose wording straddles an italic the ruling does not quote', () => {
+    const italicised = ruling({
+      pageIndex: 285,
+      quote: 'extinguished on acount of the desecration.',
+      correction: 'extinguished on account of the desecration.'
+    })
+    expect(
+      unapplied(
+        [italicised],
+        prose(
+          'but was instantaneously extinguished on account of the <i>desecration.</i> T. Livius'
+        )
+      )
+    ).toEqual([])
+  })
+
+  it('still flags it when the book keeps the printed form behind the same markup', () => {
+    const italicised = ruling({
+      pageIndex: 285,
+      quote: 'extinguished on acount of the desecration.',
+      correction: 'extinguished on account of the desecration.'
+    })
+    expect(
+      unapplied(
+        [italicised],
+        book({
+          blocks: [
+            para('extinguished on account of the <i>desecration.</i>'),
+            para('extinguished on acount of the <i>desecration.</i>', { id: 'p12b2' })
+          ]
+        })
+      )
+    ).toHaveLength(1)
+  })
+
+  /**
+   * The one thing stripping the tags cannot see. A ruling whose two forms are
+   * the same words and differ only in emphasis would compare equal to itself
+   * once stripped, and every such ruling would read as already applied.
+   */
+  it('reads a ruling about the emphasis alone with the markup left in', () => {
+    const setInItalic = ruling({
+      pageIndex: 137,
+      quote: 'the Catechism of the Religion of Positivism',
+      correction: 'the <i>Catechism of the Religion of Positivism</i>'
+    })
+    expect(
+      unapplied(
+        [setInItalic],
+        prose('exclaims the author of the Catechism of the Religion of Positivism')
+      )
+    ).toHaveLength(1)
+    expect(
+      unapplied(
+        [setInItalic],
+        prose('exclaims the author of the <i>Catechism of the Religion of Positivism</i>')
+      )
+    ).toEqual([])
+  })
+
+  /**
    * A correction that only *adds* something contains the printed form, so
    * "is the old reading still there?" is meaningless — it always is. Asking
    * anyway reported a landed correction as outstanding forever, which is how

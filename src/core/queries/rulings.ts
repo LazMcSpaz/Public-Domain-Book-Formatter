@@ -161,14 +161,45 @@ export function settled(
  * `<i>` — was reported outstanding forever. A check that cries wolf is what
  * stops anyone reading the check, so the rule for what counts as the book lives
  * in one place and no caller gets to decide it.
+ *
+ * ## Why the comparison is made twice
+ *
+ * `bookText` puts the markup back, and the doc comment there says a ruling's
+ * correction is quoted from those strings. On this book that turned out not to
+ * hold. A ruling is written from the **query sheet**, and a query's quote is
+ * written by whoever raised it — a reader working from a render, in plain
+ * prose. Leaf 285 of *Isis Unveiled* Vol. I was raised as `extinguished on
+ * acount of the desecration` where the book carries `on acount of the
+ * <i>desecration.</i>`, so the ruling was applied, the word was mended, and
+ * the check went on reporting it outstanding because the tags sat inside the
+ * quoted phrase.
+ *
+ * So each side is asked in both notations, and either answer counts. What that
+ * cannot see is a ruling **about** the markup — "set this title in italic" —
+ * whose two forms are the same words and differ only in tags: stripped, its
+ * correction equals its quote and every such ruling would read as already
+ * applied. That case is named rather than lost, and compared with the tags
+ * left in.
  */
 export function unapplied(rulings: readonly Ruling[], book: BookDocument): Ruling[] {
-  const text = bookText(book).toLowerCase()
+  const marked = bookText(book).toLowerCase()
+  const plain = stripInlineMarkup(marked)
   return rulings.filter((ruling) => {
     if (ruling.decision !== 'corrected') return false
     const wanted = (ruling.correction ?? '').trim().toLowerCase()
     if (wanted === '') return true
-    if (!text.includes(wanted)) return true
+    const quote = ruling.quote.trim().toLowerCase()
+
+    // A ruling whose two forms are the same words once the tags come off is a
+    // ruling about the emphasis and nothing else. Stripping would make it
+    // compare equal to itself, so it is read with the markup left in.
+    const aboutMarkupOnly = stripInlineMarkup(wanted) === stripInlineMarkup(quote)
+    const has = (needle: string): boolean =>
+      aboutMarkupOnly
+        ? marked.includes(needle)
+        : marked.includes(needle) || plain.includes(stripInlineMarkup(needle))
+
+    if (!has(wanted)) return true
 
     // The printed form still being in the book usually means the correction
     // half-landed — one occurrence mended and another missed. It means nothing
@@ -176,9 +207,21 @@ export function unapplied(rulings: readonly Ruling[], book: BookDocument): Rulin
     // correction that only adds something does: closing a quotation turns
     // `he awoke.` into `he awoke.”`, and the first will always be inside the
     // second. Asking then reports every such ruling as unapplied forever.
-    if (wanted.includes(ruling.quote.trim().toLowerCase())) return false
-    return text.includes(ruling.quote.trim().toLowerCase())
+    if (wanted.includes(quote)) return false
+    return has(quote)
   })
+}
+
+/**
+ * The inline notation removed, leaving the words.
+ *
+ * Only the tags the book's own notation uses — `parseInlineMarkup` reads `<i>`,
+ * `<em>`, `<b>` and `<strong>` and nothing else, so nothing else is taken out.
+ * A stray `<` in the text stays where it is rather than eating the rest of the
+ * line, which a general tag-stripper would do to a note quoting an inequality.
+ */
+function stripInlineMarkup(text: string): string {
+  return text.replace(/<\/?(?:i|em|b|strong)>/gi, '')
 }
 
 const HEADING: Record<RulingDecision, string> = {
