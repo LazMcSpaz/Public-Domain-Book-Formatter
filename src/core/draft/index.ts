@@ -481,14 +481,27 @@ function typeSize(line: DraftLine): number | null {
 }
 
 /**
- * The page's own type size, as the median of its lines'.
+ * The page's own body type size.
  *
- * Per line rather than per word, so a page whose footnotes run long does not
- * drag the body figure down with them.
+ * An **upper quartile** rather than a median, because the body is the largest
+ * text a page sets, not the commonest. A median is the commonest, and on a
+ * note-heavy leaf the notes are the commonest: leaf 91 of Isis Vol. I carries
+ * one footnote long enough to fill half the page, so 17 of its lines measure
+ * 22 against 11 at 26, and the median called the *footnote* size the body.
+ * Everything measured against it then moved with it — the stamp on that leaf
+ * came out at 86% of "body" instead of 73% and was left on the leaf.
+ *
+ * Measured on the other seventeen fixture leaves, all of them body-dominated,
+ * the two differ by 0 to 2 pixels. So this costs nothing where the median was
+ * right and fixes the case where it was not.
  */
 function bodyTypeSize(lines: readonly DraftLine[]): number {
-  const sizes = lines.map(typeSize).filter((v): v is number => v !== null)
-  return sizes.length > 0 ? median(sizes) : 1
+  const sizes = lines
+    .map(typeSize)
+    .filter((v): v is number => v !== null)
+    .sort((a, b) => a - b)
+  if (sizes.length === 0) return 1
+  return sizes[Math.min(sizes.length - 1, Math.floor(sizes.length * 0.75))]!
 }
 
 /**
