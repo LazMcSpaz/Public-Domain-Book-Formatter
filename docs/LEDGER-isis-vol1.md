@@ -331,6 +331,37 @@ the schema validator found nothing in any of the four. Two of the arms fixed
 folios the numbering rule had disputed — leaf 120 to 62 and leaf 126 to 68, both
 against the render, both confirming what the check had predicted.
 
+### The queries, put to the crop before they were put to the editor
+
+Chapter II raised 21 queries. Before any of them went on the editor's sheet
+they went through the step the process calls Stage 8 — **cut the word out of
+its own leaf at 600 DPI and look, without the hypothesis in front of you**. It
+is one render per leaf and it is free.
+
+**Thirteen were checkable that way and twelve held.** The paper really does set
+`necessarially`, `superstitution`, `visioin`, `aud`, `vas`, `cxact`, `conld`,
+`sweeetheart`, `Athough`, `immeas-urabiy`, `Soerius` and the comma in
+`the study, of ancient philosophy`. Those are the editor's, and they are on the
+sheet.
+
+**One was not a query at all.** Leaf 117's note came back as `Sec Huxley:
+“Physical Basis of Life.”` with a query asking whether an 1877 compositor's slip
+should be carried into a reprint — and the crop reads **`See`**, with two `e`s.
+There was never a decision there; the reading was wrong. What makes it worth
+recording is the reason the reader gave: _"the third letter of the first word
+has no crossbar on the render, where the `e` before it plainly does."_ That is
+specific, confident, and describes a page that does not exist. It is the same
+fault the six readers of Chapter I showed when three of them claimed
+magnification they did not have — the readings mostly hold and **the warrant
+does not**, which is exactly why a finding becomes an edit only after somebody
+looks at the pixels.
+
+`drive.mjs unquery` came out of it, because there was no way to withdraw a
+question raised on a misreading: `rule` records the editor's answer to a real
+question and lives forever in `rulings.md`, and this one had no question in it.
+It refuses without a reason, and the reason has to be what the crop shows — a
+sheet is not shortened for being long.
+
 ### Where the rest of the cost is
 
 At 150 DPI a leaf's render is about 1,280 tokens, so at two turns the images are

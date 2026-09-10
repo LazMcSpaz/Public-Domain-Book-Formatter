@@ -3355,6 +3355,81 @@ async function serve() {
      * There is deliberately no argument for a proposed fix. A suggestion beside
      * a question is an answer in all but name, and the answer is the editor's.
      */
+    /**
+     * Withdraw a query whose premise was wrong.
+     *
+     * A query is a question for the editor about *the book*, and it is raised
+     * and never taken — that rule stands. But a query raised because the
+     * reader misread the paper is not a question about the book at all: on
+     * leaf 117 of Isis Vol. I a note came back as `Sec Huxley` with a query
+     * asking whether an 1877 compositor's slip should be carried, and the crop
+     * at 600 DPI reads `See`, with two `e`s. There was never a decision there.
+     *
+     * So this is not `rule`. A ruling is the editor's answer to a real
+     * question and lives forever in `rulings.md`; this says the question
+     * should not have been asked, and the reason has to be evidence — the
+     * words the crop actually shows. It is refused without one, because "the
+     * sheet is long" is not a reason to shorten it.
+     *
+     * The correction itself is a separate act. This removes the question; the
+     * text is mended with `sweep` or `correct` like any other reading, and
+     * the report says so rather than letting a withdrawn query look like a
+     * fixed book.
+     */
+    unquery: async ([leaf, quote, because = '']) => {
+      const pageIndex = Number(leaf)
+      if (!Number.isInteger(pageIndex) || !quote || !because) {
+        throw new Error(
+          'unquery <leaf> <quote> <what the crop actually shows> — evidence, not tidiness'
+        )
+      }
+      return page.evaluate(
+        async ([repo, pageIndex, quote, because]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+
+          const leafAt = run.transcriptions.find((t) => t.pageIndex === pageIndex)
+          if (!leafAt) throw new Error(`Leaf ${pageIndex} has not been read.`)
+          const held = (leafAt.queries ?? []).find((q) => q.quote === quote)
+          if (!held) {
+            throw new Error(
+              `No query on leaf ${pageIndex} carries those words. Check the quote against ` +
+                '`queries`; nothing was changed.'
+            )
+          }
+
+          const transcriptions = run.transcriptions.map((t) =>
+            t.pageIndex === pageIndex
+              ? { ...t, queries: (t.queries ?? []).filter((q) => q.quote !== quote) }
+              : t
+          )
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            transcriptions
+          })
+          const stored = await runStore.saveRun(next)
+          const raised = queriesMod.collectQueries(transcriptions)
+          return {
+            pageIndex,
+            withdrawn: held,
+            because,
+            stored: stored === true,
+            queriesOnThisBook: raised.length,
+            waiting: queriesMod.outstanding(raised, run.rulings ?? []).length,
+            next: 'The question is gone. The text is not mended — use `sweep` for that.'
+          }
+        },
+        [REPO, pageIndex, quote, because]
+      )
+    },
+
     query: async ([leaf, quote, kind = 'unclear', why = '']) => {
       const pageIndex = Number(leaf)
       if (!Number.isInteger(pageIndex) || !quote || !why) {

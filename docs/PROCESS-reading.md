@@ -361,6 +361,18 @@ can score is worse than no check, because it manufactures confidence.
 
 ---
 
+**A query is not exempt.** Measured on Chapter II of _Isis Unveiled_: of 21
+queries raised, 13 could be cut out of their own leaves and looked at, and
+**12 held. One was not a query at all** — a note read as `Sec Huxley` with a
+query about carrying a compositor's slip, where the crop reads `See`. The
+reason given for it was specific and confident and described a page that does
+not exist. So the crop pass runs over the queries too, before any of them reach
+the editor's sheet, and `drive.mjs unquery` withdraws one whose premise the
+pixels refute — refusing without a reason, because a sheet is not shortened for
+being long.
+
+---
+
 ## Stage 9 — A person decides
 
 The verdicts are **a sheet to read, not a queue to approve**. Nothing reaches
