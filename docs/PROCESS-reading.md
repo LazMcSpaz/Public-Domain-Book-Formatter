@@ -291,6 +291,31 @@ see far**. That property is rebuilt on purpose:
   draft at 80% of its size, and it is in context for every turn.
 - **Checkpoint every batch.** A session that dies loses one batch, not a book.
 
+`scripts/batch.mjs` does all of the above from a drafted chapter — it splits it,
+writes the lean per-batch draft and a brief carrying the seam, the disputed
+folios and the unsettled hyphens, and **refuses to write anything if a render is
+missing**, because a reader handed a missing render reads the draft alone. The
+shared method every reader is given is [`BRIEF-reading.md`](./BRIEF-reading.md).
+
+```bash
+node scripts/drive.mjs draft ch4.json 157 158 … 182
+for n in $(seq 157 182); do node scripts/drive.mjs leaf $n ch4-$n 150; done
+node scripts/batch.mjs ch4.json out/ch4 --per 13 --renders out/ch4/leaves \
+  --prefix ch4 --seam out/ch3-tail.txt
+# … give each brief to one subagent, then, per batch:
+node scripts/batch.mjs --check out/ch4/A-done.json out/ch4/A-draft.json
+node scripts/drive.mjs transcribe <scan.pdf> out/ch4/A-done.json
+```
+
+`--check` is the half `transcribe` cannot do. `parsePageTranscription` refuses a
+field it does not know and `verifyPage` compares the leaf against OCR — but by
+then the notation has been parsed into word indices, so an unclosed `<i>`, which
+`parseInlineMarkup` reads as "italic to the end of the block" and reports
+nowhere, is invisible from that side. `--check` runs over the raw JSON where the
+tags still exist, and also catches a leaf missing from the reply, a footnote
+filed under one mark and opening with another, and word drift against the draft
+past a few per cent — a reader _correcting_ a page does not move it that far.
+
 ---
 
 ## Stage 6 — Check the book against itself, for free
