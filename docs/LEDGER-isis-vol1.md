@@ -362,6 +362,29 @@ question and lives forever in `rulings.md`, and this one had no question in it.
 It refuses without a reason, and the reason has to be what the crop shows — a
 sheet is not shortened for being long.
 
+### Chapter III, on the shape the measurement recommended
+
+Two batches of thirteen, told to open every render in one block, on a draft
+trimmed to 80% by dropping the settled hyphens and the two `structural` lines
+that repeat on every leaf.
+
+| Batch | Leaves |  Tokens |   Per leaf | Tool calls | Per leaf |
+| ----- | -----: | ------: | ---------: | ---------: | -------: |
+| E     |     13 | 173,043 | **13,311** |         23 |      1.8 |
+| F     |     13 | 164,511 | **12,655** |         25 |      1.9 |
+
+**12,983 a leaf across the chapter**, against Chapter II's 20,532 and Chapter
+I's ~26,000 — half the baseline, on the same accuracy. `flagged: []` for all 26
+leaves, word drift between −3.5% and +1.4%, and `--check` clean on both.
+
+The volume's numbering disputed four folios in this chapter and every one was
+settled against the render: 138 → 80, 140 → 82, 141 → 83, 146 → 88. With leaves
+120 and 126 from Chapter II that is **six for six**, and five of the six are the
+same fault — this fount's old-style **8** read as a **3**.
+
+At this rate the remaining 595 leaves are about **7.7M tokens**, against 15.5M
+at the Chapter I rate.
+
 ### Where the rest of the cost is
 
 At 150 DPI a leaf's render is about 1,280 tokens, so at two turns the images are
