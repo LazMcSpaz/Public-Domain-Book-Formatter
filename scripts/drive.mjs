@@ -27,6 +27,7 @@
 import { chromium } from 'playwright'
 import { createServer } from 'node:http'
 import { access, mkdir, writeFile } from 'node:fs/promises'
+import { createReadStream, statSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
 const PORT = Number(process.env.DRIVE_PORT ?? 7788)
@@ -286,7 +287,7 @@ async function serve() {
      */
     _adopt: async (path) => {
       const full = resolve(REPO, path)
-      const { readFile, stat } = await import('node:fs/promises')
+      const { stat } = await import('node:fs/promises')
       const meta = await stat(full)
       const file = {
         name: full.split('/').pop(),
@@ -304,17 +305,24 @@ async function serve() {
         [REPO, key]
       )
       if (!held) {
-        const bytes = await readFile(full)
+        // Fetched by the page rather than base64'd into this call. See the
+        // GET /file route: a 357 MB scan is 476 MB of base64, and the tab
+        // does not survive being handed it.
         await page.evaluate(
-          async ([repo, f, base64]) => {
+          async ([repo, f, url]) => {
             const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
-            const raw = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+            const res = await fetch(url)
+            if (!res.ok) throw new Error(`fetching the scan: ${res.status}`)
+            const raw = new Uint8Array(await res.arrayBuffer())
+            if (raw.length !== f.size) {
+              throw new Error(`scan arrived as ${raw.length} bytes, expected ${f.size}`)
+            }
             await runStore.saveSourceFile(
               [f.name, f.size, f.lastModified].join('\u0000'),
               new File([raw], f.name, { type: 'application/pdf' })
             )
           },
-          [REPO, file, bytes.toString('base64')]
+          [REPO, file, `http://127.0.0.1:${PORT}/file?path=${encodeURIComponent(full)}`]
         )
       }
       return { file, key, scanStored: true }
@@ -408,7 +416,39 @@ async function serve() {
       const full = resolve(REPO, path)
       const { stat } = await import('node:fs/promises')
       const meta = await stat(full)
-      await page.setInputFiles('input[type=file]', full)
+      // Not `setInputFiles`: it carries the file across the debug protocol as
+      // base64 and the tab dies well below the size of a scanned volume. The
+      // bytes are fetched by the page and put on the input as a `File`, which
+      // raises the same change event the app gets when a person picks one —
+      // so this is still the app's own intake path and not a second one.
+      //
+      // `lastModified` is set from the file's real mtime because a run key is
+      // `name\0size\0modified`: a stamped time would file the reading under a
+      // key nothing later would find, which is the fault `_adopt` exists to
+      // avoid.
+      await page.evaluate(
+        async ({ url, name, size, lastModified }) => {
+          const res = await fetch(url)
+          if (!res.ok) throw new Error(`fetching the scan: ${res.status}`)
+          const buf = await res.arrayBuffer()
+          if (buf.byteLength !== size) {
+            throw new Error(`scan arrived as ${buf.byteLength} bytes, expected ${size}`)
+          }
+          const file = new File([buf], name, { type: 'application/pdf', lastModified })
+          const input = document.querySelector('input[type=file]')
+          if (!input) throw new Error('no file input on the page')
+          const dt = new DataTransfer()
+          dt.items.add(file)
+          input.files = dt.files
+          input.dispatchEvent(new Event('change', { bubbles: true }))
+        },
+        {
+          url: `http://127.0.0.1:${PORT}/file?path=${encodeURIComponent(full)}`,
+          name: full.split('/').pop(),
+          size: meta.size,
+          lastModified: Math.floor(meta.mtimeMs)
+        }
+      )
       // Current from here on, and its scan stored, so no later verb has to
       // guess which book it means or fall back to another one's pixels.
       const adopted = await handlers._adopt(path)
@@ -3510,6 +3550,31 @@ async function serve() {
   }
 
   const server = createServer((req, res) => {
+    // Bytes for the page, over HTTP rather than through the debug protocol.
+    //
+    // Playwright's `setInputFiles` and a base64 argument to `page.evaluate`
+    // both carry the whole file across CDP as text, a third larger again, and
+    // the tab dies somewhere between 32 MB and 110 MB — measured, on a fresh
+    // browser, both ways. A scanned volume of Isis Unveiled is 357 MB. The
+    // *page* holds that comfortably: fetching it and taking a full copy
+    // besides, 714 MB in all, was measured to work. So the file arrives the
+    // way any other resource does, and the protocol carries only the URL.
+    if (req.method === 'GET' && req.url.startsWith('/file?')) {
+      const wanted = new URL(req.url, 'http://127.0.0.1').searchParams.get('path')
+      try {
+        const meta = statSync(wanted)
+        res.writeHead(200, {
+          'Content-Type': 'application/pdf',
+          'Content-Length': meta.size,
+          'Access-Control-Allow-Origin': '*'
+        })
+        createReadStream(wanted).pipe(res)
+      } catch (err) {
+        res.writeHead(404, { 'Access-Control-Allow-Origin': '*' })
+        res.end(String(err))
+      }
+      return
+    }
     let body = ''
     req.on('data', (chunk) => (body += chunk))
     req.on('end', () => {
