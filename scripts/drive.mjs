@@ -1996,6 +1996,88 @@ async function serve() {
       )
     },
 
+    /**
+     * Every picture the reading found, leaf by leaf.
+     *
+     * The detection is not new and this verb runs none: `detectIllustrations`
+     * has already looked at every leaf, inside recon's loop while the page was
+     * rendered and about to be thrown away, and the candidates are in the recon
+     * cache beside the words. What was missing is a way to *ask* — so a plate
+     * reached the book only when a reader happened to notice one, and on this
+     * volume four did while five hundred leaves went by without the question
+     * being put at all.
+     *
+     * That is the shape CLAUDE.md names: a step done for one book is not done
+     * for the next, and habits skip. A number nobody can read is a check nobody
+     * is running.
+     *
+     * `ink` is the fraction of the region that is ink, which is why it was
+     * offered rather than how sure anything is — an ink test cannot tell a
+     * woodcut from a table of figures, and is not asked to. What the verb is
+     * for is putting a short list of leaves in front of someone with the
+     * renders, not deciding.
+     */
+    figures: async ([out = '', minInk = '0']) => {
+      const found = await page.evaluate(
+        async ([repo, floor]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
+          const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const cached = await cacheMod.loadReconCache(newest.key, {
+            dpi: recon.RECON_DPI,
+            maxPages: null
+          })
+          if (!cached) throw new Error('No cached reading on this device.')
+          // The same distinction `words` and `ocr` draw: a leaf with no picture
+          // and a leaf the reading never reached look identical from here, and
+          // reporting one as the other is how a book is declared plateless on
+          // the strength of a cache that stops at leaf 200.
+          const covered = [...new Set(cached.words.map((w) => w.pageIndex))].sort((a, b) => a - b)
+          const rows = (cached.illustrations ?? [])
+            .filter((c) => c.ink >= floor)
+            .map((c) => ({
+              leaf: c.region.pageIndex,
+              ink: Math.round(c.ink * 1000) / 1000,
+              x: Math.round(c.region.bbox.x0),
+              y: Math.round(c.region.bbox.y0),
+              w: Math.round(c.region.bbox.x1 - c.region.bbox.x0),
+              h: Math.round(c.region.bbox.y1 - c.region.bbox.y0)
+            }))
+            .sort((a, b) => a.leaf - b.leaf || b.ink - a.ink)
+          return {
+            book: newest.fileName,
+            leavesRead: covered.length,
+            firstLeafRead: covered[0] ?? null,
+            lastLeafRead: covered[covered.length - 1] ?? null,
+            candidates: rows.length,
+            leavesWithCandidates: [...new Set(rows.map((r) => r.leaf))],
+            rows
+          }
+        },
+        [REPO, Number(minInk)]
+      )
+      if (out) {
+        const lines = [
+          `# Pictures the reading found — ${found.book}`,
+          '',
+          `${found.candidates} candidate(s) on ${found.leavesWithCandidates.length} leaf/leaves, ` +
+            `out of ${found.leavesRead} leaves read (${found.firstLeafRead}–${found.lastLeafRead}).`,
+          '',
+          'Ink is the fraction of the region that is ink — why it was offered, not how sure',
+          'anything is. Look at each on the render before deciding it is a picture.',
+          '',
+          '| Leaf | Ink | Box (x, y, w × h) |',
+          '| ---: | ---: | --- |',
+          ...found.rows.map((r) => `| ${r.leaf} | ${r.ink} | ${r.x}, ${r.y}, ${r.w} × ${r.h} |`)
+        ]
+        writeFileSync(resolve(REPO, out), lines.join('\n') + '\n')
+        return { ...found, wrote: resolve(REPO, out) }
+      }
+      return found
+    },
+
     ocr: async ([...ns]) => {
       // `ocr 37 fresh` re-reads the pixels instead of the cache, which is how
       // to tell a leaf the cache has no words for from a leaf Tesseract cannot
