@@ -214,6 +214,62 @@ describe('a quotation that never closes', () => {
   })
 
   /**
+   * The other way a quotation crosses a paragraph, and the one this book uses:
+   * no mark at the break at all, one closing mark at the end. Of 30 findings
+   * measured over 422 leaves of *Isis Unveiled*, not one had a next block that
+   * opened with a mark — so the convention the test above exempts never fired
+   * on this book, while a fifth of what the check reported was this.
+   */
+  it('leaves a quotation that runs on and closes in a later paragraph', () => {
+    const found = checkConsistency(
+      doc([
+        block('He said, “All occultists know that man has seven senses.'),
+        block('And the additional two are known to few of them.”')
+      ])
+    ).filter((f) => f.kind === 'unclosed-quote')
+    expect(found).toHaveLength(0)
+  })
+
+  /**
+   * The bound is the point rather than a tuning. A quotation that has crossed
+   * three paragraphs with no mark of any kind in it is better explained by a
+   * lost mark than by a very long run-on, and saying so is what the check is
+   * for. On the finished volume every run-on closed within two.
+   */
+  it('reports one that has run on too far to be a run-on', () => {
+    const found = checkConsistency(
+      doc([
+        block('He said, “All occultists know that man has seven senses.'),
+        block('A paragraph with no mark in it at all.'),
+        block('A second paragraph with no mark in it at all.'),
+        block('A third paragraph with no mark in it at all.'),
+        block('And the additional two are known to few of them.”')
+      ])
+    ).filter((f) => f.kind === 'unclosed-quote')
+    expect(found).toHaveLength(1)
+  })
+
+  /**
+   * Which opening is reported, rather than whichever happened to be last. A
+   * block with a lost mark early and two sound quotations after it was putting
+   * the last of them on the sheet — a passage that closes perfectly well two
+   * words later, and tells a reader nothing about where to look.
+   */
+  it('points at the opening that is unmatched, not the last one', () => {
+    const found = checkConsistency(
+      doc([
+        block(
+          'He began, “this one never closes. Then “a sound quotation,” and ' +
+            '“another sound one,” and the paragraph ends.'
+        ),
+        block('An ordinary paragraph.')
+      ])
+    ).filter((f) => f.kind === 'unclosed-quote')
+    expect(found).toHaveLength(1)
+    expect(found[0]!.found).toContain('this one never closes')
+  })
+
+  /**
    * Printing convention opens **every line** of quoted verse and closes only
    * the last, so a verse block carries several opening marks and often no
    * closing one at all. Measured over the first 176 leaves of *Isis Unveiled*,
