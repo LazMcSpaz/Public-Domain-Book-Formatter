@@ -53,7 +53,7 @@ export interface DraftLine {
 }
 
 export interface DraftBlock {
-  kind: 'paragraph' | 'heading' | 'caption'
+  kind: 'paragraph' | 'heading' | 'caption' | 'footnote'
   text: string
 }
 
@@ -75,7 +75,7 @@ export interface DraftPage {
   blocks: DraftBlock[]
   /** Runs of words OCR itself was unsure of, as spans to look at. */
   uncertain: DraftSpan[]
-  furniture: { runningHead?: string; folio?: string }
+  furniture: { runningHead?: string; folio?: string; stamp?: string[] }
   /**
    * What the draft guessed rather than measured, in plain language.
    *
@@ -452,6 +452,110 @@ interface Measure {
  * into the gutter or a stray mark in the margin would otherwise widen the
  * measure and stop every real indent from registering.
  */
+/**
+ * A line's type size, which is **not** the height of its boxes.
+ *
+ * A word's box is as tall as its tallest letter and as deep as its lowest, so
+ * `Godfrey` and `archaeologist` measure 29–30 where `with`, `and` and `Max`
+ * measure 21–23 — on the same line, in the same size. Taking the median of a
+ * line's word heights therefore measures its *word mix*, and on leaf 300 of
+ * Isis Vol. I it called a footnote 106% of the body and would have kept it in
+ * the text.
+ *
+ * The lower quartile is close to the x-height, because most words in running
+ * prose have neither an ascender nor a descender. Words of one character are
+ * left out: a lone `*`, `1` or `.` is a reference mark or a leader, not type
+ * to measure.
+ *
+ * Returns null on a line with too few words to measure, which is a real
+ * answer and not a zero — `'+ ¢ Timeeus,” p. 22.'` is four boxes and the
+ * statistic means nothing on it.
+ */
+function typeSize(line: DraftLine): number | null {
+  const heights = line.words
+    .filter((w) => w.text.trim().length >= 2)
+    .map(heightOf)
+    .sort((a, b) => a - b)
+  if (heights.length === 0) return null
+  return heights[Math.floor(heights.length / 4)]!
+}
+
+/**
+ * The page's own type size, as the median of its lines'.
+ *
+ * Per line rather than per word, so a page whose footnotes run long does not
+ * drag the body figure down with them.
+ */
+function bodyTypeSize(lines: readonly DraftLine[]): number {
+  const sizes = lines.map(typeSize).filter((v): v is number => v !== null)
+  return sizes.length > 0 ? median(sizes) : 1
+}
+
+/**
+ * The most trailing lines a scanner's stamp is looked for over.
+ *
+ * The HathiTrust footer is two lines — `Digitized by` / `Original from` above
+ * `CORNELL UNIVERSITY CORNELL UNIVERSITY` — and OCR merges them into one on
+ * about a third of leaves. Three is that plus room, and the cap is what keeps
+ * the walk from eating a page: on leaf 7 of `tight-scramble` the biggest gap
+ * on the leaf is 7.3 strides and sits under a chapter opening, so an unbounded
+ * walk up from the foot would have taken the whole leaf as a stamp.
+ */
+/**
+ * How near a miss has to be before a declined furniture line is worth naming.
+ *
+ * The set-apart test is the first one a candidate meets and the one nearly
+ * every leaf fails, because the top line of a page of running prose sits a
+ * normal line's distance from the next. Saying so on every leaf would bury the
+ * declines that matter. Two-thirds of the threshold is close enough to be
+ * worth a look and far enough that ordinary body text does not reach it.
+ */
+const FURNITURE_NEAR = 0.66
+
+const STAMP_MAX_LINES = 3
+
+/**
+ * How far a stamp stands off the text above it, in paragraph strides.
+ *
+ * Measured over eighteen leaves of five books: the stamp on Isis Vol. I sits
+ * **5.8 to 7.0** strides below the last line of the page, and the largest gap
+ * above a *last* line anywhere else is **1.8** — on a leaf whose footnotes are
+ * set in two ragged columns. Three sits clear of both.
+ */
+const STAMP_GAP = 3
+
+/**
+ * How much smaller than the body a stamp is set.
+ *
+ * The Cornell footer measures 50–73% of the body's type size, and the smallest
+ * real footnote measures 77%. 0.80 separates them, and the gap test above has
+ * to agree before anything is taken, so this only has to be roughly right.
+ */
+const STAMP_SIZE = 0.8
+
+/**
+ * How much smaller than the body a footnote is set.
+ *
+ * Measured across the six Isis leaves: body lines come out at 96–100% of the
+ * page's type size and footnotes at 77–88%, with nothing in between. 0.92 sits
+ * in that gap. A footnote is *not* required to carry a reference mark, because
+ * a note running onto a second line has none — leaf 650 has two such lines —
+ * and requiring one would put half a note back in the body text.
+ */
+/**
+ * What a footnote's reference mark looks like at the head of a line.
+ *
+ * The marks this book actually sets are `*`, a dagger, a double dagger and
+ * `§`, and OCR has no reliable glyph for the middle two: across six leaves it
+ * read them as `t`, `+`, `1` and `|`. So the class is wide, and it is only
+ * ever used to decide where one note *ends and another begins* — never whether
+ * a line is a note at all, which the type size decides. A line of body text
+ * beginning `1` is common; a line of body text set at 85% of the body is not.
+ */
+const FOOTNOTE_MARK = /^\s*[*†‡§¶|+t1-9]\s*[^\s]/u
+
+const FOOTNOTE_SIZE = 0.92
+
 function measureOf(lines: readonly DraftLine[]): Measure {
   const left = median(lines.map((l) => l.left))
   const right = median(lines.map((l) => l.right))
@@ -569,6 +673,61 @@ function splitFurnitureLine(
  * before `deriveChapters` ever sees it. And at the **foot** of a leaf only a
  * folio is taken: `FINIS.` is the book's colophon and belongs in the text.
  */
+/**
+ * Take the scanner's own stamp off the foot of the leaf.
+ *
+ * A digitized book carries matter that was never printed on the paper: the
+ * library's footer, a rights notice, a handle URL. On Isis Vol. I every one of
+ * 693 leaves ends `Digitized by … CORNELL UNIVERSITY`, which OCR reads as text
+ * and which would otherwise become a block on every leaf and print in the
+ * book.
+ *
+ * It is not identified by what it *says*. OCR reads the same footer as
+ * `Digitized by`, `Diaitieed by`, `— Oriainal from` and `CORMELL UNIVERSITY`
+ * across six sampled leaves, so a phrase list would catch some leaves and miss
+ * others — and a rule that half-works here is worse than none, because the
+ * leaves it misses are the ones nobody checks.
+ *
+ * It is identified by **where it sits**: a short run of lines at the very foot,
+ * set smaller than the body, standing several strides clear of the last line of
+ * text. All three tests must pass. Each one alone has a real counter-example in
+ * the fixtures — `FINIS.` is a last line set apart, a chapter opening leaves a
+ * seven-stride gap under its number, and a leaf's final short line is often
+ * small — and together they take the stamp on all six Isis leaves and nothing
+ * at all on the twelve leaves of the four books that have no stamp.
+ *
+ * Removed from the lines, and **named in `structural`**, because a draft that
+ * quietly drops matter off a leaf is the one shape of draft nobody can check.
+ */
+function takeStamp(lines: DraftLine[], stride: number, bodySize: number, said: string[]): string[] {
+  if (lines.length < STAMP_MAX_LINES + 2) return []
+  const run: number[] = []
+  for (let i = lines.length - 1; i >= 1 && run.length < STAMP_MAX_LINES; i--) {
+    const size = typeSize(lines[i]!)
+    if (size === null || size > bodySize * STAMP_SIZE) break
+    run.unshift(i)
+    if ((lines[i]!.top - lines[i - 1]!.bottom) / stride >= STAMP_GAP) break
+  }
+  if (run.length === 0) return []
+  const top = run[0]!
+  const standoff = (lines[top]!.top - lines[top - 1]!.bottom) / stride
+  if (standoff < STAMP_GAP) return []
+  const taken = run.map((i) => lines[i]!.text.trim())
+  // Measured before the splice: after it, `lines[top]` is gone and
+  // `lines[top - 1]` is the last line of the *body*, so reporting its size
+  // would describe the text this rule just decided to keep.
+  const biggest = Math.max(...run.map((i) => typeSize(lines[i]!) ?? 0))
+  lines.splice(top, run.length)
+  said.push(
+    `${taken.length} line(s) were taken off the foot as the scanner's own stamp rather than ` +
+      `the book's text — ${taken.map((t) => `"${t}"`).join(', ')}. They stand ` +
+      `${standoff.toFixed(1)} strides clear of the text above and are set at ` +
+      `${Math.round((biggest / bodySize) * 100)}% of the body. Check the render if the book ` +
+      'really does print something down there.'
+  )
+  return taken
+}
+
 function takeFurniture(
   lines: DraftLine[],
   measure: Measure,
@@ -589,7 +748,23 @@ function takeFurniture(
     }
 
     const between = at === 'first' ? neighbour.top - line.bottom : line.top - neighbour.bottom
-    if (between < gap * FURNITURE_GAP) return
+    if (between < gap * FURNITURE_GAP) {
+      // Said, not returned in silence. This is the first test and the one most
+      // declines fail, so it was the one decline in this function that spoke
+      // nowhere — and a running head it turned down went into the body text
+      // with nothing in `structural` pointing at it, which is exactly what the
+      // contract above promises cannot happen. Reported only when the line
+      // came close: every leaf of running prose fails this by a mile at the
+      // top, and a note on every leaf is a note nobody reads.
+      if (between >= gap * FURNITURE_GAP * FURNITURE_NEAR) {
+        say(
+          `it stands ${Math.round(between)} off the ${at === 'first' ? 'line below' : 'line above'}` +
+            ` and a running head needs ${Math.round(gap * FURNITURE_GAP)} — close, so check the` +
+            ' render: if it is furniture, it has gone into the text.'
+        )
+      }
+      return
+    }
 
     const letters = alnum(text)
     if (
@@ -762,7 +937,28 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
   const white = Math.max(1, stride - bodyHeight)
 
   const measure = measureOf(lines)
-  const furniture = takeFurniture(lines, measure, white, bodyHeight, structural)
+
+  // Before the running head, so the two rules cannot contradict each other in
+  // `structural`. Both look at the last line of the leaf: with the head taken
+  // first, a stamp produced "kept as text: its head is 89% of the measure"
+  // from one rule and "taken off the foot as the scanner's own stamp" from the
+  // next, about the same line, two entries apart. Taking the stamp first
+  // leaves the furniture rule looking at the book's own last line, which is
+  // the line it was written to judge.
+  const bodySize = bodyTypeSize(lines)
+  const stamp = takeStamp(lines, stride, bodySize, structural)
+
+  const furniture: DraftPage['furniture'] = takeFurniture(
+    lines,
+    measure,
+    white,
+    bodyHeight,
+    structural
+  )
+  // Recorded, not discarded. `checkableText` counts a leaf's furniture as
+  // transcribed, so a stamp that vanished here would read downstream as words
+  // OCR found and the transcription lost — on every leaf of the book.
+  if (stamp.length > 0) furniture.stamp = stamp
 
   const oversize = usable.filter((w) => heightOf(w) > bodyHeight * OVERSIZE)
   if (oversize.length > 0) {
@@ -802,20 +998,76 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
     )
   }
 
+  // Where the notes begin, if the leaf sets any.
+  //
+  // A footnote is set smaller than the text it hangs off, and on this book that
+  // is the only thing that reliably separates the two: the marks OCR reads are
+  // `*`, `t`, `1`, `+`, `|` and `§` — a dagger and a double dagger it has no
+  // glyph for — and a note that runs to a second line carries no mark at all.
+  // So the size decides, and the mark is only reported.
+  //
+  // Walked from the foot and stopped at the first body-sized line, rather than
+  // filtering the whole leaf, because a short line anywhere in the text can
+  // measure small and only the ones *below the last full line* are notes.
+  let notesFrom = lines.length
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const size = typeSize(lines[i]!)
+    if (size === null || size > bodySize * FOOTNOTE_SIZE) break
+    // Made of words, the same test furniture has to pass. `-_` on leaf 7 of
+    // `aura-loose` is a speck on a back cover: small, at the foot, and set
+    // apart — a footnote by every other measure here, and not type at all.
+    const letters = alnum(lines[i]!.text)
+    if (letters.length < FURNITURE_MIN_ALNUM) break
+    notesFrom = i
+  }
+  // A run of small lines is only a note if something in it carries a reference
+  // mark. Size alone does not transfer between books: on leaf 40 of
+  // `tight-clairvoyance` the last two lines of ordinary body text measure
+  // under 92% of that page's type size and were called footnotes, which is
+  // the same overfitting this file warns about in its own header. A note is
+  // marked; the tail of a paragraph is not.
+  //
+  // The mark is wanted *somewhere in the run*, not on every line, because a
+  // note running to a second line carries none and a note continued from the
+  // leaf before opens with none — leaf 650 of Isis has both.
+  let marked = lines.slice(notesFrom).filter((l) => FOOTNOTE_MARK.test(l.text.trim())).length
+  if (notesFrom < lines.length && marked === 0) {
+    structural.push(
+      `${lines.length - notesFrom} line(s) at the foot are set smaller than the body but not ` +
+        'one of them opens with a reference mark, so they are left as text. If they are notes ' +
+        'continued from the leaf before, they need retyping as such.'
+    )
+    notesFrom = lines.length
+    marked = 0
+  }
+  if (notesFrom < lines.length) {
+    structural.push(
+      `${lines.length - notesFrom} line(s) at the foot are set at or under ` +
+        `${Math.round(FOOTNOTE_SIZE * 100)}% of the body and are called footnotes; ` +
+        `${marked} of them open with a reference mark. Where one note runs on from another ` +
+        'the split between them is a guess — the mark is what divides them, and OCR reads a ' +
+        'dagger as `t` or `+` about as often as not.'
+    )
+  }
+
   const blocks: DraftBlock[] = []
   let run: DraftLine[] = []
+  let runIsNote = false
 
   const flush = (): void => {
     if (run.length === 0) return
-    const centred = run.every((l) => isCentred(l, body))
-    const right = run.length === 1 && isRightAligned(run[0]!, body)
+    const centred = !runIsNote && run.every((l) => isCentred(l, body))
+    const right = !runIsNote && run.length === 1 && isRightAligned(run[0]!, body)
     const text = run
       .map((l) => l.text.trim())
       .join(' ')
       .replace(/\s+/gu, ' ')
       .trim()
     if (text.length > 0) {
-      blocks.push({ kind: centred ? 'heading' : right ? 'caption' : 'paragraph', text })
+      blocks.push({
+        kind: runIsNote ? 'footnote' : centred ? 'heading' : right ? 'caption' : 'paragraph',
+        text
+      })
     }
     run = []
   }
@@ -823,12 +1075,19 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i]!
     const previous = lines[i - 1]
+    const isNote = i >= notesFrom
     if (previous) {
       const wide = line.top - previous.top > stride * PARAGRAPH_GAP
       const indented = !besideInitial(line) && isIndented(line, body)
       const switched = isCentred(line, body) !== isCentred(previous, body)
-      if (wide || indented || switched) flush()
+      // A note opens at its mark, and the first note opens where the notes do.
+      // Without the first of those, several notes on one leaf join into one
+      // block and print as a single note; without the second, the last
+      // paragraph of the page and the first note become one.
+      const opensNote = isNote && (!runIsNote || FOOTNOTE_MARK.test(line.text.trim()))
+      if (wide || indented || switched || opensNote) flush()
     }
+    runIsNote = isNote
     run.push(line)
   }
   flush()

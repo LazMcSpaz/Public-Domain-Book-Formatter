@@ -160,6 +160,18 @@ export const EDITORIAL_QUERY_KINDS: readonly EditorialQueryKind[] = [
 export interface PageFurniture {
   runningHead?: string
   folio?: string
+  /**
+   * Lines the *scanner* put on the leaf, not the printer — a library's footer,
+   * a rights notice, a handle URL. Isis Unveiled carries
+   * `Digitized by … CORNELL UNIVERSITY` on all 693 leaves.
+   *
+   * Kept rather than dropped for the same reason the running head is kept: OCR
+   * read these words off the leaf, so a transcription that does not account for
+   * them anywhere reads to `checkableText` as a leaf with words missing, and
+   * every leaf of the book is flagged. They are recorded here, counted as
+   * accounted-for, and never printed.
+   */
+  stamp?: string[]
 }
 
 /** Bibliographic fields read off front matter (title page, imprint). */
@@ -350,7 +362,8 @@ export const PAGE_SCHEMA = {
       type: 'object',
       properties: {
         runningHead: { type: 'string' },
-        folio: { type: 'string' }
+        folio: { type: 'string' },
+        stamp: { type: 'array', items: { type: 'string' } }
       },
       required: [],
       additionalProperties: false
@@ -530,6 +543,10 @@ export function parsePageTranscription(raw: unknown, pageIndex: number): PageTra
     furniture.runningHead = rawFurniture['runningHead']
   }
   if (typeof rawFurniture['folio'] === 'string') furniture.folio = rawFurniture['folio']
+  if (Array.isArray(rawFurniture['stamp'])) {
+    const stamp = rawFurniture['stamp'].filter((t): t is string => typeof t === 'string')
+    if (stamp.length > 0) furniture.stamp = stamp
+  }
 
   const result: PageTranscription = {
     pageIndex,
@@ -589,7 +606,11 @@ export function transcriptionText(page: PageTranscription): string {
  * So the checks get this, and only the checks.
  */
 export function checkableText(page: PageTranscription): string {
-  const furniture = [page.furniture?.runningHead, page.furniture?.folio]
+  const furniture = [
+    page.furniture?.runningHead,
+    page.furniture?.folio,
+    ...(page.furniture?.stamp ?? [])
+  ]
     .filter((t): t is string => typeof t === 'string' && t.trim().length > 0)
     .join(' ')
   const body = transcriptionText(page)

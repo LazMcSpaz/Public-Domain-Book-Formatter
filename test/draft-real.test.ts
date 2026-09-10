@@ -89,20 +89,36 @@ const split = (text: string): string[] => text.split(/\s+/u).filter((w) => w.len
  * The words whose order is evidence: roughly body-sized, and confidently read.
  *
  * Returned as a set of the word *texts*, because that is what survives into a
- * block. A text appearing both as an ordinary word and as a speck somewhere
- * else on the leaf counts as ordinary, which is the forgiving direction and
- * costs the oracle nothing it was relying on.
+ * block — so a text that appears **both** ways on one leaf is ambiguous
+ * evidence and is left out of the ground truth entirely.
+ *
+ * That used to go the other way: a text appearing as an ordinary word anywhere
+ * counted as ordinary everywhere, on the grounds that the forgiving direction
+ * "costs the oracle nothing it was relying on". Leaf 200 of Isis Vol. I
+ * falsifies that. It carries a `:` that is a **2 × 5 pixel speck** at the right
+ * margin, which lands on a line of its own between two real ones, and it also
+ * carries ordinary colons elsewhere — so the speck was admitted to the ground
+ * truth, and OCR having emitted it *after* the line below it read as the draft
+ * scrambling a page it had laid out correctly.
+ *
+ * Excluding both is the honest reading: a glyph this module cannot place and
+ * this oracle cannot vouch for is not evidence either way. What it costs is
+ * recorded here rather than forgotten — every ordinary colon on such a leaf
+ * stops being checked for order, which on these fixtures is 14 words across
+ * 18 leaves.
  */
 function ordinaryWords(words: readonly DraftWord[]): Set<string> {
   const heights = words.map((w) => w.bbox.y1 - w.bbox.y0).sort((a, b) => a - b)
   const body = heights[heights.length >> 1] ?? 1
   const keep = new Set<string>()
+  const doubtful = new Set<string>()
   for (const w of words) {
     const height = w.bbox.y1 - w.bbox.y0
-    if (w.confidence < 60) continue
-    if (height < body * 0.45 || height > body * 1.8) continue
-    keep.add(w.text)
+    const ordinary = w.confidence >= 60 && height >= body * 0.45 && height <= body * 1.8
+    if (ordinary) keep.add(w.text)
+    else doubtful.add(w.text)
   }
+  for (const t of doubtful) keep.delete(t)
   return keep
 }
 
@@ -163,7 +179,11 @@ describe('nothing is silently lost or duplicated', () => {
         const laid = [
           ...drafted.blocks.flatMap((b) => split(b.text)),
           ...split(drafted.furniture.runningHead ?? ''),
-          ...split(drafted.furniture.folio ?? '')
+          ...split(drafted.furniture.folio ?? ''),
+          // The scanner's stamp is furniture too. It is *recorded* rather than
+          // discarded precisely so this holds — take the assignment out of
+          // `draftPage` and these leaves fail again, which is the check.
+          ...(drafted.furniture.stamp ?? []).flatMap(split)
         ]
         // Every word OCR read reaches the draft exactly once — in a block or,
         // if it was furniture, in `furniture`. A word that reaches neither has
@@ -244,4 +264,119 @@ describe('folios run in step with the leaves', () => {
       expect(new Set(offsets).size, `offsets were ${offsets.join(', ')}`).toBe(1)
     })
   }
+})
+
+/**
+ * The three rules Isis Unveiled needed, and the twelve leaves that guard them.
+ *
+ * This book is the first here whose scan carries a **digitization stamp** —
+ * `Digitized by … CORNELL UNIVERSITY` at the foot of all 693 leaves — and the
+ * first with **footnotes** at all: the four Panchadasi fixtures contain not one
+ * between them, which is why the module had no rule for either.
+ *
+ * Both rules are geometric on purpose. The stamp is not matched on its words,
+ * because OCR reads the same footer as `Digitized by`, `Diaitieed by`,
+ * `— Oriainal from` and `CORMELL UNIVERSITY` across six leaves; a footnote is
+ * not required to carry a reference mark, because a note running to a second
+ * line has none. What the assertions below are really protecting is that
+ * neither rule fires on the four books that have neither.
+ */
+describe('the scanner’s stamp is not the book', () => {
+  const isis = fixtures.find((f) => f.name === 'isis-vol1')!
+
+  it('never reaches a block, on any leaf that carries one', () => {
+    for (const leaf of isis.fixture.leaves) {
+      const draft = draftPage(toWords(leaf.words))
+      const text = draft.blocks.map((b) => b.text).join(' ')
+      expect(text, `leaf ${leaf.pageIndex}`).not.toMatch(/CORNELL|UNIVERSITY|Digitized|Oriainal/u)
+      expect(
+        draft.structural.some((s) => s.includes("scanner's own stamp")),
+        `leaf ${leaf.pageIndex} took a stamp but did not say so`
+      ).toBe(true)
+    }
+  })
+
+  it('is never taken off a book that has none', () => {
+    for (const { name, fixture } of fixtures) {
+      if (name === 'isis-vol1') continue
+      for (const leaf of fixture.leaves) {
+        const draft = draftPage(toWords(leaf.words))
+        expect(
+          draft.structural.find((s) => s.includes("scanner's own stamp")),
+          `${name} leaf ${leaf.pageIndex}`
+        ).toBeUndefined()
+      }
+    }
+  })
+
+  /**
+   * The counter-example that set `STAMP_MAX_LINES`.
+   *
+   * `tight-scramble` leaf 7 has the biggest gap of any leaf in any fixture —
+   * 7.3 strides — and it sits under a chapter opening, near the *top*. An
+   * unbounded walk up from the foot reaches it and takes the whole leaf.
+   */
+  it('leaves a chapter opening alone, though its gap is bigger than any stamp’s', () => {
+    const leaf = fixtures.find((f) => f.name === 'tight-scramble')!.fixture.leaves[0]!
+    const draft = draftPage(toWords(leaf.words))
+    expect(draft.blocks.map((b) => b.text).join(' ')).toMatch(/LESSON/u)
+  })
+
+  /** `FINIS.` is a last line, set apart, and it is the book's own. */
+  it('leaves FINIS. on the leaf', () => {
+    const leaf = fixtures
+      .find((f) => f.name === 'tight-clairvoyance')!
+      .fixture.leaves.find((l) => l.pageIndex === 322)!
+    const draft = draftPage(toWords(leaf.words))
+    expect(draft.blocks.map((b) => b.text).join(' ')).toMatch(/FINIS/u)
+  })
+})
+
+describe('footnotes are told from the text by their size', () => {
+  const isis = fixtures.find((f) => f.name === 'isis-vol1')!
+  const leafAt = (n: number) => isis.fixture.leaves.find((l) => l.pageIndex === n)!
+
+  it('separates three notes on a leaf that sets three', () => {
+    const draft = draftPage(toWords(leafAt(300).words))
+    const notes = draft.blocks.filter((b) => b.kind === 'footnote')
+    expect(notes).toHaveLength(3)
+    expect(notes[0]!.text).toMatch(/W\. R\. Grove/u)
+    // The third note is the one that measures *taller* than the body by median
+    // box height, because `Godfrey`, `Higgins` and `archaeologist` all carry
+    // ascenders. Type size is what catches it.
+    expect(notes[2]!.text).toMatch(/Godfrey Higgins/u)
+  })
+
+  it('keeps a note that carries no reference mark, where it runs on', () => {
+    const draft = draftPage(toWords(leafAt(650).words))
+    const notes = draft.blocks.filter((b) => b.kind === 'footnote')
+    expect(notes.some((n) => /doubted in regard to the naming/u.test(n.text))).toBe(true)
+  })
+
+  it('finds none in the four books that print none', () => {
+    for (const { name, fixture } of fixtures) {
+      if (name === 'isis-vol1') continue
+      for (const leaf of fixture.leaves) {
+        const draft = draftPage(toWords(leaf.words))
+        expect(
+          draft.blocks.filter((b) => b.kind === 'footnote'),
+          `${name} leaf ${leaf.pageIndex}`
+        ).toHaveLength(0)
+      }
+    }
+  })
+})
+
+describe('a furniture line declined by a hair says so', () => {
+  it('names the running head it kept, and by how much it missed', () => {
+    const leaf = fixtures
+      .find((f) => f.name === 'isis-vol1')!
+      .fixture.leaves.find((l) => l.pageIndex === 101)!
+    const draft = draftPage(toWords(leaf.words))
+    // 35 against a threshold of 36: one pixel, and the head went into the body.
+    expect(draft.furniture.runningHead).toBeUndefined()
+    const said = draft.structural.find((s) => s.includes('BARRACHIAS'))
+    expect(said, 'the decline was silent').toBeDefined()
+    expect(said).toMatch(/close, so check the render/u)
+  })
 })
