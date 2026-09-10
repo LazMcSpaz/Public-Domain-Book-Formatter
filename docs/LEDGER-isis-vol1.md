@@ -425,6 +425,42 @@ because one speck of dirt on the line is tall: leaf 202 reads
 `: 144 THE VEIL OF ISIS.`, 39 pixels against a 27-pixel body, and only the
 folio it carries says it is furniture.
 
+### What the free check is worth, scored
+
+`checkConsistency` over the first 176 leaves — Stage 6, pure, deterministic, no
+spend. **46 findings.** Scored one by one, because a check nobody can score
+manufactures confidence:
+
+| Kind              | Found |  Real | What the rest were                                  |
+| ----------------- | ----: | ----: | --------------------------------------------------- |
+| `doubled-word`    |     4 | **3** | `that which is is that which was` — correct English |
+| `stray-spelling`  |    11 |     1 | a real word that resembles a commoner one           |
+| `name-variant`    |     9 |     0 | the same                                            |
+| `unclosed-quote`  |    21 |     — | not scored; the book quotes on nearly every leaf    |
+| `missing-chapter` |     1 |     0 | a forward reference to Chapter VII, unread          |
+
+**`doubled-word` is earning its place and the other two are not, at this
+scale.** Of its four, `of of` (124) and `a a` (189) were already on the sheet
+from readers, and **`with with` on leaf 201 was not** — "their own mental
+requests were complied with with perfect fidelity", the line ending `complied`
+and the next opening `with with`. Confirmed at 900 DPI, and OCR read the
+doubling independently. Eleven readers with the render had passed over it.
+
+The false positives are a **scale effect, not a regression**. The name-variant
+check was tuned on _Clairvoyance_ from 17 findings with 1 real to 3 with 3 real,
+and that tuning holds for a 200-page book in one language. _Isis Unveiled_ runs
+to 628 pages of English carrying Sanskrit, Latin, Greek, French, German and
+Norse, so `heretic` against `hermetic`, `Parsis` against `Paris`, `Virgil`
+against `Virgin`, `genus` against `genius` and `Sanscrit` against `Sanskrit` are
+all one edit apart and all correct as printed. Recorded rather than re-tuned:
+the honest fix is a rule that knows a book has more than one language in it, and
+guessing a new threshold from these 46 would be exactly the tuning-to-pass the
+process forbids.
+
+`missing-chapter` firing on a forward reference is an artefact of running the
+check over a **partly read** book, which is worth doing anyway — it caught the
+doubling three chapters before the book is finished — and is not a fault.
+
 ### Where the rest of the cost is
 
 At 150 DPI a leaf's render is about 1,280 tokens, so at two turns the images are

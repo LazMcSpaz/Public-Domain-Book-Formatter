@@ -335,6 +335,22 @@ Nothing here proposes a reading, so nothing needs adjudicating — only looking.
 it produced 3, all real. The cost — `Baillie`/`Bailly` will never be caught —
 is recorded in a test rather than forgotten.
 
+**And it is measured again on each book, because the tuning does not
+transfer.** Over the first 176 leaves of _Isis Unveiled_ the same check gave 46
+findings and 3 real ones — all three from `doubled-word`, which is earning its
+place, and none from `name-variant` or `stray-spelling`, which are not. That is
+a scale effect rather than a regression: 628 pages of English carrying Sanskrit,
+Latin, Greek, French, German and Norse put `heretic` against `hermetic`,
+`Parsis` against `Paris`, `Virgil` against `Virgin` and `genus` against `genius`
+one edit apart, all correct as printed. **Score it per book and record the
+score. Do not guess a new threshold from a bad ratio** — that is tuning to pass.
+
+Run it on a partly read book too. `missing-chapter` will fire on every forward
+reference to a chapter nobody has reached, which is an artefact and not a fault,
+and the run is what found `complied with with perfect fidelity` on leaf 201 —
+three chapters before the book is finished, after eleven readers with the
+renders had passed over it.
+
 ---
 
 ## Stage 7 — Read for sense
