@@ -612,3 +612,23 @@ The brief now says three at a time, always. The 30% figure the one-block rule
 was built on was measured against full leaf-by-leaf interleaving — fourteen
 turns for a fourteen-leaf batch; groups of three is four or five. A batch that
 has to be read again from nothing costs all of it.
+
+### The folio check, scored over the whole volume
+
+The rule is one line — a folio the volume's own offset does not predict is
+reported to the reader who has the render — and it has now been exercised on
+every batch. Across chapters VI to VIII the readers corrected **twelve** folios
+they had been told to look at, and **all twelve** came back as the offset
+predicts: 245 = 187, 247 = 189, 249–252 = 191–194, 329 = 271, 341 = 283,
+343 = 285, 346 = 288, 347 = 289, 349 = 291. Not one of them was the book
+misnumbering itself; every one was OCR losing a stroke.
+
+Two shapes account for all twelve, and both are the same scan defect rather than
+twelve separate accidents: the old-style `8`, whose upper bowl is thin in this
+face, read as `3`, and the old-style `9`, whose tail is thinner still, read as
+`0` or `1`. That is worth having beyond this book — the check costs nothing, it
+has never yet been wrong, and what it finds is a property of the type rather
+than of the volume.
+
+The tally in the table above (2 / 2 in Chapter I) therefore reads **14 / 14**
+across the volume so far, with no disagreement.
