@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { buildVocabulary, draftPage, type DraftWord } from '@core/draft'
+import { buildVocabulary, draftPage, folioOffset, type DraftWord } from '@core/draft'
 
 /**
  * The draft module, against word boxes measured off real scans.
@@ -250,18 +250,29 @@ describe('the furniture a real leaf actually prints', () => {
  * fixed number of leaves. One folio misread breaks the constant. It is the
  * same trick as the reading-order oracle — a ground truth the material
  * supplies for free.
+ *
+ * This used to demand unanimity, which was right until the fixture gained a
+ * leaf whose folio really is misread: 126 is set `68` on the paper and OCR
+ * reads it `63`. Unanimity has no way to say "one of these is wrong and here
+ * it is", so the oracle is now `folioOffset` — the shipped rule — which votes
+ * a plurality and **names the dissenters**. That is the better test: it asserts
+ * the module rather than restating it, and a fixture leaf whose number is
+ * genuinely misread is evidence rather than an exception to write down.
  */
 describe('folios run in step with the leaves', () => {
+  /** The leaves whose printed folio is known wrong, checked against the crop. */
+  const misread: Record<string, number[]> = { 'isis-vol1': [126] }
+
   for (const { name, fixture } of fixtures) {
     it(`${name}`, () => {
-      const offsets = fixture.leaves
-        .map((leaf) => {
-          const folio = draftPage(toWords(leaf.words)).furniture.folio
-          return folio && /^[0-9]+$/u.test(folio) ? Number(folio) - leaf.pageIndex : null
-        })
-        .filter((n): n is number => n !== null)
-      if (offsets.length < 2) return
-      expect(new Set(offsets).size, `offsets were ${offsets.join(', ')}`).toBe(1)
+      const sightings = fixture.leaves.flatMap((leaf) => {
+        const folio = draftPage(toWords(leaf.words)).furniture.folio
+        return folio ? [{ pageIndex: leaf.pageIndex, folio }] : []
+      })
+      if (sightings.length < 2) return
+      const voted = folioOffset(sightings, 2)
+      expect(voted.offset, `sightings were ${JSON.stringify(sightings)}`).not.toBeNull()
+      expect(voted.dissenting).toEqual(misread[name] ?? [])
     })
   }
 })
@@ -458,5 +469,74 @@ describe('the book settles a line-break hyphen the page cannot', () => {
     expect(drafted.hyphens).toEqual([])
     expect(drafted.blocks.map((b) => b.text).join(' ')).toContain('im- mensely')
     expect(drafted.structural.join(' ')).toMatch(/line-break hyphen\(s\) are left/)
+  })
+})
+
+/**
+ * The furniture the leaf cannot settle and the volume can.
+ *
+ * A running head is decided from geometry alone, which is all one leaf has, and
+ * on a real scan it is not quite enough: measured over Chapter II of this
+ * volume, **7 of 34 leaves** carried a head that missed the standoff test by a
+ * pixel or two and went into the body as a paragraph. That is worse than a
+ * wrong word — it puts furniture into the prose and nothing downstream can tell.
+ *
+ * These three leaves are the three shapes it takes, all measured off the paper.
+ */
+describe('the volume’s numbering settles the furniture a leaf cannot', () => {
+  const isis = fixtures.find((f) => f.name.includes('isis'))!
+  const leafAt = (pageIndex: number) => isis.fixture.leaves.find((l) => l.pageIndex === pageIndex)!
+  const drafted = (pageIndex: number, expectedFolio?: number) =>
+    draftPage(
+      toWords(leafAt(pageIndex).words),
+      expectedFolio === undefined ? {} : { expectedFolio }
+    )
+
+  /** Leaf 101: `THE WISE BARRACHIAS-HASSAN-OGLU. 43` stands 35 off where 36 is wanted. */
+  it('rescues a head that misses the standoff and carries the right number', () => {
+    expect(drafted(101).furniture.runningHead).toBeUndefined()
+    const guided = drafted(101, 43)
+    expect(guided.furniture.runningHead).toBe('THE WISE BARRACHIAS-HASSAN-OGLU.')
+    expect(guided.furniture.folio).toBe('43')
+    expect(guided.structural.join(' ')).toMatch(/taken anyway/)
+  })
+
+  /** Leaf 109: the head runs to 73% of the measure and its `51` reads `5I`. */
+  it('rescues a head too wide for the width test, and takes the folio off it', () => {
+    expect(drafted(109).furniture.runningHead).toBeUndefined()
+    const guided = drafted(109, 51)
+    expect(guided.furniture.runningHead).toBe('THE ALKAHEST NO FICTION.')
+    expect(guided.furniture.folio).toBe('51')
+  })
+
+  /**
+   * Leaf 126 is the one the rule must **not** settle. The paper is set `68` —
+   * checked at 1200 DPI, an old-style 8 OCR read as a 3 — and from inside the
+   * draft a misread number and a book that misnumbers its own leaf are
+   * indistinguishable. A reprint does not renumber its original, so this is
+   * reported with both numbers and nothing is changed.
+   */
+  it('reports a folio that disagrees with the volume, and changes nothing', () => {
+    const guided = drafted(126, 68)
+    expect(guided.furniture.folio).toBe('63')
+    expect(guided.structural.join(' ')).toMatch(
+      /folio here reads "63" where the volume's numbering predicts "68"/
+    )
+    expect(guided.structural.join(' ')).toMatch(/Nothing was changed/)
+  })
+
+  /**
+   * The false positive this rule could produce: a body line that happens to
+   * carry the leaf's own number would be lifted out of the prose. Nothing
+   * guards that but the geometry it is overriding, so the leaves that already
+   * decide correctly must decide the same way with a folio in hand.
+   */
+  it('changes nothing on the leaves the geometry already settles', () => {
+    for (const pageIndex of [91, 99, 200, 300, 400, 650]) {
+      const plain = drafted(pageIndex)
+      const guided = drafted(pageIndex, pageIndex - 58)
+      expect(guided.furniture, `leaf ${pageIndex}`).toEqual(plain.furniture)
+      expect(guided.blocks.length, `leaf ${pageIndex}`).toBe(plain.blocks.length)
+    }
   })
 })

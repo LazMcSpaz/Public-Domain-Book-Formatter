@@ -52,6 +52,7 @@ export interface DraftLine {
   right: number
 }
 
+import { namesFolio, asFolio } from './folios'
 import { healWrappedHyphens, tally, type HyphenVerdict, type Vocabulary } from './hyphens'
 
 export interface DraftBlock {
@@ -119,6 +120,17 @@ export interface DraftOptions {
    * `thought- transference` stop being the same two marks. See `./hyphens`.
    */
   vocabulary?: Vocabulary
+  /**
+   * The folio this leaf should carry, from the volume's own numbering.
+   *
+   * Optional, and everything below behaves exactly as it did without one. With
+   * it, a line at the top that *names* this number is furniture whatever the
+   * geometry says — which is what rescues a head standing 35 off the line below
+   * where the rule wants 36 — and a folio that comes off disagreeing with it is
+   * reported. See `./folios`: the offset is voted by the leaves the draft took
+   * confidently, never assumed.
+   */
+  expectedFolio?: number
 }
 
 const DEFAULTS = { uncertainBelow: 60 }
@@ -766,7 +778,8 @@ function takeFurniture(
   measure: Measure,
   gap: number,
   bodyHeight: number,
-  said: string[]
+  said: string[],
+  expectedFolio?: number
 ): { runningHead?: string; folio?: string } {
   const furniture: { runningHead?: string; folio?: string } = {}
 
@@ -780,6 +793,25 @@ function takeFurniture(
       said.push(`"${text}" sits at the ${where} of the leaf but was kept as text: ${why}`)
     }
 
+    // The volume corroborating this line. A head that carries the number the
+    // numbering predicts is furniture however narrowly it misses a geometric
+    // test — and the geometric tests are the ones that were letting real heads
+    // through into the prose, seven of them in one chapter.
+    //
+    // Only at the top: at the foot a line naming this leaf's number *is* the
+    // folio and is already handled, and a body line that happens to end in the
+    // right figure is exactly the false positive to avoid.
+    const corroborated =
+      at === 'first' && expectedFolio !== undefined && namesFolio(text, expectedFolio)
+    const rescue = (missed: string): void => {
+      said.push(
+        `"${text}" failed the running-head test (${missed}) and was taken anyway: it carries ` +
+          `"${expectedFolio}", which is the folio this leaf should have on the volume's own ` +
+          'numbering. Check the render — a body line that happens to carry that number would ' +
+          'look the same to this.'
+      )
+    }
+
     const between = at === 'first' ? neighbour.top - line.bottom : line.top - neighbour.bottom
     if (between < gap * FURNITURE_GAP) {
       // Said, not returned in silence. This is the first test and the one most
@@ -789,14 +821,18 @@ function takeFurniture(
       // contract above promises cannot happen. Reported only when the line
       // came close: every leaf of running prose fails this by a mile at the
       // top, and a note on every leaf is a note nobody reads.
-      if (between >= gap * FURNITURE_GAP * FURNITURE_NEAR) {
+      if (corroborated) {
+        rescue(
+          `it stands ${Math.round(between)} off the line below where ${Math.round(gap * FURNITURE_GAP)} is wanted`
+        )
+      } else if (between >= gap * FURNITURE_GAP * FURNITURE_NEAR) {
         say(
           `it stands ${Math.round(between)} off the ${at === 'first' ? 'line below' : 'line above'}` +
             ` and a running head needs ${Math.round(gap * FURNITURE_GAP)} — close, so check the` +
             ' render: if it is furniture, it has gone into the text.'
         )
       }
-      return
+      if (!corroborated) return
     }
 
     const letters = alnum(text)
@@ -837,11 +873,14 @@ function takeFurniture(
 
     if (!split) return
     if (!folioAtMargin && !shortHead(split.headWidth, measure)) {
-      say(
-        `its head is ${Math.round((split.headWidth / measure.width) * 100)}% of the measure` +
-          ' and no folio is set off at the margin beside it'
-      )
-      return
+      if (!corroborated) {
+        say(
+          `its head is ${Math.round((split.headWidth / measure.width) * 100)}% of the measure` +
+            ' and no folio is set off at the margin beside it'
+        )
+        return
+      }
+      rescue(`its head is ${Math.round((split.headWidth / measure.width) * 100)}% of the measure`)
     }
 
     if (at === 'last') {
@@ -852,6 +891,7 @@ function takeFurniture(
         furniture.folio = text
         lines.pop()
         said.push(`"${text}" was taken off the foot as a folio.`)
+        reconcile(text)
       } else {
         say('only a folio is taken off the foot of a leaf; anything else there is text')
       }
@@ -871,6 +911,54 @@ function takeFurniture(
           '. Check it is not the first line of the text.'
       )
     }
+    reconcile(text)
+  }
+
+  /**
+   * The folio that came off, against the one the volume predicts.
+   *
+   * Three outcomes and they are deliberately not the same. Where the line
+   * *carries* the expected number and what came off is not it, the split was
+   * wrong and the number is right there on the line — `62 THE VEIL OF ISIS. 4`
+   * gave up `4`. That is corrected, and said.
+   *
+   * Where the line does not carry it at all, the number was misread or **the
+   * book misnumbers its own leaf**, and those are not distinguishable from
+   * here. A reprint does not renumber its original, so nothing is changed: it
+   * is reported, with both numbers, for somebody with the render.
+   */
+  const reconcile = (text: string): void => {
+    if (expectedFolio === undefined) return
+    const wanted = String(expectedFolio)
+    const got = asFolio(furniture.folio ?? '')
+    if (got === wanted) return
+    if (namesFolio(text, expectedFolio)) {
+      said.push(
+        (got === ''
+          ? `No folio came off "${text}", though it carries "${wanted}"`
+          : `The folio came off "${text}" as "${furniture.folio}", but the line carries "${wanted}"`) +
+          ", which is what the volume's numbering predicts. Taken as the folio."
+      )
+      furniture.folio = wanted
+      // Taken *out* of the head as well. `splitFurnitureLine` leaves the
+      // number in when it cannot see it set off at the margin, so the head
+      // would otherwise read "THE ALKAHEST NO FICTION. 5I" — a folio recorded
+      // twice, once right and once as OCR read it.
+      if (furniture.runningHead !== undefined) {
+        const kept = furniture.runningHead
+          .split(/\s+/u)
+          .filter((token) => asFolio(token) !== wanted)
+          .join(' ')
+          .trim()
+        if (kept !== '') furniture.runningHead = kept
+      }
+      return
+    }
+    said.push(
+      `The folio here reads "${furniture.folio ?? '(none)'}" where the volume's numbering ` +
+        `predicts "${wanted}". Nothing was changed — OCR may have misread it, or the book may ` +
+        'misnumber this leaf, and a reprint does not renumber its original. Check the render.'
+    )
   }
 
   consider('first')
@@ -987,7 +1075,8 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
     measure,
     white,
     bodyHeight,
-    structural
+    structural,
+    options.expectedFolio
   )
   // Recorded, not discarded. `checkableText` counts a leaf's furniture as
   // transcribed, so a stamp that vanished here would read downstream as words
@@ -1191,4 +1280,5 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
   }
 }
 
+export * from './folios'
 export * from './hyphens'

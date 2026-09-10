@@ -2377,24 +2377,62 @@ async function serve() {
           const vocabulary = cached
             ? draftMod.buildVocabulary([...readAlready, cached.words.map((w) => w.text).join(' ')])
             : null
+          // The volume's numbering, voted rather than assumed.
+          //
+          // Leaves already transcribed vote first and count for most: their
+          // folios were confirmed by a reader with the render. The leaves being
+          // drafted now vote too, from a throwaway first pass — which costs
+          // nothing, being geometry over boxes already in memory — so a book
+          // with no transcription at all still gets an offset.
+          //
+          // `folioOffset` refuses below a quorum rather than trusting two
+          // sightings, and names the leaves that dissent: on Chapter I those
+          // were exactly the two whose folios OCR had misread, so the offset
+          // and the list of leaves to look at fall out of the same count.
+          const sightings = (run?.transcriptions ?? [])
+            .filter((t) => typeof t.furniture?.folio === 'string')
+            .map((t) => ({ pageIndex: t.pageIndex, folio: t.furniture.folio }))
+          const firstPass = (pageIndex, words) => draftMod.draftPage(words).furniture.folio
+          const drafts = new Map()
+          if (cached) {
+            for (const n of list) {
+              const words = cached.words.filter((w) => w.pageIndex === n)
+              drafts.set(n, words)
+              const folio = firstPass(n, words)
+              if (typeof folio === 'string') sightings.push({ pageIndex: n, folio })
+            }
+          }
+          const numbering = draftMod.folioOffset(sightings)
+
           const draftOf = (pageIndex, words) => ({
             pageIndex,
             words: words.length,
-            ...draftMod.draftPage(words, vocabulary ? { vocabulary } : {})
+            ...draftMod.draftPage(words, {
+              ...(vocabulary ? { vocabulary } : {}),
+              ...(numbering.offset === null
+                ? {}
+                : { expectedFolio: draftMod.folioFor(pageIndex, numbering.offset) })
+            })
           })
           if (cached) {
             return {
               read: 'the cached reading',
+              numbering: {
+                rule:
+                  numbering.offset === null
+                    ? 'not voted — too few folios agree, so no leaf is rescued or checked by it'
+                    : `leaf = folio + ${numbering.offset}`,
+                agreed: numbering.agreed,
+                votes: numbering.votes,
+                // The leaves whose folio disagrees with the winner: the check
+                // and the correction come out of the same count.
+                dissenting: numbering.dissenting
+              },
               // Said out loud: a draft weighed against 60,000 of the book's own
               // words and one weighed against nothing are different drafts, and
               // the second leaves every hyphen for a person.
               vocabulary: vocabulary.size,
-              pages: list.map((n) =>
-                draftOf(
-                  n,
-                  cached.words.filter((w) => w.pageIndex === n)
-                )
-              )
+              pages: list.map((n) => draftOf(n, drafts.get(n)))
             }
           }
           const file = await runStore.loadSourceFile(newest.key)
@@ -2434,6 +2472,8 @@ async function serve() {
         // settled on nothing are different drafts, and only one of them leaves
         // every break for a person.
         vocabulary: drafted.vocabulary ?? 'none — every line-break hyphen is left for a reader',
+        // What the volume's own numbering settled, and what it could not.
+        numbering: drafted.numbering ?? 'not voted — no cached reading to vote from',
         leaves: drafted.pages.map((d) => ({
           pageIndex: d.pageIndex,
           role: d.role,

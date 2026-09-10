@@ -140,6 +140,37 @@ the word owns or one the measure imposed is a typographic join — exactly what
 join being a guess, and it abstains rather than guessing, which is the property
 that makes an automatic rule safe to run at all.
 
+**The furniture rule, because it puts furniture into the prose.** A running
+head is decided from geometry alone — a short line at the top standing clear of
+the text below — which is all one leaf has. On a real scan it is not quite
+enough: measured over Chapter II of _Isis Unveiled_, **7 of 34 leaves** carried
+a head that missed the standoff by a pixel or two (`THE WISE
+BARRACHIAS-HASSAN-OGLU. 43` stands 35 off where the rule wants 36) and went
+into the body as a paragraph.
+
+The volume knows. Leaves are numbered consecutively, so `leaf = folio + offset`
+holds throughout, and the offset is **voted** by the leaves whose furniture the
+draft did take confidently — plus every leaf already transcribed, whose folio a
+reader confirmed against the render. `folioOffset` refuses below a quorum
+rather than trusting two sightings. A line at the top that carries the number
+the numbering predicts is a running head whatever the gap measures.
+
+The same arithmetic runs the other way and catches the misread folio, in two
+kinds that are deliberately handled differently:
+
+- the line **carries** the predicted number and something else came off
+  (`62 THE VEIL OF ISIS. 4` gave up `4`) → the split was wrong, corrected, said
+- the line does not carry it at all → **reported, never changed.** OCR may have
+  misread it or the book may misnumber its own leaf, and those are not
+  distinguishable from inside a draft. A reprint does not renumber its original.
+
+Measured on Chapter II: **33 of 34 leaves** now have their head taken, against
+26 before; the one that does not is the chapter opening, which prints no head.
+Two folios corrected, one reported. That one was leaf 126, where the numbering
+predicted 68 and OCR read 63 — the crop at 1200 DPI shows an old-style **8**.
+The check pointed at the one leaf that needed eyes and the eyes took ten
+seconds, which is the whole shape this is meant to have.
+
 **Result.** A JSON array in the exact shape `transcribe` takes, plus per-leaf:
 
 - `role` — a guess, and the field most likely to be wrong;
@@ -148,6 +179,10 @@ that makes an automatic rule safe to run at all.
   reading order for Stage 3, not a warning list to clear;
 - `hyphens` — every line-break hyphen and what the book made of it, with the
   words that decided each. The `unsettled` ones are the only ones needing eyes.
+
+`drive.mjs draft` reports the vocabulary size and the numbering it voted,
+including the leaves whose folio dissents — the check and the list of leaves to
+look at fall out of the same count.
 
 **Nothing believes a draft.** It is not saved anywhere, nothing downstream
 reads a draft file, and the only way its contents reach the store is by being
