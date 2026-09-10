@@ -475,12 +475,19 @@ doubling three chapters before the book is finished — and is not a fault.
 
 Chapter VI made the earlier reading of this sharper, and corrected part of it.
 
-**Fourteen images in one tool block times the request out.** Four attempts at
-fourteen leaves on this chapter, **three dead at exactly the same line** —
-_"now I'll open all 14 renders in one block"_ — each having read its brief, its
-draft and nothing else. One of the three was a relaunch of a batch that had
-already died there. Only the first attempt survived, so fourteen is not
-impossible, only unreliable, and eight has never failed.
+**The render-loading turn times out, intermittently, and it is not a size
+threshold.** Four batches of this chapter died at exactly the same line —
+_"now I'll open all N renders in one block"_ — each having read its brief, its
+draft and nothing else. Three were opening fourteen images. The fourth was
+opening **seven**, which is what killed the tidy explanation: batches of six,
+seven, ten, twelve, thirteen and fourteen all came through elsewhere. Size
+raises the risk and does not decide it, so there is no number to pick that buys
+safety.
+
+I wrote "eight is the size that has never failed" into the process on the
+strength of the first three, and a seven-image batch failed within the hour.
+The honest guidance is the dull one: keep the batch at the cheap size, and
+relaunch the occasional casualty.
 
 **And batch size does pay, which the Chapter II experiment understated.** The
 seven-leaf batches the timeouts forced came in at **20,614 tokens a leaf**,
@@ -490,8 +497,9 @@ batch amortises them over fewer leaves. The ledger said "batch size is not the
 lever; turns are", and that was half right stated as a whole: **turns dominate,
 and per-agent overhead is the second term.**
 
-So the shape is twelve or thirteen leaves, opened in two blocks of at most
-eight, written once. `scripts/batch.mjs` puts the cap in every brief.
+So the shape is twelve or thirteen leaves, opened in one block and written
+once, with a line in the brief telling the reader to split the load if that
+request times out. Paying for two blocks up front buys nothing.
 
 Nothing was lost in any of the three failures: no output file existed and the
 batches already landed were untouched, which is what checkpointing per batch is

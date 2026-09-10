@@ -280,13 +280,14 @@ see far**. That property is rebuilt on purpose:
   turn re-sends the accumulated context, so a reader that opens a render, writes
   a leaf, opens the next and writes again pays for the first render eleven more
   times.
-- **Eight is a ceiling, and it is also measured.** **Fourteen images in a single
-  tool block times the request out.** Four attempts at fourteen on one chapter,
-  **three dead at exactly that point** — each having read its brief, its draft
-  and nothing else, and one of them a relaunch of a batch that had already died
-  there. Only the first survived. Eight has never failed. Two blocks of eight
-  still costs two turns, which keeps nearly all of the saving, and
-  `scripts/batch.mjs` writes the cap into every brief.
+- **The render-loading turn times out sometimes, and there is no safe size.**
+  Four batches of one chapter died at exactly that line — three opening fourteen
+  images and one opening **seven** — while batches of six, seven, ten, twelve,
+  thirteen and fourteen came through. Size raises the risk and does not decide
+  it, so picking a number does not buy safety. **Relaunch and say that nothing
+  was written**; the agent dies before it writes, so the output path does not
+  exist and every other batch is untouched. Telling the reader to split the load
+  on a retry is worth doing; paying for two blocks up front is not.
 - **Size still pays, up to that ceiling.** The seven-leaf batches the timeouts
   forced came in at **20,614 tokens a leaf** against ~13,000 for thirteen-leaf
   ones: the brief, the method document and the setup are paid once per agent

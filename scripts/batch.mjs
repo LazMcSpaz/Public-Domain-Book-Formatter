@@ -12,11 +12,17 @@
  * accumulated context, so cost per leaf tracks *tool calls per leaf* almost
  * exactly and batch size barely matters beside it.
  *
- * The cap is the other half, and it is measured too: **fourteen images in one
- * tool block times the request out.** Four attempts at fourteen on one chapter,
- * three of them dead at exactly that point having done nothing else — including
- * a relaunch of one that had already died there. Eight has never failed. Two
- * blocks of eight still costs two turns, which keeps nearly all of the saving.
+ * **The render-loading turn times out, intermittently, and it is not a size
+ * threshold.** On one chapter four batches died at exactly that line — three of
+ * them opening fourteen images and one opening *seven* — while other batches of
+ * six, seven, ten, twelve, thirteen and fourteen came through. Size raises the
+ * risk and does not decide it, so there is no safe number to pick.
+ *
+ * What that means in practice: **keep the batch at the cheap size and expect to
+ * relaunch one now and then.** Nothing is lost when it happens — the agent dies
+ * before writing anything, so the output path does not exist and every other
+ * batch is untouched. Splitting the load into two smaller blocks is worth
+ * telling a reader to try on a retry; it is not worth paying for up front.
  *
  * **Give the reader a lean draft.** `structural` and the settled `hyphens` are
  * the parent's record, not the reader's material: the hyphens have already been
@@ -303,17 +309,17 @@ ${leaves.map((l) => l.pageIndex).join(', ')} — ${leaves.length} of them.
 
 ## How to work
 
-**Open your renders in blocks of at most eight**, before you write anything —
-one block if you have eight leaves or fewer, two if you have more. Read them all
-against their drafts, then write the whole batch in one file write.
+**Open your renders in one block**, before you write anything, then read them
+all against their drafts and write the whole batch in one file write. This is
+measured, not a preference: interleaving reading and writing leaf by leaf costs
+about 30% more for the same leaves and finds nothing extra, because every turn
+re-sends the whole accumulated context.
 
-Two things are measured here and neither is a preference. Interleaving reading
-and writing leaf by leaf costs about 30% more for the same leaves and finds
-nothing extra, because every turn re-sends the whole accumulated context. And
-**fourteen images in a single tool block times the request out** — it took
-three batches of one chapter down at exactly that point, each of them having
-done nothing yet. Four attempts at fourteen, three dead. Eight has never
-failed.
+**If that request times out, open them in two smaller groups instead.** It
+happens now and then and it is not your fault — four batches of one chapter died
+at exactly that step, three opening fourteen images and one opening seven, while
+batches of every size between six and fourteen came through. Nothing is lost
+when it happens.
 
 ## The seam
 ${
