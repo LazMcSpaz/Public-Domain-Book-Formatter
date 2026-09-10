@@ -183,6 +183,53 @@ describe('a quotation that never closes', () => {
   })
 
   /**
+   * Printing convention opens **every line** of quoted verse and closes only
+   * the last, so a verse block carries several opening marks and often no
+   * closing one at all. Measured over the first 176 leaves of *Isis Unveiled*,
+   * this check produced 21 findings and every one was a verse block or a
+   * table's ditto column — 21 lines on a sheet somebody has to read, with
+   * nothing in them.
+   *
+   * An exemption by block *kind* rather than a threshold, which is why it is
+   * safe: it is a fact about what verse is, not a guess about how much noise to
+   * tolerate.
+   */
+  it('says nothing about quoted verse, which opens every line', () => {
+    // The shape the real book produces: a verse line that opens a mark and
+    // closes nothing, with ordinary prose after it. Leaf 96 of *Isis Unveiled*
+    // is exactly this.
+    const found = checkConsistency(
+      doc([
+        block('“ If ancestry can be in aught believed,', 'verse'),
+        block('The next paragraph begins in the ordinary way.')
+      ])
+    ).filter((f) => f.kind === 'unclosed-quote')
+    expect(found).toHaveLength(0)
+  })
+
+  /** The same line as a paragraph is still reported — the exemption is by kind. */
+  it('still reports the same line when it is prose', () => {
+    const found = checkConsistency(
+      doc([
+        block('“ If ancestry can be in aught believed,'),
+        block('The next paragraph begins in the ordinary way.')
+      ])
+    ).filter((f) => f.kind === 'unclosed-quote')
+    expect(found).toHaveLength(1)
+  })
+
+  /** In a column of figures a repeated `“` is the ditto mark, not a quotation. */
+  it('says nothing about a table using the mark as a ditto', () => {
+    const found = checkConsistency(
+      doc([
+        block('1st.—Satya-yug | 1,728,000 years.\n2d.—Trêtya yug | 1,296,000 “', 'table'),
+        block('The next paragraph begins in the ordinary way.')
+      ])
+    ).filter((f) => f.kind === 'unclosed-quote')
+    expect(found).toHaveLength(0)
+  })
+
+  /**
    * Straight marks cannot be measured — the same character opens and closes —
    * so a book still carrying them is left alone rather than guessed at.
    */

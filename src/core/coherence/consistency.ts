@@ -546,10 +546,21 @@ function doubledPhrases(blocks: readonly BookBlock[]): ConsistencyFinding[] {
  * paragraph opens and only the last closes. So an unclosed mark is reported
  * only when the *next* block does not open one, which is what tells a continued
  * quotation from a lost one.
+ *
+ * **Verse and tables are exempt, and not as a tuning.** Both use an opening
+ * mark for something that is not a quotation: printing convention opens *every
+ * line* of quoted verse and closes only the last, and in a table of figures a
+ * repeated `“` is the ditto mark. Measured over the first 176 leaves of *Isis
+ * Unveiled*, this check produced 21 findings and every one of them was a verse
+ * block or the year column of a table — nothing lost, nothing gained, 21 lines
+ * on a sheet that has to be read. The exemption is a fact about what those
+ * block kinds *are*, which is why it is safe where a new threshold would not
+ * be.
  */
 function unclosedQuotes(blocks: readonly BookBlock[]): ConsistencyFinding[] {
   const findings: ConsistencyFinding[] = []
   blocks.forEach((block, i) => {
+    if (block.kind === 'verse' || block.kind === 'table') return
     const text = plain(block)
     const opens = (text.match(/“/gu) ?? []).length
     const closes = (text.match(/”/gu) ?? []).length
