@@ -463,12 +463,28 @@ const GAP_FROM_FRONT = 2
  * Very high precision and the classic artefact of a page seam or a line the
  * compositor set twice. A short list of words English really does double
  * ("that that", "had had") keeps it honest.
+ *
+ * **The boundary is spelled out rather than left to `\b`.** JavaScript's `\b`
+ * is defined against `\w`, which is `[A-Za-z0-9_]` and nothing else — the `u`
+ * flag does not widen it. So a boundary falls in the *middle* of every word
+ * this book spells with a ligature or an accent, and the check went wrong in
+ * both directions on the same page. `Amphitheatri Sapientiæ Æternæ` was
+ * reported as the doubled word `æ Æ`, because `\b` sits between the `i` and the
+ * `æ` and the trailing ligature of one word matched the leading ligature of the
+ * next. And `Æneid Æneid`, `Œdipus Œdipus`, `œuvre œuvre` and `élan élan` — a
+ * word doubled across a page seam, which is the exact artefact this check
+ * exists for — matched nothing at all, because there is no `\b` before a
+ * leading `Æ`.
+ *
+ * The false negative is the one that mattered. This volume names the *Æneid*,
+ * Œdipus, Ægypt and dæmons on nearly every leaf, and a doubled one of those
+ * would have gone through in silence.
  */
 function doubledWords(blocks: readonly BookBlock[]): ConsistencyFinding[] {
   const findings: ConsistencyFinding[] = []
   for (const block of blocks) {
     const text = plain(block)
-    const re = /\b(\p{L}[\p{L}'’-]*)(\s+)(\1)\b/giu
+    const re = /(?<![\p{L}\p{M}'’-])(\p{L}[\p{L}\p{M}'’-]*)(\s+)(\1)(?![\p{L}\p{M}'’-])/giu
     for (const match of text.matchAll(re)) {
       const word = match[1]!.toLocaleLowerCase()
       if (DOUBLABLE.has(word)) continue

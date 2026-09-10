@@ -130,6 +130,37 @@ describe('a word or a phrase printed twice', () => {
     expect(found[0]!.found).toMatch(/the\s+the/i)
   })
 
+  /**
+   * JavaScript's `\b` is defined against `[A-Za-z0-9_]` and the `u` flag does
+   * not widen it, so a boundary falls inside every word this book spells with a
+   * ligature. Both halves of that were live on one page of *Isis Unveiled*.
+   */
+  it('reports a doubled word that opens with a ligature or an accent', () => {
+    for (const line of [
+      'Virgil tells it in the Æneid Æneid of his later years.',
+      'The œuvre œuvre of the alchemists.',
+      'An élan élan the schoolmen never named.'
+    ]) {
+      const found = checkConsistency(doc([block(line)])).filter((f) => f.kind === 'doubled-word')
+      expect(found, line).toHaveLength(1)
+    }
+  })
+
+  /**
+   * The other half, and the reason the boundary is spelled out rather than
+   * merely widened: `Amphitheatri Sapientiæ Æternæ` was reported as the doubled
+   * word `æ Æ`, the trailing ligature of one word matching the leading ligature
+   * of the next across a boundary that should never have been there.
+   */
+  it('does not read a trailing ligature and a leading one as a doubled word', () => {
+    expect(
+      kinds(doc([block('Khunrath, on a plate of his Amphitheatri Sapientiæ Æternæ, sets four.')]))
+    ).not.toContain('doubled-word')
+    expect(kinds(doc([block('He read the Timæus Ægyptian scholars once prized.')]))).not.toContain(
+      'doubled-word'
+    )
+  })
+
   it('leaves the words English really does double', () => {
     expect(kinds(doc([block('He knew that that was the whole of it.')]))).not.toContain(
       'doubled-word'

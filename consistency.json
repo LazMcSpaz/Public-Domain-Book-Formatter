@@ -1,5 +1,16 @@
 [
  {
+  "kind": "stray-spelling",
+  "blockId": "p66b5",
+  "pages": [
+   66,
+   67
+  ],
+  "found": "trine",
+  "against": "triune (5 uses against 1)",
+  "context": "…icance. For instance four, of which the Dodecahedron is the trine, was held sacred by the Pythagoreans. It is the perfect squ…"
+ },
+ {
   "kind": "unclosed-quote",
   "blockId": "p70b2",
   "pages": [
@@ -18,19 +29,8 @@
    76
   ],
   "found": "heretic",
-  "against": "hermetic (22 uses against 1)",
+  "against": "hermetic (38 uses against 1)",
   "context": "…almost deified by his countrymen and afterward treated as a heretic, remarks, that the more absurd and void of sense the Talmud…"
- },
- {
-  "kind": "stray-spelling",
-  "blockId": "p76b2",
-  "pages": [
-   76,
-   77
-  ],
-  "found": "started",
-  "against": "startled (6 uses against 1)",
-  "context": "…t day the first man himself was born. Whenever a writer has started with the idea of connecting its first foundation in a count…"
  },
  {
   "kind": "name-variant",
@@ -39,7 +39,7 @@
    83
   ],
   "found": "Parsis",
-  "against": "Paris (8 uses against 1)",
+  "against": "Paris (13 uses against 1)",
   "context": "…, who derive their name from it. The Mobeds, priests of the Parsis—the ancient Ghebers—are named, even at the present day, Mag…"
  },
  {
@@ -80,7 +80,7 @@
    98
   ],
   "found": "victis",
-  "against": "victims (6 uses against 1)",
+  "against": "victims (8 uses against 1)",
   "context": "…dogma was branded at once an iconoclast and an infidel. Væ victis ! . . . . Science has conquered. But in its turn the victor…"
  },
  {
@@ -91,7 +91,7 @@
    99
   ],
   "found": "froth",
-  "against": "forth (19 uses against 1)",
+  "against": "forth (24 uses against 1)",
   "context": "…ological phenomena. They judge by its surface, covered with froth and scum. But they might with equal propriety deny that the…"
  },
  {
@@ -111,7 +111,7 @@
    111
   ],
   "found": "occurence",
-  "against": "occurrence (5 uses against 1)",
+  "against": "occurrence (7 uses against 1)",
   "context": "…ral disquisitions beneficent, though the latter is of rarer occurence. Who are those spirits, what those powers or intelligences…"
  },
  {
@@ -131,7 +131,7 @@
    132
   ],
   "found": "compete",
-  "against": "complete (6 uses against 1)",
+  "against": "complete (8 uses against 1)",
   "context": "…ssional wizard, either of the North, South or West, who can compete with anything approaching success, with these untutored, na…"
  },
  {
@@ -141,19 +141,8 @@
    141
   ],
   "found": "immorality",
-  "against": "immortality (27 uses against 1)",
+  "against": "immortality (35 uses against 1)",
   "context": "…sive exercise of religious instinct is productive of sexual immorality. Priests, monks, nuns, saints, media, ecstatics, and devote…"
- },
- {
-  "kind": "name-variant",
-  "blockId": "p148b1",
-  "pages": [
-   148,
-   149
-  ],
-  "found": "Sanscrit",
-  "against": "Sanskrit (3 uses against 1)",
-  "context": "…e respect, and notwithstanding the unwillingness of certain Sanscrit scholars, we can show the identity between the two. Moreove…"
  },
  {
   "kind": "name-variant",
@@ -163,7 +152,7 @@
    151
   ],
   "found": "Brahma’s",
-  "against": "Brahmans (10 uses against 1)",
+  "against": "Brahmans (13 uses against 1)",
   "context": "…r as soon as darkness was dispersed and “ there was light,” Brahma’s understanding was opened, and he saw in the ideal world (wh…"
  },
  {
@@ -172,9 +161,9 @@
   "pages": [
    151
   ],
-  "found": "Universo",
-  "against": "Universe (18 uses against 1)",
-  "context": "…f the author of the Causa Principio et Uno, or the Infinito Universo e Mondi. Both Bruno, who confesses that the source of his i…"
+  "found": "Infinito",
+  "against": "Infinite (3 uses against 1)",
+  "context": "…heories of the author of the Causa Principio et Uno, or the Infinito Universo e Mondi. Both Bruno, who confesses that the source…"
  },
  {
   "kind": "name-variant",
@@ -250,6 +239,16 @@
   "context": "…rible noise. “As,” adds de Mirville, “we were already but too rich in facts, we recoiled before this new enormity added to so many others.”§"
  },
  {
+  "kind": "stray-spelling",
+  "blockId": "p175b2",
+  "pages": [
+   175
+  ],
+  "found": "fried",
+  "against": "friend (5 uses against 1)",
+  "context": "…carry them to the length of supping on grasshoppers boiled, fried, and in soup. ‡ Meanwhile, millions of Americans are either…"
+ },
+ {
   "kind": "name-variant",
   "blockId": "p178b0",
   "pages": [
@@ -310,6 +309,16 @@
   "context": "…is derived from the Sanskrit Mahaji, the great or wise (the anointed by the divine wisdom). “Eumolpus is the mythic founder of the Eumolpidæ"
  },
  {
+  "kind": "stray-spelling",
+  "blockId": "p190b0",
+  "pages": [
+   190
+  ],
+  "found": "apples",
+  "against": "applies (4 uses against 1)",
+  "context": "…o Hades (the subterranean garden), and plucking the “golden apples” from the “tree of life,” slays the dragon.‡ The rough Tita…"
+ },
+ {
   "kind": "unclosed-quote",
   "blockId": "p195b5",
   "pages": [
@@ -327,19 +336,18 @@
    201
   ],
   "found": "complied",
-  "against": "compiled (4 uses against 1)",
+  "against": "compiled (5 uses against 1)",
   "context": "…tizer what they desired, for their own mental requests were complied with perfect fidelity."
  },
  {
-  "kind": "stray-spelling",
-  "blockId": "p210b2",
+  "kind": "name-variant",
+  "blockId": "p221b10",
   "pages": [
-   210,
-   211
+   221
   ],
-  "found": "genus",
-  "against": "genius (6 uses against 1)",
-  "context": "…of the evolutionists, it is but natural to think that each genus, beginning with the mollusks and ending with monkey-man, ha…"
+  "found": "Origin",
+  "against": "Origen (5 uses against 1)",
+  "context": "(MS. Account of the Origin and Attributes of the True Rosicrucians.)"
  },
  {
   "kind": "name-variant",
@@ -379,7 +387,7 @@
    233
   ],
   "found": "angles",
-  "against": "angels (4 uses against 1)",
+  "against": "angels (13 uses against 1)",
   "context": "…The committee could “ tickle their feet, nostrils, and the angles of the eyes by the approach of a feather, pinch their skin…"
  },
  {
@@ -411,7 +419,7 @@
    247
   ],
   "found": "Tyndalls",
-  "against": "Tyndall’s (4 uses against 1)",
+  "against": "Tyndall’s (5 uses against 1)",
   "context": "…ying loose on the threshold of the “ chasm ” not one of our Tyndalls would stoop to pick it up."
  },
  {
@@ -421,7 +429,7 @@
    247
   ],
   "found": "tyndalls",
-  "against": "tyndall's (4 uses against 1)",
+  "against": "tyndall's (5 uses against 1)",
   "context": "…ying loose on the threshold of the “ chasm ” not one of our Tyndalls would stoop to pick it up."
  },
  {
@@ -443,6 +451,16 @@
   "found": "…fell across the paper, and an alphabetic message told us : “We have tried to do as you asked, but our power is exhausted…",
   "against": "8 opening marks against 7 closing",
   "context": "…word our, as the joint intelligent efforts of the friendly lath and pencil, would make us think that there were two psychic forces present."
+ },
+ {
+  "kind": "name-variant",
+  "blockId": "p270b1",
+  "pages": [
+   270
+  ],
+  "found": "Augoeidés",
+  "against": "Augoeides (7 uses against 1)",
+  "context": "…or astral body—the soul) ; the third is the Divine spirit (Augoeidés).” Our human body, being possessed of “primeval earth-stuff…"
  },
  {
   "kind": "name-variant",
@@ -472,7 +490,7 @@
    293
   ],
   "found": "chapter xi",
-  "against": "the book prints I, II, III, IV, V, VI, VII, VIII",
+  "against": "the book prints I, II, III, IV, V, VI, VII, VIII, IX, X",
   "context": "In chapter xi., which is entirely devoted to the wonderful achievements o…"
  },
  {
@@ -539,13 +557,23 @@
  },
  {
   "kind": "stray-spelling",
+  "blockId": "p318b9",
+  "pages": [
+   318
+  ],
+  "found": "waning",
+  "against": "warning (4 uses against 1)",
+  "context": "…ell whether the Moslem Crescent, which seems, indeed, to be waning, will irrevocably “wane, dissolve, and disappear,” as the o…"
+ },
+ {
+  "kind": "stray-spelling",
   "blockId": "p325b1",
   "pages": [
    325,
    326
   ],
   "found": "crete",
-  "against": "create (8 uses against 1)",
+  "against": "create (13 uses against 1)",
   "context": "…e planet to become extremely flattened at the poles; and in Crete the personified god Jupiter was represented without ears. T…"
  },
  {
@@ -555,7 +583,7 @@
    329
   ],
   "found": "Buddhism",
-  "against": "Buddhist (7 uses against 1)",
+  "against": "Buddhist (10 uses against 2)",
   "context": "…Son, or Πατηρ and Λογος is identical with the groundwork of Buddhism. Moses could not reveal to the multitude the sublime secret…"
  },
  {
@@ -607,5 +635,169 @@
   "found": "…ontrary, the foundation of all forms, and anterior to them. “But the very presence of forms denotes it to be the creation…",
   "against": "2 opening marks against 1 closing",
   "context": "…ya, and all her works are as nothing before the uncreated being, SPIRIT, in whose profound and sacred repose all motion must cease forever,”"
+ },
+ {
+  "kind": "stray-spelling",
+  "blockId": "p351b9",
+  "pages": [
+   351,
+   352
+  ],
+  "found": "waned",
+  "against": "warned (4 uses against 1)",
+  "context": "…ations, waxed in power, attained the climax of development, waned, and became extinct; and mankind, when the end of the lower…"
+ },
+ {
+  "kind": "stray-spelling",
+  "blockId": "p358b1",
+  "pages": [
+   358
+  ],
+  "found": "principes",
+  "against": "principles (37 uses against 1)",
+  "context": "…let us call the ‘powers’ into existence. The genii are the Principes, the ‘sons of Light,’ but thou art the ‘Messenger of Life.’…"
+ },
+ {
+  "kind": "unclosed-quote",
+  "blockId": "p358b1",
+  "pages": [
+   358
+  ],
+  "found": "…angels do, and about what they are consulting. †† They say, “Let us call forth the world, and let us call the ‘powers’ in…",
+  "against": "2 opening marks against 1 closing",
+  "context": "…d, and let us call the ‘powers’ into existence. The genii are the Principes, the ‘sons of Light,’ but thou art the ‘Messenger of Life.’ ” ‡‡"
+ },
+ {
+  "kind": "stray-spelling",
+  "blockId": "p360b1",
+  "pages": [
+   360
+  ],
+  "found": "heaves",
+  "against": "heavens (7 uses against 1)",
+  "context": "…nd Immortal breath ; under the efflux of which the universe heaves its mighty bosom, infusing Intelligent life throughout crea…"
+ },
+ {
+  "kind": "stray-spelling",
+  "blockId": "p362b0",
+  "pages": [
+   362
+  ],
+  "found": "county",
+  "against": "country (24 uses against 1)",
+  "context": "…xtensive graveyard in a number of high mounds upon the Clay County bluffs."
+ },
+ {
+  "kind": "name-variant",
+  "blockId": "p365b1",
+  "pages": [
+   365,
+   366
+  ],
+  "found": "Buddhism",
+  "against": "Buddhist (10 uses against 2)",
+  "context": "…orld-religions—Christianity, Judaism, Brahmanism, Paganism, Buddhism, proceeds from this one source : Truth is known but to the…"
+ },
+ {
+  "kind": "doubled-word",
+  "blockId": "p377b1",
+  "pages": [
+   377
+  ],
+  "found": "æ Æ",
+  "against": "the same word twice",
+  "context": "…list, has on a plate of his rare work, Amphitheatri Sapientiæ Æternæ, representations of the four classes of these human “e…"
+ },
+ {
+  "kind": "stray-spelling",
+  "blockId": "p383b1",
+  "pages": [
+   383
+  ],
+  "found": "countess",
+  "against": "countless (14 uses against 1)",
+  "context": "…d than the gentle Baroness Adelma von Vay, of Austria (born Countess Wurmbrandt), who is described to us by a correspondent as “…"
+ },
+ {
+  "kind": "stray-spelling",
+  "blockId": "p390b3",
+  "pages": [
+   390
+  ],
+  "found": "meals",
+  "against": "metals (7 uses against 1)",
+  "context": "…ting themselves at our tables, they partake of our festival meals. Whenever they meet on his travels a solitary Phœnician, th…"
+ },
+ {
+  "kind": "unclosed-quote",
+  "blockId": "p413b2",
+  "pages": [
+   413,
+   414
+  ],
+  "found": "…ct from her. And so it is that we see in Leviticus xx. 27 : “A man also or woman that hath a familiar spirit, or that is…",
+  "against": "4 opening marks against 3 closing",
+  "context": "…t is a wizard (an irresponsible jidegnoni) shall surely be put to death, they shall stone them with stones, their blood shall be upon them.”"
+ },
+ {
+  "kind": "name-variant",
+  "blockId": "p414b1",
+  "pages": [
+   414
+  ],
+  "found": "Spirits",
+  "against": "Spiritus (4 uses against 1)",
+  "context": "…ubt, and one which gives the lie to a recent utterance of “ Spirits,” by the mouth of one of the most popular inspirational med…"
+ },
+ {
+  "kind": "stray-spelling",
+  "blockId": "p414b1",
+  "pages": [
+   414
+  ],
+  "found": "ingenius",
+  "against": "ingenious (7 uses against 1)",
+  "context": "…at is, to gain their livelihood ! An interpretation no less ingenius than novel. Certainly, nowhere short of the source of such…"
+ },
+ {
+  "kind": "stray-spelling",
+  "blockId": "p417b1",
+  "pages": [
+   417
+  ],
+  "found": "patent",
+  "against": "patient (12 uses against 1)",
+  "context": "…to produce spiritual appearances on the stage, and sold his patent in 1863, in Paris, for the sum of 20,000 francs. The phanto…"
+ },
+ {
+  "kind": "name-variant",
+  "blockId": "p419b1",
+  "pages": [
+   419
+  ],
+  "found": "Mather",
+  "against": "Matter (3 uses against 1)",
+  "context": "…m witchcraft, as we find it recorded in the works of Cotton Mather, Calef, Upham, and others, furnishes a curious corroboratio…"
+ },
+ {
+  "kind": "stray-spelling",
+  "blockId": "p426b1",
+  "pages": [
+   426
+  ],
+  "found": "earths",
+  "against": "earth's (8 uses against 1)",
+  "context": "“ Man lives on many earths before he reaches this. Myriads of worlds swarm in space wh…"
+ },
+ {
+  "kind": "unclosed-quote",
+  "blockId": "p429b3",
+  "pages": [
+   429,
+   430
+  ],
+  "found": "…psy. . . . We rather incline to the opinion,” says Figuier, “ that it was a disease sui generis, and in order to have an…",
+  "against": "4 opening marks against 3 closing",
+  "context": "…in order to have an appropriate name for such a disease, we must be satisfied with the one of the Trembling Convulsionaires of Cevennes.” *"
  }
 ]
