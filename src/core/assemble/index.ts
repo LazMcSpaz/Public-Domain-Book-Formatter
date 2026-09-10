@@ -21,3 +21,4 @@ export {
   type Illustration,
   type IllustrationSource
 } from './assemble-book'
+export { bookText } from './book-text'

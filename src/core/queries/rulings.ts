@@ -39,6 +39,7 @@
  *
  * Pure: no DOM, no I/O.
  */
+import { bookText, type BookDocument } from '@core/assemble'
 import type { EditorialQueryKind } from '@core/transcribe'
 import type { RaisedQuery } from './index'
 
@@ -153,12 +154,16 @@ export function settled(
  * between deciding and applying is exactly where a book quietly keeps the error
  * its editor is certain was fixed.
  *
- * `body` is the assembled text of the whole book — what `drive.mjs body` hands
- * back. A correction counts as applied when its words appear there and the
- * printed form no longer does.
+ * It takes the **document**, not a string, and asks `bookText` what the book
+ * says. That is not fussiness: the caller used to join `doc.blocks` and call it
+ * the book, which left out every footnote and stripped the emphasis out of the
+ * text, so a correction landing in a note — or one whose wording carried an
+ * `<i>` — was reported outstanding forever. A check that cries wolf is what
+ * stops anyone reading the check, so the rule for what counts as the book lives
+ * in one place and no caller gets to decide it.
  */
-export function unapplied(rulings: readonly Ruling[], body: string): Ruling[] {
-  const text = body.toLowerCase()
+export function unapplied(rulings: readonly Ruling[], book: BookDocument): Ruling[] {
+  const text = bookText(book).toLowerCase()
   return rulings.filter((ruling) => {
     if (ruling.decision !== 'corrected') return false
     const wanted = (ruling.correction ?? '').trim().toLowerCase()

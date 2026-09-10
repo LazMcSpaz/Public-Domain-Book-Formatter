@@ -10,6 +10,7 @@ import {
   type RaisedQuery,
   type Ruling
 } from '@core/queries'
+import { type BookBlock, type BookDocument } from '@core/assemble'
 import { noteOnTheText } from '@core/annotate'
 
 const query = (over: Partial<RaisedQuery> = {}): RaisedQuery => ({
@@ -29,6 +30,36 @@ const ruling = (over: Partial<Ruling> = {}): Ruling => ({
   decidedOn: '2026-08-24',
   ...over
 })
+
+/**
+ * A book made of whatever text a case needs.
+ *
+ * `unapplied` takes the document rather than a string because the caller that
+ * used to build the string got it wrong — see `bookText`. Building a document
+ * here rather than passing prose keeps these tests asking the question the
+ * caller actually asks.
+ */
+const book = (over: Partial<BookDocument> = {}): BookDocument => ({
+  blocks: [],
+  footnotes: [],
+  chapters: [],
+  asides: [],
+  illustrations: [],
+  sections: [],
+  skipped: [],
+  synopsesUnmatched: [],
+  ...over
+})
+
+const para = (text: string, over: Partial<BookBlock> = {}): BookBlock => ({
+  id: 'p12b1',
+  kind: 'paragraph',
+  text,
+  sourcePages: [12],
+  ...over
+})
+
+const prose = (text: string): BookDocument => book({ blocks: [para(text)] })
 
 describe('finding the ruling that settles a query', () => {
   it('matches the leaf and the words', () => {
@@ -136,18 +167,18 @@ describe('what is still waiting', () => {
  */
 describe('rulings the book has not caught up with', () => {
   it('flags a correction the text does not carry', () => {
-    expect(unapplied([ruling()], 'a radioative emanation of the aura')).toHaveLength(1)
+    expect(unapplied([ruling()], prose('a radioative emanation of the aura'))).toHaveLength(1)
   })
 
   it('says nothing once the text reads the corrected way', () => {
-    expect(unapplied([ruling()], 'a radioactive emanation of the aura')).toEqual([])
+    expect(unapplied([ruling()], prose('a radioactive emanation of the aura'))).toEqual([])
   })
 
   it('still flags it when both readings are in the book', () => {
     // One occurrence mended and another missed is the commonest way a
     // correction half-lands, and the one a plain "is the new word there?" test
     // would call finished.
-    expect(unapplied([ruling()], 'radioactive here, radioative there')).toHaveLength(1)
+    expect(unapplied([ruling()], prose('radioactive here, radioative there'))).toHaveLength(1)
   })
 
   /**
@@ -163,7 +194,7 @@ describe('rulings the book has not caught up with', () => {
       correction: 'the moment at which he awoke.\u201d'
     })
     expect(
-      unapplied([closing], 'dispatching a messenger, the moment at which he awoke.\u201d')
+      unapplied([closing], prose('dispatching a messenger, the moment at which he awoke.\u201d'))
     ).toEqual([])
   })
 
@@ -174,16 +205,78 @@ describe('rulings the book has not caught up with', () => {
       correction: 'the moment at which he awoke.\u201d'
     })
     expect(
-      unapplied([closing], 'dispatching a messenger, the moment at which he awoke.')
+      unapplied([closing], prose('dispatching a messenger, the moment at which he awoke.'))
     ).toHaveLength(1)
   })
 
   it('has no opinion about a ruling that changes nothing', () => {
-    expect(unapplied([ruling({ decision: 'as-printed', correction: undefined })], '')).toEqual([])
+    expect(unapplied([ruling({ decision: 'as-printed', correction: undefined })], book())).toEqual(
+      []
+    )
   })
 
   it('flags a correction that never said what it should read', () => {
-    expect(unapplied([ruling({ correction: '' })], 'anything')).toHaveLength(1)
+    expect(unapplied([ruling({ correction: '' })], prose('anything'))).toHaveLength(1)
+  })
+
+  /**
+   * Measured on *Isis Unveiled*: two of the corrections the editor ruled on
+   * were inside footnotes, which assembly pulls out of the block flow, so a
+   * check reading `doc.blocks` reported them outstanding after they had been
+   * made. Both notes and the editor's own divisions are text a reader sees.
+   */
+  it('sees a correction that landed in a footnote', () => {
+    const note = ruling({
+      pageIndex: 89,
+      quote: 'the Northen Hemisphere',
+      correction: 'the Northern Hemisphere'
+    })
+    const withNote = book({
+      blocks: [para('The note hangs off this sentence.')],
+      footnotes: [
+        {
+          id: 'fn48',
+          originalMarker: '*',
+          text: 'at the end of the tertiary period, the Northern Hemisphere had changed',
+          pageIndex: 89,
+          orphaned: false
+        }
+      ]
+    })
+    expect(unapplied([note], withNote)).toEqual([])
+  })
+
+  it('sees a correction that landed in a division the editor wrote', () => {
+    const inIntro = ruling({ quote: 'radioative', correction: 'radioactive' })
+    const withIntro = book({
+      sections: [
+        {
+          id: 'introduction',
+          placement: 'front',
+          title: 'Introduction',
+          blocks: [para('a radioactive emanation of the aura', { id: 'introb1' })]
+        }
+      ]
+    })
+    expect(unapplied([inIntro], withIntro)).toEqual([])
+  })
+
+  /**
+   * A ruling's correction is quoted from the text as it is written down, and
+   * emphasis is written down as `<i>`. A block's own `text` has it stripped out
+   * into word indices, so a correction carrying a tag could never be found —
+   * the third false alarm the same book produced.
+   */
+  it('reads the emphasis back before looking for the words', () => {
+    const italic = ruling({
+      pageIndex: 67,
+      quote: 'the ancient mystics—the <i>Tetractys.</i>',
+      correction: 'the ancient mystics—the <i>Tetractys.</i> Amen.'
+    })
+    const set = book({
+      blocks: [para('the ancient mystics—the Tetractys. Amen.', { emphasis: [3] })]
+    })
+    expect(unapplied([italic], set)).toEqual([])
   })
 })
 

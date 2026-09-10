@@ -2635,7 +2635,7 @@ async function serve() {
             assemble.assembleBook(run.transcriptions),
             run.edits ?? []
           )
-          const notYet = queriesMod.unapplied(rulings, doc.blocks.map((b) => b.text).join('\n'))
+          const notYet = queriesMod.unapplied(rulings, doc)
           const waiting = queriesMod.outstanding(raised, rulings)
           const title =
             typeof run.identityAnswers?.title === 'string' && run.identityAnswers.title
