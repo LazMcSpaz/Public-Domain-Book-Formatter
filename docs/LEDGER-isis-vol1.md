@@ -712,3 +712,59 @@ its way to being dropped on an argument nobody had tested.
 **The two `doubled-word` findings are both false positives and both fine**: `is
 is` in a correctly quoted proverb ("that which is is that which was"), and `Sing
 Sing, N. Y.` in a citation. Two on 422 leaves is a rate worth paying.
+
+### The volume is read, and where it actually ends
+
+**628 leaves, 59 to 686, no gaps.** 2,057 blocks, 17 chapters, **870 footnotes
+and 0 orphaned**. Leaf 686 prints `END OF VOLUME I.` centred below its last
+paragraph; 687 to 692 are blank.
+
+That last fact was worth measuring rather than assuming. The scan is 693 pages
+and the reading was sized against it for most of a session. What made the tail
+look like content was OCR returning the _same_ string of garbage for 687, 688
+and 689 — which reads like three pages of a two-column index until you render
+one and find it blank. The string is the HathiTrust sidebar read vertically: it
+sits on every leaf of this scan and belongs to no page. There is no index here
+to discard under the front-matter rule, because there is no index.
+
+The marker tally over the whole volume:
+
+| `*` | `†` | `‡` | `§` | `‖` | `¶` | `**` | `††` | `‡‡` | `⁂` |
+| --: | --: | --: | --: | --: | --: | ---: | ---: | ---: | --: |
+| 432 | 240 | 110 |  48 |  22 |   9 |    4 |    2 |    2 |   1 |
+
+**The folio rule finished 31 for 31.** Thirty-one leaves were put to a reader
+because their folio disagreed with `leaf = folio + 58`, and thirty-one times the
+reader found the volume right and OCR wrong — a stroke lost off an old-style
+`8` or `9`. Not once did the book misnumber itself. A check with that record
+costs nothing and should be the first thing built for the next volume.
+
+### The asterism, and a trap that is real but not yet live
+
+Leaf 652 opens a footnote with an **asterism (`⁂`)** and runs it across two
+pages — the longest note in the volume, twelve blocks, joined by the widened
+runover rule into one. The reader flagged that `⁂` is outside the `* † ‡ § ‖ ¶`
+class the method names, which was the right instinct, so it was measured
+against the font files rather than argued about.
+
+**No book face here carries `⁂` at all**, and only EB Garamond carries `‖`;
+this book is set in Crimson Pro, which has neither. Fifty-two faces scanned.
+
+That sounds fatal and is not, because the engine **renumbers**: a placed note's
+printed mark is `String(nextNumber++)`, and `originalMarker` is used only to
+find the reference in the body and is then dropped (`layout/footnotes.ts`). So
+`⁂` and `‖` never reach the page — for a note that is _placed_.
+
+The exception is where the trap lives. A note whose reference mark is nowhere in
+the body becomes a **collected endnote**, and `paginate.ts` prints those as
+`` `${note.originalMarker} ${note.text}` `` — the original symbol, drawn. With
+`renderPdf` verifying that every glyph the book prints has a width, one
+unplaced `‖` note would stop the export rather than write a hole. That is the
+right failure, and it is a late one.
+
+It is **not live**: 0 of 870 notes are orphaned, so nothing is collected and
+nothing draws an asterism today. Recorded rather than fixed, because fixing a
+conditional fault by changing what the engine prints is how a book acquires a
+substitution nobody asked for. What would make it safe is the smaller thing:
+have the endnote path fall back to a numeral when the face has no glyph for the
+original mark, and say so in the export report.
