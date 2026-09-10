@@ -845,3 +845,61 @@ floor. Against that: every leaf was also read against its own render by a batch
 reader, and from leaf 551 those readers were asked to raise figures explicitly.
 Three independent passes and no fourth plate is as close to settled as this gets
 without turning the paper.
+
+### The unclosed quotations, adjudicated — and a prediction that was wrong
+
+Forty-four findings. What I said before looking: _"most are probably the reading
+restoring an opening `“` that OCR mangled and missing its close, which is mine
+to fix; the rest are the book's own."_
+
+|                                                             |        |
+| ----------------------------------------------------------- | -----: |
+| **The book's own** — the compositor opened and never closed | **31** |
+| Spurious open — a blot read as a quotation mark             |      1 |
+| Not a quotation fault — a paragraph wrongly split at a seam |      1 |
+| Not a fault — a displayed list inside one quotation         |      1 |
+| Run-on across a paragraph, removed by fixing the check      |     10 |
+| **Dropped — the paper prints a mark this reading lost**     |  **0** |
+
+**Zero.** Not one closing mark has been lost in transcription in 628 leaves, and
+the thing I expected to be the bulk of the pile does not exist. The readers
+checked every opening mark at 2× to 12× and every one is a properly formed
+double turned comma on the paper. What that says about the reading is worth more
+than the sheet it produced.
+
+**Ten went before anyone opened a render.** The check could not see a quotation
+that _runs on_ — no mark at the paragraph break, one closing mark at the end. It
+already exempted the other convention, where every paragraph opens and only the
+last closes, and that exemption **never fired once on this book**: of 30
+findings over 422 leaves, not one had a next block opening with a mark. A fifth
+of the sheet was the check's own blind spot.
+
+**Two real faults, and neither was a quotation.** Page 439 had a ragged blot
+fused to the left arm of a `T`, read as an opening mark — settled three ways: at
+12× against the book's own crisp `‘` on the same leaf, by the sense (the
+sentence is Blavatsky's own voice, `we write in February, 1877`), and by the
+second edition, which prints nothing there. And pages 601–602 were one paragraph
+split in two: 660 opens **flush left**, with no indent.
+
+That second one is the more interesting failure. `shouldJoin` reads a trailing
+colon as a closed sentence and a leading quotation mark as the start of
+something, and leaf 659 ends `and was answered :` while 660 opens `‘That is
+Mahu.’` — both signals present, both pointing the wrong way. The evidence that
+settles it is the **indent**, which `draft` measures off the pixels and the
+transcription does not carry. Mended here by the field that exists for it,
+`continuesPrevious`, but the general case wants the geometry carried through.
+
+**One finding was left on the sheet deliberately.** The Voltaire epigraph on
+page 99 opens in its lead-in line and closes five blocks later at the end of the
+fifth numbered item. Relaxing the rule to follow a run of displayed-quotation
+blocks was measured first: it would remove **that one finding and no other in
+the volume**, so the rule was left alone and the case is named in `quotations.md`
+instead. Tuning a check to clear one known-good case is how a check stops
+meaning anything.
+
+**Thirty-one went to the editor as one query, not thirty-one.** They are four
+habits — closes the inner and forgets the outer (11), re-opens mid-paragraph
+(7), the extract simply never closes (9), left open across a displayed extract
+and re-opened after (4) — and the decision is a single principle applied
+thirty-one times. `quotations.md` on the shelf lists every instance under its
+habit.
