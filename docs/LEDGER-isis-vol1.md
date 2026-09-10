@@ -768,3 +768,46 @@ conditional fault by changing what the engine prints is how a book acquires a
 substitution nobody asked for. What would make it safe is the smaller thing:
 have the endnote path fall back to a numeral when the face has no glyph for the
 original mark, and say so in the export report.
+
+### Pages 436–438, repaired by collation — and a mechanism twice asserted and wrong
+
+The editor supplied the passage from another edition. Before a word of it was
+used it was collated against this one, because filling one edition's gaps from
+another is conflation unless the two actually agree:
+
+- **25 of 25** fragments the three damaged leaves still preserve were found in
+  the other edition, **in order**, on all three pages.
+- Three clean paragraphs nearby agree **word for word over 453 words**. The only
+  differences are this edition's spaced punctuation (`it ;` against `it;`),
+  which is the 1877 setting's own house style.
+
+On that evidence the other edition is a sound witness here, and the three leaves
+are repaired. **The negative is restored**: page 437 reads _"because it has
+**not** been well or correctly understood"_, where the damaged leaf said the
+opposite. Every supplied passage is named in its leaf's `uncertain` list with
+its provenance, so nothing is silently sourced.
+
+**The mechanism I gave for the damage was wrong, and I gave it twice** — in a
+query and in a commit — after taking it from the reader's report without
+testing it. I said "a set-off in the physical copy Cornell digitised: 437 and
+438 face each other when the book is open." What is actually measured:
+
+- Leaf 494 (folio 436) carries text from folio **438**; leaf 495 (folio 437)
+  carries text from folio **439**. Two leaves on in both cases, not facing.
+- The transferred text is **right-reading**. An offset between two pages pressed
+  together is mirrored.
+- The ink is genuinely **absent** from folios 438 and 439 where it stands on 436
+  and 437, so it is a transfer and not two images blended.
+- Each PDF page holds **one** page image, so it is not a rendering artefact.
+
+A consistent two-leaf, right-reading transfer is what the evidence shows. What
+produced it I cannot establish, and naming a second cause I have not shown would
+be the same error again. The repair does not rest on knowing: it rests on the
+collation, which is checkable and was checked.
+
+What this cost is worth naming. The reader proposed a mechanism, plausibly, in a
+report otherwise full of careful work — and it went into a query and a commit
+without being tested, because it explained the evidence I had at the time. It
+took the editor's pasted text to make me look at where the intruding words
+actually live in this book, which is one `sweep` and thirty seconds. **A
+mechanism is a claim about the world and wants pixels like any other reading.**
