@@ -138,6 +138,9 @@ function checkBatch(donePath, draftPath) {
         problems.push(`leaf ${n} block ${i}: HTML-escaped markup in the text`)
       }
       if (block.kind === 'footnote') {
+        // Symbols only, never a digit. A note that opens `1 Kings, i. 1-4`
+        // is citing a book of the Bible, not carrying the marker `1` — see
+        // `printedMarker`, which learned the same lesson from leaf 275.
         const printed = /^\s*([*\u2020\u2021\u00a7\u00b6\u2016])/u.exec(block.text)
         if (block.marker && printed && printed[1] !== block.marker.trim()) {
           problems.push(
