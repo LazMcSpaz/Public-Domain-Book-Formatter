@@ -1,0 +1,905 @@
+# Reading ledger — _Isis Unveiled_, Vol. I
+
+693 leaves of scan. **38 transcribed so far**: pageIndex 59–96, which is
+Chapter I entire, folios 1–38. The remaining 655 are unread.
+
+This is the first book here read at chapter scale under the no-API process,
+and the first whose scan carries a digitization stamp or whose text carries
+footnotes at all. Everything below is measured from the drafts and the landed
+batches rather than taken from a reader's own account of its work.
+
+## The scan
+
+HathiTrust's scan of the Cornell copy of the 1877 first edition, merged from
+its 19 chunks — 357 MB, past `MAX_SCAN_BYTES` by an order of magnitude, so it
+lives in the working container and not on the shelf. See
+`ISIS-UNVEILED-1877-scans.md` on the shelf for the leaf-to-folio map and how to
+rebuild it.
+
+**Recon: 693 leaves in 47 minutes, 4.1 s a leaf**, at 300 DPI. Run twice,
+because the first reading was destroyed by a restart script that deleted the
+driver's persistent profile. That profile holds the recon cache and the stored
+scan; nothing else here costs 47 minutes to replace.
+
+## The readers
+
+| Reader                   | What it is                                                                      | Independent of                              |
+| ------------------------ | ------------------------------------------------------------------------------- | ------------------------------------------- |
+| OCR                      | Tesseract off the 300-dpi render                                                | —                                           |
+| `@core/draft`            | the geometry OCR measured and threw away                                        | nothing — same words                        |
+| Six batch agents         | one per handful of leaves, given the page images and the draft                  | the draft's _judgement_, not its characters |
+| The deterministic checks | `verifyPage` against the cached OCR, `checkConsistency` over the assembled text | all of the above                            |
+
+There is no second OCR engine and no typeset witness for this book. The agents
+are therefore the only reader with _meaning_ available, and the OCR
+cross-check is the only reader independent of them.
+
+## What the reading changed
+
+Measured across the 38 leaves, draft against landed batch:
+
+|                              | Draft |  Landed |                                                               |
+| ---------------------------- | ----: | ------: | ------------------------------------------------------------- |
+| Running heads in `furniture` |    26 |  **37** | of 37 possible — leaf 59 is a chapter opening and prints none |
+| Italic runs                  |     0 | **227** | OCR recovers no emphasis at all                               |
+| Footnote blocks              |    51 |  **58** | seven the draft never saw                                     |
+| Unhealed line-break hyphens  |   217 |   **0** |                                                               |
+| Verse blocks                 |     0 |   **7** | all were `heading`, being centred                             |
+| Heading blocks               |    14 |       3 |                                                               |
+| `uncertain` spans            |   389 |  **13** | the rest were settled against the image                       |
+| Editorial queries            |     0 |  **14** |                                                               |
+
+## What each check raised, and what survived
+
+| Check                                      | Raised | Confirmed | Refuted |
+| ------------------------------------------ | -----: | --------: | ------: |
+| `verifyPage` — OCR against the landed text |      6 |     **6** |       0 |
+| `checkConsistency` over the chapter        |      8 |     **0** |       8 |
+
+**The OCR cross-check earned its place outright.** All six findings were
+`orphan-footnote` on one batch, whose agent left the reference mark inside the
+footnote's text and set no `marker` field. That matters rather than being
+pedantry: `assemble-book` calls `stripLeadingMarker(raw, block.marker ?? '*')`,
+so a dagger note with no marker would have been labelled `*` **and** kept its
+`†` in the text. Repaired deterministically by lifting the leading mark into
+`marker`, and the batch re-landed clean.
+
+**`checkConsistency` produced nothing real on this chapter**, and every finding
+is explainable rather than random:
+
+- three `stray-spelling`, each proposing a word that is wrong in context —
+  `teachers` for `teaches` in "as it teaches", `hermetic` for `heretic` in
+  "treated as a heretic", `finger` for `finer` in "the finer intuition of a
+  Champollion";
+- five `unclosed-quote`, being the **ditto marks** in the yuga table (`1,296,000 “`),
+  two verse quotations opening in one block and closing in another, and two
+  quotations continuing across a page seam, which is how the book is set.
+
+0 of 8 on one chapter is not enough to condemn a check that costs nothing, but
+it is recorded so it can be scored rather than trusted. If the rate holds over
+several chapters the quote check wants a rule for tables and verse.
+
+## What only a reader with the image could find
+
+**Leaf 72's footnote was never OCR'd at all.** The page prints
+`* Exodus, xxv., 40.` under the rule; the word boxes go from the last body line
+at y=1969 straight to the stamp at y=2411, with nothing between. No
+deterministic check could have caught it — the transcription ends up with
+_more_ text than OCR, not less, so nothing is missing to detect. Restored from
+the render and **adjudicated against a 500-DPI crop before being believed**.
+
+That single leaf is the argument for the whole image-based pass.
+
+## The systematic faults, which the chapter made visible
+
+**The digitization stamp, on every leaf.** `Digitized by … CORNELL UNIVERSITY`
+at the foot of all 693. Now lifted by `@core/draft` — 38 of 38 in this chapter,
+none left in the text — and recorded in `furniture.stamp` rather than dropped.
+Measured, not assumed: landing leaf 59 with the stamp dropped produces
+`confident-word-missing`; landing it recorded produces `flagged: []`. Dropping
+it silently would have flagged all 693 leaves.
+
+**Printer's signature marks, every sixteenth folio.** OCR emits them as a
+stray digit block with no home in `PageFurniture`. Found on folios 17 (`2`) and
+33 (`3`), which predicts one on every folio ≡ 1 (mod 16); drafting folios 49,
+65 and 81 outside the chapter returned `4`, `5` and `6`. **Confirmed 3 of 3.**
+Vol. I will carry about 39 of them. Two agents removed theirs independently and
+neither had anywhere to put it.
+
+**A running head fell into the body on 12 leaves of 38.** The set-apart test
+declines them by a hair — leaf 101 stands 35 from the line below against a
+threshold of 36. The declines now speak, so each was visible and 11 were moved
+by hand (the twelfth is the chapter opening, which prints none). At 32% of
+leaves this is the largest remaining hand cost in the process and the number
+most worth attacking — but the constant must be measured, not tuned to make a
+page come out nicer.
+
+**Bands of scanner noise read as words.** Leaf 62 carried
+`A ET yr rt er oR BDI + 37 = VSO OPE Err AT` spliced onto a paragraph; leaf 70
+and leaf 84 the same off the footnote rule. They are a horizontal band at one
+y, spanning the full measure, at OCR confidence 0–50 — mean about 26. Deleting
+them by rule would be wrong: low confidence means _needs eyes_, and the leaves
+that most need reading would be the ones eaten. The honest fix is a report, not
+a deletion, and `@core/draft` does not make one yet.
+
+**One folio was misread rather than misplaced.** The draft gave leaf 66 the
+folio `3`; the page prints `8`. Nothing in `structural` flagged it, because the
+furniture rule was confident. Caught by an agent and independently confirmed by
+the leaf-to-folio map, which is constant at `leaf = folio + 59` for this volume.
+
+## What the batch readers are worth, and where they overstate
+
+Their substantive readings held up under checking. Two spot-checks against
+crops the parent cut itself: the paper does print `symbolology` and does print
+`mediæval` with the ligature, both as reported.
+
+But **three of the six reported evidence they could not have had** — "confirmed
+at 4×", "checked at 8×", "verified at 10×" — when what each was given was one
+150-DPI page image and no means of magnifying it. The readings were right; the
+warrant was inflated. One agent did do the honest thing and measured, summing
+dark pixels per column to tell a broken em dash from two.
+
+The lesson is the one the process already states: a reader's account of its own
+confidence carries no weight, and the crop is what settles a reading. Score the
+batch by what survives the pixels, never by how sure it sounded.
+
+## Cost, for sizing the rest
+
+- Recon: 4.1 s a leaf, once per volume.
+- Six agents over 37 leaves: 121k–205k tokens each, 43–86 tool calls each,
+  5.5–14.6 minutes each, run in parallel.
+- The parent held **no page image** for any leaf a batch read. The one leaf it
+  read itself, leaf 59, took six crops — a chapter opening with Greek in a
+  footnote is the expensive kind.
+
+At this rate the remaining 655 leaves of Vol. I are on the order of 95 further
+batches. That is the number to argue with before running it.
+
+## Still open
+
+- **2** editorial queries waiting on the editor, of the 14 raised: the Gibbon
+  note that closes on a comma (70), and the comma set where a full stop is
+  expected between two sentences (86). The other twelve are ruled;
+  `rulings.md` on the shelf is the record.
+- 13 `uncertain` spans left deliberately, each with a reason on the leaf.
+- The figure on leaf 67 prints without the rule the compositor set under it.
+  See **The underscored figure**, below.
+
+## The editor's rulings on Chapter I
+
+Twelve of the fourteen queries are settled and recorded on the run itself, so a
+session six months from now reads them rather than being told from memory. The
+sheet is `rulings.md` beside the book; this is the summary.
+
+**Set right** — seven corrections, applied as ordinary `text` edits and verified
+by the deterministic check (`unapplied`) that compares what the editor decided
+against what the book prints:
+
+| Leaf | As printed                  | Reads                         |
+| ---- | --------------------------- | ----------------------------- |
+| 63   | `Nothwithstanding`          | `Notwithstanding`             |
+| 66   | `Stalbaüm`, `Schleirmacher` | `Stallbaum`, `Schleiermacher` |
+| 67   | `sacred number 4 the most`  | `sacred number 4, the most`   |
+| 70   | `the one active ; or male`  | `the one active, or male`     |
+| 84   | `take in con sideration`    | `take in consideration`       |
+| 89   | `the Northen Hemisphere`    | `the Northern Hemisphere`     |
+| 89   | `helicocentric system`      | `heliocentric system`         |
+
+The two on leaf 89 are inside footnote `fn48`, which is worth saying because it
+is what found a fault in the check — see below.
+
+**Kept as printed** — five, four of them spots and one standing:
+
+| Leaf       | Words                       | Why                                                                                  |
+| ---------- | --------------------------- | ------------------------------------------------------------------------------------ |
+| 65         | `THE PYTHOGOREAN NUMERALS.` | See below: it cannot print, and mending it would break a check.                      |
+| 95         | `symbolology`               | Both forms were in print in 1877. Kept and watched; a recurrence makes it standing.  |
+| 95         | `Terra legit carnem …`      | Not enough is settled about the couplet to depart from the sheet.                    |
+| 80         | Felt's prospectus           | It may be Felt's own circular quoted verbatim.                                       |
+| _standing_ | `practiced` / `practised`   | Both were current. The edition follows the sheet word by word; tracked, not imposed. |
+
+### The running head that could not have printed
+
+The query on leaf 65 said reproducing `PYTHOGOREAN` "will look to a reader like
+our own misspelling". That was wrong, and it was wrong in the direction that
+costs something: the editor ruled on a premise the code does not support.
+
+`runningHeadText` (`layout/paginate.ts`) takes a head from the edition title, the
+author, or `page.chapterTitle`. It has never read `furniture.runningHead`. The
+scanned head is a **record of the sheet** and a witness for the OCR cross-check —
+`checkableText` counts it as transcribed so a leaf is not flagged for words OCR
+found — so mending it would print nothing different and would make that check
+disagree with the paper. Kept as printed, and the reason is on the ruling.
+
+The lesson is narrow and worth keeping: a query has to say what the reader will
+actually see, and "will look to a reader like…" is a claim about the engine that
+can be checked before it is written.
+
+### The underscored figure on leaf 67
+
+The editor asked whether the treatment the compositor gave the `4` could be kept
+without the line spacing coming out wrong. Measured off the pixels rather than
+described from the render:
+
+| Measured on the 300-DPI leaf                     | The `4` | The page's own folio `9` | Body roman `t` |
+| ------------------------------------------------ | ------: | -----------------------: | -------------: |
+| Median dark run across the glyph (stroke weight) |     4.0 |                      4.0 |            2.0 |
+| Box height                                       |    32.8 |                     29.8 |           20.8 |
+
+So the figure is **not display type**. It is a text figure at body size in the
+fount's own weight — identical to the folio, which nobody would call display —
+and it reads heavy beside `number` only because figures in this face are twice
+the stroke of the lowercase. Its box (y 1264–1297) is the same vertical extent
+as `by` (1264–1298) and `replaced` (1263–1298) on the same line.
+
+What is actually distinctive is a **rule under it**: about 4 px thick and 20 px
+wide, centred under the numeral, sitting 3–6 px below the baseline, inked as
+solid as the type, and inside the figure's own OCR box — which is why Tesseract
+read the whole thing as `4` at 86%.
+
+**So the line spacing is not the obstacle, and would not have been.** The trap
+CLAUDE.md records — "the slot grid is one _body_ leading, anything set larger
+occupies several slots" — is about a **block** set larger, a title or a
+subtitle. Inside a paragraph the engine has exactly one mechanism for a span set
+differently from its host: `Attachment` (`layout/break-lines.ts`), which carries
+its own `sizePt` and `risePt`, is measured at its own size so the breaker gets
+the line length right, and touches the slot grid not at all. A footnote's
+reference mark rides it today. An inline run at body size costs nothing in
+spacing, and the paper is at body size.
+
+The obstacle is a different one and should be recorded as itself: **the book has
+no underline.** `<i>` and `<b>` are the whole inline notation, and `<b>` in EB
+Garamond draws a real bold — which would print a lie about a figure that is not
+bold. Adding a third inline kind is the same shape of change `strong` was: 28
+files, 101 references, through parsing, seam-carry, retype, splice, the breaker,
+`drawPage`, the reading column and the sweep. Worth doing when a book needs it;
+not worth doing for one numeral.
+
+**The figure therefore prints plain, and the rule is recorded here rather than
+silently dropped.** The comma the editor approved is in.
+
+### What applying the rulings found
+
+`unapplied` is the deterministic cross-check between what the editor decided and
+what the book prints — the one thing standing between "we agreed to fix that"
+and a book that quietly keeps the error. Applying these twelve rulings ran it
+for the first time on a book with rulings in it, and **three of the seven
+corrections came back as outstanding after they had landed**.
+
+None of them was a bad correction. The check's one caller handed it
+`doc.blocks.map((b) => b.text)` and called that the book, which it is not:
+assembly pulls footnotes out of the block flow (so both leaf-89 corrections were
+invisible), divisions the editor wrote are not blocks, and a block's `text` has
+its emphasis stripped out into word indices (so the leaf-67 correction, which
+carries an `<i>`, could not be found at all).
+
+Fixed by putting the rule for what counts as the book in one place —
+`bookText` in `@core/assemble` — and making `unapplied` take the document rather
+than a string, so no caller gets to decide. The three tests were run against the
+reinstated bug and fail. This is the `deriveChapters` shape again: a second copy
+of a rule agrees with the first until the day it doesn't.
+
+One thing it left behind, worth someone's attention rather than a fix here: a
+query raised through `drive.mjs query` is refused unless its words are on the
+leaf, while a query arriving inside a transcription reply is not checked at all.
+The leaf-67 query's quote was written in a notation the book never uses
+(`<i>Tetractys</i>.` against the book's `<i>Tetractys.</i>`), which is how the
+first ruling on it was recorded unfindable. A query nobody can look up is worse
+than none — the driver's own words — and `parsePageTranscription` has the page's
+blocks in hand when it accepts one.
+
+## Chapter II, and what the batch shape costs
+
+The chapter was read as **four arms of one experiment**, because the question
+after Chapter I was whether the agents could be made cheaper and nobody had
+measured anything. All four had the same brief except for one paragraph, and the
+draft they were given had already had the hyphen rule and the numbering rule
+run over it.
+
+| Arm | Leaves | How the brief told it to work  |  Tokens |   Per leaf | Tool calls | Per leaf |
+| --- | -----: | ------------------------------ | ------: | ---------: | ---------: | -------: |
+| A   |      6 | one leaf at a time             | 175,295 | **29,216** |         71 |     11.8 |
+| B   |      6 | every render first, then write | 135,111 | **22,519** |         15 |      2.5 |
+| C   |     12 | every render first, then write | 224,225 | **18,685** |         84 |      7.0 |
+| D   |     10 | every render first, then write | 163,472 | **16,347** |         18 |      1.8 |
+
+Chapter I, for comparison, ran at about **26,000 a leaf** — six agents of six,
+each working a leaf at a time, on a draft with neither rule applied.
+
+**What the numbers actually say is that batch size is not the lever; turns
+are.** Cost per leaf tracks tool calls per leaf almost exactly, and the two
+lines cross: C is a bigger batch than B and dearer per leaf than D, because C
+did not follow the instruction — 84 calls for twelve leaves against D's 18 for
+ten. Every turn re-sends the whole accumulated context, so a reader that opens
+a render, writes a leaf, opens the next render and writes again is paying for
+the first render eleven more times.
+
+The paragraph that produced that difference is one sentence long. Arm A was
+told to work a leaf at a time; B, C and D were told to open every render in a
+single block and then write once. **Same six leaves, A against B: 29,216 a leaf
+against 22,519, and nothing found by the expensive one that the cheap one
+missed.**
+
+Chapter II came to **698,103 tokens for 34 leaves — 20,532 a leaf**, against
+Chapter I's ~26,000, and that is with half the arms deliberately or accidentally
+running the dear way. At D's rate the remaining 621 leaves of the volume are on
+the order of **10.2M tokens against 17.2M** at the Chapter I rate.
+
+What did _not_ change is accuracy. Every arm landed with `flagged: []` except
+one leaf of C, word counts moved between −3.4% and +2.2% against the draft, and
+the schema validator found nothing in any of the four. Two of the arms fixed
+folios the numbering rule had disputed — leaf 120 to 62 and leaf 126 to 68, both
+against the render, both confirming what the check had predicted.
+
+### The queries, put to the crop before they were put to the editor
+
+Chapter II raised 21 queries. Before any of them went on the editor's sheet
+they went through the step the process calls Stage 8 — **cut the word out of
+its own leaf at 600 DPI and look, without the hypothesis in front of you**. It
+is one render per leaf and it is free.
+
+**Thirteen were checkable that way and twelve held.** The paper really does set
+`necessarially`, `superstitution`, `visioin`, `aud`, `vas`, `cxact`, `conld`,
+`sweeetheart`, `Athough`, `immeas-urabiy`, `Soerius` and the comma in
+`the study, of ancient philosophy`. Those are the editor's, and they are on the
+sheet.
+
+**One was not a query at all.** Leaf 117's note came back as `Sec Huxley:
+“Physical Basis of Life.”` with a query asking whether an 1877 compositor's slip
+should be carried into a reprint — and the crop reads **`See`**, with two `e`s.
+There was never a decision there; the reading was wrong. What makes it worth
+recording is the reason the reader gave: _"the third letter of the first word
+has no crossbar on the render, where the `e` before it plainly does."_ That is
+specific, confident, and describes a page that does not exist. It is the same
+fault the six readers of Chapter I showed when three of them claimed
+magnification they did not have — the readings mostly hold and **the warrant
+does not**, which is exactly why a finding becomes an edit only after somebody
+looks at the pixels.
+
+`drive.mjs unquery` came out of it, because there was no way to withdraw a
+question raised on a misreading: `rule` records the editor's answer to a real
+question and lives forever in `rulings.md`, and this one had no question in it.
+It refuses without a reason, and the reason has to be what the crop shows — a
+sheet is not shortened for being long.
+
+### Chapter III, on the shape the measurement recommended
+
+Two batches of thirteen, told to open every render in one block, on a draft
+trimmed to 80% by dropping the settled hyphens and the two `structural` lines
+that repeat on every leaf.
+
+| Batch | Leaves |  Tokens |   Per leaf | Tool calls | Per leaf |
+| ----- | -----: | ------: | ---------: | ---------: | -------: |
+| E     |     13 | 173,043 | **13,311** |         23 |      1.8 |
+| F     |     13 | 164,511 | **12,655** |         25 |      1.9 |
+
+**12,983 a leaf across the chapter**, against Chapter II's 20,532 and Chapter
+I's ~26,000 — half the baseline, on the same accuracy. `flagged: []` for all 26
+leaves, word drift between −3.5% and +1.4%, and `--check` clean on both.
+
+The volume's numbering disputed four folios in this chapter and every one was
+settled against the render: 138 → 80, 140 → 82, 141 → 83, 146 → 88. With leaves
+120 and 126 from Chapter II that is **six for six**, and five of the six are the
+same fault — this fount's old-style **8** read as a **3**.
+
+At this rate the remaining 595 leaves are about **7.7M tokens**, against 15.5M
+at the Chapter I rate.
+
+### Chapter IV, and the trap that nearly cost a chapter
+
+| Batch | Leaves |  Tokens | Per leaf | Tool calls |
+| ----- | -----: | ------: | -------: | ---------: |
+| A     |     13 | 188,939 |   14,534 |         22 |
+| B     |     13 | 167,663 |   12,897 |         24 |
+
+**13,715 a leaf**, `--check` clean on both, `flagged: []` on both, and the
+volume's numbering disputed one folio (168 → 110) which the reader settled
+against the render.
+
+What this chapter turned up is not about the reading. Three readers across two
+chapters had raised the same query — a lone figure at the foot of every
+sixteenth leaf — so the rule for it was written and committed and went green:
+signature `n` sits on folio `sheet × (n − 1) + 1`, so the figure and the folio
+check each other and no sheet size has to be assumed. Then the next chapter was
+drafted and **no signature was taken**.
+
+The rule was right. `npm test` was running it. The driver was not: the restart
+script started vite only when port 5173 was silent, so it had never restarted
+vite at all, and the process from the start of the session was still serving
+from an in-memory transform cache holding every module as it stood before each
+`src/core` edit since. `curl` on the canonical `/@fs/…` URL came back without a
+function that had been on disk for an hour; the same URL with `?v=<timestamp>`
+came back with it.
+
+**A whole chapter had been drafted by the old code and looked entirely fine**,
+which is the only reason this is survivable: a draft is an input to a reader
+who checks it against the render, never a thing that lands. The lesson is in
+CLAUDE.md now, along with the cheap test — if the plain URL and the
+cache-busted one disagree, the code is right and the server is stale.
+
+Two more rules came out of the same pass. The signature mark: six in this
+volume, on folios 33, 49, 65, 81, 97 and 113, every one giving a sheet of 16,
+and the one on folio 33 is leaf 91 — in the fixture since before any of this,
+with a stray `3` nobody had noticed. And a head that _measures_ as display type
+because one speck of dirt on the line is tall: leaf 202 reads
+`: 144 THE VEIL OF ISIS.`, 39 pixels against a 27-pixel body, and only the
+folio it carries says it is furniture.
+
+### What the free check is worth, scored
+
+`checkConsistency` over the first 176 leaves — Stage 6, pure, deterministic, no
+spend. **46 findings.** Scored one by one, because a check nobody can score
+manufactures confidence:
+
+| Kind              | Found |  Real | What the rest were                                  |
+| ----------------- | ----: | ----: | --------------------------------------------------- |
+| `doubled-word`    |     4 | **3** | `that which is is that which was` — correct English |
+| `stray-spelling`  |    11 |     1 | a real word that resembles a commoner one           |
+| `name-variant`    |     9 |     0 | the same                                            |
+| `unclosed-quote`  |    21 |     — | not scored; the book quotes on nearly every leaf    |
+| `missing-chapter` |     1 |     0 | a forward reference to Chapter VII, unread          |
+
+**`doubled-word` is earning its place and the other two are not, at this
+scale.** Of its four, `of of` (124) and `a a` (189) were already on the sheet
+from readers, and **`with with` on leaf 201 was not** — "their own mental
+requests were complied with with perfect fidelity", the line ending `complied`
+and the next opening `with with`. Confirmed at 900 DPI, and OCR read the
+doubling independently. Eleven readers with the render had passed over it.
+
+The false positives are a **scale effect, not a regression**. The name-variant
+check was tuned on _Clairvoyance_ from 17 findings with 1 real to 3 with 3 real,
+and that tuning holds for a 200-page book in one language. _Isis Unveiled_ runs
+to 628 pages of English carrying Sanskrit, Latin, Greek, French, German and
+Norse, so `heretic` against `hermetic`, `Parsis` against `Paris`, `Virgil`
+against `Virgin`, `genus` against `genius` and `Sanscrit` against `Sanskrit` are
+all one edit apart and all correct as printed. Recorded rather than re-tuned:
+the honest fix is a rule that knows a book has more than one language in it, and
+guessing a new threshold from these 46 would be exactly the tuning-to-pass the
+process forbids.
+
+Eight of the 21 `unclosed-quote` findings went away for a reason that is not a
+tuning: **verse and tables do not have quotations to close.** Printing
+convention opens every line of quoted verse and closes only the last, and in a
+column of figures a repeated `“` is the ditto mark. Exempted by block _kind_,
+which is a fact about what those things are rather than a guess about how much
+noise to tolerate — the same line set as prose is still reported, and that is
+tested. The **13 that remain are real prose with a mark that never closes**,
+and they are worth a pass: a closing mark OCR lost is the sort of thing that
+prints and is found by a reader.
+
+`missing-chapter` firing on a forward reference is an artefact of running the
+check over a **partly read** book, which is worth doing anyway — it caught the
+doubling three chapters before the book is finished — and is not a fault.
+
+### Where the batch size actually settles
+
+Chapter VI made the earlier reading of this sharper, and corrected part of it.
+
+**The render-loading turn times out, intermittently, and it is not a size
+threshold.** Four batches of this chapter died at exactly the same line —
+_"now I'll open all N renders in one block"_ — each having read its brief, its
+draft and nothing else. Three were opening fourteen images. The fourth was
+opening **seven**, which is what killed the tidy explanation: batches of six,
+seven, ten, twelve, thirteen and fourteen all came through elsewhere. Size
+raises the risk and does not decide it, so there is no number to pick that buys
+safety.
+
+I wrote "eight is the size that has never failed" into the process on the
+strength of the first three, and a seven-image batch failed within the hour.
+The honest guidance is the dull one: keep the batch at the cheap size, and
+relaunch the occasional casualty.
+
+**And batch size does pay, which the Chapter II experiment understated.** The
+seven-leaf batches the timeouts forced came in at **20,614 tokens a leaf**,
+against about 13,000 for thirteen-leaf ones. The brief, the shared method
+document and the setup are paid once per agent whatever its size, so a small
+batch amortises them over fewer leaves. The ledger said "batch size is not the
+lever; turns are", and that was half right stated as a whole: **turns dominate,
+and per-agent overhead is the second term.**
+
+So the shape is twelve or thirteen leaves, opened in one block and written
+once, with a line in the brief telling the reader to split the load if that
+request times out. Paying for two blocks up front buys nothing.
+
+Nothing was lost in any of the three failures: no output file existed and the
+batches already landed were untouched, which is what checkpointing per batch is
+for.
+
+### Where the rest of the cost is
+
+At 150 DPI a leaf's render is about 1,280 tokens, so at two turns the images are
+about 2,600 of D's 16,347. The rest is the brief, the draft, the reply and the
+reading. The draft is the part worth attacking: measured on Chapter III's first
+batch, `blocks` is 50% of it, `structural` 18%, the settled `hyphens` 16% and
+`uncertain` 12%. The hyphens are pure noise to a reader — they have already been
+applied to the text, and the unsettled ones are named in the brief — and two
+`structural` lines repeat verbatim on every leaf. Taking those out puts the
+draft at **80%** of its size, which is what Chapter III is being read against.
+
+## What of this chapter's reading was deterministic
+
+Measured after the fact, against what the readers actually decided. Every one
+of these is a pure function over data the app already holds, and each was
+checked by asking whether the rule agrees with the reader rather than whether
+it looks plausible.
+
+| Rule                                                                                                              |                                      Settled | Disagreed | Abstained |
+| ----------------------------------------------------------------------------------------------------------------- | -------------------------------------------: | --------: | --------: |
+| Heal a line-break hyphen when the joined form occurs elsewhere in the book, keep it when the hyphenated form does |                                **181 / 216** |     **0** |        35 |
+| Accept a near-miss running head when its number equals the folio the volume's offset predicts                     |                                   **9 / 12** |     **0** |         3 |
+| Flag a folio that disagrees with the volume's offset                                                              |                                    **2 / 2** |         0 |         — |
+| Drop the printer's signature mark on every folio ≡ 1 (mod 16)                                                     | 2 / 2 in chapter, 3 / 3 predicted outside it |         0 |         — |
+
+**The hyphen figure is a correction of an earlier one in this ledger, which
+said 210 of 217 with 7 abstentions.** That number was measured with a
+vocabulary that included the chapter's own corrected transcriptions — so the
+readers' decisions were in the evidence, and the rule was largely agreeing with
+itself. The figure above is measured the other way: the vocabulary is the
+volume's OCR from the 655 leaves **outside** this chapter and no transcription
+at all, 27,653 words. On that evidence the rule settles 181 of 216 candidates
+and **every one of the 181 matches what a reader with the images landed**; the
+35 it abstains on are left character for character.
+
+That is a floor, not the shipped behaviour: `drive.mjs draft` weighs a leaf
+against every cached leaf of the volume _and_ every leaf already corrected,
+which on this book is 28,647 words and settles more — `Carpen- ter's` is
+unsettled on the strict vocabulary and joined on the real one.
+
+The offset is not assumed: it is voted by the leaves whose furniture the draft
+took confidently — 24 of 26 agree on `leaf = folio + 58` in pageIndex terms —
+and the two that dissent are precisely the two misread folios. The check and
+the correction fall out of the same count.
+
+The three hyphens and three heads the rules abstain on are the right ones to
+abstain on: on leaves 69 and 95 OCR mangled the folio past reading (`37` came
+through as `fig`), and leaf 59 is a chapter opening that prints no head at all.
+
+**About 228 of the roughly 526 corrections made on this chapter — 43% — were
+decidable without eyes.** They were done by hand, in agents, at token cost.
+
+### Chapters VI and VII, and two rules the leaves corrected
+
+**A markerless footnote paragraph continues the note above it, wherever it
+sits.** The join was written narrow: only the _first_ note on a leaf could be a
+runover, on the reasoning that a markerless note with a note above it on the
+same leaf was some other thing. Leaf 216 was named in the code as the case
+nobody had looked at. Leaf 287 forced the look — it sets one `*` note in five
+paragraphs, the mark on the first, the body carrying exactly one reference — and
+under the narrow rule that one leaf produced one note and **four orphan `*`
+endnotes** at the back of the book, out of order and meaning nothing. Rendered
+and read, leaf 216 turns out to be the same shape: a third paragraph under its
+`†`, not a third note. The narrowness was caution rather than a finding.
+
+Scored across the 226 leaves read at the time: **284 notes, 10 markerless** — 5
+runovers the old rule already joined, and 5 later-on-leaf, every one of them on
+those two leaves. So widening the rule removes five orphans and creates no join
+anywhere else in the volume. It still errs toward reporting: `verifyPage` flags
+a note with no mark anywhere whether or not assembly joins it, so a reader who
+drops a marker by mistake is caught by the check rather than by silence.
+
+What this costs is honest and worth writing down: a `Footnote` holds one `text`,
+so a note of five printed paragraphs is set as one. The page indents each
+paragraph; the book will not. Ten continuation paragraphs across 284 notes is
+small enough to accept for now, and it is a layout feature — `breakNote` breaks
+the note once — rather than an assembly one.
+
+**The hyphen rule's abstention was vindicated, not faulted.** Leaf 289 came off
+the drafter as `Green- Will's`, and the render reads `Greenhill's` — OCR had
+misread `hill's` as `Will's`. The rule looked up `GreenWill's` and
+`Green-Will's`, found neither attested anywhere in the volume, declined to
+settle it, and left it character for character; the reader with the image fixed
+it. That is the rule doing exactly what it is for, and it leaves the
+**181 / 216 with 0 disagreements** figure above standing. Worth recording
+because the batch report described it as a compound the rule had got wrong, and
+it was not: the rule never ruled on it.
+
+### Six batches lost at one turn, and the advice that could not be taken
+
+The batch brief said "open your renders in one block", with a fallback: "if that
+request times out, open them in two smaller groups instead." The fallback was
+advice nobody could act on. The timeout does not come back as an error to
+recover from — it ends the reader where it stands, and the batch is lost whole.
+Both readers sent at leaves 242–248 and 249–255 died with the same last words:
+_"Now I'll open all seven renders in one block."_
+
+Six batches of this volume have now died at exactly that turn — three opening
+fourteen images, three opening seven — against successes at every size from six
+to fourteen. So it is not a size threshold, as an earlier note in this ledger
+came close to calling it. It is a risk that rises with the pixels in one
+request, and the only lever that lowers it is how many go up at once.
+
+The brief now says three at a time, always. The 30% figure the one-block rule
+was built on was measured against full leaf-by-leaf interleaving — fourteen
+turns for a fourteen-leaf batch; groups of three is four or five. A batch that
+has to be read again from nothing costs all of it.
+
+### The folio check, scored over the whole volume
+
+The rule is one line — a folio the volume's own offset does not predict is
+reported to the reader who has the render — and it has now been exercised on
+every batch. Across chapters VI to VIII the readers corrected **twelve** folios
+they had been told to look at, and **all twelve** came back as the offset
+predicts: 245 = 187, 247 = 189, 249–252 = 191–194, 329 = 271, 341 = 283,
+343 = 285, 346 = 288, 347 = 289, 349 = 291. Not one of them was the book
+misnumbering itself; every one was OCR losing a stroke.
+
+Two shapes account for all twelve, and both are the same scan defect rather than
+twelve separate accidents: the old-style `8`, whose upper bowl is thin in this
+face, read as `3`, and the old-style `9`, whose tail is thinner still, read as
+`0` or `1`. That is worth having beyond this book — the check costs nothing, it
+has never yet been wrong, and what it finds is a property of the type rather
+than of the volume.
+
+The tally in the table above (2 / 2 in Chapter I) therefore reads **14 / 14**
+across the volume so far, with no disagreement.
+
+### Two checks that were quietly wrong, and the leaves that found them
+
+Both were live defects rather than tuning questions, and neither would have been
+visible without a long book of this particular kind going through them.
+
+**A doubled reference mark is one marker.** Past six notes a leaf starts the
+symbols again — `**`, `††`, `‡‡` — and leaf 358 carries nine notes and uses all
+three. Both places that read a mark off a note's own text matched a single
+symbol. In `--check` that was a false refusal: it stopped a sound batch and
+called three notes misfiled when they were filed right. In `printedMarker` it
+had not fired yet and was worse: a note with no declared marker opening `** With
+the Gnostics` would be filed under `*`, a mark another note on that leaf already
+owns, so the body's `**` reference reaches nothing and the note prints as an
+orphan endnote — with `stripLeadingMarker`, handed `*`, leaving the second
+asterisk in the text. Only a repeat of the same symbol counts and only two of
+them: `*†` is two notes a reader has run together and should be reported, not
+merged, and this tradition doubles without trebling. The doc comment had claimed
+the doubles all along; the regex never implemented them.
+
+Scored over the 372 leaves read at the time: **556 notes, 0 orphaned**, and
+`**` × 4, `††` × 2, `‡‡` × 2 — eight notes that the single-symbol rule would
+have misfiled the moment a reader left the field off.
+
+**The doubled-word check could not see a word beginning with a ligature.**
+JavaScript's `\b` is defined against `\w`, which is `[A-Za-z0-9_]` and nothing
+else; the `u` flag does not widen it. So a boundary falls in the _middle_ of
+every word this book spells `dæmon`, `Timæus`, `fœtus` or `élan`, and the check
+was wrong in both directions on one page.
+
+The false positive is what surfaced it — `Amphitheatri Sapientiæ Æternæ` came
+back as the doubled word `æ Æ`, the trailing ligature of one word matching the
+leading ligature of the next across a boundary that should not exist. The false
+negative is the one that mattered: `Æneid Æneid`, `Œdipus Œdipus`, `œuvre œuvre`
+and `élan élan` matched nothing at all, there being no `\b` before a leading
+`Æ`. A word doubled across a page seam is the exact artefact this check exists
+for, and on a volume that names the Æneid, Œdipus, Ægypt and dæmons on nearly
+every leaf it would have gone through in silence.
+
+What both have in common is worth naming: a check can be **noisy** and still be
+read, and a check that is **silent** cannot be. The `æ Æ` report is what got
+anybody to look at a rule that had been failing to fire for three hundred
+leaves.
+
+### The unclosed quotations, measured — and a hypothesis that did not survive it
+
+`unclosed-quote` had climbed to thirty findings and was on the list of checks to
+tighten or drop. The hypothesis was that it is an artefact of the unit: a
+nineteenth-century printer sets an opening mark at the head of _every_ paragraph
+of a long quotation and closes only the last, so a check that balances marks
+within one block would report every paragraph but the last, forever, and the
+right fix would be to balance across blocks instead.
+
+The measurement says no, and says it cleanly. Over the 1,385 blocks assembled
+from the 422 leaves read so far:
+
+- **Not one finding has a next block that opens with a quotation mark.** Zero of
+  thirty. The convention the hypothesis rests on is not what this book does.
+- **Every balanced quotation closes inside its own block** — all 47 of them, span
+  zero. So the block _is_ the right unit here, and the check is asking the right
+  question.
+- **The book never closes a quotation it did not open.** Zero negative crossings
+  in 1,385 blocks, which is what a check reporting noise would not look like.
+- What is left is a **surplus of 65 opening marks** with nothing to close them.
+
+So the thirty findings are thirty places where a quotation opens and never
+closes, and the check is earning its place rather than crying wolf. What it
+cannot say is whose fault each one is: the 1877 compositor's, or this reading's
+— OCR renders the opening `“` as `¢`, `«`, `*` or `‘‘` on nearly every leaf and
+the readers restore it constantly, so a restored open whose close was missed
+looks exactly like a printer's omission. That is a question for the crops, and
+it is a pass of its own rather than something to settle from the count.
+
+Recorded here mainly because the hypothesis was wrong and the measurement was
+cheap. Scoring a check is what tells you whether to keep it, and this one was on
+its way to being dropped on an argument nobody had tested.
+
+**The two `doubled-word` findings are both false positives and both fine**: `is
+is` in a correctly quoted proverb ("that which is is that which was"), and `Sing
+Sing, N. Y.` in a citation. Two on 422 leaves is a rate worth paying.
+
+### The volume is read, and where it actually ends
+
+**628 leaves, 59 to 686, no gaps.** 2,057 blocks, 17 chapters, **870 footnotes
+and 0 orphaned**. Leaf 686 prints `END OF VOLUME I.` centred below its last
+paragraph; 687 to 692 are blank.
+
+That last fact was worth measuring rather than assuming. The scan is 693 pages
+and the reading was sized against it for most of a session. What made the tail
+look like content was OCR returning the _same_ string of garbage for 687, 688
+and 689 — which reads like three pages of a two-column index until you render
+one and find it blank. The string is the HathiTrust sidebar read vertically: it
+sits on every leaf of this scan and belongs to no page. There is no index here
+to discard under the front-matter rule, because there is no index.
+
+The marker tally over the whole volume:
+
+| `*` | `†` | `‡` | `§` | `‖` | `¶` | `**` | `††` | `‡‡` | `⁂` |
+| --: | --: | --: | --: | --: | --: | ---: | ---: | ---: | --: |
+| 432 | 240 | 110 |  48 |  22 |   9 |    4 |    2 |    2 |   1 |
+
+**The folio rule finished 31 for 31.** Thirty-one leaves were put to a reader
+because their folio disagreed with `leaf = folio + 58`, and thirty-one times the
+reader found the volume right and OCR wrong — a stroke lost off an old-style
+`8` or `9`. Not once did the book misnumber itself. A check with that record
+costs nothing and should be the first thing built for the next volume.
+
+### The asterism, and a trap that is real but not yet live
+
+Leaf 652 opens a footnote with an **asterism (`⁂`)** and runs it across two
+pages — the longest note in the volume, twelve blocks, joined by the widened
+runover rule into one. The reader flagged that `⁂` is outside the `* † ‡ § ‖ ¶`
+class the method names, which was the right instinct, so it was measured
+against the font files rather than argued about.
+
+**No book face here carries `⁂` at all**, and only EB Garamond carries `‖`;
+this book is set in Crimson Pro, which has neither. Fifty-two faces scanned.
+
+That sounds fatal and is not, because the engine **renumbers**: a placed note's
+printed mark is `String(nextNumber++)`, and `originalMarker` is used only to
+find the reference in the body and is then dropped (`layout/footnotes.ts`). So
+`⁂` and `‖` never reach the page — for a note that is _placed_.
+
+The exception is where the trap lives. A note whose reference mark is nowhere in
+the body becomes a **collected endnote**, and `paginate.ts` prints those as
+`` `${note.originalMarker} ${note.text}` `` — the original symbol, drawn. With
+`renderPdf` verifying that every glyph the book prints has a width, one
+unplaced `‖` note would stop the export rather than write a hole. That is the
+right failure, and it is a late one.
+
+It is **not live**: 0 of 870 notes are orphaned, so nothing is collected and
+nothing draws an asterism today. Recorded rather than fixed, because fixing a
+conditional fault by changing what the engine prints is how a book acquires a
+substitution nobody asked for. What would make it safe is the smaller thing:
+have the endnote path fall back to a numeral when the face has no glyph for the
+original mark, and say so in the export report.
+
+### Pages 436–438, repaired by collation — and a mechanism twice asserted and wrong
+
+The editor supplied the passage from another edition. Before a word of it was
+used it was collated against this one, because filling one edition's gaps from
+another is conflation unless the two actually agree:
+
+- **25 of 25** fragments the three damaged leaves still preserve were found in
+  the other edition, **in order**, on all three pages.
+- Three clean paragraphs nearby agree **word for word over 453 words**. The only
+  differences are this edition's spaced punctuation (`it ;` against `it;`),
+  which is the 1877 setting's own house style.
+
+On that evidence the other edition is a sound witness here, and the three leaves
+are repaired. **The negative is restored**: page 437 reads _"because it has
+**not** been well or correctly understood"_, where the damaged leaf said the
+opposite. Every supplied passage is named in its leaf's `uncertain` list with
+its provenance, so nothing is silently sourced.
+
+**The mechanism I gave for the damage was wrong, and I gave it twice** — in a
+query and in a commit — after taking it from the reader's report without
+testing it. I said "a set-off in the physical copy Cornell digitised: 437 and
+438 face each other when the book is open." What is actually measured:
+
+- Leaf 494 (folio 436) carries text from folio **438**; leaf 495 (folio 437)
+  carries text from folio **439**. Two leaves on in both cases, not facing.
+- The transferred text is **right-reading**. An offset between two pages pressed
+  together is mirrored.
+- The ink is genuinely **absent** from folios 438 and 439 where it stands on 436
+  and 437, so it is a transfer and not two images blended.
+- Each PDF page holds **one** page image, so it is not a rendering artefact.
+
+A consistent two-leaf, right-reading transfer is what the evidence shows. What
+produced it I cannot establish, and naming a second cause I have not shown would
+be the same error again. The repair does not rest on knowing: it rests on the
+collation, which is checkable and was checked.
+
+What this cost is worth naming. The reader proposed a mechanism, plausibly, in a
+report otherwise full of careful work — and it went into a query and a commit
+without being tested, because it explained the evidence I had at the time. It
+took the editor's pasted text to make me look at where the intruding words
+actually live in this book, which is one `sweep` and thirty seconds. **A
+mechanism is a claim about the world and wants pixels like any other reading.**
+
+### The figure sweep, scored — and what the book actually carries
+
+Four leaves had plates raised by readers who happened to notice them. Nothing
+had asked the volume the question. Three signals were built and each was scored
+against the plates already known, rather than trusted:
+
+| Signal                                                        | Candidates | Of the 3 known plates |
+| ------------------------------------------------------------- | ---------: | --------------------- |
+| Ink density (`detectIllustrations`, already run during recon) |         35 | **1** — 564 only      |
+| OCR junk the readers deleted between draft and done           |          9 | **2** — 520, 564      |
+| Contact sheet, all 628 leaves tiled 36 to a page              |  18 sheets | **3** — all           |
+
+The automatic pair miss **leaf 193**, and the miss is structural rather than a
+threshold to tune: `detectRegions` looks for a rectangle with no _words_ in it,
+and 193's Travancore amulet has the text run round it in a narrow eleven-line
+column. It leaves no junk blocks either, because OCR reads that text perfectly
+well. It is invisible to both and unmistakable at a twentieth of full size.
+
+**The sweep found no plate the reading had missed.** The volume carries three
+figures — 193, 520, 564 — plus the two display sorts on 630, and that is all.
+Everything else the sheets flagged was checked against a render and was not a
+figure: 565 and 388 were adjacent-cell confusions (for 564 and 387), and 90,
+155, 318 and 678 are a table and three verse blocks, **every one of them already
+correctly typed** in the book file — leaf 90's yuga table carries its `cells`,
+and it was landed by hand in Chapter I before the batch machinery existed.
+
+What the sweep cannot claim is a census. All three controls are half- or
+quarter-page figures, which is what survives the reduction; a small inline cut
+or a two-line diagram might not, and the honest statement is that this is a
+floor. Against that: every leaf was also read against its own render by a batch
+reader, and from leaf 551 those readers were asked to raise figures explicitly.
+Three independent passes and no fourth plate is as close to settled as this gets
+without turning the paper.
+
+### The unclosed quotations, adjudicated — and a prediction that was wrong
+
+Forty-four findings. What I said before looking: _"most are probably the reading
+restoring an opening `“` that OCR mangled and missing its close, which is mine
+to fix; the rest are the book's own."_
+
+|                                                             |        |
+| ----------------------------------------------------------- | -----: |
+| **The book's own** — the compositor opened and never closed | **31** |
+| Spurious open — a blot read as a quotation mark             |      1 |
+| Not a quotation fault — a paragraph wrongly split at a seam |      1 |
+| Not a fault — a displayed list inside one quotation         |      1 |
+| Run-on across a paragraph, removed by fixing the check      |     10 |
+| **Dropped — the paper prints a mark this reading lost**     |  **0** |
+
+**Zero.** Not one closing mark has been lost in transcription in 628 leaves, and
+the thing I expected to be the bulk of the pile does not exist. The readers
+checked every opening mark at 2× to 12× and every one is a properly formed
+double turned comma on the paper. What that says about the reading is worth more
+than the sheet it produced.
+
+**Ten went before anyone opened a render.** The check could not see a quotation
+that _runs on_ — no mark at the paragraph break, one closing mark at the end. It
+already exempted the other convention, where every paragraph opens and only the
+last closes, and that exemption **never fired once on this book**: of 30
+findings over 422 leaves, not one had a next block opening with a mark. A fifth
+of the sheet was the check's own blind spot.
+
+**Two real faults, and neither was a quotation.** Page 439 had a ragged blot
+fused to the left arm of a `T`, read as an opening mark — settled three ways: at
+12× against the book's own crisp `‘` on the same leaf, by the sense (the
+sentence is Blavatsky's own voice, `we write in February, 1877`), and by the
+second edition, which prints nothing there. And pages 601–602 were one paragraph
+split in two: 660 opens **flush left**, with no indent.
+
+That second one is the more interesting failure. `shouldJoin` reads a trailing
+colon as a closed sentence and a leading quotation mark as the start of
+something, and leaf 659 ends `and was answered :` while 660 opens `‘That is
+Mahu.’` — both signals present, both pointing the wrong way. The evidence that
+settles it is the **indent**, which `draft` measures off the pixels and the
+transcription does not carry. Mended here by the field that exists for it,
+`continuesPrevious`, but the general case wants the geometry carried through.
+
+**One finding was left on the sheet deliberately.** The Voltaire epigraph on
+page 99 opens in its lead-in line and closes five blocks later at the end of the
+fifth numbered item. Relaxing the rule to follow a run of displayed-quotation
+blocks was measured first: it would remove **that one finding and no other in
+the volume**, so the rule was left alone and the case is named in `quotations.md`
+instead. Tuning a check to clear one known-good case is how a check stops
+meaning anything.
+
+**Thirty-one went to the editor as one query, not thirty-one.** They are four
+habits — closes the inner and forgets the outer (11), re-opens mid-paragraph
+(7), the extract simply never closes (9), left open across a displayed extract
+and re-opened after (4) — and the decision is a single principle applied
+thirty-one times. `quotations.md` on the shelf lists every instance under its
+habit.

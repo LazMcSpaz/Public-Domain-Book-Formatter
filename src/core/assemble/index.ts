@@ -13,6 +13,7 @@ export {
   stripSoftHyphens,
   footnoteMarkerPattern,
   stripLeadingMarker,
+  printedMarker,
   type BookDocument,
   type BookBlock,
   type Footnote,
@@ -21,3 +22,4 @@ export {
   type Illustration,
   type IllustrationSource
 } from './assemble-book'
+export { bookText } from './book-text'

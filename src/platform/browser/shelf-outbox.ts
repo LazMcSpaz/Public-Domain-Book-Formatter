@@ -17,7 +17,14 @@
  *
  * Browser-only.
  */
-import { bookPath, mergeOutbox, summarize, type OutboxConflict, type ShelfConfig } from '@core/sync'
+import {
+  bookPath,
+  isRuling,
+  mergeOutbox,
+  summarize,
+  type OutboxConflict,
+  type ShelfConfig
+} from '@core/sync'
 import { parseBookFile, serializeBookFile, toBase64 } from '@core/project'
 import { getText, putFile } from './shelf'
 import { clearQueued, outboxFor } from './run-store'
@@ -108,7 +115,7 @@ async function sendQueue(config: ShelfConfig, bookKey: string): Promise<FlushRes
   }
 
   const file = parseBookFile(text)
-  const merged = mergeOutbox(file.run.edits, queued)
+  const merged = mergeOutbox({ edits: file.run.edits, rulings: file.run.rulings }, queued)
   if (merged.applied.length === 0) {
     return {
       idle: false,
@@ -120,7 +127,7 @@ async function sendQueue(config: ShelfConfig, bookKey: string): Promise<FlushRes
   }
 
   const json = serializeBookFile({
-    run: { ...file.run, edits: merged.edits },
+    run: { ...file.run, edits: merged.edits, rulings: merged.rulings },
     answers: file.answers,
     voice: file.voice,
     notesCheckpoint: file.notesCheckpoint,
@@ -135,14 +142,17 @@ async function sendQueue(config: ShelfConfig, bookKey: string): Promise<FlushRes
   // that will not parse looks like a saved book until the day it is needed.
   parseBookFile(json)
 
-  const marks = merged.applied.filter((entry) => entry.edit.kind === 'highlight').length
+  const marks = merged.applied.filter((entry) => entry.edit?.kind === 'highlight').length
+  const rulings = merged.applied.filter(isRuling).length
   await putFile(
     config,
     path,
     toBase64(new TextEncoder().encode(json)),
-    marks > 0
-      ? `${marks} passages marked while reading`
-      : `${merged.applied.length} changes from a reading session`
+    rulings > 0 && rulings === merged.applied.length
+      ? `${rulings} ${rulings === 1 ? 'query' : 'queries'} ruled on`
+      : marks > 0
+        ? `${marks} passages marked while reading`
+        : `${merged.applied.length} changes from a reading session`
   )
   // Only after the shelf has answered, and only what it took. A conflicted
   // entry stays queued: it is a change the editor made that nobody has

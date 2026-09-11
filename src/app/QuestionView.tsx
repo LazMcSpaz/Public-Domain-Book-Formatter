@@ -111,6 +111,12 @@ function EvidenceView({
   )
 }
 
+/**
+ * How long a passage of evidence has to be before it takes the wider half of
+ * the row. See `readsEvidence`, below, for what the two cases are.
+ */
+const EVIDENCE_LEADS_AT = 400
+
 /** Where a hovered word crop's wider cutting should appear, in viewport space. */
 interface Peek {
   src: string
@@ -510,10 +516,18 @@ export function QuestionView({
   }
 
   const hasEvidence = (question.evidence?.length ?? 0) > 0
-  // Evidence carrying a passage of text is the point of the screen, not a
-  // footnote to it: the scan and the transcription both need room, and three
-  // radio buttons do not. So the row is told which way to divide itself.
-  const readsEvidence = question.evidence?.some((e) => e.kind === 'text') ?? false
+  // Which half of the screen is the point of it.
+  //
+  // The uncertainty gate shows a whole leaf's transcription beside its scan and
+  // asks whether it is good enough to keep: there the evidence is the screen
+  // and three radio buttons are not. The query gate shows the *phrase* a
+  // decision is about — a line or two — beside three options that each carry a
+  // sentence of consequence, and there the substance is the other way round.
+  // Told apart by length, because the two hand over the same shape of evidence
+  // and nothing else distinguishes them: a leaf of prose runs to thousands of
+  // characters and the longest query quote on this book is under two hundred.
+  const readsEvidence =
+    question.evidence?.some((e) => e.kind === 'text' && e.text.length >= EVIDENCE_LEADS_AT) ?? false
 
   return (
     <div className="q">

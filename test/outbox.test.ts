@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { commutes, entriesBetween, mergeOutbox, summarize, type OutboxEntry } from '@core/sync'
 import type { BookEdit } from '@core/edits'
+import type { Ruling } from '@core/queries'
 
 const highlight = (id: string, tag: 'note' | 'intro' = 'note'): BookEdit => ({
   kind: 'highlight',
@@ -35,7 +36,9 @@ describe('two devices marking one book cannot conflict', () => {
     // so a shelf that moved under us is not a problem to solve — the marks
     // simply both survive.
     const onShelf = [highlight('elsewhere')]
-    const result = mergeOutbox(onShelf, [entry({ edit: highlight('here') })])
+    const result = mergeOutbox({ edits: onShelf, rulings: [] }, [
+      entry({ edit: highlight('here') })
+    ])
     expect(result.conflicts).toEqual([])
     expect(result.edits).toHaveLength(2)
     expect(result.applied).toHaveLength(1)
@@ -54,8 +57,8 @@ describe('two devices marking one book cannot conflict', () => {
       entry({ edit: highlight('h1') }),
       entry({ id: 'q2', edit: { kind: 'text', blockId: 'p1b0', text: 'Sent once.' } })
     ]
-    const first = mergeOutbox([], queued)
-    const again = mergeOutbox(first.edits, queued)
+    const first = mergeOutbox({ edits: [], rulings: [] }, queued)
+    const again = mergeOutbox({ edits: first.edits, rulings: [] }, queued)
     expect(again.edits).toEqual(first.edits)
     expect(again.conflicts).toEqual([])
     expect(again.applied).toHaveLength(2)
@@ -72,7 +75,7 @@ describe('two devices marking one book cannot conflict', () => {
     // made, not by how they came out of the store, and a store is under no
     // obligation to return them in order. Folded in backwards, the earlier
     // wording would win and the editor's second thought would be lost.
-    const result = mergeOutbox([], [second, first])
+    const result = mergeOutbox({ edits: [], rulings: [] }, [second, first])
     expect(result.edits).toHaveLength(1)
     expect((result.edits[0] as { tag: string }).tag).toBe('intro')
   })
@@ -82,7 +85,7 @@ describe('a correction that does not commute', () => {
   const correction: BookEdit = { kind: 'text', blockId: 'p1b0', text: 'The corrected words.' }
 
   it('goes up when the shelf still holds what it was made against', () => {
-    const result = mergeOutbox([], [entry({ edit: correction, saw: null })])
+    const result = mergeOutbox({ edits: [], rulings: [] }, [entry({ edit: correction, saw: null })])
     expect(result.conflicts).toEqual([])
     expect(result.edits).toEqual([correction])
   })
@@ -91,7 +94,9 @@ describe('a correction that does not commute', () => {
     // Two devices retyping one block genuinely disagree and there is no correct
     // answer to pick. Forcing ours would delete somebody's work in silence.
     const theirs: BookEdit = { kind: 'text', blockId: 'p1b0', text: 'Their words.' }
-    const result = mergeOutbox([theirs], [entry({ edit: correction, saw: null })])
+    const result = mergeOutbox({ edits: [theirs], rulings: [] }, [
+      entry({ edit: correction, saw: null })
+    ])
     expect(result.applied).toEqual([])
     expect(result.edits).toEqual([theirs])
     expect(result.conflicts).toHaveLength(1)
@@ -101,7 +106,9 @@ describe('a correction that does not commute', () => {
 
   it('goes up when it was made against the version the shelf still has', () => {
     const base: BookEdit = { kind: 'text', blockId: 'p1b0', text: 'The old words.' }
-    const result = mergeOutbox([base], [entry({ edit: correction, saw: base })])
+    const result = mergeOutbox({ edits: [base], rulings: [] }, [
+      entry({ edit: correction, saw: base })
+    ])
     expect(result.conflicts).toEqual([])
     expect(result.edits).toEqual([correction])
   })
@@ -110,7 +117,9 @@ describe('a correction that does not commute', () => {
     // A `split` and a `text` are both about p1b0 and are not the same change.
     // Judging by the block alone would call one a conflict with the other.
     const split: BookEdit = { kind: 'split', blockId: 'p1b0', at: 5 }
-    const result = mergeOutbox([split], [entry({ edit: correction, saw: null })])
+    const result = mergeOutbox({ edits: [split], rulings: [] }, [
+      entry({ edit: correction, saw: null })
+    ])
     expect(result.conflicts).toEqual([])
     expect(result.edits).toContainEqual(correction)
     expect(result.edits).toContainEqual(split)
@@ -121,7 +130,7 @@ describe('a correction that does not commute', () => {
     // what it applied, so a correction nobody could take is still on the device
     // and still reported rather than lost.
     const theirs: BookEdit = { kind: 'text', blockId: 'p1b0', text: 'Their words.' }
-    const result = mergeOutbox([theirs], [entry({ edit: correction })])
+    const result = mergeOutbox({ edits: [theirs], rulings: [] }, [entry({ edit: correction })])
     expect(result.applied).not.toContainEqual(expect.objectContaining({ edit: correction }))
     expect(result.conflicts[0]!.entry.edit).toEqual(correction)
   })
@@ -138,11 +147,16 @@ describe('what the interface has to be able to say', () => {
         madeAt: '2026-09-06T09:00:00.000Z'
       })
     ])
-    expect(summary).toEqual({ waiting: 3, marks: 2, oldest: '2026-09-05T09:00:00.000Z' })
+    expect(summary).toEqual({
+      waiting: 3,
+      marks: 2,
+      rulings: 0,
+      oldest: '2026-09-05T09:00:00.000Z'
+    })
   })
 
   it('says nothing is waiting when nothing is', () => {
-    expect(summarize([])).toEqual({ waiting: 0, marks: 0, oldest: null })
+    expect(summarize([])).toEqual({ waiting: 0, marks: 0, rulings: 0, oldest: null })
   })
 })
 
@@ -153,7 +167,9 @@ describe('a mark taken off must not come back', () => {
     // still holds it and nothing said otherwise. Silently wrong, which is the
     // one outcome worth building machinery to prevent.
     const onShelf = [highlight('h1'), highlight('h2')]
-    const result = mergeOutbox(onShelf, [entry({ edit: highlight('h1'), remove: true })])
+    const result = mergeOutbox({ edits: onShelf, rulings: [] }, [
+      entry({ edit: highlight('h1'), remove: true })
+    ])
     expect(result.conflicts).toEqual([])
     expect(result.edits).toEqual([highlight('h2')])
     expect(result.applied).toHaveLength(1)
@@ -162,7 +178,9 @@ describe('a mark taken off must not come back', () => {
   it('leaves the queue when it was already gone from both sides', () => {
     // Removed here and removed there. Nothing to do, and treating it as a
     // conflict would strand the entry on the device for ever.
-    const result = mergeOutbox([], [entry({ edit: highlight('h1'), remove: true })])
+    const result = mergeOutbox({ edits: [], rulings: [] }, [
+      entry({ edit: highlight('h1'), remove: true })
+    ])
     expect(result.applied).toHaveLength(1)
     expect(result.conflicts).toEqual([])
     expect(result.edits).toEqual([])
@@ -171,7 +189,9 @@ describe('a mark taken off must not come back', () => {
   it('reports a correction withdrawn here that was changed elsewhere', () => {
     const base: BookEdit = { kind: 'text', blockId: 'p1b0', text: 'The old words.' }
     const theirs: BookEdit = { kind: 'text', blockId: 'p1b0', text: 'Their words.' }
-    const result = mergeOutbox([theirs], [entry({ edit: base, saw: base, remove: true })])
+    const result = mergeOutbox({ edits: [theirs], rulings: [] }, [
+      entry({ edit: base, saw: base, remove: true })
+    ])
     expect(result.applied).toEqual([])
     expect(result.edits).toEqual([theirs])
     expect(result.conflicts[0]!.why).toMatch(/changed elsewhere/u)
@@ -179,7 +199,9 @@ describe('a mark taken off must not come back', () => {
 
   it('withdraws a correction the shelf still holds unchanged', () => {
     const base: BookEdit = { kind: 'text', blockId: 'p1b0', text: 'The old words.' }
-    const result = mergeOutbox([base], [entry({ edit: base, saw: base, remove: true })])
+    const result = mergeOutbox({ edits: [base], rulings: [] }, [
+      entry({ edit: base, saw: base, remove: true })
+    ])
     expect(result.conflicts).toEqual([])
     expect(result.edits).toEqual([])
   })
@@ -231,7 +253,7 @@ describe('what to send, worked out from the list the app already keeps', () => {
     const second = between([mine], [mineAgain], first)
     expect(second[0]!.saw).toEqual(onShelf)
     // And it merges cleanly against the shelf it was actually made against.
-    expect(mergeOutbox([onShelf], second).conflicts).toEqual([])
+    expect(mergeOutbox({ edits: [onShelf], rulings: [] }, second).conflicts).toEqual([])
   })
 
   it('does not mistake two kinds of edit on one block for each other', () => {
@@ -239,5 +261,96 @@ describe('what to send, worked out from the list the app already keeps', () => {
     const split: BookEdit = { kind: 'split', blockId: 'p1b0', at: 3 }
     expect(between([text], [text, split])).toHaveLength(1)
     expect(between([text], [text, split])[0]!.edit).toEqual(split)
+  })
+})
+
+/**
+ * Rulings ride the same queue as the marks, and for the same reason: an
+ * evening of judgement that exists nowhere else, made on a device that may be
+ * offline. They commute for the same reason too — each is keyed by the query it
+ * answers and touches nothing else.
+ */
+describe('the editor’s rulings, queued', () => {
+  const ruling = (over: Partial<Ruling> = {}): Ruling => ({
+    pageIndex: 285,
+    quote: 'on acount of the desecration',
+    kind: 'printers-error',
+    decision: 'as-printed',
+    decidedOn: '2026-09-10',
+    ...over
+  })
+
+  const queued = (r: Ruling, over: Partial<OutboxEntry> = {}): OutboxEntry =>
+    ({
+      id: `ruling:${r.pageIndex}:${r.quote}`,
+      bookKey: 'book',
+      madeAt: '2026-09-10T10:00:00.000Z',
+      ruling: r,
+      ...over
+    }) as OutboxEntry
+
+  it('folds one into a shelf that has rulings of its own', () => {
+    const onShelf = [ruling({ pageIndex: 12, quote: 'belleves' })]
+    const result = mergeOutbox({ edits: [], rulings: onShelf }, [queued(ruling())])
+    expect(result.conflicts).toEqual([])
+    expect(result.rulings.map((r) => r.pageIndex)).toEqual([12, 285])
+    // And leaves the edit list alone: a ruling is a decision, not a change to
+    // the book. `unapplied()` is only a real check while the two stay apart.
+    expect(result.edits).toEqual([])
+  })
+
+  /**
+   * The property that lets this be a queue rather than a merge algorithm.
+   * A second ruling on one query is the editor changing their mind about their
+   * own answer, not two devices disagreeing — so the later one wins and nothing
+   * is reported.
+   */
+  it('replaces an earlier ruling on the same query, in place', () => {
+    const onShelf = [ruling({ decision: 'as-printed' }), ruling({ pageIndex: 400, quote: 'other' })]
+    const later = ruling({ decision: 'corrected', correction: 'on account of the desecration' })
+    const result = mergeOutbox({ edits: [], rulings: onShelf }, [queued(later)])
+    expect(result.conflicts).toEqual([])
+    expect(result.rulings).toHaveLength(2)
+    // In place: moving it to the end would make a diff out of nothing on a
+    // shelf whose whole point is that git keeps every version.
+    expect(result.rulings[0]!.decision).toBe('corrected')
+    expect(result.rulings[1]!.quote).toBe('other')
+  })
+
+  it('is a no-op when the shelf already holds exactly that ruling', () => {
+    const r = ruling()
+    const result = mergeOutbox({ edits: [], rulings: [r] }, [queued(r)])
+    expect(result.rulings).toEqual([r])
+    expect(result.applied).toHaveLength(1)
+  })
+
+  it('counts as waiting, and is named apart from the reading marks', () => {
+    const summary = summarize([queued(ruling()), entry({ edit: highlight('h1') })])
+    expect(summary).toEqual({
+      waiting: 2,
+      marks: 1,
+      rulings: 1,
+      oldest: '2026-09-07T10:00:00.000Z'
+    })
+  })
+
+  /**
+   * `entriesBetween` keys the queue it is handed by the *edit* each entry
+   * carries, so a ruling sitting in it has no key at all. Left in, every ruling
+   * in the queue collapsed onto `undefined` and the last one won — which meant
+   * a correction typed at the proof step could be queued with a ruling's `saw`,
+   * and be reported as a conflict against a base it was never made from.
+   */
+  it('is not mistaken for a change to the book when the edit queue is read', () => {
+    const entries = entriesBetween(
+      [],
+      [highlight('h1')],
+      [queued(ruling()), queued(ruling({ pageIndex: 400, quote: 'other' }))],
+      'book',
+      '2026-09-10T11:00:00.000Z'
+    )
+    expect(entries).toHaveLength(1)
+    expect(entries[0]!.edit).toEqual(highlight('h1'))
+    expect(entries[0]!.saw).toBeNull()
   })
 })

@@ -32,9 +32,10 @@
  * platform's business.
  */
 import { correctsTheBook, editTarget, sameTarget, withEdit, type BookEdit } from '@core/edits'
+import { withRuling, type Ruling } from '@core/queries'
 
-/** One change made on this device, waiting to go up. */
-export interface OutboxEntry {
+/** What every queued change carries, whatever kind it is. */
+interface QueuedChange {
   /**
    * Unique per queued change.
    *
@@ -44,8 +45,13 @@ export interface OutboxEntry {
   id: string
   /** Which book this belongs to — the run key, as the shelf catalogue uses. */
   bookKey: string
-  edit: BookEdit
   madeAt: string
+}
+
+/** A change to the book itself. */
+export interface EditEntry extends QueuedChange {
+  edit: BookEdit
+  ruling?: never
   /**
    * What occupied this edit's target when the change was made, or null when
    * nothing did. The base a conflict is judged against — see above.
@@ -62,6 +68,39 @@ export interface OutboxEntry {
    * rather than as a bare identifier.
    */
   remove?: boolean
+}
+
+/**
+ * The editor's answer to one query, made at the query gate.
+ *
+ * A ruling is not a change to the book — a `corrected` ruling becomes an
+ * ordinary `text` edit later, and keeping the two apart is what lets
+ * `unapplied()` be a real check. But it is expensive in exactly the way a
+ * reading mark is: an evening of judgement that exists nowhere else, made on a
+ * device that may be offline, and worth nothing until it reaches the shelf. So
+ * it rides the same queue, for the same reason, and **it commutes for the same
+ * reason too**: each ruling is keyed by the query it answers, changes nothing
+ * else, and is collapsed on that key by `withRuling`. Two devices ruling on
+ * one book cannot conflict, and a re-sent flush is a no-op.
+ *
+ * A second ruling on the same query is not a disagreement to report — it is
+ * the editor changing their mind about their own answer, and the later one
+ * wins. That is what makes this different from a `text` edit, where two
+ * devices retyping one block genuinely disagree and there is no correct answer
+ * to pick. There is no `saw` and no `remove`: a ruling is never made against a
+ * base that could have moved, and unruling a query is done by ruling it again.
+ */
+export interface RulingEntry extends QueuedChange {
+  ruling: Ruling
+  edit?: never
+}
+
+/** One change made on this device, waiting to go up. */
+export type OutboxEntry = EditEntry | RulingEntry
+
+/** Whether a queued change is a ruling rather than an edit. */
+export function isRuling(entry: OutboxEntry): entry is RulingEntry {
+  return entry.ruling !== undefined
 }
 
 /**
@@ -85,9 +124,17 @@ export interface OutboxConflict {
   why: string
 }
 
+/** What the shelf holds now: the two lists a flush folds the queue into. */
+export interface ShelfState {
+  edits: readonly BookEdit[]
+  rulings: readonly Ruling[]
+}
+
 export interface MergeResult {
   /** The shelf's edit list with everything mergeable folded in. */
   edits: BookEdit[]
+  /** The shelf's rulings with every queued ruling folded in. */
+  rulings: Ruling[]
   /** The entries that went in — the ones a successful flush may clear. */
   applied: OutboxEntry[]
   /**
@@ -110,16 +157,21 @@ const same = (a: BookEdit | null, b: BookEdit | null): boolean =>
  * ends up with the later wording — `withEdit` collapses them, exactly as it
  * would have if both had been made online.
  */
-export function mergeOutbox(
-  shelfEdits: readonly BookEdit[],
-  entries: readonly OutboxEntry[]
-): MergeResult {
-  let edits = [...shelfEdits]
+export function mergeOutbox(shelf: ShelfState, entries: readonly OutboxEntry[]): MergeResult {
+  let edits = [...shelf.edits]
+  let rulings = [...shelf.rulings]
   const applied: OutboxEntry[] = []
   const conflicts: OutboxConflict[] = []
 
   const ordered = [...entries].sort((a, b) => a.madeAt.localeCompare(b.madeAt))
   for (const entry of ordered) {
+    // A ruling answers a query and touches nothing else, so there is no target
+    // on the shelf to disagree with it and nothing to report. See `RulingEntry`.
+    if (isRuling(entry)) {
+      rulings = withRuling(rulings, entry.ruling)
+      applied.push(entry)
+      continue
+    }
     const onShelf = edits.find((e) => sameTarget(e, entry.edit)) ?? null
     // Already exactly what the shelf holds: a flush whose response was lost,
     // re-sent. Checked before anything else and for every kind, because
@@ -171,7 +223,7 @@ export function mergeOutbox(
     edits = withEdit(edits, entry.edit)
     applied.push(entry)
   }
-  return { edits, applied, conflicts }
+  return { edits, rulings, applied, conflicts }
 }
 
 /** What the interface has to be able to say about the queue. */
@@ -180,6 +232,8 @@ export interface OutboxSummary {
   waiting: number
   /** Of those, how many are marks the editor made while reading. */
   marks: number
+  /** Of those, how many are rulings the editor made at the query gate. */
+  rulings: number
   /** The oldest thing waiting, so "since Tuesday" can be said rather than "some". */
   oldest: string | null
 }
@@ -188,7 +242,8 @@ export function summarize(entries: readonly OutboxEntry[]): OutboxSummary {
   const dates = entries.map((e) => e.madeAt).sort()
   return {
     waiting: entries.length,
-    marks: entries.filter((e) => e.edit.kind === 'highlight').length,
+    marks: entries.filter((e) => e.edit?.kind === 'highlight').length,
+    rulings: entries.filter(isRuling).length,
     oldest: dates[0] ?? null
   }
 }
@@ -221,10 +276,15 @@ export function entriesBetween(
   queued: readonly OutboxEntry[],
   bookKey: string,
   madeAt: string
-): OutboxEntry[] {
+): EditEntry[] {
   const key = (edit: BookEdit): string => `${edit.kind}:${editTarget(edit)}`
-  const held = new Map(queued.map((entry) => [key(entry.edit), entry]))
-  const out: OutboxEntry[] = []
+  // Rulings are keyed by the query they answer and never by an edit target, so
+  // they are not candidates to be replaced by a change to the book — and asking
+  // one for its `edit` would key the whole map on `undefined`.
+  const held = new Map(
+    queued.filter((entry): entry is EditEntry => !isRuling(entry)).map((e) => [key(e.edit), e])
+  )
+  const out: EditEntry[] = []
 
   for (const edit of next) {
     const before = previous.find((e) => sameTarget(e, edit)) ?? null

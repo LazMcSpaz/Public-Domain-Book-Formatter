@@ -5,11 +5,14 @@ import {
   settled,
   unapplied,
   rulingsMarkdown,
+  reviewMarkdown,
   toMention,
+  withRuling,
   queriesMarkdown,
   type RaisedQuery,
   type Ruling
 } from '@core/queries'
+import { type BookBlock, type BookDocument } from '@core/assemble'
 import { noteOnTheText } from '@core/annotate'
 
 const query = (over: Partial<RaisedQuery> = {}): RaisedQuery => ({
@@ -29,6 +32,36 @@ const ruling = (over: Partial<Ruling> = {}): Ruling => ({
   decidedOn: '2026-08-24',
   ...over
 })
+
+/**
+ * A book made of whatever text a case needs.
+ *
+ * `unapplied` takes the document rather than a string because the caller that
+ * used to build the string got it wrong — see `bookText`. Building a document
+ * here rather than passing prose keeps these tests asking the question the
+ * caller actually asks.
+ */
+const book = (over: Partial<BookDocument> = {}): BookDocument => ({
+  blocks: [],
+  footnotes: [],
+  chapters: [],
+  asides: [],
+  illustrations: [],
+  sections: [],
+  skipped: [],
+  synopsesUnmatched: [],
+  ...over
+})
+
+const para = (text: string, over: Partial<BookBlock> = {}): BookBlock => ({
+  id: 'p12b1',
+  kind: 'paragraph',
+  text,
+  sourcePages: [12],
+  ...over
+})
+
+const prose = (text: string): BookDocument => book({ blocks: [para(text)] })
 
 describe('finding the ruling that settles a query', () => {
   it('matches the leaf and the words', () => {
@@ -136,18 +169,87 @@ describe('what is still waiting', () => {
  */
 describe('rulings the book has not caught up with', () => {
   it('flags a correction the text does not carry', () => {
-    expect(unapplied([ruling()], 'a radioative emanation of the aura')).toHaveLength(1)
+    expect(unapplied([ruling()], prose('a radioative emanation of the aura'))).toHaveLength(1)
   })
 
   it('says nothing once the text reads the corrected way', () => {
-    expect(unapplied([ruling()], 'a radioactive emanation of the aura')).toEqual([])
+    expect(unapplied([ruling()], prose('a radioactive emanation of the aura'))).toEqual([])
   })
 
   it('still flags it when both readings are in the book', () => {
     // One occurrence mended and another missed is the commonest way a
     // correction half-lands, and the one a plain "is the new word there?" test
     // would call finished.
-    expect(unapplied([ruling()], 'radioactive here, radioative there')).toHaveLength(1)
+    expect(unapplied([ruling()], prose('radioactive here, radioative there'))).toHaveLength(1)
+  })
+
+  /**
+   * The real leaf, and the reason the comparison is made in both notations.
+   *
+   * Leaf 285 of *Isis Unveiled* Vol. I prints `on acount of the
+   * <i>desecration.</i>`. The query was raised by a reader working from the
+   * render, in plain prose, and the ruling was written from the query — so the
+   * word was mended, the edit landed, and the check went on reporting the
+   * ruling outstanding because the tags sat inside the quoted phrase.
+   */
+  it('finds a correction whose wording straddles an italic the ruling does not quote', () => {
+    const italicised = ruling({
+      pageIndex: 285,
+      quote: 'extinguished on acount of the desecration.',
+      correction: 'extinguished on account of the desecration.'
+    })
+    expect(
+      unapplied(
+        [italicised],
+        prose(
+          'but was instantaneously extinguished on account of the <i>desecration.</i> T. Livius'
+        )
+      )
+    ).toEqual([])
+  })
+
+  it('still flags it when the book keeps the printed form behind the same markup', () => {
+    const italicised = ruling({
+      pageIndex: 285,
+      quote: 'extinguished on acount of the desecration.',
+      correction: 'extinguished on account of the desecration.'
+    })
+    expect(
+      unapplied(
+        [italicised],
+        book({
+          blocks: [
+            para('extinguished on account of the <i>desecration.</i>'),
+            para('extinguished on acount of the <i>desecration.</i>', { id: 'p12b2' })
+          ]
+        })
+      )
+    ).toHaveLength(1)
+  })
+
+  /**
+   * The one thing stripping the tags cannot see. A ruling whose two forms are
+   * the same words and differ only in emphasis would compare equal to itself
+   * once stripped, and every such ruling would read as already applied.
+   */
+  it('reads a ruling about the emphasis alone with the markup left in', () => {
+    const setInItalic = ruling({
+      pageIndex: 137,
+      quote: 'the Catechism of the Religion of Positivism',
+      correction: 'the <i>Catechism of the Religion of Positivism</i>'
+    })
+    expect(
+      unapplied(
+        [setInItalic],
+        prose('exclaims the author of the Catechism of the Religion of Positivism')
+      )
+    ).toHaveLength(1)
+    expect(
+      unapplied(
+        [setInItalic],
+        prose('exclaims the author of the <i>Catechism of the Religion of Positivism</i>')
+      )
+    ).toEqual([])
   })
 
   /**
@@ -163,7 +265,7 @@ describe('rulings the book has not caught up with', () => {
       correction: 'the moment at which he awoke.\u201d'
     })
     expect(
-      unapplied([closing], 'dispatching a messenger, the moment at which he awoke.\u201d')
+      unapplied([closing], prose('dispatching a messenger, the moment at which he awoke.\u201d'))
     ).toEqual([])
   })
 
@@ -174,16 +276,78 @@ describe('rulings the book has not caught up with', () => {
       correction: 'the moment at which he awoke.\u201d'
     })
     expect(
-      unapplied([closing], 'dispatching a messenger, the moment at which he awoke.')
+      unapplied([closing], prose('dispatching a messenger, the moment at which he awoke.'))
     ).toHaveLength(1)
   })
 
   it('has no opinion about a ruling that changes nothing', () => {
-    expect(unapplied([ruling({ decision: 'as-printed', correction: undefined })], '')).toEqual([])
+    expect(unapplied([ruling({ decision: 'as-printed', correction: undefined })], book())).toEqual(
+      []
+    )
   })
 
   it('flags a correction that never said what it should read', () => {
-    expect(unapplied([ruling({ correction: '' })], 'anything')).toHaveLength(1)
+    expect(unapplied([ruling({ correction: '' })], prose('anything'))).toHaveLength(1)
+  })
+
+  /**
+   * Measured on *Isis Unveiled*: two of the corrections the editor ruled on
+   * were inside footnotes, which assembly pulls out of the block flow, so a
+   * check reading `doc.blocks` reported them outstanding after they had been
+   * made. Both notes and the editor's own divisions are text a reader sees.
+   */
+  it('sees a correction that landed in a footnote', () => {
+    const note = ruling({
+      pageIndex: 89,
+      quote: 'the Northen Hemisphere',
+      correction: 'the Northern Hemisphere'
+    })
+    const withNote = book({
+      blocks: [para('The note hangs off this sentence.')],
+      footnotes: [
+        {
+          id: 'fn48',
+          originalMarker: '*',
+          text: 'at the end of the tertiary period, the Northern Hemisphere had changed',
+          pageIndex: 89,
+          orphaned: false
+        }
+      ]
+    })
+    expect(unapplied([note], withNote)).toEqual([])
+  })
+
+  it('sees a correction that landed in a division the editor wrote', () => {
+    const inIntro = ruling({ quote: 'radioative', correction: 'radioactive' })
+    const withIntro = book({
+      sections: [
+        {
+          id: 'introduction',
+          placement: 'front',
+          title: 'Introduction',
+          blocks: [para('a radioactive emanation of the aura', { id: 'introb1' })]
+        }
+      ]
+    })
+    expect(unapplied([inIntro], withIntro)).toEqual([])
+  })
+
+  /**
+   * A ruling's correction is quoted from the text as it is written down, and
+   * emphasis is written down as `<i>`. A block's own `text` has it stripped out
+   * into word indices, so a correction carrying a tag could never be found —
+   * the third false alarm the same book produced.
+   */
+  it('reads the emphasis back before looking for the words', () => {
+    const italic = ruling({
+      pageIndex: 67,
+      quote: 'the ancient mystics—the <i>Tetractys.</i>',
+      correction: 'the ancient mystics—the <i>Tetractys.</i> Amen.'
+    })
+    const set = book({
+      blocks: [para('the ancient mystics—the Tetractys. Amen.', { emphasis: [3] })]
+    })
+    expect(unapplied([italic], set)).toEqual([])
   })
 })
 
@@ -324,5 +488,125 @@ describe('the note on the text', () => {
     const text = noteOnTheText(rulings).join('\n')
     expect(text).toContain('do not name them')
     expect(text).toContain('Do not list the individual places')
+  })
+})
+
+/**
+ * The sheet an independent reader is handed.
+ *
+ * `queries.md` empties as it is answered and `rulings.md` only ever grows, so a
+ * settled question is on one and off the other. That is right for working
+ * through them and wrong for checking the work — an auditor wants every query
+ * the reading raised, in book order, with what became of it, without holding
+ * two files open and matching them by hand.
+ */
+describe('the review sheet', () => {
+  const raised: RaisedQuery[] = [
+    query({ pageIndex: 12, quote: 'radioative' }),
+    query({ pageIndex: 40, quote: 'practiced deception', kind: 'inconsistent' }),
+    query({ pageIndex: 63, quote: 'a passage nobody has ruled on' })
+  ]
+  const rulings: Ruling[] = [
+    ruling({ because: 'The compositor dropped the c.' }),
+    {
+      pageIndex: null,
+      quote: 'practiced / practised',
+      kind: 'inconsistent',
+      decision: 'as-printed',
+      covers: ['practiced', 'practised'],
+      because: 'Both were current in 1877.',
+      decidedOn: '2026-08-24'
+    }
+  ]
+  const sheet = reviewMarkdown({ title: 'The Astral World', fileName: 'a.pdf' }, raised, rulings)
+
+  it('counts what is settled and what is not', () => {
+    expect(sheet).toContain('3 raised, 2 settled, 1 still waiting.')
+  })
+
+  it('carries every query, settled or not, in leaf order', () => {
+    const leaves = [...sheet.matchAll(/^\| (\d+) \|/gmu)].map((m) => Number(m[1]))
+    expect(leaves).toEqual([12, 40, 63])
+  })
+
+  it('puts the corrected reading beside the words it was made about', () => {
+    expect(sheet).toMatch(/\| 12 \|.*`radioative`.*Set right.*`radioactive`.*dropped the c/u)
+  })
+
+  it('marks a query still waiting rather than leaving the row blank', () => {
+    expect(sheet).toMatch(/\| 63 \|.*\*\*waiting\*\*/u)
+  })
+
+  /**
+   * A standing ruling settles a query without appearing against any one leaf,
+   * so an auditor reading down the leaves would find the decision and never
+   * find where it came from.
+   */
+  it('says when a query was settled by a standing ruling, and lists it', () => {
+    expect(sheet).toMatch(/\| 40 \|.*standing ruling/u)
+    expect(sheet).toContain('## Standing rulings')
+    expect(sheet).toContain('Both were current in 1877.')
+  })
+
+  it('says so plainly when nothing was raised', () => {
+    expect(reviewMarkdown({ title: 'A', fileName: 'a.pdf' }, [], [])).toContain(
+      'Nothing was raised'
+    )
+  })
+})
+
+/**
+ * Ruling on a query a second time.
+ *
+ * The list is what the shelf holds and what `answerFor` reads, so a duplicate
+ * would make the answer depend on which one was looked at first — and appending
+ * rather than replacing would make a diff out of nothing on a shelf whose whole
+ * point is that git keeps every version.
+ */
+describe('the editor changing their mind', () => {
+  const kept: Ruling = {
+    pageIndex: 285,
+    quote: 'on acount of the desecration',
+    kind: 'printers-error',
+    decision: 'as-printed',
+    decidedOn: '2026-09-01'
+  }
+
+  it('replaces the earlier ruling where it stood', () => {
+    const others: Ruling = { ...kept, pageIndex: 400, quote: 'elsewhere' }
+    const mended: Ruling = {
+      ...kept,
+      decision: 'corrected',
+      correction: 'on account of the desecration',
+      decidedOn: '2026-09-10'
+    }
+    const out = withRuling([kept, others], mended)
+    expect(out).toHaveLength(2)
+    expect(out[0]).toEqual(mended)
+    expect(out[1]).toEqual(others)
+  })
+
+  it('appends one that answers a query nothing has answered', () => {
+    const fresh: Ruling = { ...kept, pageIndex: 12, quote: 'belleves' }
+    expect(withRuling([kept], fresh)).toEqual([kept, fresh])
+  })
+
+  /**
+   * The same query written with different spacing or case is the same query:
+   * a quote is typed by whoever raised it, and `answerFor` already matches on
+   * the trimmed lower-cased words. If this did not, the list would grow a
+   * second answer that `answerFor` would then pick between arbitrarily.
+   */
+  it('knows the same query through a difference in case or spacing', () => {
+    const same: Ruling = { ...kept, quote: '  On Acount Of The Desecration ', decision: 'noted' }
+    const out = withRuling([kept], same)
+    expect(out).toHaveLength(1)
+    expect(out[0]!.decision).toBe('noted')
+  })
+
+  /** A standing ruling names no leaf, so it is never confused with one that does. */
+  it('does not mistake a standing ruling for one on a leaf', () => {
+    const standing: Ruling = { ...kept, pageIndex: null }
+    expect(withRuling([kept], standing)).toHaveLength(2)
   })
 })

@@ -7,9 +7,22 @@ describe('reading a link', () => {
   it('names the book and where to land', () => {
     expect(parseDeepLink('#book=human-aura-4f2a1c&at=review')).toEqual({
       slug: 'human-aura-4f2a1c',
-      at: 'gate-uncertainties',
+      at: 'gate-queries',
       leaf: null
     })
+  })
+
+  /**
+   * `review` moved. It pointed at the gate that asks whether a *transcription*
+   * is good enough to keep, because when the alias was written that was the
+   * only place a decision waited. `drive.mjs link review` calls itself "a URL
+   * that opens this book where decisions wait", and the decisions that wait on
+   * the editor are the queries.
+   */
+  it('sends “review” to the queries, and keeps a name for the old gate', () => {
+    expect(parseDeepLink('#book=a-book-1&at=review').at).toBe('gate-queries')
+    expect(parseDeepLink('#book=a-book-1&at=queries').at).toBe('gate-queries')
+    expect(parseDeepLink('#book=a-book-1&at=uncertainties').at).toBe('gate-uncertainties')
   })
 
   it('takes a step id as well as a friendly name', () => {
@@ -117,7 +130,18 @@ describe('what a link is allowed to mark as walked', () => {
       'gate-identity',
       'transcribe',
       'gate-uncertainties',
-      'gate-structure'
+      'gate-structure',
+      'gate-queries'
     ])
+  })
+
+  /**
+   * A link to the query gate must not mark the query gate walked. The list is
+   * every step *before* it and the queries themselves are still waiting, which
+   * is the property that keeps a deep link from answering anything.
+   */
+  it('does not carry a link to the queries past the queries', () => {
+    expect(stepsBefore('gate-queries')).not.toContain('gate-queries')
+    expect(stepsBefore('gate-queries')).toContain('gate-structure')
   })
 })

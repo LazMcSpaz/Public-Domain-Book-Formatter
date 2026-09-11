@@ -284,6 +284,19 @@ The first driver command after a restart often dies with `Target page,
 context or browser has been closed` — retry it. And `pkill -f vite` matches
 the shell running it, so kill from a detached script or by pid.
 
+**"Restart" means kill vite, not check whether the port answers.** A restart
+script that starts vite only when :5173 is silent never restarts it at all, so
+the process that came up at the start of a session is still serving hours
+later — with an **in-memory transform cache** holding every module as it was
+before each `src/core` edit since. Measured: `curl` on the canonical
+`/@fs/…/draft/index.ts` came back without a function that had been on disk,
+committed, and green under `npm test` for an hour, while the same URL with
+`?v=<timestamp>` came back with it. A whole chapter was drafted by the old
+code and looked entirely fine, because a draft is only ever an input to a
+reader who checks it against the render. The cache-busting parameter is also
+the cheap way to tell this apart from a real bug: **if the plain URL and the
+busted URL disagree, the code is right and the server is stale.**
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what
@@ -449,10 +462,33 @@ node scripts/drive.mjs sweep --was "belleves" --now "believes"   # fix them all,
 node scripts/drive.mjs runs          # readings held here; `runs drop <n>` removes one
 node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` work it
 
+node scripts/drive.mjs figures f.md   # every picture the reading already found,
+                                     #   leaf by leaf — a shortlist, not a check
+node scripts/contact-sheets.mjs <renders> <out>  # the whole book, small, many to
+                                     #   a sheet: the only thing that answers
+                                     #   "is there a picture we have missed?"
+
 node scripts/book-files.mjs <book-dir> --check   # do the readable files still
                                      #   describe the book? regenerates them
                                      #   without --check
 ```
+
+**Ask a book whether it has pictures, once, rather than hoping a reader looks
+up.** `detectIllustrations` runs over every leaf during recon and its candidates
+sit in the recon cache; until `figures` existed nothing could read them, so on
+_Isis Unveiled_ Vol. I a plate reached the book only when a reader happened to
+notice one, and five hundred leaves went by without the question being put.
+
+Neither automatic signal is a check, and both were scored rather than trusted.
+The ink test finds 1 of that volume's 3 plates; a scan for the OCR junk a plate
+leaves behind finds 2 of 3. The miss is structural — `detectRegions` wants a
+rectangle with no _words_ in it, and a figure with text run around it has words
+on every side. Leaf 193 is exactly that and escapes both.
+
+What does work is looking: 628 leaves tiled into 18 sheets, where a shape among
+even grey columns is unmistakable. Be honest about its reach — a half-page
+figure survives the reduction and a two-line diagram may not, so a clean sweep
+is a floor rather than a census.
 
 **Reading a leaf is `draft` → look → correct → `transcribe`.** Never type a leaf
 out from the render: that is the generative act the whole design avoids, and a
@@ -1427,6 +1463,59 @@ in `screenshots/`. Don't ship UI blind.
   paginator does, and the drop cap belongs to a chapter heading, which is one
   at level 1. The first version conflated those and indented where the page
   does not.
+- **Also done**: **the queries are a gate the editor works one at a time**
+  (`src/core/queries/gate.ts`, and `gate-queries` in the step machine). A query
+  is raised and never taken, and until now that was half a channel: the question
+  reached `queries.md` on the shelf and the answer had to come back through a
+  chat session. Seventy-nine of them is an evening of dictation, and a decision
+  that never makes the trip is a book that keeps an error its editor settled
+  weeks ago. Now it is one query to a screen — the passage as printed, a crop of
+  the leaf, the three decisions a `Ruling` can carry, and a box for the
+  reasoning that goes into `rulings.md`.
+
+  **Nothing is pre-selected, and that is the design.** Every other question here
+  arrives with the recommended answer chosen; this one must not, because a
+  suggestion beside a question is an answer in all but name and the answer is
+  the editor's — which is why `EditorialQuery` has no field for a proposed fix.
+  `ChoiceQuestion.defaultValue` is therefore optional, so `defaultAnswers` seeds
+  nothing and no answer exists until a person makes one. Nothing is `required`
+  either: `required` governs the _step_, so seventy-nine required questions is a
+  gate that cannot be left until all seventy-nine are settled — the exact
+  opposite of the partial work this exists to keep. Skipping is safe because
+  `rulingsFromAnswers` files nothing for an undecided query.
+
+  **A ruling is saved the moment it is made**, on the device and on the shelf.
+  It rides the outbox, and the argument that queue's doc comment makes for a
+  reading mark holds word for word: each ruling is keyed by the query it
+  answers, touches nothing else, and is collapsed on that key by `withRuling`,
+  so two devices ruling on one book cannot conflict and a re-sent flush is a
+  no-op. A second ruling on one query is the editor changing their mind about
+  their own answer, not a disagreement to report, so the later one wins — which
+  is what makes it unlike a `text` edit, and why a `RulingEntry` has no `saw`.
+  `withRuling` replaces **in place**, because nothing reads two rulings on one
+  query and moving one to the end would make a diff out of nothing on a shelf
+  whose whole point is that git keeps every version.
+
+  A sitting's rulings do not reach the state until the gate is left: the gate
+  shows what is _outstanding_, so folding one in as it was made would take its
+  screen out of the list under the editor, and going back to change an answer
+  would find the query gone. They live in a ref, which is what is persisted and
+  queued, so nothing is at risk. `SavedRun.rulings` had existed since v12 with
+  nothing writing it — `persistRun` blanked the field on every autosave.
+
+  Three things came out of driving it in a browser rather than reading the diff.
+  The **decision was squeezed into a column** while the quoted phrase took the
+  screen, because `QuestionView` divided the row on whether there was _any_ text
+  evidence; the two gates hand over the same shape of evidence and only its
+  length tells them apart. An **empty gate stopped everybody** — an EPUB raises
+  no queries by construction — so it now walks itself through, in the shell
+  rather than in `canEnter`, because a step that cannot be entered is a step
+  `completed` never names and the proof step is gated on this one. And **`link
+review` had to work for a book whose scan is too large for the shelf**, which
+  is Vol. I of _Isis Unveiled_ exactly: the link opens such a book the light way
+  and lands on the gate, because every decision here can be made from the words
+  and the crop is a help rather than a requirement.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

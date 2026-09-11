@@ -473,7 +473,65 @@ export function assembleBook(
 
       // Footnotes leave the body flow entirely and are re-attached at typeset time.
       if (block.kind === 'footnote') {
-        const marker = block.marker ?? '*'
+        // **A note paragraph with no mark on it continues the note above.** The
+        // page prints the marker once, at the head of the note, and every
+        // further paragraph of that note — whether it falls lower on the same
+        // leaf or at the top of the next one — is set with a first-line indent
+        // and nothing else. Filed as a note of its own it becomes a second note
+        // with the `*` fallback, so the reader gets the note in pieces and the
+        // orphan halves print as collected endnotes at the back of the book,
+        // out of order and meaning nothing.
+        //
+        // This started narrower — only the *first* note on a leaf could be a
+        // runover — on the reasoning that a markerless note with a note above
+        // it on the same leaf was some other thing, and leaf 216 of this volume
+        // was cited as the case nobody had looked at. Leaf 287 forced the look,
+        // and both leaves turn out to be the same shape: 287 sets one `*` note
+        // in five paragraphs, with the mark on the first and the body carrying
+        // exactly one reference; 216 sets a third paragraph under its `†`. The
+        // narrow rule was caution, not a finding, and the two pages it was
+        // cautious about both say the same thing.
+        //
+        // It still errs toward reporting: `verifyPage` flags a note with no
+        // mark anywhere whether or not assembly joins it, so a reader who drops
+        // a marker by mistake is caught by the check rather than by the silence
+        // this rule would otherwise create.
+        const previousNote = footnotes[footnotes.length - 1]
+        if (previousNote !== undefined && !block.marker && printedMarker(block.text) === null) {
+          const joined = stripSoftHyphens(joinText(previousNote.text, block.text))
+          // Word indices again, and the same trap the marker strip has: the
+          // continuation's emphasis is counted from its own first word, so it
+          // has to be shifted past everything already in the note.
+          //
+          // Measured against the *joined* text rather than the note's old word
+          // count, because `joinText` heals a hyphen across the seam — which
+          // merges two words into one and moves every index after it by one.
+          const shift = wordCount(joined) - wordCount(block.text)
+          if (block.emphasis?.length) {
+            previousNote.emphasis = [
+              ...(previousNote.emphasis ?? []),
+              ...block.emphasis.map((i) => i + shift)
+            ]
+          }
+          if (block.strong?.length) {
+            previousNote.strong = [
+              ...(previousNote.strong ?? []),
+              ...block.strong.map((i) => i + shift)
+            ]
+          }
+          previousNote.text = joined
+          continue
+        }
+        // The declared marker, or the one the note's own text opens with, or
+        // `*` — in that order. The bare `*` fallback used to come second and
+        // mislabelled every note whose transcriber left the mark in the text
+        // and omitted the field: the page's `†` stayed in the text, the note
+        // was filed as `*`, and `markOrphanFootnotes` then looked for a mark
+        // the body does not carry. Where the field disagrees with the text,
+        // the field still wins here and `verifyPage` reports the disagreement
+        // — assembly must stay total, and a contradiction inside one leaf is
+        // something for a person rather than something to resolve silently.
+        const marker = block.marker ?? printedMarker(block.text) ?? '*'
         const raw = stripSoftHyphens(block.text.trim())
         const text = stripLeadingMarker(raw, marker)
         // Emphasis is word indices, and stripping the marker removes leading
@@ -744,6 +802,58 @@ function escapeRegExp(s: string): string {
  * The marker must be followed by punctuation or whitespace, so "1662 was the
  * year" is never mistaken for a marker plus text.
  */
+/**
+ * The reference mark a note's own text opens with, or null.
+ *
+ * The printed page repeats the marker at the head of the note, so a note whose
+ * text begins `† See Gibbon` is telling you what its marker is. That matters
+ * because a reader transcribing a leaf can put the mark in the text and forget
+ * the field, and the fallback for a missing field used to be `*` — so on six
+ * notes in one chapter of *Isis Unveiled* the `†` stayed in the text and the
+ * note was filed under a mark the page never printed. Reading it off the text
+ * is not a guess; it is the same act as reading it off the page.
+ *
+ * A bare digit is only a marker when **punctuation** follows it. Whitespace is
+ * not enough, and that was measured the hard way: leaf 275 of *Isis Unveiled*
+ * carries the note `1 Kings, i. 1-4, 15.` under a printed `*`, and a rule that
+ * took "digit, then a space" read its marker as `1` — so `verifyPage` reported
+ * a contradiction that was not there, and a note with no declared field would
+ * have been filed under a mark the page never printed. `1 Kings`,
+ * `2 Corinthians` and `1 vol.` are all commoner at the head of a citation than
+ * a note numbered `1 ` with no point after it.
+ *
+ * What that costs is a note that really does print `1 See Croll` with no
+ * punctuation, which falls back to the `*` default — the behaviour before any
+ * of this existed. Worth it: this book prints no numbered notes at all (`*`,
+ * `†`, `‡`, `§`, `‖`, `¶` and their doubles, across 273 of them), so the rule
+ * only ever fires here on something that is not a marker.
+ *
+ * Symbols need no such guard: no note begins with a dagger by accident.
+ *
+ * **A doubled mark is one marker, not the first of two.** When a leaf runs past
+ * the six symbols the printer starts again with `**`, `††`, `‡‡`; leaf 358 of
+ * this volume carries nine notes and uses all three. Matching a single symbol
+ * read `** With the Gnostics` as the marker `*` — which on that leaf is already
+ * taken, so the note would have been filed under a mark another note owns, the
+ * body's `**` reference would have reached nothing, and `stripLeadingMarker`
+ * would have left the second asterisk sitting in the text. Only a repeat of the
+ * *same* symbol counts (`*†` is two marks that have run together, not one), and
+ * only two of them: this tradition doubles and does not treble, and inventing a
+ * third tier on no evidence is the kind of guess the rest of this file exists
+ * to avoid.
+ */
+export function printedMarker(text: string): string | null {
+  const trimmed = text.trim()
+  const symbol = /^([*\u2020\u2021\u00a7\u00b6\u2016])\1?/u.exec(trimmed)
+  if (symbol) return symbol[0]!
+  const superscript = new RegExp(`^(${SUPERSCRIPT_CLASS}{1,3})`, 'u').exec(trimmed)
+  if (superscript) {
+    return [...superscript[1]!].map((d) => String(SUPERSCRIPT_DIGITS.indexOf(d))).join('')
+  }
+  const digits = /^(\d{1,3})[.)\]:]/u.exec(trimmed)
+  return digits ? digits[1]! : null
+}
+
 export function stripLeadingMarker(text: string, marker: string): string {
   const trimmed = text.trim()
   const m = marker.trim()

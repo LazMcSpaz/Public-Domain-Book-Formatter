@@ -336,3 +336,80 @@ describe('line-break hyphens are counted and reported', () => {
     expect(page.blocks.map((b) => b.text).join(' ')).toContain('ad- vanced')
   })
 })
+
+/**
+ * A folio at the foot, against the rule that keeps a footnote from being
+ * reported as body text.
+ *
+ * That rule asks whether the note pass will claim the last line, and one of its
+ * tests is `FOOTNOTE_MARK` — which reads *a digit followed by anything* as a
+ * mark, so the bare folio `142` matches as marker `1` and text `42`. Without an
+ * explicit exclusion the folio would be claimed as a note and the leaf would
+ * lose its page number in silence.
+ *
+ * Synthetic on purpose, and the one place in this module where that is the
+ * right tool: the fault is a regex reading a numeral, not a geometry, and no
+ * leaf of either real fixture happens to print its folio at the foot.
+ */
+describe('a folio at the foot is never mistaken for a footnote', () => {
+  const withFootFolio = (folio: string) =>
+    words([
+      ...filler(0),
+      ...filler(1),
+      ...filler(2),
+      ...filler(3),
+      ...filler(4),
+      ...filler(5),
+      // Set smaller than the body and standing clear, which is what makes it
+      // look like a note. Not *so* small or *so* far clear that it reads as the
+      // scanner's own stamp, which is a different rule with its own thresholds.
+      { text: folio, line: 7, from: 28, scale: 0.85 }
+    ])
+
+  it('takes a bare number off the foot as the folio', () => {
+    const drafted = draftPage(withFootFolio('142'))
+    expect(drafted.furniture.folio).toBe('142')
+    expect(drafted.blocks.some((b) => b.kind === 'footnote')).toBe(false)
+  })
+
+  /**
+   * The negative the real fixtures cannot supply: a lone figure at the foot
+   * whose arithmetic does not land. Every leaf of both real books that carries
+   * one is a genuine signature, so nothing there can tell "a signature" from
+   * "any lone figure at the foot" — and the second would eat numerals out of
+   * the book on every leaf that happens to end in one.
+   */
+  it('leaves a lone figure whose arithmetic does not land', () => {
+    // Folio 50, figure 4: a signature 4 would sit on `sheet × 3 + 1`, and 49
+    // does not divide by 3 at all.
+    const drafted = draftPage(withFootFolio('4'), { expectedFolio: 50 })
+    expect(drafted.furniture.signature).toBeUndefined()
+    expect(drafted.blocks.map((b) => b.text).join(' ')).toContain('4')
+  })
+
+  it('takes one whose arithmetic does land', () => {
+    // Folio 49, figure 4: 48 / 3 = 16, a book gathered in sixteens.
+    const drafted = draftPage(withFootFolio('4'), { expectedFolio: 49 })
+    expect(drafted.furniture.signature).toBe('4')
+  })
+
+  it('still takes a real note at the foot as a note', () => {
+    const drafted = draftPage(
+      words([
+        ...filler(0),
+        ...filler(1),
+        ...filler(2),
+        ...filler(3),
+        ...filler(4),
+        ...filler(5),
+        { text: '*', line: 7, from: 0, scale: 0.85 },
+        { text: 'See', line: 7, from: 2, scale: 0.85 },
+        { text: 'Gibbon,', line: 7, from: 6, scale: 0.85 },
+        { text: 'vol.', line: 7, from: 14, scale: 0.85 },
+        { text: 'ii.', line: 7, from: 19, scale: 0.85 }
+      ])
+    )
+    expect(drafted.blocks.some((b) => b.kind === 'footnote')).toBe(true)
+    expect(drafted.furniture.folio).toBeUndefined()
+  })
+})

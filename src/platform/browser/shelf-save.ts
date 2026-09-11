@@ -20,7 +20,7 @@
  *
  * Browser-only.
  */
-import { scanRefusal, type ShelfConfig } from '@core/sync'
+import { scanRefusal, type ShelfAbout, type ShelfConfig } from '@core/sync'
 import {
   parseBookFile,
   serializeBookFile,
@@ -70,7 +70,17 @@ export interface ShelfPushInput {
  * off the transcriptions and the rulings off the run, so a sheet written down
  * would be a second copy that can disagree with the book.
  */
-function editorialSheets(run: SavedRun): { queries?: string; rulings?: string } {
+/**
+ * The two sheets that go up beside the book.
+ *
+ * Exported because a session driving a headless browser has no shelf token —
+ * and must not be given one, the credential rule being what it is — so it
+ * writes the shelf directory to a checkout instead. That is the same four
+ * files, and they have to be built by this function rather than by a second
+ * one in the driver: two conventions for the same directory agree until the
+ * day one of them changes.
+ */
+export function editorialSheets(run: SavedRun): { queries?: string; rulings?: string } {
   const raised = collectQueries(run.transcriptions)
   const rulings = run.rulings ?? []
   if (raised.length === 0 && rulings.length === 0) return {}
@@ -82,6 +92,31 @@ function editorialSheets(run: SavedRun): { queries?: string; rulings?: string } 
   return {
     ...(raised.length > 0 ? { queries: queriesMarkdown(book, raised, rulings) } : {}),
     ...(rulings.length > 0 ? { rulings: rulingsMarkdown(book, rulings) } : {})
+  }
+}
+
+/**
+ * The few hundred bytes the intake screen reads instead of the whole book.
+ *
+ * Built from the book file rather than from the run, and parsed back out of the
+ * serialized JSON on the way — so a card can never describe a book file that
+ * would not load. One function because the card is a convention: a shelf whose
+ * cards were written two ways would list the same book differently depending on
+ * which door it went up through.
+ */
+export function catalogueCard(key: string, json: string, scanPath: string | null): ShelfAbout {
+  const summary = summarizeBookFile(parseBookFile(json))
+  return {
+    key,
+    fileName: summary.fileName,
+    savedAt: new Date().toISOString(),
+    pageCount: summary.pageCount,
+    notes: summary.notes,
+    corrections: summary.corrections,
+    marked: summary.marked,
+    facts: summary.facts,
+    complete: summary.complete,
+    scanPath
   }
 }
 
@@ -144,18 +179,7 @@ export async function pushBookToShelf(
     config,
     input.key,
     json,
-    {
-      key: input.key,
-      fileName: summary.fileName,
-      savedAt: new Date().toISOString(),
-      pageCount: summary.pageCount,
-      notes: summary.notes,
-      corrections: summary.corrections,
-      marked: summary.marked,
-      facts: summary.facts,
-      complete: summary.complete,
-      scanPath: scan?.path ?? null
-    },
+    catalogueCard(input.key, json, scan?.path ?? null),
     input.what,
     editorialSheets(input.run)
   )

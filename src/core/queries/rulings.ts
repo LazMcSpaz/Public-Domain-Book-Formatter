@@ -39,6 +39,7 @@
  *
  * Pure: no DOM, no I/O.
  */
+import { bookText, type BookDocument } from '@core/assemble'
 import type { EditorialQueryKind } from '@core/transcribe'
 import type { RaisedQuery } from './index'
 
@@ -126,6 +127,38 @@ export function answerFor(query: RaisedQuery, rulings: readonly Ruling[]): Rulin
   )
 }
 
+/**
+ * Where a ruling sits: the leaf and the words, or the class a standing ruling
+ * names. Two rulings with the same target are the same decision made twice.
+ */
+export function rulingTarget(ruling: Ruling): string {
+  return `${ruling.pageIndex ?? 'standing'}:${ruling.quote.trim().toLowerCase()}`
+}
+
+/** Whether two rulings answer the same question. */
+export function sameRuling(a: Ruling, b: Ruling): boolean {
+  return a.pageIndex === b.pageIndex && sameWords(a.quote, b.quote)
+}
+
+/**
+ * The list with this ruling in it, replacing an earlier ruling on the same
+ * query **where that one stood**.
+ *
+ * `withEdit` removes and re-appends, because an edit list is applied in order
+ * and the later one has to win. Rulings are not applied in order — nothing
+ * reads two rulings on one query — so moving one to the end would only make a
+ * diff out of nothing, on a shelf whose whole point is that git keeps every
+ * version. Ruling on a query a second time is the editor changing their mind,
+ * and the later answer is the one that counts.
+ */
+export function withRuling(rulings: readonly Ruling[], ruling: Ruling): Ruling[] {
+  const at = rulings.findIndex((r) => sameRuling(r, ruling))
+  if (at < 0) return [...rulings, ruling]
+  const out = [...rulings]
+  out[at] = ruling
+  return out
+}
+
 /** The queries still waiting on a person. */
 export function outstanding(
   queries: readonly RaisedQuery[],
@@ -153,17 +186,52 @@ export function settled(
  * between deciding and applying is exactly where a book quietly keeps the error
  * its editor is certain was fixed.
  *
- * `body` is the assembled text of the whole book — what `drive.mjs body` hands
- * back. A correction counts as applied when its words appear there and the
- * printed form no longer does.
+ * It takes the **document**, not a string, and asks `bookText` what the book
+ * says. That is not fussiness: the caller used to join `doc.blocks` and call it
+ * the book, which left out every footnote and stripped the emphasis out of the
+ * text, so a correction landing in a note — or one whose wording carried an
+ * `<i>` — was reported outstanding forever. A check that cries wolf is what
+ * stops anyone reading the check, so the rule for what counts as the book lives
+ * in one place and no caller gets to decide it.
+ *
+ * ## Why the comparison is made twice
+ *
+ * `bookText` puts the markup back, and the doc comment there says a ruling's
+ * correction is quoted from those strings. On this book that turned out not to
+ * hold. A ruling is written from the **query sheet**, and a query's quote is
+ * written by whoever raised it — a reader working from a render, in plain
+ * prose. Leaf 285 of *Isis Unveiled* Vol. I was raised as `extinguished on
+ * acount of the desecration` where the book carries `on acount of the
+ * <i>desecration.</i>`, so the ruling was applied, the word was mended, and
+ * the check went on reporting it outstanding because the tags sat inside the
+ * quoted phrase.
+ *
+ * So each side is asked in both notations, and either answer counts. What that
+ * cannot see is a ruling **about** the markup — "set this title in italic" —
+ * whose two forms are the same words and differ only in tags: stripped, its
+ * correction equals its quote and every such ruling would read as already
+ * applied. That case is named rather than lost, and compared with the tags
+ * left in.
  */
-export function unapplied(rulings: readonly Ruling[], body: string): Ruling[] {
-  const text = body.toLowerCase()
+export function unapplied(rulings: readonly Ruling[], book: BookDocument): Ruling[] {
+  const marked = bookText(book).toLowerCase()
+  const plain = stripInlineMarkup(marked)
   return rulings.filter((ruling) => {
     if (ruling.decision !== 'corrected') return false
     const wanted = (ruling.correction ?? '').trim().toLowerCase()
     if (wanted === '') return true
-    if (!text.includes(wanted)) return true
+    const quote = ruling.quote.trim().toLowerCase()
+
+    // A ruling whose two forms are the same words once the tags come off is a
+    // ruling about the emphasis and nothing else. Stripping would make it
+    // compare equal to itself, so it is read with the markup left in.
+    const aboutMarkupOnly = stripInlineMarkup(wanted) === stripInlineMarkup(quote)
+    const has = (needle: string): boolean =>
+      aboutMarkupOnly
+        ? marked.includes(needle)
+        : marked.includes(needle) || plain.includes(stripInlineMarkup(needle))
+
+    if (!has(wanted)) return true
 
     // The printed form still being in the book usually means the correction
     // half-landed — one occurrence mended and another missed. It means nothing
@@ -171,9 +239,21 @@ export function unapplied(rulings: readonly Ruling[], body: string): Ruling[] {
     // correction that only adds something does: closing a quotation turns
     // `he awoke.` into `he awoke.”`, and the first will always be inside the
     // second. Asking then reports every such ruling as unapplied forever.
-    if (wanted.includes(ruling.quote.trim().toLowerCase())) return false
-    return text.includes(ruling.quote.trim().toLowerCase())
+    if (wanted.includes(quote)) return false
+    return has(quote)
   })
+}
+
+/**
+ * The inline notation removed, leaving the words.
+ *
+ * Only the tags the book's own notation uses — `parseInlineMarkup` reads `<i>`,
+ * `<em>`, `<b>` and `<strong>` and nothing else, so nothing else is taken out.
+ * A stray `<` in the text stays where it is rather than eating the rest of the
+ * line, which a general tag-stripper would do to a note quoting an inequality.
+ */
+function stripInlineMarkup(text: string): string {
+  return text.replace(/<\/?(?:i|em|b|strong)>/gi, '')
 }
 
 const HEADING: Record<RulingDecision, string> = {
@@ -256,4 +336,87 @@ export function toMention(rulings: readonly Ruling[]): {
     kept: wanted.filter((r) => r.decision !== 'corrected'),
     corrected: wanted.filter((r) => r.decision === 'corrected')
   }
+}
+
+/**
+ * Every query in one place with what became of it — the sheet an independent
+ * reader is handed.
+ *
+ * `queries.md` empties as it is answered and `rulings.md` only ever grows, and
+ * between them a question that was settled is on one sheet while the question
+ * it answered is off the other. That is right for working through them and
+ * wrong for checking the work: somebody auditing an edition wants **every**
+ * query the reading raised, in book order, with what the page says, what was
+ * decided, what it now reads, and the reasoning — without holding two files
+ * open and matching them up by hand.
+ *
+ * Derived from the run, so it cannot drift from the book the way a written
+ * summary would. What it deliberately does *not* do is judge: it puts the
+ * decision beside the words it was made about and leaves the reading to a
+ * person.
+ */
+export function reviewMarkdown(
+  book: { title: string; fileName: string },
+  raised: readonly RaisedQuery[],
+  rulings: readonly Ruling[]
+): string {
+  const byLeaf = [...raised].sort((a, b) => a.pageIndex - b.pageIndex)
+  const settledCount = byLeaf.filter((q) => answerFor(q, rulings) !== null).length
+
+  const lines: string[] = [
+    `# Every editorial query, and what became of it — ${book.title}`,
+    '',
+    'For review. Each query is a place the reading found where being faithful to',
+    'the 1877 setting and being correct pull apart. **The reading never decided',
+    'one of these**; it transcribed the page as printed and raised the question.',
+    'What is decided here was decided by the editor, or by a ruling the editor',
+    'made on a case like it — and where that is so, the reasoning says which.',
+    '',
+    `${byLeaf.length} raised, ${settledCount} settled, ${byLeaf.length - settledCount} still waiting.`,
+    ''
+  ]
+
+  if (byLeaf.length === 0) {
+    lines.push('Nothing was raised.', '')
+    return lines.join('\n')
+  }
+
+  lines.push(
+    '| Leaf | As printed | Decided | Now reads | Why it was raised | Why it was decided that way |',
+    '| ---: | --- | --- | --- | --- | --- |'
+  )
+  for (const query of byLeaf) {
+    const ruling = answerFor(query, rulings)
+    const decision = ruling === null ? '**waiting**' : HEADING[ruling.decision]
+    const reads =
+      ruling?.decision === 'corrected' && ruling.correction ? `\`${cell(ruling.correction)}\`` : '—'
+    const standing = ruling !== null && ruling.pageIndex === null ? ' *(standing ruling)*' : ''
+    lines.push(
+      `| ${query.pageIndex} | \`${cell(query.quote)}\` | ${decision}${standing} | ${reads} | ` +
+        `${cell(query.why)} | ${cell(ruling?.because ?? '')} |`
+    )
+  }
+  lines.push('')
+
+  const standing = rulings.filter((r) => r.pageIndex === null)
+  if (standing.length > 0) {
+    lines.push(
+      '## Standing rulings',
+      '',
+      'Decisions that answer a class rather than a spot, listed because they',
+      'settle queries above without appearing against any one leaf.',
+      '',
+      '| Covers | Decided | Why |',
+      '| --- | --- | --- |'
+    )
+    for (const ruling of standing) {
+      lines.push(
+        `| \`${cell((ruling.covers ?? [ruling.quote]).join('`, `'))}\` | ` +
+          `${HEADING[ruling.decision]} | ${cell(ruling.because ?? '')} |`
+      )
+    }
+    lines.push('')
+  }
+
+  return lines.join('\n')
 }

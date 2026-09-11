@@ -130,6 +130,37 @@ describe('a word or a phrase printed twice', () => {
     expect(found[0]!.found).toMatch(/the\s+the/i)
   })
 
+  /**
+   * JavaScript's `\b` is defined against `[A-Za-z0-9_]` and the `u` flag does
+   * not widen it, so a boundary falls inside every word this book spells with a
+   * ligature. Both halves of that were live on one page of *Isis Unveiled*.
+   */
+  it('reports a doubled word that opens with a ligature or an accent', () => {
+    for (const line of [
+      'Virgil tells it in the Æneid Æneid of his later years.',
+      'The œuvre œuvre of the alchemists.',
+      'An élan élan the schoolmen never named.'
+    ]) {
+      const found = checkConsistency(doc([block(line)])).filter((f) => f.kind === 'doubled-word')
+      expect(found, line).toHaveLength(1)
+    }
+  })
+
+  /**
+   * The other half, and the reason the boundary is spelled out rather than
+   * merely widened: `Amphitheatri Sapientiæ Æternæ` was reported as the doubled
+   * word `æ Æ`, the trailing ligature of one word matching the leading ligature
+   * of the next across a boundary that should never have been there.
+   */
+  it('does not read a trailing ligature and a leading one as a doubled word', () => {
+    expect(
+      kinds(doc([block('Khunrath, on a plate of his Amphitheatri Sapientiæ Æternæ, sets four.')]))
+    ).not.toContain('doubled-word')
+    expect(kinds(doc([block('He read the Timæus Ægyptian scholars once prized.')]))).not.toContain(
+      'doubled-word'
+    )
+  })
+
   it('leaves the words English really does double', () => {
     expect(kinds(doc([block('He knew that that was the whole of it.')]))).not.toContain(
       'doubled-word'
@@ -177,6 +208,109 @@ describe('a quotation that never closes', () => {
       doc([
         block('He said, “All occultists know that man has seven senses.'),
         block('“And the additional two are known to few of them.”')
+      ])
+    ).filter((f) => f.kind === 'unclosed-quote')
+    expect(found).toHaveLength(0)
+  })
+
+  /**
+   * The other way a quotation crosses a paragraph, and the one this book uses:
+   * no mark at the break at all, one closing mark at the end. Of 30 findings
+   * measured over 422 leaves of *Isis Unveiled*, not one had a next block that
+   * opened with a mark — so the convention the test above exempts never fired
+   * on this book, while a fifth of what the check reported was this.
+   */
+  it('leaves a quotation that runs on and closes in a later paragraph', () => {
+    const found = checkConsistency(
+      doc([
+        block('He said, “All occultists know that man has seven senses.'),
+        block('And the additional two are known to few of them.”')
+      ])
+    ).filter((f) => f.kind === 'unclosed-quote')
+    expect(found).toHaveLength(0)
+  })
+
+  /**
+   * The bound is the point rather than a tuning. A quotation that has crossed
+   * three paragraphs with no mark of any kind in it is better explained by a
+   * lost mark than by a very long run-on, and saying so is what the check is
+   * for. On the finished volume every run-on closed within two.
+   */
+  it('reports one that has run on too far to be a run-on', () => {
+    const found = checkConsistency(
+      doc([
+        block('He said, “All occultists know that man has seven senses.'),
+        block('A paragraph with no mark in it at all.'),
+        block('A second paragraph with no mark in it at all.'),
+        block('A third paragraph with no mark in it at all.'),
+        block('And the additional two are known to few of them.”')
+      ])
+    ).filter((f) => f.kind === 'unclosed-quote')
+    expect(found).toHaveLength(1)
+  })
+
+  /**
+   * Which opening is reported, rather than whichever happened to be last. A
+   * block with a lost mark early and two sound quotations after it was putting
+   * the last of them on the sheet — a passage that closes perfectly well two
+   * words later, and tells a reader nothing about where to look.
+   */
+  it('points at the opening that is unmatched, not the last one', () => {
+    const found = checkConsistency(
+      doc([
+        block(
+          'He began, “this one never closes. Then “a sound quotation,” and ' +
+            '“another sound one,” and the paragraph ends.'
+        ),
+        block('An ordinary paragraph.')
+      ])
+    ).filter((f) => f.kind === 'unclosed-quote')
+    expect(found).toHaveLength(1)
+    expect(found[0]!.found).toContain('this one never closes')
+  })
+
+  /**
+   * Printing convention opens **every line** of quoted verse and closes only
+   * the last, so a verse block carries several opening marks and often no
+   * closing one at all. Measured over the first 176 leaves of *Isis Unveiled*,
+   * this check produced 21 findings and every one was a verse block or a
+   * table's ditto column — 21 lines on a sheet somebody has to read, with
+   * nothing in them.
+   *
+   * An exemption by block *kind* rather than a threshold, which is why it is
+   * safe: it is a fact about what verse is, not a guess about how much noise to
+   * tolerate.
+   */
+  it('says nothing about quoted verse, which opens every line', () => {
+    // The shape the real book produces: a verse line that opens a mark and
+    // closes nothing, with ordinary prose after it. Leaf 96 of *Isis Unveiled*
+    // is exactly this.
+    const found = checkConsistency(
+      doc([
+        block('“ If ancestry can be in aught believed,', 'verse'),
+        block('The next paragraph begins in the ordinary way.')
+      ])
+    ).filter((f) => f.kind === 'unclosed-quote')
+    expect(found).toHaveLength(0)
+  })
+
+  /** The same line as a paragraph is still reported — the exemption is by kind. */
+  it('still reports the same line when it is prose', () => {
+    const found = checkConsistency(
+      doc([
+        block('“ If ancestry can be in aught believed,'),
+        block('The next paragraph begins in the ordinary way.')
+      ])
+    ).filter((f) => f.kind === 'unclosed-quote')
+    expect(found).toHaveLength(1)
+  })
+
+  /** In a column of figures a repeated `“` is the ditto mark, not a quotation. */
+  it('says nothing about a table using the mark as a ditto', () => {
+    const found = checkConsistency(
+      doc([
+        block('1st.—Satya-yug | 1,728,000 years.\n2d.—Trêtya yug | 1,296,000 “', 'table'),
+        block('The next paragraph begins in the ordinary way.')
       ])
     ).filter((f) => f.kind === 'unclosed-quote')
     expect(found).toHaveLength(0)

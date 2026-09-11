@@ -59,8 +59,24 @@ export interface ChoiceOption {
 export interface ChoiceQuestion extends QuestionBase {
   type: 'choice'
   options: ChoiceOption[]
-  /** Pre-selected recommendation — the user usually just confirms. */
-  defaultValue: string
+  /**
+   * Pre-selected recommendation — the user usually just confirms.
+   *
+   * **Optional, because one gate must not recommend.** Every other question
+   * here arrives with the app's best answer already chosen, which is the design
+   * philosophy working: the app interviews, and the user confirms. The query
+   * gate is the exception and the reason is the standing rule the whole
+   * `queries` module is built on — *a suggestion beside a question is an answer
+   * in all but name, and the answer is the editor's*. A reader's query is
+   * forbidden a proposed fix for exactly this reason; a screen that arrives
+   * with one of the assistant's options already filled in would give it back.
+   *
+   * So a choice may decline to recommend. Left undefined, `defaultAnswers`
+   * seeds nothing, and with `required` the step cannot be completed until a
+   * person has actually chosen. The editor ruled on this directly rather than
+   * it being inferred: offer the options and the reasoning, choose nothing.
+   */
+  defaultValue?: string
   multi?: false
 }
 
@@ -280,6 +296,10 @@ export function defaultAnswers(questions: readonly Question[]): Answers {
   for (const q of questions) {
     switch (q.type) {
       case 'choice':
+        // A choice that declines to recommend seeds nothing, so `required`
+        // holds the step until a person chooses. See `ChoiceQuestion`.
+        if (q.defaultValue !== undefined) out[q.id] = q.defaultValue
+        break
       case 'text':
         out[q.id] = q.defaultValue
         break

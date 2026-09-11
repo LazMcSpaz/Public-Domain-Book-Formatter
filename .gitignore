@@ -5,6 +5,19 @@ screenshots
 .drive-profile
 screenshots/
 
+# What a driving session leaves lying in the checkout. All of it is derived —
+# `drive.mjs save` writes the whole book, `consistency` and `crops` write their
+# findings — and all of it has a real home elsewhere: the book file belongs on
+# the shelf under `books/<slug>/book.json`, and a findings file is read once and
+# thrown away. Ignored rather than tidied by hand because `git add -A` is how a
+# session commits, and `book.out.json` is two megabytes: it rode into this
+# repository on one such commit and was re-committed on the four after it,
+# where git now keeps every one of those versions for good. That is the same
+# rule the scans note below states, learned again the expensive way.
+book.out.json
+consistency.json
+findings.json
+
 # Scans dropped into `public/` so the dev server can serve them — scratch for a
 # driving session, never repository content. A scan belongs on the shelf under
 # its own SHA-256, written once; git keeps every version of everything forever,
