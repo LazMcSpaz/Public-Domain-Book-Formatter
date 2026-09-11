@@ -2760,13 +2760,17 @@ await page.evaluate(async (repo) => {
 }, REPO)
 await page.goto(URL_BASE, { waitUntil: 'networkidle' })
 await page.waitForTimeout(1200)
-const runsOnIntake = await page
-  .locator('.q')
-  .filter({ hasText: 'already paid to have read' })
-  .count()
+// The intake asked about saved transcriptions as a question — "books you have
+// already paid to have read" — until the shelf became the front page and they
+// became a card on it. The wording went and this assertion did not, so it has
+// been checking for prose the app no longer has. The claim worth holding it to
+// is unchanged: a book already read is named here, and there is a way back into
+// it.
+const runsOnIntake = await page.locator('.q').filter({ hasText: 'On this device' }).count()
 const namedOnIntake = await page.locator('.notes li').filter({ hasText: '.pdf' }).count()
 await shot('02b-intake-saved-runs')
-if (runsOnIntake !== 1) throw new Error('Intake does not mention the saved runs')
+if (runsOnIntake !== 1) throw new Error('Intake does not name the books saved on this device')
+if (namedOnIntake < 1) throw new Error('Intake names no saved transcription')
 console.log(`  → intake names ${namedOnIntake} saved transcription(s) after a reload`)
 
 // And the one that matters: press it, and the book opens with no file picker.
@@ -3059,11 +3063,17 @@ const pushed = await page.evaluate(
 await page.goto(URL_BASE, { waitUntil: 'networkidle' })
 await page.waitForSelector('.drop', { timeout: 30000 })
 await page.waitForTimeout(1200)
+// The shelf was a list under the intake headed "Books on your shelf" until it
+// became the front page, at which point it became `.shelf` and a card per book.
+// The assertion did not move with it, so it has been reading an empty string
+// out of a `.catch` and calling the shelf unlisted. What is worth holding the
+// screen to is that the shelf is named *and* has a book on it, which the old
+// wording could not tell apart from a heading over nothing.
 const shelfListed = await page
-  .locator('.q')
-  .filter({ hasText: 'Books on your shelf' })
+  .locator('.shelf')
   .innerText()
   .catch(() => '')
+const shelfCards = await page.locator('.shelf .shelf-book').count()
 await shot('12b-shelf-intake')
 
 const pulled = await page.evaluate(
@@ -3455,7 +3465,7 @@ const finalChecks = [
     [...shelfFiles.keys()].some((p) => /^books\/.+\/about\.json$/.test(p))
   ],
   ['the scan is written once, not once per save', pushed.scanUploadedTwice === false],
-  ['the shelf is listed on the intake screen', /Books on your shelf/.test(shelfListed)],
+  ['the shelf is listed on the intake screen', /Your shelf/.test(shelfListed) && shelfCards > 0],
   ['the transcription comes back', pulled?.pages === 1],
   ['the corrections come back', pulled?.corrections === 1],
   ['the fact bank comes back', pulled?.facts === 1],

@@ -1726,8 +1726,21 @@ export function App(): JSX.Element {
         if (link.slug && !openedFromLink.current) {
           const wanted = books.find((b) => shelfSlug(b.key) === link.slug)
           openedFromLink.current = true
-          if (wanted) void openFromShelf(wanted)
-          else setShelfNote(`This link names a book (${link.slug}) that is not on the shelf.`)
+          // A book whose scan is not on the shelf cannot be opened the full
+          // way: the scan is what `openFromShelf` fetches and recon is what
+          // lands the flow, so without one it stores the book and asks for the
+          // file. A link about a *decision* still has to work for such a book,
+          // and every decision the query gate asks can be made from the words —
+          // the crop of the leaf is a help, not a requirement. Vol. I of *Isis
+          // Unveiled* is exactly this case: 357 MB of photographed leaves, too
+          // large for the shelf, with seventy-seven queries waiting on it.
+          if (!wanted) {
+            setShelfNote(`This link names a book (${link.slug}) that is not on the shelf.`)
+          } else if (wanted.scanPath) {
+            void openFromShelf(wanted)
+          } else {
+            void readFromShelf(wanted)
+          }
         }
       } catch {
         // A shelf that cannot be read is not a reason to fail the intake
@@ -2028,6 +2041,13 @@ export function App(): JSX.Element {
         if (file.notesCheckpoint) await saveAnnotationCheckpoint(file.notesCheckpoint)
         setSavedRuns(await listRuns())
 
+        // Whether the link that opened this book asked for the query gate.
+        // Read and cleared here, because this route is the whole of the landing
+        // for a book with no scan — the effect below waits on `savedRun`, which
+        // only a route that fetches the file and runs recon ever sets.
+        const wantsQueries = landAt.current === 'gate-queries'
+        landAt.current = null
+
         // No `fileDataRef`: there is deliberately no file behind this session,
         // and anything that reaches for pixels has to find nothing rather than
         // find the wrong book's.
@@ -2069,20 +2089,27 @@ export function App(): JSX.Element {
             'transcribe',
             'gate-uncertainties',
             'gate-structure',
-            // The queries *could* be ruled on here — a ruling needs the words
-            // and the reasoning, and the crop of the leaf is a help rather
-            // than a requirement. But this route promises the reading view and
-            // must land there, so the gate is stepped past and reached the
-            // other way: `link review` opens the book with its scan, which is
-            // the door that gate was built for.
-            'gate-queries'
+            // The queries *can* be ruled on here — a ruling needs the words and
+            // the reasoning, and the crop of the leaf is a help rather than a
+            // requirement. But this route promises the reading view and must
+            // land there, so the gate is stepped past unless the link that
+            // opened the book asked for it by name. The rail is a progress
+            // indicator and not a menu, so there is no way back to a gate
+            // marked done: a link is the door, and it has to work for a book
+            // whose scan is too large for the shelf.
+            ...(wantsQueries ? [] : (['gate-queries'] as const))
           ]
         }))
         chooseProofView('reading')
         setShelfNote(
-          `“${file.run.fileName}” is open to read. The scan was not fetched, so “Check against ` +
-            'the scan” has no pixels on this device — leave a comment on a passage instead.' +
-            (lost.length > 0 ? lostNote(lost) : '')
+          wantsQueries
+            ? `“${file.run.fileName}” is open at the decisions waiting on you. The scan was not ` +
+                'fetched, so each query shows the words as printed rather than the leaf.' +
+                (lost.length > 0 ? lostNote(lost) : '')
+            : `“${file.run.fileName}” is open to read. The scan was not fetched, so “Check ` +
+                'against the scan” has no pixels on this device — leave a comment on a passage ' +
+                'instead.' +
+                (lost.length > 0 ? lostNote(lost) : '')
         )
       } catch (err) {
         setShelfNote(

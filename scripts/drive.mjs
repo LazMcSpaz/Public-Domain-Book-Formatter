@@ -2862,6 +2862,11 @@ async function serve() {
           const run = await runStore.loadRun(newest.key)
           const slug = shelf.shelfSlug(newest.key)
           const raised = run ? queriesMod.collectQueries(run.transcriptions) : []
+          // What is *waiting*, not what was raised. This said 109 for a book
+          // with 32 of them already ruled on — a number that is wrong in the
+          // direction that stops anybody looking, since a sheet that never goes
+          // down reads as a sheet nobody is working through.
+          const waiting = queriesMod.outstanding(raised, run?.rulings ?? [])
           return {
             url: wizard.deepLink(base, {
               slug,
@@ -2870,7 +2875,8 @@ async function serve() {
             }),
             book: run?.fileName ?? newest.fileName,
             slug,
-            queriesWaiting: raised.length,
+            queriesRaised: raised.length,
+            queriesWaiting: waiting.length,
             // Said out loud because a link to a book the shelf has never seen
             // opens the intake screen and looks broken.
             onTheShelf:
