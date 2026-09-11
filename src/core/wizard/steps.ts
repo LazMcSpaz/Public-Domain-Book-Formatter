@@ -1279,9 +1279,12 @@ const gateStructure: Step = {
  * It sits before the proof step because a query is about what the *book* says,
  * and proofing text whose readings are still in question is work done twice.
  *
- * A gate with nothing waiting asks nothing and is walked through, which is the
- * ordinary behaviour of every gate here — a book whose queries are all ruled
- * on, or that raised none, should not be stopped to be told so.
+ * A gate with nothing waiting asks nothing, and the shell walks it through
+ * without a click — a book whose queries are all ruled on, or that raised none,
+ * should not be stopped to be told so, and an EPUB raises none by construction.
+ * Done there rather than here, in `canEnter`: a step that cannot be entered is
+ * a step `completed` never names, and the proof step is gated on this one
+ * having been passed.
  */
 const gateQueries: Step = {
   id: 'gate-queries',

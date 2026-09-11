@@ -15,6 +15,8 @@ import { assembleBook } from '@core/assemble'
 import { describeProfile, profileFromAnswers, type DesignAnswers } from '@core/design'
 import { buildExport, editionFromAnswers } from '@core/export'
 import { applyEdits, type BookEdit } from '@core/edits'
+import { collectQueries } from '@core/queries'
+import type { PageTranscription } from '@core/transcribe'
 import { BookEditor } from './BookEditor'
 import { QuestionView } from './QuestionView'
 import { ExportResult } from './ExportResult'
@@ -34,7 +36,7 @@ const SAMPLE_PROSE = [
 
 /** A book far enough along that every gate has something real to show. */
 function sampleState(stepId: StepId) {
-  const document = assembleBook([
+  const pages: PageTranscription[] = [
     {
       pageIndex: 0,
       role: 'title-page',
@@ -63,9 +65,26 @@ function sampleState(stepId: StepId) {
         { kind: 'paragraph', text: SAMPLE_PROSE }
       ],
       uncertain: [],
-      furniture: {}
+      furniture: {},
+      // Two of the three shapes a query takes, so the gate previews with
+      // something a person would actually have to think about rather than with
+      // a placeholder. Neither carries a proposed fix, because a query cannot:
+      // the answer is the editor's.
+      queries: [
+        {
+          kind: 'printers-error',
+          quote: 'gathered under a waxing moone',
+          why: 'The 1662 setting has “moone” here and “moon” four lines down. Either is the compositor’s, and this edition has to pick one or keep both.'
+        },
+        {
+          kind: 'inconsistent',
+          quote: 'lib. ii.',
+          why: 'The note cites Croll’s second book; the passage it hangs on describes an operation Croll sets out in the third. One of the two numbers is wrong and the page does not say which.'
+        }
+      ]
     }
-  ])
+  ]
+  const document = assembleBook(pages)
 
   // Every step before the one being previewed counts as done.
   const upto = STEPS.findIndex((s) => s.id === stepId)
@@ -90,6 +109,10 @@ function sampleState(stepId: StepId) {
     },
     classifications: [{ pageIndex: 0, role: 'title-page' as const, selfReportedConfidence: 0 }],
     document,
+    // Read off the transcriptions, exactly as the app does — a preview built
+    // from a second, hand-written list would show a gate that agrees with
+    // nothing.
+    queries: collectQueries(pages),
     completed
   }
 }

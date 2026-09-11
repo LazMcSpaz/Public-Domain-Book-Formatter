@@ -2302,6 +2302,25 @@ export function App(): JSX.Element {
   }, [shelfConfig])
 
   /**
+   * A gate with nothing to ask must not stop anybody.
+   *
+   * This is the one gate that is routinely empty. An EPUB raises no queries at
+   * all — nothing read it off a page — and a book whose queries have all been
+   * ruled on should not be stopped to be told so. Left to the ordinary
+   * behaviour it shows a heading, a blurb and a Continue button, which is a
+   * screen that exists only to be dismissed.
+   *
+   * Walked through here rather than refused by `canEnter`, because a step that
+   * cannot be entered is also a step `completed` never names — and the proof
+   * step is gated on this one having been passed, so the flow would come back
+   * here the moment everything else was done.
+   */
+  useEffect(() => {
+    if (step.id !== 'gate-queries' || questions.length > 0) return
+    complete({ rulings: [...rulingsRef.current] })
+  }, [step.id, questions.length, complete])
+
+  /**
    * File what the editor has just ruled — on this device, and on the shelf.
    *
    * Called on every press of Next at the query gate, which is what the editor

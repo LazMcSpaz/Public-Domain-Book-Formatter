@@ -1647,6 +1647,17 @@ mark.claim {
 .q-row.evidence-led .fields {
   flex: 0 1 clamp(220px, 26%, 320px);
 }
+/*
+ * A short passage — a query's quoted phrase — keeps the `readable` styling and
+ * loses the wider half. Without this it took `flex: 3` against options that
+ * had `flex: 1`, so the three decisions squeezed into a column narrow enough to
+ * break each of their descriptions over five lines, beside a box holding six
+ * words and a great deal of nothing.
+ */
+.q-row:not(.evidence-led) .q-evidence.readable {
+  flex: 0 1 clamp(200px, 34%, 380px);
+}
+
 .q-evidence.readable {
   flex: 3;
   min-width: 0;

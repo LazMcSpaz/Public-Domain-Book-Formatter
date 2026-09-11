@@ -7,6 +7,7 @@ import {
   rulingsMarkdown,
   reviewMarkdown,
   toMention,
+  withRuling,
   queriesMarkdown,
   type RaisedQuery,
   type Ruling
@@ -551,5 +552,61 @@ describe('the review sheet', () => {
     expect(reviewMarkdown({ title: 'A', fileName: 'a.pdf' }, [], [])).toContain(
       'Nothing was raised'
     )
+  })
+})
+
+/**
+ * Ruling on a query a second time.
+ *
+ * The list is what the shelf holds and what `answerFor` reads, so a duplicate
+ * would make the answer depend on which one was looked at first — and appending
+ * rather than replacing would make a diff out of nothing on a shelf whose whole
+ * point is that git keeps every version.
+ */
+describe('the editor changing their mind', () => {
+  const kept: Ruling = {
+    pageIndex: 285,
+    quote: 'on acount of the desecration',
+    kind: 'printers-error',
+    decision: 'as-printed',
+    decidedOn: '2026-09-01'
+  }
+
+  it('replaces the earlier ruling where it stood', () => {
+    const others: Ruling = { ...kept, pageIndex: 400, quote: 'elsewhere' }
+    const mended: Ruling = {
+      ...kept,
+      decision: 'corrected',
+      correction: 'on account of the desecration',
+      decidedOn: '2026-09-10'
+    }
+    const out = withRuling([kept, others], mended)
+    expect(out).toHaveLength(2)
+    expect(out[0]).toEqual(mended)
+    expect(out[1]).toEqual(others)
+  })
+
+  it('appends one that answers a query nothing has answered', () => {
+    const fresh: Ruling = { ...kept, pageIndex: 12, quote: 'belleves' }
+    expect(withRuling([kept], fresh)).toEqual([kept, fresh])
+  })
+
+  /**
+   * The same query written with different spacing or case is the same query:
+   * a quote is typed by whoever raised it, and `answerFor` already matches on
+   * the trimmed lower-cased words. If this did not, the list would grow a
+   * second answer that `answerFor` would then pick between arbitrarily.
+   */
+  it('knows the same query through a difference in case or spacing', () => {
+    const same: Ruling = { ...kept, quote: '  On Acount Of The Desecration ', decision: 'noted' }
+    const out = withRuling([kept], same)
+    expect(out).toHaveLength(1)
+    expect(out[0]!.decision).toBe('noted')
+  })
+
+  /** A standing ruling names no leaf, so it is never confused with one that does. */
+  it('does not mistake a standing ruling for one on a leaf', () => {
+    const standing: Ruling = { ...kept, pageIndex: null }
+    expect(withRuling([kept], standing)).toHaveLength(2)
   })
 })

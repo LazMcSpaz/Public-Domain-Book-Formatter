@@ -692,7 +692,27 @@ const seeded = await page.evaluate(
               : [])
           ],
           uncertain: [],
-          furniture: {}
+          furniture: {},
+          // Two decisions the reading refused to take, so the query gate has
+          // something real to be worked through. Neither carries a proposed
+          // fix, because a query cannot: the answer is the editor's.
+          ...(i === 2 || i === 4
+            ? {
+                queries: [
+                  i === 2
+                    ? {
+                        kind: 'printers-error',
+                        quote: `Restored page ${i + 1}.`,
+                        why: 'The compositor set “Restored” where the running head has “Restor’d”. Either is his, and this edition has to pick one or keep both.'
+                      }
+                    : {
+                        kind: 'inconsistent',
+                        quote: `Restored page ${i + 1}.`,
+                        why: 'This leaf numbers itself five and the one before it numbers itself five as well. One of the two is wrong and the page does not say which.'
+                      }
+                ]
+              }
+            : {})
         })),
         failures: [],
         usage: { inputTokens: 1000, outputTokens: 2000, cacheReadTokens: 0 },
@@ -966,6 +986,59 @@ await shot('05c-gate-structure-illustrations')
 await page.locator('.actions button.primary').first().click()
 await page.waitForTimeout(4000)
 const afterStructure = await page.locator('.rail li.active .label').innerText()
+
+// --- the queries ------------------------------------------------------------
+// The decisions the reading raised and refused to take, one to a screen with
+// the leaf beside each. What has to be true here is not how it looks: it is
+// that pressing Next *files the ruling* — on this device and, where a shelf is
+// connected, on the shelf. The editor asked for that by name, because
+// seventy-nine decisions is several sittings and a sitting kept only at the end
+// is a sitting a locked phone can take.
+console.log('5c1. the queries, one decision at a time')
+await page.waitForSelector('.q', { timeout: 30000 })
+await shot('05c1-gate-queries')
+
+// One query to a screen. The fixture raises two, so the pager has a Next.
+const queryScreens = await page.locator('.q').count()
+const queryPager = await page.locator('.pager').count()
+
+// Rule the first: keep it as printed, with a reason, and press Next.
+await page.locator('.opt', { hasText: 'Keep it as printed' }).first().click()
+await page
+  .locator('.q')
+  .filter({ hasText: 'in your own words' })
+  .locator('textarea')
+  .first()
+  .fill('The spelling mix is the book’s own and this edition keeps it.')
+const nextLeaf = page.locator('.pager button', { hasText: /next/i }).first()
+const hasNext = (await nextLeaf.count()) > 0
+if (hasNext) {
+  await nextLeaf.click()
+  await page.waitForTimeout(1500)
+}
+await shot('05c1a-gate-queries-ruled')
+
+// The claim to check: the ruling is in the *stored run*, not only in the tab.
+// Read out of IndexedDB rather than off the screen, because an indicator that
+// says "saved" is exactly what a save that did not happen also says.
+const ruledOnDevice = await page.evaluate(async () => {
+  const open = indexedDB.open('pdbf')
+  const db = await new Promise((res, rej) => {
+    open.onsuccess = () => res(open.result)
+    open.onerror = () => rej(open.error)
+  })
+  if (!db.objectStoreNames.contains('runs')) return 0
+  const all = await new Promise((res) => {
+    const req = db.transaction('runs').objectStore('runs').getAll()
+    req.onsuccess = () => res(req.result ?? [])
+    req.onerror = () => res([])
+  })
+  return all.reduce((n, r) => n + (r?.rulings?.length ?? 0), 0)
+})
+
+await page.locator('.actions button.primary').first().click()
+await page.waitForTimeout(3000)
+const afterQueries = await page.locator('.rail li.active .label').innerText()
 
 // --- proofreading -----------------------------------------------------------
 // The one step with no questions: the scan on one side, what was read off it on
@@ -1958,6 +2031,10 @@ const advanceTo = async (label) => {
 await advanceTo('Transcribing')
 await advanceTo('Check the uncertain spots')
 await advanceTo('Confirm the structure')
+// The query gate raises itself only when something is waiting: book two is the
+// same stub, so it has the same two queries and stops here. A book with none
+// walks through without a click and this would be one step too many.
+await advanceTo('Decisions waiting on you')
 await advanceTo('Read it through')
 
 // The notes gate on book two: the editor is the same person, so the pen name
@@ -3157,6 +3234,10 @@ console.log(
 console.log(`  a verdict is written to storage as it is made: ${verdictSaved}`)
 console.log(`  illustration candidates: ${foundIllustrations} (crops shown: ${illustrationCrops})`)
 console.log(`  advanced past the structure gate to: ${afterStructure}`)
+console.log(
+  `  the query gate: ${queryScreens} question(s), pager: ${queryPager > 0}, ` +
+    `ruling(s) in the stored run after one Next: ${ruledOnDevice}, then: ${afterQueries}`
+)
 console.log(`  proof sheet: ${proofBoxes} editable block(s), ${proofScan} scan(s) beside them`)
 console.log(
   `  the galley: ${galleyPassages} passage(s), ${galleyItalics} italic run(s) set as type, ` +
@@ -3215,6 +3296,15 @@ if (pagedCards >= allAtOnce) throw new Error('The phone view is not paging the g
 if (continueMidway !== 0) throw new Error('The continue button is reachable before the last leaf')
 if (!cursorKept) throw new Error('Moving through the gate does not record where you got to')
 if (!pagerInView) throw new Error('The pager is off-screen on a phone')
+
+// The whole reason the gate exists. A ruling that reached nothing but the tab
+// is an evening of judgement one locked phone away from being gone, and an
+// indicator saying "saved" is exactly what a save that did not happen also
+// says — so this is read out of the store rather than off the screen.
+if (ruledOnDevice < 1) {
+  throw new Error('A ruling made at the query gate did not reach the stored run')
+}
+if (queryPager === 0) throw new Error('The query gate is not paged one decision to a screen')
 console.log(`  and after closing the tab it reopens on: "${resumedAt.replace(/\s+/g, ' ')}"`)
 // Compared against the leaf actually left on, not a literal. Which page sits at
 // a given place in the gate depends on which leaves got flagged, and that
