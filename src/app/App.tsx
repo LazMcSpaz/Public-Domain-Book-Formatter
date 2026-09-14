@@ -131,6 +131,7 @@ import {
 import { newSavedProfile, readingStyle, styleQuestions, type SavedStyleProfile } from '@core/style'
 import {
   entriesBetween,
+  queryCropPath,
   summarize as summarizeOutbox,
   type OutboxSummary,
   type ShelfAbout,
@@ -312,6 +313,24 @@ export function App(): JSX.Element {
 
   /** Which leaf each query sits on, by the key its questions are grouped under. */
   const queryPagesRef = useRef<Map<string, number>>(new Map())
+
+  /**
+   * Crops fetched off the shelf, by path.
+   *
+   * For a book whose scan is too large to keep — 357 MB of photographed leaves
+   * is past this shelf's refusal and past GitHub's per-file limit both — the
+   * crops were cut in advance by a session that had the paper. They are fetched
+   * one at a time, as the gate reaches each query, because the whole point of
+   * the route that opens such a book is that it does not pull the pixels down.
+   *
+   * The Blob is kept beside the URL rather than the URL alone: the lightbox
+   * revokes what it is handed, so it gets a second URL minted from the same
+   * bytes, and the one the gate is showing survives being looked at.
+   */
+  const shelfCropsRef = useRef<Map<string, { blob: Blob; url: string }>>(new Map())
+  const cropsInFlightRef = useRef<Set<string>>(new Set())
+  /** Bumped when a crop lands, because a ref changing renders nothing. */
+  const [cropsFetched, setCropsFetched] = useState(0)
   const [runProgress, setRunProgress] = useState<RunProgress | null>(null)
   const [pendingCost, setPendingCost] = useState<string | null>(null)
   /**
@@ -1079,16 +1098,81 @@ export function App(): JSX.Element {
    * `<img>` pointing at nothing, which would look exactly like evidence.
    */
   const queryCropFor = useCallback((key: string): string | undefined => {
-    if (!reconRef.current) return undefined
     const page = queryPagesRef.current.get(key)
-    return page === undefined ? undefined : `page:${page}`
+    if (page === undefined) return undefined
+    // The scan is here: render the leaf, which is the whole book's worth of
+    // evidence and costs nothing to keep offering.
+    if (reconRef.current) return `page:${page}`
+    // It is not: fall back to the crop cut in advance and kept beside the book.
+    // Still a ref the shell resolves, never a URL — a `blob:` that resolves to
+    // nothing outside the tab that minted it looks exactly like evidence.
+    const book = fileKeyRef.current
+    if (!book) return undefined
+    const config = loadShelf()
+    if (!shelfReady(config)) return undefined
+    return `shelf:${queryCropPath(book, key)}`
   }, [])
 
-  const resolveEvidence = useCallback((src: string): string | undefined => {
-    const m = /^page:(\d+)$/.exec(src)
-    if (m) return reconRef.current?.thumbnails.get(Number(m[1]))
-    return src
+  // Object URLs must be revoked — the rule `releaseRecon` exists for. A gate
+  // worked through on a long book mints one per query and they live as long as
+  // the tab does otherwise.
+  useEffect(() => {
+    const held = shelfCropsRef.current
+    return () => {
+      for (const { url } of held.values()) URL.revokeObjectURL(url)
+      held.clear()
+    }
   }, [])
+
+  /**
+   * Pull one crop off the shelf, then ask for a render.
+   *
+   * Guarded against a second fetch of the same path because `resolveEvidence`
+   * runs on every render and a miss would otherwise start a request per frame.
+   * A failure is left as a miss rather than retried for ever: the gate shows
+   * the passage as printed and the reason it was raised, which is what it
+   * showed before there were any crops at all.
+   */
+  const fetchShelfCrop = useCallback(async (path: string): Promise<void> => {
+    if (shelfCropsRef.current.has(path) || cropsInFlightRef.current.has(path)) return
+    cropsInFlightRef.current.add(path)
+    try {
+      const config = loadShelf()
+      if (!shelfReady(config)) return
+      const bytes = await getBytes(config, path)
+      if (!bytes) return
+      const blob = new Blob([bytes as BlobPart], { type: 'image/jpeg' })
+      shelfCropsRef.current.set(path, { blob, url: URL.createObjectURL(blob) })
+      setCropsFetched((n) => n + 1)
+    } catch {
+      // Evidence, not load-bearing. See above.
+    } finally {
+      cropsInFlightRef.current.delete(path)
+    }
+  }, [])
+
+  const resolveEvidence = useCallback(
+    (src: string): string | undefined => {
+      const m = /^page:(\d+)$/.exec(src)
+      if (m) return reconRef.current?.thumbnails.get(Number(m[1]))
+      const onShelf = /^shelf:(.+)$/.exec(src)
+      if (onShelf) {
+        const path = onShelf[1]!
+        const held = shelfCropsRef.current.get(path)
+        if (held) return held.url
+        void fetchShelfCrop(path)
+        // Nothing, deliberately, until the bytes are here: `EvidenceView` draws
+        // no `<img>` for a src it cannot resolve, and a broken image where the
+        // pixels go is worse than a gate that admits it has none yet.
+        return undefined
+      }
+      return src
+    },
+    // `cropsFetched` is not read here and is in the list on purpose: it is what
+    // tells React the cache has changed, and without it the first render after
+    // a crop lands would resolve from the same stale closure and show nothing.
+    [fetchShelfCrop, cropsFetched]
+  )
 
   /**
    * Cut the named words out of a leaf, for the discrepancy grid.
@@ -1143,6 +1227,15 @@ export function App(): JSX.Element {
    * the caller revokes what it is handed.
    */
   const enlargeEvidence = useCallback(async (src: string): Promise<string | undefined> => {
+    // A shelf crop is already the readable size — it was cut at 300 DPI for
+    // exactly this — so opening it full size is the same pixels, not a bigger
+    // render. A *fresh* URL off the same Blob, because the lightbox revokes
+    // what it is handed and the gate is still showing the other one.
+    const onShelf = /^shelf:(.+)$/.exec(src)
+    if (onShelf) {
+      const held = shelfCropsRef.current.get(onShelf[1]!)
+      return held ? URL.createObjectURL(held.blob) : undefined
+    }
     const m = /^page:(\d+)$/.exec(src)
     const file = fileDataRef.current
     if (!m || !file) return undefined

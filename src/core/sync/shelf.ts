@@ -150,6 +150,35 @@ export function aboutPath(key: string): string {
 }
 
 /**
+ * A crop of the leaf one query sits on, cut in advance and kept beside the book.
+ *
+ * The query gate promises the pixels beside every decision and keeps that
+ * promise by rendering the leaf — which works until the scan is too large for
+ * the shelf to hold. Vol. I of *Isis Unveiled* is 357 MB, past both this
+ * shelf's own refusal and GitHub's per-file limit, so it can go up in no form
+ * at all and the gate had nothing to show.
+ *
+ * So a session that *does* have the paper cuts one crop per outstanding query
+ * and writes it here, and the gate fetches them one at a time. Named by the
+ * query rather than by a digest, unlike a picture the editor supplied: a
+ * digest tells you two files differ and this has to answer "which crop belongs
+ * to the query on screen", which is a lookup and not a comparison.
+ *
+ * Written once and never rewritten — a query that has been ruled on is gone
+ * from the gate, and one whose wording changed is a different query with a
+ * different key — so this costs the repository its own size and not a version
+ * of it per save.
+ *
+ * **JPEG.** These are a photograph of paper and the scan inside the PDF is
+ * already JPEG 2000, so a lossless format was keeping every artefact of a lossy
+ * original at three times the size: measured on this book, 275 KB a crop as PNG
+ * against 81 as JPEG at quality 0.9, or 21 MB against 6.4 over seventy-nine.
+ */
+export function queryCropPath(key: string, query: string): string {
+  return `${SHELF_ROOT}/${shelfSlug(key)}/queries/${query}.jpg`
+}
+
+/**
  * The editor's queries for one book, as Markdown beside its `book.json`.
  *
  * Markdown rather than JSON because it exists to be *read* — by a person, on a

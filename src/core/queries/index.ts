@@ -31,6 +31,7 @@ import { outstanding, type Ruling } from './rulings'
 
 export * from './rulings'
 export * from './gate'
+export * from './locate'
 
 /** A query with the leaf it was raised on. */
 export interface RaisedQuery extends EditorialQuery {
