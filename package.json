@@ -16,7 +16,8 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "check:install": "PUBLIC_BASE=/Public-Domain-Book-Formatter/ vite build && node scripts/check-install.mjs",
-    "check:outbox": "node scripts/check-outbox.mjs"
+    "check:outbox": "node scripts/check-outbox.mjs",
+    "check:crop": "node scripts/check-query-crop.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

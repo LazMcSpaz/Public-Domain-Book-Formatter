@@ -422,6 +422,9 @@ npm run check:install                # build under the Pages sub-path, then ask 
 npm run check:outbox                 # with the dev server up: does a mark made
                                      #   offline reach the shelf when the connection
                                      #   comes back? The shelf is stubbed in the page.
+npm run check:crop                   # with the dev server up: for a book whose scan
+                                     #   is too large for the shelf, does the query
+                                     #   gate draw the crop cut for it in advance?
 node scripts/screenshot-flow.mjs     # drive the wizard headlessly, screenshot each screen
 ```
 
@@ -1515,6 +1518,64 @@ review` had to work for a book whose scan is too large for the shelf**, which
   is Vol. I of _Isis Unveiled_ exactly: the link opens such a book the light way
   and lands on the gate, because every decision here can be made from the words
   and the crop is a help rather than a requirement.
+
+- **Also done**: **the gate finds its pixels when the scan cannot be kept.**
+  The query gate promises the paper beside every decision and keeps that
+  promise by rendering the leaf — which works right up until the scan is too
+  large for the shelf to hold. Vol. I of _Isis Unveiled_ is **357 MB**, past
+  this shelf's own 40 MB refusal and past GitHub's per-file limit both, so it
+  can go up in no form at all: the editor opened the gate and was asked
+  seventy-nine editorial questions over a passage of type and nothing else.
+
+  So the crops are cut **once**, by a session that has the paper
+  (`drive.mjs querycrops`), written to `books/<slug>/queries/<key>.jpg`, and
+  fetched by the gate one at a time — which keeps the property the light route
+  exists for: opening such a book still pulls down a book file and not a volume
+  of pixels. `queryCropFor` falls back to `shelf:<path>`, still a ref the shell
+  resolves rather than a URL, because a `blob:` that resolves to nothing
+  outside the tab that minted it looks exactly like evidence.
+
+  **`locateQuote` (`src/core/queries/locate.ts`)** is what makes a crop
+  possible: a phrase written by a reader lined up against the words OCR boxed,
+  loosely enough to survive the disagreement — and loosely **on purpose**,
+  because a query is often raised _about_ a word OCR got wrong, so an exact
+  match fails hardest exactly where a query is and `belleves` has to find
+  `believes`. What keeps that from being sloppy is the floor: below two thirds
+  it returns null and the caller must say so, because a crop of the wrong three
+  lines is not a weaker version of the right one — the editor rules on it. On
+  this volume it placed **74 of 79**; the five it refused are all Latin and
+  ligatures (`Hæc murus æneus esto`, `Cory: "Phædras ;"`), which is where OCR
+  reads worst and where the paper is most worth looking at, so those get the
+  whole leaf rather than nothing, and which is which is named.
+
+  **JPEG, measured rather than assumed**: these are a photograph of paper and
+  the scan inside the PDF is already JPEG 2000, so PNG was preserving every
+  artefact of a lossy original at three times the size — 275 KB a crop against
+  81, or 21 MB against 6.4 over the set, on a shelf that keeps every version
+  for ever.
+
+  `npm run check:crop` is the measurement, kept, and fault-injected against
+  both halves of the wiring. It has **its own page and its own stub** rather
+  than a section of `screenshot-flow`: that was tried first and what it kept
+  measuring was the accumulated state of the run — a shelf holding several
+  books, a device deliberately wiped, a book whose queries an earlier section
+  had already ruled on. Three green-looking failures came out of that, each a
+  true statement about a book the check was not looking at. Two traps worth
+  keeping: a `page.route` installed after the first navigation misses the
+  requests that navigation makes (they fail against the sandbox's own
+  certificate authority, and an empty shelf looks exactly like an empty shelf),
+  and `page.goto` to a URL differing only in its hash **does not reload the
+  document**, so the mount effects a deep link is read by never run again.
+
+  Two driver faults came out of running it on a real volume. **`load` base64'd
+  the scan through the debug protocol** — `use` had been fixed to fetch it over
+  HTTP and this verb had not, so the fault the `GET /file` route exists to
+  prevent was sitting in the one verb a session opens a book with; 476 MB of
+  base64 kills the tab and returns `Target page, context or browser has been
+closed`, which is indistinguishable from the flake the first command after a
+  restart throws. And **`querycrops` first reached for `cropWordsFromPage`**,
+  which opens the PDF and renders the page itself: twelve leaves opened
+  thirteen documents over a 357 MB file and rendered every leaf twice.
 
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
