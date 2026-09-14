@@ -575,7 +575,6 @@ async function serve() {
       // stored the book without it. The rule the app is built on is that no
       // text is repaired without pixels; a loader that leaves the pixels behind
       // makes following that rule impossible rather than merely inconvenient.
-      const scanBytes = await readFile(scan)
       const alreadyStored = await page.evaluate(
         async ([repo, file]) => {
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
@@ -643,24 +642,41 @@ async function serve() {
         },
         [REPO, json, { name, size: meta.size, lastModified: Math.floor(meta.mtimeMs) }, pictures]
       )
-      // Sent after the run, and only when it is not already there: a scan is
-      // tens of megabytes of base64 across the wire, and re-loading the same
-      // book to answer one more question should not pay for it twice.
+      // Sent after the run, and only when it is not already there: re-loading
+      // the same book to answer one more question should not pay for the scan
+      // twice.
+      //
+      // **Fetched by the page, not base64'd into this call.** `use` was fixed
+      // to do that and this verb was not, which left the fault the GET /file
+      // route exists to prevent sitting in the one verb a session actually
+      // opens a book with: a 357 MB scan is 476 MB of base64, the tab dies
+      // somewhere between 32 and 110 MB, and what comes back is
+      // `Target page, context or browser has been closed` — which reads
+      // exactly like the flake the first command after a restart throws, so it
+      // was retried rather than diagnosed. Measured on Vol. I of *Isis
+      // Unveiled*: dead twice through the protocol, fine over HTTP.
       if (!alreadyStored) {
         await page.evaluate(
-          async ([repo, file, base64]) => {
+          async ([repo, file, url]) => {
             const project = await import(`/@fs${repo}/src/core/project/index.ts`)
             const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
-            const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0))
+            const res = await fetch(url)
+            if (!res.ok) throw new Error(`fetching the scan: ${res.status}`)
+            const raw = new Uint8Array(await res.arrayBuffer())
+            // The length is checked because a truncated scan is a book whose
+            // later leaves render blank rather than a book that fails to open.
+            if (raw.length !== file.size) {
+              throw new Error(`scan arrived as ${raw.length} bytes, expected ${file.size}`)
+            }
             await runStore.saveSourceFile(
               project.fileKey(file),
-              new File([bytes], file.name, { type: 'application/pdf' })
+              new File([raw], file.name, { type: 'application/pdf' })
             )
           },
           [
             REPO,
             { name, size: meta.size, lastModified: Math.floor(meta.mtimeMs) },
-            scanBytes.toString('base64')
+            `http://127.0.0.1:${PORT}/file?path=${encodeURIComponent(scan)}`
           ]
         )
       }
@@ -1994,6 +2010,197 @@ async function serve() {
         },
         [REPO, list]
       )
+    },
+
+    /**
+     * Cut the crop that goes beside each query, once, for a book with no scan
+     * on the shelf.
+     *
+     * The gate promises the pixels beside every decision, and keeps that
+     * promise by rendering the leaf — which works right up until the scan is
+     * too large for the shelf to hold. Vol. I of *Isis Unveiled* is 357 MB, so
+     * the app opens it with no pixels at all and the gate asks seventy-nine
+     * editorial questions over a passage of type and nothing else.
+     *
+     * So the crops are cut here, by the one session that does have the paper,
+     * and written beside the book where the gate can fetch them one at a time.
+     * Nothing about the gate changes for a book whose scan *is* on the device:
+     * that route still renders the leaf, and this is the fallback.
+     *
+     * **What it will not do is guess.** `locateQuote` refuses a match below its
+     * floor, and a query it cannot place is reported rather than cropped from
+     * somewhere plausible — a crop of the wrong three lines is not a weaker
+     * version of the right one, because the editor rules on it.
+     *
+     * `querycrops <outDir> [leaf...]` — all outstanding queries, or only those
+     * on the named leaves. Given in batches because each leaf is a render plus
+     * an OCR pass and a book's worth is minutes, not seconds.
+     */
+    querycrops: async ([outDir = 'querycrops', ...only]) => {
+      const wanted = only.map(Number).filter(Number.isFinite)
+      const result = await page.evaluate(
+        async ([repo, leaves]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
+          const ocrMod = await import(`/@fs${repo}/src/platform/browser/ocr.ts`)
+          const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+          const cropMod = await import(`/@fs${repo}/src/platform/browser/word-crops.ts`)
+          const reconMod = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no stored reading.')
+          const file = await runStore.loadSourceFile(newest.key)
+          if (!file) throw new Error('The scan is not stored on this device.')
+
+          const raised = queriesMod.collectQueries(run.transcriptions)
+          let waiting = queriesMod.outstanding(raised, run.rulings ?? [])
+          if (leaves.length > 0) waiting = waiting.filter((q) => leaves.includes(q.pageIndex))
+
+          const byLeaf = new Map()
+          for (const q of waiting) {
+            const list = byLeaf.get(q.pageIndex) ?? []
+            list.push(q)
+            byLeaf.set(q.pageIndex, list)
+          }
+
+          const engine = new ocrMod.OcrEngine()
+          await engine.init()
+          const cut = []
+          const unplaced = []
+          /** Queries given the whole leaf because the passage could not be found. */
+          const whole = []
+          try {
+            const doc = await pdfMod.openPdf(file)
+            for (const [pageIndex, queries] of [...byLeaf.entries()].sort((a, b) => a[0] - b[0])) {
+              // OCR at the resolution the boxes are meant to be read in. Any
+              // other scale and every box points at the wrong pixels.
+              const rendered = await pdfMod.renderPage(doc, pageIndex, reconMod.RECON_DPI)
+              // `recognize` already flattens to `OcrWord[]` with the boxes on
+              // them, which is the whole reason OCR is the witness here.
+              const words = (await engine.recognize(rendered.canvas, pageIndex)).words
+
+              // Cut from the canvas already in hand.
+              //
+              // `cropWordsFromPage` is the obvious call and the wrong one at
+              // this size: it opens the PDF and renders the page *itself*, so a
+              // batch of twelve leaves opened thirteen documents over a 357 MB
+              // file and rendered every leaf twice. The tab died with
+              // `Execution context was destroyed`, which reads like a
+              // navigation and is actually memory. One render, one document,
+              // and the canvas released before the next leaf.
+              //
+              // Padded by about a line of this book's type, measured rather
+              // than guessed: the editor is reading a passage in its setting,
+              // so the lines either side are what make a compositor's slip
+              // legible as one. At 44 px the box clipped the first letter of
+              // the first matched word — an OCR box is drawn to the ink, and an
+              // `S` that opens a note sits a hair outside it.
+              const PAD = 120
+              for (const query of queries) {
+                const key = queriesMod.queryKey(query)
+                const found = queriesMod.locateQuote(query.quote, words)
+                const box = found
+                  ? cropMod.unionBox(found.words.map((w) => ({ id: w.id, bbox: w.bbox })))
+                  : null
+                // A passage OCR could not place still gets its pixels — the
+                // whole leaf, rather than a crop of lines that might be the
+                // wrong ones. The five this happened to on Vol. I are all
+                // Latin and ligatures (`Hæc murus æneus`, `Phædras`), which is
+                // exactly where OCR reads worst and where the editor most
+                // wants to look at the paper. Reported either way: the sheet
+                // says which crops point at the passage and which are a leaf.
+                if (!box) whole.push({ key, leaf: pageIndex, quote: query.quote })
+                const x0 = box ? Math.max(0, Math.floor(box.x0 - PAD)) : 0
+                const y0 = box ? Math.max(0, Math.floor(box.y0 - PAD)) : 0
+                const x1 = box
+                  ? Math.min(rendered.canvas.width, Math.ceil(box.x1 + PAD))
+                  : rendered.canvas.width
+                const y1 = box
+                  ? Math.min(rendered.canvas.height, Math.ceil(box.y1 + PAD))
+                  : rendered.canvas.height
+                const cutCanvas = document.createElement('canvas')
+                cutCanvas.width = x1 - x0
+                cutCanvas.height = y1 - y0
+                cutCanvas
+                  .getContext('2d')
+                  .drawImage(
+                    rendered.canvas,
+                    x0,
+                    y0,
+                    cutCanvas.width,
+                    cutCanvas.height,
+                    0,
+                    0,
+                    cutCanvas.width,
+                    cutCanvas.height
+                  )
+                // JPEG, not PNG, and measured rather than assumed: these
+                // crops are a photograph of paper, the scan inside the PDF is
+                // already JPEG 2000, and a lossless format for lossy pixels
+                // bought nothing. Measured on three leaves of this book:
+                // 825 KB of PNG against 244 KB of JPEG for the same three
+                // crops — 275 KB a crop against 81 — which over seventy-nine
+                // is 21 MB against 6.4, on a shelf that keeps every version of
+                // everything for ever. Quality 0.9 rather than lower
+                // because the thing being read is 1877 type at 300 DPI and the
+                // question is often which of two letters the compositor set.
+                const blob = await new Promise((r) => cutCanvas.toBlob(r, 'image/jpeg', 0.9))
+                cutCanvas.width = 0
+                cutCanvas.height = 0
+                cut.push({
+                  key,
+                  leaf: pageIndex,
+                  score: found ? Number(found.score.toFixed(2)) : 0,
+                  bytes: [...new Uint8Array(await blob.arrayBuffer())]
+                })
+              }
+              // A 300 DPI leaf is ~19 MB of pixels. Released before the next is
+              // rendered, which is the rule recon itself follows.
+              rendered.canvas.width = 0
+              rendered.canvas.height = 0
+            }
+            await doc.destroy()
+          } finally {
+            await engine.dispose()
+          }
+
+          return {
+            book: run.fileName,
+            outstanding: waiting.length,
+            cut,
+            unplaced,
+            whole
+          }
+        },
+        [REPO, wanted]
+      )
+
+      const { writeFile, mkdir } = await import('node:fs/promises')
+      const dir = `${OUT}/${outDir}`
+      await mkdir(dir, { recursive: true })
+      let bytesWritten = 0
+      for (const crop of result.cut) {
+        const buf = Buffer.from(crop.bytes)
+        bytesWritten += buf.length
+        await writeFile(`${dir}/${crop.key}.jpg`, buf)
+      }
+      return {
+        book: result.book,
+        outstanding: result.outstanding,
+        wrote: result.cut.length,
+        into: dir,
+        bytes: bytesWritten,
+        weakest: result.cut.length ? Math.min(...result.cut.map((c) => c.score)) : null,
+        // Never a silent miss. A query with no crop is a query the editor will
+        // rule on from the words alone, and they are owed the list.
+        ...(result.unplaced.length > 0 ? { unplaced: result.unplaced } : {}),
+        // Named rather than counted: a whole leaf is evidence and a crop is
+        // evidence pointed at the passage, and the editor is owed the
+        // difference.
+        ...(result.whole.length > 0 ? { wholeLeaf: result.whole } : {})
+      }
     },
 
     /**
