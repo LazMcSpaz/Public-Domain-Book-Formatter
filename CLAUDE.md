@@ -254,6 +254,29 @@ git merge-base --is-ancestor HEAD origin/main && echo "local is behind"
 git fetch origin main && git reset --hard FETCH_HEAD
 ```
 
+**A read of a file can answer for the write that follows it.** Every ruling
+the editor made at the query gate on _Isis Unveiled_ failed with
+`422: Invalid request. "sha" wasn't supplied.` — a message about a field in a
+request nobody wrote. GitHub's `ETag` for a path is the **blob sha**, and the
+same one is handed out whatever media type was asked for: measured, a
+conditional request for `application/vnd.github+json` carrying the ETag the
+`raw` representation issued comes back `304 Not Modified`, `Vary: Accept`
+notwithstanding. A flush reads the book file raw and asks the JSON envelope for
+its sha a moment later, so a cache lenient about `Vary` served the **book file**
+as the answer to "what is this path's sha" — it parses, being JSON, and has no
+`sha` in it. The write then went up as a _create_ of a file that already exists.
+
+Three rules now, in the order of how much they can be relied on: the sha is
+asked for at a URL carrying a unique parameter, so nothing can hold an answer
+for it; every shelf read is `cache: 'no-store'`; and `shaOf` checks that the
+answer is a file record rather than treating anything it does not recognise as
+"not there". `npm run check:cache` is the measurement, and **Chromium cannot be
+made to show this fault** — it honours `Vary: Accept` properly, which was tried
+against a real origin with GitHub's exact headers. The device it happened on was
+an iPad. So the check asserts the property that does not need a browser to be
+sloppy, with the stub playing the lenient cache; fault-injected, it reproduces
+the editor's error verbatim.
+
 **The PDF in a book's directory is the _export_. The scan is
 `scans/<sha256>.pdf`, and `book.json` names it in `scan.path`.** Handing
 `drive.mjs load` the exported book instead of the scan does not fail: it
@@ -425,6 +448,9 @@ npm run check:outbox                 # with the dev server up: does a mark made
 npm run check:crop                   # with the dev server up: for a book whose scan
                                      #   is too large for the shelf, does the query
                                      #   gate draw the crop cut for it in advance?
+npm run check:cache                  # with the dev server up: can a read of a book
+                                     #   file answer the sha lookup for the write that
+                                     #   follows it? (it could, and did)
 node scripts/screenshot-flow.mjs     # drive the wizard headlessly, screenshot each screen
 ```
 
