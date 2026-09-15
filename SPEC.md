@@ -187,7 +187,12 @@ Entered from the review view when the user hits an image. Opens the illustration
 
 ### Placement & print quality
 
-- Confirm/adjust placement in the text flow.
+- Confirm/adjust placement in the text flow. The engine's default is after the
+  last text that shared the picture's leaf, to the measure; a person can set a
+  figure at the width the original printed it, inside a paragraph at a point in
+  it, or beside the text with the lines run past it (`IllustrationPlacement`).
+  A placement the engine cannot honour falls back and is reported, never
+  silently changed.
 - **DPI awareness:** show effective DPI at placed size; warn if an image is scaled past what its source resolution supports (KDP wants ~300 DPI). Prevents beautiful-on-screen art printing muddy. Folds into export validation.
 
 **Image flow end to end:** auto-detect candidates (low trust) → review/accept/reject regions → per-image editing mode (reliable tools + best-effort background removal, non-destructive, full-res) → DPI-aware placement → export validation.

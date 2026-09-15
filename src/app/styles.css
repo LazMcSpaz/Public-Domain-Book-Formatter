@@ -1167,6 +1167,31 @@ button.ghost {
   background: #fff;
   border-radius: 3px;
 }
+.proof-placement {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  align-items: center;
+  margin: 6px 0;
+  font-size: 0.8rem;
+}
+.proof-placement label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.proof-placement select,
+.proof-placement input[type='number'] {
+  font: inherit;
+  font-size: 0.8rem;
+  padding: 3px 4px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #fff;
+}
+.proof-placement input[type='number'] {
+  width: 5.5em;
+}
 .proof-picture input[type='text'] {
   width: 100%;
   box-sizing: border-box;

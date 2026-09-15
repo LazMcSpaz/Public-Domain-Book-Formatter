@@ -1219,9 +1219,22 @@ async function serve() {
             notesPlaced: built.notesPlaced,
             notesCollected: built.notesCollected,
             notesDropped: built.notesDropped,
-            imagesPlaced: built.imagesPlaced.map((i) => ({ id: i.id, dpi: Math.round(i.dpi) })),
+            // With the page, so a figure can be looked at without bisecting
+            // the book for it: `proof <page>` renders the leaf it names.
+            imagesPlaced: built.imagesPlaced.map((i) => ({
+              id: i.id,
+              page: i.pageIndex + 1,
+              dpi: Math.round(i.dpi),
+              widthIn: Number((i.widthPt / 72).toFixed(2))
+            })),
             imagesDropped: built.imagesDropped,
             warnings: built.warnings.length,
+            // The first few, with their pages. A count alone cannot tell an
+            // overfull line from a figure the engine could not set as asked,
+            // and those want different people.
+            warningsFirst: built.warnings
+              .slice(0, 8)
+              .map((w) => ({ page: w.pageIndex + 1, text: w.text })),
             substitutions: built.substitutions,
             bytes: built.bytes.length,
             // Never silent about this. A book proofed with the defaults looks
@@ -2204,6 +2217,269 @@ async function serve() {
     },
 
     /**
+     * Cut a figure out of the scan and set it where the original set it.
+     *
+     * The engine's own rule for a picture — after the last text that shared
+     * its leaf, as wide as the measure — is the most the scan can say. A
+     * session that has looked at the leaf can say where the figure actually
+     * stood, and this is how it says so: the pixels come off the render at
+     * `CROP_DPI`, exactly as the structure gate cuts them, and travel as a
+     * *supplied* picture (`image` edit plus bytes on the run), because a book
+     * whose scan is too large for any shelf has no leaf to re-cut them from.
+     *
+     * ```
+     * figure cut 564 0.391,0.122,0.289,0.117 --after p564b0                 # between blocks, at its printed width
+     * figure cut 520 0.426,0.153,0.226,0.152 --in p520b0 --at "which embraces"   # mid-sentence; text resumes below
+     * figure cut 193 0.527,0.532,0.389,0.175 --beside p193b1 --at "various kinds" --side right
+     * figure list
+     * figure drop <imageId>
+     * ```
+     *
+     * The crop is `x,y,w,h` as fractions of the leaf, the same box `leaf`
+     * takes; measure it off the pixels rather than reading it off the screen.
+     * `--width <in>` overrides the printed size, which defaults to the crop's
+     * own width at the render DPI — so a figure cut at 300 DPI and set at
+     * that size prints at 300 DPI, and the KDP check agrees. `--at` is a
+     * phrase in the host block's text; it must occur once, and the figure
+     * begins at the word it starts with. `--caption` sets one under the
+     * picture; a caption the leaf already carries as a block is left where
+     * it is, which prints the same.
+     *
+     * Nothing leaves this device: `save` writes the book and its pictures to
+     * a shelf directory, `shelf push` sends them up.
+     */
+    figure: async (argv) => {
+      const flag = (name) => {
+        const i = argv.indexOf(`--${name}`)
+        return i === -1 ? null : argv[i + 1]
+      }
+      const positional = argv.filter(
+        (a, i) => !a.startsWith('--') && !argv[i - 1]?.startsWith('--')
+      )
+      const action = positional[0]
+
+      if (action === 'list' || action === 'drop') {
+        const imageId = positional[1] ?? null
+        if (action === 'drop' && !imageId) throw new Error('figure drop <imageId>')
+        return page.evaluate(
+          async ([repo, action, imageId]) => {
+            const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+            const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+            const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+            const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+            const newest = await window.__pdbfPickBook(runStore)
+            if (!newest) throw new Error('No book on this device.')
+            const run = await runStore.loadRun(newest.key)
+            if (!run) throw new Error('That book has no reading stored here.')
+            if (action === 'list') {
+              const doc = editsMod.applyEdits(
+                assemble.assembleBook(run.transcriptions),
+                run.edits ?? []
+              )
+              return {
+                figures: doc.illustrations.map((i) => ({
+                  id: i.id,
+                  origin: i.origin ?? 'scan',
+                  after: i.anchorAfterBlockId ?? null,
+                  leaf: i.pageIndex,
+                  px: `${i.sourceWidth}x${i.sourceHeight}`,
+                  placement: i.placement ?? 'the engine’s rule: after its block, to the measure',
+                  caption: i.caption
+                }))
+              }
+            }
+            const had = (run.edits ?? []).some((e) => e.kind === 'image' && e.imageId === imageId)
+            if (!had) throw new Error(`No supplied picture \`${imageId}\` on this book.`)
+            const edits = (run.edits ?? []).filter(
+              (e) =>
+                !(e.kind === 'image' && e.imageId === imageId) &&
+                !(e.kind === 'retouch' && e.illustrationId === imageId) &&
+                !(e.kind === 'place' && e.illustrationId === imageId)
+            )
+            const images = new Map(
+              run.images.filter((i) => i.id !== imageId).map((i) => [i.id, i.bytes])
+            )
+            const next = project.createSavedRun({
+              ...run,
+              images,
+              savedAt: new Date().toISOString(),
+              edits
+            })
+            const stored = await runStore.saveRun(next)
+            return { dropped: imageId, stored: stored === true, edits: edits.length }
+          },
+          [REPO, action, imageId]
+        )
+      }
+
+      if (action !== 'cut') {
+        throw new Error(
+          'figure cut <leaf> <x,y,w,h> (--after <block> | --in <block> --at "<phrase>" | ' +
+            '--beside <block> --at "<phrase>" --side left|right) [--width <in>] [--caption "…"]'
+        )
+      }
+      const leaf = Number(positional[1])
+      const box = (positional[2] ?? '')
+        .split(',')
+        .map(Number)
+        .filter((v) => Number.isFinite(v))
+      if (!Number.isFinite(leaf) || box.length !== 4) {
+        throw new Error('figure cut <leaf> <x,y,w,h> — four fractions of the leaf')
+      }
+      const after = flag('after')
+      const within = flag('in')
+      const beside = flag('beside')
+      const chosen = [after, within, beside].filter(Boolean)
+      if (chosen.length !== 1) {
+        throw new Error('Say exactly one of --after <block>, --in <block>, --beside <block>.')
+      }
+      const phrase = flag('at')
+      const side = flag('side')
+      if ((within || beside) && !phrase) throw new Error('--in and --beside need --at "<phrase>".')
+      if (beside && side !== 'left' && side !== 'right') {
+        throw new Error('--beside needs --side left or --side right.')
+      }
+      const widthIn = flag('width') === null ? null : Number(flag('width'))
+      if (widthIn !== null && !(widthIn > 0)) throw new Error('--width is inches, greater than 0.')
+      const caption = flag('caption')
+      const dpi = Number(flag('dpi') ?? '300')
+
+      return page.evaluate(
+        async ([repo, leaf, box, blockId, mode, phrase, side, widthIn, caption, dpi]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const pdf = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+          const file = await runStore.loadSourceFile(newest.key)
+          if (!file) throw new Error('The scan is not stored on this device.')
+
+          // The host block, against the book as it stands — the same text
+          // `body` hands back, so an offset found here is the offset the
+          // engine will read.
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const block = doc.blocks.find((b) => b.id === blockId)
+          if (!block) throw new Error(`No block \`${blockId}\` in this book.`)
+
+          let at = null
+          if (mode !== 'inline') {
+            const first = block.text.indexOf(phrase)
+            if (first < 0) {
+              throw new Error(`\`${phrase}\` is not in block ${blockId}. Nothing was cut.`)
+            }
+            if (block.text.indexOf(phrase, first + 1) >= 0) {
+              throw new Error(
+                `\`${phrase}\` appears more than once in block ${blockId}. Give a longer phrase.`
+              )
+            }
+            // The figure begins at a word: back up to the start of the one the
+            // phrase begins inside, so a phrase typed mid-word cannot put a
+            // picture into the middle of it.
+            at = first
+            while (at > 0 && !/\s/u.test(block.text[at - 1])) at--
+          }
+
+          // Cut at the render's own resolution, as the structure gate does.
+          const opened = await pdf.openPdf(file)
+          let png
+          let width
+          let height
+          try {
+            const rendered = await pdf.renderPage(opened, leaf, dpi)
+            const [fx, fy, fw, fh] = box
+            const cut = document.createElement('canvas')
+            cut.width = Math.max(1, Math.round(rendered.canvas.width * fw))
+            cut.height = Math.max(1, Math.round(rendered.canvas.height * fh))
+            cut
+              .getContext('2d')
+              .drawImage(
+                rendered.canvas,
+                Math.round(rendered.canvas.width * fx),
+                Math.round(rendered.canvas.height * fy),
+                cut.width,
+                cut.height,
+                0,
+                0,
+                cut.width,
+                cut.height
+              )
+            rendered.canvas.width = 0
+            rendered.canvas.height = 0
+            width = cut.width
+            height = cut.height
+            const blob = await new Promise((r) => cut.toBlob(r, 'image/png'))
+            png = new Uint8Array(await blob.arrayBuffer())
+            cut.width = 0
+            cut.height = 0
+          } finally {
+            await opened.destroy()
+          }
+
+          const printedIn = widthIn ?? width / dpi
+          const placement =
+            mode === 'inline'
+              ? { kind: 'inline', widthIn: printedIn }
+              : mode === 'within'
+                ? { kind: 'within', widthIn: printedIn, at }
+                : { kind: 'beside', widthIn: printedIn, at, side }
+          const imageId = `fig${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`
+          const edit = {
+            kind: 'image',
+            imageId,
+            afterBlockId: blockId,
+            sourceWidth: width,
+            sourceHeight: height,
+            ...(caption ? { caption } : {}),
+            placement
+          }
+          const edits = editsMod.withEdit(run.edits ?? [], edit)
+          const images = new Map(run.images.map((i) => [i.id, i.bytes]))
+          images.set(imageId, png)
+          const next = project.createSavedRun({
+            ...run,
+            images,
+            savedAt: new Date().toISOString(),
+            edits
+          })
+          const stored = await runStore.saveRun(next)
+          return {
+            imageId,
+            leaf,
+            block: blockId,
+            placement,
+            ...(at !== null ? { beginsAt: block.text.slice(at, at + 40) } : {}),
+            px: `${width}x${height}`,
+            bytes: png.length,
+            // The resolution it will print at, at the size it was told to
+            // print at. Cut at 300 and set at its own width, this is 300.
+            dpi: Math.round(width / printedIn),
+            stored: stored === true,
+            next: '`proof` lays it out; `save` writes it beside the book; nothing has left this device.'
+          }
+        },
+        [
+          REPO,
+          leaf,
+          box,
+          after ?? within ?? beside,
+          after ? 'inline' : within ? 'within' : 'beside',
+          phrase,
+          side,
+          widthIn,
+          caption,
+          dpi
+        ]
+      )
+    },
+
+    /**
      * Every picture the reading found, leaf by leaf.
      *
      * The detection is not new and this verb runs none: `detectIllustrations`
@@ -2508,11 +2784,28 @@ async function serve() {
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
           const parsed = project.parseBookFile(json)
           const key = parsed.run.key
-          const run = await runStore.loadRun(key)
+          // The run under the file's own key, or — because a scan rebuilt on
+          // this machine carries a fresh date and `load` re-keys the run to
+          // match it — the book this browser has open, when it is the same
+          // book. `save` keeps the shelf's key on the file for that reason,
+          // and the check that it *is* the same book is the file name and the
+          // leaf count: sheets built from some other volume's run would be
+          // written beside this one with nothing to say so.
+          let run = await runStore.loadRun(key)
+          if (!run) {
+            const open = await window.__pdbfPickBook(runStore)
+            const candidate = open ? await runStore.loadRun(open.key) : null
+            const same =
+              candidate &&
+              candidate.fileName === parsed.run.fileName &&
+              candidate.transcriptions.length === parsed.run.transcriptions.length
+            if (same) run = candidate
+          }
           if (!run) {
             throw new Error(
-              `That book file is filed under a key this browser has no run for (${key}). ` +
-                'The sheets are built from the run, so nothing was written.'
+              `That book file is filed under a key this browser has no run for (${key}), ` +
+                'and the book open here is not it. The sheets are built from the run, so ' +
+                'nothing was written.'
             )
           }
           return {

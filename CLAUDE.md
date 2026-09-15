@@ -493,6 +493,12 @@ node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` 
 
 node scripts/drive.mjs figures f.md   # every picture the reading already found,
                                      #   leaf by leaf — a shortlist, not a check
+node scripts/drive.mjs figure cut 193 0.527,0.532,0.389,0.175 --beside p193b1 --at "various kinds" --side right
+                                     #   cut a figure out of the scan at 300 DPI and set it
+                                     #   where the original set it: `--after <block>` at its
+                                     #   printed size, `--in <block> --at "<phrase>"` mid-
+                                     #   paragraph, `--beside … --side left|right` with the
+                                     #   text run past it; `figure list`, `figure drop <id>`
 node scripts/contact-sheets.mjs <renders> <out>  # the whole book, small, many to
                                      #   a sheet: the only thing that answers
                                      #   "is there a picture we have missed?"
@@ -1602,6 +1608,42 @@ closed`, which is indistinguishable from the flake the first command after a
   restart throws. And **`querycrops` first reached for `cropWordsFromPage`**,
   which opens the PDF and renders the page itself: twelve leaves opened
   thirteen documents over a 357 MB file and rendered every leaf twice.
+
+- **Also done**: **a figure where the original set it, at the size the original
+  printed it** (`IllustrationPlacement`; `drive.mjs figure`). The editor's
+  standing ruling on _Isis Unveiled_ (leaf 193): reproduce the illustrations
+  and their placement faithfully, and extend the tool if that is what it
+  takes. It was: a picture had exactly one shape here — after the last text
+  that shared its leaf, as wide as the measure — and that volume's three
+  figures are none of them that. An amulet is engraved into the middle of a
+  paragraph with eleven lines run down a narrow column beside it; the Azoth
+  cross is drawn mid-sentence, "by the symbol [figure] which embraces three
+  things"; the glycerine formula stands at its own small size over its
+  caption, with three geometrical figures down the left of the next paragraph.
+  Three placements, each off a leaf: `inline`, between blocks at its printed
+  width; `within`, interrupting a paragraph at a character offset with the
+  text resuming flush below; and `beside`, the run-around. The run-around is
+  the drop capital's own mechanism — per-line widths and offsets into one
+  `breakParagraph` — applied further down the paragraph: the line carrying
+  the named word is found by breaking once, the widths set from it, and the
+  paragraph broken again until the two agree. The figure and its narrowed
+  lines are held together across a page break (`holdWithNext`), a paragraph
+  shorter than its figure holds the slots beside it empty, and a placement
+  the engine cannot honour falls back to a line of its own **and reports it**.
+  Width is in **inches**, not a fraction of the measure: the cut was made at
+  that size, a wider measure gains white rather than a larger engraving, and
+  a figure cut at 300 DPI and set at its own width prints at 300 DPI, which is
+  what the KDP check then says. The pixels travel as a supplied picture
+  (`image` edit plus bytes, `images/<digest>.png` on the shelf), because a
+  volume whose scan is too large for any shelf has no leaf to re-cut them
+  from; a picture cut at the structure gate takes the same placement through
+  the `place` edit. The proof sheet offers all of it, so the door is not only
+  the driver's. Five faults were injected against the layout tests and one
+  survived the first fixture: a run-around that never met a page break passed
+  with the hold removed, and the sweep that walks the host paragraph down the
+  page is what caught it. Crop boxes were **measured** off the 300-DPI render
+  — ink runs per row and column, sixty lines of Node — after the first pass
+  clipped the descenders of the line above the formula into the picture.
 
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a

@@ -103,6 +103,50 @@ place the book contradicts itself — is raised as a **query** and transcribed a
 printed. See the standing rule in `PROCESS-reading.md`; it does not soften
 here.
 
+## Stage 12b — The figures, cut and placed
+
+The book's own pictures are the book's, not apparatus, and they are the one
+part of a leaf the reading cannot carry: a transcription has no field for an
+engraving, so a figure reaches the book only when a session that has the
+paper cuts it and says where it stood. The standing ruling (leaf 193 of _Isis_
+Vol. I) is to reproduce them and their placement faithfully.
+
+1. **Find them.** `drive.mjs figures` lists what recon's ink test found, which
+   is a floor and not a census; the contact sheets are what answer "is there a
+   picture we have missed?" — see the figure sweep in the ledger.
+2. **Measure, do not look.** Decode the 300-DPI render and read the ink bounds
+   off the numbers (CLAUDE.md, _Measuring, rather than looking_). The crop is
+   `x,y,w,h` as fractions of the leaf; the printed width is the crop's pixels
+   over the render DPI, and the fraction of the original measure it occupied
+   is the number to compare the reprint against.
+3. **Cut and place**, one verb, at the render's own resolution:
+
+   ```bash
+   node scripts/drive.mjs figure cut 564 0.391,0.122,0.289,0.117 --after p564b0
+   node scripts/drive.mjs figure cut 520 0.426,0.153,0.226,0.152 --in p520b0 --at "which embraces"
+   node scripts/drive.mjs figure cut 193 0.527,0.532,0.389,0.175 --beside p193b1 --at "various kinds" --side right
+   node scripts/drive.mjs figure list
+   ```
+
+   `--after` sets it between blocks at its printed size; `--in` interrupts the
+   paragraph at the phrase and resumes the text flush below; `--beside` runs
+   the text down the other side from the line carrying the phrase. A caption
+   the leaf carries as its own block prints where it is.
+
+4. **Look at the page it landed on.** `proof` reports each picture's page and
+   the DPI at its placed size, and `proof <page>` renders it. Cut at 300 and set
+   at its own width, the DPI is 300; a smaller number means it was set larger
+   than the original and is the KDP check's business.
+5. **Nothing has left the device.** `save` writes the book and its pictures
+   beside it (`images/<digest>.png`) into the shelf directory; then the readable
+   files, then one commit.
+
+Two things the engine will do for you and say so: a placement it cannot honour
+— a figure too wide for text beside it, too tall to share a page — is set on a
+line of its own and reported as a layout warning; and a run-around is never
+split across a page break, which can leave white at the foot of the page
+before it, exactly as a plate does.
+
 ## Stage 13 — The apparatus
 
 The part that makes a reprint worth publishing, and the part that skips.

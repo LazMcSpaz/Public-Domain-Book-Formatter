@@ -315,3 +315,50 @@ describe('finding a run when the file has moved but the book has not', () => {
     expect(keyMatchesFile(fileKey(FILE), { ...FILE, name: 'other.pdf' })).toBe(false)
   })
 })
+
+describe('migrateSavedRun — a picture’s placement, which came with v17', () => {
+  const beside = { kind: 'beside' as const, widthIn: 1.98, at: 769, side: 'right' as const }
+
+  it('keeps a placement through the round trip, on both edits that carry one', () => {
+    const original = run({
+      edits: [
+        {
+          kind: 'image',
+          imageId: 'fig1',
+          afterBlockId: 'p0b1',
+          sourceWidth: 595,
+          sourceHeight: 419,
+          placement: beside
+        },
+        {
+          kind: 'place',
+          illustrationId: 'i1',
+          placement: { kind: 'within', widthIn: 1.15, at: 202 }
+        },
+        { kind: 'place', illustrationId: 'i2', placement: null }
+      ]
+    })
+    expect(migrateSavedRun(JSON.parse(JSON.stringify(original))).edits).toEqual(original.edits)
+  })
+
+  it('drops a placement it cannot size, and the picture keeps its place in the book', () => {
+    // `widthIn` is what the engine sizes by; a placement without one would set
+    // the figure at NaN inches, which lays out as nothing and reports no fault.
+    const raw = JSON.parse(JSON.stringify(run())) as Record<string, unknown>
+    raw['edits'] = [
+      {
+        kind: 'image',
+        imageId: 'fig1',
+        afterBlockId: 'p0b1',
+        sourceWidth: 10,
+        sourceHeight: 10,
+        placement: { kind: 'beside', at: 3, side: 'right' }
+      },
+      { kind: 'place', illustrationId: 'i1', placement: { kind: 'sideways', widthIn: 1 } }
+    ]
+    const restored = migrateSavedRun(raw)
+    expect(restored.edits).toEqual([
+      { kind: 'image', imageId: 'fig1', afterBlockId: 'p0b1', sourceWidth: 10, sourceHeight: 10 }
+    ])
+  })
+})

@@ -12,6 +12,7 @@
  * are re-applied over it, so they can be undone and the book can be
  * re-assembled underneath them.
  */
+import type { IllustrationPlacement } from '@core/assemble'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { BookDocument } from '@core/assemble'
 import type { BlockKind, VerificationFinding } from '@core/transcribe'
@@ -109,6 +110,109 @@ const KINDS: { value: BlockKind; label: string }[] = [
   { value: 'list-item', label: 'List item' },
   { value: 'table', label: 'Table' }
 ]
+
+/**
+ * Where a picture sits against the text, as the editor says rather than as the
+ * engine guesses — see `IllustrationPlacement`.
+ *
+ * Four answers: the engine's own rule (after the block, to the measure), at
+ * its printed size between blocks, inside the paragraph at a point in it, or
+ * beside the text with the lines run past it. The size is in inches because
+ * that is what a ruler on the original leaf gives, and `at` is a character
+ * offset into the block — set from the cursor in the passage above where
+ * there is one, or typed.
+ */
+function PlacementControl({
+  value,
+  onChange,
+  atFromCursor
+}: {
+  value: IllustrationPlacement | undefined
+  onChange: (next: IllustrationPlacement | undefined) => void
+  /** The caret in the host passage, when the picture sits under one. */
+  atFromCursor?: () => number
+}): JSX.Element {
+  const kind = value?.kind ?? 'measure'
+  const widthIn = value?.widthIn ?? 2
+  const at = value && value.kind !== 'inline' ? value.at : 0
+  const side = value?.kind === 'beside' ? value.side : 'right'
+  const build = (
+    next: Partial<{ kind: string; widthIn: number; at: number; side: 'left' | 'right' }>
+  ): IllustrationPlacement | undefined => {
+    const k = next.kind ?? kind
+    const w = Math.max(0.1, next.widthIn ?? widthIn)
+    const a = Math.max(0, next.at ?? at)
+    const sd = next.side ?? side
+    if (k === 'measure') return undefined
+    if (k === 'inline') return { kind: 'inline', widthIn: w }
+    if (k === 'within') return { kind: 'within', widthIn: w, at: a }
+    return { kind: 'beside', widthIn: w, at: a, side: sd }
+  }
+  return (
+    <div className="proof-placement">
+      <label>
+        Set it
+        <select
+          value={kind}
+          aria-label="Where the picture sits"
+          onChange={(e) => onChange(build({ kind: e.target.value }))}
+        >
+          <option value="measure">after the passage, to the measure (the engine’s rule)</option>
+          <option value="inline">after the passage, at its printed size</option>
+          <option value="within">inside the passage, at a point in it</option>
+          <option value="beside">beside the passage, the text run past it</option>
+        </select>
+      </label>
+      {kind !== 'measure' ? (
+        <label>
+          width, inches
+          <input
+            type="number"
+            step="0.05"
+            min="0.1"
+            value={widthIn}
+            aria-label="Printed width in inches"
+            onChange={(e) => onChange(build({ widthIn: Number(e.target.value) }))}
+          />
+        </label>
+      ) : null}
+      {kind === 'within' || kind === 'beside' ? (
+        <label>
+          at character
+          <input
+            type="number"
+            min="0"
+            value={at}
+            aria-label="Character offset in the passage where the picture begins"
+            onChange={(e) => onChange(build({ at: Number(e.target.value) }))}
+          />
+          {atFromCursor ? (
+            <button
+              type="button"
+              title="Take the offset from the cursor in the passage above"
+              onClick={() => onChange(build({ at: atFromCursor() }))}
+            >
+              from the cursor
+            </button>
+          ) : null}
+        </label>
+      ) : null}
+      {kind === 'beside' ? (
+        <label>
+          side
+          <select
+            value={side}
+            aria-label="Which margin the picture stands against"
+            onChange={(e) => onChange(build({ side: e.target.value as 'left' | 'right' }))}
+          >
+            <option value="left">left</option>
+            <option value="right">right</option>
+          </select>
+        </label>
+      ) : null}
+    </div>
+  )
+}
 
 export function ProofSheet({
   document: doc,
@@ -259,6 +363,14 @@ export function ProofSheet({
   const opsById = useMemo(() => {
     const out = new Map<string, ImageEditOp[]>()
     for (const edit of edits) if (edit.kind === 'retouch') out.set(edit.illustrationId, edit.ops)
+    return out
+  }, [edits])
+
+  /** Where each scanned picture was put by the editor, from `place` edits. */
+  const placementsById = useMemo(() => {
+    const out = new Map<string, IllustrationPlacement | null>()
+    for (const edit of edits)
+      if (edit.kind === 'place') out.set(edit.illustrationId, edit.placement)
     return out
   }, [edits])
 
@@ -566,6 +678,14 @@ export function ProofSheet({
                         aria-label="Caption for your picture"
                         onChange={(e) => push({ ...image, caption: e.target.value })}
                       />
+                      <PlacementControl
+                        value={image.placement}
+                        atFromCursor={() => caretOf(document.activeElement) || 0}
+                        onChange={(placement) => {
+                          const { placement: _was, ...rest } = image
+                          push(placement ? { ...rest, placement } : rest)
+                        }}
+                      />
                       <ImageEditor
                         previewUrl={preview}
                         sourceWidth={image.sourceWidth}
@@ -610,6 +730,12 @@ export function ProofSheet({
               <span className="proof-annotation-bar">
                 <span className="proof-annotation-label">Cut from this leaf</span>
               </span>
+              <PlacementControl
+                value={placementsById.get(picture.id) ?? undefined}
+                onChange={(placement) =>
+                  push({ kind: 'place', illustrationId: picture.id, placement: placement ?? null })
+                }
+              />
               <ImageEditor
                 previewUrl={imagePreview?.(picture.id)}
                 sourceWidth={picture.sourceWidth}

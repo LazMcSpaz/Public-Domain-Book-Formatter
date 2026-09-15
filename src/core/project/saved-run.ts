@@ -26,6 +26,7 @@ import { BLOCK_KINDS, type PageTranscription } from '@core/transcribe'
 import { HIGHLIGHT_TAGS, isHighlightTag, type BookEdit } from '@core/edits'
 import { normalizeMarkup } from '@core/transcribe'
 import type { ImageEditOp } from '@core/model'
+import type { IllustrationPlacement } from '@core/assemble'
 import { FOOTINGS, type Fact } from '@core/harvest'
 import { RULING_DECISIONS, type Ruling } from '@core/queries'
 import { EDITORIAL_QUERY_KINDS } from '@core/transcribe'
@@ -49,13 +50,16 @@ import { EDITORIAL_QUERY_KINDS } from '@core/transcribe'
  * and v14 → v15 the `note-text` edit, a correction to one of the book's own
  * footnotes, and v15 → v16 the `highlight` edit — a passage the editor marked
  * while reading, before annotating — together with the optional range a memo
- * left on a selection now carries.
+ * left on a selection now carries, and v16 → v17 a picture's *placement*: the
+ * width the original printed it at and where it sits against the text, on the
+ * `image` edit for a supplied picture and as the `place` edit for one cut from
+ * the scan.
  * None of them damages an older run — each is a complete transcription that simply
  * has none of the newer thing on it yet — so all upgrade in place rather than
  * being refused. That distinction is the whole reason a migration exists
  * instead of a version check.
  */
-export const CURRENT_SCHEMA_VERSION = 16
+export const CURRENT_SCHEMA_VERSION = 17
 
 /** A page the model could not read at all. Mirrors the runner's `PageFailure`. */
 export interface SavedFailure {
@@ -269,6 +273,37 @@ export function keyMatchesFile(key: string, file: { name: string; size: number }
 
 function isObject(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null && !Array.isArray(v)
+}
+
+/**
+ * A picture's placement, read strictly.
+ *
+ * Every field the engine sizes or positions by is checked, because a
+ * placement that parsed loosely would set a figure at `NaN` inches — which
+ * lays out as nothing at all and reports no fault. Unknown kinds and missing
+ * numbers come back `undefined`, and the caller decides whether that means
+ * "no placement" (an `image` edit keeps its picture) or "no edit".
+ */
+function parsePlacement(raw: unknown): IllustrationPlacement | undefined {
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) return undefined
+  const value = raw as Record<string, unknown>
+  const widthIn = value['widthIn']
+  if (typeof widthIn !== 'number' || !(widthIn > 0)) return undefined
+  const at = value['at']
+  switch (value['kind']) {
+    case 'inline':
+      return { kind: 'inline', widthIn }
+    case 'within':
+      return typeof at === 'number' && at >= 0 ? { kind: 'within', widthIn, at } : undefined
+    case 'beside': {
+      const side = value['side']
+      if (typeof at !== 'number' || at < 0) return undefined
+      if (side !== 'left' && side !== 'right') return undefined
+      return { kind: 'beside', widthIn, at, side }
+    }
+    default:
+      return undefined
+  }
 }
 
 function num(v: unknown, fallback: number): number {
@@ -615,14 +650,27 @@ function parseEdits(raw: unknown): BookEdit[] {
           typeof value['sourceHeight'] === 'number'
         ) {
           const caption = value['caption']
+          const placement = parsePlacement(value['placement'])
           out.push({
             kind: 'image',
             imageId,
             afterBlockId: after,
             sourceWidth: value['sourceWidth'],
             sourceHeight: value['sourceHeight'],
-            ...(typeof caption === 'string' ? { caption } : {})
+            ...(typeof caption === 'string' ? { caption } : {}),
+            ...(placement ? { placement } : {})
           })
+        }
+        break
+      }
+      case 'place': {
+        const illustrationId = str(value['illustrationId'], '')
+        // `null` is an answer — back to the engine's own placement — and has to
+        // survive the round trip as one, distinct from a placement that would
+        // not parse, which is dropped with the edit.
+        const placement = value['placement'] === null ? null : parsePlacement(value['placement'])
+        if (illustrationId && placement !== undefined) {
+          out.push({ kind: 'place', illustrationId, placement })
         }
         break
       }

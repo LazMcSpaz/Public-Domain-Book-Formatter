@@ -20,6 +20,7 @@ export {
   type ChapterEntry,
   type BookSection,
   type Illustration,
+  type IllustrationPlacement,
   type IllustrationSource
 } from './assemble-book'
 export { bookText } from './book-text'

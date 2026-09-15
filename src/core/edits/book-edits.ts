@@ -37,7 +37,7 @@ import {
   type TranscribedBlock
 } from '@core/transcribe'
 import { deriveChapters } from '@core/assemble'
-import type { BookBlock, BookDocument, Illustration } from '@core/assemble'
+import type { BookBlock, BookDocument, Illustration, IllustrationPlacement } from '@core/assemble'
 
 /**
  * One correction, naming the block it applies to.
@@ -145,6 +145,12 @@ export type BookEdit =
       sourceWidth: number
       sourceHeight: number
       caption?: string
+      /**
+       * Where it sits and how large — see `IllustrationPlacement`. Absent,
+       * the engine sets it to the measure after `afterBlockId`. For `within`
+       * and `beside`, `afterBlockId` is the paragraph that hosts it.
+       */
+      placement?: IllustrationPlacement
     }
   /**
    * A division the editor wrote — an introduction, an afterword, an appendix.
@@ -300,6 +306,17 @@ export type BookEdit =
    * platform's business.
    */
   | { kind: 'retouch'; illustrationId: string; ops: ImageEditOp[] }
+  /**
+   * Where a picture cut from the scan sits, and how large.
+   *
+   * The engine's own rule — after the last text that shared the leaf, set to
+   * the measure — is the most the scan can say. A person who has looked at the
+   * leaf can say where the figure actually stood: mid-paragraph with the text
+   * run round it, or between two lines at the size the original printed it.
+   * `null` returns the picture to the engine's rule, and is kept distinct from
+   * the edit being absent so that undoing a placement is itself a decision.
+   */
+  | { kind: 'place'; illustrationId: string; placement: IllustrationPlacement | null }
 
 /** How a split block's halves are named, so the ids stay deterministic. */
 const splitId = (id: string, half: number): string => `${id}/${half}`
@@ -342,6 +359,8 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   const inserted = new Map<string, BookEdit & { kind: 'insert' }>()
   /** Retouching per picture, keyed so adjusting a slider replaces the stack. */
   const retouched = new Map<string, ImageEditOp[]>()
+  /** Where each scanned picture was put by a person, keyed so a later say wins. */
+  const placements = new Map<string, IllustrationPlacement | null>()
   // Illustration anchors are held as an override map and folded in at the end,
   // so a picture re-anchored to a block that a later edit drops falls back to
   // where the engine would have put it rather than vanishing.
@@ -397,6 +416,11 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
 
     if (edit.kind === 'retouch') {
       retouched.set(edit.illustrationId, edit.ops)
+      continue
+    }
+
+    if (edit.kind === 'place') {
+      placements.set(edit.illustrationId, edit.placement)
       continue
     }
 
@@ -620,7 +644,8 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
       sourceHeight: image.sourceHeight,
       caption: image.caption?.trim() ? image.caption.trim() : null,
       anchorAfterBlockId: image.afterBlockId,
-      origin: 'supplied' as const
+      origin: 'supplied' as const,
+      ...(image.placement ? { placement: image.placement } : {})
     }))
     .map((illustration) => withRetouching(illustration, retouched.get(illustration.id)))
 
@@ -634,6 +659,7 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
       return { ...illustration, anchorAfterBlockId: after }
     })
     .map((illustration) => withRetouching(illustration, retouched.get(illustration.id)))
+    .map((illustration) => withPlacement(illustration, placements))
 
   return {
     ...doc,
@@ -656,6 +682,26 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
  * core never sees, but a crop changes how many pixels are spread over the same
  * printed inches — and that is the number the KDP check reports.
  */
+/**
+ * A scanned picture placed by a person, or left to the engine's rule.
+ *
+ * A `place` edit naming `null` takes any placement *off* — a picture cut from
+ * the scan has none to begin with, so that case only matters once one has been
+ * given and then withdrawn, which is exactly the case that has to work.
+ */
+function withPlacement(
+  illustration: Illustration,
+  placements: ReadonlyMap<string, IllustrationPlacement | null>
+): Illustration {
+  if (!placements.has(illustration.id)) return illustration
+  const placement = placements.get(illustration.id) ?? null
+  if (placement === null) {
+    const { placement: _dropped, ...rest } = illustration
+    return rest
+  }
+  return { ...illustration, placement }
+}
+
 function withRetouching(illustration: Illustration, ops: ImageEditOp[] | undefined): Illustration {
   if (!ops || ops.length === 0) return illustration
   const size = sizeAfterOps(illustration.sourceWidth, illustration.sourceHeight, ops)
@@ -733,7 +779,8 @@ export function blockOf(edit: BookEdit): string | null {
     edit.kind === 'section' ||
     edit.kind === 'insert' ||
     edit.kind === 'note-text' ||
-    edit.kind === 'retouch'
+    edit.kind === 'retouch' ||
+    edit.kind === 'place'
   ) {
     return null
   }
@@ -776,6 +823,7 @@ export function countEdited(edits: readonly BookEdit[]): number {
     else if (edit.kind === 'section') touched.add(edit.sectionId)
     else if (edit.kind === 'insert') touched.add(edit.insertId)
     else if (edit.kind === 'retouch') touched.add(edit.illustrationId)
+    else if (edit.kind === 'place') touched.add(edit.illustrationId)
     else touched.add(edit.blockId)
   }
   return touched.size
@@ -841,7 +889,8 @@ export function withEdit(edits: readonly BookEdit[], edit: BookEdit): BookEdit[]
     edit.kind === 'memo' ||
     edit.kind === 'highlight' ||
     edit.kind === 'note-text' ||
-    edit.kind === 'retouch'
+    edit.kind === 'retouch' ||
+    edit.kind === 'place'
   if (!collapsible) return [...edits, edit]
 
   const target = editTarget(edit)
@@ -869,5 +918,6 @@ export function editTarget(edit: BookEdit): string {
   // last. The same reason a note is keyed by the note.
   if (edit.kind === 'highlight') return edit.highlightId
   if (edit.kind === 'retouch') return edit.illustrationId
+  if (edit.kind === 'place') return edit.illustrationId
   return edit.blockId
 }

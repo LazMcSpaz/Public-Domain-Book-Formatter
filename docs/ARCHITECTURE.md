@@ -230,6 +230,25 @@ OCR word boxes ──► detectRegions ──► rectangles with no *text* in th
   picture was on, so it goes after the last text that shared that page. Inferring
   a position within the page would be guessing, and a picture confidently dropped
   into the wrong paragraph is harder to spot than one sitting a paragraph late.
+- **A person can say more, and the engine carries it** (`IllustrationPlacement`
+  on `Illustration`, on the `image` edit for a supplied picture and as the
+  `place` edit for one cut from the scan). Three shapes, each taken off a real
+  leaf of _Isis Unveiled_: `inline`, between blocks at the width the original
+  printed it; `within`, interrupting a paragraph at a character offset with the
+  text resuming flush below (a symbol drawn mid-sentence); and `beside`, the
+  run-around — the figure against one margin from the line that carries the
+  word at `at`, and the lines set to the narrower measure until it is past. The
+  run-around is the drop capital's mechanism (`lineWidths` per line, offsets per
+  line) applied further down the paragraph: the line the word falls on is found
+  by breaking once, the widths set from it, and the paragraph broken again until
+  the two agree. The figure and its narrowed lines are **held together** across
+  a page break (`FlowLine.holdWithNext`), a paragraph shorter than its figure
+  holds the slots beside it empty, and a placement the engine cannot honour —
+  too wide for text beside it, too tall to share a page, a heading as host —
+  falls back to a line of its own and **reports** it as a layout warning.
+  `widthIn` is inches rather than a fraction of the measure: the cut was made
+  at that size, a wider measure gains white rather than a larger engraving, and
+  the resolution the KDP check reports stays the resolution the crop has.
 - **Pixels travel beside the page model, not in it.** `ImageItem` carries an id;
   the renderer resolves it. Ornaments carry their art because art is path data,
   and pictures cannot: megabytes of decoded bitmap in a `LaidOutPage` would drag
