@@ -20,7 +20,9 @@
 import {
   bookPath,
   isRuling,
+  landedRulings,
   mergeOutbox,
+  rulingsMissingFrom,
   summarize,
   type OutboxConflict,
   type ShelfConfig
@@ -28,6 +30,7 @@ import {
 import { parseBookFile, serializeBookFile, toBase64 } from '@core/project'
 import { getText, putFile } from './shelf'
 import { clearQueued, outboxFor } from './run-store'
+import { landedFor, rememberLanded } from './landed'
 
 /** What a flush did, in the words the interface has to be able to say. */
 export interface FlushResult {
@@ -115,6 +118,39 @@ async function sendQueue(config: ShelfConfig, bookKey: string): Promise<FlushRes
   }
 
   const file = parseBookFile(text)
+
+  // The read has to be *current*, not merely successful.
+  //
+  // What is written back is the whole rulings list folded over what was read,
+  // so a file that arrived short does not miss a ruling, it deletes it — and
+  // the queue is cleared afterwards, which makes the deletion permanent and
+  // silent. Measured on a real book: two flushes inside GitHub's own
+  // `max-age=60` window each took a ruling off the shelf, one of them for good.
+  //
+  // Refusing costs a minute and keeps every entry queued; writing costs the
+  // editor work they will not know is gone. That asymmetry is the whole
+  // argument, and it is why this stops rather than repairing: the device knows
+  // a ruling is *missing*, not what it said.
+  const missing = rulingsMissingFrom(landedFor(bookKey), {
+    edits: file.run.edits,
+    rulings: file.run.rulings
+  })
+  if (missing.length > 0) {
+    const one = missing.length === 1
+    return {
+      idle: false,
+      sent: 0,
+      conflicts: [],
+      waiting: queued.length,
+      note:
+        `${config.repo} answered with a copy of this book that is missing ` +
+        `${missing.length} ruling${one ? '' : 's'} it already had, so nothing was ` +
+        `written — sending would have deleted ${one ? 'it' : 'them'}. ` +
+        `Your ${queued.length} change${queued.length === 1 ? ' is' : 's are'} still ` +
+        'here and will go up on the next try.'
+    }
+  }
+
   const merged = mergeOutbox({ edits: file.run.edits, rulings: file.run.rulings }, queued)
   if (merged.applied.length === 0) {
     return {
@@ -154,6 +190,10 @@ async function sendQueue(config: ShelfConfig, bookKey: string): Promise<FlushRes
         ? `${marks} passages marked while reading`
         : `${merged.applied.length} changes from a reading session`
   )
+  // What the shelf demonstrably holds now, for the next read to be checked
+  // against. Before the queue is cleared: if the record will not save, the
+  // entries staying queued is the safer of the two ways to be wrong.
+  rememberLanded(bookKey, landedRulings(merged.rulings))
   // Only after the shelf has answered, and only what it took. A conflicted
   // entry stays queued: it is a change the editor made that nobody has
   // accepted, and clearing it to tidy the queue is the one thing that would

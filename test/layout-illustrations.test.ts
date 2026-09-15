@@ -408,3 +408,217 @@ describe('layout — what it reports about pictures', () => {
     expect(bookText(run(doc(1200, 400)))).toContain('chirurgeon')
   })
 })
+
+/**
+ * A figure where the original set it, at the size the original printed it.
+ *
+ * The engine's own rule — after the last text that shared the leaf, as wide
+ * as the measure — is the most the scan can say. A person who has looked at
+ * the leaf can say more, and *Isis Unveiled* has three figures that need it:
+ * an amulet set into a paragraph with the text run down a column beside it, a
+ * symbol drawn mid-sentence, and a chemical formula at its own small size.
+ */
+describe('layout — a figure placed where the original set it', () => {
+  const profile = defaultStyleProfile()
+  const leading = leadingFor(profile.bodyFontSize)
+  const WORD = 'nucleus'
+  const HOST = `${PROSE}Attach to the ${WORD} three hydroxyl groups and there result triatomic compounds among which is a very familiar substance and the account of it runs on for some lines yet before the paragraph is done with the matter. ${PROSE.repeat(4)}`
+  const AT = HOST.indexOf(WORD)
+
+  /** A supplied picture, the way `applyEdits` hands one to the engine. */
+  const figure = (
+    placement: NonNullable<import('@core/assemble').Illustration['placement']>,
+    over: Partial<{ sourceWidth: number; sourceHeight: number }> = {}
+  ): import('@core/assemble').Illustration => ({
+    id: 'fig1',
+    pageIndex: -1,
+    sourceWidth: over.sourceWidth ?? 600,
+    sourceHeight: over.sourceHeight ?? 300,
+    caption: null,
+    anchorAfterBlockId: 'p0b1',
+    origin: 'supplied',
+    placement
+  })
+
+  const docWith = (
+    placement: NonNullable<import('@core/assemble').Illustration['placement']>,
+    over: Partial<{ sourceWidth: number; sourceHeight: number; host: string; before: string }> = {}
+  ): BookDocument => {
+    const doc = assembleBook([
+      page(0, [
+        { kind: 'paragraph', text: over.before ?? PROSE },
+        { kind: 'paragraph', text: over.host ?? HOST },
+        { kind: 'paragraph', text: PROSE.repeat(2) }
+      ])
+    ])
+    return { ...doc, illustrations: [figure(placement, over)] }
+  }
+
+  const pageWithImage = (book: LaidOutBook): LaidOutPage =>
+    book.pages.find((p) => images(p).length > 0)!
+  const rightEdge = (l: PositionedLine): number =>
+    Math.max(...l.runs.map((r) => r.xPt + measurer.widthOf(r.text, r.font, r.sizePt)))
+  const leftEdge = (l: PositionedLine): number => Math.min(...l.runs.map((r) => r.xPt))
+  /** Lines whose baseline falls in the picture's vertical span. */
+  const linesBeside = (p: LaidOutPage, item: ImageItem): PositionedLine[] =>
+    lines(p).filter(
+      (l) =>
+        l.runs.length > 0 &&
+        l.baselinePt > item.yPt &&
+        l.baselinePt < item.yPt + item.heightPt + leading
+    )
+
+  it('sets an inline figure at the width the original printed it, centred', () => {
+    const book = run(docWith({ kind: 'inline', widthIn: 1.5 }))
+    const item = allImages(book)[0]!
+    const p = pageWithImage(book)
+    expect(item.widthPt).toBeCloseTo(1.5 * 72, 6)
+    expect(item.xPt).toBeCloseTo(p.frame.xPt + (p.frame.widthPt - item.widthPt) / 2, 6)
+    // Nothing is set over it.
+    for (const l of linesBeside(p, item))
+      expect(l.baselinePt).toBeGreaterThan(item.yPt + item.heightPt)
+  })
+
+  it('never sets an inline figure wider than the measure', () => {
+    const book = run(docWith({ kind: 'inline', widthIn: 12 }))
+    const item = allImages(book)[0]!
+    expect(item.widthPt).toBeCloseTo(pageWithImage(book).frame.widthPt, 6)
+  })
+
+  describe('within — a symbol drawn mid-sentence', () => {
+    const book = run(docWith({ kind: 'within', widthIn: 1.5, at: AT }))
+    const p = pageWithImage(book)
+    const item = images(p)[0]!
+
+    it('stops the text before the word, draws the figure, and resumes below it', () => {
+      const above = lines(p).filter((l) => l.baselinePt < item.yPt)
+      const below = lines(p).filter((l) => l.baselinePt > item.yPt + item.heightPt)
+      const textAbove = above.map((l) => l.runs.map((r) => r.text).join(' ')).join(' ')
+      const textBelow = below.map((l) => l.runs.map((r) => r.text).join(' ')).join(' ')
+      expect(textAbove).toContain('Attach to the')
+      expect(textAbove).not.toContain(WORD)
+      expect(textBelow.startsWith(`${WORD} three hydroxyl`)).toBe(true)
+    })
+
+    it('resumes flush, because it is the same sentence and not a new paragraph', () => {
+      const resumed = lines(p).find((l) => l.baselinePt > item.yPt + item.heightPt)!
+      expect(leftEdge(resumed)).toBeCloseTo(p.frame.xPt, 3)
+    })
+
+    it('draws the figure centred at its printed width', () => {
+      expect(item.widthPt).toBeCloseTo(1.5 * 72, 6)
+      expect(item.xPt).toBeCloseTo(p.frame.xPt + (p.frame.widthPt - item.widthPt) / 2, 6)
+    })
+
+    it('loses no words of the paragraph', () => {
+      const all = bookText(book).replace(/·/g, ' ').replace(/\s+/g, ' ')
+      for (const w of HOST.split(/\s+/)) expect(all).toContain(w.replace(/-$/, ''))
+    })
+
+    it('reports the block on one page, as one thing', () => {
+      expect(book.blockPages.filter((b) => b.blockId === 'p0b1')).toHaveLength(1)
+    })
+  })
+
+  describe('beside — the text run down a column past the figure', () => {
+    const gutter = profile.bodyFontSize
+
+    it('narrows the lines from the one carrying the word, on the right', () => {
+      const book = run(docWith({ kind: 'beside', widthIn: 1.8, at: AT, side: 'right' }))
+      const p = pageWithImage(book)
+      const item = images(p)[0]!
+      expect(item.xPt).toBeCloseTo(p.frame.xPt + p.frame.widthPt - item.widthPt, 6)
+      const beside = linesBeside(p, item)
+      expect(beside.length).toBeGreaterThan(2)
+      for (const l of beside) {
+        expect(leftEdge(l)).toBeCloseTo(p.frame.xPt, 3)
+        expect(rightEdge(l)).toBeLessThanOrEqual(item.xPt - gutter + 0.5)
+      }
+      // The word the placement names is on the first narrowed line.
+      expect(beside[0]!.runs.map((r) => r.text).join(' ')).toContain(WORD)
+      // And the lines after the figure take the full measure again.
+      const after = lines(p).filter((l) => l.baselinePt > item.yPt + item.heightPt + leading)
+      expect(after.some((l) => rightEdge(l) > item.xPt + 1)).toBe(true)
+    })
+
+    it('narrows the lines on the left, and moves them out past the figure', () => {
+      const book = run(docWith({ kind: 'beside', widthIn: 1.8, at: AT, side: 'left' }))
+      const p = pageWithImage(book)
+      const item = images(p)[0]!
+      expect(item.xPt).toBeCloseTo(p.frame.xPt, 6)
+      for (const l of linesBeside(p, item)) {
+        expect(leftEdge(l)).toBeGreaterThanOrEqual(item.xPt + item.widthPt + gutter - 0.5)
+      }
+    })
+
+    it('keeps every word', () => {
+      const book = run(docWith({ kind: 'beside', widthIn: 1.8, at: AT, side: 'right' }))
+      const all = bookText(book).replace(/·/g, ' ').replace(/\s+/g, ' ')
+      for (const w of HOST.split(/\s+/)) expect(all).toContain(w.replace(/-$/, ''))
+    })
+
+    it('holds the slots beside a figure taller than its paragraph', () => {
+      const short = `${PROSE}Attach to the ${WORD} three hydroxyl groups.`
+      const book = run(
+        docWith(
+          { kind: 'beside', widthIn: 1.8, at: short.indexOf(WORD), side: 'right' },
+          { host: short, sourceWidth: 300, sourceHeight: 600 }
+        )
+      )
+      const p = pageWithImage(book)
+      const item = images(p)[0]!
+      const nextBlock = book.blockPages.find((b) => b.blockId === 'p0b2')!
+      expect(nextBlock.pageIndex).toBe(p.index)
+      const firstOfNext = lines(p).find((l) =>
+        l.runs
+          .map((r) => r.text)
+          .join(' ')
+          .startsWith('The chirurgeon')
+      )
+      // The paragraph after starts below the picture, not through it.
+      const below = lines(p).filter((l) => l.baselinePt > item.yPt + item.heightPt)
+      expect(below.length).toBeGreaterThan(0)
+      expect(firstOfNext).toBeDefined()
+    })
+
+    it('never splits a figure from the lines set beside it across a page', () => {
+      // The figure is five slots tall. Walk the host paragraph down the first
+      // page a paragraph at a time, so that for some length of text before it
+      // the run-around would straddle the page break if nothing held it — a
+      // fixture at one length passed with the hold removed, because that one
+      // length happened not to break inside it.
+      const slots = Math.ceil((1.8 * 72 * 300) / 600 / leading)
+      let straddled = 0
+      for (let k = 1; k <= 24; k++) {
+        const book = run(
+          docWith(
+            { kind: 'beside', widthIn: 1.8, at: AT, side: 'right' },
+            { before: PROSE.repeat(k) }
+          )
+        )
+        const p = pageWithImage(book)
+        const item = images(p)[0]!
+        expect(item.yPt + item.heightPt).toBeLessThanOrEqual(p.frame.yPt + p.frame.heightPt + 0.5)
+        // Every narrowed line is on the figure's page: the paragraph is long
+        // enough to fill the column, so the page must carry all of them.
+        const beside = linesBeside(p, item)
+        expect(beside.length).toBe(slots)
+        for (const l of beside) expect(rightEdge(l)).toBeLessThanOrEqual(item.xPt - gutter + 0.5)
+        if (p.index > 0 && book.blockPages.find((b) => b.blockId === 'p0b1')!.pageIndex < p.index) {
+          straddled++
+        }
+      }
+      // And the sweep did put the paragraph across a page break, or it has
+      // exercised nothing.
+      expect(straddled).toBeGreaterThan(0)
+    })
+
+    it('falls back to a line of its own when the text would have no room, and says so', () => {
+      const book = run(docWith({ kind: 'beside', widthIn: 4.2, at: AT, side: 'right' }))
+      const item = allImages(book)[0]!
+      const p = pageWithImage(book)
+      expect(item.xPt).toBeCloseTo(p.frame.xPt + (p.frame.widthPt - item.widthPt) / 2, 6)
+      expect(book.warnings.some((w) => /too wide/.test(w.text))).toBe(true)
+    })
+  })
+})

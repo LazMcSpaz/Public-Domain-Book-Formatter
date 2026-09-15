@@ -46,18 +46,36 @@
  * gate on *Isis Unveiled* failed that way, with the book file itself as the
  * thing that shadowed its own sha.
  *
+ * **And the same cache took a ruling off the shelf, three hours later.** The
+ * fix above was applied to `shaOf` alone, with a comment arguing that a unique
+ * URL is the rule that does not depend on anybody's cache being correct — and
+ * `getText` was left on `cache: 'no-store'`, which governs the *browser's*
+ * cache and not a shared one. `s-maxage=60` invites a shared cache explicitly.
+ *
+ * What that cost is on the record rather than in theory. A flush reads the book
+ * file, folds the queue into *its* list and writes the whole list back, so a
+ * read a minute out of date **deletes** everything that landed in that minute.
+ * Over fourteen commits to one book, the two flushes that came 44 seconds after
+ * the one before them each dropped a ruling — leaf 196, which survived only
+ * because the editor happened to rule it again, and leaf 209, which did not —
+ * while every one of the nine gaps longer than a minute was clean. Two for two
+ * under the window, none above it. The commit message still said "1 query ruled
+ * on".
+ *
  * Three rules come out of it, and they are in the order of how much they can be
  * relied on.
  *
- * **The sha is asked for at a URL nothing else reads.** A unique parameter is
- * added to that one request, so no cache anywhere — the browser's, a proxy's,
- * one written next year — holds an entry that could answer it with the file's
- * own contents. GitHub ignores the parameter and returns the record, measured.
- * This is the rule that does not depend on anybody's cache being correct, which
- * is why it is first: Chromium honours `Vary: Accept` properly and cannot be
- * made to show this fault at all, and the device it happened on was an iPad.
+ * **Every read is asked for at a URL nothing else reads.** A unique parameter
+ * on the request, so no cache anywhere — the browser's, GitHub's own edge, a
+ * proxy written next year — holds an entry that could answer it. GitHub ignores
+ * the parameter and returns the record, measured. This is the rule that does
+ * not depend on anybody's cache being correct, which is why it is first:
+ * Chromium honours `Vary: Accept` properly and cannot be made to show the first
+ * fault at all, and the device both happened on was an iPad. It goes on **every
+ * read**, not on the clever one — that distinction is what the second fault
+ * was.
  *
- * **Every read is `cache: 'no-store'`.** The right declaration on its own
+ * **Every read is also `cache: 'no-store'`.** The right declaration on its own
  * terms — the shelf is the source of truth and a minute-old answer from it is
  * not one — and it closes the same door from the other side.
  *
@@ -97,6 +115,33 @@ const API = 'https://api.github.com'
  * next one's answer.
  */
 const NO_CACHE = 'no-store' as const
+
+/**
+ * A read's URL, made one that nothing can already have an answer for.
+ *
+ * `unshared` is not decoration and not a retry counter: see the note on the
+ * ETag and on `s-maxage`, above. Every read of the shelf goes through here, so
+ * that the property holds for the reads as a class rather than for whichever
+ * one somebody last thought about.
+ */
+function readUrl(config: ShelfConfig, path: string): string {
+  return (
+    `${API}/repos/${config.repo}/contents/${path}` +
+    `?ref=${encodeURIComponent(config.branch)}&unshared=${Date.now()}-${++reads}`
+  )
+}
+
+/**
+ * A counter beside the clock, because the clock is not fine enough.
+ *
+ * `Date.now()` is milliseconds, and two reads of one path inside a millisecond
+ * — a flush reading the book and then a picture, a gate fetching two crops —
+ * would produce the same URL and hand the second one the first one's answer.
+ * That is the whole fault again, in the small. The counter makes the property
+ * hold for *every* read rather than for reads that happen to be far enough
+ * apart, which is the distinction this module has now got wrong twice.
+ */
+let reads = 0
 
 function headers(config: ShelfConfig, accept = 'application/vnd.github+json'): HeadersInit {
   return {
@@ -198,13 +243,10 @@ export async function checkShelf(config: ShelfConfig): Promise<ShelfInfo> {
  * their own request.
  */
 async function shaOf(config: ShelfConfig, path: string): Promise<string | null> {
-  // `unshared` is not decoration and not a retry counter: it is what makes this
-  // request's URL one that a read of the same file cannot have an answer for.
-  // See the note on the ETag, above.
-  const url =
-    `${API}/repos/${config.repo}/contents/${path}` +
-    `?ref=${encodeURIComponent(config.branch)}&unshared=${Date.now()}`
-  const response = await fetch(url, { headers: headers(config), cache: NO_CACHE })
+  const response = await fetch(readUrl(config, path), {
+    headers: headers(config),
+    cache: NO_CACHE
+  })
   if (response.status === 404) return null
   if (!response.ok) throw await explain(response)
   let body: unknown
@@ -266,8 +308,7 @@ export async function putFile(
  * one.
  */
 export async function getText(config: ShelfConfig, path: string): Promise<string | null> {
-  const url = `${API}/repos/${config.repo}/contents/${path}?ref=${encodeURIComponent(config.branch)}`
-  const response = await fetch(url, {
+  const response = await fetch(readUrl(config, path), {
     headers: headers(config, 'application/vnd.github.raw'),
     cache: NO_CACHE
   })
@@ -278,8 +319,7 @@ export async function getText(config: ShelfConfig, path: string): Promise<string
 
 /** Read a file as bytes — the scan. */
 export async function getBytes(config: ShelfConfig, path: string): Promise<Uint8Array | null> {
-  const url = `${API}/repos/${config.repo}/contents/${path}?ref=${encodeURIComponent(config.branch)}`
-  const response = await fetch(url, {
+  const response = await fetch(readUrl(config, path), {
     headers: headers(config, 'application/vnd.github.raw'),
     cache: NO_CACHE
   })
@@ -290,8 +330,10 @@ export async function getBytes(config: ShelfConfig, path: string): Promise<Uint8
 
 /** Every book on the shelf. Empty for a repository nobody has saved to yet. */
 export async function listShelf(config: ShelfConfig): Promise<{ slug: string; path: string }[]> {
-  const url = `${API}/repos/${config.repo}/contents/books?ref=${encodeURIComponent(config.branch)}`
-  const response = await fetch(url, { headers: headers(config) })
+  const response = await fetch(readUrl(config, 'books'), {
+    headers: headers(config),
+    cache: NO_CACHE
+  })
   // A shelf with nothing on it has no `books/` directory, which is a 404 and
   // not a failure: it is what a repository looks like before the first save.
   if (response.status === 404) return []

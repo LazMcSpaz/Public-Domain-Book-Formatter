@@ -1172,3 +1172,51 @@ describe('applyEdits — a block the editor wrote, inside the body', () => {
     expect(countEdited(list)).toBe(1)
   })
 })
+
+/**
+ * Where a picture sits, carried on the edit that adds it and settable on one
+ * the scan supplied. The engine's own rule is the fallback, not the answer.
+ */
+describe('applyEdits — where a picture is placed', () => {
+  const beside = { kind: 'beside' as const, widthIn: 1.98, at: 12, side: 'right' as const }
+
+  it('carries a supplied picture’s placement through to the illustration', () => {
+    const doc = applyEdits(book(), [
+      {
+        kind: 'image',
+        imageId: 'img1',
+        afterBlockId: 'p0b1',
+        sourceWidth: 595,
+        sourceHeight: 419,
+        placement: beside
+      }
+    ])
+    expect(doc.illustrations[0]!.placement).toEqual(beside)
+    expect(doc.illustrations[0]!.anchorAfterBlockId).toBe('p0b1')
+  })
+
+  it('places a picture cut from the scan, and takes the placement off again', () => {
+    const scanned = {
+      ...book(),
+      illustrations: [{ id: 'i1', pageIndex: 0, sourceWidth: 10, sourceHeight: 10, caption: null }]
+    }
+    const placed = applyEdits(scanned, [{ kind: 'place', illustrationId: 'i1', placement: beside }])
+    expect(placed.illustrations[0]!.placement).toEqual(beside)
+
+    const withdrawn = applyEdits(scanned, [
+      { kind: 'place', illustrationId: 'i1', placement: beside },
+      { kind: 'place', illustrationId: 'i1', placement: null }
+    ])
+    expect(withdrawn.illustrations[0]!.placement).toBeUndefined()
+    expect('placement' in withdrawn.illustrations[0]!).toBe(false)
+  })
+
+  it('collapses a second say about the same picture onto the first', () => {
+    const edits = withEdit(
+      withEdit([], { kind: 'place', illustrationId: 'i1', placement: beside }),
+      { kind: 'place', illustrationId: 'i1', placement: { kind: 'inline', widthIn: 1 } }
+    )
+    expect(edits).toHaveLength(1)
+    expect(edits[0]).toMatchObject({ placement: { kind: 'inline' } })
+  })
+})

@@ -56,6 +56,8 @@ const PORT = 8443
 // book file's shape, and it is what made the fault silent.
 const PATH = 'books/probe/book.json'
 const BODY = JSON.stringify({ version: 15, run: { edits: [], rulings: [] } })
+/** The same book after a ruling landed — what a second read must come back with. */
+const LATER = JSON.stringify({ version: 15, run: { edits: [], rulings: ['leaf 209'] } })
 const SHA = 'b7558071af729a61e188aaceb0643fd104e72d7f'
 
 const certDir = mkdtempSync(join(tmpdir(), 'pdbf-cert-'))
@@ -83,6 +85,10 @@ execFileSync(
 
 /** Every GET the stub answered, and how. */
 const reads = []
+/** What each URL was answered with the first time — the stale cache's memory. */
+const answered = new Map()
+/** The book file as it stands now; a second read must see the later one. */
+let current = BODY
 /** Every write it was asked to make, with whether it carried a sha. */
 const writes = []
 /** URLs already served as a raw read — what a lenient cache would hold. */
@@ -104,6 +110,14 @@ const server = createServer(
 
     if (req.method === 'GET') {
       const raw = String(req.headers.accept ?? '').includes('raw')
+      // The 60-second window at its worst: a URL already answered is answered
+      // again with what it said then. A read whose URL is unique cannot be.
+      if (answered.has(req.url)) {
+        reads.push({ url: req.url, raw, stale: true })
+        return res
+          .writeHead(200, { ...cors, 'content-type': 'application/vnd.github.raw; charset=utf-8' })
+          .end(answered.get(req.url))
+      }
       // The lenient cache. A URL already read raw answers with the file again,
       // whatever was asked for — which is what GitHub's one-ETag-per-path lets
       // such a cache do, and what put a book file where a sha should have been.
@@ -112,7 +126,7 @@ const server = createServer(
       if (raw) cached.add(req.url)
       const body =
         raw || shadowed
-          ? BODY
+          ? current
           : JSON.stringify({
               name: 'book.json',
               path: PATH,
@@ -121,6 +135,10 @@ const server = createServer(
               content: '',
               encoding: 'none'
             })
+      // Remembered *before* the reply goes out, not after it: written after
+      // the `return` this sat dead, the stale path never ran, and the check
+      // passed for a reason that had nothing to do with what it asserts.
+      answered.set(req.url, body)
       return res
         .writeHead(200, {
           ...cors,
@@ -147,6 +165,8 @@ const server = createServer(
         }
         const sha = typeof sent.sha === 'string' && sent.sha !== '' ? sent.sha : null
         writes.push({ sha })
+        // The book moves on, as it does the moment a ruling lands.
+        if (sha) current = LATER
         if (!sha) {
           return res
             .writeHead(422, { ...cors, 'content-type': 'application/json' })
@@ -190,10 +210,12 @@ const result = await page.evaluate(
     const text = await shelf.getText(config, path)
     try {
       await shelf.putFile(config, path, btoa('updated'), 'a ruling')
-      return { read: text === null ? null : text.length, error: null }
     } catch (err) {
       return { read: text === null ? null : text.length, error: String(err?.message ?? err) }
     }
+    // A second flush, a moment later. This is the read that deleted a ruling.
+    const again = await shelf.getText(config, path)
+    return { read: text === null ? null : text.length, again, error: null }
   },
   [REPO, PATH]
 )
@@ -202,9 +224,19 @@ await browser.close()
 server.close()
 
 const shadowed = reads.filter((r) => r.shadowed)
+const stale = reads.filter((r) => r.stale)
 const problems = []
 if (result.read !== BODY.length)
   problems.push(`the book file read back as ${result.read}, not ${BODY.length}`)
+if (stale.length > 0) {
+  problems.push(`a read was answered out of the cache's memory (${stale[0].url})`)
+}
+if (result.again !== undefined && result.again !== LATER) {
+  problems.push(
+    'the second read came back with the earlier book — a flush folding its queue ' +
+      'into that would delete whatever landed in between'
+  )
+}
 if (shadowed.length > 0) {
   problems.push(
     `the sha was looked up at a URL a read of the file already answers (${shadowed[0].url})`
@@ -215,6 +247,9 @@ if (writes[0] && writes[0].sha === null) problems.push('the write went up with n
 if (result.error) problems.push(`the write failed: ${result.error}`)
 
 console.log(`read back    : ${result.read} chars`)
+console.log(
+  `read again   : ${result.again === LATER ? 'the current book' : JSON.stringify(result.again)}`
+)
 console.log(
   `reads        : ${reads.map((r) => (r.raw ? 'raw' : 'json') + (r.shadowed ? '(shadowed)' : '')).join(', ')}`
 )

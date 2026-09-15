@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { commutes, entriesBetween, mergeOutbox, summarize, type OutboxEntry } from '@core/sync'
+import {
+  commutes,
+  entriesBetween,
+  landedRulings,
+  mergeOutbox,
+  rulingsMissingFrom,
+  summarize,
+  type OutboxEntry
+} from '@core/sync'
 import type { BookEdit } from '@core/edits'
 import type { Ruling } from '@core/queries'
 
@@ -352,5 +360,58 @@ describe('the editor’s rulings, queued', () => {
     expect(entries).toHaveLength(1)
     expect(entries[0]!.edit).toEqual(highlight('h1'))
     expect(entries[0]!.saw).toBeNull()
+  })
+})
+
+/**
+ * The read a flush folds its queue into has to be *current*, not merely
+ * successful — because what goes back is the whole rulings list.
+ *
+ * Taken from the record rather than imagined. Over fourteen commits to one
+ * book, the two flushes that came 44 seconds after the one before them each
+ * dropped a ruling (leaf 196, re-ruled by luck; leaf 209, gone), while all nine
+ * gaps longer than a minute were clean — GitHub's `max-age=60, s-maxage=60`,
+ * against reads that were proof only against the browser's own cache.
+ */
+describe('a read that came back short', () => {
+  const ruling = (pageIndex: number, quote: string): Ruling => ({
+    pageIndex,
+    quote,
+    kind: 'printers-error',
+    decision: 'as-printed',
+    decidedOn: '2026-09-15'
+  })
+  const r196 = ruling(196, 'for if their will does not free “ them from this fatal attraction')
+  const r209 = ruling(209, 'Skuld—or the Present the Past, and the Future')
+
+  it('names the rulings a stale file is missing', () => {
+    const landed = landedRulings([r196, r209])
+    expect(landed).toHaveLength(2)
+    // The shelf answered with a copy from before leaf 209 was filed.
+    const stale = { edits: [], rulings: [r196] }
+    expect(rulingsMissingFrom(landed, stale)).toEqual(landedRulings([r209]))
+  })
+
+  it('says nothing when the file holds everything this device landed', () => {
+    const landed = landedRulings([r196, r209])
+    expect(rulingsMissingFrom(landed, { edits: [], rulings: [r209, r196] })).toEqual([])
+    // And a shelf that has *more* than this device knows about is not a fault:
+    // another device ruled on something, which is what a shelf is for.
+    const extra = { edits: [], rulings: [r196, r209, ruling(218, 'a third')] }
+    expect(rulingsMissingFrom(landed, extra)).toEqual([])
+  })
+
+  it('is silent for a device with no record, which is what losing it must cost', () => {
+    // Private browsing, a cleared site, a second device: no net, never a
+    // refusal nobody can clear.
+    expect(rulingsMissingFrom([], { edits: [], rulings: [] })).toEqual([])
+  })
+
+  it('keys a re-ruling to the same query, so changing an answer is not a loss', () => {
+    // The editor ruled 196 `corrected`, then went back and made it
+    // `as-printed`. That is one query settled twice, not two rulings — and a
+    // file carrying only the later one is complete.
+    const first = { ...r196, decision: 'corrected' as const, correction: 'x' }
+    expect(rulingsMissingFrom(landedRulings([first]), { edits: [], rulings: [r196] })).toEqual([])
   })
 })

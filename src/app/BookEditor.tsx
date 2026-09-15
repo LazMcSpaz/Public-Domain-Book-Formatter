@@ -101,6 +101,16 @@ function snippet(text: string, at: number): string {
   return words.length > 0 ? `…${words}` : 'the start'
 }
 
+/** Where the engine will set it, in the editor's words rather than the engine's. */
+function describePlacement(picture: Illustration): string {
+  const p = picture.placement
+  if (!p) return 'set here by the engine, to the measure'
+  const size = `${p.widthIn.toFixed(2)} in wide`
+  if (p.kind === 'inline') return `set after this passage, ${size}`
+  if (p.kind === 'within') return `set inside this passage at character ${p.at}, ${size}`
+  return `set ${p.side} of the text from character ${p.at}, ${size}`
+}
+
 /** A picture's place in the column — a card, never the pixels. */
 function PictureCard({ picture }: { picture: Illustration }): JSX.Element {
   return (
@@ -113,7 +123,7 @@ function PictureCard({ picture }: { picture: Illustration }): JSX.Element {
         {picture.caption ? <i> — {picture.caption}</i> : null}
       </span>
       <span className="galley-picture-hint">
-        set here by the engine · picture tools are in “Check against the scan”
+        {describePlacement(picture)} · picture tools are in “Check against the scan”
       </span>
     </div>
   )

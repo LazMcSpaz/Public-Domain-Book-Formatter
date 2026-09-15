@@ -32,7 +32,7 @@
  * platform's business.
  */
 import { correctsTheBook, editTarget, sameTarget, withEdit, type BookEdit } from '@core/edits'
-import { withRuling, type Ruling } from '@core/queries'
+import { rulingTarget, withRuling, type Ruling } from '@core/queries'
 
 /** What every queued change carries, whatever kind it is. */
 interface QueuedChange {
@@ -145,6 +145,44 @@ export interface MergeResult {
    * of this app is built to avoid.
    */
   conflicts: OutboxConflict[]
+}
+
+/**
+ * The rulings a flush knows the shelf already holds, that the file it just read
+ * does not.
+ *
+ * A flush reads the book file, folds the queue into *its* rulings and writes
+ * the whole list back — so a read that is out of date does not merely miss
+ * something, it **deletes** it, and the commit message still reports the one
+ * ruling that went in. That is not hypothetical: over fourteen commits to one
+ * book, the two flushes that came 44 seconds after the one before them each
+ * dropped a ruling, and one of them was gone for good, while every gap longer
+ * than a minute was clean. GitHub answers a read with `max-age=60,
+ * s-maxage=60`, and the reads were only proof against the *browser's* cache.
+ *
+ * The cause is fixed where it belongs — every read is now asked for at a URL
+ * nothing can already have an answer for — and this is the net under it, which
+ * is the part that does not care *why* a read came back short. The device
+ * remembers which rulings it has landed; a file missing one of them is a file
+ * that cannot safely be written back over, whatever produced it.
+ *
+ * Keys, not rulings: this is compared against a record kept between sessions,
+ * and `rulingTarget` is already the identity rule the shelf collapses on.
+ *
+ * Only rulings, and deliberately. They are the list that accretes and is never
+ * deleted, so "missing" can only mean the read was wrong. An edit list is
+ * legitimately rewritten — a block merged away takes its correction with it —
+ * so the same check over edits would refuse honest work.
+ */
+export function rulingsMissingFrom(landed: readonly string[], shelf: ShelfState): string[] {
+  if (landed.length === 0) return []
+  const here = new Set(shelf.rulings.map(rulingTarget))
+  return [...new Set(landed)].filter((key) => !here.has(key))
+}
+
+/** What a flush now knows the shelf holds, to be checked against the next read. */
+export function landedRulings(rulings: readonly Ruling[]): string[] {
+  return [...new Set(rulings.map(rulingTarget))]
 }
 
 const same = (a: BookEdit | null, b: BookEdit | null): boolean =>

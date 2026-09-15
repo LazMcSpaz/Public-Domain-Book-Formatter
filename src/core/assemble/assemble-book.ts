@@ -181,6 +181,39 @@ export interface IllustrationSource {
  */
 export type IllustrationOrigin = 'scan' | 'supplied'
 
+/**
+ * How a picture sits against the text — where the original set it, and at
+ * what size.
+ *
+ * The engine's own rule, absent any of these, is honest and coarse: a picture
+ * goes after the last text that shared its page and is set to the full
+ * measure. That is the most the *scan* can say about a plate. A person looking
+ * at the leaf can say a great deal more, and a reprint that means to reproduce
+ * the original's figures has to be able to carry it: an engraving of an amulet
+ * set into the middle of a paragraph with eleven lines run down a narrow column
+ * beside it is not "a picture after this paragraph, as wide as the page".
+ *
+ * `widthIn` is the width the original printed the figure at, in inches, taken
+ * off the leaf. Inches rather than a fraction of the measure, because the cut
+ * was made at that size and reads at that size; a reprint on a wider measure
+ * gains white beside it rather than a larger engraving, and the resolution the
+ * KDP check reports stays the resolution the crop actually has.
+ *
+ * `at` is a character offset into the host block's text, the same convention a
+ * note's anchor and a `split` use. For `within` it is where the text stops for
+ * the picture and resumes below it, on a fresh line with no indent — the shape
+ * of a symbol drawn mid-sentence. For `beside` it names the word the run-around
+ * begins beside: the figure stands from the line that carries that word, and
+ * the lines are set to the narrower measure until it is past.
+ */
+export type IllustrationPlacement =
+  /** Between blocks, centred, at the width the original printed it. */
+  | { kind: 'inline'; widthIn: number }
+  /** Inside the paragraph it follows, interrupting it at `at`. */
+  | { kind: 'within'; widthIn: number; at: number }
+  /** Beside the paragraph's text, which runs down the other side of it. */
+  | { kind: 'beside'; widthIn: number; at: number; side: 'left' | 'right' }
+
 /** An illustration in the assembled book, with the caption it was printed under. */
 export interface Illustration extends IllustrationSource {
   /**
@@ -200,6 +233,13 @@ export interface Illustration extends IllustrationSource {
   anchorAfterBlockId?: string | null
   /** Defaults to `scan`. A supplied picture has no source leaf to fall back on. */
   origin?: IllustrationOrigin
+  /**
+   * Where and how large, when a person has said. Absent, the engine sets it to
+   * the measure after `anchorAfterBlockId` (or after the last text that shared
+   * its leaf). For `within` and `beside`, `anchorAfterBlockId` names the host
+   * paragraph.
+   */
+  placement?: IllustrationPlacement
   /**
    * Retouching to apply over the original pixels before embedding — crop,
    * straighten, levels and the rest of SPEC §6.

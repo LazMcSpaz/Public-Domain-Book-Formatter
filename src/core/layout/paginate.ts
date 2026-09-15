@@ -263,6 +263,20 @@ const IMAGE_SPACE_SLOTS = 1
  * called the result a plate.
  */
 const PLATE_HEIGHT_RATIO = 0.62
+/**
+ * White between a run-around figure and the text beside it, in ems of the
+ * body size. Measured off the leaf this was built for: the column stopped an
+ * em short of the engraving, which is also the gap a reader expects.
+ */
+const BESIDE_GUTTER_EMS = 1
+/**
+ * How much of the measure the text beside a figure must keep.
+ *
+ * Below three-tenths a column is a few words a line, which is not text run
+ * beside a picture but a picture with a ragged fringe. Such a figure is set
+ * on a line of its own instead, and the fallback is reported.
+ */
+const BESIDE_MIN_TEXT_RATIO = 0.3
 
 /**
  * A block turned into placeable lines, with the rules about where it may break.
@@ -313,6 +327,13 @@ interface Flowable {
    * centre against.
    */
   contentHeightPt?: number
+  /**
+   * Something the builder could not do as asked, reported against the page
+   * this lands on. A placement that had to fall back is not a fault in the
+   * book, but it is a decision the engine took for the editor and must not
+   * take in silence.
+   */
+  warning?: string
 }
 
 interface FlowLine {
@@ -337,7 +358,25 @@ interface FlowLine {
    * slot machinery, which is what keeps the text below it from being set on top
    * of it — the engine never draws over anything, it only runs out of slots.
    */
-  image?: { id: string; widthPt: number; heightPt: number }
+  image?: {
+    id: string
+    widthPt: number
+    heightPt: number
+    /**
+     * Left edge, relative to the frame. Absent, the picture is centred in the
+     * measure; a figure the text runs beside sits against one margin.
+     */
+    xPt?: number
+  }
+  /**
+   * A page break may not fall after this line.
+   *
+   * A figure and the lines set beside it are one thing: the picture on one
+   * page and the narrowed lines that were making room for it on the next is
+   * not a run-around, it is a picture with a hole under it. The placement loop
+   * backs off to the start of a held run rather than breaking inside it.
+   */
+  holdWithNext?: boolean
   /**
    * A rule drawn with this line — a table's head or foot rule.
    *
@@ -653,6 +692,42 @@ function spacedForSize(lines: FlowLine[], sizePt: number, ctx: BuildContext): Fl
  * thing that distinguishes front matter from back is `pageSection`, which is
  * what `folioFor` reads to number it in roman rather than arabic.
  */
+/**
+ * Which of a block's pictures it hosts, and which follow it.
+ *
+ * One figure can be hosted — a paragraph with two engravings set into it is
+ * not a case any leaf here has shown — and the rest are set after the block.
+ * A placement the paragraph cannot honour (see `hostable`) is set after it
+ * too, carrying the reason, so the page it lands on reports the fallback.
+ */
+function partitionFigures(
+  mine: readonly Illustration[],
+  ctx: BuildContext,
+  slotsPerPage: number
+): { hosted: Illustration | null; after: { illustration: Illustration; warning?: string }[] } {
+  let hosted: Illustration | null = null
+  const after: { illustration: Illustration; warning?: string }[] = []
+  for (const illustration of mine) {
+    const kind = illustration.placement?.kind
+    if (kind !== 'within' && kind !== 'beside') {
+      after.push({ illustration })
+      continue
+    }
+    const check = hostable(illustration, ctx, slotsPerPage)
+    if (!check.ok) {
+      after.push({ illustration, warning: fallbackWarning(illustration, check.why) })
+    } else if (hosted === null) {
+      hosted = illustration
+    } else {
+      after.push({
+        illustration,
+        warning: fallbackWarning(illustration, 'its paragraph already hosts a figure')
+      })
+    }
+  }
+  return { hosted, after }
+}
+
 function sectionFlowables(
   section: BookSection,
   ctx: BuildContext,
@@ -677,25 +752,26 @@ function sectionFlowables(
 
   const out: Flowable[] = [title]
   section.blocks.forEach((block, i) => {
-    out.push(
-      buildFlowable(block, ctx, {
-        // The first paragraph sits directly under the title, so it is set
-        // flush: there is no preceding paragraph for an indent to distinguish
-        // it from.
-        suppressFirstIndent: i === 0,
-        dropCap: profile.dropCap && i === 0
-      })
-    )
     // A picture the editor pinned to a paragraph of their own prose.
     //
     // The body anchors by block *index*, which is meaningless here: a section
     // is written rather than read, its blocks are derived from the prose on
     // every layout, and the only stable handle is the id. An introduction that
     // discusses a title page and cannot show it is the case this exists for.
-    for (const illustration of illustrations) {
-      if (illustration.anchorAfterBlockId === block.id) {
-        out.push(buildIllustrationFlowable(illustration, ctx, slotsPerPage))
-      }
+    const mine = illustrations.filter((x) => x.anchorAfterBlockId === block.id)
+    const { hosted, after } = partitionFigures(mine, ctx, slotsPerPage)
+    out.push(
+      buildFlowable(block, ctx, {
+        // The first paragraph sits directly under the title, so it is set
+        // flush: there is no preceding paragraph for an indent to distinguish
+        // it from.
+        suppressFirstIndent: i === 0,
+        dropCap: profile.dropCap && i === 0,
+        ...(hosted ? { figure: hosted } : {})
+      })
+    )
+    for (const { illustration, warning } of after) {
+      out.push(buildIllustrationFlowable(illustration, ctx, slotsPerPage, warning))
     }
   })
 
@@ -721,7 +797,8 @@ function sectionFlowables(
 function buildIllustrationFlowable(
   illustration: Illustration,
   ctx: BuildContext,
-  slotsPerPage: number
+  slotsPerPage: number,
+  warning?: string
 ): Flowable {
   const font: FontRef = { family: ctx.profile.bodyFont, style: 'italic' }
   const sizePt = ctx.profile.bodyFontSize * CAPTION_SIZE_RATIO
@@ -752,7 +829,13 @@ function buildIllustrationFlowable(
       ? illustration.sourceHeight / illustration.sourceWidth
       : 1
 
-  let widthPt = ctx.measureWidth
+  // The measure, unless a person has said the size the original printed it at
+  // — never wider than the measure, since a figure past the margin is not a
+  // reproduction of anything.
+  let widthPt =
+    illustration.placement !== undefined
+      ? Math.min(ctx.measureWidth, illustration.placement.widthIn * PT_PER_INCH)
+      : ctx.measureWidth
   let heightPt = widthPt * ratio
 
   // Decided from the natural height, before any clamping: whether this is a
@@ -785,6 +868,7 @@ function buildIllustrationFlowable(
 
   return {
     lines,
+    ...(warning ? { warning } : {}),
     spaceBefore: IMAGE_SPACE_SLOTS,
     spaceAfter: IMAGE_SPACE_SLOTS,
     startsChapter: false,
@@ -920,6 +1004,12 @@ interface FlowableOptions {
    * block that happens to carry the title.
    */
   chapter?: { id: string; title: string; level: number }
+  /**
+   * A figure this paragraph hosts — set inside it (`within`) or beside its
+   * lines (`beside`). Already checked by `hostable`; the paragraph is built
+   * round it rather than the picture being a flowable of its own.
+   */
+  figure?: Illustration
 }
 
 function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOptions): Flowable {
@@ -984,6 +1074,27 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
     style.style === 'regular'
       ? spansFor(ctx, family, style.style, block.emphasis, block.strong)
       : []
+
+  // A paragraph with a figure in it or beside it is built round the figure.
+  // The drop capital gives way: both change the measure of the opening lines,
+  // and a paragraph that has an engraving set into it has its ornament already.
+  if (opts.figure && (block.kind === 'paragraph' || block.kind === 'blockquote')) {
+    return withBlockId(
+      block.id,
+      buildFigureFlowable(block, text, opts.figure, {
+        font,
+        sizePt,
+        indentLeft,
+        measure,
+        firstIndent: hang > 0 ? 0 : firstIndent,
+        attachments,
+        markToNote,
+        spans,
+        style,
+        ctx
+      })
+    )
+  }
 
   const dropCap = opts.dropCap && block.kind === 'paragraph' && text.trim().length > 0
   if (!dropCap) {
@@ -1067,6 +1178,247 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
       markToNote
     })
   )
+}
+
+/** Whitespace-separated words, the breaker's own unit of indexing. */
+function countWords(text: string): number {
+  return text.split(/\s+/u).filter((w) => w.length > 0).length
+}
+
+/**
+ * The word a placement's `at` names, as an index into the block's words.
+ *
+ * Character offsets are what a note and a `split` use and what a person can
+ * point at; the breaker indexes words. Counting the words before the offset
+ * converts one to the other in the same way a drop capital's shift is found,
+ * and an offset that falls inside a word names that word.
+ */
+function wordAtOffset(block: BookBlock, at: number): number {
+  const clamped = Math.max(0, Math.min(block.text.length, at))
+  return countWords(block.text.slice(0, clamped))
+}
+
+/** The first line that carries a word at or past `wordIndex`. */
+function lineOfWord(broken: readonly BrokenLine[], wordIndex: number): number {
+  const i = broken.findIndex((line) => line.words.some((w) => w.sourceIndex >= wordIndex))
+  return i < 0 ? Math.max(0, broken.length - 1) : i
+}
+
+/**
+ * Whether a figure can be set the way its placement asks, in this paragraph.
+ *
+ * `within` always can: text stops, the picture is drawn, text resumes. A
+ * run-around cannot when the figure would leave the text less than
+ * `BESIDE_MIN_TEXT_RATIO` of the measure — and a picture too tall to share a
+ * page with anything is a plate, whatever the placement says. Both fall back
+ * to the picture on a line of its own, and the fallback is reported: the
+ * engine does not quietly do something other than what it was asked.
+ */
+function hostable(
+  illustration: Illustration,
+  ctx: BuildContext,
+  slotsPerPage: number
+): { ok: true } | { ok: false; why: string } {
+  const placement = illustration.placement
+  if (!placement || placement.kind === 'inline') return { ok: false, why: '' }
+  const ratio =
+    illustration.sourceWidth > 0 && illustration.sourceHeight > 0
+      ? illustration.sourceHeight / illustration.sourceWidth
+      : 1
+  const widthPt = Math.min(ctx.measureWidth, placement.widthIn * PT_PER_INCH)
+  const heightPt = widthPt * ratio
+  if (heightPt > slotsPerPage * ctx.leading * PLATE_HEIGHT_RATIO) {
+    return { ok: false, why: `too tall to share a page with its paragraph` }
+  }
+  if (placement.kind === 'beside') {
+    const gutter = ctx.profile.bodyFontSize * BESIDE_GUTTER_EMS
+    if (ctx.measureWidth - widthPt - gutter < ctx.measureWidth * BESIDE_MIN_TEXT_RATIO) {
+      return { ok: false, why: `too wide for text to run beside it` }
+    }
+  }
+  return { ok: true }
+}
+
+/** What the loop says when a placement had to give way. */
+function fallbackWarning(illustration: Illustration, why: string): string {
+  return `picture ${illustration.id} was set on a line of its own: ${why}`
+}
+
+interface FigureParams {
+  font: FontRef
+  sizePt: number
+  indentLeft: number
+  measure: number
+  firstIndent: number
+  attachments: readonly Attachment[]
+  markToNote: ReadonlyMap<string, string>
+  spans: readonly TextSpan[]
+  style: BlockStyle
+  ctx: BuildContext
+}
+
+/**
+ * A paragraph built round the figure it hosts.
+ *
+ * Two shapes, both taken off real leaves rather than invented.
+ *
+ * **`within`** — a symbol drawn mid-sentence: "…by the symbol [figure] which
+ * embraces three things". The words before `at` are set as a paragraph whose
+ * last line is short, the figure is drawn centred on the slots below, and the
+ * words from `at` resume on a fresh line with no indent, because they are not
+ * a new paragraph. One slot of air on each side, as the original leaves.
+ *
+ * **`beside`** — an engraving with the text run down a narrow column past it.
+ * The whole paragraph is broken once with a per-line measure, the way a drop
+ * capital already narrows its opening lines: full width to the line that
+ * carries the word at `at`, the narrowed width for as many lines as the figure
+ * is tall, full width after. The line the word falls on is not known until the
+ * paragraph is broken, and narrowing moves the breaks, so it is found, the
+ * widths set from it, and the paragraph broken again until the two agree —
+ * which on real prose is once or twice. The figure hangs from the first
+ * narrowed slot against the margin its `side` names, and those lines are held
+ * together across a page break. A paragraph shorter than the figure is padded
+ * with empty narrowed slots, so whatever follows starts below the picture.
+ *
+ * Emphasis, bold and reference marks are indexed by word, so for `within` the
+ * second part's indices are shifted by the words that went before, exactly as
+ * a drop capital shifts everything by the initial it lifts out.
+ */
+function buildFigureFlowable(
+  block: BookBlock,
+  text: string,
+  figure: Illustration,
+  p: FigureParams
+): Flowable {
+  const placement = figure.placement
+  if (!placement || placement.kind === 'inline') {
+    throw new Error('buildFigureFlowable needs a within or beside placement')
+  }
+  const { ctx, font, sizePt, indentLeft, measure } = p
+  const optical = ctx.profile.opticalMargins ? ctx.measurer : undefined
+  const hyphenate =
+    block.kind === 'paragraph' || block.kind === 'blockquote' ? ctx.hyphenate : undefined
+
+  const ratio =
+    figure.sourceWidth > 0 && figure.sourceHeight > 0 ? figure.sourceHeight / figure.sourceWidth : 1
+  const widthPt = Math.min(measure, placement.widthIn * PT_PER_INCH)
+  const heightPt = widthPt * ratio
+  const slots = Math.max(1, Math.ceil(heightPt / ctx.leading))
+  const wordAt = wordAtOffset(block, placement.at)
+
+  const base = (lineWidths: number | number[], firstLineIndentPt: number) => ({
+    font,
+    sizePt,
+    measurer: ctx.measurer,
+    lineWidths,
+    alignment: p.style.alignment,
+    firstLineIndentPt,
+    ...(hyphenate ? { hyphenate } : {})
+  })
+
+  const flow = (lines: FlowLine[]): Flowable => ({
+    lines,
+    blockId: block.id,
+    spaceBefore: p.style.spaceBefore,
+    spaceAfter: p.style.spaceAfter,
+    startsChapter: false,
+    chapter: null,
+    keepWithNext: false,
+    orphanControl: true
+  })
+
+  if (placement.kind === 'within') {
+    const words = text.split(/\s+/u).filter((w) => w.length > 0)
+    const before = words.slice(0, wordAt).join(' ')
+    const after = words.slice(wordAt).join(' ')
+    const spansBefore = p.spans.map((s) => ({
+      ...s,
+      words: new Set([...s.words].filter((i) => i < wordAt))
+    }))
+    const spansAfter = p.spans.map((s) => ({
+      ...s,
+      words: new Set([...s.words].filter((i) => i >= wordAt).map((i) => i - wordAt))
+    }))
+    const attBefore = p.attachments.filter((a) => a.wordIndex < wordAt)
+    const attAfter = p.attachments
+      .filter((a) => a.wordIndex >= wordAt)
+      .map((a) => ({ ...a, wordIndex: a.wordIndex - wordAt }))
+
+    const set = (part: string, first: number, spans: TextSpan[], attachments: Attachment[]) =>
+      part.length === 0
+        ? []
+        : toFlowLines(
+            breakParagraph(part, {
+              ...base(measure, first),
+              ...(attachments.length > 0 ? { attachments } : {}),
+              ...(spans.length > 0 ? { spans } : {})
+            }),
+            font,
+            sizePt,
+            [indentLeft],
+            p.markToNote,
+            optical,
+            spans
+          )
+
+    const linesBefore = set(before, p.firstIndent, spansBefore, attBefore)
+    // Resumes flush: it is the same sentence, not a new paragraph.
+    const linesAfter = set(after, 0, spansAfter, attAfter)
+    const held: FlowLine[] = [
+      ...Array.from({ length: IMAGE_SPACE_SLOTS }, () => ({ runs: [], holdWithNext: true })),
+      ...Array.from({ length: slots }, (_, i): FlowLine => ({
+        runs: [],
+        holdWithNext: true,
+        ...(i === 0 ? { image: { id: figure.id, widthPt, heightPt } } : {})
+      })),
+      ...Array.from({ length: IMAGE_SPACE_SLOTS }, () => ({ runs: [] }))
+    ]
+    // The line the picture interrupts stays with it: a page ending on "…by
+    // the symbol" with the symbol overleaf is the shape this exists to avoid.
+    const last = linesBefore[linesBefore.length - 1]
+    if (last) last.holdWithNext = true
+    return flow([...linesBefore, ...held, ...linesAfter])
+  }
+
+  // beside
+  const gutter = ctx.profile.bodyFontSize * BESIDE_GUTTER_EMS
+  const narrow = Math.max(1, measure - widthPt - gutter)
+  const breakWith = (widths: number | number[]) =>
+    breakParagraph(text, {
+      ...base(widths, p.firstIndent),
+      ...(p.attachments.length > 0 ? { attachments: p.attachments } : {}),
+      ...(p.spans.length > 0 ? { spans: p.spans } : {})
+    })
+
+  let start = lineOfWord(breakWith(measure), wordAt)
+  let broken: BrokenLine[] = []
+  for (let pass = 0; pass < 4; pass++) {
+    const widths = [
+      ...Array.from({ length: start }, () => measure),
+      ...Array.from({ length: slots }, () => narrow),
+      measure
+    ]
+    broken = breakWith(widths)
+    const found = lineOfWord(broken, wordAt)
+    if (found === start) break
+    start = found
+  }
+
+  const left = placement.side === 'left' ? indentLeft + widthPt + gutter : indentLeft
+  const offsets = broken.map((_, i) => (i >= start && i < start + slots ? left : indentLeft))
+  const lines = toFlowLines(broken, font, sizePt, offsets, p.markToNote, optical, p.spans)
+  // A paragraph shorter than its figure: hold the slots beside it empty so the
+  // next block starts under the picture rather than through it.
+  while (lines.length < start + slots) lines.push({ runs: [] })
+  const first = lines[start]!
+  first.image = {
+    id: figure.id,
+    widthPt,
+    heightPt,
+    xPt: placement.side === 'left' ? indentLeft : indentLeft + measure - widthPt
+  }
+  for (let i = start; i < start + slots - 1; i++) lines[i]!.holdWithNext = true
+  return flow(lines)
 }
 
 /** A flowable stamped with the block it came from. */
@@ -1354,6 +1706,19 @@ function runningHeadText(
   }
 }
 
+/**
+ * `take`, pulled back so a page break cannot fall inside a held run of lines.
+ *
+ * Lines carrying `holdWithNext` may not end a page. Taking every line to the
+ * end of the item is always allowed — there is nothing after it to be parted
+ * from — so the walk only applies to a partial take.
+ */
+function heldBoundary(flow: Flowable, placed: number, take: number, remaining: number): number {
+  let out = take
+  while (out > 0 && out < remaining && flow.lines[placed + out - 1]?.holdWithNext) out--
+  return out
+}
+
 export function layout(
   raw: BookDocument,
   profile: StyleProfile,
@@ -1589,9 +1954,14 @@ export function layout(
     }
   }
 
-  const pushIllustrationsAfter = (blockIndex: number): void => {
-    for (const illustration of anchored.get(blockIndex) ?? []) {
-      flowables.push(buildIllustrationFlowable(illustration, ctx, slotsPerPage))
+  const pushIllustrationsAfter = (
+    blockIndex: number,
+    list: readonly { illustration: Illustration; warning?: string }[] = (
+      anchored.get(blockIndex) ?? []
+    ).map((illustration) => ({ illustration }))
+  ): void => {
+    for (const { illustration, warning } of list) {
+      flowables.push(buildIllustrationFlowable(illustration, ctx, slotsPerPage, warning))
     }
   }
 
@@ -1647,6 +2017,8 @@ export function layout(
       pushIllustrationsAfter(i)
       return
     }
+    // A figure the paragraph hosts is built into it; the rest follow it.
+    const { hosted, after } = partitionFigures(anchored.get(i) ?? [], ctx, slotsPerPage)
     // A run of headings off the leaf, or a label the editor put on one — the
     // same line in the same place, arrived at two ways because only one of them
     // is available to each.
@@ -1663,10 +2035,22 @@ export function layout(
         ...(chapter
           ? { chapter: { id: chapter.id, title: chapter.title, level: chapter.level } }
           : {}),
-        ...(prep ? { text: prep.text, references: prep.references } : {})
+        ...(prep ? { text: prep.text, references: prep.references } : {}),
+        ...(hosted && block.kind !== 'heading' ? { figure: hosted } : {})
       })
     )
-    pushIllustrationsAfter(i)
+    pushIllustrationsAfter(
+      i,
+      hosted && block.kind === 'heading'
+        ? [
+            ...after,
+            {
+              illustration: hosted,
+              warning: fallbackWarning(hosted, 'a heading cannot host a figure')
+            }
+          ]
+        : after
+    )
   })
 
   // Back matter the editor wrote, after the body and before the collected
@@ -1857,6 +2241,11 @@ export function layout(
         take = 0
       }
 
+      // Never break inside a held run: back off to the line before it starts.
+      // If that leaves nothing, the clamp below decides, exactly as it does
+      // for an unbreakable item.
+      take = heldBoundary(flow, placed, take, remaining)
+
       // Reserve for the notes these lines would pull onto the page.
       //
       // Greedy and forward-only: a line whose reference brings a new note
@@ -1880,6 +2269,8 @@ export function layout(
       }
       const noteLimited = allowed === 0 && beforeNotes > 0
       take = Math.min(take, allowed)
+      // The reservation can cut into a held run too.
+      take = heldBoundary(flow, placed, take, remaining)
 
       if (take <= 0) {
         // Never push an item off a page it is the only occupant of — that
@@ -1896,6 +2287,11 @@ export function layout(
           openBodyPage(false)
           continue
         }
+      }
+
+      // What the builder could not do as asked, against the page it fell on.
+      if (placed === 0 && take > 0 && flow.warning) {
+        warnings.push({ pageIndex: current().index, text: flow.warning })
       }
 
       for (let k = 0; k < take; k++) {
@@ -2130,8 +2526,9 @@ function finishPage(
         kind: 'image',
         id,
         // Centred in the measure and hung from the top of its slot, like the
-        // ornament: a picture has no baseline to sit on either.
-        xPt: frame.xPt + (frame.widthPt - widthPt) / 2,
+        // ornament: a picture has no baseline to sit on either — unless the
+        // line says which margin it stands against.
+        xPt: frame.xPt + (line.image.xPt ?? (frame.widthPt - widthPt) / 2),
         yPt: frame.yPt + slot * ctx.leading,
         widthPt,
         heightPt

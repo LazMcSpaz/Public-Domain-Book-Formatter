@@ -277,6 +277,41 @@ an iPad. So the check asserts the property that does not need a browser to be
 sloppy, with the stub playing the lenient cache; fault-injected, it reproduces
 the editor's error verbatim.
 
+**And the same cache took a ruling off the shelf, three hours later.** The fix
+above was applied to `shaOf` alone, under a comment arguing that a unique URL
+is the rule that does not depend on anybody's cache being correct — while
+`getText` and `getBytes` kept `cache: 'no-store'`, which governs the
+**browser's** cache and not a shared one. `s-maxage=60` invites a shared cache
+by name.
+
+A flush reads the book file, folds the queue into _its_ list and writes the
+whole list back, so a read a minute out of date does not miss a ruling, it
+**deletes** it. Measured off the shelf's own history: over fourteen commits to
+one book, the two flushes that came **44 seconds** after the one before them
+each dropped a ruling — leaf 196, which survived only because the editor
+happened to rule it again, and leaf 209, which was gone — while all nine gaps
+longer than a minute were clean. Two for two under the window, none above it.
+The commit message still said "1 query ruled on".
+
+Three things, and the order is the lesson. **Every read** now goes through one
+`readUrl`, so the property holds for the reads as a class rather than for
+whichever one somebody last thought about — that distinction _is_ the second
+fault. The unique parameter is `Date.now()` **and a counter**, because
+milliseconds are not fine enough to separate two reads of one path in the same
+tick. And the flush keeps a net under all of it: the device remembers which
+rulings it has seen the shelf accept (`rulingsMissingFrom`, `landed.ts`), and a
+file that comes back missing one is **refused, not written over** — refusing
+costs a minute, writing costs work the editor will never know is gone. Losing
+that record is safe by construction: an empty one makes the guard silent, which
+is the behaviour that shipped before it.
+
+`npm run check:cache` measures both halves against a real origin whose stub
+answers any URL it has already answered with what it said then. Its first
+version put `answered.set` **after** the `return` that sent the reply — dead
+code, so the new assertion never ran and the check passed for a reason that had
+nothing to do with what it asserts. That is this file's own rule about tests,
+found in the check written to enforce it.
+
 **The PDF in a book's directory is the _export_. The scan is
 `scans/<sha256>.pdf`, and `book.json` names it in `scan.path`.** Handing
 `drive.mjs load` the exported book instead of the scan does not fail: it
@@ -450,7 +485,8 @@ npm run check:crop                   # with the dev server up: for a book whose 
                                      #   gate draw the crop cut for it in advance?
 npm run check:cache                  # with the dev server up: can a read of a book
                                      #   file answer the sha lookup for the write that
-                                     #   follows it? (it could, and did)
+                                     #   follows it, or a later read of the book itself?
+                                     #   (it could, and did — twice, one ruling lost)
 node scripts/screenshot-flow.mjs     # drive the wizard headlessly, screenshot each screen
 ```
 
@@ -493,6 +529,12 @@ node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` 
 
 node scripts/drive.mjs figures f.md   # every picture the reading already found,
                                      #   leaf by leaf — a shortlist, not a check
+node scripts/drive.mjs figure cut 193 0.527,0.532,0.389,0.175 --beside p193b1 --at "various kinds" --side right
+                                     #   cut a figure out of the scan at 300 DPI and set it
+                                     #   where the original set it: `--after <block>` at its
+                                     #   printed size, `--in <block> --at "<phrase>"` mid-
+                                     #   paragraph, `--beside … --side left|right` with the
+                                     #   text run past it; `figure list`, `figure drop <id>`
 node scripts/contact-sheets.mjs <renders> <out>  # the whole book, small, many to
                                      #   a sheet: the only thing that answers
                                      #   "is there a picture we have missed?"
@@ -1602,6 +1644,42 @@ closed`, which is indistinguishable from the flake the first command after a
   restart throws. And **`querycrops` first reached for `cropWordsFromPage`**,
   which opens the PDF and renders the page itself: twelve leaves opened
   thirteen documents over a 357 MB file and rendered every leaf twice.
+
+- **Also done**: **a figure where the original set it, at the size the original
+  printed it** (`IllustrationPlacement`; `drive.mjs figure`). The editor's
+  standing ruling on _Isis Unveiled_ (leaf 193): reproduce the illustrations
+  and their placement faithfully, and extend the tool if that is what it
+  takes. It was: a picture had exactly one shape here — after the last text
+  that shared its leaf, as wide as the measure — and that volume's three
+  figures are none of them that. An amulet is engraved into the middle of a
+  paragraph with eleven lines run down a narrow column beside it; the Azoth
+  cross is drawn mid-sentence, "by the symbol [figure] which embraces three
+  things"; the glycerine formula stands at its own small size over its
+  caption, with three geometrical figures down the left of the next paragraph.
+  Three placements, each off a leaf: `inline`, between blocks at its printed
+  width; `within`, interrupting a paragraph at a character offset with the
+  text resuming flush below; and `beside`, the run-around. The run-around is
+  the drop capital's own mechanism — per-line widths and offsets into one
+  `breakParagraph` — applied further down the paragraph: the line carrying
+  the named word is found by breaking once, the widths set from it, and the
+  paragraph broken again until the two agree. The figure and its narrowed
+  lines are held together across a page break (`holdWithNext`), a paragraph
+  shorter than its figure holds the slots beside it empty, and a placement
+  the engine cannot honour falls back to a line of its own **and reports it**.
+  Width is in **inches**, not a fraction of the measure: the cut was made at
+  that size, a wider measure gains white rather than a larger engraving, and
+  a figure cut at 300 DPI and set at its own width prints at 300 DPI, which is
+  what the KDP check then says. The pixels travel as a supplied picture
+  (`image` edit plus bytes, `images/<digest>.png` on the shelf), because a
+  volume whose scan is too large for any shelf has no leaf to re-cut them
+  from; a picture cut at the structure gate takes the same placement through
+  the `place` edit. The proof sheet offers all of it, so the door is not only
+  the driver's. Five faults were injected against the layout tests and one
+  survived the first fixture: a run-around that never met a page break passed
+  with the hold removed, and the sweep that walks the host paragraph down the
+  page is what caught it. Crop boxes were **measured** off the 300-DPI render
+  — ink runs per row and column, sixty lines of Node — after the first pass
+  clipped the descenders of the line above the formula into the picture.
 
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
