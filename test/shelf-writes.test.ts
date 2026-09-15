@@ -25,12 +25,19 @@ const PATH = 'books/probe/book.json'
 interface Call {
   url: string
   method: string
+  /** The media type asked for — what tells a read from a sha lookup. */
+  accept: string
 }
 
 function stubFetch(answer: (call: Call) => Response): Call[] {
   const seen: Call[] = []
   globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
-    const call = { url: String(input), method: init?.method ?? 'GET' }
+    const headers = (init?.headers ?? {}) as Record<string, string>
+    const call = {
+      url: String(input),
+      method: init?.method ?? 'GET',
+      accept: headers['Accept'] ?? ''
+    }
     seen.push(call)
     return Promise.resolve(answer(call))
   }) as typeof fetch
@@ -50,28 +57,56 @@ afterEach(() => {
 
 describe('the sha a write is made against', () => {
   it('is asked for at a URL a read of the same file cannot answer', async () => {
-    // The lenient cache, as a stub: any URL already read raw answers with the
-    // file again, whatever media type asked. If the sha lookup shares that URL
-    // it gets the book, which has no sha in it.
-    const readRaw = new Set<string>()
+    // The lenient cache, as a stub: **any** URL already answered is answered
+    // again with what it said then, whatever media type asks. That is the worst
+    // a cache with a sixty-second window can do, and it is what it did — first
+    // to the sha lookup, which got the book file and no sha in it, and later to
+    // the read itself, where a flush folded its queue into a minute-old book
+    // and deleted the ruling that had landed in between.
+    //
+    // Keyed on the URL alone rather than on which call it looks like: the first
+    // version of this stub told the read from the lookup by the read's URL
+    // ending in `ref=main`, which stopped being true the moment the reads were
+    // fixed too, and the test then failed for a reason that was not the bug.
+    const answered = new Map<string, Response>()
+    const BOOK = '{"version":15,"run":{}}'
     const calls = stubFetch((call) => {
       if (call.method === 'PUT') return json({ content: {} })
-      if (readRaw.has(call.url)) return new Response('{"version":15,"run":{}}')
-      if (call.url.includes('unshared') || !call.url.endsWith('ref=main')) {
-        return json({ path: PATH, sha: 'b7558071' })
-      }
-      readRaw.add(call.url)
-      return new Response('{"version":15,"run":{}}')
+      const held = answered.get(call.url)
+      if (held) return held.clone()
+      const reply = call.accept.includes('raw')
+        ? new Response(BOOK)
+        : json({ path: PATH, sha: 'b7558071' })
+      answered.set(call.url, reply.clone())
+      return reply
     })
 
-    expect(await getText(config, PATH)).toBe('{"version":15,"run":{}}')
+    expect(await getText(config, PATH)).toBe(BOOK)
     await putFile(config, PATH, 'dXBkYXRlZA==', 'a ruling')
 
-    const read = calls.find((c) => c.method === 'GET')!
-    const lookup = calls.filter((c) => c.method === 'GET')[1]!
-    expect(lookup.url).not.toBe(read.url)
-    const put = calls.find((c) => c.method === 'PUT')
-    expect(put).toBeDefined()
+    const gets = calls.filter((c) => c.method === 'GET')
+    expect(gets).toHaveLength(2)
+    // Two requests for one path, at two URLs: neither can answer the other.
+    expect(gets[1]!.url).not.toBe(gets[0]!.url)
+    expect(calls.find((c) => c.method === 'PUT')).toBeDefined()
+  })
+
+  it('reads the book at a URL a previous read cannot answer either', async () => {
+    // The second fault, and the one that cost a ruling. Two reads of the book
+    // file a moment apart must not be the same request, or the later one comes
+    // back with the earlier book and the flush writes that back over the shelf.
+    const answered = new Map<string, string>()
+    let current = '{"rulings":[]}'
+    stubFetch((call) => {
+      const held = answered.get(call.url)
+      if (held !== undefined) return new Response(held)
+      answered.set(call.url, current)
+      return new Response(current)
+    })
+
+    expect(await getText(config, PATH)).toBe('{"rulings":[]}')
+    current = '{"rulings":["leaf 209"]}'
+    expect(await getText(config, PATH)).toBe('{"rulings":["leaf 209"]}')
   })
 
   /**
