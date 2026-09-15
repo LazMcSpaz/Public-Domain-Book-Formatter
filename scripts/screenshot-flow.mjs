@@ -1182,6 +1182,56 @@ const fnEdited = await page
   .catch(() => '')
 await shot('05c2a1b-galley-footnote')
 
+// A reference mark the page prints that refers to no note.
+//
+// The engine pairs positionally and book-wide, so a mark the compositor set in
+// error does not stand harmlessly: it takes the next note of its marker
+// anywhere in the book and every note of that marker after it is set one
+// reference early. Declaring it bare is the only way to say so, and the offer
+// belongs beside the note that looks wrong, which is where the editor notices.
+//
+// Driven rather than reasoned about, because the first version of this button
+// was wired to a `NoteChip` that had no way of knowing *which* occurrence of
+// the marker its note had claimed.
+await page.locator('.galley-fn button', { hasText: 'This mark has no note' }).first().click()
+await page.waitForTimeout(600)
+const bareRows = await page.locator('.galley-bare').count()
+const bareSaid = await page
+  .locator('.galley-bare .proof-annotation-label')
+  .first()
+  .textContent()
+  .catch(() => '')
+// The note it was paired to is now unclaimed, so it leaves the passage and is
+// collected as an endnote rather than dropped.
+//
+// Counting `.galley-fn` is what this measured first, and it measured nothing:
+// the endnotes group renders the same chip, so the total is 1 either way and
+// the line printed "1 -> 1 -> 1" under a claim about the note moving. What
+// discriminates is *where* the chip is.
+const collectedChips = async () => await page.locator('.galley-endnotes .galley-fn').count()
+const bareMovedNote = (await collectedChips()) === 1
+await shot('05c2a1c-galley-bare-mark')
+
+// And taken back, because a decision that cannot be undone is not one anybody
+// makes from a screen.
+await page.locator('.galley-bare button', { hasText: 'It does have a note' }).first().click()
+await page.waitForTimeout(600)
+const bareUndone = (await page.locator('.galley-bare').count()) === 0
+const noteBackOnPassage = (await collectedChips()) === 0
+console.log(
+  '  a printed mark can be declared to have no note:',
+  bareRows === 1,
+  `— ${bareSaid?.trim()}`
+)
+console.log(
+  '  declaring it releases the note, which is collected rather than dropped:',
+  bareMovedNote
+)
+console.log(
+  '  and the declaration can be taken back, the note returning to its passage:',
+  bareUndone && noteBackOnPassage
+)
+
 // Back to the leaf view: everything below navigates the sheet by leaf number.
 await page.locator('.proof-view-toggle button', { hasText: 'Check against the scan' }).click()
 await page.waitForSelector('.proof-bar', { timeout: 10000 })

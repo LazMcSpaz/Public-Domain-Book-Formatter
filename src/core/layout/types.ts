@@ -248,6 +248,16 @@ export interface LaidOutBook {
   imagesPlaced: PlacedImage[]
   /** Illustrations that could not be set, and why. Same rule as the notes. */
   imagesDropped: { id: string; reason: string }[]
+  /**
+   * Marks the editor declared bare that this layout found no occurrence for.
+   *
+   * The same rule as the notes and the pictures, applied to the one editorial
+   * statement that fails *backwards*: a lost declaration does not leave a gap
+   * the reader can see, it puts the surplus mark back in the claiming walk and
+   * moves every note of that marker after it by one. Nothing downstream can
+   * tell that happened, so it is said here.
+   */
+  bareMarksMissed: { blockId: string; marker: string; nth: number }[]
 }
 
 /**

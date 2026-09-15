@@ -362,3 +362,40 @@ describe('migrateSavedRun — a picture’s placement, which came with v17', () 
     ])
   })
 })
+
+describe('migrateSavedRun — a mark declared bare, which came with v18', () => {
+  it('keeps the declaration, and the taking-back of one, through the round trip', () => {
+    const original = run({
+      edits: [
+        { kind: 'bare-mark', blockId: 'p164b3', marker: '‡', nth: 2, bare: true },
+        // `false` is an answer, not an absence — the editor deciding the mark
+        // does refer to something after all — and has to survive as one.
+        { kind: 'bare-mark', blockId: 'p309b1', marker: '*', nth: 1, bare: false }
+      ]
+    })
+    expect(migrateSavedRun(JSON.parse(JSON.stringify(original))).edits).toEqual(original.edits)
+  })
+
+  it('refuses a declaration the claiming walk could not count in', () => {
+    // `nth` is the field a loose parse would damage, and it would damage it
+    // quietly: a 0, a fraction or a NaN matches no occurrence, so the record
+    // would survive the save and then be reported as a mark the block no
+    // longer has — a true statement about the wrong thing. Refused at the
+    // door instead, where the shape is still visible.
+    const raw = JSON.parse(JSON.stringify(run())) as Record<string, unknown>
+    raw['edits'] = [
+      { kind: 'bare-mark', blockId: 'p1b0', marker: '‡', nth: 0, bare: true },
+      { kind: 'bare-mark', blockId: 'p1b0', marker: '‡', nth: 1.5, bare: true },
+      { kind: 'bare-mark', blockId: 'p1b0', marker: '', nth: 1, bare: true },
+      { kind: 'bare-mark', blockId: '', marker: '‡', nth: 1, bare: true },
+      { kind: 'bare-mark', blockId: 'p1b0', marker: '‡', nth: 1 },
+      // A truthy non-boolean is the one that gets through a `bare !== undefined`
+      // check, and it is the shape a hand-edited book file produces.
+      { kind: 'bare-mark', blockId: 'p1b0', marker: '‡', nth: 1, bare: 'yes' },
+      { kind: 'bare-mark', blockId: 'p1b0', marker: '‡', nth: 1, bare: true }
+    ]
+    expect(migrateSavedRun(raw).edits).toEqual([
+      { kind: 'bare-mark', blockId: 'p1b0', marker: '‡', nth: 1, bare: true }
+    ])
+  })
+})

@@ -214,6 +214,42 @@ export type IllustrationPlacement =
   /** Beside the paragraph's text, which runs down the other side of it. */
   | { kind: 'beside'; widthIn: number; at: number; side: 'left' | 'right' }
 
+/**
+ * A reference mark the page prints that refers to no note.
+ *
+ * The engine pairs positionally and book-wide — the k-th occurrence of a
+ * marker takes the k-th waiting note of it — which is what keeps a paragraph
+ * carrying two `*` across a page seam from giving both of them to one note.
+ * The cost of that rule is that a *surplus* mark cannot simply stand there. It
+ * takes the next note of its marker anywhere in the book, the note that one
+ * belonged to takes the one after, and every note of that marker to the end of
+ * the volume is set one reference early.
+ *
+ * Old books have surplus marks. On leaf 106 of *Isis Unveiled* Vol. I the 1877
+ * compositor set `‡` twice with one `‡` note under it, and the mark against
+ * "Presbytere de Cideville" refers to nothing at all. Transcribed as printed —
+ * which is the rule — it silently displaced every `‡` note from there on.
+ *
+ * So a mark can be declared bare: it prints, and it claims nothing. That is an
+ * editorial statement about the paper, not a correction of it, which is why it
+ * is recorded here rather than by deleting the character. Deleting it would
+ * make the book say something the leaf does not, and would leave no trace of a
+ * decision somebody made by looking at the pixels.
+ *
+ * Anchored by **occurrence, not by character offset**. Every later correction
+ * shifts the characters in a block, and an offset recorded at 118 would come to
+ * name whatever now sits there — the reason a highlight is anchored by its
+ * words. "The second `‡` in this block" survives rewording of everything around
+ * it, and it is the same coordinate the claiming walk itself counts in.
+ */
+export interface BareMark {
+  blockId: string
+  /** The marker as printed: `*`, `†`, `‡`, `**`. */
+  marker: string
+  /** Which occurrence of that marker within the block, 1-based. */
+  nth: number
+}
+
 /** An illustration in the assembled book, with the caption it was printed under. */
 export interface Illustration extends IllustrationSource {
   /**
@@ -295,6 +331,14 @@ export interface BookDocument {
   illustrations: Illustration[]
   /** Divisions the editor wrote: an introduction, an afterword, an appendix. */
   sections: BookSection[]
+  /**
+   * Marks the editor has said print bare — see `BareMark`.
+   *
+   * Absent on a freshly assembled book: nothing but a person who has looked at
+   * the leaf can know that a mark refers to nothing, so this only ever arrives
+   * through `applyEdits`.
+   */
+  bareMarks?: BareMark[]
   /** Pages deliberately not transcribed, and why. */
   skipped: { pageIndex: number; role: PageRole; reason: string }[]
   /**

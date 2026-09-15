@@ -1643,6 +1643,11 @@ async function serve() {
      * note, because a note set under the wrong reference is obvious when the
      * two are on one line and invisible in any count.
      *
+     * Bare marks go in, and must: a declaration this did not carry would make
+     * the check report the fault it was written to prove fixed. That happened
+     * — this verb predates the declaration by an hour and said nothing had
+     * changed after one was made.
+     *
      * `pairs [out.json] [leaf...]` — the whole book, or only references whose
      * block began on the named leaves.
      */
@@ -1661,7 +1666,7 @@ async function serve() {
             assemble.assembleBook(run.transcriptions),
             run.edits ?? []
           )
-          const prepared = notesMod.prepareFootnotes(doc.blocks, doc.footnotes)
+          const prepared = notesMod.prepareFootnotes(doc.blocks, doc.footnotes, doc.bareMarks)
           const byId = new Map(doc.footnotes.map((n) => [n.id, n]))
           const rows = []
           doc.blocks.forEach((block, i) => {
@@ -3847,6 +3852,117 @@ async function serve() {
      * written — the substitution is a way of composing that string without
      * retyping four hundred words, never a way of editing part of a block.
      */
+
+    /**
+     * Say that a reference mark the page prints refers to no note.
+     *
+     * The pairing is positional and runs the length of the book — the k-th
+     * occurrence of a marker takes the k-th waiting note of it — so a surplus
+     * mark does not stand harmlessly. It takes the next note of its marker
+     * anywhere in the book, and every note of that marker after it is set one
+     * reference early. Old books have surplus marks: leaf 106 of *Isis
+     * Unveiled* Vol. I sets `‡` twice with one `‡` note under it.
+     *
+     * The decision is the editor's every time and cannot be anything else —
+     * nothing in a text distinguishes a mark the compositor set in error from
+     * a note the reading failed to find. So this verb only records a decision
+     * already made; `pairs` is what shows the case for one.
+     *
+     *   bare list                        — every mark now declared bare
+     *   bare p164b3 ‡ 2                  — the 2nd ‡ in that block prints alone
+     *   bare p164b3 ‡ 2 --undo           — take it back
+     *
+     * The occurrence, not a character offset: every later correction shifts
+     * the characters in a block, and an offset would come to name whatever
+     * then sat there. It is also the coordinate the claiming walk itself
+     * counts in, so what is recorded is what the engine reads.
+     */
+    bare: async ([blockId, marker, nth, ...flags]) => {
+      const undo = flags.includes('--undo')
+      return page.evaluate(
+        async ([repo, blockId, marker, nth, undo]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const notesMod = await import(`/@fs${repo}/src/core/layout/footnotes.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          if (blockId === 'list' || !blockId) {
+            const prepared = notesMod.prepareFootnotes(doc.blocks, doc.footnotes, doc.bareMarks)
+            return {
+              bare: (doc.bareMarks ?? []).map((m) => {
+                const block = doc.blocks.find((b) => b.id === m.blockId)
+                return { ...m, text: (block?.text ?? '').slice(0, 90) }
+              }),
+              // A declaration that no longer applies puts the original fault
+              // back, silently, so it leads the reply rather than trailing it.
+              missed: prepared.bareMarksMissed
+            }
+          }
+
+          const n = Number(nth)
+          if (!Number.isInteger(n) || n < 1) {
+            throw new Error(`\`${nth}\` is not an occurrence number. The first mark is 1.`)
+          }
+          const block = doc.blocks.find((b) => b.id === blockId)
+          if (!block) throw new Error(`No block \`${blockId}\` in this book.`)
+
+          // Refused rather than recorded when the block has no such
+          // occurrence. It would be *reported* later by `bareMarksMissed`, but
+          // reported as a mark the block has lost rather than as one it never
+          // had — and the session that wrote it would have gone away believing
+          // the ruling had landed.
+          const found = [...block.text.matchAll(/[*†‡§‖¶⁂]+/gu)].filter((m) => m[0] === marker)
+          if (!undo && found.length < n) {
+            throw new Error(
+              `Block ${blockId} prints \`${marker}\` ${found.length} time(s), not ${n}. ` +
+                'Nothing was recorded.'
+            )
+          }
+
+          const edits = editsMod.withEdit(run.edits ?? [], {
+            kind: 'bare-mark',
+            blockId,
+            marker,
+            nth: n,
+            bare: !undo
+          })
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            edits
+          })
+          const stored = await runStore.saveRun(next)
+          const after = editsMod.applyEdits(assemble.assembleBook(run.transcriptions), edits)
+          const prepared = notesMod.prepareFootnotes(after.blocks, after.footnotes, after.bareMarks)
+          const at = after.blocks.find((b) => b.id === blockId)
+          return {
+            blockId,
+            marker,
+            nth: n,
+            bare: !undo,
+            stored: stored === true,
+            occurrences: found.length,
+            where: (at?.text ?? '').slice(0, 120),
+            orphans: prepared.orphans.length,
+            missed: prepared.bareMarksMissed,
+            edits: edits.length,
+            next: '`shelf push` sends it to the shelf; nothing has left this device yet.'
+          }
+        },
+        [REPO, blockId, marker, nth, undo]
+      )
+    },
+
     correct: async (argv) => {
       const flag = (name) => {
         const i = argv.indexOf(`--${name}`)

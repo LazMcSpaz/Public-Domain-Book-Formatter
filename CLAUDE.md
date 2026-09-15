@@ -1718,6 +1718,59 @@ closed`, which is indistinguishable from the flake the first command after a
   — ink runs per row and column, sixty lines of Node — after the first pass
   clipped the descenders of the line above the formula into the picture.
 
+- **Also done**: **a reference mark that prints and claims no note**
+  (`BareMark`; the `bare-mark` edit, SavedRun v18; `drive.mjs bare` and
+  `drive.mjs pairs`). The editor's ruling on leaf 106 of _Isis Unveiled_
+  Vol. I: the 1877 compositor set `‡` twice with one `‡` note under it, and
+  the mark against "Presbytere de Cideville" refers to nothing. Keep it as
+  printed, with nothing under it — which the engine had no way to do. Pairing
+  is positional and runs the length of the book, so a surplus mark does not
+  stand harmlessly: it takes the next note of its marker _anywhere_, the note
+  that one belonged to takes the one after, and every note of that marker to
+  the end of the volume is set one reference early. Measured on that book: one
+  surplus `‡` displaced **188 references**, and declaring it bare put every one
+  of them back.
+
+  Anchored by **occurrence, not offset** — "the second `‡` in this block" —
+  for the reason a highlight is anchored by its words: every later correction
+  shifts the characters, and an offset recorded today names whatever sits
+  there tomorrow. It is also the coordinate the claiming walk itself counts
+  in, so what is recorded is what the engine reads. A declaration the document
+  has no occurrence for is **reported** (`bareMarksMissed`, through to
+  `LaidOutBook`), because this is the one editorial statement that fails
+  _backwards_: losing it leaves no gap a reader can see, it silently puts the
+  surplus mark back in the walk. `drive.mjs bare` refuses one the block cannot
+  carry rather than recording it to be reported later as a mark the block has
+  lost.
+
+  Eleven faults were injected and all eleven caught, but two tests of mine
+  passed against the reinstated bug first and both are worth recognising. The
+  end-to-end layout test asserted `notesPlaced === 2` — true either way, one
+  of them under the wrong reference — and passed with `doc.bareMarks` never
+  reaching `prepareFootnotes`; the count of `‡` left in the body was no better,
+  being 1 either way. What discriminates is **which words carry a reference**,
+  read off the raised runs. And the `applyEdits` fixture used one leaf, where
+  the only note is claimed by the first mark whatever happens: the damage a
+  surplus mark does is to the _next_ leaf, so the fixture has to have one.
+
+  Two things came out of the same pass. The galley grouped the book's own
+  footnotes by its **own** rule — the first block whose text matched the
+  marker — so on a book with 110 `‡` notes every one of them hung off whichever
+  passage carried the first `‡`, and the galley disagreed with the page about
+  where a note belongs, which is the one thing editing a note where it is read
+  cannot afford. It goes through `prepareFootnotes` now. And `drive.mjs pairs`
+  is the check that made all of this visible: `checkFootnotePairing` counts
+  marks against notes _per leaf_, which is the right question to ask of a
+  transcription and the wrong one after a correction, since a correction is
+  keyed to an assembled block and a block crossing a seam belongs to two leaves
+  at once — so it can only run over the pristine reading and goes on naming
+  leaves already fixed. `pairs` reads `prepareFootnotes`' own output instead,
+  with the body text before each mark beside the note that claimed it, because
+  a note under the wrong reference is obvious on one line and invisible in any
+  count. It shipped an hour before the declaration existed and did not pass
+  `doc.bareMarks`, so its first answer after a ruling was that nothing had
+  changed.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

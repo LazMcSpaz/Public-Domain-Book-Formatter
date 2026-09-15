@@ -59,7 +59,11 @@ describe('prepareFootnotes — locating and renumbering reference marks', () => 
     // The old mark is gone: it is redrawn during layout at its own size, and
     // leaving it would print the original digit beside the new one.
     expect(prepared.blocks[0]!.text).toContain('gentle fire. It was watched.')
-    expect(prepared.blocks[0]!.references).toEqual([{ wordIndex: 7, noteId: 'fn1', mark: '1' }])
+    // `printed` and `nth` are the coordinate a bare-mark declaration is written
+    // in — which marker the original set here, and which occurrence of it.
+    expect(prepared.blocks[0]!.references).toEqual([
+      { wordIndex: 7, noteId: 'fn1', mark: '1', printed: '1', nth: 1 }
+    ])
   })
 
   it('does not mistake a numeral in the text for a reference mark', () => {
@@ -879,5 +883,150 @@ describe('prepareFootnotes — a block carrying one marker twice', () => {
       ]
     )
     expect(out.blocks[0]!.references.map((r) => r.noteId)).toEqual(['mine', 'n1', 'n2'])
+  })
+})
+
+/**
+ * A reference mark the page prints that refers to no note.
+ *
+ * The pairing is positional and book-wide, which is what stops a paragraph
+ * carrying two `*` across a page seam from giving both of them to one note.
+ * The price is that a *surplus* mark cannot simply stand: it takes the next
+ * note of its marker anywhere in the book, and every note of that marker after
+ * it is set one reference early. Leaf 106 of *Isis Unveiled* Vol. I is exactly
+ * that — the 1877 compositor set `‡` twice with one `‡` note under it.
+ *
+ * So the fixture is that leaf: two `‡` on one leaf with one note, and a second
+ * leaf whose own `‡` note is the one the surplus mark steals.
+ */
+describe('prepareFootnotes — a mark declared bare', () => {
+  const build106 = (): BookDocument =>
+    build([
+      page(0, [
+        {
+          kind: 'paragraph',
+          text: 'For this would cover the whole ground.‡ It would appear that de Mirville, in his narrative of the wonders manifested at the Presbytere de Cideville, ‡ was much struck.'
+        },
+        { kind: 'footnote', text: 'De Mirville: “Des Esprits,” p. 33.', marker: '‡' }
+      ]),
+      page(1, [
+        {
+          kind: 'paragraph',
+          text: 'They sat for two hours consecutively, without obtaining the least movement.‡'
+        },
+        { kind: 'footnote', text: 'Ibid., vol. i., p. 313.', marker: '‡' }
+      ])
+    ])
+
+  /** The second `‡` in the first block: the one the compositor set in error. */
+  const cideville = { blockId: 'p0b0', marker: '‡', nth: 2 }
+
+  it('is the fault: undeclared, the surplus mark takes the next leaf’s note', () => {
+    const doc = build106()
+    const prepared = prepareFootnotes(doc.blocks, doc.footnotes)
+    const claimed = prepared.blocks.flatMap((b) =>
+      b.references.map((r) => prepared.notes.get(r.noteId)!.text)
+    )
+    // Three marks, two notes: the surplus one takes the second leaf's note and
+    // the second leaf's own mark is left with nothing.
+    expect(claimed).toEqual(['De Mirville: “Des Esprits,” p. 33.', 'Ibid., vol. i., p. 313.'])
+  })
+
+  it('declared bare, every note stays on its own reference', () => {
+    const doc = build106()
+    const prepared = prepareFootnotes(doc.blocks, doc.footnotes, [cideville])
+
+    const first = prepared.blocks[0]!.references.map((r) => prepared.notes.get(r.noteId)!.text)
+    const second = prepared.blocks[1]!.references.map((r) => prepared.notes.get(r.noteId)!.text)
+    expect(first).toEqual(['De Mirville: “Des Esprits,” p. 33.'])
+    expect(second).toEqual(['Ibid., vol. i., p. 313.'])
+    expect(prepared.orphans).toEqual([])
+    expect(prepared.bareMarksMissed).toEqual([])
+  })
+
+  it('leaves the bare mark standing in the text, because the page prints it', () => {
+    const doc = build106()
+    const prepared = prepareFootnotes(doc.blocks, doc.footnotes, [cideville])
+    // The claimed mark is stripped — it is redrawn at its own size during
+    // layout — and the bare one is not, having nothing to be redrawn as.
+    expect(prepared.blocks[0]!.text).not.toContain('ground.‡')
+    expect(prepared.blocks[0]!.text).toContain('Cideville, ‡ was much struck')
+  })
+
+  it('counts occurrences of that marker alone, not marks in general', () => {
+    const doc = build([
+      page(0, [
+        {
+          kind: 'paragraph',
+          text: 'He wrote it down* and then, much later, wrote it again‡ and once more‡.'
+        },
+        { kind: 'footnote', text: 'The first hand.', marker: '*' },
+        { kind: 'footnote', text: 'The second hand.', marker: '‡' }
+      ])
+    ])
+    // `nth: 1` means the first `‡`, not the first mark on the leaf — which is
+    // an asterisk. Getting this wrong would bare the wrong mark and look right
+    // in any fixture whose surplus mark happened to be the first of anything.
+    const prepared = prepareFootnotes(doc.blocks, doc.footnotes, [
+      { blockId: 'p0b0', marker: '‡', nth: 1 }
+    ])
+    const claimed = prepared.blocks[0]!.references.map((r) => prepared.notes.get(r.noteId)!.text)
+    expect(claimed).toEqual(['The first hand.', 'The second hand.'])
+    expect(prepared.blocks[0]!.text).toContain('wrote it again‡')
+    expect(prepared.blocks[0]!.text).not.toContain('once more‡')
+  })
+
+  it('reports a declaration it could not apply rather than letting it lapse', () => {
+    const doc = build106()
+    // A block that is not there — the shape a dropped or merged block leaves.
+    // Silence here restores the original fault, so it is the one outcome this
+    // mechanism must never have.
+    const gone = { blockId: 'p9b9', marker: '‡', nth: 1 }
+    const prepared = prepareFootnotes(doc.blocks, doc.footnotes, [gone])
+    expect(prepared.bareMarksMissed).toEqual([gone])
+  })
+
+  it('reports an occurrence the block does not have that many of', () => {
+    const doc = build106()
+    const tooFar = { blockId: 'p0b0', marker: '‡', nth: 3 }
+    const prepared = prepareFootnotes(doc.blocks, doc.footnotes, [tooFar])
+    expect(prepared.bareMarksMissed).toEqual([tooFar])
+  })
+
+  it('reaches the engine: the bare mark is left on the page, and claims nothing', () => {
+    const doc = build106()
+    // The discriminator has to be something only the declaration changes, and
+    // two earlier attempts were not. `notesPlaced` is 2 either way — two notes
+    // are set whatever happens, one of them under the wrong reference. The
+    // count of `‡` left in the body is 1 either way too: three marks and two
+    // notes, so exactly one always goes unclaimed. What differs is **which
+    // words carry a reference**, which is the thing the reader sees.
+    //
+    // A reference mark is drawn as a raised, smaller run, so the words before
+    // one are the words it sits on.
+    const carrying = (b: LaidOutBook): string[] =>
+      b.pages
+        .flatMap((p) => lines(p))
+        .flatMap((l) =>
+          l.runs.flatMap((r, i) =>
+            // `i > 0` excludes the note's *own* mark at the foot of the
+            // page, which is raised in the same way and opens its line.
+            r.risePt !== undefined && r.risePt > 0 && i > 0
+              ? [l.runs[i - 1]!.text.split(/\s+/u).filter(Boolean).at(-1) ?? '']
+              : []
+          )
+        )
+
+    expect(carrying(run(doc))).toEqual(['ground.', 'Cideville,'])
+    const book = run({ ...doc, bareMarks: [cideville] })
+    expect(carrying(book)).toEqual(['ground.', 'movement.'])
+    expect(book.notesDropped).toEqual([])
+    expect(book.bareMarksMissed).toEqual([])
+  })
+
+  it('reaches the engine’s report when it could not be applied', () => {
+    const doc = build106()
+    const gone = { blockId: 'p9b9', marker: '‡', nth: 1 }
+    expect(run({ ...doc, bareMarks: [gone] }).bareMarksMissed).toEqual([gone])
   })
 })

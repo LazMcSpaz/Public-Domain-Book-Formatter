@@ -2317,6 +2317,21 @@ textarea.galley-plain {
   resize: vertical;
 }
 
+/* A mark the editor has said refers to nothing. It prints — the page printed
+   it — so the record of the decision is the only thing on screen that says so,
+   and without it the declaration would be invisible and unrepeatable. */
+.galley-bare {
+  margin: 8px 0 12px 24px;
+  padding: 6px 8px;
+  border-left: 3px solid var(--line);
+  background: #f5f5f4;
+  border-radius: 0 4px 4px 0;
+  font-size: 0.85rem;
+}
+.galley-bare .proof-annotation-label {
+  color: var(--muted);
+}
+
 /* A memo is the editor talking to the assistant: visibly not part of the book,
    visibly never printed. Amber while open, settled once answered. */
 .galley-memo {

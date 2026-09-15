@@ -1220,3 +1220,92 @@ describe('applyEdits — where a picture is placed', () => {
     expect(edits[0]).toMatchObject({ placement: { kind: 'inline' } })
   })
 })
+
+/**
+ * Declaring a printed reference mark bare.
+ *
+ * The decision is the editor's and only the editor's: nothing in a text can
+ * tell a mark the compositor set in error from a note the reading failed to
+ * find. What the edit list has to do is carry it, keyed so that saying it twice
+ * is saying it once and taking it back genuinely takes it back.
+ */
+describe('a mark declared bare', () => {
+  // Two leaves, because the damage a surplus mark does is not local: it takes
+  // the *next* leaf's note. A one-leaf fixture cannot show it — the first
+  // version of this block used one, and the end-to-end test passed with the
+  // mechanism switched off, since the only note was claimed by the first mark
+  // either way.
+  const marked = (): BookDocument =>
+    assembleBook([
+      page(0, [
+        { kind: 'paragraph', text: 'It covers the ground.‡ Later, at Cideville, ‡ he was struck.' },
+        { kind: 'footnote', text: 'De Mirville, p. 33.', marker: '‡' }
+      ]),
+      page(1, [
+        { kind: 'paragraph', text: 'They sat two hours without the least movement.‡' },
+        { kind: 'footnote', text: 'Ibid., p. 313.', marker: '‡' }
+      ])
+    ])
+
+  const bare = (nth: number, is = true): BookEdit => ({
+    kind: 'bare-mark',
+    blockId: 'p0b0',
+    marker: '‡',
+    nth,
+    bare: is
+  })
+
+  it('reaches the document the engine lays out', () => {
+    expect(applyEdits(marked(), [bare(2)]).bareMarks).toEqual([
+      { blockId: 'p0b0', marker: '‡', nth: 2 }
+    ])
+  })
+
+  it('is absent, not empty, on a book with none — so a book is one document', () => {
+    // An empty array here would make every document that has been through
+    // `applyEdits` differ from one that has not, which is the property the
+    // memo tests rest on.
+    expect(applyEdits(marked(), []).bareMarks).toBeUndefined()
+    expect(
+      applyEdits(marked(), [{ kind: 'text', blockId: 'p0b1', text: 'x' }]).bareMarks
+    ).toBeUndefined()
+  })
+
+  it('is taken back by declaring it not bare, leaving no trace for the engine to read', () => {
+    // Absent, by the same rule as a book that never had one: taking a
+    // declaration back has to leave the document the engine sees identical to
+    // one where it was never made.
+    expect(applyEdits(marked(), [bare(2), bare(2, false)]).bareMarks).toBeUndefined()
+  })
+
+  it('keys on the occurrence, so a second surplus mark does not undo the first', () => {
+    const list = withEdit(withEdit([], bare(1)), bare(2))
+    expect(list).toHaveLength(2)
+    expect(applyEdits(marked(), list).bareMarks).toHaveLength(2)
+  })
+
+  it('collapses a repeat of the same occurrence', () => {
+    expect(withEdit(withEdit([], bare(2)), bare(2, false))).toHaveLength(1)
+  })
+
+  it('counts as a change to the book, because it changes what prints', () => {
+    // Not a message about the book like a memo or a highlight: the reader sees
+    // a different page. A `countEdited` that ignored it would report a leaf
+    // the editor had ruled on as untouched.
+    expect(countEdited([bare(2)])).toBe(1)
+  })
+
+  it('changes which note the engine pairs, end to end', () => {
+    const before = applyEdits(marked(), [])
+    const after = applyEdits(marked(), [bare(2)])
+    const claimed = (doc: BookDocument): string[][] => {
+      const prepared = prepareFootnotes(doc.blocks, doc.footnotes, doc.bareMarks)
+      return prepared.blocks.map((b) => b.references.map((r) => prepared.notes.get(r.noteId)!.text))
+    }
+    // Undeclared, the surplus mark takes the second leaf's note and that
+    // leaf's own mark is left with nothing. Declared, each note is under the
+    // reference it was printed under.
+    expect(claimed(before)).toEqual([['De Mirville, p. 33.', 'Ibid., p. 313.'], []])
+    expect(claimed(after)).toEqual([['De Mirville, p. 33.'], ['Ibid., p. 313.']])
+  })
+})
