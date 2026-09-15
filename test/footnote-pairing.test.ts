@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { checkFootnotePairing } from '@core/coherence'
+import { checkFootnotePairing, checkNoteContinuations } from '@core/coherence'
 import type { PageTranscription, TranscribedBlock } from '@core/transcribe'
 
 const page = (pageIndex: number, blocks: TranscribedBlock[]): PageTranscription => ({
@@ -98,5 +98,66 @@ describe('checkFootnotePairing — the marks and the notes have to balance', () 
       [111, -1],
       [118, -2]
     ])
+  })
+})
+
+describe('checkNoteContinuations — a runover recorded as a fresh note', () => {
+  const page = (pageIndex: number, blocks: TranscribedBlock[]): PageTranscription => ({
+    pageIndex,
+    role: 'body',
+    blocks,
+    uncertain: [],
+    furniture: {}
+  })
+
+  it('names a footnote whose marker sits on text that opens mid-sentence', () => {
+    // Leaf 330 of Isis Vol. I: the tail of leaf 329's † note, given a † of its
+    // own by the reading. On the paper it has no marker at all.
+    const found = checkNoteContinuations([
+      page(329, [
+        { kind: 'paragraph', text: 'The whole resting upon the Hindu Illusion.†' },
+        { kind: 'footnote', marker: '†', text: 'In no country were the true esoteric doctrines' }
+      ]),
+      page(330, [
+        { kind: 'paragraph', text: 'The kabalistic heresies receive an unexpected support.' },
+        {
+          kind: 'footnote',
+          marker: '†',
+          text: 'expanding his idea, or dispelling the gloom.” Thus speaks the first code'
+        }
+      ])
+    ])
+    expect(found).toHaveLength(1)
+    expect(found[0]).toMatchObject({ pageIndex: 330, marker: '†' })
+    expect(found[0]!.opening.startsWith('expanding his idea, or dispelling')).toBe(true)
+  })
+
+  it('is quiet on a fresh note, on a runover that has no marker, and on a note opening with its own mark', () => {
+    expect(
+      checkNoteContinuations([
+        page(1, [
+          { kind: 'footnote', marker: '*', text: 'Plato : “Theages.”' },
+          { kind: 'footnote', marker: '†', text: '† “Ripley Revived,” 1678.' },
+          { kind: 'footnote', text: 'and so the note goes on, with no marker of its own.' },
+          { kind: 'footnote', marker: '‡', text: '‡ Ibid., p. 2.' }
+        ])
+      ])
+    ).toEqual([])
+  })
+
+  it('does not take a lower-case citation opening on a proper noun for a runover', () => {
+    // `de Mirville` opens lower case and is a fresh note. The check is a floor,
+    // not a verdict: it reports and the leaf decides, so this is a known
+    // false positive worth having rather than a case to tune away.
+    //
+    // The text opens with the note's *own* repeated mark, as the printed page
+    // sets it. That is deliberate: the mark has to be taken off before the
+    // first letter is judged, and a version of this check that did not strip
+    // it saw `‡` — neither lower case nor punctuation — and stayed quiet on
+    // every note in the book.
+    const found = checkNoteContinuations([
+      page(1, [{ kind: 'footnote', marker: '‡', text: '‡ de Mirville : “Des Esprits,” p. 33.' }])
+    ])
+    expect(found).toHaveLength(1)
   })
 })

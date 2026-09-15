@@ -37,7 +37,13 @@ import {
   type TranscribedBlock
 } from '@core/transcribe'
 import { deriveChapters } from '@core/assemble'
-import type { BookBlock, BookDocument, Illustration, IllustrationPlacement } from '@core/assemble'
+import type {
+  BareMark,
+  BookBlock,
+  BookDocument,
+  Illustration,
+  IllustrationPlacement
+} from '@core/assemble'
 
 /**
  * One correction, naming the block it applies to.
@@ -317,6 +323,17 @@ export type BookEdit =
    * the edit being absent so that undoing a placement is itself a decision.
    */
   | { kind: 'place'; illustrationId: string; placement: IllustrationPlacement | null }
+  /**
+   * A reference mark that prints and claims no note — see `BareMark`.
+   *
+   * The one decision the engine's positional pairing could not express, and it
+   * is the editor's every time: only somebody looking at the leaf can tell a
+   * mark the compositor set in error from a note the reading failed to find.
+   * `bare: false` is how one is taken back, kept distinct from the edit being
+   * absent for the reason a `place` of `null` is — undoing a decision is
+   * itself a decision, and the record of it is worth keeping.
+   */
+  | { kind: 'bare-mark'; blockId: string; marker: string; nth: number; bare: boolean }
 
 /** How a split block's halves are named, so the ids stay deterministic. */
 const splitId = (id: string, half: number): string => `${id}/${half}`
@@ -361,6 +378,14 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   const retouched = new Map<string, ImageEditOp[]>()
   /** Where each scanned picture was put by a person, keyed so a later say wins. */
   const placements = new Map<string, IllustrationPlacement | null>()
+  /**
+   * Marks declared bare, keyed by block, marker and occurrence.
+   *
+   * Held as a map rather than appended, so saying it twice is saying it once
+   * and `bare: false` genuinely undoes rather than adding a contradiction the
+   * engine would have to arbitrate.
+   */
+  const bared = new Map<string, BareMark & { bare: boolean }>()
   // Illustration anchors are held as an override map and folded in at the end,
   // so a picture re-anchored to a block that a later edit drops falls back to
   // where the engine would have put it rather than vanishing.
@@ -421,6 +446,21 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
 
     if (edit.kind === 'place') {
       placements.set(edit.illustrationId, edit.placement)
+      continue
+    }
+
+    if (edit.kind === 'bare-mark') {
+      // Not routed through the per-block switch below, because a bare mark
+      // survives its block being renamed by a split in a way a text edit does
+      // not: it is a statement about the paper, and the paper has not changed.
+      // What it cannot survive is the block ceasing to exist, which
+      // `prepareFootnotes` reports rather than swallowing.
+      bared.set(`${edit.blockId}\u0000${edit.marker}\u0000${edit.nth}`, {
+        blockId: edit.blockId,
+        marker: edit.marker,
+        nth: edit.nth,
+        bare: edit.bare
+      })
       continue
     }
 
@@ -661,6 +701,10 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
     .map((illustration) => withRetouching(illustration, retouched.get(illustration.id)))
     .map((illustration) => withPlacement(illustration, placements))
 
+  const stillBare: BareMark[] = [...bared.values()]
+    .filter((m) => m.bare)
+    .map(({ bare: _bare, ...m }) => m)
+
   return {
     ...doc,
     blocks,
@@ -671,7 +715,18 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
     // heading has to be able to add one — and dropping a heading has to be able
     // to remove one. Recomputed rather than patched, for the same reason the
     // engine re-runs instead of mutating.
-    chapters: chaptersOf(blocks, doc.chapters)
+    chapters: chaptersOf(blocks, doc.chapters),
+    // Only the marks still declared bare. A `bare: false` is the editor taking
+    // the declaration back, and what it has to produce is a document with no
+    // trace of it — not one carrying a flag the engine has to remember to read
+    // the right way round.
+    //
+    // Absent rather than empty when there are none, so that a book with no
+    // bare marks is the *same document* whether or not it went through here.
+    // An empty array would make `applyEdits(doc, [aMemo])` differ from
+    // `applyEdits(doc, [])`, which is the property the memo tests assert and
+    // the one that says a message about a book changes nothing about it.
+    ...(stillBare.length > 0 ? { bareMarks: stillBare } : {})
   }
 }
 
@@ -890,7 +945,8 @@ export function withEdit(edits: readonly BookEdit[], edit: BookEdit): BookEdit[]
     edit.kind === 'highlight' ||
     edit.kind === 'note-text' ||
     edit.kind === 'retouch' ||
-    edit.kind === 'place'
+    edit.kind === 'place' ||
+    edit.kind === 'bare-mark'
   if (!collapsible) return [...edits, edit]
 
   const target = editTarget(edit)
@@ -919,5 +975,8 @@ export function editTarget(edit: BookEdit): string {
   if (edit.kind === 'highlight') return edit.highlightId
   if (edit.kind === 'retouch') return edit.illustrationId
   if (edit.kind === 'place') return edit.illustrationId
+  // By block *and* mark: a leaf can print two surplus marks, and keying on
+  // the block alone would make declaring the second undo the first.
+  if (edit.kind === 'bare-mark') return `${edit.blockId}\u0000${edit.marker}\u0000${edit.nth}`
   return edit.blockId
 }

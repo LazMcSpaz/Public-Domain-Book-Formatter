@@ -108,3 +108,55 @@ export function checkFootnotePairing(
   }
   return out
 }
+
+/** A footnote block recorded as a fresh note that reads like the tail of one. */
+export interface ContinuationFinding {
+  pageIndex: number
+  marker: string
+  /** How the block's text opens, after its own repeated marker is stripped. */
+  opening: string
+}
+
+/**
+ * Footnote blocks that carry a marker but open mid-sentence.
+ *
+ * A long note runs off the foot of one leaf and finishes at the foot of the
+ * next, where the printed page sets it with **no marker** — it is the rest of
+ * the note above, and assembly joins it as such. A reader who gives that
+ * runover the previous note's marker has created a note with no mark in the
+ * body, and the pairing is positional: the phantom waits, takes the next mark
+ * of its marker anywhere in the book, and every note of that marker to the end
+ * of the volume is set one reference early. On *Isis Unveiled* Vol. I one
+ * such block — leaf 330, "expanding his idea, or dispelling the gloom.”" under
+ * a `†` — displaced 239 `†` references and left the last of them an orphan.
+ *
+ * The shape is mechanical: a marker on text whose first letter is lower case,
+ * or which opens on a closing quote or a comma. That is what a runover looks
+ * like and what a fresh note never does. Reported, never repaired — the leaf
+ * decides — and swept over every footnote in the volume the moment a
+ * transcription lands, because a check that has to be run by hand is the
+ * check that is not run.
+ *
+ * Pure: no DOM, no I/O.
+ */
+export function checkNoteContinuations(
+  transcriptions: readonly PageTranscription[]
+): ContinuationFinding[] {
+  const out: ContinuationFinding[] = []
+  for (const page of [...transcriptions].sort((a, b) => a.pageIndex - b.pageIndex)) {
+    for (const block of page.blocks) {
+      if (block.kind !== 'footnote') continue
+      const marker = block.marker?.trim()
+      if (!marker) continue
+      // The page repeats the marker at the head of the note; take it off so the
+      // first *word* is what gets judged.
+      const text = (block.text ?? '').replace(/^[\s*†‡§‖¶⁂]+/u, '')
+      const first = text[0]
+      if (!first) continue
+      const opensMidSentence = /[\p{Ll}]/u.test(first) || /[,;:)”’]/u.test(first)
+      if (opensMidSentence)
+        out.push({ pageIndex: page.pageIndex, marker, opening: text.slice(0, 60) })
+    }
+  }
+  return out
+}

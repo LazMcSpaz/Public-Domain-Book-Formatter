@@ -25,8 +25,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { PageBrowser } from './PageBrowser'
 import { caretOffset, offsetAtPoint, setCaret } from './dom-offsets'
 import { outlineOf, passagesOf, sectionTitlesOf, type Passage } from './passages'
-import { footnoteMarkerPattern, type Footnote, type Illustration } from '@core/assemble'
-import { anchorIllustrations } from '@core/layout'
+import type { BareMark, Footnote, Illustration } from '@core/assemble'
+import { anchorIllustrations, prepareFootnotes, type NoteReference } from '@core/layout'
 import { checkGlossaryMarks, glossaryHeadwords, withGlossaryMark } from '@core/annotate'
 import type { BookDocument } from '@core/assemble'
 import type { BlockKind } from '@core/transcribe'
@@ -129,6 +129,12 @@ function PictureCard({ picture }: { picture: Illustration }): JSX.Element {
   )
 }
 
+/** "the second ‡ in this passage" reads better than "‡ #2" over a paragraph. */
+const ordinal = (n: number): string => {
+  const names = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth']
+  return names[n - 1] ?? `${n}th`
+}
+
 const mintId = (prefix: string): string =>
   `${prefix}${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`
 
@@ -146,18 +152,36 @@ function NoteChip({
   note,
   label,
   onCommit,
-  onRemove
+  onRemove,
+  onBare
 }: {
   note: Footnote
   label: string
   onCommit: (text: string) => void
   onRemove: () => void
+  /**
+   * Say that the mark this note was paired to refers to nothing.
+   *
+   * Not the same action as removing the note, and the difference is the whole
+   * point: removing it says the book has one note fewer, and this says the
+   * *mark* above is the compositor's error. Because the pairing is positional
+   * and runs the length of the book, a surplus mark does not stand harmlessly
+   * — it takes this note off whatever it belonged to, and every note of that
+   * marker after it moves by one. So the offer belongs here, beside the note
+   * that looks wrong, which is where the editor notices.
+   */
+  onBare?: () => void
 }): JSX.Element {
   const current = withMarkup(note.text, note.emphasis, note.strong)
   return (
     <div className="proof-annotation galley-note galley-fn">
       <span className="proof-annotation-bar">
         <span className="proof-annotation-label">{label}</span>
+        {onBare ? (
+          <button type="button" onClick={onBare}>
+            This mark has no note
+          </button>
+        ) : null}
         <button type="button" onClick={onRemove}>
           Remove note
         </button>
@@ -235,28 +259,55 @@ export function BookEditor({
    * A note is read where its reference is, so that is where it is edited —
    * the Docs shape, and the first time these notes are editable at all:
    * assembly pulls them out of the block flow, so no block edit could reach
-   * them. Placement is found the way the engine finds it, by the printed
-   * marker (`footnoteMarkerPattern`), over the blocks as they now stand; a
-   * note whose marker is nowhere goes to the endnotes group at the foot of
-   * the column, named rather than hidden, exactly as the engine collects it.
+   * them. Placement comes from the engine's own pairing over the blocks as
+   * they now stand, so the galley and the page cannot disagree about where a
+   * note belongs; one whose marker is nowhere goes to the endnotes group at
+   * the foot of the column, named rather than hidden, as the engine collects it.
    */
   const printedNotes = useMemo(() => {
-    const byBlock = new Map<string, Footnote[]>()
-    const unplaced: Footnote[] = []
-    for (const note of doc.footnotes) {
-      // The editor's own notes are edits and edit as such; this is the book's.
-      if (!note.originalMarker) continue
-      const pattern = footnoteMarkerPattern(note.originalMarker)
-      const host = pattern ? doc.blocks.find((b) => pattern.test(b.text)) : undefined
-      if (!host) {
-        unplaced.push(note)
-        continue
+    const byBlock = new Map<string, { note: Footnote; reference: NoteReference }[]>()
+    const byId = new Map(doc.footnotes.map((n) => [n.id, n]))
+
+    // Through `prepareFootnotes` — the engine's own pairing, over the document
+    // as it stands, bare marks included.
+    //
+    // This used to find the *first* block whose text matched the note's
+    // printed marker, which is not where the note goes and is not even a
+    // stable answer: on a book with a hundred `‡` notes every one of them
+    // hung off whichever passage happened to carry the first `‡`, so the
+    // galley showed a wall of notes on one paragraph and none anywhere else.
+    // Worse, it disagreed with what the book would print, and the whole point
+    // of editing a note where it is read is that those are the same place.
+    const prepared = prepareFootnotes(doc.blocks, doc.footnotes, doc.bareMarks)
+    doc.blocks.forEach((block, i) => {
+      for (const reference of prepared.blocks[i]?.references ?? []) {
+        const note = byId.get(reference.noteId)
+        // The editor's own notes are edits and edit as such; this is the book's.
+        if (!note?.originalMarker) continue
+        const list = byBlock.get(block.id) ?? []
+        list.push({ note, reference })
+        byBlock.set(block.id, list)
       }
-      const list = byBlock.get(host.id) ?? []
-      list.push(note)
-      byBlock.set(host.id, list)
+    })
+    const unplaced = prepared.orphans.filter((n) => n.originalMarker)
+    return { byBlock, unplaced, missed: prepared.bareMarksMissed }
+  }, [doc])
+
+  /**
+   * Marks the editor has said print bare, by the passage they stand in.
+   *
+   * Listed so a declaration can be taken back. An unclaimed marker looks
+   * exactly like every other character in the text once it is made, so without
+   * this the decision would be invisible and permanent.
+   */
+  const bareByBlock = useMemo(() => {
+    const out = new Map<string, BareMark[]>()
+    for (const mark of doc.bareMarks ?? []) {
+      const list = out.get(mark.blockId) ?? []
+      list.push(mark)
+      out.set(mark.blockId, list)
     }
-    return { byBlock, unplaced }
+    return out
   }, [doc])
 
   const outline = useMemo(() => outlineOf(doc), [doc])
@@ -400,7 +451,7 @@ export function BookEditor({
     // unplaced one to the endnotes group.
     const anchorOf = new Map<string, string>()
     for (const [blockId, list] of printedNotes.byBlock) {
-      for (const note of list) anchorOf.set(note.id, blockId)
+      for (const { note } of list) anchorOf.set(note.id, blockId)
     }
     for (const note of doc.footnotes) {
       const text = withMarkup(note.text, note.emphasis, note.strong)
@@ -1245,14 +1296,53 @@ export function BookEditor({
                   </div>
                 ))}
 
-                {(printedNotes.byBlock.get(passage.id) ?? []).map((note) => (
+                {(printedNotes.byBlock.get(passage.id) ?? []).map(({ note, reference }) => (
                   <NoteChip
                     key={`${note.id}:${note.text}`}
                     note={note}
                     label={`Note ${note.originalMarker} — the book's own, printed at the foot of its page`}
                     onCommit={(text) => push({ kind: 'note-text', noteId: note.id, text })}
                     onRemove={() => push({ kind: 'note-text', noteId: note.id, text: '' })}
+                    // Only a mark the original printed can be declared bare. An
+                    // authored note is anchored rather than marked, so there is
+                    // no character in the text to leave standing.
+                    onBare={
+                      reference.printed !== undefined && reference.nth !== undefined
+                        ? () =>
+                            push({
+                              kind: 'bare-mark',
+                              blockId: passage.id,
+                              marker: reference.printed!,
+                              nth: reference.nth!,
+                              bare: true
+                            })
+                        : undefined
+                    }
                   />
+                ))}
+
+                {(bareByBlock.get(passage.id) ?? []).map((mark) => (
+                  <div key={`bare:${mark.marker}:${mark.nth}`} className="galley-bare">
+                    <span className="proof-annotation-bar">
+                      <span className="proof-annotation-label">
+                        {`The ${ordinal(mark.nth)} “${mark.marker}” in this passage prints with no note — it refers to nothing`}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          push({
+                            kind: 'bare-mark',
+                            blockId: passage.id,
+                            marker: mark.marker,
+                            nth: mark.nth,
+                            bare: false
+                          })
+                        }
+                      >
+                        It does have a note
+                      </button>
+                    </span>
+                  </div>
                 ))}
 
                 {memos.map((memo) => (

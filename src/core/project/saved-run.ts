@@ -53,13 +53,15 @@ import { EDITORIAL_QUERY_KINDS } from '@core/transcribe'
  * left on a selection now carries, and v16 → v17 a picture's *placement*: the
  * width the original printed it at and where it sits against the text, on the
  * `image` edit for a supplied picture and as the `place` edit for one cut from
- * the scan.
+ * the scan, and v17 → v18 the `bare-mark` edit: a reference mark the page
+ * prints that refers to no note, which the engine's positional pairing had no
+ * way to express and which a surplus mark in an old book makes necessary.
  * None of them damages an older run — each is a complete transcription that simply
  * has none of the newer thing on it yet — so all upgrade in place rather than
  * being refused. That distinction is the whole reason a migration exists
  * instead of a version check.
  */
-export const CURRENT_SCHEMA_VERSION = 17
+export const CURRENT_SCHEMA_VERSION = 18
 
 /** A page the model could not read at all. Mirrors the runner's `PageFailure`. */
 export interface SavedFailure {
@@ -671,6 +673,28 @@ function parseEdits(raw: unknown): BookEdit[] {
         const placement = value['placement'] === null ? null : parsePlacement(value['placement'])
         if (illustrationId && placement !== undefined) {
           out.push({ kind: 'place', illustrationId, placement })
+        }
+        break
+      }
+      case 'bare-mark': {
+        const blockId = str(value['blockId'], '')
+        const marker = str(value['marker'], '')
+        const nth = value['nth']
+        const bare = value['bare']
+        // Every field the claiming walk counts in, checked. `nth` is where a
+        // loose parse would do its damage: a `0` or a `NaN` matches no
+        // occurrence, so the declaration would be dropped by
+        // `bareMarksMissed` — reported, but reported as a mark the block no
+        // longer has rather than as a record that was never well formed.
+        if (
+          blockId &&
+          marker &&
+          typeof nth === 'number' &&
+          Number.isInteger(nth) &&
+          nth >= 1 &&
+          typeof bare === 'boolean'
+        ) {
+          out.push({ kind: 'bare-mark', blockId, marker, nth, bare })
         }
         break
       }

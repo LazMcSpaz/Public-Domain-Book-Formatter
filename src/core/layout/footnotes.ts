@@ -20,7 +20,7 @@
  *
  * Pure: text in, text and positions out.
  */
-import { footnoteMarkerPattern, type Footnote } from '@core/assemble'
+import { footnoteMarkerPattern, type BareMark, type Footnote } from '@core/assemble'
 
 /** A reference mark, resolved to the word it sits on. */
 export interface NoteReference {
@@ -29,6 +29,17 @@ export interface NoteReference {
   noteId: string
   /** The mark as it will be printed in this edition, e.g. "4". */
   mark: string
+  /**
+   * The marker the *original* printed here, and which occurrence of it this is
+   * within the block, 1-based.
+   *
+   * The coordinate a `BareMark` is written in, and the reason it is reported:
+   * without it nothing outside this module can name a particular mark, so no
+   * surface could offer to declare one bare. An authored note, which has an
+   * anchor rather than a printed marker, has neither.
+   */
+  printed?: string
+  nth?: number
 }
 
 /** One body block with its printed markers removed, and where they were. */
@@ -67,6 +78,17 @@ export interface PreparedFootnotes {
    * be placed. Reported, never silently discarded.
    */
   orphans: Footnote[]
+  /**
+   * Marks declared bare that this document has no occurrence for.
+   *
+   * The block was dropped or merged away, or it was retyped and the marker the
+   * editor was looking at is no longer in it. Either way the declaration has
+   * silently stopped applying — and silence is the dangerous outcome, because
+   * what it restores is the fault: the mark starts claiming a note again and
+   * every note of that marker after it moves by one. Reported for the same
+   * reason `notesDropped` is.
+   */
+  bareMarksMissed: BareMark[]
 }
 
 /**
@@ -130,16 +152,43 @@ function occurrences(source: string, marker: string): { start: number; end: numb
   const out: { start: number; end: number }[] = []
   let match: RegExpExecArray | null
   while ((match = scan.exec(source)) !== null) {
-    out.push({ start: match.index, end: match.index + match[0].length })
+    const start = match.index
+    const end = start + match[0].length
+    // Only a **maximal run** counts. `footnoteMarkerPattern('*')` is a bare
+    // `/\*/`, so without this the two characters of a `**` are two `*`
+    // occurrences as well — and the claiming walk below hands each of them a
+    // note before the emit loop discards them in favour of the `**`. Those
+    // notes go back to the pool and the *next* block takes them: on Isis
+    // Vol. I leaf 190's paragraph carried `**` and a lone `*`, so the lone
+    // `*` took the note from leaf 194 and leaf 193 took leaves 191's and
+    // 193's. The tie-break at emit time is right but comes too late; the
+    // occurrence must never be counted in the first place.
+    const before = start > 0 ? source[start - 1]! : ''
+    const after = end < source.length ? source[end]! : ''
+    if (!MARKER_CHAR.test(before) && !MARKER_CHAR.test(after)) out.push({ start, end })
     if (match.index === scan.lastIndex) scan.lastIndex++
   }
   return out
 }
 
+/** Any character a printed reference mark is made of. */
+const MARKER_CHAR = /[*†‡§‖¶⁂]/u
+
 export function prepareFootnotes(
   blocks: readonly { id: string; text: string }[],
-  footnotes: readonly Footnote[]
+  footnotes: readonly Footnote[],
+  bareMarks: readonly BareMark[] = []
 ): PreparedFootnotes {
+  /** Bare occurrences by block and marker, as a set of 1-based positions. */
+  const bareIn = new Map<string, Set<number>>()
+  for (const mark of bareMarks) {
+    const key = `${mark.blockId}\u0000${mark.marker}`
+    const at = bareIn.get(key) ?? new Set<number>()
+    at.add(mark.nth)
+    bareIn.set(key, at)
+  }
+  /** Every bare mark this pass actually found somewhere to skip. */
+  const bareHonoured = new Set<string>()
   // Every note is searched for, including the ones assembly already flagged as
   // orphaned. Filtering them out here would leave nothing to report, and a note
   // that disappears without a word is the failure this module exists to avoid —
@@ -152,7 +201,13 @@ export function prepareFootnotes(
   for (const block of blocks) {
     const source = block.text
 
-    const hits: { start: number; end: number; noteId: string }[] = []
+    const hits: {
+      start: number
+      end: number
+      noteId: string
+      printed?: string
+      nth?: number
+    }[] = []
     /** The remaining notes that print a marker, grouped by it, oldest first. */
     const byMarker = new Map<string, Footnote[]>()
     for (const note of remaining.values()) {
@@ -187,10 +242,26 @@ export function prepareFootnotes(
     // So the occurrences are walked positionally and the k-th takes the k-th
     // remaining note of that marker. Extra markers simply find no note left,
     // which is the case the report below names.
+    //
+    // A mark the editor has declared **bare** is stepped over rather than
+    // counted out: it prints — an unclaimed marker is never stripped — and the
+    // notes waiting for that marker go on to the next occurrence. That is the
+    // whole of the mechanism, and it has to live inside this walk rather than
+    // beside it, because "the k-th mark takes the k-th note" is exactly the
+    // rule a surplus mark breaks.
     for (const [marker, waiting] of byMarker) {
       const places = occurrences(source, marker)
-      for (let k = 0; k < Math.min(places.length, waiting.length); k++) {
-        hits.push({ ...places[k]!, noteId: waiting[k]!.id })
+      const bare = bareIn.get(`${block.id}\u0000${marker}`)
+      let claimed = 0
+      for (let k = 0; k < places.length; k++) {
+        if (bare?.has(k + 1)) {
+          bareHonoured.add(`${block.id}\u0000${marker}\u0000${k + 1}`)
+          continue
+        }
+        const note = waiting[claimed]
+        if (!note) break
+        claimed++
+        hits.push({ ...places[k]!, noteId: note.id, printed: marker, nth: k + 1 })
       }
     }
 
@@ -232,7 +303,12 @@ export function prepareFootnotes(
       if (!note) continue
       const mark = String(nextNumber++)
 
-      references.push({ wordIndex: counter.lastWordIndex(), noteId: note.id, mark })
+      references.push({
+        wordIndex: counter.lastWordIndex(),
+        noteId: note.id,
+        mark,
+        ...(hit.printed !== undefined ? { printed: hit.printed, nth: hit.nth } : {})
+      })
       notes.set(note.id, {
         id: note.id,
         mark,
@@ -256,5 +332,12 @@ export function prepareFootnotes(
   // attach it to — but the caller is told, and tells the user.
   const orphans = [...remaining.values()]
 
-  return { blocks: prepared, notes, orphans }
+  // A declaration that found nothing to apply to. See `bareMarksMissed`: this
+  // is the one failure of this mechanism that puts the *original* fault back,
+  // so it is named rather than counted.
+  const bareMarksMissed = bareMarks.filter(
+    (m) => !bareHonoured.has(`${m.blockId}\u0000${m.marker}\u0000${m.nth}`)
+  )
+
+  return { blocks: prepared, notes, orphans, bareMarksMissed }
 }

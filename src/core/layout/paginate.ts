@@ -1908,7 +1908,8 @@ export function layout(
   // and collected as an endnote when the structure gate asked for that.
   const prepared = prepareFootnotes(
     doc.blocks.map((b) => (b.kind === 'table' ? { id: b.id, text: '' } : b)),
-    doc.footnotes
+    doc.footnotes,
+    doc.bareMarks
   )
 
   // Every note broken to the measure once. A note's line count does not depend
@@ -2490,6 +2491,7 @@ export function layout(
     notesPlaced: placedIds.size,
     notesCollected: collected.length,
     notesDropped,
+    bareMarksMissed: prepared.bareMarksMissed,
     imagesPlaced,
     imagesDropped
   }

@@ -21,6 +21,7 @@ export {
   type BookSection,
   type Illustration,
   type IllustrationPlacement,
+  type BareMark,
   type IllustrationSource
 } from './assemble-book'
 export { bookText } from './book-text'

@@ -1718,6 +1718,103 @@ closed`, which is indistinguishable from the flake the first command after a
   — ink runs per row and column, sixty lines of Node — after the first pass
   clipped the descenders of the line above the formula into the picture.
 
+- **Also done**: **a reference mark that prints and claims no note**
+  (`BareMark`; the `bare-mark` edit, SavedRun v18; `drive.mjs bare` and
+  `drive.mjs pairs`). The editor's ruling on leaf 106 of _Isis Unveiled_
+  Vol. I: the 1877 compositor set `‡` twice with one `‡` note under it, and
+  the mark against "Presbytere de Cideville" refers to nothing. Keep it as
+  printed, with nothing under it — which the engine had no way to do. Pairing
+  is positional and runs the length of the book, so a surplus mark does not
+  stand harmlessly: it takes the next note of its marker _anywhere_, the note
+  that one belonged to takes the one after, and every note of that marker to
+  the end of the volume is set one reference early. Measured on that book: one
+  surplus `‡` displaced **188 references**, and declaring it bare put every one
+  of them back.
+
+  Anchored by **occurrence, not offset** — "the second `‡` in this block" —
+  for the reason a highlight is anchored by its words: every later correction
+  shifts the characters, and an offset recorded today names whatever sits
+  there tomorrow. It is also the coordinate the claiming walk itself counts
+  in, so what is recorded is what the engine reads. A declaration the document
+  has no occurrence for is **reported** (`bareMarksMissed`, through to
+  `LaidOutBook`), because this is the one editorial statement that fails
+  _backwards_: losing it leaves no gap a reader can see, it silently puts the
+  surplus mark back in the walk. `drive.mjs bare` refuses one the block cannot
+  carry rather than recording it to be reported later as a mark the block has
+  lost.
+
+  Eleven faults were injected and all eleven caught, but two tests of mine
+  passed against the reinstated bug first and both are worth recognising. The
+  end-to-end layout test asserted `notesPlaced === 2` — true either way, one
+  of them under the wrong reference — and passed with `doc.bareMarks` never
+  reaching `prepareFootnotes`; the count of `‡` left in the body was no better,
+  being 1 either way. What discriminates is **which words carry a reference**,
+  read off the raised runs. And the `applyEdits` fixture used one leaf, where
+  the only note is claimed by the first mark whatever happens: the damage a
+  surplus mark does is to the _next_ leaf, so the fixture has to have one.
+
+  Two things came out of the same pass. The galley grouped the book's own
+  footnotes by its **own** rule — the first block whose text matched the
+  marker — so on a book with 110 `‡` notes every one of them hung off whichever
+  passage carried the first `‡`, and the galley disagreed with the page about
+  where a note belongs, which is the one thing editing a note where it is read
+  cannot afford. It goes through `prepareFootnotes` now. And `drive.mjs pairs`
+  is the check that made all of this visible: `checkFootnotePairing` counts
+  marks against notes _per leaf_, which is the right question to ask of a
+  transcription and the wrong one after a correction, since a correction is
+  keyed to an assembled block and a block crossing a seam belongs to two leaves
+  at once — so it can only run over the pristine reading and goes on naming
+  leaves already fixed. `pairs` reads `prepareFootnotes`' own output instead,
+  with the body text before each mark beside the note that claimed it, because
+  a note under the wrong reference is obvious on one line and invisible in any
+  count. It shipped an hour before the declaration existed and did not pass
+  `doc.bareMarks`, so its first answer after a ruling was that nothing had
+  changed.
+
+- **Also done**: **every footnote in Isis Vol. I is under its own mark — 840 of
+  840 — and the two faults that stood between 86% and that.** Both were
+  found by tracing each marker's chain in `drive.mjs pairs` output to the first
+  leaf where the note's home leaf and the mark's leaf part company, and both
+  are shapes worth recognising on the next book.
+
+  **A doubled marker was two singles in the claiming walk.**
+  `footnoteMarkerPattern('*')` is a bare `/\*/`, so `occurrences()` counted the
+  two characters of a `**` as two `*` occurrences as well. The walk handed each
+  a note _before_ the emit loop discarded them in favour of the `**` — the
+  tie-break was right and came too late — so those notes fell back into the
+  pool and the **next** block took them. Leaf 190 carried `**` and, much later,
+  a lone `*`: the lone `*` took leaf 194's note and leaf 193 took leaves 191's
+  and 193's, and because the chain re-converged at once the per-leaf check
+  never named it. An occurrence is now a **maximal run**: a hit with a marker
+  character on either side of it is not one.
+
+  **A runover recorded as a fresh note.** Leaf 330's foot is the tail of leaf
+  329's `†` note, and on the paper it has no marker, as a runover does. The
+  reading gave it `†`. A note with no mark in the body waits, and it took leaf
+  332's `†`; every `†` note to the end of the volume was set one early and the
+  last, "Ibid., p. 2." on leaf 684, was collected as an endnote. Fixed in the
+  **transcription** — the marker removed and the leaf re-landed through
+  `transcribe`, merging by leaf so the text is untouched — because assembly
+  already joins a markerless footnote to the note above it. That shape is
+  mechanical: a marker on text whose first letter is lower case, or which
+  opens on a closing quote or a comma. `checkNoteContinuations`
+  (`@core/coherence`) names every such block, `transcribe` reports it the
+  moment a batch lands, and swept over this volume it finds leaf 330 and no
+  other. It is a floor and not a verdict — `‡ de Mirville` opens lower case
+  and is a fresh note — so the leaf decides.
+
+  Two things about how it was measured. The score is _notes on their own leaf
+  or the one after_, and the seam is why "the one after" is in it: a
+  paragraph joined across leaves puts a mark on the leaf after the one its
+  block began on. That score went 59% → 66% (leaf 164 bare) → 86% (leaf 415's
+  three title asterisks bare) → 100% (leaf 330's phantom removed, then the
+  `**` fix), and the last two steps were _engine_ and _transcription_ faults
+  rather than the compositor's — which is the correction owed to the ledger,
+  where the drift had been attributed to three surplus marks in the text. And
+  the fixtures had to have the shape of the fault: the `**` test needs a lone
+  `*` **after** the `**` in the same block and a following block with marks
+  of its own, or the stolen notes have nowhere to show up.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

@@ -87,7 +87,11 @@ export function layoutWithToc(
   // concerned, and whether there will be one is decided by the document and the
   // option alone — never by a layout — so both passes agree about it.
   if (options.orphanNotes === 'collect') {
-    const { orphans } = prepareFootnotes(doc.blocks, doc.footnotes)
+    // The bare marks go in here too, and must: whether there is a collected
+    // endnotes section is decided in this pass and again in the layout, and a
+    // difference between the two is a contents that names a section the book
+    // does not print. Two calls, one set of inputs.
+    const { orphans } = prepareFootnotes(doc.blocks, doc.footnotes, doc.bareMarks)
     if (orphans.length > 0) {
       entries.push({ id: 'endnotes', title: ENDNOTES_TITLE, level: 1, folio: null })
     }
