@@ -1625,6 +1625,96 @@ async function serve() {
       }
     },
 
+    /**
+     * What the engine actually paired: each reference mark, the words it sits
+     * on, and the note that claimed it.
+     *
+     * `checkFootnotePairing` counts marks against notes **per leaf**, which is
+     * the right question to ask of a transcription and the wrong one to ask
+     * after a correction: a correction is keyed to an assembled block, and an
+     * assembled block that crosses a page seam belongs to two leaves at once.
+     * So the counting check can only ever be run over the pristine reading, and
+     * it goes on naming leaves whose fault has since been fixed.
+     *
+     * This asks the other question, over the book as it will print. It does not
+     * re-derive the rule — it reads `prepareFootnotes`' own output, which is
+     * what the page is set from — so a pairing it reports right is right. Each
+     * row carries the tail of the body text before the mark and the head of the
+     * note, because a note set under the wrong reference is obvious when the
+     * two are on one line and invisible in any count.
+     *
+     * `pairs [out.json] [leaf...]` — the whole book, or only references whose
+     * block began on the named leaves.
+     */
+    pairs: async ([out = '', ...only]) => {
+      const wanted = only.map(Number).filter(Number.isFinite)
+      const found = await page.evaluate(
+        async ([repo, leaves]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const notesMod = await import(`/@fs${repo}/src/core/layout/footnotes.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const run = await runStore.loadRun(newest.key)
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const prepared = notesMod.prepareFootnotes(doc.blocks, doc.footnotes)
+          const byId = new Map(doc.footnotes.map((n) => [n.id, n]))
+          const rows = []
+          doc.blocks.forEach((block, i) => {
+            const leaf = block.sourcePages?.[0]
+            if (leaves.length > 0 && !leaves.includes(leaf)) return
+            const out = prepared.blocks[i]
+            if (!out) return
+            // `wordIndex` counts words in the *rewritten* text, which is the
+            // text with the original marker taken out — so the words before it
+            // are the words the reader meets before the mark.
+            const words = out.text.split(/\s+/u).filter(Boolean)
+            for (const ref of out.references) {
+              const note = prepared.notes.get(ref.noteId)
+              rows.push({
+                leaf,
+                blockId: block.id,
+                mark: ref.mark,
+                printed: byId.get(ref.noteId)?.originalMarker ?? null,
+                before: words.slice(Math.max(0, ref.wordIndex - 9), ref.wordIndex + 1).join(' '),
+                note: (note?.text ?? '').slice(0, 90)
+              })
+            }
+          })
+          return {
+            references: rows.length,
+            notes: doc.footnotes.length,
+            // A note whose marker is nowhere in the body. It is collected as an
+            // endnote rather than dropped, and it is the one number here that
+            // should be read before the rows.
+            orphans: prepared.orphans.map((n) => ({
+              marker: n.originalMarker,
+              leaf: n.pageIndex,
+              opening: n.text.slice(0, 70)
+            })),
+            rows
+          }
+        },
+        [REPO, wanted]
+      )
+      if (out) {
+        const { writeFile } = await import('node:fs/promises')
+        await writeFile(out, JSON.stringify(found, null, 1))
+      }
+      return {
+        ...(out ? { wrote: out } : {}),
+        references: found.references,
+        notes: found.notes,
+        orphaned: found.orphans.length,
+        orphans: found.orphans,
+        ...(out ? {} : { rows: found.rows })
+      }
+    },
+
     consistency: async ([out = 'consistency.json', which = 'edited']) => {
       // `consistency out.json pristine` runs over the transcription before any
       // correction. That is the *normal* occasion for these checks — they exist
