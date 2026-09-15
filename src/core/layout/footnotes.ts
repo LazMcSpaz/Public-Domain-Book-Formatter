@@ -152,11 +152,27 @@ function occurrences(source: string, marker: string): { start: number; end: numb
   const out: { start: number; end: number }[] = []
   let match: RegExpExecArray | null
   while ((match = scan.exec(source)) !== null) {
-    out.push({ start: match.index, end: match.index + match[0].length })
+    const start = match.index
+    const end = start + match[0].length
+    // Only a **maximal run** counts. `footnoteMarkerPattern('*')` is a bare
+    // `/\*/`, so without this the two characters of a `**` are two `*`
+    // occurrences as well — and the claiming walk below hands each of them a
+    // note before the emit loop discards them in favour of the `**`. Those
+    // notes go back to the pool and the *next* block takes them: on Isis
+    // Vol. I leaf 190's paragraph carried `**` and a lone `*`, so the lone
+    // `*` took the note from leaf 194 and leaf 193 took leaves 191's and
+    // 193's. The tie-break at emit time is right but comes too late; the
+    // occurrence must never be counted in the first place.
+    const before = start > 0 ? source[start - 1]! : ''
+    const after = end < source.length ? source[end]! : ''
+    if (!MARKER_CHAR.test(before) && !MARKER_CHAR.test(after)) out.push({ start, end })
     if (match.index === scan.lastIndex) scan.lastIndex++
   }
   return out
 }
+
+/** Any character a printed reference mark is made of. */
+const MARKER_CHAR = /[*†‡§‖¶⁂]/u
 
 export function prepareFootnotes(
   blocks: readonly { id: string; text: string }[],

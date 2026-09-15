@@ -1030,3 +1030,51 @@ describe('prepareFootnotes — a mark declared bare', () => {
     expect(run({ ...doc, bareMarks: [gone] }).bareMarksMissed).toEqual([gone])
   })
 })
+
+describe('prepareFootnotes — a doubled marker is not two singles in the claiming walk', () => {
+  // Leaf 190 of Isis Vol. I: a paragraph carrying `**` and, much later, a lone
+  // `*`; the next paragraph carries two more `*`. Four `*`/`**` notes in all.
+  const build190 = (): BookDocument =>
+    build([
+      page(0, [
+        {
+          kind: 'paragraph',
+          text: 'He saith unto them, Take the Holy Pneuma.** And this man, thus favored, should not be capable of true prophecy.*'
+        },
+        { kind: 'footnote', text: 'John xx. 22.', marker: '**' },
+        { kind: 'footnote', text: 'Heathen Religion, 104.', marker: '*' }
+      ]),
+      page(1, [
+        {
+          kind: 'paragraph',
+          text: 'As Josephus the historian says,* the trembling will cease.*'
+        },
+        { kind: 'footnote', text: 'Josephus: Antiquities, viii.', marker: '*' },
+        { kind: 'footnote', text: 'The Land of Charity, p. 210.', marker: '*' }
+      ])
+    ])
+
+  it('gives the lone star the first waiting star note, not the third', () => {
+    const doc = build190()
+    const prepared = prepareFootnotes(doc.blocks, doc.footnotes)
+    const claimed = prepared.blocks.map((b) =>
+      b.references.map((r) => prepared.notes.get(r.noteId)!.text)
+    )
+    // The two characters of `**` must not be counted as two `*` occurrences.
+    // When they were, the lone `*` was the third `*` hit and took the fourth
+    // note; the two phantom hits were discarded at emit and their notes fell
+    // to the next paragraph — exactly the pairing below, inverted.
+    expect(claimed).toEqual([
+      ['John xx. 22.', 'Heathen Religion, 104.'],
+      ['Josephus: Antiquities, viii.', 'The Land of Charity, p. 210.']
+    ])
+    expect(prepared.orphans).toEqual([])
+  })
+
+  it('still lets a doubled marker claim its own note', () => {
+    const doc = build190()
+    const prepared = prepareFootnotes(doc.blocks, doc.footnotes)
+    const first = prepared.blocks[0]!.references
+    expect(first.map((r) => r.printed)).toEqual(['**', '*'])
+  })
+})

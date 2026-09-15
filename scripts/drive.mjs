@@ -1334,6 +1334,7 @@ async function serve() {
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const schema = await import(`/@fs${repo}/src/core/transcribe/index.ts`)
+          const coherence = await import(`/@fs${repo}/src/core/coherence/index.ts`)
           const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
           const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
           const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
@@ -1539,7 +1540,15 @@ async function serve() {
                 ? `checked against the cached reading, all ${compared} leaf(s)`
                 : `NOT CHECKED on ${seenLeaves - compared} of ${seenLeaves} leaf(s) —` +
                   ' the cached reading has no words for them',
-            flagged: checked
+            flagged: checked,
+            // A runover given a marker of its own is a note with no mark in the
+            // body, and the pairing is positional: it waits, takes the next
+            // mark of its marker anywhere in the book, and moves every note of
+            // that marker after it by one. Leaf 330 of Isis Vol. I did that to
+            // 239 † notes. Named the moment the leaf lands, over the leaves
+            // that landed, because a check that has to be remembered is the
+            // check that is not run. A floor, not a verdict — the leaf decides.
+            continuationShaped: coherence.checkNoteContinuations(parsed)
           }
         },
         [REPO, file, pages, mode === 'replace']

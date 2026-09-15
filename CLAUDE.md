@@ -1771,6 +1771,50 @@ closed`, which is indistinguishable from the flake the first command after a
   `doc.bareMarks`, so its first answer after a ruling was that nothing had
   changed.
 
+- **Also done**: **every footnote in Isis Vol. I is under its own mark — 840 of
+  840 — and the two faults that stood between 86% and that.** Both were
+  found by tracing each marker's chain in `drive.mjs pairs` output to the first
+  leaf where the note's home leaf and the mark's leaf part company, and both
+  are shapes worth recognising on the next book.
+
+  **A doubled marker was two singles in the claiming walk.**
+  `footnoteMarkerPattern('*')` is a bare `/\*/`, so `occurrences()` counted the
+  two characters of a `**` as two `*` occurrences as well. The walk handed each
+  a note _before_ the emit loop discarded them in favour of the `**` — the
+  tie-break was right and came too late — so those notes fell back into the
+  pool and the **next** block took them. Leaf 190 carried `**` and, much later,
+  a lone `*`: the lone `*` took leaf 194's note and leaf 193 took leaves 191's
+  and 193's, and because the chain re-converged at once the per-leaf check
+  never named it. An occurrence is now a **maximal run**: a hit with a marker
+  character on either side of it is not one.
+
+  **A runover recorded as a fresh note.** Leaf 330's foot is the tail of leaf
+  329's `†` note, and on the paper it has no marker, as a runover does. The
+  reading gave it `†`. A note with no mark in the body waits, and it took leaf
+  332's `†`; every `†` note to the end of the volume was set one early and the
+  last, "Ibid., p. 2." on leaf 684, was collected as an endnote. Fixed in the
+  **transcription** — the marker removed and the leaf re-landed through
+  `transcribe`, merging by leaf so the text is untouched — because assembly
+  already joins a markerless footnote to the note above it. That shape is
+  mechanical: a marker on text whose first letter is lower case, or which
+  opens on a closing quote or a comma. `checkNoteContinuations`
+  (`@core/coherence`) names every such block, `transcribe` reports it the
+  moment a batch lands, and swept over this volume it finds leaf 330 and no
+  other. It is a floor and not a verdict — `‡ de Mirville` opens lower case
+  and is a fresh note — so the leaf decides.
+
+  Two things about how it was measured. The score is _notes on their own leaf
+  or the one after_, and the seam is why "the one after" is in it: a
+  paragraph joined across leaves puts a mark on the leaf after the one its
+  block began on. That score went 59% → 66% (leaf 164 bare) → 86% (leaf 415's
+  three title asterisks bare) → 100% (leaf 330's phantom removed, then the
+  `**` fix), and the last two steps were _engine_ and _transcription_ faults
+  rather than the compositor's — which is the correction owed to the ledger,
+  where the drift had been attributed to three surplus marks in the text. And
+  the fixtures had to have the shape of the fault: the `**` test needs a lone
+  `*` **after** the `**` in the same block and a following block with marks
+  of its own, or the stolen notes have nowhere to show up.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with
