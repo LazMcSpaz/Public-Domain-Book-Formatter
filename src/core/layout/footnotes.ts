@@ -112,6 +112,30 @@ class WordCounter {
  * reason a note is renumbered by *reference* order rather than by the order
  * assembly happened to collect it in.
  */
+/**
+ * Every place a marker of this kind appears, in the order it is printed.
+ *
+ * Global, because one block can carry several — see the note in the loop. The
+ * zero-length guard is not theoretical: `footnoteMarkerPattern` builds an
+ * alternation with lookarounds for a numeric marker, and a pattern that can
+ * match empty would spin here for ever.
+ */
+function occurrences(source: string, marker: string): { start: number; end: number }[] {
+  const pattern = footnoteMarkerPattern(marker)
+  if (!pattern) return []
+  const scan = new RegExp(
+    pattern.source,
+    pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`
+  )
+  const out: { start: number; end: number }[] = []
+  let match: RegExpExecArray | null
+  while ((match = scan.exec(source)) !== null) {
+    out.push({ start: match.index, end: match.index + match[0].length })
+    if (match.index === scan.lastIndex) scan.lastIndex++
+  }
+  return out
+}
+
 export function prepareFootnotes(
   blocks: readonly { id: string; text: string }[],
   footnotes: readonly Footnote[]
@@ -128,9 +152,9 @@ export function prepareFootnotes(
   for (const block of blocks) {
     const source = block.text
 
-    // Every remaining note's first occurrence in this block, in the order they
-    // appear on the page rather than the order the notes were collected.
     const hits: { start: number; end: number; noteId: string }[] = []
+    /** The remaining notes that print a marker, grouped by it, oldest first. */
+    const byMarker = new Map<string, Footnote[]>()
     for (const note of remaining.values()) {
       // A note the editor wrote carries its position instead of a printed
       // marker. Its hit is zero-width: there is nothing in the text to strip,
@@ -142,16 +166,47 @@ export function prepareFootnotes(
         hits.push({ start: at, end: at, noteId: note.id })
         continue
       }
-
-      const pattern = footnoteMarkerPattern(note.originalMarker)
-      if (!pattern) continue
-      const match = pattern.exec(source)
-      if (match)
-        hits.push({ start: match.index, end: match.index + match[0].length, noteId: note.id })
+      const list = byMarker.get(note.originalMarker) ?? []
+      list.push(note)
+      byMarker.set(note.originalMarker, list)
     }
-    // Ties go to the zero-width hit, so a note written at the exact spot a
-    // printed marker sits refers to the word before it rather than to the mark.
-    hits.sort((a, b) => a.start - b.start || a.end - a.start - (b.end - b.start))
+
+    // **A block can carry the same marker more than once**, and each one is a
+    // different note. Assembly joins a paragraph across a page seam, so a
+    // paragraph running from one leaf onto the next brings both leaves' `*`
+    // into one block — and the version of this loop that asked each note for
+    // its *first* match gave both of them the same position, kept one and
+    // dropped the other. The consequences were not local: the unclaimed note
+    // waited for the next `*` anywhere in the book and took it, the note that
+    // one belonged to took the one after that, and every `*` note from the
+    // seam onwards was set under the wrong reference. On *Isis Unveiled* that
+    // was 638 of 857 notes, with page 155 citing Cooke's "New Chemistry" where
+    // Josephus belongs, and a literal asterisk left in the text at every seam
+    // because the marker nobody claimed was never stripped.
+    //
+    // So the occurrences are walked positionally and the k-th takes the k-th
+    // remaining note of that marker. Extra markers simply find no note left,
+    // which is the case the report below names.
+    for (const [marker, waiting] of byMarker) {
+      const places = occurrences(source, marker)
+      for (let k = 0; k < Math.min(places.length, waiting.length); k++) {
+        hits.push({ ...places[k]!, noteId: waiting[k]!.id })
+      }
+    }
+
+    hits.sort((a, b) => {
+      if (a.start !== b.start) return a.start - b.start
+      const aWide = a.end - a.start
+      const bWide = b.end - b.start
+      // Ties go to the zero-width hit, so a note written at the exact spot a
+      // printed marker sits refers to the word before it rather than to the
+      // mark.
+      if ((aWide === 0) !== (bWide === 0)) return aWide === 0 ? -1 : 1
+      // Otherwise the longer run wins: `**` in the text is one marker, not a
+      // `*` with another beside it, and letting `*` take the position would
+      // leave a stray asterisk and send the `**` note down the book.
+      return bWide - aWide
+    })
 
     if (hits.length === 0) {
       prepared.push({ text: source, references: [] })

@@ -117,6 +117,24 @@ function EvidenceView({
  */
 const EVIDENCE_LEADS_AT = 400
 
+/**
+ * How long an explanation has to be before it is set *below* the thing it
+ * explains rather than above it.
+ *
+ * A sentence of help belongs over the question it qualifies. Fourteen hundred
+ * characters of standing argument do not: on a phone they are the whole
+ * screen, and the passage being decided — the one thing the editor came to
+ * look at — is somewhere past the fold. That happened on a real query and the
+ * editor's reasonable reading of it was that the quotation on screen had
+ * nothing to do with the question.
+ *
+ * So long help becomes reference material, kept and moved under the evidence
+ * and the options. The number is the same one the evidence uses because it is
+ * the same judgement in the other direction: a couple of hundred characters is
+ * a remark, and past four hundred it is a document.
+ */
+const HELP_TRAILS_AT = 400
+
 /** Where a hovered word crop's wider cutting should appear, in viewport space. */
 interface Peek {
   src: string
@@ -528,11 +546,17 @@ export function QuestionView({
   // characters and the longest query quote on this book is under two hundred.
   const readsEvidence =
     question.evidence?.some((e) => e.kind === 'text' && e.text.length >= EVIDENCE_LEADS_AT) ?? false
+  // Kept, never trimmed: what it says is the reasoning a decision rests on.
+  // Only where it sits changes.
+  const helpTrails = (question.help?.length ?? 0) >= HELP_TRAILS_AT
+  const help = question.help ? (
+    <div className={helpTrails ? 'help trailing' : 'help'}>{question.help}</div>
+  ) : null
 
   return (
     <div className="q">
       <span className="prompt">{question.prompt}</span>
-      {question.help ? <div className="help">{question.help}</div> : null}
+      {helpTrails ? null : help}
       {hasEvidence ? (
         <div className={readsEvidence ? 'q-row evidence-led' : 'q-row'}>
           <div className="fields">{body()}</div>
@@ -541,6 +565,7 @@ export function QuestionView({
       ) : (
         body()
       )}
+      {helpTrails ? help : null}
       {enlarged ? (
         <Lightbox
           src={enlarged.src}

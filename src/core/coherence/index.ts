@@ -30,3 +30,4 @@ export {
   type SenseLedger
 } from './sense'
 export { chunkForSense, type SenseChunk, type SenseChunking } from './chunk'
+export { checkFootnotePairing, type PairingFinding } from './footnote-pairing'

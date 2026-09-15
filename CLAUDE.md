@@ -312,6 +312,43 @@ code, so the new assertion never ran and the check passed for a reason that had
 nothing to do with what it asserts. That is this file's own rule about tests,
 found in the check written to enforce it.
 
+**One block can carry the same marker twice, and the engine could only see
+one.** `prepareFootnotes` asked each note for its _first_ match in a block —
+and assembly joins a paragraph across a page seam, so a paragraph running from
+one leaf onto the next brings both leaves' `*` into a single block. Both notes
+were handed the same position, one was kept and the other dropped; the dropped
+one then claimed the next `*` **anywhere in the book**, the note that one
+belonged to took the one after, and every note of that marker from the seam on
+was set under the wrong reference. On _Isis Unveiled_ Vol. I that was **638 of
+857 notes** — page 155 citing Cooke's "New Chemistry" where Josephus belongs —
+with a literal asterisk left in the text at every seam, because a marker nobody
+claims is never stripped. Nothing reported it: `orphaned` was 0, since every
+note was claimed by _something_.
+
+Occurrences are now walked positionally and the k-th takes the k-th waiting
+note of that marker, and a doubled marker beats a single at the same position
+(`**` in the text is one marker, not a `*` with another beside it).
+
+**The counts the printed page makes equal are worth checking.** A footnote sits
+at the foot of the leaf its mark is on, so per leaf and per marker the two
+balance; `checkFootnotePairing` (`@core/coherence`) names every leaf where they
+do not and carries the **running drift**, because the first non-zero entry is
+where a reader first meets the wrong note. Eight leaves in six hundred, on this
+book. It takes the _transcriptions_ rather than the assembled document on
+purpose: assembly joins across seams, so an assembled block belongs to two
+leaves at once and "does this leaf balance?" stops having an answer.
+
+**Two numbers name one place, and the gate gave only one.** A query was headed
+`Leaf 228` while its own reason cited `page 170` — the scan leaf and the folio
+the book prints, the same place twice, with nothing on screen to say so. The
+editor reasonably read it as a question about a different passage. A
+`RaisedQuery` now carries the leaf's `folio` and `whereItIs` names both. Two
+things came with it, from the same screenshot: a query's quote cut **mid-word**
+stopped before the fault it was raised about, and **1,400 characters of help
+above the passage** put the thing being decided past the fold on a phone —
+`HELP_TRAILS_AT` now sets long help below the evidence and the options, where
+it reads as the reference it is.
+
 **The PDF in a book's directory is the _export_. The scan is
 `scans/<sha256>.pdf`, and `book.json` names it in `scan.path`.** Handing
 `drive.mjs load` the exported book instead of the scan does not fail: it

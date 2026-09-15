@@ -349,6 +349,13 @@ body {
   font-size: 0.85rem;
   margin-bottom: 12px;
 }
+/* Long help set below what it explains: reference, not preamble. */
+.q .help.trailing {
+  margin-top: 16px;
+  margin-bottom: 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+}
 .q input[type='text'],
 .q > textarea,
 .q .fields > textarea {
