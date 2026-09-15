@@ -26,6 +26,48 @@
  * serves up to 100 MB. A book with its transcription is comfortably past that
  * line, so the raw path is the one used for reading.
  *
+ * **And nothing from the shelf may be served out of the browser's cache.**
+ * GitHub answers a read with `Cache-Control: private, max-age=60`, so a book
+ * file fetched twice inside a minute comes back the second time without asking
+ * — a source of truth quietly a minute out of date, which is the one thing this
+ * design refuses. That was the theory. What it actually did was worse, and is
+ * measured rather than feared.
+ *
+ * GitHub's `ETag` for a path is the **blob sha**, and it hands out the same one
+ * whatever media type was asked for, `Vary: Accept` notwithstanding: given the
+ * ETag issued for `application/vnd.github.raw`, a conditional request for
+ * `application/vnd.github+json` is answered **`304 Not Modified`**. So a flush,
+ * which reads the book file raw and then asks the JSON envelope for its sha a
+ * moment later, got the revalidation it deserved and the wrong representation
+ * back — the cached *book file* served as the answer to "what is this path's
+ * sha". It parses, being JSON; it has no `sha` in it; and the write that
+ * followed went up as a **create** of a file that already exists, which GitHub
+ * refuses with `422: "sha" wasn't supplied`. Every ruling made at the query
+ * gate on *Isis Unveiled* failed that way, with the book file itself as the
+ * thing that shadowed its own sha.
+ *
+ * Three rules come out of it, and they are in the order of how much they can be
+ * relied on.
+ *
+ * **The sha is asked for at a URL nothing else reads.** A unique parameter is
+ * added to that one request, so no cache anywhere — the browser's, a proxy's,
+ * one written next year — holds an entry that could answer it with the file's
+ * own contents. GitHub ignores the parameter and returns the record, measured.
+ * This is the rule that does not depend on anybody's cache being correct, which
+ * is why it is first: Chromium honours `Vary: Accept` properly and cannot be
+ * made to show this fault at all, and the device it happened on was an iPad.
+ *
+ * **Every read is `cache: 'no-store'`.** The right declaration on its own
+ * terms — the shelf is the source of truth and a minute-old answer from it is
+ * not one — and it closes the same door from the other side.
+ *
+ * **And `shaOf` checks that the answer is the answer it asked for**, because a
+ * reply this module does not understand is not "the file is not there". That is
+ * the rule that would have caught the other two failing: what reached the
+ * editor was a message about a missing `sha` field in a request they never
+ * made, when what had happened was that the lookup had been answered with their
+ * book.
+ *
  * Browser-only.
  */
 import {
@@ -46,6 +88,15 @@ import { normalizeVoice, type EditorVoice } from '@core/annotate'
 import { toBase64 } from '@core/project'
 
 const API = 'https://api.github.com'
+
+/**
+ * Every read of the shelf goes to the network.
+ *
+ * Not a tuning choice: see the note on the ETag, above. `no-store` also keeps
+ * the *response* out of the cache, which is what stops one read shadowing the
+ * next one's answer.
+ */
+const NO_CACHE = 'no-store' as const
 
 function headers(config: ShelfConfig, accept = 'application/vnd.github+json'): HeadersInit {
   return {
@@ -120,7 +171,10 @@ export interface ShelfInfo {
  * book is saved. The app says so rather than assuming the choice was deliberate.
  */
 export async function checkShelf(config: ShelfConfig): Promise<ShelfInfo> {
-  const response = await fetch(`${API}/repos/${config.repo}`, { headers: headers(config) })
+  const response = await fetch(`${API}/repos/${config.repo}`, {
+    headers: headers(config),
+    cache: NO_CACHE
+  })
   if (!response.ok) throw await explain(response)
   const body = (await response.json()) as {
     full_name?: string
@@ -134,14 +188,42 @@ export async function checkShelf(config: ShelfConfig): Promise<ShelfInfo> {
   }
 }
 
-/** The blob sha of a path, or null when it is not there yet. */
+/**
+ * The blob sha of a path, or null when it is not there yet.
+ *
+ * Null means **read, and not there**. Anything else — a body this does not
+ * recognise, a directory where a file was named — throws, because the caller's
+ * response to null is to create the file, and creating over a file that exists
+ * is refused by GitHub in the one wording that sends the reader looking at
+ * their own request.
+ */
 async function shaOf(config: ShelfConfig, path: string): Promise<string | null> {
-  const url = `${API}/repos/${config.repo}/contents/${path}?ref=${encodeURIComponent(config.branch)}`
-  const response = await fetch(url, { headers: headers(config) })
+  // `unshared` is not decoration and not a retry counter: it is what makes this
+  // request's URL one that a read of the same file cannot have an answer for.
+  // See the note on the ETag, above.
+  const url =
+    `${API}/repos/${config.repo}/contents/${path}` +
+    `?ref=${encodeURIComponent(config.branch)}&unshared=${Date.now()}`
+  const response = await fetch(url, { headers: headers(config), cache: NO_CACHE })
   if (response.status === 404) return null
   if (!response.ok) throw await explain(response)
-  const body = (await response.json()) as { sha?: string }
-  return body.sha ?? null
+  let body: unknown
+  try {
+    body = await response.json()
+  } catch {
+    throw new ShelfError(`GitHub did not answer with a file record for ${path}.`, null)
+  }
+  if (Array.isArray(body)) {
+    throw new ShelfError(`${path} is a directory on ${config.repo}, not a file.`, null)
+  }
+  const sha = (body as { sha?: unknown })?.sha
+  if (typeof sha !== 'string' || sha === '') {
+    throw new ShelfError(
+      `GitHub's answer for ${path} carried no sha, so it cannot be written safely.`,
+      null
+    )
+  }
+  return sha
 }
 
 /** Whether a path is already on the shelf — what stops a scan being sent twice. */
@@ -185,7 +267,10 @@ export async function putFile(
  */
 export async function getText(config: ShelfConfig, path: string): Promise<string | null> {
   const url = `${API}/repos/${config.repo}/contents/${path}?ref=${encodeURIComponent(config.branch)}`
-  const response = await fetch(url, { headers: headers(config, 'application/vnd.github.raw') })
+  const response = await fetch(url, {
+    headers: headers(config, 'application/vnd.github.raw'),
+    cache: NO_CACHE
+  })
   if (response.status === 404) return null
   if (!response.ok) throw await explain(response)
   return response.text()
@@ -194,7 +279,10 @@ export async function getText(config: ShelfConfig, path: string): Promise<string
 /** Read a file as bytes — the scan. */
 export async function getBytes(config: ShelfConfig, path: string): Promise<Uint8Array | null> {
   const url = `${API}/repos/${config.repo}/contents/${path}?ref=${encodeURIComponent(config.branch)}`
-  const response = await fetch(url, { headers: headers(config, 'application/vnd.github.raw') })
+  const response = await fetch(url, {
+    headers: headers(config, 'application/vnd.github.raw'),
+    cache: NO_CACHE
+  })
   if (response.status === 404) return null
   if (!response.ok) throw await explain(response)
   return new Uint8Array(await response.arrayBuffer())
