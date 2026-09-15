@@ -119,12 +119,18 @@ const built = await page.evaluate(async (repo) => {
         role: 'body',
         blocks: [{ kind: 'paragraph', text: `It is not ${quote} upon earth.` }],
         uncertain: [],
-        furniture: {},
+        furniture: { folio: '170' },
         queries: [
           {
             kind: 'printers-error',
             quote,
-            why: 'Raised so the gate has a decision to hang a crop beside.'
+            // Long on purpose: a standing ruling explained once and pointed at
+            // from every place it covers. It has to sit *below* the passage,
+            // or on a phone the passage is past the fold and the editor is
+            // reading an argument about somewhere else.
+            why:
+              'One decision applied thirty-one times, not thirty-one decisions. '.repeat(8) +
+              'Raised so the gate has a decision to hang a crop beside.'
           }
         ]
       }
@@ -190,6 +196,11 @@ const src = await page
   .catch(() => null)
 
 await page.screenshot({ path: 'screenshots/13-query-crop-from-shelf.png', fullPage: true })
+// And the phone, which is where the fold matters.
+await page.setViewportSize({ width: 430, height: 930 })
+await page.waitForTimeout(400)
+await page.screenshot({ path: 'screenshots/13b-query-gate-phone.png', fullPage: true })
+await page.setViewportSize({ width: 1100, height: 1400 })
 
 if (!/Decisions waiting/i.test(where)) {
   problems.push(`the link did not land on the query gate — it is at "${where}"`)

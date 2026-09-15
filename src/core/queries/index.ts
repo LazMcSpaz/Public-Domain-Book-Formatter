@@ -36,6 +36,17 @@ export * from './locate'
 /** A query with the leaf it was raised on. */
 export interface RaisedQuery extends EditorialQuery {
   pageIndex: number
+  /**
+   * The number the leaf itself prints, when it printed one.
+   *
+   * Carried because the editor meets a query on a screen headed by the *leaf*
+   * — a count of images in a scan — while every word written about the book,
+   * the query's own reason included, cites the **page**. On this shelf's first
+   * volume leaf 228 prints folio 170, and a query whose reason said "page 170"
+   * under a heading that said "Leaf 228" read as a question about somewhere
+   * else entirely. Two numbers for one place, and nothing on screen to say so.
+   */
+  folio?: string
 }
 
 /** Every query in a reading, oldest leaf first. */
@@ -43,7 +54,11 @@ export function collectQueries(transcriptions: readonly PageTranscription[]): Ra
   return [...transcriptions]
     .sort((a, b) => a.pageIndex - b.pageIndex)
     .flatMap((page) =>
-      (page.queries ?? []).map((query) => ({ ...query, pageIndex: page.pageIndex }))
+      (page.queries ?? []).map((query) => ({
+        ...query,
+        pageIndex: page.pageIndex,
+        ...(page.furniture?.folio?.trim() ? { folio: page.furniture.folio.trim() } : {})
+      }))
     )
 }
 

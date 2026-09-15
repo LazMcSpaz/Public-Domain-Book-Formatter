@@ -766,3 +766,118 @@ describe('a footnote can italicise the book it names', () => {
     expect(italic).not.toContain('1895.')
   })
 })
+
+/**
+ * Two notes of the same marker in one block, which is what a page seam makes.
+ *
+ * Assembly joins a paragraph that runs from one leaf onto the next, so both
+ * leaves' `*` arrive in a single block. The version of this loop that asked
+ * each note for its *first* match handed both notes the same position, kept
+ * one and dropped the other — and the dropped one then claimed the next `*`
+ * anywhere in the book, the note that one belonged to claimed the one after,
+ * and every `*` note from the seam on was set under the wrong reference.
+ *
+ * On *Isis Unveiled* that was 638 of 857 notes: page 155 cited Cooke's "New
+ * Chemistry" where Josephus belongs, and a literal asterisk was left in the
+ * text at every seam, because a marker nobody claimed is never stripped.
+ */
+describe('prepareFootnotes — a block carrying one marker twice', () => {
+  const note = (id: string, marker: string, text: string) => ({
+    id,
+    originalMarker: marker,
+    text,
+    pageIndex: 0,
+    orphaned: false
+  })
+
+  /** One paragraph, joined across a seam: leaf 70's `*` and leaf 71's `*`. */
+  const seam = [
+    {
+      id: 'p70b2',
+      text: 'There was not a philosopher who did not hold it,* and the former is pure ether.*'
+    },
+    { id: 'p72b2', text: 'The fundamental figure of the Kabala is that one.*' }
+  ]
+  const notes = [
+    note('fn13', '*', 'See Gibbon.'),
+    note('fn14', '*', 'See Turner.'),
+    note('fn18', '*', 'Exodus, xxv., 40.')
+  ]
+
+  it('claims both, in the order they are printed', () => {
+    const out = prepareFootnotes(seam, notes)
+    expect(out.blocks[0]!.references.map((r) => r.noteId)).toEqual(['fn13', 'fn14'])
+    expect(out.blocks[1]!.references.map((r) => r.noteId)).toEqual(['fn18'])
+  })
+
+  it('numbers them by where they are printed, not by where they were collected', () => {
+    const out = prepareFootnotes(seam, notes)
+    expect([...out.notes.values()].map((n) => [n.id, n.mark])).toEqual([
+      ['fn13', '1'],
+      ['fn14', '2'],
+      ['fn18', '3']
+    ])
+  })
+
+  it('leaves no marker behind in the text — an unclaimed one prints as itself', () => {
+    const out = prepareFootnotes(seam, notes)
+    expect(out.blocks[0]!.text).not.toContain('*')
+    expect(out.blocks[1]!.text).not.toContain('*')
+  })
+
+  it('does not put a later leaf’s note under an earlier leaf’s mark', () => {
+    // The fault stated as the reader would meet it: fn18 is Exodus, and it
+    // belongs to the mark on p72b2, not to either mark on the seam.
+    const out = prepareFootnotes(seam, notes)
+    expect(out.blocks[0]!.references.map((r) => r.noteId)).not.toContain('fn18')
+  })
+
+  it('pairs positionally, so a marker the book prints with no note shifts the rest', () => {
+    // Leaf 111 of that volume prints a `*` the reading found no note for. The
+    // engine cannot tell which of two identical marks is the stray one — it
+    // pairs the k-th occurrence with the k-th waiting note, and that is the
+    // right rule given a faithful transcription. So the shift is real and is
+    // the *book's* to fix, which is why `checkFootnotePairing` names every
+    // leaf where the marks and the notes do not balance rather than leaving
+    // it to be discovered on a printed page.
+    const out = prepareFootnotes(
+      [{ id: 'p111b0', text: 'a stray mark * with no note' }, ...seam],
+      notes
+    )
+    expect(out.blocks[0]!.references.map((r) => r.noteId)).toEqual(['fn13'])
+    // …and everything after it is one out, which is exactly the damage.
+    expect(out.blocks[1]!.references.map((r) => r.noteId)).toEqual(['fn14', 'fn18'])
+  })
+
+  it('gives a doubled marker to the note that prints one, not to a single', () => {
+    // `**` in the text is one marker, and the `*` pattern matches its first
+    // character — so both notes land on the same position and the tie decides
+    // which is right. The single must not take it: that would strip one
+    // asterisk, leave the other in the printed text, and send the `**` note
+    // off down the book to claim somebody else's mark.
+    //
+    // The fixture has to *make* the tie. An earlier version put a `*` and a
+    // `**` at different places in one sentence, where the two notes never
+    // competed for a position at all — it passed whichever way the tie was
+    // broken, which is no test of the tie.
+    const out = prepareFootnotes(
+      [{ id: 'b', text: 'only a doubled mark** stands here' }],
+      [note('a', '*', 'single'), note('b', '**', 'double')]
+    )
+    expect(out.blocks[0]!.references.map((r) => r.noteId)).toEqual(['b'])
+    expect(out.blocks[0]!.text).not.toContain('*')
+  })
+
+  it('still sets an editor’s note at its anchor, ahead of a mark in the same place', () => {
+    const at = 'first'.length
+    const out = prepareFootnotes(
+      [{ id: 'b', text: 'first* second*' }],
+      [
+        note('n1', '*', 'printed one'),
+        note('n2', '*', 'printed two'),
+        { ...note('mine', '', 'the editor’s'), anchor: { blockId: 'b', at } }
+      ]
+    )
+    expect(out.blocks[0]!.references.map((r) => r.noteId)).toEqual(['mine', 'n1', 'n2'])
+  })
+})

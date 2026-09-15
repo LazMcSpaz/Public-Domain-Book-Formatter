@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { STEPS, initialState, stepById, type Question, type WizardState } from '@core/wizard'
-import { MODELS } from '@core/transcribe'
+import { MODELS, type PageTranscription } from '@core/transcribe'
+import { collectQueries, queryQuestions, whereItIs } from '@core/queries'
 
 /**
  * What every question on every gate has to manage, tested as a rule rather than
@@ -177,5 +178,53 @@ describe('a decision that is expensive to undo says so', () => {
       .questions(s)
       .find((x) => x.id === 'orthography')
     expect(q && 'help' in q ? q.help : '').toMatch(/read the book\s+again|pay/i)
+  })
+})
+
+/**
+ * A query names its place in both the numbers that name it.
+ *
+ * The editor meets a query on a screen headed by the **leaf** — a count of
+ * images in a scan — while every word written about the book, the query's own
+ * reason included, cites the **page** the book prints. Leaf 228 of *Isis
+ * Unveiled* prints folio 170, and a reason reading "this passage on page 170"
+ * under a heading reading "Leaf 228" was reasonably taken to be about a
+ * different passage altogether.
+ */
+describe('a query gate question says where it is', () => {
+  const page = (
+    pageIndex: number,
+    folio: string | undefined,
+    quote: string
+  ): PageTranscription => ({
+    pageIndex,
+    role: 'body',
+    blocks: [{ kind: 'paragraph', text: `something ${quote} and more` }],
+    uncertain: [],
+    furniture: folio === undefined ? {} : { folio },
+    queries: [{ kind: 'printers-error', quote, why: 'because the page says so' }]
+  })
+
+  it('carries the folio the leaf prints', () => {
+    const raised = collectQueries([page(228, '170', 'the spirits of heaven')])
+    expect(raised[0]!.folio).toBe('170')
+    expect(whereItIs(raised[0]!)).toBe('Leaf 228 · page 170')
+  })
+
+  it('names the leaf alone when the leaf printed no number', () => {
+    const raised = collectQueries([page(9, undefined, 'a plate with no folio')])
+    expect(raised[0]!.folio).toBeUndefined()
+    expect(whereItIs(raised[0]!)).toBe('Leaf 9')
+  })
+
+  it('puts both into the prompt the editor actually reads', () => {
+    const raised = collectQueries([page(228, '170', 'the spirits of heaven')])
+    const [decision] = queryQuestions(raised, [])
+    expect(decision!.prompt).toBe('Leaf 228 · page 170: what should this edition do?')
+  })
+
+  it('ignores a folio that is only whitespace', () => {
+    const raised = collectQueries([page(12, '   ', 'a quote')])
+    expect(whereItIs(raised[0]!)).toBe('Leaf 12')
   })
 })

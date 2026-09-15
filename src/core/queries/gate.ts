@@ -57,6 +57,19 @@ import type { Answers, Evidence, Question } from '@core/wizard'
 import type { RaisedQuery } from './index'
 import { outstanding, type Ruling, type RulingDecision } from './rulings'
 
+/**
+ * Where a query is, in both the numbers that name it.
+ *
+ * The leaf is what everything in this app counts and what the crop is cut
+ * from; the folio is what the book prints and what every reason written about
+ * it cites. Giving one and not the other is how "this passage on page 170"
+ * came to sit under a heading reading "Leaf 228" — the same place, twice, with
+ * no way to know it.
+ */
+export function whereItIs(query: RaisedQuery): string {
+  return query.folio ? `Leaf ${query.pageIndex} · page ${query.folio}` : `Leaf ${query.pageIndex}`
+}
+
 /** The id a query's questions are grouped under, and keyed by. */
 export function queryKey(query: RaisedQuery): string {
   // The leaf plus a digest of the words. Not the words themselves: an id goes
@@ -126,7 +139,7 @@ export function queryQuestions(
     const decision: Question = {
       id: `${key}-decision`,
       type: 'choice',
-      prompt: `Leaf ${query.pageIndex}: what should this edition do?`,
+      prompt: `${whereItIs(query)}: what should this edition do?`,
       help: query.why,
       evidence,
       options: DECISIONS.map((d) => ({
