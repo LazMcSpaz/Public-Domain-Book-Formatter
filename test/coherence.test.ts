@@ -328,6 +328,70 @@ describe('a quotation that never closes', () => {
   })
 })
 
+/**
+ * Which of two things the compositor did, named on the finding. Thirty-one of
+ * these were ruled on *Isis Unveiled* as a class, and the two among them that
+ * were genuine omissions had to be found by reading all thirty-one, because
+ * the sheet could not tell a nested quotation closed with one mark (the shop's
+ * own practice, 32 times against 5) from a quotation with no closing mark at
+ * all. The shape is what tells them apart, and it is measured from the
+ * unmatched opening rather than over the whole block.
+ */
+describe('the shape of an unclosed quotation', () => {
+  const shapeOf = (blocks: BookBlock[]) =>
+    checkConsistency(doc(blocks))
+      .filter((f) => f.kind === 'unclosed-quote')
+      .map((f) => f.shape)
+
+  it('names a nested quotation closed with one mark', () => {
+    expect(
+      shapeOf([
+        block(
+          '“ It is not the spirits of heaven which are the masters, but “the soul of ' +
+            'man which is concealed in him as the fire is concealed in the flint.”'
+        ),
+        block('An ordinary paragraph.')
+      ])
+    ).toEqual(['closed-once'])
+  })
+
+  it('names a quotation with no closing mark anywhere after it', () => {
+    expect(
+      shapeOf([
+        block('“And the heaven was visible in seven circles, through the divine SPIRIT. *'),
+        block('We challenge any one to indicate a single passage.')
+      ])
+    ).toEqual(['never-closed'])
+  })
+
+  /**
+   * Left open across quoted verse and closed on the prose after it. Five of the
+   * thirty-one on *Isis Unveiled* were this (pp. 96, 99, 472, 602, 620), and the
+   * verse block's own line-opening marks were what stopped the run-on rule from
+   * seeing the close: they are stepped over, not read.
+   */
+  it('names a quotation that closes after a displayed extract', () => {
+    expect(
+      shapeOf([
+        block('The friar quotes the verses, “in the parlance of his time :'),
+        block('If ancestry can be in aught believed,', 'verse'),
+        block('“ Descending spirits have conversed with man.', 'verse'),
+        block('and so the tale is told.”')
+      ])
+    ).toEqual(['closed-after-extract'])
+  })
+
+  /** A sound quotation before the unmatched one must not lend it its close. */
+  it('measures from the unmatched opening, not over the whole block', () => {
+    expect(
+      shapeOf([
+        block('He said “this closes,” and then “this one never does.'),
+        block('An ordinary paragraph.')
+      ])
+    ).toEqual(['never-closed'])
+  })
+})
+
 describe('a cross-reference to a chapter the book has not got', () => {
   const chaptered = (reference: string): BookDocument => {
     const blocks = [

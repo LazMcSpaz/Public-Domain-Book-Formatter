@@ -3972,6 +3972,131 @@ async function serve() {
       )
     },
 
+    /**
+     * A footnote of the editor's own, set at a point in a passage.
+     *
+     * ```
+     * note p234b3 --after "committee of 1824" --text "The commission was…"
+     * note list
+     * note drop ed…
+     * ```
+     *
+     * The mark goes directly after the last character of the phrase, which is
+     * where a reference mark sits on a page. The phrase is matched against the
+     * block's *current* plain text and must occur exactly once: a note at the
+     * wrong occurrence is a note under the wrong sentence, so an ambiguous
+     * phrase is refused rather than guessed, as `correct` refuses.
+     *
+     * Nothing here writes the prose. The text is handed in, having been written
+     * in the voice and audited (`voice.mjs audit`) before it gets this far. What
+     * is recorded is exactly the `note` edit the galley's own "add a footnote"
+     * produces, so a note placed from a session and one typed on the page are
+     * the same thing to the engine.
+     */
+    note: async (argv) => {
+      const flag = (name) => {
+        const i = argv.indexOf(`--${name}`)
+        return i === -1 ? null : argv[i + 1]
+      }
+      const positional = argv.filter(
+        (a, i) => !a.startsWith('--') && !argv[i - 1]?.startsWith('--')
+      )
+      const action = positional[0] ?? 'list'
+      const target = positional[1] ?? null
+      const after = flag('after')
+      const text = flag('text')
+      return page.evaluate(
+        async ([repo, action, target, after, text]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const notesMod = await import(`/@fs${repo}/src/core/layout/footnotes.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+
+          // Every authored note, with whether the engine found it a place — the
+          // footnote rule: a note that cannot be set is reported, never dropped.
+          const describe = (edits) => {
+            const doc = editsMod.applyEdits(assemble.assembleBook(run.transcriptions), edits)
+            const prepared = notesMod.prepareFootnotes(doc.blocks, doc.footnotes, doc.bareMarks)
+            const unplaced = new Set(prepared.orphans.map((o) => o.id ?? o.noteId ?? o))
+            return edits
+              .filter((e) => e.kind === 'note')
+              .map((e) => {
+                const block = doc.blocks.find((b) => b.id === e.blockId)
+                return {
+                  noteId: e.noteId,
+                  blockId: e.blockId,
+                  at: e.at,
+                  placed: Boolean(block) && !unplaced.has(e.noteId),
+                  on: (block?.text ?? '').slice(Math.max(0, e.at - 70), e.at),
+                  text: e.text.slice(0, 90)
+                }
+              })
+          }
+
+          if (action === 'list') return { notes: describe(run.edits ?? []) }
+
+          let edits
+          if (action === 'drop') {
+            if (!target) throw new Error('note drop <noteId>')
+            const before = (run.edits ?? []).length
+            edits = (run.edits ?? []).filter((e) => e.kind !== 'note' || e.noteId !== target)
+            if (edits.length === before) throw new Error(`No note \`${target}\` in this book.`)
+          } else {
+            const blockId = action
+            if (!after || !text) {
+              throw new Error('note <blockId> --after "<phrase>" --text "<the note>"')
+            }
+            const doc = editsMod.applyEdits(
+              assemble.assembleBook(run.transcriptions),
+              run.edits ?? []
+            )
+            const block = doc.blocks.find((b) => b.id === blockId)
+            if (!block) throw new Error(`No block \`${blockId}\` in this book.`)
+            const hits = []
+            for (
+              let i = block.text.indexOf(after);
+              i !== -1;
+              i = block.text.indexOf(after, i + 1)
+            ) {
+              hits.push(i)
+            }
+            if (hits.length !== 1) {
+              throw new Error(
+                `“${after}” occurs ${hits.length} time(s) in ${blockId}; it has to occur ` +
+                  'exactly once. Nothing was recorded.'
+              )
+            }
+            edits = editsMod.withEdit(run.edits ?? [], {
+              kind: 'note',
+              noteId: `ed${Date.now().toString(36)}${Math.floor(Math.random() * 1e4)}`,
+              blockId,
+              at: hits[0] + after.length,
+              text
+            })
+          }
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            edits
+          })
+          const stored = await runStore.saveRun(next)
+          return {
+            stored: stored === true,
+            edits: edits.length,
+            notes: describe(edits),
+            next: '`save` writes the book file; nothing has left this device yet.'
+          }
+        },
+        [REPO, action, target, after, text]
+      )
+    },
+
     correct: async (argv) => {
       const flag = (name) => {
         const i = argv.indexOf(`--${name}`)

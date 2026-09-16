@@ -561,6 +561,11 @@ node scripts/drive.mjs reading       # every passage the editor marked while rea
 node scripts/drive.mjs sweep --was "belleves"   # find across the whole book; free
 node scripts/drive.mjs sweep --was "belleves" --now "believes"   # fix them all,
                                      #   emphasis kept, every change reported
+node scripts/drive.mjs note p234b3 --after "committee of 1824" --text "…"
+                                     #   an editor's footnote, set after those words;
+                                     #   the prose is written in the voice and audited
+                                     #   first — this only places it. `note list`,
+                                     #   `note drop <id>`
 node scripts/drive.mjs runs          # readings held here; `runs drop <n>` removes one
 node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` work it
 

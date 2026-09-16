@@ -51,6 +51,25 @@ export interface ConsistencyFinding {
   against: string
   /** Enough of the sentence to recognise the place without opening the book. */
   context: string
+  /**
+   * For an `unclosed-quote`, what the compositor did after the unmatched
+   * opening.
+   *
+   * `closed-once`: a closing mark follows it in the same block, so a nested
+   * quotation was closed with one mark and the outer left open. That is the
+   * period's ordinary shortcut and, measured on *Isis Unveiled*, the shop's
+   * own practice: 32 nested quotations closed with one mark against 5 with two.
+   * `closed-after-extract`: no closing mark follows in the block, but the
+   * blocks after it are quoted verse or a table and the first mark past them
+   * is a closing one, so the quotation was left open across a displayed
+   * extract and does close; the reader loses nothing. `never-closed`: no
+   * closing mark follows anywhere in the block or past the extract, which no
+   * convention explains. Of the thirty-one findings ruled on that volume as a
+   * class, two were `never-closed` and both were the compositor's omissions;
+   * the sheet did not say which two, and a person had to find them by reading
+   * all thirty-one. This is the field that names them.
+   */
+  shape?: 'closed-once' | 'closed-after-extract' | 'never-closed'
 }
 
 /** Words too short or too common for a one-letter difference to mean anything. */
@@ -625,13 +644,30 @@ function unclosedQuotes(blocks: readonly BookBlock[]): ConsistencyFinding[] {
     const nextMark = /[“”]/u.exec(after)
     if (nextMark?.[0] === '”') return
 
+    // Measured from the unmatched opening, not over the whole block: a sound
+    // quotation earlier in the paragraph has a closing mark that says nothing
+    // about this one. Past the block, verse and tables are stepped over: their
+    // marks are line-openers and dittos, not this quotation's, and a `”` on the
+    // first prose block after them is the close the extract deferred.
+    const pastExtract = blocks
+      .slice(i + 1)
+      .filter((b) => b.kind !== 'verse' && b.kind !== 'table')
+      .slice(0, QUOTE_RUNS_ON_FOR)
+      .map((b) => plain(b))
+      .join('\u0000')
+    const shape = text.slice(at + 1).includes('”')
+      ? 'closed-once'
+      : /[“”]/u.exec(pastExtract)?.[0] === '”'
+        ? 'closed-after-extract'
+        : 'never-closed'
     findings.push({
       kind: 'unclosed-quote',
       blockId: block.id,
       pages: [...block.sourcePages],
       found: around(text, at, 1),
       against: `${opens} opening marks against ${closes} closing`,
-      context: around(text, Math.max(0, text.length - 80), 80)
+      context: around(text, Math.max(0, text.length - 80), 80),
+      shape
     })
   })
   return findings
