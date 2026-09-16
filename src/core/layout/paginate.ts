@@ -28,6 +28,7 @@ import { effectiveDpi } from '@core/image'
 import { rebaseRanges, shiftRanges, type SubscriptRange } from '@core/transcribe'
 import {
   breakParagraph,
+  breakVerse,
   fontForWord,
   type Alignment,
   type Attachment,
@@ -1114,7 +1115,10 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
 
   const dropCap = opts.dropCap && block.kind === 'paragraph' && text.trim().length > 0
   if (!dropCap) {
-    const broken = breakParagraph(text, {
+    // Verse keeps the lines the poem has; everything else reflows. See
+    // `breakVerse` for why that distinction is the whole of it.
+    const breaker = block.kind === 'verse' && text.includes('\n') ? breakVerse : breakParagraph
+    const broken = breaker(text, {
       font,
       sizePt,
       measurer: ctx.measurer,
@@ -1184,7 +1188,11 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
           ? { id: block.id, title: block.text.trim(), level: block.level ?? 1 }
           : null),
       keepWithNext: block.kind === 'heading',
-      orphanControl: block.kind === 'paragraph'
+      // Verse as well as prose: a quotation of verse that leaves one line at
+      // the foot of a page, or carries one over to the head of the next, is a
+      // composition fault the original does not have. The lines are the poem's
+      // and they were set together.
+      orphanControl: block.kind === 'paragraph' || block.kind === 'verse'
     }
   }
 

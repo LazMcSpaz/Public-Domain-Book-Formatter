@@ -1898,6 +1898,54 @@ closed`, which is indistinguishable from the flake the first command after a
   the two strings rather than assuming an offset, and **returns null rather
   than guessing** when the transformation was not a pure deletion.
 
+- **Also done**: **verse keeps the lines the poem has, and the book is set in
+  the face its own ruling names.** Two halves of the editor's instruction to
+  come as close to the original's composition as the tool can manage.
+
+  **The line break.** Every kind here reflows and must: a newline in a
+  paragraph is where the 1877 compositor's measure happened to end, and
+  honouring it would be the manual line break the proof step refuses to offer,
+  because the book is set to a measure it has not chosen yet. Verse is the
+  exception and, measured over this volume, the **only** one — 1,881
+  paragraphs, 42 blockquotes, 17 headings and 7 captions carry no newline
+  between them, while 6 of the 105 verse blocks do, and they are Shakespeare,
+  Virgil and Byron. `breakVerse` breaks each line on its own so it is
+  _measured_ on its own, then re-indexes the words back onto the whole block,
+  so everything downstream — the face a word is set in, the note a mark belongs
+  to, the figure below the line — goes on counting in the block's own words and
+  needs no idea that this happened. A line too long for the measure still
+  wraps; a blank line between stanzas comes back as a line with nothing on it.
+  Verse also takes the widow and orphan control that only paragraphs had: a
+  stanza with one line at the foot of a page is a fault the original does not
+  have.
+
+  Six faults were injected against the new suite and all six caught. A seventh
+  assertion — that no page carries exactly one line of a stanza — was
+  **written, found not to discriminate, and removed**: the paginator already
+  keeps a short verse whole in every fixture that can be built for it, with
+  footnotes squeezing the page and with a page shortened to a few slots alike,
+  so the test passed with the fault reinstated and was a test of reasoning
+  rather than of code. What the change is actually verified against is the
+  book: Shakespeare's three lines land 36, 37, 37 before and 37, 37, 37 after,
+  and all six multi-line stanzas in the volume now sit whole on a page.
+
+  **The face.** The ruling of 2026-09-16 says this edition is set in Cardo,
+  the one face offered that carries U+2295 for the Azoth cross on leaf 520.
+  The ruling was in `rulings.md` and **not in the book file**, whose `answers`
+  were empty — so every export took the defaults. That is the Clairvoyance
+  failure recurring, and it is silent by construction: `substitutions` is empty
+  because no face was missing, the page count is right, and nothing is
+  reported. Measured on the export: the cross appears on **no page** of the
+  Crimson Pro run and on its own page of the Cardo one, and the subscript drop
+  of 1.803pt is Crimson Pro's cap height to three decimals rather than Cardo's.
+  `answers.design` now carries `bodyFont` and `headingFont`, and nothing else,
+  so the ruling lands and no other choice is invented.
+
+  What this leaves open is that a design ruling can still live in a sheet
+  rather than in the book, with nothing comparing the two. Until something
+  does, a book is not finished until someone has asked whether the face the
+  rulings name is the face the book file sets.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

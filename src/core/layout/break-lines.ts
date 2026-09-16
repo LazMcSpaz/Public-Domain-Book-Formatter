@@ -447,6 +447,96 @@ function chooseBreakpoints(items: InputItem[], lineWidths: number | number[]): n
  * judge the breaks, so the spacing a renderer draws is the spacing the breaker
  * scored — there is no second opinion about it anywhere.
  */
+/**
+ * A verse block broken at the line breaks the poem actually has.
+ *
+ * Every other kind here reflows, and must: a paragraph's newline is an
+ * artefact of where the 1877 compositor's measure happened to end, and
+ * honouring it would be the manual line break this app refuses to offer,
+ * because the book is set to a measure it has not chosen yet. Verse is the
+ * exception and the only one — `\n` in a `verse` block is the poet's line,
+ * not the typesetter's, and flowing it into a paragraph loses the poem.
+ *
+ * Each line is broken on its own so it is *measured* on its own (a line's
+ * italics have to be known to the breaker or its length comes out wrong), and
+ * then re-indexed back onto the whole block, so everything downstream — the
+ * face a word is set in, the note a mark belongs to — goes on counting in the
+ * block's own words and needs no idea that this happened. A line too long for
+ * the measure still wraps, which is what a printed book does with a long
+ * verse line; a blank line between stanzas comes back as a line with nothing
+ * on it, so the stanza break survives too.
+ */
+export function breakVerse(text: string, options: BreakParagraphOptions): BrokenLine[] {
+  const out: BrokenLine[] = []
+  let wordsBefore = 0
+  let charsBefore = 0
+
+  for (const raw of text.split(/\r?\n/u)) {
+    const lead = raw.length - raw.trimStart().length
+    const line = raw.trim()
+    const at = charsBefore + lead
+    const words = line.split(/\s+/u).filter((w) => w.length > 0).length
+
+    if (line.length === 0) {
+      // A stanza break. An empty line of its own, carrying the measure so the
+      // spacing machinery downstream has a width to work from.
+      out.push({
+        words: [],
+        index: out.length,
+        hyphenated: false,
+        widthPt: widthForLine(options.lineWidths, 0),
+        overfull: false
+      })
+      charsBefore += raw.length + 1
+      continue
+    }
+
+    const spans = options.spans
+      ?.map((span) => ({
+        ...span,
+        words: new Set(
+          [...span.words]
+            .filter((i) => i >= wordsBefore && i < wordsBefore + words)
+            .map((i) => i - wordsBefore)
+        )
+      }))
+      .filter((span) => span.words.size > 0)
+    const attachments = options.attachments
+      ?.filter((a) => a.wordIndex >= wordsBefore && a.wordIndex < wordsBefore + words)
+      .map((a) => ({ ...a, wordIndex: a.wordIndex - wordsBefore }))
+    const subscripts = options.subscripts
+      ?.filter((r) => r.from >= at && r.to <= at + line.length)
+      .map((r) => ({ from: r.from - at, to: r.to - at }))
+
+    const broken = breakParagraph(line, {
+      ...options,
+      // A verse line is its own line; an indent on it belongs to the block,
+      // and the block's style has already placed the whole thing.
+      firstLineIndentPt: 0,
+      ...(spans?.length ? { spans } : { spans: undefined }),
+      ...(attachments?.length ? { attachments } : { attachments: undefined }),
+      ...(subscripts?.length ? { subscripts } : { subscripts: undefined })
+    })
+    for (const one of broken) {
+      out.push({
+        ...one,
+        index: out.length,
+        // Back into the block's own coordinates, so a caller that knows
+        // nothing about verse still reads the right span and the right note.
+        words: one.words.map((w) => ({
+          ...w,
+          sourceIndex: w.sourceIndex < 0 ? w.sourceIndex : w.sourceIndex + wordsBefore
+        }))
+      })
+    }
+
+    wordsBefore += words
+    charsBefore += raw.length + 1
+  }
+
+  return out
+}
+
 export function breakParagraph(text: string, options: BreakParagraphOptions): BrokenLine[] {
   if (text.trim().length === 0) return []
 

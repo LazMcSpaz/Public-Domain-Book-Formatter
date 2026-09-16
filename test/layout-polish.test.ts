@@ -14,6 +14,8 @@ import {
 import { defaultStyleProfile } from '@core/style'
 import type { StyleProfile } from '@core/model'
 import type { BookBlock, BookDocument } from '@core/assemble'
+import { assembleBook } from '@core/assemble'
+import { parsePageTranscription, type BlockKind } from '@core/transcribe'
 
 const measurer = fixedWidthMeasurer(0.5)
 const FONT: FontRef = { family: 'EB Garamond', style: 'regular' }
@@ -473,5 +475,45 @@ describe('strong runs pick a face the book actually has', () => {
     ])
     const book = layout(document, defaultStyleProfile(), boldMeasurer, { edition: EDITION })
     expect(faceOf(book, 'Isis')?.style).toBe('bold')
+  })
+})
+
+describe('verse keeps the lines the poem has', () => {
+  const leaf = (blocks: { kind: BlockKind; text: string }[]) =>
+    parsePageTranscription({ role: 'body', blocks, uncertain: [], furniture: {} }, 0)
+
+  const laidOut = (text: string, kind: BlockKind = 'verse') => {
+    const doc = assembleBook([leaf([{ kind, text }])])
+    return layout(doc, { ...defaultStyleProfile(), dropCap: false }, fixedWidthMeasurer(0.5), {
+      edition: { title: 'T', author: 'A' }
+    })
+  }
+
+  /** Every laid-out line of the book, as the words drawn on it. */
+  const drawnLines = (book: ReturnType<typeof layout>) =>
+    book.pages
+      .flatMap((p) => p.items)
+      .filter((i) => 'runs' in i && Array.isArray(i.runs) && i.runs.length > 0)
+      .map((i) =>
+        (i as { runs: { text: string }[] }).runs
+          .map((r) => r.text)
+          .join(' ')
+          .trim()
+      )
+
+  const POEM = 'The lights burn blue\nCold fearful drops stand\nMethought the souls'
+
+  it('sets each line of the verse on a line of its own', () => {
+    const lines = drawnLines(laidOut(POEM))
+    expect(lines).toContain('The lights burn blue')
+    expect(lines).toContain('Cold fearful drops stand')
+    expect(lines).toContain('Methought the souls')
+  })
+
+  it('runs a paragraph together, which is what every other kind must still do', () => {
+    // The distinction is the point: a paragraph's newline is where the 1877
+    // measure ended, not where a line belongs.
+    const lines = drawnLines(laidOut(POEM, 'paragraph'))
+    expect(lines.some((l) => l.includes('blue Cold'))).toBe(true)
   })
 })

@@ -1,0 +1,26 @@
+<!doctype html><meta charset="utf-8" />
+<body style="margin: 0">
+  <canvas id="c"></canvas>
+  <script type="module">
+    try {
+      if (navigator.serviceWorker) {
+        for (const r of await navigator.serviceWorker.getRegistrations()) await r.unregister()
+        if (window.caches) for (const k of await caches.keys()) await caches.delete(k)
+      }
+      const pdfjs = await import('/__tmp/pdf.mjs')
+      pdfjs.GlobalWorkerOptions.workerSrc = '/__tmp/pdf.worker.mjs'
+      const page = Number(new URL(location).searchParams.get('p') || 1)
+      const doc = await pdfjs.getDocument({ url: '/__tmp-isis.pdf' }).promise
+      const p = await doc.getPage(page)
+      const viewport = p.getViewport({ scale: 3 })
+      const c = document.getElementById('c')
+      c.width = viewport.width
+      c.height = viewport.height
+      await p.render({ canvasContext: c.getContext('2d'), viewport }).promise
+      document.title = 'ready'
+    } catch (e) {
+      document.title = 'failed'
+      console.log('ERR ' + e.message)
+    }
+  </script>
+</body>

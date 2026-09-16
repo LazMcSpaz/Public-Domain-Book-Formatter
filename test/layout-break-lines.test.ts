@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   breakParagraph,
+  breakVerse,
   englishHyphenator,
   fixedWidthMeasurer,
   itemsFromText,
@@ -291,5 +292,103 @@ describe('a figure set below the line', () => {
     const plain = itemsFromText('Na2CO3 means soda', options())
     const boxes = plain.filter((i) => i.type === 'box').map((i) => ('text' in i ? i.text : ''))
     expect(boxes[0]).toBe('Na2CO3')
+  })
+})
+
+describe('breakVerse — the lines the poem actually has', () => {
+  const POEM = 'The lights burn blue\nCold fearful drops\nMethought the souls'
+
+  const lineTexts = (lines: { words: { text: string }[] }[]) =>
+    lines.map((l) => l.words.map((w) => w.text).join(' '))
+
+  it('sets one line per line, where a paragraph would have run them together', () => {
+    // Wide enough that a reflowing breaker would fit the whole poem on one line.
+    const wide = options({ lineWidths: 200, alignment: 'left' })
+    expect(lineTexts(breakVerse(POEM, wide))).toEqual([
+      'The lights burn blue',
+      'Cold fearful drops',
+      'Methought the souls'
+    ])
+    expect(lineTexts(breakParagraph(POEM, wide))).toEqual([
+      'The lights burn blue Cold fearful drops Methought the souls'
+    ])
+  })
+
+  it('keeps a stanza break as a line with nothing on it', () => {
+    const lines = breakVerse('one two\n\nthree four', options({ lineWidths: 200 }))
+    expect(lineTexts(lines)).toEqual(['one two', '', 'three four'])
+  })
+
+  it('still wraps a line too long for the measure', () => {
+    // One point a character, so 'aaaa bbbb cccc' is 14 against a measure of 9.
+    const lines = breakVerse('aaaa bbbb cccc\ndd', options({ lineWidths: 9, alignment: 'left' }))
+    expect(lineTexts(lines)).toEqual(['aaaa bbbb', 'cccc', 'dd'])
+  })
+
+  it('numbers its lines straight through, as one block', () => {
+    expect(breakVerse(POEM, options({ lineWidths: 200 })).map((l) => l.index)).toEqual([0, 1, 2])
+  })
+
+  it('re-indexes the words back onto the whole block, so a span still finds them', () => {
+    // The last line's words are 7, 8 and 9 of the block and 0, 1 and 2 of
+    // their own line. Downstream reads the block's index, so that is what has
+    // to come back — unshifted, they would name 'blue', 'Cold' and 'fearful'.
+    const lines = breakVerse(POEM, options({ lineWidths: 200 }))
+    expect(lines[2]!.words.map((w) => w.sourceIndex)).toEqual([7, 8, 9])
+    expect(lines[0]!.words.map((w) => w.sourceIndex)).toEqual([0, 1, 2, 3])
+  })
+
+  it('measures each line with the face that line is actually set in', () => {
+    // The breaker has to know a line's italics or its length is wrong — and
+    // the spans are indexed against the *block*, so slicing them per line is
+    // the part that can go wrong silently.
+    const wide = fixedWidthMeasurer(1)
+    const italicIsWider = {
+      ...wide,
+      widthOf: (t: string, f: { style: string }, size: number) =>
+        wide.widthOf(t, f as never, size) * (f.style === 'italic' ? 4 : 1)
+    }
+    const spans = [
+      { words: new Set([7, 8, 9]), font: { family: 'Test', style: 'italic' as const } }
+    ]
+    const lines = breakVerse(
+      POEM,
+      options({ lineWidths: 30, alignment: 'left', measurer: italicIsWider as never, spans })
+    )
+    // The first two lines fit; the italic third is four times as wide and must
+    // wrap. A breaker that handed every line the block's own span set — or
+    // none of it — would not split exactly here.
+    expect(lineTexts(lines).slice(0, 2)).toEqual(['The lights burn blue', 'Cold fearful drops'])
+    expect(lineTexts(lines).length).toBeGreaterThan(3)
+  })
+
+  it('gives a line only the reference marks that belong to it', () => {
+    const lines = breakVerse(
+      POEM,
+      options({
+        lineWidths: 200,
+        attachments: [{ wordIndex: 8, text: '*', sizePt: 0.6, risePt: 0.3 }]
+      })
+    )
+    expect(lines[0]!.words.some((w) => w.text === '*')).toBe(false)
+    expect(lines[2]!.words.some((w) => w.text === '*')).toBe(true)
+  })
+
+  it('gives a line only the figures that belong to it', () => {
+    // 'Na2CO3' on the second line: offsets 21..22 and 24..25 of the block.
+    const text = 'the chemist\nNa2CO3 is soda'
+    const lines = breakVerse(
+      text,
+      options({
+        lineWidths: 200,
+        subscripts: [
+          { from: 14, to: 15 },
+          { from: 17, to: 18 }
+        ]
+      })
+    )
+    expect(lineTexts(lines)[0]).toBe('the chemist')
+    expect(lines[1]!.words.map((w) => w.text)).toEqual(['Na', '2', 'CO', '3', 'is', 'soda'])
+    expect(lines[1]!.words[1]!.risePt).toBeLessThan(0)
   })
 })
