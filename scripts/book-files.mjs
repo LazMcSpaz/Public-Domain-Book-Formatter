@@ -226,5 +226,95 @@ if (flags.includes('--marks') && bodyArg && !bodyArg.startsWith('--')) {
     console.log(`  ok        ${v.entry}  — the book never uses the word`)
 }
 
+/**
+ * What the export will print on the title page, against what the reading found
+ * on the original's and what the shelf calls the directory.
+ *
+ * None of this is derivable, so none of it is rewritten; it is checked because
+ * the export takes `'Untitled'` for a missing title and prints it as though it
+ * were one. Vol. I of *Isis Unveiled* proofed for a week with UNTITLED on
+ * every recto running head and nothing reported it, and a book on this shelf
+ * carried another book's title in its export answers for a month — the
+ * reading had found "The Human Aura" on its own title page and nothing
+ * compared the two. Letters and digits only, either containing the other, so
+ * a subtitle or a dropped article is not a disagreement.
+ */
+const letters = (v) =>
+  String(v ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '')
+const agrees = (a, b) => letters(a).includes(letters(b)) || letters(b).includes(letters(a))
+const exportAnswers = book.answers?.export ?? {}
+const readMeta = (book.run?.transcriptions ?? []).map((t) => t.metadata).filter(Boolean)
+// One witness or none. A collected volume gathers many title pages, each
+// naming its own lecture, and the volume's title is on none of them — so a
+// reading that found several distinct titles is a collection, and the export
+// title is checked against the directory instead.
+const oneOf = (field) => {
+  const seen = [
+    ...new Set(
+      readMeta
+        .map((m) => m[field])
+        .filter(Boolean)
+        .map(letters)
+    )
+  ]
+  return seen.length === 1 ? readMeta.map((m) => m[field]).find(Boolean) : null
+}
+const readTitle = oneOf('title')
+const readAuthor = oneOf('author')
+for (const [field, read] of [
+  ['title', readTitle],
+  ['author', readAuthor]
+]) {
+  const said = typeof exportAnswers[field] === 'string' ? exportAnswers[field].trim() : ''
+  if (!said) {
+    stale += 1
+    console.log(
+      `  UNSET   answers.export.${field}  — the export prints ${
+        field === 'title'
+          ? '“Untitled” on the title page and every recto running head'
+          : 'no author'
+      }`
+    )
+  } else if (read && !agrees(said, read)) {
+    stale += 1
+    console.log(
+      `  MISNAMED  answers.export.${field} says ${JSON.stringify(said)}, the reading's title page says ${JSON.stringify(read)}`
+    )
+  } else if (field === 'title' && !read) {
+    // No title page was read (the reading may start past the front matter),
+    // so the directory's name is the only other witness: one word of four
+    // letters shared, camel case and hyphens both split.
+    const words = (v) =>
+      String(v)
+        .replace(/([a-z])([A-Z])/g, '$1 $2')
+        .toLowerCase()
+        .split(/[^a-z0-9]+/)
+        .filter((w) => w.length >= 4)
+    const shared = words(basename(dir)).filter((w) => words(said).includes(w))
+    if (shared.length === 0) {
+      stale += 1
+      console.log(
+        `  MISNAMED  answers.export.title says ${JSON.stringify(said)} and the directory is ${basename(dir)}: no word in common`
+      )
+    } else console.log(`  ok      answers.export.title  (${JSON.stringify(said)})`)
+  } else console.log(`  ok      answers.export.${field}  (${JSON.stringify(said)})`)
+}
+// A look nobody chose. The export takes the defaults when there are no design
+// answers and reports nothing, and a ruling that names a face lives in a sheet
+// the export never reads; `drive.mjs proof` compares the two, this only asks
+// whether a choice was made at all.
+const designAnswers = book.answers?.design ?? {}
+if (Object.keys(designAnswers).length === 0) {
+  stale += 1
+  console.log('  UNSET   answers.design  — the export takes the default look')
+} else if (!designAnswers.font && !designAnswers.bodyFont) {
+  stale += 1
+  console.log('  UNSET   answers.design.font  — no face was chosen; the period default prints')
+} else {
+  console.log(`  ok      answers.design  (${designAnswers.bodyFont ?? designAnswers.font})`)
+}
+
 console.log(`${basename(dir)}: ${stale === 0 ? 'in step with book.json' : `${stale} out of date`}`)
 if (check && stale > 0) process.exitCode = 1

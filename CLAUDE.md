@@ -392,6 +392,54 @@ reader who checks it against the render. The cache-busting parameter is also
 the cheap way to tell this apart from a real bug: **if the plain URL and the
 busted URL disagree, the code is right and the server is stale.**
 
+**A book file with no answers proofs as a finished book.** _Isis Unveiled_
+Vol. I was proofed for a week with `answers` empty: the running head on every
+recto said UNTITLED, the title page was one word, and the whole volume was set
+in a face the editor had ruled against — the ruling lived in `rulings.md`,
+which the export never reads. Nothing reported any of it, because the export
+takes `'Untitled'` for a missing title and the period default for a missing
+face and prints both as though somebody had chosen them. `drive.mjs proof`
+now leads its report with `cautions`: no export answers, a title of
+`Untitled`, no author, no design answers, no face chosen, and **a face named
+in a ruling that the book is not set in** — lexical, over the faces the
+design gate offers, which are the only ones a ruling can mean. `book-files
+--check` asks the same of the file on the shelf: `UNSET` for a missing title,
+author or face, and `MISNAMED` when the export title disagrees with the title
+the reading found on the original's title page. Swept over the shelf, that
+found a book carrying **another book's title** in its export answers, a month
+old. Read the cautions before the page count.
+
+**A ruling filed under the wrong words settles nothing.** A query quotes a
+passage; a ruling is matched to it by that quote, exactly. The ruling on leaf
+530 was filed under the words that were _changed_ rather than the words the
+query quoted, so the query stayed waiting with a ruling beside it and the gate
+asked the editor again for a decision already made. `rule` now refuses when
+the leaf has queries waiting and the quote is none of them, lists them, and
+names the nearest; `force` files the ruling anyway, for the rare decision
+about something on the leaf nobody raised.
+
+**The same book has a different key on every machine.** A run key is
+`name\0size\0modified`, and `load` reads the modified time off _this_
+checkout, so a book fetched from the shelf is filed here under a key that
+slugs to a directory the shelf has not got: the shelf holds
+`books/isis-vol1-vjj34f/` and this container's key slugged to
+`isis-vol1-1bkyqpa`, which is where `queries` said the sheet was and where
+`shelf push` would have put a second copy of the book. `load` now records the
+shelf's key against the device's (`__pdbfShelfKey`), every shelf path in the
+driver derives from it, `book` reports `shelfDir` and says when the keys
+differ, and `shelf push` **refuses** rather than create the second directory.
+`save` was already right: it keeps the shelf's key.
+
+**Two smaller traps, both about what a check can see.** `grep "'verse'"` on a
+module served by vite found nothing and the code was there — esbuild emits
+double quotes, so grep for an identifier rather than a quoted string. And a
+fault-injection script whose restore step copies a snapshot taken _before_
+the fix silently reverts the fix; an export made afterwards then tests
+nothing. Read the diff on disk before re-exporting, every time. The restart
+script that the section above describes is committed now as
+`scripts/restart-servers.sh`, so it does not have to be rebuilt from memory
+in every container, wrongly.
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what
@@ -531,6 +579,8 @@ Working _on a book_ (see **How the work is actually done**, above):
 
 ```bash
 node scripts/drive.mjs serve &       # hold a browser open, take commands on :7788
+sh scripts/restart-servers.sh        # kill vite, chromium and the driver by pid and
+                                     #   start them again; wait ~20s, retry the first verb
 node scripts/drive.mjs load <book.json> <scan.pdf>   # from the shelf, not from the device
 node scripts/drive.mjs body out.json # the assembled book: block ids and the exact
                                      #   strings an edit must be written in terms of

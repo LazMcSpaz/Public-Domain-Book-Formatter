@@ -160,6 +160,29 @@ async function serve() {
       }
       return runs[0]
     }
+
+    /**
+     * The key a book is filed under on the *shelf*, as against the one it is
+     * filed under here.
+     *
+     * A run key is `name\0size\0modified`, and `load` reads the modified time
+     * off this machine's checkout — so the same book gets a different key on
+     * every container it is loaded into, and a shelf path derived from the
+     * device's key names a directory the shelf has not got. Measured on Vol. I
+     * of *Isis Unveiled*: the shelf holds `books/isis-vol1-vjj34f/` and this
+     * device's key slugged to `isis-vol1-1bkyqpa`, which is what `queries`
+     * reported as the sheet's path and where `shelf push` would have put a
+     * second copy of the book. `load` records the shelf's key against the
+     * device's; this hands it back, and hands back the device's own when
+     * nothing was recorded — a book opened from disk has no other.
+     */
+    window.__pdbfShelfKey = (key) => {
+      try {
+        return localStorage.getItem(`pdbf.shelfKey.${key}`) ?? key
+      } catch {
+        return key
+      }
+    }
   })
 
   /** Kept rather than printed: a controller asks for them when something looks wrong. */
@@ -385,10 +408,28 @@ async function serve() {
           // text rather than off the passages the editor stopped at, which is
           // the whole defect the reading pass exists to fix.
           const marked = (run?.edits ?? []).filter((e) => e.kind === 'highlight')
+          const sync = await import(`/@fs${repo}/src/core/sync/index.ts`)
+          const shelfKey = wanted ? window.__pdbfShelfKey(wanted) : null
           return {
             current: wanted
               ? (runs.find((r) => r.key === wanted)?.fileName ?? wanted.split('\u0000')[0])
               : null,
+            // Where the book is on the shelf, said up front, because the
+            // device's own key slugs to somewhere else on every machine but
+            // the first (see `__pdbfShelfKey`) and a session writing sheets
+            // into that path would be writing them beside the book.
+            ...(shelfKey
+              ? {
+                  shelfDir: sync.bookPath(shelfKey).replace(/\/book\.json$/u, ''),
+                  ...(shelfKey !== wanted
+                    ? {
+                        keyDiffers:
+                          'this device filed the book under its own key; `save` keeps the ' +
+                          'shelf’s, and `shelf push` will refuse'
+                      }
+                    : {})
+                }
+              : {}),
             scanStored: wanted ? Boolean(await runStore.loadSourceFile(wanted)) : false,
             commentsOpen: memos.filter((m) => !m.resolved).length,
             commentsAnswered: memos.filter((m) => m.resolved).length,
@@ -627,9 +668,19 @@ async function serve() {
           if (book.answers && Object.keys(book.answers).length > 0) {
             localStorage.setItem(`pdbf.review.${key}`, JSON.stringify(book.answers))
           }
+          // Which directory this book has on the shelf, kept against the key
+          // it has here, because the two differ on every machine but the one
+          // that first read the scan (see `__pdbfShelfKey`). Cleared when they
+          // agree, so a record from an earlier load cannot outlive its reason.
+          const shelfKey = typeof book.run.key === 'string' && book.run.key ? book.run.key : key
+          if (shelfKey !== key) localStorage.setItem(`pdbf.shelfKey.${key}`, shelfKey)
+          else localStorage.removeItem(`pdbf.shelfKey.${key}`)
+          const sync = await import(`/@fs${repo}/src/core/sync/index.ts`)
           return {
             saved,
             key,
+            shelfKey,
+            shelfDir: sync.bookPath(shelfKey).replace(/\/book\.json$/u, ''),
             pages: run.pageCount,
             edits: run.edits.length,
             images: run.images.length,
@@ -1160,6 +1211,30 @@ async function serve() {
             author: meta.find((m) => m.author)?.author ?? '',
             ...(saved.export ?? {})
           })
+          // What this proof is standing on, said in words rather than left to
+          // be noticed. Every one of these printed a finished-looking book on
+          // Vol. I of *Isis Unveiled* and nothing reported it: no export
+          // answers set the running head on every recto to UNTITLED, and no
+          // design answers set the whole volume in a face the editor had ruled
+          // against, in a sheet the export never reads. A caution is a line to
+          // read before trusting the page count.
+          const cautions = []
+          if (!saved.export || Object.keys(saved.export).length === 0) {
+            cautions.push(
+              'no export answers: the title page, the copyright page and the running heads ' +
+                'are printing placeholders'
+            )
+          }
+          if (edition.title === 'Untitled') {
+            cautions.push('the title is “Untitled” — every recto running head says so')
+          }
+          if (!edition.author) cautions.push('no author: the title page prints none')
+          const design = saved.design ?? {}
+          if (Object.keys(design).length === 0) {
+            cautions.push('no design answers: this is the default look, not a chosen one')
+          } else if (!design.font && !design.bodyFont) {
+            cautions.push('no face chosen: the period default is printing')
+          }
           // Through the app's own path rather than a second assembly of the
           // same steps, so this cannot report a book the export would not write.
           // The pixels travel beside the document rather than in it, so they
@@ -1176,6 +1251,28 @@ async function serve() {
             { ...wizard.initialState(), styleProfiles: [] },
             answers
           ).style
+          // A face named in a ruling and not set in the book. The rulings are
+          // a sheet the export never reads, so "set in Cardo" can sit in
+          // `rulings.md` for a week while every export takes the period
+          // default — which is exactly what happened. Lexical on purpose: the
+          // only faces a ruling can mean are the ones the design gate offers.
+          const designMod = await import(`/@fs${repo}/src/core/design/index.ts`)
+          for (const r of run.rulings ?? []) {
+            const said = `${r.correction ?? ''} ${r.because ?? ''}`
+            for (const face of designMod.BODY_FONTS) {
+              const named = new RegExp(
+                `\\b${face.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`,
+                'iu'
+              )
+              if (named.test(said) && face.family !== profile.bodyFont) {
+                cautions.push(
+                  `a ruling on ${r.pageIndex === null ? 'the book' : `leaf ${r.pageIndex}`} names ` +
+                    `${face.label} and the book is set in ${profile.bodyFont}: ` +
+                    JSON.stringify(said.trim().slice(0, 120))
+                )
+              }
+            }
+          }
           const built = await interior.renderInterior(doc, profile, {
             edition,
             orphanNotes: 'collect',
@@ -1196,6 +1293,10 @@ async function serve() {
           }
           return {
             title: edition.title,
+            author: edition.author,
+            // First, because it is the line to read before any other number
+            // here. Empty is the good answer.
+            cautions,
             look: `${profile.trimSize}in · ${profile.bodyFont} ${profile.bodyFontSize}pt · ${
               profile.dropCap ? 'drop cap' : 'no drop cap'
             } · ${profile.ornaments.chapterOpener ?? 'no chapter ornament'} · heads ${
@@ -2842,6 +2943,21 @@ async function serve() {
 
           const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book on this device.')
+          // `pushStoredBook` files the book under the key this device holds,
+          // and a book loaded from the shelf holds a different one here (see
+          // `__pdbfShelfKey`). Pushing it would put a second copy of the book
+          // in a directory of its own beside the real one, and the shelf would
+          // then list two books and the next session would open the wrong
+          // one. Refused, with the way that works.
+          const shelfKey = window.__pdbfShelfKey(newest.key)
+          if (shelfKey !== newest.key) {
+            throw new Error(
+              `This book lives on the shelf as ${sync.bookPath(shelfKey)} and this device ` +
+                `filed it under a key that slugs to ${sync.bookPath(newest.key)}. A push from ` +
+                'here would create the second directory. Write the file with `save` and commit ' +
+                'it into the first instead.'
+            )
+          }
 
           // The app's own by-hand path, not a second assembly of the same
           // steps: a book put up from here has to be the same file as one put
@@ -2852,8 +2968,8 @@ async function serve() {
             repository: where,
             pushed: result.path ?? null,
             note: result.note ?? null,
-            queries: sync.queriesPath(newest.key),
-            rulings: sync.rulingsPath(newest.key)
+            queries: sync.queriesPath(shelfKey),
+            rulings: sync.rulingsPath(shelfKey)
           }
         },
         [REPO, action ?? '', what]
@@ -3464,7 +3580,9 @@ async function serve() {
           const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book on this device.')
           const run = await runStore.loadRun(newest.key)
-          const slug = shelf.shelfSlug(newest.key)
+          // The shelf's directory, not the device's slug of its own key: the
+          // two differ on any machine but the one that first read the scan.
+          const slug = shelf.shelfSlug(window.__pdbfShelfKey(newest.key))
           const raised = run ? queriesMod.collectQueries(run.transcriptions) : []
           // What is *waiting*, not what was raised. This said 109 for a book
           // with 32 of them already ruled on — a number that is wrong in the
@@ -3548,9 +3666,11 @@ async function serve() {
             // something to nod at and a list is something to act on.
             decidedButNotPrinted: notYet.map((r) => ({ leaf: r.pageIndex, quote: r.quote })),
             leaves: [...new Set(waiting.map((q) => q.pageIndex))],
-            shelfPath: shelf.queriesPath(newest.key),
-            rulingsShelfPath: shelf.rulingsPath(newest.key),
-            reviewShelfPath: shelf.rulingsPath(newest.key).replace(/rulings\.md$/u, 'review.md')
+            shelfPath: shelf.queriesPath(window.__pdbfShelfKey(newest.key)),
+            rulingsShelfPath: shelf.rulingsPath(window.__pdbfShelfKey(newest.key)),
+            reviewShelfPath: shelf
+              .rulingsPath(window.__pdbfShelfKey(newest.key))
+              .replace(/rulings\.md$/u, 'review.md')
           }
         },
         [REPO]
@@ -4633,9 +4753,12 @@ async function serve() {
       if (!quote || !decision) {
         throw new Error(
           'rule <leaf|standing> <quote> <as-printed|corrected|noted> [correction|-] ' +
-            '[why] [mention] [covers:a,b] [kind:inconsistent]'
+            '[why] [mention] [covers:a,b] [kind:inconsistent] [force]'
         )
       }
+      // `force` files a ruling on a leaf that has queries waiting even though
+      // the quote matches none of them. Without it that is refused, below.
+      const force = flags.includes('force')
       const kind = flags.find((f) => f.startsWith('kind:'))?.slice('kind:'.length)
       if (kind && !['printers-error', 'inconsistent', 'unclear'].includes(kind)) {
         throw new Error(`\`${kind}\` is not a kind of query.`)
@@ -4660,6 +4783,7 @@ async function serve() {
         mention: flags.includes('mention'),
         decidedOn: new Date().toISOString().slice(0, 10)
       }
+      if (force) ruling.force = true
       if (ruling.pageIndex !== null && !Number.isInteger(ruling.pageIndex)) {
         throw new Error(`\`${leaf}\` is not a leaf number, and not \`standing\`.`)
       }
@@ -4711,6 +4835,36 @@ async function serve() {
                       .map((q) => q.kind)
                   )
                 ]
+          // A ruling filed under words the query did not ask about answers
+          // nothing: the query goes on waiting, the sheet keeps it, and the
+          // editor is asked again for a decision already made. It happened on
+          // leaf 530 of *Isis Unveiled* — the ruling was filed under the words
+          // that were changed rather than the words the query quoted, and the
+          // gate showed the query as open with a ruling sitting beside it. So
+          // when the leaf has queries waiting and this quote is none of them,
+          // refuse and list them; `force` is for the rare ruling that really
+          // is about something on the leaf nobody raised.
+          const waitingHere = queriesMod
+            .outstanding(raised, run.rulings ?? [])
+            .filter((q) => q.pageIndex === proposed.pageIndex)
+          if (!asked && proposed.pageIndex !== null && waitingHere.length > 0 && !proposed.force) {
+            const lower = proposed.quote.trim().toLowerCase()
+            const near = waitingHere.filter(
+              (q) => q.quote.toLowerCase().includes(lower) || lower.includes(q.quote.toLowerCase())
+            )
+            throw new Error(
+              `Leaf ${proposed.pageIndex} has ${waitingHere.length} quer${
+                waitingHere.length === 1 ? 'y' : 'ies'
+              } waiting and none is worded like that, so this ruling would settle none of them.` +
+                (near.length > 0
+                  ? ` Nearest: ${near.map((q) => JSON.stringify(q.quote)).join('; ')}.`
+                  : '') +
+                ' Waiting: ' +
+                waitingHere.map((q) => JSON.stringify(q.quote)).join('; ') +
+                '. Rule under one of those quotes exactly, or add `force` to file this as well.'
+            )
+          }
+          delete proposed.force
           const kind = asked?.kind ?? proposed.kind ?? (covered.length === 1 ? covered[0] : null)
           if (!kind) {
             throw new Error(
