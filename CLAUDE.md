@@ -581,6 +581,10 @@ node scripts/contact-sheets.mjs <renders> <out>  # the whole book, small, many t
                                      #   a sheet: the only thing that answers
                                      #   "is there a picture we have missed?"
 
+node scripts/drive.mjs sweep --was "NA2CO3" --now "Na<sub>2</sub>CO<sub>3</sub>"
+                                     #   `<sub>` is notation like `<i>` and `<b>`: a
+                                     #   chemical formula's figures, set below the line
+
 node scripts/book-files.mjs <book-dir> --check   # do the readable files still
                                      #   describe the book? regenerates them
                                      #   without --check
@@ -1819,6 +1823,80 @@ closed`, which is indistinguishable from the flake the first command after a
   the fixtures had to have the shape of the fault: the `**` test needs a lone
   `*` **after** the `**` in the same block and a following block with marks
   of its own, or the stolen notes have nowhere to show up.
+
+- **Also done**: **a figure below the line, which is what a chemical formula is
+  made of** (`subscript`; `drive.mjs sweep` writes the `<sub>` notation like any
+  other tag). The editor's ruling on leaf 520 of _Isis Unveiled_ Vol. I: every
+  numeral in the formulae on that leaf is a subscript on the paper, in the body
+  line and in the displayed reaction alike, and the transcription carried them
+  as ordinary digits because plain text has nowhere to put the position.
+
+  **It is the one inline kind here that is not word-granular, and that is the
+  whole of the design problem.** `emphasis` and `strong` are word indices
+  because that is the breaker's own coordinate system; `Na2CO3` is one
+  whitespace-separated word and only two of its characters drop, so no word
+  index can describe it. `markup.ts` said this case "has not come up" and named
+  character ranges as the rejected alternative — it came up. `subscript` is
+  therefore **character ranges** into the clean text, and what makes the
+  offsets safe is exactly what makes the word indices safe: they are re-derived
+  from the notation on every edit rather than stored once and re-applied to
+  text that has moved. `parseInlineMarkup` had been computing these ranges
+  since it was written and throwing them away; `<sub>` was in `TRANSPARENT_TAGS`.
+
+  **Nothing in the PDF writer changed, because the mechanism was already
+  there.** A footnote's reference mark is an `Attachment` — a short run at its
+  own size, lifted off the baseline, given its own box so the breaker measures
+  the line correctly — and a subscript is the same thing with a **negative**
+  rise. `drawPage` already honoured `sizePt` and `risePt`. What the breaker
+  gained is the ability to put such a run _inside_ a word rather than only
+  glued after one, and the rule that a word carrying one is **never
+  hyphenated**: a formula broken across two lines is not a decision worth
+  letting Knuth–Plass make.
+
+  **Both numbers are measured.** The displayed reaction on that leaf, rendered
+  at 600 DPI and read with `scripts/lib/ink.mjs` (new, and the PNG decoder
+  **Measuring, rather than looking** has been asking for), sets its capitals 49
+  pixels tall and its subscript figures 26 — on both of its lines
+  independently. That is 0.53. The figures reach 14 pixels below a baseline at
+  row 173, so the drop is 0.286 of a **cap height**, and of cap height rather
+  than of the em because the seven faces disagree about that far more than they
+  look as though they do: 0.573 of the em in Crimson Pro against 0.770 in Libre
+  Baskerville. `FontMetrics` now reports `capHeight` and the drop is computed
+  from the face that will draw it — a fixed em fraction would have been a fifth
+  too deep in one face and visibly shallow in another. Confirmed in the real
+  690-page export rather than in a fixture: letters at 11.000/baseline 366.34,
+  figures at 5.830/baseline 364.54, ratio 0.530, drop 1.803pt, and the letters
+  either side of each figure share one baseline to three decimals.
+
+  **Synthesised, never set from U+2082**, for the reason the reference mark
+  already refuses to use ¹²³: measured across all seven faces, IM FELL English
+  carries no subscript figures at all, and neither Cardo's italic nor its bold
+  carries the `subs` feature. Anything resting on a glyph the face may not have
+  draws as a hole in the most likely configuration.
+
+  **`withMarkup` now takes its marks as one object**, and that is a fix rather
+  than a tidy-up. `strong` was added as a third positional argument and
+  `drive.mjs body` went on calling it with two — so an edit written against
+  what the driver handed back and posted straight back as a `text` edit
+  **silently stripped every bold run in the block**, because `applyEdits`
+  re-derives the marks from the notation it is given. A block, a footnote and a
+  prepared note all carry these fields under these names, so a call site passes
+  the thing itself and cannot forget a kind it has never heard of.
+  `spliceRunInto` had the same shape and got the same treatment.
+
+  Two more live gaps closed on the way, both silent. **The EPUB reader never
+  serialised `<b>` at all** — the block push has always read `markup.strong`
+  and nothing upstream ever wrote a `<b>` into the string it parses, so every
+  bold word in every EPUB arrived as roman, with no test anywhere near it. And
+  **the page parser was dropping the new ranges on the floor**; the assembly
+  test found it, which is the argument for writing the assembly test.
+
+  Sixteen faults were injected across the four new suites and all sixteen
+  caught. The one worth recognising is the page seam that **heals a hyphen**:
+  it shortens the join, so a range shifted by the sum of the two halves'
+  lengths lands one character early. `rebaseRanges` builds the map by walking
+  the two strings rather than assuming an offset, and **returns null rather
+  than guessing** when the transformation was not a pure deletion.
 
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
