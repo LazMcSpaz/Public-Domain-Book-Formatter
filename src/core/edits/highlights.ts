@@ -173,7 +173,7 @@ export function highlightSheet(doc: BookDocument, edits: readonly BookEdit[]): H
         madeAt: h.madeAt,
         anchor,
         at: span,
-        blockText: block ? withMarkup(block.text, block.emphasis, block.strong) : null,
+        blockText: block ? withMarkup(block.text, block) : null,
         sourcePages: block ? [...block.sourcePages] : [],
         passage: block && span ? passageAround(block.text, span.from, span.to) : `«${h.quote}»`
       }

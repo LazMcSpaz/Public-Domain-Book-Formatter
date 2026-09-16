@@ -44,7 +44,7 @@ export function passagesOf(doc: BookDocument, edits: readonly BookEdit[]): Passa
         s.blocks.map((b, index) => ({
           id: b.id,
           kind: b.kind,
-          text: withMarkup(b.text, b.emphasis, b.strong),
+          text: withMarkup(b.text, b),
           origin: { type: 'section' as const, sectionId: s.id, index }
         }))
       )
@@ -68,7 +68,7 @@ export function passagesOf(doc: BookDocument, edits: readonly BookEdit[]): Passa
   const body: Passage[] = doc.blocks.map((b) => ({
     id: b.id,
     kind: b.kind,
-    text: withMarkup(b.text, b.emphasis, b.strong),
+    text: withMarkup(b.text, b),
     ...(b.label ? { label: b.label } : {}),
     ...(b.level !== undefined ? { level: b.level } : {}),
     origin: { type: 'body' as const }

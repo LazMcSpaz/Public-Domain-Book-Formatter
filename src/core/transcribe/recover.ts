@@ -22,6 +22,7 @@
  *
  * Pure: two texts in, runs out.
  */
+import { rebaseRanges, type InlineMarks, type SubscriptRange } from './markup'
 import type { OcrWordLike } from './types'
 
 /**
@@ -336,6 +337,15 @@ export interface SplicedBlock {
   emphasis: number[]
   /** The block's strong runs, moved the same way and for the same reason. */
   strong: number[]
+  /**
+   * The block's subscript ranges, moved by the *characters* inserted.
+   *
+   * The same argument as the word indices, in the coordinate a range is
+   * counted in — and the reason the splice is measured rather than assumed:
+   * the text is rebuilt with its whitespace collapsed, so the offsets do not
+   * simply shift by the run's own length.
+   */
+  subscript: SubscriptRange[]
 }
 
 /**
@@ -353,10 +363,12 @@ export interface SplicedBlock {
  */
 export function spliceRunInto(
   blockText: string,
-  emphasis: readonly number[] | undefined,
-  run: DroppedRun,
-  strong?: readonly number[]
+  marks: InlineMarks | undefined,
+  run: DroppedRun
 ): SplicedBlock | null {
+  const emphasis = marks?.emphasis
+  const strong = marks?.strong
+  const subscript = marks?.subscript
   const inserted = run.text.split(/\s+/u).filter((w) => w.length > 0).length
   const shift = (marks: readonly number[] | undefined, from: number): number[] =>
     (marks ?? []).map((i) => (i < from ? i : i + inserted))
@@ -365,10 +377,19 @@ export function spliceRunInto(
   if (!anchor) {
     // A run dropped from the very start of the page goes at the front, so every
     // word of the block moves along by all of it.
+    const text = `${run.text} ${blockText}`.trim()
     return {
-      text: `${run.text} ${blockText}`.trim(),
+      text,
       emphasis: shift(emphasis, 0),
-      strong: shift(strong, 0)
+      strong: shift(strong, 0),
+      // Located rather than offset: `trim` may take characters off both ends.
+      subscript:
+        rebaseRanges(
+          subscript,
+          blockText,
+          blockText.trim(),
+          text.length - blockText.trim().length
+        ) ?? []
     }
   }
 
@@ -384,5 +405,24 @@ export function spliceRunInto(
     .replace(/\s+/gu, ' ')
     .trim()
   const before = head.split(/\s+/u).filter((w) => w.length > 0).length
-  return { text, emphasis: shift(emphasis, before), strong: shift(strong, before) }
+  // The head keeps its own offsets only if collapsing whitespace did not move
+  // them, so it is mapped rather than assumed; the tail moves by however much
+  // longer the rebuilt string is in front of it.
+  const newHead = text.slice(0, text.length - tail.replace(/\s+/gu, ' ').trimEnd().length)
+  const ranges: SubscriptRange[] = []
+  for (const r of subscript ?? []) {
+    if (r.to <= end) {
+      const mapped = rebaseRanges([r], head, newHead.trimEnd(), 0)
+      if (mapped?.length) ranges.push(...mapped)
+    } else if (r.from >= end) {
+      const by = text.length - blockText.length
+      ranges.push({ from: r.from + by, to: r.to + by })
+    }
+  }
+  return {
+    text,
+    emphasis: shift(emphasis, before),
+    strong: shift(strong, before),
+    subscript: ranges
+  }
 }

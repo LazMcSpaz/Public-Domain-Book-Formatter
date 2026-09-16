@@ -10,6 +10,7 @@
  */
 import type { PageRole } from '@core/pages'
 import { parseInlineMarkup } from './markup'
+import type { SubscriptRange } from './markup'
 
 /** Structural role of a run of text within the page. */
 export type BlockKind =
@@ -70,6 +71,16 @@ export interface TranscribedBlock {
    * never a bold smeared out of the regular outlines.
    */
   strong?: number[]
+  /**
+   * Character ranges of `text` to set below the line, ascending.
+   *
+   * The one inline kind here that is not word-granular, because the thing it
+   * exists for sits inside a word: `Na2CO3` is one whitespace-separated word
+   * and only its figures drop. See `@core/transcribe/markup` for why that is
+   * safe — the ranges are re-derived from `<sub>` in the notation on every
+   * edit, never stored once and re-applied to text that has moved since.
+   */
+  subscript?: SubscriptRange[]
   /** Heading level 1–6, only meaningful when `kind` is 'heading'. */
   level?: number
   /**
@@ -297,7 +308,8 @@ export function normalizeMarkup<T extends TranscribedBlock>(block: T): T {
     ...block,
     text: markup.text,
     ...(markup.emphasis.length > 0 ? { emphasis: markup.emphasis } : {}),
-    ...(markup.strong.length > 0 ? { strong: markup.strong } : {})
+    ...(markup.strong.length > 0 ? { strong: markup.strong } : {}),
+    ...(markup.subscript.length > 0 ? { subscript: markup.subscript } : {})
   }
 }
 
@@ -438,6 +450,7 @@ const BLOCK_FIELDS = new Set([
   'headerRow',
   'emphasis',
   'strong',
+  'subscript',
   'level',
   'marker',
   'continuesPrevious',
@@ -500,6 +513,7 @@ export function parsePageTranscription(raw: unknown, pageIndex: number): PageTra
     const block: TranscribedBlock = { kind: kind as BlockKind, text: markup.text }
     if (markup.emphasis.length > 0) block.emphasis = markup.emphasis
     if (markup.strong.length > 0) block.strong = markup.strong
+    if (markup.subscript.length > 0) block.subscript = markup.subscript
     const level = b['level']
     if (typeof level === 'number' && Number.isFinite(level)) {
       block.level = Math.min(6, Math.max(1, Math.round(level)))

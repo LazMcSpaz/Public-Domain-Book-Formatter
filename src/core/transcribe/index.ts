@@ -28,8 +28,12 @@ export {
   parseInlineMarkup,
   withMarkup,
   shiftEmphasis,
+  rebaseRanges,
+  shiftRanges,
   wordCount,
-  type InlineMarkup
+  type InlineMarkup,
+  type InlineMarks,
+  type SubscriptRange
 } from './markup'
 export {
   findDroppedRuns,

@@ -48,6 +48,18 @@ const SKIP = new Set(['head', 'script', 'style', 'title', 'nav', 'svg', 'meta', 
 
 /** Inline elements meaning "italic", matching what `markup.ts` already reads. */
 const ITALIC = new Set(['i', 'em', 'cite', 'var', 'dfn'])
+/**
+ * Inline elements meaning "strong", the same list `markup.ts` reads.
+ *
+ * These were missing, and missing silently: the block push below has always
+ * read `markup.strong`, but nothing upstream ever wrote a `<b>` into the string
+ * it parses, so every bold word in every EPUB arrived in the book as plain
+ * roman with no report. The italic path had been written and the bold one
+ * never was.
+ */
+const STRONG = new Set(['b', 'strong'])
+/** Inline elements meaning "below the line" — a chemical formula's figures. */
+const SUBSCRIPT = new Set(['sub'])
 
 /** A picture referenced by the markup, to be pulled out of the archive. */
 export interface EpubImage {
@@ -86,10 +98,17 @@ function inlineMarkup(nodes: readonly EpubNode[]): string {
         out += ' '
         continue
       }
-      if (ITALIC.has(node.name)) {
-        out += '<i>'
+      const tag = ITALIC.has(node.name)
+        ? 'i'
+        : STRONG.has(node.name)
+          ? 'b'
+          : SUBSCRIPT.has(node.name)
+            ? 'sub'
+            : null
+      if (tag) {
+        out += `<${tag}>`
         visit(node.children)
-        out += '</i>'
+        out += `</${tag}>`
         continue
       }
       visit(node.children)
@@ -148,6 +167,7 @@ export function blocksFromDocument(root: EpubNode, startIndex = 0): EpubContent 
       text: markup.text,
       ...(markup.emphasis.length > 0 ? { emphasis: markup.emphasis } : {}),
       ...(markup.strong.length > 0 ? { strong: markup.strong } : {}),
+      ...(markup.subscript.length > 0 ? { subscript: markup.subscript } : {}),
       ...extra
     })
   }

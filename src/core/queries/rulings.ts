@@ -253,7 +253,7 @@ export function unapplied(rulings: readonly Ruling[], book: BookDocument): Rulin
  * line, which a general tag-stripper would do to a note quoting an inequality.
  */
 function stripInlineMarkup(text: string): string {
-  return text.replace(/<\/?(?:i|em|b|strong)>/gi, '')
+  return text.replace(/<\/?(?:i|em|b|strong|sub)>/gi, '')
 }
 
 const HEADING: Record<RulingDecision, string> = {

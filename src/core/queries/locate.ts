@@ -90,7 +90,7 @@ function normalize(text: string): string {
  */
 export function quoteTokens(quote: string): string[] {
   return quote
-    .replace(/<\/?(?:i|em|b|strong)>/gi, ' ')
+    .replace(/<\/?(?:i|em|b|strong|sub)>/gi, ' ')
     .split(/\s+/u)
     .map(normalize)
     .filter((w) => w.length > 0)

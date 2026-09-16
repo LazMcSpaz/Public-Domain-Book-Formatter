@@ -34,7 +34,7 @@ export interface RichNode {
   nodeValue: string | null
   childNodes: ArrayLike<RichNode>
   /** Elements carry inline style; some editors emit emphasis through it. */
-  style?: { fontStyle?: string; fontWeight?: string } | null
+  style?: { fontStyle?: string; fontWeight?: string; verticalAlign?: string } | null
 }
 
 const escapeHtml = (s: string): string =>
@@ -51,7 +51,7 @@ const escapeHtml = (s: string): string =>
  * the notation means rather than a variant of it.
  */
 export function htmlOfMarkup(raw: string): string {
-  const { text, emphasis, strong } = parseInlineMarkup(raw)
+  const { text, emphasis, strong, subscript } = parseInlineMarkup(raw)
   const marks = [
     { words: new Set(strong), tag: 'b', inside: false },
     { words: new Set(emphasis), tag: 'i', inside: false }
@@ -59,10 +59,12 @@ export function htmlOfMarkup(raw: string): string {
 
   let out = ''
   let index = 0
+  let cursor = 0
   for (const part of text.split(/(\s+)/u)) {
     if (part.length === 0) continue
     if (/^\s+$/u.test(part)) {
       out += part
+      cursor += part.length
       continue
     }
     for (const mark of [...marks].reverse()) {
@@ -77,7 +79,23 @@ export function htmlOfMarkup(raw: string): string {
         mark.inside = true
       }
     }
-    out += escapeHtml(part)
+    // `<sub>` opens and closes inside one word, so it nests innermost and is
+    // escaped either side of the tags rather than around them.
+    if (subscript.length > 0) {
+      let at = 0
+      for (const range of subscript) {
+        const from = Math.max(range.from - cursor, 0)
+        const to = Math.min(range.to - cursor, part.length)
+        if (to <= from || from >= part.length) continue
+        out += escapeHtml(part.slice(at, from))
+        out += `<sub>${escapeHtml(part.slice(from, to))}</sub>`
+        at = to
+      }
+      out += escapeHtml(part.slice(at))
+    } else {
+      out += escapeHtml(part)
+    }
+    cursor += part.length
     index += 1
   }
   for (const mark of [...marks].reverse()) if (mark.inside) out += `</${mark.tag}>`
@@ -87,6 +105,17 @@ export function htmlOfMarkup(raw: string): string {
 /** Tag names that mean italic, beyond what inline style may add. */
 const ITALIC_NAMES = new Set(['I', 'EM', 'CITE', 'VAR'])
 const STRONG_NAMES = new Set(['B', 'STRONG'])
+/**
+ * Tag names that mean subscript.
+ *
+ * `execCommand('subscript')` in a `contenteditable` emits `<sub>`, so the
+ * galley's own toolbar and a hand-typed tag arrive here as the same thing —
+ * which is the property Ctrl+I already has and the reason the notation is read
+ * back off the DOM rather than tracked beside it.
+ */
+const SUBSCRIPT_NAMES = new Set(['SUB'])
+
+const styledSubscript = (node: RichNode): boolean => (node.style?.verticalAlign ?? '') === 'sub'
 
 const styledItalic = (node: RichNode): boolean =>
   (node.style?.fontStyle ?? '').startsWith('italic') || node.style?.fontStyle === 'oblique'
@@ -112,10 +141,15 @@ const styledBold = (node: RichNode): boolean => {
  *    exactly as the notation's reader would take it.
  */
 export function markupOfNodes(nodes: ArrayLike<RichNode>): string {
-  return serialize(nodes, false, false)
+  return serialize(nodes, false, false, false)
 }
 
-function serialize(nodes: ArrayLike<RichNode>, insideI: boolean, insideB: boolean): string {
+function serialize(
+  nodes: ArrayLike<RichNode>,
+  insideI: boolean,
+  insideB: boolean,
+  insideSub: boolean
+): string {
   let out = ''
   for (let i = 0; i < nodes.length; i += 1) {
     const node = nodes[i]!
@@ -132,10 +166,14 @@ function serialize(nodes: ArrayLike<RichNode>, insideI: boolean, insideB: boolea
     }
     const italic = !insideI && (ITALIC_NAMES.has(name) || styledItalic(node))
     const bold = !insideB && (STRONG_NAMES.has(name) || styledBold(node))
-    let inner = serialize(node.childNodes, insideI || italic, insideB || bold)
+    const low = !insideSub && (SUBSCRIPT_NAMES.has(name) || styledSubscript(node))
+    let inner = serialize(node.childNodes, insideI || italic, insideB || bold, insideSub || low)
     // Marking nothing is not a mark: an empty <i></i> left behind by an editor
     // would otherwise emit a tag pair the notation reads as an unclosed run.
     if (inner.trim().length > 0) {
+      // Innermost, matching how `withMarkup` prints it and how the reader
+      // takes it: a subscript lives inside a word, never around one.
+      if (low) inner = `<sub>${inner}</sub>`
       if (italic) inner = `<i>${inner}</i>`
       if (bold) inner = `<b>${inner}</b>`
     }

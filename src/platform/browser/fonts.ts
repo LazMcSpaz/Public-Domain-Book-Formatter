@@ -278,12 +278,23 @@ export async function loadFonts(families: readonly string[]): Promise<FontTable>
 
     metrics(ref, sizePt): FontMetrics {
       const face = faceFor(ref)
-      if (!face) return { ascent: sizePt * 0.75, descent: sizePt * 0.25, lineGap: 0 }
+      if (!face) {
+        return {
+          ascent: sizePt * 0.75,
+          descent: sizePt * 0.25,
+          lineGap: 0,
+          capHeight: sizePt * 0.7
+        }
+      }
       const scale = sizePt / face.font.unitsPerEm
       return {
         ascent: face.font.ascent * scale,
         descent: Math.abs(face.font.descent) * scale,
-        lineGap: face.font.lineGap * scale
+        lineGap: face.font.lineGap * scale,
+        // A face with no `capHeight` in its OS/2 table is rare and not worth
+        // failing over; the ascent overshoots a capital by a little, so the
+        // fallback is the common ratio rather than the ascent.
+        capHeight: (face.font.capHeight || face.font.unitsPerEm * 0.7) * scale
       }
     },
 

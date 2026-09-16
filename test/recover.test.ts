@@ -241,27 +241,39 @@ describe('spliceRunInto — putting a clause back without losing the italics', (
 
   it('moves emphasis that sits after the join, and leaves the rest alone', () => {
     // Five words go in after word 2. The italic must stay on `alembick`.
-    const out = spliceRunInto('Of the alembick being set upon a fire', [2], run('the alembick'))!
+    const out = spliceRunInto(
+      'Of the alembick being set upon a fire',
+      { emphasis: [2] },
+      run('the alembick')
+    )!
     expect(out.text).toBe('Of the alembick and of the fixed salt being set upon a fire')
     expect(out.emphasis).toEqual([2])
   })
 
   it('shifts emphasis that the inserted words pushed along', () => {
-    const out = spliceRunInto('Of the alembick being set upon a fire', [5], run('the alembick'))!
+    const out = spliceRunInto(
+      'Of the alembick being set upon a fire',
+      { emphasis: [5] },
+      run('the alembick')
+    )!
     // `upon` was word 5; five words went in ahead of it.
     expect(out.text.split(' ')[5 + 5]).toBe('upon')
     expect(out.emphasis).toEqual([10])
   })
 
   it('shifts everything when the clause goes at the very front', () => {
-    const out = spliceRunInto('the alembick being set', [1], { ...run(''), text: 'Of these two' })!
+    const out = spliceRunInto(
+      'the alembick being set',
+      { emphasis: [1] },
+      { ...run(''), text: 'Of these two' }
+    )!
     expect(out.text).toBe('Of these two the alembick being set')
     expect(out.emphasis).toEqual([4])
     expect(out.text.split(' ')[4]).toBe('alembick')
   })
 
   it('says so when the anchor is in another block', () => {
-    expect(spliceRunInto('nothing like it here', [], run('the alembick'))).toBeNull()
+    expect(spliceRunInto('nothing like it here', { emphasis: [] }, run('the alembick'))).toBeNull()
   })
 
   it('is what spliceRun is built from, so the two can never disagree', () => {

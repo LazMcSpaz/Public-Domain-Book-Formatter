@@ -212,3 +212,84 @@ describe('a compound breaks at its own hyphen without gaining another', () => {
     expect(lines.join('|')).toContain('extra-')
   })
 })
+
+describe('a figure set below the line', () => {
+  const formula = (over: Partial<BreakParagraphOptions> = {}) =>
+    itemsFromText(
+      'Na2CO3 means soda',
+      options({
+        subscripts: [
+          { from: 2, to: 3 },
+          { from: 5, to: 6 }
+        ],
+        ...over
+      })
+    )
+
+  it('cuts the word into its letters and its figures', () => {
+    const boxes = formula()
+      .filter((i) => i.type === 'box')
+      .map((i) => ('text' in i ? i.text : ''))
+    expect(boxes.slice(0, 4)).toEqual(['Na', '2', 'CO', '3'])
+  })
+
+  it('sets the figures smaller and below the baseline, and the letters neither', () => {
+    const boxes = formula()
+      .filter((i) => i.type === 'box')
+      .map((i) => i as unknown as { text: string; sizePt?: number; risePt?: number })
+    const [na, two, co, three] = boxes
+    expect(na!.sizePt).toBeUndefined()
+    expect(co!.sizePt).toBeUndefined()
+    // 0.53 of the type, measured off the 1877 page.
+    expect(two!.sizePt).toBeCloseTo(0.53, 5)
+    expect(three!.sizePt).toBeCloseTo(0.53, 5)
+    // Below, not above: a positive rise is what a footnote's mark uses.
+    expect(two!.risePt).toBeLessThan(0)
+    // 0.286 of a cap height, and the stub's capital is 0.7 of the em.
+    expect(two!.risePt).toBeCloseTo(-0.7 * 0.286, 5)
+  })
+
+  it('measures the figures at their own size, so the line is not set too long', () => {
+    // One character each at 1pt: the plain letters are 2 + 2, the figures are
+    // 0.53 each. A breaker that measured them as full size would make the word
+    // 6pt and every line carrying it fractionally too long.
+    const width = formula()
+      .filter((i) => i.type === 'box')
+      .slice(0, 4)
+      .reduce((sum, i) => sum + i.width, 0)
+    expect(width).toBeCloseTo(2 + 0.53 + 2 + 0.53, 5)
+  })
+
+  it('never hyphenates a formula, whatever the hyphenator would do to it', () => {
+    const boxes = formula({ hyphenate: englishHyphenator() })
+      .filter((i) => i.type === 'box')
+      .map((i) => ('text' in i ? i.text : ''))
+    expect(boxes.slice(0, 4)).toEqual(['Na', '2', 'CO', '3'])
+    // And the words that are not formulae are still hyphenated normally.
+    expect(boxes.length).toBeGreaterThan(4)
+  })
+
+  it('leaves the figures as runs of their own rather than fusing them back', () => {
+    // The merge rule re-joins hyphenation fragments of one word. If it fused a
+    // formula's pieces the figures would be drawn as body text at body size.
+    const line = breakParagraph(
+      'Na2CO3',
+      options({
+        lineWidths: 40,
+        subscripts: [
+          { from: 2, to: 3 },
+          { from: 5, to: 6 }
+        ]
+      })
+    )[0]!
+    expect(line.words.map((w) => w.text)).toEqual(['Na', '2', 'CO', '3'])
+    expect(line.words[1]!.risePt).toBeLessThan(0)
+    expect(line.words[2]!.risePt).toBeFalsy()
+  })
+
+  it('does nothing at all to a paragraph that has no formula in it', () => {
+    const plain = itemsFromText('Na2CO3 means soda', options())
+    const boxes = plain.filter((i) => i.type === 'box').map((i) => ('text' in i ? i.text : ''))
+    expect(boxes[0]).toBe('Na2CO3')
+  })
+})

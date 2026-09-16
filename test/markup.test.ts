@@ -5,6 +5,7 @@ import {
   parsePageTranscription,
   withMarkup,
   shiftEmphasis,
+  rebaseRanges,
   wordCount,
   type TranscribedBlock
 } from '@core/transcribe'
@@ -220,7 +221,7 @@ describe('emphasis survives the journey to the page', () => {
 describe('withMarkup — showing the emphasis where it can be edited', () => {
   const round = (raw: string) => {
     const parsed = parseInlineMarkup(raw)
-    return withMarkup(parsed.text, parsed.emphasis)
+    return withMarkup(parsed.text, parsed)
   }
 
   it('puts the tags back where they were', () => {
@@ -240,20 +241,22 @@ describe('withMarkup — showing the emphasis where it can be edited', () => {
   })
 
   it('wraps a phrase once rather than tagging each of its words', () => {
-    expect(withMarkup('how to project the astral body', [2, 3, 4, 5])).toBe(
+    expect(withMarkup('how to project the astral body', { emphasis: [2, 3, 4, 5] })).toBe(
       'how to <i>project the astral body</i>'
     )
   })
 
   it('leaves an unemphasised block completely alone', () => {
-    expect(withMarkup('nothing stressed here', [])).toBe('nothing stressed here')
+    expect(withMarkup('nothing stressed here', { emphasis: [] })).toBe('nothing stressed here')
     expect(withMarkup('nothing stressed here', undefined)).toBe('nothing stressed here')
   })
 
   it('handles emphasis at either end of the block', () => {
-    expect(withMarkup('first word only', [0])).toBe('<i>first</i> word only')
-    expect(withMarkup('and the last', [2])).toBe('and the <i>last</i>')
-    expect(withMarkup('every single word', [0, 1, 2])).toBe('<i>every single word</i>')
+    expect(withMarkup('first word only', { emphasis: [0] })).toBe('<i>first</i> word only')
+    expect(withMarkup('and the last', { emphasis: [2] })).toBe('and the <i>last</i>')
+    expect(withMarkup('every single word', { emphasis: [0, 1, 2] })).toBe(
+      '<i>every single word</i>'
+    )
   })
 
   it('survives the round trip both ways', () => {
@@ -284,7 +287,7 @@ describe('withMarkup — showing the emphasis where it can be edited', () => {
   })
 
   it('round-trips through an edit, which is how the proof editor keeps it', () => {
-    const shown = withMarkup('the Lama superintends the withdrawal', [1])
+    const shown = withMarkup('the Lama superintends the withdrawal', { emphasis: [1] })
     expect(shown).toBe('the <i>Lama</i> superintends the withdrawal')
     // The user fixes a different word; the emphasis is unharmed because it was
     // never separate from the text they were handed.
@@ -338,14 +341,17 @@ describe('strong runs', () => {
   })
 
   it('writes both tags back, nested rather than crossed', () => {
-    const round = withMarkup('Blavatsky. She wrote Isis Unveiled in 1877.', [3, 4], [0])
+    const round = withMarkup('Blavatsky. She wrote Isis Unveiled in 1877.', {
+      emphasis: [3, 4],
+      strong: [0]
+    })
     expect(round).toBe('<b>Blavatsky.</b> She wrote <i>Isis Unveiled</i> in 1877.')
     expect(parseInlineMarkup(round).strong).toEqual([0])
     expect(parseInlineMarkup(round).emphasis).toEqual([3, 4])
   })
 
   it('round-trips a word that is both', () => {
-    const round = withMarkup('Isis Unveiled. Her first book.', [0, 1], [0, 1])
+    const round = withMarkup('Isis Unveiled. Her first book.', { emphasis: [0, 1], strong: [0, 1] })
     expect(round).toBe('<b><i>Isis Unveiled.</i></b> Her first book.')
     const back = parseInlineMarkup(round)
     expect(back.text).toBe('Isis Unveiled. Her first book.')
@@ -354,7 +360,192 @@ describe('strong runs', () => {
   })
 
   it('leaves unmarked text alone', () => {
-    expect(withMarkup('plain words', undefined, undefined)).toBe('plain words')
-    expect(withMarkup('plain words', [], [])).toBe('plain words')
+    expect(withMarkup('plain words', undefined)).toBe('plain words')
+    expect(withMarkup('plain words', { emphasis: [], strong: [] })).toBe('plain words')
+  })
+})
+
+describe('subscript runs — the one kind that is not word-granular', () => {
+  it('reads a figure inside a word as a character range', () => {
+    const m = parseInlineMarkup('NA<sub>2</sub>CO<sub>3</sub>—means soda')
+    expect(m.text).toBe('NA2CO3—means soda')
+    expect(m.subscript).toEqual([
+      { from: 2, to: 3 },
+      { from: 5, to: 6 }
+    ])
+    // The word is not marked: nothing about `NA2CO3` is emphasised or strong.
+    expect(m.emphasis).toEqual([])
+    expect(m.strong).toEqual([])
+  })
+
+  it('writes them back exactly where they were', () => {
+    const raw = '(Na<sub>2</sub>CO<sub>3</sub>+2HKC<sub>4</sub>H<sub>4</sub>O<sub>6</sub>+Aq)='
+    const m = parseInlineMarkup(raw)
+    expect(withMarkup(m.text, m)).toBe(raw)
+  })
+
+  it('settles: what it shows parses back to what it was shown', () => {
+    const once = withMarkup('Na2CO3 and C2H6O', {
+      subscript: [
+        { from: 2, to: 3 },
+        { from: 5, to: 6 },
+        { from: 12, to: 13 },
+        { from: 14, to: 15 }
+      ]
+    })
+    expect(once).toBe('Na<sub>2</sub>CO<sub>3</sub> and C<sub>2</sub>H<sub>6</sub>O')
+    const back = parseInlineMarkup(once)
+    expect(withMarkup(back.text, back)).toBe(once)
+  })
+
+  it('nests inside italic and bold rather than across them', () => {
+    const raw = '<i>Na<sub>2</sub>CO<sub>3</sub></i> is soda'
+    const m = parseInlineMarkup(raw)
+    expect(m.emphasis).toEqual([0])
+    expect(m.subscript).toEqual([
+      { from: 2, to: 3 },
+      { from: 5, to: 6 }
+    ])
+    expect(withMarkup(m.text, m)).toBe(raw)
+  })
+
+  it('folds two tags that describe one stretch into one range', () => {
+    // `H<sub>2</sub><sub>3</sub>` and `H<sub>23</sub>` are the same page, so
+    // they have to be the same record or the round trip is not one.
+    const a = parseInlineMarkup('H<sub>2</sub><sub>3</sub>O')
+    const b = parseInlineMarkup('H<sub>23</sub>O')
+    expect(a.subscript).toEqual(b.subscript)
+    expect(a.subscript).toEqual([{ from: 1, to: 3 }])
+  })
+
+  it('drops a pair that marks nothing', () => {
+    expect(parseInlineMarkup('plain<sub></sub> words').subscript).toEqual([])
+  })
+
+  it('runs an unclosed tag to the end of the block, as the other kinds do', () => {
+    const m = parseInlineMarkup('CO<sub>2')
+    expect(m.text).toBe('CO2')
+    expect(m.subscript).toEqual([{ from: 2, to: 3 }])
+  })
+
+  it('leaves a block with no subscript carrying no ranges at all', () => {
+    expect(parseInlineMarkup('nothing low here').subscript).toEqual([])
+    expect(withMarkup('nothing low here', { subscript: [] })).toBe('nothing low here')
+  })
+})
+
+describe('rebaseRanges — a character range through a deletion', () => {
+  it('follows a soft hyphen out of the middle of the text', () => {
+    const before = 'Na2­CO3'
+    const after = before.replace(/­/gu, '')
+    expect(
+      rebaseRanges(
+        [
+          { from: 2, to: 3 },
+          { from: 6, to: 7 }
+        ],
+        before,
+        after,
+        0
+      )
+    ).toEqual([
+      { from: 2, to: 3 },
+      { from: 5, to: 6 }
+    ])
+  })
+
+  it('places the whole lot where the text landed', () => {
+    expect(rebaseRanges([{ from: 2, to: 3 }], 'Na2CO3', 'Na2CO3', 40)).toEqual([
+      { from: 42, to: 43 }
+    ])
+  })
+
+  it('drops a range whose characters were deleted outright', () => {
+    expect(rebaseRanges([{ from: 0, to: 2 }], '* note', 'note', 0)).toEqual([])
+  })
+
+  it('refuses rather than guessing when the text was not merely cut', () => {
+    expect(rebaseRanges([{ from: 0, to: 1 }], 'abc', 'xyz', 0)).toBeNull()
+  })
+})
+
+describe('a subscript survives the journey to the page', () => {
+  /** What a leaf of transcription looks like coming out of the reader. */
+  const leaf = (text: string, over: Record<string, unknown> = {}, at = 0) =>
+    parsePageTranscription(
+      {
+        role: 'body',
+        blocks: [{ kind: 'paragraph', text, ...over }],
+        uncertain: [],
+        furniture: {}
+      },
+      at
+    )
+
+  /** The characters a block's ranges actually name, as strings. */
+  const under = (text: string, ranges?: { from: number; to: number }[]) =>
+    (ranges ?? []).map((r) => text.slice(r.from, r.to))
+
+  it('moves along when a paragraph is joined across a page seam', () => {
+    // The seam is the case a character range is most likely to get wrong: the
+    // second half's offsets are counted from its own first character, and a
+    // word count cannot move them.
+    const built = assembleBook([
+      leaf('The chemist writes', { continuesNext: true }),
+      leaf('Na<sub>2</sub>CO<sub>3</sub> and means soda.', { continuesPrevious: true }, 1)
+    ])
+    expect(built.blocks).toHaveLength(1)
+    const joined = built.blocks[0]!
+    expect(joined.text).toBe('The chemist writes Na2CO3 and means soda.')
+    expect(under(joined.text, joined.subscript)).toEqual(['2', '3'])
+  })
+
+  it('moves along again when the seam heals a hyphen, which shortens the join', () => {
+    // `joinText` deletes the wrapping hyphen, so the second half lands one
+    // character earlier than a naive sum of the two lengths would put it.
+    const built = assembleBook([
+      leaf('the sodium car-', { continuesNext: true }),
+      leaf('bonate Na<sub>2</sub>CO<sub>3</sub>.', { continuesPrevious: true }, 1)
+    ])
+    const joined = built.blocks[0]!
+    expect(joined.text).toBe('the sodium carbonate Na2CO3.')
+    expect(under(joined.text, joined.subscript)).toEqual(['2', '3'])
+  })
+
+  it('follows a soft hyphen out of the middle of a block', () => {
+    const built = assembleBook([leaf('sodi­um Na<sub>2</sub>CO<sub>3</sub>.')])
+    const joined = built.blocks[0]!
+    expect(joined.text).toBe('sodium Na2CO3.')
+    expect(under(joined.text, joined.subscript)).toEqual(['2', '3'])
+  })
+
+  it('follows a footnote past the marker stripped off its front', () => {
+    const built = assembleBook([
+      leaf('The body of the leaf.'),
+      leaf('* Or Na<sub>2</sub>CO<sub>3</sub>, as the chemists write it.', {
+        kind: 'footnote',
+        marker: '*'
+      })
+    ])
+    const note = built.footnotes[0]!
+    expect(note.text).toBe('Or Na2CO3, as the chemists write it.')
+    expect(under(note.text, note.subscript)).toEqual(['2', '3'])
+  })
+
+  it('is forgotten when the passage is retyped, like every other mark', () => {
+    const built = assembleBook([leaf('Na<sub>2</sub>CO<sub>3</sub> is soda.')])
+    const after = applyEdits(built, [
+      { kind: 'text', blockId: built.blocks[0]!.id, text: 'plain words now' }
+    ])
+    expect(after.blocks[0]!.subscript).toBeUndefined()
+  })
+
+  it('is read back from a tag typed by hand in the galley', () => {
+    const built = assembleBook([leaf('NA2CO3 is soda.')])
+    const after = applyEdits(built, [
+      { kind: 'text', blockId: built.blocks[0]!.id, text: 'Na<sub>2</sub>CO<sub>3</sub> is soda.' }
+    ])
+    expect(after.blocks[0]!.text).toBe('Na2CO3 is soda.')
+    expect(under(after.blocks[0]!.text, after.blocks[0]!.subscript)).toEqual(['2', '3'])
   })
 })

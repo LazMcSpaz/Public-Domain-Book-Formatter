@@ -26,7 +26,7 @@
  */
 
 /** The only tags the notation prints — see `withMarkup`. */
-const NOTATION_TAG = /<\/?[bi]>/y
+const NOTATION_TAG = /<\/?(?:[bi]|sub)>/y
 
 export interface PlainMap {
   /** The text with the tags removed — what a reader searches. */

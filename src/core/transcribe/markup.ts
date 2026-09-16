@@ -26,6 +26,21 @@
  * this has not come up — and the alternative is threading character ranges
  * through the breaker, the hyphenator and the seam repair.
  *
+ * ## The one thing that is not word-granular
+ *
+ * A chemical formula is. `Na2CO3` is one whitespace-separated word and the two
+ * figures in it are set below the line while the letters are not, so no word
+ * index can describe it — the case the paragraph above says "has not come up"
+ * came up, on page 462 of _Isis Unveiled_ Vol. I. `subscript` is therefore
+ * **character ranges** into the clean text, and it is the only kind here that
+ * is, deliberately: emphasis stays word-granular because that is the breaker's
+ * own coordinate system and nothing has ever needed finer.
+ *
+ * What makes the offsets safe is the same thing that makes the word indices
+ * safe — they are re-derived from the notation on every edit rather than
+ * stored once and re-applied to text that has since moved. `parseInlineMarkup`
+ * already computed these ranges and threw them away; now it keeps one set.
+ *
  * Pure: text in, text and indices out.
  */
 
@@ -44,13 +59,28 @@ const ITALIC_TAGS = new Set(['i', 'em', 'cite', 'var'])
  */
 const STRONG_TAGS = new Set(['b', 'strong'])
 /**
+ * Tags that mean "set this below the line".
+ *
+ * `sub` was transparent — content kept, tag dropped — for as long as nothing
+ * downstream could set a figure below the baseline, which meant a chemical
+ * formula arrived in the book as the flat word `Na2CO3` with no record that the
+ * paper had set anything low. What a subscript is actually *drawn* as is the
+ * layout engine's decision, and it is a synthesised one: a smaller size on a
+ * lowered baseline, never the Unicode subscript figures. That is the same
+ * refusal a footnote's reference mark already makes, for the same measured
+ * reason — IM FELL English carries no U+2082 at all, and neither Cardo's italic
+ * nor its bold carries the `subs` feature, so anything resting on a glyph the
+ * face may not have would draw as a hole in the most likely configuration.
+ */
+const SUBSCRIPT_TAGS = new Set(['sub'])
+/**
  * Tags whose content is kept but whose meaning the book expresses another way.
  *
  * `sup` is the interesting one: it is nearly always a footnote reference mark,
  * and the footnote machinery finds those by looking for the bare marker in the
  * text. Keeping the digit and dropping the tag is what lets it work.
  */
-const TRANSPARENT_TAGS = new Set(['sup', 'sub', 'span', 'p', 'small'])
+const TRANSPARENT_TAGS = new Set(['sup', 'span', 'p', 'small'])
 
 export interface InlineMarkup {
   /** The text with every tag removed. */
@@ -69,6 +99,28 @@ export interface InlineMarkup {
    * omitted entirely where there is none.
    */
   strong: number[]
+  /**
+   * Stretches of `text` to set below the line, as character ranges.
+   *
+   * Character ranges rather than word indices because the thing this exists for
+   * sits inside a word — see the note at the head of this module. Ascending,
+   * non-overlapping and never touching (two adjacent ranges are merged into
+   * one), so a caller can walk them in step with the text.
+   */
+  subscript: SubscriptRange[]
+}
+
+/** Half-open character range `[from, to)` into a block's clean text. */
+export interface SubscriptRange {
+  from: number
+  to: number
+}
+
+/** The inline marks a block, a footnote or a written section carries. */
+export interface InlineMarks {
+  emphasis?: readonly number[]
+  strong?: readonly number[]
+  subscript?: readonly SubscriptRange[]
 }
 
 /** Anything that looks like a tag, closing or not, with or without attributes. */
@@ -84,20 +136,27 @@ const TAG = /<\s*(\/?)\s*([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/gu
  * in the printed text.
  */
 export function parseInlineMarkup(raw: string): InlineMarkup {
-  if (!raw.includes('<')) return { text: raw, emphasis: [], strong: [] }
+  if (!raw.includes('<')) return { text: raw, emphasis: [], strong: [], subscript: [] }
 
   // Walk the source once, building the clean text and remembering the character
   // ranges each kind of tag covered. Words are counted afterwards, from the
-  // clean text, so the indices match what the breaker will produce.
+  // clean text, so the indices match what the breaker will produce — except for
+  // the subscript ranges, which are kept as they stand.
   let text = ''
-  const ranges = { italic: [] as Range[], strong: [] as Range[] }
-  const open = { italic: [] as number[], strong: [] as number[] }
+  const ranges = { italic: [] as Range[], strong: [] as Range[], sub: [] as Range[] }
+  const open = { italic: [] as number[], strong: [] as number[], sub: [] as number[] }
   let last = 0
 
   for (const match of raw.matchAll(TAG)) {
     const [whole, closing, rawName] = match
     const name = (rawName ?? '').toLowerCase()
-    const kind = ITALIC_TAGS.has(name) ? 'italic' : STRONG_TAGS.has(name) ? 'strong' : null
+    const kind = ITALIC_TAGS.has(name)
+      ? 'italic'
+      : STRONG_TAGS.has(name)
+        ? 'strong'
+        : SUBSCRIPT_TAGS.has(name)
+          ? 'sub'
+          : null
     if (!kind && !TRANSPARENT_TAGS.has(name)) continue
 
     text += raw.slice(last, match.index)
@@ -115,12 +174,14 @@ export function parseInlineMarkup(raw: string): InlineMarkup {
 
   // An unclosed tag marks the rest of the block, which is what it asked for and
   // the least surprising reading of a mistake.
-  for (const kind of ['italic', 'strong'] as const) {
+  for (const kind of ['italic', 'strong', 'sub'] as const) {
     for (const start of open[kind]) ranges[kind].push({ start, end: text.length })
   }
 
+  const subscript = mergeRanges(ranges.sub)
+
   if (ranges.italic.length === 0 && ranges.strong.length === 0) {
-    return { text, emphasis: [], strong: [] }
+    return { text, emphasis: [], strong: [], subscript }
   }
 
   // Map character ranges onto word indices, counting words exactly as
@@ -145,12 +206,33 @@ export function parseInlineMarkup(raw: string): InlineMarkup {
   }
 
   const sorted = (set: Set<number>): number[] => [...set].sort((a, b) => a - b)
-  return { text, emphasis: sorted(emphasis), strong: sorted(strong) }
+  return { text, emphasis: sorted(emphasis), strong: sorted(strong), subscript }
 }
 
 interface Range {
   start: number
   end: number
+}
+
+/**
+ * Overlapping and touching ranges folded into one list, ascending.
+ *
+ * `Na<sub>2</sub><sub>3</sub>` and `Na<sub>23</sub>` describe the same page, so
+ * they had better produce the same record: a serialiser that emitted two
+ * adjacent pairs of tags would round-trip to a different string every time.
+ * Empty ranges are dropped — `<sub></sub>` marks nothing.
+ */
+function mergeRanges(ranges: readonly Range[]): SubscriptRange[] {
+  const sorted = [...ranges]
+    .filter((r) => r.end > r.start)
+    .sort((a, b) => a.start - b.start || a.end - b.end)
+  const out: SubscriptRange[] = []
+  for (const r of sorted) {
+    const last = out[out.length - 1]
+    if (last && r.start <= last.to) last.to = Math.max(last.to, r.end)
+    else out.push({ from: r.start, to: r.end })
+  }
+  return out
 }
 
 /**
@@ -171,45 +253,73 @@ interface Range {
  *
  * Contiguous emphasised words share one pair of tags, so a phrase reads as a
  * phrase rather than as five tagged words.
+ *
+ * The marks arrive as one object rather than as a run of positional arguments,
+ * and that is a fix rather than a tidy-up. `strong` was added as a third
+ * positional and `drive.mjs body` went on calling this with two — so an edit
+ * written against what the driver handed back and posted straight back as a
+ * `text` edit silently stripped every bold run in the block, because
+ * `applyEdits` re-derives the marks from the notation it is given. A block, a
+ * footnote and a prepared note all carry these three fields under these three
+ * names, so every call site can now pass the thing itself and cannot forget a
+ * kind it has never heard of.
  */
-export function withMarkup(
-  text: string,
-  emphasis: readonly number[] | undefined,
-  strong?: readonly number[]
-): string {
-  if (!emphasis?.length && !strong?.length) return text
-  const marks = [
+export function withMarkup(text: string, marks: InlineMarks | undefined): string {
+  const emphasis = marks?.emphasis
+  const strong = marks?.strong
+  const subscript = marks?.subscript
+  if (!emphasis?.length && !strong?.length && !subscript?.length) return text
+  const runs = [
     { words: new Set(strong ?? []), tag: 'b', inside: false },
     { words: new Set(emphasis ?? []), tag: 'i', inside: false }
   ]
 
   let out = ''
   let index = 0
+  let cursor = 0
   for (const part of text.split(/(\s+)/u)) {
     if (part.length === 0) continue
     if (/^\s+$/u.test(part)) {
       out += part
+      cursor += part.length
       continue
     }
     // Closing runs before opening any, and in reverse, so the tags nest:
     // `<b><i>…</i></b>` and never `<b><i>…</b></i>`.
-    for (const mark of [...marks].reverse()) {
-      if (mark.inside && !mark.words.has(index)) {
-        out = out.replace(/(\s*)$/u, `</${mark.tag}>$1`)
-        mark.inside = false
+    for (const run of [...runs].reverse()) {
+      if (run.inside && !run.words.has(index)) {
+        out = out.replace(/(\s*)$/u, `</${run.tag}>$1`)
+        run.inside = false
       }
     }
-    for (const mark of marks) {
-      if (!mark.inside && mark.words.has(index)) {
-        out += `<${mark.tag}>`
-        mark.inside = true
+    for (const run of runs) {
+      if (!run.inside && run.words.has(index)) {
+        out += `<${run.tag}>`
+        run.inside = true
       }
     }
-    out += part
+    // `<sub>` opens and closes inside one word, so it always nests innermost
+    // and never has to be closed and reopened around a word boundary.
+    out += subscript?.length ? taggedWord(part, cursor, subscript) : part
+    cursor += part.length
     index += 1
   }
-  for (const mark of [...marks].reverse()) if (mark.inside) out += `</${mark.tag}>`
+  for (const run of [...runs].reverse()) if (run.inside) out += `</${run.tag}>`
   return out
+}
+
+/** One word with `<sub>` put back wherever a range covers part of it. */
+function taggedWord(word: string, start: number, ranges: readonly SubscriptRange[]): string {
+  let out = ''
+  let at = 0
+  for (const range of ranges) {
+    const from = Math.max(range.from - start, 0)
+    const to = Math.min(range.to - start, word.length)
+    if (to <= from || from >= word.length) continue
+    out += word.slice(at, from) + '<sub>' + word.slice(from, to) + '</sub>'
+    at = to
+  }
+  return out + word.slice(at)
 }
 
 /**
@@ -221,6 +331,63 @@ export function withMarkup(
  */
 export function shiftEmphasis(emphasis: readonly number[], by: number): number[] {
   return emphasis.map((i) => i + by)
+}
+
+/**
+ * Subscript ranges carried onto a string the text has been folded into.
+ *
+ * The word-index kinds shift by a word count and that is the whole of it. A
+ * character range cannot: assembly does not merely move a block's text, it
+ * *edits* it on the way — trimming the ends, healing a hyphen across a page
+ * seam, taking soft hyphens out, stripping a footnote's leading marker — and
+ * every one of those deletions moves the characters after it.
+ *
+ * So the map is built rather than assumed. `after` must be `before` with
+ * characters deleted and nothing else, which is what all four of those
+ * transformations are; a two-pointer walk then says where each original
+ * character ended up, and `at` says where `after` was placed in the
+ * destination. A range whose text was deleted outright collapses to nothing
+ * and is dropped, which is the right answer: there is no character left under
+ * it.
+ *
+ * Returns null when `after` is not a deletion of `before`, because a caller
+ * that has changed the text some other way is asking a question this cannot
+ * answer, and a guess would put a figure under the wrong letter.
+ */
+export function rebaseRanges(
+  ranges: readonly SubscriptRange[] | undefined,
+  before: string,
+  after: string,
+  at: number
+): SubscriptRange[] | null {
+  if (!ranges?.length) return []
+  // `map[i]` is where `before[i]` sits in the destination; `map[before.length]`
+  // is the end, so a range's exclusive `to` maps like any other index.
+  const map = new Array<number>(before.length + 1)
+  let j = 0
+  for (let i = 0; i < before.length; i++) {
+    if (j < after.length && after[j] === before[i]) {
+      map[i] = at + j
+      j += 1
+    } else {
+      // Deleted: anything anchored here collapses onto what follows it.
+      map[i] = at + j
+    }
+  }
+  map[before.length] = at + j
+  if (j !== after.length) return null
+  const out: SubscriptRange[] = []
+  for (const range of ranges) {
+    const from = map[Math.max(0, Math.min(before.length, range.from))]!
+    const to = map[Math.max(0, Math.min(before.length, range.to))]!
+    if (to > from) out.push({ from, to })
+  }
+  return out
+}
+
+/** Subscript ranges moved along by a fixed number of characters. */
+export function shiftRanges(ranges: readonly SubscriptRange[], by: number): SubscriptRange[] {
+  return ranges.map((r) => ({ from: r.from + by, to: r.to + by }))
 }
 
 /** How many whitespace-separated words a string holds, counted as the breaker does. */

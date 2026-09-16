@@ -506,8 +506,7 @@ export function ProofSheet({
             // edition has to print is invisible here — impossible to confirm,
             // impossible to add where the pass missed it, and quietly discarded
             // by retyping the paragraph. `applyEdits` reads them straight back.
-            const text =
-              currentText.get(block.id) ?? withMarkup(block.text, block.emphasis, block.strong)
+            const text = currentText.get(block.id) ?? withMarkup(block.text, block)
             const kind = currentKind.get(block.id) ?? block.kind
             const isDropped = dropped.has(block.id)
             // A memo or a highlight is a message about the block, not a change

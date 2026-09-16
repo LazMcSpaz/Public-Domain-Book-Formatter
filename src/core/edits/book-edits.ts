@@ -490,7 +490,8 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
             text: edit.text,
             ...(block.cells ? { cells: undefined } : {}),
             ...(block.emphasis ? { emphasis: undefined } : {}),
-            ...(block.strong ? { strong: undefined } : {})
+            ...(block.strong ? { strong: undefined } : {}),
+            ...(block.subscript ? { subscript: undefined } : {})
           })
         )
         break
@@ -620,12 +621,13 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
         kind: 'paragraph',
         text: corrected.replace(/\s+/gu, ' ').trim()
       })
-      const { emphasis: _emphasis, strong: _strong, ...rest } = note
+      const { emphasis: _emphasis, strong: _strong, subscript: _sub, ...rest } = note
       return {
         ...rest,
         text: marked.text,
         ...(marked.emphasis?.length ? { emphasis: marked.emphasis } : {}),
-        ...(marked.strong?.length ? { strong: marked.strong } : {})
+        ...(marked.strong?.length ? { strong: marked.strong } : {}),
+        ...(marked.subscript?.length ? { subscript: marked.subscript } : {})
       }
     })
     .filter((note) => note.text.trim().length > 0)
@@ -646,6 +648,7 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
       text: marked.text,
       ...(marked.emphasis?.length ? { emphasis: marked.emphasis } : {}),
       ...(marked.strong?.length ? { strong: marked.strong } : {}),
+      ...(marked.subscript?.length ? { subscript: marked.subscript } : {}),
       pageIndex: block.sourcePages[0] ?? 0,
       orphaned: false,
       anchor: { blockId: note.blockId, at: note.at }

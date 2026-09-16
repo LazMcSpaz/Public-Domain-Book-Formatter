@@ -93,7 +93,7 @@ export function memoSheet(doc: BookDocument, edits: readonly BookEdit[]): MemoCo
         at: memo.at,
         text: memo.text,
         resolved: memo.resolved ?? null,
-        blockText: block ? withMarkup(block.text, block.emphasis, block.strong) : null,
+        blockText: block ? withMarkup(block.text, block) : null,
         sourcePages: block ? [...block.sourcePages] : [],
         where: block ? whereabouts(block.text, memo.at) : 'a block that is no longer in the book'
       }

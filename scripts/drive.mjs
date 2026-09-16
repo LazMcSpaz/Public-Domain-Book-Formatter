@@ -2013,7 +2013,7 @@ async function serve() {
               id: b.id,
               kind: b.kind,
               pages: b.sourcePages,
-              text: markup.withMarkup(b.text, b.emphasis)
+              text: markup.withMarkup(b.text, b)
             }))
           return {
             edited: say(applied.blocks),
@@ -4144,7 +4144,7 @@ async function serve() {
           // With the `<i>` and `<b>` tags on, exactly as `body` hands it back
           // and exactly as `applyEdits` reads it in — a correction typed
           // against the bare text would strip every emphasis in the block.
-          const before = markup.withMarkup(block.text, block.emphasis, block.strong)
+          const before = markup.withMarkup(block.text, block)
 
           let text = replacement
           if (text === null) {
@@ -4238,7 +4238,7 @@ async function serve() {
           let replaced = 0
 
           for (const block of doc.blocks) {
-            const text = markup.withMarkup(block.text, block.emphasis, block.strong)
+            const text = markup.withMarkup(block.text, block)
             const matches = editsMod.findMatches(text, was, matchCase)
             if (matches.length === 0) continue
             found.push({
@@ -4278,7 +4278,7 @@ async function serve() {
           // `note-text` record that exists for exactly this reach.
           for (const note of doc.footnotes) {
             if (!note.originalMarker) continue
-            const text = markup.withMarkup(note.text, note.emphasis, note.strong)
+            const text = markup.withMarkup(note.text, note)
             const matches = editsMod.findMatches(text, was, matchCase)
             if (matches.length === 0) continue
             found.push({

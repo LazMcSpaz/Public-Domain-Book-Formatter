@@ -25,11 +25,13 @@ import {
   type SynopsisEntry
 } from '@core/pages'
 import {
+  rebaseRanges,
   shiftEmphasis,
   tableToText,
   wordCount,
   type BlockKind,
   type PageTranscription,
+  type SubscriptRange,
   type TranscribedBlock
 } from '@core/transcribe'
 
@@ -91,6 +93,8 @@ export interface Footnote {
   emphasis?: number[]
   /** Word indices the note sets bold. See `TranscribedBlock.strong`. */
   strong?: number[]
+  /** Character ranges the note sets below the line. See `TranscribedBlock.subscript`. */
+  subscript?: SubscriptRange[]
   /** Page the note was printed on. */
   pageIndex: number
   /** True when no body text referenced this marker. */
@@ -603,6 +607,21 @@ export function assembleBook(
               ...block.strong.map((i) => i + shift)
             ]
           }
+          // Character ranges cannot ride a word count. `joined` is the note's
+          // own text with this block's trimmed onto the end of it, so the map
+          // is built against that trimmed tail and placed where it landed.
+          if (block.subscript?.length) {
+            const tail = block.text.trim()
+            const moved = rebaseRanges(
+              block.subscript,
+              block.text,
+              tail,
+              joined.length - tail.length
+            )
+            if (moved?.length) {
+              previousNote.subscript = [...(previousNote.subscript ?? []), ...moved]
+            }
+          }
           previousNote.text = joined
           continue
         }
@@ -626,12 +645,16 @@ export function assembleBook(
         const shift = wordCount(raw) - wordCount(text)
         const emphasis = block.emphasis?.map((i) => i - shift).filter((i) => i >= 0)
         const strong = block.strong?.map((i) => i - shift).filter((i) => i >= 0)
+        // The same removal, read as characters: the marker and the soft hyphens
+        // both come off the front and the middle, and a range has to follow.
+        const subscript = rebaseRanges(block.subscript, block.text, text, 0) ?? []
         footnotes.push({
           id: `fn${footnotes.length + 1}`,
           originalMarker: marker,
           text,
           ...(emphasis?.length ? { emphasis } : {}),
           ...(strong?.length ? { strong } : {}),
+          ...(subscript.length ? { subscript } : {}),
           pageIndex: page.pageIndex,
           orphaned: false
         })
@@ -660,7 +683,24 @@ export function assembleBook(
             ...shiftEmphasis(block.strong, wordCount(previous.text))
           ]
         }
-        previous.text = stripSoftHyphens(joinText(previous.text, block.text))
+        const joinedText = stripSoftHyphens(joinText(previous.text, block.text))
+        // `joinText` only ever trims the front of the second half and heals a
+        // hyphen on the back of the first, so the second half arrives at the
+        // end of the join intact — its ranges are mapped through the same
+        // trimming and soft-hyphen removal and placed there.
+        if (block.subscript?.length) {
+          const tail = stripSoftHyphens(block.text.trimStart())
+          const moved = rebaseRanges(
+            block.subscript,
+            block.text,
+            tail,
+            joinedText.length - tail.length
+          )
+          if (moved?.length) {
+            previous.subscript = [...(previous.subscript ?? []), ...moved]
+          }
+        }
+        previous.text = joinedText
         if (!previous.sourcePages.includes(page.pageIndex)) {
           previous.sourcePages.push(page.pageIndex)
         }
@@ -668,11 +708,16 @@ export function assembleBook(
         continue
       }
 
+      // A soft hyphen taken out of the middle of a block moves every character
+      // after it, so a range recorded against the raw text has to come with it.
+      const clean = stripSoftHyphens(block.text)
+      const rebased = rebaseRanges(block.subscript, block.text, clean, 0) ?? []
       target.push(
         cleaned({
           ...block,
           id: `p${page.pageIndex}b${blockIndex}`,
-          text: stripSoftHyphens(block.text),
+          text: clean,
+          ...(rebased.length ? { subscript: rebased } : { subscript: undefined }),
           sourcePages: [page.pageIndex]
         })
       )

@@ -37,6 +37,7 @@ import {
 } from 'tex-linebreak'
 import patterns from 'hyphenation.en-us'
 import type { TextMeasurer } from './measure'
+import type { SubscriptRange } from '@core/transcribe'
 import type { FontRef } from './types'
 
 /** How a paragraph's lines are set within the measure. */
@@ -120,6 +121,18 @@ export interface BreakParagraphOptions {
   /** Spans set differently from the paragraph, glued to the end of a word. */
   attachments?: readonly Attachment[]
   /**
+   * Stretches of the paragraph's text to set below the line, as character
+   * ranges — a chemical formula's figures, and nothing else so far.
+   *
+   * Character ranges rather than word indices because the figures sit *inside*
+   * a word: `Na2CO3` is one word to the breaker and only two of its characters
+   * drop. A word carrying any of these is emitted as several boxes with no
+   * break between them, which also means such a word is never hyphenated: a
+   * formula split across two lines is not a line-break decision anyone wants
+   * the algorithm making.
+   */
+  subscripts?: readonly SubscriptRange[]
+  /**
    * Runs set in a face other than the paragraph's own, by word index.
    *
    * The breaker has to know, rather than the renderer alone: italic and bold
@@ -183,6 +196,27 @@ const RAGGED_STRETCH = 6
  * the same restraint about hyphenating at all.
  */
 const HYPHEN_PENALTY = 50
+
+/**
+ * How big a subscript figure is, as a fraction of the type it sits in.
+ *
+ * Measured off the 1877 page rather than taken from a handbook: the displayed
+ * reaction on leaf 520 of _Isis Unveiled_ Vol. I, rendered at 600 DPI and read
+ * with `scripts/lib/ink.mjs`, sets its capitals 49 pixels tall and its
+ * subscript figures 26, on both of its two lines. 26/49 is this number.
+ */
+const SUBSCRIPT_SCALE = 0.53
+/**
+ * How far a subscript drops below the baseline, as a fraction of cap height.
+ *
+ * From the same measurement: the capitals sit on a baseline at row 173 and the
+ * subscript figures reach row 187, so the drop is 14 pixels against a 49-pixel
+ * capital. Of cap height rather than of the em because that is what it was
+ * measured against, and because the em would make it a different depth in
+ * every face — Crimson Pro's capitals are 0.573 of its em and Libre
+ * Baskerville's are 0.770.
+ */
+const SUBSCRIPT_DROP = 0.286
 
 /** `\parfillskip`: the last line may end anywhere, so its slack is free. */
 const PARAGRAPH_FILL_STRETCH = 1e6
@@ -275,7 +309,11 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
     items.push(box('', indent, -1))
   }
 
-  const words = text.split(/\s+/u).filter((w) => w.length > 0)
+  // Matched rather than split, because a subscript is a character range into
+  // this same string and the words have to be locatable in it. `/\S+/` and
+  // `split(/\s+/).filter(Boolean)` produce the same list, by construction.
+  const found = [...text.matchAll(/\S+/gu)]
+  const words = found.map((m) => m[0])
 
   // Grouped so a word carrying two marks gets both, in order.
   const attachments = new Map<number, Attachment[]>()
@@ -285,8 +323,61 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
     else attachments.set(attachment.wordIndex, [attachment])
   }
 
+  const subscripts = options.subscripts ?? []
+  // Asked once: it is a lookup per face and the answer is the same for every
+  // word in the paragraph.
+  const subSizePt = sizePt * SUBSCRIPT_SCALE
+  const subRisePt = subscripts.length
+    ? -measurer.metrics(font, sizePt).capHeight * SUBSCRIPT_DROP
+    : 0
+
   words.forEach((word, i) => {
     if (i > 0) items.push(glue(spaceWidth, stretch, shrink))
+
+    const at = found[i]!.index
+    const dropped = subscripts.filter((r) => r.from < at + word.length && r.to > at)
+    if (dropped.length > 0) {
+      // A word with a figure below the line is set as its own little sequence
+      // of boxes and is never hyphenated: `Na2CO3` broken across two lines is
+      // not a decision worth letting the algorithm make.
+      let cut = 0
+      for (const range of dropped) {
+        const from = Math.max(range.from - at, 0)
+        const to = Math.min(range.to - at, word.length)
+        if (to <= from) continue
+        if (from > cut) {
+          const plain = word.slice(cut, from)
+          items.push(box(plain, width(plain, i), i))
+        }
+        const low = word.slice(from, to)
+        const figure: TextBox = {
+          type: 'box',
+          width: measurer.widthOf(low, fontAt(i), subSizePt),
+          text: low,
+          source: i,
+          sizePt: subSizePt,
+          risePt: subRisePt
+        }
+        items.push(figure)
+        cut = to
+      }
+      if (cut < word.length) {
+        const plain = word.slice(cut)
+        items.push(box(plain, width(plain, i), i))
+      }
+      for (const attachment of attachments.get(i) ?? []) {
+        const mark: TextBox = {
+          type: 'box',
+          width: measurer.widthOf(attachment.text, font, attachment.sizePt),
+          text: attachment.text,
+          source: i,
+          sizePt: attachment.sizePt,
+          risePt: attachment.risePt
+        }
+        items.push(mark)
+      }
+      return
+    }
 
     const pieces = hyphenate ? hyphenate(word) : [word]
     if (pieces.length <= 1) {

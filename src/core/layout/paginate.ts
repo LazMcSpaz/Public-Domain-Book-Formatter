@@ -25,6 +25,7 @@ import { findOrnament, type OrnamentArt } from '@core/ornament'
 import { headingRunEnd } from '@core/assemble'
 import type { BookBlock, BookDocument, BookSection, Illustration } from '@core/assemble'
 import { effectiveDpi } from '@core/image'
+import { rebaseRanges, shiftRanges, type SubscriptRange } from '@core/transcribe'
 import {
   breakParagraph,
   fontForWord,
@@ -904,7 +905,8 @@ function breakNote(note: PreparedNote, ctx: BuildContext): NoteBlock {
     lineWidths: Math.max(1, ctx.measureWidth - hang),
     alignment: 'left',
     ...(ctx.hyphenate ? { hyphenate: ctx.hyphenate } : {}),
-    ...(spans.length > 0 ? { spans } : {})
+    ...(spans.length > 0 ? { spans } : {}),
+    ...(note.subscript?.length ? { subscripts: note.subscript } : {})
   })
 
   const lines = toFlowLines(broken, font, sizePt, [hang], undefined, undefined, spans)
@@ -1075,6 +1077,19 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
       ? spansFor(ctx, family, style.style, block.emphasis, block.strong)
       : []
 
+  /**
+   * Figures the original set below the line, as character ranges.
+   *
+   * Offered only when the text being broken *is* the block's own text. A
+   * running head cut to fit, a line upper-cased because the face has no real
+   * small capitals, a caption supplied through `opts.text` — each is a
+   * different string, and a character range measured against one of them and
+   * applied to another would put a figure under whatever letter now sits
+   * there. Dropping them is safe where keeping them would not be: a heading
+   * has no chemistry in it.
+   */
+  const subscripts = text === block.text ? (block.subscript ?? []) : []
+
   // A paragraph with a figure in it or beside it is built round the figure.
   // The drop capital gives way: both change the measure of the opening lines,
   // and a paragraph that has an engraving set into it has its ornament already.
@@ -1090,6 +1105,7 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
         attachments,
         markToNote,
         spans,
+        subscripts,
         style,
         ctx
       })
@@ -1109,7 +1125,8 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
       ...(block.kind === 'paragraph' || block.kind === 'blockquote'
         ? { hyphenate: ctx.hyphenate }
         : {}),
-      ...(spans.length > 0 ? { spans } : {})
+      ...(spans.length > 0 ? { spans } : {}),
+      ...(subscripts.length > 0 ? { subscripts } : {})
     })
     // A chapter opener may carry a flourish under its title. It belongs to the
     // heading's own lines so the two can never be separated by a page break.
@@ -1175,7 +1192,8 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
     block.id,
     buildDropCapFlowable(text, font, sizePt, indentLeft, measure, ctx, style, {
       attachments,
-      markToNote
+      markToNote,
+      subscripts
     })
   )
 }
@@ -1253,6 +1271,7 @@ interface FigureParams {
   attachments: readonly Attachment[]
   markToNote: ReadonlyMap<string, string>
   spans: readonly TextSpan[]
+  subscripts: readonly SubscriptRange[]
   style: BlockStyle
   ctx: BuildContext
 }
@@ -1344,14 +1363,32 @@ function buildFigureFlowable(
       .filter((a) => a.wordIndex >= wordAt)
       .map((a) => ({ ...a, wordIndex: a.wordIndex - wordAt }))
 
-    const set = (part: string, first: number, spans: TextSpan[], attachments: Attachment[]) =>
+    // The two halves are rebuilt by joining words with single spaces, so a
+    // character range has to be mapped onto that normalised text before it can
+    // be cut in two at the word the figure interrupts.
+    const joinedAll = words.join(' ')
+    const normalised = rebaseRanges(p.subscripts, text, joinedAll, 0) ?? []
+    const cut = before.length === 0 ? 0 : before.length + 1
+    const subsBefore = normalised.filter((r) => r.to <= cut)
+    const subsAfter = normalised
+      .filter((r) => r.from >= cut)
+      .map((r) => ({ from: r.from - cut, to: r.to - cut }))
+
+    const set = (
+      part: string,
+      first: number,
+      spans: TextSpan[],
+      attachments: Attachment[],
+      subscripts: readonly SubscriptRange[]
+    ) =>
       part.length === 0
         ? []
         : toFlowLines(
             breakParagraph(part, {
               ...base(measure, first),
               ...(attachments.length > 0 ? { attachments } : {}),
-              ...(spans.length > 0 ? { spans } : {})
+              ...(spans.length > 0 ? { spans } : {}),
+              ...(subscripts.length > 0 ? { subscripts } : {})
             }),
             font,
             sizePt,
@@ -1361,9 +1398,9 @@ function buildFigureFlowable(
             spans
           )
 
-    const linesBefore = set(before, p.firstIndent, spansBefore, attBefore)
+    const linesBefore = set(before, p.firstIndent, spansBefore, attBefore, subsBefore)
     // Resumes flush: it is the same sentence, not a new paragraph.
-    const linesAfter = set(after, 0, spansAfter, attAfter)
+    const linesAfter = set(after, 0, spansAfter, attAfter, subsAfter)
     const held: FlowLine[] = [
       ...Array.from({ length: IMAGE_SPACE_SLOTS }, () => ({ runs: [], holdWithNext: true })),
       ...Array.from({ length: slots }, (_, i): FlowLine => ({
@@ -1387,7 +1424,8 @@ function buildFigureFlowable(
     breakParagraph(text, {
       ...base(widths, p.firstIndent),
       ...(p.attachments.length > 0 ? { attachments: p.attachments } : {}),
-      ...(p.spans.length > 0 ? { spans: p.spans } : {})
+      ...(p.spans.length > 0 ? { spans: p.spans } : {}),
+      ...(p.subscripts.length > 0 ? { subscripts: p.subscripts } : {})
     })
 
   let start = lineOfWord(breakWith(measure), wordAt)
@@ -1618,7 +1656,11 @@ function buildDropCapFlowable(
   measure: number,
   ctx: BuildContext,
   style: BlockStyle,
-  notes: { attachments: readonly Attachment[]; markToNote: ReadonlyMap<string, string> }
+  notes: {
+    attachments: readonly Attachment[]
+    markToNote: ReadonlyMap<string, string>
+    subscripts: readonly SubscriptRange[]
+  }
 ): Flowable {
   const initial = [...text.trim()][0] ?? ''
   const rest = text.trim().slice(initial.length).replace(/^\s+/u, '')
@@ -1631,6 +1673,13 @@ function buildDropCapFlowable(
   const attachments = notes.attachments
     .map((a) => ({ ...a, wordIndex: a.wordIndex - shift }))
     .filter((a) => a.wordIndex >= 0)
+  // The initial and the space after it come off the front, so the ranges move
+  // back by however many characters that was — the word indices' own rule, in
+  // the coordinate a range is counted in.
+  const lead = text.length - rest.length
+  const subscripts = (notes.subscripts ?? [])
+    .filter((r) => r.from >= lead)
+    .map((r) => ({ from: r.from - lead, to: r.to - lead }))
 
   const build = (depth: number): { lines: FlowLine[]; capSize: number; capWidth: number } => {
     // A capital's height is roughly 0.7em in a book face, so an initial that
@@ -1648,6 +1697,7 @@ function buildDropCapFlowable(
       lineWidths: widths,
       alignment: style.alignment,
       ...(attachments.length > 0 ? { attachments } : {}),
+      ...(subscripts.length > 0 ? { subscripts } : {}),
       ...(ctx.hyphenate ? { hyphenate: ctx.hyphenate } : {})
     })
     const offsets = [...Array.from({ length: depth }, () => indentLeft + capWidth), indentLeft]
@@ -2100,6 +2150,16 @@ export function layout(
             ...(note.strong?.length
               ? {
                   strong: note.originalMarker.trim() ? note.strong.map((i) => i + 1) : note.strong
+                }
+              : {}),
+            // The same prepend, counted in characters: the marker and the space
+            // after it push every range along by exactly their own length.
+            ...(note.subscript?.length
+              ? {
+                  subscript: shiftRanges(
+                    note.subscript,
+                    note.originalMarker.trim() ? note.originalMarker.trim().length + 1 : 0
+                  )
                 }
               : {}),
             sourcePages: []

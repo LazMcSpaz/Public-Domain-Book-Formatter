@@ -81,7 +81,8 @@ function diskFontTable(): FontTable {
       return {
         ascent: face.font.ascent * scale,
         descent: Math.abs(face.font.descent) * scale,
-        lineGap: face.font.lineGap * scale
+        lineGap: face.font.lineGap * scale,
+        capHeight: (face.font.capHeight || face.font.unitsPerEm * 0.7) * scale
       }
     },
     bytesFor: (ref) => faceFor(ref).bytes,
@@ -316,6 +317,90 @@ describe('renderPdf — a strong run reaches the page', () => {
     let all = ''
     for (let i = 0; i < reopened.numPages; i++) all += ` ${await textOfPage(reopened, i)}`
     expect(all).toContain('Aerolite. A stony meteorite')
+  })
+})
+
+/**
+ * A chemical formula, which is the one inline kind that sits inside a word.
+ *
+ * Worth its own end-to-end test for a reason the other two do not have: a
+ * subscript is not a face, it is a *size and a baseline*, so nothing about it
+ * shows up in `fontsUsed` and the two checks above would pass with every figure
+ * drawn flat in the middle of the line. What discriminates is the geometry of
+ * the drawn runs — smaller, and lower than the letters either side of them —
+ * and that the word still copies out as one word rather than as four pieces.
+ */
+describe('renderPdf — a figure below the line reaches the page', () => {
+  const withFormula = async () => {
+    const fonts = diskFontTable()
+    const body: BookBlock = {
+      ...block('paragraph', 'The chemist writes Na2CO3 and means washing soda by it.'),
+      subscript: [
+        { from: 21, to: 22 },
+        { from: 24, to: 25 }
+      ]
+    }
+    const book = layout(
+      { ...DOCUMENT, blocks: [block('heading', 'Chemistry', 1), body] },
+      { ...defaultStyleProfile(), dropCap: false },
+      fonts,
+      { edition: EDITION, hyphenate: englishHyphenator() }
+    )
+    const pdf = await renderPdf(book, fonts, { title: EDITION.title, author: EDITION.author })
+    return { book, pdf }
+  }
+
+  /** Every drawn run of the finished file, with its size and its baseline. */
+  const drawnRuns = async (bytes: Uint8Array) => {
+    const reopened = await reopen(bytes)
+    const runs: { text: string; height: number; y: number }[] = []
+    for (let i = 0; i < reopened.numPages; i++) {
+      const content = await (await reopened.getPage(i + 1)).getTextContent()
+      for (const item of content.items) {
+        if (!('str' in item) || item.str.trim().length === 0) continue
+        runs.push({ text: item.str, height: item.height, y: item.transform[5] as number })
+      }
+    }
+    return runs
+  }
+
+  it('draws the figures smaller than the letters beside them', async () => {
+    const { pdf } = await withFormula()
+    const runs = await drawnRuns(pdf.bytes)
+    const na = runs.find((r) => r.text === 'Na')
+    const two = runs.find((r) => r.text === '2')
+    expect(na).toBeDefined()
+    expect(two).toBeDefined()
+    expect(two!.height).toBeLessThan(na!.height)
+  })
+
+  it('sets them below the baseline the letters sit on, not above it', async () => {
+    const { pdf } = await withFormula()
+    const runs = await drawnRuns(pdf.bytes)
+    const na = runs.find((r) => r.text === 'Na')!
+    const two = runs.find((r) => r.text === '2')!
+    const co = runs.find((r) => r.text === 'CO')!
+    expect(two.y).toBeLessThan(na.y)
+    // The letters either side share one baseline: only the figure moved.
+    expect(co.y).toBeCloseTo(na.y, 3)
+  })
+
+  it('still copies out as the formula, in order and with nothing lost', async () => {
+    const { pdf } = await withFormula()
+    // Joined without a separator, because `textOfPage` puts a space between
+    // every drawn run and a formula is four abutting runs — the space is the
+    // test helper's, not the file's. What the file has to get right is that
+    // every piece is there, in order, as real characters: a glyph with no
+    // `ToUnicode` entry is what turns a page into line noise, and it would
+    // show up here as a gap rather than as spacing.
+    const runs = await drawnRuns(pdf.bytes)
+    expect(runs.map((r) => r.text).join('')).toContain('Na2CO3')
+
+    const reopened = await reopen(pdf.bytes)
+    let all = ''
+    for (let i = 0; i < reopened.numPages; i++) all += ` ${await textOfPage(reopened, i)}`
+    expect(all).toContain('The chemist writes')
+    expect(all).toContain('means washing soda')
   })
 })
 

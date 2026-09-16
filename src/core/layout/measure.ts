@@ -22,6 +22,17 @@ export interface FontMetrics {
   descent: number
   /** The font's own recommended extra space between lines. Often zero. */
   lineGap: number
+  /**
+   * Baseline to the top of a capital, in points. Positive.
+   *
+   * Read from the face rather than taken as a constant because it is what a
+   * subscript is positioned against, and the seven faces offered disagree
+   * about it far more than they look as though they do: 0.573 of the em in
+   * Crimson Pro against 0.770 in Libre Baskerville. A drop fixed in ems would
+   * be a third too deep in one and visibly shallow in the other, which is the
+   * same mistake as measuring a page with the wrong ruler.
+   */
+  capHeight: number
 }
 
 export interface TextMeasurer {
@@ -65,7 +76,8 @@ export function fixedWidthMeasurer(emRatio = 0.5): TextMeasurer {
     metrics: (_font, sizePt) => ({
       ascent: sizePt * 0.75,
       descent: sizePt * 0.25,
-      lineGap: 0
+      lineGap: 0,
+      capHeight: sizePt * 0.7
     }),
     // The fixed-width measurer stands in for a font it does not have, so it
     // reports the capability the engine's default path assumes: none.
