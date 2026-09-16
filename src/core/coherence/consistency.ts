@@ -59,16 +59,19 @@ export interface ConsistencyFinding {
    * quotation was closed with one mark and the outer left open. That is the
    * period's ordinary shortcut and, measured on *Isis Unveiled*, the shop's
    * own practice: 32 nested quotations closed with one mark against 5 with two.
-   * `continues`: no closing mark follows in the block, but the quotation goes
-   * on past a displayed extract (verse, a table, a list set as blockquotes)
-   * and either re-opens on the first prose paragraph after it, the convention
-   * the style books teach, or closes there; the reader loses nothing. On
-   * *Isis Unveiled* that is pp. 96, 99, 602 and 620, each left open across
-   * verses or a numbered list. `never-closed`: no closing mark follows in the
-   * block and nothing past it takes the quotation up, which no convention
-   * explains. Of the thirty-one findings ruled on that volume as a class the
-   * sheet could not say which were this, and a person had to find them by
-   * reading all thirty-one. This is the field that names them.
+   * `continues`: no closing mark follows in the block, but a convention could
+   * account for it — past any displayed extract (verse, a table, a list set
+   * as blockquotes) the first prose paragraph either opens with a mark, which
+   * is how the style books continue a quotation, or closes one. A convention
+   * that *could* account for it is not proof that it does: a fresh quotation
+   * opening at the head of the next paragraph looks identical, and p. 250 of
+   * *Isis Unveiled* is exactly that, so this shape still wants a reader,
+   * though a quicker one. `never-closed`: nothing past the block takes the
+   * quotation up at all, which no convention explains. Of the thirty-one
+   * findings ruled on that volume as a class the sheet could not say which
+   * were which, and a person had to read all thirty-one; measured after, they
+   * were 23 closed once, 5 continuing and 2 never closed. This is the field
+   * that names them.
    */
   shape?: 'closed-once' | 'continues' | 'never-closed'
 }
@@ -623,9 +626,10 @@ const QUOTE_RUNS_ON_FOR = 3
  * paragraph reached, an opening mark at its head is the re-open-every-
  * paragraph convention and a closing mark first is the run-on close; an
  * opening mark anywhere else is a new quotation, so this one was never taken
- * up. Measured on *Isis Unveiled*: this names pp. 96, 99, 602 and 620, each
- * left open across verses or a list, and leaves pp. 125, 249 and 472, which
- * nothing takes up.
+ * up. Measured on *Isis Unveiled*: this takes pp. 96, 99, 602 and 620, each
+ * left open across verses or a list, and p. 249, where what it takes for a
+ * re-opening is a fresh quotation; it leaves pp. 125 and 472, which nothing
+ * takes up.
  */
 function continuesPast(blocks: readonly BookBlock[], i: number): boolean {
   let counted = 0
