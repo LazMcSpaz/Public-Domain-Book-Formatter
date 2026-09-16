@@ -365,20 +365,67 @@ describe('the shape of an unclosed quotation', () => {
   })
 
   /**
-   * Left open across quoted verse and closed on the prose after it. Five of the
-   * thirty-one on *Isis Unveiled* were this (pp. 96, 99, 472, 602, 620), and the
+   * Left open across quoted verse and taken up on the prose after it. Four of
+   * the thirty-one on *Isis Unveiled* were this (pp. 96, 99, 602, 620), and the
    * verse block's own line-opening marks were what stopped the run-on rule from
-   * seeing the close: they are stepped over, not read.
+   * seeing past them: they are stepped over, not read.
    */
   it('names a quotation that closes after a displayed extract', () => {
     expect(
       shapeOf([
         block('The friar quotes the verses, “in the parlance of his time :'),
-        block('If ancestry can be in aught believed,', 'verse'),
-        block('“ Descending spirits have conversed with man.', 'verse'),
+        // Four lines with no mark of their own: p. 602 quotes its verses in
+        // single marks, so if verse were merely read rather than stepped over,
+        // the run-on bound would be spent on it before the prose is reached.
+        block('Ding dong! The hammer-strokes fall long and fast,', 'verse'),
+        block('Until the iron turns to steel at last!', 'verse'),
+        block('Now shall the long, long day of rest begin,', 'verse'),
+        block('The Land of Bliss Eternal calls me in!', 'verse'),
         block('and so the tale is told.”')
       ])
-    ).toEqual(['closed-after-extract'])
+    ).toEqual(['continues'])
+  })
+
+  /** The shape p. 96 actually has: verses, then a paragraph that re-opens. */
+  it('names a quotation that re-opens on the paragraph after the verses', () => {
+    expect(
+      shapeOf([
+        block(
+          'The doctrine explained by Virgil in the text of the Æneid :'.replace('The', '“ The')
+        ),
+        block('Principio cœlum ac terras camposque liquentes,', 'verse'),
+        block('and the lines following.'),
+        block('“ From this spirit, then, which is called the life of the universe.”')
+      ])
+    ).toEqual(['continues'])
+  })
+
+  /**
+   * The shape p. 99 has: a numbered list set as blockquotes, the close on the
+   * fifth item. Five one-line items are not three paragraphs of lost prose, so
+   * they do not count toward the run-on bound.
+   */
+  it('reads through a displayed list to the close on its last item', () => {
+    expect(
+      shapeOf([
+        block('“A testimony is sufficient when it rests on :', 'blockquote'),
+        block('1st. A great number of very sensible witnesses.', 'blockquote'),
+        block('2d. Who are sane, bodily and mentally.', 'blockquote'),
+        block('3d. Who are impartial and disinterested.', 'blockquote'),
+        block('4th. Who unanimously agree.', 'blockquote'),
+        block('5th. Who solemnly certify to the fact.”—VOLTAIRE.', 'blockquote')
+      ])
+    ).toEqual(['continues'])
+  })
+
+  /** An opening mark mid-paragraph after the extract is a new quotation, not this one. */
+  it('does not let a later quotation stand in for the close', () => {
+    expect(
+      shapeOf([
+        block('Yule, who quotes the friar, “in the parlance of his time :'),
+        block('Such feats are nothing beside what is done by “the jugglers of Bengal.”')
+      ])
+    ).toEqual(['never-closed'])
   })
 
   /** A sound quotation before the unmatched one must not lend it its close. */

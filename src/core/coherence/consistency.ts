@@ -59,17 +59,18 @@ export interface ConsistencyFinding {
    * quotation was closed with one mark and the outer left open. That is the
    * period's ordinary shortcut and, measured on *Isis Unveiled*, the shop's
    * own practice: 32 nested quotations closed with one mark against 5 with two.
-   * `closed-after-extract`: no closing mark follows in the block, but the
-   * blocks after it are quoted verse or a table and the first mark past them
-   * is a closing one, so the quotation was left open across a displayed
-   * extract and does close; the reader loses nothing. `never-closed`: no
-   * closing mark follows anywhere in the block or past the extract, which no
-   * convention explains. Of the thirty-one findings ruled on that volume as a
-   * class, two were `never-closed` and both were the compositor's omissions;
-   * the sheet did not say which two, and a person had to find them by reading
-   * all thirty-one. This is the field that names them.
+   * `continues`: no closing mark follows in the block, but the quotation goes
+   * on past a displayed extract (verse, a table, a list set as blockquotes)
+   * and either re-opens on the first prose paragraph after it, the convention
+   * the style books teach, or closes there; the reader loses nothing. On
+   * *Isis Unveiled* that is pp. 96, 99, 602 and 620, each left open across
+   * verses or a numbered list. `never-closed`: no closing mark follows in the
+   * block and nothing past it takes the quotation up, which no convention
+   * explains. Of the thirty-one findings ruled on that volume as a class the
+   * sheet could not say which were this, and a person had to find them by
+   * reading all thirty-one. This is the field that names them.
    */
-  shape?: 'closed-once' | 'closed-after-extract' | 'never-closed'
+  shape?: 'closed-once' | 'continues' | 'never-closed'
 }
 
 /** Words too short or too common for a one-letter difference to mean anything. */
@@ -611,6 +612,35 @@ function doubledPhrases(blocks: readonly BookBlock[]): ConsistencyFinding[] {
 /** How many blocks on a run-on quotation may close in. See `unclosedQuotes`. */
 const QUOTE_RUNS_ON_FOR = 3
 
+/**
+ * Whether a quotation left open in block `i` is taken up again past a
+ * displayed extract — the half of the run-on rule that the extract hides.
+ *
+ * Verse and tables are stepped over without being read: their marks are
+ * line-openers and dittos. Blockquotes are read but not counted toward the
+ * bound, because a numbered list of five one-line items is not three
+ * paragraphs of prose with a mark lost somewhere in them. On the first prose
+ * paragraph reached, an opening mark at its head is the re-open-every-
+ * paragraph convention and a closing mark first is the run-on close; an
+ * opening mark anywhere else is a new quotation, so this one was never taken
+ * up. Measured on *Isis Unveiled*: this names pp. 96, 99, 602 and 620, each
+ * left open across verses or a list, and leaves pp. 125, 249 and 472, which
+ * nothing takes up.
+ */
+function continuesPast(blocks: readonly BookBlock[], i: number): boolean {
+  let counted = 0
+  for (let j = i + 1; j < blocks.length && counted < QUOTE_RUNS_ON_FOR; j++) {
+    const b = blocks[j]!
+    if (b.kind === 'verse' || b.kind === 'table') continue
+    const t = plain(b)
+    if (t.trimStart().startsWith('“')) return true
+    const mark = /[“”]/u.exec(t)
+    if (mark) return mark[0] === '”'
+    if (b.kind !== 'blockquote') counted++
+  }
+  return false
+}
+
 function unclosedQuotes(blocks: readonly BookBlock[]): ConsistencyFinding[] {
   const findings: ConsistencyFinding[] = []
   blocks.forEach((block, i) => {
@@ -646,19 +676,11 @@ function unclosedQuotes(blocks: readonly BookBlock[]): ConsistencyFinding[] {
 
     // Measured from the unmatched opening, not over the whole block: a sound
     // quotation earlier in the paragraph has a closing mark that says nothing
-    // about this one. Past the block, verse and tables are stepped over: their
-    // marks are line-openers and dittos, not this quotation's, and a `”` on the
-    // first prose block after them is the close the extract deferred.
-    const pastExtract = blocks
-      .slice(i + 1)
-      .filter((b) => b.kind !== 'verse' && b.kind !== 'table')
-      .slice(0, QUOTE_RUNS_ON_FOR)
-      .map((b) => plain(b))
-      .join('\u0000')
+    // about this one.
     const shape = text.slice(at + 1).includes('”')
       ? 'closed-once'
-      : /[“”]/u.exec(pastExtract)?.[0] === '”'
-        ? 'closed-after-extract'
+      : continuesPast(blocks, i)
+        ? 'continues'
         : 'never-closed'
     findings.push({
       kind: 'unclosed-quote',
