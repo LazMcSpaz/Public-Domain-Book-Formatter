@@ -1700,24 +1700,43 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
     return rangesFor(marksAt(r, c), ctx, family, { text, own: text })
   }
 
+  /** The first line's own width, or nothing where the cell is empty. */
+  const naturalOf = (broken: BrokenLine[], font: FontRef, spans: readonly TextSpan[]): number => {
+    const line = broken[0]
+    return line ? naturalWidth(line, ctx.measurer, font, sizePt, spans) : 0
+  }
+
   const natural: number[] = []
   for (let c = 0; c < columns; c++) {
     let widest = 0
     rows.forEach((row, r) => {
-      // Measured through the breaker rather than with one font, because a cell
-      // that italicises a word is not the width of the same cell in roman and
-      // this number is what decides the column.
-      const broken = breakParagraph(cellAt(row, c), {
-        font: fontFor(r),
-        sizePt,
-        measurer: ctx.measurer,
-        lineWidths: Number.MAX_SAFE_INTEGER,
-        alignment: 'left',
-        ...(spansAt(r, c).length > 0 ? { spans: spansAt(r, c) } : {}),
-        ...rangeArgs(rangesAt(r, c))
-      })
-      const line = broken[0]
-      const width = line ? naturalWidth(line, ctx.measurer, fontFor(r), sizePt, spansAt(r, c)) : 0
+      const spans = spansAt(r, c)
+      const ranges = rangesAt(r, c)
+      const marked = spans.length > 0 || ranges.smallCaps.length > 0 || ranges.subscripts.length > 0
+      // A cell with nothing marked in it is measured exactly as it always was,
+      // in one call on the whole string. Going through the breaker for every
+      // cell changed the answer by a hair — the breaker measures each word and
+      // adds a space, where `widthOf` shapes the string entire — and a hair is
+      // enough: it squeezed a column of *Isis Unveiled*'s yuga table until
+      // `2d.—Trêtya yug` no longer fitted, on a table with no marks in it at
+      // all. A cell that *is* marked has to go through the breaker, because
+      // an italic advance is not a roman one and this number decides the
+      // column; it is also the only kind of cell whose width has changed.
+      const width = marked
+        ? naturalOf(
+            breakParagraph(cellAt(row, c), {
+              font: fontFor(r),
+              sizePt,
+              measurer: ctx.measurer,
+              lineWidths: Number.MAX_SAFE_INTEGER,
+              alignment: 'left',
+              ...(spans.length > 0 ? { spans } : {}),
+              ...rangeArgs(ranges)
+            }),
+            fontFor(r),
+            spans
+          )
+        : ctx.measurer.widthOf(cellAt(row, c), fontFor(r), sizePt)
       widest = Math.max(widest, width)
     })
     natural.push(widest)
