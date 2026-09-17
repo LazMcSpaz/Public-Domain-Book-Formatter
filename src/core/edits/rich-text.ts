@@ -24,7 +24,7 @@
  * so the walk is unit-testable without a browser and `src/core` stays free of
  * DOM types.
  */
-import { parseInlineMarkup } from '@core/transcribe'
+import { parseInlineMarkup, type MarkRange } from '@core/transcribe'
 
 /** What the serialiser needs of a DOM node. Real nodes satisfy it as-is. */
 export interface RichNode {
@@ -59,7 +59,6 @@ const escapeHtml = (s: string): string =>
 export function htmlOfMarkup(raw: string): string {
   const { text, emphasis, strong, smallCaps, subscript } = parseInlineMarkup(raw)
   const marks = [
-    { words: new Set(smallCaps), tag: 'sc', inside: false },
     { words: new Set(strong), tag: 'b', inside: false },
     { words: new Set(emphasis), tag: 'i', inside: false }
   ]
@@ -86,26 +85,59 @@ export function htmlOfMarkup(raw: string): string {
         mark.inside = true
       }
     }
-    // `<sub>` opens and closes inside one word, so it nests innermost and is
-    // escaped either side of the tags rather than around them.
-    if (subscript.length > 0) {
-      let at = 0
-      for (const range of subscript) {
-        const from = Math.max(range.from - cursor, 0)
-        const to = Math.min(range.to - cursor, part.length)
-        if (to <= from || from >= part.length) continue
-        out += escapeHtml(part.slice(at, from))
-        out += `<sub>${escapeHtml(part.slice(from, to))}</sub>`
-        at = to
-      }
-      out += escapeHtml(part.slice(at))
-    } else {
-      out += escapeHtml(part)
-    }
+    // `<sc>` and `<sub>` are character ranges: they open and close inside the
+    // word, so they nest innermost and the text is escaped either side of the
+    // tags rather than around them.
+    out += charMarked(part, cursor, smallCaps, subscript)
     cursor += part.length
     index += 1
   }
   for (const mark of [...marks].reverse()) if (mark.inside) out += `</${mark.tag}>`
+  return out
+}
+
+/**
+ * One word with the character-range tags put back, everything else escaped.
+ *
+ * Both kinds in one walk because they can meet in a word and a piece has to be
+ * wholly inside or wholly outside each: cut wherever either answer changes and
+ * the nesting falls out, `<sc>` outside `<sub>`. This mirrors `withMarkup`'s
+ * own serialiser exactly — the difference is only that this one escapes, being
+ * handed to `dangerouslySetInnerHTML`.
+ */
+function charMarked(
+  word: string,
+  start: number,
+  smallCaps: readonly MarkRange[],
+  subscript: readonly MarkRange[]
+): string {
+  if (smallCaps.length === 0 && subscript.length === 0) return escapeHtml(word)
+  const inside = (ranges: readonly MarkRange[], at: number): boolean =>
+    ranges.some((r) => r.from <= start + at && r.to > start + at)
+  let out = ''
+  let sc = false
+  let sub = false
+  for (let at = 0; at <= word.length; at += 1) {
+    const wantSc = at < word.length && inside(smallCaps, at)
+    const wantSub = at < word.length && inside(subscript, at)
+    if (sub && (!wantSub || wantSc !== sc)) {
+      out += '</sub>'
+      sub = false
+    }
+    if (sc && !wantSc) {
+      out += '</sc>'
+      sc = false
+    }
+    if (wantSc && !sc) {
+      out += '<sc>'
+      sc = true
+    }
+    if (wantSub && !sub) {
+      out += '<sub>'
+      sub = true
+    }
+    if (at < word.length) out += escapeHtml(word[at]!)
+  }
   return out
 }
 

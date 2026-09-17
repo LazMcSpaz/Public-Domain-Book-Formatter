@@ -20,7 +20,7 @@
  *
  * Pure: text in, text and positions out.
  */
-import type { SubscriptRange } from '@core/transcribe'
+import type { MarkRange, SubscriptRange } from '@core/transcribe'
 import { footnoteMarkerPattern, type BareMark, type Footnote } from '@core/assemble'
 
 /** A reference mark, resolved to the word it sits on. */
@@ -67,8 +67,8 @@ export interface PreparedNote {
   emphasis?: number[]
   /** Word indices set bold. See `Footnote.strong`. */
   strong?: number[]
-  /** Word indices set in small capitals. See `Footnote.smallCaps`. */
-  smallCaps?: number[]
+  /** Character ranges set in small capitals. See `Footnote.smallCaps`. */
+  smallCaps?: MarkRange[]
   /** Character ranges set below the line. See `Footnote.subscript`. */
   subscript?: SubscriptRange[]
 }

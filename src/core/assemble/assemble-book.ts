@@ -34,10 +34,55 @@ import {
   tableToText,
   wordCount,
   type BlockKind,
+  type MarkRange,
   type PageTranscription,
-  type SubscriptRange,
   type TranscribedBlock
 } from '@core/transcribe'
+
+/**
+ * The marks measured in characters rather than in words.
+ *
+ * Named as a list rather than written out at each of the four places assembly
+ * folds one string into another, because that is how `<sub>` came to be
+ * carried across three seams and not the fourth. A kind added here is carried
+ * everywhere or nowhere.
+ */
+const RANGE_MARKS = ['smallCaps', 'subscript'] as const
+
+interface RangeMarks {
+  smallCaps?: MarkRange[]
+  subscript?: MarkRange[]
+}
+
+/**
+ * `from`'s character ranges, mapped onto a string `after` has been placed into
+ * at `at`. Only the kinds that survive the move come back.
+ */
+function movedRanges(from: RangeMarks, before: string, after: string, at: number): RangeMarks {
+  const out: RangeMarks = {}
+  for (const kind of RANGE_MARKS) {
+    const ranges = from[kind]
+    if (!ranges?.length) continue
+    const moved = rebaseRanges(ranges, before, after, at)
+    if (moved?.length) out[kind] = moved
+  }
+  return out
+}
+
+/** The same, appended to what the destination already carries. */
+function appendRanges(
+  into: RangeMarks,
+  from: RangeMarks,
+  before: string,
+  after: string,
+  at: number
+): void {
+  const moved = movedRanges(from, before, after, at)
+  for (const kind of RANGE_MARKS) {
+    const ranges = moved[kind]
+    if (ranges?.length) into[kind] = [...(into[kind] ?? []), ...ranges]
+  }
+}
 
 /** A block in the assembled book, with provenance back to its source page. */
 export interface BookBlock extends TranscribedBlock {
@@ -98,9 +143,9 @@ export interface Footnote {
   /** Word indices the note sets bold. See `TranscribedBlock.strong`. */
   strong?: number[]
   /** Word indices the note sets in small capitals. */
-  smallCaps?: number[]
+  smallCaps?: MarkRange[]
   /** Character ranges the note sets below the line. See `TranscribedBlock.subscript`. */
-  subscript?: SubscriptRange[]
+  subscript?: MarkRange[]
   /** Page the note was printed on. */
   pageIndex: number
   /** True when no body text referenced this marker. */
@@ -642,12 +687,6 @@ export function assembleBook(
               ...block.emphasis.map((i) => i + shift)
             ]
           }
-          if (block.smallCaps?.length) {
-            previousNote.smallCaps = [
-              ...(previousNote.smallCaps ?? []),
-              ...block.smallCaps.map((i) => i + shift)
-            ]
-          }
           if (block.strong?.length) {
             previousNote.strong = [
               ...(previousNote.strong ?? []),
@@ -657,18 +696,8 @@ export function assembleBook(
           // Character ranges cannot ride a word count. `joined` is the note's
           // own text with this block's trimmed onto the end of it, so the map
           // is built against that trimmed tail and placed where it landed.
-          if (block.subscript?.length) {
-            const tail = block.text.trim()
-            const moved = rebaseRanges(
-              block.subscript,
-              block.text,
-              tail,
-              joined.length - tail.length
-            )
-            if (moved?.length) {
-              previousNote.subscript = [...(previousNote.subscript ?? []), ...moved]
-            }
-          }
+          const noteTail = block.text.trim()
+          appendRanges(previousNote, block, block.text, noteTail, joined.length - noteTail.length)
           previousNote.text = joined
           continue
         }
@@ -692,18 +721,16 @@ export function assembleBook(
         const shift = wordCount(raw) - wordCount(text)
         const emphasis = block.emphasis?.map((i) => i - shift).filter((i) => i >= 0)
         const strong = block.strong?.map((i) => i - shift).filter((i) => i >= 0)
-        const smallCaps = block.smallCaps?.map((i) => i - shift).filter((i) => i >= 0)
         // The same removal, read as characters: the marker and the soft hyphens
         // both come off the front and the middle, and a range has to follow.
-        const subscript = rebaseRanges(block.subscript, block.text, text, 0) ?? []
+        const ranges = movedRanges(block, block.text, text, 0)
         footnotes.push({
           id: `fn${footnotes.length + 1}`,
           originalMarker: marker,
           text,
           ...(emphasis?.length ? { emphasis } : {}),
           ...(strong?.length ? { strong } : {}),
-          ...(smallCaps?.length ? { smallCaps } : {}),
-          ...(subscript.length ? { subscript } : {}),
+          ...ranges,
           pageIndex: page.pageIndex,
           orphaned: false
         })
@@ -726,12 +753,6 @@ export function assembleBook(
             ...shiftEmphasis(block.emphasis, wordCount(previous.text))
           ]
         }
-        if (block.smallCaps?.length) {
-          previous.smallCaps = [
-            ...(previous.smallCaps ?? []),
-            ...shiftEmphasis(block.smallCaps, wordCount(previous.text))
-          ]
-        }
         if (block.strong?.length) {
           previous.strong = [
             ...(previous.strong ?? []),
@@ -743,18 +764,8 @@ export function assembleBook(
         // hyphen on the back of the first, so the second half arrives at the
         // end of the join intact — its ranges are mapped through the same
         // trimming and soft-hyphen removal and placed there.
-        if (block.subscript?.length) {
-          const tail = stripSoftHyphens(block.text.trimStart())
-          const moved = rebaseRanges(
-            block.subscript,
-            block.text,
-            tail,
-            joinedText.length - tail.length
-          )
-          if (moved?.length) {
-            previous.subscript = [...(previous.subscript ?? []), ...moved]
-          }
-        }
+        const tail = stripSoftHyphens(block.text.trimStart())
+        appendRanges(previous, block, block.text, tail, joinedText.length - tail.length)
         previous.text = joinedText
         if (!previous.sourcePages.includes(page.pageIndex)) {
           previous.sourcePages.push(page.pageIndex)
@@ -766,13 +777,15 @@ export function assembleBook(
       // A soft hyphen taken out of the middle of a block moves every character
       // after it, so a range recorded against the raw text has to come with it.
       const clean = stripSoftHyphens(block.text)
-      const rebased = rebaseRanges(block.subscript, block.text, clean, 0) ?? []
+      const rebased = movedRanges(block, block.text, clean, 0)
       target.push(
         cleaned({
           ...block,
           id: `p${page.pageIndex}b${blockIndex}`,
           text: clean,
-          ...(rebased.length ? { subscript: rebased } : { subscript: undefined }),
+          smallCaps: undefined,
+          subscript: undefined,
+          ...rebased,
           sourcePages: [page.pageIndex]
         })
       )

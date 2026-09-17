@@ -10,7 +10,7 @@
  */
 import { ALL_PAGE_ROLES, type PageRole } from '@core/pages'
 import { parseInlineMarkup } from './markup'
-import type { SubscriptRange } from './markup'
+import type { MarkRange, SubscriptRange } from './markup'
 
 /** Structural role of a run of text within the page. */
 export type BlockKind =
@@ -72,17 +72,23 @@ export interface TranscribedBlock {
    */
   strong?: number[]
   /**
-   * Indices of whitespace-separated words to set in small capitals.
+   * Stretches of `text` to set in small capitals, as character ranges.
    *
-   * Same convention as {@link emphasis}. What it prints as is the engine's
-   * decision: a face carrying `smcp` sets real small capitals, and one without
-   * sets full capitals rather than capitals scaled down. The word is stored in
-   * its own case — `Hermetist`, not `HERMETIST` — because `smcp` replaces
-   * lower-case letters and leaves capitals alone, which is what makes an
-   * initial full capital over small ones fall out of the notation rather than
-   * out of a rule about first letters.
+   * Same convention as {@link subscript}, and ranges for the same reason:
+   * *Isis Unveiled*'s glossary sets every headword against the em dash that
+   * introduces its definition, so `HERMETIST.—From Hermes` is one
+   * whitespace-separated word and no word index can name the nine letters that
+   * are small capitals without also naming the four that are not.
+   *
+   * What it prints as is the engine's decision: a face carrying `smcp` sets
+   * real small capitals, and one without sets full capitals rather than
+   * capitals scaled down. The text is stored in its own case — `Hermetist`,
+   * not `HERMETIST` — because `smcp` replaces lower-case letters and leaves
+   * capitals alone, which is what makes an initial full capital over small
+   * ones fall out of the notation rather than out of a rule about first
+   * letters.
    */
-  smallCaps?: number[]
+  smallCaps?: MarkRange[]
   /**
    * Character ranges of `text` to set below the line, ascending.
    *

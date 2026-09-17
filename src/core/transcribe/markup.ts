@@ -126,12 +126,19 @@ export interface InlineMarkup {
    */
   strong: number[]
   /**
-   * Indices of whitespace-separated words to set in small capitals, ascending.
+   * Stretches of `text` to set in small capitals, as character ranges.
    *
-   * Same convention and same reasons as `emphasis`, and stored the same way:
-   * omitted entirely where there is none.
+   * **Character ranges, not word indices, and measured rather than assumed.**
+   * Every glossary headword in *Isis Unveiled* is glued to the em dash that
+   * introduces its definition — `HERMETIST.—From Hermes` is one
+   * whitespace-separated word — so a word index cannot say "these nine letters
+   * and not the two after them", and marking the word would have set `FROM` in
+   * small capitals too. Thirty headwords, thirty words that no word index
+   * describes. The same reason `subscript` is ranges, arrived at the same way.
+   *
+   * Ascending, non-overlapping and never touching, exactly as `subscript`.
    */
-  smallCaps: number[]
+  smallCaps: MarkRange[]
   /**
    * Stretches of `text` to set below the line, as character ranges.
    *
@@ -144,17 +151,26 @@ export interface InlineMarkup {
 }
 
 /** Half-open character range `[from, to)` into a block's clean text. */
-export interface SubscriptRange {
+export interface MarkRange {
   from: number
   to: number
 }
+
+/**
+ * What a subscript's ranges have always been called.
+ *
+ * Kept as the name because `subscript` is the field it describes everywhere,
+ * and the shape is now shared with small capitals: both mark a stretch of
+ * characters rather than a run of words, for the same reason.
+ */
+export type SubscriptRange = MarkRange
 
 /** The inline marks a block, a footnote or a written section carries. */
 export interface InlineMarks {
   emphasis?: readonly number[]
   strong?: readonly number[]
-  smallCaps?: readonly number[]
-  subscript?: readonly SubscriptRange[]
+  smallCaps?: readonly MarkRange[]
+  subscript?: readonly MarkRange[]
 }
 
 /** Anything that looks like a tag, closing or not, with or without attributes. */
@@ -226,17 +242,17 @@ export function parseInlineMarkup(raw: string): InlineMarkup {
     for (const start of open[kind]) ranges[kind].push({ start, end: text.length })
   }
 
-  const subscript = mergeRanges(ranges.sub)
+  const subscript = mergeRanges(ranges.sub, text)
+  const smallCaps = mergeRanges(ranges.smallCaps, text)
 
-  if (ranges.italic.length === 0 && ranges.strong.length === 0 && ranges.smallCaps.length === 0) {
-    return { text, emphasis: [], strong: [], smallCaps: [], subscript }
+  if (ranges.italic.length === 0 && ranges.strong.length === 0) {
+    return { text, emphasis: [], strong: [], smallCaps, subscript }
   }
 
   // Map character ranges onto word indices, counting words exactly as
   // `itemsFromText` does — by splitting on whitespace.
   const emphasis = new Set<number>()
   const strong = new Set<number>()
-  const smallCaps = new Set<number>()
   let index = 0
   let cursor = 0
   for (const word of text.split(/(\s+)/u)) {
@@ -249,20 +265,13 @@ export function parseInlineMarkup(raw: string): InlineMarkup {
       const hits = (rs: Range[]): boolean => rs.some((r) => r.start < end && r.end > start)
       if (hits(ranges.italic)) emphasis.add(index)
       if (hits(ranges.strong)) strong.add(index)
-      if (hits(ranges.smallCaps)) smallCaps.add(index)
       index += 1
     }
     cursor += word.length
   }
 
   const sorted = (set: Set<number>): number[] => [...set].sort((a, b) => a - b)
-  return {
-    text,
-    emphasis: sorted(emphasis),
-    strong: sorted(strong),
-    smallCaps: sorted(smallCaps),
-    subscript
-  }
+  return { text, emphasis: sorted(emphasis), strong: sorted(strong), smallCaps, subscript }
 }
 
 interface Range {
@@ -271,22 +280,32 @@ interface Range {
 }
 
 /**
- * Overlapping and touching ranges folded into one list, ascending.
+ * Overlapping, touching and space-separated ranges folded into one list.
  *
  * `Na<sub>2</sub><sub>3</sub>` and `Na<sub>23</sub>` describe the same page, so
  * they had better produce the same record: a serialiser that emitted two
  * adjacent pairs of tags would round-trip to a different string every time.
  * Empty ranges are dropped — `<sub></sub>` marks nothing.
+ *
+ * **A gap that is nothing but whitespace is not a gap**, and that is what
+ * makes the round trip stable rather than a nicety. `withMarkup` writes these
+ * tags a word at a time, so that they can nest inside `<i>` and `<b>` without
+ * ever crossing one — so a run spanning two words goes out as two pairs and
+ * would come back as two ranges, and the notation would grow a range every
+ * time the editor saved. Joining them costs nothing that can be drawn: a space
+ * set in small capitals is the same space.
  */
-function mergeRanges(ranges: readonly Range[]): SubscriptRange[] {
+function mergeRanges(ranges: readonly Range[], text: string): MarkRange[] {
   const sorted = [...ranges]
     .filter((r) => r.end > r.start)
     .sort((a, b) => a.start - b.start || a.end - b.end)
-  const out: SubscriptRange[] = []
+  const out: MarkRange[] = []
   for (const r of sorted) {
     const last = out[out.length - 1]
-    if (last && r.start <= last.to) last.to = Math.max(last.to, r.end)
-    else out.push({ from: r.start, to: r.end })
+    const gap = last ? text.slice(last.to, r.start) : ''
+    if (last && (r.start <= last.to || gap.trim().length === 0)) {
+      last.to = Math.max(last.to, r.end)
+    } else out.push({ from: r.start, to: r.end })
   }
   return out
 }
@@ -328,12 +347,7 @@ export function withMarkup(text: string, marks: InlineMarks | undefined): string
   if (!emphasis?.length && !strong?.length && !smallCaps?.length && !subscript?.length) {
     return text
   }
-  // Outermost first. A glossary headword set in small capitals may also be a
-  // book title in italic, and the order decides which tag wraps which — it
-  // changes nothing about what is drawn, and it keeps the notation stable so a
-  // round trip through the editor comes back identical.
   const runs = [
-    { words: new Set(smallCaps ?? []), tag: 'sc', inside: false },
     { words: new Set(strong ?? []), tag: 'b', inside: false },
     { words: new Set(emphasis ?? []), tag: 'i', inside: false }
   ]
@@ -349,7 +363,7 @@ export function withMarkup(text: string, marks: InlineMarks | undefined): string
       continue
     }
     // Closing runs before opening any, and in reverse, so the tags nest:
-    // `<sc><b><i>…</i></b></sc>` and never `<b><i>…</b></i>`.
+    // `<b><i>…</i></b>` and never `<b><i>…</b></i>`.
     for (const run of [...runs].reverse()) {
       if (run.inside && !run.words.has(index)) {
         out = out.replace(/(\s*)$/u, `</${run.tag}>$1`)
@@ -362,9 +376,11 @@ export function withMarkup(text: string, marks: InlineMarks | undefined): string
         run.inside = true
       }
     }
-    // `<sub>` opens and closes inside one word, so it always nests innermost
-    // and never has to be closed and reopened around a word boundary.
-    out += subscript?.length ? taggedWord(part, cursor, subscript) : part
+    // `<sc>` and `<sub>` are character ranges, so they open and close inside
+    // the word and never have to be closed and reopened around a word
+    // boundary — they always nest innermost. A range spanning several words is
+    // written once per word, which reads the same and keeps this one loop.
+    out += taggedWord(part, cursor, smallCaps ?? [], subscript ?? [])
     cursor += part.length
     index += 1
   }
@@ -372,18 +388,51 @@ export function withMarkup(text: string, marks: InlineMarks | undefined): string
   return out
 }
 
-/** One word with `<sub>` put back wherever a range covers part of it. */
-function taggedWord(word: string, start: number, ranges: readonly SubscriptRange[]): string {
+/**
+ * One word with the character-range tags put back around the stretches they
+ * cover.
+ *
+ * Both kinds in one walk, because they can overlap — a formula inside a
+ * small-capitals headword is not a shape this book has, but a serialiser that
+ * handled them separately would emit `<sc>Na<sub>2</sub></sc>` from one order
+ * and crossing tags from the other. Cut at every boundary and the nesting
+ * falls out: small capitals outside, the figure inside it.
+ */
+function taggedWord(
+  word: string,
+  start: number,
+  smallCaps: readonly MarkRange[],
+  subscript: readonly MarkRange[]
+): string {
+  if (smallCaps.length === 0 && subscript.length === 0) return word
+  const inside = (ranges: readonly MarkRange[], at: number): boolean =>
+    ranges.some((r) => r.from <= start + at && r.to > start + at)
+  // Every character's pair of answers, cut where either changes.
   let out = ''
-  let at = 0
-  for (const range of ranges) {
-    const from = Math.max(range.from - start, 0)
-    const to = Math.min(range.to - start, word.length)
-    if (to <= from || from >= word.length) continue
-    out += word.slice(at, from) + '<sub>' + word.slice(from, to) + '</sub>'
-    at = to
+  let sc = false
+  let sub = false
+  for (let at = 0; at <= word.length; at += 1) {
+    const wantSc = at < word.length && inside(smallCaps, at)
+    const wantSub = at < word.length && inside(subscript, at)
+    if (sub && (!wantSub || wantSc !== sc)) {
+      out += '</sub>'
+      sub = false
+    }
+    if (sc && !wantSc) {
+      out += '</sc>'
+      sc = false
+    }
+    if (wantSc && !sc) {
+      out += '<sc>'
+      sc = true
+    }
+    if (wantSub && !sub) {
+      out += '<sub>'
+      sub = true
+    }
+    if (at < word.length) out += word[at]
   }
-  return out + word.slice(at)
+  return out
 }
 
 /**

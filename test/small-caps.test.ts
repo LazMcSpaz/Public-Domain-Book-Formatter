@@ -8,23 +8,36 @@ import { defaultStyleProfile } from '@core/style'
 /**
  * Small capitals as an inline mark.
  *
- * The one mark here whose meaning depends on the case of the text it covers: a
- * face's `smcp` replaces lower-case letters with small capitals and leaves
- * capitals alone, so `<sc>Hermetist</sc>` sets a full H over small ERMETIST —
- * caps and small caps, which is what an 1877 glossary headword is — while
- * `<sc>HERMETIST</sc>` correctly gets full capitals, there being no lower-case
- * letters in it to replace.
+ * Two things are true of it and of nothing else here, and both were measured
+ * on the book rather than decided in advance.
+ *
+ * **Its meaning depends on the case of the text it covers.** A face's `smcp`
+ * replaces lower-case letters with small capitals and leaves capitals alone,
+ * so `<sc>Hermetist</sc>` sets a full H over small ERMETIST — caps and small
+ * caps, which is what an 1877 glossary headword is — while `<sc>HERMETIST</sc>`
+ * correctly gets full capitals, there being no lower-case letters to replace.
+ *
+ * **It is character ranges, not word indices.** *Isis Unveiled*'s glossary
+ * sets every headword against the em dash that introduces its definition, so
+ * `Hermetist.—From Hermes` is one whitespace-separated word of which only the
+ * first ten characters are small capitals. Thirty headwords, thirty words no
+ * word index describes. Measured on the scan at 900 DPI: the full H stands 77
+ * pixels and the letters after it 50 to 54, on one baseline.
  */
 describe('the small-capitals notation', () => {
-  it('reads <sc> into word indices and leaves the words alone', () => {
+  it('marks the headword and not the dash glued to it', () => {
     const parsed = parseInlineMarkup('<sc>Hermetist.</sc>—From Hermes, the god of Wisdom.')
     expect(parsed.text).toBe('Hermetist.—From Hermes, the god of Wisdom.')
-    expect(parsed.smallCaps).toEqual([0])
+    // Ten characters of a word that is fifteen: the case no word index reaches.
+    expect(parsed.smallCaps).toEqual([{ from: 0, to: 10 }])
+    expect(parsed.text.slice(0, 10)).toBe('Hermetist.')
     expect(parsed.emphasis).toEqual([])
   })
 
   it('takes <smallcaps> as the same tag', () => {
-    expect(parseInlineMarkup('a <smallcaps>b c</smallcaps> d').smallCaps).toEqual([1, 2])
+    expect(parseInlineMarkup('a <smallcaps>b c</smallcaps> d').smallCaps).toEqual([
+      { from: 2, to: 5 }
+    ])
   })
 
   /**
@@ -47,16 +60,46 @@ describe('the small-capitals notation', () => {
     expect(withMarkup(twice.text, twice)).toBe(written)
   })
 
-  it('nests with the other marks rather than crossing them', () => {
+  it('round-trips a headword written against its dash, byte for byte', () => {
+    // Word indices move a tag out to a word boundary; a character range does
+    // not, so this one *is* byte-identical — and the glossary is the case.
+    const raw = '<sc>Hermetist.</sc>—From Hermes.'
+    const once = parseInlineMarkup(raw)
+    expect(withMarkup(once.text, once)).toBe(raw)
+  })
+
+  it('nests inside the word-indexed marks rather than crossing them', () => {
     const out = withMarkup('Hermes Trismegistus wrote', {
-      smallCaps: [0, 1],
+      smallCaps: [{ from: 0, to: 19 }],
       emphasis: [1]
     })
-    // Small capitals outermost, so a headword that is also a title reads as a
-    // headword; and closed in the right order, never `<sc><i></sc></i>`.
-    expect(out).toBe('<sc>Hermes <i>Trismegistus</i></sc> wrote')
-    expect(parseInlineMarkup(out).smallCaps).toEqual([0, 1])
-    expect(parseInlineMarkup(out).emphasis).toEqual([1])
+    // The character-range tags sit innermost, so they never have to close and
+    // reopen around a word boundary and can never cross an `<i>`.
+    expect(out).toBe('<sc>Hermes</sc> <i><sc>Trismegistus</sc></i> wrote')
+    const back = parseInlineMarkup(out)
+    expect(back.text).toBe('Hermes Trismegistus wrote')
+    expect(back.smallCaps).toEqual([{ from: 0, to: 19 }])
+    expect(back.emphasis).toEqual([1])
+  })
+
+  it('closes the inner tag first where a run ends inside one', () => {
+    // The small-capitals run stops while the subscript is still open. Read
+    // back, crossed tags and nested tags give the same ranges — this forgiving
+    // parser pops by name — so what has to be asserted is the *string*: the
+    // galley hands it to a browser, which will not forgive it.
+    const marks = { smallCaps: [{ from: 0, to: 4 }], subscript: [{ from: 2, to: 6 }] }
+    const out = withMarkup('Na2345x', marks)
+    expect(out).toBe('<sc>Na<sub>23</sub></sc><sub>45</sub>x')
+    expect(htmlOfMarkup(out)).toBe(out)
+  })
+
+  it('cuts a formula out of a headword rather than crossing it', () => {
+    const marks = { smallCaps: [{ from: 0, to: 6 }], subscript: [{ from: 2, to: 3 }] }
+    const out = withMarkup('Na2CO3 is soda', marks)
+    expect(out).toBe('<sc>Na<sub>2</sub>CO3</sc> is soda')
+    const back = parseInlineMarkup(out)
+    expect(back.smallCaps).toEqual(marks.smallCaps)
+    expect(back.subscript).toEqual(marks.subscript)
   })
 
   it('carries the mark into a parsed page, and out again', () => {
@@ -69,7 +112,7 @@ describe('the small-capitals notation', () => {
       },
       0
     )
-    expect(page.blocks[0]?.smallCaps).toEqual([0])
+    expect(page.blocks[0]?.smallCaps).toEqual([{ from: 0, to: 8 }])
     expect(page.blocks[0]?.text).toBe('Kabalist, from KABALA.')
   })
 
@@ -85,7 +128,13 @@ describe('the small-capitals notation', () => {
       parsePageTranscription(
         {
           role: 'body',
-          blocks: [{ kind: 'paragraph', text: '<sc>Kabalist</sc>, from KABALA.', smallCaps: [0] }],
+          blocks: [
+            {
+              kind: 'paragraph',
+              text: '<sc>Kabalist</sc>, from KABALA.',
+              smallCaps: [{ from: 0, to: 8 }]
+            }
+          ],
           uncertain: [],
           furniture: {}
         },
@@ -154,6 +203,35 @@ describe('what a small-capitals run is set in', () => {
   })
 
   /**
+   * The glossary headword, which is what the whole of this is for: the mark
+   * stops inside the word, and the definition glued to it stays roman.
+   *
+   * A word-indexed mark cannot express this, and would have set `From` in
+   * small capitals along with the headword — which is how the fault would have
+   * shown on the page, and not before.
+   */
+  it('stops inside the word, where the headword stops', () => {
+    const doc = bookSaying('<sc>Hermetist.</sc>—From Hermes, the god of Wisdom.')
+    const book = layout(doc, defaultStyleProfile(), withSmallCaps(stub), { edition: EDITION })
+    const runs = runsOf(book)
+    const head = runs.find((r) => r.text === 'Hermetist.')
+    const after = runs.find((r) => r.text === '—From')
+    expect(head?.font.smallCaps).toBe(true)
+    expect(after?.font.smallCaps).toBeUndefined()
+    // One word on the paper, two runs on the page, in that order and adjacent.
+    expect(runs.indexOf(after!)).toBe(runs.indexOf(head!) + 1)
+  })
+
+  it('sets the same headword in full capitals in a face with no smcp', () => {
+    const doc = bookSaying('<sc>Hermetist.</sc>—From Hermes.')
+    const book = layout(doc, defaultStyleProfile(), stub, { edition: EDITION })
+    const runs = runsOf(book)
+    expect(runs.some((r) => r.text === 'HERMETIST.')).toBe(true)
+    expect(runs.some((r) => r.text === '—From')).toBe(true)
+    expect(runs.some((r) => r.text === '—FROM')).toBe(false)
+  })
+
+  /**
    * A subscript is a character range into the same string, so a fallback that
    * lengthened a word would put a figure under the wrong letter. `ß` uppercases
    * to `SS`; the word is left as written rather than shifted.
@@ -199,10 +277,11 @@ describe('the mark survives the journey', () => {
     ])
     const joined = book.blocks[0]
     expect(joined?.text).toContain('Hermetist')
-    // The seam shifts the indices by the words already in the block: the
-    // seventh word of the join, not the first.
-    const words = (joined?.text ?? '').split(/\s+/u)
-    expect(joined?.smallCaps?.map((i) => words[i])).toEqual(['Hermetist'])
+    // The seam moves the *characters*, not a word count, so the range has to
+    // be mapped onto the join and still name the same nine letters.
+    const range = joined?.smallCaps?.[0]
+    expect(range).toBeDefined()
+    expect(joined?.text.slice(range!.from, range!.to)).toBe('Hermetist')
   })
 
   it('is re-derived when a passage is corrected', () => {
@@ -210,7 +289,7 @@ describe('the mark survives the journey', () => {
     const corrected = applyEdits(book, [
       { kind: 'text', blockId: 'p0b0', text: 'The <sc>Hermetist</sc> spoke plainly.' }
     ])
-    expect(corrected.blocks[0]?.smallCaps).toEqual([1])
+    expect(corrected.blocks[0]?.smallCaps).toEqual([{ from: 4, to: 13 }])
     expect(corrected.blocks[0]?.text).toBe('The Hermetist spoke plainly.')
   })
 
@@ -221,7 +300,7 @@ describe('the mark survives the journey', () => {
    */
   it('is cleared when the correction drops the tag', () => {
     const book = bookSaying('The <sc>Hermetist</sc> spoke.')
-    expect(book.blocks[0]?.smallCaps).toEqual([1])
+    expect(book.blocks[0]?.smallCaps).toEqual([{ from: 4, to: 13 }])
     const corrected = applyEdits(book, [
       { kind: 'text', blockId: 'p0b0', text: 'The Hermetist spoke plainly.' }
     ])
@@ -276,8 +355,9 @@ function nodesOf(raw: string): RichNode[] {
  */
 describe('the mark crosses the galley', () => {
   it('is shown as a tag the walk knows', () => {
-    expect(htmlOfMarkup('<sc>Hermetist.</sc> From Hermes.')).toBe(
-      '<sc>Hermetist.</sc> From Hermes.'
+    // Against the dash, which is the shape the book actually has.
+    expect(htmlOfMarkup('<sc>Hermetist.</sc>—From Hermes.')).toBe(
+      '<sc>Hermetist.</sc>—From Hermes.'
     )
   })
 
@@ -292,7 +372,7 @@ describe('the mark crosses the galley', () => {
   })
 
   it('comes back as the string it went out as', () => {
-    const raw = 'The <sc>Hermetist</sc> read <i>Isis</i> twice.'
+    const raw = '<sc>Hermetist.</sc>—From Hermes, who read <i>Isis</i> twice.'
     expect(markupOfNodes(nodesOf(htmlOfMarkup(raw)))).toBe(raw)
   })
 })
@@ -312,7 +392,8 @@ describe('a sweep over a small-capitals run', () => {
     // The replaced words take no marking — that is what a replacement is — but
     // `Kabalist`, which sat inside the run and outside the match, keeps its
     // own. A rebalancer blind to `</sc>` leaves the run open instead, and an
-    // unclosed tag marks everything after it: [1, 2, 3].
-    expect(parsed.smallCaps).toEqual([1])
+    // unclosed tag marks everything after it, to the end of the block.
+    expect(parsed.smallCaps).toEqual([{ from: 2, to: 11 }])
+    expect(parsed.text.slice(2, 11)).toBe('Kabalist ')
   })
 })

@@ -33,6 +33,7 @@ export {
   wordCount,
   type InlineMarkup,
   type InlineMarks,
+  type MarkRange,
   type SubscriptRange
 } from './markup'
 export {

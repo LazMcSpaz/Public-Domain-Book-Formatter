@@ -37,7 +37,7 @@ import {
 } from 'tex-linebreak'
 import patterns from 'hyphenation.en-us'
 import type { TextMeasurer } from './measure'
-import type { SubscriptRange } from '@core/transcribe'
+import type { MarkRange } from '@core/transcribe'
 import type { FontRef } from './types'
 
 /** How a paragraph's lines are set within the measure. */
@@ -52,6 +52,16 @@ export interface PlacedWord {
   sizePt?: number
   /** Set only for an attachment: baseline offset, positive = raised. */
   risePt?: number
+  /**
+   * Set only where part of a word is set in another face — a small-capitals
+   * run that stops inside the word it began in.
+   *
+   * Everything else resolves its face from `sourceIndex`, which is the right
+   * coordinate while a face belongs to a whole word. `Hermetist.—From` is one
+   * word with two faces in it, so this says which face *this piece* is, and
+   * the resolver takes it in preference to the word's own.
+   */
+  font?: FontRef
   /**
    * Index of the source word this came from, counting whitespace-separated
    * words in the paragraph's text. Attachments carry the index of their host.
@@ -131,7 +141,33 @@ export interface BreakParagraphOptions {
    * formula split across two lines is not a line-break decision anyone wants
    * the algorithm making.
    */
-  subscripts?: readonly SubscriptRange[]
+  subscripts?: readonly MarkRange[]
+  /**
+   * Stretches of the paragraph's text to set in small capitals, as character
+   * ranges.
+   *
+   * Character ranges for the reason `subscripts` is: a glossary headword is
+   * set against the em dash that introduces its definition, so
+   * `Hermetist.—From` is one word to the breaker and only the first nine
+   * characters of it are small capitals. Measured on *Isis Unveiled*: thirty
+   * headwords, thirty words no word index describes.
+   *
+   * A word any of these touches is emitted as several boxes, each with its own
+   * face, and is never hyphenated — a headword broken across two lines is not
+   * a decision worth letting the algorithm make, and splitting a piece further
+   * would leave the hyphen in whichever face the fragment happened to be.
+   */
+  smallCaps?: readonly MarkRange[]
+  /**
+   * What a small-capitals run is set in, decided by the caller because only it
+   * knows the face.
+   *
+   * `smcp` where the face carries it; `capitals` where it does not, which is
+   * what a printer with no small capitals in the case would do and what `smcp`
+   * itself does to a letter that is already a capital. Never capitals scaled
+   * down — that is a forgery and the stroke weight gives it away.
+   */
+  smallCapsAs?: 'smcp' | 'capitals'
   /**
    * Runs set in a face other than the paragraph's own, by word index.
    *
@@ -150,50 +186,6 @@ export interface BreakParagraphOptions {
 export interface TextSpan {
   words: ReadonlySet<number>
   font: FontRef
-  /**
-   * Set these words in full capitals.
-   *
-   * The one span that changes the *text* rather than the face, and it exists
-   * for one case: a small-capitals run in a face that has no `smcp`. Only two
-   * of the seven faces offered carry the feature, and what a printer with no
-   * small capitals in the case would do is set full ones — which is also what
-   * `smcp` does to a letter that is already a capital, so the fallback has the
-   * same shape as the real thing rather than a different one. Never capitals
-   * scaled down: that is a forgery, and beside the text it sits in the stroke
-   * weight gives it away.
-   *
-   * Applied where a word becomes a box, so the width the breaker measures is
-   * the width that will be drawn.
-   */
-  upperCase?: boolean
-}
-
-/** The span that claims a word, or undefined — the first one wins. */
-export function spanForWord(
-  index: number,
-  spans: readonly TextSpan[] | undefined
-): TextSpan | undefined {
-  if (!spans) return undefined
-  for (const span of spans) if (span.words.has(index)) return span
-  return undefined
-}
-
-/**
- * A word as it will be set, which is the word itself unless a span asks for
- * capitals.
- *
- * **Length-preserving or not at all.** A subscript is a character range into
- * the same string, so a word whose uppercase form is longer — `ß` becomes `SS`,
- * and the ligatures do the same — would shift every range after it and put a
- * figure under the wrong letter. Those cases are rare and this fallback is
- * rarer, so the word is left as written where the two lengths differ: a
- * headword in the wrong case is a blemish, and a formula with its subscript in
- * the wrong place is an error nobody would catch.
- */
-export function wordAsSet(word: string, span: TextSpan | undefined): string {
-  if (!span?.upperCase) return word
-  const upper = word.toUpperCase()
-  return upper.length === word.length ? upper : word
 }
 
 /** The face a word is set in: the first span that claims it, or the default. */
@@ -273,10 +265,26 @@ interface TextBox extends Box {
   /** Present on an attachment box, which never merges with its neighbours. */
   sizePt?: number
   risePt?: number
+  /** Present where this piece's face is not the whole word's. */
+  font?: FontRef
 }
 
 function isTextBox(item: InputItem): item is TextBox {
   return item.type === 'box'
+}
+
+/**
+ * Whether two pieces are set in the same face, compared by value.
+ *
+ * By value rather than by identity because a per-piece face is built fresh for
+ * each piece, so two runs that are the same face would be two objects and an
+ * identity test would refuse a merge that is correct — quietly, as an extra
+ * run drawn at the same place, which is invisible until something counts runs.
+ */
+function sameFace(a: FontRef | undefined, b: FontRef | undefined): boolean {
+  if (a === b) return true
+  if (!a || !b) return false
+  return a.family === b.family && a.style === b.style && !a.smallCaps === !b.smallCaps
 }
 
 function box(text: string, width: number, source: number): TextBox {
@@ -357,7 +365,7 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
   // this same string and the words have to be locatable in it. `/\S+/` and
   // `split(/\s+/).filter(Boolean)` produce the same list, by construction.
   const found = [...text.matchAll(/\S+/gu)]
-  const words = found.map((m, i) => wordAsSet(m[0], spanForWord(i, options.spans)))
+  const words = found.map((m) => m[0])
 
   // Grouped so a word carrying two marks gets both, in order.
   const attachments = new Map<number, Attachment[]>()
@@ -368,6 +376,8 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
   }
 
   const subscripts = options.subscripts ?? []
+  const smallCaps = options.smallCaps ?? []
+  const capitalise = options.smallCapsAs === 'capitals'
   // Asked once: it is a lookup per face and the answer is the same for every
   // word in the paragraph.
   const subSizePt = sizePt * SUBSCRIPT_SCALE
@@ -379,35 +389,46 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
     if (i > 0) items.push(glue(spaceWidth, stretch, shrink))
 
     const at = found[i]!.index
-    const dropped = subscripts.filter((r) => r.from < at + word.length && r.to > at)
-    if (dropped.length > 0) {
-      // A word with a figure below the line is set as its own little sequence
-      // of boxes and is never hyphenated: `Na2CO3` broken across two lines is
-      // not a decision worth letting the algorithm make.
+    const touches = (ranges: readonly MarkRange[]): boolean =>
+      ranges.some((r) => r.from < at + word.length && r.to > at)
+    if (touches(subscripts) || touches(smallCaps)) {
+      // A word carrying a character-range mark is set as its own little
+      // sequence of boxes with no break between them, and is never hyphenated:
+      // `Na2CO3` split across two lines, or a headword split out of the face
+      // it opened in, is not a decision worth letting the algorithm make.
+      //
+      // Cut at every boundary of either kind rather than walking one of them,
+      // because the two can meet in one word and a piece has to be wholly
+      // inside or wholly outside each.
+      const covers = (ranges: readonly MarkRange[], k: number): boolean =>
+        ranges.some((r) => r.from <= at + k && r.to > at + k)
+      const state = (k: number): string =>
+        `${covers(subscripts, k) ? 'S' : '-'}${covers(smallCaps, k) ? 'C' : '-'}`
       let cut = 0
-      for (const range of dropped) {
-        const from = Math.max(range.from - at, 0)
-        const to = Math.min(range.to - at, word.length)
-        if (to <= from) continue
-        if (from > cut) {
-          const plain = word.slice(cut, from)
-          items.push(box(plain, width(plain, i), i))
-        }
-        const low = word.slice(from, to)
-        const figure: TextBox = {
+      for (let k = 1; k <= word.length; k += 1) {
+        if (k < word.length && state(k) === state(cut)) continue
+        const piece = word.slice(cut, k)
+        const low = covers(subscripts, cut)
+        const caps = covers(smallCaps, cut)
+        // Never lengthen: a range is measured in characters of this same
+        // string, so a piece whose capitals are longer than its letters — `ß`
+        // becomes `SS` — would move every range after it and put a figure
+        // under the wrong letter. Rare, and the wrong case is a blemish where
+        // a displaced subscript is an error nobody would catch.
+        const upper = piece.toUpperCase()
+        const text = caps && capitalise && upper.length === piece.length ? upper : piece
+        const face: FontRef = caps && !capitalise ? { ...fontAt(i), smallCaps: true } : fontAt(i)
+        const pieceSize = low ? subSizePt : sizePt
+        const built: TextBox = {
           type: 'box',
-          width: measurer.widthOf(low, fontAt(i), subSizePt),
-          text: low,
+          width: measurer.widthOf(text, face, pieceSize),
+          text,
           source: i,
-          sizePt: subSizePt,
-          risePt: subRisePt
+          ...(low ? { sizePt: subSizePt, risePt: subRisePt } : {}),
+          ...(caps ? { font: face } : {})
         }
-        items.push(figure)
-        cut = to
-      }
-      if (cut < word.length) {
-        const plain = word.slice(cut)
-        items.push(box(plain, width(plain, i), i))
+        items.push(built)
+        cut = k
       }
       for (const attachment of attachments.get(i) ?? []) {
         const mark: TextBox = {
@@ -630,7 +651,17 @@ export function breakParagraph(text: string, options: BreakParagraphOptions): Br
         const last = words[words.length - 1]
         if (item.text.length === 0) {
           // A paragraph indent: width but nothing to draw.
-        } else if (mergeable && last && !isAttachment && last.sizePt === undefined) {
+        } else if (
+          mergeable &&
+          last &&
+          !isAttachment &&
+          last.sizePt === undefined &&
+          // Two pieces of one word merge only if they are set the same. A
+          // headword and the definition glued to it are one word with two
+          // faces in it, and merging them would draw the whole of it in
+          // whichever face the first piece had.
+          sameFace(last.font, item.font)
+        ) {
           last.text += item.text
         } else if (isAttachment) {
           words.push({
@@ -638,10 +669,16 @@ export function breakParagraph(text: string, options: BreakParagraphOptions): Br
             xPt: round(x),
             sourceIndex: item.source,
             sizePt: item.sizePt!,
-            risePt: item.risePt ?? 0
+            risePt: item.risePt ?? 0,
+            ...(item.font ? { font: item.font } : {})
           })
         } else {
-          words.push({ text: item.text, xPt: round(x), sourceIndex: item.source })
+          words.push({
+            text: item.text,
+            xPt: round(x),
+            sourceIndex: item.source,
+            ...(item.font ? { font: item.font } : {})
+          })
         }
         x += item.width
         mergeable = !isAttachment

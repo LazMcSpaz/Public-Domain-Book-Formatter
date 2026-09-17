@@ -25,7 +25,7 @@ import { findOrnament, type OrnamentArt } from '@core/ornament'
 import { headingRunEnd } from '@core/assemble'
 import type { BookBlock, BookDocument, BookSection, Illustration } from '@core/assemble'
 import { effectiveDpi } from '@core/image'
-import { rebaseRanges, shiftRanges, type SubscriptRange } from '@core/transcribe'
+import { rebaseRanges, shiftRanges, type MarkRange } from '@core/transcribe'
 import {
   breakParagraph,
   breakVerse,
@@ -585,8 +585,13 @@ function toFlowLines(
         // Italic or bold where a span claims it. A hyphenated fragment keeps
         // its host word's index, so both halves of a split italic word stay
         // italic.
+        //
+        // A piece carrying its own face wins: a small-capitals run stops
+        // inside the word it began in — `Hermetist.—From` — so the word index
+        // cannot say which face this piece is, and the breaker, which measured
+        // it, already has.
         text: w.text,
-        font: fontForWord(w.sourceIndex, spans, font),
+        font: w.font ?? fontForWord(w.sourceIndex, spans, font),
         sizePt: w.sizePt ?? sizePt,
         xPt: w.xPt + offset,
         ...(w.risePt ? { risePt: w.risePt } : {})
@@ -926,7 +931,7 @@ function breakNote(note: PreparedNote, ctx: BuildContext): NoteBlock {
     alignment: 'left',
     ...(ctx.hyphenate ? { hyphenate: ctx.hyphenate } : {}),
     ...(spans.length > 0 ? { spans } : {}),
-    ...(note.subscript?.length ? { subscripts: note.subscript } : {})
+    ...rangeArgs(rangesFor(note, ctx, ctx.profile.bodyFont))
   })
 
   const lines = toFlowLines(broken, font, sizePt, [hang], undefined, undefined, spans)
@@ -980,28 +985,11 @@ function spansFor(
   marks: {
     emphasis?: readonly number[]
     strong?: readonly number[]
-    smallCaps?: readonly number[]
   }
 ): TextSpan[] {
   const spans: TextSpan[] = []
-  // Small capitals first, so a headword that is also a book title reads as a
-  // headword — the same precedence, and for the same reason, as strong over
-  // emphasis.
-  //
-  // Asked for rather than assumed, exactly as bold is. Only two of the seven
-  // faces offered carry `smcp`, and a face without it sets the run in **full
-  // capitals** — which is what `smcp` itself does to letters that are already
-  // capitals, so the fallback is the same shape as the real thing rather than
-  // a different one. Never capitals scaled down: that is a forgery and the
-  // stroke weight beside the surrounding text gives it away.
-  if (marks.smallCaps?.length) {
-    const words = new Set(marks.smallCaps)
-    spans.push(
-      ctx.measurer.hasSmallCaps(family)
-        ? { words, font: { family, style: base, smallCaps: true } }
-        : { words, font: { family, style: base }, upperCase: true }
-    )
-  }
+  // Small capitals are not here: they are character ranges, so they cannot be
+  // a span, which is word-indexed. See `rangesFor`.
   if (marks.strong?.length) {
     const style: FontStyle = ctx.measurer.hasBold(family) ? 'bold' : 'italic'
     spans.push({ words: new Set(marks.strong), font: { family, style } })
@@ -1126,7 +1114,7 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
    * there. Dropping them is safe where keeping them would not be: a heading
    * has no chemistry in it.
    */
-  const subscripts = text === block.text ? (block.subscript ?? []) : []
+  const ranges = rangesFor(block, ctx, family, text === block.text)
 
   // A paragraph with a figure in it or beside it is built round the figure.
   // The drop capital gives way: both change the measure of the opening lines,
@@ -1143,7 +1131,7 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
         attachments,
         markToNote,
         spans,
-        subscripts,
+        ranges,
         style,
         ctx
       })
@@ -1167,7 +1155,7 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
         ? { hyphenate: ctx.hyphenate }
         : {}),
       ...(spans.length > 0 ? { spans } : {}),
-      ...(subscripts.length > 0 ? { subscripts } : {})
+      ...rangeArgs(ranges)
     })
     // A chapter opener may carry a flourish under its title. It belongs to the
     // heading's own lines so the two can never be separated by a page break.
@@ -1238,7 +1226,7 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
     buildDropCapFlowable(text, font, sizePt, indentLeft, measure, ctx, style, {
       attachments,
       markToNote,
-      subscripts
+      ranges
     })
   )
 }
@@ -1246,6 +1234,61 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
 /** Whitespace-separated words, the breaker's own unit of indexing. */
 function countWords(text: string): number {
   return text.split(/\s+/u).filter((w) => w.length > 0).length
+}
+
+/**
+ * The marks measured in characters rather than in words, kept together.
+ *
+ * They travel as one object through the figure builder, the drop capital, the
+ * footnote and the ordinary paragraph, because a kind wired into three of
+ * those and not the fourth is invisible: the page simply sets that one case
+ * plainly and nothing counts it. `<sub>` was threaded one call site at a time
+ * and this is what that cost.
+ */
+interface RangeMarks {
+  subscripts: readonly MarkRange[]
+  smallCaps: readonly MarkRange[]
+  /** Decided here, where the face is known. See `BreakParagraphOptions`. */
+  smallCapsAs: 'smcp' | 'capitals'
+}
+
+/**
+ * A block's character ranges, and what a small-capitals run is set in.
+ *
+ * `keep` is false wherever the string being broken is not the block's own
+ * text — a running head cut to fit, a caption supplied through `opts.text`.
+ * A range measured against one string and applied to another puts a figure
+ * under whatever letter now sits there, and dropping them is safe where
+ * keeping them would not be.
+ */
+function rangesFor(
+  marks: { smallCaps?: readonly MarkRange[]; subscript?: readonly MarkRange[] },
+  ctx: BuildContext,
+  family: string,
+  keep = true
+): RangeMarks {
+  return {
+    subscripts: keep ? (marks.subscript ?? []) : [],
+    smallCaps: keep ? (marks.smallCaps ?? []) : [],
+    // Asked for rather than assumed, exactly as bold is. Only two of the seven
+    // faces offered carry `smcp`; a face without one sets the run in full
+    // capitals, which is what `smcp` itself does to a letter that is already a
+    // capital. Never capitals scaled down — that is a forgery and the stroke
+    // weight beside the surrounding text gives it away.
+    smallCapsAs: ctx.measurer.hasSmallCaps(family) ? 'smcp' : 'capitals'
+  }
+}
+
+/** The same, as the options `breakParagraph` takes. */
+function rangeArgs(r: RangeMarks): {
+  subscripts?: readonly MarkRange[]
+  smallCaps?: readonly MarkRange[]
+  smallCapsAs?: 'smcp' | 'capitals'
+} {
+  return {
+    ...(r.subscripts.length > 0 ? { subscripts: r.subscripts } : {}),
+    ...(r.smallCaps.length > 0 ? { smallCaps: r.smallCaps, smallCapsAs: r.smallCapsAs } : {})
+  }
 }
 
 /**
@@ -1316,7 +1359,7 @@ interface FigureParams {
   attachments: readonly Attachment[]
   markToNote: ReadonlyMap<string, string>
   spans: readonly TextSpan[]
-  subscripts: readonly SubscriptRange[]
+  ranges: RangeMarks
   style: BlockStyle
   ctx: BuildContext
 }
@@ -1412,19 +1455,27 @@ function buildFigureFlowable(
     // character range has to be mapped onto that normalised text before it can
     // be cut in two at the word the figure interrupts.
     const joinedAll = words.join(' ')
-    const normalised = rebaseRanges(p.subscripts, text, joinedAll, 0) ?? []
     const cut = before.length === 0 ? 0 : before.length + 1
-    const subsBefore = normalised.filter((r) => r.to <= cut)
-    const subsAfter = normalised
-      .filter((r) => r.from >= cut)
-      .map((r) => ({ from: r.from - cut, to: r.to - cut }))
+    // Both range kinds, cut at the same place: a headword and a formula are
+    // measured in the same characters of the same string.
+    const halve = (ranges: readonly MarkRange[]) => {
+      const normalised = rebaseRanges(ranges, text, joinedAll, 0) ?? []
+      return {
+        before: normalised.filter((r) => r.to <= cut),
+        after: normalised
+          .filter((r) => r.from >= cut)
+          .map((r) => ({ from: r.from - cut, to: r.to - cut }))
+      }
+    }
+    const subs = halve(p.ranges.subscripts)
+    const caps = halve(p.ranges.smallCaps)
 
     const set = (
       part: string,
       first: number,
       spans: TextSpan[],
       attachments: Attachment[],
-      subscripts: readonly SubscriptRange[]
+      ranges: RangeMarks
     ) =>
       part.length === 0
         ? []
@@ -1433,7 +1484,7 @@ function buildFigureFlowable(
               ...base(measure, first),
               ...(attachments.length > 0 ? { attachments } : {}),
               ...(spans.length > 0 ? { spans } : {}),
-              ...(subscripts.length > 0 ? { subscripts } : {})
+              ...rangeArgs(ranges)
             }),
             font,
             sizePt,
@@ -1443,9 +1494,14 @@ function buildFigureFlowable(
             spans
           )
 
-    const linesBefore = set(before, p.firstIndent, spansBefore, attBefore, subsBefore)
+    const half = (which: 'before' | 'after'): RangeMarks => ({
+      subscripts: subs[which],
+      smallCaps: caps[which],
+      smallCapsAs: p.ranges.smallCapsAs
+    })
+    const linesBefore = set(before, p.firstIndent, spansBefore, attBefore, half('before'))
     // Resumes flush: it is the same sentence, not a new paragraph.
-    const linesAfter = set(after, 0, spansAfter, attAfter, subsAfter)
+    const linesAfter = set(after, 0, spansAfter, attAfter, half('after'))
     const held: FlowLine[] = [
       ...Array.from({ length: IMAGE_SPACE_SLOTS }, () => ({ runs: [], holdWithNext: true })),
       ...Array.from({ length: slots }, (_, i): FlowLine => ({
@@ -1470,7 +1526,7 @@ function buildFigureFlowable(
       ...base(widths, p.firstIndent),
       ...(p.attachments.length > 0 ? { attachments: p.attachments } : {}),
       ...(p.spans.length > 0 ? { spans: p.spans } : {}),
-      ...(p.subscripts.length > 0 ? { subscripts: p.subscripts } : {})
+      ...rangeArgs(p.ranges)
     })
 
   let start = lineOfWord(breakWith(measure), wordAt)
@@ -1704,7 +1760,7 @@ function buildDropCapFlowable(
   notes: {
     attachments: readonly Attachment[]
     markToNote: ReadonlyMap<string, string>
-    subscripts: readonly SubscriptRange[]
+    ranges: RangeMarks
   }
 ): Flowable {
   const initial = [...text.trim()][0] ?? ''
@@ -1722,9 +1778,13 @@ function buildDropCapFlowable(
   // back by however many characters that was — the word indices' own rule, in
   // the coordinate a range is counted in.
   const lead = text.length - rest.length
-  const subscripts = (notes.subscripts ?? [])
-    .filter((r) => r.from >= lead)
-    .map((r) => ({ from: r.from - lead, to: r.to - lead }))
+  const moveBack = (ranges: readonly MarkRange[]): MarkRange[] =>
+    ranges.filter((r) => r.from >= lead).map((r) => ({ from: r.from - lead, to: r.to - lead }))
+  const ranges: RangeMarks = {
+    subscripts: moveBack(notes.ranges.subscripts),
+    smallCaps: moveBack(notes.ranges.smallCaps),
+    smallCapsAs: notes.ranges.smallCapsAs
+  }
 
   const build = (depth: number): { lines: FlowLine[]; capSize: number; capWidth: number } => {
     // A capital's height is roughly 0.7em in a book face, so an initial that
@@ -1742,7 +1802,7 @@ function buildDropCapFlowable(
       lineWidths: widths,
       alignment: style.alignment,
       ...(attachments.length > 0 ? { attachments } : {}),
-      ...(subscripts.length > 0 ? { subscripts } : {}),
+      ...rangeArgs(ranges),
       ...(ctx.hyphenate ? { hyphenate: ctx.hyphenate } : {})
     })
     const offsets = [...Array.from({ length: depth }, () => indentLeft + capWidth), indentLeft]
