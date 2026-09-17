@@ -55,6 +55,7 @@ export interface DraftLine {
 import { namesFolio, asFolio, looksLikeSignature } from './folios'
 import { findColumns, wordsInBand } from './columns'
 import { findPairedColumns, isPaired, pairedRow, type PairedColumns } from './paired'
+import { findIndentedBlocks } from './indented'
 // The one place a table's flattened view is derived from its cells. Imported
 // rather than restated, because `normalizeTable` exists precisely so the two
 // can never disagree about what a page says.
@@ -62,7 +63,7 @@ import { tableToText } from '../transcribe/schema'
 import { healWrappedHyphens, tally, type HyphenVerdict, type Vocabulary } from './hyphens'
 
 export interface DraftBlock {
-  kind: 'paragraph' | 'heading' | 'caption' | 'footnote' | 'table'
+  kind: 'paragraph' | 'heading' | 'blockquote' | 'caption' | 'footnote' | 'table'
   text: string
   /**
    * The rows of a `table`, each an array of cells. Never set on anything else.
@@ -1239,6 +1240,34 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
 
   const body = measureOf(lines)
 
+  // A quotation set narrower than the measure is one block, not a line each.
+  // Without this, `isIndented` fires on every line of it — that rule is for a
+  // paragraph's *first* line — and the block loop starts a new block at each
+  // one, which on this book turned every quotation into a stack of one-line
+  // headings. See `./indented`.
+  //
+  // Not run on a band `./paired` has taken: a transcript's commentary column
+  // is by construction a run of aligned lines set well inside the measure, and
+  // reading it as a quotation is nonsense.
+  const insetLines = new Set<DraftLine>()
+  const insetStarts = new Set<DraftLine>()
+  for (const bandLines of perBand) {
+    if (bandLines.some((l) => pairedOf.has(l))) continue
+    for (const found of findIndentedBlocks(bandLines, measureOf(bandLines))) {
+      insetStarts.add(bandLines[found.from]!)
+      for (let k = found.from; k < found.to; k++) insetLines.add(bandLines[k]!)
+    }
+  }
+  if (insetLines.size > 0) {
+    structural.push(
+      `${insetLines.size} line(s) in ${insetStarts.size} run(s) begin at the same x inside the ` +
+        `measure, so each run is read as one quotation set narrower than the page rather than ` +
+        `as a heading or a paragraph a line. An ordinary paragraph indents one line; a second ` +
+        `agreeing with it is a narrower measure. Check the render: verse and a list look like ` +
+        `this too, and both want a different kind.`
+    )
+  }
+
   // The lines a drop capital pushes to the right.
   //
   // A three-line initial holds the next two or three lines off the margin, and
@@ -1336,8 +1365,14 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
       }
     }
 
-    const centred = !runIsNote && run.every((l) => isCentred(l, body))
-    const right = !runIsNote && run.length === 1 && isRightAligned(run[0]!, body)
+    // A quotation set narrower than the measure. Decided before `centred`,
+    // because every line of such a block is inset equally on both sides and
+    // would otherwise be called a heading — which is the whole fault this
+    // exists to fix.
+    const inset = !runIsNote && insetLines.has(run[0]!)
+
+    const centred = !runIsNote && !inset && run.every((l) => isCentred(l, body))
+    const right = !runIsNote && !inset && run.length === 1 && isRightAligned(run[0]!, body)
     const text = run
       .map((l) => l.text.trim())
       .join(' ')
@@ -1345,7 +1380,15 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
       .trim()
     if (text.length > 0) {
       blocks.push({
-        kind: runIsNote ? 'footnote' : centred ? 'heading' : right ? 'caption' : 'paragraph',
+        kind: runIsNote
+          ? 'footnote'
+          : inset
+            ? 'blockquote'
+            : centred
+              ? 'heading'
+              : right
+                ? 'caption'
+                : 'paragraph',
         text
       })
     }
@@ -1369,14 +1412,26 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
       // divided by the blank band between them, which is `wide`, and that is
       // the whole rule.
       const oneColumn = !pairedOf.has(line)
-      const indented = oneColumn && !besideInitial(line) && isIndented(line, body)
-      const switched = oneColumn && isCentred(line, body) !== isCentred(previous, body)
+      // Inside a quotation set narrower than the measure, every line is
+      // indented and every line looks centred — both tests describe the
+      // *block*, not this line's place in it. The run is divided at the
+      // quotation's first line and at the line after its last, and nowhere
+      // between. See `./indented`.
+      // Never on a note. The notes at the foot are set smaller and often
+      // indented as a group, so the quotation rule sees a run of aligned inset
+      // lines there and would cut one note into two — measured on leaf 400 of
+      // Isis Vol. I, which gained a fourth note it does not have.
+      const inInset = !isNote && insetLines.has(line)
+      const startsInset = !isNote && insetStarts.has(line)
+      const leftInset = !isNote && insetLines.has(previous) && !inInset
+      const indented = oneColumn && !inInset && !besideInitial(line) && isIndented(line, body)
+      const switched = oneColumn && !inInset && isCentred(line, body) !== isCentred(previous, body)
       // A note opens at its mark, and the first note opens where the notes do.
       // Without the first of those, several notes on one leaf join into one
       // block and print as a single note; without the second, the last
       // paragraph of the page and the first note become one.
       const opensNote = isNote && (!runIsNote || FOOTNOTE_MARK.test(line.text.trim()))
-      if (wide || indented || switched || opensNote) flush()
+      if (wide || indented || switched || opensNote || startsInset || leftInset) flush()
     }
     runIsNote = isNote
     run.push(line)
@@ -1493,3 +1548,4 @@ export * from './folios'
 export * from './hyphens'
 export * from './columns'
 export * from './paired'
+export * from './indented'
