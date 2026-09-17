@@ -419,7 +419,7 @@ function isRecord(v: unknown): v is Record<string, unknown> {
  * `carriesDraftNotes`, which is how a batch that was never corrected is
  * noticed rather than refused.
  */
-const PAGE_FIELDS = new Set([
+export const PAGE_FIELDS = new Set([
   'pageIndex',
   'role',
   'blocks',
@@ -431,7 +431,7 @@ const PAGE_FIELDS = new Set([
   'structural'
 ])
 
-const BLOCK_FIELDS = new Set([
+export const BLOCK_FIELDS = new Set([
   'kind',
   'text',
   'cells',

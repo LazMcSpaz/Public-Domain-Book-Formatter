@@ -67,6 +67,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { resolve, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { driftVerdict } from './lib/drift.mjs'
+import { PAGE_FIELDS, BLOCK_FIELDS } from './lib/batch-fields.mjs'
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -101,8 +102,11 @@ function checkBatch(donePath, draftPath) {
       )
     : null
 
-  const PAGE = new Set(['pageIndex', 'role', 'furniture', 'blocks', 'uncertain', 'queries'])
-  const BLOCK = new Set(['kind', 'text', 'marker', 'cells'])
+  // The schema's own lists, not a shorter one written from memory. See
+  // `lib/batch-fields.mjs` for why they are written twice and what keeps them
+  // level.
+  const PAGE = new Set(PAGE_FIELDS)
+  const BLOCK = new Set(BLOCK_FIELDS)
   const KINDS = new Set([
     'paragraph',
     'heading',
