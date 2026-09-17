@@ -2264,9 +2264,30 @@ Hermes` is one whitespace-separated word of which ten characters are small
   **What could not be decided is listed, not guessed.** 47 candidates went
   unmeasured, nearly all two- and three-letter words where one letter after the
   first leaves no median to take, and 21 could not be placed on their leaf at
-  all. Both lists are in the book's ledger. The sweep also turned up two words
-  the reading records in capitals and the paper prints in lower case (`will`,
-  `all`), which the measurement refuses rather than marking.
+  all. Both lists are in the book's ledger.
+
+  **And the first fault recurred inside that list, as a finding about the
+  compositor.** The sweep also reported two words the reading records in
+  capitals and the paper prints in lower case — `will` on four leaves, `all` on
+  one. Read against the scan, all five are the box on the wrong word again: the
+  box sits on an ordinary lower-case `will` elsewhere on the same leaf, while
+  the word the reading records is `What is the WILL ?` three lines above. The
+  guard cannot fire here, because the two are **the same letters** and no
+  similarity score separates `WILL` from `will`. A guard written against one
+  spelling of a fault does not cover the fault.
+
+  Leaf 202's `WILL` is in fact **small capitals throughout, with no initial
+  full capital** — measured on the line, `What`'s W stands 71 pixels and `Can`'s
+  C 80 while all four letters of `WILL` stand 51 to 54 on one top edge, a ratio
+  of 0.72. That shape is reachable and was not looked for: `<sc>` sets what is
+  written lower case and leaves capitals alone, so a word small throughout is
+  `<sc>will</sc>` and a word with a full initial is `<sc>Will</sc>`. Every mark
+  this sweep made took the second form, because caps-and-small-caps is what a
+  glossary headword is. **The first-letter ratio is blind to the first form by
+  construction** — it measures the first letter against the rest, and in a word
+  set wholly small that ratio is 1, which the sweep reads as full capitals. Any
+  future sweep has to measure against the line's own capitals, not against the
+  word's first letter.
 
   **How it was run, which is the reusable part.** One render per _leaf_ rather
   than one crop per word — 357 crops of 163 pages is three times the work and
