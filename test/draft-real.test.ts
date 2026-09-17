@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { resolve } from 'node:path'
-import { buildVocabulary, draftPage, folioOffset, type DraftWord } from '@core/draft'
+import { buildVocabulary, draftPage, findColumns, folioOffset, type DraftWord } from '@core/draft'
 
 /**
  * The draft module, against word boxes measured off real scans.
@@ -20,11 +20,18 @@ import { buildVocabulary, draftPage, folioOffset, type DraftWord } from '@core/d
  *
  * ## The oracle, which costs nobody any labelling
  *
- * **Tesseract emits words in reading order.** Whatever else the draft does, it
- * must hand the words back in the order they were read, because both are
- * reading the same single-column page. So the drafted text must be a
- * *subsequence* of the OCR sequence — every word still there, still in order,
- * with only the furniture lifted out.
+ * **Tesseract emits words in reading order**, on a leaf holding one column of
+ * type. Whatever else the draft does, it must hand the words back in the order
+ * they were read. So the drafted text must be a *subsequence* of the OCR
+ * sequence — every word still there, still in order, with only the furniture
+ * lifted out.
+ *
+ * That holds for one column and fails badly for two: on a leaf photographed as
+ * two printed pages side by side, Tesseract crosses between them dozens of
+ * times and its emission order is not a reading of anything. So the ground
+ * truth is taken from `readingOrder` below, which re-orders by column first.
+ * On every single-column fixture that is the identity and the rule is exactly
+ * what it always was.
  *
  * A subsequence check catches a reordering exactly: if one word moves later,
  * the match fails at the word it jumped. That is the scramble this module
@@ -141,21 +148,73 @@ function isSubsequence(part: readonly string[], whole: readonly string[]): numbe
 }
 
 /**
- * There is no known-failing list any more.
+ * The order the leaf was read in — which is column-major, not emission order.
  *
- * There was one, holding `tight-scramble` leaf 7 as `it.fails` while the
- * scramble stood. The rework closed it, and the entry went with it rather than
- * being left behind as an empty object under a comment describing a fixture it
- * no longer named — which is what it had become.
+ * The oracle above rests on OCR emitting words in reading order, and that is
+ * true of a leaf holding **one** column of type. It is false of a leaf holding
+ * two printed pages side by side: measured on `patterns-vol1` leaf 7,
+ * Tesseract crosses between the two pages **73 times**, taking a few words of
+ * the right page, a few of the left, and so on down the leaf. Its emission
+ * order there is not a reading of anything, and a draft that reproduced it
+ * would be the scramble `./columns` exists to prevent.
+ *
+ * So the ground truth is the words re-ordered **by column, then by emission
+ * within each column**, using the module's own split. On a single-column leaf
+ * there is one band and this returns the array untouched, so every existing
+ * fixture is checked by exactly the rule it was checked by before.
+ *
+ * Note this does not let a bad split pass. If `findColumns` cut the leaf in
+ * the wrong place, the words either side of the cut move, and the draft — laid
+ * out from that same split — still has to be a subsequence of it; but the
+ * hand-checked expectations below, and the `structural` reasoning, are what
+ * say the cut is in the *right* place. The oracle's job is only that nothing
+ * is scrambled within a column.
  */
+function readingOrder(words: readonly DraftWord[]): DraftWord[] {
+  const { columns } = findColumns(words)
+  if (columns.length <= 1) return [...words]
+  return columns.flatMap((band) =>
+    words.filter((w) => {
+      const centre = (w.bbox.x0 + w.bbox.x1) / 2
+      return centre >= band.left && centre < band.right
+    })
+  )
+}
+
+/**
+ * The known-failing list, which held `tight-scramble` leaf 7 while that
+ * scramble stood and is now open again for one leaf and one reason.
+ *
+ * `patterns-vol1` leaf 27 is a printed page carrying **two columns of its
+ * own** — a transcript of Erickson speaking, set beside the authors'
+ * commentary on it, entry against entry. `findColumns` cuts the leaf into its
+ * two printed pages correctly and stops there, deliberately: the left page's
+ * two columns are not a second gutter to split on, they are a **table**, and
+ * laying them out means pairing each transcript entry with the commentary
+ * opposite rather than running one column after the other. Until that is
+ * built, the left page's lines are gathered across both of its columns, which
+ * is the interleaving this oracle exists to catch. It is correctly failing.
+ *
+ * `it.fails` rather than a skip on purpose: it is a ratchet. The day the
+ * pairing lands, this test starts *passing* and the suite goes red until the
+ * entry is removed, so the list cannot quietly outlive the fault it names.
+ */
+const KNOWN_SCRAMBLE: Record<string, number[]> = {
+  'patterns-vol1': [27]
+}
+
 describe('the draft preserves the order the page was read in', () => {
   for (const { name, fixture } of fixtures) {
     for (const leaf of fixture.leaves) {
-      it(`${name} leaf ${leaf.pageIndex} — ${leaf.words.length} words`, () => {
+      const known = KNOWN_SCRAMBLE[name]?.includes(leaf.pageIndex) ?? false
+      const run = known ? it.fails : it
+      run(`${name} leaf ${leaf.pageIndex} — ${leaf.words.length} words`, () => {
         const words = toWords(leaf.words)
         const drafted = draftPage(words)
         const ordinary = ordinaryWords(words)
-        const ocr = leaf.words.map(([text]) => text).filter((t) => ordinary.has(t))
+        const ocr = readingOrder(words)
+          .map((w) => w.text)
+          .filter((t) => ordinary.has(t))
         const laid = drafted.blocks.flatMap((b) => split(b.text)).filter((t) => ordinary.has(t))
         const broke = isSubsequence(laid, ocr)
         expect(
@@ -666,4 +725,101 @@ describe("a signature mark is the printer's, not the book's", () => {
       ).toBeUndefined()
     }
   })
+})
+
+/**
+ * The cut between two printed pages is in the right place.
+ *
+ * The reading-order oracle above cannot assert this and says so: it re-orders
+ * the ground truth with `findColumns` too, so a cut in the wrong place moves
+ * both sides together and passes. What pins the cut is the material — a phrase
+ * that is **contiguous on the paper** is contiguous in the draft, and on a
+ * leaf laid out as two pages read as one it cannot be, because the other
+ * page's words land inside it.
+ *
+ * These were read off the renders at 150 DPI (`drive.mjs leaf <n>`), which is
+ * the only thing here that can say what the paper does.
+ *
+ * `patterns-vol1` leaf 7 is the case to keep: before the split its draft
+ * opened `in our experience of sensory data. For example, we can fantasize a
+ * green cow, Introduction: even though we have never experienced one` — where
+ * `Introduction:` is the display title of the page beside it, eleven words
+ * deep into a sentence it has nothing to do with.
+ *
+ * **Phrases are quoted as this fixture's reader produced them**, which is
+ * Tesseract over the render. That is not what the app reads off this
+ * particular book — it is a born-digital PDF whose own text layer comes out at
+ * confidence 100 — so the display type here is far worse than anything the app
+ * will see: leaf 7's title reads `Intro uction o . Th e M dp | S N Ot { h e`.
+ * The fixture is kept that way on purpose, because what is under test is the
+ * geometry, and a noisier reader tests it harder. Quote body type, not display.
+ */
+const CONTIGUOUS: Record<string, Record<number, string[]>> = {
+  'patterns-vol1': {
+    7: [
+      // Wholly on the left page. Interleaved, the right page's words land
+      // inside this: it used to read `people who use hypnosis model of the
+      // world allow us to operate more efficiently from context to for
+      // medical, dental`.
+      'the models that we as humans create will differ from the world of reality in three major ways',
+      // Better still — this one *crosses* the seam, the left page's last
+      // paragraph running onto the right page. It is contiguous only if the
+      // cut is in exactly the right place and the pages are in the right order.
+      'make shifts in our experience of sensory data'
+    ],
+    // The part title, set across the spread: left page then right page.
+    4: ['PART I', 'HYPNOTIC WORK'],
+    // The leaf that defeated taking the *widest* gap rather than the most
+    // central: its right-hand page is a sparse list of example sentences, so
+    // the ragged white inside that list is wider than the gutter beside it.
+    //
+    // This entry is what makes that a test. `Rhetorical Questions` was here
+    // first and was **useless** — it survives the wrong cut too, so
+    // reinstating the bug left the suite green, which is this repository's own
+    // warning about tests that pass before and after the fix. The phrase below
+    // is one the wrong cut demonstrably breaks: with the widest gap taken, the
+    // right page's `(Who cares whether you show up or not?)` lands inside it,
+    // giving `transform, turn into, ___ (Nobody cares whether you show up or
+    // not.) become, etc.`
+    118: ['change, transform, turn into, become, etc.']
+  }
+}
+
+describe('a leaf holding two printed pages is cut between them', () => {
+  for (const { name, fixture } of fixtures) {
+    const expected = CONTIGUOUS[name]
+    if (!expected) continue
+    for (const leaf of fixture.leaves) {
+      const want = expected[leaf.pageIndex]
+      if (!want) continue
+      it(`${name} leaf ${leaf.pageIndex}`, () => {
+        const drafted = draftPage(toWords(leaf.words))
+        const flat = drafted.blocks
+          .map((b) => b.text)
+          .join('   ')
+          .replace(/\s+/gu, ' ')
+        for (const phrase of want) expect(flat).toContain(phrase)
+      })
+    }
+  }
+})
+
+/**
+ * And a single-column book is still read as one column.
+ *
+ * The cheapest guard there is, and the one that matters most: this rule was
+ * added for one book and runs on every book, so the claim worth asserting is
+ * that it abstains everywhere else. Nineteen leaves across five books, none of
+ * which may gain a column.
+ */
+describe('the column rule abstains on every single-column book', () => {
+  for (const { name, fixture } of fixtures) {
+    if (name === 'patterns-vol1') continue
+    for (const leaf of fixture.leaves) {
+      it(`${name} leaf ${leaf.pageIndex}`, () => {
+        const { columns, why } = findColumns(toWords(leaf.words))
+        expect(columns.length, why.join(' ')).toBe(1)
+      })
+    }
+  }
 })

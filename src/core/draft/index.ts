@@ -53,6 +53,7 @@ export interface DraftLine {
 }
 
 import { namesFolio, asFolio, looksLikeSignature } from './folios'
+import { findColumns, wordsInBand } from './columns'
 import { healWrappedHyphens, tally, type HyphenVerdict, type Vocabulary } from './hyphens'
 
 export interface DraftBlock {
@@ -131,6 +132,18 @@ export interface DraftOptions {
    * confidently, never assumed.
    */
   expectedFolio?: number
+  /**
+   * Whether to look for several columns of type on the leaf.
+   *
+   * `'auto'` (the default) measures, and abstains to one column unless the ink
+   * shows a central gutter — which it does on no leaf of any single-column
+   * book here, so the default is safe for every book already read. `'single'`
+   * declines to look, for a caller that knows its leaf is one page and would
+   * rather not read the reasoning in `structural`.
+   *
+   * See `./columns` for the measurement that sets the threshold.
+   */
+  columns?: 'auto' | 'single'
 }
 
 const DEFAULTS = { uncertainBelow: 60 }
@@ -1092,7 +1105,19 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
   }
 
   const bodyHeight = median(usable.map(heightOf))
-  const lines = toLines(usable, bodyHeight)
+
+  // Lines are gathered *per column*, because gathering them across a leaf that
+  // holds two printed pages interleaves one page into the other word by word —
+  // see `./columns`, which abstains to a single column on every ordinary book.
+  // Everything after this point reads the line sequence and nothing else, so
+  // one column and several are the same code from here down.
+  const split = options.columns === 'single' ? null : findColumns(usable)
+  const bands = split?.columns ?? []
+  structural.push(...(split?.why ?? []))
+  const lines =
+    bands.length > 1
+      ? bands.flatMap((band) => toLines(wordsInBand(usable, band, bands[0]!.left), bodyHeight))
+      : toLines(usable, bodyHeight)
 
   // Baseline to baseline, never bottom-to-top. See PARAGRAPH_GAP.
   const strides: number[] = []
@@ -1346,3 +1371,4 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
 
 export * from './folios'
 export * from './hyphens'
+export * from './columns'
