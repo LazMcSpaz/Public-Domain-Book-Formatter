@@ -131,7 +131,12 @@ const PAUSE = {
 }
 
 /** Block kinds that are read as ordinary prose. */
-const PROSE = new Set(['paragraph', 'quote', 'list-item', 'caption'])
+// `blockquote`, not `quote`: the kind is named in `@core/transcribe` and this set
+// once carried a name that nothing emits, so every block quotation in every
+// book came back "nothing knows how to read a blockquote". No book had one
+// until *Uncommon Therapy*, whose case reports are all set as quotations —
+// 71 blocks, ten thousand words, reported unread and counted in nothing.
+const PROSE = new Set(['paragraph', 'blockquote', 'list-item', 'caption'])
 
 /**
  * The chapters a listener counts, which are the level-1 openings.

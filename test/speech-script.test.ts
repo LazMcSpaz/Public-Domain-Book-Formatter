@@ -192,6 +192,24 @@ describe('openingPieces', () => {
   })
 })
 
+describe('readChapter, on a block quotation', () => {
+  it('reads it as prose rather than reporting it unread', () => {
+    // The kind is `blockquote`, and the prose set once named a kind nothing
+    // emits — so a book whose case reports are all set as quotations came
+    // back with ten thousand words reported unread.
+    const book = bookOf({
+      blocks: [
+        block('p1b0', 'heading', 'A'),
+        block('p1b1', 'blockquote', 'A woman came to me with a stomach ulcer.')
+      ],
+      chapters: [{ id: 'p1b0', title: 'A', level: 1 }] as BookDocument['chapters']
+    })
+    const script = readChapter(book, 0)
+    expect(script.unread).toEqual([])
+    expect(script.pieces.map((p) => p.text)).toContain('A woman came to me with a stomach ulcer.')
+  })
+})
+
 describe('readChapter', () => {
   it('reads the headings, then the prose, with silence between', () => {
     const script = readChapter(TWO_CHAPTERS, 0)
