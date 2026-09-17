@@ -392,6 +392,30 @@ reader who checks it against the render. The cache-busting parameter is also
 the cheap way to tell this apart from a real bug: **if the plain URL and the
 busted URL disagree, the code is right and the server is stale.**
 
+**A finding raised on a snippet is usually settled by the paragraph.** Four
+places in one chapter of _Uncommon Therapy_ were held back as undeterminable
+and put to the editor — `hypnotized °.`, `He often an family members`, two
+missing quotation marks, and a clause with no verb. Read again with the whole
+paragraph in view, three of the four answered themselves: the next sentence
+said "the same behavior he produced _in_ that other room", two sentences on
+the author wrote "he will _see_ a wife … and then _see_ the husband", and the
+book quotes the word "hypnosis" both times it names it on the next page. The
+fourth turned out not to be a fault at all — the verb of one clause carrying
+into the next is ordinary English, and calling it damage was the error. The
+editor's remark was that these come to him often and are resolved easily once
+more context is given, which is a cost being paid on the wrong side.
+
+So before anything is raised: **read the whole block it sits in, the block
+before and the block after, and look for the same word or construction used
+elsewhere in the chapter.** The book is its own best witness, and the
+evidence that settles a snippet is nearly always within a page of it. That
+does not soften the rule below — a decision that is the editor's is still
+raised and never taken, and a suggestion beside a question is still an answer
+in all but name. What it changes is which findings are the editor's: one the
+paragraph answers was never a decision, and one it does not is raised with
+the paragraph attached, so the person deciding is not asked to go and find
+the context the reader should have brought.
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what
