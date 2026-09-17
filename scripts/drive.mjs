@@ -4289,6 +4289,97 @@ async function serve() {
     },
 
     /**
+     * Say what a block *is*, or take it out of the book altogether.
+     *
+     * `correct` and `sweep` change what a block says and nothing else, and
+     * `applyEdits` has had `retype` and `drop` since the proof step was built
+     * — but only the wizard could reach them, so a session working a book from
+     * the conversation could fix every word of a paragraph and not say it was
+     * a heading.
+     *
+     * The job that needs `drop` is a figure. A diagram drawn out of rules and
+     * letters — a syntactic tree, a brace over a derivation — comes off the
+     * leaf as scrambled word fragments, and cutting it as a picture leaves
+     * those fragments in the text beside the picture, saying the same thing
+     * twice and saying it wrongly once. `figure cut` had no way to take them
+     * out; this is it.
+     *
+     *   node scripts/drive.mjs block p74b12 drop
+     *   node scripts/drive.mjs block p97b5 retype heading 2
+     *
+     * Reversible, like every other edit here: both are entries on the edit
+     * list, and `withEdit` collapses a second one on the same block.
+     */
+    block: async ([blockId, action, blockKind, level]) => {
+      if (!blockId || !action) {
+        throw new Error('block <blockId> drop | block <blockId> retype <kind> [level]')
+      }
+      if (action !== 'drop' && action !== 'retype') {
+        throw new Error(`\`${action}\` is not a thing to do to a block. Try drop or retype.`)
+      }
+      if (action === 'retype' && !blockKind) throw new Error('block <blockId> retype <kind>')
+
+      return page.evaluate(
+        async ([repo, blockId, action, blockKind, level]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const schema = await import(`/@fs${repo}/src/core/transcribe/index.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const block = doc.blocks.find((b) => b.id === blockId)
+          // Refused rather than recorded to be reported later as an edit
+          // nothing answers — the same rule `bare` follows. An edit naming a
+          // block the book has not got changes nothing and says it did.
+          if (!block) throw new Error(`No block \`${blockId}\` in this book.`)
+
+          if (action === 'retype' && !schema.BLOCK_KINDS.includes(blockKind)) {
+            throw new Error(
+              `\`${blockKind}\` is not a kind of block. One of: ${schema.BLOCK_KINDS.join(', ')}.`
+            )
+          }
+
+          const edit =
+            action === 'drop'
+              ? { kind: 'drop', blockId }
+              : {
+                  kind: 'retype',
+                  blockId,
+                  blockKind,
+                  ...(level === undefined || level === null ? {} : { level: Number(level) })
+                }
+          const edits = editsMod.withEdit(run.edits ?? [], edit)
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            edits
+          })
+          const stored = await runStore.saveRun(next)
+          return {
+            blockId,
+            was: block.kind,
+            did: action,
+            ...(action === 'retype' ? { now: blockKind } : {}),
+            text: block.text.slice(0, 90),
+            stored: stored === true,
+            edits: edits.length,
+            next: '`shelf push` sends it to the shelf; nothing has left this device yet.'
+          }
+        },
+        [REPO, blockId, action, blockKind ?? null, level ?? null]
+      )
+    },
+
+    /**
      * Find — and optionally replace — across the whole book.
      *
      * The recurring OCR misreading is the case this exists for: the same
