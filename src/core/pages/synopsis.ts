@@ -84,6 +84,25 @@ const TRAILING_FOLIO = /^(.*?)[.\u2026\s]{4,}\s*([0-9ivxlc]+)\s*$/i
 const NUMBER_LINE = /^\s*(lesson|chapter|part|book|section)\b[\s.]*[0-9ivxlcdm]*\s*\.?\s*$/i
 
 /**
+ * The same thing with the word left off: a heading that is a numeral and
+ * nothing else.
+ *
+ * Plenty of books set the number alone — *Uncommon Therapy* opens each chapter
+ * with a large `I` beside the title, and prints the word "chapter" nowhere. A
+ * heading of one bare numeral is a number line by the only reading available,
+ * and refusing it split every such chapter into two: one called "I" with no
+ * text under it, and one called "STRATEGIC THERAPY" with no number over it.
+ *
+ * Safe here in a way it would not be in running text, where `I` is the
+ * commonest pronoun in English and `I AM THAT I AM` is a real chapter title:
+ * this is asked only of a *heading*, and only of one whose entire content is
+ * the numeral. `speakHeadingNumbers` has drawn the line in that same place
+ * since it was written, so the two modules now agree rather than differing on
+ * what counts as a number.
+ */
+const BARE_NUMBER_LINE = /^\s*[0-9]+\s*\.?\s*$|^\s*[ivxlcdm]+\s*\.?\s*$/i
+
+/**
  * Whether a heading is a bare number line — `LESSON III.`, `CHAPTER IV` — as
  * against a title that happens to begin with one of those words.
  *
@@ -94,7 +113,8 @@ const NUMBER_LINE = /^\s*(lesson|chapter|part|book|section)\b[\s.]*[0-9ivxlcdm]*
  * assembler is exactly the kind of thing that drifts.
  */
 export function isNumberLine(text: string): boolean {
-  return NUMBER_LINE.test(text.trim())
+  const trimmed = text.trim()
+  return NUMBER_LINE.test(trimmed) || BARE_NUMBER_LINE.test(trimmed)
 }
 
 /**
