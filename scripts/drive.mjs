@@ -4176,6 +4176,135 @@ async function serve() {
     },
 
     /**
+     * The text of one of the **book's own** footnotes.
+     *
+     * ```
+     * notetext list                               # every note, with its anchor
+     * notetext 317 ‡ 0 mended.txt                 # what that note should read
+     * notetext 317 ‡ 0 --drop                     # back to what the paper prints
+     * ```
+     *
+     * `note` writes a footnote this edition adds; this one amends a footnote
+     * the 1877 compositor set. Until now nothing in a session could: `sweep`
+     * reached them, and only by matching words.
+     *
+     * The anchor is the leaf, the marker and which occurrence of it — never
+     * `fnN`, which is a position in the assembled list and moves under every
+     * note added or removed anywhere earlier in the book. `nth` is counted
+     * from 0, exactly as `notes` prints it, so an anchor can be copied from
+     * that report without arithmetic.
+     *
+     * Refused when the leaf has no such note, rather than recorded. It would
+     * be *reported* afterwards by `noteTextsMissed` — but reported as a
+     * correction that has lost its note, while the session that wrote it went
+     * away believing the amendment had landed, and the paper's own text stands
+     * in the book with nothing on the page to say so.
+     */
+    notetext: async ([leaf, marker, nth = '0', file, ...flags]) => {
+      const drop = flags.includes('--drop') || file === '--drop'
+      let text = null
+      if (!drop && leaf !== 'list' && leaf) {
+        if (!file) throw new Error('notetext <leaf> <marker> <nth> <file with the text>')
+        const { readFile } = await import('node:fs/promises')
+        text = (await readFile(resolve(REPO, file), 'utf8')).replace(/\n+$/u, '')
+      }
+      return page.evaluate(
+        async ([repo, leaf, marker, nth, text, drop]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const markup = await import(`/@fs${repo}/src/core/transcribe/markup.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+
+          const pristine = assemble.assembleBook(run.transcriptions)
+          const doc = editsMod.applyEdits(pristine, run.edits ?? [])
+          const byAnchor = editsMod.noteAnchors(doc.footnotes)
+          const anchors = editsMod.anchorsById(doc.footnotes)
+
+          if (!leaf || leaf === 'list') {
+            return {
+              // The amendments standing, first: each is an editorial decision
+              // and the report is what says one is still in force.
+              amended: (run.edits ?? [])
+                .filter((e) => e.kind === 'note-text')
+                .map((e) => ({
+                  at: e.at,
+                  reads: e.text.slice(0, 90),
+                  onTheLeaf: (byAnchor.get(editsMod.noteKey(e.at))?.text ?? null)?.slice(0, 90)
+                })),
+              missed: doc.noteTextsMissed ?? [],
+              notes: doc.footnotes.map((n) => ({
+                at: anchors.get(n.id) ?? null,
+                reads: n.text.slice(0, 70)
+              }))
+            }
+          }
+
+          const at = { pageIndex: Number(leaf), marker, nth: Number(nth) }
+          if (!Number.isInteger(at.pageIndex) || !Number.isInteger(at.nth) || at.nth < 0) {
+            throw new Error('notetext <leaf> <marker> <nth from 0> <file>')
+          }
+          const note = byAnchor.get(editsMod.noteKey(at))
+          if (!note) {
+            const onLeaf = doc.footnotes
+              .filter((n) => n.pageIndex === at.pageIndex)
+              .map((n) => ({ at: anchors.get(n.id), reads: n.text.slice(0, 70) }))
+            throw new Error(
+              `Leaf ${at.pageIndex} has no ${at.nth === 0 ? 'first' : `#${at.nth + 1}`} ` +
+                `\`${marker}\` note. Nothing was written. It carries: ` +
+                JSON.stringify(onLeaf)
+            )
+          }
+
+          const was = markup.withMarkup(note.text, note)
+          let edits
+          if (drop) {
+            const before = (run.edits ?? []).length
+            edits = (run.edits ?? []).filter(
+              (e) => e.kind !== 'note-text' || editsMod.noteKey(e.at) !== editsMod.noteKey(at)
+            )
+            if (edits.length === before) {
+              throw new Error('That note carries no amendment. Nothing was changed.')
+            }
+          } else {
+            if (text === was) {
+              return { at, unchanged: true, reads: was, next: 'Nothing to write.' }
+            }
+            edits = editsMod.withEdit(run.edits ?? [], { kind: 'note-text', at, text })
+          }
+
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            edits
+          })
+          const stored = await runStore.saveRun(next)
+          const after = editsMod.applyEdits(pristine, edits)
+          const now = editsMod.noteAnchors(after.footnotes).get(editsMod.noteKey(at))
+          return {
+            at,
+            dropped: drop,
+            stored: stored === true,
+            was,
+            // Read back off the assembled book rather than echoed, because the
+            // one thing worth knowing is that the amendment reached the note
+            // and not that the edit was written.
+            reads: now ? markup.withMarkup(now.text, now) : null,
+            missed: after.noteTextsMissed ?? [],
+            edits: edits.length,
+            next: '`shelf push` sends it to the shelf; nothing has left this device yet.'
+          }
+        },
+        [REPO, leaf, marker, nth, text, drop]
+      )
+    },
+
+    /**
      * A footnote of the editor's own, set at a point in a passage.
      *
      * ```
@@ -4479,13 +4608,25 @@ async function serve() {
 
           // The book's own footnotes — not blocks, so swept through the
           // `note-text` record that exists for exactly this reach.
+          //
+          // Anchored by leaf, marker and occurrence, never by `fnN`: that id is
+          // a position in the assembled list, and anything that adds or removes
+          // a note renumbers every note after it. A sweep is also the one
+          // writer here that touches several notes at once, so the id being
+          // wrong would not merely mis-file one correction — `withEdit`
+          // collapses on the anchor, and edits that all carry the same absent
+          // anchor collapse into one.
+          const noteAt = editsMod.anchorsById(doc.footnotes)
           for (const note of doc.footnotes) {
             if (!note.originalMarker) continue
+            const at = noteAt.get(note.id)
+            if (!at) continue
             const text = markup.withMarkup(note.text, note)
             const matches = editsMod.findMatches(text, was, matchCase)
             if (matches.length === 0) continue
             found.push({
               note: note.id,
+              at,
               marker: note.originalMarker,
               matches: matches.map((m) => m.context)
             })
@@ -4493,7 +4634,7 @@ async function serve() {
               const swept = editsMod.sweepText(text, was, now, matchCase)
               edits = editsMod.withEdit(edits, {
                 kind: 'note-text',
-                noteId: note.id,
+                at,
                 text: swept.text
               })
               replaced += swept.count

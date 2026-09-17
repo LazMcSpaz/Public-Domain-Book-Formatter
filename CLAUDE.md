@@ -2277,6 +2277,66 @@ Hermes` is one whitespace-separated word of which ten characters are small
   and the record says which was used. A wrapper that pipes the script to `tail`
   tests `tail`'s exit status and will report success forever.
 
+- **Also done**: **a correction to a footnote names the leaf and the marker, not
+  a place in a list** (`NoteAnchor`; `drive.mjs notetext`). A `note-text` edit
+  was keyed to `fnN`, an id assigned in assembly order — so anything that adds
+  or removes a note anywhere earlier renumbers every note after it and every
+  edit written against the old numbering silently names a different one. Three
+  things did that to _Isis Unveiled_ Vol. I in one session: the `**` claiming
+  fix, four bare-mark declarations, and the front matter, whose leaves put notes
+  before every note in the book. **All eleven corrections on that volume landed
+  on the wrong notes**, and nothing reported it — the counts balance, `orphaned`
+  is 0, the export has no cautions, and the only way to see it is to read a
+  printed foot against the scan, which is what turned it up: leaf 55 prints
+  `§ Ibid., p. 92.` and the book printed a paragraph from another leaf entirely.
+
+  This is the fault the highlight was designed against — "anchored by its words,
+  not its offset, because every later correction shifts the characters" — and
+  `note-text` had been given the one anchor that cannot survive the book
+  changing. It is now `{pageIndex, marker, nth}`: the leaf, the reference mark,
+  and which occurrence of it, all three of them things the paper shows.
+  `noteAnchors` and `anchorsById` are one walk read from either end, so a
+  surface holding a note and a surface holding an anchor cannot count
+  differently. An anchor that names no note is **reported** through
+  `noteTextsMissed` to `LaidOutBook` and led by `drive.mjs notes`, because this
+  edit fails backwards: losing one leaves the paper's own text standing, which
+  looks exactly like nothing being wrong. The migration **drops** a legacy
+  id-anchored edit rather than carrying it, since the id it names is not the
+  note it meant.
+
+  **The recovery is the part worth recording, and it argued against my own
+  first answer.** The ledger entry written when the fault was found proposed
+  dropping the eleven, on the ground that "what each was originally correcting
+  has to be recovered rather than guessed". That followed from the id being the
+  only thing written down. With the anchor readable against the paper, ten of
+  the eleven turn out to be rows already on the book's `rulings.md` — matched by
+  the ruling's leaf and then by the printed text against every note on it, with
+  a wide margin in every case — and all eleven went back in **byte for byte** as
+  the editor approved them. Dropping them would have undone ten editorial
+  decisions. The eleventh had no row and now has one: `Sec` for `See`, which the
+  scan at 2400 DPI settles (the second letter carries a crossbar and the third
+  does not, so the paper does print `Sec`), filed under the standing ruling the
+  sheet already carries fourteen of.
+
+  **`notetext` exists because there was no door.** `sweep` reached a footnote
+  and only by matching words; nothing in a session could amend one by naming it.
+  The verb refuses an anchor the book has no note for and lists what the leaf
+  does carry, rather than recording an edit for `noteTextsMissed` to report
+  afterwards as a correction that has lost its note — by which time the session
+  that wrote it has gone away believing it landed.
+
+  **And the fix missed a site, which using it is what found.** `drive.mjs`'s
+  sweep still wrote `{noteId}`, so from the moment the core required an anchor
+  the sweep could not touch a footnote at all. Reinstated, it throws inside
+  `editTarget` — loud rather than silent, because `noteKey` reads `at.pageIndex`
+  off nothing — which is the good version of this failure and not one to rely
+  on: a driver is not typechecked, and the only reason this was a crash instead
+  of eleven more mis-filed corrections is that the core had already been made
+  strict. Eight faults were injected against the anchor itself and eight caught;
+  the last needed a fixture carrying the same marker twice on one leaf, since
+  nothing else can tell an anchor that counts occurrences from one that does
+  not.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with
