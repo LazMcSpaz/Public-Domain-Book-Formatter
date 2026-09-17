@@ -14,6 +14,7 @@ export {
   footnoteMarkerPattern,
   stripLeadingMarker,
   printedMarker,
+  plainMarker,
   type BookDocument,
   type BookBlock,
   type Footnote,

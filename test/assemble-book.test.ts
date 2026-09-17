@@ -347,6 +347,25 @@ describe('stripLeadingMarker', () => {
     expect(stripLeadingMarker('† See Croll.', '†')).toBe('See Croll.')
   })
 
+  /**
+   * And the other way round. *Patterns of the Hypnotic Techniques* gathers its
+   * notes at the back of each Part, where a plain `1` marker would be found
+   * against standalone digits the length of the volume — so every mark is
+   * recorded as the superscript itself. The note still opens with the plain
+   * "1." the compositor set at its head, and matching only the superscript
+   * form leaves it there to print as "¹1. Syntactic Structures".
+   */
+  it('drops a plain-digit note head under a superscript marker', () => {
+    expect(stripLeadingMarker('1. Syntactic Structures, Mouton & Co.', '\u00b9')).toBe(
+      'Syntactic Structures, Mouton & Co.'
+    )
+    expect(stripLeadingMarker('10. Huxley, A.', '\u00b9\u2070')).toBe('Huxley, A.')
+    expect(stripLeadingMarker('\u00b9 See Croll.', '\u00b9')).toBe('See Croll.')
+    // Still not a different note's, and still not a numeral.
+    expect(stripLeadingMarker('2. See Croll.', '\u00b9')).toBe('2. See Croll.')
+    expect(stripLeadingMarker('1662 was the year.', '\u00b9')).toBe('1662 was the year.')
+  })
+
   it('leaves a note alone when it does not repeat its marker', () => {
     expect(stripLeadingMarker('See Croll, lib. ii.', '1')).toBe('See Croll, lib. ii.')
   })

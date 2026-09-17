@@ -4211,6 +4211,7 @@ async function serve() {
       const from = positional[1] ?? null
       const was = flag('was')
       const now = flag('now')
+      const bare = argv.includes('--bare')
       if (!blockId || (!from && was === null)) {
         throw new Error('correct <blockId> <file> | correct <blockId> --was <text> --now <text>')
       }
@@ -4222,7 +4223,7 @@ async function serve() {
       }
 
       return page.evaluate(
-        async ([repo, blockId, replacement, was, now]) => {
+        async ([repo, blockId, replacement, was, now, bare]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
           const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
@@ -4265,6 +4266,28 @@ async function serve() {
           if (text === before) {
             return { blockId, changed: false, why: 'That is what the block already says.' }
           }
+          // **A whole-block replacement that carries no tags throws the block's
+          // italics away**, silently, and `applyEdits` has no way to know it was
+          // not meant. It happened: 44 blocks of *Patterns of the Hypnotic
+          // Techniques* Vol. I were corrected from bare text and lost 188
+          // emphasis runs between them — every book title in the bibliography,
+          // every quoted phrase under discussion — and the book file, the
+          // export report and the KDP checks were all perfectly happy. The
+          // `--was`/`--now` form cannot do this, because it splices into the
+          // marked-up string; only the file form can.
+          //
+          // Refused rather than warned, because a warning on a run of forty is
+          // a line of output nobody reads. `--bare` is the way to say it was
+          // meant, which is a real case: `Erick <i>son</i>` is one word the
+          // conversion broke and italicised half of.
+          const tags = (t) => (t.match(/<(?:i|b|strong|em)>/gu) ?? []).length
+          if (!bare && tags(before) > 0 && tags(text) === 0) {
+            throw new Error(
+              `Block ${blockId} sets ${tags(before)} run(s) in italic or bold and the ` +
+                'replacement has no tags in it, so every one would be dropped. Write the ' +
+                'replacement with the tags `body` hands back, or pass --bare if that is meant.'
+            )
+          }
 
           const edits = editsMod.withEdit(run.edits ?? [], { kind: 'text', blockId, text })
           const next = project.createSavedRun({
@@ -4284,7 +4307,7 @@ async function serve() {
             next: '`shelf push` sends it to the shelf; nothing has left this device yet.'
           }
         },
-        [REPO, blockId, replacement, was, now]
+        [REPO, blockId, replacement, was, now, bare]
       )
     },
 

@@ -174,6 +174,42 @@ function occurrences(source: string, marker: string): { start: number; end: numb
 /** Any character a printed reference mark is made of. */
 const MARKER_CHAR = /[*†‡§‖¶⁂]/u
 
+/**
+ * What each heading reads *without* the reference mark on it, keyed by the text
+ * it carries with the mark.
+ *
+ * A footnote's reference can sit on a chapter title — this book's Erickson
+ * articles each carry their journal citation that way — and the mark is then
+ * part of the heading's text. The heading itself prints correctly, because the
+ * engine draws it from the prepared text with the mark reattached as a raised
+ * run. The *contents* and the *running head* do not: both take their title from
+ * `doc.chapters`, which is derived at assembly and knows nothing about which
+ * characters are marks, so the reader gets "…and Pain Control⁷" in the contents
+ * and again at the top of every page of the article.
+ *
+ * Keyed by the raw text rather than by block id because the two consumers reach
+ * it differently — the contents has a `ChapterEntry` whose id is the *first*
+ * heading of a run while its title comes from the last, and the running head
+ * has the block. A heading is named by what it says.
+ *
+ * Only headings whose text actually changed are in here, so a lookup that
+ * misses means there was no mark, and the caller keeps what it had.
+ */
+export function headingsWithoutMarks(
+  blocks: readonly { kind?: string; text: string }[],
+  prepared: PreparedFootnotes
+): Map<string, string> {
+  const out = new Map<string, string>()
+  prepared.blocks.forEach((prep, i) => {
+    const block = blocks[i]
+    if (!block || block.kind !== 'heading') return
+    const raw = block.text.trim()
+    const clean = prep.text.trim()
+    if (raw !== clean) out.set(raw, clean)
+  })
+  return out
+}
+
 export function prepareFootnotes(
   blocks: readonly { id: string; text: string }[],
   footnotes: readonly Footnote[],

@@ -312,6 +312,57 @@ code, so the new assertion never ran and the check passed for a reason that had
 nothing to do with what it asserts. That is this file's own rule about tests,
 found in the check written to enforce it.
 
+**A correction typed as plain text throws the paragraph's italics away.**
+`correct <blockId> <file>` takes the file verbatim, and a file written from the
+bare text has no `<i>` in it — so on _Patterns of the Hypnotic Techniques_
+Vol. I, 44 corrected blocks lost **188 emphasis runs** between them: every book
+title in the bibliography, every phrase the authors set apart for discussion.
+Nothing reported it. The book file, the export report and the KDP checks were
+all perfectly happy, because a block with no emphasis is exactly what a block
+with no emphasis looks like.
+
+Repairing it is mechanical — the pristine text still has the markup, so the
+change is diffed against the _stripped_ pristine and replayed into the marked
+one — but the repair is only possible while the pristine is still there, and
+the point is not to need it. `correct` now **refuses** a whole-block
+replacement that would take a block's tag count to zero, with `--bare` to say
+it was meant. That case is real: `Erick <i>son</i>` is one word the conversion
+broke in half and italicised half of. Refused rather than warned, because a
+warning on a run of forty is a line of output nobody reads.
+
+**A marker written in superscript digits is a run, exactly as `**` is.**
+A book that gathers its notes at the back of each Part cannot use a plain `1`
+marker — `(?<!\d)1(?!\d)` matches standalone digits the length of the volume —
+so every mark goes in as the superscript character itself. Matched literally,
+`¹` is then found inside every `¹⁰`…`¹⁷` in the book. The overlap guard in
+`prepareFootnotes`' emit loop hides most of the damage, since the `¹` inside a
+`¹⁰` starts where the `¹⁰` does and the longer run wins the position — but it
+comes too late for the _count_: the walk hands the k-th occurrence the k-th
+waiting note first, so a block carrying `¹⁰` and then a real `¹` gives the real
+mark the **second** waiting note. `footnoteMarkerPattern` now builds the same
+lookarounds for a superscript marker that it builds for a plain-digit one, which
+fixes the walk and `markOrphanFootnotes` together — they share that pattern
+precisely so they cannot disagree.
+
+Two more came with it, both from the same convention. `printedMarker` reads
+"1." back as "1", so a note _declared_ `¹` could never agree with its own
+printed head and `verifyPage` called every one of them a contradiction inside
+its leaf: `plainMarker` is what the two are compared through now. And
+`stripLeadingMarker` knew that a marker reported as a plain digit is usually
+printed superscript, but not the reverse, so a note declared `¹` kept the "1."
+the compositor set at its head and printed as "¹1. Syntactic Structures".
+
+**A reference mark on a chapter title reaches the contents and the running
+head.** The heading itself always printed correctly — the engine draws it from
+the prepared text and reattaches the mark as a raised run — which is why nothing
+noticed that `doc.chapters[].title` is derived at assembly and knows nothing
+about which characters are marks. Each of the Erickson articles reprinted in
+this volume carries its journal citation on its title, so the contents read
+"…and Pain Control⁷" and every page of the article was headed the same.
+`headingsWithoutMarks` is the one lookup both consumers use, from
+`prepareFootnotes`' own output, because the numbered pass has to name a chapter
+exactly as the layout does or the folios stop matching.
+
 **One block can carry the same marker twice, and the engine could only see
 one.** `prepareFootnotes` asked each note for its _first_ match in a block —
 and assembly joins a paragraph across a page seam, so a paragraph running from

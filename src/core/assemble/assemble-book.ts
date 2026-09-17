@@ -938,12 +938,41 @@ export function printedMarker(text: string): string | null {
   return digits ? digits[1]! : null
 }
 
+/**
+ * A marker in the form {@link printedMarker} reports — superscript digits read
+ * back to plain ones, everything else as it stands.
+ *
+ * The two have to be comparable. `printedMarker` normalises "¹" to "1", so a
+ * note *declared* `¹` — which is what a book whose notes are gathered at the
+ * back needs, a bare `1` being found against standalone digits the length of
+ * the volume — could never agree with its own printed head, whatever that head
+ * said. `verifyPage` reported every one of them as a contradiction inside the
+ * leaf, which is a flag nobody can act on and the kind that teaches a reader to
+ * stop looking.
+ */
+export function plainMarker(marker: string): string {
+  const trimmed = marker.trim()
+  return new RegExp(`^${SUPERSCRIPT_CLASS}+$`, 'u').test(trimmed)
+    ? fromSuperscript(trimmed)
+    : trimmed
+}
+
 export function stripLeadingMarker(text: string, marker: string): string {
   const trimmed = text.trim()
   const m = marker.trim()
   if (!m) return trimmed
 
-  const forms = /^\d+$/.test(m) ? [m, toSuperscript(m)] : [m]
+  // Both ways round. A marker reported as a plain digit is usually *printed*
+  // superscript, and a marker recorded as the superscript itself — which is
+  // what a book whose notes are gathered at the back needs, since a bare `1`
+  // matches standalone digits the length of the volume — still opens its note
+  // with the plain "1." the compositor set there. Leaving that unstripped
+  // prints a note as "¹1. Syntactic Structures".
+  const forms = /^\d+$/.test(m)
+    ? [m, toSuperscript(m)]
+    : new RegExp(`^${SUPERSCRIPT_CLASS}+$`, 'u').test(m)
+      ? [m, fromSuperscript(m)]
+      : [m]
   for (const form of forms) {
     const rest = trimmed.replace(new RegExp(`^${escapeRegExp(form)}(?:[.)\\]:]\\s*|\\s+)`), '')
     // Never strip the note down to nothing — a note that is only its marker is
@@ -964,6 +993,10 @@ function toSuperscript(digits: string): string {
   return [...digits].map((d) => SUPERSCRIPT_DIGITS[Number(d)]!).join('')
 }
 
+function fromSuperscript(digits: string): string {
+  return [...digits].map((d) => String(SUPERSCRIPT_DIGITS.indexOf(d))).join('')
+}
+
 /**
  * Where a footnote's printed marker appears in body text — the single source of
  * truth for both orphan detection and footnote attachment, which have to agree
@@ -976,12 +1009,26 @@ function toSuperscript(digits: string): string {
  * 2. The reference mark in the text is usually *superscript* ("grosse.¹") while
  *    the marker is reported as a plain digit. Matching only the plain form
  *    orphans essentially every numbered footnote in a real book.
+ * 3. A marker *written* in superscript digits is a run, exactly as `**` is.
+ *    Escaped literally, `¹` is found inside every `¹⁰`…`¹⁹` in the book — so on
+ *    a book numbered past nine, note 1 claims the reference belonging to note
+ *    10 and every `¹` note after it is set one early. The same lookarounds the
+ *    plain-digit form uses hold it to the whole run. This is not the `*`/`**`
+ *    guard in `occurrences`: that one asks whether a *marker character* sits
+ *    either side, and a superscript digit is not one of those — nor should it
+ *    be, since the guard must not start refusing `†` beside a mark.
  *
  * Returns null for an empty marker, which can never be located.
  */
 export function footnoteMarkerPattern(marker: string): RegExp | null {
   const trimmed = marker.trim()
   if (!trimmed) return null
+  if (new RegExp(`^${SUPERSCRIPT_CLASS}+$`, 'u').test(trimmed)) {
+    return new RegExp(
+      `(?<!${SUPERSCRIPT_CLASS})${escapeRegExp(trimmed)}(?!${SUPERSCRIPT_CLASS})`,
+      'u'
+    )
+  }
   if (!/^\d+$/.test(trimmed)) return new RegExp(escapeRegExp(trimmed))
 
   const superscript = toSuperscript(trimmed)

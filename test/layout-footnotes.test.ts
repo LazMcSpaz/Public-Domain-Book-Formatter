@@ -97,6 +97,69 @@ describe('prepareFootnotes — locating and renumbering reference marks', () => 
     expect(marks).toEqual(['1', '2', '3'])
   })
 
+  /**
+   * *Patterns of the Hypnotic Techniques* gathers its notes at the back of each
+   * Part, so a plain `1` marker is unusable — the body is full of standalone
+   * digits — and every mark was set as the superscript itself. That makes `¹`
+   * a marker written in superscript digits, and matched literally it is found
+   * inside every `¹⁰`…`¹⁹` in the book.
+   *
+   * The overlap guard in the emit loop hides most of that: the `¹` inside a
+   * `¹⁰` starts where the `¹⁰` does, so the longer run wins the position and
+   * the shorter hit is skipped with its note still in the pool. What it cannot
+   * hide is the *count*. The walk hands the k-th occurrence the k-th waiting
+   * note before any of that, so a block carrying `¹⁰` and then a real `¹`
+   * gives the real mark the **second** waiting note and the first is left to be
+   * taken further down the book.
+   *
+   * Hence the fixture: both `¹` notes still waiting when the block is reached,
+   * and the `¹⁰` ahead of the mark that should have taken the first of them.
+   * Counting references is blind to this — there are two either way.
+   */
+  it('does not find a superscript marker inside a longer one', () => {
+    const doc = build([
+      page(0, [
+        {
+          kind: 'paragraph',
+          text: 'The tenth claim.¹⁰ The first claim.¹ It was watched.'
+        },
+        { kind: 'footnote', text: 'Note on the first.', marker: '¹' },
+        { kind: 'footnote', text: 'Note on the tenth.', marker: '¹⁰' }
+      ]),
+      page(1, [
+        { kind: 'paragraph', text: 'The last claim.¹ It was watched.' },
+        { kind: 'footnote', text: 'Note on the last.', marker: '¹' }
+      ])
+    ])
+    const prepared = prepareFootnotes(doc.blocks, doc.footnotes)
+
+    const carried = prepared.blocks.map((b) =>
+      b.references.map((r) => prepared.notes.get(r.noteId)?.text)
+    )
+    expect(carried).toEqual([['Note on the tenth.', 'Note on the first.'], ['Note on the last.']])
+  })
+
+  /**
+   * And the other half, which fails silently rather than visibly: assembly
+   * shares this one pattern with the walk so the two cannot disagree, and a
+   * bare `¹` tests true against a body whose only superscript is a `¹⁰`. The
+   * note would be reported placed and then reach nothing — the failure this
+   * module exists to avoid.
+   */
+  it('reports a superscript note whose own mark is absent, even where a longer one is not', () => {
+    const doc = build([
+      page(0, [
+        { kind: 'paragraph', text: 'The tenth claim.¹⁰ Nothing else is marked.' },
+        { kind: 'footnote', text: 'Note on the tenth.', marker: '¹⁰' },
+        { kind: 'footnote', text: 'Stranded.', marker: '¹' }
+      ])
+    ])
+    expect(doc.footnotes.filter((n) => n.orphaned).map((n) => n.text)).toEqual(['Stranded.'])
+    expect(prepareFootnotes(doc.blocks, doc.footnotes).orphans.map((o) => o.text)).toEqual([
+      'Stranded.'
+    ])
+  })
+
   it('reports a note whose marker is nowhere in the body', () => {
     const doc = build([
       page(0, [
@@ -289,6 +352,48 @@ describe('layout — notes with no reference mark', () => {
     // The entry has to carry a folio, or it is an index entry with no index.
     const heading = book.chapterPages.find((c) => c.title === ENDNOTES_TITLE)!
     expect(book.pages[heading.pageIndex]!.folio).not.toBeNull()
+  })
+
+  /**
+   * The reference can sit on the chapter title itself. Each of the Erickson
+   * articles reprinted in *Patterns of the Hypnotic Techniques* carries its
+   * journal citation that way, and the mark is then part of the heading's text
+   * — so the contents read "…and Pain Control\u2077" and every page of the article
+   * was headed the same. The heading as *printed* was always right, which is
+   * why nothing noticed: the engine draws that from the prepared text and
+   * reattaches the mark as a raised run.
+   *
+   * Both consumers are checked here because they reach the title by different
+   * routes, and the numbered pass has to name the chapter exactly as the layout
+   * does or the folios stop matching.
+   */
+  it('keeps a reference mark on a chapter title out of the contents and the running head', () => {
+    const marked = build([
+      page(0, [
+        { kind: 'heading', text: 'The Interspersal Technique\u2077', level: 1 },
+        { kind: 'paragraph', text: PROSE.repeat(8) },
+        { kind: 'footnote', text: 'Amer. J. Clin. Hypn., 1966, 3, 198-209.', marker: '\u2077' }
+      ])
+    ])
+    const book = layoutWithToc(marked, defaultStyleProfile(), measurer, { edition: EDITION })
+
+    expect(book.notesPlaced).toBe(1)
+    const contents = book.pages.find((p) => p.kind === 'contents')!
+    expect(textOf(contents)).toContain('Interspersal')
+    expect(textOf(contents)).not.toContain('\u2077')
+    expect(book.chapterPages.map((c) => c.title)).toEqual(['The Interspersal Technique'])
+    expect(book.pages.map((p) => p.chapterTitle).filter(Boolean)).not.toContain(
+      'The Interspersal Technique\u2077'
+    )
+    // And the mark is still *printed* on the heading, as a raised run beside the
+    // title — which is the point: it is taken out of the words, not thrown away.
+    const opening = book.pages[book.chapterPages[0]!.pageIndex]!
+    expect(lines(opening).some((l) => l.runs.some((r) => r.text.includes('INTERSPERSAL')))).toBe(
+      true
+    )
+    expect(
+      lines(opening).some((l) => l.runs.some((r) => r.text === '1' && (r.risePt ?? 0) > 0))
+    ).toBe(true)
   })
 
   it('gives a book with nothing but stranded notes a contents page anyway', () => {

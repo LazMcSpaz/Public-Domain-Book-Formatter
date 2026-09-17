@@ -138,6 +138,28 @@ describe('the leaf reports what assembly could not settle', () => {
     expect(found[0]!.message).toMatch(/declared "\*", printed "†"/)
   })
 
+  /**
+   * A marker recorded as the superscript itself agrees with the plain digit the
+   * compositor set at the head of the note. `printedMarker` reads "1." back as
+   * "1", so comparing it against the field as typed made every note in a book
+   * marked this way a contradiction inside its own leaf — 26 of them here, none
+   * of which a person could have done anything about.
+   */
+  it('says nothing when a superscript field matches the plain digit the note opens with', () => {
+    const found = verifyPage(
+      page([{ kind: 'footnote', marker: '\u00b9', text: '1. Syntactic Structures.' }]),
+      ocr
+    ).filter((f) => f.code === 'footnote-marker' || f.code === 'orphan-footnote')
+    expect(found).toEqual([])
+    // And a real disagreement is still one.
+    expect(
+      verifyPage(
+        page([{ kind: 'footnote', marker: '\u00b9', text: '2. See Gibbon.' }]),
+        ocr
+      ).filter((f) => f.code === 'footnote-marker')
+    ).toHaveLength(1)
+  })
+
   it('says nothing when the field and the page agree', () => {
     const found = verifyPage(
       page([{ kind: 'footnote', marker: '†', text: '† See Gibbon.' }]),

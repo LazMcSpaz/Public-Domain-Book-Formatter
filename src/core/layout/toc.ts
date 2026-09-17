@@ -25,7 +25,7 @@
 import type { StyleProfile } from '@core/model'
 import type { BookDocument } from '@core/assemble'
 import { ENDNOTES_TITLE, layout, type LayoutOptions, type TocLine } from './paginate'
-import { prepareFootnotes } from './footnotes'
+import { headingsWithoutMarks, prepareFootnotes } from './footnotes'
 import type { TextMeasurer } from './measure'
 import type { LaidOutBook } from './types'
 
@@ -57,6 +57,16 @@ export function layoutWithToc(
   // heading it is, because the folios are matched back by *identity* — pairing
   // by array position would hand every chapter the wrong number the moment an
   // introduction was added in front of them.
+  // A chapter title that carries a footnote's reference mark is stored with the
+  // mark in it, and the contents must print the title rather than the mark. The
+  // same lookup the layout uses, from the same call, so the two passes cannot
+  // name a chapter differently.
+  const titleMarks = headingsWithoutMarks(
+    doc.blocks,
+    prepareFootnotes(doc.blocks, doc.footnotes, doc.bareMarks)
+  )
+  const titled = (title: string): string => titleMarks.get(title.trim()) ?? title
+
   const front = doc.sections.filter((x) => x.placement === 'front')
   const back = doc.sections.filter((x) => x.placement === 'back')
 
@@ -68,7 +78,7 @@ export function layoutWithToc(
     })),
     ...doc.chapters.map((chapter) => ({
       id: chapter.id,
-      title: chapter.title,
+      title: titled(chapter.title),
       ...(chapter.label ? { label: chapter.label } : {}),
       level: chapter.level,
       // Only when the style asks. The descriptions are long — twenty of them

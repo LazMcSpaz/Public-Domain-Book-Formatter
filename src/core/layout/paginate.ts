@@ -35,7 +35,12 @@ import {
   type BrokenLine,
   type TextSpan
 } from './break-lines'
-import { prepareFootnotes, type NoteReference, type PreparedNote } from './footnotes'
+import {
+  headingsWithoutMarks,
+  prepareFootnotes,
+  type NoteReference,
+  type PreparedNote
+} from './footnotes'
 import { anchorIllustrations } from './illustrations'
 import { typographicQuotes, withTypographicQuotes } from './quotes'
 import {
@@ -176,8 +181,15 @@ const DROP_CAP_LINES = 3
 /** Gap between a drop capital and the text beside it, as a fraction of its size. */
 const DROP_CAP_GAP_RATIO = 0.06
 
-/** Footnotes are set smaller than the body, as a fraction of the body size. */
-const NOTE_SIZE_RATIO = 0.82
+/**
+ * Footnotes are set smaller than the body, as a fraction of the body size.
+ *
+ * 0.75 rather than the 0.82 this shipped with, at the editor's request on
+ * *Patterns of the Hypnotic Techniques*: that book's notes are gathered at the
+ * back of each Part and are being brought down to the foot of the leaf their
+ * reference sits on, where a note within a hair of body size reads as body.
+ */
+const NOTE_SIZE_RATIO = 0.75
 /** Baseline-to-baseline within a note, as a fraction of the note size. */
 const NOTE_LEADING_RATIO = 1.22
 /** The separator rule's length, as a fraction of the measure. */
@@ -1166,7 +1178,11 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
       chapter:
         opts.chapter ??
         (block.kind === 'heading'
-          ? { id: block.id, title: block.text.trim(), level: block.level ?? 1 }
+          ? // `source` rather than `block.text`: it is the prepared text where
+            // there is one, so a reference mark on the title never reaches the
+            // running head. `text` would do as well but may have been
+            // upper-cased for a face with no small capitals.
+            { id: block.id, title: source.trim(), level: block.level ?? 1 }
           : null),
       keepWithNext: block.kind === 'heading',
       orphanControl: block.kind === 'paragraph'
@@ -1953,6 +1969,14 @@ export function layout(
     doc.bareMarks
   )
 
+  // A reference mark on a chapter title is part of that heading's text, and the
+  // contents and the running head both take their title from `doc.chapters` —
+  // derived at assembly, which knows nothing about which characters are marks.
+  // Without this the reader meets "…and Pain Control⁷" in the contents and at
+  // the head of every page of the article.
+  const titleMarks = headingsWithoutMarks(doc.blocks, prepared)
+  const titled = (title: string): string => titleMarks.get(title.trim()) ?? title
+
   // Every note broken to the measure once. A note's line count does not depend
   // on which page it lands on, so this is computed here and only looked up
   // during the flow.
@@ -2075,7 +2099,7 @@ export function layout(
         dropCap: profile.dropCap && afterChapterHeading,
         ...(above ? { superscription: above } : {}),
         ...(chapter
-          ? { chapter: { id: chapter.id, title: chapter.title, level: chapter.level } }
+          ? { chapter: { id: chapter.id, title: titled(chapter.title), level: chapter.level } }
           : {}),
         ...(prep ? { text: prep.text, references: prep.references } : {}),
         ...(hosted && block.kind !== 'heading' ? { figure: hosted } : {})

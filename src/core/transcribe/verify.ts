@@ -23,7 +23,7 @@
  * Pure: no model calls, no I/O.
  */
 import type { OcrWordLike } from './types'
-import { printedMarker } from '@core/assemble'
+import { plainMarker, printedMarker } from '@core/assemble'
 import { dispositionFor } from '@core/pages'
 import type { PageTranscription } from './schema'
 import { checkableText } from './schema'
@@ -201,7 +201,7 @@ export function verifyPage(
   const contradicted = notes.filter((b) => {
     if (!b.marker) return false
     const printed = printedMarker(b.text)
-    return printed !== null && printed !== b.marker.trim()
+    return printed !== null && printed !== plainMarker(b.marker)
   })
 
   if (noMarkAtAll.length > 0) {
