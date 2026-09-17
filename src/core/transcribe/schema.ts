@@ -266,6 +266,77 @@ export function tableToText(cells: readonly (readonly string[])[]): string {
 }
 
 /**
+ * A table's per-cell word indices, addressed into the flattened view.
+ *
+ * `TranscribedBlock.emphasis` indexes the whitespace-separated words of `text`,
+ * and for a table `text` is the flattened view. So the ` | ` between two cells
+ * is itself a word in that tokenisation, and a cell's own word 0 sits at a
+ * running offset that counts one extra per separator crossed. The arithmetic
+ * lives here, beside `tableToText`, for the reason `tableToText` lives here: a
+ * table's structure and its view must not come to disagree about where a word
+ * is, and two copies of this sum is how they would.
+ *
+ * `cells` is taken row by row and `perCell` in the same order — row-major,
+ * which is the order the flattened view sets them in.
+ */
+export function flattenCellEmphasis(
+  cells: readonly (readonly string[])[],
+  perCell: readonly (readonly number[])[]
+): number[] {
+  const out: number[] = []
+  let at = 0
+  let cell = 0
+  for (const row of cells) {
+    row.forEach((text, c) => {
+      if (c > 0) at++ // the ` | ` between this cell and the last
+      for (const i of perCell[cell] ?? []) out.push(at + i)
+      at += wordsOf(text).length
+      cell++
+    })
+  }
+  return out.sort((a, b) => a - b)
+}
+
+/**
+ * The inverse: a table's flattened emphasis, split back onto its cells.
+ *
+ * What the engine needs, because it sets a table a **cell** at a time — each
+ * broken to its own column and the columns zipped back together on the
+ * baseline grid — so a word index into the whole flattened string means
+ * nothing to it. Indices landing on a separator, or past the end, belong to no
+ * cell and are dropped: they cannot be drawn and there is nothing to be drawn
+ * on.
+ */
+export function cellEmphasis(
+  cells: readonly (readonly string[])[],
+  emphasis: readonly number[] | undefined
+): number[][] {
+  const out: number[][] = []
+  if (!emphasis || emphasis.length === 0) {
+    for (const row of cells) for (const _cell of row) out.push([])
+    return out
+  }
+  const marked = new Set(emphasis)
+  let at = 0
+  for (const row of cells) {
+    row.forEach((text, c) => {
+      if (c > 0) at++
+      const n = wordsOf(text).length
+      const mine: number[] = []
+      for (let i = 0; i < n; i++) if (marked.has(at + i)) mine.push(i)
+      out.push(mine)
+      at += n
+    })
+  }
+  return out
+}
+
+/** Whitespace-separated words, the one tokenisation an index here means. */
+function wordsOf(text: string): string[] {
+  return text.split(/\s+/u).filter((w) => w.length > 0)
+}
+
+/**
  * Recover a table's rows from its flattened text.
  *
  * The inverse of `tableToText`, and the reason a table can be corrected in the

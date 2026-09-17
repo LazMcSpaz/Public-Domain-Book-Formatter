@@ -10,6 +10,7 @@ import {
   type LaidOutPage,
   type LayoutEdition,
   type OrnamentItem,
+  type TextMeasurer,
   type PositionedLine
 } from '@core/layout'
 import { BUILTIN_ORNAMENTS } from '@core/ornament'
@@ -1048,5 +1049,85 @@ describe('blockPages — which page each block opens on, measured', () => {
     // The long paragraph spills over pages, but its record is where it began —
     // the same page its heading opened.
     expect(para.pageIndex).toBe(heading.pageIndex)
+  })
+})
+
+describe('a table prints the emphasis it carries', () => {
+  /**
+   * Nothing read `block.emphasis` on a table, so a table printed roman. On a
+   * book whose transcript columns mark the interspersed hypnotic suggestion by
+   * setting it in italic and nothing else, that is the teaching gone with no
+   * warning anywhere — the rows print, they just say something else.
+   *
+   * The assertion is *which words are drawn in italic*, read off the runs. A
+   * count is no good here: it is the same either way when the wrong cell's
+   * words are marked, which is exactly what an index counted inside a cell
+   * rather than across the ` | ` separator produces.
+   */
+  const cells = [
+    ['and you can relax now', 'pacing his breathing'],
+    ['while I talk to you', 'and leading him down']
+  ]
+
+  function tableDoc(emphasis: number[]): BookDocument {
+    const table: BookBlock = {
+      id: 'p0t0',
+      kind: 'table',
+      text: cells.map((r) => r.join(' | ')).join('\n'),
+      cells,
+      emphasis,
+      sourcePages: [0]
+    }
+    return doc([block('paragraph', PROSE), table, block('paragraph', PROSE)])
+  }
+
+  const italicWords = (book: LaidOutBook): string[] =>
+    book.pages
+      .flatMap((p) => textRuns(p))
+      .filter((r) => r.font.style === 'italic')
+      .map((r) => r.text)
+
+  it('sets the words the flattened view marks, in the cells they fall in', () => {
+    // Flattened: and you can relax now | pacing his breathing
+    //             0   1   2     3   4  5   6     7      8
+    //            while I talk to you | and leading him down
+    //             9   10 11  12 13  14 15   16    17   18
+    const book = run(tableDoc([1, 2, 16, 17]))
+    expect(italicWords(book)).toEqual(['you', 'can', 'leading', 'him'])
+  })
+
+  it('marks nothing where the block carries nothing', () => {
+    expect(italicWords(run(tableDoc([])))).toEqual([])
+  })
+
+  it('ignores an index that lands on the separator between two cells', () => {
+    expect(italicWords(run(tableDoc([5, 14])))).toEqual([])
+  })
+
+  /**
+   * The breaker has to know as well as the renderer. Italic advances differ
+   * from roman, so a cell measured entirely in roman and then drawn partly in
+   * italic wraps its column in the wrong place — the fault the `spans` option
+   * exists for, and the one the fixed-width measurer cannot show, because it
+   * reports the same width for every face.
+   */
+  it('measures the cell in the faces it will be drawn in', () => {
+    const wide: TextMeasurer = {
+      ...measurer,
+      widthOf: (text, font, sizePt) =>
+        [...text].length * sizePt * (font.style === 'italic' ? 1.4 : 0.5)
+    }
+    const laid = (emphasis: number[]) =>
+      layout(tableDoc(emphasis), defaultStyleProfile(), wide, { edition: EDITION })
+    const roman = laid([])
+    const italic = laid([1, 2, 16, 17])
+    // Marked in italic at nearly three times the width, the cells wrap further
+    // and the rows take more lines. A breaker that never saw the spans lays
+    // out exactly the same rows either way.
+    const rowLines = (book: LaidOutBook) =>
+      book.pages.flatMap((p) => textRuns(p)).filter((r) => r.text === 'you').length
+    expect(rowLines(italic)).toBe(rowLines(roman))
+    const heightOf = (book: LaidOutBook) => book.pages.reduce((n, p) => n + lines(p).length, 0)
+    expect(heightOf(italic)).toBeGreaterThan(heightOf(roman))
   })
 })

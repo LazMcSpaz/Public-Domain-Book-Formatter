@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   asSource,
+  cellEmphasis,
   emphasisForTexts,
   flattenCellEmphasis,
   withoutConversionDamage,
@@ -211,5 +212,29 @@ describe('asSource', () => {
     const read = emphasisForTexts(['the first part', 'and the second part'], src)
     expect(read.emphasis).toEqual([[1], [2]])
     expect(read.unmatched).toEqual([])
+  })
+})
+
+describe('cellEmphasis', () => {
+  const cells = [
+    ['you can relax', 'the client hears'],
+    ['go inside', 'and he does']
+  ]
+
+  it('is the inverse of flattening, cell for cell', () => {
+    const perCell = [[1, 2], [], [0, 1], [2]]
+    expect(cellEmphasis(cells, flattenCellEmphasis(cells, perCell))).toEqual(perCell)
+  })
+
+  it('gives one list per cell even where nothing is marked', () => {
+    expect(cellEmphasis(cells, undefined)).toEqual([[], [], [], []])
+    expect(cellEmphasis(cells, [])).toEqual([[], [], [], []])
+  })
+
+  it('drops an index that lands on a separator or past the end', () => {
+    // Flattened: you can relax | the client hears \n go inside | and he does
+    //            0   1   2     3 4   5      6       7  8      9 10  11 12
+    // 3 and 9 are the separators; 13 is past the end.
+    expect(cellEmphasis(cells, [3, 9, 13])).toEqual([[], [], [], []])
   })
 })

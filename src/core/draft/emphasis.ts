@@ -39,6 +39,9 @@
  */
 
 import type { DraftWord } from './index'
+// The flattened view's coordinates are the schema's, not a second set: see
+// `flattenCellEmphasis` there, beside `tableToText`.
+export { flattenCellEmphasis, cellEmphasis } from '../transcribe/schema'
 
 /**
  * How far ahead in the source a lost token is looked for before the block word
@@ -322,36 +325,6 @@ export function withoutConversionDamage(
     kept.push(i)
   }
   return { emphasis: kept, dropped }
-}
-
-/**
- * A table's per-cell emphasis, addressed the way the rest of the app addresses
- * a table's words.
- *
- * `TranscribedBlock.emphasis` indexes the whitespace-separated words of `text`,
- * and for a table `text` is the flattened view — cells joined by ` | `, rows by
- * a newline. So the separator is itself a word in that tokenisation, and a
- * cell's own word 0 sits at a running offset that counts one extra per
- * separator crossed. Doing that arithmetic here rather than at each call site
- * is the same argument `tableToText` makes: one derivation, so the structure
- * and the view cannot come to disagree.
- */
-export function flattenCellEmphasis(
-  cells: readonly (readonly string[])[],
-  perCell: readonly (readonly number[])[]
-): number[] {
-  const out: number[] = []
-  let at = 0
-  let cell = 0
-  for (const row of cells) {
-    row.forEach((text, c) => {
-      if (c > 0) at++ // the ` | ` between this cell and the last
-      for (const i of perCell[cell] ?? []) out.push(at + i)
-      at += text.split(/\s+/u).filter((w) => w.length > 0).length
-      cell++
-    })
-  }
-  return out.sort((a, b) => a - b)
 }
 
 /**

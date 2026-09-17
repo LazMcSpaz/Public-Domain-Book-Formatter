@@ -25,6 +25,8 @@ import { findOrnament, type OrnamentArt } from '@core/ornament'
 import { headingRunEnd } from '@core/assemble'
 import type { BookBlock, BookDocument, BookSection, Illustration } from '@core/assemble'
 import { effectiveDpi } from '@core/image'
+// The flattened view's coordinates, from the one place they are defined.
+import { cellEmphasis } from '@core/transcribe/schema'
 import {
   breakParagraph,
   fontForWord,
@@ -1499,6 +1501,28 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
   const rows = (block.cells ?? []).filter((row) => row.length > 0)
   if (rows.length === 0) return []
 
+  /**
+   * The emphasis the page printed, split back onto the cells it falls in.
+   *
+   * A table's `emphasis` indexes the *flattened* view, which is what every
+   * other reader of a block indexes and means nothing to an engine that sets a
+   * table one cell at a time. `cellEmphasis` is the one place that arithmetic
+   * lives, beside `tableToText`.
+   *
+   * Nothing read this before, so a table simply printed roman. On a book whose
+   * transcript columns mark the interspersed suggestion by setting it in
+   * italic and nothing else, that is the teaching gone with no warning
+   * anywhere — the rows print, they just say something else.
+   */
+  const perCell = cellEmphasis(rows, block.emphasis)
+  /** Where row `r`'s cell `c` sits in that row-major list. */
+  const cellStart: number[] = []
+  rows.reduce((at, row) => {
+    cellStart.push(at)
+    return at + row.length
+  }, 0)
+  const cellIndex = (r: number, c: number): number => (cellStart[r] ?? 0) + c
+
   const sizePt = ctx.profile.bodyFontSize * TABLE_SIZE_RATIO
   const family = ctx.profile.bodyFont
   const bodyFont: FontRef = { family, style: 'regular' }
@@ -1559,19 +1583,36 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
     // cells still sit on the baseline grid.
     const perColumn = Array.from({ length: columns }, (_, c) => {
       const width = Math.max(1, widths[c] ?? 1)
+      // Emphasis inside a head row would have to be roman to show at all, and
+      // the head is set in italic entire — the same refusal an epigraph gets.
+      const marked = hasHead && r === 0 ? [] : (perCell[cellIndex(r, c)] ?? [])
+      const spans: TextSpan[] =
+        marked.length > 0 ? [{ words: new Set(marked), font: { family, style: 'italic' } }] : []
       const broken = breakParagraph(cellAt(row, c), {
         font,
         sizePt,
         measurer: ctx.measurer,
         lineWidths: width,
-        alignment: 'left'
+        alignment: 'left',
+        // The breaker, not only the renderer: italic advances differ from
+        // roman, and a cell measured in roman then drawn partly in italic
+        // wraps its column in the wrong places.
+        ...(spans.length > 0 ? { spans } : {})
       })
       const offsets = broken.map((line) => {
         const base = columnX[c] ?? 0
         if (!alignRight[c]) return base
         return base + Math.max(0, width - naturalWidth(line, ctx.measurer, font, sizePt))
       })
-      return toFlowLines(broken, font, sizePt, offsets.length > 0 ? offsets : [columnX[c] ?? 0])
+      return toFlowLines(
+        broken,
+        font,
+        sizePt,
+        offsets.length > 0 ? offsets : [columnX[c] ?? 0],
+        undefined,
+        undefined,
+        spans.length > 0 ? spans : undefined
+      )
     })
 
     const height = Math.max(1, ...perColumn.map((lines) => lines.length))
