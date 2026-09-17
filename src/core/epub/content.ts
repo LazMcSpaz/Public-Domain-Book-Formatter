@@ -58,6 +58,16 @@ const ITALIC = new Set(['i', 'em', 'cite', 'var', 'dfn'])
  * never was.
  */
 const STRONG = new Set(['b', 'strong'])
+/**
+ * Inline elements meaning "small capitals", the same list `markup.ts` reads.
+ *
+ * Only the explicit element. An EPUB far more often says this with
+ * `font-variant: small-caps` in a stylesheet, and this reader does not read
+ * stylesheets — so a book that sets its headwords that way arrives without the
+ * mark, which is the same answer it got before and not a regression. Guessing
+ * from a class name would be the wrong kind of clever.
+ */
+const SMALL_CAPS = new Set(['sc'])
 /** Inline elements meaning "below the line" — a chemical formula's figures. */
 const SUBSCRIPT = new Set(['sub'])
 
@@ -102,9 +112,11 @@ function inlineMarkup(nodes: readonly EpubNode[]): string {
         ? 'i'
         : STRONG.has(node.name)
           ? 'b'
-          : SUBSCRIPT.has(node.name)
-            ? 'sub'
-            : null
+          : SMALL_CAPS.has(node.name)
+            ? 'sc'
+            : SUBSCRIPT.has(node.name)
+              ? 'sub'
+              : null
       if (tag) {
         out += `<${tag}>`
         visit(node.children)
@@ -167,6 +179,7 @@ export function blocksFromDocument(root: EpubNode, startIndex = 0): EpubContent 
       text: markup.text,
       ...(markup.emphasis.length > 0 ? { emphasis: markup.emphasis } : {}),
       ...(markup.strong.length > 0 ? { strong: markup.strong } : {}),
+      ...(markup.smallCaps.length > 0 ? { smallCaps: markup.smallCaps } : {}),
       ...(markup.subscript.length > 0 ? { subscript: markup.subscript } : {}),
       ...extra
     })

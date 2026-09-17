@@ -491,6 +491,7 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
             ...(block.cells ? { cells: undefined } : {}),
             ...(block.emphasis ? { emphasis: undefined } : {}),
             ...(block.strong ? { strong: undefined } : {}),
+            ...(block.smallCaps ? { smallCaps: undefined } : {}),
             ...(block.subscript ? { subscript: undefined } : {})
           })
         )
@@ -621,12 +622,19 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
         kind: 'paragraph',
         text: corrected.replace(/\s+/gu, ' ').trim()
       })
-      const { emphasis: _emphasis, strong: _strong, subscript: _sub, ...rest } = note
+      const {
+        emphasis: _emphasis,
+        strong: _strong,
+        smallCaps: _smallCaps,
+        subscript: _sub,
+        ...rest
+      } = note
       return {
         ...rest,
         text: marked.text,
         ...(marked.emphasis?.length ? { emphasis: marked.emphasis } : {}),
         ...(marked.strong?.length ? { strong: marked.strong } : {}),
+        ...(marked.smallCaps?.length ? { smallCaps: marked.smallCaps } : {}),
         ...(marked.subscript?.length ? { subscript: marked.subscript } : {})
       }
     })
@@ -648,6 +656,7 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
       text: marked.text,
       ...(marked.emphasis?.length ? { emphasis: marked.emphasis } : {}),
       ...(marked.strong?.length ? { strong: marked.strong } : {}),
+      ...(marked.smallCaps?.length ? { smallCaps: marked.smallCaps } : {}),
       ...(marked.subscript?.length ? { subscript: marked.subscript } : {}),
       pageIndex: block.sourcePages[0] ?? 0,
       orphaned: false,

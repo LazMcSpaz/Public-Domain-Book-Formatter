@@ -97,6 +97,8 @@ export interface Footnote {
   emphasis?: number[]
   /** Word indices the note sets bold. See `TranscribedBlock.strong`. */
   strong?: number[]
+  /** Word indices the note sets in small capitals. */
+  smallCaps?: number[]
   /** Character ranges the note sets below the line. See `TranscribedBlock.subscript`. */
   subscript?: SubscriptRange[]
   /** Page the note was printed on. */
@@ -640,6 +642,12 @@ export function assembleBook(
               ...block.emphasis.map((i) => i + shift)
             ]
           }
+          if (block.smallCaps?.length) {
+            previousNote.smallCaps = [
+              ...(previousNote.smallCaps ?? []),
+              ...block.smallCaps.map((i) => i + shift)
+            ]
+          }
           if (block.strong?.length) {
             previousNote.strong = [
               ...(previousNote.strong ?? []),
@@ -684,6 +692,7 @@ export function assembleBook(
         const shift = wordCount(raw) - wordCount(text)
         const emphasis = block.emphasis?.map((i) => i - shift).filter((i) => i >= 0)
         const strong = block.strong?.map((i) => i - shift).filter((i) => i >= 0)
+        const smallCaps = block.smallCaps?.map((i) => i - shift).filter((i) => i >= 0)
         // The same removal, read as characters: the marker and the soft hyphens
         // both come off the front and the middle, and a range has to follow.
         const subscript = rebaseRanges(block.subscript, block.text, text, 0) ?? []
@@ -693,6 +702,7 @@ export function assembleBook(
           text,
           ...(emphasis?.length ? { emphasis } : {}),
           ...(strong?.length ? { strong } : {}),
+          ...(smallCaps?.length ? { smallCaps } : {}),
           ...(subscript.length ? { subscript } : {}),
           pageIndex: page.pageIndex,
           orphaned: false
@@ -714,6 +724,12 @@ export function assembleBook(
           previous.emphasis = [
             ...(previous.emphasis ?? []),
             ...shiftEmphasis(block.emphasis, wordCount(previous.text))
+          ]
+        }
+        if (block.smallCaps?.length) {
+          previous.smallCaps = [
+            ...(previous.smallCaps ?? []),
+            ...shiftEmphasis(block.smallCaps, wordCount(previous.text))
           ]
         }
         if (block.strong?.length) {

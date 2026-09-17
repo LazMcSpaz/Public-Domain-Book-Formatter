@@ -7,8 +7,9 @@
  * ways across a `contenteditable`:
  *
  *  - `htmlOfMarkup` renders the notation as HTML that contains nothing but
- *    `<i>`, `<b>` and escaped text, so a block can be shown (and edited) with
- *    its emphasis visible rather than as tags.
+ *    the notation's own tags — `<i>`, `<b>`, `<sc>`, `<sub>` — and escaped
+ *    text, so a block can be shown (and edited) with its emphasis visible
+ *    rather than as tags.
  *  - `markupOfNodes` walks the edited DOM back to the notation, so what the
  *    editor commits is exactly the string a textarea would have held. Ctrl+I
  *    and a hand-typed tag produce the same edit; `normalizeMarkup` remains
@@ -34,25 +35,31 @@ export interface RichNode {
   nodeValue: string | null
   childNodes: ArrayLike<RichNode>
   /** Elements carry inline style; some editors emit emphasis through it. */
-  style?: { fontStyle?: string; fontWeight?: string; verticalAlign?: string } | null
+  style?: {
+    fontStyle?: string
+    fontWeight?: string
+    fontVariant?: string
+    verticalAlign?: string
+  } | null
 }
 
 const escapeHtml = (s: string): string =>
   s.replace(/&/gu, '&amp;').replace(/</gu, '&lt;').replace(/>/gu, '&gt;')
 
 /**
- * The notation as HTML: escaped text with `<i>` and `<b>` around the marked
- * word runs, and nothing else — safe to hand to `dangerouslySetInnerHTML`
- * because every character that did not come out of this function's own two
- * tags has been escaped.
+ * The notation as HTML: escaped text with the notation's own tags around the
+ * marked word runs, and nothing else — safe to hand to
+ * `dangerouslySetInnerHTML` because every character that did not come out of
+ * this function's own tags has been escaped.
  *
- * Contiguous marked words share one pair of tags and `<b>` nests outside
- * `<i>`, the same conventions `withMarkup` prints, so the editor shows what
- * the notation means rather than a variant of it.
+ * Contiguous marked words share one pair of tags and they nest `<sc>` outside
+ * `<b>` outside `<i>`, the same conventions `withMarkup` prints, so the editor
+ * shows what the notation means rather than a variant of it.
  */
 export function htmlOfMarkup(raw: string): string {
-  const { text, emphasis, strong, subscript } = parseInlineMarkup(raw)
+  const { text, emphasis, strong, smallCaps, subscript } = parseInlineMarkup(raw)
   const marks = [
+    { words: new Set(smallCaps), tag: 'sc', inside: false },
     { words: new Set(strong), tag: 'b', inside: false },
     { words: new Set(emphasis), tag: 'i', inside: false }
   ]
@@ -106,6 +113,20 @@ export function htmlOfMarkup(raw: string): string {
 const ITALIC_NAMES = new Set(['I', 'EM', 'CITE', 'VAR'])
 const STRONG_NAMES = new Set(['B', 'STRONG'])
 /**
+ * Tag names that mean small capitals.
+ *
+ * `<sc>` is not an HTML element, so nothing in a `contenteditable` produces
+ * one by itself — it is here because `htmlOfMarkup` emits it and this walk is
+ * what reads that back. A mark the renderer can write and the reader cannot
+ * see is not a gap that reports itself: the run would simply be gone from the
+ * block the moment the editor touched it, which is the shape of fault the
+ * `withMarkup` positional argument had.
+ *
+ * `font-variant: small-caps` is read too, because that is what a paste from a
+ * word processor carries.
+ */
+const SMALL_CAPS_NAMES = new Set(['SC', 'SMALLCAPS'])
+/**
  * Tag names that mean subscript.
  *
  * `execCommand('subscript')` in a `contenteditable` emits `<sub>`, so the
@@ -116,6 +137,9 @@ const STRONG_NAMES = new Set(['B', 'STRONG'])
 const SUBSCRIPT_NAMES = new Set(['SUB'])
 
 const styledSubscript = (node: RichNode): boolean => (node.style?.verticalAlign ?? '') === 'sub'
+
+const styledSmallCaps = (node: RichNode): boolean =>
+  (node.style?.fontVariant ?? '').includes('small-caps')
 
 const styledItalic = (node: RichNode): boolean =>
   (node.style?.fontStyle ?? '').startsWith('italic') || node.style?.fontStyle === 'oblique'
@@ -141,15 +165,18 @@ const styledBold = (node: RichNode): boolean => {
  *    exactly as the notation's reader would take it.
  */
 export function markupOfNodes(nodes: ArrayLike<RichNode>): string {
-  return serialize(nodes, false, false, false)
+  return serialize(nodes, { i: false, b: false, sc: false, sub: false })
 }
 
-function serialize(
-  nodes: ArrayLike<RichNode>,
-  insideI: boolean,
-  insideB: boolean,
-  insideSub: boolean
-): string {
+/** Which runs the walk is already inside, so a nested mark does not re-open. */
+interface Inside {
+  i: boolean
+  b: boolean
+  sc: boolean
+  sub: boolean
+}
+
+function serialize(nodes: ArrayLike<RichNode>, inside: Inside): string {
   let out = ''
   for (let i = 0; i < nodes.length; i += 1) {
     const node = nodes[i]!
@@ -164,10 +191,16 @@ function serialize(
       out += ' '
       continue
     }
-    const italic = !insideI && (ITALIC_NAMES.has(name) || styledItalic(node))
-    const bold = !insideB && (STRONG_NAMES.has(name) || styledBold(node))
-    const low = !insideSub && (SUBSCRIPT_NAMES.has(name) || styledSubscript(node))
-    let inner = serialize(node.childNodes, insideI || italic, insideB || bold, insideSub || low)
+    const italic = !inside.i && (ITALIC_NAMES.has(name) || styledItalic(node))
+    const bold = !inside.b && (STRONG_NAMES.has(name) || styledBold(node))
+    const caps = !inside.sc && (SMALL_CAPS_NAMES.has(name) || styledSmallCaps(node))
+    const low = !inside.sub && (SUBSCRIPT_NAMES.has(name) || styledSubscript(node))
+    let inner = serialize(node.childNodes, {
+      i: inside.i || italic,
+      b: inside.b || bold,
+      sc: inside.sc || caps,
+      sub: inside.sub || low
+    })
     // Marking nothing is not a mark: an empty <i></i> left behind by an editor
     // would otherwise emit a tag pair the notation reads as an unclosed run.
     if (inner.trim().length > 0) {
@@ -176,6 +209,7 @@ function serialize(
       if (low) inner = `<sub>${inner}</sub>`
       if (italic) inner = `<i>${inner}</i>`
       if (bold) inner = `<b>${inner}</b>`
+      if (caps) inner = `<sc>${inner}</sc>`
     }
     out += inner
     // Block-level children separate words: two <div> lines pasted in must not

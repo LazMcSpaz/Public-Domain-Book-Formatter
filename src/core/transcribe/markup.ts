@@ -59,6 +59,32 @@ const ITALIC_TAGS = new Set(['i', 'em', 'cite', 'var'])
  */
 const STRONG_TAGS = new Set(['b', 'strong'])
 /**
+ * Tags that mean "set this in small capitals".
+ *
+ * The one mark here whose meaning depends on the *case of the text it covers*,
+ * and that is the whole of how to use it. A face's `smcp` feature replaces
+ * lower-case letters with small capitals and leaves capitals alone, so the
+ * word is written the way it is spelt — `<sc>Hermetist</sc>` — and the page
+ * sets a full H over small ERMETIST, which is what caps-and-small-caps is and
+ * what an 1877 glossary headword looks like. Writing `<sc>HERMETIST</sc>`
+ * asks for small capitals and gets full ones, correctly: there are no
+ * lower-case letters in it to replace.
+ *
+ * That is why the notation could not simply be hung on the capitals the
+ * reading already carries. A transcription that reads `HERMETIST.` records
+ * what letters are on the paper and says nothing about their size, and marking
+ * it changes nothing; the word has to be written in its own case for the mark
+ * to have anything to act on.
+ *
+ * What a small-caps run is actually *drawn* as is the engine's decision, and
+ * it refuses to synthesise: a face with no `smcp` sets the run in full
+ * capitals rather than in capitals scaled down, for the same reason a face
+ * with no bold sets a strong run in italic. Scaled capitals are a forgery and
+ * they look like one — the weight of the strokes gives it away beside the
+ * text they sit in.
+ */
+const SMALL_CAPS_TAGS = new Set(['sc', 'smallcaps'])
+/**
  * Tags that mean "set this below the line".
  *
  * `sub` was transparent — content kept, tag dropped — for as long as nothing
@@ -100,6 +126,13 @@ export interface InlineMarkup {
    */
   strong: number[]
   /**
+   * Indices of whitespace-separated words to set in small capitals, ascending.
+   *
+   * Same convention and same reasons as `emphasis`, and stored the same way:
+   * omitted entirely where there is none.
+   */
+  smallCaps: number[]
+  /**
    * Stretches of `text` to set below the line, as character ranges.
    *
    * Character ranges rather than word indices because the thing this exists for
@@ -120,6 +153,7 @@ export interface SubscriptRange {
 export interface InlineMarks {
   emphasis?: readonly number[]
   strong?: readonly number[]
+  smallCaps?: readonly number[]
   subscript?: readonly SubscriptRange[]
 }
 
@@ -136,15 +170,27 @@ const TAG = /<\s*(\/?)\s*([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/gu
  * in the printed text.
  */
 export function parseInlineMarkup(raw: string): InlineMarkup {
-  if (!raw.includes('<')) return { text: raw, emphasis: [], strong: [], subscript: [] }
+  if (!raw.includes('<')) {
+    return { text: raw, emphasis: [], strong: [], smallCaps: [], subscript: [] }
+  }
 
   // Walk the source once, building the clean text and remembering the character
   // ranges each kind of tag covered. Words are counted afterwards, from the
   // clean text, so the indices match what the breaker will produce — except for
   // the subscript ranges, which are kept as they stand.
   let text = ''
-  const ranges = { italic: [] as Range[], strong: [] as Range[], sub: [] as Range[] }
-  const open = { italic: [] as number[], strong: [] as number[], sub: [] as number[] }
+  const ranges = {
+    italic: [] as Range[],
+    strong: [] as Range[],
+    smallCaps: [] as Range[],
+    sub: [] as Range[]
+  }
+  const open = {
+    italic: [] as number[],
+    strong: [] as number[],
+    smallCaps: [] as number[],
+    sub: [] as number[]
+  }
   let last = 0
 
   for (const match of raw.matchAll(TAG)) {
@@ -154,9 +200,11 @@ export function parseInlineMarkup(raw: string): InlineMarkup {
       ? 'italic'
       : STRONG_TAGS.has(name)
         ? 'strong'
-        : SUBSCRIPT_TAGS.has(name)
-          ? 'sub'
-          : null
+        : SMALL_CAPS_TAGS.has(name)
+          ? 'smallCaps'
+          : SUBSCRIPT_TAGS.has(name)
+            ? 'sub'
+            : null
     if (!kind && !TRANSPARENT_TAGS.has(name)) continue
 
     text += raw.slice(last, match.index)
@@ -174,20 +222,21 @@ export function parseInlineMarkup(raw: string): InlineMarkup {
 
   // An unclosed tag marks the rest of the block, which is what it asked for and
   // the least surprising reading of a mistake.
-  for (const kind of ['italic', 'strong', 'sub'] as const) {
+  for (const kind of ['italic', 'strong', 'smallCaps', 'sub'] as const) {
     for (const start of open[kind]) ranges[kind].push({ start, end: text.length })
   }
 
   const subscript = mergeRanges(ranges.sub)
 
-  if (ranges.italic.length === 0 && ranges.strong.length === 0) {
-    return { text, emphasis: [], strong: [], subscript }
+  if (ranges.italic.length === 0 && ranges.strong.length === 0 && ranges.smallCaps.length === 0) {
+    return { text, emphasis: [], strong: [], smallCaps: [], subscript }
   }
 
   // Map character ranges onto word indices, counting words exactly as
   // `itemsFromText` does — by splitting on whitespace.
   const emphasis = new Set<number>()
   const strong = new Set<number>()
+  const smallCaps = new Set<number>()
   let index = 0
   let cursor = 0
   for (const word of text.split(/(\s+)/u)) {
@@ -200,13 +249,20 @@ export function parseInlineMarkup(raw: string): InlineMarkup {
       const hits = (rs: Range[]): boolean => rs.some((r) => r.start < end && r.end > start)
       if (hits(ranges.italic)) emphasis.add(index)
       if (hits(ranges.strong)) strong.add(index)
+      if (hits(ranges.smallCaps)) smallCaps.add(index)
       index += 1
     }
     cursor += word.length
   }
 
   const sorted = (set: Set<number>): number[] => [...set].sort((a, b) => a - b)
-  return { text, emphasis: sorted(emphasis), strong: sorted(strong), subscript }
+  return {
+    text,
+    emphasis: sorted(emphasis),
+    strong: sorted(strong),
+    smallCaps: sorted(smallCaps),
+    subscript
+  }
 }
 
 interface Range {
@@ -267,9 +323,17 @@ function mergeRanges(ranges: readonly Range[]): SubscriptRange[] {
 export function withMarkup(text: string, marks: InlineMarks | undefined): string {
   const emphasis = marks?.emphasis
   const strong = marks?.strong
+  const smallCaps = marks?.smallCaps
   const subscript = marks?.subscript
-  if (!emphasis?.length && !strong?.length && !subscript?.length) return text
+  if (!emphasis?.length && !strong?.length && !smallCaps?.length && !subscript?.length) {
+    return text
+  }
+  // Outermost first. A glossary headword set in small capitals may also be a
+  // book title in italic, and the order decides which tag wraps which — it
+  // changes nothing about what is drawn, and it keeps the notation stable so a
+  // round trip through the editor comes back identical.
   const runs = [
+    { words: new Set(smallCaps ?? []), tag: 'sc', inside: false },
     { words: new Set(strong ?? []), tag: 'b', inside: false },
     { words: new Set(emphasis ?? []), tag: 'i', inside: false }
   ]
@@ -285,7 +349,7 @@ export function withMarkup(text: string, marks: InlineMarks | undefined): string
       continue
     }
     // Closing runs before opening any, and in reverse, so the tags nest:
-    // `<b><i>…</i></b>` and never `<b><i>…</b></i>`.
+    // `<sc><b><i>…</i></b></sc>` and never `<b><i>…</b></i>`.
     for (const run of [...runs].reverse()) {
       if (run.inside && !run.words.has(index)) {
         out = out.replace(/(\s*)$/u, `</${run.tag}>$1`)

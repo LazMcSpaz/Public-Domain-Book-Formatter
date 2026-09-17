@@ -72,6 +72,18 @@ export interface TranscribedBlock {
    */
   strong?: number[]
   /**
+   * Indices of whitespace-separated words to set in small capitals.
+   *
+   * Same convention as {@link emphasis}. What it prints as is the engine's
+   * decision: a face carrying `smcp` sets real small capitals, and one without
+   * sets full capitals rather than capitals scaled down. The word is stored in
+   * its own case — `Hermetist`, not `HERMETIST` — because `smcp` replaces
+   * lower-case letters and leaves capitals alone, which is what makes an
+   * initial full capital over small ones fall out of the notation rather than
+   * out of a rule about first letters.
+   */
+  smallCaps?: number[]
+  /**
    * Character ranges of `text` to set below the line, ascending.
    *
    * The one inline kind here that is not word-granular, because the thing it
@@ -298,6 +310,7 @@ export function normalizeMarkup<T extends TranscribedBlock>(block: T): T {
     text: markup.text,
     ...(markup.emphasis.length > 0 ? { emphasis: markup.emphasis } : {}),
     ...(markup.strong.length > 0 ? { strong: markup.strong } : {}),
+    ...(markup.smallCaps.length > 0 ? { smallCaps: markup.smallCaps } : {}),
     ...(markup.subscript.length > 0 ? { subscript: markup.subscript } : {})
   }
 }
@@ -340,7 +353,7 @@ export function normalizeTable<T extends TranscribedBlock>(block: T): T {
   const cells = (block.cells ?? parseTableText(block.text))
     .map((row) => row.map((cell) => parseInlineMarkup(cell.trim()).text))
     .filter((row) => row.some((cell) => cell.length > 0))
-  const { emphasis: _e, strong: _s, subscript: _sub, ...bare } = block
+  const { emphasis: _e, strong: _s, smallCaps: _sc, subscript: _sub, ...bare } = block
   return { ...(bare as T), cells, text: tableToText(cells) }
 }
 
@@ -457,6 +470,7 @@ const BLOCK_FIELDS = new Set([
   'headerRow',
   'emphasis',
   'strong',
+  'smallCaps',
   'subscript',
   'level',
   'marker',
@@ -529,6 +543,7 @@ export function parsePageTranscription(raw: unknown, pageIndex: number): PageTra
     const block: TranscribedBlock = { kind: kind as BlockKind, text: markup.text }
     if (markup.emphasis.length > 0) block.emphasis = markup.emphasis
     if (markup.strong.length > 0) block.strong = markup.strong
+    if (markup.smallCaps.length > 0) block.smallCaps = markup.smallCaps
     if (markup.subscript.length > 0) block.subscript = markup.subscript
     const level = b['level']
     if (typeof level === 'number' && Number.isFinite(level)) {

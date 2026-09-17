@@ -67,6 +67,8 @@ export interface PreparedNote {
   emphasis?: number[]
   /** Word indices set bold. See `Footnote.strong`. */
   strong?: number[]
+  /** Word indices set in small capitals. See `Footnote.smallCaps`. */
+  smallCaps?: number[]
   /** Character ranges set below the line. See `Footnote.subscript`. */
   subscript?: SubscriptRange[]
 }
@@ -318,6 +320,7 @@ export function prepareFootnotes(
         text: note.text,
         ...(note.emphasis?.length ? { emphasis: note.emphasis } : {}),
         ...(note.strong?.length ? { strong: note.strong } : {}),
+        ...(note.smallCaps?.length ? { smallCaps: note.smallCaps } : {}),
         ...(note.subscript?.length ? { subscript: note.subscript } : {})
       })
       remaining.delete(note.id)

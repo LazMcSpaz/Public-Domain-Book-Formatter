@@ -150,6 +150,50 @@ export interface BreakParagraphOptions {
 export interface TextSpan {
   words: ReadonlySet<number>
   font: FontRef
+  /**
+   * Set these words in full capitals.
+   *
+   * The one span that changes the *text* rather than the face, and it exists
+   * for one case: a small-capitals run in a face that has no `smcp`. Only two
+   * of the seven faces offered carry the feature, and what a printer with no
+   * small capitals in the case would do is set full ones — which is also what
+   * `smcp` does to a letter that is already a capital, so the fallback has the
+   * same shape as the real thing rather than a different one. Never capitals
+   * scaled down: that is a forgery, and beside the text it sits in the stroke
+   * weight gives it away.
+   *
+   * Applied where a word becomes a box, so the width the breaker measures is
+   * the width that will be drawn.
+   */
+  upperCase?: boolean
+}
+
+/** The span that claims a word, or undefined — the first one wins. */
+export function spanForWord(
+  index: number,
+  spans: readonly TextSpan[] | undefined
+): TextSpan | undefined {
+  if (!spans) return undefined
+  for (const span of spans) if (span.words.has(index)) return span
+  return undefined
+}
+
+/**
+ * A word as it will be set, which is the word itself unless a span asks for
+ * capitals.
+ *
+ * **Length-preserving or not at all.** A subscript is a character range into
+ * the same string, so a word whose uppercase form is longer — `ß` becomes `SS`,
+ * and the ligatures do the same — would shift every range after it and put a
+ * figure under the wrong letter. Those cases are rare and this fallback is
+ * rarer, so the word is left as written where the two lengths differ: a
+ * headword in the wrong case is a blemish, and a formula with its subscript in
+ * the wrong place is an error nobody would catch.
+ */
+export function wordAsSet(word: string, span: TextSpan | undefined): string {
+  if (!span?.upperCase) return word
+  const upper = word.toUpperCase()
+  return upper.length === word.length ? upper : word
 }
 
 /** The face a word is set in: the first span that claims it, or the default. */
@@ -313,7 +357,7 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
   // this same string and the words have to be locatable in it. `/\S+/` and
   // `split(/\s+/).filter(Boolean)` produce the same list, by construction.
   const found = [...text.matchAll(/\S+/gu)]
-  const words = found.map((m) => m[0])
+  const words = found.map((m, i) => wordAsSet(m[0], spanForWord(i, options.spans)))
 
   // Grouped so a word carrying two marks gets both, in order.
   const attachments = new Map<number, Attachment[]>()

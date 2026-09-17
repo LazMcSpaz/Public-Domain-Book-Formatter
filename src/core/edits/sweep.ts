@@ -26,7 +26,7 @@
  */
 
 /** The only tags the notation prints — see `withMarkup`. */
-const NOTATION_TAG = /<\/?(?:[bi]|sub)>/y
+const NOTATION_TAG = /<\/?(?:[bi]|sc|sub)>/y
 
 export interface PlainMap {
   /** The text with the tags removed — what a reader searches. */
@@ -128,12 +128,16 @@ export function sweepText(
     // it (or the mirror) would leave a stray tag behind — harmless to the
     // parser, which is forgiving, but it silently strips the marking from the
     // words outside the match. Re-balancing at the splice keeps them marked.
-    const swallowed = out.slice(start, end).match(/<\/?[bi]>/gu) ?? []
+    // Every notation tag, not only the one-letter ones: a name taken by
+    // slicing the string worked while every tag here was `<i>` or `<b>`, and
+    // reads `</sc>` as a closer for `<s>`.
+    const swallowed = out.slice(start, end).match(/<\/?(?:[bi]|sc|sub)>/gu) ?? []
     const reopen: string[] = []
     const reclose: string[] = []
     for (const tag of swallowed) {
-      if (tag[1] === '/') {
-        const open = reopen.findIndex((t) => t === `<${tag[2]}>`)
+      const name = tag.replace(/[<>/]/gu, '')
+      if (tag.startsWith('</')) {
+        const open = reopen.findIndex((t) => t === `<${name}>`)
         // A closer whose opener is also in the match cancels it; one whose
         // opener is *before* the match must close again ahead of the splice.
         if (open >= 0) reopen.splice(open, 1)

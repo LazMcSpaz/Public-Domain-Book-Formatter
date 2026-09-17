@@ -916,7 +916,7 @@ function breakNote(note: PreparedNote, ctx: BuildContext): NoteBlock {
   const markSize = sizePt * MARK_SIZE_RATIO
   const hang = ctx.measurer.widthOf(note.mark, font, markSize) + sizePt * NOTE_HANG_GAP_RATIO
 
-  const spans = spansFor(ctx, ctx.profile.bodyFont, 'regular', note.emphasis, note.strong)
+  const spans = spansFor(ctx, ctx.profile.bodyFont, 'regular', note)
 
   const broken = breakParagraph(note.text, {
     font,
@@ -977,16 +977,37 @@ function spansFor(
   ctx: BuildContext,
   family: string,
   base: FontStyle,
-  emphasis: readonly number[] | undefined,
-  strong: readonly number[] | undefined
+  marks: {
+    emphasis?: readonly number[]
+    strong?: readonly number[]
+    smallCaps?: readonly number[]
+  }
 ): TextSpan[] {
   const spans: TextSpan[] = []
-  if (strong?.length) {
-    const style: FontStyle = ctx.measurer.hasBold(family) ? 'bold' : 'italic'
-    spans.push({ words: new Set(strong), font: { family, style } })
+  // Small capitals first, so a headword that is also a book title reads as a
+  // headword — the same precedence, and for the same reason, as strong over
+  // emphasis.
+  //
+  // Asked for rather than assumed, exactly as bold is. Only two of the seven
+  // faces offered carry `smcp`, and a face without it sets the run in **full
+  // capitals** — which is what `smcp` itself does to letters that are already
+  // capitals, so the fallback is the same shape as the real thing rather than
+  // a different one. Never capitals scaled down: that is a forgery and the
+  // stroke weight beside the surrounding text gives it away.
+  if (marks.smallCaps?.length) {
+    const words = new Set(marks.smallCaps)
+    spans.push(
+      ctx.measurer.hasSmallCaps(family)
+        ? { words, font: { family, style: base, smallCaps: true } }
+        : { words, font: { family, style: base }, upperCase: true }
+    )
   }
-  if (emphasis?.length) {
-    spans.push({ words: new Set(emphasis), font: { family, style: 'italic' } })
+  if (marks.strong?.length) {
+    const style: FontStyle = ctx.measurer.hasBold(family) ? 'bold' : 'italic'
+    spans.push({ words: new Set(marks.strong), font: { family, style } })
+  }
+  if (marks.emphasis?.length) {
+    spans.push({ words: new Set(marks.emphasis), font: { family, style: 'italic' } })
   }
   return base === 'regular' ? spans : []
 }
@@ -1092,10 +1113,7 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
    * italic entire, and emphasis inside one would have to be roman to show at
    * all, which is a refinement no book here has needed.
    */
-  const spans =
-    style.style === 'regular'
-      ? spansFor(ctx, family, style.style, block.emphasis, block.strong)
-      : []
+  const spans = style.style === 'regular' ? spansFor(ctx, family, style.style, block) : []
 
   /**
    * Figures the original set below the line, as character ranges.

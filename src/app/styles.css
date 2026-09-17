@@ -2125,6 +2125,23 @@ mark.claim {
   margin: 0 0 0.9em;
   white-space: pre-wrap;
 }
+
+/* The small-capitals notation, shown as what it means.
+
+   `<sc>` is not an HTML element and so has no default rendering at all: left
+   alone it reads as plain roman, which would make this the one mark that is
+   real on the page and invisible in the galley — impossible to confirm and
+   easy to strip by retyping, which is exactly the fault italics had before
+   `withMarkup` put the tags back.
+
+   A browser synthesises small capitals where the face has no `smcp`, which is
+   not what the engine does — it sets full capitals rather than a forgery. So
+   this is a screen approximation of the mark and says so; the page is the PDF,
+   and the design gate's approval is of that. */
+sc {
+  font-variant-caps: small-caps;
+  font-feature-settings: 'smcp' 1;
+}
 .galley-heading {
   text-align: center;
   font-weight: 600;
