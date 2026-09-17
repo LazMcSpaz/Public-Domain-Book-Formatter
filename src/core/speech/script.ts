@@ -304,6 +304,34 @@ export function readChapter(
 }
 
 /**
+ * How many pieces at the head of a script make up the chapter's opening.
+ *
+ * The music under a chapter is timed from the end of its title, so something
+ * has to say where the title ends. "The last heading in the chapter" was that
+ * something, and it was right only for as long as a heading could not appear
+ * anywhere but the top.
+ *
+ * The moment a chapter kept its own section headings, it stopped being right in
+ * the worst available way. Measured on chapter VIII of *The Human Aura*: the
+ * last heading is "TABLE OF HEALING COLORS.", six and a half minutes in, so the
+ * bed was planned around a 390-second opening. There is no 390 seconds of
+ * music, the fade was pulled in to where the file ends, and what a listener
+ * hears is twenty seconds of music playing on under the first paragraph — which
+ * is the one thing `planOpening` was written to prevent.
+ *
+ * So the opening is the run of headings the chapter *starts* with, pauses
+ * between them included. Anything else ends it.
+ */
+export function openingPieces(script: ReadingScript): number {
+  let count = 0
+  for (const [index, piece] of script.pieces.entries()) {
+    if (piece.kind === 'heading') count = index + 1
+    else if (piece.kind !== 'pause') break
+  }
+  return count
+}
+
+/**
  * How long the finished audio ought to be, roughly, in seconds.
  *
  * Not a target and not enforced. It is the number to compare a render against:

@@ -12,6 +12,7 @@ import {
   expectedSeconds,
   looksLikeLabel,
   looksOrnamental,
+  openingPieces,
   readChapter,
   spokenChapters,
   withoutSilentMarks
@@ -161,6 +162,33 @@ describe('a chapter with a section inside it', () => {
     const pieces = readChapter(CHAPTER_WITH_A_SECTION, 0).pieces
     const at = pieces.findIndex((p) => p.text === 'AURIC MAGNETISM.')
     expect(pieces[at - 1]?.seconds).toBe(0.4)
+  })
+})
+
+describe('openingPieces', () => {
+  it('is the run of headings a chapter starts with, and the pause between them', () => {
+    const script = readChapter(CHAPTER_WITH_A_SECTION, 0)
+    // "CHAPTER VIII.", the 0.4s over the title, and "AURIC MAGNETISM." — and
+    // then it stops. The music is timed from the end of this.
+    expect(openingPieces(script)).toBe(3)
+    expect(script.pieces[2]?.text).toBe('AURIC MAGNETISM.')
+  })
+
+  it('does not run on to a section heading in the middle of the chapter', () => {
+    // The fault: taking the *last* heading put the end of the opening six and a
+    // half minutes into the reading, so the bed was planned around a 390-second
+    // title and played on under the first paragraph.
+    const script = readChapter(CHAPTER_WITH_A_SECTION, 0)
+    const section = script.pieces.findIndex((p) => p.text === 'TABLE OF HEALING COLORS.')
+    expect(section).toBeGreaterThan(openingPieces(script))
+  })
+
+  it('is nothing for a chapter that opens on prose', () => {
+    const book = bookOf({
+      blocks: [block('p1b0', 'paragraph', 'No heading at all.')],
+      chapters: [{ id: 'p1b0', title: 'A', level: 1 }] as BookDocument['chapters']
+    })
+    expect(openingPieces(readChapter(book, 0))).toBe(0)
   })
 })
 
