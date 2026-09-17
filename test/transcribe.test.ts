@@ -14,6 +14,7 @@ import {
   type PageTranscription,
   type OcrWordLike
 } from '@core/transcribe'
+import { ALL_PAGE_ROLES, dispositionFor } from '@core/pages'
 import type { LexiconEntry } from '@core/lexicon'
 
 function lex(term: string): LexiconEntry {
@@ -85,6 +86,44 @@ describe('parsePageTranscription', () => {
     expect(() =>
       parsePageTranscription({ role: 'sidebar', blocks: [], uncertain: [], furniture: {} }, 0)
     ).toThrow(/unknown page role/i)
+  })
+
+  /**
+   * The parser's list of roles used to be a second, hand-written copy of the
+   * union, and it had gone one short: `digitization-notice` — the role that
+   * exists so a scanning library's inserted leaf does not print as a colophon —
+   * was in `PageRole` and not in `PAGE_ROLES`. It typechecked, because an array
+   * typed `readonly PageRole[]` only rejects names that are *not* roles, and
+   * the whole suite passed. It surfaced on the front matter of *Isis Unveiled*
+   * Vol. I, where five leaves of HathiTrust and Cornell apparatus wanted that
+   * role and could not be landed under it.
+   *
+   * So the property is asserted over the roles as a class rather than over
+   * whichever one somebody last thought about.
+   */
+  it('accepts every role the disposition table knows, not a copy of the list', () => {
+    for (const role of ALL_PAGE_ROLES) {
+      const parsed = parsePageTranscription({ role, blocks: [], uncertain: [], furniture: {} }, 0)
+      expect(parsed.role).toBe(role)
+      // And the role is one the pipeline can act on, which is the point of
+      // accepting it: a role with no disposition would be a leaf nothing knows
+      // what to do with.
+      expect(dispositionFor(parsed.role)).toBeTruthy()
+    }
+  })
+
+  it('takes a leaf the scanning library inserted, so it can be discarded by role', () => {
+    const parsed = parsePageTranscription(
+      {
+        role: 'digitization-notice',
+        blocks: [],
+        uncertain: [],
+        furniture: { stamp: ['Digitized by Original from'] }
+      },
+      2
+    )
+    expect(parsed.role).toBe('digitization-notice')
+    expect(dispositionFor(parsed.role)).toBe('discard')
   })
 
   it('rejects a malformed block instead of importing half a page', () => {

@@ -88,6 +88,25 @@ const DISPOSITIONS: Record<PageRole, PageDisposition> = {
   unknown: 'transcribe'
 }
 
+/**
+ * Every page role there is, as data — the one list, and the only one.
+ *
+ * Derived from `DISPOSITIONS` rather than written out again, because
+ * `DISPOSITIONS` is a `Record<PageRole, …>` and the compiler will not let it
+ * miss a member. A second hand-written list cannot make that promise: an array
+ * typed `readonly PageRole[]` rejects a name that is not a role and says
+ * nothing whatever about a role that is not in the array.
+ *
+ * That is not hypothetical. `PAGE_ROLES` in `@core/transcribe/schema` was such
+ * a list and had drifted one short of the union — `digitization-notice`, the
+ * role that exists so a library's inserted leaf does not print as a colophon,
+ * was missing. It typechecked, every test passed, and the leaf could not be
+ * landed under the one role that describes it. Found on the front matter of
+ * *Isis Unveiled* Vol. I, where five leaves of HathiTrust and Cornell
+ * apparatus needed exactly that role.
+ */
+export const ALL_PAGE_ROLES: readonly PageRole[] = Object.keys(DISPOSITIONS) as PageRole[]
+
 /** What to do with a page of this role. */
 export function dispositionFor(role: PageRole): PageDisposition {
   return DISPOSITIONS[role]

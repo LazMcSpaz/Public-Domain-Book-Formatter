@@ -8,7 +8,7 @@
  *
  * Pure: types, the JSON schema, and a strict parser. No I/O, no client.
  */
-import type { PageRole } from '@core/pages'
+import { ALL_PAGE_ROLES, type PageRole } from '@core/pages'
 import { parseInlineMarkup } from './markup'
 import type { SubscriptRange } from './markup'
 
@@ -221,26 +221,15 @@ export interface PageTranscription {
   metadata?: ExtractedMetadata
 }
 
-const PAGE_ROLES: readonly PageRole[] = [
-  'half-title',
-  'title-page',
-  'copyright',
-  'dedication',
-  'epigraph',
-  'preface',
-  'table-of-contents',
-  'list-of-illustrations',
-  'chapter-opening',
-  'body',
-  'part-divider',
-  'plate',
-  'index',
-  'appendix',
-  'glossary',
-  'colophon',
-  'blank',
-  'unknown'
-]
+/**
+ * Every page role the parser accepts — the roles module's own list, not a copy.
+ *
+ * It was a copy, and it had gone one short: `digitization-notice` was in the
+ * union and not in the array, so `parsePageTranscription` refused the role that
+ * exists to keep a scanning library's leaf out of the book. `ALL_PAGE_ROLES` is
+ * built from the disposition table, which the compiler holds to the union.
+ */
+const PAGE_ROLES: readonly PageRole[] = ALL_PAGE_ROLES
 
 /**
  * Every block kind, as data.

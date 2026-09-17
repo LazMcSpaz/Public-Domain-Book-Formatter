@@ -440,6 +440,24 @@ script that the section above describes is committed now as
 `scripts/restart-servers.sh`, so it does not have to be rebuilt from memory
 in every container, wrongly.
 
+**A second hand-written list of a union's members drifts, and the compiler
+says nothing.** `PAGE_ROLES` in `@core/transcribe/schema` was a copy of the
+`PageRole` union written out by hand, typed `readonly PageRole[]` — which
+rejects a name that is not a role and is silent about a role that is not in the
+array. It had gone one short. `digitization-notice`, the role that exists so a
+scanning library's inserted leaf does not print as a colophon, was in the union,
+in the disposition table and refused by the parser, so a leaf could not be
+landed under the only role that describes it. It typechecked and the whole suite
+passed. Found reading the front matter of _Isis Unveiled_ Vol. I, where five
+leaves of HathiTrust and Cornell apparatus wanted exactly that role.
+
+`ALL_PAGE_ROLES` is now derived from `DISPOSITIONS`, a `Record<PageRole, …>`
+the compiler will not let miss a member, and the parser takes that list rather
+than a copy. The test asserts the property over the roles **as a class** — every
+role the disposition table knows parses, and what comes back has a disposition —
+because a test naming one role is the same hand-written list again. Reinstating
+the drift fails it; the version before the fix passed.
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what
