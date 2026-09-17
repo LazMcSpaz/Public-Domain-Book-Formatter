@@ -136,6 +136,15 @@ export interface LayoutOptions {
 }
 
 /** One line of the table of contents. */
+/** One topic line under a contents entry, and the place it points at. */
+export interface TocTopic {
+  text: string
+  /** The block whose page this entry's number is. */
+  blockId: string
+  /** The measured folio, or null on the first pass when it isn't known yet. */
+  folio: string | null
+}
+
 export interface TocLine {
   /** The heading this entry is, so its folio can be matched back by identity. */
   id: string
@@ -162,6 +171,16 @@ export interface TocLine {
    * trusting it.
    */
   synopsis?: string
+  /**
+   * The topics the original analytical contents listed under this entry.
+   *
+   * Each names a block, and the folio beside it is filled in by the second pass
+   * exactly as the entry's own is — see `layoutWithToc`. `folio` is null on the
+   * first pass and the line is set either way, which is what keeps the two
+   * passes the same length: the number sits in a lane reserved whether or not
+   * there is a number to put in it.
+   */
+  topics?: readonly TocTopic[]
 }
 
 /** The heading over collected endnotes, and the contents entry for them. */
@@ -3152,6 +3171,70 @@ function buildContents(
       page.lines.push({ slot, line: { runs } })
       slot += 1
     })
+
+    // The original's own topics, under the chapter they belong to.
+    //
+    // Set smaller than the entry and indented under it, which is how a page of
+    // this kind has always been set: the chapter's name stands over the list of
+    // what is in it, and the eye runs down the topics and across to the
+    // numbers.
+    //
+    // **The line is set whether or not there is a number yet**, and that is
+    // what makes this safe for the two-pass scheme: pass one emits every topic
+    // with its folio blank, so the contents is already the right length and
+    // pass two only fills digits into a gap that was there. Skipping a topic
+    // for want of a number would make pass two longer by a line per entry,
+    // `layoutWithToc` would catch the change and fall back to pass one, and
+    // pass one has no numbers on it at all. A descriptive contents shipped
+    // exactly that way once, in silence.
+    //
+    // The folio's lane is reserved for a different and smaller reason: the
+    // number is set flush right whatever the text does, so a topic measured to
+    // the full width would crowd it. That is tidiness rather than correctness,
+    // and it is worth saying so — an earlier draft of this comment claimed the
+    // lane was what kept the two passes the same length, which is false,
+    // because both passes measure to the same width either way.
+    const topicSize = sizePt * SYNOPSIS_SCALE
+    const topicIndent = indent + sizePt * 1.5
+    const topicMeasure = Math.max(1, ctx.measureWidth - folioColumn - topicIndent)
+    for (const topic of entry.topics ?? []) {
+      // A topic that wraps hangs its continuation, so a second line of one
+      // entry is not read as a fresh one.
+      const lines = breakParagraph(topic.text, {
+        font: body,
+        sizePt: topicSize,
+        measurer: ctx.measurer,
+        lineWidths: [topicMeasure, Math.max(1, topicMeasure - sizePt)],
+        alignment: 'left'
+      })
+      if (lines.length === 0) continue
+      if (slot + lines.length > slotsPerPage) {
+        page = newPage('front')
+        page.kind = 'contents'
+        page.suppressRunningHead = true
+        page.suppressFolio = true
+        slot = 0
+      }
+      lines.forEach((line, lineIndex) => {
+        const runs: TextRun[] = line.words.map((w) => ({
+          text: w.text,
+          font: body,
+          sizePt: topicSize,
+          xPt: w.xPt + topicIndent + (lineIndex === 0 ? 0 : sizePt)
+        }))
+        if (lineIndex === lines.length - 1 && topic.folio) {
+          const width = ctx.measurer.widthOf(topic.folio, body, topicSize)
+          runs.push({
+            text: topic.folio,
+            font: body,
+            sizePt: topicSize,
+            xPt: ctx.measureWidth - width
+          })
+        }
+        page.lines.push({ slot: slot + lineIndex, line: { runs } })
+      })
+      slot += lines.length
+    }
   })
 }
 

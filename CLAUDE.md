@@ -498,6 +498,61 @@ entries in the file: 31 and 31. **A measurement that contradicts a sound
 hypothesis is a measurement to check**, and the render is what either of them
 has to answer to.
 
+**The original's analytical contents, renumbered to this edition**
+(`src/core/pages/analytical.ts`). `synopsis.ts` recovers one shape of original
+contents — a paragraph under each chapter; this recovers the commoner one, a
+list of the topics a chapter covers with the page each begins on. Vol. I of
+_Isis Unveiled_ lists **156** of them, and they were being discarded with the
+numbers beside them, which is the wrong half again.
+
+The renumbering does **no arithmetic between the two paginations**, because
+none is possible. An entry names a page of the 1877 printing; the leaf that
+printed that folio is in the reading; the blocks off that leaf are in the
+document; the engine reports which page each block opens on. So a topic travels
+as a **block id** and its folio is measured by the machinery that numbers the
+chapters. 155 of the 156 are placed — the odd one is `PREFACE`, which prints as
+an entry in its own right.
+
+Five things it took to get there, four of them faults:
+
+- **A chapter opening prints no folio**, so the page an analytical contents
+  names most often is the page no leaf claims. The first topic of all fifteen
+  chapters was dropped. `folioToLeaf` **votes** the leaf-to-folio offset from
+  the leaves that do print one and fills only the gaps, with the roman series
+  voted apart from the arabic one and a series whose leaves disagree
+  contributing nothing. Measured on this volume: 613 leaves print an arabic
+  folio and all 613 agree on 58.
+- **A chapter heading's flowable carries no `blockId`**, so it is not in
+  `blockPages` and a topic pointing at one came back with no page at all. The
+  topic points at the leaf's first passage of prose instead, which is the same
+  page and where a reader following the entry starts.
+- **The body prints `CHAPTER I.` and nothing else** — the name
+  `OLD THINGS WITH NEW NAMES.` is in the contents alone — so the chapter's
+  _title_ is the number and the contents group's _label_ is. Matching title to
+  title and label to label found **0 of 15**; matching the body's title against
+  the group's label finds 15.
+- **`applyEdits` threw the whole thing away on the first correction**, which is
+  the fault CLAUDE.md already records for the synopsis, recurring with a new
+  field. `chaptersOf` carried `synopsis` by name and knew nothing of `topics`.
+  It now names the keys `deriveChapters` _computes_ in a `Record` the compiler
+  holds to the union, and carries everything else by default: a new recovered
+  field is kept without anyone remembering, and a new derived one fails to
+  compile until it is listed.
+- And **a comment claimed more than the code did.** The folio's reserved lane
+  was described as what keeps the two contents passes the same length. It is
+  not: both passes measure to the same width either way, and what actually
+  keeps them equal is that a topic line is emitted with its folio blank. The
+  lane is tidiness. The fault injection is what said so — removing it changed
+  nothing any test could see.
+
+**And the two-pass guard can be blind.** Emitting a topic line only when it had
+a number left pass one with no topics at all and pass two with 48, and
+`layoutWithToc` did not notice: its guard compares the whole book's page count,
+and in a book whose chapters open recto a contents one leaf shorter is absorbed
+by the blanks that pad each opening to a right-hand page. The invariant is now
+asserted where it lives — the same contents laid out with the folios blank and
+with them filled, compared directly.
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what

@@ -810,16 +810,49 @@ function paragraphsOf(text: string, sectionId: string): BookBlock[] {
  * block — so re-deriving the list without them threw away the whole point of
  * reading that page, silently, on every correction.
  */
+/**
+ * The fields `deriveChapters` computes from the blocks, named so the ones it
+ * cannot compute are whatever is left.
+ *
+ * A `Record` rather than an array, because the compiler will not let it miss a
+ * member of the union — and the union is the half that is *safe* to lose on a
+ * re-derivation. Everything else on a chapter came from somewhere the blocks do
+ * not hold, so it is carried across by default.
+ *
+ * That direction is deliberate. The first version of `chaptersOf` carried the
+ * recovered synopsis by name, which was right until a second such field
+ * existed: `topics` was added, nothing here knew about it, and the analytical
+ * contents was read, matched to fifteen chapters and thrown away again on the
+ * first correction — in silence, exactly as the synopsis had been. Adding a
+ * field to `ChapterEntry` now carries it without anyone remembering to; adding
+ * one that really is derived fails to compile until it is listed here.
+ */
+type DerivedChapterKey = 'id' | 'title' | 'label' | 'level' | 'blockIndex' | 'sourcePage'
+const DERIVED_CHAPTER_KEYS: Record<DerivedChapterKey, true> = {
+  id: true,
+  title: true,
+  label: true,
+  level: true,
+  blockIndex: true,
+  sourcePage: true
+}
+
 function chaptersOf(
   blocks: readonly BookBlock[],
   before: BookDocument['chapters']
 ): BookDocument['chapters'] {
-  const synopses = new Map(
-    before.filter((c) => c.synopsis !== undefined).map((c) => [c.id, c.synopsis!])
-  )
+  const was = new Map(before.map((c) => [c.id, c]))
   return deriveChapters(blocks).map((chapter) => {
-    const synopsis = synopses.get(chapter.id)
-    return synopsis === undefined ? chapter : { ...chapter, synopsis }
+    const old = was.get(chapter.id)
+    if (!old) return chapter
+    const carried: Record<string, unknown> = {}
+    for (const [key, value] of Object.entries(old)) {
+      if (key in DERIVED_CHAPTER_KEYS) continue
+      if (value !== undefined) carried[key] = value
+    }
+    return Object.keys(carried).length === 0
+      ? chapter
+      : ({ ...chapter, ...carried } as BookDocument['chapters'][number])
   })
 }
 

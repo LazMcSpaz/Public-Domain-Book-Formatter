@@ -2,6 +2,17 @@
  * Page roles and front-matter handling (SPEC §7).
  */
 export {
+  readAnalyticalContents,
+  analyticalLooksSound,
+  analyticalKey,
+  folioToLeaf,
+  type FolioSighting,
+  type AnalyticalTopic,
+  type AnalyticalGroup,
+  type AnalyticalBlock
+} from './analytical'
+
+export {
   ALL_PAGE_ROLES,
   dispositionFor,
   isFrontMatter,

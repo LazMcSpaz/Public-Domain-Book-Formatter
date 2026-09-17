@@ -74,7 +74,20 @@ export function layoutWithToc(
       // Only when the style asks. The descriptions are long — twenty of them
       // turn a one-leaf contents into four — so this is a preference and not a
       // consequence of the book having had them.
-      ...(profile.contentsSynopsis && chapter.synopsis ? { synopsis: chapter.synopsis } : {})
+      ...(profile.contentsSynopsis && chapter.synopsis ? { synopsis: chapter.synopsis } : {}),
+      // The original's own topic list, carried whole. Unconditional where the
+      // book had one, because these entries *are* the contents that book
+      // printed — a reader opening the page is looking for them, and the
+      // generated list of chapter names is what is left when they are gone.
+      ...(chapter.topics?.length
+        ? {
+            topics: chapter.topics.map((t) => ({
+              text: t.text,
+              blockId: t.blockId,
+              folio: null
+            }))
+          }
+        : {})
     })),
     ...back.map((section) => ({
       id: `${section.id}-title`,
@@ -104,10 +117,26 @@ export function layoutWithToc(
   const first = layout(doc, profile, measurer, { ...options, toc: entries })
 
   const placed = new Map(first.chapterPages.map((c) => [c.id, c.pageIndex]))
+  // Where each block landed, which is how a topic gets its number. The entry
+  // named a page of the *original*; assembly turned that into a block of this
+  // document; this is the page that block opens on, measured by the pass that
+  // has just run. No arithmetic between the two paginations anywhere.
+  const blockFolio = new Map(first.blockPages.map((b) => [b.blockId, b.folio]))
   const numbered: TocLine[] = entries.map((entry) => {
     const pageIndex = placed.get(entry.id)
     const folio = pageIndex === undefined ? null : (first.pages[pageIndex]?.folio ?? null)
-    return { ...entry, folio }
+    return {
+      ...entry,
+      folio,
+      ...(entry.topics
+        ? {
+            topics: entry.topics.map((t) => ({
+              ...t,
+              folio: blockFolio.get(t.blockId) ?? null
+            }))
+          }
+        : {})
+    }
   })
 
   const second = layout(doc, profile, measurer, { ...options, toc: numbered })

@@ -18,9 +18,13 @@ import type { ImageEditOp } from '@core/model'
 import {
   dispositionFor,
   isNumberLine,
+  readAnalyticalContents,
+  analyticalLooksSound,
+  folioToLeaf,
   readSynopsis,
   synopsisKey,
   synopsisLooksSound,
+  type AnalyticalGroup,
   type PageRole,
   type SynopsisEntry
 } from '@core/pages'
@@ -115,6 +119,25 @@ export interface Footnote {
   anchor?: { blockId: string; at: number }
 }
 
+/**
+ * One topic from the original analytical contents, located in this edition.
+ *
+ * `blockId` is the whole of the renumbering: the entry named a page of the 1877
+ * printing, the leaf that printed that folio is in the reading, and this is a
+ * block that came off it. The engine reports which page each block opens on, so
+ * the folio beside the entry is *measured* rather than converted — there is no
+ * arithmetic anywhere from the old pagination to the new one, and none is
+ * possible, because the two do not stand in a ratio.
+ *
+ * `originalFolio` rides along so the renumbering can be checked by a person
+ * against the scan, and is never printed.
+ */
+export interface AnalyticalPlacedTopic {
+  text: string
+  blockId: string
+  originalFolio: string
+}
+
 export interface ChapterEntry {
   /**
    * The id of the block this heading is, so the contents can match on it.
@@ -154,6 +177,22 @@ export interface ChapterEntry {
    * contents, or when the parse was not sound enough to trust.
    */
   synopsis?: string
+  /**
+   * The topics the original contents listed under this chapter, each pointing
+   * at the block this edition will number it by.
+   *
+   * The other shape of analytical contents, and the commoner one: a list of
+   * what the chapter covers, a line each, with the page it begins on. Recovered
+   * for the same reason as {@link synopsis} — the entries are the book's own
+   * work and only the numbers beside them were ever stale.
+   *
+   * What makes them printable is that the stale number is *recoverable*. Each
+   * entry names a place by the folio the original printed, the leaf that
+   * printed that folio is in the reading, and the blocks off that leaf are in
+   * this document — so the entry travels as a block id and the engine measures
+   * its folio the same way it measures a chapter's.
+   */
+  topics?: AnalyticalPlacedTopic[]
   /** Index into `blocks` where the chapter starts. */
   blockIndex: number
   sourcePage: number
@@ -812,6 +851,110 @@ export function assembleBook(
         label: entry.label,
         synopsis: entry.synopsis
       })
+    }
+  }
+
+  // The other shape of analytical contents: a list of topics under each
+  // chapter, each with the page the original printed it on.
+  //
+  // Read from the same runs of leaves and matched to the chapters the same way,
+  // but placed rather than merely carried — see `AnalyticalPlacedTopic`. Two
+  // lookups do it, and neither is arithmetic:
+  //
+  //   the folio the original printed  ->  the leaf that printed it
+  //   the leaf                        ->  a block that came off it
+  //
+  // The first comes from the reading's own furniture, so it holds for the
+  // roman-numbered front matter and the arabic body alike without either being
+  // told about the other. The second walks forward, because the leaf a topic
+  // names may open mid-paragraph and contribute no block of its own: a
+  // paragraph joined across the seam belongs to the leaf it began on.
+  {
+    const leafOfFolio = folioToLeaf(
+      ordered.map((page) => ({
+        pageIndex: page.pageIndex,
+        folio: page.furniture?.folio ?? null
+      }))
+    )
+    // The first block of *prose* on each leaf, and prose rather than the first
+    // block of any kind for a reason the engine decides: a chapter heading's
+    // flowable carries no `blockId`, so it is not in `blockPages` and a topic
+    // pointing at one comes back with no page at all. Measured, not reasoned —
+    // the first topic of every chapter in the fixture printed with no number
+    // beside it, because the leaf it named opens with the chapter's heading.
+    //
+    // Pointing at the passage under the heading is also the better answer on
+    // its own terms: it is the same page, and it is where a reader following
+    // the entry actually starts reading.
+    const firstBlockOnLeaf = new Map<number, string>()
+    for (const block of blocks) {
+      if (block.kind === 'heading') continue
+      const match = /^p(\d+)b\d+$/u.exec(block.id)
+      if (!match) continue
+      const leaf = Number(match[1])
+      if (!firstBlockOnLeaf.has(leaf)) firstBlockOnLeaf.set(leaf, block.id)
+    }
+    const highestLeaf = Math.max(0, ...ordered.map((p) => p.pageIndex))
+    const placeAt = (folio: string): string | null => {
+      const leaf = leafOfFolio(folio)
+      if (leaf === null) return null
+      for (let n = leaf; n <= Math.min(leaf + 3, highestLeaf); n++) {
+        const id = firstBlockOnLeaf.get(n)
+        if (id) return id
+      }
+      return null
+    }
+
+    const groups = contentsRuns.flatMap((run) => {
+      const parsed = readAnalyticalContents(
+        run.flatMap((page) =>
+          page.blocks.map((b) => ({
+            kind: b.kind,
+            text: b.text,
+            ...(b.cells ? { cells: b.cells } : {})
+          }))
+        )
+      )
+      return analyticalLooksSound(parsed) ? parsed : []
+    })
+    if (groups.length > 0) {
+      const byTitle = new Map(groups.map((g) => [synopsisKey(g.title), g]))
+      const byLabel = new Map<string, AnalyticalGroup[]>()
+      for (const group of groups) {
+        if (!group.label) continue
+        const key = synopsisKey(group.label)
+        byLabel.set(key, [...(byLabel.get(key) ?? []), group])
+      }
+      const taken = new Set<AnalyticalGroup>()
+      for (const chapter of chapters) {
+        // Three ways in, in the order of how much each proves.
+        //
+        // The third is the one this book needs, and it was missing. An 1877
+        // chapter opening prints `CHAPTER I.` and nothing else — the name
+        // `OLD THINGS WITH NEW NAMES.` appears *only* in the contents — so the
+        // body's chapter carries that number as its **title** and has no label
+        // at all, while the contents group carries it as its **label**.
+        // Matching title against title missed every chapter of the volume, and
+        // matching label against label had no label on the body's side to use.
+        // Measured: 0 of 15 chapters matched before this line, 15 of 15 after.
+        const byOwnLabel = chapter.label ? (byLabel.get(synopsisKey(chapter.label)) ?? []) : []
+        const byTitleAsNumber = byLabel.get(synopsisKey(chapter.title)) ?? []
+        const found =
+          byTitle.get(synopsisKey(chapter.title)) ??
+          byOwnLabel.find((g) => !taken.has(g)) ??
+          byTitleAsNumber.find((g) => !taken.has(g))
+        if (!found || taken.has(found)) continue
+        taken.add(found)
+        // A topic whose folio names no leaf this reading has is **left out**,
+        // not printed with the original's number and not printed with none: an
+        // entry pointing at a page that does not exist is worse than an entry
+        // the reader never sees, because the reader trusts it.
+        const placed = found.topics.flatMap((topic) => {
+          const blockId = placeAt(topic.originalFolio)
+          return blockId ? [{ text: topic.text, blockId, originalFolio: topic.originalFolio }] : []
+        })
+        if (placed.length > 0) chapter.topics = placed
+      }
     }
   }
 
