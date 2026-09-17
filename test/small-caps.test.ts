@@ -232,6 +232,43 @@ describe('what a small-capitals run is set in', () => {
   })
 
   /**
+   * The fault that reached a printed page: a block carrying a footnote is
+   * handed to the breaker with its *markers taken out* — they are redrawn as
+   * attachments, so leaving them in would print both — and that moves every
+   * character after each one. A guard that dropped the ranges wherever the two
+   * strings differed therefore dropped them on most of the book: 921 notes in
+   * this volume, and the glossary's headwords came out in plain roman with
+   * every other thing on the page right.
+   *
+   * The fixture has to have the shape of the fault. A mark *after* the marker
+   * is what moves; a mark before it would land correctly however the ranges
+   * were handled, and the test would pass with the guard reinstated.
+   */
+  it('survives a footnote marker taken out of the same block', () => {
+    const doc = assembleBook([
+      parsePageTranscription(
+        {
+          role: 'body',
+          blocks: [
+            { kind: 'paragraph', text: 'He wrote* of the <sc>Hermetist.</sc>—From Hermes.' },
+            { kind: 'footnote', text: '* Isis Unveiled, i. 45.', marker: '*' }
+          ],
+          uncertain: [],
+          furniture: {}
+        },
+        0
+      )
+    ])
+    const book = layout(doc, defaultStyleProfile(), withSmallCaps(stub), { edition: EDITION })
+    const runs = runsOf(book)
+    // The marker is gone from the text and redrawn, so the range had to move
+    // back a character to still name the headword.
+    expect(runs.some((r) => r.text.includes('*'))).toBe(false)
+    expect(runs.find((r) => r.text === 'Hermetist.')?.font.smallCaps).toBe(true)
+    expect(runs.find((r) => r.text === '—From')?.font.smallCaps).toBeUndefined()
+  })
+
+  /**
    * A subscript is a character range into the same string, so a fallback that
    * lengthened a word would put a figure under the wrong letter. `ß` uppercases
    * to `SS`; the word is left as written rather than shifted.

@@ -2109,6 +2109,61 @@ closed`, which is indistinguishable from the flake the first command after a
   does, a book is not finished until someone has asked whether the face the
   rulings name is the face the book file sets.
 
+- **Also done**: **small capitals, and the guard that was throwing away the
+  marks measured in characters.** _Isis Unveiled_'s BEFORE THE VEIL glossary
+  sets its 31 headwords in caps and small capitals — measured off the scan at
+  900 DPI rather than judged by eye: HIEROPHANT's full H stands 77 pixels and
+  the letters after it 50 to 53, on one baseline, a ratio of 0.65, and every
+  headword sampled across leaves 39 to 55 falls between 0.65 and 0.75.
+
+  **The mark is character ranges, and that was arrived at by being wrong
+  first.** It was built as word indices, like `<i>` and `<b>`, and then could
+  not set a single headword in the book it was asked for: every one of them is
+  glued to the em dash that introduces its definition, so `HERMETIST.—From
+Hermes` is one whitespace-separated word of which ten characters are small
+  capitals and five are not. Marking the word would have set `FROM` in small
+  capitals too. That is the conclusion `subscript` reached, for the same
+  reason, and `markup.ts` had said the case "has not come up" — it has. What
+  makes the offsets safe is what makes the word indices safe: they are
+  re-derived from the notation on every edit rather than stored once.
+
+  **Its meaning depends on the case of the text it covers**, which nothing else
+  here does. `smcp` replaces lower-case letters and leaves capitals alone, so
+  the word is written the way it is spelt — `<sc>Hermetist</sc>` — and the
+  initial full capital falls out of the notation rather than out of a rule
+  about first letters. A transcription reading `HERMETIST.` records what
+  letters are on the paper and says nothing about their size, so the 31
+  headwords had to be rewritten into their own case for the mark to act on.
+  A face with no `smcp` — five of the seven offered — sets the run in **full
+  capitals**, never capitals scaled down, the same refusal that governs bold.
+
+  **And the fault that reached a printed page.** With the mark in the book
+  file, in the block and in the document handed to the engine, the glossary
+  came out in plain roman. `buildFlowable` was dropping every character range
+  wherever the string being broken was not the block's own text — and it
+  almost never is: a block carrying a footnote is handed over with its
+  _markers taken out_, because they are redrawn as attachments and leaving
+  them in would print both. On a book with 921 notes that is most of the
+  blocks there are, and the same guard had been dropping `subscript` for as
+  long as it has existed. Taking a marker out is a pure deletion, so the map
+  is **built** — `rebaseRanges` walks the two strings — and dropped only where
+  the transformation is not a deletion, as for an upper-cased running head.
+
+  Nothing short of looking at the render catches this. The unit test passed,
+  the export reported `cautions: []`, no notes dropped, no substitutions, and
+  784 pages both ways. What settled it was measuring the rendered page the
+  same way the scan was measured: cap 16 pixels, small capitals 11, ratio
+  0.688 against the paper's 0.70, every letter on one baseline. **Two
+  measurements were wrong before the right one**, both worth recognising — a
+  headword locator that matched the first OCR box whose letters started with
+  the word, so `MAGICIAN` was measured against `“magic.”` and came back with
+  its first letter _shorter_ than the rest, which is not a thing a compositor
+  does; and a whole afternoon spent on the browser's HTTP cache, which was
+  innocent. A proof of the same page in a face with no `smcp` is what located
+  the fault: it printed the headwords in full capitals, which proved the mark
+  was reaching the breaker and the split was happening, and left `rangesFor`
+  as the only place the face could be lost.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

@@ -931,7 +931,7 @@ function breakNote(note: PreparedNote, ctx: BuildContext): NoteBlock {
     alignment: 'left',
     ...(ctx.hyphenate ? { hyphenate: ctx.hyphenate } : {}),
     ...(spans.length > 0 ? { spans } : {}),
-    ...rangeArgs(rangesFor(note, ctx, ctx.profile.bodyFont))
+    ...rangeArgs(rangesFor(note, ctx, ctx.profile.bodyFont, { text: note.text, own: note.text }))
   })
 
   const lines = toFlowLines(broken, font, sizePt, [hang], undefined, undefined, spans)
@@ -1103,18 +1103,9 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
    */
   const spans = style.style === 'regular' ? spansFor(ctx, family, style.style, block) : []
 
-  /**
-   * Figures the original set below the line, as character ranges.
-   *
-   * Offered only when the text being broken *is* the block's own text. A
-   * running head cut to fit, a line upper-cased because the face has no real
-   * small capitals, a caption supplied through `opts.text` — each is a
-   * different string, and a character range measured against one of them and
-   * applied to another would put a figure under whatever letter now sits
-   * there. Dropping them is safe where keeping them would not be: a heading
-   * has no chemistry in it.
-   */
-  const ranges = rangesFor(block, ctx, family, text === block.text)
+  // Mapped onto the string actually being broken, which for any block carrying
+  // a footnote is the block's text with the markers taken out. See `rangesFor`.
+  const ranges = rangesFor(block, ctx, family, { text, own: block.text })
 
   // A paragraph with a figure in it or beside it is built round the figure.
   // The drop capital gives way: both change the measure of the opening lines,
@@ -1253,23 +1244,44 @@ interface RangeMarks {
 }
 
 /**
- * A block's character ranges, and what a small-capitals run is set in.
+ * A block's character ranges, mapped onto the string that will be broken, and
+ * what a small-capitals run is set in.
  *
- * `keep` is false wherever the string being broken is not the block's own
- * text — a running head cut to fit, a caption supplied through `opts.text`.
- * A range measured against one string and applied to another puts a figure
- * under whatever letter now sits there, and dropping them is safe where
- * keeping them would not be.
+ * **The string being broken is usually not the block's own.** Every block
+ * carrying a footnote reference is handed over with its markers *taken out* —
+ * they are redrawn as attachments, so leaving them in would print both — and
+ * that moves every character after each one. On a book with 921 notes that is
+ * most of the blocks there are.
+ *
+ * The first version of this dropped the ranges wherever the two strings
+ * differed, which is how the glossary's headwords came out in plain roman on
+ * a page that had every other thing right: the mark was in the book file, in
+ * the block, and in the document handed to the engine, and it was thrown away
+ * one call before the breaker. The same guard had been dropping `subscript`
+ * for as long as it has existed, on any block that also carries a note.
+ *
+ * Taking the markers out is a pure deletion, so the map can be *built* rather
+ * than guessed — `rebaseRanges` walks the two strings and says where each
+ * character went. Where the transformation is not a deletion (a running head
+ * cut to fit, a heading upper-cased because the face has no `smcp`) it returns
+ * null and the ranges are dropped, which is the honest answer: a range
+ * measured against one string and applied to another puts a figure under
+ * whatever letter now sits there.
  */
 function rangesFor(
   marks: { smallCaps?: readonly MarkRange[]; subscript?: readonly MarkRange[] },
   ctx: BuildContext,
   family: string,
-  keep = true
+  onto: { text: string; own: string }
 ): RangeMarks {
+  const map = (ranges: readonly MarkRange[] | undefined): readonly MarkRange[] => {
+    if (!ranges?.length) return []
+    if (onto.text === onto.own) return ranges
+    return rebaseRanges(ranges, onto.own, onto.text, 0) ?? []
+  }
   return {
-    subscripts: keep ? (marks.subscript ?? []) : [],
-    smallCaps: keep ? (marks.smallCaps ?? []) : [],
+    subscripts: map(marks.subscript),
+    smallCaps: map(marks.smallCaps),
     // Asked for rather than assumed, exactly as bold is. Only two of the seven
     // faces offered carry `smcp`; a face without one sets the run in full
     // capitals, which is what `smcp` itself does to a letter that is already a
