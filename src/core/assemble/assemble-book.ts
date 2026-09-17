@@ -432,6 +432,16 @@ export interface BookSection {
 }
 
 export interface BookDocument {
+  /**
+   * `note-text` corrections whose anchor named no note in this book.
+   *
+   * Reported because this edit fails *backwards*: losing one leaves the
+   * paper's own text standing, which looks exactly like nothing being wrong.
+   * Absent rather than empty when there are none, so a document that went
+   * through `applyEdits` with nothing missing is the same document as one that
+   * did not.
+   */
+  noteTextsMissed?: { pageIndex: number; marker: string; nth: number }[]
   /** Body blocks in reading order, seams repaired. */
   blocks: BookBlock[]
   /** Notes pulled out of the page flow, in order of first reference. */

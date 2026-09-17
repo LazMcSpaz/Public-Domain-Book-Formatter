@@ -1701,30 +1701,52 @@ async function serve() {
             assemble.assembleBook(run.transcriptions),
             run.edits ?? []
           )
-          return doc.footnotes.map((n) => ({
-            id: n.id,
-            marker: n.originalMarker,
-            pageIndex: n.pageIndex,
-            orphaned: n.orphaned,
-            words: n.text.split(/\s+/u).filter(Boolean).length,
-            opening: n.text.slice(0, 60)
-          }))
+          const at = editsMod.anchorsById(doc.footnotes)
+          return {
+            // Corrections whose anchor named no note. Reported first because
+            // this edit fails backwards: losing one leaves the paper's own
+            // text standing, which looks exactly like nothing being wrong.
+            missed: doc.noteTextsMissed ?? [],
+            notes: doc.footnotes.map((n) => ({
+              id: n.id,
+              // What a correction names it by. The id is a position in a list
+              // and the list moves; the leaf, the marker and which of them it
+              // is are what the paper shows and do not.
+              at: at.get(n.id) ?? null,
+              marker: n.originalMarker,
+              pageIndex: n.pageIndex,
+              orphaned: n.orphaned,
+              words: n.text.split(/\s+/u).filter(Boolean).length,
+              opening: n.text.slice(0, 60)
+            }))
+          }
         },
         [REPO]
       )
+      const notes = found.notes
       if (out) {
         const { writeFile } = await import('node:fs/promises')
-        await writeFile(resolve(REPO, out), JSON.stringify(found, null, 1))
+        await writeFile(resolve(REPO, out), JSON.stringify(notes, null, 1))
       }
-      const orphaned = found.filter((n) => n.orphaned)
+      const orphaned = notes.filter((n) => n.orphaned)
       const byMarker = {}
-      for (const n of found) byMarker[n.marker] = (byMarker[n.marker] ?? 0) + 1
+      for (const n of notes) byMarker[n.marker] = (byMarker[n.marker] ?? 0) + 1
       const perLeaf = {}
       for (const n of orphaned) perLeaf[n.pageIndex] = (perLeaf[n.pageIndex] ?? 0) + 1
       return {
         ...(out ? { wrote: out } : {}),
-        notes: found.length,
-        leavesWithNotes: new Set(found.map((n) => n.pageIndex)).size,
+        // First, because a correction that reached no note leaves the paper's
+        // own text standing and nothing else says so.
+        ...(found.missed.length > 0
+          ? {
+              correctionsThatReachedNoNote: found.missed,
+              warning:
+                'Those `note-text` corrections name no note in this book. The notes ' +
+                'they were written against print as the reading has them.'
+            }
+          : {}),
+        notes: notes.length,
+        leavesWithNotes: new Set(notes.map((n) => n.pageIndex)).size,
         byMarker,
         orphaned: orphaned.length,
         // Named, not counted. A run of orphans on one leaf is a marker sequence

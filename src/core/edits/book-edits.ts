@@ -41,6 +41,7 @@ import type {
   BareMark,
   BookBlock,
   BookDocument,
+  Footnote,
   Illustration,
   IllustrationPlacement
 } from '@core/assemble'
@@ -186,16 +187,33 @@ export type BookEdit =
    * Footnotes leave the block flow at assembly — that is how the engine sets
    * them at the foot of their page — which left them the one kind of text in
    * the book no edit could reach: not a block, so `text` cannot name them,
-   * and not the editor's own writing, so `note` cannot either. `noteId` is
-   * the assembled note's id (`fn1`, `fn2`, …), positional over the
-   * transcription the same way a block id is, and stable for the same
-   * reason: the transcription is frozen once read.
+   * and not the editor's own writing, so `note` cannot either.
+   *
+   * **Anchored by what the paper shows, not by a position in a list.** This
+   * used to carry the assembled note's id (`fn1`, `fn2`, …) on the argument
+   * that the transcription is frozen once read. It is not: a leaf re-landed
+   * to fix a marker, front matter added at the head of a volume, a claiming
+   * bug repaired — each of them renumbers every note after it, and an edit
+   * written against the old numbering silently comes to name a different one.
+   * Measured on *Isis Unveiled* Vol. I: eleven `note-text` edits, eleven
+   * notes carrying text from elsewhere in the book, and nothing reporting it
+   * — the counts balance, nothing is orphaned, the export has no cautions,
+   * and the only way to see it is to read a printed foot against the scan.
+   *
+   * The leaf, the marker and which occurrence of that marker on that leaf are
+   * what a reader would use to point at the note, and none of them moves when
+   * a note is inserted somewhere else. It is the same lesson the highlight
+   * learnt from offsets and the bare mark from anything but occurrence.
+   *
+   * An anchor that matches no note is **reported** (`noteTextsMissed`), never
+   * dropped in silence: this edit fails backwards — losing it leaves the
+   * paper's own text in place, which looks like nothing is wrong.
    *
    * `<i>`/`<b>` are read by the same convention as everywhere else. An empty
    * text removes the note — the rule blocks already follow: clearing it
    * means "this is not part of the book", and it is undoable like any edit.
    */
-  | { kind: 'note-text'; noteId: string; text: string }
+  | { kind: 'note-text'; at: NoteAnchor; text: string }
   /**
    * A note the editor leaves *for the assistant* — "this page breaks badly",
    * "check this word against the scan" — anchored the way an authored note is,
@@ -361,6 +379,8 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   const authored = new Map<string, BookEdit & { kind: 'note' }>()
   /** Corrections to the book's own footnotes, keyed so re-editing replaces. */
   const noteTexts = new Map<string, string>()
+  /** Anchors that named no note in the book, for the caller to report. */
+  const noteTextsMissed: NoteAnchor[] = []
   /** Pictures the editor added, keyed so re-captioning one replaces it. */
   const supplied = new Map<string, BookEdit & { kind: 'image' }>()
   /** Divisions the editor wrote, keyed so editing one replaces it. */
@@ -425,7 +445,7 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
     }
 
     if (edit.kind === 'note-text') {
-      noteTexts.set(edit.noteId, edit.text)
+      noteTexts.set(noteKey(edit.at), edit.text)
       continue
     }
 
@@ -614,9 +634,23 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   // for the same reason a block's text edit is: the tags typed are the
   // emphasis meant, and retyping invalidates the word indices of the old
   // wording. A note emptied is removed — the rule blocks already follow.
+  const noteAt = noteAnchors(doc.footnotes)
+  const byNote = new Map<string, string>()
+  for (const [key, text] of noteTexts) {
+    const note = noteAt.get(key)
+    if (note) byNote.set(note.id, text)
+    else {
+      const [pageIndex, marker, nth] = key.split('\u0000')
+      noteTextsMissed.push({
+        pageIndex: Number(pageIndex),
+        marker: marker ?? '',
+        nth: Number(nth)
+      })
+    }
+  }
   const footnotes = doc.footnotes
     .map((note) => {
-      const corrected = noteTexts.get(note.id)
+      const corrected = byNote.get(note.id)
       if (corrected === undefined) return note
       const marked = normalizeMarkup<TranscribedBlock>({
         kind: 'paragraph',
@@ -738,7 +772,11 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
     // An empty array would make `applyEdits(doc, [aMemo])` differ from
     // `applyEdits(doc, [])`, which is the property the memo tests assert and
     // the one that says a message about a book changes nothing about it.
-    ...(stillBare.length > 0 ? { bareMarks: stillBare } : {})
+    ...(stillBare.length > 0 ? { bareMarks: stillBare } : {}),
+    // Absent rather than empty, for the reason `bareMarks` is: a document with
+    // nothing missing must be the same document whether or not it came through
+    // here.
+    ...(noteTextsMissed.length > 0 ? { noteTextsMissed } : {})
   }
 }
 
@@ -872,6 +910,65 @@ function chaptersOf(
  * disjunction — which is how adding a kind silently breaks a filter somewhere
  * else that was written before it existed.
  */
+/**
+ * Which footnote a `note-text` edit is about, in the coordinates the page
+ * itself uses: the leaf it was printed on, the marker it was printed under,
+ * and which occurrence of that marker on that leaf it is.
+ *
+ * `nth` is almost always 0. It exists because a leaf can carry the same marker
+ * twice — the 1877 compositor did it on leaf 106 of *Isis Unveiled* — and an
+ * anchor that could not say which would be ambiguous exactly where the book is
+ * already irregular.
+ */
+export interface NoteAnchor {
+  pageIndex: number
+  marker: string
+  nth: number
+}
+
+/** The key a note is found by: leaf, marker, and which one of them it is. */
+export function noteKey(at: NoteAnchor): string {
+  return `${at.pageIndex}\u0000${at.marker}\u0000${at.nth}`
+}
+
+/**
+ * Every note in the book, keyed the way a `note-text` edit names one.
+ *
+ * Exported because the driver and the proof sheet both have to turn "this
+ * note" into an anchor, and a second implementation of the counting would be
+ * the thing this anchor exists to avoid.
+ */
+export function noteAnchors(notes: readonly Footnote[]): Map<string, Footnote> {
+  const out = new Map<string, Footnote>()
+  for (const { note, at } of anchoredNotes(notes)) out.set(noteKey(at), note)
+  return out
+}
+
+/**
+ * The same walk, keyed by the note's own id.
+ *
+ * What a surface actually has in hand is a note — the galley is showing it,
+ * the driver was handed it — and what an edit needs is the anchor. One walk
+ * serves both directions so the counting cannot differ between them, which is
+ * the failure the anchor exists to prevent.
+ */
+export function anchorsById(notes: readonly Footnote[]): Map<string, NoteAnchor> {
+  const out = new Map<string, NoteAnchor>()
+  for (const { note, at } of anchoredNotes(notes)) out.set(note.id, at)
+  return out
+}
+
+function anchoredNotes(notes: readonly Footnote[]): { note: Footnote; at: NoteAnchor }[] {
+  const seen = new Map<string, number>()
+  return notes.map((note) => {
+    const marker = note.originalMarker ?? ''
+    const key = `${note.pageIndex}\u0000${marker}`
+    const nth = seen.get(key) ?? 0
+    seen.set(key, nth + 1)
+    return { note, at: { pageIndex: note.pageIndex, marker, nth } }
+  })
+}
+
 export function blockOf(edit: BookEdit): string | null {
   if (
     edit.kind === 'anchor' ||
@@ -917,7 +1014,7 @@ export function countEdited(edits: readonly BookEdit[]): number {
     // evening of reading would report three hundred blocks as edited.
     if (!correctsTheBook(edit)) continue
     if (edit.kind === 'anchor') touched.add(edit.illustrationId)
-    else if (edit.kind === 'note-text') touched.add(edit.noteId)
+    else if (edit.kind === 'note-text') touched.add(noteKey(edit.at))
     else if (edit.kind === 'note') touched.add(edit.noteId)
     else if (edit.kind === 'image') touched.add(edit.imageId)
     else if (edit.kind === 'section') touched.add(edit.sectionId)
@@ -1009,7 +1106,7 @@ export function withEdit(edits: readonly BookEdit[], edit: BookEdit): BookEdit[]
 export function editTarget(edit: BookEdit): string {
   if (edit.kind === 'anchor') return edit.illustrationId
   if (edit.kind === 'note') return edit.noteId
-  if (edit.kind === 'note-text') return edit.noteId
+  if (edit.kind === 'note-text') return noteKey(edit.at)
   if (edit.kind === 'image') return edit.imageId
   if (edit.kind === 'section') return edit.sectionId
   if (edit.kind === 'insert') return edit.insertId

@@ -32,6 +32,7 @@ import type { BookDocument } from '@core/assemble'
 import type { BlockKind } from '@core/transcribe'
 import { withMarkup, wordCount } from '@core/transcribe'
 import {
+  anchorsById,
   findMatches,
   htmlOfMarkup,
   markupOfNodes,
@@ -294,6 +295,22 @@ export function BookEditor({
   }, [doc])
 
   /**
+   * Each note's anchor — leaf, marker, and which occurrence of it on that leaf.
+   *
+   * A `note-text` edit names a note that way rather than by its assembled id,
+   * because the id is a position in a list and the list moves whenever a leaf
+   * is re-landed or front matter is added. See `NoteAnchor`.
+   */
+  const noteAnchorsById = useMemo(() => anchorsById(doc.footnotes), [doc])
+
+  /** Correct or clear the book's own note, by what the paper shows. */
+  const pushNoteText = (noteId: string, text: string): void => {
+    const at = noteAnchorsById.get(noteId)
+    if (!at) return
+    push({ kind: 'note-text', at, text })
+  }
+
+  /**
    * Marks the editor has said print bare, by the passage they stand in.
    *
    * Listed so a declaration can be taken back. An unclaimed marker looks
@@ -514,7 +531,9 @@ export function BookEditor({
       const text = withMarkup(note.text, note)
       const swept = sweepText(text, find.query, find.replace, find.matchCase)
       if (swept.count === 0) continue
-      next = withEdit(next, { kind: 'note-text', noteId: note.id, text: swept.text })
+      const at = noteAnchorsById.get(note.id)
+      if (!at) continue
+      next = withEdit(next, { kind: 'note-text', at, text: swept.text })
       total += swept.count
     }
     for (const edit of edits) {
@@ -1301,8 +1320,8 @@ export function BookEditor({
                     key={`${note.id}:${note.text}`}
                     note={note}
                     label={`Note ${note.originalMarker} — the book's own, printed at the foot of its page`}
-                    onCommit={(text) => push({ kind: 'note-text', noteId: note.id, text })}
-                    onRemove={() => push({ kind: 'note-text', noteId: note.id, text: '' })}
+                    onCommit={(text) => pushNoteText(note.id, text)}
+                    onRemove={() => pushNoteText(note.id, '')}
                     // Only a mark the original printed can be declared bare. An
                     // authored note is anchored rather than marked, so there is
                     // no character in the text to leave standing.
@@ -1397,8 +1416,8 @@ export function BookEditor({
                   key={`${note.id}:${note.text}`}
                   note={note}
                   label={`Note ${note.originalMarker} — from leaf ${note.pageIndex + 1}, collected as an endnote`}
-                  onCommit={(text) => push({ kind: 'note-text', noteId: note.id, text })}
-                  onRemove={() => push({ kind: 'note-text', noteId: note.id, text: '' })}
+                  onCommit={(text) => pushNoteText(note.id, text)}
+                  onRemove={() => pushNoteText(note.id, '')}
                 />
               ))}
             </div>

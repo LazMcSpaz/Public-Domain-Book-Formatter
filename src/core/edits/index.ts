@@ -7,6 +7,10 @@
  */
 export {
   applyEdits,
+  anchorsById,
+  noteAnchors,
+  noteKey,
+  type NoteAnchor,
   blockOf,
   countEdited,
   correctsTheBook,

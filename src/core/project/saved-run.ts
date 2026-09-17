@@ -749,9 +749,29 @@ function parseEdits(raw: unknown): BookEdit[] {
         break
       }
       case 'note-text': {
-        const noteId = str(value['noteId'], '')
-        if (noteId && typeof value['text'] === 'string') {
-          out.push({ kind: 'note-text', noteId, text: value['text'] })
+        // An edit written against the old anchor — the assembled note's id —
+        // is **dropped**, not converted. There is nothing to convert it to:
+        // the id names a position in a list that has since moved, which is the
+        // whole reason the anchor changed, so resolving it now would attach
+        // the text to whichever note happens to sit there today. Dropping it
+        // leaves the note as the paper has it, which is the safe half of a bad
+        // choice; on the one book that had any, all eleven were already
+        // attached to the wrong notes.
+        const at = value['at']
+        if (
+          at &&
+          typeof at === 'object' &&
+          typeof (at as Record<string, unknown>)['pageIndex'] === 'number' &&
+          typeof (at as Record<string, unknown>)['marker'] === 'string' &&
+          typeof (at as Record<string, unknown>)['nth'] === 'number' &&
+          typeof value['text'] === 'string'
+        ) {
+          const a = at as { pageIndex: number; marker: string; nth: number }
+          out.push({
+            kind: 'note-text',
+            at: { pageIndex: a.pageIndex, marker: a.marker, nth: a.nth },
+            text: value['text']
+          })
         }
         break
       }
