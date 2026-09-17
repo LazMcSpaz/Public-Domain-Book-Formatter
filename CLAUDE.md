@@ -2215,6 +2215,68 @@ Hermes` is one whitespace-separated word of which ten characters are small
   breaker blind, and a one-chapter contents is refused by
   `analyticalLooksSound` before any mark is reached.
 
+- **Also done**: **the body swept for small capitals, and the five ways a
+  measurement can be confidently wrong.** Every all-capitals word in _Isis
+  Unveiled_ Vol. I had its pixels read: 357 candidates on 163 leaves, 289
+  measured, **123 caps and small capitals against 166 full capitals**, the two
+  populations separating at 0.83 and 0.86 with nothing in between. Headings are
+  out of the count — the design sets those.
+
+  **A word list decides nothing here.** `GOD` is full capitals on leaf 18 and
+  small capitals on leaf 30; `KNOWLEDGE` is small on 18 and full on 23;
+  `SPIRIT` is full on 18 and `SCIENCE` small on 57. Only the leaf decides, so
+  every occurrence is measured. The page was then checked against the paper:
+  the 1877 printing sets `—POPE.` at 0.741 and the edition prints it at 0.688,
+  inside the paper's own spread of 0.654 to 0.741.
+
+  **Five faults, each of which produced a confident verdict about the wrong
+  ink, and none of which shows in a count.** They are worth recognising because
+  the shape recurs: a number that is _arithmetically_ fine and _physically_
+  impossible.
+
+  - _The box was on the wrong word._ Similarity matching put `CAUSELESS` on
+    `ceaseless`, `IAO` on `Tao`, `TRAI-VIDYA` on the running head `TRAIL`. The
+    matched OCR token must carry a capital of its own — the transcription
+    records the word in capitals, so OCR read at least one — and a word of four
+    letters or fewer needs a far better match, because similarity over three
+    letters says almost nothing.
+  - _The box held more than the word._ OCR runs neighbours together, so `GOD`'s
+    box is `as—GOD.` and the first letter measured is an `a`. The box's letter
+    count has to agree with the word's, give or take one for a misread letter.
+  - _The first letter was an em dash_ — a 4-pixel band against 20-pixel small
+    capitals, ratio 5.
+  - _The first letter was an opening quotation mark_, about half a capital, so
+    half-the-median did not catch it. The first letter of a word set in
+    capitals is never shorter than the run's median.
+  - _The window reached into the line above._ A five-pixel vertical pad pulled
+    the previous line's descenders into the first column band and `—LORD` came
+    back at 0.43, under the small-capital range, on a line the scan shows
+    plainly in caps and small caps.
+
+  **And one guard that was measuring the wrong thing.** Counting ink runs was
+  tried as a test of "is this box the right word" and had to be withdrawn: at
+  450 DPI a thin stroke drops below the threshold and a letter splits into its
+  stems, so `FATHER` reads as nine runs and `MYSTERY` as twelve. That costs the
+  ratio nothing — every stem of a capital is full height, and so is every stem
+  of a small capital — but as a guard it rejected thirty-three sound
+  measurements before anyone looked at why.
+
+  **What could not be decided is listed, not guessed.** 47 candidates went
+  unmeasured, nearly all two- and three-letter words where one letter after the
+  first leaves no median to take, and 21 could not be placed on their leaf at
+  all. Both lists are in the book's ledger. The sweep also turned up two words
+  the reading records in capitals and the paper prints in lower case (`will`,
+  `all`), which the measurement refuses rather than marking.
+
+  **How it was run, which is the reusable part.** One render per _leaf_ rather
+  than one crop per word — 357 crops of 163 pages is three times the work and
+  three times the browser churn. The driver's Chromium, holding a 357 MB scan
+  open, stops answering after a few dozen renders and then crashes its target,
+  so the restart belongs inside the loop; and one leaf of this volume crashes
+  it at 450 DPI repeatably with a fresh browser, so the DPI falls back to 300
+  and the record says which was used. A wrapper that pipes the script to `tail`
+  tests `tail`'s exit status and will report success forever.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with
