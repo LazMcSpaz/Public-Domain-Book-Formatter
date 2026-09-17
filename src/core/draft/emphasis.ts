@@ -56,6 +56,26 @@ const RESYNC_WINDOW = 12
 /** How many source words may be run together to match one block word. */
 const JOIN_MAX = 3
 
+/**
+ * How many of a text's opening words are used to find where in the source it
+ * begins, and how many of them must agree.
+ *
+ * A text does not always carry on from where the last one stopped, and a table
+ * is why. The source reads a leaf down, line by line; a reader who turned a
+ * page of prose into a transcript beside its commentary has the whole left
+ * column in one cell and the whole right column in the next, so that second
+ * cell begins *behind* where the first one ended. A walk that can only go
+ * forward finds the first cell and then nothing.
+ *
+ * Measured on _Patterns_ Vol. I, landing seven corrected batches: with a
+ * forward-only walk, leaf 54 lost 307 words of 808 and leaf 45 lost 249 of
+ * 719 — both leaves where a reader re-cut the columns. Six of six is too
+ * brittle for a reader who retyped a word, and three of six is enough that a
+ * wrong anchor would have to agree three times running.
+ */
+const ANCHOR_WORDS = 6
+const ANCHOR_AGREE = 3
+
 /** Letters and digits only, folded — the one thing both sides agree on. */
 function key(text: string): string {
   return text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
@@ -96,10 +116,46 @@ export function emphasisForTexts(
   let matched = 0
   let total = 0
 
+  /** The keys of the source, once, so anchoring is not O(n²) in `key`. */
+  const keys = source.map((x) => key(x.text))
+
+  /**
+   * Where in the source a text beginning with these words starts.
+   *
+   * Scored over the opening words rather than matched on the first, because
+   * the first word of a cell is as often `and` as anything else. Ties go to
+   * the position nearest where the last text left off: the same phrase can
+   * occur twice on a leaf, and the near one is the one being read.
+   */
+  const anchorFor = (words: readonly string[], from: number): number => {
+    const opening = words
+      .map(key)
+      .filter((k) => k !== '')
+      .slice(0, ANCHOR_WORDS)
+    if (opening.length < ANCHOR_AGREE) return from
+    let best = from
+    let score = -1
+    for (let at = 0; at < source.length; at++) {
+      let agreed = 0
+      let k = at
+      for (const want of opening) {
+        while (k < source.length && keys[k] === '') k++
+        if (k < source.length && keys[k] === want) agreed++
+        k++
+      }
+      if (agreed > score || (agreed === score && Math.abs(at - from) < Math.abs(best - from))) {
+        score = agreed
+        best = at
+      }
+    }
+    return score >= ANCHOR_AGREE ? best : from
+  }
+
   let s = 0
   texts.forEach((text, t) => {
     const words = text.split(/\s+/u).filter((w) => w.length > 0)
     total += words.length
+    s = anchorFor(words, s)
     let w = 0
     while (w < words.length) {
       const here = key(words[w]!)
@@ -296,4 +352,36 @@ export function flattenCellEmphasis(
     })
   }
   return out.sort((a, b) => a - b)
+}
+
+/**
+ * A block that already carries emphasis, back as a stream of words to read it
+ * off.
+ *
+ * The other direction, and the one that lets work already done be kept. Seven
+ * readers corrected the structure of half this volume before the italics
+ * existed: their blocks are a re-division of a draft's words — joined, split,
+ * moved into cells — and re-drafting the leaf now gives the same words with
+ * the faces on them. Lining the two up is `emphasisForTexts` again, with a
+ * draft on the source side instead of a file.
+ *
+ * A table's flattened view is what to pass, separators and all. The ` | ` has
+ * no letters in it, so the walk steps over it on the source side exactly as it
+ * steps over a lone `|` cell on the other — which is what makes a table read
+ * against its own cells rather than against a string nobody transcribed.
+ *
+ * The boxes are nominal. Nothing downstream of the walk reads them, and a
+ * position invented here would be a worse lie than an obvious one.
+ */
+export function asSource(text: string, emphasis?: readonly number[]): DraftWord[] {
+  const marked = new Set(emphasis ?? [])
+  return text
+    .split(/\s+/u)
+    .filter((w) => w.length > 0)
+    .map((word, i) => ({
+      text: word,
+      confidence: 100,
+      italic: marked.has(i),
+      bbox: { x0: i, y0: 0, x1: i + 1, y1: 1 }
+    }))
 }

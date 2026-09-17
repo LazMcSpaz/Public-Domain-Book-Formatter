@@ -3068,6 +3068,176 @@ async function serve() {
     },
 
     /**
+     * Put the file's own emphasis onto a batch somebody has already corrected.
+     *
+     * Seven readers corrected the structure of half of _Patterns of the
+     * Hypnotic Techniques_ Vol. I before `DraftWord.italic` existed, and on
+     * this book the italics are not decoration: leaf 20 says outright that
+     * they mark the interspersed hypnotic suggestions, so on the interspersal
+     * technique the italic run *is* the content. Reading those leaves again to
+     * get them is hours of work for something the file states.
+     *
+     * So the leaf is re-drafted — which now carries the emphasis — and the two
+     * are lined up by their words. A corrected block is a *re-division* of the
+     * draft's words, joined and split and moved into cells, so positions are
+     * worth nothing here and tokens are worth everything; see
+     * `@core/draft/emphasis`, which is the same walk the draft itself uses.
+     *
+     * Nothing is written to the store and no text is changed: this reads a
+     * batch and writes a batch, with `emphasis` on the blocks that have any.
+     * Land it with `transcribe` afterwards, as usual.
+     *
+     * The report to read is `unmatched`. A scatter of ones is a reader having
+     * typed a word the file lost; a **run** of them on one leaf means that
+     * leaf's blocks were lined up against the wrong part of the draft — which
+     * is what a reader turning a paragraph into a table looks like, since that
+     * moves the words — and the emphasis on that leaf is not to be trusted.
+     */
+    emphasis: async ([inPath, outPath]) => {
+      if (!inPath) throw new Error('emphasis <done.json> [out.json]')
+      const { readFile, writeFile } = await import('node:fs/promises')
+      const batch = JSON.parse(await readFile(resolve(REPO, inPath), 'utf8'))
+      const pages = Array.isArray(batch) ? batch : (batch.pages ?? [])
+      if (pages.length === 0) throw new Error(`${inPath} holds no pages.`)
+
+      const marked = await page.evaluate(
+        async ([repo, given]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
+          const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const draftMod = await import(`/@fs${repo}/src/core/draft/index.ts`)
+          const emphasisMod = await import(`/@fs${repo}/src/core/draft/emphasis.ts`)
+          const schema = await import(`/@fs${repo}/src/core/transcribe/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const cached = await cacheMod.loadReconCache(newest.key, {
+            dpi: recon.RECON_DPI,
+            maxPages: null
+          })
+          if (!cached) throw new Error('No cached reading on this device.')
+          const covered = new Set(cached.words.map((w) => w.pageIndex))
+
+          const report = []
+          for (const leaf of given) {
+            const n = leaf.pageIndex
+            if (!covered.has(n)) {
+              report.push({ leaf: n, read: false })
+              continue
+            }
+            const words = cached.words.filter((w) => w.pageIndex === n)
+            // No vocabulary and no expected folio: this is not a draft anybody
+            // reads, only a stream of words with faces on them, and hyphen
+            // healing here would put the source *further* from the corrected
+            // text rather than nearer it.
+            const drafted = draftMod.draftPage(words)
+            const source = drafted.blocks.flatMap((b) => emphasisMod.asSource(b.text, b.emphasis))
+            // A table's cells, never its flattened view: the reader's own
+            // division is what the indices have to come back in.
+            // Markup first. Some readers on this volume marked the italics
+            // they could see by hand, in `<i>` tags, which is the notation the
+            // app reads everywhere else — so the text carries `<i>Syntactic`
+            // as a *word* and matches nothing. `normalizeMarkup` is the one
+            // reader of that notation and turns it back into text plus
+            // indices, which is also what makes the hand marking usable as a
+            // second witness below.
+            const texts = []
+            const spans = []
+            // `normalizeTable` first, because a batch may name a table by its
+            // cells alone and leave the flattened view to be derived — which
+            // is allowed, and which leaves `text` undefined for the markup
+            // reader to trip over.
+            leaf.blocks = (leaf.blocks ?? []).map((b) =>
+              schema.normalizeMarkup(schema.normalizeTable(b))
+            )
+            for (const block of leaf.blocks) {
+              const cells = block.cells?.flat()
+              spans.push({
+                block,
+                from: texts.length,
+                cells: cells?.length ?? 0,
+                byHand: block.emphasis
+              })
+              texts.push(...(cells ?? [block.text]))
+            }
+            const read = emphasisMod.emphasisForTexts(texts, source)
+            let put = 0
+            let byHand = 0
+            let agreed = 0
+            for (const { block, from, cells, byHand: hand } of spans) {
+              const mine =
+                cells > 0 ? read.emphasis.slice(from, from + cells) : [read.emphasis[from] ?? []]
+              const flat =
+                cells > 0
+                  ? emphasisMod.flattenCellEmphasis(block.cells ?? [], mine)
+                  : (mine[0] ?? [])
+              // Where a reader marked by hand, the two are compared before
+              // the file's answer replaces it. The file *states* the face, and
+              // a reader was looking at a render drawn from that same file, so
+              // the file is the better witness — but a hand marking the file
+              // does not carry is a place to look, and the comparison is free.
+              if (hand) {
+                byHand += hand.length
+                const has = new Set(flat)
+                agreed += hand.filter((i) => has.has(i)).length
+              }
+              if (flat.length > 0) {
+                block.emphasis = flat
+                put += flat.length
+              } else delete block.emphasis
+            }
+            report.push({
+              leaf: n,
+              read: true,
+              marked: put,
+              inDraft: drafted.blocks.reduce((k, b) => k + (b.emphasis?.length ?? 0), 0),
+              of: read.total,
+              byHand,
+              agreed,
+              unmatched: read.unmatched.map((u) => u.is)
+            })
+          }
+          return { pages: given, report }
+        },
+        [REPO, pages]
+      )
+
+      const out = outPath ?? inPath
+      await writeFile(
+        resolve(REPO, out),
+        JSON.stringify(
+          Array.isArray(batch) ? marked.pages : { ...batch, pages: marked.pages },
+          null,
+          1
+        ) + '\n'
+      )
+      const put = marked.report.reduce((n, r) => n + (r.marked ?? 0), 0)
+      const inDraft = marked.report.reduce((n, r) => n + (r.inDraft ?? 0), 0)
+      return {
+        wrote: out,
+        leaves: marked.report.length,
+        marked: put,
+        // What the draft had to give, beside what landed. The two differ when
+        // a leaf was re-divided in a way that moved its words, and that gap is
+        // the number to look at before landing the batch.
+        inDraft,
+        unread: marked.report.filter((r) => !r.read).map((r) => r.leaf),
+        // Where a reader marked the italics by hand, what the file made of the
+        // same words. A free second witness, and the one number here that says
+        // anything about whether the file's faces are worth believing.
+        byHand: marked.report.reduce((n, r) => n + (r.byHand ?? 0), 0),
+        byHandAgreed: marked.report.reduce((n, r) => n + (r.agreed ?? 0), 0),
+        leavesWithUnmatched: marked.report
+          .filter((r) => (r.unmatched?.length ?? 0) > 0)
+          .map((r) => ({
+            leaf: r.leaf,
+            lost: r.unmatched.length,
+            of: r.of,
+            words: r.unmatched.slice(0, 12)
+          }))
+      }
+    },
+
+    /**
      * The free reading, shaped like a page and ready to be corrected.
      *
      * With no API there is nothing that turns a leaf into blocks, and asking a

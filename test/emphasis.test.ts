@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
+  asSource,
   emphasisForTexts,
   flattenCellEmphasis,
   withoutConversionDamage,
@@ -178,5 +179,37 @@ describe('flattenCellEmphasis', () => {
     const words = tableToText(cells).split(/\s+/u)
     const flat = flattenCellEmphasis(cells, [[0], [], [], [0]])
     expect(flat.map((i) => words[i])).toEqual(['left', 'right'])
+  })
+})
+
+describe('asSource', () => {
+  it('reads a drafted block back as words carrying its faces', () => {
+    const src = asSource('see The Structure of Magic here', [1, 2, 3, 4])
+    expect(src.filter((w) => w.italic).map((w) => w.text)).toEqual([
+      'The',
+      'Structure',
+      'of',
+      'Magic'
+    ])
+  })
+
+  it('carries a table through its flattened view, separators and all', () => {
+    // The draft's side is the flattened text; the corrected side is the cells.
+    // The ` | ` has no letters in it, so the walk steps over it and the two
+    // line up — which is what lets a reader's re-divided table keep its
+    // emphasis.
+    const cells = [['you can relax', 'the client hears']]
+    const flat = tableToText(cells)
+    const marked = flattenCellEmphasis(cells, [[1, 2], []])
+    const read = emphasisForTexts(cells.flat(), asSource(flat, marked))
+    expect(read.emphasis).toEqual([[1, 2], []])
+    expect(read.unmatched).toEqual([])
+  })
+
+  it('survives the reader having re-divided the paragraphs', () => {
+    const src = asSource('the first part and the second part', [1, 5])
+    const read = emphasisForTexts(['the first part', 'and the second part'], src)
+    expect(read.emphasis).toEqual([[1], [2]])
+    expect(read.unmatched).toEqual([])
   })
 })
