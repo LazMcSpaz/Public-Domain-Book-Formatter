@@ -458,6 +458,46 @@ role the disposition table knows parses, and what comes back has a disposition �
 because a test naming one role is the same hand-written list again. Reinstating
 the drift fails it; the version before the fix passed.
 
+**A table could not be landed as a table, and notation inside a cell printed
+as angle brackets.** Two faults in the same place, both found reading the
+analytical contents of _Isis Unveiled_ Vol. I — 156 entries in 17 `table`
+blocks, the first batch here made of them.
+
+`parsePageTranscription` demanded `text` on every block, so a table handed its
+`cells` and no text was refused — although the doc comment on `cells` says the
+text is _derived from_ the rows and `normalizeTable`, four lines further down
+the same map, derives it. "One canonical structure and one derived view" cannot
+hold while the derived view is required input. And `normalizeTable` recomputes
+`text` from `cells` **after** `parseInlineMarkup` has run over the block's own
+text, so an `<i>` written inside a cell survived into the derived text verbatim
+while the emphasis indices taken off the pre-normalized text went on describing
+a string that no longer existed: the page would have printed the tags. The
+marks are now read out of each cell and then **dropped**, which is the honest
+answer rather than a shortcut — the engine sets a table one cell at a time,
+each in a single font, so there is no path by which a run inside a cell could
+be set in italic. Where the original italicises inside a table, that is worth
+telling the editor, not worth storing as a mark the page cannot make.
+
+`scripts/batch.mjs --check` had the same blind spot from the other side: every
+check reached for `block.text` and threw `Cannot read properties of undefined`
+on the first table, taking the whole run down. A crash there reads as "this
+file is broken" rather than "this checker cannot see a table", which is worse
+than not checking, because `--check` is the gate a batch passes before it is
+landed. It now reads a table's words off its rows and validates that the rows
+are rows.
+
+**And a word-drift warning was right when the first measurement said it was
+noise.** All five contents leaves came back about half the length of their
+draft. The explanation offered — OCR reads a row of leader dots as words — was
+correct, and the measurement written to confirm it counted only tokens that are
+mostly full stops and put the debris at 3%, which appeared to refute it. The
+dots come off Tesseract as word-shaped junk with two dots in twenty-seven
+characters (`cu.vereunsnessessosssenessss`), so the filter measured the wrong
+thing. What settled it was counting the entries on the render against the
+entries in the file: 31 and 31. **A measurement that contradicts a sound
+hypothesis is a measurement to check**, and the render is what either of them
+has to answer to.
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what

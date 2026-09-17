@@ -126,6 +126,69 @@ describe('parsePageTranscription', () => {
     expect(dispositionFor(parsed.role)).toBe('discard')
   })
 
+  /**
+   * A table's `text` is derived from its `cells` — the doc comment on `cells`
+   * says so — and yet the parser demanded the derived view as input and threw
+   * "block N has no text" on a table given only its rows. Found landing the
+   * analytical contents of *Isis Unveiled* Vol. I, 156 entries in 17 table
+   * blocks, which is the natural shape for that page and could not be filed.
+   */
+  it('takes a table given its rows and no text, and derives the text', () => {
+    const parsed = parsePageTranscription(
+      {
+        role: 'table-of-contents',
+        blocks: [
+          {
+            kind: 'table',
+            cells: [
+              ['Lost arts', '49'],
+              ['Their relation to crime', '71']
+            ]
+          }
+        ],
+        uncertain: [],
+        furniture: {}
+      },
+      11
+    )
+    expect(parsed.blocks[0]?.cells).toEqual([
+      ['Lost arts', '49'],
+      ['Their relation to crime', '71']
+    ])
+    expect(parsed.blocks[0]?.text).toBe('Lost arts | 49\nTheir relation to crime | 71')
+  })
+
+  /**
+   * Notation inside a cell used to survive into the derived text verbatim,
+   * because `normalizeTable` recomputes `text` from `cells` *after*
+   * `parseInlineMarkup` has run over the block's own text — so the page would
+   * have printed the angle brackets, while the emphasis indices taken off the
+   * pre-normalized text described a string that no longer existed. The engine
+   * sets each cell in one font and cannot italicise a run inside one, so the
+   * marks are dropped rather than re-derived.
+   */
+  it('reads notation out of a table cell rather than printing the tags', () => {
+    const parsed = parsePageTranscription(
+      {
+        role: 'table-of-contents',
+        blocks: [
+          {
+            kind: 'table',
+            cells: [['Superficial generalizations of the French <i>savants</i>', '60']]
+          }
+        ],
+        uncertain: [],
+        furniture: {}
+      },
+      12
+    )
+    const block = parsed.blocks[0]
+    expect(block?.cells).toEqual([['Superficial generalizations of the French savants', '60']])
+    expect(block?.text).not.toMatch(/<i>|<\/i>/u)
+    // No mark the page could not make: a cell is set in a single font.
+    expect(block?.emphasis).toBeUndefined()
+  })
+
   it('rejects a malformed block instead of importing half a page', () => {
     expect(() =>
       parsePageTranscription(

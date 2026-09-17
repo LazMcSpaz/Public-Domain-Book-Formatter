@@ -77,6 +77,31 @@ const flag = (name, fallback = null) => {
 }
 
 /**
+ * A block's words, for a block that may be a table.
+ *
+ * A `table` carries `cells` and **no** `text`: the flattened view is derived
+ * from the rows and `parsePageTranscription` is what derives it. So every check
+ * that reached for `block.text` threw `Cannot read properties of undefined` on
+ * the first table in a batch and took the whole run down — worse than not
+ * checking, because `--check` is the gate a batch passes before it is landed
+ * and a crash reads as "this file is broken" rather than "this checker cannot
+ * see a table". Found on the analytical contents of *Isis Unveiled* Vol. I,
+ * which is 156 entries in 17 table blocks and the first batch here made of
+ * them.
+ *
+ * Joined with a space rather than ` | `, because this is deliberately not the
+ * derived view — that belongs to `tableToText`, and a second copy of it here
+ * would be one more thing to drift. What every caller wants is the words and
+ * the tags, and both survive any separator.
+ */
+const textOfBlock = (block) =>
+  typeof block.text === 'string'
+    ? block.text
+    : Array.isArray(block.cells)
+      ? block.cells.map((row) => (Array.isArray(row) ? row.join(' ') : '')).join('\n')
+      : ''
+
+/**
  * What came back from a reader, checked against what it was given.
  *
  * Deterministic and cheap, and it runs before anything is stored. Four things:
@@ -132,9 +157,24 @@ function checkBatch(donePath, draftPath) {
         if (!BLOCK.has(key)) problems.push(`leaf ${n} block ${i}: unknown field \`${key}\``)
       }
       if (!KINDS.has(block.kind)) problems.push(`leaf ${n} block ${i}: kind \`${block.kind}\``)
+      const blockText = textOfBlock(block)
+      // A table's rows have to be rows. `cells` is the canonical structure and
+      // everything downstream indexes it two deep, so a ragged one fails later
+      // and further from its cause than here.
+      if (block.kind === 'table') {
+        if (!Array.isArray(block.cells) || block.cells.length === 0) {
+          problems.push(`leaf ${n} block ${i}: a table with no \`cells\``)
+        } else if (!block.cells.every((row) => Array.isArray(row))) {
+          problems.push(`leaf ${n} block ${i}: a table whose rows are not arrays`)
+        } else if (!block.cells.every((row) => row.every((c) => typeof c === 'string'))) {
+          problems.push(`leaf ${n} block ${i}: a table with a non-string cell`)
+        }
+      } else if (typeof block.text !== 'string') {
+        problems.push(`leaf ${n} block ${i}: no \`text\``)
+      }
       for (const tag of ['i', 'b']) {
-        const open = (block.text.match(new RegExp(`<${tag}>`, 'gu')) ?? []).length
-        const close = (block.text.match(new RegExp(`</${tag}>`, 'gu')) ?? []).length
+        const open = (blockText.match(new RegExp(`<${tag}>`, 'gu')) ?? []).length
+        const close = (blockText.match(new RegExp(`</${tag}>`, 'gu')) ?? []).length
         if (open !== close) {
           problems.push(
             `leaf ${n} block ${i}: ${open} <${tag}> against ${close} </${tag}> — an unclosed ` +
@@ -142,7 +182,7 @@ function checkBatch(donePath, draftPath) {
           )
         }
       }
-      if (/&(lt|gt|amp);/u.test(block.text)) {
+      if (/&(lt|gt|amp);/u.test(blockText)) {
         problems.push(`leaf ${n} block ${i}: HTML-escaped markup in the text`)
       }
       if (block.kind === 'footnote') {
@@ -157,7 +197,7 @@ function checkBatch(donePath, draftPath) {
         // symbol counts, and only two — `printedMarker` says why, and this
         // pattern is a copy of it because that module is TypeScript and this is
         // a Node script. Change one and change the other.
-        const printed = /^\s*([*\u2020\u2021\u00a7\u00b6\u2016])\1?/u.exec(block.text)
+        const printed = /^\s*([*\u2020\u2021\u00a7\u00b6\u2016])\1?/u.exec(blockText)
         if (block.marker && printed && printed[0].trim() !== block.marker.trim()) {
           problems.push(
             `leaf ${n} block ${i}: filed under "${block.marker}" but opens "${printed[0].trim()}"`
@@ -172,7 +212,7 @@ function checkBatch(donePath, draftPath) {
           // mark in the text and forgot the field — is visible.
           notes.push(
             `leaf ${n} block ${i}: footnote with no marker (a note continued from the leaf ` +
-              `before prints none): ${JSON.stringify(block.text.slice(0, 50))}`
+              `before prints none): ${JSON.stringify(blockText.slice(0, 50))}`
           )
         }
       }
@@ -181,10 +221,10 @@ function checkBatch(donePath, draftPath) {
       const was = words(
         draft
           .get(n)
-          .blocks.map((b) => b.text)
+          .blocks.map((b) => textOfBlock(b))
           .join(' ')
       )
-      const now = words(page.blocks.map((b) => b.text).join(' '))
+      const now = words(page.blocks.map((b) => textOfBlock(b)).join(' '))
       // Two thresholds, not one: the proportion decides what is reported and
       // the word count decides what blocks. `scripts/lib/drift.mjs` says why,
       // and it is a separate module so the rule can be tested without running
@@ -290,7 +330,7 @@ const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'
 const batches = []
 for (let i = 0; i < draft.length; i += per) batches.push(draft.slice(i, i + per))
 
-const textOf = (leaf) => leaf.blocks.map((b) => b.text).join(' ')
+const textOf = (leaf) => leaf.blocks.map((b) => textOfBlock(b)).join(' ')
 const seamFromFile = seamPath ? readFileSync(resolve(REPO, seamPath), 'utf8').trim() : null
 
 batches.forEach((leaves, n) => {

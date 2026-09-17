@@ -320,10 +320,28 @@ export function normalizeTable<T extends TranscribedBlock>(block: T): T {
     // because `Omit` cannot express that to a generic parameter.
     return rest as T
   }
+  // Inline notation is read *out* of a cell, never left in it.
+  //
+  // Measured, because it was silently wrong: this function recomputes `text`
+  // from `cells` after `parseInlineMarkup` has already run over the block's
+  // text, so a `<i>` written inside a cell survived into the derived text
+  // verbatim — the page would have printed the angle brackets — while the
+  // emphasis indices taken off the pre-normalized text went on describing a
+  // string that no longer existed. Both halves of "one canonical structure and
+  // one derived view" were false at once.
+  //
+  // The marks are then dropped rather than re-derived, and that is the honest
+  // answer rather than a shortcut: the engine sets a table one cell at a time,
+  // each in a single font (`paginate`, the table flowable), so there is no
+  // path by which a run inside a cell could be set in italic. Keeping indices
+  // nothing can honour would be a record of emphasis this book does not print.
+  // Where the original italicises inside a table, that is worth reporting to
+  // the editor, not worth storing as a mark the page cannot make.
   const cells = (block.cells ?? parseTableText(block.text))
-    .map((row) => row.map((cell) => cell.trim()))
+    .map((row) => row.map((cell) => parseInlineMarkup(cell.trim()).text))
     .filter((row) => row.some((cell) => cell.length > 0))
-  return { ...block, cells, text: tableToText(cells) }
+  const { emphasis: _e, strong: _s, subscript: _sub, ...bare } = block
+  return { ...(bare as T), cells, text: tableToText(cells) }
 }
 
 /**
@@ -491,14 +509,23 @@ export function parsePageTranscription(raw: unknown, pageIndex: number): PageTra
     if (typeof kind !== 'string' || !BLOCK_KINDS.includes(kind as BlockKind)) {
       throw new Error(`Page ${pageIndex + 1}: block ${i} has unknown kind ${JSON.stringify(kind)}`)
     }
-    if (typeof text !== 'string') {
+    // A `table` is the one kind whose `text` is *derived*: `cells` is the
+    // canonical structure and `normalizeTable`, at the foot of this map,
+    // computes the flattened view from it. So a table handed its rows and no
+    // text is complete, and refusing it made the doc comment on `cells` false —
+    // "one canonical structure and one derived view" cannot hold while the
+    // derived view is required input. Every other kind still needs its text,
+    // because there is nothing to derive one from.
+    const rows = b['cells']
+    const tableWithRows = kind === 'table' && Array.isArray(rows) && rows.length > 0
+    if (typeof text !== 'string' && !tableWithRows) {
       throw new Error(`Page ${pageIndex + 1}: block ${i} has no text`)
     }
     // The model emits `<em>`, `<i>` and `<sup>` although nothing asked it to,
     // because the original prints those words in italic and the schema gave it
     // no field to say so. Read the tags, keep what they meant, remove them —
     // left in, they are drawn verbatim and the book prints angle brackets.
-    const markup = parseInlineMarkup(text)
+    const markup = parseInlineMarkup(typeof text === 'string' ? text : '')
     const block: TranscribedBlock = { kind: kind as BlockKind, text: markup.text }
     if (markup.emphasis.length > 0) block.emphasis = markup.emphasis
     if (markup.strong.length > 0) block.strong = markup.strong
