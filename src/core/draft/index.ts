@@ -54,11 +54,25 @@ export interface DraftLine {
 
 import { namesFolio, asFolio, looksLikeSignature } from './folios'
 import { findColumns, wordsInBand } from './columns'
+import { findPairedColumns, pairedRow, type PairedColumns } from './paired'
+// The one place a table's flattened view is derived from its cells. Imported
+// rather than restated, because `normalizeTable` exists precisely so the two
+// can never disagree about what a page says.
+import { tableToText } from '../transcribe/schema'
 import { healWrappedHyphens, tally, type HyphenVerdict, type Vocabulary } from './hyphens'
 
 export interface DraftBlock {
-  kind: 'paragraph' | 'heading' | 'caption' | 'footnote'
+  kind: 'paragraph' | 'heading' | 'caption' | 'footnote' | 'table'
   text: string
+  /**
+   * The rows of a `table`, each an array of cells. Never set on anything else.
+   *
+   * Same shape and same rule as `TranscribedBlock.cells`: `cells` is the
+   * structure and `text` is the flattened view derived from it, so everything
+   * that reads a page as prose keeps working. A draft emits one only for a
+   * transcript set beside its commentary — see `./paired`.
+   */
+  cells?: string[][]
 }
 
 export interface DraftSpan {
@@ -1114,10 +1128,33 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
   const split = options.columns === 'single' ? null : findColumns(usable)
   const bands = split?.columns ?? []
   structural.push(...(split?.why ?? []))
-  const lines =
+  const perBand =
     bands.length > 1
-      ? bands.flatMap((band) => toLines(wordsInBand(usable, band, bands[0]!.left), bodyHeight))
-      : toLines(usable, bodyHeight)
+      ? bands.map((band) => toLines(wordsInBand(usable, band, bands[0]!.left), bodyHeight))
+      : [toLines(usable, bodyHeight)]
+  const lines = perBand.flat()
+
+  // Does one printed page set a transcript beside the commentary on it? That
+  // cannot be found the way a gutter is — those columns are set ragged and
+  // their ink overlaps — so it is decided per page from the gap *inside* a
+  // line, and only then are that page's lines cut. See `./paired`.
+  const pairedOf = new Map<DraftLine, PairedColumns>()
+  perBand.forEach((bandLines, i) => {
+    const paired = findPairedColumns(bandLines, bodyHeight)
+    if (!paired) return
+    for (const line of bandLines) pairedOf.set(line, paired)
+    structural.push(
+      `${bands.length > 1 ? `Printed page ${i + 1} of this leaf sets` : 'This leaf sets'} its ` +
+        `matter in two columns that pair: ${paired.split} of ${paired.measured} lines divide at ` +
+        `about x=${Math.round(paired.at)}, the narrowest division being ` +
+        `${Math.round(paired.narrowest)}px against a ${Math.round(bodyHeight)}px body. Each row ` +
+        `is set as a table of two cells, left then right. **This is a guess about what the two ` +
+        `columns mean** — that they answer each other row by row, as a transcript and its ` +
+        `commentary do, rather than running one after the other like a newspaper. Geometry ` +
+        `cannot tell those apart. If the page is a diagram rather than two columns, it needs ` +
+        `cutting as a figure instead, and neither reading is right.`
+    )
+  })
 
   // Baseline to baseline, never bottom-to-top. See PARAGRAPH_GAP.
   const strides: number[] = []
@@ -1268,6 +1305,21 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
 
   const flush = (): void => {
     if (run.length === 0) return
+
+    // A transcript set beside its commentary: this run is one row of two
+    // cells. `pairedRow` returns null for a run that crosses the division on
+    // nothing but word spaces, which is full-measure prose sitting among the
+    // paired matter and must not be cut in half — see `./paired`.
+    const paired = runIsNote ? undefined : pairedOf.get(run[0]!)
+    if (paired) {
+      const row = pairedRow(run, paired)
+      if (row) {
+        blocks.push({ kind: 'table', text: tableToText([row]), cells: [row] })
+        run = []
+        return
+      }
+    }
+
     const centred = !runIsNote && run.every((l) => isCentred(l, body))
     const right = !runIsNote && run.length === 1 && isRightAligned(run[0]!, body)
     const text = run
@@ -1290,8 +1342,19 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
     const isNote = i >= notesFrom
     if (previous) {
       const wide = line.top - previous.top > stride * PARAGRAPH_GAP
-      const indented = !besideInitial(line) && isIndented(line, body)
-      const switched = isCentred(line, body) !== isCentred(previous, body)
+      // On a page setting two columns that pair, where a line *starts* says
+      // which column it is in and nothing about indentation: the second line
+      // of a commentary entry opens at the right column's edge, which against
+      // the page's own left margin reads as an enormous indent, and a short
+      // entry inset on both sides reads as centred. Both tests assume one
+      // column. Applied here they cut every continuation line into a row of
+      // its own — measured on leaf 27, an 11-row table of which 4 rows were a
+      // continuation with an empty cell beside it. Rows on such a page are
+      // divided by the blank band between them, which is `wide`, and that is
+      // the whole rule.
+      const oneColumn = !pairedOf.has(line)
+      const indented = oneColumn && !besideInitial(line) && isIndented(line, body)
+      const switched = oneColumn && isCentred(line, body) !== isCentred(previous, body)
       // A note opens at its mark, and the first note opens where the notes do.
       // Without the first of those, several notes on one leaf join into one
       // block and print as a single note; without the second, the last
@@ -1327,9 +1390,50 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
   // With a vocabulary the book settles most of them and this speaks for each
   // outcome; without one the count is still said out loud, because a break left
   // alone *prints* as `ad- vanced` and is invisible until a page is rendered.
+  // Adjacent rows are one table, not a stack of one-row tables. Each paired
+  // row is flushed on its own because the blank band between two rows is the
+  // same signal that ends a paragraph, so they arrive separately and are
+  // joined here — a transcript and its commentary are one thing on the page.
+  const merged: DraftBlock[] = []
+  for (const block of blocks) {
+    const last = merged[merged.length - 1]
+    if (block.kind === 'table' && last?.kind === 'table' && last.cells && block.cells) {
+      last.cells = [...last.cells, ...block.cells]
+      last.text = tableToText(last.cells)
+      continue
+    }
+    merged.push(block)
+  }
+  blocks.length = 0
+  blocks.push(...merged)
+  const tables = blocks.filter((b) => b.kind === 'table')
+  if (tables.length > 0) {
+    structural.push(
+      `${tables.length} table(s) of ${tables.reduce((n, t) => n + (t.cells?.length ?? 0), 0)} ` +
+        `row(s) in total. Check the render: each row should be one phrase and what is said ` +
+        `about it, and a row that reads as one broken sentence means the division was ` +
+        `misplaced on that line.`
+    )
+  }
+
   const hyphens: HyphenVerdict[] = []
   if (options.vocabulary) {
     for (const block of blocks) {
+      // A table's `cells` are the structure and its `text` is derived, so
+      // healing the flattened view alone would leave the two disagreeing about
+      // what the page says — which is the one thing `normalizeTable` exists to
+      // prevent. Heal each cell and re-derive.
+      if (block.kind === 'table' && block.cells) {
+        block.cells = block.cells.map((row) =>
+          row.map((cell) => {
+            const healed = healWrappedHyphens(cell, options.vocabulary!)
+            hyphens.push(...healed.verdicts)
+            return healed.text
+          })
+        )
+        block.text = tableToText(block.cells)
+        continue
+      }
       const { text, verdicts } = healWrappedHyphens(block.text, options.vocabulary)
       block.text = text
       hyphens.push(...verdicts)
@@ -1372,3 +1476,4 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
 export * from './folios'
 export * from './hyphens'
 export * from './columns'
+export * from './paired'

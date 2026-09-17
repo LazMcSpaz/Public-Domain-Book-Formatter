@@ -182,31 +182,32 @@ function readingOrder(words: readonly DraftWord[]): DraftWord[] {
 }
 
 /**
- * The known-failing list, which held `tight-scramble` leaf 7 while that
- * scramble stood and is now open again for one leaf and one reason.
+ * The leaves this oracle does not apply to, and why.
  *
- * `patterns-vol1` leaf 27 is a printed page carrying **two columns of its
- * own** — a transcript of Erickson speaking, set beside the authors'
- * commentary on it, entry against entry. `findColumns` cuts the leaf into its
- * two printed pages correctly and stops there, deliberately: the left page's
- * two columns are not a second gutter to split on, they are a **table**, and
- * laying them out means pairing each transcript entry with the commentary
- * opposite rather than running one column after the other. Until that is
- * built, the left page's lines are gathered across both of its columns, which
- * is the interleaving this oracle exists to catch. It is correctly failing.
+ * Not a known-failing list — there is nothing wrong with leaf 27. It is a
+ * printed page setting a transcript beside the commentary on it, and the
+ * subsequence oracle simply has no ground truth for such a page: OCR emits it
+ * one line at a time across both columns, while the page is *read* row by row
+ * and cell by cell, and neither sequence is a subsequence of the other. That
+ * is a two-dimensional reading order, and an emission sequence cannot express
+ * one.
  *
- * `it.fails` rather than a skip on purpose: it is a ratchet. The day the
- * pairing lands, this test starts *passing* and the suite goes red until the
- * entry is removed, so the list cannot quietly outlive the fault it names.
+ * So it is marked `it.fails` rather than skipped, which keeps it a ratchet: if
+ * the draft ever laid this page out as a plain sequence again, this test would
+ * start passing and the suite would go red until somebody explained why.
+ *
+ * What actually checks this page is the contiguity list below, whose leaf 27
+ * entries are cells read off the render, and the loss test above, which counts
+ * a table's words from its `cells`.
  */
-const KNOWN_SCRAMBLE: Record<string, number[]> = {
+const NOT_A_SEQUENCE: Record<string, number[]> = {
   'patterns-vol1': [27]
 }
 
 describe('the draft preserves the order the page was read in', () => {
   for (const { name, fixture } of fixtures) {
     for (const leaf of fixture.leaves) {
-      const known = KNOWN_SCRAMBLE[name]?.includes(leaf.pageIndex) ?? false
+      const known = NOT_A_SEQUENCE[name]?.includes(leaf.pageIndex) ?? false
       const run = known ? it.fails : it
       run(`${name} leaf ${leaf.pageIndex} — ${leaf.words.length} words`, () => {
         const words = toWords(leaf.words)
@@ -236,7 +237,13 @@ describe('nothing is silently lost or duplicated', () => {
         const drafted = draftPage(toWords(leaf.words))
         const ocr = leaf.words.map(([text]) => text).filter((t) => t.trim().length > 0)
         const laid = [
-          ...drafted.blocks.flatMap((b) => split(b.text)),
+          // A table's words come from its `cells`, never from `text`. `text`
+          // is the *derived* flattened view and puts a ` | ` between cells, so
+          // counting it would score a separator as a word of the book and make
+          // a leaf look as though it had gained one per row.
+          ...drafted.blocks.flatMap((b) =>
+            b.kind === 'table' && b.cells ? b.cells.flat().flatMap(split) : split(b.text)
+          ),
           ...split(drafted.furniture.runningHead ?? ''),
           ...split(drafted.furniture.folio ?? ''),
           // The scanner's stamp is furniture too. It is *recorded* rather than
@@ -769,6 +776,19 @@ const CONTIGUOUS: Record<string, Record<number, string[]>> = {
     ],
     // The part title, set across the spread: left page then right page.
     4: ['PART I', 'HYPNOTIC WORK'],
+    // Leaf 27's paired rows, each read off the render at 150 DPI. Each of
+    // these is one cell, and under the old reading the other column's words
+    // landed inside every one of them — `. . . keep on listening. . .
+    // Presupposition that Joe has` was what a single line came out as.
+    27: [
+      'Presupposition that Joe has been listening.',
+      'Lack of referential index.',
+      // Not a cell at all: the long quotation this page sets across the *full
+      // measure*, in the middle of the paired matter. Cut at the column
+      // division it becomes `. . . and here is your pencil | and your pad but
+      // speaking of`, half of every line filed under the wrong speaker.
+      'your pencil and your pad but speaking of the tomato plant'
+    ],
     // The leaf that defeated taking the *widest* gap rather than the most
     // central: its right-hand page is a sparse list of example sentences, so
     // the ragged white inside that list is wider than the gutter beside it.
@@ -794,10 +814,15 @@ describe('a leaf holding two printed pages is cut between them', () => {
       if (!want) continue
       it(`${name} leaf ${leaf.pageIndex}`, () => {
         const drafted = draftPage(toWords(leaf.words))
+        // Joined with a mark that is **not whitespace**, because the next line
+        // collapses whitespace. It was U+2028 first — which `\s` matches — so a
+        // phrase split across two blocks read as contiguous, and the test passed
+        // with the split reinstated. That is this repository's own warning about
+        // tests, found in the check written to enforce it.
         const flat = drafted.blocks
           .map((b) => b.text)
-          .join('   ')
-          .replace(/\s+/gu, ' ')
+          .join(' \u00b6 ')
+          .replace(/[^\S\u00b6]+/gu, ' ')
         for (const phrase of want) expect(flat).toContain(phrase)
       })
     }
