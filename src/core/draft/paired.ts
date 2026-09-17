@@ -65,7 +65,7 @@
  * Pure: no DOM, no I/O, no network.
  */
 
-import type { DraftLine } from './index'
+import type { DraftLine, DraftWord } from './index'
 
 /**
  * A page carrying some of the signal but not enough to act on — reported so
@@ -250,6 +250,17 @@ export interface PairedLine {
   left: string
   right: string
   /**
+   * The words behind each side, in reading order.
+   *
+   * Carried because the text alone loses the one thing a born-digital file
+   * states and a scan does not: which face each word is set in. A row's cells
+   * gather several lines, so by the time there are two strings the words have
+   * been interleaved out of the order the leaf reads them in and no later walk
+   * can put them back. See `@core/draft/emphasis`.
+   */
+  leftWords: DraftWord[]
+  rightWords: DraftWord[]
+  /**
    * True when the line has words on both sides of the boundary but no gap wide
    * enough to be a column division — a line of full-measure prose crossing it.
    * A run holding one of these is not a table row.
@@ -260,19 +271,42 @@ export interface PairedLine {
 /** Cut one line at the boundary, reporting a line that merely crosses it. */
 export function splitLine(line: DraftLine, paired: PairedColumns): PairedLine {
   const words = [...line.words].sort((a, b) => a.bbox.x0 - b.bbox.x0)
-  const left: string[] = []
-  const right: string[] = []
+  const left: DraftWord[] = []
+  const right: DraftWord[] = []
   for (const w of words) {
     const centre = (w.bbox.x0 + w.bbox.x1) / 2
-    ;(centre < paired.at ? left : right).push(w.text)
+    ;(centre < paired.at ? left : right).push(w)
   }
   const gap = widestGap(line)
   const wide = gap !== null && gap.width >= paired.gap
   return {
-    left: left.join(' ').trim(),
-    right: right.join(' ').trim(),
+    left: left
+      .map((w) => w.text)
+      .join(' ')
+      .trim(),
+    right: right
+      .map((w) => w.text)
+      .join(' ')
+      .trim(),
+    leftWords: left,
+    rightWords: right,
     straddles: left.length > 0 && right.length > 0 && !wide
   }
+}
+
+/** A run of lines read as one row: the two cells, and the words behind each. */
+export interface PairedRow {
+  cells: [string, string]
+  /**
+   * The words of each cell, in the order that cell sets them.
+   *
+   * **Not** the order the leaf reads them in, which is the whole point: a row
+   * gathering six lines has the left column's six line-ends run together and
+   * then the right column's, where the leaf alternates between the two every
+   * line. Anything asking what face a cell's word is set in has to be handed
+   * this rather than left to walk the leaf.
+   */
+  words: [DraftWord[], DraftWord[]]
 }
 
 /**
@@ -282,10 +316,7 @@ export function splitLine(line: DraftLine, paired: PairedColumns): PairedLine {
  * but word spaces means the whole run is ordinary prose, however its other
  * lines behave.
  */
-export function pairedRow(
-  run: readonly DraftLine[],
-  paired: PairedColumns
-): [string, string] | null {
+export function pairedRow(run: readonly DraftLine[], paired: PairedColumns): PairedRow | null {
   const cut = run.map((l) => splitLine(l, paired))
   if (cut.some((c) => c.straddles)) return null
   const left = cut
@@ -297,5 +328,8 @@ export function pairedRow(
     .filter((t) => t.length > 0)
     .join(' ')
   if (left.length === 0 && right.length === 0) return null
-  return [left, right]
+  return {
+    cells: [left, right],
+    words: [cut.flatMap((c) => c.leftWords), cut.flatMap((c) => c.rightWords)]
+  }
 }

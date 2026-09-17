@@ -34,8 +34,18 @@
  * *free to rebuild* — that is the entire premise of caching it — so the honest
  * response to a record this version cannot read is to drop it and read the scan
  * again, not to write code that guesses at what an older one meant.
+ *
+ * **3**: `OcrWord.italic`. A born-digital file states which face each word is
+ * set in, and a record written before that field existed carries no face for
+ * any word — which is indistinguishable, downstream, from a book that sets
+ * nothing in italic. That is the third failure listed above, and it is the
+ * worst kind: a whole volume's emphasis gone with every check still green. It
+ * was measured rather than imagined — on _Patterns of the Hypnotic Techniques_
+ * Vol. I, whose interspersal chapters mark the buried suggestion by setting it
+ * in italic and nothing else, a version-2 record served the reading and the
+ * draft came back with not one word marked.
  */
-export const RECON_CACHE_VERSION = 2
+export const RECON_CACHE_VERSION = 3
 
 /** What a stored reading was made under. */
 export interface ReconStamp {

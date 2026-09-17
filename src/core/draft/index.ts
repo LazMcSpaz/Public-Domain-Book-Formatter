@@ -70,6 +70,7 @@ import { findIndentedBlocks } from './indented'
 // can never disagree about what a page says.
 import { tableToText } from '../transcribe/schema'
 import { healWrappedHyphens, tally, type HyphenVerdict, type Vocabulary } from './hyphens'
+import { emphasisForTexts, flattenCellEmphasis, withoutConversionDamage } from './emphasis'
 
 export interface DraftBlock {
   kind: 'paragraph' | 'heading' | 'blockquote' | 'caption' | 'footnote' | 'table'
@@ -83,6 +84,16 @@ export interface DraftBlock {
    * transcript set beside its commentary — see `./paired`.
    */
   cells?: string[][]
+  /**
+   * Indices of whitespace-separated words to set in italic.
+   *
+   * Same convention as `TranscribedBlock.emphasis`, into `text` — and for a
+   * table that means into the *flattened* view, separators counted, because
+   * that is what everything downstream indexes. Only ever set where the source
+   * stated it: a scanned leaf's words carry no face at all and this stays
+   * absent, which is not the same as a book with nothing in italic.
+   */
+  emphasis?: number[]
 }
 
 export interface DraftSpan {
@@ -1396,6 +1407,18 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
   }
 
   const blocks: DraftBlock[] = []
+  /**
+   * The words behind each block, one list per *text unit* — the block itself,
+   * or each of a table's cells in the order the flattened view sets them.
+   *
+   * Kept rather than recovered, because for a table it cannot be recovered. A
+   * row gathers a run of lines and each line is cut in two, so the left cell
+   * holds every line's left half run together while the leaf alternates
+   * between the columns line by line. Walking the leaf against the cells finds
+   * the first cell and then nothing, and reports a page of unmatched words —
+   * which is what it did.
+   */
+  const sourceOf = new Map<DraftBlock, DraftWord[][]>()
   let run: DraftLine[] = []
   let runIsNote = false
 
@@ -1410,7 +1433,13 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
     if (paired) {
       const row = pairedRow(run, paired)
       if (row) {
-        blocks.push({ kind: 'table', text: tableToText([row]), cells: [row] })
+        const block: DraftBlock = {
+          kind: 'table',
+          text: tableToText([row.cells]),
+          cells: [row.cells]
+        }
+        blocks.push(block)
+        sourceOf.set(block, row.words)
         run = []
         return
       }
@@ -1430,7 +1459,7 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
       .replace(/\s+/gu, ' ')
       .trim()
     if (text.length > 0) {
-      blocks.push({
+      const block: DraftBlock = {
         kind: runIsNote
           ? 'footnote'
           : inset
@@ -1441,7 +1470,9 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
                 ? 'caption'
                 : 'paragraph',
         text
-      })
+      }
+      blocks.push(block)
+      sourceOf.set(block, [run.flatMap((l) => l.words)])
     }
     run = []
   }
@@ -1522,6 +1553,10 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
     if (block.kind === 'table' && last?.kind === 'table' && last.cells && block.cells) {
       last.cells = [...last.cells, ...block.cells]
       last.text = tableToText(last.cells)
+      // The words travel with the cells. Leaving them behind here is silent:
+      // the table still prints, it simply loses the emphasis of every row
+      // after the first.
+      sourceOf.set(last, [...(sourceOf.get(last) ?? []), ...(sourceOf.get(block) ?? [])])
       continue
     }
     merged.push(block)
@@ -1579,6 +1614,67 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
           'them — hyphen healing runs at page seams only, so they print mid-line. Join the ones ' +
           'that are one word and keep the hyphen on the ones that are two. Hand `draft` the ' +
           "book's vocabulary and most of them settle themselves."
+      )
+    }
+  }
+
+  // ## The emphasis, last of all
+  //
+  // Last because every step above this one moves the words about — lines are
+  // joined into blocks, hyphens healed across the join, a paired line cut into
+  // cells — and an index into a block's words is only good once the block has
+  // stopped changing. The flag itself was never in question: on a born-digital
+  // leaf the file *states* which face each word is set in, and what is done
+  // here is address it, not recover it. See `./emphasis`.
+  const italicised = lines.some((l) => l.words.some((w) => w.italic !== undefined))
+  if (italicised) {
+    const damage: string[] = []
+    const unplaced: string[] = []
+    for (const block of blocks) {
+      const source = sourceOf.get(block) ?? []
+      const texts = block.cells ? block.cells.flat() : [block.text]
+      // Each block against its own words, so there is nothing to resynchronise
+      // and no way for one block to be lined up against another's part of the
+      // leaf. The walk still has work to do: hyphen healing joined some of
+      // these words after the block was built, and a table's cells were cut
+      // out of lines rather than gathered from them.
+      const read = emphasisForTexts(texts, source.flat())
+      unplaced.push(...read.unmatched.map((u) => u.is))
+      const flat = block.cells
+        ? flattenCellEmphasis(block.cells, read.emphasis)
+        : (read.emphasis[0] ?? [])
+      const words = block.text.split(/\s+/u).filter((w) => w.length > 0)
+      const { emphasis, dropped } = withoutConversionDamage(words, flat)
+      damage.push(...dropped.map((d) => d.is))
+      if (emphasis.length > 0) block.emphasis = emphasis
+    }
+    const marked = blocks.reduce((n, b) => n + (b.emphasis?.length ?? 0), 0)
+    structural.push(
+      `${marked} word(s) are set in italic, read off the file's own faces rather than guessed ` +
+        'at — this source states its emphasis rather than leaving it to be recovered from the ' +
+        'pixels. That is a fact about the file and not about the book it reproduces; check any ' +
+        'that look odd against the render.'
+    )
+    if (damage.length > 0) {
+      structural.push(
+        `${damage.length} lone italic ${[...new Set(damage)]
+          .map((d) => `\`${d}\``)
+          .join(' / ')} with roman either side ${damage.length === 1 ? 'was' : 'were'} set ` +
+          'roman: this source italicises a share of its prepositions, which is its converter\u2019s ' +
+          'doing rather than the book\u2019s own emphasis. Never applied at the edge of a block, ' +
+          'where a real run may simply have been cut. See `CONVERSION_DAMAGE`.'
+      )
+    }
+    if (unplaced.length > 0) {
+      structural.push(
+        `${unplaced.length} word(s) of this leaf could not be lined up with a word in the file ` +
+          `and are set roman: ${unplaced
+            .slice(0, 8)
+            .map((u) => `\`${u}\``)
+            .join(
+              ', '
+            )}${unplaced.length > 8 ? ', \u2026' : ''}. A scatter of these is ordinary; ` +
+          'a run of them means a block has lost the words it was built from.'
       )
     }
   }

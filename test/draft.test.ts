@@ -20,12 +20,15 @@ interface Placed {
   drift?: number
   /** Type size against the body, for display lines and running heads. */
   scale?: number
+  /** The face the *file* says this word is set in. See `DraftWord.italic`. */
+  italic?: boolean
 }
 
 const words = (placed: readonly Placed[]): DraftWord[] =>
   placed.map((p) => ({
     text: p.text,
     confidence: p.confidence ?? 95,
+    ...(p.italic === undefined ? {} : { italic: p.italic }),
     bbox: {
       x0: p.from * CHAR,
       x1: (p.from + p.text.length) * CHAR,
@@ -411,5 +414,125 @@ describe('a folio at the foot is never mistaken for a footnote', () => {
     )
     expect(drafted.blocks.some((b) => b.kind === 'footnote')).toBe(true)
     expect(drafted.furniture.folio).toBeUndefined()
+  })
+})
+
+describe('the emphasis a born-digital file states', () => {
+  /**
+   * A paragraph of prose with a title italicised in the middle of it. The
+   * indices have to survive being joined out of two lines, which is the whole
+   * reason this is addressed after the blocks are built rather than while they
+   * are.
+   */
+  const leaf = (): DraftWord[] =>
+    words([
+      // A paragraph with no emphasis in it first, so the second paragraph's
+      // indices are read out of its own slice of the leaf and not off the top
+      // of it. A leaf of one block cannot tell those apart.
+      ...filler(0),
+      ...filler(1),
+      ...filler(2),
+      { text: 'see', line: 5, from: 0 },
+      { text: 'The', line: 5, from: 4, italic: true },
+      { text: 'Structure', line: 5, from: 8, italic: true },
+      { text: 'of', line: 5, from: 18, italic: true },
+      { text: 'Magic', line: 5, from: 21, italic: true },
+      { text: 'for', line: 5, from: 27 },
+      { text: 'the', line: 5, from: 31 },
+      { text: 'whole', line: 5, from: 35 },
+      ...filler(5, 41, 20),
+      { text: 'argument', line: 6, from: 0 },
+      { text: 'of', line: 6, from: 9, italic: true },
+      { text: 'this', line: 6, from: 12 },
+      { text: 'kind.', line: 6, from: 17 },
+      ...filler(6, 23, 36),
+      ...filler(7)
+    ])
+
+  it('marks the words the file sets in italic', () => {
+    const page = draftPage(leaf())
+    const block = page.blocks.find((b) => b.text.includes('Structure'))!
+    const marked = (block.emphasis ?? []).map((i) => block.text.split(/\s+/u)[i])
+    expect(marked).toEqual(['The', 'Structure', 'of', 'Magic'])
+  })
+
+  it("sets roman a lone italic preposition this source's conversion invented", () => {
+    // The two lines join into one paragraph, so this block carries both `of`s:
+    // the one inside the title and the one between `argument` and `this`. The
+    // file sets both in italic and only the first is emphasis — which is why
+    // the rule is about the run and not about the word.
+    const page = draftPage(leaf())
+    const block = page.blocks.find((b) => b.text.includes('argument'))!
+    const w = block.text.split(/\s+/u)
+    const inTitle = w.indexOf('of')
+    const loose = w.indexOf('of', inTitle + 1)
+    expect(w[loose - 1]).toBe('argument')
+    expect(block.emphasis).toContain(inTitle)
+    expect(block.emphasis).not.toContain(loose)
+    expect(
+      page.structural.some((s) => s.includes('lone italic') && s.includes('CONVERSION_DAMAGE'))
+    ).toBe(true)
+  })
+
+  it('says how many words it marked, because the flag is a fact about the file', () => {
+    const page = draftPage(leaf())
+    expect(page.structural.some((s) => /\d+ word\(s\) are set in italic/u.test(s))).toBe(true)
+  })
+
+  it('marks nothing at all on a leaf whose words carry no face', () => {
+    // A scan. Absence is not roman — there is simply nothing to say, so the
+    // draft says nothing rather than reporting a book with no emphasis.
+    const page = draftPage(
+      words([...filler(0), { text: 'plain', line: 1, from: 0 }, ...filler(1, 6, 54), ...filler(2)])
+    )
+    expect(page.blocks.every((b) => b.emphasis === undefined)).toBe(true)
+    expect(page.structural.some((s) => s.includes('set in italic'))).toBe(false)
+  })
+})
+
+describe('emphasis on a transcript set beside its commentary', () => {
+  /**
+   * The shape this volume is made of, and the one place the italics *are* the
+   * content: the left column is what was said and the right is the comment on
+   * it, and the suggestion buried in the transcript is marked by being set in
+   * italic. The block is a `table`, so its emphasis has to be addressed into
+   * the flattened view — cells joined by ` | ` — which is what everything
+   * downstream indexes.
+   */
+  const paired = (): DraftWord[] =>
+    words(
+      // Two runs with a blank band between them, so the leaf gives two table
+      // blocks that are then merged into one two-row table. A single run
+      // cannot show a row losing the words it was built from in that merge.
+      [0, 1, 2, 3, 5, 6, 7, 8]
+        .map((i) => [
+          { text: 'and', line: i, from: 0 },
+          { text: 'you', line: i, from: 4, italic: i === 1 },
+          { text: 'can', line: i, from: 8, italic: i === 1 },
+          // The commentary column runs much wider than the transcript, which is
+          // what keeps the gap between them off the centre of the leaf — a
+          // central one is a *gutter*, and `./columns` would cut the leaf into
+          // two printed pages before this is ever asked.
+          { text: 'pacing', line: i, from: 25 },
+          { text: 'his', line: i, from: 32 },
+          { text: 'breathing', line: i, from: 36 },
+          { text: 'and', line: i, from: 46 },
+          // Emphasis in the *commentary* cell too, and on another row: an index
+          // counted inside its own cell rather than across the ` | ` lands on
+          // `pacing his` here, which is how that fault shows.
+          { text: 'leading', line: i, from: 50, italic: i === 6 },
+          { text: 'him', line: i, from: 58, italic: i === 6 },
+          { text: 'gently', line: i, from: 62 },
+          { text: 'onward', line: i, from: 69 }
+        ])
+        .flat()
+    )
+
+  it('puts the italic on the word the flattened view sets it on', () => {
+    const page = draftPage(paired())
+    const rows = page.blocks.filter((b) => b.kind === 'table')
+    expect(rows.length).toBeGreaterThan(0)
+    const marked = rows.flatMap((b) => (b.emphasis ?? []).map((i) => b.text.split(/\s+/u)[i]))
+    expect(marked).toEqual(['you', 'can', 'leading', 'him'])
   })
 })
