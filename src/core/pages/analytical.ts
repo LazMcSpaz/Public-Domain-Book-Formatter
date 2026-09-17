@@ -36,7 +36,20 @@ import { synopsisKey, isNumberLine } from './synopsis'
 
 /** One topic line, as the original contents sets it. */
 export interface AnalyticalTopic {
-  /** The topic, as printed, with the leader dots and the number taken off. */
+  /**
+   * The topic, as printed, with the leader dots and the number taken off —
+   * **as notation**, so a word the original italicised is still italicised
+   * when the contents is set.
+   *
+   * Notation rather than clean text plus a mark list, which is what every
+   * other carrier of emphasis here uses, because a topic is only ever *set*:
+   * nothing matches on it, nothing counts its words, and the one place it is
+   * read is the line that draws it. Carrying the string the notation already
+   * defines is one field that cannot drift from another, where a parallel mark
+   * list re-based through `cleanTopic`'s own edits would be three chances to
+   * be wrong for no reader's benefit. `layoutWithToc` parses it at the point
+   * of setting.
+   */
   text: string
   /**
    * The folio the original printed beside it, verbatim — `104`, `xxiii`.
@@ -70,6 +83,19 @@ export interface AnalyticalGroup {
 export interface AnalyticalBlock {
   kind: string
   text?: string
+  /**
+   * The row's cells **as notation** — `The French <i>savants</i>` — not as the
+   * clean strings a block stores.
+   *
+   * A block keeps its marks against its whole flattened text, which is the
+   * right coordinate for a table and the wrong one for a reader that joins two
+   * cells and trims the result. So the caller writes each cell's own share back
+   * as tags before handing it over (`assembleBook` does, through
+   * `marksForCell`), and everything here is plain string work over one string.
+   *
+   * It is also what keeps this module free of `@core/transcribe`, which
+   * imports `@core/pages` for the role list and cannot be imported back.
+   */
   cells?: readonly (readonly string[])[]
 }
 
@@ -151,6 +177,11 @@ export function readAnalyticalContents(blocks: readonly AnalyticalBlock[]): Anal
     inHeadingRun = false
 
     if (block.kind === 'table' && block.cells) {
+      // The cells arrive as notation (see `AnalyticalBlock.cells`), so a word
+      // the original italicised travels into the topic and is set as the
+      // original set it. Without that the three entries *Isis Unveiled*
+      // italicises — *savants*, *Orohippus*, *Shudâla Mâdan* — print in roman,
+      // which is what this edition did until the engine could set them.
       for (const row of block.cells) {
         const cells = row.map((c) => c.trim()).filter((c) => c.length > 0)
         if (cells.length === 0) continue

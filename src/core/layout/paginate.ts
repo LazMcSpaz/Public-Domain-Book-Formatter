@@ -25,7 +25,15 @@ import { findOrnament, type OrnamentArt } from '@core/ornament'
 import { headingRunEnd } from '@core/assemble'
 import type { BookBlock, BookDocument, BookSection, Illustration } from '@core/assemble'
 import { effectiveDpi } from '@core/image'
-import { rebaseRanges, shiftRanges, type MarkRange } from '@core/transcribe'
+import {
+  cellStarts,
+  marksForCell,
+  parseInlineMarkup,
+  rebaseRanges,
+  shiftRanges,
+  type InlineMarks,
+  type MarkRange
+} from '@core/transcribe'
 import {
   breakParagraph,
   breakVerse,
@@ -1597,11 +1605,16 @@ function naturalWidth(
   line: BrokenLine,
   measurer: TextMeasurer,
   font: FontRef,
-  sizePt: number
+  sizePt: number,
+  spans?: readonly TextSpan[]
 ): number {
   const last = line.words[line.words.length - 1]
   if (!last) return 0
-  return last.xPt + measurer.widthOf(last.text, font, last.sizePt ?? sizePt)
+  // The last word's own face, which is not the paragraph's where a span or a
+  // piece of a split word claims it: an italic advance is not a roman one, and
+  // this number decides where a right-aligned cell starts.
+  const face = last.font ?? fontForWord(last.sourceIndex, spans, font)
+  return last.xPt + measurer.widthOf(last.text, face, last.sizePt ?? sizePt)
 }
 
 /**
@@ -1663,11 +1676,49 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
   const columns = Math.max(...rows.map((row) => row.length))
   const cellAt = (row: readonly string[], c: number): string => (row[c] ?? '').trim()
 
+  /**
+   * A cell's own marks, taken out of the block's.
+   *
+   * A table records its emphasis against its *derived* text — the flattened
+   * view with the pipes in it — because that is the string the proof editor
+   * shows and every cross-check reads. The engine sets one cell at a time, so
+   * each one asks for the part that falls inside it. See `marksForCell`.
+   *
+   * `starts` is computed from the same filtered rows the flattening uses, so
+   * the two cannot disagree about where a cell begins.
+   */
+  const starts = cellStarts(rows)
+  const marksAt = (r: number, c: number): InlineMarks => {
+    const at = starts[r]?.[c]
+    if (!at) return {}
+    return marksForCell(block, at, rows[r]?.[c] ?? '')
+  }
+  const spansAt = (r: number, c: number): TextSpan[] =>
+    spansFor(ctx, family, fontFor(r).style, marksAt(r, c))
+  const rangesAt = (r: number, c: number): RangeMarks => {
+    const text = cellAt(rows[r] ?? [], c)
+    return rangesFor(marksAt(r, c), ctx, family, { text, own: text })
+  }
+
   const natural: number[] = []
   for (let c = 0; c < columns; c++) {
     let widest = 0
     rows.forEach((row, r) => {
-      widest = Math.max(widest, ctx.measurer.widthOf(cellAt(row, c), fontFor(r), sizePt))
+      // Measured through the breaker rather than with one font, because a cell
+      // that italicises a word is not the width of the same cell in roman and
+      // this number is what decides the column.
+      const broken = breakParagraph(cellAt(row, c), {
+        font: fontFor(r),
+        sizePt,
+        measurer: ctx.measurer,
+        lineWidths: Number.MAX_SAFE_INTEGER,
+        alignment: 'left',
+        ...(spansAt(r, c).length > 0 ? { spans: spansAt(r, c) } : {}),
+        ...rangeArgs(rangesAt(r, c))
+      })
+      const line = broken[0]
+      const width = line ? naturalWidth(line, ctx.measurer, fontFor(r), sizePt, spansAt(r, c)) : 0
+      widest = Math.max(widest, width)
     })
     natural.push(widest)
   }
@@ -1710,19 +1761,30 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
     // cells still sit on the baseline grid.
     const perColumn = Array.from({ length: columns }, (_, c) => {
       const width = Math.max(1, widths[c] ?? 1)
+      const spans = spansAt(r, c)
       const broken = breakParagraph(cellAt(row, c), {
         font,
         sizePt,
         measurer: ctx.measurer,
         lineWidths: width,
-        alignment: 'left'
+        alignment: 'left',
+        ...(spans.length > 0 ? { spans } : {}),
+        ...rangeArgs(rangesAt(r, c))
       })
       const offsets = broken.map((line) => {
         const base = columnX[c] ?? 0
         if (!alignRight[c]) return base
-        return base + Math.max(0, width - naturalWidth(line, ctx.measurer, font, sizePt))
+        return base + Math.max(0, width - naturalWidth(line, ctx.measurer, font, sizePt, spans))
       })
-      return toFlowLines(broken, font, sizePt, offsets.length > 0 ? offsets : [columnX[c] ?? 0])
+      return toFlowLines(
+        broken,
+        font,
+        sizePt,
+        offsets.length > 0 ? offsets : [columnX[c] ?? 0],
+        undefined,
+        undefined,
+        spans
+      )
     })
 
     const height = Math.max(1, ...perColumn.map((lines) => lines.length))
@@ -3288,14 +3350,27 @@ function buildContents(
     const topicIndent = indent + sizePt * 1.5
     const topicMeasure = Math.max(1, ctx.measureWidth - folioColumn - topicIndent)
     for (const topic of entry.topics ?? []) {
+      // The topic carries its own notation — see `AnalyticalTopic.text` — so
+      // this is the point of setting, and the one place it is parsed. Three
+      // entries of *Isis Unveiled*'s contents italicise a word, and they used
+      // to reach the page in roman because nothing between the cell and here
+      // could carry the mark.
+      const marks = parseInlineMarkup(topic.text)
+      const spans = spansFor(ctx, ctx.profile.bodyFont, 'regular', marks)
+      const ranges = rangesFor(marks, ctx, ctx.profile.bodyFont, {
+        text: marks.text,
+        own: marks.text
+      })
       // A topic that wraps hangs its continuation, so a second line of one
       // entry is not read as a fresh one.
-      const lines = breakParagraph(topic.text, {
+      const lines = breakParagraph(marks.text, {
         font: body,
         sizePt: topicSize,
         measurer: ctx.measurer,
         lineWidths: [topicMeasure, Math.max(1, topicMeasure - sizePt)],
-        alignment: 'left'
+        alignment: 'left',
+        ...(spans.length > 0 ? { spans } : {}),
+        ...rangeArgs(ranges)
       })
       if (lines.length === 0) continue
       if (slot + lines.length > slotsPerPage) {
@@ -3308,9 +3383,10 @@ function buildContents(
       lines.forEach((line, lineIndex) => {
         const runs: TextRun[] = line.words.map((w) => ({
           text: w.text,
-          font: body,
-          sizePt: topicSize,
-          xPt: w.xPt + topicIndent + (lineIndex === 0 ? 0 : sizePt)
+          font: w.font ?? fontForWord(w.sourceIndex, spans, body),
+          sizePt: w.sizePt ?? topicSize,
+          xPt: w.xPt + topicIndent + (lineIndex === 0 ? 0 : sizePt),
+          ...(w.risePt ? { risePt: w.risePt } : {})
         }))
         if (lineIndex === lines.length - 1 && topic.folio) {
           const width = ctx.measurer.widthOf(topic.folio, body, topicSize)

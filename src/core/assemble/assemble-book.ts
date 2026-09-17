@@ -29,8 +29,11 @@ import {
   type SynopsisEntry
 } from '@core/pages'
 import {
+  cellStarts,
+  marksForCell,
   rebaseRanges,
   shiftEmphasis,
+  withMarkup,
   tableToText,
   wordCount,
   type BlockKind,
@@ -67,6 +70,26 @@ function movedRanges(from: RangeMarks, before: string, after: string, at: number
     if (moved?.length) out[kind] = moved
   }
   return out
+}
+
+/**
+ * A table's cells with the notation put back into each one.
+ *
+ * `marksForCell` takes the part of the block's marks that falls inside a cell
+ * and re-bases it; `withMarkup` writes it back as tags. The round trip is the
+ * point: the contents reader works in plain strings over one cell at a time,
+ * and this is the one place that turns "marks over the flattened view" into
+ * "a cell that knows what it is".
+ */
+function markedCells(block: TranscribedBlock): string[][] {
+  const cells = block.cells ?? []
+  const starts = cellStarts(cells)
+  return cells.map((row, r) =>
+    row.map((cell, c) => {
+      const at = starts[r]?.[c]
+      return at ? withMarkup(cell, marksForCell(block, at, cell)) : cell
+    })
+  )
 }
 
 /** The same, appended to what the destination already carries. */
@@ -940,7 +963,12 @@ export function assembleBook(
           page.blocks.map((b) => ({
             kind: b.kind,
             text: b.text,
-            ...(b.cells ? { cells: b.cells } : {})
+            // Each cell with its own share of the block's marks written back as
+            // tags. A table records them against its whole flattened text, and
+            // the contents reader joins two cells and trims the result — so the
+            // conversion belongs here, where both coordinate systems are in
+            // view, rather than in a reader that would have to import them.
+            ...(b.cells ? { cells: markedCells(b) } : {})
           }))
         )
       )

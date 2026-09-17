@@ -163,9 +163,12 @@ describe('parsePageTranscription', () => {
    * because `normalizeTable` recomputes `text` from `cells` *after*
    * `parseInlineMarkup` has run over the block's own text — so the page would
    * have printed the angle brackets, while the emphasis indices taken off the
-   * pre-normalized text described a string that no longer existed. The engine
-   * sets each cell in one font and cannot italicise a run inside one, so the
-   * marks are dropped rather than re-derived.
+   * pre-normalized text described a string that no longer existed.
+   *
+   * The marks used to be dropped here as well, on the argument that the engine
+   * sets each cell in one font. It sets them per cell now, so they are kept —
+   * recorded against the derived text, which is the one coordinate a table can
+   * carry them in without a second list to keep in step.
    */
   it('reads notation out of a table cell rather than printing the tags', () => {
     const parsed = parsePageTranscription(
@@ -185,8 +188,12 @@ describe('parsePageTranscription', () => {
     const block = parsed.blocks[0]
     expect(block?.cells).toEqual([['Superficial generalizations of the French savants', '60']])
     expect(block?.text).not.toMatch(/<i>|<\/i>/u)
-    // No mark the page could not make: a cell is set in a single font.
-    expect(block?.emphasis).toBeUndefined()
+    // The mark is kept, in the coordinates of the *derived* text — the
+    // flattened view with the pipe in it, which is what the proof editor shows
+    // and every cross-check reads. `savants` is its sixth word.
+    expect(block?.text).toBe('Superficial generalizations of the French savants | 60')
+    expect(block?.emphasis).toEqual([5])
+    expect(block?.text.split(/\s+/u)[5]).toBe('savants')
   })
 
   it('rejects a malformed block instead of importing half a page', () => {

@@ -10,7 +10,7 @@
  */
 import { ALL_PAGE_ROLES, type PageRole } from '@core/pages'
 import { parseInlineMarkup } from './markup'
-import type { MarkRange, SubscriptRange } from './markup'
+import type { InlineMarks, MarkRange, SubscriptRange } from './markup'
 
 /** Structural role of a run of text within the page. */
 export type BlockKind =
@@ -349,18 +349,129 @@ export function normalizeTable<T extends TranscribedBlock>(block: T): T {
   // string that no longer existed. Both halves of "one canonical structure and
   // one derived view" were false at once.
   //
-  // The marks are then dropped rather than re-derived, and that is the honest
-  // answer rather than a shortcut: the engine sets a table one cell at a time,
-  // each in a single font (`paginate`, the table flowable), so there is no
-  // path by which a run inside a cell could be set in italic. Keeping indices
-  // nothing can honour would be a record of emphasis this book does not print.
-  // Where the original italicises inside a table, that is worth reporting to
-  // the editor, not worth storing as a mark the page cannot make.
-  const cells = (block.cells ?? parseTableText(block.text))
-    .map((row) => row.map((cell) => parseInlineMarkup(cell.trim()).text))
+  // The marks are then recorded **against the derived text**, which is the one
+  // place a table can carry them without a second list to keep in step. They
+  // used to be dropped here, on the argument that the engine sets a cell in a
+  // single font and so could not honour them — true when it was written, and
+  // the analytical contents of *Isis Unveiled* is what made it worth changing:
+  // three of its entries italicise a word inside a cell (*savants*,
+  // *Orohippus*, *Shudâla Mâdan*) and the reprint printed all three in roman.
+  //
+  // The derived text is the flattened view — rows on lines, cells separated by
+  // a pipe — which is what the proof editor shows, what the word-count
+  // cross-check reads and what `withMarkup` writes tags back into. So a word
+  // index here means the same thing it means in a paragraph, and the engine
+  // asks `marksForCell` for the part of it that falls inside the cell it is
+  // about to set.
+  //
+  // Read once off the whole flattened notation rather than once per cell:
+  // stripping tags and joining with a tag-free separator commute, so the text
+  // this produces is `tableToText` of the stripped cells either way, and there
+  // is one reader rather than one per cell.
+  const rows = (block.cells ?? parseTableText(block.text))
+    .map((row) => row.map((cell) => cell.trim()))
     .filter((row) => row.some((cell) => cell.length > 0))
+  const notation = tableToText(rows)
+  const cells = rows.map((row) => row.map((cell) => parseInlineMarkup(cell).text))
+  const text = tableToText(cells)
+
+  /**
+   * Where the rows carried no tags there is nothing to re-derive the marks
+   * *from*, and the block's own already describe this same derived text — so
+   * they are kept rather than recomputed as empty.
+   *
+   * This is not a nicety, because `normalizeTable` runs on every path a table
+   * takes into the book: the reply, assembly, and every correction. Re-deriving
+   * from clean rows would wipe a table's emphasis at the first page seam after
+   * it was made, silently. It is the same contract `normalizeMarkup` keeps one
+   * function above — a block with no `<` in it comes back untouched, marks and
+   * all — and the idempotence test is what found it.
+   */
+  const marks: InlineMarks = notation === text ? block : parseInlineMarkup(notation)
   const { emphasis: _e, strong: _s, smallCaps: _sc, subscript: _sub, ...bare } = block
-  return { ...(bare as T), cells, text: tableToText(cells) }
+  return {
+    ...(bare as T),
+    cells,
+    text,
+    ...(marks.emphasis?.length ? { emphasis: [...marks.emphasis] } : {}),
+    ...(marks.strong?.length ? { strong: [...marks.strong] } : {}),
+    ...(marks.smallCaps?.length ? { smallCaps: [...marks.smallCaps] } : {}),
+    ...(marks.subscript?.length ? { subscript: [...marks.subscript] } : {})
+  }
+}
+
+/** Whitespace-separated words, counted the way the line breaker counts them. */
+function wordsIn(text: string): number {
+  return (text.match(/\S+/gu) ?? []).length
+}
+
+/** Where one cell begins in a table's flattened text. */
+export interface CellStart {
+  /** Characters before it — the coordinate a range is measured in. */
+  char: number
+  /** Whitespace-separated words before it — the coordinate an index is in. */
+  word: number
+}
+
+/**
+ * Where every cell begins in the flattened view, in both coordinates.
+ *
+ * Built by laying the flattened text out again rather than by arithmetic on
+ * cell lengths, so it cannot disagree with `tableToText` about the separators.
+ * The running word count is safe to keep because every join begins with
+ * whitespace — a pipe separator or a newline — so no boundary ever falls
+ * inside a word.
+ */
+export function cellStarts(cells: readonly (readonly string[])[]): CellStart[][] {
+  const out: CellStart[][] = []
+  let char = 0
+  let word = 0
+  cells.forEach((row, r) => {
+    const starts: CellStart[] = []
+    if (r > 0) char += 1
+    row.forEach((cell, c) => {
+      if (c > 0) {
+        char += CELL_SEPARATOR.length
+        word += wordsIn(CELL_SEPARATOR)
+      }
+      starts.push({ char, word })
+      char += cell.length
+      word += wordsIn(cell)
+    })
+    out.push(starts)
+  })
+  return out
+}
+
+/**
+ * The part of a table's marks that falls inside one cell, re-based onto it.
+ *
+ * The engine sets a table one cell at a time and breaks each cell as its own
+ * little paragraph, so it needs the marks in the cell's own coordinates. A run
+ * that reached past the pipe — which the notation permits and no book here has
+ * — is clipped to the cell rather than dropped or allowed to run on.
+ */
+export function marksForCell(marks: InlineMarks, at: CellStart, cell: string): InlineMarks {
+  const words = wordsIn(cell)
+  const indices = (list: readonly number[] | undefined): number[] =>
+    (list ?? []).filter((i) => i >= at.word && i < at.word + words).map((i) => i - at.word)
+  const ranges = (list: readonly MarkRange[] | undefined): MarkRange[] =>
+    (list ?? [])
+      .map((r) => ({
+        from: Math.max(r.from - at.char, 0),
+        to: Math.min(r.to - at.char, cell.length)
+      }))
+      .filter((r) => r.to > r.from)
+  const emphasis = indices(marks.emphasis)
+  const strong = indices(marks.strong)
+  const smallCaps = ranges(marks.smallCaps)
+  const subscript = ranges(marks.subscript)
+  return {
+    ...(emphasis.length > 0 ? { emphasis } : {}),
+    ...(strong.length > 0 ? { strong } : {}),
+    ...(smallCaps.length > 0 ? { smallCaps } : {}),
+    ...(subscript.length > 0 ? { subscript } : {})
+  }
 }
 
 /**
