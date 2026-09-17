@@ -2173,10 +2173,33 @@ async function serve() {
      * rather than off a guess, and until this verb existed there was no way to
      * read those numbers out of a book without a one-off `page.evaluate`.
      */
+    /**
+     * OCR's word boxes for named leaves, from the cache or from the pixels.
+     *
+     * `--fresh` reads a leaf the cache has not got, rather than reporting it
+     * absent. The recon cache on a long book is routinely partial — this
+     * volume's covers the first 300 leaves of 693 — and until this existed
+     * there was no way to measure anything on the other 393: the boxes are
+     * what a crop is cut from, what `locateQuote` lines a phrase up against,
+     * and what a letter's height is read out of.
+     *
+     * **It writes nothing.** Extending the cache means loading it, appending,
+     * and saving the whole record back, and a bad save *deletes* the reading —
+     * an hour of Tesseract, for a measurement that wanted it for a minute. So
+     * the boxes are read and handed over and the cache is left alone; the leaf
+     * is read again next time, which costs seconds.
+     *
+     * The render is `renderPage(doc, n, RECON_DPI)` — the same call recon
+     * makes, at the same DPI, so these boxes are in the same frame as the
+     * cached ones and a crop cut from either lands in the same place. That is
+     * the property `ocr`'s own pixel path warns it does not have: it widens a
+     * leaf whose frame cuts ink, which moves every box on it.
+     */
     words: async ([...ns]) => {
-      const list = ns.map(Number)
+      const fresh = ns.includes('--fresh')
+      const list = ns.filter((a) => !a.startsWith('--')).map(Number)
       return page.evaluate(
-        async ([repo, leaves]) => {
+        async ([repo, leaves, readPixels]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
           const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
@@ -2193,6 +2216,14 @@ async function serve() {
           // same reason. Reporting one as the other is how a measurement gets
           // taken off a leaf nothing has read.
           const covered = new Set(cached.words.map((w) => w.pageIndex))
+          const say = (w) => ({
+            text: w.text,
+            confidence: w.confidence,
+            x0: Math.round(w.bbox.x0),
+            y0: Math.round(w.bbox.y0),
+            x1: Math.round(w.bbox.x1),
+            y1: Math.round(w.bbox.y1)
+          })
           const out = {}
           const absent = []
           for (const n of leaves) {
@@ -2200,33 +2231,63 @@ async function serve() {
               absent.push(n)
               continue
             }
-            out[n] = cached.words
-              .filter((w) => w.pageIndex === n)
-              .map((w) => ({
-                text: w.text,
-                confidence: w.confidence,
-                x0: Math.round(w.bbox.x0),
-                y0: Math.round(w.bbox.y0),
-                x1: Math.round(w.bbox.x1),
-                y1: Math.round(w.bbox.y1)
-              }))
+            out[n] = cached.words.filter((w) => w.pageIndex === n).map(say)
           }
+
+          const readNow = []
+          if (readPixels && absent.length > 0) {
+            const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+            const ocrMod = await import(`/@fs${repo}/src/platform/browser/ocr.ts`)
+            const file = await runStore.loadSourceFile(newest.key)
+            if (!file) throw new Error('No scan on this device to read those leaves from.')
+            const engine = new ocrMod.OcrEngine()
+            let doc = await pdfMod.openPdf(file)
+            // pdf.js keeps per-page state on the document and `cleanup()` does
+            // not empty it, so it is closed and reopened every so often — the
+            // same recycling `ocr` does, and for the same reason: over a few
+            // hundred leaves it accumulates until the renderer is killed.
+            const RECYCLE_AFTER = 40
+            let sinceOpen = 0
+            try {
+              for (const n of absent) {
+                if (n < 0 || n >= doc.numPages) continue
+                if (sinceOpen >= RECYCLE_AFTER) {
+                  await doc.destroy()
+                  doc = await pdfMod.openPdf(file)
+                  sinceOpen = 0
+                }
+                sinceOpen++
+                const rendered = await pdfMod.renderPage(doc, n, recon.RECON_DPI)
+                const result = await engine.recognize(rendered.canvas, n)
+                rendered.canvas.width = 0
+                rendered.canvas.height = 0
+                out[n] = result.words.map(say)
+                readNow.push(n)
+              }
+            } finally {
+              await engine.dispose()
+              await doc.destroy()
+            }
+          }
+          const stillAbsent = absent.filter((n) => !readNow.includes(n))
           return {
-            read: 'the cached reading',
+            read:
+              readNow.length > 0 ? 'the cache, and the pixels for the rest' : 'the cached reading',
             leavesInCache: covered.size,
-            ...(absent.length > 0
+            ...(readNow.length > 0 ? { readFromPixels: readNow.length } : {}),
+            ...(stillAbsent.length > 0
               ? {
-                  notInTheCache: absent,
+                  notInTheCache: stillAbsent,
                   warning:
                     'Those leaves are not in the cached reading at all — either the ' +
                     'reading has not reached them or nothing read them. They are not ' +
-                    'leaves with no words on them.'
+                    'leaves with no words on them. `--fresh` reads them off the pixels.'
                 }
               : {}),
             words: out
           }
         },
-        [REPO, list]
+        [REPO, list, fresh]
       )
     },
 
