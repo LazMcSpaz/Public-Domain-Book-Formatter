@@ -569,8 +569,37 @@ export function parsePageTranscription(raw: unknown, pageIndex: number): PageTra
     // left in, they are drawn verbatim and the book prints angle brackets.
     const markup = parseInlineMarkup(text)
     const block: TranscribedBlock = { kind: kind as BlockKind, text: markup.text }
-    if (markup.emphasis.length > 0) block.emphasis = markup.emphasis
-    if (markup.strong.length > 0) block.strong = markup.strong
+    // The notation *and* the field, because `emphasis` and `strong` have
+    // always been on `BLOCK_FIELDS` and were read from the tags alone — so a
+    // batch that named them outright was accepted and then silently stripped,
+    // which is the exact failure `refuseUnknown` exists to prevent, on the
+    // fields it is standing guard over.
+    //
+    // It cost a whole volume. `Patterns of the Hypnotic Techniques` Vol. I
+    // marks the interspersed hypnotic suggestion by setting it in italic and
+    // nothing else — leaf 20 says so — and the deterministic pass that lifts
+    // those runs off the file's own faces writes them as indices, not as tags.
+    // 4,900 words of emphasis landed through here and not one reached the
+    // book: the batch reported `landed: 8`, the cross-check against OCR
+    // passed, the export raised no warning, and the pages printed in roman.
+    const words = markup.text.split(/\s+/u).filter((w) => w.length > 0).length
+    const given = (value: unknown): number[] =>
+      Array.isArray(value)
+        ? [
+            ...new Set(
+              value.filter(
+                (n): n is number =>
+                  typeof n === 'number' && Number.isInteger(n) && n >= 0 && n < words
+              )
+            )
+          ].sort((a, b) => a - b)
+        : []
+    const emphasis = [...new Set([...markup.emphasis, ...given(b['emphasis'])])].sort(
+      (x, y) => x - y
+    )
+    const strong = [...new Set([...markup.strong, ...given(b['strong'])])].sort((x, y) => x - y)
+    if (emphasis.length > 0) block.emphasis = emphasis
+    if (strong.length > 0) block.strong = strong
     const level = b['level']
     if (typeof level === 'number' && Number.isFinite(level)) {
       block.level = Math.min(6, Math.max(1, Math.round(level)))

@@ -358,3 +358,58 @@ describe('strong runs', () => {
     expect(withMarkup('plain words', [], [])).toBe('plain words')
   })
 })
+
+describe('emphasis a batch names outright, rather than tagging', () => {
+  const page = (block: Record<string, unknown>) =>
+    parsePageTranscription(
+      { pageIndex: 8, role: 'body', furniture: {}, blocks: [block], uncertain: [] },
+      8
+    ).blocks[0]!
+
+  /**
+   * `emphasis` and `strong` have been on `BLOCK_FIELDS` from the start and
+   * were read from the inline tags alone, so a batch that named them was
+   * accepted and then silently stripped — the exact failure `refuseUnknown`
+   * exists to prevent, on the fields it was standing guard over.
+   *
+   * It cost a volume. The pass that lifts a born-digital file's own faces off
+   * the page writes indices, not tags: 4,900 words of emphasis landed through
+   * here, the batch reported `landed: 8`, the OCR cross-check passed, the
+   * export raised no warning, and every page printed in roman.
+   */
+  it('keeps the indices a block carries in its own field', () => {
+    const block = page({
+      kind: 'paragraph',
+      text: 'see The Structure of Magic here',
+      emphasis: [1, 2, 3, 4]
+    })
+    expect(block.emphasis).toEqual([1, 2, 3, 4])
+  })
+
+  it('keeps a strong run named the same way', () => {
+    const block = page({ kind: 'paragraph', text: 'Aerolite. A stone fallen', strong: [0] })
+    expect(block.strong).toEqual([0])
+  })
+
+  it('takes the tags and the field together, without repeating a word', () => {
+    const block = page({
+      kind: 'paragraph',
+      text: 'see <i>The Structure</i> of Magic here',
+      emphasis: [2, 3, 4]
+    })
+    expect(block.emphasis).toEqual([1, 2, 3, 4])
+  })
+
+  it('drops an index no word could carry rather than writing it to the book', () => {
+    // A stale index outlives a retype, and an emphasis past the end of the
+    // block is a run the engine would look for and never find.
+    const block = page({ kind: 'paragraph', text: 'four words in all', emphasis: [0, 4, 99, -1] })
+    expect(block.emphasis).toEqual([0])
+  })
+
+  it('leaves a block with neither alone', () => {
+    const block = page({ kind: 'paragraph', text: 'plain prose here' })
+    expect(block.emphasis).toBeUndefined()
+    expect(block.strong).toBeUndefined()
+  })
+})
