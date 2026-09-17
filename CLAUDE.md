@@ -2164,6 +2164,57 @@ Hermes` is one whitespace-separated word of which ten characters are small
   was reaching the breaker and the split was happening, and left `rangesFor`
   as the only place the face could be lost.
 
+- **Also done**: **a word inside a table cell can be italic, and a contents
+  entry can too.** The engine set every cell in one font, so `normalizeTable`
+  dropped a run inside one — under a comment arguing that keeping a mark the
+  page cannot make would be a record of emphasis the book does not print. True
+  while it was true. _Isis Unveiled_'s analytical contents is what made it
+  worth changing: three of its 156 entries italicise a word — _savants_,
+  _Orohippus_, _Shudâla Mâdan_ — and the reprint printed all three in roman.
+
+  **A table's marks live in the coordinates of its derived text**, not in a
+  structure beside `cells`. The flattened view — rows on lines, cells
+  separated by a pipe — is what the proof editor puts in a textarea, what the
+  word-count cross-check reads and what `withMarkup` writes tags back into, so
+  a word index in a table means what it means in a paragraph and all four
+  kinds work in a cell with no new storage. A per-cell mark list would be the
+  second hand-written copy this file keeps recording the cost of. `cellStarts`
+  and `marksForCell` hand the engine each cell's share in the cell's own
+  coordinates, and a run that reached past a pipe is clipped rather than
+  allowed to mark the cell beside it.
+
+  **The contents is a second path, and stopping at the body table would have
+  set nothing anyone was looking at.** A contents leaf is _discarded by role_:
+  its entries are read off into `chapter.topics` and drawn by the TOC builder,
+  not by the table builder. So an `AnalyticalTopic` carries its own
+  **notation** end to end and is parsed at the point of setting — one field
+  rather than clean text plus a mark list re-based through `cleanTopic`'s own
+  edits, because nothing matches on a topic or counts its words and the only
+  thing that reads one is the line that draws it. Assembly writes each cell's
+  marks back as tags before handing them over, which is also what keeps
+  `@core/pages` free of `@core/transcribe`: that import would be a cycle,
+  since the schema reads the role list the other way.
+
+  **`normalizeTable` was not idempotent, and it runs on every path into the
+  book.** Re-deriving the marks from rows that carry no tags computed them as
+  empty, so a table's emphasis would have been wiped at the first page seam
+  after it was made — silently, the same day it was added. Where there is no
+  notation to re-derive from, the block's own marks already describe the same
+  derived text and are kept: the contract `normalizeMarkup` keeps one function
+  above. The idempotence test is what found it, and it is the shape to write
+  first for anything that normalises.
+
+  A cell that italicises a word is also not the width of the same cell in
+  roman, and that number decides the column, so the natural width is measured
+  through the breaker with the spans applied rather than with one font.
+
+  Twelve faults injected, twelve caught. Three fixtures had to be rebuilt to
+  discriminate, each a case of the fixture being too small for the fault: a
+  one-row table cannot see a missing newline between rows, a single-word
+  cell's natural width is measured by `naturalWidth` alone and passes with the
+  breaker blind, and a one-chapter contents is refused by
+  `analyticalLooksSound` before any mark is reached.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with
