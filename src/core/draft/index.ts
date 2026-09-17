@@ -629,8 +629,50 @@ const FOOTNOTE_MARK = /^\s*[*†‡§¶|+t1-9]\s*[^\s]/u
 
 const FOOTNOTE_SIZE = 0.92
 
+/**
+ * A low percentile, for an edge of the text frame.
+ *
+ * The margin a page is set to is not the *median* line start — it is the edge
+ * the body sits against, and a quotation is inset from it while nothing is
+ * outdented from it. The two agree on an ordinary page, where most lines begin
+ * at the margin, and part company exactly where it matters.
+ *
+ * Measured on leaf 37 of `patterns-vol1`: its right-hand printed page sets
+ * **15 of 37 lines as one quotation**, so the median line start *is* the
+ * quotation's (2059) and the body (1913) came back **outdented by −0.132 of
+ * the measure**, with the quotation at 0.000. Every rule here is written
+ * against a frame the body sits in, so all of them were reading that page
+ * inside out — and the quotation went to the page as fourteen one-line
+ * headings.
+ */
+function percentile(values: readonly number[], p: number): number {
+  if (values.length === 0) return 0
+  const sorted = [...values].sort((a, b) => a - b)
+  const at = Math.min(sorted.length - 1, Math.max(0, Math.round((sorted.length - 1) * p)))
+  return sorted[at]!
+}
+
+/**
+ * The frame the body of this page sits in.
+ *
+ * Deliberately *not* the median of either edge — see `percentile`. A fifth of
+ * the way in from each end is far enough to ignore the few lines a drop
+ * capital, a hanging indent or a stray box displaces, and near enough the end
+ * to find the margin itself rather than the commonest inset.
+ */
+const FRAME_EDGE = 0.2
+
 function measureOf(lines: readonly DraftLine[]): Measure {
-  const left = median(lines.map((l) => l.left))
+  const left = percentile(
+    lines.map((l) => l.left),
+    FRAME_EDGE
+  )
+  // The *median* on this edge, deliberately. A percentile here pushes the
+  // right margin outward past where most lines end, so every line gains
+  // apparent inset on the right and a paragraph's indented first line starts
+  // reading as centred — measured on leaf 7, which gained four such headings.
+  // Justified text ends at the margin on nearly every line, so the median is
+  // already the margin; the left edge is the one a quotation can capture.
   const right = median(lines.map((l) => l.right))
   return { left, right, width: Math.max(1, right - left) }
 }

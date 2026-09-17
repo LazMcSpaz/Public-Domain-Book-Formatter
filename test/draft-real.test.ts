@@ -208,7 +208,8 @@ const NOT_A_SEQUENCE: Record<string, number[]> = {
  * A leaf this module genuinely does scramble, and the reason, which is not the
  * one above.
  *
- * `patterns-vol1` leaf 35 carries **16 boxes far taller than the body** —
+ * `patterns-vol1` leaves 35 and 37 carry boxes far taller than the body — 16
+ * on leaf 35 —
  * Tesseract running one box across two lines, which this file's own header
  * names as the fault class that only real OCR produces. Line clustering then
  * puts `The`, `pro` and `cedure` on different lines, and the draft emits them
@@ -228,7 +229,7 @@ const NOT_A_SEQUENCE: Record<string, number[]> = {
  * worth fixing — separately, and by someone who has read the clustering rule.
  */
 const KNOWN_SCRAMBLE: Record<string, number[]> = {
-  'patterns-vol1': [35]
+  'patterns-vol1': [35, 37]
 }
 
 describe('the draft preserves the order the page was read in', () => {
@@ -1052,5 +1053,45 @@ describe('a quotation rule that stays in its lane', () => {
       .filter((b) => b.kind === 'table')
       .reduce((n, b) => n + (b.cells?.length ?? 0), 0)
     expect(rows, drafted.blocks.map((b) => b.kind).join(',')).toBe(8)
+  })
+})
+
+/**
+ * The frame is the margin the body sits against, not the commonest line start.
+ *
+ * `measureOf` took the median of the line starts, which is the margin on an
+ * ordinary page because most lines begin there — and is something else
+ * entirely on a page that is mostly quotation. Leaf 37's right-hand printed
+ * page sets **15 of its 37 lines as one quotation** at x=2059 against a body
+ * at x=1913, so the median *is* the quotation's left: the body came back
+ * outdented by −0.132 of the measure and the quotation at 0.000, and every
+ * rule here — centred, indented, right-aligned — read that page inside out.
+ *
+ * The quotation went to the draft as **fourteen one-line headings**, and no
+ * amount of work on the quotation rule could have fixed it, because the
+ * quotation was the frame.
+ *
+ * The left edge takes a low percentile now and the right keeps the median: a
+ * percentile on the right pushes the margin out past where lines end, so every
+ * line gains apparent inset there and a paragraph's indented first line starts
+ * reading as centred — measured on leaf 7, which gained four such headings
+ * before the right edge was put back.
+ *
+ * Over the whole volume the two changes together took 293 headings to 65.
+ */
+describe('the frame is the margin, not the commonest line start', () => {
+  const leaf = fixtures
+    .find((f) => f.name === 'patterns-vol1')!
+    .fixture.leaves.find((l) => l.pageIndex === 37)!
+
+  it('leaf 37 does not read its own quotation as the measure', () => {
+    const drafted = draftPage(toWords(leaf.words))
+    const headings = drafted.blocks.filter((b) => b.kind === 'heading')
+    const shown = drafted.blocks.map((b) => `${b.kind}: ${b.text.slice(0, 60)}`).join('\n')
+    // 13 with the median measure, 1 with the frame. The count is the assertion
+    // because this leaf's OCR is too damaged for any phrase to be quoted — see
+    // KNOWN_SCRAMBLE — and what is under test is which way the page was read.
+    expect(headings.length, shown).toBeLessThanOrEqual(2)
+    expect(drafted.blocks.filter((b) => b.kind === 'blockquote').length, shown).toBeGreaterThan(4)
   })
 })
