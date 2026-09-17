@@ -54,7 +54,7 @@ export interface DraftLine {
 
 import { namesFolio, asFolio, looksLikeSignature } from './folios'
 import { findColumns, wordsInBand } from './columns'
-import { findPairedColumns, pairedRow, type PairedColumns } from './paired'
+import { findPairedColumns, isPaired, pairedRow, type PairedColumns } from './paired'
 // The one place a table's flattened view is derived from its cells. Imported
 // rather than restated, because `normalizeTable` exists precisely so the two
 // can never disagree about what a page says.
@@ -1140,17 +1140,33 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
   // line, and only then are that page's lines cut. See `./paired`.
   const pairedOf = new Map<DraftLine, PairedColumns>()
   perBand.forEach((bandLines, i) => {
-    const paired = findPairedColumns(bandLines, bodyHeight)
-    if (!paired) return
-    for (const line of bandLines) pairedOf.set(line, paired)
+    const found = findPairedColumns(bandLines, bodyHeight)
+    if (!found) return
+    const where = bands.length > 1 ? `Printed page ${i + 1} of this leaf` : 'This leaf'
+
+    if (!isPaired(found)) {
+      // Some of the signal and not enough of it. Named rather than passed over
+      // in silence, because this is exactly where a page is *part* prose and
+      // part transcript — and a page left as prose looks, in the draft, like a
+      // page that was never in question.
+      structural.push(
+        `${where} may set part of its matter in two columns: ${found.split} of ` +
+          `${found.measured} lines divide widely, which is under the share needed before any ` +
+          `line is cut, so the whole page is left as prose. This is what a page looks like when ` +
+          `a transcript begins part way down it, under prose. **Check the render**: if the foot ` +
+          `of it is two columns, those blocks need retyping as a table.`
+      )
+      return
+    }
+
+    for (const line of bandLines) pairedOf.set(line, found)
     structural.push(
-      `${bands.length > 1 ? `Printed page ${i + 1} of this leaf sets` : 'This leaf sets'} its ` +
-        `matter in two columns that pair: ${paired.split} of ${paired.measured} lines divide at ` +
-        `about x=${Math.round(paired.at)}, the narrowest division being ` +
-        `${Math.round(paired.narrowest)}px against a ${Math.round(bodyHeight)}px body. Each row ` +
-        `is set as a table of two cells, left then right. **This is a guess about what the two ` +
-        `columns mean** — that they answer each other row by row, as a transcript and its ` +
-        `commentary do, rather than running one after the other like a newspaper. Geometry ` +
+      `${where} sets its matter in two columns that pair: ${found.split} of ${found.measured} ` +
+        `lines divide at about x=${Math.round(found.at)}, the narrowest division being ` +
+        `${Math.round(found.narrowest)}px against a word space of ${Math.round(found.space)}px. ` +
+        `Each row is set as a table of two cells, left then right. **This is a guess about what ` +
+        `the two columns mean** — that they answer each other row by row, as a transcript and ` +
+        `its commentary do, rather than running one after the other like a newspaper. Geometry ` +
         `cannot tell those apart. If the page is a diagram rather than two columns, it needs ` +
         `cutting as a figure instead, and neither reading is right.`
     )

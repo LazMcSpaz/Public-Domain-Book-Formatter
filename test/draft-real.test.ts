@@ -184,8 +184,8 @@ function readingOrder(words: readonly DraftWord[]): DraftWord[] {
 /**
  * The leaves this oracle does not apply to, and why.
  *
- * Not a known-failing list — there is nothing wrong with leaf 27. It is a
- * printed page setting a transcript beside the commentary on it, and the
+ * Not a known-failing list — there is nothing wrong with these leaves. Each
+ * carries a printed page setting a transcript beside the commentary on it, and the
  * subsequence oracle simply has no ground truth for such a page: OCR emits it
  * one line at a time across both columns, while the page is *read* row by row
  * and cell by cell, and neither sequence is a subsequence of the other. That
@@ -201,7 +201,7 @@ function readingOrder(words: readonly DraftWord[]): DraftWord[] {
  * a table's words from its `cells`.
  */
 const NOT_A_SEQUENCE: Record<string, number[]> = {
-  'patterns-vol1': [27]
+  'patterns-vol1': [27, 28]
 }
 
 describe('the draft preserves the order the page was read in', () => {
@@ -896,4 +896,40 @@ describe('a fraction of a pixel does not move the cut', () => {
       })
     })
   }
+})
+
+/**
+ * A page the rule cannot settle is named, not passed over.
+ *
+ * `findPairedColumns` decides per printed page, and a page can be *part* prose
+ * and part paired — the leaf where the induction transcript starts under four
+ * paragraphs of introduction is exactly that, and the prose above dilutes its
+ * share below the bar. Measured over this volume's 231 printed pages: 11 clear
+ * it, 12 sit between 0.20 and 0.40, and 205 are under 0.20.
+ *
+ * Deciding per *run* instead was measured and rejected: **23 of the 205 prose
+ * bands contain a run whose every line splits**, the Guide and the
+ * Introduction among them. A false table silently restructures text that was
+ * right, where an interleaved transcript is visible in the draft. So the
+ * twelve are reported instead — and this asserts the report exists, because a
+ * fallback that says nothing is the failure mode this repository keeps
+ * finding.
+ *
+ * Leaf 28 is the fixture for it and carries both answers at once: its second
+ * printed page pairs (0.47) and its first is only noticed (0.31).
+ */
+describe('a page that is part prose and part paired says so', () => {
+  const leaf = fixtures
+    .find((f) => f.name === 'patterns-vol1')!
+    .fixture.leaves.find((l) => l.pageIndex === 28)!
+
+  it('reports the page it acted on and the page it could not', () => {
+    const drafted = draftPage(toWords(leaf.words))
+    const acted = drafted.structural.filter((s) => s.includes('in two columns that pair'))
+    const noticed = drafted.structural.filter((s) => s.includes('may set part of its matter'))
+    expect(acted, drafted.structural.join('\n')).toHaveLength(1)
+    expect(noticed, drafted.structural.join('\n')).toHaveLength(1)
+    // And the one it acted on actually produced a table.
+    expect(drafted.blocks.some((b) => b.kind === 'table')).toBe(true)
+  })
 })

@@ -67,6 +67,17 @@
 
 import type { DraftLine } from './index'
 
+/**
+ * A page carrying some of the signal but not enough to act on — reported so
+ * the twelve of them on this volume are looked at rather than passing as
+ * prose in silence. See `PAIR_NOTICED`.
+ */
+export interface PairedNoticed {
+  noticed: number
+  split: number
+  measured: number
+}
+
 export interface PairedColumns {
   /** The x the two columns divide at, voted by the lines that split. */
   at: number
@@ -132,6 +143,25 @@ const PAIR_GAP_MIN_HEIGHTS = 0.5
  */
 const PAIR_SHARE = 0.4
 
+/**
+ * Enough of the signal to be worth naming, though not enough to act on.
+ *
+ * A page can be *part* prose and part paired — the leaf where the induction
+ * transcript begins under four paragraphs of introduction is exactly that, and
+ * its share is diluted below `PAIR_SHARE` by the prose above. Measured over
+ * this volume's 231 printed pages: 11 clear the bar, **12 sit between 0.20 and
+ * 0.40**, and 205 are under 0.20.
+ *
+ * Those twelve are reported and not acted on, and the reason is measured
+ * rather than cautious. Deciding per *run* instead of per page was tried, and
+ * **23 of the 205 prose bands contain a run whose every line splits** —
+ * including the Guide and the Introduction, which are plain prose. A false
+ * table silently restructures text that was right; an interleaved transcript
+ * is visible in the draft and flagged. So the rule stays per page, and the
+ * pages it cannot settle get named instead of passing in silence.
+ */
+const PAIR_NOTICED = 0.2
+
 /** Below this many lines a share means nothing, so the page is left alone. */
 const MIN_LINES = 6
 
@@ -159,14 +189,20 @@ function widestGap(line: DraftLine): { width: number; middle: number } | null {
   return best
 }
 
+/** True for the answer that can be acted on, false for one merely noticed. */
+export function isPaired(found: PairedColumns | PairedNoticed | null): found is PairedColumns {
+  return found !== null && 'at' in found
+}
+
 /**
  * Whether this page sets its matter in two columns that pair, and where they
- * divide. `null` — the ordinary answer — means one column.
+ * divide. `null` — the ordinary answer — means one column; a `PairedNoticed`
+ * means the signal was there and too weak to act on.
  */
 export function findPairedColumns(
   lines: readonly DraftLine[],
   bodyHeight: number
-): PairedColumns | null {
+): PairedColumns | PairedNoticed | null {
   if (lines.length < MIN_LINES) return null
 
   // Every gap between neighbouring words on this band, so the threshold is set
@@ -194,7 +230,10 @@ export function findPairedColumns(
     if (gap.width >= threshold) gaps.push(gap)
   }
   if (measured < MIN_LINES) return null
-  if (gaps.length / measured < PAIR_SHARE) return null
+  const share = gaps.length / measured
+  if (share < PAIR_SHARE) {
+    return share >= PAIR_NOTICED ? { noticed: share, split: gaps.length, measured } : null
+  }
 
   return {
     at: median(gaps.map((g) => g.middle)),
