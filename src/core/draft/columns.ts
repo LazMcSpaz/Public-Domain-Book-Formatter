@@ -171,11 +171,21 @@ export function findColumns(words: readonly DraftWord[]): ColumnSplit {
   // where the zeros are and costs nothing, and it is the profile a later pass
   // needs for the columns inside one printed page, where the signal is a
   // valley rather than a gap.
-  const span = right - left
+  //
+  // **Every index here is an integer, deliberately.** A real box is
+  // fractional — the harvested fixtures are rounded for readability, but the
+  // recon cache holds what the renderer measured — and a fractional index into
+  // a typed array is not a slot. It reads `undefined`, so `cover[x]++` stores
+  // `NaN`, which a typed array then drops: the profile stays empty and the
+  // whole leaf reads as one enormous gutter. Worse, a fractional `span` makes
+  // `new Int32Array(span + 1)` throw outright. Neither shows up against a
+  // fixture of whole numbers, which is exactly why this comment is here.
+  const origin = Math.floor(left)
+  const span = Math.ceil(right) - origin
   const cover = new Int32Array(span + 1)
   for (const w of usable) {
-    const from = Math.max(0, Math.floor(w.bbox.x0) - left)
-    const to = Math.min(span, Math.ceil(w.bbox.x1) - left)
+    const from = Math.max(0, Math.floor(w.bbox.x0) - origin)
+    const to = Math.min(span, Math.ceil(w.bbox.x1) - origin)
     for (let x = from; x < to; x++) cover[x]!++
   }
 
@@ -190,8 +200,8 @@ export function findColumns(words: readonly DraftWord[]): ColumnSplit {
       const width = x - run
       if (width >= minGutter) {
         gaps.push({
-          left: left + run,
-          right: left + x,
+          left: origin + run,
+          right: origin + x,
           width,
           offCentre: Math.abs((run + x) / 2 - middle) / inkWidth
         })

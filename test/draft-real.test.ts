@@ -823,3 +823,52 @@ describe('the column rule abstains on every single-column book', () => {
     }
   }
 })
+
+/**
+ * A real word box is fractional, and the fixtures here are not.
+ *
+ * `harvest-boxes.mjs` rounds every coordinate so a fixture stays readable, but
+ * the recon cache holds what the renderer actually measured — and on a
+ * born-digital PDF, whose text is read straight out rather than found by OCR,
+ * those are fractions. So every leaf in `fixtures/boxes` is whole numbers and
+ * **no fixture here can catch an error in fractional arithmetic.**
+ *
+ * One was waiting. The coverage profile is an `Int32Array` indexed by x, and
+ * the first version took its origin from the raw left edge of the ink, so a
+ * fractional origin made every index fractional. A fractional index into a
+ * typed array is not a slot: the read gives `undefined`, `undefined + 1` is
+ * `NaN`, and storing `NaN` is dropped — so the profile silently stayed empty.
+ * Measured with the shipped leaf 7 boxes shifted by 0.37 of a pixel, the split
+ * came back as `[{134.37, 262.37}, {3389.37, 3389.37}]`: a first column an
+ * inch wide and a second of zero width, which between them hold almost none of
+ * the leaf.
+ *
+ * This shifts real boxes by a fraction and requires the answer not to move,
+ * which is the property the arithmetic has to have and the one the fixtures
+ * cannot express.
+ */
+describe('a fraction of a pixel does not move the cut', () => {
+  const leaf = fixtures
+    .find((f) => f.name === 'patterns-vol1')!
+    .fixture.leaves.find((l) => l.pageIndex === 7)!
+  const whole = findColumns(toWords(leaf.words))
+
+  for (const off of [0.37, 0.5, 0.91]) {
+    it(`boxes shifted by ${off}px`, () => {
+      const shifted = toWords(leaf.words).map((w) => ({
+        ...w,
+        bbox: { ...w.bbox, x0: w.bbox.x0 + off, x1: w.bbox.x1 + off }
+      }))
+      const got = findColumns(shifted)
+      expect(got.columns.length).toBe(whole.columns.length)
+      got.columns.forEach((band, i) => {
+        const want = whole.columns[i]!
+        // Within a pixel of where the whole-number boxes put it, plus the
+        // shift itself. A band an inch wide, or one of zero width, is the
+        // failure this is written against.
+        expect(Math.abs(band.left - (want.left + off))).toBeLessThanOrEqual(1)
+        expect(Math.abs(band.right - (want.right + off))).toBeLessThanOrEqual(1)
+      })
+    })
+  }
+})
