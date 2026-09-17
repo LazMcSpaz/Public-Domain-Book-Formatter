@@ -17,6 +17,7 @@ export {
 } from './pronounce'
 export {
   readChapter,
+  spokenChapters,
   looksLikeLabel,
   looksOrnamental,
   chapterBlocks,

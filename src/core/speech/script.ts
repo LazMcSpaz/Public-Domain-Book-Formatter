@@ -23,7 +23,7 @@
  * because the voice is given one paragraph at a time and cannot know what
  * follows.
  */
-import type { BookDocument, BookBlock, Footnote } from '@core/assemble'
+import type { BookDocument, BookBlock, ChapterEntry, Footnote } from '@core/assemble'
 import { GLOSSARY_MARK } from '@core/annotate'
 import { speakHeadingNumbers } from './roman'
 import { applyPronunciations, type Pronunciation } from './pronounce'
@@ -120,6 +120,8 @@ const PAUSE = {
   beforeNotes: 1.6,
   /** Between one note and the next. */
   betweenNotes: 0.5,
+  /** Before a heading that opens a section inside a chapter. */
+  beforeSection: 1.4,
   /** Before a line that titles what follows — it opens a group. */
   beforeLabel: 1,
   /** After one, and shorter, so the first item under it sounds attached. */
@@ -132,18 +134,44 @@ const PAUSE = {
 const PROSE = new Set(['paragraph', 'quote', 'list-item', 'caption'])
 
 /**
- * The blocks belonging to one chapter, by its entry in the document.
+ * The chapters a listener counts, which are the level-1 openings.
  *
- * Sliced between this chapter's opening block and the next one's rather than by
- * counting headings, because a chapter can open with two of them — a number
- * over a title — and counting would start every chapter one block late.
+ * `doc.chapters` is the *contents'* list and holds more than chapters: a
+ * subheading set inside a chapter earns an entry there because the contents
+ * page shows it, and so does a divider the editor wrote between two books.
+ * Counting those as chapters is wrong twice over, and the second way is the
+ * serious one.
+ *
+ * The first is only confusing — the numbering stops matching the book's spine,
+ * so "chapter 11" of the combined *Human Aura* was a section in the middle of
+ * chapter VIII.
+ *
+ * The second loses text. Slicing from one entry to the next ended chapter
+ * VIII's reading at that section: its audio stopped on "The following table,
+ * committed to memory, will be of help to him", and the table and three closing
+ * paragraphs were never spoken. Nothing reported it, because `unread` accounts
+ * for blocks *inside* the slice and these had fallen outside it — a gap with a
+ * green report beside it, which is the exact failure this module is arranged
+ * against. Three chapters of that one book were short this way.
+ */
+export function spokenChapters(doc: BookDocument): ChapterEntry[] {
+  return doc.chapters.filter((chapter) => chapter.level === 1)
+}
+
+/**
+ * The blocks belonging to one chapter, by its place in {@link spokenChapters}.
+ *
+ * Sliced between this chapter's opening block and the next *chapter's* rather
+ * than by counting headings, because a chapter can open with two of them — a
+ * number over a title — and counting would start every chapter one block late.
  */
 export function chapterBlocks(doc: BookDocument, index: number): BookBlock[] {
-  const chapter = doc.chapters[index]
+  const chapters = spokenChapters(doc)
+  const chapter = chapters[index]
   if (chapter === undefined) return []
   const from = doc.blocks.findIndex((block) => block.id === chapter.id)
   if (from < 0) return []
-  const next = doc.chapters[index + 1]
+  const next = chapters[index + 1]
   const to = next ? doc.blocks.findIndex((block) => block.id === next.id) : -1
   return doc.blocks.slice(from, to < 0 ? doc.blocks.length : to)
 }
@@ -175,7 +203,7 @@ export function readChapter(
   pronunciations: readonly Pronunciation[] = []
 ): ReadingScript {
   const blocks = chapterBlocks(doc, index)
-  const entry = doc.chapters[index]
+  const entry = spokenChapters(doc)[index]
   const pieces: SpokenPiece[] = []
   const unread: UnreadBlock[] = []
 
@@ -221,10 +249,21 @@ export function readChapter(
 
     const isHeading = block.kind === 'heading'
     const isLabel = !isHeading && looksLikeLabel(text)
-    // A number line over a title is one opening, not two, so the gap between
-    // them is set rather than widened by whatever came before.
-    if (isHeading) gap = pieces.length > 0 ? PAUSE.overTitle : 0
-    else if (isLabel) gap = Math.max(gap, PAUSE.beforeLabel)
+    if (isHeading) {
+      // Two kinds of heading, and they want opposite amounts of air.
+      //
+      // A number line over a title is one opening, not two, so the two are set
+      // close together and the gap is fixed rather than widened by whatever
+      // came before. A heading that follows prose is a new section inside the
+      // chapter and needs *more* room than a paragraph break, not less — read
+      // with the opening's gap it sounds like a sentence that lost its verb.
+      //
+      // Which one this is, is read off what was last said rather than tracked
+      // in a variable, so an ornament or a skipped table between two headings
+      // cannot leave the answer stale.
+      const opensWithTheOneBefore = pieces.at(-1)?.kind === 'heading'
+      gap = pieces.length === 0 ? 0 : opensWithTheOneBefore ? PAUSE.overTitle : PAUSE.beforeSection
+    } else if (isLabel) gap = Math.max(gap, PAUSE.beforeLabel)
 
     if (gap > 0) pieces.push({ kind: 'pause', seconds: gap })
     pieces.push({
