@@ -578,6 +578,17 @@ export interface EmbeddedWord {
   confidence: number
   pageIndex: number
   bbox: { x0: number; y0: number; x1: number; y1: number }
+  /**
+   * True where the file sets this word in an italic face.
+   *
+   * Only ever present on a born-digital reading, and it is the one piece of
+   * information the file has that a scan does not: on a page of pixels
+   * emphasis has to be *recovered*, and here it is simply stated. Undefined
+   * means nobody asked, never "roman" — a scanned leaf's words carry no flag
+   * at all, and a reader that treated absence as "not italic" would report a
+   * book with no emphasis as a book with none to find.
+   */
+  italic?: boolean
 }
 
 /**
@@ -602,7 +613,44 @@ export async function extractPageWords(
   const scale = dpi / PDF_POINTS_PER_INCH
   try {
     const viewport = page.getViewport({ scale })
+
+    // The operator list has to be fetched before `commonObjs` holds anything,
+    // because that is what loads the fonts. Without it every lookup below
+    // misses and every word comes back roman — which is not an error anywhere,
+    // just a book that quietly loses its emphasis.
+    await page.getOperatorList()
     const content = await page.getTextContent()
+
+    /**
+     * Whether a font pdf.js has loaded is an italic one.
+     *
+     * `content.styles` is no use for this: it reports `fontFamily: 'serif'` for
+     * the roman and the italic alike, which is what a CSS fallback needs and
+     * not what the file says. The loaded font object carries the PDF's own
+     * name and a flag off its descriptor — measured on this book,
+     * `TimesNewRoman` with `italic: false` beside `TimesNewRoman,Italic` with
+     * `italic: true`, and the words under the second are exactly the ones set
+     * in italic on the page.
+     */
+    const italics = new Map<string, boolean>()
+    const isItalic = (fontName: string | undefined): boolean => {
+      if (!fontName) return false
+      const known = italics.get(fontName)
+      if (known !== undefined) return known
+      let flag = false
+      try {
+        const font = page.commonObjs.get(fontName) as { italic?: boolean; name?: string } | null
+        // The flag first, the name as a fallback: a font whose descriptor
+        // omits the italic angle still usually says so in its name.
+        flag = font?.italic === true || /italic|oblique/i.test(font?.name ?? '')
+      } catch {
+        // Not loaded — leave it roman rather than guessing from the name of
+        // something that was never resolved.
+        flag = false
+      }
+      italics.set(fontName, flag)
+      return flag
+    }
 
     const words: EmbeddedWord[] = []
     const lines: string[] = []
@@ -624,6 +672,8 @@ export async function extractPageWords(
       const width = (item.width || 0) * scale
       const perChar = raw.length > 0 ? width / raw.length : 0
 
+      const italic = isItalic('fontName' in item ? item.fontName : undefined)
+
       let offset = 0
       for (const part of raw.split(/(\s+)/u)) {
         if (part.trim().length > 0) {
@@ -632,6 +682,7 @@ export async function extractPageWords(
             text: part,
             confidence: 100,
             pageIndex,
+            italic,
             bbox: {
               x0: x + offset * perChar,
               y0: y,

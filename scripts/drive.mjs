@@ -2107,7 +2107,12 @@ async function serve() {
                 x0: Math.round(w.bbox.x0),
                 y0: Math.round(w.bbox.y0),
                 x1: Math.round(w.bbox.x1),
-                y1: Math.round(w.bbox.y1)
+                y1: Math.round(w.bbox.y1),
+                // Only a born-digital reading has this, and only where the
+                // file says so. Omitted rather than defaulted to false: a
+                // scanned leaf cannot answer the question at all, and a reader
+                // shown `false` would take that for "checked, and roman".
+                ...(w.italic === undefined ? {} : { italic: w.italic })
               }))
           }
           return {
@@ -3416,6 +3421,58 @@ async function serve() {
           }
         },
         [REPO]
+      )
+    },
+
+    /**
+     * Which faces a born-digital leaf is set in, and which of them are italic.
+     *
+     * The question this exists to answer is not curiosity. Emphasis on such a
+     * book is *stated* rather than recovered, so it comes down to whether
+     * pdf.js has resolved the font object at all — and when it has not, every
+     * word comes back roman with nothing raised anywhere. That failure is
+     * silent by construction, and this is the one command that distinguishes
+     * "this book sets nothing in italic" from "the fonts were never loaded".
+     *
+     * It also answers the question that decides what a book's italics are
+     * worth: how many italic faces are there? On _Patterns_ Vol. I there is
+     * exactly one, `TimesNewRoman,Italic`, which is why the conversion damage
+     * in that file (a lone italic `of` mid-sentence, 164 times) cannot be told
+     * from the author's own emphasis by the font — only by the shape of the
+     * run. See `spuriousItalic` in `@core/draft/emphasis`.
+     */
+    fontprobe: async ([n = '7']) => {
+      return page.evaluate(
+        async ([repo, leaf]) => {
+          const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          const file = await runStore.loadSourceFile(newest.key)
+          if (!file) throw new Error('The scan is not stored on this device.')
+          const doc = await pdfMod.openPdf(file)
+          const page1 = await doc.getPage(Number(leaf) + 1)
+          const out = { ops: null, names: [], lookups: [] }
+          try {
+            await page1.getOperatorList()
+            out.ops = 'ok'
+          } catch (e) {
+            out.ops = String(e)
+          }
+          const content = await page1.getTextContent()
+          out.names = [
+            ...new Set(content.items.filter((i) => i.str?.trim()).map((i) => i.fontName))
+          ]
+          for (const nm of out.names) {
+            try {
+              const f = page1.commonObjs.get(nm)
+              out.lookups.push({ nm, name: f?.name, italic: f?.italic })
+            } catch (e) {
+              out.lookups.push({ nm, threw: String(e).slice(0, 120) })
+            }
+          }
+          return out
+        },
+        [REPO, n]
       )
     },
 

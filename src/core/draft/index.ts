@@ -40,6 +40,15 @@ export interface DraftWord {
   /** 0–100, a real engine probability (SPEC §4). */
   confidence: number
   bbox: { x0: number; y0: number; x1: number; y1: number }
+  /**
+   * True where the file sets this word in an italic face.
+   *
+   * A born-digital PDF *states* its emphasis where a scan only shows it, so on
+   * such a book this is the one thing the draft need not guess. Undefined
+   * means nobody could say — a scanned leaf carries no flag — which is not the
+   * same as roman, and nothing here treats it as such.
+   */
+  italic?: boolean
 }
 
 /** A run of words OCR set on one baseline. */

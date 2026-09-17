@@ -48,6 +48,14 @@ export interface OcrWord {
   confidence: number
   bbox: { x0: number; y0: number; x1: number; y1: number }
   pageIndex: number
+  /**
+   * True where the *file* sets this word in an italic face.
+   *
+   * Set only on a born-digital reading, where the emphasis is stated rather
+   * than recovered — see `EmbeddedWord.italic`. Tesseract never sets it, and
+   * undefined means "nobody could say", not "roman".
+   */
+  italic?: boolean
 }
 
 export interface OcrPageResult {
