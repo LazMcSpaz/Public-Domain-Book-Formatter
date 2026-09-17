@@ -2358,6 +2358,80 @@ Hermes` is one whitespace-separated word of which ten characters are small
   nothing else can tell an anchor that counts occurrences from one that does
   not.
 
+- **Also done**: **the body swept again, against the line instead of the word —
+  and the third form of small capitals the first sweep could not see.** That
+  sweep asked whether a word's first letter stands taller than the rest, which
+  decides caps-and-small-capitals against full capitals and nothing else. The
+  form this book uses most is a word set **wholly** in small capitals, where
+  that ratio is 1 and the sweep reads it as full capitals — so all 166 words it
+  left alone were left alone on a test that could not see them. Re-measured:
+  **168 small capitals throughout, 22 caps and small capitals, 52 full
+  capitals**, and _Isis Unveiled_ Vol. I now carries 347 marks against 157.
+
+  **Height alone cannot finish it, which is the finding under the finding.**
+  Measured on leaf 202, the small capitals of `What is the WILL ?` stand at this
+  face's x-height to the pixel — 33 pixels against 31 to 33 for the x-height
+  letters and 51 for the capitals, at 600 DPI. There is no gap between "small
+  capital" and "x-height letter" to put a threshold in, and a day was spent
+  hunting for one. What separates them is **uniformity**: the reading records
+  the word in capitals, so if it is set in capitals of any size its letters
+  share one height, and if the box has landed on an ordinary lower-case word
+  they do not — `will` is two x-height letters and two ascenders, `WILL` in
+  small capitals is four of one height. Fifty per cent, where height offered
+  ten. The level then says which size, and the spread says whether this is the
+  word at all.
+
+  **Located by alignment, not by spelling.** The old sweep matched a word to an
+  OCR token by similarity — which cannot work here at all, because `WILL` and
+  `will` are the same letters, so the score is 1.0 against every occurrence on
+  the leaf and the tie-break is arbitrary. On five leaves it chose wrong and the
+  result was written up as a finding about the compositor. The block is now
+  aligned against the whole leaf with `SequenceMatcher` and the position read
+  off the alignment, so the neighbours decide. **280 of 280 placed**, against 21
+  unplaceable before — including `TRAI-VIDYA`, which OCR reads as `Trar-vipya`
+  and which scores 0.57 against itself while its neighbours align exactly.
+
+  **Four faults in the measurement, each producing confident numbers**, and all
+  four are shapes to recognise when measuring type off a scan:
+
+  - _The window clipped the line's own ascenders._ Cropping to the word's box
+    understates every tall letter on the line, so the cap height comes out near
+    the x-height: leaf 113 gave x/cap = 0.85, which no face does.
+  - _Two lines came back as one letter._ A window tall enough to hold this
+    line's ascenders also holds the line above, and a column of pixels carrying
+    ink from both is a **single band** — bottom on this baseline, top on the one
+    before. Leaf 18's cap height read 90 pixels against a real 26, and no
+    ceiling on the ratio can separate that from a tall letter, because it _is_ a
+    tall letter with something stuck to it. The line is found by **rows** first
+    now, and nothing outside those rows is looked at again.
+  - _The baseline slopes._ These leaves are photographed about a degree out of
+    square, so a line's baseline falls some fourteen pixels across the measure
+    at 600 DPI. One median for the line puts half that at each end — the whole
+    of the difference being read. Each letter's baseline now comes from the
+    letters around it.
+  - _A word's own full stops were counted as letters._ `B.C.` is two letters and
+    three stops, so the median height **is** a full stop's and the word was
+    measured against its own punctuation. Taken off the tallest band instead,
+    which is a letter in every word there is.
+
+  **Fourteen spot-checks against the scan, fourteen correct**, including three
+  different verdicts on one line: `ᴡʜᴏ, ᴡʜᴀᴛ is GOD ?` on leaf 18. And checked on
+  the printed page, which is the only thing that catches the fault `rangesFor`
+  had: `Mᴀᴢᴅᴇᴀɴs` sets caps and small capitals and `ᴜɴᴋɴᴏᴡᴀʙʟᴇ` sets small
+  capitals throughout with no full initial. The second needs no ratio — had the
+  mark not reached the page the word would print in **lower case**, so this
+  form's failure is visible rather than subtle, which the caps-and-small-capitals
+  form's is not.
+
+  **What is refused is listed.** Fourteen boxes are on a different word from the
+  one the reading records, caught by the spread and named rather than marked.
+  Twenty-four are not measured, nearly all for one honest reason: the line is set
+  **entirely** in capitals, so it carries no lower-case letters to give a scale —
+  and a display line is the design's to set, not an inline mark's. Two more are a
+  token that is really two words, a quotation closing and its attribution joined
+  by a dash, where one mark over both would claim a span the compositor set as
+  two.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with
