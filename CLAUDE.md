@@ -254,6 +254,30 @@ git merge-base --is-ancestor HEAD origin/main && echo "local is behind"
 git fetch origin main && git reset --hard FETCH_HEAD
 ```
 
+**The driver's reply was cut at 146 KB whenever a script captured it.**
+`drive.mjs` in client mode printed the browser's answer with `console.log` and
+then called `process.exit`. When stdout is a **file** — a shell redirect, which
+is how every by-hand call uses it — writes are synchronous and nothing is lost.
+When it is a **pipe**, which is what `execFileSync` gives it and what every
+script that captures a reply has, `console.log` is asynchronous and the exit
+drops whatever has not drained. Measured on one call: `words` over forty leaves
+is **2,133,802 bytes** down a redirect and **146,087** down a pipe, cut in the
+middle of a token.
+
+It survived months because the driver is nearly always used by hand. What found
+it was the first script to read a reply back — a chapter map over 747 leaves —
+and the only reason it was loud is that truncated JSON does not parse. A reply
+cut at a boundary would have been a silently short answer, which is this file's
+whole subject. `process.exitCode` and an explicit `process.stdout.write` let
+node exit on its own, which flushes first.
+
+`npm run check:driver` is the measurement, and it needs no browser: the fault is
+entirely in the client half, so the check stands up a stub on `DRIVE_PORT` that
+answers with a large body and compares the bytes that come back through a pipe.
+Its own first version blocked its own event loop with `execFileSync` — so the
+stub could never answer the child it was waiting on, and the check reported
+"nothing is listening" about a port it was listening on itself.
+
 **A read of a file can answer for the write that follows it.** Every ruling
 the editor made at the query gate on _Isis Unveiled_ failed with
 `422: Invalid request. "sha" wasn't supplied.` — a message about a field in a

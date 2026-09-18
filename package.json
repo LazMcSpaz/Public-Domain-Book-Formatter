@@ -18,7 +18,8 @@
     "check:install": "PUBLIC_BASE=/Public-Domain-Book-Formatter/ vite build && node scripts/check-install.mjs",
     "check:outbox": "node scripts/check-outbox.mjs",
     "check:crop": "node scripts/check-query-crop.mjs",
-    "check:cache": "node scripts/check-shelf-cache.mjs"
+    "check:cache": "node scripts/check-shelf-cache.mjs",
+    "check:driver": "node scripts/check-driver-output.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

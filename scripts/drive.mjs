@@ -60,8 +60,16 @@ async function send(verb, args) {
     process.exit(1)
   }
   const text = await res.text()
-  console.log(text)
-  process.exit(res.ok ? 0 : 1)
+  // **Never `process.exit()` with a reply still in the buffer.** When stdout is
+  // a *file* — a shell redirect — writes are synchronous and nothing is lost.
+  // When it is a *pipe*, which is what `execFileSync` and every script that
+  // captures this gives it, `console.log` is asynchronous and `process.exit`
+  // drops whatever has not drained. Measured: `words` over forty leaves is
+  // 2,133,802 bytes down a redirect and **146,087** down a pipe, cut mid-token,
+  // and the only reason it was noticed is that truncated JSON does not parse.
+  // Setting `exitCode` and letting node exit on its own flushes first.
+  process.exitCode = res.ok ? 0 : 1
+  process.stdout.write(text.endsWith('\n') ? text : `${text}\n`)
 }
 
 async function serve() {
