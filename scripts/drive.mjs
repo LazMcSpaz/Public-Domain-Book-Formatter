@@ -2217,6 +2217,58 @@ async function serve() {
      * the property `ocr`'s own pixel path warns it does not have: it widens a
      * leaf whose frame cuts ink, which moves every box on it.
      */
+    /**
+     * The recon cache's thumbnails, written to disk as `<dir>/thumb-<leaf>.png`.
+     *
+     * Recon makes a thumbnail of every leaf while it has the page in hand and
+     * keeps them in the cache, so the input `contact-sheets.mjs` wants — every
+     * leaf, small — already exists the moment recon finishes. Rendering the
+     * volume again for it cost three hours of driver time on Vol. I of _Isis_;
+     * this costs the time to write seven hundred small files.
+     *
+     * Honest about the size: ~200 px wide is a tenth of full size, and the
+     * contact-sheet note already says a half-page figure survives that and a
+     * two-line diagram may not. Same floor, no rendering.
+     */
+    thumbs: async ([dir = 'thumbs']) => {
+      const { mkdir, writeFile } = await import('node:fs/promises')
+      const out = resolve(REPO, dir)
+      await mkdir(out, { recursive: true })
+      const got = await page.evaluate(
+        async ([repo]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
+          const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const cached = await cacheMod.loadReconCache(newest.key, {
+            dpi: recon.RECON_DPI,
+            maxPages: null
+          })
+          if (!cached) throw new Error('No cached reading on this device.')
+          const list = []
+          for (const [leaf, url] of cached.thumbnails) {
+            const blob = await (await fetch(url)).blob()
+            const buf = new Uint8Array(await blob.arrayBuffer())
+            let bin = ''
+            for (let i = 0; i < buf.length; i += 0x8000) {
+              bin += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000))
+            }
+            list.push({ leaf, type: blob.type, b64: btoa(bin) })
+          }
+          return list
+        },
+        [REPO]
+      )
+      let written = 0
+      for (const t of got) {
+        const ext = t.type.includes('jpeg') ? 'jpg' : 'png'
+        await writeFile(`${out}/thumb-${t.leaf}.${ext}`, Buffer.from(t.b64, 'base64'))
+        written += 1
+      }
+      return { dir: out, written, next: `node scripts/contact-sheets.mjs ${dir} <out-dir>` }
+    },
+
     words: async ([...ns]) => {
       const fresh = ns.includes('--fresh')
       const list = ns.filter((a) => !a.startsWith('--')).map(Number)

@@ -743,6 +743,8 @@ node scripts/drive.mjs figure cut 193 0.527,0.532,0.389,0.175 --beside p193b1 --
 node scripts/drive.mjs figure retouch <id> grayscale threshold:150 despeckle:1
                                      #   clean a cut: a photograph of paper reads as a
                                      #   photocopy beside new type. `none` clears the stack
+node scripts/drive.mjs thumbs thumbs/   # every leaf's recon thumbnail, written to
+                                     #   disk: the contact sheets' input for free
 node scripts/contact-sheets.mjs <renders> <out>  # the whole book, small, many to
                                      #   a sheet: the only thing that answers
                                      #   "is there a picture we have missed?"
