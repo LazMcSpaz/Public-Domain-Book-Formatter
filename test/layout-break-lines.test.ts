@@ -212,3 +212,47 @@ describe('a compound breaks at its own hyphen without gaining another', () => {
     expect(lines.join('|')).toContain('extra-')
   })
 })
+
+/**
+ * The hyphenator only ever sees letters, so a token joined by a dash, a slash
+ * or a run of dots reached the breaker as one box. In the three-column
+ * transcripts of *Patterns* Vol. II that was `search—L-operator` and
+ * `when/where/how?...` set into the gutter between columns, fifty-two times.
+ */
+describe('a line may end after a dash, a slash or an ellipsis inside a token', () => {
+  const measurer = fixedWidthMeasurer(0.5)
+  const font: FontRef = { family: 'EB Garamond', style: 'regular' }
+  const setAt = (text: string, widthPt: number): string[] =>
+    breakParagraph(text, {
+      font,
+      sizePt: 10,
+      measurer,
+      lineWidths: widthPt,
+      alignment: 'left',
+      hyphenate: (word) => [word]
+    }).map((line) => line.words.map((w) => w.text).join(' '))
+
+  it('breaks after the em dash, and draws nothing there', () => {
+    const lines = setAt('the search—L-operator here', 55)
+    expect(lines[0]).toBe('the search—')
+    expect(lines[1]).toMatch(/^L-operator/)
+  })
+
+  it('breaks after a slash', () => {
+    const lines = setAt('the when/where/how? thing', 50)
+    expect(lines[0]).toBe('the when/')
+    expect(lines[1]).toMatch(/^where\//)
+  })
+
+  it('breaks after a run of dots', () => {
+    const lines = setAt('so know...move..., then', 50)
+    expect(lines[0]).toBe('so know...')
+    expect(lines[1]).toMatch(/^move\.\.\.,/)
+  })
+
+  it('leaves a short pair like V/K whole', () => {
+    const lines = setAt('the V/K split', 15)
+    expect(lines.join('|')).not.toContain('V/|')
+    expect(lines.join('|')).toContain('V/K')
+  })
+})

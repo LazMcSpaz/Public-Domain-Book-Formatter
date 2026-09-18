@@ -163,7 +163,46 @@ export function fontForWord(
  * hyphen, not a discretionary one — and the same is true of the dashes a
  * 19th-century text uses inside a word.
  */
-const ENDS_HYPHENATED = /[-\u2010\u2011\u2012\u2013\u2014]$/u
+const ENDS_HYPHENATED = /[-\u2010\u2011\u2012\u2013\u2014/.\u2026]$/u
+
+/**
+ * Where a line may end inside a token with nothing drawn: after a dash, a
+ * slash, or a run of dots.
+ *
+ * The hyphenator only ever sees letters, so `search—L-operator`,
+ * `when/where/how?...` and `know...move...,` reached the breaker as one box
+ * each and set overfull wherever the measure was narrower than they were —
+ * which in a three-column transcript is every column. An em dash, a slash and
+ * an ellipsis are all places a line may legitimately end, and the piece before
+ * them already carries the mark, so the break costs the same as a hyphenation
+ * and draws nothing. Both sides have to be word-sized: `V/K` and `and/or` stay
+ * whole.
+ */
+const BREAK_AFTER = /(?<=[\u2013\u2014/]|\.{2,}|\u2026)(?=[^\s.\u2026])/u
+const SEGMENT_MIN_LETTERS = 3
+
+function lettersIn(text: string): number {
+  return (text.match(/\p{L}/gu) ?? []).length
+}
+
+/** A token cut at the marks a line may end on, or whole where a cut would leave a scrap. */
+export function segmentsOf(word: string): string[] {
+  const parts = word.split(BREAK_AFTER)
+  if (parts.length <= 1) return [word]
+  const out: string[] = []
+  for (const part of parts) {
+    const previous = out[out.length - 1]
+    if (
+      previous !== undefined &&
+      (lettersIn(previous) < SEGMENT_MIN_LETTERS || lettersIn(part) < SEGMENT_MIN_LETTERS)
+    ) {
+      out[out.length - 1] = previous + part
+    } else {
+      out.push(part)
+    }
+  }
+  return out
+}
 
 const GLUE_STRETCH = 0.5
 const GLUE_SHRINK = 0.333
@@ -288,7 +327,9 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
   words.forEach((word, i) => {
     if (i > 0) items.push(glue(spaceWidth, stretch, shrink))
 
-    const pieces = hyphenate ? hyphenate(word) : [word]
+    const pieces = segmentsOf(word).flatMap((segment) =>
+      hyphenate ? hyphenate(segment) : [segment]
+    )
     if (pieces.length <= 1) {
       items.push(box(word, width(word, i), i))
     } else {
