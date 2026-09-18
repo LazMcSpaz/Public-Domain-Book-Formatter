@@ -50,7 +50,9 @@ import {
 
 const bookPath = process.argv[2]
 if (!bookPath || bookPath.startsWith('--')) {
-  console.error('usage: node scripts/read-book.mjs <book.json> --chapter <n> [--script|--out dir]')
+  console.error(
+    'usage: node scripts/read-book.mjs <book.json> --chapters | --chapter <n> [--script|--out dir]'
+  )
   process.exit(2)
 }
 
@@ -84,6 +86,38 @@ const doc = edits.applyEdits(assemble.assembleBook(file.run.transcriptions), fil
 // section heading inside a chapter earns an entry there, and reading to it cuts
 // the chapter it sits in short. See `spokenChapters`.
 const chapters = speech.spokenChapters(doc)
+
+// Who wrote it and what it is called, as the export gate recorded them. The
+// audio export tags every chapter with these, so a book whose file has none
+// is said so here rather than found out in a player.
+const identity = file.run.identityAnswers ?? {}
+const bookIdentity = {
+  bookTitle: typeof identity.title === 'string' ? identity.title : undefined,
+  subtitle: typeof identity.subtitle === 'string' ? identity.subtitle : undefined,
+  author: typeof identity.author === 'string' ? identity.author : undefined,
+  year: identity.year === undefined ? undefined : String(identity.year),
+  chapterCount: chapters.length
+}
+if (!bookIdentity.bookTitle || !bookIdentity.author) {
+  console.error(
+    `${basename(bookPath)} names ${bookIdentity.bookTitle ? 'no author' : 'no title'}; ` +
+      'its chapters will carry no such tag.'
+  )
+}
+
+// The chapters as data, for whatever renders them in parallel: one line of
+// JSON, so a workflow can build its matrix from it without parsing the
+// human-readable list below.
+if (hasFlag('chapters')) {
+  console.log(
+    JSON.stringify({
+      ...bookIdentity,
+      chapters: chapters.map((c, i) => ({ n: i + 1, label: c.label ?? null, title: c.title }))
+    })
+  )
+  await close()
+  process.exit(0)
+}
 
 if (chapterNumber < 1 || chapterNumber > chapters.length) {
   // The list, not just the refusal: in a combined volume the entries are not
@@ -286,6 +320,7 @@ await writeFile(
   `${JSON.stringify(
     {
       book: basename(bookPath),
+      ...bookIdentity,
       chapter: chapterNumber,
       title: script.title,
       label: script.label,

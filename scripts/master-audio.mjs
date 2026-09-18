@@ -25,9 +25,10 @@
  * silently did nothing looks exactly like one that worked.
  */
 import { execFile } from 'node:child_process'
-import { mkdir, readdir } from 'node:fs/promises'
+import { mkdir, readdir, readFile } from 'node:fs/promises'
 import { basename, resolve } from 'node:path'
 import { promisify } from 'node:util'
+import { expectedTags, tagsFor } from './audio-tags.mjs'
 
 const run = promisify(execFile)
 
@@ -70,6 +71,27 @@ export async function measure(file) {
   return JSON.parse(stderr.slice(from, to + 1))
 }
 
+/**
+ * The tags a file actually carries, read back with ffprobe. What ffmpeg was
+ * asked for is not evidence of what it wrote — a container that does not take
+ * a tag drops it without a word — so the file is asked.
+ */
+export async function tagsOn(file) {
+  const { stdout } = await run('ffprobe', [
+    '-v',
+    'error',
+    '-show_entries',
+    'format_tags',
+    '-of',
+    'json',
+    file
+  ])
+  const tags = JSON.parse(stdout).format?.tags ?? {}
+  // ffprobe reports keys as it finds them, and ID3 round-trips them in a case
+  // of its own choosing.
+  return Object.fromEntries(Object.entries(tags).map(([k, v]) => [k.toLowerCase(), v]))
+}
+
 /** The second pass: one fixed correction, from what the first pass measured. */
 export function correctionFrom(measured) {
   return [
@@ -96,6 +118,15 @@ export function withinBand(loudness, peak) {
   return reasons
 }
 
+/** The reader's record beside a rendering, or null where there is none. */
+async function recordBeside(wavPath) {
+  try {
+    return JSON.parse(await readFile(wavPath.replace(/\.wav$/u, '.json'), 'utf8'))
+  } catch {
+    return null
+  }
+}
+
 const from = resolve(process.argv[2] ?? 'rendered')
 const into = resolve(process.argv[3] ?? 'audio')
 const bitrate = process.argv[4] ?? '64k'
@@ -116,6 +147,13 @@ for (const name of waves) {
     `${name}: ${before.input_i} LUFS, true peak ${before.input_tp} dBFS, range ${before.input_lra}`
   )
 
+  // The record the reader wrote beside the rendering names the book, the
+  // author and the chapter; a rendering with no record beside it gets the
+  // file's own name as its title, and says so, rather than nothing.
+  const record = await recordBeside(source)
+  if (!record) console.log(`  ! no record beside ${name}; tagged by its file name only`)
+  const tags = tagsFor(record ?? { title: basename(name, '.wav') })
+
   await run('ffmpeg', [
     '-nostdin',
     '-loglevel',
@@ -131,8 +169,24 @@ for (const name of waves) {
     bitrate,
     '-ac',
     '1',
+    ...tags,
     target
   ])
+
+  // Read back off the file, not off the arguments. A tag asked for and not
+  // written is a chapter that shows up in a player as "chapter-03".
+  const written = await tagsOn(target)
+  const wanted = expectedTags(record ?? { title: basename(name, '.wav') })
+  const missing = Object.entries(wanted).filter(([k, v]) => written[k] !== v)
+  if (missing.length > 0) {
+    console.error(`  ! ${name}: tags not written: ${missing.map(([k]) => k).join(', ')}`)
+    console.error(`    wanted ${JSON.stringify(wanted)}\n    found  ${JSON.stringify(written)}`)
+    process.exitCode = 1
+  } else {
+    console.log(
+      `  tagged: ${written.title} · ${written.album ?? '(no album)'} · ${written.artist ?? '(no artist)'} · track ${written.track ?? '?'}`
+    )
+  }
 
   // Measured again on the file that will actually be listened to, not on the
   // intermediate: the encode is part of what could put it out of band, and a
