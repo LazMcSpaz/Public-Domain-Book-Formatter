@@ -24,6 +24,12 @@
  * follows.
  */
 import type { BookDocument, BookBlock, ChapterEntry, Footnote } from '@core/assemble'
+// The module, not the barrel. `@core/layout` re-exports the line breaker,
+// whose named import from the CommonJS `tex-linebreak` is fine in the browser
+// and under vitest and fails under vite's SSR door — which is how every script
+// in `scripts/` loads core. Measured: the barrel import shipped green under 2007
+// tests and `read-book.mjs` could not start.
+import { prepareFootnotes } from '@core/layout/footnotes'
 import { GLOSSARY_MARK } from '@core/annotate'
 import { speakHeadingNumbers } from './roman'
 import { applyPronunciations, type Pronunciation } from './pronounce'
@@ -191,9 +197,24 @@ export function chapterBlocks(doc: BookDocument, index: number): BookBlock[] {
 export function chapterNotes(doc: BookDocument, blocks: readonly BookBlock[]): Footnote[] {
   const ids = new Set(blocks.map((block) => block.id))
   const pages = new Set(blocks.flatMap((block) => block.sourcePages))
-  return doc.footnotes.filter((note) =>
-    note.anchor ? ids.has(note.anchor.blockId) : pages.has(note.pageIndex)
-  )
+  // A note belongs to the chapter its *mark* is in, and the engine's walk is
+  // what says where that is. The leaf a note was printed on is only a
+  // fallback, for a note the walk could not pair: a reflowed edition prints
+  // notes wherever there was room — *Uncommon Therapy* sets chapter V's
+  // note fifty-seven leaves on, in chapter VIII — and read by leaf it would be
+  // heard at the end of the wrong chapter.
+  const prepared = prepareFootnotes(doc.blocks, doc.footnotes, doc.bareMarks)
+  const markedIn = new Map<string, string>()
+  prepared.blocks.forEach((block, i) => {
+    for (const reference of block.references) {
+      markedIn.set(reference.noteId, doc.blocks[i]?.id ?? '')
+    }
+  })
+  return doc.footnotes.filter((note) => {
+    if (note.anchor) return ids.has(note.anchor.blockId)
+    const marked = markedIn.get(note.id)
+    return marked !== undefined ? ids.has(marked) : pages.has(note.pageIndex)
+  })
 }
 
 /**
@@ -215,6 +236,15 @@ export function readChapter(
   const said = (text: string) => applyPronunciations(withoutSilentMarks(text), pronunciations)
   const heading = (text: string) => said(speakHeadingNumbers(text))
 
+  // A footnote's reference mark is printed for the eye and read aloud as a
+  // number: "families who live in poverty 1 ." came back as "poverty one".
+  // The engine already walks every block and deletes each mark it pairs with a
+  // note, so the text spoken is that walk's output and not a second opinion
+  // about where the marks are — one implementation, the one that sets the
+  // page. A block the walk has no entry for is read as it stands.
+  const marked = prepareFootnotes(doc.blocks, doc.footnotes, doc.bareMarks).blocks
+  const spoken = new Map(doc.blocks.map((block, i) => [block.id, marked[i]?.text ?? block.text]))
+
   // One silence between two things, never two.
   //
   // Emitting a gap after a piece *and* before the next one stacks them: a label
@@ -224,7 +254,7 @@ export function readChapter(
   // precedes.
   let gap = 0
   for (const block of blocks) {
-    const text = block.text.trim()
+    const text = (spoken.get(block.id) ?? block.text).trim()
     if (text.length === 0) {
       unread.push({ id: block.id, kind: block.kind, why: 'the block is empty' })
       continue

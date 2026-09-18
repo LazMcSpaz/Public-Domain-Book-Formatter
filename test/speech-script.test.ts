@@ -210,6 +210,64 @@ describe('readChapter, on a block quotation', () => {
   })
 })
 
+describe('readChapter, on a block carrying a footnote mark', () => {
+  it('does not read the reference digit aloud', () => {
+    // "families who live in poverty.1 In the middle class" was spoken as
+    // "poverty one". The engine's own walk deletes the mark it pairs with the
+    // note; the script reads that text rather than the block's.
+    const book = bookOf({
+      blocks: [
+        block('p1b0', 'heading', 'A'),
+        block('p1b1', 'paragraph', 'Families who live in poverty.1 In the middle class it differs.')
+      ],
+      footnotes: [
+        { id: 'n1', originalMarker: '1', text: 'A citation.', pageIndex: 0, orphaned: false }
+      ] as BookDocument['footnotes'],
+      chapters: [{ id: 'p1b0', title: 'A', level: 1 }] as BookDocument['chapters']
+    })
+    const said = readChapter(book, 0)
+      .pieces.filter((p) => p.kind === 'paragraph')
+      .map((p) => p.text)
+    expect(said).toHaveLength(1)
+    expect(said[0]).not.toMatch(/\b1\b/)
+    expect(said[0]).toContain('poverty.')
+    expect(said[0]).toContain('In the middle class')
+  })
+})
+
+describe('chapterNotes, in an edition that prints notes far from their marks', () => {
+  it('gives a note to the chapter its mark is in, not the leaf it was printed on', () => {
+    const book = bookOf({
+      blocks: [
+        block('p1b0', 'heading', 'A', [1]),
+        block(
+          'p1b1',
+          'paragraph',
+          'Working through that can change the marriage.2 More follows.',
+          [1]
+        ),
+        block('p9b0', 'heading', 'B', [9]),
+        block('p9b1', 'paragraph', 'A later chapter, on whose leaf the note was set.', [9])
+      ],
+      footnotes: [
+        {
+          id: 'n2',
+          originalMarker: '2',
+          text: 'Occasionally one finds a case.',
+          pageIndex: 9,
+          orphaned: false
+        }
+      ] as BookDocument['footnotes'],
+      chapters: [
+        { id: 'p1b0', title: 'A', level: 1 },
+        { id: 'p9b0', title: 'B', level: 1 }
+      ] as BookDocument['chapters']
+    })
+    expect(chapterNotes(book, chapterBlocks(book, 0)).map((n) => n.id)).toEqual(['n2'])
+    expect(chapterNotes(book, chapterBlocks(book, 1))).toEqual([])
+  })
+})
+
 describe('readChapter', () => {
   it('reads the headings, then the prose, with silence between', () => {
     const script = readChapter(TWO_CHAPTERS, 0)
