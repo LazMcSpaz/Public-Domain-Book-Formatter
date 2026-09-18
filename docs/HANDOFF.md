@@ -119,6 +119,24 @@ run:
 Everything else — trim, face, ornaments, whether chapters open recto — has a
 sensible default and can be shown rather than asked.
 
+### 5a. Starting cold on _Isis Unveiled_ Vol. II
+
+The shelf directory is `books/isis-vol2-syhtl3/`. Read its `scan.md` and
+`ledger.md` first; both were written before a word was read.
+
+- **The scan is not on the shelf** (380 MB). Merge the twenty-one
+  `coo1-ark--13960-t4wh3597r-*` chunks in the shelf's root with the recipe in
+  `ISIS-UNVEILED-1877-scans.md`, name the result `isis-vol2.pdf`, and check the
+  anchors in `scan.md` against it before `load`. Leaf-to-folio: `+17` to driver
+  leaf 280, two unpaginated plates at 281–282, `+19` from 283.
+- **Every decision is already made**: no editor's apparatus, Cardo at 6 × 9 with
+  the volume line _Volume II: Theology_, and the slips policy. They are in the
+  ledger; do not ask again.
+- **The readers' brief has four instructions Vol. I's lacked** —
+  `BRIEF-reading.md`. Run `scripts/doubts.mjs` on every batch before landing
+  it, then `pairs` for the chapter.
+- **Front matter first**, then the body a chapter at a time in 13-leaf batches.
+
 ## 6. Getting a second reader, which is most of the value
 
 A conversation that has read three hundred pages of one author is exactly the
