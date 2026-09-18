@@ -2358,41 +2358,86 @@ Hermes` is one whitespace-separated word of which ten characters are small
   nothing else can tell an anchor that counts occurrences from one that does
   not.
 
-- **Also done**: **the body swept again, against the line instead of the word —
-  and the third form of small capitals the first sweep could not see.** That
-  sweep asked whether a word's first letter stands taller than the rest, which
-  decides caps-and-small-capitals against full capitals and nothing else. The
-  form this book uses most is a word set **wholly** in small capitals, where
-  that ratio is 1 and the sweep reads it as full capitals — so all 166 words it
-  left alone were left alone on a test that could not see them. Re-measured:
-  **168 small capitals throughout, 22 caps and small capitals, 52 full
-  capitals**, and _Isis Unveiled_ Vol. I now carries 347 marks against 157.
+- **Also done**: **the body swept again — against the line instead of the word,
+  and then against the letterforms instead of the ratio.** The first sweep asked
+  whether a word's first letter stands taller than the rest, which decides
+  caps-and-small-capitals against full capitals and nothing else. The form this
+  book uses most is a word set **wholly** in small capitals, where that ratio is
+  1 and the sweep reads it as full capitals — so all 166 words it left alone
+  were left alone on a test that could not see them. Re-measured: **168 small
+  capitals throughout, 33 caps and small capitals, 51 full capitals**, and _Isis
+  Unveiled_ Vol. I now carries 358 marks against 157.
 
   **Height alone cannot finish it, which is the finding under the finding.**
   Measured on leaf 202, the small capitals of `What is the WILL ?` stand at this
   face's x-height to the pixel — 33 pixels against 31 to 33 for the x-height
   letters and 51 for the capitals, at 600 DPI. There is no gap between "small
   capital" and "x-height letter" to put a threshold in, and a day was spent
-  hunting for one. What separates them is **uniformity**: the reading records
-  the word in capitals, so if it is set in capitals of any size its letters
-  share one height, and if the box has landed on an ordinary lower-case word
-  they do not — `will` is two x-height letters and two ascenders, `WILL` in
-  small capitals is four of one height. Fifty per cent, where height offered
-  ten. The level then says which size, and the spread says whether this is the
-  word at all.
+  hunting for one. What decides it is the **pattern** the letters make against
+  their own line: all tall is full capitals, all small is small capitals
+  throughout, a tall run then small is caps and small capitals, and anything
+  else is refused.
 
-  **Located by alignment, not by spelling.** The old sweep matched a word to an
-  OCR token by similarity — which cannot work here at all, because `WILL` and
-  `will` are the same letters, so the score is 1.0 against every occurrence on
-  the leaf and the tie-break is arbitrary. On five leaves it chose wrong and the
-  result was written up as a finding about the compositor. The block is now
-  aligned against the whole leaf with `SequenceMatcher` and the position read
-  off the alignment, so the neighbours decide. **280 of 280 placed**, against 21
-  unplaceable before — including `TRAI-VIDYA`, which OCR reads as `Trar-vipya`
-  and which scores 0.57 against itself while its neighbours align exactly.
+  **Uniformity was tried first and had to be withdrawn**, which is worth
+  recording because it looked rigorous. The rule was that a word the reading
+  records in capitals must have letters of one height, and it refused fourteen
+  words — of which, cropped and read, **four in five were sound**. A round
+  capital splits at the ink threshold with no piece holding its apex, so `Sᴏᴜʟ`
+  measures its `O` twelve pixels short of its own top; a wide initial splits
+  into stems, so the median lands tall. Ten more of the fourteen were `B.C.`,
+  `A.D.` and `F.R.S.`, whose full stops sit **between** the letters and so
+  survived a stripper that only worked at the ends. A rule that refuses four
+  sound words for every unsound one is not a guard, it is noise with a
+  confident manner.
 
-  **Four faults in the measurement, each producing confident numbers**, and all
-  four are shapes to recognise when measuring type off a scan:
+  **Located by alignment, not by spelling.** Similarity cannot work here at all,
+  because `WILL` and `will` are the same letters, so the score is 1.0 against
+  every occurrence on the leaf and the tie-break is arbitrary. On five leaves
+  the first sweep chose wrong and the result was written up as a finding about
+  the compositor. The block is aligned against the whole leaf with
+  `SequenceMatcher` and the position read off the alignment, so the neighbours
+  decide.
+
+  **Four ways a box still landed on the wrong word**, every one of them found by
+  cutting the crop and looking, and every one of them scoring well:
+
+  - _The bracket was open at one end._ Where OCR mangles a word the alignment
+    brackets it between words that did match — which is evidence only when the
+    bracket is tight. A block ending mid-leaf leaves a replace opcode one word
+    wide on the block side and **313 tokens** wide on the OCR side, and
+    similarity over three hundred tokens is the whole-leaf search this was
+    written to avoid: `ADONAI` on leaf 416 went to `Zanoni,` eleven lines below,
+    which scores better against the wrong word than `ApoNalL` does against the
+    right one. The pick is now taken at the position the _matched_ side implies
+    — from the left for a word ending a block, from the right for one opening
+    it, because a block's first word has the leaf's furniture and an unread drop
+    capital in front of it.
+  - _The neighbours aligned, but not here._ `THE` opening a chapter on leaf 632
+    matched the epigraph's italic `The` ten tokens above, and scored **1.00**,
+    because every word after it aligned — somewhere. A neighbour now counts only
+    when its own displacement agrees with its distance from the word.
+  - _The box held a different word of the right shape._ `XI` on leaf 543 landed
+    on `Zoxuis`, OCR's reading of the _Louis_ beside it. The box's letter count
+    has to be the word's, give or take two; the honest exception is a word the
+    compositor broke over a line, where OCR's token is a prefix of it (`TRAI-`,
+    `INFAL-`, `INCOMPREHENSI-`) and half a word set in one style still measures
+    the style.
+  - _And a fragment is not a letter._ On leaf 277 a plainly full-capital `AM`
+    shed a piece of its `M` measuring 0.54 of the cap, which turned `t t t` into
+    `t t t s` and the word into caps and small capitals. Height cannot see that.
+    **Width cannot either**: across the 1,308 pieces measured here the widths run
+    smoothly from 0.19 to 1.2 x-heights, because a letter regularly splits into
+    stems and a stem is narrow — a `T` opening a word comes back as two pieces of
+    0.4 and 0.33. What separates them is that a stem carries **its letter's top**
+    and a fragment carries nothing's, so a narrow piece whose height matches no
+    other piece in the word is dropped and one that matches even a single other
+    piece is kept. Never the first piece, which is the one place a word is
+    allowed a letter of its own height: `Lɪɢʜᴛ` on leaf 214 opens with an `L` at
+    0.94 against 0.63, in a piece 0.44 wide — a lone narrow outlier by every
+    test, and the full capital the paper prints.
+
+  **Four faults in the measurement itself**, and all four are shapes to
+  recognise when measuring type off a scan:
 
   - _The window clipped the line's own ascenders._ Cropping to the word's box
     understates every tall letter on the line, so the cap height comes out near
@@ -2414,23 +2459,25 @@ Hermes` is one whitespace-separated word of which ten characters are small
     measured against its own punctuation. Taken off the tallest band instead,
     which is a letter in every word there is.
 
-  **Fourteen spot-checks against the scan, fourteen correct**, including three
-  different verdicts on one line: `ᴡʜᴏ, ᴡʜᴀᴛ is GOD ?` on leaf 18. And checked on
-  the printed page, which is the only thing that catches the fault `rangesFor`
-  had: `Mᴀᴢᴅᴇᴀɴs` sets caps and small capitals and `ᴜɴᴋɴᴏᴡᴀʙʟᴇ` sets small
-  capitals throughout with no full initial. The second needs no ratio — had the
-  mark not reached the page the word would print in **lower case**, so this
-  form's failure is visible rather than subtle, which the caps-and-small-capitals
-  form's is not.
+  **Twenty-four spot-checks against the scan, twenty-four correct**, including
+  three different verdicts on one line — `ᴡʜᴏ, ᴡʜᴀᴛ is GOD ?` on leaf 18 — and
+  `No God, No Soul ?`, `Cᴀʙᴀʀ Zɪᴏ`, `Tʜᴇ ʟᴇᴠɪᴛᴀᴛɪᴏɴ ᴏғ ʜᴜᴍᴀɴ ʙᴇɪɴɢs.` and
+  `"Cᴇɴᴛʀᴀʟ Sᴘɪʀɪᴛᴜᴀʟ Sᴜɴ"`. And checked on the printed page, which is the only
+  thing that catches the fault `rangesFor` had: `Mᴀᴢᴅᴇᴀɴs` sets caps and small
+  capitals and `ᴜɴᴋɴᴏᴡᴀʙʟᴇ` sets small capitals throughout with no full initial.
+  The second needs no ratio — had the mark not reached the page the word would
+  print in **lower case**, so this form's failure is visible rather than subtle,
+  which the caps-and-small-capitals form's is not.
 
-  **What is refused is listed.** Fourteen boxes are on a different word from the
-  one the reading records, caught by the spread and named rather than marked.
-  Twenty-four are not measured, nearly all for one honest reason: the line is set
-  **entirely** in capitals, so it carries no lower-case letters to give a scale —
-  and a display line is the design's to set, not an inline mark's. Two more are a
-  token that is really two words, a quotation closing and its attribution joined
-  by a dash, where one mark over both would claim a span the compositor set as
-  two.
+  **What is refused is listed, and it is now five words rather than fourteen.**
+  Three are a box the alignment would not place at this word's position, one is
+  the box on `Zoxuis`, and one is a word whose neighbours never aligned.
+  Twenty-three more are not measured, nearly all for one honest reason: the line
+  is set **entirely** in capitals, so it carries no lower-case letters to give a
+  scale — and a display line is the design's to set, not an inline mark's. Two
+  are a token that is really two words, a quotation closing and its attribution
+  joined by a dash, where one mark over both would claim a span the compositor
+  set as two.
 
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
