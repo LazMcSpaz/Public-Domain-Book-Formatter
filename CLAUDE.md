@@ -2570,6 +2570,36 @@ Hermes` is one whitespace-separated word of which ten characters are small
   output?" is not the same question as "is it on the page", and only the second
   one is about a book.
 
+- **Also done**: **the spans the resolution stopped were re-cut, and a third
+  of them were wrong.** _Isis Unveiled_ Vol. I was read off **150-DPI
+  renders**, and 149 of its 304 uncertain spans say in their own words that the
+  resolution is what stopped them. The 94 that carried a rival reading were cut
+  from the scan at 600 to 1200 DPI at the box the OCR words measure and read
+  against the sheet: **the reading stood in 56, the rival was right in 28,
+  neither in 3, and 7 the pixels cannot settle.** Eleven of the 28 are accents
+  — a grave read as an acute, six times — and six are **wrong sorts the reading
+  had silently mended** into the word it meant, which is the generative act the
+  whole design exists to prevent, done in the reader's own head one letter at
+  a time. Those six stand as printed now, with a query on each.
+
+  Three things worth keeping. **A span is located by the English either side
+  of it**, because a Greek or Hebrew word comes back from OCR as Latin junk and
+  cannot be matched on its own letters; that placed 89 of 94, and the rest were
+  placed off the token list by hand. **A sweep is the wrong tool for a phrase
+  the volume repeats** — `kabalist` occurs 149 times — so anything that hit
+  twice went through `correct` on the one block on the span's leaf, and the
+  two in footnotes through `notetext`. And **a query is quoted in the
+  transcription's words, not the paper's**: the verb refused five raised in the
+  printed form, since that form lives in an edit and not on the leaf, and a
+  query nobody can look up is worse than none.
+
+  The lesson under it is about the reading, not the re-cut: **a render at the
+  resolution the eye needs for a page is not the resolution the eye needs for
+  a letter.** 150 DPI is right for reading a leaf and wrong for deciding an
+  accent, and a reader who records "cannot be told at this resolution" has said
+  exactly what to do next. The next book's reading should cut its doubtful
+  words at 600 as it goes, rather than leave 149 of them for a pass afterwards.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with
