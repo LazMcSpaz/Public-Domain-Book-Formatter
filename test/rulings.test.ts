@@ -553,6 +553,19 @@ describe('the review sheet', () => {
       'Nothing was raised'
     )
   })
+
+  /**
+   * The preamble named one book's year. Every sheet this function has ever
+   * written says a 1975 typescript is being weighed against "the 1877
+   * setting", because the sentence was written while the only book on the
+   * shelf was *Isis Unveiled*. A sheet that misdates the book it heads is
+   * not a smaller fault for being in the prose rather than in a table.
+   */
+  it('does not date the original from whichever book it was written for', () => {
+    const preamble = reviewMarkdown({ title: 'A', fileName: 'a.pdf' }, [], [])
+    expect(preamble).toContain('faithful to\nthe original setting')
+    expect(preamble).not.toMatch(/\b1[6-9]\d\d\b/u)
+  })
 })
 
 /**

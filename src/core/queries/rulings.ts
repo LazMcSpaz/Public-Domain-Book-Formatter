@@ -367,7 +367,7 @@ export function reviewMarkdown(
     `# Every editorial query, and what became of it — ${book.title}`,
     '',
     'For review. Each query is a place the reading found where being faithful to',
-    'the 1877 setting and being correct pull apart. **The reading never decided',
+    'the original setting and being correct pull apart. **The reading never decided',
     'one of these**; it transcribed the page as printed and raised the question.',
     'What is decided here was decided by the editor, or by a ruling the editor',
     'made on a case like it — and where that is so, the reasoning says which.',
