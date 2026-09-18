@@ -69,6 +69,27 @@ the device, so its absence is ordinary rather than a failure.
 
 **Result.** `state` reports `step: gate-identity` and the true `pageCount`.
 
+**Before a word is read — the decisions that were made late on Vol. I and
+cost a re-export each.** Do them while recon runs:
+
+- **Check the merged scan against its index.** A volume in chunks is
+  concatenated before it can be read; render the top band of the leaves the
+  index anchors and the leaves either side of each chunk join, and read the
+  folios. Vol. II of _Isis_: seven anchors and three joins, all at 150 DPI,
+  ten minutes. A volume silently assembled out of order is the one fault
+  nothing downstream would catch.
+- **Write `answers.export` and `answers.design` now** — title, author, the
+  volume line, the face. A book file with no answers proofs as a finished
+  book with `Untitled` on every recto, and the face the rulings name is not
+  the face it is set in unless the book file says so.
+- **Record the apparatus decision** — glossary, marks, introduction, or none
+  — in the ledger, so the readable files that do not exist are not missing.
+- **Record the slips policy**, if the editor has given one, so the readers'
+  `printers-error` queries can be ruled in bulk afterwards.
+- **Map the leaf-to-folio offsets and the chapter openings off the free
+  OCR**, and cut the plates the index knows about as soon as their leaves are
+  read. Run the contact sheets for figures _now_, not after the body.
+
 ---
 
 ## Stage 1 — Take the free reading first
@@ -218,6 +239,22 @@ node scripts/drive.mjs sheet doubts 12:belleves 12:Soclety      # word crops
 
 **Result.** A batch where every page carries `pageIndex`, a `role`, `blocks`,
 `uncertain` and `furniture`.
+
+---
+
+## Stage 3b — Cut the doubts before landing
+
+```bash
+node scripts/doubts.mjs out/ch4/A-done.json out/ch4/A-doubts
+```
+
+Every `uncertain` entry that names a rival reading, located on its leaf against
+the OCR boxes and cut at 600 DPI (1200 for a word or two), with an index to
+read in one sitting. **Correct the batch file from the crops, then land it.**
+Vol. I left 149 of these to a pass at the end, and a third of the ones re-cut
+were wrong — every one had said "cannot be told at this resolution", which is
+an instruction, and a reader given a 150-DPI page has said all it can. The
+resolution the eye needs for a page is not the resolution it needs for a letter.
 
 ---
 

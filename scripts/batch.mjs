@@ -172,7 +172,10 @@ function checkBatch(donePath, draftPath) {
       } else if (typeof block.text !== 'string') {
         problems.push(`leaf ${n} block ${i}: no \`text\``)
       }
-      for (const tag of ['i', 'b']) {
+      // Every tag the parser reads, not the two it read when this was written:
+      // an unclosed `<sc>` marks the rest of the block in small capitals as
+      // silently as an unclosed `<i>` marks it italic.
+      for (const tag of ['i', 'b', 'strong', 'sc', 'smallcaps', 'sub']) {
         const open = (blockText.match(new RegExp(`<${tag}>`, 'gu')) ?? []).length
         const close = (blockText.match(new RegExp(`</${tag}>`, 'gu')) ?? []).length
         if (open !== close) {
