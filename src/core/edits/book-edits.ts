@@ -518,23 +518,38 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
         // A split with nothing on one side of it is not a split. Silently
         // keeping the block whole beats leaving an empty paragraph in the book.
         if (first.length === 0 || second.length === 0) break
+        // `emphasis` and `strong` are word indices into this block's own text,
+        // so they have to be *partitioned* rather than carried. `...block`
+        // copies the whole array into both halves, which leaves the second
+        // half's italics on whatever words now sit at those indices — the
+        // silent emphasis damage this file's own history is full of, and
+        // reported by nothing, because a block with the wrong words marked
+        // looks exactly like a block with the right ones marked.
+        const wordsInFirst = first.split(/\s+/u).filter(Boolean).length
+        const runsFor = (runs: readonly number[] | undefined, half: 1 | 2) => {
+          if (!runs || runs.length === 0) return undefined
+          const kept =
+            half === 1
+              ? runs.filter((w) => w < wordsInFirst)
+              : runs.filter((w) => w >= wordsInFirst).map((w) => w - wordsInFirst)
+          return kept.length > 0 ? kept : undefined
+        }
+        const halfOf = (half: 1 | 2, text: string) => ({
+          ...block,
+          text,
+          emphasis: runsFor(block.emphasis, half),
+          strong: runsFor(block.strong, half),
+          ...(block.cells ? { cells: undefined } : {})
+        })
         blocks.splice(index, 1, {
-          ...normalizeTable({
-            ...block,
-            text: first,
-            ...(block.cells ? { cells: undefined } : {})
-          }),
+          ...normalizeTable(halfOf(1, first)),
           id: splitId(block.id, 1),
           // The first half no longer runs on: the second half is what follows
           // it, and it is right here.
           continuesNext: false
         })
         blocks.splice(index + 1, 0, {
-          ...normalizeTable({
-            ...block,
-            text: second,
-            ...(block.cells ? { cells: undefined } : {})
-          }),
+          ...normalizeTable(halfOf(2, second)),
           id: splitId(block.id, 2),
           continuesPrevious: false
         })

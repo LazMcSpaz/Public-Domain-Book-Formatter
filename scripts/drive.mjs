@@ -4403,6 +4403,134 @@ async function serve() {
     },
 
     /**
+     * Put back a hard line break the conversion dropped.
+     *
+     * A born-digital PDF's text layer has no line structure, so matter the
+     * compositor set on its own lines — a list of example sentences, a
+     * numbered list, an address, a transcript of an exchange — arrives as one
+     * run-on block. On *Patterns of the Hypnotic Techniques* Vol. I the three
+     * example sentences under "Selectional Restrictions" printed as a single
+     * line reading `The man drank the rock The flower was angry The happy
+     * chair sang a love song`, which is not a sentence in any language.
+     *
+     * The break is named by **the words the second half begins with**, never
+     * by a character offset, for the reason a highlight and a bare mark are:
+     * every correction before it shifts the characters, and an offset recorded
+     * against yesterday's text names whatever sits there today. The match is
+     * on letters and digits alone so a phrase read off the scan's own word
+     * boxes still finds a passage the reading has since corrected.
+     *
+     * Several phrases split one block into several pieces, applied in order
+     * and each resolved against the document as the one before it left it —
+     * because a split renames its halves (`p79b5` becomes `p79b5/1` and
+     * `p79b5/2`) and the caller should not have to track that.
+     *
+     * ```
+     * split p79b5 "The flower was angry" "The happy chair sang"
+     * ```
+     */
+    split: async ([blockId, ...phrases]) => {
+      if (!blockId || phrases.length === 0) {
+        throw new Error('split <blockId> "<words the next line starts with>" [more…]')
+      }
+      return page.evaluate(
+        async ([repo, blockId, phrases]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+
+          const key = (s) => s.toLowerCase().replace(/[^a-z0-9]+/gu, '')
+          // Word starts, so a matched phrase maps back to a character offset
+          // in the text `applyEdits` will actually slice.
+          const wordsOf = (text) => {
+            const out = []
+            const re = /\S+/gu
+            let m
+            while ((m = re.exec(text)) !== null) out.push({ at: m.index, key: key(m[0]) })
+            return out.filter((w) => w.key.length > 0)
+          }
+          const offsetOf = (text, phrase) => {
+            const want = wordsOf(phrase).map((w) => w.key)
+            const have = wordsOf(text)
+            if (want.length === 0) return null
+            const n = Math.min(want.length, 6)
+            const hits = []
+            for (let i = 0; i + n <= have.length; i++) {
+              let ok = true
+              for (let k = 0; k < n; k++)
+                if (have[i + k].key !== want[k]) {
+                  ok = false
+                  break
+                }
+              if (ok) hits.push(have[i].at)
+            }
+            // Two places in one block that start the same way is a break this
+            // cannot place, and placing it at a guess is how a paragraph gets
+            // cut in the wrong half.
+            if (hits.length !== 1) return null
+            return hits[0] === 0 ? null : hits[0]
+          }
+
+          let edits = run.edits ?? []
+          const done = []
+          const missed = []
+          for (const phrase of phrases) {
+            const doc = editsMod.applyEdits(assemble.assembleBook(run.transcriptions), edits)
+            const inside = doc.blocks.filter(
+              (b) => b.id === blockId || b.id.startsWith(`${blockId}/`)
+            )
+            if (inside.length === 0) throw new Error(`No block \`${blockId}\` in this book.`)
+            let placed = null
+            for (const b of inside) {
+              const at = offsetOf(b.text, phrase)
+              if (at !== null) {
+                if (placed) {
+                  placed = null
+                  break
+                } // ambiguous across halves
+                placed = { id: b.id, at }
+              }
+            }
+            if (!placed) {
+              missed.push(phrase)
+              continue
+            }
+            edits = editsMod.withEdit(edits, { kind: 'split', blockId: placed.id, at: placed.at })
+            done.push({ phrase, blockId: placed.id, at: placed.at })
+          }
+
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            edits
+          })
+          const stored = await runStore.saveRun(next)
+          const after = editsMod
+            .applyEdits(assemble.assembleBook(run.transcriptions), edits)
+            .blocks.filter((b) => b.id === blockId || b.id.startsWith(`${blockId}/`))
+            .map((b) => ({ id: b.id, text: b.text.slice(0, 80) }))
+          return {
+            blockId,
+            split: done.length,
+            // Named, never counted away: a phrase that could not be placed is
+            // a line break that is still missing from the book.
+            missed,
+            pieces: after,
+            stored: stored === true,
+            edits: edits.length
+          }
+        },
+        [REPO, blockId, phrases]
+      )
+    },
+
+    /**
      * Find — and optionally replace — across the whole book.
      *
      * The recurring OCR misreading is the case this exists for: the same

@@ -164,6 +164,28 @@ describe('applyEdits — splitting and joining', () => {
     expect(texts(fixed)).toEqual(['Corrected first.', 'Corrected second.'])
   })
 
+  /**
+   * `emphasis` is word indices into the block's own text, so a split has to
+   * partition them: the first half keeps the ones that fall in it, the second
+   * half keeps the rest renumbered from its own first word. Copying the array
+   * into both halves — which is what `...block` does on its own — leaves the
+   * second half's italics sitting on whatever words now occupy those indices,
+   * which is the silent-emphasis-damage fault again and reported by nothing.
+   */
+  it('partitions emphasis across a split instead of copying it to both halves', () => {
+    const doc = assembleBook([
+      page(0, [
+        // words:      0     1      2       3   4     5      6
+        { kind: 'paragraph', text: 'Plain words here. Then italic words follow.', emphasis: [4, 5] }
+      ])
+    ])
+    const fixed = applyEdits(doc, [{ kind: 'split', blockId: 'p0b0', at: 18 }])
+    expect(texts(fixed)).toEqual(['Plain words here.', 'Then italic words follow.'])
+    expect(fixed.blocks[0]!.emphasis ?? []).toEqual([])
+    // 'italic words' are words 1 and 2 of the second half, not 4 and 5.
+    expect(fixed.blocks[1]!.emphasis).toEqual([1, 2])
+  })
+
   it('refuses a split that would leave an empty paragraph', () => {
     const doc = assembleBook([page(0, [{ kind: 'paragraph', text: 'One block.' }])])
     for (const at of [0, 10, 999, -5]) {

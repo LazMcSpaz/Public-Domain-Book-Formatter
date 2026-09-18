@@ -4,6 +4,7 @@ import {
   fixedWidthMeasurer,
   hangPunctuation,
   layout,
+  leadingFor,
   type FontRef,
   type LaidOutBook,
   type LaidOutPage,
@@ -13,6 +14,7 @@ import {
 } from '@core/layout'
 import { defaultStyleProfile } from '@core/style'
 import type { StyleProfile } from '@core/model'
+import { assembleBook } from '@core/assemble'
 import type { BookBlock, BookDocument } from '@core/assemble'
 
 const measurer = fixedWidthMeasurer(0.5)
@@ -473,5 +475,65 @@ describe('strong runs pick a face the book actually has', () => {
     ])
     const book = layout(document, defaultStyleProfile(), boldMeasurer, { edition: EDITION })
     expect(faceOf(book, 'Isis')?.style).toBe('bold')
+  })
+})
+
+/**
+ * Space between two blocks is the larger of what one asks for after it and
+ * what the next asks for before it, never the sum.
+ *
+ * This surfaced on *Patterns of the Hypnotic Techniques* Vol. I, where the
+ * born-digital conversion had run each stack of example sentences together
+ * into one block. Restoring the compositor's line breaks makes each line its
+ * own block, and adjacent blockquotes were taking `spaceAfter` **plus**
+ * `spaceBefore` — a blank line between every item of a list the original sets
+ * on consecutive lines. Two quotation paragraphs one under the other had the
+ * same doubled gap all along; nothing asserted the spacing, so nothing said so.
+ */
+describe('space between adjacent blocks collapses', () => {
+  const POLISH_EDITION: LayoutEdition = { title: 'A Treatise of Airs', author: 'Robert Boyle' }
+
+  function slotsBetween(kind: 'blockquote' | 'paragraph'): number {
+    const doc = assembleBook([
+      {
+        pageIndex: 0,
+        role: 'body',
+        blocks: [
+          { kind: 'heading', text: 'A Chapter', level: 1 },
+          { kind, text: 'First short line' },
+          { kind, text: 'Second short line' }
+        ],
+        uncertain: [],
+        furniture: {}
+      }
+    ])
+    const book = layout(doc, defaultStyleProfile(), measurer, { edition: POLISH_EDITION })
+    const all = book.pages.flatMap((p) =>
+      p.items.filter((i): i is PositionedLine => i.kind === 'line')
+    )
+    const at = (word: string) =>
+      all.find((l) =>
+        l.runs
+          .map((r) => r.text)
+          .join(' ')
+          .includes(word)
+      )
+    const first = at('First')
+    const second = at('Second')
+    expect(first).toBeDefined()
+    expect(second).toBeDefined()
+    // Slots are one *body* leading apart, which is what the gap is counted in.
+    const profile = defaultStyleProfile()
+    const leading = leadingFor(profile.bodyFontSize)
+    return Math.round((second!.baselinePt - first!.baselinePt) / leading)
+  }
+
+  it('leaves one slot of space between two blockquotes, not two', () => {
+    // One line of type plus one slot of separation. Summed, it would be three.
+    expect(slotsBetween('blockquote')).toBe(2)
+  })
+
+  it('leaves consecutive paragraphs touching, as prose does', () => {
+    expect(slotsBetween('paragraph')).toBe(1)
   })
 })

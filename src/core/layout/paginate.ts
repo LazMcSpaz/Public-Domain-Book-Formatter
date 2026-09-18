@@ -2219,6 +2219,19 @@ export function layout(
     return page
   }
 
+  /**
+   * The space the flow just placed asked for *after* it.
+   *
+   * Space between two blocks is the larger of the one's `spaceAfter` and the
+   * other's `spaceBefore`, never their sum — the ordinary collapsing rule, and
+   * without it a run of blocks of one kind drifts apart. Two quotation
+   * paragraphs set one under the other were taking two slots where the page
+   * gives one, and a stacked list whose lines are separate blocks — the shape
+   * the conversion's dropped line breaks are restored into — came out with a
+   * blank line between every item.
+   */
+  let spacedAfter = 0
+
   for (let i = 0; i < flowables.length; i++) {
     const flow = flowables[i]!
     flowSection = flow.pageSection ?? 'body'
@@ -2243,8 +2256,10 @@ export function layout(
     }
 
     // Space before collapses at the top of a page — leading white at the head
-    // of a page is a hole, not a separation.
-    if (slot > 0) slot += flow.spaceBefore
+    // of a page is a hole, not a separation — and against the space the block
+    // above already left, which is what keeps a run of one kind together.
+    if (slot > 0) slot += Math.max(0, flow.spaceBefore - spacedAfter)
+    spacedAfter = 0
 
     if (flow.ownPage) {
       current().kind = 'plate'
@@ -2422,6 +2437,7 @@ export function layout(
 
     if (placed < flow.lines.length) break
     slot += flow.spaceAfter
+    spacedAfter = flow.spaceAfter
   }
 
   // --- page furniture and finishing --------------------------------------
