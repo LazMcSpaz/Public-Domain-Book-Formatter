@@ -35,13 +35,24 @@ const run = promisify(execFile)
 export const TARGET = { I: -19, TP: -3, LRA: 7 }
 
 /**
+ * What `loudnorm` is asked for, which is not the target.
+ *
+ * An MP3 overshoots the true peak of what it was given by up to half a
+ * decibel — measured: asked for -3, the encoded file came back at -2.67 and
+ * failed the check it had just been mastered to pass. So the ask sits half a
+ * decibel under the ceiling and the *check* stays at the ceiling, which is
+ * Audible's and not ours to move.
+ */
+export const ASK = { ...TARGET, TP: TARGET.TP - 0.5 }
+
+/**
  * What ffmpeg makes of a file's loudness.
  *
  * `loudnorm` prints its JSON to stderr among everything else it has to say, so
  * the object is cut out by its braces rather than by hoping it is alone.
  */
 export async function measure(file) {
-  const filter = `loudnorm=I=${TARGET.I}:TP=${TARGET.TP}:LRA=${TARGET.LRA}:print_format=json`
+  const filter = `loudnorm=I=${ASK.I}:TP=${ASK.TP}:LRA=${ASK.LRA}:print_format=json`
   const { stderr } = await run('ffmpeg', [
     '-nostdin',
     '-hide_banner',
@@ -62,9 +73,9 @@ export async function measure(file) {
 /** The second pass: one fixed correction, from what the first pass measured. */
 export function correctionFrom(measured) {
   return [
-    `loudnorm=I=${TARGET.I}`,
-    `TP=${TARGET.TP}`,
-    `LRA=${TARGET.LRA}`,
+    `loudnorm=I=${ASK.I}`,
+    `TP=${ASK.TP}`,
+    `LRA=${ASK.LRA}`,
     `measured_I=${measured.input_i}`,
     `measured_TP=${measured.input_tp}`,
     `measured_LRA=${measured.input_lra}`,

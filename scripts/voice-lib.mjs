@@ -245,11 +245,20 @@ export async function speak({ tts, TextSplitterStream, speech }, text, voice, sp
   const splitter = new TextSplitterStream()
   splitter.push(text)
   splitter.close()
-  const sentences = []
-  for (const sentence of splitter) {
-    const said = (await phonemize(sentence, dialect)).join(' ')
-    sentences.push({ text: sentence, cost: said.length })
+  // A sentence the model cannot take in one pass is broken at a clause rather
+  // than handed over to be cut. Core chooses *where*; whether the halves fit
+  // is measured here, each time, until every piece is under budget — so what
+  // packs is a cost and not a proportion. A piece with nothing left to break
+  // at is reported by `packSentences` exactly as before.
+  const measured = async (text) => {
+    const cost = (await phonemize(text, dialect)).join(' ').length
+    if (cost <= speech.CHUNK_BUDGET) return [{ text, cost }]
+    const halves = speech.breakAtClause(text)
+    if (halves === null) return [{ text, cost }]
+    return [...(await measured(halves[0])), ...(await measured(halves[1]))]
   }
+  const sentences = []
+  for (const sentence of splitter) sentences.push(...(await measured(sentence)))
 
   const { chunks, tooLong } = speech.packSentences(sentences)
   const parts = []

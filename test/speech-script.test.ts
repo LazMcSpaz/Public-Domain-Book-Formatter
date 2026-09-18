@@ -12,7 +12,9 @@ import {
   expectedSeconds,
   looksLikeLabel,
   looksOrnamental,
+  openingPieces,
   readChapter,
+  spokenChapters,
   withoutSilentMarks
 } from '@core/speech'
 import type { Pronunciation } from '@core/speech'
@@ -73,6 +75,138 @@ describe('chapterBlocks', () => {
 
   it('is empty for a chapter that is not there', () => {
     expect(chapterBlocks(TWO_CHAPTERS, 9)).toEqual([])
+  })
+})
+
+/**
+ * A chapter with a section heading part way through it — the shape that was
+ * losing text.
+ *
+ * `doc.chapters` is the contents' list, so the section earns an entry in it
+ * exactly as a chapter does, distinguished only by `level`. Measured on the
+ * combined *Human Aura*: three of its chapters were cut short at a section of
+ * their own, with nothing reported.
+ */
+const CHAPTER_WITH_A_SECTION = bookOf({
+  blocks: [
+    block('p1b0', 'heading', 'CHAPTER VIII.'),
+    block('p1b1', 'heading', 'AURIC MAGNETISM.'),
+    block('p1b2', 'paragraph', 'The following table will be of help to him.'),
+    block('p2b0', 'heading', 'TABLE OF HEALING COLORS.', [2]),
+    block('p2b1', 'paragraph', 'Cooling and soothing: shades of violet.', [2]),
+    block('p2b2', 'paragraph', 'A paragraph closing the chapter.', [2]),
+    block('p3b0', 'heading', 'CHAPTER IX.', [3]),
+    block('p3b1', 'heading', 'DEVELOPING THE AURA.', [3]),
+    block('p3b2', 'paragraph', 'The next chapter begins.', [3])
+  ],
+  chapters: [
+    { id: 'p1b0', title: 'AURIC MAGNETISM.', label: 'CHAPTER VIII.', level: 1 },
+    { id: 'p2b0', title: 'TABLE OF HEALING COLORS.', level: 3 },
+    { id: 'p3b0', title: 'DEVELOPING THE AURA.', label: 'CHAPTER IX.', level: 1 }
+  ] as BookDocument['chapters']
+})
+
+describe('spokenChapters', () => {
+  it('is the level-1 openings, not every entry in the contents', () => {
+    expect(spokenChapters(CHAPTER_WITH_A_SECTION).map((c) => c.title)).toEqual([
+      'AURIC MAGNETISM.',
+      'DEVELOPING THE AURA.'
+    ])
+  })
+
+  it('numbers chapters the way the book does', () => {
+    // The second chapter is chapter IX, not the section that sits inside the
+    // first one. Asking for "chapter 2" and being given a subheading is how a
+    // render came back describing itself as chapter 11 of a book whose eleventh
+    // chapter is something else entirely.
+    expect(spokenChapters(CHAPTER_WITH_A_SECTION)[1]?.label).toBe('CHAPTER IX.')
+  })
+})
+
+describe('a chapter with a section inside it', () => {
+  it('is not cut short at the section', () => {
+    // The fault this was written for: slicing to the next *entry* ended the
+    // chapter at its own subheading, losing the table and the paragraphs after
+    // it with `unread` reporting nothing, because those blocks were outside the
+    // slice the accounting covers.
+    expect(chapterBlocks(CHAPTER_WITH_A_SECTION, 0).map((b) => b.id)).toEqual([
+      'p1b0',
+      'p1b1',
+      'p1b2',
+      'p2b0',
+      'p2b1',
+      'p2b2'
+    ])
+  })
+
+  it('says everything in it, the section heading included', () => {
+    const said = readChapter(CHAPTER_WITH_A_SECTION, 0)
+      .pieces.filter((p) => p.text !== undefined)
+      .map((p) => p.text)
+    expect(said).toContain('TABLE OF HEALING COLORS.')
+    expect(said).toContain('A paragraph closing the chapter.')
+  })
+
+  it('leaves room before a section heading, rather than closing it up', () => {
+    // A heading that follows prose opens a section and wants *more* air than a
+    // paragraph break. The 0.4s that sets a number line against its title is
+    // the opposite of what it needs, and reads as a sentence missing its verb.
+    const pieces = readChapter(CHAPTER_WITH_A_SECTION, 0).pieces
+    const at = pieces.findIndex((p) => p.text === 'TABLE OF HEALING COLORS.')
+    expect(pieces[at - 1]?.seconds).toBe(1.4)
+  })
+
+  it('still sets a number line close against the title under it', () => {
+    // The other half of the same rule, and the one a careless fix would break:
+    // "CHAPTER VIII." and "AURIC MAGNETISM." are one opening, not two.
+    const pieces = readChapter(CHAPTER_WITH_A_SECTION, 0).pieces
+    const at = pieces.findIndex((p) => p.text === 'AURIC MAGNETISM.')
+    expect(pieces[at - 1]?.seconds).toBe(0.4)
+  })
+})
+
+describe('openingPieces', () => {
+  it('is the run of headings a chapter starts with, and the pause between them', () => {
+    const script = readChapter(CHAPTER_WITH_A_SECTION, 0)
+    // "CHAPTER VIII.", the 0.4s over the title, and "AURIC MAGNETISM." — and
+    // then it stops. The music is timed from the end of this.
+    expect(openingPieces(script)).toBe(3)
+    expect(script.pieces[2]?.text).toBe('AURIC MAGNETISM.')
+  })
+
+  it('does not run on to a section heading in the middle of the chapter', () => {
+    // The fault: taking the *last* heading put the end of the opening six and a
+    // half minutes into the reading, so the bed was planned around a 390-second
+    // title and played on under the first paragraph.
+    const script = readChapter(CHAPTER_WITH_A_SECTION, 0)
+    const section = script.pieces.findIndex((p) => p.text === 'TABLE OF HEALING COLORS.')
+    expect(section).toBeGreaterThan(openingPieces(script))
+  })
+
+  it('is nothing for a chapter that opens on prose', () => {
+    const book = bookOf({
+      blocks: [block('p1b0', 'paragraph', 'No heading at all.')],
+      chapters: [{ id: 'p1b0', title: 'A', level: 1 }] as BookDocument['chapters']
+    })
+    expect(openingPieces(readChapter(book, 0))).toBe(0)
+  })
+})
+
+describe('readChapter, on a block quotation', () => {
+  it('reads it as prose rather than reporting it unread', () => {
+    // The kind is `blockquote`, and the prose set once named a kind nothing
+    // emits — so a book whose case reports are all set as quotations came
+    // back with ten thousand words reported unread.
+    const book = bookOf({
+      blocks: [
+        block('p1b0', 'heading', 'A'),
+        block('p1b1', 'blockquote', 'A woman came to me with a stomach ulcer.')
+      ],
+      chapters: [{ id: 'p1b0', title: 'A', level: 1 }] as BookDocument['chapters']
+    })
+    const script = readChapter(book, 0)
+    expect(script.unread).toEqual([])
+    expect(script.pieces.map((p) => p.text)).toContain('A woman came to me with a stomach ulcer.')
   })
 })
 

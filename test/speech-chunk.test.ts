@@ -6,7 +6,13 @@
  * paragraphs, 55 sentences, and only 6 paragraphs short enough to be read whole.
  */
 import { describe, expect, it } from 'vitest'
-import { CHUNK_BUDGET, MODEL_LIMIT, packSentences, type Measured } from '@core/speech'
+import {
+  CHUNK_BUDGET,
+  MODEL_LIMIT,
+  packSentences,
+  type Measured,
+  breakAtClause
+} from '@core/speech'
 
 const of = (...costs: number[]): Measured[] => costs.map((cost, i) => ({ text: `S${i + 1}`, cost }))
 
@@ -62,5 +68,31 @@ describe('packSentences', () => {
       460
     )
     expect(chunks).toEqual(['S1'])
+  })
+})
+
+describe('breakAtClause', () => {
+  it('breaks at a semicolon before a comma, even when a comma is nearer the middle', () => {
+    const [left, right] = breakAtClause(
+      'He came in, sat down, and waited; she said nothing, and left.'
+    )!
+    expect(left).toBe('He came in, sat down, and waited;')
+    expect(right).toBe('she said nothing, and left.')
+  })
+
+  it('takes the boundary nearest the middle when several are of one strength', () => {
+    const [left] = breakAtClause('one, two, three, four, five, six, seven, eight')!
+    expect(left).toBe('one, two, three, four,')
+  })
+
+  it('rejoins to the original and drops nothing', () => {
+    const text =
+      'That man made his living for twenty-seven years laying floors - most men cannot last fifteen'
+    const [left, right] = breakAtClause(text)!
+    expect(`${left} ${right}`).toBe(text)
+  })
+
+  it('is null for a run with nothing to break at', () => {
+    expect(breakAtClause('supercalifragilisticexpialidocious')).toBeNull()
   })
 })

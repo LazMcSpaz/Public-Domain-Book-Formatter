@@ -17,15 +17,24 @@ export {
 } from './pronounce'
 export {
   readChapter,
+  spokenChapters,
   looksLikeLabel,
   looksOrnamental,
   chapterBlocks,
   chapterNotes,
   expectedSeconds,
+  openingPieces,
   withoutSilentMarks,
   type ReadingScript,
   type SpokenPiece,
   type UnreadBlock
 } from './script'
-export { packSentences, CHUNK_BUDGET, MODEL_LIMIT, type Measured, type Packed } from './chunk'
+export {
+  packSentences,
+  breakAtClause,
+  CHUNK_BUDGET,
+  MODEL_LIMIT,
+  type Measured,
+  type Packed
+} from './chunk'
 export { planOpening, musicGainAt, type Opening, type OpeningOptions } from './opening'

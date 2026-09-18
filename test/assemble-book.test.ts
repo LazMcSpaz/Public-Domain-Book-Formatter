@@ -836,6 +836,36 @@ describe('deriveChapters — divisions above chapters', () => {
     expect(doc.chapters[0]!.label).toBe('CHAPTER XI.')
   })
 
+  it('joins a bare numeral to the title after it', () => {
+    // *Uncommon Therapy* sets a large `I` beside `STRATEGIC THERAPY` and prints
+    // the word "chapter" nowhere. Refusing a numeral with no word before it
+    // split every chapter of that book in two: one called "I" carrying no text,
+    // and one carrying the whole chapter with no number over it.
+    const doc = assembleBook([
+      leaf([
+        heading('I'),
+        heading('STRATEGIC THERAPY'),
+        { kind: 'paragraph', text: 'Therapy can be called strategic.' }
+      ])
+    ])
+    expect(doc.chapters).toHaveLength(1)
+    expect(doc.chapters[0]!.title).toBe('STRATEGIC THERAPY')
+    expect(doc.chapters[0]!.label).toBe('I')
+  })
+
+  it('does not join two titles neither of which is a number', () => {
+    // The other half of the rule, and what the guard is for: a division above a
+    // chapter is complete in itself and must stand apart from it.
+    const doc = assembleBook([
+      leaf([
+        heading('THE ASTRAL WORLD'),
+        heading('STRATEGIC THERAPY'),
+        { kind: 'paragraph', text: 'Therapy can be called strategic.' }
+      ])
+    ])
+    expect(doc.chapters).toHaveLength(2)
+  })
+
   it('joins one tagged a level deeper than its number, as a published book has it', () => {
     const doc = assembleBook([
       leaf([

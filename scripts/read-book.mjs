@@ -80,12 +80,17 @@ const file = project.parseBookFile(await readFile(resolve(bookPath), 'utf8'))
 // detect.
 const doc = edits.applyEdits(assemble.assembleBook(file.run.transcriptions), file.run.edits ?? [])
 
-if (chapterNumber < 1 || chapterNumber > doc.chapters.length) {
+// The chapters as a listener counts them, which is not the contents' list: a
+// section heading inside a chapter earns an entry there, and reading to it cuts
+// the chapter it sits in short. See `spokenChapters`.
+const chapters = speech.spokenChapters(doc)
+
+if (chapterNumber < 1 || chapterNumber > chapters.length) {
   // The list, not just the refusal: in a combined volume the entries are not
   // the chapters — "BOOK ONE. THE HUMAN AURA" is a divider, and chapter one of
   // that book is the second entry.
-  console.error(`This book has ${doc.chapters.length} chapters; asked for ${chapterNumber}.`)
-  doc.chapters.forEach((c, i) => console.error(`  ${i + 1}. ${c.label ?? ''} ${c.title}`.trim()))
+  console.error(`This book has ${chapters.length} chapters; asked for ${chapterNumber}.`)
+  chapters.forEach((c, i) => console.error(`  ${i + 1}. ${c.label ?? ''} ${c.title}`.trim()))
   await close()
   // `exit` rather than a code: esbuild's service is still waiting on this
   // process and prints a fatal-looking deadlock under the chapter list if it
@@ -122,6 +127,16 @@ if (paragraphLimit > 0) {
 // After any trimming, so a preview is not measured against the whole chapter.
 const expected = speech.expectedSeconds(script)
 
+// A script with nothing in it renders a file of silence, and a file of silence
+// is indistinguishable from one that worked until somebody plays it. Refused
+// here rather than discovered there.
+if (script.pieces.every((piece) => piece.text === undefined)) {
+  console.error(`Chapter ${chapterNumber} has nothing to say. Nothing was written.`)
+  for (const block of script.unread) console.error(`  ${block.id} (${block.kind}) — ${block.why}`)
+  await close()
+  process.exit(2)
+}
+
 const label = [script.label, script.title].filter(Boolean).join(' — ')
 console.log(`${basename(bookPath)} · chapter ${chapterNumber}: ${label}`)
 console.log(
@@ -157,6 +172,11 @@ const truncated = []
 // Where the voice stops saying the title, in samples — which is what the music
 // is timed from. Not the pause after it: that beat is breathing room, and
 // counting it would start the fade a second and a bit late on every chapter.
+//
+// Bounded to the chapter's *opening*, because a chapter now keeps its own
+// section headings and the last heading in one is minutes from the top. See
+// `openingPieces`.
+const openingLength = speech.openingPieces(script)
 let headingSamples = 0
 let rate = 24000
 const started = Date.now()
@@ -183,7 +203,9 @@ for (const [index, piece] of script.pieces.entries()) {
   }
   rate = result.rate
   parts.push(result.samples)
-  if (piece.kind === 'heading') headingSamples = before + result.samples.length
+  if (piece.kind === 'heading' && index < openingLength) {
+    headingSamples = before + result.samples.length
+  }
   spoken.push({
     kind: piece.kind,
     id: piece.id,
@@ -203,11 +225,22 @@ console.log(
 )
 
 if (truncated.length > 0) {
-  console.log(`\n${truncated.length} sentences are longer than the model reads in one pass:`)
+  // Said exactly, because the two cases call for different things from a
+  // person. The budget sits deliberately below the model's own limit, so a
+  // sentence between the two is flagged without being cut, and reporting that
+  // as a lost tail sends somebody rewriting a paragraph that reads perfectly.
+  // Over the limit, the tokenizer truncates with no error at all, and that one
+  // has to be fixed in the book.
+  console.log(`\n${truncated.length} sentences are longer than one pass is budgeted for:`)
   for (const long of truncated) {
-    console.log(`  ${long.id ?? '—'} (${long.phonemes} phonemes): ${long.text.slice(0, 90)}…`)
+    const cut = long.phonemes > speech.MODEL_LIMIT
+    console.log(
+      `  ${long.id ?? '—'} (${long.phonemes} phonemes, ` +
+        `${cut ? `over the model's limit of ${speech.MODEL_LIMIT} — its tail is missing` : `under the model's limit of ${speech.MODEL_LIMIT}, so nothing was cut`}): ` +
+        `${long.text.slice(0, 90)}…`
+    )
   }
-  console.log('  Their tails will be missing. Split them in the book, or shorten them.')
+  console.log('  Split them in the book, or shorten them.')
 }
 
 // Measured against what the words predicted. A chapter that comes back at half
