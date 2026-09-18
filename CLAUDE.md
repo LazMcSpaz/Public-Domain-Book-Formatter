@@ -2479,6 +2479,33 @@ Hermes` is one whitespace-separated word of which ten characters are small
   joined by a dash, where one mark over both would claim a span the compositor
   set as two.
 
+- **Also done**: **the page seam moved every italic after it one word late.**
+  Found mending one word on leaf 32 of _Isis Unveiled_ Vol. I: the paper sets
+  `Daimonion`, `annihilated`, `divine` and `Rational` and the book printed `of`,
+  `and`, `spirit` and `and`, with the transcription underneath it perfectly
+  right — emphasis `[50, 135, 147, 150]`, which are exactly those four words.
+
+  `assembleBook` shifted the second half's word indices by
+  `wordCount(previous.text)`, the first half's own count. **`joinText` heals a
+  hyphen across the seam**, so `beings be-` + `tween the divine` is one word
+  shorter than its halves and every index after it lands one word late. The
+  shift is now measured against the **joined** text, which is what the
+  note-continuation join four hundred lines up in the same file has always done,
+  with a comment saying why. The body join was a second copy of the rule that
+  did not — this file's own recurring shape — and `markup.ts` carried the belief
+  that produced it, in a sentence reading "the word-index kinds shift by a word
+  count and that is the whole of it". Both are fixed. **37 blocks** in that
+  volume were carrying misplaced italics.
+
+  **Nothing in the suite covered it**: 2,101 tests passed with the fault in
+  place. The test asserts **which words** carry the mark rather than which
+  indices, because an index one word late is still a number in range and every
+  count in the document still balances — the same reason the bare-mark test had
+  to read the raised runs rather than count notes. A second test joins a seam
+  with **no** hyphen and passes under the fault, so a fix that simply subtracted
+  one everywhere fails it; both faults were injected and each was caught by its
+  own test.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

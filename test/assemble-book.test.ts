@@ -104,6 +104,39 @@ describe('assembleBook', () => {
     expect(doc.blocks[0]!.text).toBe('and so the chirurgeon proceeded.')
   })
 
+  // The words are asserted rather than the indices, because an index is a proxy
+  // for the thing that goes wrong: a mark one word late is still a number in
+  // range, and every count in the document still balances.
+  const emphasised = (doc: BookDocument, n = 0): string[] => {
+    const block = doc.blocks[n]!
+    const words = block.text.split(/\s+/u).filter((w) => w.length > 0)
+    return (block.emphasis ?? []).map((i) => words[i]!)
+  }
+
+  it('moves the second half’s italics by the words the join actually makes', () => {
+    const doc = assembleBook([
+      page(0, [para('The dæmons are intermediate beings be-', { continuesNext: true })]),
+      page(1, [
+        para(
+          'tween the divine perfection and human sinfulness, the latter are annihilated, and the rest.',
+          { continuesPrevious: true, emphasis: [10], strong: [10] }
+        )
+      ])
+    ])
+    expect(doc.blocks[0]!.text).toContain('beings between the divine')
+    expect(emphasised(doc)).toEqual(['annihilated,'])
+    const words = doc.blocks[0]!.text.split(/\s+/u)
+    expect(doc.blocks[0]!.strong!.map((i) => words[i])).toEqual(['annihilated,'])
+  })
+
+  it('moves them by the first half’s words when the seam joins with a space', () => {
+    const doc = assembleBook([
+      page(0, [para('the alembick being set upon', { continuesNext: true })]),
+      page(1, [para('a gentle fire of divine heat.', { continuesPrevious: true, emphasis: [4] })])
+    ])
+    expect(emphasised(doc)).toEqual(['divine'])
+  })
+
   it('keeps genuinely separate paragraphs apart', () => {
     const doc = assembleBook([
       page(0, [para('A complete thought.')]),

@@ -449,8 +449,12 @@ export function shiftEmphasis(emphasis: readonly number[], by: number): number[]
 /**
  * Subscript ranges carried onto a string the text has been folded into.
  *
- * The word-index kinds shift by a word count and that is the whole of it. A
- * character range cannot: assembly does not merely move a block's text, it
+ * The word-index kinds shift by a word count — but by the count the *join*
+ * makes, not by the first half's own, because healing a hyphen across a page
+ * seam turns two words into one and moves every index after it. That sentence
+ * used to stop at "and that is the whole of it", and the body seam was written
+ * against it: see `assembleBook`. A character range cannot shift by a count at
+ * all: assembly does not merely move a block's text, it
  * *edits* it on the way — trimming the ends, healing a hyphen across a page
  * seam, taking soft hyphens out, stripping a footnote's leading marker — and
  * every one of those deletions moves the characters after it.

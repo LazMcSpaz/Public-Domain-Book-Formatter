@@ -777,22 +777,32 @@ export function assembleBook(
       // the kind rules relax.
       const acrossSeam = previous !== undefined && !previous.sourcePages.includes(page.pageIndex)
       if (joinable && shouldJoin(previous, block, acrossSeam)) {
+        const joinedText = stripSoftHyphens(joinText(previous.text, block.text))
         // Emphasis is carried as word indices, so the second half's italics have
-        // to move along by however many words the first half had — or they land
-        // on the wrong words once the two are one paragraph.
+        // to move along by however many words come before them in the join — or
+        // they land on the wrong words once the two are one paragraph.
+        //
+        // Measured against the **joined** text rather than the first half's own
+        // word count, because `joinText` heals a hyphen across the seam and two
+        // words become one: `beings be-` + `tween the divine` is one word
+        // shorter than its halves, so counting the first half puts every mark
+        // after the seam one word late. Found on leaf 32 of _Isis Unveiled_
+        // Vol. I, where the paper italicises `Daimonion`, `annihilated`,
+        // `divine` and `Rational` and the book set `of`, `and`, `spirit` and
+        // `and` — a paragraph whose every mark was wrong, with the
+        // transcription underneath it perfectly right. The note-continuation
+        // join four hundred lines up has always measured it this way; this is
+        // the same rule at the site that does it for the body.
+        const shift = wordCount(joinedText) - wordCount(block.text)
         if (block.emphasis?.length) {
           previous.emphasis = [
             ...(previous.emphasis ?? []),
-            ...shiftEmphasis(block.emphasis, wordCount(previous.text))
+            ...shiftEmphasis(block.emphasis, shift)
           ]
         }
         if (block.strong?.length) {
-          previous.strong = [
-            ...(previous.strong ?? []),
-            ...shiftEmphasis(block.strong, wordCount(previous.text))
-          ]
+          previous.strong = [...(previous.strong ?? []), ...shiftEmphasis(block.strong, shift)]
         }
-        const joinedText = stripSoftHyphens(joinText(previous.text, block.text))
         // `joinText` only ever trims the front of the second half and heals a
         // hyphen on the back of the first, so the second half arrives at the
         // end of the join intact — its ranges are mapped through the same
