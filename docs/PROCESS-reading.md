@@ -493,8 +493,18 @@ cannot settle; an inconsistency the book itself contains; anything where
    caught three of its own false alarms on the way** — it was reading
    `doc.blocks` and calling that the book, which leaves out every footnote and
    strips the markup. `bookText` is now the one rule for what counts as the book.
-2. **`draft` handles single-column matter only.** Two columns come back
-   interleaved. It does not detect this and should.
+2. ~~**`draft` handles single-column matter only.** Two columns come back
+   interleaved. It does not detect this and should.~~ **Closed**, in three
+   pieces that each read a different page. `findColumns` cuts a leaf that is
+   two photographed pages at its gutter; `./paired` divides a page whose
+   transcript and commentary columns overlap in x, from the gap inside each
+   line; and `findPairedBands` divides a page whose columns have white
+   between them, off centre, in different faces at different leadings — the
+   hundred and ten transcript leaves of _Patterns_ Vol. II, which the first
+   two could not see. Lines are gathered per column there and rows cut only
+   where every column is between lines. What remains a guess, and is said on
+   every such leaf: that the columns pair row by row rather than running one
+   after the other.
 3. **A leaf OCR barely read produces a poor draft and says so only indirectly**
    — through `uncertain` and low word counts. There is no explicit "this leaf
    needs eyes, not a draft" signal, which is what Stage 5's triage needs.

@@ -62,7 +62,13 @@ export interface DraftLine {
 }
 
 import { namesFolio, asFolio, looksLikeSignature } from './folios'
-import { findColumns, wordsInBand } from './columns'
+import {
+  findColumns,
+  findPairedBands,
+  wordsInBand,
+  type ColumnBand,
+  type PairedBands
+} from './columns'
 import { findPairedColumns, isPaired, pairedRow, type PairedColumns } from './paired'
 import { findIndentedBlocks } from './indented'
 // The one place a table's flattened view is derived from its cells. Imported
@@ -528,6 +534,139 @@ export function toLines(words: readonly DraftWord[], bodyHeight: number): DraftL
       }
     })
 }
+
+/** One row of a page whose columns pair: a cell per column, and the words behind each. */
+interface PairedBandRow {
+  cells: string[]
+  words: DraftWord[][]
+}
+
+/**
+ * `(20)`, `(24 - 26)`, `(1,2,3)`, `E: (1)`, and `2)` where OCR lost a
+ * parenthesis: a cell holding nothing but utterance numbers, with at most a
+ * speaker's initial before them.
+ */
+const UTTERANCE_NUMBER = /^(?:[A-Z]{1,2}:\s*)?(?:\(?\d+(?:\s*[-–,]\s*\d+)*\)?\s*)+$/u
+
+/**
+ * The rows of a page whose columns pair, from its lines and the bands that
+ * divide it.
+ *
+ * Each column's lines are gathered again from its own words, because the
+ * lines handed in were gathered across the page and on such a page that
+ * shuffles the columns together. A row ends where one column opens a fresh
+ * block — a gap wider than its own leading allows a paragraph — at a height
+ * where **no column has a line**: the commentary runs on past the utterance it
+ * answers, and a cut made on the transcript's white alone would part a
+ * comment from its second half. Each line then belongs to the row its middle
+ * falls in, and a row is one cell per column, empty where a column is silent
+ * — a comment continued from the leaf before has nothing beside it.
+ *
+ * An utterance number set on a line of its own above its text, as this book
+ * sets `(20)` in both columns, is a row of numbers by that rule and is joined
+ * to the row under it instead, cell by cell; a number spanning several
+ * utterances in a third column joins the first of them the same way.
+ */
+function pairRows(
+  own: readonly DraftLine[],
+  columns: readonly ColumnBand[],
+  bodyHeight: number
+): PairedBandRow[] {
+  const words = own.flatMap((l) => l.words)
+  const perColumn = columns.map((band) =>
+    toLines(
+      words.filter((w) => {
+        const centre = (w.bbox.x0 + w.bbox.x1) / 2
+        return centre >= band.left && centre < band.right
+      }),
+      bodyHeight
+    )
+  )
+  const cuts: number[] = []
+  for (const col of perColumn) {
+    const strides: number[] = []
+    for (let i = 1; i < col.length; i++) strides.push(col[i]!.top - col[i - 1]!.top)
+    const stride = Math.max(1, median(strides))
+    for (let i = 1; i < col.length; i++) {
+      const above = col[i - 1]!
+      const below = col[i]!
+      if (below.top - above.top <= stride * PARAGRAPH_GAP) continue
+      const y = (above.bottom + below.top) / 2
+      if (perColumn.some((c) => c.some((l) => l.top < y && l.bottom > y))) continue
+      cuts.push(y)
+    }
+  }
+  cuts.sort((a, b) => a - b)
+  const rowOf = (line: DraftLine): number => {
+    const y = (line.top + line.bottom) / 2
+    let r = 0
+    for (const cut of cuts) {
+      if (y <= cut) break
+      r++
+    }
+    return r
+  }
+  // Lines per row per column, kept as lines until the cells are made: the
+  // turns of a dialogue are told apart by where their lines begin.
+  const rows: DraftLine[][][] = Array.from({ length: cuts.length + 1 }, () => columns.map(() => []))
+  perColumn.forEach((col, c) => {
+    for (const line of col) rows[rowOf(line)]![c]!.push(line)
+  })
+  const textOf = (ls: readonly DraftLine[]): string =>
+    ls
+      .map((l) => l.text.trim())
+      .filter((t) => t.length > 0)
+      .join(' ')
+      .replace(/\s+/gu, ' ')
+  const filled = rows.filter((r) => r.some((ls) => textOf(ls).length > 0))
+
+  // An utterance number on a line of its own joins the row under it.
+  const joined: DraftLine[][][] = []
+  for (let i = 0; i < filled.length; i++) {
+    const row = filled[i]!
+    const next = filled[i + 1]
+    const numbersOnly = row.every((ls) => {
+      const t = textOf(ls)
+      return t.length === 0 || UTTERANCE_NUMBER.test(t)
+    })
+    if (numbersOnly && next) {
+      for (let c = 0; c < columns.length; c++) next[c] = [...row[c]!, ...next[c]!]
+      continue
+    }
+    joined.push(row)
+  }
+
+  // A dialogue set a turn a line in the first column — `M: A lake.` /
+  // `E: Tell me more about it.` — is a row a turn, the other columns' cells
+  // riding with the first. A cell cannot hold a line break, and a dozen turns
+  // run together as one paragraph is not what the page says.
+  const out: PairedBandRow[] = []
+  for (const row of joined) {
+    const first = row[0] ?? []
+    const turnsAt = first.flatMap((l, i) => (SPEAKER_TURN.test(l.text.trim()) ? [i] : []))
+    const groups: DraftLine[][] =
+      turnsAt.length >= 2
+        ? [first.slice(0, turnsAt[0]!), ...turnsAt.map((at, k) => first.slice(at, turnsAt[k + 1]))]
+        : [first]
+    const rest = row.slice(1)
+    groups.forEach((g, k) => {
+      // The first group carries the other columns even when it is empty — a
+      // comment continued from the leaf before has nothing beside it — and a
+      // later empty group is nothing at all.
+      if (k > 0 && g.length === 0) return
+      const cells = [textOf(g), ...rest.map((ls) => (k === 0 ? textOf(ls) : ''))]
+      const words = [
+        g.flatMap((l) => l.words),
+        ...rest.map((ls) => (k === 0 ? ls.flatMap((l) => l.words) : []))
+      ]
+      out.push({ cells, words })
+    })
+  }
+  return out
+}
+
+/** `M: A lake.`, `E: Tell me more about it.`: a line opening a speaker's turn. */
+const SPEAKER_TURN = /^[A-Z]{1,2}:\s/u
 
 interface Measure {
   left: number
@@ -1217,11 +1356,42 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
   const split = options.columns === 'single' ? null : findColumns(usable)
   const bands = split?.columns ?? []
   structural.push(...(split?.why ?? []))
-  const perBand =
-    bands.length > 1
-      ? bands.map((band) => toLines(wordsInBand(usable, band, bands[0]!.left), bodyHeight))
-      : [toLines(usable, bodyHeight)]
+  // Each printed page's words, moved to a common origin — see `wordsInBand`.
+  const pageWords: DraftWord[][] =
+    bands.length > 1 ? bands.map((band) => wordsInBand(usable, band, bands[0]!.left)) : [usable]
+  const perBand = pageWords.map((ws) => toLines(ws, bodyHeight))
   const lines = perBand.flat()
+  const pageOfLine = new Map<DraftLine, number>()
+  perBand.forEach((bandLines, i) => bandLines.forEach((l) => pageOfLine.set(l, i)))
+
+  // Does one printed page set its matter in columns that pair, with a band of
+  // white between them? Asked of the *words*, because the lines just gathered
+  // are wrong on exactly such a page: its columns are set in different faces
+  // at different leadings, and a line gathered across both is two lines
+  // shuffled together. Those lines still serve the furniture and note passes,
+  // which read a leaf's head and foot; the rows are built after those have
+  // taken what is theirs. See `findPairedBands`.
+  const pairedPages = new Map<number, PairedBands>()
+  if (options.columns !== 'single') {
+    pageWords.forEach((ws, i) => {
+      const found = findPairedBands(ws)
+      const where = bands.length > 1 ? `Printed page ${i + 1} of this leaf` : 'This leaf'
+      if (found.columns.length < 2) {
+        // Declined, and said only where a band was worth weighing: a page of
+        // prose has nothing to report, but a page that *looks* like columns
+        // and was left as one is exactly the page to check on the render.
+        if (found.considered > 0) structural.push(`${where}: ${found.why.join(' ')}`)
+        return
+      }
+      pairedPages.set(i, found)
+      const count =
+        ['', '', 'two', 'three', 'four'][found.columns.length] ?? String(found.columns.length)
+      structural.push(
+        `${where} sets its matter in ${count} columns that pair, with white between them: ` +
+          found.why.join(' ')
+      )
+    })
+  }
 
   // Does one printed page set a transcript beside the commentary on it? That
   // cannot be found the way a gutter is — those columns are set ragged and
@@ -1229,6 +1399,8 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
   // line, and only then are that page's lines cut. See `./paired`.
   const pairedOf = new Map<DraftLine, PairedColumns>()
   perBand.forEach((bandLines, i) => {
+    // A page already divided on its white is not asked again.
+    if (pairedPages.has(i)) return
     const found = findPairedColumns(bandLines, bodyHeight)
     if (!found) return
     const where = bands.length > 1 ? `Printed page ${i + 1} of this leaf` : 'This leaf'
@@ -1339,8 +1511,8 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
   // reading it as a quotation is nonsense.
   const insetLines = new Set<DraftLine>()
   const insetStarts = new Set<DraftLine>()
-  for (const bandLines of perBand) {
-    if (bandLines.some((l) => pairedOf.has(l))) continue
+  for (const [i, bandLines] of perBand.entries()) {
+    if (pairedPages.has(i) || bandLines.some((l) => pairedOf.has(l))) continue
     for (const found of findIndentedBlocks(bandLines, measureOf(bandLines))) {
       insetStarts.add(bandLines[found.from]!)
       for (let k = found.from; k < found.to; k++) insetLines.add(bandLines[k]!)
@@ -1391,8 +1563,23 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
   // Walked from the foot and stopped at the first body-sized line, rather than
   // filtering the whole leaf, because a short line anywhere in the text can
   // measure small and only the ones *below the last full line* are notes.
+  // Not on a page divided on its white. The lines at its foot were gathered
+  // across the columns and are made of the columns' own words — the third
+  // column of *Patterns* Vol. II is a note against a few utterances, set
+  // small, and on leaf 131 it ends the page: three "footnotes" that were the
+  // last row of the table. A note on such a page cannot be told from a small
+  // column by size, so none is looked for, and the draft says so.
+  const lastPage = perBand.length - 1
+  const footIsColumns = pairedPages.has(lastPage)
+  if (footIsColumns) {
+    structural.push(
+      'No footnotes were looked for at the foot of this leaf: it is divided into columns, and ' +
+        'a line at its foot is read as the columns’ own. A note printed under such a page ' +
+        'needs retyping as one.'
+    )
+  }
   let notesFrom = lines.length
-  for (let i = lines.length - 1; i >= 0; i--) {
+  for (let i = footIsColumns ? -1 : lines.length - 1; i >= 0; i--) {
     const size = typeSize(lines[i]!)
     if (size === null || size > bodySize * FOOTNOTE_SIZE) break
     // Made of words, the same test furniture has to pass. `-_` on leaf 7 of
@@ -1430,6 +1617,23 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
         'the split between them is a guess — the mark is what divides them, and OCR reads a ' +
         'dagger as `t` or `+` about as often as not.'
     )
+  }
+
+  // The rows of each page whose columns pair, built from what the furniture
+  // and note passes left of it. Emitted in the block loop where the page's
+  // first line falls, so the rows keep their place among the leaf's other
+  // blocks — the notes at its foot come after them, as on the page.
+  const pairedRows = new Map<
+    number,
+    { lines: Set<DraftLine>; rows: PairedBandRow[]; emitted: boolean }
+  >()
+  for (const [pageIndex, found] of pairedPages) {
+    const own = lines.filter((l, i) => i < notesFrom && pageOfLine.get(l) === pageIndex)
+    pairedRows.set(pageIndex, {
+      lines: new Set(own),
+      rows: pairRows(own, found.columns, bodyHeight),
+      emitted: false
+    })
   }
 
   const blocks: DraftBlock[] = []
@@ -1525,6 +1729,26 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
     const line = lines[i]!
     const previous = lines[i - 1]
     const isNote = i >= notesFrom
+    // A line of a page divided on its white was read into a row already; the
+    // page's rows go out where its first line falls.
+    const page = pageOfLine.get(line)
+    const paired = page === undefined ? undefined : pairedRows.get(page)
+    if (paired?.lines.has(line)) {
+      if (!paired.emitted) {
+        flush()
+        for (const row of paired.rows) {
+          const block: DraftBlock = {
+            kind: 'table',
+            text: tableToText([row.cells]),
+            cells: [row.cells]
+          }
+          blocks.push(block)
+          sourceOf.set(block, row.words)
+        }
+        paired.emitted = true
+      }
+      continue
+    }
     if (previous) {
       const wide = line.top - previous.top > stride * PARAGRAPH_GAP
       // On a page setting two columns that pair, where a line *starts* says

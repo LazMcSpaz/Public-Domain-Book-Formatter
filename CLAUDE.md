@@ -506,6 +506,35 @@ The display verdict needs three lines (`SHAPE_FLOOR_LINES`): `flush` is a
 share of the inner lines, a two-line run has one, and a rate built from one
 event called an indented opening line on a scanned leaf of _Isis_ a list.
 
+**Two columns with white between them were read as one, and the lines came
+back shuffled.** _Patterns_ Vol. II sets a hundred and ten of its leaves as a
+narrow transcript column in one face beside a wider commentary column in
+another at a tighter leading, with a third column of notes on some. Both
+column rules abstained, each correctly by its own measure: the white between
+the columns sits 0.17 of the ink width off centre, past what a gutter between
+two photographed pages may be, and the gap inside a line never clears three
+word spaces on a page whose commentary is spaced dots. So `toLines` gathered
+across the page, and a leaf drafted as
+`look takes up and when on are a you wonderful no longer stand`.
+
+`findPairedBands` (`src/core/draft/columns.ts`) reads the third shape: a
+clear band with ink on both sides of it on most of the rows its narrower
+side reaches, and a narrower side wide enough to be a column. Every constant
+was set from the leaves, and the one that matters is the width: a transcript
+column is 0.30 of the page or more, a margin of speaker labels or contents
+folios 0.16 or less. Lines are gathered **per column** there, rows are cut
+only where every column is between lines — the commentary runs on past the
+utterance it answers — and a dialogue set a turn a line becomes a row a
+turn, since a cell cannot hold a line break. Two things came with it. A
+spread's gutter is two inner margins wide, 4.8 body heights and up on Vol. I,
+where a column division is under 3.6, so `findColumns` asks for four; leaf
+135's division fell near the centre and was being read as two printed pages.
+And the note pass stands down on such a page, because the third column ends
+leaf 131 in small type and was three footnotes. The scan itself has a fact
+worth knowing: it omits every blank verso, so the folio offset climbs at each
+chapter, and the text was checked continuous across every step before a leaf
+was read.
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what

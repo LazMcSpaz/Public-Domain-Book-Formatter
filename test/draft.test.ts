@@ -38,12 +38,29 @@ const words = (placed: readonly Placed[]): DraftWord[] =>
   }))
 
 /** A full-measure line of filler, so the page has a measure to be judged against. */
-const filler = (line: number, from = 0, width = 60): Placed[] =>
-  Array.from({ length: Math.floor(width / 6) }, (_, i) => ({
-    text: 'wwwww',
-    line,
-    from: from + i * 6
-  }))
+/**
+ * A line of body text: words of five characters with a one-character space,
+ * running from `from` for `width` characters.
+ *
+ * The word boundaries are shifted by a character or two per line, because a
+ * real page never breaks its words at the same x on every line and a fixture
+ * that does grows a clear band of white down the page between every pair of
+ * words — with ink on both sides on every row, which is exactly the shape
+ * `findPairedBands` reads as two columns. The first word still begins at
+ * `from` and the last still ends at `from + width`, which is what the indent
+ * and centring rules read.
+ */
+const filler = (line: number, from = 0, width = 60): Placed[] => {
+  const shift = (line * 2) % 6
+  const out: Placed[] = []
+  let at = 0
+  while (at < width) {
+    const next = at === 0 ? Math.min(width, 5 + shift) : Math.min(width, at + 5)
+    out.push({ text: 'w'.repeat(next - at), line, from: from + at })
+    at = next + 1
+  }
+  return out
+}
 
 describe('gathering words onto their lines', () => {
   /**
@@ -661,6 +678,158 @@ describe('the emphasis a born-digital file states', () => {
     )
     expect(page.blocks.every((b) => b.emphasis === undefined)).toBe(true)
     expect(page.structural.some((s) => s.includes('set in italic'))).toBe(false)
+  })
+})
+
+describe('a page divided on the white between its columns', () => {
+  /**
+   * The shape of *Patterns* Vol. II: a narrow transcript column in one face,
+   * a wider commentary column in another at a tighter leading, and on some
+   * rows a third column of notes. Every column's lines are a row's worth
+   * apart at the row boundaries and nowhere else. `line` is fractional here
+   * on purpose — the commentary's lines fall between the transcript's, which
+   * is what makes a line gathered across the page two lines shuffled.
+   */
+  // Columns at 0–22, 30–58 and 66–88 characters: each side of each band is
+  // a quarter or more of the ink, as on the paper, where the transcript is
+  // 0.30 of the width and a label margin is 0.16 or less.
+  const transcript = (): Placed[] => [
+    // Row (1): the number on a line of its own in both columns, as printed.
+    { text: '(1)', line: 0, from: 0 },
+    { text: '(1)', line: 0, from: 30 },
+    { text: 'And', line: 1.5, from: 0 },
+    { text: 'you', line: 1.5, from: 4 },
+    { text: 'can', line: 1.5, from: 8 },
+    { text: 'rest', line: 1.5, from: 12 },
+    { text: 'there', line: 1.5, from: 17 },
+    { text: 'now,', line: 2.5, from: 0 },
+    { text: 'comfortably.', line: 2.5, from: 5 },
+    { text: 'embedded', line: 1.5, from: 30 },
+    { text: 'command:', line: 1.5, from: 39 },
+    { text: '...rest', line: 1.5, from: 48 },
+    { text: 'there', line: 2.3, from: 30 },
+    { text: 'now...,', line: 2.3, from: 36 },
+    { text: 'pacing:', line: 3.1, from: 30 },
+    { text: 'breath', line: 3.1, from: 38 },
+    // Row (2), with a note in a third column.
+    { text: '(2)', line: 5, from: 0 },
+    { text: '(2)', line: 5, from: 30 },
+    { text: '(2-3)', line: 5, from: 66 },
+    { text: 'That', line: 6.5, from: 0 },
+    { text: 'is', line: 6.5, from: 5 },
+    { text: 'right,', line: 6.5, from: 8 },
+    { text: 'and', line: 6.5, from: 15 },
+    { text: 'good.', line: 6.5, from: 19 },
+    { text: 'presupposition:', line: 6.5, from: 30 },
+    { text: '...right...', line: 7.3, from: 30 },
+    { text: 'good...', line: 7.3, from: 42 },
+    { text: 'Leading', line: 6.5, from: 66 },
+    { text: 'into', line: 6.5, from: 74 },
+    { text: 'the', line: 6.5, from: 79 },
+    { text: 'trance', line: 6.5, from: 83 },
+    { text: 'proper', line: 7.3, from: 66 },
+    // Row (3), transcript only: the client answers and nobody comments.
+    { text: '(3)', line: 10, from: 0 },
+    { text: 'M:', line: 11.5, from: 0 },
+    { text: 'Yes,', line: 11.5, from: 3 },
+    { text: 'I', line: 11.5, from: 8 },
+    { text: 'suppose', line: 11.5, from: 10 },
+    { text: 'so.', line: 11.5, from: 18 }
+  ]
+
+  it('gathers each column’s lines on its own leading and pairs the rows', () => {
+    const page = draftPage(words(transcript()))
+    const rows = page.blocks.filter((b) => b.kind === 'table').flatMap((b) => b.cells ?? [])
+    expect(
+      rows.map((r) => r.join(' | ')),
+      page.structural.join('\n')
+    ).toEqual([
+      '(1) And you can rest there now, comfortably. | (1) embedded command: ...rest there now..., pacing: breath | ',
+      '(2) That is right, and good. | (2) presupposition: ...right... good... | (2-3) Leading into the trance proper',
+      '(3) M: Yes, I suppose so. |  | '
+    ])
+    expect(page.structural.some((s) => /three columns that pair/u.test(s))).toBe(true)
+  })
+
+  it('sets a dialogue a row a turn, the comment riding with the first', () => {
+    // Leaf 135: `M:` and `E:` trade one-line turns down the transcript column
+    // under one utterance number, with a comment against the first only.
+    const page = draftPage(
+      words([
+        ...transcript(),
+        { text: '(4)', line: 14, from: 0 },
+        { text: '(4)', line: 14, from: 30 },
+        { text: 'And', line: 15.5, from: 0 },
+        { text: 'describe', line: 15.5, from: 4 },
+        { text: 'it.', line: 15.5, from: 13 },
+        { text: 'M:', line: 16.5, from: 0 },
+        { text: 'Splashing', line: 16.5, from: 3 },
+        { text: 'in', line: 16.5, from: 13 },
+        { text: 'the', line: 16.5, from: 16 },
+        { text: 'water.', line: 17.5, from: 3 },
+        { text: 'E:', line: 18.5, from: 0 },
+        { text: 'A', line: 18.5, from: 3 },
+        { text: 'lake?', line: 18.5, from: 5 },
+        { text: 'presupposition:', line: 15.5, from: 30 },
+        { text: '...describe...', line: 16.3, from: 30 }
+      ])
+    )
+    const rows = page.blocks.filter((b) => b.kind === 'table').flatMap((b) => b.cells ?? [])
+    expect(rows.slice(-3).map((r) => r.join(' | '))).toEqual([
+      '(4) And describe it. | (4) presupposition: ...describe... | ',
+      'M: Splashing in the water. |  | ',
+      'E: A lake? |  | '
+    ])
+  })
+
+  it('leaves a margin of speaker labels as the paragraph it stands beside', () => {
+    // `W:` and `E:` down the left, the text beside them: a clear band with
+    // ink on both sides on every row, and no width to the narrower side.
+    const page = draftPage(
+      words(
+        [
+          [{ text: 'W:', line: 0, from: 0 }, ...filler(0, 4, 56)],
+          filler(1, 4, 56),
+          [{ text: 'E:', line: 2, from: 0 }, ...filler(2, 4, 56)],
+          filler(3, 4, 56),
+          [{ text: 'W:', line: 4, from: 0 }, ...filler(4, 4, 56)],
+          filler(5, 4, 56)
+        ].flat() as Placed[]
+      )
+    )
+    expect(page.blocks.filter((b) => b.kind === 'table')).toHaveLength(0)
+    expect(page.structural.some((s) => /margin of labels/u.test(s))).toBe(true)
+  })
+
+  it('looks for no footnotes at the foot of such a page, and says so', () => {
+    // The third column's note ends the page, set small: a footnote by size
+    // and position, and the last row of the table on the paper.
+    const page = draftPage(
+      words([
+        ...transcript(),
+        { text: '(4)', line: 14, from: 0 },
+        { text: '(4)', line: 14, from: 30 },
+        { text: '(4-6)', line: 14, from: 66 },
+        { text: 'Good,', line: 15.5, from: 0 },
+        { text: 'and', line: 15.5, from: 6 },
+        { text: 'very', line: 15.5, from: 10 },
+        { text: 'deeply.', line: 15.5, from: 15 },
+        { text: 'pacing:', line: 15.5, from: 30 },
+        { text: '...deeply...', line: 15.5, from: 38 },
+        { text: 'Deepening', line: 15.5, from: 66, scale: 0.8 },
+        { text: 'by', line: 15.5, from: 76, scale: 0.8 },
+        { text: 'touch', line: 15.5, from: 79, scale: 0.8 },
+        { text: 'alone', line: 16.2, from: 66, scale: 0.8 }
+      ])
+    )
+    expect(page.blocks.filter((b) => b.kind === 'footnote')).toHaveLength(0)
+    const rows = page.blocks.filter((b) => b.kind === 'table').flatMap((b) => b.cells ?? [])
+    expect(rows[rows.length - 1]).toEqual([
+      '(4) Good, and very deeply.',
+      '(4) pacing: ...deeply...',
+      '(4-6) Deepening by touch alone'
+    ])
+    expect(page.structural.some((s) => /No footnotes were looked for/u.test(s))).toBe(true)
   })
 })
 

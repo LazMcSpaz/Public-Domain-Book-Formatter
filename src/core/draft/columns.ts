@@ -115,12 +115,19 @@ const MIN_WORDS = 8
 /**
  * A candidate gap must be at least this many body heights wide.
  *
- * Only to reject noise — a single pixel of white between two words is not a
- * gutter. It is deliberately not the discriminator: see the header, where
- * width is shown not to separate the two cases at all. The narrowest real
- * gutter measured is 190px against a 33px body, which is 5.8 of these.
+ * Width does not tell a gutter from an innocent gap beside a margin — see the
+ * header, where the two overlap as shares of the ink width — but it does tell
+ * a gutter from the **division between two columns of one page**, which the
+ * centrality test cannot when that division happens to fall near the middle.
+ * A gutter is two inner margins photographed side by side; a column division
+ * is one gap. Measured: the gutters of *Patterns* Vol. I run **4.8 to 13.8**
+ * body heights (the 4.8 is leaf 4, a part title in 111px display type), and
+ * every column division on the 110 transcript leaves of Vol. II is under
+ * **3.6**. Leaf 135 of that volume is the case: its division sits 0.093 off
+ * centre and 50px wide against a 34px body, and at one body height it was
+ * read as two printed pages.
  */
-const GUTTER_MIN_HEIGHTS = 1
+const GUTTER_MIN_HEIGHTS = 4
 
 /**
  * How far from the middle of the ink a gutter may sit, as a share of the ink
@@ -259,6 +266,250 @@ export function findColumns(words: readonly DraftWord[]): ColumnSplit {
     ],
     why
   }
+}
+
+/**
+ * A band of white between two columns *within* one printed page: where it
+ * is, and the rows either side of it that make it a division.
+ */
+export interface PairedDivision {
+  left: number
+  right: number
+  /** Rows of type with ink on the narrower side of the band. */
+  rows: number
+  /** Of those, rows with ink on both sides. */
+  both: number
+  /** The narrower side's width as a share of the page's ink width. */
+  narrowShare: number
+}
+
+export interface PairedBands {
+  /** Left to right. One band when the page is one column. */
+  columns: ColumnBand[]
+  divisions: PairedDivision[]
+  /**
+   * Clear bands with enough rows either side to be weighed at all, taken or
+   * not. Zero on a page of prose, so a caller can tell a page that was never
+   * in question from one that was looked at and left.
+   */
+  considered: number
+  why: string[]
+}
+
+/**
+ * The narrower side of a division must hold ink on this many rows.
+ *
+ * Low, because the third column of *Patterns* Vol. II is a note against a
+ * few utterances and stands on three rows of leaf 135. Its only job is the
+ * one- and two-row innocents: a speck at the margin of Isis leaf 200 and two
+ * short lines of `tight-scramble` 7 each leave a clear band with a row or
+ * two beside it. The width test is what keeps out a label margin, not this.
+ */
+export const PAIRED_MIN_ROWS = 3
+
+/**
+ * Of the rows with ink on the narrower side, the share that must have ink on
+ * the wider side too.
+ *
+ * White beside a margin has ink on one side only, so it scores **0.00**
+ * exactly — a single line reaching across would have broken the band — and
+ * `aura-loose` 7 is the fixture that shows it. Two columns that pair score
+ * 0.70–1.00 on most transcript leaves of *Patterns* Vol. II, but not all:
+ * leaf 135 scores **0.50**, because where Erickson and the client trade
+ * short lines the transcript column runs on with nothing beside it. A
+ * column whose rows are half unanswered is still a column, so the bar sits
+ * under it with room, and well clear of nothing.
+ */
+export const PAIRED_ROW_SHARE = 0.35
+
+/**
+ * The narrower side of a division must be at least this share of the page's
+ * ink width.
+ *
+ * This is the test that tells a column from a margin of labels. Measured:
+ * every transcript division of *Patterns* Vol. II has its narrower side at
+ * **0.30–0.47** of the ink width, the third column included; the contents
+ * leaf of the same volume (folios beside leaders), its "Hypnotist:/Client:"
+ * margin on leaf 90, and the "W:"/"E:" speaker labels of Vol. I leaf 28 sit
+ * at **0.06–0.16**. Nothing lands between 0.16 and 0.30, so 0.22 has a factor
+ * of about 1.4 clear on either side.
+ */
+export const PAIRED_NARROW_SHARE = 0.22
+
+/** A band must be at least this many body heights wide to be a division. */
+const PAIRED_BAND_MIN_HEIGHTS = 0.5
+
+/**
+ * Rows are buckets this many body heights tall, by a word's vertical centre.
+ *
+ * Coarse on purpose: the two columns of a paired page are set in different
+ * faces at different leadings, so gathering rows by box overlap chains lines
+ * of one column into lines of the other. A bucket only has to say whether
+ * some ink stands beside some other ink at about the same height.
+ */
+const PAIRED_ROW_HEIGHTS = 0.8
+
+/**
+ * The columns of type within one printed page, where they pair row by row.
+ *
+ * `findColumns` finds the gutter of a two-up leaf and abstains on everything
+ * else, and one of the things it abstains on is the page this exists for:
+ * *Patterns of the Hypnotic Techniques* Vol. II sets a hundred and ten leaves
+ * with Erickson's words down a narrow left column and the authors' analysis
+ * down a wider right one, so the white between them stands 0.17 of the ink
+ * width off centre, past what a gutter may be. `./paired` cannot take it
+ * either: that finder judges the gap *inside* a line against the page's own
+ * word space, and here the commentary's spaced dots are words, so the median
+ * space is 24px against a division of 55 — under the three spaces it asks
+ * for. Both were written from Vol. I and both are right about Vol. I.
+ *
+ * What this page has that neither rule reads is a **clear band with ink on
+ * both sides of it on most rows**. A gutter has that too, but a gutter is
+ * central and is taken first; a margin of white beside short lines has ink on
+ * one side only; and a margin of speaker labels has ink on both sides but no
+ * width to it. Three measurements, each set from the leaves (see the
+ * constants), and a page clears all three or is left as one column.
+ *
+ * Nothing here is a reading: every character came off the pixels, and what
+ * is decided is which words share a column. The caller gathers lines per
+ * column, because the columns of such a page are set in different faces at
+ * different leadings and a line gathered across both is two lines shuffled.
+ *
+ * Pure: no DOM, no I/O, no network.
+ */
+export function findPairedBands(words: readonly DraftWord[]): PairedBands {
+  const usable = words.filter((w) => w.text.trim().length > 0)
+  const why: string[] = []
+  let considered = 0
+  const one = (band: ColumnBand): PairedBands => ({
+    columns: [band],
+    divisions: [],
+    considered,
+    why
+  })
+
+  if (usable.length < MIN_WORDS) {
+    const left = usable.length ? Math.min(...usable.map((w) => w.bbox.x0)) : 0
+    const right = usable.length ? Math.max(...usable.map((w) => w.bbox.x1)) : 0
+    return one({ left, right })
+  }
+
+  const bodyHeight = median(usable.map((w) => w.bbox.y1 - w.bbox.y0))
+  const rowHeight = Math.max(1, bodyHeight * PAIRED_ROW_HEIGHTS)
+  const rowOf = (w: DraftWord): number => Math.floor((w.bbox.y0 + w.bbox.y1) / 2 / rowHeight)
+
+  // The running head is measured with the rest. A head set flush right widens
+  // the ink and leaves a clear band beside the commentary, and that band is
+  // declined on its own: the head is the one row with ink beyond it. Leaving
+  // the head out was tried and no leaf could tell the difference.
+  const measured = usable
+  const left = Math.min(...measured.map((w) => w.bbox.x0))
+  const right = Math.max(...measured.map((w) => w.bbox.x1))
+  const whole: ColumnBand = { left, right }
+  const inkWidth = Math.max(1, right - left)
+  const minBand = Math.max(1, bodyHeight * PAIRED_BAND_MIN_HEIGHTS)
+
+  // Coverage per x, integer-indexed for the reason `findColumns` gives.
+  const origin = Math.floor(left)
+  const span = Math.ceil(right) - origin
+  const cover = new Int32Array(span + 1)
+  for (const w of measured) {
+    const from = Math.max(0, Math.floor(w.bbox.x0) - origin)
+    const to = Math.min(span, Math.ceil(w.bbox.x1) - origin)
+    for (let x = from; x < to; x++) cover[x]!++
+  }
+  const bands: ColumnBand[] = []
+  let run = -1
+  for (let x = 0; x <= span; x++) {
+    const empty = x < span && cover[x] === 0
+    if (empty) {
+      if (run < 0) run = x
+    } else if (run >= 0) {
+      if (x - run >= minBand) bands.push({ left: origin + run, right: origin + x })
+      run = -1
+    }
+  }
+  if (bands.length === 0) return one(whole)
+
+  const rows = new Map<number, DraftWord[]>()
+  for (const w of measured) {
+    const key = rowOf(w)
+    rows.set(key, [...(rows.get(key) ?? []), w])
+  }
+
+  const divisions: PairedDivision[] = []
+  const declined: string[] = []
+  for (const band of bands) {
+    let leftRows = 0
+    let rightRows = 0
+    let both = 0
+    for (const row of rows.values()) {
+      const l = row.some((w) => w.bbox.x1 <= band.left)
+      const r = row.some((w) => w.bbox.x0 >= band.right)
+      if (l) leftRows++
+      if (r) rightRows++
+      if (l && r) both++
+    }
+    const narrower = Math.min(leftRows, rightRows)
+    const narrowShare = Math.min(band.left - left, right - band.right) / inkWidth
+    const where = `${Math.round(band.left)}–${Math.round(band.right)}`
+    if (narrower < PAIRED_MIN_ROWS) {
+      declined.push(`${where} has ink on only ${narrower} row(s) of its narrower side`)
+      continue
+    }
+    considered++
+    const share = both / narrower
+    if (share < PAIRED_ROW_SHARE) {
+      declined.push(
+        `${where} has ink on both sides on ${both} of the ${narrower} rows its narrower side ` +
+          `reaches (${share.toFixed(2)}, under ${PAIRED_ROW_SHARE}) — white beside a margin`
+      )
+      continue
+    }
+    if (narrowShare < PAIRED_NARROW_SHARE) {
+      declined.push(
+        `${where} leaves its narrower side ${narrowShare.toFixed(2)} of the ink width (under ` +
+          `${PAIRED_NARROW_SHARE}) — a margin of labels, not a column`
+      )
+      continue
+    }
+    divisions.push({ ...band, rows: narrower, both, narrowShare })
+  }
+
+  if (divisions.length === 0) {
+    why.push(
+      `One column within the page: ${bands.length} clear band(s) measured and none taken — ` +
+        declined.join('; ') +
+        '.'
+    )
+    return one(whole)
+  }
+
+  divisions.sort((a, b) => a.left - b.left)
+  const columns: ColumnBand[] = []
+  let from = whole.left
+  for (const d of divisions) {
+    columns.push({ left: from, right: d.left })
+    from = d.right
+  }
+  columns.push({ left: from, right: whole.right })
+  why.push(
+    `${columns.length} columns within the page that pair: ` +
+      divisions
+        .map(
+          (d) =>
+            `a clear band ${Math.round(d.right - d.left)}px wide at ${Math.round(d.left)}–` +
+            `${Math.round(d.right)} with ink on both sides on ${d.both} of the ${d.rows} rows its ` +
+            `narrower side reaches, that side being ${d.narrowShare.toFixed(2)} of the ink width`
+        )
+        .join('; ') +
+      (declined.length > 0 ? `. Not taken: ${declined.join('; ')}` : '') +
+      '. Lines are gathered per column and the columns are read row by row, as a transcript ' +
+      'beside its commentary is. **That is a guess about what the columns mean**: geometry ' +
+      'cannot tell columns that pair from columns that run one after the other like a ' +
+      'newspaper. Check the render.'
+  )
+  return { columns, divisions, considered, why }
 }
 
 /**

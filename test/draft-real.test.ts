@@ -201,7 +201,12 @@ function readingOrder(words: readonly DraftWord[]): DraftWord[] {
  * a table's words from its `cells`.
  */
 const NOT_A_SEQUENCE: Record<string, number[]> = {
-  'patterns-vol1': [27, 28]
+  'patterns-vol1': [27, 28],
+  // Every transcript leaf of Vol. II: Erickson's words down a narrow left
+  // column, the analysis down a wider right one, a third column of notes on
+  // some. Divided on the white between them (`findPairedBands`) and read row
+  // by row.
+  'patterns-vol2': [116, 120, 121, 127, 131, 135, 200]
 }
 
 /**
@@ -358,6 +363,16 @@ describe('the furniture a real leaf actually prints', () => {
 describe('folios run in step with the leaves', () => {
   /** The leaves whose printed folio is known wrong, checked against the crop. */
   const misread: Record<string, number[]> = { 'isis-vol1': [126] }
+  /**
+   * Leaves whose folio is right and dissents anyway, because the scan is not
+   * consecutive: the Internet Archive scan of *Patterns* Vol. II omits every
+   * blank verso, so the offset between leaf and folio climbs by one at each
+   * chapter that opens recto and by two or three around a part title —
+   * measured leaf by leaf, from −5 at the Introduction to +11 at the
+   * Bibliography, with the text continuous across every step. The vote takes
+   * the transcript leaves' +5, and the leaves from other chapters dissent.
+   */
+  const notConsecutive: Record<string, number[]> = { 'patterns-vol2': [40, 90, 200] }
 
   for (const { name, fixture } of fixtures) {
     it(`${name}`, () => {
@@ -368,7 +383,7 @@ describe('folios run in step with the leaves', () => {
       if (sightings.length < 2) return
       const voted = folioOffset(sightings, 2)
       expect(voted.offset, `sightings were ${JSON.stringify(sightings)}`).not.toBeNull()
-      expect(voted.dissenting).toEqual(misread[name] ?? [])
+      expect(voted.dissenting).toEqual([...(misread[name] ?? []), ...(notConsecutive[name] ?? [])])
     })
   }
 })
@@ -959,14 +974,109 @@ describe('a page that is part prose and part paired says so', () => {
     .find((f) => f.name === 'patterns-vol1')!
     .fixture.leaves.find((l) => l.pageIndex === 28)!
 
-  it('reports the page it acted on and the page it could not', () => {
+  /**
+   * Both printed pages of leaf 28 set a transcript beside its commentary, and
+   * for a long time only the second was taken. The first page's transcript
+   * column is sparse — `(4) And look at anyone spot / there`, a line or two
+   * against a dozen of commentary — so of its fifty-odd lines eleven divide
+   * widely, a share of 0.2, and `./paired` could only notice it. Counted on
+   * the rows the narrower column reaches, as `findPairedBands` counts, it is
+   * eleven of thirteen, with a clear band 84px wide between the columns and
+   * the transcript at 0.42 of the page's width. So both pages are acted on
+   * now, and nothing is left merely noticed.
+   */
+  it('acts on both printed pages, the sparse transcript included', () => {
     const drafted = draftPage(toWords(leaf.words))
     const acted = drafted.structural.filter((s) => s.includes('in two columns that pair'))
     const noticed = drafted.structural.filter((s) => s.includes('may set part of its matter'))
-    expect(acted, drafted.structural.join('\n')).toHaveLength(1)
-    expect(noticed, drafted.structural.join('\n')).toHaveLength(1)
-    // And the one it acted on actually produced a table.
-    expect(drafted.blocks.some((b) => b.kind === 'table')).toBe(true)
+    expect(acted, drafted.structural.join('\n')).toHaveLength(2)
+    expect(noticed, drafted.structural.join('\n')).toHaveLength(0)
+    const tables = drafted.blocks.filter((b) => b.kind === 'table')
+    expect(tables.length).toBeGreaterThanOrEqual(1)
+    // The sparse page's rows really are the utterances against their comment.
+    const rows = tables.flatMap((t) => t.cells ?? [])
+    const spot = rows.find((r) => /\(4\) And look at anyone spot/u.test(r[0] ?? ''))
+    expect(spot, rows.map((r) => r.join(' | ')).join('\n')).toBeDefined()
+    expect(spot![0]).toMatch(/spot there$/u)
+  })
+})
+
+/**
+ * *Patterns* Vol. II, read against the renders of its leaves.
+ *
+ * The book's transcript pages set Erickson's words down a narrow left column
+ * in one face, the authors' analysis down a wider right one in another at a
+ * tighter leading, and on some leaves a third column of notes against a run
+ * of utterances. Neither of the two earlier rules could take it: the white
+ * between the columns sits 0.17 of the ink width off centre, past what a
+ * gutter may be, and the gap inside a line never clears three word spaces on
+ * a page whose commentary is spaced dots. The lines were being gathered
+ * across the page, so a leaf came back as two columns shuffled together —
+ * `look takes up and when on are a you wonderful no longer stand`.
+ *
+ * Every expectation here was read off the 120-DPI render of the leaf.
+ */
+describe('a transcript beside its commentary, divided on the white between them', () => {
+  const vol2 = fixtures.find((f) => f.name === 'patterns-vol2')!
+  const leafOf = (n: number) => vol2.fixture.leaves.find((l) => l.pageIndex === n)!
+  const rowsOf = (n: number) =>
+    draftPage(toWords(leafOf(n).words))
+      .blocks.filter((b) => b.kind === 'table')
+      .flatMap((b) => b.cells ?? [])
+
+  it('pairs each utterance with its analysis, a row apiece', () => {
+    const rows = rowsOf(120)
+    expect(rows.map((r) => r.length)).toEqual([2, 2, 2, 2])
+    // A comment continued from the leaf before, with nothing beside it.
+    expect(rows[0]![0]).toBe('')
+    expect(rows[0]![1]).toMatch(/^years, unspecified verb/u)
+    expect(rows[2]![0]).toBe(
+      '(21) The world suddenly takes on a wonderful look when you stand up and are no longer creeping.'
+    )
+    expect(rows[2]![1]).toMatch(/^\(21\) nominalization: /u)
+    expect(rows[3]![0]).toMatch(/^\(22\) And, older, you bent over/u)
+  })
+
+  it('cuts a row only where every column is between lines', () => {
+    // Leaf 121: the comment on (23) runs on twelve lines past the utterance,
+    // and the transcript column's white beside it is not a row boundary.
+    const rows = rowsOf(121)
+    expect(rows).toHaveLength(4)
+    expect(rows[0]![0]).toMatch(/^\(23\) so you would have another view/u)
+    expect(rows[0]![1]).toMatch(/looked at\. \. \.$/u)
+    expect(rows[1]![0]).toMatch(/^\(24\) \| would like to have you single out/u)
+  })
+
+  it('sets a note spanning several utterances in a third cell of the first', () => {
+    const rows = rowsOf(121)
+    expect(rows.map((r) => r.length)).toEqual([3, 3, 3, 3])
+    expect(rows[1]![2]).toMatch(/^\(24 - 26\) Instruction to access/u)
+    expect(rows[0]![2]).toBe('')
+    expect(rows[2]![2]).toBe('')
+  })
+
+  it('reads the small note that ends leaf 131 as the last row, not as footnotes', () => {
+    const drafted = draftPage(toWords(leafOf(131).words))
+    expect(drafted.blocks.filter((b) => b.kind === 'footnote')).toHaveLength(0)
+    const rows = drafted.blocks.filter((b) => b.kind === 'table').flatMap((b) => b.cells ?? [])
+    const last = rows[rows.length - 1]!
+    expect(last[0]).toBe('(68) And very deeply.')
+    expect(last[2]).toMatch(/^\(68-72\) Positive hallucination instructions/u)
+  })
+
+  it('sets a dialogue a row a turn', () => {
+    // Leaf 135, utterance (82): the client and Erickson trade one-line turns
+    // down the transcript column, each its own hanging item on the paper.
+    const rows = rowsOf(135)
+    const turns = rows.map((r) => r[0] ?? '').filter((t) => /^[ME]: /u.test(t))
+    expect(turns.length).toBeGreaterThanOrEqual(10)
+    expect(turns).toContain('M: A lake.')
+    expect(turns).toContain('E: You what?')
+  })
+
+  it('does not read the division as a gutter on the leaf where it falls near the centre', () => {
+    const { columns, why } = findColumns(toWords(leafOf(135).words))
+    expect(columns, why.join(' ')).toHaveLength(1)
   })
 })
 
