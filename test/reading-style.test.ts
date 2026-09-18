@@ -25,6 +25,7 @@ const profile = (over: Partial<StyleProfile> = {}): StyleProfile =>
     chaptersOpenRecto: true,
     pageNumber: 'bottom-center',
     contentsSynopsis: true,
+    contentsDepth: 6,
     ornaments: {},
     frontMatter: { titlePage: true, copyrightPage: true, halfTitle: false, titleBorder: false },
     ...over

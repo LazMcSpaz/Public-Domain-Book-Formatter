@@ -76,16 +76,18 @@ export function layoutWithToc(
       title: section.title,
       ...(section.label ? { label: section.label } : {})
     })),
-    ...doc.chapters.map((chapter) => ({
-      id: chapter.id,
-      title: titled(chapter.title),
-      ...(chapter.label ? { label: chapter.label } : {}),
-      level: chapter.level,
-      // Only when the style asks. The descriptions are long — twenty of them
-      // turn a one-leaf contents into four — so this is a preference and not a
-      // consequence of the book having had them.
-      ...(profile.contentsSynopsis && chapter.synopsis ? { synopsis: chapter.synopsis } : {})
-    })),
+    ...doc.chapters
+      .filter((chapter) => chapter.level <= profile.contentsDepth)
+      .map((chapter) => ({
+        id: chapter.id,
+        title: titled(chapter.title),
+        ...(chapter.label ? { label: chapter.label } : {}),
+        level: chapter.level,
+        // Only when the style asks. The descriptions are long — twenty of them
+        // turn a one-leaf contents into four — so this is a preference and not a
+        // consequence of the book having had them.
+        ...(profile.contentsSynopsis && chapter.synopsis ? { synopsis: chapter.synopsis } : {})
+      })),
     ...back.map((section) => ({
       id: `${section.id}-title`,
       title: section.title,

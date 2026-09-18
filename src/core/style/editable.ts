@@ -287,6 +287,21 @@ export function styleQuestions(
         ]
       : []),
     {
+      id: 'contentsDepth',
+      type: 'choice',
+      prompt: 'How deep does the contents go?',
+      help:
+        'A book’s headings run deeper than its contents: run-in sub-heads under a chapter ' +
+        'are set on the page and are not usually listed. The original’s own contents page ' +
+        'is the guide.',
+      defaultValue: String(profile.contentsDepth),
+      options: [
+        { value: '1', label: 'Chapters only' },
+        { value: '2', label: 'Chapters and their sections' },
+        { value: '6', label: 'Every heading' }
+      ]
+    },
+    {
       id: 'chaptersOpenRecto',
       type: 'confirm',
       prompt: 'Start every chapter on a right-hand page?',
@@ -464,6 +479,7 @@ export function applyStyleAnswers(profile: StyleProfile, answers: Answers): Styl
     opticalMargins: pickBool(answers, 'opticalMargins', profile.opticalMargins),
     pageNumber: pick(answers, 'pageNumber', profile.pageNumber) as PageNumberPosition,
     contentsSynopsis: pickBool(answers, 'contentsSynopsis', profile.contentsSynopsis),
+    contentsDepth: pickNumber(answers, 'contentsDepth', profile.contentsDepth),
     ornaments: {
       chapterOpener: pickOrnament(answers, 'ornamentChapter', profile.ornaments.chapterOpener),
       sectionDivider: pickOrnament(answers, 'ornamentDivider', profile.ornaments.sectionDivider),

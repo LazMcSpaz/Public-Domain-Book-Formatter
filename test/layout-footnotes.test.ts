@@ -1183,3 +1183,54 @@ describe('prepareFootnotes — a doubled marker is not two singles in the claimi
     expect(first.map((r) => r.printed)).toEqual(['**', '*'])
   })
 })
+
+/**
+ * A book's headings run deeper than its contents. *Patterns* Vol. II sets four
+ * run-in sub-heads under one chapter and a "Transcript" section head in two
+ * others, and its own contents page names the chapters and nothing else; every
+ * level was listed before `contentsDepth` existed, so the contents carried
+ * lines the original never had.
+ */
+describe('the contents goes as deep as the style says', () => {
+  const deep = build([
+    page(0, [
+      { kind: 'heading', text: 'Of the Air', level: 1 },
+      { kind: 'paragraph', text: PROSE.repeat(4) },
+      { kind: 'heading', text: 'Eidetic images:', level: 3 },
+      { kind: 'paragraph', text: PROSE.repeat(4) }
+    ]),
+    page(1, [
+      { kind: 'heading', text: 'Of Fire', level: 1 },
+      { kind: 'paragraph', text: PROSE.repeat(4) },
+      { kind: 'heading', text: 'Transcript', level: 2 },
+      { kind: 'paragraph', text: PROSE.repeat(4) }
+    ])
+  ])
+  const contents = (depth: number): string =>
+    layoutWithToc(deep, { ...defaultStyleProfile(), contentsDepth: depth }, measurer, {
+      edition: EDITION
+    })
+      .pages.filter((p) => p.kind === 'contents')
+      .map(textOf)
+      .join(' ')
+
+  it('lists every heading at 6, which is what every book laid out before it got', () => {
+    const text = contents(6)
+    expect(text).toContain('Eidetic images:')
+    expect(text).toContain('Transcript')
+  })
+
+  it('lists the chapters alone at 1, as the original’s own contents does', () => {
+    const text = contents(1)
+    expect(text).toContain('Of the Air')
+    expect(text).toContain('Of Fire')
+    expect(text).not.toContain('Eidetic images:')
+    expect(text).not.toContain('Transcript')
+  })
+
+  it('keeps the sections and drops the run-in heads at 2', () => {
+    const text = contents(2)
+    expect(text).toContain('Transcript')
+    expect(text).not.toContain('Eidetic images:')
+  })
+})

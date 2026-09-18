@@ -339,6 +339,18 @@ export interface StyleProfile {
    * contents had no descriptions to recover.
    */
   contentsSynopsis: boolean
+  /**
+   * The deepest heading level the contents lists, 1–6.
+   *
+   * A book's headings run deeper than its contents: *Patterns* Vol. II sets
+   * four run-in sub-heads — "Eidetic images:", "Kinesthetic:" — under one
+   * chapter and a "Transcript" section head in two others, and its own
+   * contents page names the chapters and nothing else. Every level was listed
+   * before this existed, indented, so the contents carried lines the original
+   * never had. 6 lists everything, which is what a book laid out before the
+   * question was asked keeps getting.
+   */
+  contentsDepth: number
   ornaments: OrnamentChoices
   /** Front-matter visual toggles. */
   frontMatter: {
