@@ -256,3 +256,49 @@ describe('a line may end after a dash, a slash or an ellipsis inside a token', (
     expect(lines.join('|')).toContain('V/K')
   })
 })
+
+/**
+ * A ragged line holding one word had no stretch — the stretch sat on the
+ * interword glue, which is discarded at the break — so it was infeasible at
+ * any tolerance and the breaker set two words overfull rather than one short.
+ * Every narrow column of a three-column transcript is made of such lines.
+ */
+describe('a ragged line may hold a single word', () => {
+  const measurer = fixedWidthMeasurer(0.5)
+  const font: FontRef = { family: 'EB Garamond', style: 'regular' }
+  const setAt = (text: string, widthPt: number, hyphenate = (word: string) => [word]) =>
+    breakParagraph(text, {
+      font,
+      sizePt: 10,
+      measurer,
+      lineWidths: widthPt,
+      alignment: 'left',
+      hyphenate
+    })
+
+  it('sets one token to a line rather than two overfull', () => {
+    const lines = setAt('nominalization: ...feeling..., then', 80)
+    expect(lines.map((l) => l.words.map((w) => w.text).join(' '))).toEqual([
+      'nominalization:',
+      '...feeling...,',
+      'then'
+    ])
+    expect(lines.every((l) => !l.overfull)).toBe(true)
+  })
+
+  it('has the room at a hyphenation too', () => {
+    const lines = setAt('the extraordinary thing', 60, (w) =>
+      w === 'extraordinary' ? ['extra', 'ordinary'] : [w]
+    )
+    const texts = lines.map((l) => l.words.map((w) => w.text).join(''))
+    expect(texts[0]).toBe('theextra-')
+    expect(lines.every((l) => !l.overfull)).toBe(true)
+  })
+
+  it('still draws the words of an unbroken hyphenation as one run', () => {
+    const lines = setAt('an extraordinary thing', 200, (w) =>
+      w === 'extraordinary' ? ['extra', 'ordinary'] : [w]
+    )
+    expect(lines[0]!.words.map((w) => w.text)).toEqual(['an', 'extraordinary', 'thing'])
+  })
+})

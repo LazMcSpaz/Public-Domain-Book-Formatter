@@ -209,12 +209,25 @@ const GLUE_SHRINK = 0.333
 
 /**
  * Ragged setting keeps spaces rigid and lets the *line* end short, so the glue
- * that absorbs the slack is at the end of the line rather than between words.
- * Modelled as a large stretch on the interword glue, with the words then drawn
- * at their natural spacing — the breaker gets the tolerance, the reader gets
- * even spaces.
+ * that absorbs the slack has to sit at the end of the line rather than between
+ * the words — TeX's `\rightskip`. Knuth–Plass has no per-line glue, so the
+ * construction is his own from the paper: each space becomes a zero-width glue
+ * carrying the stretch, a free penalty, and the space itself with the stretch
+ * taken back. An unbroken space nets to nothing; a line broken at the penalty
+ * keeps the first glue and its stretch, and the second is discarded at the
+ * head of the next line. The same pair goes round an in-word penalty, so a
+ * line ending at a hyphen or a dash has the room too.
+ *
+ * The first version put a large stretch on the interword glue instead, which
+ * is discarded at the break — so a line holding one word had no stretch at
+ * all, was infeasible at any tolerance, and the breaker fell back to setting
+ * two words overfull rather than one short. Every narrow column of the
+ * *Patterns* Vol. II transcripts is made of such lines: forty-three of them
+ * into the gutter, after the tokens themselves had been made breakable.
+ *
+ * The stretch is the measure, so the emptiest line a paragraph can have
+ * costs a ratio of one and no line is ever infeasible for being short.
  */
-const RAGGED_STRETCH = 6
 
 /**
  * The cost of breaking a word with a hyphen. TeX's `\hyphenpenalty` is 50 on a
@@ -302,8 +315,22 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
   const spaceWidth = width(' ')
   const hyphenWidth = width('-')
   const ragged = alignment !== 'justify'
-  const stretch = ragged ? spaceWidth * RAGGED_STRETCH : spaceWidth * GLUE_STRETCH
-  const shrink = ragged ? 0 : spaceWidth * GLUE_SHRINK
+  const stretch = spaceWidth * GLUE_STRETCH
+  const shrink = spaceWidth * GLUE_SHRINK
+  const fill = ragged
+    ? Math.max(
+        spaceWidth,
+        typeof options.lineWidths === 'number'
+          ? options.lineWidths
+          : Math.max(0, ...options.lineWidths)
+      )
+    : 0
+  /** A break point in ragged setting, with the line's slack absorbed at its end. */
+  const raggedBreak = (cost: number, widthAtBreak: number, flagged: boolean): InputItem[] => [
+    glue(0, fill, 0),
+    penalty(widthAtBreak, cost, flagged),
+    glue(0, -fill, 0)
+  ]
 
   const items: InputItem[] = []
 
@@ -325,7 +352,10 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
   }
 
   words.forEach((word, i) => {
-    if (i > 0) items.push(glue(spaceWidth, stretch, shrink))
+    if (i > 0) {
+      if (ragged) items.push(glue(0, fill, 0), penalty(0, 0, false), glue(spaceWidth, -fill, 0))
+      else items.push(glue(spaceWidth, stretch, shrink))
+    }
 
     const pieces = segmentsOf(word).flatMap((segment) =>
       hyphenate ? hyphenate(segment) : [segment]
@@ -341,7 +371,9 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
           // says so — `hyphenated` below is decided on the penalty's width, and
           // a break taken at a zero-width one draws nothing.
           const already = ENDS_HYPHENATED.test(pieces[p - 1] ?? '')
-          items.push(penalty(already ? 0 : hyphenWidth, HYPHEN_PENALTY, true))
+          const widthAtBreak = already ? 0 : hyphenWidth
+          if (ragged) items.push(...raggedBreak(HYPHEN_PENALTY, widthAtBreak, true))
+          else items.push(penalty(widthAtBreak, HYPHEN_PENALTY, true))
         }
         items.push(box(piece, width(piece, i), i))
       })
@@ -462,6 +494,10 @@ export function breakParagraph(text: string, options: BreakParagraphOptions): Br
         x += item.width
         mergeable = !isAttachment
       } else if (item.type === 'glue') {
+        // The zero-width halves of a ragged break carry stretch and nothing
+        // else: no advance, and no bearing on whether the pieces either side
+        // of the penalty between them are one word.
+        if (item.width === 0 && item.shrink === 0) continue
         x += item.width + (ratio >= 0 ? ratio * item.stretch : ratio * item.shrink)
         mergeable = false
       }
