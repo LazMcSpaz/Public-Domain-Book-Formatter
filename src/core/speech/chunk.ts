@@ -38,6 +38,48 @@ export const MODEL_LIMIT = 510
  */
 export const CHUNK_BUDGET = 460
 
+/**
+ * Where to break a sentence the model cannot take in one pass.
+ *
+ * Only *where*. Whether the halves fit is not knowable here — the cost of a
+ * stretch is measured with the phonemizer, which this module does not have —
+ * so the caller measures each half and asks again until every piece is under
+ * budget. Handing back an estimate for the caller to pack on would be a chunk
+ * that fits on paper and is cut in the reading.
+ *
+ * The break is the strongest boundary nearest the middle: a semicolon is a
+ * breath the author put there, a dash the next best, a comma after that, and a
+ * bare space only when there is nothing else. Null for a run with no boundary
+ * at all, which the caller reports rather than cuts.
+ *
+ * Three of Erickson's quoted speeches in chapter I of *Uncommon Therapy* run to
+ * 577, 608 and 739 phonemes against a limit of 510. The advice was to split
+ * them in the book, which edits the author to suit the reader.
+ */
+export function breakAtClause(text: string): [string, string] | null {
+  const whole = text.trim()
+  const mid = whole.length / 2
+  for (const re of [/;\s/gu, /\s[—–-]\s/gu, /,\s/gu, /\s+/gu]) {
+    let best = -1
+    let bestDistance = Infinity
+    for (const m of whole.matchAll(re)) {
+      const at = (m.index ?? 0) + m[0].length
+      if (at <= 0 || at >= whole.length) continue
+      const distance = Math.abs(at - mid)
+      if (distance < bestDistance) {
+        best = at
+        bestDistance = distance
+      }
+    }
+    if (best > 0) {
+      const left = whole.slice(0, best).trim()
+      const right = whole.slice(best).trim()
+      if (left.length > 0 && right.length > 0) return [left, right]
+    }
+  }
+  return null
+}
+
 /** One sentence and what it costs in phonemes. */
 export interface Measured {
   text: string
