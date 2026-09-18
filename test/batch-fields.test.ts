@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { PAGE_FIELDS, BLOCK_FIELDS } from '@core/transcribe/schema'
+import { PAGE_FIELDS, BLOCK_FIELDS, BLOCK_KINDS } from '@core/transcribe/schema'
 // @ts-expect-error — a plain Node module with no types. `batch.mjs` has no
 // build step and cannot import TypeScript, so the list is written twice; this
 // test is the only thing that makes that safe.
@@ -17,5 +17,8 @@ describe('the fields a batch may carry', () => {
   it('is one list, whichever side asks', () => {
     expect([...script.PAGE_FIELDS].sort()).toEqual([...PAGE_FIELDS].sort())
     expect([...script.BLOCK_FIELDS].sort()).toEqual([...BLOCK_FIELDS].sort())
+    // The kinds too: the check kept seven of the schema's nine and refused a
+    // batch for `list-item`, a kind the parser takes and the engine sets.
+    expect([...script.BLOCK_KINDS].sort()).toEqual([...BLOCK_KINDS].sort())
   })
 })

@@ -40,3 +40,21 @@ export const BLOCK_FIELDS = [
   'continuesPrevious',
   'continuesNext'
 ]
+
+/**
+ * The block kinds, for the same reason. `--check` kept its own list of seven
+ * while the schema had nine, so a reader who set the Summary's six bullets of
+ * *Patterns* Vol. II as `list-item` — the kind the engine hangs a marker on —
+ * had the batch refused six times over for a kind the parser takes.
+ */
+export const BLOCK_KINDS = [
+  'paragraph',
+  'heading',
+  'blockquote',
+  'verse',
+  'epigraph',
+  'caption',
+  'footnote',
+  'list-item',
+  'table'
+]

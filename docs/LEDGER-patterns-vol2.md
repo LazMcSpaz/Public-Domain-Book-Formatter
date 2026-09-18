@@ -103,6 +103,26 @@ body reference marks with no note printed on the leaf; this book gathers
 its notes at the end of each Part (leaves 110–112, notes 1–8), and pairing
 them to their marks is the apparatus step, after the reading.
 
+## The apparatus, to be done after the reading
+
+- Part I's eight notes are on leaves 110–112, landed with plain-digit
+  markers 1–8. `drive.mjs notes` reports none orphaned, which is the
+  plain-digit false match Vol. I found: a marker `1` matches any standalone
+  1 in the volume. They are to be re-landed with the superscript characters
+  as markers, the convention Vol. I settled on.
+- Body marks found so far: ¹ ² (leaf 11), ³ (15), ⁵ (22), ⁶ (24), ⁷ (25),
+  and **⁹ on leaf 27** where the eighth note belongs — the render prints a
+  9; note 8 is about the A_d and R operators interacting, which is that
+  paragraph's subject. A compositor's error, to be queried and ruled ⁸.
+- **⁴ is on leaf 21**, set as a small 4 hard against the comma in
+  "coordinate distinctions,⁴ are particularly useful", and the reader
+  passed over it. To be put back as a correction on that block.
+- **Six asterisks with no note printed**: leaves 63, 78 (two), 79, 81, 89.
+  The notes section carries only the numbered eight. Vol. I's ruling on Isis
+  leaf 106 is the precedent — kept as printed with nothing under them, as
+  `bare-mark` declarations — unless the renders of 110–112 show asterisked
+  notes the readers did not file.
+
 A lesson from ch0-A: I landed it with the check red on leaf 17 because my
 shell chained the two commands. The drift was legitimate, but the check
 exists to be read first, and every batch since lands only on "Land it".

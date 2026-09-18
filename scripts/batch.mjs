@@ -67,7 +67,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { resolve, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { driftVerdict } from './lib/drift.mjs'
-import { PAGE_FIELDS, BLOCK_FIELDS } from './lib/batch-fields.mjs'
+import { PAGE_FIELDS, BLOCK_FIELDS, BLOCK_KINDS } from './lib/batch-fields.mjs'
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -107,15 +107,7 @@ function checkBatch(donePath, draftPath) {
   // level.
   const PAGE = new Set(PAGE_FIELDS)
   const BLOCK = new Set(BLOCK_FIELDS)
-  const KINDS = new Set([
-    'paragraph',
-    'heading',
-    'blockquote',
-    'verse',
-    'footnote',
-    'caption',
-    'table'
-  ])
+  const KINDS = new Set(BLOCK_KINDS)
   const problems = []
   const notes = []
 
