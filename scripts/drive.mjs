@@ -2600,6 +2600,110 @@ async function serve() {
         )
       }
 
+      if (action === 'retouch') {
+        // **A picture cut from a scan is a photograph of paper.** Set beside
+        // new type it reads as a photocopy — grey, with the sheet's own tone
+        // and speckle around the ink. The image engine has had `threshold`,
+        // `despeckle` and the rest since SPEC §6 was wired, and the proof
+        // sheet offers them; nothing in a session could reach them, so a
+        // figure landed from here could only ever be the raw cut.
+        //
+        // Non-destructive, as everywhere else: a `retouch` edit is a *stack*
+        // re-applied over the original pixels, so the ops can be changed or
+        // taken off without re-cutting, and `sizeAfterOps` is what the DPI
+        // check divides by.
+        const imageId = positional[1] ?? null
+        const spec = positional.slice(2)
+        if (!imageId || spec.length === 0) {
+          throw new Error(
+            'figure retouch <imageId> <op[:args]>…  — grayscale, threshold:150, ' +
+              'despeckle:1, brightness:10, contrast:20, levels:0,255,1  (`none` clears)'
+          )
+        }
+        const ops =
+          spec[0] === 'none'
+            ? []
+            : spec.map((s) => {
+                const [name, args = ''] = s.split(':')
+                const n = args
+                  .split(',')
+                  .filter((a) => a !== '')
+                  .map(Number)
+                if (n.some((v) => !Number.isFinite(v)))
+                  throw new Error(`\`${s}\` has an argument that is not a number.`)
+                switch (name) {
+                  case 'grayscale':
+                    return { op: 'grayscale', params: {} }
+                  case 'threshold':
+                    return { op: 'threshold', params: { level: n[0] ?? 128 } }
+                  case 'despeckle':
+                    return { op: 'despeckle', params: { radius: n[0] ?? 1 } }
+                  case 'brightness':
+                    return { op: 'brightness', params: { amount: n[0] ?? 0 } }
+                  case 'contrast':
+                    return { op: 'contrast', params: { amount: n[0] ?? 0 } }
+                  case 'levels':
+                    return {
+                      op: 'levels',
+                      params: { black: n[0] ?? 0, white: n[1] ?? 255, gamma: n[2] ?? 1 }
+                    }
+                  default:
+                    throw new Error(`\`${name}\` is not an image op.`)
+                }
+              })
+        return page.evaluate(
+          async ([repo, imageId, ops]) => {
+            const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+            const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+            const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+            const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+            const newest = await window.__pdbfPickBook(runStore)
+            if (!newest) throw new Error('No book on this device.')
+            const run = await runStore.loadRun(newest.key)
+            if (!run) throw new Error('That book has no reading stored here.')
+            const doc = editsMod.applyEdits(
+              assemble.assembleBook(run.transcriptions),
+              run.edits ?? []
+            )
+            // Refused rather than recorded: a retouch on a picture the book has
+            // not got is an op stack nothing will ever apply, and the session
+            // that wrote it goes away believing the figure was cleaned.
+            const target = doc.illustrations.find((i) => i.id === imageId)
+            if (!target) {
+              throw new Error(
+                `No picture \`${imageId}\` in this book. It has: ` +
+                  (doc.illustrations.map((i) => i.id).join(', ') || 'none')
+              )
+            }
+            let edits = (run.edits ?? []).filter(
+              (e) => !(e.kind === 'retouch' && e.illustrationId === imageId)
+            )
+            if (ops.length > 0) {
+              edits = editsMod.withEdit(edits, { kind: 'retouch', illustrationId: imageId, ops })
+            }
+            const next = project.createSavedRun({
+              ...run,
+              images: new Map(run.images.map((i) => [i.id, i.bytes])),
+              savedAt: new Date().toISOString(),
+              edits
+            })
+            const stored = await runStore.saveRun(next)
+            const after = editsMod
+              .applyEdits(assemble.assembleBook(run.transcriptions), edits)
+              .illustrations.find((i) => i.id === imageId)
+            return {
+              retouched: imageId,
+              ops: ops.map((o) => o.op),
+              was: `${target.sourceWidth}x${target.sourceHeight}`,
+              now: after ? `${after.sourceWidth}x${after.sourceHeight}` : null,
+              stored: stored === true,
+              next: '`proof` renders the page it lands on; nothing has left this device yet.'
+            }
+          },
+          [REPO, imageId, ops]
+        )
+      }
+
       if (action !== 'cut') {
         throw new Error(
           'figure cut <leaf> <x,y,w,h> (--after <block> | --in <block> --at "<phrase>" | ' +

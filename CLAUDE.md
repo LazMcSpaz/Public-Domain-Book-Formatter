@@ -740,6 +740,9 @@ node scripts/drive.mjs figure cut 193 0.527,0.532,0.389,0.175 --beside p193b1 --
                                      #   printed size, `--in <block> --at "<phrase>"` mid-
                                      #   paragraph, `--beside … --side left|right` with the
                                      #   text run past it; `figure list`, `figure drop <id>`
+node scripts/drive.mjs figure retouch <id> grayscale threshold:150 despeckle:1
+                                     #   clean a cut: a photograph of paper reads as a
+                                     #   photocopy beside new type. `none` clears the stack
 node scripts/contact-sheets.mjs <renders> <out>  # the whole book, small, many to
                                      #   a sheet: the only thing that answers
                                      #   "is there a picture we have missed?"
@@ -2505,6 +2508,34 @@ Hermes` is one whitespace-separated word of which ten characters are small
   with **no** hyphen and passes under the fault, so a fix that simply subtracted
   one everywhere fails it; both faults were injected and each was caught by its
   own test.
+
+- **Also done**: **a figure can be cleaned from a session, and a line of type
+  the edition has no face for can be traced off the paper** (`figure retouch` on
+  the driver). The image engine has had `threshold`, `despeckle`, `levels` and
+  the rest since SPEC §6 was wired, and the proof sheet offers them — but
+  nothing in a conversation could reach them, so a figure landed from here could
+  only ever be the raw cut, which is **a photograph of paper**: grey, carrying
+  the sheet's own tone and speckle around every stroke, and reading as a
+  photocopy beside new type.
+
+  The occasion was _Isis Unveiled_ Vol. I's `Volume First.`, set in blackletter
+  at the head of the original's contents and in a face this edition does not
+  have. Cut at 600 DPI to the box the **ink** measures — a generous crop decoded
+  with `scripts/lib/ink.mjs`, the bounds read off the rows and columns, the crop
+  redone to them — then `grayscale`, `threshold: 150`, `despeckle: 1`, and set at
+  the width the 1877 page printed it. The threshold was measured rather than
+  looked at: at 120 the ink comes to 8,627 pixels and the thin strokes drop out,
+  at 150 it is 10,341 and at 175 it is 10,373, so the histogram is flat above
+  150 and that is the cut to take.
+
+  Two things the verb does not do, on purpose. It **refuses** a picture the book
+  has not got and names the ones it has, rather than recording an op stack
+  nothing will ever apply — the rule `notetext` and `bare` follow, because that
+  failure is silent and the session that wrote it goes away believing the figure
+  was cleaned. And it records a **stack**, not new bytes: the ops are re-applied
+  over the original pixels every time, so they can be changed or taken off
+  without cutting again, and `sizeAfterOps` is still what the DPI check divides
+  by.
 
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
