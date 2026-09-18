@@ -2537,6 +2537,39 @@ Hermes` is one whitespace-separated word of which ten characters are small
   without cutting again, and `sizeAfterOps` is still what the DPI check divides
   by.
 
+- **Also done**: **a footnote longer than its page breaks over the foot of the
+  next one, and the warning it used to raise was hiding a loss.** The two
+  long-footnote warnings on _Isis Unveiled_ Vol. I had stood since the first
+  export and read as a typographic nuisance. Rendered and looked at, they were
+  **text falling off the sheet**: note 889 was drawn under one line of body text
+  and kept going past the bottom margin, past the trim, with the folio struck
+  through it and its last third nowhere a reader or a printer could reach. The
+  only sign was one line in `warnings`.
+
+  A page now carries **slices** — `{id, from, count}` rather than a note id — so
+  a note too long for the page its mark falls on sets what fits and continues at
+  the foot of the next. The carry is at most one note deep, because only the last
+  note at the foot of a page can be the one that overran it, and a page never
+  gives itself over entirely to a note: one body line is always kept, which is
+  what makes the carry terminate and is also the right look. `warnings` on that
+  volume went from 2 to **0** with the page count unchanged.
+
+  **The warning is gone rather than reworded.** It used to mean "this note is
+  about to be drawn off the sheet"; splitting makes it mean "this note breaks
+  over the next page", which is ordinary composition and not worth a line in a
+  report whose value is that it is usually empty. What is never silent is a note
+  that runs out of _book_ — any note whose lines were not all set is reported
+  through `notesDropped`, the channel that already refuses to lose a picture.
+
+  **And a test of mine passed against the fault, in a shape worth recognising.**
+  The first one asserted that every word of a 900-word note reached a page — and
+  the old engine passed it, because it _emitted_ every line and drew the overflow
+  past the trim. The words were there and were not on the sheet. What
+  discriminates is counting only lines whose baseline sits above the bottom of
+  the trim, and a second test asserts that geometry on its own. "Is it in the
+  output?" is not the same question as "is it on the page", and only the second
+  one is about a book.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

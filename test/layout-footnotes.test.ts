@@ -195,16 +195,81 @@ describe('layout — footnotes', () => {
     expect(bookText(book)).not.toContain('Nothing points at me.')
   })
 
-  it('terminates on a note longer than the page, and warns', () => {
+  // Every word is its own token so the assertion can be "all of it reached a
+  // page" rather than "some of it did". A note built out of repeated prose
+  // cannot tell the two apart, which is how the old behaviour — a third of the
+  // note drawn off the bottom of the sheet — passed a test for years.
+  const NUMBERED = Array.from({ length: 900 }, (_, i) => `word${i}`).join(' ')
+
+  it('breaks a note longer than its page over the foot of the next', () => {
     const monster = build([
       page(0, [
         { kind: 'paragraph', text: `A short paragraph with a mark.1 ${PROSE}` },
-        { kind: 'footnote', text: PROSE.repeat(40), marker: '1' }
+        { kind: 'footnote', text: NUMBERED, marker: '1' }
       ])
     ])
     const book = run(monster)
-    expect(book.pages.length).toBeGreaterThan(0)
-    expect(book.warnings.some((w) => w.text.includes('longer than the page'))).toBe(true)
+    expect(book.pages.length).toBeGreaterThan(1)
+    expect(book.notesDropped).toEqual([])
+
+    // Only what is **on the sheet** counts. The old engine emitted every line
+    // of the note and drew the overflow past the bottom of the trim, so a set
+    // built from the items alone comes back complete and the test passes
+    // against the fault — measured, not supposed: it did.
+    const set = new Set(
+      book.pages.flatMap((p) =>
+        lines(p)
+          .filter((l) => l.baselinePt <= p.heightPt)
+          .flatMap((l) => l.runs.flatMap((r) => r.text.split(/\s+/u)))
+      )
+    )
+    const missing = Array.from({ length: 900 }, (_, i) => `word${i}`).filter((w) => !set.has(w))
+    expect(missing).toEqual([])
+  })
+
+  it('draws nothing below the bottom of the sheet', () => {
+    const monster = build([
+      page(0, [
+        { kind: 'paragraph', text: `A short paragraph with a mark.1 ${PROSE}` },
+        { kind: 'footnote', text: NUMBERED, marker: '1' }
+      ])
+    ])
+    const book = run(monster)
+    const over = book.pages.flatMap((p) =>
+      lines(p)
+        .filter((l) => l.baselinePt > p.heightPt)
+        .map((l) => ({
+          page: p.index,
+          at: Math.round(l.baselinePt),
+          sheet: Math.round(p.heightPt)
+        }))
+    )
+    expect(over).toEqual([])
+  })
+
+  it('does not break a note that fits', () => {
+    // Several lines long on purpose. A one-line note is on one page whatever
+    // the rule does, so it cannot tell a sound implementation from one that
+    // breaks every note it touches — injected, a two-line cap left this
+    // passing.
+    const ordinary = build([
+      page(0, [
+        { kind: 'paragraph', text: `A short paragraph with a mark.1 ${PROSE}` },
+        {
+          kind: 'footnote',
+          text: `See Croll, Basilica Chymica, lib. ii. ${PROSE.repeat(2)}`,
+          marker: '1'
+        }
+      ])
+    ])
+    const book = run(ordinary)
+    const withNotes = book.pages.filter((p) =>
+      lines(p).some((l) => l.runs.some((r) => r.text.includes('Basilica')))
+    )
+    expect(withNotes).toHaveLength(1)
+    // And the whole of it is on that page rather than merely starting there.
+    const onPage = lines(withNotes[0]!).flatMap((l) => l.runs.map((r) => r.text))
+    expect(onPage).toContain('evening.')
   })
 })
 

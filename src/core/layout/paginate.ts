@@ -423,6 +423,25 @@ interface NoteBlock {
   lines: FlowLine[]
 }
 
+/**
+ * As much of one note as a page carries.
+ *
+ * A note used to be all-or-nothing on a page, and a note longer than the page
+ * its mark falls on had nowhere to go: the flow took one body line, the whole
+ * note was drawn under it, and the lines that would not fit were drawn *past
+ * the bottom of the trim* — off the sheet, unreadable and unprintable, with the
+ * folio struck through them. Measured on _Isis Unveiled_ Vol. I, note 889 lost
+ * about a third of itself that way, and the only sign was one line in
+ * `warnings`. A note is prose the reader has to be able to finish, so it breaks
+ * across the foot of the next page instead, which is what a compositor does.
+ */
+interface NoteSlice {
+  id: string
+  /** The first line of the note this page carries, counting from 0. */
+  from: number
+  count: number
+}
+
 /** Bookkeeping while a page is being filled. */
 interface PageBuilder {
   index: number
@@ -436,8 +455,11 @@ interface PageBuilder {
   suppressRunningHead: boolean
   /** Display pages (half-title, title, copyright) carry no folio. */
   suppressFolio: boolean
-  /** Notes referenced from this page, in the order they are referenced. */
-  noteIds: string[]
+  /**
+   * The notes at the foot of this page, in the order they are referenced — each
+   * a slice, because a note too long for one page continues on the next.
+   */
+  notes: NoteSlice[]
 }
 
 function roman(n: number): string {
@@ -2048,6 +2070,20 @@ export function layout(
     return Math.max(0, Math.min(slotsPerPage, slots))
   }
 
+  /**
+   * The most note lines a page may carry once its last body line is at `slot`.
+   *
+   * `bodySlotsFor` reads the other way — lines of note to slots of body — and
+   * this is its inverse, found by walking rather than by algebra because the
+   * relation is a floor division and stepping it is exact where inverting it is
+   * approximately right.
+   */
+  function maxNoteLinesUnder(lastBodySlot: number): number {
+    let n = 0
+    while (n < slotsPerPage * 8 && bodySlotsFor(n + 1) >= lastBodySlot + 1) n += 1
+    return n
+  }
+
   const frameFrom = (side: PageSide): PageFrame => (side === 'recto' ? rectoFrame : versoFrame)
 
   function newPage(section: PageSection, opts?: Partial<PageBuilder>): PageBuilder {
@@ -2066,7 +2102,7 @@ export function layout(
       frame: frameFrom(side),
       lines: [],
       chapterTitle: previous?.chapterTitle ?? null,
-      noteIds: [],
+      notes: [],
       suppressRunningHead: false,
       suppressFolio: false,
       ...opts
@@ -2168,6 +2204,25 @@ export function layout(
     noteBlocks.set(note.id, breakNote(note, ctx))
   }
   const noteLinesOf = (id: string): number => noteBlocks.get(id)?.lines.length ?? 0
+
+  // How much of each note has been set, and the tail of the one still running.
+  // `carry` is at most one note deep because only the *last* note at the foot
+  // of a page can be the one that overran it — the notes above it are whole by
+  // construction.
+  const notePlaced = new Map<string, number>()
+  const noteLeft = (id: string): number => noteLinesOf(id) - (notePlaced.get(id) ?? 0)
+  let carry: string | null = null
+
+  /**
+   * The most note lines a page may carry, which is one short of all of them.
+   *
+   * A page given over entirely to a note would set no body line, so the flow
+   * would make no progress and the note would carry to a page that made none
+   * either. Leaving room for a single body line is what makes the carry
+   * terminate, and it is also what a compositor does: a foot of notes under one
+   * line of text is a page, a foot of notes under nothing is a mistake.
+   */
+  const maxNoteLines = Math.max(1, maxNoteLinesUnder(0))
 
   // Where each picture falls in the reading order. Computed before anything is
   // broken so an illustration is a flowable like any other from here on, and
@@ -2399,6 +2454,7 @@ export function layout(
       }
     }
     page = newPage(flowSection)
+    seedCarry(page)
     slot = 0
   }
 
@@ -2410,6 +2466,27 @@ export function layout(
   function current(): PageBuilder {
     if (page === null) throw new Error('layout: no page open')
     return page
+  }
+
+  /**
+   * Put the running note's next stretch at the foot of the page just opened.
+   *
+   * Before any body line is reserved, because the tail of a note the reader is
+   * in the middle of comes before anything new: the body slots this page has
+   * are whatever is left under it.
+   */
+  function seedCarry(target: PageBuilder): void {
+    if (carry === null) return
+    const id = carry
+    const left = noteLeft(id)
+    if (left <= 0) {
+      carry = null
+      return
+    }
+    const count = Math.min(left, maxNoteLines)
+    target.notes.push({ id, from: notePlaced.get(id) ?? 0, count })
+    notePlaced.set(id, (notePlaced.get(id) ?? 0) + count)
+    carry = count < left ? id : null
   }
 
   for (let i = 0; i < flowables.length; i++) {
@@ -2467,14 +2544,18 @@ export function layout(
     let headingRecorded = false
     while (placed < flow.lines.length) {
       // A page is always open here: the block above opened one if there wasn't.
-      const pageNoteLines = current().noteIds.reduce((n, id) => n + noteLinesOf(id), 0)
+      const pageLines = (p: PageBuilder): number => p.notes.reduce((n, s) => n + s.count, 0)
+      const pageNoteLines = pageLines(current())
       let bodySlots = bodySlotsFor(pageNoteLines)
       let available = bodySlots - slot
       if (available <= 0) {
         if (bodyPageCount() >= maxBodyPages) break
         openBodyPage(false)
-        bodySlots = slotsPerPage
-        available = slotsPerPage
+        // Read off the page that was just opened rather than assumed to be a
+        // whole one: it may already be carrying the tail of a note from the
+        // page before, and the body has whatever is left under that.
+        bodySlots = bodySlotsFor(pageLines(current()))
+        available = bodySlots - slot
       }
 
       const remaining = flow.lines.length - placed
@@ -2514,13 +2595,13 @@ export function layout(
       // there is nothing to re-flow, which is why the second pass the plan
       // budgeted for turned out not to be needed.
       const beforeNotes = take
-      const claimed = new Set(current().noteIds)
+      const claimed = new Set(current().notes.map((n) => n.id))
       let claimedLines = pageNoteLines
       let allowed = 0
       for (let k = 0; k < take; k++) {
         const ids = flow.lines[placed + k]!.noteIds ?? []
         const fresh = ids.filter((id) => !claimed.has(id) && noteBlocks.has(id))
-        const lines = claimedLines + fresh.reduce((n, id) => n + noteLinesOf(id), 0)
+        const lines = claimedLines + fresh.reduce((n, id) => n + noteLeft(id), 0)
         if (slot + k + 1 > bodySlotsFor(lines)) break
         for (const id of fresh) claimed.add(id)
         claimedLines = lines
@@ -2562,8 +2643,26 @@ export function layout(
         // here, from the lines actually placed, rather than from the trial
         // above — a line the clamp rejected must not leave its note behind.
         for (const id of line.noteIds ?? []) {
-          if (noteBlocks.has(id) && !current().noteIds.includes(id)) {
-            current().noteIds.push(id)
+          if (!noteBlocks.has(id)) continue
+          if (current().notes.some((n) => n.id === id)) continue
+          // What of this note the page can still hold, given the body lines it
+          // now has. On every ordinary page that is all of it — the reservation
+          // above only let these lines on because their notes fit. The clamp
+          // bites in the one case the reservation cannot solve: a note longer
+          // than the page its own mark falls on, where the flow below takes a
+          // single body line and the note has to break.
+          const room = Math.max(
+            0,
+            maxNoteLinesUnder(slot + k) - current().notes.reduce((n, x) => n + x.count, 0)
+          )
+          const left = noteLeft(id)
+          const count = Math.min(left, room)
+          if (count <= 0) break
+          current().notes.push({ id, from: notePlaced.get(id) ?? 0, count })
+          notePlaced.set(id, (notePlaced.get(id) ?? 0) + count)
+          if (count < left) {
+            carry = id
+            break
           }
         }
 
@@ -2577,12 +2676,12 @@ export function layout(
         }
       }
 
-      if (noteLimited) {
-        warnings.push({
-          pageIndex: current().index,
-          text: 'a footnote is longer than the page it belongs to'
-        })
-      }
+      // No warning for `noteLimited` any more. It used to mean "this note is
+      // longer than its page and is about to be drawn off the sheet", which was
+      // worth shouting about; it now means "this note breaks over the foot of
+      // the next page", which is ordinary composition. What is still never
+      // silent is a note that runs out of *book*: `notesDropped`, below, reports
+      // any note whose lines were not all set.
 
       // The block's opening page is only known once its first line is placed
       // — the same reasoning as the chapter record below.
@@ -2630,10 +2729,12 @@ export function layout(
    * printing on top of the text.
    */
   function drawNotes(page: PageBuilder, items: PageItem[]): void {
-    if (page.noteIds.length === 0) return
+    if (page.notes.length === 0) return
 
-    const blocks = page.noteIds.map((id) => noteBlocks.get(id)).filter((b): b is NoteBlock => !!b)
-    const noteLines = blocks.reduce((n, b) => n + b.lines.length, 0)
+    const slices = page.notes
+      .map((s) => ({ slice: s, block: noteBlocks.get(s.id) }))
+      .filter((x): x is { slice: NoteSlice; block: NoteBlock } => x.block !== undefined)
+    const noteLines = slices.reduce((n, x) => n + x.slice.count, 0)
     if (noteLines === 0) return
 
     const lastBodySlot = page.lines.reduce((max, l) => Math.max(max, l.slot), -1)
@@ -2651,8 +2752,8 @@ export function layout(
     })
 
     let baseline = ruleY + NOTE_RULE_THICKNESS + ruleGapBelow + noteMetrics.ascent
-    for (const block of blocks) {
-      for (const line of block.lines) {
+    for (const { slice, block } of slices) {
+      for (const line of block.lines.slice(slice.from, slice.from + slice.count)) {
         const runs = runsAt(line, page.frame.xPt)
         if (runs.length > 0) items.push({ kind: 'line', baselinePt: baseline, runs })
         baseline += noteLeading
@@ -2685,7 +2786,7 @@ export function layout(
   // Every note that found a reference was placed, because a page is only ever
   // closed once the lines referencing its notes have been set. Anything left
   // over never had a reference to attach to, and is reported rather than lost.
-  const placedIds = new Set(pages.flatMap((p) => p.noteIds))
+  const placedIds = new Set(pages.flatMap((p) => p.notes.map((n) => n.id)))
   const collectedIds = new Set(collected.map((note) => note.id))
   const notesDropped = [
     ...prepared.orphans
@@ -2699,6 +2800,23 @@ export function layout(
       .map((note) => ({
         id: note.id,
         reason: 'its reference falls on a page that was not laid out'
+      })),
+    // **A note that breaks over a page and never finishes.** Splitting a long
+    // note means part of it is carried, and a carry the book runs out of pages
+    // to honour would leave a sentence stopping in mid-air at the foot of the
+    // last leaf — which is exactly what the drawing used to do to every long
+    // note, and is the failure this whole change exists to end. It cannot
+    // happen while pages are left, so it is reported rather than guarded
+    // against: silence here is the worst outcome in the program.
+    ...[...prepared.notes.values()]
+      .filter(
+        (note) => placedIds.has(note.id) && (notePlaced.get(note.id) ?? 0) < noteLinesOf(note.id)
+      )
+      .map((note) => ({
+        id: note.id,
+        reason:
+          `only ${notePlaced.get(note.id) ?? 0} of its ${noteLinesOf(note.id)} lines were set — ` +
+          'the book ran out of pages before the note ran out of words'
       }))
   ]
 
