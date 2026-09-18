@@ -496,11 +496,15 @@ paper; `layout()` **warns** when a book's headings carry no level at all;
 it already joined a number line; `split` partitions emphasis and `merge`
 carries it across, both of which were silently losing italics; and
 `drive.mjs split` puts back a line break the conversion dropped, named by the
-words the next line starts with. What is still a person's job on such a
-file: which short lines are hard breaks. The measurement that decides it —
-the block's own margin, the share of its lines reaching it, and whether the
-line ends on a function word — is in the ledger for this book and not yet in
-the app.
+words the next line starts with. Which short lines are hard breaks is
+measured too, in `draft/breaks.ts`: a run's own margin, the share of its
+lines reaching it, and the words at the seam — and a prose line that ends a
+sentence a quarter short with a capital under it is a paragraph the
+conversion swallowed. `draftPage` cuts on both and reports each cut in its
+`structural` list, because it is a guess from geometry and the leaf decides.
+The display verdict needs three lines (`SHAPE_FLOOR_LINES`): `flush` is a
+share of the inner lines, a two-line run has one, and a rate built from one
+event called an indented opening line on a scanned leaf of _Isis_ a list.
 
 ### A test that passes before and after the fix is not a test
 
@@ -600,6 +604,18 @@ the title and the one-line description a person wrote at the top of each file:
 those are the editor's sentences about this edition and no amount of reading
 `book.json` would recover them.
 
+**The entries of `corrections.md` are derivable too, and were not.** They
+were built by a script in one session's scratchpad, so the first session to
+end took the only thing that could rewrite them. `correctionRows`
+(`src/core/edits/corrections-sheet.ts`) is that script as a pure module:
+pristine against edited, diffed on the bare text so a restored italic is not
+a correction, with a plain digit set as its superscript listed apart from the
+word changes. `drive.mjs corrections <book-dir>` writes the file, keeping
+everything above the first entry as the editor's, and `book-files.mjs --body`
+checks it with the same code. Its first version judged a reference mark on
+the windowed text and missed one where a second correction sat three words
+away; the verdict is on the changed words now, and the window is for reading.
+
 **The order that keeps them together.** A change to a book is not one edit but
 four, and doing three of them is how the shelf ends up describing a book it no
 longer holds: write `book.json`, re-export the PDF, regenerate the readable
@@ -688,7 +704,11 @@ node scripts/contact-sheets.mjs <renders> <out>  # the whole book, small, many t
 
 node scripts/book-files.mjs <book-dir> --check   # do the readable files still
                                      #   describe the book? regenerates them
-                                     #   without --check
+                                     #   without --check; `--body body.json`
+                                     #   checks corrections.md's entries too
+node scripts/drive.mjs corrections <book-dir>    # rewrite corrections.md's entries
+                                     #   from the book as it stands, keeping the
+                                     #   prose above them; `--check` writes nothing
 ```
 
 **Ask a book whether it has pictures, once, rather than hoping a reader looks

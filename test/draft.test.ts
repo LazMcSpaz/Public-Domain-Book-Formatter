@@ -156,6 +156,152 @@ describe('drafting a page into blocks', () => {
     ])
   })
 
+  /**
+   * A text layer has no line structure, so a stack of example sentences set
+   * one under the other arrives as one run. Measured off the run's own
+   * geometry: its lines mostly fall short of its own margin, so it is display
+   * matter, and each line opens with a capital, so each is its own block.
+   */
+  it('cuts a stack of example sentences into one block a line', () => {
+    const page = draftPage(
+      words(
+        [
+          ...filler(0),
+          ...filler(1),
+          [{ text: 'The man drank the rock', line: 3, from: 8 }],
+          [{ text: 'The flower was angry', line: 4, from: 8 }],
+          [{ text: 'The happy chair sang a love song', line: 5, from: 8 }],
+          ...filler(7),
+          ...filler(8)
+        ].flat() as Placed[]
+      )
+    )
+    const quoted = page.blocks.filter((b) => b.kind === 'blockquote').map((b) => b.text)
+    expect(quoted).toEqual([
+      'The man drank the rock',
+      'The flower was angry',
+      'The happy chair sang a love song'
+    ])
+    expect(page.structural.some((s) => /line break\(s\).*put back/u.test(s))).toBe(true)
+  })
+
+  it('cuts a word list one word a line, capitals or not', () => {
+    const page = draftPage(
+      words(
+        [
+          ...filler(0),
+          [{ text: 'converse', line: 2, from: 8 }],
+          [{ text: 'intone', line: 3, from: 8 }],
+          [{ text: 'whine', line: 4, from: 8 }],
+          [{ text: 'cry', line: 5, from: 8 }],
+          ...filler(7)
+        ].flat() as Placed[]
+      )
+    )
+    expect(page.blocks.filter((b) => b.kind === 'blockquote').map((b) => b.text)).toEqual([
+      'converse',
+      'intone',
+      'whine',
+      'cry'
+    ])
+  })
+
+  /**
+   * The same shape — inset, ragged — but a continuous list that merely wraps:
+   * each line ends on a comma and the next opens lower case. One block.
+   */
+  it('leaves a wrapped list whole', () => {
+    const page = draftPage(
+      words(
+        [
+          ...filler(0),
+          [{ text: 'slap, handle, grasp, pass, hold, wear, catch,', line: 2, from: 8 }],
+          [{ text: 'catch hold of, steer, paddle, row, stroke, pour, chop,', line: 3, from: 8 }],
+          [{ text: 'slice, pin, button, tear, strum, play, etc.', line: 4, from: 8 }],
+          ...filler(6)
+        ].flat() as Placed[]
+      )
+    )
+    expect(page.blocks.filter((b) => b.kind === 'blockquote')).toHaveLength(1)
+  })
+
+  /**
+   * Two inset lines, the first a sentence a little short of the second, the
+   * second opening with a capital. On one inner line the run's `flush` is 0,
+   * which is the shape of a list — built from one event. Leaf 650 of *Isis
+   * Unveiled* has exactly this, an indented first line whose paragraph runs
+   * on, and was cut into a list by the first version. Under the floor the
+   * run is judged as prose, and a line 15% short does not end a paragraph.
+   */
+  it('does not call a two-line run display matter on the strength of one line', () => {
+    const page = draftPage(
+      words(
+        [
+          ...filler(0),
+          [{ text: 'Ic or ique, as a terminal, means great, as cazique, etc.', line: 2, from: 8 }],
+          // 19% longer than the line above: past the flush tolerance, short
+          // of the quarter the prose rule needs.
+          [
+            {
+              text: 'Columbus mentions, in his fourth voyage, the village Cariai, probably',
+              line: 3,
+              from: 8
+            }
+          ],
+          ...filler(5)
+        ].flat() as Placed[]
+      )
+    )
+    expect(page.blocks.filter((b) => b.kind === 'blockquote')).toHaveLength(1)
+    expect(page.structural.some((s) => /line break\(s\).*put back/u.test(s))).toBe(false)
+  })
+
+  /**
+   * Prose the conversion ran together across a paragraph end: `malignancy.`
+   * on a line of its own, `Radical therapy` opening the next. On the paper
+   * (leaf 19) they are two paragraphs.
+   */
+  it('cuts prose where a sentence ends a quarter short and a capital opens the next line', () => {
+    const page = draftPage(
+      words(
+        [
+          ...filler(0),
+          ...filler(1),
+          ...filler(2),
+          [{ text: 'reported the growth to be a malignancy.', line: 3, from: 0 }],
+          [{ text: 'Radical therapy was then instituted but it was promptly', line: 4, from: 0 }],
+          ...filler(5),
+          ...filler(6)
+        ].flat() as Placed[]
+      )
+    )
+    const paras = page.blocks.filter((b) => b.kind === 'paragraph').map((b) => b.text)
+    expect(paras).toHaveLength(2)
+    expect(paras[1]!.startsWith('Radical therapy')).toBe(true)
+  })
+
+  /**
+   * The typescript's own ragged setting: a line short mid-phrase, the phrase
+   * finishing on the next. `in its Surface / Structure representation` is one
+   * phrase, and cutting it is new damage. No sentence ends, so no cut.
+   */
+  it('leaves ragged prose whole when the short line ends mid-sentence', () => {
+    const page = draftPage(
+      words(
+        [
+          ...filler(0),
+          ...filler(1),
+          ...filler(2),
+          [{ text: 'which does not occur explicitly in its Surface', line: 3, from: 0 }],
+          [{ text: 'Structure representation. We will call this semantic.', line: 4, from: 0 }],
+          ...filler(5),
+          ...filler(6)
+        ].flat() as Placed[]
+      )
+    )
+    expect(page.blocks.filter((b) => b.kind === 'paragraph')).toHaveLength(1)
+  })
+
   it('calls a lone line ranged right a caption — which is what a folio line is', () => {
     const page = draftPage(
       words([

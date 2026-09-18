@@ -684,7 +684,13 @@ describe('the foot of a leaf does not call a footnote body text', () => {
       200: { notes: 1, folio: '142', blocks: 7 },
       300: { notes: 3, folio: '242', blocks: 5 },
       400: { notes: 3, folio: '342', blocks: 6 },
-      650: { notes: 3, folio: '592', blocks: 11 }
+      // 11 before `draft/breaks` existed. Its prose rule cuts leaf 650 once,
+      // at "Yet he omits to mention this word." — a sentence on a line 44%
+      // short of the run's margin with a capital under it, which is a
+      // one-line paragraph on the paper. The floor on the display verdict
+      // (`SHAPE_FLOOR_LINES`) is what keeps the count at one: without it the
+      // two-line indented runs were called lists and cut as well.
+      650: { notes: 3, folio: '592', blocks: 12 }
     }
     for (const leaf of isis.fixture.leaves) {
       const want = expected[leaf.pageIndex]

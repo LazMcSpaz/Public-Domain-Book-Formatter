@@ -47,6 +47,19 @@ export {
 } from './rich-text'
 export { findMatches, sweepText, type SweepMatch } from './sweep'
 export {
+  claimedCounts,
+  correctionRows,
+  correctionsHeader,
+  correctionsMarkdown,
+  isMarkRestoration,
+  wordHunks,
+  withCounts,
+  CONTEXT_WORDS,
+  type CorrectionRow,
+  type CorrectionRows,
+  type SheetBlock
+} from './corrections-sheet'
+export {
   proofSheet,
   nextFlaggedPage,
   type ProofBlock,

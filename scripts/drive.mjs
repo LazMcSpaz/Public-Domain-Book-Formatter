@@ -234,6 +234,82 @@ async function serve() {
     return page.evaluate((c) => window.__pdbfAgent.run(c), command)
   }
 
+  /**
+   * The assembled book, pristine and edited, in the strings an edit must be
+   * written in terms of. Shared by `body` and `corrections`, because two
+   * readers of the same run that assembled it separately would disagree
+   * exactly where a correction sits.
+   */
+  const readBody = () =>
+    page.evaluate(
+      async ([repo]) => {
+        const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+        const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+        const edits = await import(`/@fs${repo}/src/core/edits/index.ts`)
+        const markup = await import(`/@fs${repo}/src/core/transcribe/index.ts`)
+        const newest = await window.__pdbfPickBook(runStore)
+        if (!newest) throw new Error('No book open on this device.')
+        const run = await runStore.loadRun(newest.key)
+        const bare = assemble.assembleBook(run.transcriptions)
+        const applied = edits.applyEdits(bare, run.edits ?? [])
+        const say = (blocks) =>
+          blocks.map((b) => ({
+            id: b.id,
+            kind: b.kind,
+            pages: b.sourcePages,
+            text: markup.withMarkup(b.text, b.emphasis)
+          }))
+        return {
+          edited: say(applied.blocks),
+          pristine: say(bare.blocks),
+          // What the contents and the running heads will be built from. A
+          // chapter opened by a number over a name is one entry here and two
+          // heading blocks above, which is worth being able to see rather
+          // than infer from a rendered page.
+          chapters: applied.chapters.map((c) => ({
+            id: c.id,
+            label: c.label ?? null,
+            title: c.title,
+            level: c.level,
+            // Whether the original contents' description reached this
+            // chapter. Reported because a synopsis that failed to match is
+            // silent otherwise: the contents still prints, just plainer, and
+            // nothing says the prose was read and then dropped.
+            synopsis: c.synopsis ? `${c.synopsis.slice(0, 60)}…` : null
+          })),
+          // A description read off the original contents that no chapter
+          // claimed. Silent otherwise: the contents still prints, only
+          // plainer, so nothing looks broken and the prose was read and
+          // thrown away.
+          synopsesUnmatched: applied.synopsesUnmatched.map((x) => x.title),
+          sections: applied.sections.map((s) => ({
+            id: s.id,
+            placement: s.placement,
+            title: s.title,
+            blocks: s.blocks.length
+          }))
+        }
+      },
+      [REPO]
+    )
+
+  /**
+   * What a shelf book is called, for the head of a sheet started from nothing:
+   * the export answers' title with its series line, or the directory's name
+   * when the book has not reached that gate.
+   */
+  const bookTitle = async (where) => {
+    const { readFile } = await import('node:fs/promises')
+    try {
+      const book = JSON.parse(await readFile(resolve(where, 'book.json'), 'utf8'))
+      const exp = book.answers?.export ?? {}
+      if (exp.title) return exp.seriesLine ? `${exp.title}*, *${exp.seriesLine}` : exp.title
+    } catch {
+      /* no book file, or not one this reads */
+    }
+    return where.split('/').pop()
+  }
+
   const handlers = {
     /** The gate on screen, as the controller sees it. */
     state: () => run({ op: 'state' }),
@@ -2007,60 +2083,57 @@ async function serve() {
      * can be checked before any of it is written.
      */
     body: async ([out = 'body.json']) => {
-      const doc = await page.evaluate(
-        async ([repo]) => {
-          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
-          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
-          const edits = await import(`/@fs${repo}/src/core/edits/index.ts`)
-          const markup = await import(`/@fs${repo}/src/core/transcribe/index.ts`)
-          const newest = await window.__pdbfPickBook(runStore)
-          if (!newest) throw new Error('No book open on this device.')
-          const run = await runStore.loadRun(newest.key)
-          const bare = assemble.assembleBook(run.transcriptions)
-          const applied = edits.applyEdits(bare, run.edits ?? [])
-          const say = (blocks) =>
-            blocks.map((b) => ({
-              id: b.id,
-              kind: b.kind,
-              pages: b.sourcePages,
-              text: markup.withMarkup(b.text, b.emphasis)
-            }))
-          return {
-            edited: say(applied.blocks),
-            pristine: say(bare.blocks),
-            // What the contents and the running heads will be built from. A
-            // chapter opened by a number over a name is one entry here and two
-            // heading blocks above, which is worth being able to see rather
-            // than infer from a rendered page.
-            chapters: applied.chapters.map((c) => ({
-              id: c.id,
-              label: c.label ?? null,
-              title: c.title,
-              level: c.level,
-              // Whether the original contents' description reached this
-              // chapter. Reported because a synopsis that failed to match is
-              // silent otherwise: the contents still prints, just plainer, and
-              // nothing says the prose was read and then dropped.
-              synopsis: c.synopsis ? `${c.synopsis.slice(0, 60)}…` : null
-            })),
-            // A description read off the original contents that no chapter
-            // claimed. Silent otherwise: the contents still prints, only
-            // plainer, so nothing looks broken and the prose was read and
-            // thrown away.
-            synopsesUnmatched: applied.synopsesUnmatched.map((x) => x.title),
-            sections: applied.sections.map((s) => ({
-              id: s.id,
-              placement: s.placement,
-              title: s.title,
-              blocks: s.blocks.length
-            }))
-          }
-        },
-        [REPO]
-      )
+      const doc = await readBody()
       const { writeFile } = await import('node:fs/promises')
       await writeFile(out, JSON.stringify(doc, null, 1))
       return { wrote: out, blocks: doc.edited.length }
+    },
+
+    /**
+     * Rewrite the entries of a shelf book's `corrections.md` from the book as
+     * it stands, keeping the prose the editor wrote above them.
+     *
+     * The entries quote the assembled body, which is why `book-files.mjs`
+     * cannot build them without being handed one; this verb has the browser
+     * and does. The derivation itself is `@core/edits` and shared with that
+     * script's `--body` check, so the sheet on the shelf and the check that
+     * it is still true cannot disagree about what an entry is. `--check`
+     * writes nothing and exits non-zero when the file on the shelf differs.
+     */
+    corrections: async ([dir, ...flags]) => {
+      if (!dir) throw new Error('corrections <shelf-book-directory> [--check]')
+      const { readFile, writeFile } = await import('node:fs/promises')
+      const where = resolve(REPO, dir)
+      const path = resolve(where, 'corrections.md')
+      let existing = null
+      try {
+        existing = await readFile(path, 'utf8')
+      } catch {
+        /* a book with no sheet yet */
+      }
+      const doc = await readBody()
+      const built = await page.evaluate(
+        async ([repo, existing, title, doc]) => {
+          const edits = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const rows = edits.correctionRows(doc.pristine, doc.edited)
+          return {
+            text: edits.correctionsMarkdown(edits.correctionsHeader(existing, title), rows),
+            words: rows.words.length,
+            marks: rows.marks.length
+          }
+        },
+        [REPO, existing, await bookTitle(where), doc]
+      )
+      const same = existing === built.text
+      if (flags.includes('--check')) {
+        if (!same)
+          throw new Error(
+            `${path} differs from the book: ${built.words} corrections, ${built.marks} reference marks`
+          )
+        return { path, upToDate: true, corrections: built.words, marks: built.marks }
+      }
+      if (!same) await writeFile(path, built.text)
+      return { wrote: same ? null : path, corrections: built.words, marks: built.marks }
     },
 
     /**

@@ -226,5 +226,39 @@ if (flags.includes('--marks') && bodyArg && !bodyArg.startsWith('--')) {
     console.log(`  ok        ${v.entry}  — the book never uses the word`)
 }
 
+/**
+ * The entries of `corrections.md`, against the body. Every entry quotes the
+ * assembled text, so this too needs a body handed in (`drive.mjs body`);
+ * given one, the same derivation `drive.mjs corrections` writes with is run
+ * here and the file compared to it, prose kept, counts included. Without
+ * `--check` the file is rewritten.
+ */
+const corrArg = flags[flags.indexOf('--body') + 1]
+if (flags.includes('--body') && corrArg && !corrArg.startsWith('--')) {
+  const { correctionRows, correctionsHeader, correctionsMarkdown } =
+    await import('../src/core/edits/corrections-sheet.ts')
+  const body = JSON.parse(readFileSync(corrArg, 'utf8'))
+  const path = join(dir, 'corrections.md')
+  const had = existsSync(path) ? readFileSync(path, 'utf8') : null
+  const exp = book.answers?.export ?? {}
+  const title = exp.title
+    ? exp.seriesLine
+      ? `${exp.title}*, *${exp.seriesLine}`
+      : exp.title
+    : basename(dir)
+  const rows = correctionRows(body.pristine, body.edited)
+  const text = correctionsMarkdown(correctionsHeader(had, title), rows)
+  const note = `${rows.words.length} corrections, ${rows.marks.length} reference marks`
+  if (had === text) console.log(`  ok      corrections.md  (${note})`)
+  else {
+    stale += 1
+    if (check) console.log(`  STALE   corrections.md  (${note}) — entries differ from the body`)
+    else {
+      writeFileSync(path, text)
+      console.log(`  written corrections.md  (${note})`)
+    }
+  }
+}
+
 console.log(`${basename(dir)}: ${stale === 0 ? 'in step with book.json' : `${stale} out of date`}`)
 if (check && stale > 0) process.exitCode = 1

@@ -71,6 +71,7 @@ import { findIndentedBlocks } from './indented'
 import { tableToText } from '../transcribe/schema'
 import { healWrappedHyphens, tally, type HyphenVerdict, type Vocabulary } from './hyphens'
 import { emphasisForTexts, flattenCellEmphasis, withoutConversionDamage } from './emphasis'
+import { cutRun, type RunBreak } from './breaks'
 
 export interface DraftBlock {
   kind: 'paragraph' | 'heading' | 'blockquote' | 'caption' | 'footnote' | 'table'
@@ -1446,6 +1447,8 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
   const sourceOf = new Map<DraftBlock, DraftWord[][]>()
   let run: DraftLine[] = []
   let runIsNote = false
+  /** Line breaks put back from the geometry, reported below as the guesses they are. */
+  const restoredBreaks: RunBreak[] = []
 
   const flush = (): void => {
     if (run.length === 0) return
@@ -1493,13 +1496,27 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
             : right
               ? 'caption'
               : 'paragraph'
-      const block: DraftBlock = {
-        kind,
-        text,
-        ...(kind === 'heading' ? { level: headingLevel(run, bodyHeight) } : {})
+      // Lines the compositor set apart and the text layer ran together. Only
+      // prose and quotations are cut: a heading's lines are one title, a note
+      // is one note, and a caption is one line already. See `./breaks`.
+      const pieces =
+        kind === 'paragraph' || kind === 'blockquote' ? cutRun(run) : { pieces: [run], breaks: [] }
+      for (const piece of pieces.pieces) {
+        const pieceText = piece
+          .map((l) => l.text.trim())
+          .join(' ')
+          .replace(/\s+/gu, ' ')
+          .trim()
+        if (pieceText.length === 0) continue
+        const block: DraftBlock = {
+          kind,
+          text: pieceText,
+          ...(kind === 'heading' ? { level: headingLevel(run, bodyHeight) } : {})
+        }
+        blocks.push(block)
+        sourceOf.set(block, [piece.flatMap((l) => l.words)])
       }
-      blocks.push(block)
-      sourceOf.set(block, [run.flatMap((l) => l.words)])
+      restoredBreaks.push(...pieces.breaks)
     }
     run = []
   }
@@ -1547,6 +1564,17 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
   }
   flush()
 
+  if (restoredBreaks.length > 0) {
+    const by = new Map<string, number>()
+    for (const b of restoredBreaks) by.set(b.reason, (by.get(b.reason) ?? 0) + 1)
+    structural.push(
+      `${restoredBreaks.length} line break(s) the text layer ran together were put back from ` +
+        `the geometry (${[...by].map(([r, n]) => `${n} ${r}`).join(', ')}). A run whose lines ` +
+        'mostly fall short of its own margin is display matter and is cut where a line opens ' +
+        'an item, a capital or a short word; prose is cut only where a sentence ends a quarter ' +
+        'short with a capital under it. A line ending on `of` or `the` is never cut.'
+    )
+  }
   const headings = blocks.filter((b) => b.kind === 'heading').length
   if (headings > 0) {
     structural.push(
@@ -1723,3 +1751,4 @@ export * from './hyphens'
 export * from './columns'
 export * from './paired'
 export * from './indented'
+export * from './breaks'
