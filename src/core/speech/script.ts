@@ -24,6 +24,7 @@
  * follows.
  */
 import type { BookDocument, BookBlock, ChapterEntry, Footnote } from '@core/assemble'
+import { prepareFootnotes } from '@core/layout'
 import { GLOSSARY_MARK } from '@core/annotate'
 import { speakHeadingNumbers } from './roman'
 import { applyPronunciations, type Pronunciation } from './pronounce'
@@ -215,6 +216,15 @@ export function readChapter(
   const said = (text: string) => applyPronunciations(withoutSilentMarks(text), pronunciations)
   const heading = (text: string) => said(speakHeadingNumbers(text))
 
+  // A footnote's reference mark is printed for the eye and read aloud as a
+  // number: "families who live in poverty 1 ." came back as "poverty one".
+  // The engine already walks every block and deletes each mark it pairs with a
+  // note, so the text spoken is that walk's output and not a second opinion
+  // about where the marks are — one implementation, the one that sets the
+  // page. A block the walk has no entry for is read as it stands.
+  const marked = prepareFootnotes(doc.blocks, doc.footnotes, doc.bareMarks).blocks
+  const spoken = new Map(doc.blocks.map((block, i) => [block.id, marked[i]?.text ?? block.text]))
+
   // One silence between two things, never two.
   //
   // Emitting a gap after a piece *and* before the next one stacks them: a label
@@ -224,7 +234,7 @@ export function readChapter(
   // precedes.
   let gap = 0
   for (const block of blocks) {
-    const text = block.text.trim()
+    const text = (spoken.get(block.id) ?? block.text).trim()
     if (text.length === 0) {
       unread.push({ id: block.id, kind: block.kind, why: 'the block is empty' })
       continue

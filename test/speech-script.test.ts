@@ -210,6 +210,31 @@ describe('readChapter, on a block quotation', () => {
   })
 })
 
+describe('readChapter, on a block carrying a footnote mark', () => {
+  it('does not read the reference digit aloud', () => {
+    // "families who live in poverty.1 In the middle class" was spoken as
+    // "poverty one". The engine's own walk deletes the mark it pairs with the
+    // note; the script reads that text rather than the block's.
+    const book = bookOf({
+      blocks: [
+        block('p1b0', 'heading', 'A'),
+        block('p1b1', 'paragraph', 'Families who live in poverty.1 In the middle class it differs.')
+      ],
+      footnotes: [
+        { id: 'n1', originalMarker: '1', text: 'A citation.', pageIndex: 0, orphaned: false }
+      ] as BookDocument['footnotes'],
+      chapters: [{ id: 'p1b0', title: 'A', level: 1 }] as BookDocument['chapters']
+    })
+    const said = readChapter(book, 0)
+      .pieces.filter((p) => p.kind === 'paragraph')
+      .map((p) => p.text)
+    expect(said).toHaveLength(1)
+    expect(said[0]).not.toMatch(/\b1\b/)
+    expect(said[0]).toContain('poverty.')
+    expect(said[0]).toContain('In the middle class')
+  })
+})
+
 describe('readChapter', () => {
   it('reads the headings, then the prose, with silence between', () => {
     const script = readChapter(TWO_CHAPTERS, 0)
