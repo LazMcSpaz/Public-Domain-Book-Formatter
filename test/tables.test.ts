@@ -177,6 +177,53 @@ describe('assembly leaves a table whole', () => {
     expect(book.blocks[1]!.kind).toBe('table')
   })
 
+  it('reads the markup a reader put inside a cell, and takes the tags out', () => {
+    // The transcript leaves of *Patterns* Vol. II set the analysis column as
+    // `presupposition: <i>this time</i> ...` — a cell has no other way to say
+    // the page prints those words in italic. The parser read the tags off the
+    // flattened text into word indices and then regenerated that text from the
+    // cells, tags and all, so the engine drew the word in italic *and* the
+    // angle brackets around it, on a hundred and ten leaves.
+    const block = normalizeTable<TranscribedBlock>({
+      kind: 'table',
+      text: 'stale',
+      cells: [
+        ['(1) Well, Monde', '(1) presupposition: <i>this time</i> ...'],
+        ['(2) So <i>turn</i>', '<b>tag</b> question']
+      ]
+    })
+    expect(block.cells).toEqual([
+      ['(1) Well, Monde', '(1) presupposition: this time ...'],
+      ['(2) So turn', 'tag question']
+    ])
+    expect(block.text).toBe(
+      '(1) Well, Monde | (1) presupposition: this time ...\n(2) So turn | tag question'
+    )
+    // Word indices into the flattened view, separators counted as words.
+    expect(block.emphasis).toEqual([6, 7, 11])
+    expect(block.strong).toEqual([13])
+  })
+
+  it('sets a stored table from clean cells even when its text still carries the tags', () => {
+    // The shape every transcript leaf was stored in before the cells were read
+    // for markup: emphasis already as indices, and the tags still in the cells
+    // and in the text regenerated from them. Assembly is the one door those
+    // readings come through, so it is where they have to come out clean.
+    const book = assembleBook([
+      pageWith([
+        {
+          kind: 'table',
+          cells: [['(2) So <i>turn</i>', 'embedded command: <i>turn</i>']],
+          text: '(2) So <i>turn</i> | embedded command: <i>turn</i>',
+          emphasis: [2, 6]
+        }
+      ])
+    ])
+    expect(book.blocks[0]!.cells).toEqual([['(2) So turn', 'embedded command: turn']])
+    expect(book.blocks[0]!.text).toBe('(2) So turn | embedded command: turn')
+    expect(book.blocks[0]!.emphasis).toEqual([2, 6])
+  })
+
   it('cleans the cells, not only the flattened text', () => {
     // Soft hyphens are scan noise. Stripping them from the text alone would
     // leave the two views describing different tables.

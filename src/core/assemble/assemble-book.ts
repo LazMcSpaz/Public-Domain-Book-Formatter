@@ -25,8 +25,8 @@ import {
   type SynopsisEntry
 } from '@core/pages'
 import {
+  normalizeTable,
   shiftEmphasis,
-  tableToText,
   wordCount,
   type BlockKind,
   type PageTranscription,
@@ -382,7 +382,11 @@ export function stripSoftHyphens(text: string): string {
 function cleaned(block: BookBlock): BookBlock {
   if (block.kind !== 'table' || !block.cells) return block
   const cells = block.cells.map((row) => row.map(stripSoftHyphens))
-  return { ...block, cells, text: tableToText(cells) }
+  // Through `normalizeTable` rather than `tableToText` alone, so a table whose
+  // cells still carry inline markup — every transcript leaf stored before
+  // `normalizeTable` read the cells' own tags — is set from clean cells here,
+  // at the one door every stored reading comes through.
+  return normalizeTable({ ...block, cells })
 }
 
 /** Blocks whose second half can arrive under another name. See `shouldJoin`. */

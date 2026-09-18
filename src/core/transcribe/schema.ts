@@ -9,7 +9,7 @@
  * Pure: types, the JSON schema, and a strict parser. No I/O, no client.
  */
 import type { PageRole } from '@core/pages'
-import { parseInlineMarkup } from './markup'
+import { parseInlineMarkup, type InlineMarkup } from './markup'
 
 /** Structural role of a run of text within the page. */
 export type BlockKind =
@@ -390,10 +390,53 @@ export function normalizeTable<T extends TranscribedBlock>(block: T): T {
     // because `Omit` cannot express that to a generic parameter.
     return rest as T
   }
-  const cells = (block.cells ?? parseTableText(block.text))
+  const rows = (block.cells ?? parseTableText(block.text))
     .map((row) => row.map((cell) => cell.trim()))
     .filter((row) => row.some((cell) => cell.length > 0))
-  return { ...block, cells, text: tableToText(cells) }
+  if (!rows.some((row) => row.some((cell) => cell.includes('<')))) {
+    return { ...block, cells: rows, text: tableToText(rows) }
+  }
+  // A tag inside a cell is read the way a tag inside a paragraph is, and for
+  // the same reason: a reader setting a transcript's analysis column writes
+  // `presupposition: <i>this time</i>` because the page prints those words in
+  // italic and a cell has no other way to say so. Left in the cells, the tag
+  // reaches the page twice over. `parsePageTranscription` reads the markup off
+  // the *flattened* text and records it as word indices — correctly — and then
+  // this function regenerated that text from the cells, tags and all, so the
+  // engine drew `<i>watch</i>` in italic: the word set as the indices asked and
+  // the angle brackets around it as the cell still said. A hundred and ten
+  // leaves of *Patterns* Vol. II printed that way, with the export report
+  // showing nothing but overfull lines. The cells are the structure the engine
+  // sets, so the cells are where the tags come out, and the indices they
+  // carried are folded into the block's own through the one flattening rule.
+  const parsed = rows.map((row) => row.map((cell) => parseInlineMarkup(cell)))
+  const cells = parsed.map((row) => row.map((markup) => markup.text.trim()))
+  const perCell = (pick: (markup: InlineMarkup) => number[]): number[][] =>
+    parsed.flatMap((row) => row.map(pick))
+  const union = (own: readonly number[] | undefined, found: number[]): number[] =>
+    [...new Set([...(own ?? []), ...found])].sort((a, b) => a - b)
+  const emphasis = union(
+    block.emphasis,
+    flattenCellEmphasis(
+      cells,
+      perCell((m) => m.emphasis)
+    )
+  )
+  const strong = union(
+    block.strong,
+    flattenCellEmphasis(
+      cells,
+      perCell((m) => m.strong)
+    )
+  )
+  const { emphasis: _emphasis, strong: _strong, ...rest } = block
+  return {
+    ...rest,
+    cells,
+    text: tableToText(cells),
+    ...(emphasis.length > 0 ? { emphasis } : {}),
+    ...(strong.length > 0 ? { strong } : {})
+  } as T
 }
 
 /**
