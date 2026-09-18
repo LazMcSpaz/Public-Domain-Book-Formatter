@@ -1776,6 +1776,13 @@ function heldBoundary(flow: Flowable, placed: number, take: number, remaining: n
   return out
 }
 
+/**
+ * How many level-less headings it takes before the book's shape is doubted.
+ * A pamphlet with three chapters and no levels is fine; a volume with dozens
+ * is a reading that never measured the type.
+ */
+const UNLEVELLED_HEADINGS_FLOOR = 12
+
 export function layout(
   raw: BookDocument,
   profile: StyleProfile,
@@ -1811,6 +1818,26 @@ export function layout(
   /** First page each block opens on — recorded as its first line is placed. */
   const blockPagesMap = new Map<string, number>()
   const warnings: LayoutWarning[] = []
+
+  // A heading with no level is a level-1 heading to everything below, and a
+  // level-1 heading opens a page. A reading that assigns no levels at all —
+  // which a text layer with no page images produces, having no type sizes to
+  // measure — therefore makes every sub-head a chapter: on *Patterns of the
+  // Hypnotic Techniques* Vol. I that was eighty chapters, sixty-one pages, and
+  // `Quotes` in the contents, with `warnings: 0` beside it. Reported once, on
+  // the first page, because the fault is the book's shape and not any leaf's.
+  const headingBlocks = doc.blocks.filter((b) => b.kind === 'heading')
+  if (
+    headingBlocks.length >= UNLEVELLED_HEADINGS_FLOOR &&
+    headingBlocks.every((b) => b.level === undefined)
+  ) {
+    warnings.push({
+      pageIndex: 0,
+      text:
+        `${headingBlocks.length} headings and none carries a level, so every one opens a page ` +
+        'as a chapter; run-in sub-heads want level 2'
+    })
+  }
 
   // --- footnote geometry ---------------------------------------------------
   //

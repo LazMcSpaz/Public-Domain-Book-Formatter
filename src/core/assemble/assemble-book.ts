@@ -813,6 +813,16 @@ export function assembleBook(
  * A number line (`CHAPTER XI.`, `LESSON III.`) is incomplete on its own and
  * absorbs the heading after it. A complete heading absorbs nothing.
  */
+/**
+ * A heading whose last character promises more: "Introduction:" is not a
+ * title, it is the first line of one, and the heading under it completes it.
+ * A number line is the same shape and was already joined; this is the other
+ * way a title comes back from a reading as two blocks.
+ */
+function endsOpen(text: string): boolean {
+  return /[:\u2014\u2013-]\s*$/u.test(text.trim())
+}
+
 export function headingRunEnd(
   blocks: readonly { kind: string; text: string }[],
   from: number
@@ -821,7 +831,7 @@ export function headingRunEnd(
   while (
     end + 1 < blocks.length &&
     blocks[end + 1]!.kind === 'heading' &&
-    isNumberLine(blocks[end]!.text)
+    (isNumberLine(blocks[end]!.text) || endsOpen(blocks[end]!.text))
   )
     end++
   return end

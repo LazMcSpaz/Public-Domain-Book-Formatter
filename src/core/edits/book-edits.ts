@@ -566,10 +566,21 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
         // A table's rows are separated by newlines, so two tables run together
         // join row-wise; prose joins with a space, as prose does.
         const joiner = block.kind === 'table' || next.kind === 'table' ? '\n' : ' '
+        // The second block's runs are word indices into *its* text; joined
+        // on, they sit after every word of the first. Dropping them — which
+        // `...block` does on its own — is the split fault run backwards, and
+        // just as silent.
+        const shift = block.text.trim().split(/\s+/u).filter(Boolean).length
+        const joined = (a: readonly number[] | undefined, b: readonly number[] | undefined) => {
+          const out = [...(a ?? []), ...(b ?? []).map((w) => w + shift)]
+          return out.length > 0 ? out : undefined
+        }
         blocks.splice(index, 2, {
           ...normalizeTable({
             ...block,
             text: `${block.text.trim()}${joiner}${next.text.trim()}`.trim(),
+            emphasis: joined(block.emphasis, next.emphasis),
+            strong: joined(block.strong, next.strong),
             ...(block.cells ? { cells: undefined } : {})
           }),
           sourcePages: [...new Set([...block.sourcePages, ...next.sourcePages])].sort(

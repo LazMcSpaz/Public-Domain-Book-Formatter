@@ -537,3 +537,40 @@ describe('space between adjacent blocks collapses', () => {
     expect(slotsBetween('paragraph')).toBe(1)
   })
 })
+
+/**
+ * A reading that assigns no heading levels makes every sub-head a chapter,
+ * and the engine reported nothing while opening eighty pages for them. The
+ * warning is the book's, so it is raised once; and it is not raised for a
+ * short book, whose three level-less headings are three chapters.
+ */
+describe('a book whose headings carry no level is reported', () => {
+  const EDITION: LayoutEdition = { title: 'A Treatise of Airs', author: 'Robert Boyle' }
+  const bookWith = (headings: number, level: number | undefined) =>
+    assembleBook([
+      {
+        pageIndex: 0,
+        role: 'body',
+        blocks: Array.from({ length: headings }, (_, i) => [
+          { kind: 'heading' as const, text: `Head ${i + 1}`, ...(level ? { level } : {}) },
+          { kind: 'paragraph' as const, text: 'A line of prose under it.' }
+        ]).flat(),
+        uncertain: [],
+        furniture: {}
+      }
+    ])
+  const warned = (headings: number, level: number | undefined) =>
+    layout(bookWith(headings, level), defaultStyleProfile(), fixedWidthMeasurer(0.5), {
+      edition: EDITION
+    }).warnings.filter((w) => /none carries a level/u.test(w.text))
+
+  it('warns once on a long book with no levels at all', () => {
+    expect(warned(20, undefined)).toHaveLength(1)
+  })
+  it('says nothing when the levels were set', () => {
+    expect(warned(20, 2)).toHaveLength(0)
+  })
+  it('says nothing about a short book', () => {
+    expect(warned(3, undefined)).toHaveLength(0)
+  })
+})

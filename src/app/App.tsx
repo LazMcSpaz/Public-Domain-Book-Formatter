@@ -38,7 +38,7 @@ import {
 } from '../platform/browser/recon-cache'
 import { canKeepAwake, keepAwake, type ReleaseWakeLock } from '../platform/browser/wake-lock'
 import { looksLikeEpub, openEpub } from '../platform/browser/epub'
-import { describeAssessment } from '@core/textquality'
+import { assessText, describeAssessment } from '@core/textquality'
 import { QuestionView } from './QuestionView'
 import { QuestionList } from './QuestionList'
 import { useAgentSurface } from './agent-surface'
@@ -1515,10 +1515,20 @@ export function App(): JSX.Element {
       // and reading it off pictures would have been ten minutes spent to get a
       // worse answer. Said here because it changes what the next step is for.
       if (result.source === 'embedded') {
+        // Said plainly, because the last wording here ("already contains its
+        // own text") was read as "and the text is right". A PDF with no page
+        // images has nobody's pixels behind it: the text is whatever the
+        // person who made the file put there, and if that was OCR of a
+        // typescript — the 2016 print-to-PDF that Vol. I of *Patterns* turned
+        // out to be — its wrong words are all shaped like right ones, carry
+        // confidence 100, and pass every damage check this app has.
+        const quality = assessText(result.pageText.join('\n'))
         setResumeNote(
-          'This PDF was typeset rather than scanned, so it already contains its own text and ' +
-            'none had to be read off pictures of it. Check it at the next step before paying ' +
-            'to have it read again — you may not need to.'
+          'This PDF carries its own text and no page images, so nothing was read off pictures — ' +
+            'and nothing can be checked against pictures either. The words are whoever made the ' +
+            "file's, not the book's. " +
+            describeAssessment(quality) +
+            ' Heading levels and line breaks are not in a text layer; expect to set both.'
         )
       }
 

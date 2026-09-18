@@ -186,6 +186,27 @@ describe('applyEdits — splitting and joining', () => {
     expect(fixed.blocks[1]!.emphasis).toEqual([1, 2])
   })
 
+  /**
+   * The mirror of the split case. Joining two blocks with `...block` keeps the
+   * first block's word indices and throws the second's away, so the italics in
+   * a paragraph the reading broke in two vanish the moment it is joined back —
+   * and a paragraph with no italics is exactly what a paragraph with no italics
+   * looks like. The second block's runs are carried across, offset by the
+   * words that now precede them.
+   */
+  it("carries the second block's emphasis across a merge, offset by the first", () => {
+    const doc = assembleBook([
+      page(0, [
+        { kind: 'paragraph', text: 'Plain start here.', emphasis: [1] },
+        { kind: 'paragraph', text: 'Then italic words follow.', emphasis: [1, 2] }
+      ])
+    ])
+    const fixed = applyEdits(doc, [{ kind: 'merge', blockId: 'p0b0' }])
+    expect(texts(fixed)).toEqual(['Plain start here. Then italic words follow.'])
+    // words: 0 Plain 1 start 2 here. 3 Then 4 italic 5 words 6 follow.
+    expect(fixed.blocks[0]!.emphasis).toEqual([1, 4, 5])
+  })
+
   it('refuses a split that would leave an empty paragraph', () => {
     const doc = assembleBook([page(0, [{ kind: 'paragraph', text: 'One block.' }])])
     for (const at of [0, 10, 999, -5]) {

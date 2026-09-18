@@ -189,6 +189,32 @@ describe('assembleBook', () => {
   })
 
   /**
+   * "Introduction:" over "The Map Is Not the Territory" is one title set on
+   * two lines — the colon says the second line completes the first. It came
+   * back from the reading as two heading blocks, as the LESSON case did, and
+   * because the first is not a number line it was counted as two chapters:
+   * "Introduction:" alone on a recto, a blank verso, and the real title two
+   * leaves on. A heading that ends in a colon is joined to the heading after
+   * it, exactly as a number line is.
+   */
+  it('joins a heading ending in a colon to the heading that completes it', () => {
+    const doc = assembleBook([
+      page(0, [
+        { kind: 'heading', text: 'Introduction:' },
+        { kind: 'heading', text: 'The Map Is Not the Territory' },
+        { kind: 'paragraph', text: "In the authors' experience people who use hypnosis." },
+        { kind: 'heading', text: 'Preview of Patterns' },
+        { kind: 'paragraph', text: 'Another paragraph.' }
+      ])
+    ])
+    expect(doc.chapters.map((c) => c.title)).toEqual([
+      'The Map Is Not the Territory',
+      'Preview of Patterns'
+    ])
+    expect(doc.chapters[0]!.label).toBe('Introduction:')
+  })
+
+  /**
    * "LESSON I." over "THE ASTRAL SENSES." is one chapter opening printed on two
    * lines, and the reading brings it back as two heading blocks because on the
    * page that is what it is. Counting it as two chapters listed every chapter

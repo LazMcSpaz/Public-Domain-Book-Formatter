@@ -774,8 +774,18 @@ async function serve() {
      * in. Carrying the answers back means a verdict reached here survives
      * without having to walk the rest of the book to make it stick.
      */
-    save: async ([bookPath, out = 'book.out.json']) => {
+    save: async ([bookPath, out]) => {
       const { readFile, writeFile } = await import('node:fs/promises')
+      // With no output named, the book goes back where it came from. The old
+      // default was `book.out.json` in the current directory — which, run from
+      // the formatter checkout, wrote a book file and an `images/` tree into
+      // the repository, where `git add -A` found them.
+      if (!out) {
+        if (!bookPath || bookPath === '-') {
+          throw new Error('save <book.json> [out.json] — with no book to read, say where to write')
+        }
+        out = bookPath
+      }
       // No original when one is being made for the first time — writing a book
       // file out of a seeded run is how the round trip gets something to test
       // against without a real book having been read.

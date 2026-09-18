@@ -467,6 +467,41 @@ paragraph answers was never a decision, and one it does not is raised with
 the paragraph attached, so the person deciding is not asked to go and find
 the context the reader should have brought.
 
+**A PDF with no page images is text with nobody's pixels behind it, and it
+passed every check.** _Patterns of the Hypnotic Techniques_ Vol. I arrived as
+a 512 KB PDF — `Producer: Acrobat PDFWriter`, made in 2016, not one image in
+it. `looksScanned` said not a scan, correctly, so its text was read straight
+out and **every one of 81,743 words was stamped confidence 100**; `assessText`
+scored it **trustworthy, 0.998, no signals**, correctly, because it measures
+character garbage and there was none. The file was somebody's OCR of the 1975
+typescript printed to PDF, and it needed 350 word corrections, 57 restored
+line breaks, 50 heading levels and 4 paragraph breaks — `arc` for `are`,
+`hut` for `but`, `Erick son`, three example sentences run into one line,
+`Introduction:` alone on a recto with the title two leaves on, eighty
+headings each opening a page. All of it shaped like right text, none of it
+visible to a measure of word shapes, and no crop to hold any of it against:
+the "crop" of such a leaf is the text layer drawn again.
+
+Two questions were being answered with one test. _Is the page a
+photograph?_ says whether the geometry can be trusted, and that is all it
+says; it had been taken to mean the characters could be too, which holds for
+a Standard Ebooks EPUB and is the reverse of true for an OCR'd typescript.
+Now: the intake note for an embedded-text PDF says what such a file is and
+runs the damage check with its verdict worded honestly (`describeAssessment`
+no longer says "can be used as it stands"); `draftPage` gives a heading a
+**level from its type size**, measured against the leaf's body height, which
+is the one thing that told a chapter title from a run-in sub-head on the
+paper; `layout()` **warns** when a book's headings carry no level at all;
+`headingRunEnd` joins a heading that ends in a colon to the one after it, as
+it already joined a number line; `split` partitions emphasis and `merge`
+carries it across, both of which were silently losing italics; and
+`drive.mjs split` puts back a line break the conversion dropped, named by the
+words the next line starts with. What is still a person's job on such a
+file: which short lines are hard breaks. The measurement that decides it —
+the block's own margin, the share of its lines reaching it, and whether the
+line ends on a function word — is in the ledger for this book and not yet in
+the app.
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what

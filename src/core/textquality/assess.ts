@@ -187,7 +187,16 @@ export function assessText(text: string, options: AssessOptions = {}): TextAsses
 export function describeAssessment(a: TextAssessment): string {
   if (a.words < MIN_WORDS) return 'There is too little text here to judge it.'
   if (a.verdict === 'trustworthy') {
-    return 'This text reads as typed rather than scanned — it can be used as it stands.'
+    // "Can be used as it stands" was the wording here, and it is what a
+    // 2016 print-to-PDF of somebody's OCR of a 1975 typescript scored: 0.998,
+    // no signals, and three hundred and fifty wrong words shaped exactly like
+    // right ones. This measure sees character garbage. It cannot see `arc` for
+    // `are`, and must not claim to.
+    return (
+      'This text has no character damage in it. That says it was typed or well converted, ' +
+      'not that every word is right: a wrong word shaped like a right one (`arc` for `are`) ' +
+      'is invisible here and shows up only when someone reads it.'
+    )
   }
   const why = a.signals.length > 0 ? ` — ${a.signals.join(', ')}` : ''
   return a.verdict === 'garbage'

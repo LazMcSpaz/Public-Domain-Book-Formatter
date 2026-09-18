@@ -128,6 +128,34 @@ describe('drafting a page into blocks', () => {
     expect(heading?.text).toBe('THE ASTRAL SENSES')
   })
 
+  /**
+   * Which of two centred lines opens a chapter is a matter of type size, and
+   * the size is on the page. A heading with no level is a level-1 heading to
+   * the engine, which opens a recto for it: eighty headings of one volume
+   * arrived that way and cost sixty-one pages of blank versos and sunk heads.
+   */
+  it('gives a heading in display type level 1 and one at the body size level 2', () => {
+    const page = draftPage(
+      words(
+        [
+          ...filler(0),
+          ...filler(1),
+          [{ text: 'PART ONE', line: 5, from: 26, scale: 1.6 }],
+          ...filler(9),
+          ...filler(10),
+          [{ text: 'Summary', line: 14, from: 26 }],
+          ...filler(18),
+          ...filler(19)
+        ].flat() as Placed[]
+      )
+    )
+    const heads = page.blocks.filter((b) => b.kind === 'heading')
+    expect(heads.map((b) => [b.text, b.level])).toEqual([
+      ['PART ONE', 1],
+      ['Summary', 2]
+    ])
+  })
+
   it('calls a lone line ranged right a caption — which is what a folio line is', () => {
     const page = draftPage(
       words([

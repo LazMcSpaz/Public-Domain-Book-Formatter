@@ -76,6 +76,15 @@ export interface DraftBlock {
   kind: 'paragraph' | 'heading' | 'blockquote' | 'caption' | 'footnote' | 'table'
   text: string
   /**
+   * For a heading: 1 when it is set in display type, 2 when it is set at the
+   * body size. Measured, from the tallest word in the run against the body —
+   * the one thing that told a chapter title from a run-in sub-head on the
+   * paper when eighty headings of *Patterns of the Hypnotic Techniques* had
+   * arrived with no level at all, and the engine, which opens a page for every
+   * level-1 heading, opened eighty pages.
+   */
+  level?: number
+  /**
    * The rows of a `table`, each an array of cells. Never set on anything else.
    *
    * Same shape and same rule as `TranscribedBlock.cells`: `cells` is the
@@ -1156,6 +1165,22 @@ function uncertainSpans(lines: readonly DraftLine[], below: number): DraftSpan[]
  * to finish near the margin, and a wrongly split paragraph is harder to see in
  * a diff than a wrongly joined one.
  */
+/**
+ * Display type against the body size. The threshold sits between the two
+ * populations measured on a real volume: run-in sub-heads at 0.98–1.00 of the
+ * body, titles at 1.26 and up. Nothing was seen between 1.10 and 1.25.
+ */
+export const DISPLAY_TYPE_RATIO = 1.2
+
+/** 1 for a heading set in display type, 2 for one set at the body size. */
+export function headingLevel(run: readonly DraftLine[], body: number): 1 | 2 {
+  let tallest = 0
+  for (const line of run) {
+    for (const w of line.words) tallest = Math.max(tallest, w.bbox.y1 - w.bbox.y0)
+  }
+  return body > 0 && tallest / body >= DISPLAY_TYPE_RATIO ? 1 : 2
+}
+
 export function draftPage(words: readonly DraftWord[], options: DraftOptions = {}): DraftPage {
   const uncertainBelow = options.uncertainBelow ?? DEFAULTS.uncertainBelow
   const structural: string[] = []
@@ -1459,17 +1484,19 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
       .replace(/\s+/gu, ' ')
       .trim()
     if (text.length > 0) {
+      const kind = runIsNote
+        ? 'footnote'
+        : inset
+          ? 'blockquote'
+          : centred
+            ? 'heading'
+            : right
+              ? 'caption'
+              : 'paragraph'
       const block: DraftBlock = {
-        kind: runIsNote
-          ? 'footnote'
-          : inset
-            ? 'blockquote'
-            : centred
-              ? 'heading'
-              : right
-                ? 'caption'
-                : 'paragraph',
-        text
+        kind,
+        text,
+        ...(kind === 'heading' ? { level: headingLevel(run, bodyHeight) } : {})
       }
       blocks.push(block)
       sourceOf.set(block, [run.flatMap((l) => l.words)])
