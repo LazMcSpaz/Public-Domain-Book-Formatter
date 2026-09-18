@@ -28,3 +28,7 @@ public/*.pdf
 public/*.epub
 !public/test-*.pdf
 !public/test-*.epub
+
+# A volume merged for reading sits here while it is read; it is 350–380 MB and
+# belongs nowhere in history. The chunks it is made of are on the shelf.
+/isis-vol*.pdf
