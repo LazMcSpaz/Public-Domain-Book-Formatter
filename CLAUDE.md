@@ -535,6 +535,42 @@ worth knowing: it omits every blank verso, so the folio offset climbs at each
 chapter, and the text was checked continuous across every step before a leaf
 was read.
 
+**A table's cells kept their tags, and the page printed both.** The readers
+set the transcript's analysis column as `presupposition: <i>this time</i>`,
+because a cell has no other way to say the page prints those words in
+italic. `parsePageTranscription` read the tags off the flattened text into
+word indices — correctly — and then `normalizeTable` regenerated that text
+from the cells, tags and all. The engine sets a table cell by cell, so it
+drew the word in italic as the indices asked and the angle brackets round it
+as the cell still said, on a hundred and ten leaves of _Patterns_ Vol. II.
+Nothing reported it: the export said 479 overfull lines and 260 pages, and
+both numbers looked like a three-column book being hard to set. The cells
+are what the engine sets, so the cells are where the tags now come out
+(`normalizeTable`), and assembly's cleaner goes through the same function so
+the readings already stored come out clean at the one door they all pass.
+The rule this joins: **a report that only counts cannot tell a fault from a
+hard book — render a page and look.**
+
+**A ragged line could not hold a single word.** The stretch that lets a
+ragged line end short sat on the interword glue, and Knuth–Plass discards
+the glue a line breaks at, so a line holding one token had no stretch, was
+infeasible at any tolerance, and the breaker fell back to setting two tokens
+overfull rather than one short. Every narrow column of a transcript is made
+of such lines: 43 into the gutter, after `segmentsOf` had already let a
+token break after a dash, a slash or an ellipsis run (`search—L-operator`
+and `when/where/how?...` had been one box each). Knuth's own ragged-right
+construction is what fixes it — a zero-width glue carrying the stretch, a
+free penalty, the rigid space with the stretch taken back — and it was
+found by a test whose first line was a single box, which no arithmetic
+about the measure explained until the item stream was dumped.
+
+**The contents listed every heading**, indented by level, where the
+original's own contents page names the chapters and nothing else. Four
+run-in sub-heads and two "Transcript" section heads were lines the original
+never had. `contentsDepth` on the style profile, 6 by default so a book laid
+out before the question existed keeps what it got; the original's contents
+page is the guide for setting it lower.
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what
@@ -1974,6 +2010,16 @@ closed`, which is indistinguishable from the flake the first command after a
   `*` **after** the `**` in the same block and a following block with marks
   of its own, or the stolen notes have nowhere to show up.
 
+- **Also done**: **_Patterns_ Vol. II, read and made** — the second book
+  read without an API, 237 leaves through `draft` → subagents → `batch
+--check` → `transcribe`, 215 queries ruled under the rulings carried from
+  Vol. I, the eight Part I notes paired under superscript markers, six bare
+  marks declared, and the edition exported at 232 pages with no warnings
+  (`docs/LEDGER-patterns-vol2.md`). Four app faults came out of looking at
+  its pages: table cells kept their tags, a ragged line could not hold one
+  word, a token joined by a dash or a slash could not break, and the
+  contents listed every heading level — each above under _What has actually
+  gone wrong_, each fixed with a test that fails against the fault.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with
