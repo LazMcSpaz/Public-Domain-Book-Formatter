@@ -63,9 +63,16 @@ abstain rather than guess, and neither needs your attention except where named:
 
 2. **`uncertain`** spans — runs of words OCR itself scored low. Check each
    against the render.
-3. **Italics.** The draft carries none. The book italicises heavily — book
-   titles, Latin, Greek transliterations, emphasis. Mark them with `<i>…</i>`
-   in the block text.
+3. **Italics, small capitals, subscripts.** The draft carries none. The book
+   italicises heavily — book titles, Latin, Greek transliterations, emphasis.
+   Mark them with `<i>…</i>` in the block text. Where the paper sets a word in
+   **small capitals**, write it in its own case inside `<sc>…</sc>`: a word set
+   caps-and-small-caps is `<sc>Hermetist</sc>`, a word set small throughout is
+   `<sc>will</sc>`, and a full capital is left as a capital — the tag lowers
+   what is lower case and leaves capitals alone. A figure set **below the
+   line**, as in a chemical formula, is `Na<sub>2</sub>CO<sub>3</sub>`. Vol. I
+   had none of this marked and needed three sweeps of 357 words afterwards; a
+   reader looking at the leaf can see it in a glance.
 4. **Block kinds.** A quotation set as an indented block is `blockquote`;
    verse is `verse`; a note at the foot is `footnote`; matter in columns is
    `table`.
@@ -75,6 +82,14 @@ abstain rather than guess, and neither needs your attention except where named:
    stripped from the front of the text downstream using this field, so a note
    with the wrong marker keeps a stray `†` and loses a `*`. This went wrong on
    six notes in the last chapter.
+
+   **A note that runs over from the leaf before carries no marker.** The tail
+   of a long note at the foot of the next leaf prints without a `*` or `†`, and
+   it is recorded without one — assembly joins it to the note above. Giving it
+   one makes a fresh note that waits for a mark, takes the next leaf's, and
+   sets every note of that marker one reference early to the end of the
+   volume. One such on Vol. I displaced 188 references.
+
 6. **The reference mark in the body.** Where the body carries a `*` or `†`
    pointing at a note, keep it in the body text exactly where it is printed.
 
@@ -93,6 +108,19 @@ abstain rather than guess, and neither needs your attention except where named:
   specific, confident, and a description of a page that does not exist. Say what
   you actually looked at, and where you cannot tell, say that instead.
 - **Do not invent a footnote's continuation**, a running head, or a folio.
+- **`text` is what the paper prints, even when the paper is wrong.** Where a
+  sort is plainly a slip — `nevertheiess`, `kabalisf`, `casily` — the slip
+  goes in `text` and a `printers-error` query goes beside it. Do not write the
+  word you know was meant and put the paper's form in `alternatives`: Vol. I's
+  readers did that six times, and each was a silent correction that had to be
+  found by re-cutting the leaf. The plain ones are ruled on in bulk afterwards
+  under a standing instruction; that is cheap. Finding them is not.
+- **Where a letter cannot be told at this size, name the word and both
+  readings** in `uncertain` — `text` as the paper most plausibly has it,
+  `alternatives` the other, `reason` which letters are in doubt. The parent
+  cuts every such word at 600 DPI before the batch is landed. Vol. I left 149
+  of these to a pass at the end, and a third of the ones re-cut were wrong;
+  named as you go, they cost a crop each and nothing else.
 
 ## Output
 
@@ -128,7 +156,11 @@ not know is refused and the whole batch is rejected):
 ]
 ```
 
-`role` is one of `body`, `chapter-opening`, `table-of-contents`, `blank`.
+`role` is one of `body`, `chapter-opening`, `part-divider`, `blank`,
+`half-title`, `title-page`, `copyright`, `dedication`, `epigraph`, `preface`,
+`table-of-contents`, `list-of-illustrations`, `plate`, `appendix`, `glossary`,
+`index`, `colophon`, `digitization-notice` — that last for a scanning library's
+inserted leaf, which is neither the book's nor blank.
 `kind` on a block is one of `paragraph`, `heading`, `blockquote`, `verse`,
 `footnote`, `caption`, `table`. `kind` on a query is one of
 `printers-error`, `inconsistent`, `unclear`. Omit `uncertain` and `queries`
