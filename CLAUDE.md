@@ -609,12 +609,22 @@ The specific shapes it took, all worth recognising:
 ### Measuring, rather than looking
 
 Eyeballing a rendered crop gave three different answers about the same ratio,
-and one of them went into a comment and a test as though it were measured.
-There is no image library here, but a PNG is `zlib` plus five filter types and
-a scanline loop, which is about sixty lines of Node: decode the crop, sum the
-dark pixels per row, and read the ink bands off the numbers. Do that before
-writing a ratio down. The same rule the app applies to readings applies to
-proportions: propose from sense, accept from pixels.
+and one of them went into a comment and a test as though it were measured. A
+PNG is `zlib` plus five filter types and a scanline loop, which is about sixty
+lines of Node, so `scripts/lib/ink.mjs` decodes the crop, sums the dark pixels
+per row, and reads the ink bands off the numbers. Do that before writing a
+ratio down. The same rule the app applies to readings applies to proportions:
+propose from sense, accept from pixels.
+
+**This used to say "there is no image library here", and that is not true of
+the container** — Pillow is installed, and it was used to measure a scan the
+editor sent from another source against ours. The claim was written about the
+_repo_, where it still holds and is still the rule: nothing in `scripts/` or
+`src/` may reach for one, because they run under Node against `package.json`
+and a Python dependency in a Node script is a script that works here and
+nowhere else. For a measurement in the scratchpad that nothing will depend on
+twice, use whatever reads the pixels; the answer is the same either way, which
+is the point of measuring.
 
 ### The layout engine, where it surprises
 

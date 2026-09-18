@@ -4,9 +4,11 @@
  * CLAUDE.md's rule — propose from sense, accept from pixels — applies to
  * proportions as much as to readings, and it was broken the first time by a
  * ratio that was looked at rather than measured and then written into a
- * comment and a test as though it had been. There is no image library here
- * and none is wanted: a PNG is zlib plus five filter types and a scanline
- * loop, which is this file.
+ * comment and a test as though it had been. No image library is wanted in this
+ * repo — everything in `scripts/` runs under Node against `package.json`, and
+ * a script that needs a Python package works on the machine that has one and
+ * nowhere else. A PNG is zlib plus five filter types and a scanline loop,
+ * which is this file.
  *
  * `decode` handles 8-bit greyscale, RGB and RGBA, non-interlaced, which is
  * every render the driver writes. Anything else raises rather than guessing,
