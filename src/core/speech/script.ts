@@ -24,7 +24,12 @@
  * follows.
  */
 import type { BookDocument, BookBlock, ChapterEntry, Footnote } from '@core/assemble'
-import { prepareFootnotes } from '@core/layout'
+// The module, not the barrel. `@core/layout` re-exports the line breaker,
+// whose named import from the CommonJS `tex-linebreak` is fine in the browser
+// and under vitest and fails under vite's SSR door — which is how every script
+// in `scripts/` loads core. Measured: the barrel import shipped green under 2007
+// tests and `read-book.mjs` could not start.
+import { prepareFootnotes } from '@core/layout/footnotes'
 import { GLOSSARY_MARK } from '@core/annotate'
 import { speakHeadingNumbers } from './roman'
 import { applyPronunciations, type Pronunciation } from './pronounce'
