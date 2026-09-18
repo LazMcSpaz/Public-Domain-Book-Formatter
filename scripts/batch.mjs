@@ -125,7 +125,13 @@ function checkBatch(donePath, draftPath) {
     if (absent.length > 0) problems.push(`leaves missing from the reply: ${absent.join(', ')}`)
   }
 
-  const words = (t) => t.split(/\s+/u).filter(Boolean).length
+  // Tokens carrying a letter or a digit, not every run of ink. The analysis
+  // columns of *Patterns* Vol. II quote each phrase between spaced dots, and
+  // OCR reads `. . .` as three tokens where the reader writes one: leaf 118
+  // went from 196 tokens to 163 on that alone, a -17% that read as a fifth of
+  // the page lost, while its lexical words went 125 to 125. A dropped or
+  // invented passage is made of words, and this counts those.
+  const words = (t) => t.split(/\s+/u).filter((w) => /[\p{L}\p{N}]/u.test(w)).length
   for (const page of done) {
     const n = page.pageIndex
     for (const key of Object.keys(page)) {
