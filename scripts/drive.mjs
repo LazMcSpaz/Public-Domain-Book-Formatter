@@ -60,7 +60,21 @@ async function send(verb, args) {
   }
   const text = await res.text()
   console.log(text)
-  process.exit(res.ok ? 0 : 1)
+  // A verb that refuses answers 200 with `{ "error": ... }`, so the HTTP status
+  // alone reports success on a command that did nothing. That is the shape that
+  // let a stale PDF sit beside a rebuilt book file for a whole session: the
+  // render never ran, the pipeline carried on, and the check after it read the
+  // previous run's report and printed a page count that looked right.
+  //
+  // `$?` is what a shell pipeline and a build script have to go on, so it has to
+  // mean what it says.
+  let refused = false
+  try {
+    refused = typeof JSON.parse(text)?.error === 'string'
+  } catch {
+    refused = false
+  }
+  process.exit(res.ok && !refused ? 0 : 1)
 }
 
 async function serve() {
