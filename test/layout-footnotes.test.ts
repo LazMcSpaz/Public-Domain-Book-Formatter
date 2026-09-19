@@ -703,6 +703,93 @@ describe('layoutWithToc — descriptions under the entries', () => {
   })
 })
 
+/**
+ * A numbered series in the contents: the number over the title, never beside it.
+ *
+ * `deriveChapters` gives a chapter carrying a run-in number line a `label`, and
+ * a plain list used to set it by gluing the two into one string and breaking
+ * wherever the measure fell. A collected volume of thirty-two numbered lectures
+ * came out reading `MANUSCRIPT LECTURE No. 1 The Pros and Cons` on one line and
+ * `of the Sex Problem` on the next. The number is not part of the title.
+ *
+ * And the folio column has to fit what the folio line actually says. It was cut
+ * to four digits while the line prints `Page 49`, so a title broken to the
+ * measure beside it ran straight through the number on a finished page.
+ */
+describe('layoutWithToc — a numbered entry in a plain contents', () => {
+  const numbered = build([
+    page(0, [
+      { kind: 'heading', text: 'MANUSCRIPT LECTURE No. 6', level: 1 },
+      { kind: 'heading', text: 'The Masters, Part I', level: 1 },
+      { kind: 'paragraph', text: PROSE.repeat(8) }
+    ]),
+    page(1, [
+      { kind: 'heading', text: 'MANUSCRIPT LECTURE No. 13', level: 1 },
+      { kind: 'heading', text: 'The Dangers of New Thought, Metaphysics and Psychology', level: 1 },
+      { kind: 'paragraph', text: PROSE.repeat(8) }
+    ])
+  ])
+  const book = (): LaidOutBook =>
+    layoutWithToc(numbered, defaultStyleProfile(), measurer, { edition: EDITION })
+
+  const contentsLines = (b: LaidOutBook): PositionedLine[] =>
+    b.pages.filter((p) => p.kind === 'contents').flatMap((p) => lines(p))
+
+  it('sets the number on its own line, with the title on the line under it', () => {
+    const rows = contentsLines(book()).map((l) => l.runs.map((r) => r.text).join(' '))
+    const at = rows.findIndex((r) => r.includes('MANUSCRIPT LECTURE No. 6'))
+    expect(at).toBeGreaterThanOrEqual(0)
+    // The number line carries the number and nothing else.
+    expect(rows[at]).not.toContain('Masters')
+    // And the title is the next thing set.
+    expect(rows[at + 1]).toContain('The Masters, Part I')
+  })
+
+  /**
+   * The titles here sweep a range of lengths on purpose.
+   *
+   * The folio column is sized for the longest folio the contents can print, and
+   * a title is broken to the measure that is left, so whether a given title
+   * collides depends on where its last line happens to fall. One title proves
+   * nothing: the first fixture written for this passed with the fault
+   * reinstated, because both of its titles broke well short of the lane. A
+   * sweep of lengths puts at least one last line in the band the fault opens.
+   */
+  const sweep = build(
+    Array.from({ length: 22 }, (_, i) =>
+      page(i, [
+        { kind: 'heading' as const, text: `MANUSCRIPT LECTURE No. ${i + 1}`, level: 1 },
+        {
+          kind: 'heading' as const,
+          // 30 characters, then one more word each time: the last line steps
+          // across the measure rather than landing at one width.
+          text: `Of the Nature of the Element${' xi'.repeat(i)}`,
+          level: 1
+        },
+        { kind: 'paragraph' as const, text: PROSE.repeat(8) }
+      ])
+    )
+  )
+
+  it('never prints a title through its own page number', () => {
+    const laid = layoutWithToc(sweep, defaultStyleProfile(), measurer, { edition: EDITION })
+    const rows = laid.pages.filter((p) => p.kind === 'contents').flatMap((p) => lines(p))
+    let checked = 0
+    for (const line of rows) {
+      const folio = line.runs.find((r) => /^Page \d+$/.test(r.text))
+      if (!folio) continue
+      checked += 1
+      for (const run of line.runs) {
+        if (run === folio) continue
+        const right = run.xPt + measurer.widthOf(run.text, run.font, run.sizePt)
+        expect(right).toBeLessThanOrEqual(folio.xPt + 0.01)
+      }
+    }
+    // A test that found no folio line would pass without looking at anything.
+    expect(checked).toBeGreaterThanOrEqual(20)
+  })
+})
+
 describe('layoutWithToc — a contents page with measured numbers', () => {
   const doc = build([
     page(0, [

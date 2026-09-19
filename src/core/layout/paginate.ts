@@ -2442,9 +2442,14 @@ function buildContents(
   const heading: FontRef = { family: profile.headingFont, style: 'regular' }
   const sizePt = profile.bodyFontSize
 
-  // Wide enough for four digits and a little air — more than any interior KDP
-  // will print, so the column never has to grow.
-  const folioColumn = ctx.measurer.widthOf('8888', body, sizePt) + sizePt * 0.5
+  // Wide enough for the longest folio this contents can print, and a little
+  // air. Measured from `folioLabel` rather than from the digits, because that
+  // is what actually goes on the line: the entry reads "Page 49", not "49", and
+  // a column cut to four digits is short by the width of the word. Titles were
+  // broken to a measure that ran under it and the last line printed through the
+  // number — `MANUSCRIPT LECTURE No. 6 The Masters, Part I` and `Page 49`
+  // sharing the same inch of a finished book.
+  const folioColumn = ctx.measurer.widthOf(folioLabel('8888'), body, sizePt) + sizePt * 0.5
 
   if (pages.length % 2 === 1) {
     const blank = newPage('front')
@@ -2559,16 +2564,29 @@ function buildContents(
       ? Math.max(1, ctx.measureWidth - indent)
       : Math.max(1, ctx.measureWidth - folioColumn - indent)
 
-    const labelLines =
-      descriptive && entry.label
-        ? breakParagraph(entry.label, {
-            font: body,
-            sizePt: entryLabelSize,
-            measurer: ctx.measurer,
-            lineWidths: measure,
-            alignment: 'center'
-          })
-        : []
+    // The number goes on a line of its own, above the title, in both settings.
+    //
+    // It used to do that only on a descriptive contents; a plain list ran the
+    // two together as one string and broke wherever the measure fell, so a
+    // collected volume of numbered lectures read `MANUSCRIPT LECTURE No. 1 The
+    // Pros and Cons` on one line and `of the Sex Problem` on the next. The
+    // number is not part of the title — it says which of the series this is —
+    // and a reader running down the page is looking for one or the other, never
+    // for the pair spliced together.
+    //
+    // Centred in a descriptive contents because the titles are centred there;
+    // flush left in a plain list, over a flush-left title, for the same reason.
+    // Set at the smaller size either way, which is what makes it read as a
+    // label over a name rather than as a first line of it.
+    const labelLines = entry.label
+      ? breakParagraph(entry.label, {
+          font: body,
+          sizePt: entryLabelSize,
+          measurer: ctx.measurer,
+          lineWidths: measure,
+          alignment: descriptive ? 'center' : 'left'
+        })
+      : []
 
     const broken = descriptive
       ? balancedLines(entry.title, {
@@ -2577,7 +2595,7 @@ function buildContents(
           measurer: ctx.measurer,
           maxWidth: measure
         })
-      : breakParagraph(entry.label ? `${entry.label} ${entry.title}` : entry.title, {
+      : breakParagraph(entry.title, {
           font: body,
           sizePt,
           measurer: ctx.measurer,
