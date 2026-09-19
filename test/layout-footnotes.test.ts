@@ -789,6 +789,81 @@ describe('layout — a wrapped display heading', () => {
     }
   })
 
+  it('centres the balanced lines on the measure, not on the narrowed box', () => {
+    // The trap the balancing walks into: `breakParagraph` centres inside the
+    // width it is handed, and the search hands it a narrower one. Take only
+    // the grouping from that setting; decide the position against the page.
+    const book = headed('SIX MANUSCRIPT LECTURES BY MANLY P. HALL')
+    const page = book.pages.find((p) => lines(p).some((l) => l.runs.some((r) => r.text === 'SIX')))!
+    const centre = page.frame.xPt + page.frame.widthPt / 2
+    const rows = lines(page).filter((l) => l.runs.some((r) => ['SIX', 'BY'].includes(r.text)))
+    expect(rows).toHaveLength(2)
+    for (const row of rows) {
+      const first = row.runs[0]!
+      const last = row.runs[row.runs.length - 1]!
+      const left = first.xPt
+      const right = last.xPt + measurer.widthOf(last.text, last.font, last.sizePt)
+      // Within a point: the two margins either side of the line are equal.
+      expect(
+        Math.abs(left - page.frame.xPt - (page.frame.xPt + page.frame.widthPt - right))
+      ).toBeLessThan(1)
+      expect(Math.abs((left + right) / 2 - centre)).toBeLessThan(1)
+    }
+  })
+
+  it('turns a title at its comma or colon rather than mid-phrase', () => {
+    // Both fixtures are titles off a finished book, and both came out of it
+    // turning inside a phrase while the mark that names the joint sat stranded
+    // in the middle of a line: `SPECIAL CLASS IN SECRET / DOCTRINE: THE
+    // STANZAS OF DZYAN`, and `THE DANGERS OF NEW / THOUGHT, METAPHYSICS AND
+    // PSYCHOLOGY`.
+    const colon = headingRows(
+      headed('SPECIAL CLASS IN SECRET DOCTRINE: THE STANZAS OF DZYAN'),
+      'SPECIAL'
+    )
+    expect(colon).toHaveLength(2)
+    expect(colon[0]!.at(-1)).toBe('DOCTRINE:')
+
+    const comma = headingRows(
+      headed('THE DANGERS OF NEW THOUGHT, METAPHYSICS AND PSYCHOLOGY'),
+      'THE'
+    )
+    expect(comma).toHaveLength(2)
+    expect(comma[0]!.at(-1)).toBe('THOUGHT,')
+  })
+
+  it('does not break a title that fits, however many commas it has', () => {
+    // The reason the preference is charged on the other breaks rather than
+    // discounted at the punctuation: TeX squares its demerits, so a bonus big
+    // enough to beat a mediocre break also beats setting the line whole, and
+    // every title with a comma in it would turn at it.
+    const rows = headingRows(headed('THE THEORY OF REINCARNATION, PART ONE'), 'THE')
+    expect(rows[0]).toEqual(['THE', 'THEORY', 'OF', 'REINCARNATION,', 'PART', 'ONE'])
+  })
+
+  it('will set a short line so a title can turn at its phrase', () => {
+    // Ragged setting here is stretch on the word spaces, so the slack a line
+    // has is proportional to how many words are on it — and the short line is
+    // the one that needs slack. `THE SECRET DOCTRINE:` has two spaces in it,
+    // and without a constant allowance the breaker refused it as a line at
+    // every width the balancing search could offer, so the title set as `A
+    // SPECIAL CLASS IN THE SECRET / DOCTRINE: IN APPRECIATION OF / MADAME
+    // BLAVATSKY` with the term of art split down the middle.
+    const rows = headingRows(
+      headed('A SPECIAL CLASS IN THE SECRET DOCTRINE: IN APPRECIATION OF MADAME BLAVATSKY'),
+      'SPECIAL'
+    )
+    expect(rows[1]!.at(-1)).toBe('DOCTRINE:')
+  })
+
+  it("never offers to turn a line between a person's initials", () => {
+    // A title's full stops are abbreviations, so the phrase test leaves them
+    // out: `MADAME H. / P. BLAVATSKY` would be a worse fault than the one this
+    // fixes.
+    const rows = headingRows(headed('IN APPRECIATION OF MADAME H. P. BLAVATSKY'), 'IN')
+    for (const row of rows) expect(row.at(-1)).not.toMatch(/^[A-Z]\.$/)
+  })
+
   it('keeps the heading on the same number of lines it would have filled', () => {
     // Balancing must never buy evenness with an extra line: the search is for
     // the narrowest measure that still returns the natural line count.

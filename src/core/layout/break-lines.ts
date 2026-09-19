@@ -117,6 +117,14 @@ export interface BreakParagraphOptions {
   firstLineIndentPt?: number
   /** Splits a word into hyphenatable pieces. Omit to disable hyphenation. */
   hyphenate?: (word: string) => string[]
+  /**
+   * Prefer to turn the line at a comma, colon, semicolon or dash.
+   *
+   * For a display line — a chapter title, a heading — and not for prose, where
+   * breaking at the phrase would make the paragraph's right edge follow its
+   * punctuation rather than its measure.
+   */
+  preferPhraseBreaks?: boolean
   /** Spans set differently from the paragraph, glued to the end of a word. */
   attachments?: readonly Attachment[]
   /**
@@ -186,6 +194,70 @@ const HYPHEN_PENALTY = 50
 
 /** `\parfillskip`: the last line may end anywhere, so its slack is free. */
 const PARAGRAPH_FILL_STRETCH = 1e6
+
+/**
+ * What a wrapped display line pays for breaking anywhere but at a mark of
+ * punctuation.
+ *
+ * A title is read as a phrase, not as prose, so where it turns matters in a way
+ * it does not in a paragraph: `BUDDHA, THE` over `DIVINE WANDERER` and `SPECIAL
+ * CLASS IN` over `SECRET DOCTRINE: IN` over `APPRECIATION OF H. P. B.` both
+ * came off a finished book, and both turn in the middle of a phrase while the
+ * comma and the colon that mark the real joint sit stranded in the middle of a
+ * line.
+ *
+ * Charged rather than discounted, which is the whole of the design. TeX takes a
+ * *negative* penalty as a bonus, and a bonus at the comma is what this wants to
+ * be — but demerits are squared, so a bonus large enough to beat a mediocre
+ * break also beats setting the title on one line at all, and every title with a
+ * comma in it would break in two. A charge on the other breaks cannot: a line
+ * that is never broken pays nothing.
+ *
+ * 150 against a hyphen's 50. Turning a title mid-phrase should cost more than
+ * hyphenating a word, and less than the ~10,000 demerits of a line stretched to
+ * the edge of legality, so it decides between comparable breaks and never
+ * forces a bad one.
+ */
+const PHRASE_BREAK_PENALTY = 150
+
+/**
+ * The marks that end a phrase.
+ *
+ * Deliberately not the full stop: a title's periods are abbreviations — `H. P.
+ * B.`, `MANLY P. HALL` — and treating those as joints would offer to turn a
+ * line between a person's initials, which is the fault this exists to fix
+ * rather than a cure for it.
+ */
+const PHRASE_END = /[,;:\u2013\u2014-]$/u
+
+/**
+ * The slack a display line has, as a multiple of its own word space.
+ *
+ * Ragged setting here is modelled as stretch on the *word spaces*, which means
+ * the slack a line has is proportional to how many words are on it — and a
+ * short line is exactly the one that needs slack. `SECRET DOCTRINE:` has one
+ * space in it, so at six spaces of stretch it could end at most thirty points
+ * short of the measure, and the breaker refused it as a line at every width
+ * the balancing search could offer. The title set as `SPECIAL CLASS IN /
+ * SECRET DOCTRINE: THE / STANZAS OF DZYAN` for want of that, splitting the
+ * term of art down the middle.
+ *
+ * TeX's answer is `\rightskip`, glue appended to the line *after* the break is
+ * chosen, so the slack does not depend on the words. This is the same thing
+ * within what the breaker here models: a large constant on each word space, so
+ * a two-word line has room to fall short.
+ *
+ * It is confined to display lines because it flattens badness — with this much
+ * stretch almost any break is legal, and what a line ends up looking like is
+ * then decided by the width the caller hands in rather than by the breaker.
+ * That is the right division of labour for a title, which `balancedLines` sets
+ * by searching widths, and the wrong one for prose.
+ *
+ * It does not reach a line of one word, which has no word space at all:
+ * `BUDDHA, THE / DIVINE WANDERER` is still set that way rather than as
+ * `BUDDHA, / THE DIVINE WANDERER`, and would need the real `\rightskip`.
+ */
+const DISPLAY_STRETCH = 30
 
 interface TextBox extends Box {
   type: 'box'
@@ -263,7 +335,10 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
   const spaceWidth = width(' ')
   const hyphenWidth = width('-')
   const ragged = alignment !== 'justify'
-  const stretch = ragged ? spaceWidth * RAGGED_STRETCH : spaceWidth * GLUE_STRETCH
+  const display = options.preferPhraseBreaks === true
+  const stretch = ragged
+    ? spaceWidth * (display ? DISPLAY_STRETCH : RAGGED_STRETCH)
+    : spaceWidth * GLUE_STRETCH
   const shrink = ragged ? 0 : spaceWidth * GLUE_SHRINK
 
   const items: InputItem[] = []
@@ -286,7 +361,19 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
   }
 
   words.forEach((word, i) => {
-    if (i > 0) items.push(glue(spaceWidth, stretch, shrink))
+    if (i > 0) {
+      // A charge on turning here, when the word before does not end a phrase.
+      //
+      // The penalty goes *before* the glue on purpose. A break at glue is legal
+      // only where a box comes immediately before it, so putting a penalty
+      // there moves the breakpoint onto the penalty itself, which is where the
+      // charge can be made. Leaving the glue bare after a comma is what makes
+      // that break the free one.
+      if (options.preferPhraseBreaks === true && !PHRASE_END.test(words[i - 1] ?? '')) {
+        items.push(penalty(0, PHRASE_BREAK_PENALTY, false))
+      }
+      items.push(glue(spaceWidth, stretch, shrink))
+    }
 
     const pieces = hyphenate ? hyphenate(word) : [word]
     if (pieces.length <= 1) {

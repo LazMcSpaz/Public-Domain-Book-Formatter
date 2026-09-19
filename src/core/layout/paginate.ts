@@ -617,8 +617,20 @@ function balancedLines(
   if (natural.length < 2) return natural
 
   /**
-   * A width is acceptable if it sets the same number of lines and no line
-   * overflows it.
+   * How many of a setting's turns fall at the end of a phrase.
+   *
+   * The last line is not a turn, so it does not count.
+   */
+  const joints = (lines: BrokenLine[]): number =>
+    lines.slice(0, -1).filter((line) => /[,;:\u2013\u2014-]$/u.test(line.words.at(-1)?.text ?? ''))
+      .length
+
+  const naturalJoints = joints(natural)
+
+  /**
+   * A width is acceptable if it sets the same number of lines, no line
+   * overflows it, and it gives up none of the phrase joints the natural
+   * setting turned at.
    *
    * The line count alone is not enough, and believing it was put eight fresh
    * overfull warnings into a book: narrowed past the longest word in the text,
@@ -626,10 +638,22 @@ function balancedLines(
    * own that is *wider than the measure* — and the line count is unchanged, so
    * the search accepted it and went on narrowing. `BUDDHA, THE / DIVINE
    * WANDERER` and four other chapter titles came out of that.
+   *
+   * The joints are the other half, and they are why the two rules live
+   * together rather than in the breaker alone. Evenness and phrasing pull
+   * against each other: `SPECIAL CLASS IN SECRET DOCTRINE: THE STANZAS OF
+   * DZYAN` turns at its colon when it is set to the measure, and the search
+   * would then narrow straight past that break to even the two lines up,
+   * splitting `SECRET DOCTRINE` to do it. Evenness is a refinement; turning a
+   * title in the middle of a phrase is a mistake, so the refinement gives way.
    */
   const ok = (width: number): boolean => {
     const lines = at(width)
-    return lines.length <= natural.length && !lines.some((line) => line.overfull)
+    return (
+      lines.length <= natural.length &&
+      !lines.some((line) => line.overfull) &&
+      joints(lines) >= naturalJoints
+    )
   }
 
   let tooNarrow = 0
@@ -641,7 +665,66 @@ function balancedLines(
     if (ok(mid)) wide = mid
     else tooNarrow = mid
   }
-  return at(wide)
+
+  /**
+   * Then look across the whole range for a setting that turns at *more*
+   * joints than the measure's own does.
+   *
+   * Preserving the joints the natural setting found is not enough, because on
+   * a long title the natural setting often finds none. `SPECIAL CLASS IN
+   * SECRET DOCTRINE: THE STANZAS OF DZYAN` set to the measure turns at
+   * `SPECIAL CLASS IN / SECRET DOCTRINE: THE / STANZAS OF DZYAN` — three lines
+   * with the colon stranded in the middle of the second — and the jointed
+   * setting it wants is not reachable by narrowing alone, because the breaker
+   * will not accept `SECRET DOCTRINE:` as a line until the measure comes down
+   * to about its own width. A ragged line stretches its word spaces to fill
+   * the measure and a short line has too few to stretch, so the width that
+   * makes a phrase legal is the width that phrase nearly fills.
+   *
+   * Sixteen steps across a range that the binary search has already bounded,
+   * which on this book is about three thousand extra breaks and costs under a
+   * second. Joints first, then evenness: the sweep starts at the narrowest
+   * acceptable width and only moves for a setting with strictly more of them,
+   * so the evenest of the best-phrased settings is the one that comes back.
+   */
+  const SWEEP = 16
+  let bestWidth = wide
+  let best = at(wide)
+  for (let i = 1; i <= SWEEP; i++) {
+    const width = wide + ((maxWidth - wide) * i) / SWEEP
+    const lines = at(width)
+    if (lines.length > natural.length || lines.some((line) => line.overfull)) continue
+    if (joints(lines) > joints(best)) {
+      best = lines
+      bestWidth = width
+    }
+  }
+  wide = bestWidth
+
+  const balanced = best
+  if (rest.alignment !== 'center' || wide >= maxWidth) return balanced
+
+  /**
+   * A breaker centres inside the width it was handed, and that width is not
+   * the measure.
+   *
+   * This is the whole hazard of balancing a centred line: the search hands
+   * `breakParagraph` a *narrower* box to get an even break out of it, and the
+   * words come back centred in that box, whose left edge is the frame's. On a
+   * six-by-nine page the narrowing runs to eighty points, so a balanced title
+   * sat forty points left of the title it was under — even lines, visibly off
+   * centre, which is a worse fault than the ragged break it was fixing.
+   *
+   * Only the grouping of words into lines is taken from the narrow setting.
+   * Where each line sits is decided here, against the measure the page
+   * actually has.
+   */
+  const shift = (maxWidth - wide) / 2
+  return balanced.map((line) => ({
+    ...line,
+    widthPt: maxWidth,
+    words: line.words.map((word) => ({ ...word, xPt: word.xPt + shift }))
+  }))
 }
 
 /**
@@ -1036,6 +1119,12 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
       ...(block.kind === 'paragraph' || block.kind === 'blockquote'
         ? { hyphenate: ctx.hyphenate }
         : {}),
+      // A title is read as a phrase, so it turns at the comma or the colon
+      // that marks its joint rather than wherever the measure runs out. Only a
+      // heading: in prose this would make the right edge follow the
+      // punctuation, which is the ransom-note look justification exists to
+      // avoid.
+      ...(block.kind === 'heading' ? { preferPhraseBreaks: true } : {}),
       ...(spans.length > 0 ? { spans } : {})
     }
     /**
@@ -1084,7 +1173,8 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
         font,
         sizePt: size,
         measurer: ctx.measurer,
-        alignment: style.alignment
+        alignment: style.alignment,
+        preferPhraseBreaks: true
       }
       return spacedForSize(
         toFlowLines(
