@@ -30,6 +30,7 @@ import {
   fontForWord,
   type Alignment,
   type Attachment,
+  type BreakParagraphOptions,
   type BrokenLine,
   type TextSpan
 } from './break-lines'
@@ -595,27 +596,49 @@ function widthOfRun(run: TextRun, measurer: TextMeasurer | undefined, font: Font
  */
 function balancedLines(
   text: string,
-  opts: { font: FontRef; sizePt: number; measurer: TextMeasurer; maxWidth: number }
+  opts: Omit<BreakParagraphOptions, 'lineWidths'> & {
+    maxWidth: number
+    /**
+     * The width the continuation lines get, where the caller hangs them. The
+     * measure is narrowed by the same amount as the first line, so a hang is
+     * preserved rather than squeezed away.
+     */
+    hang?: number
+  }
 ): BrokenLine[] {
+  const { maxWidth, hang = 0, ...rest } = opts
   const at = (width: number): BrokenLine[] =>
     breakParagraph(text, {
-      font: opts.font,
-      sizePt: opts.sizePt,
-      measurer: opts.measurer,
-      lineWidths: Math.max(1, width),
-      alignment: 'center'
+      ...rest,
+      lineWidths: hang > 0 ? [Math.max(1, width), Math.max(1, width - hang)] : Math.max(1, width)
     })
 
-  const natural = at(opts.maxWidth)
+  const natural = at(maxWidth)
   if (natural.length < 2) return natural
 
+  /**
+   * A width is acceptable if it sets the same number of lines and no line
+   * overflows it.
+   *
+   * The line count alone is not enough, and believing it was put eight fresh
+   * overfull warnings into a book: narrowed past the longest word in the text,
+   * `breakParagraph` cannot break it, so it emits that word on a line of its
+   * own that is *wider than the measure* — and the line count is unchanged, so
+   * the search accepted it and went on narrowing. `BUDDHA, THE / DIVINE
+   * WANDERER` and four other chapter titles came out of that.
+   */
+  const ok = (width: number): boolean => {
+    const lines = at(width)
+    return lines.length <= natural.length && !lines.some((line) => line.overfull)
+  }
+
   let tooNarrow = 0
-  let wide = opts.maxWidth
+  let wide = maxWidth
   // Twelve halvings settles a 400pt measure to a tenth of a point, which is
   // finer than any face's word space.
   for (let i = 0; i < 12; i++) {
     const mid = (tooNarrow + wide) / 2
-    if (at(mid).length <= natural.length) wide = mid
+    if (ok(mid)) wide = mid
     else tooNarrow = mid
   }
   return at(wide)
@@ -1003,11 +1026,10 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
 
   const dropCap = opts.dropCap && block.kind === 'paragraph' && text.trim().length > 0
   if (!dropCap) {
-    const broken = breakParagraph(text, {
+    const breaking: Omit<BreakParagraphOptions, 'lineWidths'> = {
       font,
       sizePt,
       measurer: ctx.measurer,
-      lineWidths: measure,
       alignment: style.alignment,
       firstLineIndentPt: firstIndent,
       ...(attachments.length > 0 ? { attachments } : {}),
@@ -1015,7 +1037,27 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
         ? { hyphenate: ctx.hyphenate }
         : {}),
       ...(spans.length > 0 ? { spans } : {})
-    })
+    }
+    /**
+     * A centred heading is balanced rather than filled.
+     *
+     * Filling puts as much on the first line as the measure takes and leaves
+     * whatever is over on the second, which on a centred display line reads as
+     * a mistake: `SIX MANUSCRIPT LECTURES BY MANLY P.` over `HALL`, and `THE
+     * THEORY OF REINCARNATION - PART` over `ONE`, both on one page of a
+     * finished book. Balancing narrows the measure until the same number of
+     * lines comes back at the evenest width, which is what a compositor does by
+     * hand with a display line and the only thing that makes a wrapped title
+     * look deliberate.
+     *
+     * Only when it is centred: a flush-left heading has a straight left edge
+     * doing that work already, and narrowing its measure would just make it
+     * ragged for no gain.
+     */
+    const broken =
+      block.kind === 'heading' && style.alignment === 'center'
+        ? balancedLines(text, { ...breaking, maxWidth: measure })
+        : breakParagraph(text, { ...breaking, lineWidths: measure })
     // A chapter opener may carry a flourish under its title. It belongs to the
     // heading's own lines so the two can never be separated by a page break.
     const flourish = isChapter ? findOrnament(ctx.profile.ornaments.chapterOpener) : null
@@ -1037,15 +1079,20 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
     // page break can never fall between them.
     const above = (opts.superscription ?? []).flatMap((line) => {
       const size = sizePt * SUPERSCRIPTION_SIZE_RATIO
+      const above1 = wantsSmallCaps && !realSmallCaps ? line.toLocaleUpperCase() : line
+      const breakingAbove = {
+        font,
+        sizePt: size,
+        measurer: ctx.measurer,
+        alignment: style.alignment
+      }
       return spacedForSize(
         toFlowLines(
-          breakParagraph(wantsSmallCaps && !realSmallCaps ? line.toLocaleUpperCase() : line, {
-            font,
-            sizePt: size,
-            measurer: ctx.measurer,
-            lineWidths: measure,
-            alignment: style.alignment
-          }),
+          // The number line over a title is a display line too, and balances
+          // for the same reason.
+          style.alignment === 'center'
+            ? balancedLines(above1, { ...breakingAbove, maxWidth: measure })
+            : breakParagraph(above1, { ...breakingAbove, lineWidths: measure }),
           font,
           size,
           [indentLeft]
@@ -2593,14 +2640,23 @@ function buildContents(
           font: entryTitleFont,
           sizePt: entryTitleSize,
           measurer: ctx.measurer,
+          alignment: 'center',
           maxWidth: measure
         })
-      : breakParagraph(entry.title, {
+      : // Balanced here too, and for the same reason it is balanced on a
+        // chapter opening. `The Scientific Series: Hall's Own Contents Leaf`
+        // filled its first line and left `Leaf` alone on the second, which on a
+        // contents page reads as a stray word rather than as a wrapped title.
+        // Safe for the two-pass scheme: balancing depends on the title alone,
+        // which is identical in both passes, and it never changes the line
+        // count — that is the property it searches for.
+        balancedLines(entry.title, {
           font: body,
           sizePt,
           measurer: ctx.measurer,
-          lineWidths: [measure, Math.max(1, measure - hang)],
-          alignment: 'left'
+          alignment: 'left',
+          maxWidth: measure,
+          hang
         })
     if (broken.length === 0) return
 
@@ -2832,6 +2888,7 @@ function buildFrontMatter(
             font: entry.font,
             sizePt: entry.sizePt,
             measurer: ctx.measurer,
+            alignment: 'center',
             maxWidth: width
           })
         : broken

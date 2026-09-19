@@ -716,6 +716,88 @@ describe('layoutWithToc — descriptions under the entries', () => {
  * to four digits while the line prints `Page 49`, so a title broken to the
  * measure beside it ran straight through the number on a finished page.
  */
+/**
+ * A centred heading that wraps is balanced, not filled.
+ *
+ * Filling puts as much on the first line as the measure takes and leaves the
+ * remainder on the second, which on a centred display line reads as a mistake.
+ * A finished book carried `SIX MANUSCRIPT LECTURES BY MANLY P.` over `HALL`,
+ * and `THE THEORY OF REINCARNATION - PART` over `ONE`, on the same page.
+ */
+describe('layout — a wrapped display heading', () => {
+  const headed = (text: string): LaidOutBook =>
+    layout(
+      build([
+        page(0, [
+          { kind: 'heading', text, level: 1 },
+          { kind: 'paragraph', text: PROSE }
+        ])
+      ]),
+      defaultStyleProfile(),
+      measurer,
+      { edition: EDITION }
+    )
+
+  /** The words of each line the heading occupies, in order. */
+  const headingRows = (book: LaidOutBook, first: string): string[][] => {
+    const rows = book.pages
+      .flatMap((p) => lines(p))
+      .map((l) => l.runs.map((r) => r.text))
+      .filter((r) => r.length > 0)
+    const at = rows.findIndex((r) => r.includes(first))
+    return rows.slice(at, at + 2)
+  }
+
+  it('does not leave one word alone on the second line', () => {
+    const rows = headingRows(headed('SIX MANUSCRIPT LECTURES BY MANLY P. HALL'), 'SIX')
+    expect(rows).toHaveLength(2)
+    // The point of balancing: the two lines are within a word of each other,
+    // rather than one full line and one orphan.
+    expect(rows[1]!.length).toBeGreaterThan(1)
+    expect(Math.abs(rows[0]!.length - rows[1]!.length)).toBeLessThanOrEqual(2)
+  })
+
+  /**
+   * Balancing may not narrow past the longest word in the heading.
+   *
+   * The first version tested the line count alone, and a width narrower than
+   * one word keeps the count: `breakParagraph` cannot break the word, so it
+   * sets it on a line of its own that is wider than the measure and reports it
+   * overfull. The search accepted that and kept narrowing, which put eight
+   * fresh overfull warnings into a real book and set five chapter titles past
+   * their own margins.
+   */
+  it('never narrows past a word it cannot break', () => {
+    // Two words long enough that the balancing search can narrow past one of
+    // them while still returning two lines. A heading of ordinary words cannot
+    // trip this: the line count grows before the measure reaches any of them,
+    // which is why the first fixture written here passed with the guard gone.
+    const book = headed('PHILOPROGENITIVENESS AND ACQUISITIVENESS')
+    // A layout warning carries the offending line's own text, so the fault
+    // shows up as the heading's words coming back as warnings.
+    expect(book.warnings.map((w) => w.text)).toEqual([])
+    const page = book.pages.find((p) =>
+      lines(p).some((l) => l.runs.some((r) => r.text === 'PHILOPROGENITIVENESS'))
+    )!
+    const right = page.frame.xPt + page.frame.widthPt
+    for (const line of lines(page)) {
+      for (const run of line.runs) {
+        expect(run.xPt + measurer.widthOf(run.text, run.font, run.sizePt)).toBeLessThanOrEqual(
+          right + 0.01
+        )
+      }
+    }
+  })
+
+  it('keeps the heading on the same number of lines it would have filled', () => {
+    // Balancing must never buy evenness with an extra line: the search is for
+    // the narrowest measure that still returns the natural line count.
+    const rows = headingRows(headed('THE THEORY OF REINCARNATION - PART ONE'), 'THE')
+    expect(rows).toHaveLength(2)
+    expect(rows[1]!.length).toBeGreaterThan(1)
+  })
+})
+
 describe('layoutWithToc — a numbered entry in a plain contents', () => {
   const numbered = build([
     page(0, [
