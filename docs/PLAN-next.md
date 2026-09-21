@@ -255,6 +255,36 @@ highlight passed with the two counts swapped, and the front-matter check
 matched the _word_ "introduction" — which every book on this shelf fails,
 because all five call theirs "Before You Begin".
 
+## Phase 6 — every book carries its shape, and the flow is generated — **done**
+
+The editor's ask, in his words: _"we need a flowchart for the instructions
+since not every book presented has the same components (scan, plus OCR,
+etc)."_ The process was written for a scan and every other shape of book was
+read by a session deciding, stage by stage, what still applied.
+
+Built: `src/core/provenance` — `BookShape` (pixels; text layer `none`,
+`converted` or `typeset`; a second digitisation; `measured` or `declared`,
+with the evidence), `routeFor` (the stages that apply, each with its reason),
+and `docs/FLOW.md`, whose table is generated from the code between markers a
+test compares. `SavedRun` v19 carries the shape; recon, the EPUB opener and
+the app record it at intake; `scripts/shape.mjs` measures a shelf under Node
+with the browser's own coverage walk, moved to core; `book-files.mjs --finish`
+owes a book with no shape; `drive.mjs crops` refuses a book with no pixels by
+its shape.
+
+Measured: ten books on the shelf, eight off their files, two declared (the
+_Isis_ scan the shelf cannot hold; the Hall collection). Routes: five
+`scan-with-layer`, two `scan`, three `converted-text`. Two things the
+measurement corrected on the way: a text layer is decided by the majority of
+sampled pages and not the mean (Google's boilerplate on one leaf of _Thought
+Vibration_ made the mean say the book had one), and a scan's OCR layer is a
+**second digitisation for free** — archive.org's reading, sharing no blind
+spot with Tesseract — which is what Phase E's second reader compares against
+first on five of these ten books.
+
+Next in the agreed order: C (standing rulings, pre-filled and held), D (page
+cleanup on the ground-truth harness), E (the second reader).
+
 ## Deliberately not doing
 
 - **More review of the draft module.** Four passes have now been run over it.

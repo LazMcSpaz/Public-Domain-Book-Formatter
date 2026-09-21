@@ -34,6 +34,7 @@ import type { LexiconEntry } from '@core/lexicon'
 import type { ImageRegion } from '@core/model'
 import { deleteRecon, loadReconRecord, saveRecon } from './run-store'
 import type { ReconPartial, ReconResult } from './recon'
+import { parseShape, type BookShape } from '@core/provenance'
 import type { OcrWord } from './ocr'
 
 /** The stored form: no object URLs, everything structured-cloneable. */
@@ -52,6 +53,8 @@ interface StoredRecon {
   pageText: string[]
   /** Whether the words were OCR'd or supplied by the file itself. */
   source?: 'ocr' | 'embedded'
+  /** The file's shape, as measured when it was read. Absent on older records. */
+  shape?: BookShape
   crops: Map<string, Blob>
   contextCrops: Map<string, Blob>
   thumbnails: Map<number, Blob>
@@ -111,6 +114,7 @@ export async function saveReconCache(
       lexicon: result.lexicon,
       pageText: result.pageText,
       source: result.source,
+      ...(result.shape ? { shape: result.shape } : {}),
       crops: await blobMap(result.crops),
       contextCrops: await blobMap(result.contextCrops),
       thumbnails: await blobMap(result.thumbnails),
@@ -171,6 +175,8 @@ export async function loadReconCache(
       lexicon: record.lexicon ?? [],
       pageText: record.pageText,
       source: record.source ?? 'ocr',
+      // A record older than the shape has none; the app measures again.
+      shape: parseShape(record.shape),
       crops: urls(record.crops),
       contextCrops: urls(record.contextCrops ?? new Map()),
       thumbnails: urls(record.thumbnails),

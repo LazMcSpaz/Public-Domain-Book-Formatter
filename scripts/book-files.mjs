@@ -25,8 +25,13 @@
  * `--check` exits non-zero when anything is out of date, so it belongs in the
  * same list as the tests rather than in somebody's memory.
  */
+import { register } from 'node:module'
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join, basename } from 'node:path'
+
+// Core modules import each other, and Node resolves neither the `@core`
+// alias nor an extensionless path; this hook does. See `resolve-ts.mjs`.
+register('./resolve-ts.mjs', import.meta.url)
 
 const [dir, ...flags] = process.argv.slice(2)
 if (!dir) {
@@ -81,7 +86,10 @@ if (dir === '--shelf') {
       glossary: n.sections.some((t) => /glossar/iu.test(t)) ? '·' : ' ',
       front: n.front ? '·' : ' ',
       marked: n.marked > 0 ? '·' : ' ',
-      facts: n.facts > 0 ? '·' : ' '
+      facts: n.facts > 0 ? '·' : ' ',
+      // The route, or a question mark: a book whose shape nobody recorded
+      // cannot say which checks applied to it.
+      route: n.route ?? '?'
     })
   }
   const width = Math.max(...rows.map((r) => r.name.length))
@@ -94,7 +102,8 @@ if (dir === '--shelf') {
     'glossary',
     'front',
     'marked',
-    'facts'
+    'facts',
+    'route'
   ]
   console.log(`${'book'.padEnd(width)}  ${cols.join('  ')}`)
   for (const r of rows) {
@@ -397,6 +406,12 @@ if (finish) {
   const owed = []
   if (book.run?.complete !== true) owed.push('the reading is not marked complete')
   if (hadLedger === null) owed.push('there is no ledger.md')
+  // The shape decides which checks apply, so a book without one cannot say
+  // its checks ran. Recorded by `shape.mjs`, measured or declared.
+  if (!ledgerNumbers(book).shape)
+    owed.push(
+      'the shape is not recorded — `node scripts/shape.mjs <book-dir> --write`, or `--declare`'
+    )
   if (!existsSync(join(dir, 'corrections.md')) && (book.run?.edits ?? []).length > 0)
     owed.push('corrections were made and there is no corrections.md')
   // The editorial channel: a query nobody ruled on is a decision the book is

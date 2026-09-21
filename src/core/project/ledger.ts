@@ -38,6 +38,13 @@
  *
  * Pure: no DOM, no I/O, no network.
  */
+import {
+  parseShape,
+  describeShape,
+  routeKey,
+  type BookShape,
+  type RouteKey
+} from '@core/provenance'
 
 /** The heading the generated section lives under. Fixed, so it can be found. */
 export const LEDGER_HEADING = '## By the numbers'
@@ -89,6 +96,9 @@ export interface LedgerNumbers {
   front: boolean
   /** The scan, and its size where the book file records one. */
   scan: { path: string | null; bytes: number | null }
+  /** What the file is made of, where the run records it, and the route that puts it on. */
+  shape: BookShape | null
+  route: RouteKey | null
 }
 
 function tally(values: readonly string[]): { kind: string; count: number }[] {
@@ -139,6 +149,7 @@ export function ledgerNumbers(book: unknown): LedgerNumbers {
 
   const editKinds = edits.map((e) => (typeof e['kind'] === 'string' ? e['kind'] : 'unknown'))
   const scan = isRecord(file['scan']) ? file['scan'] : {}
+  const shape = parseShape(run['shape'])
 
   return {
     leaves: typeof run['pageCount'] === 'number' ? run['pageCount'] : transcriptions.length,
@@ -164,7 +175,9 @@ export function ledgerNumbers(book: unknown): LedgerNumbers {
     scan: {
       path: typeof scan['path'] === 'string' ? scan['path'] : null,
       bytes: typeof scan['bytes'] === 'number' ? scan['bytes'] : null
-    }
+    },
+    shape,
+    route: shape ? routeKey(shape) : null
   }
 }
 
@@ -211,6 +224,14 @@ export function ledgerSection(n: LedgerNumbers): string {
       n.scan.path === null
         ? '**not recorded**'
         : `\`${n.scan.path}\`${n.scan.bytes === null ? '' : ` (${Math.round(n.scan.bytes / 1024)} KB)`}`
+    ),
+    // The shape and its route, with the evidence beside them: a measurement's
+    // numbers or a declaration's reason, so a reader can see which it was.
+    row(
+      'Shape',
+      n.shape === null
+        ? '**not recorded** — `node scripts/shape.mjs <book-dir> --write`'
+        : `${describeShape(n.shape)}; route \`${n.route}\`. ${n.shape.evidence.join('; ')}`
     ),
     ''
   ]

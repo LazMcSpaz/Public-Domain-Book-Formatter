@@ -12,6 +12,13 @@
 import * as pdfjs from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
+import {
+  largestImageCoverage,
+  SCANNED_COVERAGE,
+  shapeOfPdf,
+  type BookShape,
+  type PdfMeasurement
+} from '@core/provenance'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
@@ -468,60 +475,34 @@ export interface PageMakeup {
   imageCoverage: number
 }
 
+/** The opcodes the coverage walk needs, as this build numbers them. */
+const COVERAGE_OPS = {
+  save: pdfjs.OPS.save,
+  restore: pdfjs.OPS.restore,
+  transform: pdfjs.OPS.transform,
+  formBegin: pdfjs.OPS.paintFormXObjectBegin,
+  formEnd: pdfjs.OPS.paintFormXObjectEnd,
+  image: [
+    pdfjs.OPS.paintImageXObject,
+    pdfjs.OPS.paintImageMaskXObject,
+    pdfjs.OPS.paintInlineImageXObject
+  ]
+}
+
 export async function pageMakeup(doc: PDFDocumentProxy, pageIndex: number): Promise<PageMakeup> {
   const page = await doc.getPage(pageIndex + 1)
   try {
     const viewport = page.getViewport({ scale: 1 })
     const area = Math.max(1, viewport.width * viewport.height)
 
+    // The walk itself is pure and lives in core (`largestImageCoverage`), so
+    // `scripts/shape.mjs` can run the same code over the shelf under Node's
+    // legacy pdf.js build. Only the opcode numbers and the matrix multiply
+    // come from the build loaded here.
     const ops = await page.getOperatorList()
-    let largest = 0
-    // The drawn size of an image is the *current transformation matrix* at the
-    // moment it is painted — an image is always drawn into the unit square, so
-    // the matrix's determinant is the area it covers. Walking back to find "the
-    // transform before the paint" reads the image's own pixel dimensions
-    // instead, which is a fact about the file and not about the page.
-    let ctm: number[] = [1, 0, 0, 1, 0, 0]
-    const stack: number[][] = []
-
-    for (let i = 0; i < ops.fnArray.length; i++) {
-      const fn = ops.fnArray[i]
-      if (fn === pdfjs.OPS.save) {
-        stack.push([...ctm])
-        continue
-      }
-      if (fn === pdfjs.OPS.restore) {
-        ctm = stack.pop() ?? [1, 0, 0, 1, 0, 0]
-        continue
-      }
-      if (fn === pdfjs.OPS.transform) {
-        ctm = pdfjs.Util.transform(ctm, ops.argsArray[i] as number[])
-        continue
-      }
-      // A form XObject carries its own matrix, and pdf.js delivers it as its
-      // own opcode rather than as a `transform`. Missing it is not a rounding
-      // error: this book paints its scans inside a form scaled roughly 2:1, so
-      // every leaf measured as twice page size and 45% visible — including the
-      // ones that render perfectly. `pageMakeup` has the same blind spot and
-      // survives it only because its threshold is loose.
-      if (fn === pdfjs.OPS.paintFormXObjectBegin) {
-        stack.push([...ctm])
-        const [matrix] = ops.argsArray[i] as [number[], number[]]
-        if (Array.isArray(matrix)) ctm = pdfjs.Util.transform(ctm, matrix)
-        continue
-      }
-      if (fn === pdfjs.OPS.paintFormXObjectEnd) {
-        ctm = stack.pop() ?? [1, 0, 0, 1, 0, 0]
-        continue
-      }
-      const isImage =
-        fn === pdfjs.OPS.paintImageXObject ||
-        fn === pdfjs.OPS.paintImageMaskXObject ||
-        fn === pdfjs.OPS.paintInlineImageXObject
-      if (!isImage) continue
-      const determinant = Math.abs((ctm[0] ?? 0) * (ctm[3] ?? 0) - (ctm[1] ?? 0) * (ctm[2] ?? 0))
-      largest = Math.max(largest, determinant / area)
-    }
+    const largest = largestImageCoverage(ops.fnArray, ops.argsArray, area, COVERAGE_OPS, (a, b) =>
+      pdfjs.Util.transform(a, b)
+    )
 
     const content = await page.getTextContent()
     const textLength = content.items.reduce(
@@ -529,9 +510,7 @@ export async function pageMakeup(doc: PDFDocumentProxy, pageIndex: number): Prom
       0
     )
 
-    // Two thirds rather than nearly all: a scan is often placed with a margin,
-    // and a decorative header on a born-digital page never reaches it.
-    return { scanned: largest >= 0.66, textLength, imageCoverage: largest }
+    return { scanned: largest >= SCANNED_COVERAGE, textLength, imageCoverage: largest }
   } finally {
     page.cleanup()
   }
@@ -555,20 +534,51 @@ export interface PdfMakeup {
  * make the other three hundred look born-digital.
  */
 export async function looksScanned(doc: PDFDocumentProxy, sample = 8): Promise<PdfMakeup> {
+  const m = await measurePdf(doc, sample)
+  const sampled = m.samples.length
+  const scannedPages = m.samples.filter((s) => s.scanned).length
+  const text = m.samples.reduce((n, s) => n + s.text, 0)
+  return { scanned: scannedPages * 2 > sampled, textPerPage: text / Math.max(1, sampled), sampled }
+}
+
+/**
+ * The measurements a book's shape is decided from: a sample of its pages and
+ * what the file says about who made it.
+ *
+ * `shapeOfPdf` in core turns this into a `BookShape`; the platform's only job
+ * is to read the numbers off the file. Evenly spaced, for the reason
+ * `looksScanned` gives.
+ */
+export async function measurePdf(doc: PDFDocumentProxy, sample = 8): Promise<PdfMeasurement> {
   const total = doc.numPages
   const step = Math.max(1, Math.floor(total / Math.min(sample, total)))
-  let scannedPages = 0
-  let sampled = 0
-  let text = 0
-
-  for (let i = 0; i < total && sampled < sample; i += step) {
+  const samples: PdfMeasurement['samples'] = []
+  for (let i = 0; i < total && samples.length < sample; i += step) {
     const makeup = await pageMakeup(doc, i)
-    sampled += 1
-    text += makeup.textLength
-    if (makeup.scanned) scannedPages += 1
+    samples.push({
+      page: i,
+      coverage: makeup.imageCoverage,
+      scanned: makeup.scanned,
+      text: makeup.textLength
+    })
   }
+  let producer: string | null = null
+  let creator: string | null = null
+  try {
+    const meta = await doc.getMetadata()
+    const info = meta.info as Record<string, unknown>
+    producer = typeof info['Producer'] === 'string' ? info['Producer'] : null
+    creator = typeof info['Creator'] === 'string' ? info['Creator'] : null
+  } catch {
+    // A file with unreadable metadata is still a file; the shape comes from
+    // the pages, and the producer is only ever corroboration.
+  }
+  return { pages: total, samples, producer, creator }
+}
 
-  return { scanned: scannedPages * 2 > sampled, textPerPage: text / Math.max(1, sampled), sampled }
+/** The book's shape, measured once off the open file. */
+export async function pdfShape(doc: PDFDocumentProxy, sample = 8): Promise<BookShape> {
+  return shapeOfPdf(await measurePdf(doc, sample))
 }
 
 /** A word the PDF itself supplied, shaped as everything downstream expects. */

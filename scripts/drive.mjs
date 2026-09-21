@@ -428,6 +428,7 @@ async function serve() {
       return page.evaluate(
         async ([repo, arg]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const provenance = await import(`/@fs${repo}/src/core/provenance/index.ts`)
           const runs = await runStore.listRuns()
           if (arg === 'clear') window.__pdbfBook = null
           else if (arg) {
@@ -469,6 +470,14 @@ async function serve() {
             commentsOpen: memos.filter((m) => !m.resolved).length,
             commentsAnswered: memos.filter((m) => m.resolved).length,
             marked: marked.length,
+            // What the book is made of and which route that puts it on, so a
+            // session starting cold reads the flow off the book rather than
+            // deciding it afresh (docs/FLOW.md). Named as missing when it is.
+            shape: run?.shape
+              ? { ...run.shape, route: provenance.routeKey(run.shape) }
+              : run
+                ? 'not recorded — `node scripts/shape.mjs <book-dir> --write`'
+                : null,
             ...(memos.some((m) => !m.resolved)
               ? {
                   next: '`memos` lists what the editor asked for; sweep them before anything else.'
@@ -2079,7 +2088,7 @@ async function serve() {
     crops: async ([path = 'findings.json', dir = 'crops', dpi = '200']) => {
       const { readFile, writeFile, mkdir } = await import('node:fs/promises')
       const raw = JSON.parse(await readFile(resolve(REPO, path), 'utf8'))
-      const located = await page.evaluate(
+      const { shape, located } = await page.evaluate(
         async ([repo, raw]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
@@ -2094,15 +2103,30 @@ async function serve() {
           const findings = raw.map((f, i) => coherence.parseSenseFinding(f, i))
           const blocks = new Map(doc.blocks.map((b) => [b.id, b.text]))
           const pages = new Map(doc.blocks.map((b) => [b.id, b.sourcePages]))
-          return coherence.locateFindings(findings, blocks).map((f) => ({
-            blockId: f.blockId,
-            quote: f.quote,
-            at: f.at,
-            pages: [...(pages.get(f.blockId) ?? [])]
-          }))
+          return {
+            shape: run.shape ?? null,
+            located: coherence.locateFindings(findings, blocks).map((f) => ({
+              blockId: f.blockId,
+              quote: f.quote,
+              at: f.at,
+              pages: [...(pages.get(f.blockId) ?? [])]
+            }))
+          }
         },
         [REPO, raw]
       )
+      // On a book with no pixels a "crop" is the text layer drawn again: the
+      // adjudicator is handed back the characters the finding was raised on
+      // and asked whether that is what the page says, agrees every time, and
+      // the pass reports a book adjudicated against itself. Refused by the
+      // shape rather than by a session remembering (docs/FLOW.md).
+      if (shape && !shape.pixels) {
+        throw new Error(
+          `This book has no pixels (${shape.textLayer} text, ${shape.how}), so a crop of a leaf is ` +
+            'not evidence. Use `concordance` — the paragraph, its neighbours and its parallels — ' +
+            'and raise a query where the book cannot answer.'
+        )
+      }
 
       // Crops go beside every other rendered leaf, under the driver's own
       // output directory, so one `.gitignore` line covers all of them.
@@ -2306,12 +2330,12 @@ async function serve() {
       await writeFile(bodyPath, JSON.stringify(body))
 
       // The glossary marks, checked here rather than by the script. The
-      // script *can* be asked (`--marks`), but from plain Node that path dies
-      // on `marks.ts`'s extensionless import of `../edits/sweep` — Node 22
-      // strips types and resolves nothing it is not told the extension of —
-      // and this verb already stands in the one place that resolves it. The
-      // headwords come off the book file exactly as the script reads them, so
-      // the two doors cannot disagree about what the glossary holds.
+      // script *can* be asked (`--marks`), and since `resolve-ts.mjs` that
+      // path loads from plain Node too; this verb keeps its own because it
+      // already holds the assembled body, which the script would have to be
+      // handed. The headwords come off the book file exactly as the script
+      // reads them, so the two doors cannot disagree about what the glossary
+      // holds.
       const book = JSON.parse(await readFile(join(where, 'book.json'), 'utf8'))
       const glossary = (book.run?.edits ?? []).find(
         (e) => e.kind === 'section' && /glossar/iu.test(e.title ?? '')

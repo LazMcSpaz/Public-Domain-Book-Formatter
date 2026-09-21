@@ -16,11 +16,12 @@ import {
   cropToObjectUrl,
   thumbnailToBlob,
   blobOfUrl,
-  looksScanned,
+  pdfShape,
   extractPageWords
 } from './pdf'
 import { detectIllustrations, type RegionCandidate } from './illustrations'
 import { OcrEngine, type OcrWord, type OcrAssetPaths } from './ocr'
+import type { BookShape } from '@core/provenance'
 
 /**
  * The resolution pages are read at, and every pixel coordinate recon produces.
@@ -75,6 +76,14 @@ export interface ReconResult {
    * apart from a scan everywhere the difference matters.
    */
   source: 'ocr' | 'embedded'
+  /**
+   * What the file is made of, measured once as it came in.
+   *
+   * Recorded on the run so every later verb reads it rather than re-deriving
+   * it, and so the shelf can say which route each book took. Null only for a
+   * cached reading written before the shape existed.
+   */
+  shape: BookShape | null
 }
 
 /**
@@ -144,10 +153,10 @@ export async function runRecon(
   const total = Math.min(doc.numPages, options.maxPages ?? doc.numPages)
 
   // Is this a photograph of a book, or a book? Asked once, structurally, before
-  // ten minutes are spent OCR-ing text the file was carrying all along.
-  const embedded =
-    options.useEmbeddedText ??
-    (await looksScanned(doc).then((m) => !m.scanned && m.textPerPage > 200))
+  // ten minutes are spent OCR-ing text the file was carrying all along. The
+  // same measurement is the book's shape, kept on the run.
+  const shape = await pdfShape(doc)
+  const embedded = options.useEmbeddedText ?? (!shape.pixels && shape.textLayer !== 'none')
 
   // Tesseract is a few seconds and a worker to start. A book that needs no OCR
   // should not pay for it.
@@ -297,7 +306,8 @@ export async function runRecon(
       thumbnails,
       illustrations,
       pageText,
-      source: embedded ? 'embedded' : 'ocr'
+      source: embedded ? 'embedded' : 'ocr',
+      shape
     }
   } finally {
     await engine?.dispose()

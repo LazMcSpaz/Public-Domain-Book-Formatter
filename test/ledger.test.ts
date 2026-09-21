@@ -169,3 +169,36 @@ describe('splicing it into a ledger', () => {
     expect(withLedgerSection('', section).startsWith(LEDGER_HEADING)).toBe(true)
   })
 })
+
+describe('the shape on the ledger', () => {
+  const shape = {
+    pixels: false,
+    textLayer: 'converted',
+    externalText: false,
+    container: 'pdf',
+    how: 'measured',
+    evidence: ['0 of 8 sampled leaves are a photograph', 'producer: Acrobat PDFWriter']
+  }
+
+  it('reads the shape and names the route it puts the book on', () => {
+    const n = ledgerNumbers({ run: { pageCount: 4, shape } })
+    expect(n.shape).toEqual(shape)
+    expect(n.route).toBe('converted-text')
+    const text = ledgerSection(n)
+    expect(text).toMatch(
+      /\| Shape \| .*OCR with no page images.*route `converted-text`.*Acrobat PDFWriter/u
+    )
+  })
+
+  it('says so when no shape was recorded, and how to record one', () => {
+    const n = ledgerNumbers({ run: { pageCount: 4 } })
+    expect(n.shape).toBeNull()
+    expect(n.route).toBeNull()
+    expect(ledgerSection(n)).toMatch(/\| Shape \| \*\*not recorded\*\* — `node scripts\/shape.mjs/u)
+  })
+
+  it('drops a shape it cannot read rather than routing on it', () => {
+    const n = ledgerNumbers({ run: { pageCount: 4, shape: { ...shape, how: 'guessed' } } })
+    expect(n.shape).toBeNull()
+  })
+})

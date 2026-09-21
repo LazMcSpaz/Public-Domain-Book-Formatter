@@ -83,6 +83,11 @@ running something, and the reviewer should try to break every one.
 
 ## Stage 0 — Bring the scan in
 
+_This document is written for a scan. A book of another shape — a text layer
+with no pixels, an EPUB — gets a subset of these stages, and which subset is
+not a judgement: [`FLOW.md`](./FLOW.md) lists the routes, generated from the
+same table the code reads. Record the shape first (`scripts/shape.mjs`)._
+
 ```bash
 node scripts/drive.mjs serve &                 # holds a browser on :7788
 node scripts/drive.mjs open <path/to/scan.pdf> # or: load <book.json> <scan.pdf>

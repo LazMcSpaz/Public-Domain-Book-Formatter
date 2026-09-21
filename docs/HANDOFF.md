@@ -116,6 +116,12 @@ run:
 3. **The imprint details**, if they are not already banked in a saved look.
 4. **Anything already ruled** on that edition.
 
+Then, before reading a leaf, **record what the book is made of** —
+`node scripts/shape.mjs <book-dir> --write`, or `--declare … --because …`
+where nothing can measure it — and read the route it lands on in
+[`FLOW.md`](./FLOW.md). Which stages apply is decided there, once, rather than
+by each session as it goes.
+
 Everything else — trim, face, ornaments, whether chapters open recto — has a
 sensible default and can be shown rather than asked.
 

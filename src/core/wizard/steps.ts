@@ -11,6 +11,7 @@
  * questions as data. No DOM, no I/O, no model calls — so the whole flow is
  * unit-testable.
  */
+import type { BookShape } from '@core/provenance'
 import type { LexiconEntry } from '@core/lexicon'
 import type { BookMetadata, PageClassification } from '@core/pages'
 import { isFrontMatter } from '@core/pages'
@@ -245,6 +246,11 @@ export interface WizardState {
    * is no point vetting how a word was *read* when nothing read it.
    */
   textSource: 'ocr' | 'embedded'
+  /**
+   * What the file is made of, measured at intake (`@core/provenance`). Null
+   * until measured, and for a book restored from a record that predates it.
+   */
+  shape: BookShape | null
   /** The assembled book, once transcription and assembly have run. */
   document: BookDocument | null
   /**
@@ -314,6 +320,7 @@ export function initialState(): WizardState {
     droppedRuns: {},
     adjudicated: {},
     textSource: 'ocr',
+    shape: null,
     document: null,
     voice: defaultVoice(),
     notesCheckpoint: null,

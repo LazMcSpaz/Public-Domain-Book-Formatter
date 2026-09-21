@@ -8,7 +8,9 @@ Guidance for AI assistants (and humans) working in this repo.
 first, then the process it points at:
 [`PROCESS-reading.md`](./docs/PROCESS-reading.md) for getting the text right
 and [`PROCESS-edition.md`](./docs/PROCESS-edition.md) for turning a read book
-into a printed one.
+into a printed one. Not every book has the same parts, and
+[`FLOW.md`](./docs/FLOW.md) says which stages a book of a given shape gets —
+`drive.mjs book` reports the shape and route of the book that is open.
 
 A **browser** app (React + TypeScript + Vite) that turns public-domain books —
 scanned PDFs, or EPUBs that are already text — into print-ready **KDP**
@@ -876,6 +878,14 @@ node scripts/book-files.mjs --shelf books/       # one row per book: what each
                                      #   has and what it is missing. Answers
                                      #   "has this book got the apparatus the
                                      #   last one got?", which was a habit
+node scripts/shape.mjs <book-dir> --write        # what the book is made of —
+                                     #   pixels, where its text came from, a
+                                     #   second digitisation — measured off the
+                                     #   scan and recorded as `run.shape`;
+                                     #   `--declare … --because …` where nothing
+                                     #   can measure it; `--shelf books/` one row
+                                     #   per book; `--flow` regenerates the table
+                                     #   in docs/FLOW.md
 node scripts/drive.mjs corrections <book-dir>    # rewrite corrections.md's entries
                                      #   from the book as it stands, keeping the
                                      #   prose above them; `--check` writes nothing
@@ -2189,6 +2199,34 @@ closed`, which is indistinguishable from the flake the first command after a
   word, a token joined by a dash or a slash could not break, and the
   contents listed every heading level — each above under _What has actually
   gone wrong_, each fixed with a test that fails against the fault.
+- **Also done**: **every book carries its shape, and the flow is a table
+  generated from it** (`src/core/provenance`, `docs/FLOW.md`). Not every book
+  presented has the same parts, and the process is written for the fullest
+  case — so which stages applied to _Patterns_ Vol. I was decided well by one
+  session and decided again from scratch for Vol. II, and nothing in a book
+  file said which decision had been made. Three questions now, each a fact
+  about the file: are there pixels (does one image cover the sampled pages);
+  what text does it carry and where from (`none`, `converted` — somebody's
+  OCR — or `typeset`, which needs a compositor or a digital-text publisher
+  named, because a converted layer is made of words shaped exactly like right
+  ones and the default has to be the safe error); and is there a second
+  digitisation (true by construction for a scan with an OCR layer, which is
+  archive.org's reading and not ours). `shapeOfPdf` decides from the majority
+  of sampled pages, never the mean — Google's boilerplate on the first leaf of
+  _Thought Vibration_ made the mean say the book had a text layer. `routeFor`
+  turns a shape into the stages that apply, with the reason for each,
+  `docs/FLOW.md` carries that table between markers a test compares against
+  the code, and `book-files.mjs --finish` owes a book with no recorded shape.
+  Measured on the shelf under Node (`scripts/shape.mjs`, the browser's own
+  coverage walk moved to core so both run one implementation): eight books
+  measured, two declared with their reasons — the _Isis_ scan the shelf cannot
+  hold, and a collection built from twenty-seven readings — and every one of
+  the ten resolves to a route. The one consumer wired so far is the one that
+  matters most: `drive.mjs crops` refuses a book with no pixels by its shape
+  rather than by a session remembering, since a crop of such a leaf is the
+  hypothesis shown back to the adjudicator. `scripts/resolve-ts.mjs` came with
+  it — a resolver hook so a shelf script can load a core module that imports
+  another, which is what had kept `marks.ts` out of reach from plain Node.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

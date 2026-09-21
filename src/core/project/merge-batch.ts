@@ -30,6 +30,7 @@
  * Pure: no DOM, no I/O, no network.
  */
 import type { PageTranscription } from '@core/transcribe'
+import type { BookShape } from '@core/provenance'
 import type { Ruling } from '@core/queries'
 import type { SavedRun, SavedFailure, SavedUsage } from './saved-run'
 import type { Fact } from '@core/harvest'
@@ -52,7 +53,8 @@ export const CARRIED_FIELDS = [
   'facts',
   'rulings',
   'usage',
-  'modelId'
+  'modelId',
+  'shape'
 ] as const
 
 /** Fields the merge itself decides, so they are not carried. */
@@ -132,6 +134,7 @@ export interface MergeBatchResult {
     adjudicated: Record<string, { verdict: string; reading: string; note: string }>
     facts: readonly Fact[]
     rulings: readonly Ruling[]
+    shape: BookShape | null
   }
   report: MergeReport
 }
@@ -221,6 +224,8 @@ export function mergeBatchIntoRun(input: MergeBatchInput): MergeBatchResult {
       adjudicated: held?.adjudicated ?? {},
       facts: held?.facts ?? [],
       rulings: held?.rulings ?? [],
+      // Measured once at intake; a batch of leaves says nothing about it.
+      shape: held?.shape ?? null,
       // A book is finished when every leaf has been read — a *coverage* test,
       // never a count. `transcriptions.length >= pageCount` reported a nine-leaf
       // book complete while leaves 0–4 had never been read, because nine
