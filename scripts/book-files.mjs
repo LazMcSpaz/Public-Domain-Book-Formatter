@@ -14,6 +14,10 @@
  *   node scripts/book-files.mjs <book-dir> --marks <body.json>
  *                                                     and check the glossary
  *                                                     marks against the body
+ *   node scripts/book-files.mjs <book-dir> --finish   every condition for "done",
+ *                                                     named, with a non-zero exit
+ *   node scripts/book-files.mjs --shelf <books-dir>   one row per book: what each
+ *                                                     has and what it is missing
  *
  * `--marks` wants what `drive.mjs body <out.json>` writes, because the marks
  * live in the *assembled* text and that only exists in the browser.
@@ -26,10 +30,93 @@ import { join, basename } from 'node:path'
 
 const [dir, ...flags] = process.argv.slice(2)
 if (!dir) {
-  console.error('usage: node scripts/book-files.mjs <book-dir> [--check]')
+  console.error('usage: node scripts/book-files.mjs <book-dir> [--check|--finish]')
+  console.error('       node scripts/book-files.mjs --shelf <books-dir>')
   process.exit(2)
 }
-const check = flags.includes('--check')
+
+/**
+ * One row per book on the shelf, so "has this book got the apparatus the last
+ * one got?" is a question something answers.
+ *
+ * CLAUDE.md asks it in those words and calls it an unchecked habit, and the
+ * habit duly skipped: _Clairvoyance_ carried 85 glossary marks and the
+ * combined volume carried a 74-entry glossary with not one mark, and nothing
+ * anywhere said so. The check that catches it cannot live inside one book,
+ * because the fault is a *difference between* books — so it lives here, and
+ * its whole job is to put the shelf in one table where a gap is a hole in a
+ * column.
+ *
+ * It judges nothing. Not every book wants a glossary, and a row of dashes is
+ * a fact rather than a fault; what it stops is the gap being invisible.
+ */
+if (dir === '--shelf') {
+  const root = flags[0]
+  if (!root) {
+    console.error('usage: node scripts/book-files.mjs --shelf <books-dir>')
+    process.exit(2)
+  }
+  const { readdirSync } = await import('node:fs')
+  const { ledgerNumbers } = await import('../src/core/project/ledger.ts')
+  const books = readdirSync(root, { withFileTypes: true })
+    .filter((e) => e.isDirectory())
+    .map((e) => e.name)
+    .sort()
+  const rows = []
+  for (const name of books) {
+    const bookPath = join(root, name, 'book.json')
+    if (!existsSync(bookPath)) {
+      rows.push({ name, missing: 'no book.json' })
+      continue
+    }
+    const n = ledgerNumbers(JSON.parse(readFileSync(bookPath, 'utf8')))
+    const has = (f) => (existsSync(join(root, name, f)) ? '·' : ' ')
+    rows.push({
+      name,
+      done: n.complete ? '·' : ' ',
+      ledger: has('ledger.md'),
+      corrections: has('corrections.md'),
+      rulings: has('rulings.md'),
+      notes: n.footnotes + n.editorNotes > 0 ? '·' : ' ',
+      glossary: n.sections.some((t) => /glossar/iu.test(t)) ? '·' : ' ',
+      front: n.front ? '·' : ' ',
+      marked: n.marked > 0 ? '·' : ' ',
+      facts: n.facts > 0 ? '·' : ' '
+    })
+  }
+  const width = Math.max(...rows.map((r) => r.name.length))
+  const cols = [
+    'done',
+    'ledger',
+    'corrections',
+    'rulings',
+    'notes',
+    'glossary',
+    'front',
+    'marked',
+    'facts'
+  ]
+  console.log(`${'book'.padEnd(width)}  ${cols.join('  ')}`)
+  for (const r of rows) {
+    if (r.missing) {
+      console.log(`${r.name.padEnd(width)}  ${r.missing}`)
+      continue
+    }
+    console.log(`${r.name.padEnd(width)}  ${cols.map((c) => r[c].padEnd(c.length)).join('  ')}`)
+  }
+  const readable = rows.filter((r) => !r.missing)
+  const noLedger = readable.filter((r) => r.ledger !== '·')
+  const unreadable = rows.length - readable.length
+  console.log(
+    `\n${readable.length} books · ${readable.length - noLedger.length} with a ledger` +
+      (noLedger.length === 0 ? '' : ` · ${noLedger.length} without`) +
+      (unreadable === 0 ? '' : ` · ${unreadable} directory without a book.json`)
+  )
+  process.exit(0)
+}
+
+const finish = flags.includes('--finish')
+const check = flags.includes('--check') || finish
 
 const book = JSON.parse(readFileSync(join(dir, 'book.json'), 'utf8'))
 const edits = book.run?.edits ?? []
@@ -257,6 +344,94 @@ if (flags.includes('--body') && corrArg && !corrArg.startsWith('--')) {
       writeFileSync(path, text)
       console.log(`  written corrections.md  (${note})`)
     }
+  }
+}
+
+/**
+ * The ledger — the one derived file nothing checked, on eight books of eleven.
+ *
+ * Its prose is the editor's and is never touched. What is checked is the
+ * generated section: a ledger whose counts disagree with the book is a score
+ * sheet for a book that no longer exists, and that is worse than none, because
+ * a stale number reads exactly like a true one.
+ *
+ * A **missing** ledger is reported on any book, and it is the finding that
+ * matters — the instruction to keep one is written in three places and was
+ * kept on three books.
+ */
+const { ledgerNumbers, ledgerSection, withLedgerSection } =
+  await import('../src/core/project/ledger.ts')
+const ledgerPath = join(dir, 'ledger.md')
+const hadLedger = existsSync(ledgerPath) ? readFileSync(ledgerPath, 'utf8') : null
+const wantLedger = withLedgerSection(hadLedger, ledgerSection(ledgerNumbers(book)))
+if (hadLedger === null) {
+  stale += 1
+  console.log(
+    '  MISSING ledger.md  — findings raised, confirmed and refuted, per book. ' +
+      'Run without --check to start one; the prose is yours to write.'
+  )
+  if (!check) {
+    writeFileSync(ledgerPath, wantLedger)
+    console.log('  written ledger.md  (the numbers; the reading is yours to write)')
+  }
+} else if (hadLedger === wantLedger) {
+  console.log('  ok      ledger.md  (its numbers match the book)')
+} else {
+  stale += 1
+  if (check) console.log('  STALE   ledger.md  — its numbers differ from book.json')
+  else {
+    writeFileSync(ledgerPath, wantLedger)
+    console.log('  written ledger.md  (numbers rebuilt, prose kept)')
+  }
+}
+
+/**
+ * The conditions for "done", named in one place so that finishing a book is
+ * something a command agrees with rather than something a session remembers.
+ *
+ * Every one of these is a rule already written down and already skipped at
+ * least once. They are gathered here because the evidence of this repository
+ * is unambiguous: a check that runs gets followed and a sentence does not.
+ */
+if (finish) {
+  const owed = []
+  if (book.run?.complete !== true) owed.push('the reading is not marked complete')
+  if (hadLedger === null) owed.push('there is no ledger.md')
+  if (!existsSync(join(dir, 'corrections.md')) && (book.run?.edits ?? []).length > 0)
+    owed.push('corrections were made and there is no corrections.md')
+  // The editorial channel: a query nobody ruled on is a decision the book is
+  // still carrying as printed, which may be right — but it must be visible.
+  //
+  // **Matched, not subtracted.** A ruling names its query by leaf and quote,
+  // and `rulings.length` also counts standing rulings that answer a class
+  // rather than a spot — so 17 raised against 15 rulings is not 2 outstanding,
+  // and the first version of this said it was.
+  const settled = new Set((book.run?.rulings ?? []).map((r) => `${r.pageIndex}\u0000${r.quote}`))
+  const outstanding = []
+  for (const t of book.run?.transcriptions ?? []) {
+    for (const q of t.queries ?? []) {
+      if (!settled.has(`${t.pageIndex}\u0000${q.quote}`)) outstanding.push(t.pageIndex)
+    }
+  }
+  if (outstanding.length > 0) {
+    const leaves = [...new Set(outstanding)].join(', ')
+    owed.push(
+      `${outstanding.length} quer${outstanding.length === 1 ? 'y has' : 'ies have'} ` +
+        `no ruling (leaf ${leaves})`
+    )
+  }
+  // The two habits CLAUDE.md names and nothing enforces. Neither can be
+  // settled from the book file alone, so they are *asked* rather than judged:
+  // an unanswerable question in front of a person beats a silent omission.
+  const glossary = sections.find((s) => /glossar/iu.test(s.title ?? ''))
+  if (glossary && !flags.includes('--marks'))
+    owed.push('this book has a glossary — run with --marks <body.json> to check its marks')
+  console.log('')
+  if (owed.length === 0) console.log(`${basename(dir)}: finished.`)
+  else {
+    console.log(`${basename(dir)}: not finished —`)
+    for (const o of owed) console.log(`  · ${o}`)
+    process.exitCode = 1
   }
 }
 

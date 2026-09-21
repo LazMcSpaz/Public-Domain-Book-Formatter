@@ -859,6 +859,14 @@ node scripts/book-files.mjs <book-dir> --check   # do the readable files still
                                      #   describe the book? regenerates them
                                      #   without --check; `--body body.json`
                                      #   checks corrections.md's entries too
+node scripts/book-files.mjs <book-dir> --finish  # every condition for "done",
+                                     #   named, with a non-zero exit. The list
+                                     #   is the thing to change when the
+                                     #   definition of finished changes
+node scripts/book-files.mjs --shelf books/       # one row per book: what each
+                                     #   has and what it is missing. Answers
+                                     #   "has this book got the apparatus the
+                                     #   last one got?", which was a habit
 node scripts/drive.mjs corrections <book-dir>    # rewrite corrections.md's entries
                                      #   from the book as it stands, keeping the
                                      #   prose above them; `--check` writes nothing
@@ -2167,7 +2175,7 @@ closed`, which is indistinguishable from the flake the first command after a
 --check` → `transcribe`, 215 queries ruled under the rulings carried from
   Vol. I, the eight Part I notes paired under superscript markers, six bare
   marks declared, and the edition exported at 232 pages with no warnings
-  (`docs/LEDGER-patterns-vol2.md`). Four app faults came out of looking at
+  (`books/…VolII…/ledger.md` on the shelf). Four app faults came out of looking at
   its pages: table cells kept their tags, a ragged line could not hold one
   word, a token joined by a dash or a slash could not break, and the
   contents listed every heading level — each above under _What has actually

@@ -664,7 +664,7 @@ cannot settle; an inconsistency the book itself contains; anything where
 5. **Stage 5 has been run at chapter scale, not book scale.** 38 leaves of
    _Isis Unveiled_ Vol. I in 6 batched subagents: the batching, the seam tail
    and the checkpointing all held, and `transcribe` merged every batch by
-   `pageIndex`. What that run measured is in `LEDGER-isis-vol1.md` and the
+   `pageIndex`. What that run measured is in `books/isis-vol1-vjj34f/ledger.md` and the
    number to argue with before running the rest is there too — **968,799 tokens
    for 37 leaves, about 26k a leaf**, which projects to roughly 17M for the
    remaining 655. That is the case for Stage 2 doing more, not for more agents.

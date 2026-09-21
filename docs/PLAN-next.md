@@ -154,7 +154,7 @@ book and leave the defect in place.
 
 ---
 
-## Phase 5 — the ledger, which is a habit and needs to be a check
+## Phase 5 — the ledger, which is a habit and needs to be a check — **done**
 
 **Three of eleven books on the shelf have a ledger.** _Clairvoyance_,
 _Uncommon Therapy_, _The Human Aura_, both Hall collections, _Thought
@@ -196,7 +196,7 @@ Four structural reasons, in the order they bite:
    is written by hand from the memory of a conversation. This file already
    records what that costs: _"They were built by a script in one session's
    scratchpad, so the first session to end took the only thing that could
-   rewrite them."_ The reading section of `LEDGER-patterns-vol1.md` is blank
+   rewrite them."_ The reading section of Patterns Vol. I's ledger is blank
    for that reason and says so.
 
 What to do, cheapest first:
@@ -220,6 +220,41 @@ The order matters and follows this repository's own rule about which fixes can
 be relied on: a check that runs beats a file in the right place, which beats an
 instruction written a fourth time.
 
+### What building it found
+
+**The shelf had already half-invented the fix, and the two halves had
+drifted.** Two books kept a `ledger.md` in the book directory _and_ a
+`docs/LEDGER-*.md` copy, and the copies were not the same file: the Isis
+ledger was **986 lines on the shelf against 905 in `docs/`**, five days
+staler, missing the whole section on the figures. So this was never a new
+convention to introduce — it was one already winning, with a duplicate
+quietly rotting beside it, which is the same disease one level up. The shelf
+copies are kept and the `docs/` ones deleted.
+
+**`--finish`, run across the shelf, found what nothing had been asked.** Ten
+books, and only _Patterns_ Vol. II comes back finished:
+
+- **88 queries across six books have never been ruled on** — 63 of them on
+  _Isis_ Vol. I. Each is a decision the editor has not made and the book is
+  carrying as printed, which may well be right, and none of them was visible.
+- **Four books made corrections and have no `corrections.md`.**
+- **Five books have a glossary whose marks nobody has checked.**
+
+**`--shelf` answers the apparatus question.** _The Human Aura_ is complete
+with no glossary and no front matter where _Clairvoyance_ — same author, same
+series, same shelf — has both. That is the gap CLAUDE.md names in those words
+and calls an unchecked habit, now a hole in a column.
+
+**And one directory is not a book at all.** `ManlyPalmerHall-CollectedBooklets`
+has no `book.json`, only `sources.md`, `notes-pending.md` and a `readings/`
+folder. Nothing had ever said so.
+
+Three faults were injected against the module and two of this file's own
+lessons recurred while writing it: a fixture with one bare mark and one
+highlight passed with the two counts swapped, and the front-matter check
+matched the _word_ "introduction" — which every book on this shelf fails,
+because all five call theirs "Before You Begin".
+
 ## Deliberately not doing
 
 - **More review of the draft module.** Four passes have now been run over it.
@@ -238,7 +273,7 @@ instruction written a fourth time.
 ## What the third book actually showed
 
 _The Astral World_ is read, checked against two further witnesses, proofed and
-on the shelf. The full ledger is in [`LEDGER-astral-world.md`](./LEDGER-astral-world.md).
+on the shelf. The full ledger is on the shelf, at `books/SwamiPanchadasi-TheAstralWorld-1vbqzip/ledger.md`.
 Phase 2 is therefore done for a book, and the one thing it turned up that no
 amount of reading would have is worth repeating here:
 
