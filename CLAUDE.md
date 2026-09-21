@@ -828,6 +828,14 @@ node scripts/drive.mjs reading       # every passage the editor marked while rea
 node scripts/drive.mjs sweep --was "belleves"   # find across the whole book; free
 node scripts/drive.mjs sweep --was "belleves" --now "believes"   # fix them all,
                                      #   emphasis kept, every change reported
+node scripts/drive.mjs parallels     # passages the book prints twice, and
+                                     #   where the two copies point one word
+                                     #   two ways. The second witness a book
+                                     #   with no pixels has. Free
+node scripts/drive.mjs concordance f.json   # what a reader is handed instead of
+                                     #   a crop on such a book: the paragraph,
+                                     #   its neighbours, its parallels — and
+                                     #   never the hypothesis
 node scripts/drive.mjs damage        # marks the printing trade does not set:
                                      #   split words, stray points, stray
                                      #   apostrophes. Free, no pixels needed.
@@ -1016,6 +1024,34 @@ Path aliases: `@core`, `@platform` (defined in `tsconfig.json`,
   between them is real is a typographic question the book answers by having set
   the word whole three hundred pages away. A `shape` finding is a place to
   look, and nothing more.
+
+  **The sense pass has the same problem, and `crops` is where it bites.** That
+  verb is the safeguard of the whole pass — a finding becomes an edit only
+  after a reader with the leaf has said what the paper says — and on a
+  born-digital PDF it renders the text layer again. The adjudicator is handed
+  back the exact characters the finding was raised on and asked whether that is
+  what the page says; it agrees, every time, and the pass reports a book
+  adjudicated against itself. That is worse than adjudicating nothing, because
+  it manufactures confidence.
+
+  Two things stand in, and they are not equal. **A second digitisation is the
+  strong one** (`@core/witness`): archive.org's OCR, a Gutenberg volunteer —
+  readings that share no blind spots with ours at all. Reach for it first.
+  **The book's own repeated passages are the weak one** (`findParallels`), and
+  they are what a 1975 typescript usually has instead. Measured on _Patterns_
+  Vol. I: 1,535 blocks gave 12 repeated passages, **6 of which point one word
+  two ways**, in a fifth of a second — and two of the six corroborate a
+  `damage` finding that was `shape` on its own evidence. p7b8 prints
+  `Structure` and `representation'`; p100b12, a hundred leaves away, prints
+  `Structure'` and `representation,`. Each copy is damaged where the other is
+  clean, and neither needed a photograph.
+
+  `drive.mjs concordance` is the door, and it carries the same strip `crops`
+  does: the paragraph, its neighbours, its parallels, and **no `why` and no
+  `expected`**. What it cannot promise is what a crop promises — so a place
+  with a parallel is settled, and a place with only context **raises a query
+  for the editor rather than a correction**. The manifest says which by whether
+  `parallels` is empty.
 
   Two things this does **not** license. It is not permission to repair a scanned
   book from its vocabulary: where pixels exist they remain the only accepter,

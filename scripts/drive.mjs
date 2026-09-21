@@ -1889,6 +1889,179 @@ async function serve() {
     },
 
     /**
+     * Every passage the book prints twice, and where the two copies disagree.
+     *
+     * The second witness for a book that has no pixels. Two copies of one
+     * sentence a hundred leaves apart were converted independently, so where
+     * they point a word two different ways, one of them is wrong — and the
+     * book said so itself, for nothing.
+     *
+     * Measured on the finished _Patterns_ Vol. I: 1,535 blocks, **12 repeated
+     * passages, 6 of which point a word two ways**, in a fifth of a second.
+     * Two of the six corroborate a `damage` finding that was `shape` on its
+     * own evidence, which is the promotion this exists for.
+     *
+     * A repeated passage is **not** a fault — that book is a training manual
+     * and sets its examples out again on purpose. Only a pointing difference
+     * is reported as one; words present in one copy and not the other are
+     * listed under it as the author's own revision.
+     *
+     *   parallels               write parallels.md
+     *   parallels out.md        somewhere else
+     */
+    parallels: async (args) => {
+      const out = args.find((a) => !a.startsWith('--')) ?? 'parallels.md'
+      const built = await page.evaluate(
+        async ([repo]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const coherence = await import(`/@fs${repo}/src/core/coherence/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const run = await runStore.loadRun(newest.key)
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const found = coherence.findParallels(doc)
+          const text = new Map(doc.blocks.map((b) => [b.id, b.text.replace(/<[^>]*>/gu, '')]))
+          return {
+            pairs: found.map((p) => ({
+              here: p.here,
+              there: p.there,
+              similarity: p.similarity,
+              pointing: p.pointing,
+              wording: p.wording,
+              hereText: text.get(p.here) ?? '',
+              thereText: text.get(p.there) ?? ''
+            }))
+          }
+        },
+        [REPO]
+      )
+      const pointed = built.pairs.filter((p) => p.pointing.length > 0)
+      const lines = [
+        '# Passages the book prints twice',
+        '',
+        'Two copies of one passage were converted independently, so where they',
+        'point a word two different ways one of them is wrong — and no',
+        'photograph was needed to say so.',
+        '',
+        '**A repeat is not a fault.** Only a pointing difference is. Words one',
+        'copy has and the other lacks are listed under it as the revision they',
+        'usually are.',
+        '',
+        `${built.pairs.length} repeated · **${pointed.length} pointing the same word two ways**.`,
+        '',
+        '---',
+        ''
+      ]
+      for (const p of pointed) {
+        lines.push(
+          `## \`${p.here}\` against \`${p.there}\` — ${(p.similarity * 100).toFixed(1)}% the same words`,
+          ''
+        )
+        for (const d of p.pointing) lines.push(`- \`${d.here}\` here, \`${d.there}\` there`)
+        if (p.wording.length > 0) {
+          lines.push('', 'Wording, which is usually the author:')
+          for (const d of p.wording)
+            lines.push(`- \`${d.here || '(nothing)'}\` here, \`${d.there || '(nothing)'}\` there`)
+        }
+        lines.push('', `> ${p.hereText}`, '', `> ${p.thereText}`, '')
+      }
+      await writeFile(resolve(out), lines.join('\n'))
+      return {
+        wrote: out,
+        repeated: built.pairs.length,
+        pointing: pointed.length,
+        rows: pointed.map((p) => ({
+          here: p.here,
+          there: p.there,
+          differences: p.pointing.map((d) => `${d.here} | ${d.there}`)
+        }))
+      }
+    },
+
+    /**
+     * What a reader is handed in place of a crop, on a book with no pixels.
+     *
+     * `crops` is the safeguard of the sense pass and it does not work on a
+     * born-digital PDF: rendering such a leaf draws the **text layer again**,
+     * so the adjudicator is given back the exact characters the finding was
+     * raised on and asked whether that is what the page says. It will agree,
+     * every time. A pass that reports a book adjudicated that way has
+     * manufactured confidence, which is worse than adjudicating nothing.
+     *
+     * So this is the other door, and it carries the same strip: the paragraph,
+     * the paragraphs either side, and every passage the book prints in nearly
+     * the same words with the differences named — and **no `why`, no
+     * `expected`**. Shown a proposed reading a model confirms; shown the
+     * evidence it reads.
+     *
+     * What it cannot do is promise what a crop promises. A parallel passage is
+     * a real second witness and settles a finding outright; the neighbouring
+     * paragraphs are context, and a finding they merely make plausible is a
+     * **query for the editor**, not a correction. The manifest says which is
+     * which by whether `parallels` is empty.
+     *
+     * Named apart from `witness`, which is a different and stronger thing: a
+     * second **digitisation** of the same book by somebody else. Where one can
+     * be had, reach for it first — it shares no blind spots with our reading
+     * at all, where this shares every one a single conversion introduced
+     * twice. Two things called `witness` is how a tool stops being one tool.
+     *
+     *   concordance findings.json [out.json]
+     */
+    concordance: async ([path = 'findings.json', out = 'concordance.json']) => {
+      const { readFile } = await import('node:fs/promises')
+      const raw = JSON.parse(await readFile(resolve(REPO, path), 'utf8'))
+      const built = await page.evaluate(
+        async ([repo, raw]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const coherence = await import(`/@fs${repo}/src/core/coherence/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const run = await runStore.loadRun(newest.key)
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const findings = raw.map((f, i) => coherence.parseSenseFinding(f, i))
+          const blocks = new Map(doc.blocks.map((b) => [b.id, b.text]))
+          const located = coherence.locateFindings(findings, blocks)
+          const unplaced = located.filter((f) => f.at === null)
+          // Only the place and the words travel. Passing the finding itself
+          // would carry `why` and `expected` into the manifest, which is the
+          // one thing this door exists to prevent.
+          const places = located
+            .filter((f) => f.at !== null)
+            .map((f) => ({ blockId: f.blockId, quote: f.quote }))
+          return {
+            concordance: coherence.concordanceFor(places, doc),
+            unplaced: unplaced.map((f) => ({ blockId: f.blockId, quote: f.quote }))
+          }
+        },
+        [REPO, raw]
+      )
+      await writeFile(resolve(out), JSON.stringify(built.concordance, null, 1))
+      const withParallel = built.concordance.filter((w) => w.parallels.length > 0).length
+      return {
+        wrote: out,
+        places: built.concordance.length,
+        settledByAParallel: withParallel,
+        contextOnly: built.concordance.length - withParallel,
+        unplaced: built.unplaced,
+        note:
+          'No hypothesis in the manifest. Ask only what the book says. ' +
+          'A place with no parallel has context and no second reader: it raises ' +
+          'a query for the editor, never a correction.'
+      }
+    },
+
+    /**
      * A crop for every finding, and a manifest that does **not** carry the guess.
      *
      * This is the safeguard, in the one place it can be enforced rather than

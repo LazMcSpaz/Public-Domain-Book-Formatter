@@ -504,6 +504,9 @@ and nothing mechanical will ever catch it.
 
 ## Stage 8 — Adjudicate every finding against the crop
 
+> **A book with no pixels cannot do this stage, and must not pretend to.** See
+> **Stage 8b**, below, before running `crops` on a born-digital PDF.
+
 ```bash
 node scripts/drive.mjs crops findings.json    # cuts a crop per finding
 node scripts/drive.mjs review findings.json verdicts.json
@@ -536,6 +539,59 @@ not exist. So the crop pass runs over the queries too, before any of them reach
 the editor's sheet, and `drive.mjs unquery` withdraws one whose premise the
 pixels refute — refusing without a reason, because a sheet is not shortened for
 being long.
+
+---
+
+## Stage 8b — When there is no crop to adjudicate against
+
+```bash
+node scripts/drive.mjs parallels                 # the free check, on its own
+node scripts/drive.mjs concordance findings.json # the manifest, in place of crops
+```
+
+`crops` is the safeguard of the sense pass, and on a born-digital PDF it does
+not work. Rendering such a leaf draws the **text layer again**, so the
+adjudicator is handed back the exact characters the finding was raised on and
+asked whether that is what the page says. It agrees, every time. A pass that
+reports a book adjudicated that way has manufactured confidence, which is
+worse than adjudicating nothing at all.
+
+Two things stand in, and they are **not** equal:
+
+| Stand-in        | What it is                                                           | Strength                                                |
+| --------------- | -------------------------------------------------------------------- | ------------------------------------------------------- |
+| `@core/witness` | a second **digitisation** — archive.org's OCR, a Gutenberg volunteer | shares no blind spots with ours; reach for it first     |
+| `findParallels` | the book's **own repeated passages**                                 | shares every blind spot one conversion introduced twice |
+
+The second is what a 1975 typescript usually has. Measured on _Patterns_
+Vol. I: 1,535 blocks, **12 repeated passages, 6 pointing one word two ways**,
+in a fifth of a second. The pair that argues for it is p7b8 against p100b12 —
+the same sixty words, converted independently a hundred leaves apart:
+
+|         | `Structure`            | `representation`            |
+| ------- | ---------------------- | --------------------------- |
+| p7b8    | clean                  | `representation'` — damaged |
+| p100b12 | `Structure'` — damaged | clean                       |
+
+Two of the six corroborate a `damage` finding that was `shape` on its own
+evidence. That is the promotion this exists for: **a parallel raises a
+finding's standing and never lowers it.**
+
+**A repeat is not a fault.** That book is a training manual and sets its
+examples out again on purpose. Only a _pointing_ difference is reported — a
+compositor setting one sentence twice does not turn a comma into an
+apostrophe, and a conversion does.
+
+`concordance` carries the same strip `crops` does: the paragraph, its
+neighbours, its parallels, and **no `why` and no `expected`**. What it cannot
+promise is what a crop promises, so the outcome differs by whether a parallel
+was found:
+
+- **a parallel** → the book settled it; this is a correction
+- **context only** → a **query for the editor**, never a correction
+
+The manifest says which by whether `parallels` is empty, so nobody has to
+remember the distinction.
 
 ---
 

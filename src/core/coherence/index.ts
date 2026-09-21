@@ -14,6 +14,13 @@
  * head for why the book's vocabulary may stand in for them, and where it may
  * not.
  *
+ * `findParallels` is the third deterministic check and the one that supplies a
+ * **second witness** where there are no pixels: the places a book prints the
+ * same passage twice were converted independently, so where the two copies
+ * point one word two ways, one of them is wrong. `concordanceFor` is what a reader
+ * is handed in place of a crop on such a book — the paragraph, its neighbours
+ * and its parallels, and never the hypothesis.
+ *
  * `Finding` and `Verdict` are the contract for the half that *does* need a
  * reader. A finding is a hypothesis and is marked as one; it becomes an edit
  * only after a reader with the crop has said what the paper says. See **A model
@@ -37,6 +44,13 @@ export {
   type SenseLedger
 } from './sense'
 export { chunkForSense, type SenseChunk, type SenseChunking } from './chunk'
+export {
+  findParallels,
+  concordanceFor,
+  type ParallelPair,
+  type PointingDifference,
+  type Concordance
+} from './parallels'
 export {
   checkDamage,
   damageSheet,
