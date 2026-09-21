@@ -27,12 +27,24 @@
 import { chromium } from 'playwright'
 import { createServer } from 'node:http'
 import { access, mkdir, writeFile } from 'node:fs/promises'
-import { createReadStream, statSync, writeFileSync } from 'node:fs'
+import { createReadStream, existsSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
 const PORT = Number(process.env.DRIVE_PORT ?? 7788)
 const URL_BASE = process.env.APP_URL ?? 'http://localhost:5173'
-const EXECUTABLE = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
+/**
+ * Which Chromium to drive.
+ *
+ * `CHROMIUM_PATH` wins when it is set. Otherwise the sandbox's vendored
+ * browser is used **if it is actually there**, and where it is not — any
+ * machine that is not this container — the value is left undefined so
+ * Playwright launches the copy it installed itself. Hardcoding the sandbox
+ * path was invisible here and fatal anywhere else: the launch fails with a
+ * missing executable, which reads like a broken install rather than a path
+ * that was only ever right on one machine.
+ */
+const VENDORED = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
+const EXECUTABLE = process.env.CHROMIUM_PATH ?? (existsSync(VENDORED) ? VENDORED : undefined)
 const OUT = process.env.DRIVE_OUT ?? 'screenshots'
 const REPO = resolve(import.meta.dirname, '..')
 /** Where the browser keeps its storage between runs. See `launchPersistentContext`. */
