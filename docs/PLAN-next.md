@@ -154,6 +154,72 @@ book and leave the defect in place.
 
 ---
 
+## Phase 5 — the ledger, which is a habit and needs to be a check
+
+**Three of eleven books on the shelf have a ledger.** _Clairvoyance_,
+_Uncommon Therapy_, _The Human Aura_, both Hall collections, _Thought
+Vibration_, the combined Panchadasi volume and _Patterns_ Vol. I were all
+finished without one; the last of those got its ledger only when a later
+session went looking for the book's score and found there was none.
+
+**The instruction is not unclear.** It is stated three times — in `CLAUDE.md`
+under how a book gets read, in `PROCESS-reading.md` at the sense pass, and as
+its own numbered section, **§7 Keep the ledger**, in `HANDOFF.md`. A rule
+written down three times and kept three times in eleven is not a comprehension
+problem. This repository already has the diagnosis, in its own words: _"Two
+things that are supposed to be standing rules turned out to be habits, and
+habits skip."_
+
+Four structural reasons, in the order they bite:
+
+1. **Nothing checks it.** `HANDOFF.md` §8, _Before you stop_, lists five
+   commands and the ledger is in none of them. `book-files.mjs --check` exists
+   for precisely this failure — it compares `corrections.md`, `notes.md`,
+   `glossary.md` and `introduction.md` against the book and exits non-zero on
+   drift, on the stated grounds that such a thing _"belongs beside the tests
+   rather than in somebody's memory"_. The ledger is the one derived file it
+   does not cover.
+2. **It lives in the wrong repository.** Ledgers are `docs/LEDGER-*.md` in the
+   formatter checkout; the books are on the shelf. Every other per-book
+   record — `corrections.md`, `queries.md`, `rulings.md`, `review.md`,
+   `about.json` — sits in the book's own directory. The ledger is the only one
+   that does not travel with its book, so finishing a book means remembering to
+   commit to a second repository.
+3. **It is written last, at the end of the longest job.** A book is read across
+   several sessions, and the ledger falls at the point where a session is
+   oldest and nearest its limit. The editor's own words for why the work is
+   spread across chats — _"to avoid confusing you or running out of my context
+   window"_ — are exactly the condition under which a final, unchecked,
+   cross-repository step gets skipped.
+4. **There is no template and nothing derives it.** `corrections.md` has
+   `correctionRows`, a pure module that rebuilds it from the book; the ledger
+   is written by hand from the memory of a conversation. This file already
+   records what that costs: _"They were built by a script in one session's
+   scratchpad, so the first session to end took the only thing that could
+   rewrite them."_ The reading section of `LEDGER-patterns-vol1.md` is blank
+   for that reason and says so.
+
+What to do, cheapest first:
+
+- **Move the ledger into the book's directory** as `books/<slug>/ledger.md`,
+  and migrate the three that exist. It then travels with the book it scores and
+  is committed by the same commit as everything else it describes.
+- **Cover it in `book-files.mjs --check`.** Not the prose — the counts. Does a
+  ledger exist; do its leaf count, correction count, note count, query count
+  and page count match `book.json`. A ledger that is merely out of date is the
+  common case and is exactly what a check catches.
+- **Derive the derivable half.** The scan, the block kinds, the edit counts,
+  the rulings tally, the export numbers and the check scores are all in the
+  artefacts. Generate those sections the way `correctionRows` generates its
+  entries, and leave the narrative — the reading, what the book cost the
+  process — for a person, above the first generated heading, exactly as the
+  other readable files keep the editor's own sentences.
+- **Put it in `HANDOFF.md` §8**, so the last list a session reads names it.
+
+The order matters and follows this repository's own rule about which fixes can
+be relied on: a check that runs beats a file in the right place, which beats an
+instruction written a fourth time.
+
 ## Deliberately not doing
 
 - **More review of the draft module.** Four passes have now been run over it.
