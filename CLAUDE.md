@@ -467,6 +467,82 @@ paragraph answers was never a decision, and one it does not is raised with
 the paragraph attached, so the person deciding is not asked to go and find
 the context the reader should have brought.
 
+**And sixteen of its faults were still in the finished book.** _Patterns_
+Vol. I was read, corrected in 465 places, queried in 14, ruled on, exported and
+marked `complete: true`. Swept afterwards by a check that costs nothing and
+holds no opinion, the assembled book gave up **three words the conversion had
+split** (`descrip tion`, `induc tion`, `explici tly`), **seven stray full
+stops** (`typically. are`, `importantly. it`, `that. he`) and **six
+apostrophes standing where commas belong** (`examination' I tell`,
+`isolating' additional`, `greatest' proficiency`). Fifteen of the sixteen are
+plainly real; the sixteenth is a full stop inside an induction transcript and
+is the editor's call. The editor found three of them by reading the first
+twenty pages.
+
+**The sharpest of them is that two of the three split words were fixed once
+and missed once.** `descrip tion` and `induc tion` each stand **twice** in the
+pristine reading and **once** in the edited book: the reader met each fault,
+corrected it, and did not ask whether the volume had another. That is this
+file's own "a step done for one book is not done for the next", inside a single
+book — and it is what a sweep is for, which is why an `attested` finding lands
+through `sweep` rather than one block at a time. The `arc`/`are` substitution
+is the counter-example and the model: 15 occurrences in the pristine text, 14
+corrected, and the one left is a real arc, "the arc that started at the tip of
+his feet".
+
+Nothing had been looking. `checkConsistency` asks where the book disagrees with
+itself about a **word or a structure**, and `sense.ts` states the exclusion
+outright — _"no `style`, no `punctuation`, no `spelling`"_ — which is right for
+a photographed 1877 leaf, where a full stop mid-clause is the compositor's
+pointing and this edition promises to reproduce it, and exactly wrong for an
+OCR'd typescript, where the same character was produced by a program. The
+distinction is **provenance, not taste**: no reader of the 1975 typescript ever
+saw `descrip tion`. `checkDamage` (`@core/coherence/damage.ts`) asks the other
+question — is this a mark the printing trade sets at all? — and
+`drive.mjs damage --check` is the gate, because a book with conversion damage
+in it should not reach an export on somebody remembering.
+
+**The count was wrong the first time, and how it was wrong is the lesson.**
+The first sweep ran over a Python reconstruction of the book — transcription
+blocks with the `text` edits applied by matching `p{page}b{index}` — and
+reported **24** faults. Eight of them did not exist. Block ids are _derived at
+assembly_, and assembly joins paragraphs across page seams, so the id a
+correction is keyed to names a different block in any reconstruction that does
+not join them: the edits landed on the wrong paragraphs, leaving faults
+standing that had been fixed and manufacturing two (`amb iguity`,
+`exp erience`) that were never in the book at all. It also produced a confident
+false claim — that `here arc effective` survived to export — which the
+assembled body refutes.
+
+That is **"a leaf's text is not a block's text"**, one entry below, paid for
+again by the session that had just read it. `drive.mjs body` is what hands back
+the real thing, and a number measured against anything else is not measured.
+Three measurements shaped the checks, and each was a fault first:
+
+- **A presence test cannot see a fault that supplies its own evidence.** Asking
+  only whether the joined form is attested and neither fragment is returned
+  **zero** findings on a book with ten splits, because `tion` is "a word this
+  book uses" precisely because `descrip tion` and `induc tion` are where it uses
+  it. A frequency ceiling on the fragments finds all ten.
+- **`matchAll` consumes what it matches, and that hid six of the ten.** Scanning
+  `lines of the induc tion`, a two-word pattern takes `lines of`, then
+  `the induc`, and never considers `induc tion` as a pair at all. Every word has
+  to be tried against the one after it, which means walking the tokens.
+- **A left-to-right walk is what separates a stray apostrophe from a closing
+  quote.** A pattern match reported ten and five of them were `'hello'`,
+  `'something'`, `'vestibule'` — ordinary quoted words. Tracking whether a
+  quotation is open removed all five and kept every real one.
+
+And one check was **refuted by measurement and not shipped**. The editor's
+fourth complaint was an indentation that made no sense — a displayed quotation
+run into its paragraph (the Chomsky block on leaf 3). The obvious signal is
+paragraph length, and it is wrong: the real run-in is 1,100 characters and does
+not reach the 99th percentile, while the nine paragraphs that do are all
+legitimately long. A doubled full stop catches this one instance and is folded
+into `stray-point`; the general case has no honest signal yet and is named here
+rather than guessed at. See the module's own standard — _a rate built from one
+event flags good prose._
+
 **A PDF with no page images is text with nobody's pixels behind it, and it
 passed every check.** _Patterns of the Hypnotic Techniques_ Vol. I arrived as
 a 512 KB PDF — `Producer: Acrobat PDFWriter`, made in 2016, not one image in
@@ -752,6 +828,10 @@ node scripts/drive.mjs reading       # every passage the editor marked while rea
 node scripts/drive.mjs sweep --was "belleves"   # find across the whole book; free
 node scripts/drive.mjs sweep --was "belleves" --now "believes"   # fix them all,
                                      #   emphasis kept, every change reported
+node scripts/drive.mjs damage        # marks the printing trade does not set:
+                                     #   split words, stray points, stray
+                                     #   apostrophes. Free, no pixels needed.
+                                     #   `--check` exits non-zero: a gate
 node scripts/drive.mjs runs          # readings held here; `runs drop <n>` removes one
 node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` work it
 
@@ -908,6 +988,42 @@ Path aliases: `@core`, `@platform` (defined in `tsconfig.json`,
   hypothesis, because a model shown both confirms rather than reads. What must
   never be added is a pass whose output is text: a "clean this up" step that
   hands back prose instead of a list of places to look.
+
+- **When there are no pixels, the book's own text is the witness — and only
+  where the book can actually answer.** Not every book here has a scan. A
+  born-digital PDF, an EPUB, somebody's 2016 OCR of a 1975 typescript printed
+  back to PDF: `looksScanned` says, correctly, that the page is not a
+  photograph, and a "crop" of such a leaf is the **text layer drawn again**.
+  That is not an independent witness, it is the same witness in a larger
+  typeface, and the rule above has nothing to accept a reading with. Both
+  volumes of _Patterns_ are this, and the ruling on leaf 38 of Vol. I says so
+  in as many words: _"This copy is born-digital and has no independent witness."_
+
+  What stands in for the pixels is the **volume's own vocabulary and its own
+  repeated text** — and the substitution is honest only where the book really
+  does answer. It answered `Gardiner`/`Gardner` (five settings against two),
+  `assymetry` against another book's title page, and `learned so quickly`
+  against the same example glossed on the next leaf. Those were not guesses;
+  the evidence was counted. It cannot answer whether a full stop should be a
+  comma, because a stray stop has no attested form to be counted against.
+
+  So the distinction is drawn at **what the book can count**, and it is carried
+  in the artefact rather than left to a tired session's judgement:
+  `DamageFinding.confidence` is `attested` where the volume settled it and
+  `shape` where it did not, and the two are listed apart on the sheet. An
+  `attested` finding is the same argument `draft/hyphens.ts` already makes
+  about a line-break hyphen — OCR read the characters, and whether the space
+  between them is real is a typographic question the book answers by having set
+  the word whole three hundred pages away. A `shape` finding is a place to
+  look, and nothing more.
+
+  Two things this does **not** license. It is not permission to repair a scanned
+  book from its vocabulary: where pixels exist they remain the only accepter,
+  because a scan has a second reader and a text layer does not. And it is not
+  permission to apply an `attested` finding automatically — `checkDamage`
+  writes nothing, `expected` is a hypothesis, and a class lands through
+  `sweep --was … --now …` with every change reported, once a person has agreed
+  the class is real.
 
 - **What needs reading is a structural question, not a statistical one.** Good
   OCR of a clean scan is made of `chirnrgeon` and `thc` — shaped exactly like

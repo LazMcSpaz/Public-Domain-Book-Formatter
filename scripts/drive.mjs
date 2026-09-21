@@ -2137,6 +2137,90 @@ async function serve() {
     },
 
     /**
+     * Marks in the book that the printing trade does not set.
+     *
+     * The free pass, and the one that should run before any paid reading. It
+     * costs nothing, holds no opinion, and on a finished 121-leaf volume that
+     * had already been through a full reading, 465 corrections, 14 rulings and
+     * an export it found **24 faults still in the text** — ten words the
+     * conversion had split, seven stray full stops and seven apostrophes
+     * standing where commas belong.
+     *
+     * Runs over the *assembled* book rather than the leaves, because the
+     * vocabulary that settles a split word is the whole volume's and a word
+     * broken across a page seam is only whole after assembly.
+     *
+     *   damage                       write damage.md and report the counts
+     *   damage out.md                somewhere else
+     *   damage --book <shelf-dir>    name the sheet after the edition
+     *   damage --check               write nothing, exit non-zero if anything is found
+     *
+     * `--check` is what makes this a gate rather than a habit: a book with
+     * conversion damage still in it should not reach an export, and the way to
+     * ensure that is a non-zero exit rather than somebody remembering.
+     *
+     * **Nothing here is applied.** An `attested` finding carries what the
+     * book's own vocabulary says the word was, and that is a hypothesis until
+     * a person agrees with it — `sweep --was … --now …` is how it lands, one
+     * class at a time, with every change reported.
+     */
+    damage: async (args) => {
+      const flags = args.filter((a) => a.startsWith('--'))
+      const check = flags.includes('--check')
+      const out = args.find((a) => !a.startsWith('--')) ?? 'damage.md'
+      // The edition's own title where a shelf directory is named, and the file
+      // the run came from where none is. Never the checkout's directory name,
+      // which is what a bare `resolve(REPO, '.')` would put at the head of the
+      // sheet — true of nothing and confusing on a shelf of eleven books.
+      const at = args.indexOf('--book')
+      const title = at === -1 ? null : await bookTitle(resolve(REPO, args[at + 1] ?? '.'))
+      const built = await page.evaluate(
+        async ([repo, title]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const coherence = await import(`/@fs${repo}/src/core/coherence/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const run = await runStore.loadRun(newest.key)
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const found = coherence.checkDamage(doc)
+          const by = {}
+          for (const f of found) by[f.kind] = (by[f.kind] ?? 0) + 1
+          return {
+            text: coherence.damageSheet(found, doc, title ?? newest.fileName),
+            total: found.length,
+            attested: found.filter((f) => f.confidence === 'attested').length,
+            by,
+            rows: found.map((f) => ({
+              kind: f.kind,
+              confidence: f.confidence,
+              blockId: f.blockId,
+              found: f.found,
+              expected: f.expected ?? null
+            }))
+          }
+        },
+        [REPO, title]
+      )
+      if (check) {
+        if (built.total > 0)
+          throw new Error(
+            `${built.total} conversion faults still in the book: ` +
+              Object.entries(built.by)
+                .map(([k, n]) => `${n} ${k}`)
+                .join(', ')
+          )
+        return { clean: true }
+      }
+      await writeFile(resolve(out), built.text)
+      return { wrote: out, ...built }
+    },
+
+    /**
      * What OCR reads off a leaf, as plain text.
      *
      * The word crops answer "is this word really printed like that?"; they
