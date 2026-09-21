@@ -407,7 +407,7 @@ const DESIGN = {
   chaptersOpenRecto: true,
   trimSize: '6x9',
   bodyFontSize: '12',
-  ornamentChapter: 'chapter-rule',
+  ornamentChapter: 'chapter-leaves',
   // Chapters only. The sub-headings are the typescripts' own display lines and
   // there are a hundred and fifty of them: real section titles, but also a
   // byline under a title, `(To be continued.)` at a foot, and the numbered
