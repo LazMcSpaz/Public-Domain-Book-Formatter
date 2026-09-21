@@ -357,6 +357,26 @@ if (flags.includes('--body') && corrArg && !corrArg.startsWith('--')) {
 }
 
 /**
+ * `reading-notes.md`, where the editor has read the book in another app.
+ *
+ * Derived from `reading/marks.json` the way every other file here is derived
+ * from `book.json`, and checked for the same reason: a sheet nobody can
+ * regenerate starts drifting from the book the moment it is written. Silent
+ * where there is no reading, since most books have none.
+ */
+if (existsSync(join(dir, 'reading', 'marks.json'))) {
+  const { execFileSync } = await import('node:child_process')
+  const script = new URL('reading-sheet.mjs', import.meta.url).pathname
+  try {
+    const args = [script, dir, ...(check ? ['--check'] : [])]
+    process.stdout.write(execFileSync(process.execPath, args, { encoding: 'utf8' }))
+  } catch (error) {
+    stale += 1
+    process.stdout.write(error.stdout ?? '  STALE   reading-notes.md\n')
+  }
+}
+
+/**
  * The ledger — the one derived file nothing checked, on eight books of eleven.
  *
  * Its prose is the editor's and is never touched. What is checked is the
