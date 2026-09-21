@@ -445,7 +445,16 @@ export function shouldJoin(
   if (!prevText || !nextText) return false
 
   const endsOpen = !/[.!?:;"')\]]\s*$/.test(prevText) || TRAILING_HYPHEN.test(prevText)
-  const startsLower = /^[\p{Ll}]/u.test(nextText)
+  // A lower-case word is what says "this continues a sentence" — and it may
+  // open a bracket first. Leaf 170 of the combined Panchadasi volume ends
+  // "…is but a reflection" and leaf 171 opens "(practically perfect,
+  // however) of the original records": one sentence, printed as two
+  // paragraphs because the first character of the second was `(` rather than
+  // a letter. The bracket is not itself a licence — the lower-case word has
+  // to be inside it — and a quotation mark is deliberately not on the list,
+  // since a paragraph of a long quotation opens with one and is starting
+  // something, which is the case the seam rule above already turns away.
+  const startsLower = /^[([]?[\p{Ll}]/u.test(nextText)
   return endsOpen && startsLower
 }
 
