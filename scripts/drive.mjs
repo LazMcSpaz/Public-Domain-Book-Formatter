@@ -3455,6 +3455,150 @@ async function serve() {
     },
 
     /**
+     * The second reader over the named leaves (all by default), as the file
+     * `witness` consumes.
+     *
+     *   second [leaf…] [--out second.json] [--tier tiny|small] [--layer]
+     *
+     * Writes `{ "<leaf>": "text" }` — exactly the contract `witness` already
+     * takes — and reports per leaf the lines found and the time taken, naming
+     * the book and run the pixels came from. `--layer` reads the file's own
+     * text layer instead of running the engine: on a scan carrying somebody's
+     * OCR (five of ten books on the shelf) that layer is already a second
+     * digitisation, and the same file lets the two witnesses be scored against
+     * each other. Each leaf is rendered at the recon DPI, read, and released;
+     * the engine reads the original render, never a cleaned one.
+     *
+     * Cached in `localStorage` under the file, the DPI and the model id, so a
+     * whole book read once is not read again; a record under another model or
+     * DPI is never served. Not the recon store: that store is capped and
+     * evicts oldest-first, and a book's worth of second-reader text must not
+     * push a ten-minute OCR reading out. Text only, so a long book is under a
+     * megabyte; a full quota skips the cache and says so.
+     */
+    second: async (args) => {
+      const { writeFile } = await import('node:fs/promises')
+      const value = (flag) => {
+        const at = args.indexOf(flag)
+        return at === -1 ? null : (args[at + 1] ?? null)
+      }
+      const taken = new Set(
+        ['--out', '--tier'].flatMap((f) =>
+          args.indexOf(f) === -1 ? [] : [args[args.indexOf(f) + 1]]
+        )
+      )
+      const leaves = args
+        .filter((a) => !a.startsWith('--') && !taken.has(a))
+        .map(Number)
+        .filter(Number.isFinite)
+      const out = value('--out') ?? 'second.json'
+      const tier = value('--tier') ?? 'tiny'
+      const layer = args.includes('--layer')
+      const built = await page.evaluate(
+        async ([repo, leaves, tier, layer]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+          const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const secondMod = await import(`/@fs${repo}/src/platform/browser/second-reader.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const file = await runStore.loadSourceFile(newest.key)
+          if (!file) throw new Error('The scan is not stored on this device.')
+          if (!layer && !secondMod.SECOND_READER_TIERS.includes(tier)) {
+            throw new Error(
+              `\`${tier}\` is not a tier: ${secondMod.SECOND_READER_TIERS.join(', ')}.`
+            )
+          }
+          const model = layer ? 'text-layer' : secondMod.secondReaderModelId(tier)
+          const cacheKey = `pdbf.second.${newest.key}\u0000${model}\u0000${recon.RECON_DPI}`
+          let texts = {}
+          try {
+            const cached = JSON.parse(localStorage.getItem(cacheKey) ?? 'null')
+            if (cached && cached.model === model && cached.dpi === recon.RECON_DPI)
+              texts = { ...cached.texts }
+          } catch {
+            texts = {}
+          }
+          const doc = await pdfMod.openPdf(file)
+          const wanted =
+            leaves.length > 0 ? leaves : Array.from({ length: doc.numPages }, (_, i) => i)
+          const per = []
+          try {
+            for (const n of wanted) {
+              if (n < 0 || n >= doc.numPages) continue
+              if (typeof texts[n] === 'string') {
+                per.push({ leaf: n, cached: true })
+                continue
+              }
+              const t0 = performance.now()
+              if (layer) {
+                const read = await pdfMod.extractPageWords(doc, n, recon.RECON_DPI)
+                texts[n] = read.text
+                per.push({
+                  leaf: n,
+                  words: read.words.length,
+                  ms: Math.round(performance.now() - t0)
+                })
+              } else {
+                const rendered = await pdfMod.renderPage(doc, n, recon.RECON_DPI)
+                try {
+                  const read = await secondMod.readLeafSecond(rendered.canvas, n, tier)
+                  texts[n] = read.text
+                  per.push({
+                    leaf: n,
+                    lines: read.lines.length,
+                    ms: Math.round(read.ms),
+                    meanConfidence: Math.round(read.meanConfidence * 1000) / 1000
+                  })
+                } finally {
+                  rendered.canvas.width = 0
+                  rendered.canvas.height = 0
+                }
+              }
+            }
+          } finally {
+            await doc.destroy()
+          }
+          let cachedOk = true
+          try {
+            localStorage.setItem(cacheKey, JSON.stringify({ model, dpi: recon.RECON_DPI, texts }))
+          } catch {
+            cachedOk = false
+          }
+          return {
+            book: newest.fileName,
+            key: newest.key,
+            model,
+            per,
+            texts,
+            leaves: doc.numPages,
+            cachedOk
+          }
+        },
+        [REPO, leaves, tier, layer]
+      )
+      // The contract `witness` takes: leaf → text, nothing else.
+      const second = {}
+      for (const n of Object.keys(built.texts).sort((a, b) => Number(a) - Number(b))) {
+        if (leaves.length === 0 || leaves.includes(Number(n))) second[n] = built.texts[n]
+      }
+      await writeFile(resolve(REPO, out), JSON.stringify(second, null, 1))
+      const fresh = built.per.filter((p) => !p.cached)
+      return {
+        wrote: out,
+        book: built.book,
+        model: built.model,
+        read: fresh.length,
+        cached: built.per.length - fresh.length,
+        msPerLeaf: fresh.length
+          ? Math.round(fresh.reduce((n, p) => n + p.ms, 0) / fresh.length)
+          : null,
+        ...(built.cachedOk ? {} : { note: 'localStorage is full; this reading was not cached.' }),
+        per: built.per.slice(0, 12)
+      }
+    },
+
+    /**
      * Measure the cleaning presets against the proofed text, leaf by leaf.
      *
      *   cleantrial trial.json --truth truth.json --leaves 13,27,51 [--presets off,gentle]

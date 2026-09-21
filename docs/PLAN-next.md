@@ -325,7 +325,35 @@ floor, and the decision: **`off` stays**, and the reason the gain was never
 there — the disagreements that remain on this shelf are columns read across,
 a gutter shadow and an unmodelled face, none of which a levels curve reaches.
 
-Next in the agreed order: E (the second reader).
+## Phase 9 — a second OCR engine, so every book has a witness — **done**
+
+Built as `PLAN-second-reader.md` asked. PaddleOCR PP-OCRv6 (tiny, 6.4 MB,
+vendored under `public/paddle/` with its SHA-256s and Apache-2.0 licence)
+through `ppu-paddle-ocr` on `onnxruntime-web`, WASM, in the driver's
+Chromium; it reads the original render, never a cleaned one, and its lines
+go into reading order through the draft's own column geometry
+(`@core/witness/reading-order`, tested on the box fixtures). `drive.mjs
+second` writes `{ leaf: text }`, which `witness` consumed unchanged on a
+whole book's worth of leaves; `--layer` writes the scan's own OCR layer in
+the same shape, so the two witnesses are scored against each other.
+
+Measured on the cleanup ledger's 42 leaves with `scoreWitness`, written
+before the numbers: the engine's disagreements with Tesseract are real
+**60%** of the time and cover **41%** of Tesseract's real errors, 3.9 s a
+leaf; the layer, where a book has one, is a better witness on two books
+(Clairvoyance 100% precise, Patterns 72%/57%) and worthless on the third
+(The Human Aura, 8% precise), where the engine is excellent (74%/81%). Both
+together catch more than either. 142 of Tesseract's 241 errors are errors
+both engines make alike, and no witness can find those — most of them the
+columns of Patterns Vol. II, read across by both. The rule set beforehand
+asked for recall of one half and the engine gave two fifths, so it is not
+the default witness on every book; it is the witness where the book has no
+layer or a layer that fails, and the ledger says which is which.
+
+Named, not done: the `small` tier (31 MB) as the next thing to measure for
+recall; a row-major reading order for transcript tables, which neither
+engine gives; and putting the reader in the app rather than only the
+driver, which the plan's own next section owns.
 
 ## Deliberately not doing
 

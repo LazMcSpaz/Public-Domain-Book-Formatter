@@ -814,6 +814,14 @@ node scripts/drive.mjs ocr 12 16 19  # what OCR reads off named leaves, as plain
 node scripts/drive.mjs cleantrial t.json --truth truth.json --leaves 13,27   # every
                                      #   preset against the proofed text, leaf by leaf;
                                      #   `scripts/cleanup-ledger.mjs` makes the tables
+node scripts/drive.mjs second 12 16 --out second.json   # the second reader over
+                                     #   named leaves (all by default), as the file
+                                     #   `witness` consumes; `--layer` reads the scan's
+                                     #   own OCR layer instead; `--tier small` the
+                                     #   larger weights, once vendored
+node scripts/drive.mjs witness second.json   # two readings side by side: the
+                                     #   mechanical disagreements settled, the
+                                     #   substantive ones worst first
 node scripts/drive.mjs draft b.json 12 13 14   # those leaves as blocks, from the cached
                                      #   OCR — the free reading, to be corrected not trusted
 node scripts/drive.mjs transcribe <scan.pdf> b.json   # land a checked batch; merges by
@@ -1186,6 +1194,21 @@ Path aliases: `@core`, `@platform` (defined in `tsconfig.json`,
 - **Junicode is vendored by hand** into `public/fonts/junicode/` (see the README
   there). It is not on npm and is loaded on demand; until it is present the app
   substitutes EB Garamond and says so.
+- **`ppu-paddle-ocr` 6.6.0 and `onnxruntime-web` 1.30.0, pinned exactly** — the
+  second reader (`src/platform/browser/second-reader.ts`). Its weights are
+  **vendored** into `public/paddle/` (`scripts/fetch-paddle-models.mjs`, with
+  the SHA-256s and the Apache-2.0 licence beside them), never fetched from the
+  Hugging Face host the package defaults to, which some networks refuse. The
+  runtime's 14 MB wasm rides as a hashed Vite asset through the package's
+  export map (`onnxruntime-web/ort-wasm-simd-threaded.wasm?url`; a deep
+  `dist/` path is refused), and `wasmPaths` is set **before** the engine's
+  module is imported, because that module sets a CDN path at import time
+  unless one is already there. Both packages are excluded from Vite's
+  dependency pre-bundling: pre-bundled, the runtime's wasm glue fails with
+  `no available backend found … K is not a function`, and a pre-bundled
+  engine would carry a second copy of the runtime with the path set on the
+  wrong one. Everything is loaded lazily, so a wizard user who never asks for
+  a second reading downloads none of it.
 
 ## Verifying UI work
 
@@ -2278,6 +2301,28 @@ closed`, which is indistinguishable from the flake the first command after a
   the despeckle costs 2.5 s a leaf, and binarising loses, as the plan said it
   would. `DEFAULT_CLEANUP` is `off` and the ledger says why; the machinery
   stays for the shelf that is foxed where this one is not.
+- **Also done**: **a second OCR engine, so a book with no layer has a
+  witness** (`src/platform/browser/second-reader.ts`,
+  `@core/witness/reading-order`, `@core/witness/score`,
+  `docs/LEDGER-second-reader.md`). `@core/witness` had done the valuable part
+  since the first book — two readings side by side, the mechanical
+  disagreements settled without anyone looking, the substantive ones handed
+  back worst first — and the second reading came only from a scan's own OCR
+  layer, so half the shelf had one reader. PaddleOCR PP-OCRv6 now reads the
+  original render in the driver's Chromium (never a cleaned one: two readers
+  that share a step share its blind spots), its line boxes go into reading
+  order through the draft's own column geometry, and `drive.mjs second`
+  writes exactly the file `witness` already takes. Measured on the cleanup
+  ledger's 42 leaves with a rule written before the numbers: three in five of
+  what it raises is a real error, it catches two in five of Tesseract's, and
+  its best is where nothing else reads the leaf — 74% precise and 81%
+  complete on _The Human Aura_, whose own layer is 8% precise. Where a scan's
+  layer is good it stays the better witness (100% precise on _Clairvoyance_),
+  and both together catch more than either; `second --layer` writes the layer
+  in the same shape so the two are scored alike. What no witness can find is
+  written down: 142 of 241 errors both engines make the same way, most of
+  them columns read across. Driver-only for now, by the plan's own
+  sequencing; the app is the next step.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with
