@@ -80,7 +80,16 @@ function search(source, term, { limit, chars }) {
   while (i >= 0) {
     const start = source.at[i]
     const stop = source.at[Math.min(i + needle.length - 1, source.at.length - 1)]
+    // Letters-only matching has no word boundaries, so `auric` is found inside
+    // **Maurice** — which is most of what a search for it returns across these
+    // books. The raw text still has the boundaries the reduction threw away,
+    // so a hit is marked when a letter abuts it on either side. It is marked
+    // rather than dropped: OCR glues words together too, and a search for
+    // `astral body` has to keep finding `theastralbody`.
+    const abuts = (c) => c !== undefined && /[A-Za-z]/u.test(c)
+    const inWord = abuts(source.raw[start - 1]) || abuts(source.raw[stop + 1])
     hits.push({
+      inWord,
       where: whereIn(source.raw, start),
       quote: source.raw
         .slice(Math.max(0, start - Math.floor(chars / 3)), stop + Math.floor((chars * 2) / 3))
@@ -88,10 +97,11 @@ function search(source, term, { limit, chars }) {
         .replace(/\s+/gu, ' ')
         .trim()
     })
-    if (hits.length >= limit) break
+    if (hits.length >= limit * 4) break
     i = source.flat.indexOf(needle, i + 1)
   }
-  return hits
+  // Whole words first; a match inside a longer word is shown, and labelled.
+  return hits.sort((a, b) => Number(a.inWord) - Number(b.inWord)).slice(0, limit)
 }
 
 /**
@@ -205,10 +215,11 @@ for (const f of files) {
   console.log(
     `\n■ ${source.name}${hits.length >= limit ? `  (first ${limit})` : `  (${hits.length})`}`
   )
-  for (const h of hits) console.log(`   [${h.where ?? '?'}] ${h.quote}`)
+  for (const h of hits)
+    console.log(`   [${h.where ?? '?'}]${h.inWord ? ' (inside a longer word)' : ''} ${h.quote}`)
 }
 if (total === 0) {
   console.log(`“${term}” is not in these files.`)
-  console.log('Four of the six are OCR and break words their own way, so this is a')
+  console.log('Six of the seven are OCR and break words their own way, so this is a')
   console.log('statement about the files rather than about Blavatsky.')
 }
