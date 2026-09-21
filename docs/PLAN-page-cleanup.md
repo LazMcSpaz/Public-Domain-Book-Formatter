@@ -1,8 +1,10 @@
 # Plan: clean the page before Tesseract reads it
 
-Status: **approved, not started.** Scope A of two; the other is
-[`PLAN-second-reader.md`](./PLAN-second-reader.md). Independent of it — either
-can land first.
+Status: **done, and measured — `off` stays.** The machinery is built and the
+ledger is [`LEDGER-page-cleanup.md`](./LEDGER-page-cleanup.md): on 42 leaves
+across four books no preset beat the raw render by more than the engine's own
+noise, and one cost 2.5 seconds a leaf for nothing. Scope A of two; the other
+is [`PLAN-second-reader.md`](./PLAN-second-reader.md).
 
 ## Why
 

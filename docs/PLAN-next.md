@@ -305,8 +305,27 @@ review sheet marks them `held` rather than settled, and the ledger's Queries
 row carries waiting and held counts matched by leaf and quote rather than
 subtracted.
 
-Next in the agreed order: D (page cleanup on the ground-truth harness), E
-(the second reader).
+## Phase 8 — clean the page before Tesseract reads it — **done; `off` stays**
+
+Built as `PLAN-page-cleanup.md` asked: `@core/image/cleanup` chooses ops
+from the leaf's own tones (percentiles of its luminance histogram, so cream,
+grey and foxed paper all land on the same white), `platform/browser/cleanup`
+applies them on the **one read path** recon and `drive.mjs ocr … fresh` both
+take, the cleaned pixels reach the engine and nothing else, no preset may
+change the page's size, and the recon cache refuses a reading made under a
+different preset exactly as it refuses a different DPI.
+
+Then measured, on the ground-truth harness Phase A built: 42 leaves across
+four books, chosen by rule and written down first, four presets, one render
+and one read each, aligned against the proofed text. `off` 241 substantive
+disagreements, `gentle` 239, `gentle+despeckle` 241, `binarise` 245 — noise,
+and the rule's floor says so. The despeckle costs 2.5 seconds a leaf. The
+ledger (`docs/LEDGER-page-cleanup.md`) carries the tables, the rule with its
+floor, and the decision: **`off` stays**, and the reason the gain was never
+there — the disagreements that remain on this shelf are columns read across,
+a gutter shadow and an unmodelled face, none of which a levels curve reaches.
+
+Next in the agreed order: E (the second reader).
 
 ## Deliberately not doing
 

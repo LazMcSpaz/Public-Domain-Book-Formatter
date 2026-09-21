@@ -9,8 +9,9 @@ Open PDF
   │
   ├─ RECON  (free, local, no API cost)
   │    PDF.js render @300dpi ─┐
-  │    Tesseract.js OCR       ├─ one page at a time, released after use
-  │    word crops             ─┘
+  │    clean for the engine   ├─ one page at a time, released after use;
+  │    Tesseract.js OCR       │  the cleaned pixels reach the engine and
+  │    word crops             ─┘  nothing else (@core/image/cleanup)
   │    lexicon harvest (book-wide, frequency-driven)
   │    illustration candidates (OCR boxes + an ink test on the pixels)
   │
@@ -327,9 +328,10 @@ the user's path, and both degrade to "do it again" rather than to an error.
   OCR-ing three hundred pages is ten minutes of a warm phone to arrive back
   where you were. Stored as Blobs rather than object URLs, since a URL names a
   Blob in a tab that has since closed. The rules that matter are the ones for
-  **refusing** it — a different DPI or a different page limit describes a book
-  this session does not have — and a refused reading is deleted, because unlike
-  a transcription it costs only time to replace.
+  **refusing** it — a different DPI, a different page limit or a different
+  cleaning preset describes a book this session does not have — and a refused
+  reading is deleted, because unlike a transcription it costs only time to
+  replace.
 
 The API key is stored with neither. It lives in its own place and must never
 travel with a book.

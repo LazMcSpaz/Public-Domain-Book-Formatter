@@ -808,7 +808,12 @@ node scripts/drive.mjs serve &       # hold a browser open, take commands on :77
 node scripts/drive.mjs load <book.json> <scan.pdf>   # from the shelf, not from the device
 node scripts/drive.mjs body out.json # the assembled book: block ids and the exact
                                      #   strings an edit must be written in terms of
-node scripts/drive.mjs ocr 12 16 19  # what OCR reads off named leaves, as plain text
+node scripts/drive.mjs ocr 12 16 19  # what OCR reads off named leaves, as plain text;
+                                     #   `fresh --clean=gentle` re-reads them through a
+                                     #   cleaning preset, on the same path recon takes
+node scripts/drive.mjs cleantrial t.json --truth truth.json --leaves 13,27   # every
+                                     #   preset against the proofed text, leaf by leaf;
+                                     #   `scripts/cleanup-ledger.mjs` makes the tables
 node scripts/drive.mjs draft b.json 12 13 14   # those leaves as blocks, from the cached
                                      #   OCR — the free reading, to be corrected not trusted
 node scripts/drive.mjs transcribe <scan.pdf> b.json   # land a checked batch; merges by
@@ -2251,6 +2256,28 @@ closed`, which is indistinguishable from the flake the first command after a
   `--finish` at the same time. `standing.ts` is free of value imports so
   `ledger.ts` can load it under plain Node — the `@core/queries` chain stops
   at a TypeScript parameter property Node's type stripping cannot read.
+- **Also done**: **a leaf can be cleaned before the engine reads it, and the
+  measurement says not to** (`src/core/image/cleanup`,
+  `platform/browser/cleanup`, `docs/LEDGER-page-cleanup.md`). Every mature
+  scan pipeline does its cheapest quality work between the render and the
+  OCR, and the ops were already here, wired only to illustrations. Now
+  `cleanupOps` chooses them from the leaf's own tones — levels anchored to
+  the 85th and 2nd percentiles of its luminance histogram, so cream, grey and
+  foxed paper all land on the same white, and a blank or a plate gets no
+  levels at all — and `recognizeLeaf` is the **one read path** recon and
+  `drive.mjs ocr … fresh --clean=<preset>` both take, so the verb measures
+  what recon does. Two rules held by construction and by test: the cleaned
+  pixels reach the engine and nothing else, every crop and thumbnail still
+  cut from the original render; and no preset changes the page's size, so
+  every word box stays in original-page pixels. The recon cache refuses a
+  reading taken through a different preset, as it refuses a different DPI.
+  Measured on the ground-truth harness before any default was set — 42
+  leaves across four books, chosen by rule and written down first, aligned
+  against the proofed text — **no preset beats the raw render**: two fewer
+  substantive disagreements in ten thousand words is the engine's own noise,
+  the despeckle costs 2.5 s a leaf, and binarising loses, as the plan said it
+  would. `DEFAULT_CLEANUP` is `off` and the ledger says why; the machinery
+  stays for the shelf that is foxed where this one is not.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

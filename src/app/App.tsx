@@ -39,6 +39,7 @@ import {
 import { canKeepAwake, keepAwake, type ReleaseWakeLock } from '../platform/browser/wake-lock'
 import { looksLikeEpub, openEpub } from '../platform/browser/epub'
 import { assessText, describeAssessment } from '@core/textquality'
+import { DEFAULT_CLEANUP } from '@core/image/cleanup'
 import { QuestionView } from './QuestionView'
 import { QuestionList } from './QuestionList'
 import { useAgentSurface } from './agent-surface'
@@ -1455,7 +1456,10 @@ export function App(): JSX.Element {
       // watch ten minutes of Tesseract to get back to it. Discarded rather than
       // trusted whenever it might not describe the book any more; see
       // `recon-cache`.
-      const wanted = { dpi: RECON_DPI, maxPages: null }
+      // The default preset is the ledger's choice (`DEFAULT_CLEANUP`); a
+      // cached reading taken through another preset is refused, as another
+      // DPI is, because its words came off different pixels.
+      const wanted = { dpi: RECON_DPI, maxPages: null, cleanup: DEFAULT_CLEANUP }
       // Flagged rather than silent: fetching a book's worth of thumbnails and
       // word boxes out of IndexedDB is quick but not instant, and a screen that
       // shows nothing during it looks like a file that failed to open.

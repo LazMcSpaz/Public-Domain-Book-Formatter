@@ -3311,21 +3311,39 @@ async function serve() {
       // read. The two look identical from outside and want opposite work: one
       // is a hole in the cache to refill, the other is a leaf that needs eyes.
       const fresh = ns.includes('fresh')
-      const pages = ns.filter((n) => n !== 'fresh').map(Number)
+      // `--clean=<preset>` reads the leaves through that cleaning, on the
+      // same path recon takes, so this verb measures what recon does.
+      const cleanFlag = ns.find((n) => n.startsWith('--clean='))
+      const clean = cleanFlag ? cleanFlag.slice('--clean='.length) : null
+      const pages = ns.filter((n) => n !== 'fresh' && !n.startsWith('--')).map(Number)
       return page.evaluate(
-        async ([repo, list, ignoreCache]) => {
+        async ([repo, list, ignoreCache, clean]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
           const ocrMod = await import(`/@fs${repo}/src/platform/browser/ocr.ts`)
           const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
           const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const cleanupMod = await import(`/@fs${repo}/src/core/image/cleanup.ts`)
+          const leafMod = await import(`/@fs${repo}/src/platform/browser/cleanup.ts`)
+          const preset =
+            clean === null ? cleanupMod.DEFAULT_CLEANUP : cleanupMod.parseCleanupPreset(clean)
+          if (!preset) {
+            throw new Error(
+              `\`${clean}\` is not a cleaning preset: ${cleanupMod.CLEANUP_PRESETS.join(', ')}.`
+            )
+          }
           const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           const file = await runStore.loadSourceFile(newest.key)
           if (!file) throw new Error('The scan is not stored on this device.')
-          const cached = ignoreCache
-            ? null
-            : await cacheMod.loadReconCache(newest.key, { dpi: recon.RECON_DPI, maxPages: null })
+          const cached =
+            ignoreCache || clean !== null
+              ? null
+              : await cacheMod.loadReconCache(newest.key, {
+                  dpi: recon.RECON_DPI,
+                  maxPages: null,
+                  cleanup: preset
+                })
           const text = {}
           const words = {}
           const say = (found) => found.map((w) => w.text).join(' ')
@@ -3378,7 +3396,7 @@ async function serve() {
                 continue
               }
               const rendered = await pdfMod.renderPage(doc, n, recon.RECON_DPI)
-              const result = await engine.recognize(rendered.canvas, n)
+              const result = await leafMod.recognizeLeaf(engine, rendered.canvas, n, preset)
 
               // Does the frame cut through ink? A leaf printed with margins
               // has bare paper at its edges, so ink hard against the frame
@@ -3414,7 +3432,7 @@ async function serve() {
               // the wider frame moves every word box — which is the unit the
               // crops and the illustration cuts are measured in.
               const whole = await pdfMod.renderPage(doc, n, recon.RECON_DPI, { wholeImage: true })
-              const second = await engine.recognize(whole.canvas, n)
+              const second = await leafMod.recognizeLeaf(engine, whole.canvas, n, preset)
               whole.canvas.width = 0
               whole.canvas.height = 0
               const better = second.words.length > result.words.length
@@ -3430,10 +3448,118 @@ async function serve() {
           // Said out loud: these words were read in a different frame from
           // every other leaf's, so their boxes do not line up with the cached
           // reading and a crop taken from one will not land where it should.
-          return { source: 'pixels', leaves, text, words, readWhole: widened }
+          return { source: 'pixels', cleanup: preset, leaves, text, words, readWhole: widened }
         },
-        [REPO, pages, fresh]
+        [REPO, pages, fresh, clean]
       )
+    },
+
+    /**
+     * Measure the cleaning presets against the proofed text, leaf by leaf.
+     *
+     *   cleantrial trial.json --truth truth.json --leaves 13,27,51 [--presets off,gentle]
+     *
+     * For each named leaf: one render, then one read per preset through
+     * `recognizeLeaf` — the same call recon makes — and each reading aligned
+     * against that leaf's proofed words from `truth` (`drive.mjs truth`),
+     * with `compareWitnesses`. What is recorded per leaf and preset is what
+     * the plan asks for: words, agreeing, substantive disagreements, joined
+     * ones, mean confidence, and the milliseconds cleaning and reading took.
+     * `scripts/cleanup-ledger.mjs` turns the files into the ledger's table.
+     *
+     * The truth text is the leaf's furniture, body words and notes in that
+     * order, because the engine reads the running head first and the notes
+     * last, and an alignment that left the furniture out would charge every
+     * preset the same few words for reading the page correctly.
+     */
+    cleantrial: async (args) => {
+      const { readFile, writeFile } = await import('node:fs/promises')
+      const isFlagValue = (list, a) => {
+        const at = list.indexOf(a)
+        return at > 0 && list[at - 1].startsWith('--')
+      }
+      const out =
+        args.find((a) => !a.startsWith('--') && !isFlagValue(args, a)) ?? 'cleantrial.json'
+      const value = (flag) => {
+        const at = args.indexOf(flag)
+        return at === -1 ? null : (args[at + 1] ?? null)
+      }
+      const truthPath = value('--truth')
+      const leavesArg = value('--leaves')
+      if (!truthPath || !leavesArg) {
+        throw new Error('cleantrial <out.json> --truth <truth.json> --leaves 1,2,3 [--presets a,b]')
+      }
+      const truth = JSON.parse(await readFile(resolve(REPO, truthPath), 'utf8'))
+      const leaves = leavesArg.split(',').map(Number)
+      const presets = (value('--presets') ?? 'off,gentle,gentle+despeckle,binarise').split(',')
+      const byLeaf = new Map(truth.leaves.map((l) => [l.pageIndex, l]))
+      const wanted = leaves.map((n) => {
+        const l = byLeaf.get(n)
+        if (!l) throw new Error(`truth.json has no leaf ${n}`)
+        return { pageIndex: n, text: [...l.furniture, ...l.words, ...l.notes].join(' ') }
+      })
+      const rows = await page.evaluate(
+        async ([repo, wanted, presets]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const ocrMod = await import(`/@fs${repo}/src/platform/browser/ocr.ts`)
+          const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+          const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const cleanupMod = await import(`/@fs${repo}/src/core/image/cleanup.ts`)
+          const leafMod = await import(`/@fs${repo}/src/platform/browser/cleanup.ts`)
+          const witness = await import(`/@fs${repo}/src/core/witness/index.ts`)
+          for (const p of presets) {
+            if (!cleanupMod.parseCleanupPreset(p)) throw new Error(`\`${p}\` is not a preset.`)
+          }
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const file = await runStore.loadSourceFile(newest.key)
+          if (!file) throw new Error('The scan is not stored on this device.')
+          const engine = new ocrMod.OcrEngine()
+          const doc = await pdfMod.openPdf(file)
+          const rows = []
+          try {
+            for (const { pageIndex, text } of wanted) {
+              const rendered = await pdfMod.renderPage(doc, pageIndex, recon.RECON_DPI)
+              for (const preset of presets) {
+                const read = await leafMod.recognizeLeaf(engine, rendered.canvas, pageIndex, preset)
+                const report = witness.compareWitnesses(read.text, text, {
+                  confidence: read.words.map((w) => w.confidence)
+                })
+                rows.push({
+                  book: newest.fileName,
+                  leaf: pageIndex,
+                  preset,
+                  truthWords: text.split(/\s+/u).filter(Boolean).length,
+                  words: report.words,
+                  agreeing: report.agreeing,
+                  substantive: report.disagreements.filter((d) => d.kind === 'substantive').length,
+                  joined: report.disagreements.filter((d) => d.kind === 'joined').length,
+                  meanConfidence: Math.round(read.meanConfidence * 10) / 10,
+                  cleanupMs: Math.round(read.cleanupMs),
+                  ocrMs: Math.round(read.ocrMs)
+                })
+              }
+              rendered.canvas.width = 0
+              rendered.canvas.height = 0
+            }
+          } finally {
+            await engine.dispose()
+            await doc.destroy()
+          }
+          return rows
+        },
+        [REPO, wanted, presets]
+      )
+      await writeFile(resolve(REPO, out), JSON.stringify(rows, null, 1))
+      const by = {}
+      for (const r of rows) {
+        const b = (by[r.preset] ??= { leaves: 0, substantive: 0, agreeing: 0, words: 0 })
+        b.leaves += 1
+        b.substantive += r.substantive
+        b.agreeing += r.agreeing
+        b.words += r.words
+      }
+      return { wrote: out, leaves: leaves.length, presets, by }
     },
 
     /**
@@ -4207,7 +4333,11 @@ async function serve() {
           const runs = await runStore.listRuns()
           const newest = await window.__pdbfPickBook(runStore)
           const whole = newest
-            ? await cacheMod.loadReconCache(newest.key, { dpi: recon.RECON_DPI, maxPages: null })
+            ? await cacheMod.loadReconCache(newest.key, {
+                dpi: recon.RECON_DPI,
+                maxPages: null,
+                cleanup: (await import(`/@fs${repo}/src/core/image/cleanup.ts`)).DEFAULT_CLEANUP
+              })
             : null
           // The same `wanted` the whole-reading load uses. Called without it,
           // this threw on every book — a verb whose only job is to say what is
