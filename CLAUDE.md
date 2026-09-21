@@ -428,7 +428,12 @@ its own HTTP cache. `curl` the module through `/@fs/...` and grep for a token
 from the change; `/src/...` returns `index.html` and will "confirm" anything.
 The first driver command after a restart often dies with `Target page,
 context or browser has been closed` — retry it. And `pkill -f vite` matches
-the shell running it, so kill from a detached script or by pid.
+the shell running it, so kill from a detached script or by pid. **The same
+rule covers `drive.mjs` itself**: `serve` holds every verb in memory, so a
+verb edited while it runs is a verb the next command does not run. `finish`
+was rewritten and re-run twice against its first version before this was
+noticed, and each time it reported an empty finding — the new code was on
+disk and the old code was answering.
 
 **"Restart" means kill vite, not check whether the port answers.** A restart
 script that starts vite only when :5173 is silent never restarts it at all, so
@@ -859,6 +864,10 @@ node scripts/book-files.mjs <book-dir> --check   # do the readable files still
                                      #   describe the book? regenerates them
                                      #   without --check; `--body body.json`
                                      #   checks corrections.md's entries too
+node scripts/drive.mjs finish <book-dir>          # the same list, from where the
+                                     #   work is done: adds the two checks that
+                                     #   need the browser (damage, glossary
+                                     #   marks) that the script can only ask for
 node scripts/book-files.mjs <book-dir> --finish  # every condition for "done",
                                      #   named, with a non-zero exit. The list
                                      #   is the thing to change when the

@@ -2273,6 +2273,117 @@ async function serve() {
      * it is still true cannot disagree about what an entry is. `--check`
      * writes nothing and exits non-zero when the file on the shelf differs.
      */
+    /**
+     * Every condition for "done", from where the work is actually done.
+     *
+     * `book-files.mjs --finish` is the definition of finished, and two of its
+     * conditions need the assembled body — the glossary marks and the entries
+     * of `corrections.md` both quote text that exists only after assembly. Run
+     * from a shell it can only *ask* for that body; run from here it has one,
+     * and it adds the one check that needs the browser outright: whether any
+     * conversion damage is left in the text.
+     *
+     * So this is the whole list, in one place, and it exits non-zero on the
+     * first thing owed. Which is the point: the rule this repository keeps
+     * finding is that a check which runs gets followed and a sentence does
+     * not, and a check that has to be assembled from three commands is a
+     * sentence with extra steps.
+     *
+     *   finish <shelf-book-directory>
+     */
+    finish: async ([dir]) => {
+      if (!dir) throw new Error('finish <shelf-book-directory>')
+      const { execFile } = await import('node:child_process')
+      const { promisify } = await import('node:util')
+      const { readFile } = await import('node:fs/promises')
+      const { tmpdir } = await import('node:os')
+      const { join } = await import('node:path')
+      const where = resolve(REPO, dir)
+
+      // The body, written once and handed to the entries check.
+      const body = await readBody()
+      const bodyPath = join(tmpdir(), `pdbf-body-${process.pid}.json`)
+      await writeFile(bodyPath, JSON.stringify(body))
+
+      // The glossary marks, checked here rather than by the script. The
+      // script *can* be asked (`--marks`), but from plain Node that path dies
+      // on `marks.ts`'s extensionless import of `../edits/sweep` — Node 22
+      // strips types and resolves nothing it is not told the extension of —
+      // and this verb already stands in the one place that resolves it. The
+      // headwords come off the book file exactly as the script reads them, so
+      // the two doors cannot disagree about what the glossary holds.
+      const book = JSON.parse(await readFile(join(where, 'book.json'), 'utf8'))
+      const glossary = (book.run?.edits ?? []).find(
+        (e) => e.kind === 'section' && /glossar/iu.test(e.title ?? '')
+      )
+      const marks = glossary
+        ? await page.evaluate(
+            async ([repo, sectionText, blocks]) => {
+              const m = await import(`/@fs${repo}/src/core/annotate/marks.ts`)
+              const report = m.checkGlossaryMarks(m.glossaryHeadwords(sectionText), blocks)
+              return {
+                marked: report.marked.length,
+                unmarked: report.unmarked.map((v) => `${v.entry} — "${v.term}" is in ${v.blockId}`),
+                absent: report.absent.length
+              }
+            },
+            [REPO, glossary.text ?? '', body.edited]
+          )
+        : null
+
+      // The conversion damage still in the text: the one condition only the
+      // browser can answer, and the one no shell script can ask for.
+      const damage = await handlers.damage(['--check']).then(
+        () => null,
+        (err) => (err instanceof Error ? err.message : String(err))
+      )
+
+      const run = promisify(execFile)
+      const script = resolve(REPO, 'scripts/book-files.mjs')
+      let out = ''
+      let code = 0
+      try {
+        const r = await run(process.execPath, [script, where, '--finish', '--body', bodyPath], {
+          maxBuffer: 1 << 24
+        })
+        out = `${r.stdout}${r.stderr}`
+      } catch (err) {
+        code = typeof err.code === 'number' ? err.code : 1
+        out = `${err.stdout ?? ''}${err.stderr ?? ''}`
+      }
+      const noise = /MODULE_TYPELESS|Reparsing as ES|eliminate this warning|trace-warnings/u
+      const lines = out.split('\n').filter((l) => !noise.test(l))
+      // The script's own "run with --marks" line is the ask this verb has just
+      // answered; every other owed line stands.
+      const owed = lines
+        .filter((l) => /^ {2}· /u.test(l) && !/run with --marks/u.test(l))
+        .map((l) => l.replace(/^ {2}· /u, ''))
+      const stale = lines.filter((l) => /^ {2}(STALE|MISSING|DRIFTED|UNMARKED|WALL)\b/u.test(l))
+      if (marks !== null) for (const u of marks.unmarked) owed.push(`glossary mark missing: ${u}`)
+      if (damage !== null) owed.push(damage)
+
+      const finished = owed.length === 0 && stale.length === 0 && code === 0
+      if (finished) {
+        return {
+          finished: true,
+          checked: lines.filter((l) => /^ {2}ok\b/u.test(l)).length,
+          glossary: marks === null ? 'none' : `${marks.marked} marked, ${marks.absent} never used`
+        }
+      }
+      // A guard's fallback has to report. If the script died before saying
+      // what it owed, its last lines are the finding, not "not finished —".
+      const detail =
+        owed.length + stale.length > 0
+          ? [...owed.map((o) => `  · ${o}`), ...stale]
+          : lines
+              .filter((l) => l.trim().length > 0)
+              .slice(-8)
+              .map((l) => `  ${l}`)
+      throw new Error(
+        `${dir.split('/').filter(Boolean).pop()}: not finished —\n${detail.join('\n')}`
+      )
+    },
+
     corrections: async ([dir, ...flags]) => {
       if (!dir) throw new Error('corrections <shelf-book-directory> [--check]')
       const { readFile, writeFile } = await import('node:fs/promises')
