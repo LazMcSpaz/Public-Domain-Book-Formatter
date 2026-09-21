@@ -27,9 +27,10 @@
  * Pure: no DOM, no I/O.
  */
 import type { EditorialQuery, PageTranscription } from '@core/transcribe'
-import { outstanding, type Ruling } from './rulings'
+import { held, outstanding, type Ruling } from './rulings'
 
 export * from './rulings'
+export * from './standing'
 export * from './gate'
 export * from './locate'
 
@@ -68,6 +69,12 @@ const HEADING: Record<EditorialQuery['kind'], string> = {
   unclear: 'Unclear for this edition'
 }
 
+const DECIDED: Record<Ruling['decision'], string> = {
+  'as-printed': 'kept as printed',
+  corrected: 'set right',
+  noted: 'kept, and told to the reader'
+}
+
 /**
  * How many of each kind, for the catalogue card and the driver's report.
  *
@@ -104,6 +111,8 @@ export function queriesMarkdown(
   // `rulingsMarkdown` — this file is the work outstanding.
   const queries = outstanding(raised, rulings)
   const answered = raised.length - queries.length
+  const holding = held(raised, rulings)
+  const heldKeys = new Set(holding.map((h) => `${h.query.pageIndex}\u0000${h.query.quote}`))
   const lines: string[] = [
     `# Queries for the editor — ${book.title}`,
     '',
@@ -139,8 +148,33 @@ export function queriesMarkdown(
     ''
   )
 
+  // Held first: a look and a nod each, and the editor should not have to
+  // find them among the decisions. Never filed from here — the gate, or
+  // `drive.mjs held approve`, is where a person says yes.
+  if (holding.length > 0) {
+    lines.push(
+      '## Held under a standing ruling — waiting for your approval',
+      '',
+      'Each of these falls under a ruling you have already made on a class of',
+      'cases. The decision below is what that ruling would give; it is **not',
+      'filed** until you approve it, at the gate or with `drive.mjs held approve`.',
+      '',
+      '| Leaf | As printed | Standing ruling | Would be | Why it was raised |',
+      '| --- | --- | --- | --- | --- |'
+    )
+    for (const { query, ruling } of holding) {
+      lines.push(
+        `| ${query.pageIndex} | \`${escapeCell(query.quote)}\` | ${escapeCell(ruling.quote)} | ` +
+          `${DECIDED[ruling.decision]} | ${escapeCell(query.why)} |`
+      )
+    }
+    lines.push('')
+  }
+
   for (const kind of Object.keys(HEADING) as EditorialQuery['kind'][]) {
-    const group = queries.filter((q) => q.kind === kind)
+    const group = queries.filter(
+      (q) => q.kind === kind && !heldKeys.has(`${q.pageIndex}\u0000${q.quote}`)
+    )
     if (group.length === 0) continue
     lines.push(`## ${HEADING[kind]}`, '')
     lines.push('| Leaf | As printed | Why it needs you |', '| --- | --- | --- |')

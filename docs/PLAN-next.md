@@ -282,8 +282,31 @@ Vibration_ made the mean say the book had one), and a scan's OCR layer is a
 spot with Tesseract — which is what Phase E's second reader compares against
 first on five of these ten books.
 
-Next in the agreed order: C (standing rulings, pre-filled and held), D (page
-cleanup on the ground-truth harness), E (the second reader).
+## Phase 7 — standing rulings, pre-filled and held — **done**
+
+The editor's decision, in two words: _"pre-filled and held"_. A query a
+standing ruling's `covers` reach used to be settled silently — `answerFor`
+returned the standing ruling, `outstanding` dropped the query, and it never
+reached the gate or the sheet. Now it is **held**: it stays outstanding,
+arrives at the gate with the ruling's decision filled in (`Question.held`,
+which `defaultAnswers` ignores and a test holds it to), and is filed only when
+a person approves it — the Accept button on the screen, the "Approve all N"
+bar at the gate, or `drive.mjs held approve --yes`. Every filed ruling names
+the standing ruling it came from in its reasoning.
+
+Measured before building: of the 88 queries with no ruling on the shelf, **3**
+fall under an existing standing ruling by its covered words — `centre` on
+leaf 7 of _The Human Aura_ (twice, once in the combined volume) and
+`practiced` on leaf 76 of _Isis_. Small, and the point was never the count:
+those three were being reported settled by the app and unruled by the finish
+check at the same time, which is two answers to one question. Both now say
+held, `queries.md` lists the held ones apart with what each would be, the
+review sheet marks them `held` rather than settled, and the ledger's Queries
+row carries waiting and held counts matched by leaf and quote rather than
+subtracted.
+
+Next in the agreed order: D (page cleanup on the ground-truth harness), E
+(the second reader).
 
 ## Deliberately not doing
 

@@ -476,6 +476,35 @@ body {
   border-color: var(--accent);
   background: var(--accent-soft);
 }
+/* The option a standing ruling would choose, until the editor accepts it:
+   marked, never selected. */
+.opt.held {
+  border-style: dashed;
+  border-color: var(--accent);
+}
+.held-note {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 6px 0 10px;
+  padding: 9px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--accent-soft);
+  font-size: 0.85rem;
+}
+.held-note .held-why {
+  flex: 1;
+}
+.held-note .held-accept {
+  flex: none;
+  font-size: 0.82rem;
+  padding: 4px 10px;
+}
+.held-note .held-accepted {
+  flex: none;
+  color: var(--accent);
+  font-weight: 600;
+}
 .opt .t {
   font-weight: 600;
   font-size: 0.93rem;

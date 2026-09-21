@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
 import {
   answerFor,
+  standingFor,
+  held,
+  heldBecause,
   outstanding,
   settled,
   unapplied,
@@ -97,44 +100,59 @@ describe('a standing ruling', () => {
     mention: true
   })
 
-  it('settles every query whose words it names, on any leaf', () => {
+  /**
+   * The editor's ruling on standing rulings, in his words: *pre-filled and
+   * held*. A query the ruling reaches is not settled by it — it stays
+   * outstanding, arrives at the gate with the ruling's decision filled in,
+   * and is filed when a person approves it. The first version of this
+   * settled it silently, and the query never reached anyone.
+   */
+  it('reaches every query whose words it names, on any leaf — and settles none of them', () => {
     for (const [leaf, quote] of [
       [8, 'the centre of the aura'],
       [31, 'astral colors'],
       [64, 'the colour of fear']
     ] as const) {
-      expect(answerFor(query({ pageIndex: leaf, quote, kind: 'inconsistent' }), [standing])).toBe(
-        standing
-      )
+      const q = query({ pageIndex: leaf, quote, kind: 'inconsistent' })
+      expect(standingFor(q, [standing])).toBe(standing)
+      expect(answerFor(q, [standing])).toBeNull()
+      expect(outstanding([q], [standing])).toEqual([q])
+      expect(held([q], [standing])).toEqual([{ query: q, ruling: standing }])
     }
   })
 
-  it('settles nothing of another kind, however the words fall', () => {
-    expect(answerFor(query({ quote: 'the centre', kind: 'printers-error' }), [standing])).toBeNull()
+  it('reaches nothing of another kind, however the words fall', () => {
+    expect(
+      standingFor(query({ quote: 'the centre', kind: 'printers-error' }), [standing])
+    ).toBeNull()
   })
 
   /**
    * Explicit rather than inferred, on purpose: a policy that worked out for
-   * itself which questions it had answered would quietly settle one nobody had
+   * itself which questions it had answered would quietly hold one nobody had
    * read.
    */
-  it('settles nothing it was not told to cover', () => {
-    expect(answerFor(query({ quote: 'realise', kind: 'inconsistent' }), [standing])).toBeNull()
+  it('reaches nothing it was not told to cover', () => {
+    expect(standingFor(query({ quote: 'realise', kind: 'inconsistent' }), [standing])).toBeNull()
   })
 
-  it('yields to a ruling made on the spot, which was made looking at the leaf', () => {
+  it('a ruling made on the spot settles the query, and it is no longer held', () => {
     const onTheSpot = ruling({ pageIndex: 8, quote: 'the centre', kind: 'inconsistent' })
-    expect(
-      answerFor(query({ pageIndex: 8, quote: 'the centre', kind: 'inconsistent' }), [
-        standing,
-        onTheSpot
-      ])
-    ).toBe(onTheSpot)
+    const q = query({ pageIndex: 8, quote: 'the centre', kind: 'inconsistent' })
+    expect(answerFor(q, [standing, onTheSpot])).toBe(onTheSpot)
+    expect(held([q], [standing, onTheSpot])).toEqual([])
   })
 
   it('is not confused by an empty cover, which would otherwise match everything', () => {
     const sloppy = ruling({ pageIndex: null, covers: ['', '  '], kind: 'inconsistent' })
-    expect(answerFor(query({ kind: 'inconsistent' }), [sloppy])).toBeNull()
+    expect(standingFor(query({ kind: 'inconsistent' }), [sloppy])).toBeNull()
+  })
+
+  it('the reasoning an approval carries names the ruling it came from', () => {
+    expect(heldBecause(standing)).toMatch(
+      /^Under the standing ruling “British\/American spelling” \(2026-/u
+    )
+    expect(heldBecause(standing)).toContain(standing.because ?? '')
   })
 })
 
@@ -520,8 +538,10 @@ describe('the review sheet', () => {
   ]
   const sheet = reviewMarkdown({ title: 'The Astral World', fileName: 'a.pdf' }, raised, rulings)
 
-  it('counts what is settled and what is not', () => {
-    expect(sheet).toContain('3 raised, 2 settled, 1 still waiting.')
+  it('counts what is settled, what is held, and what is not', () => {
+    expect(sheet).toContain(
+      '3 raised, 1 settled, 1 held under a standing ruling for approval, 1 still waiting.'
+    )
   })
 
   it('carries every query, settled or not, in leaf order', () => {
@@ -538,12 +558,14 @@ describe('the review sheet', () => {
   })
 
   /**
-   * A standing ruling settles a query without appearing against any one leaf,
-   * so an auditor reading down the leaves would find the decision and never
-   * find where it came from.
+   * A standing ruling holds a query without appearing against any one leaf,
+   * so an auditor reading down the leaves would find a row marked held and
+   * need to know which ruling holds it and what it would decide.
    */
-  it('says when a query was settled by a standing ruling, and lists it', () => {
-    expect(sheet).toMatch(/\| 40 \|.*standing ruling/u)
+  it('says when a query is held by a standing ruling, and what it would decide', () => {
+    expect(sheet).toMatch(
+      /\| 40 \|.*\*\*held\*\* — Kept as printed under the standing ruling “practiced \/ practised”/u
+    )
     expect(sheet).toContain('## Standing rulings')
     expect(sheet).toContain('Both were current in 1877.')
   })

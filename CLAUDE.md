@@ -820,6 +820,10 @@ node scripts/drive.mjs use <scan.pdf> # which book every later verb means
 node scripts/drive.mjs book          # what that is now; `book clear` forgets it
 node scripts/drive.mjs link review   # a URL that opens this book where decisions wait
 node scripts/drive.mjs queries q.md  # decisions waiting on the editor, as a sheet
+node scripts/drive.mjs held          # the waiting queries a standing ruling holds an
+                                     #   answer for; `held approve --yes` files them,
+                                     #   naming the ruling each came from — the
+                                     #   `--yes` is the editor's word, never implied
 node scripts/drive.mjs memos         # notes the editor left for the assistant, with
                                      #   the text each sits in; `memos resolve <id>
                                      #   "<what was done>"` answers one — the memo
@@ -2227,6 +2231,26 @@ closed`, which is indistinguishable from the flake the first command after a
   hypothesis shown back to the adjudicator. `scripts/resolve-ts.mjs` came with
   it — a resolver hook so a shelf script can load a core module that imports
   another, which is what had kept `marks.ts` out of reach from plain Node.
+- **Also done**: **a standing ruling holds a query; it no longer settles one.**
+  The editor's decision on the mechanism, in his words: _pre-filled and held_.
+  A ruling on a class (`pageIndex: null`, its `covers` naming the words it
+  reaches) used to settle every query it reached silently — `answerFor`
+  returned it, `outstanding` dropped the query, and nobody saw the leaf. Now
+  such a query stays outstanding and arrives at the gate with the decision
+  filled in as `Question.held`, a field `defaultAnswers` ignores on purpose
+  and a test holds it to: put the value on `defaultValue` instead and the
+  test fails, because a seeded answer files on the next press of Next with
+  nobody having looked. Approval is the Accept button on the question, the
+  "Approve all N" bar at the gate, or `drive.mjs held approve --yes`; each
+  files an ordinary ruling whose reasoning names the standing ruling it came
+  from. `queries.md` lists held queries apart with what each would be, the
+  review sheet marks them held rather than settled, and the ledger's Queries
+  row counts waiting and held by matching leaf and quote. Measured on the
+  shelf first: three of the 88 unruled queries were under a standing ruling,
+  and those three were being reported settled by the app and unruled by
+  `--finish` at the same time. `standing.ts` is free of value imports so
+  `ledger.ts` can load it under plain Node — the `@core/queries` chain stops
+  at a TypeScript parameter property Node's type stripping cannot read.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

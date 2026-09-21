@@ -429,6 +429,7 @@ async function serve() {
         async ([repo, arg]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const provenance = await import(`/@fs${repo}/src/core/provenance/index.ts`)
+          const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
           const runs = await runStore.listRuns()
           if (arg === 'clear') window.__pdbfBook = null
           else if (arg) {
@@ -470,6 +471,18 @@ async function serve() {
             commentsOpen: memos.filter((m) => !m.resolved).length,
             commentsAnswered: memos.filter((m) => m.resolved).length,
             marked: marked.length,
+            // Decisions waiting, and how many of them a standing ruling holds
+            // an answer for — said here for the reason the comments are.
+            ...(run
+              ? (() => {
+                  const raised = queriesMod.collectQueries(run.transcriptions)
+                  const waiting = queriesMod.outstanding(raised, run.rulings ?? [])
+                  return {
+                    queriesWaiting: waiting.length,
+                    queriesHeld: queriesMod.held(raised, run.rulings ?? []).length
+                  }
+                })()
+              : {}),
             // What the book is made of and which route that puts it on, so a
             // session starting cold reads the flow off the book rather than
             // deciding it afresh (docs/FLOW.md). Named as missing when it is.
@@ -489,6 +502,93 @@ async function serve() {
           }
         },
         [REPO, action ?? '']
+      )
+    },
+
+    /**
+     * The queries a standing ruling holds an answer for, and their approval.
+     *
+     * The editor's ruling on standing rulings: *pre-filled and held, never
+     * applied unasked*. `held` lists each waiting query the covers of a
+     * standing ruling reach, with the decision it would be given. `held
+     * approve --yes` files those rulings — the same rulings the gate's
+     * "Approve all" button files — and the `--yes` is the approval: without
+     * it the verb only lists. Every filed ruling names the standing ruling
+     * it came from in its reasoning.
+     */
+    held: async ([action, ...flags]) => {
+      const approve = action === 'approve'
+      if (action && !approve) throw new Error('held [approve --yes]')
+      if (approve && !flags.includes('--yes')) {
+        throw new Error(
+          'held approve files rulings, so it wants the approval said: `held approve --yes`. ' +
+            'Run `held` alone to see what would be filed.'
+        )
+      }
+      return page.evaluate(
+        async ([repo, approve]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+          const raised = queriesMod.collectQueries(run.transcriptions)
+          const rulings = run.rulings ?? []
+          const holding = queriesMod.held(raised, rulings)
+          const rows = holding.map(({ query, ruling }) => ({
+            leaf: query.pageIndex,
+            quote: query.quote,
+            kind: query.kind,
+            under: ruling.quote,
+            wouldBe: ruling.decision,
+            ...(ruling.correction ? { correction: ruling.correction } : {})
+          }))
+          if (!approve || holding.length === 0) {
+            return {
+              held: rows.length,
+              rows,
+              next:
+                rows.length === 0
+                  ? 'Nothing is held.'
+                  : 'These are filed only on approval: `held approve --yes`, or the gate one at a time.'
+            }
+          }
+          const decidedOn = new Date().toISOString().slice(0, 10)
+          let next = rulings
+          for (const { query, ruling } of holding) {
+            next = queriesMod.withRuling(next, {
+              pageIndex: query.pageIndex,
+              quote: query.quote,
+              kind: query.kind,
+              decision: ruling.decision,
+              ...(ruling.decision === 'corrected' && ruling.correction
+                ? { correction: ruling.correction }
+                : {}),
+              because: queriesMod.heldBecause(ruling),
+              ...(ruling.mention ? { mention: true } : {}),
+              decidedOn
+            })
+          }
+          const saved = await runStore.saveRun(
+            project.createSavedRun({
+              ...run,
+              images: new Map(run.images.map((i) => [i.id, i.bytes])),
+              savedAt: new Date().toISOString(),
+              rulings: next
+            })
+          )
+          return {
+            approved: rows.length,
+            rows,
+            rulings: next.length,
+            stored: saved === true,
+            waiting: queriesMod.outstanding(raised, next).length,
+            next: 'Run `queries` to rewrite the sheets, then `save` to push them.'
+          }
+        },
+        [REPO, approve]
       )
     },
 
@@ -4288,6 +4388,7 @@ async function serve() {
           )
           const notYet = queriesMod.unapplied(rulings, doc)
           const waiting = queriesMod.outstanding(raised, rulings)
+          const holding = queriesMod.held(raised, rulings)
           const title =
             typeof run.identityAnswers?.title === 'string' && run.identityAnswers.title
               ? run.identityAnswers.title
@@ -4303,6 +4404,10 @@ async function serve() {
             // that only gave the total would send somebody back to decisions
             // the editor has made.
             waiting: waiting.length,
+            // Of the waiting, how many a standing ruling holds an answer for.
+            // A nod each rather than a decision: `held approve --yes` files
+            // them, or the gate does one at a time.
+            held: holding.length,
             ruled: rulings.length,
             byKind: queriesMod.countQueries(waiting),
             // Non-empty means the book does not yet read the way the editor

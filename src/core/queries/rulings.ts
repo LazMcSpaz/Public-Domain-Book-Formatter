@@ -39,6 +39,7 @@
  *
  * Pure: no DOM, no I/O.
  */
+import { standingFor, type HeldQuery } from './standing'
 import { bookText, type BookDocument } from '@core/assemble'
 import type { EditorialQueryKind } from '@core/transcribe'
 import type { RaisedQuery } from './index'
@@ -107,24 +108,31 @@ function sameWords(a: string, b: string): boolean {
 /**
  * The ruling that settles a query, if one does.
  *
- * A ruling on the spot wins over a standing one, because the editor who wrote
- * it was looking at this leaf.
+ * Only a ruling made **on the spot** settles. A standing ruling whose covers
+ * reach the query used to settle it here as well, silently, so the query
+ * never reached the gate; the editor ruled that such a query is *held* —
+ * pre-filled with the standing ruling's decision and filed only when a
+ * person approves it. `standingFor` (`./standing.ts`) says which ruling
+ * holds it, and `held` lists them.
  */
 export function answerFor(query: RaisedQuery, rulings: readonly Ruling[]): Ruling | null {
-  const onTheSpot = rulings.find(
-    (r) => r.pageIndex === query.pageIndex && sameWords(r.quote, query.quote)
-  )
-  if (onTheSpot) return onTheSpot
-
-  const needle = query.quote.toLowerCase()
   return (
-    rulings.find(
-      (r) =>
-        r.pageIndex === null &&
-        r.kind === query.kind &&
-        (r.covers ?? []).some((word) => word.trim() !== '' && needle.includes(word.toLowerCase()))
-    ) ?? null
+    rulings.find((r) => r.pageIndex === query.pageIndex && sameWords(r.quote, query.quote)) ?? null
   )
+}
+
+/**
+ * The queries still waiting that a standing ruling holds an answer for.
+ *
+ * A subset of `outstanding`: every one of these is unsettled, and every one
+ * arrives at the gate pre-filled. Listed apart because they are a different
+ * amount of work — a look and a nod each, rather than a decision.
+ */
+export function held(queries: readonly RaisedQuery[], rulings: readonly Ruling[]): HeldQuery[] {
+  return outstanding(queries, rulings).flatMap((query) => {
+    const ruling = standingFor(query, rulings)
+    return ruling ? [{ query, ruling }] : []
+  })
 }
 
 /**
@@ -362,6 +370,7 @@ export function reviewMarkdown(
 ): string {
   const byLeaf = [...raised].sort((a, b) => a.pageIndex - b.pageIndex)
   const settledCount = byLeaf.filter((q) => answerFor(q, rulings) !== null).length
+  const heldCount = held(byLeaf, rulings).length
 
   const lines: string[] = [
     `# Every editorial query, and what became of it — ${book.title}`,
@@ -372,7 +381,9 @@ export function reviewMarkdown(
     'What is decided here was decided by the editor, or by a ruling the editor',
     'made on a case like it — and where that is so, the reasoning says which.',
     '',
-    `${byLeaf.length} raised, ${settledCount} settled, ${byLeaf.length - settledCount} still waiting.`,
+    `${byLeaf.length} raised, ${settledCount} settled, ` +
+      (heldCount > 0 ? `${heldCount} held under a standing ruling for approval, ` : '') +
+      `${byLeaf.length - settledCount - heldCount} still waiting.`,
     ''
   ]
 
@@ -387,12 +398,19 @@ export function reviewMarkdown(
   )
   for (const query of byLeaf) {
     const ruling = answerFor(query, rulings)
-    const decision = ruling === null ? '**waiting**' : HEADING[ruling.decision]
+    const holding = ruling === null ? standingFor(query, rulings) : null
+    // A held query is not decided: the standing ruling's answer is shown as
+    // what it *would* be, marked so, and the row stays a waiting one.
+    const decision =
+      ruling !== null
+        ? HEADING[ruling.decision]
+        : holding !== null
+          ? `**held** — ${HEADING[holding.decision]} under the standing ruling “${cell(holding.quote)}”, awaiting approval`
+          : '**waiting**'
     const reads =
       ruling?.decision === 'corrected' && ruling.correction ? `\`${cell(ruling.correction)}\`` : '—'
-    const standing = ruling !== null && ruling.pageIndex === null ? ' *(standing ruling)*' : ''
     lines.push(
-      `| ${query.pageIndex} | \`${cell(query.quote)}\` | ${decision}${standing} | ${reads} | ` +
+      `| ${query.pageIndex} | \`${cell(query.quote)}\` | ${decision} | ${reads} | ` +
         `${cell(query.why)} | ${cell(ruling?.because ?? '')} |`
     )
   }
@@ -403,8 +421,9 @@ export function reviewMarkdown(
     lines.push(
       '## Standing rulings',
       '',
-      'Decisions that answer a class rather than a spot, listed because they',
-      'settle queries above without appearing against any one leaf.',
+      'Decisions that answer a class rather than a spot. A query one of these',
+      'reaches is **held**, not settled: it arrives at the gate with this',
+      'decision pre-filled and is filed when the editor approves it.',
       '',
       '| Covers | Decided | Why |',
       '| --- | --- | --- |'

@@ -272,3 +272,38 @@ describe('session names reach a repository path', () => {
     expect(inboxPath('laptop-1')).toBe('control/laptop-1/inbox.json')
   })
 })
+
+describe('a held answer crosses to the controller, and is never an answer', () => {
+  it('carries the held value and its reason on the view of the question', () => {
+    const { view } = snapshot({
+      step: 'gate-queries',
+      title: 'Decisions waiting on you',
+      fileName: 'book.pdf',
+      pageCount: 8,
+      progress: { done: 7, total: 10, pct: 70 },
+      questions: [
+        {
+          id: 'q-7-abc-decision',
+          type: 'choice',
+          prompt: 'Leaf 7: what should this edition do?',
+          options: [{ value: 'noted', label: 'Keep it, and tell the reader' }],
+          held: {
+            value: 'noted',
+            why: 'Pre-filled under the standing ruling “British/American spelling”.'
+          },
+          group: 'q-7-abc'
+        }
+      ],
+      answers: {},
+      missing: []
+    })
+    const q = view.questions[0]!
+    expect(q.held).toEqual({
+      value: 'noted',
+      why: 'Pre-filled under the standing ruling “British/American spelling”.'
+    })
+    // Held, not answered: the view's answers are what the person has said.
+    expect(view.answers['q-7-abc-decision']).toBeUndefined()
+    expect(q.defaultValue).toBeUndefined()
+  })
+})

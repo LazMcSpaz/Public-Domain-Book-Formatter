@@ -430,9 +430,16 @@ if (finish) {
   }
   if (outstanding.length > 0) {
     const leaves = [...new Set(outstanding)].join(', ')
+    // A query a standing ruling reaches is held, not settled: it is filed
+    // when the editor approves it, at the gate or with `drive.mjs held
+    // approve`. Named apart because it is a nod rather than a decision.
+    const heldCount = ledgerNumbers(book).queriesHeld
     owed.push(
       `${outstanding.length} quer${outstanding.length === 1 ? 'y has' : 'ies have'} ` +
-        `no ruling (leaf ${leaves})`
+        `no ruling (leaf ${leaves})` +
+        (heldCount > 0
+          ? ` — ${heldCount} of them held under a standing ruling, waiting for approval`
+          : '')
     )
   }
   // The two habits CLAUDE.md names and nothing enforces. Neither can be

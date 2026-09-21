@@ -38,6 +38,8 @@
  *
  * Pure: no DOM, no I/O, no network.
  */
+import { standingFor } from '@core/queries/standing'
+import type { Ruling } from '@core/queries/rulings'
 import {
   parseShape,
   describeShape,
@@ -63,6 +65,9 @@ export interface LedgerNumbers {
   queryTotal: number
   /** Rulings filed against them. */
   rulings: number
+  /** Queries with no ruling on the spot, and how many of those a standing ruling holds. */
+  queriesWaiting: number
+  queriesHeld: number
   /** Pristine block kinds — what the reading found the book to be made of. */
   blocks: { kind: string; count: number }[]
   /**
@@ -136,9 +141,32 @@ export function ledgerNumbers(book: unknown): LedgerNumbers {
   const queryKinds: string[] = []
   const blockKinds: string[] = []
   let footnotes = 0
+  // Matched, not subtracted: a ruling names its query by leaf and quote, and
+  // `rulings.length` also counts standing rulings that answer a class. A
+  // query with no ruling on the spot is waiting; one a standing ruling's
+  // covers reach is held for approval, and counted apart.
+  const rulings = list(run['rulings']).filter(isRecord)
+  const onTheSpot = new Set(
+    rulings
+      .filter((r) => typeof r['pageIndex'] === 'number' && typeof r['quote'] === 'string')
+      .map((r) => `${r['pageIndex']}\u0000${String(r['quote']).trim().toLowerCase()}`)
+  )
+  const standing = rulings.filter(
+    (r): r is Record<string, unknown> & { quote: string; kind: string } =>
+      r['pageIndex'] === null && typeof r['quote'] === 'string' && typeof r['kind'] === 'string'
+  )
+  let queriesWaiting = 0
+  let queriesHeld = 0
   for (const leaf of transcriptions) {
+    const pageIndex = typeof leaf['pageIndex'] === 'number' ? leaf['pageIndex'] : -1
     for (const q of list(leaf['queries']).filter(isRecord)) {
-      queryKinds.push(typeof q['kind'] === 'string' ? q['kind'] : 'unclear')
+      const kind = typeof q['kind'] === 'string' ? q['kind'] : 'unclear'
+      queryKinds.push(kind)
+      const quote = typeof q['quote'] === 'string' ? q['quote'] : ''
+      if (onTheSpot.has(`${pageIndex}\u0000${quote.trim().toLowerCase()}`)) continue
+      queriesWaiting += 1
+      const raised = { pageIndex, quote, kind: kind as 'unclear', why: '' }
+      if (standingFor(raised, standing as unknown as Ruling[]) !== null) queriesHeld += 1
     }
     for (const b of list(leaf['blocks']).filter(isRecord)) {
       const kind = typeof b['kind'] === 'string' ? b['kind'] : 'paragraph'
@@ -158,7 +186,9 @@ export function ledgerNumbers(book: unknown): LedgerNumbers {
     editTotal: editKinds.length,
     queries: tally(queryKinds),
     queryTotal: queryKinds.length,
-    rulings: list(run['rulings']).length,
+    rulings: rulings.length,
+    queriesWaiting,
+    queriesHeld,
     blocks: tally(blockKinds),
     footnotes,
     editorNotes: editKinds.filter((k) => k === 'note').length,
@@ -209,7 +239,13 @@ export function ledgerSection(n: LedgerNumbers): string {
       n.queryTotal === 0
         ? 'none raised'
         : `${n.queryTotal} raised (${n.queries.map((q) => `${q.count} ${q.kind}`).join(', ')}), ` +
-            `${plural(n.rulings, 'ruling')} filed`
+            `${plural(n.rulings, 'ruling')} filed` +
+            (n.queriesWaiting === 0
+              ? ', none waiting'
+              : `, **${n.queriesWaiting} waiting**` +
+                (n.queriesHeld > 0
+                  ? ` (${n.queriesHeld} held under a standing ruling for approval)`
+                  : ''))
     ),
     row('Blocks, as read', n.blocks.map((b) => `${b.count} ${b.kind}`).join(', ') || '—'),
     row('Footnotes the original printed', String(n.footnotes)),

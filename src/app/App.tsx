@@ -113,6 +113,8 @@ import {
   queryKey,
   rulingTarget,
   rulingsFromAnswers,
+  approveHeld,
+  heldPending,
   sameRuling,
   withRuling,
   type Ruling
@@ -5107,6 +5109,19 @@ export function App(): JSX.Element {
           <div className="resume-note" role="status">
             {rulingNote}
             {outboxNote ? ` ${outboxNote}` : ''}
+          </div>
+        ) : null}
+
+        {/* Queries a standing ruling holds an answer for. Pre-filled on each
+            screen and filed only on approval; this is the one-press approval,
+            and it says how many it is about to file. */}
+        {step.id === 'gate-queries' && heldPending(questions, currentAnswers) > 0 ? (
+          <div className="resume-note held-all" role="status">
+            {heldPending(questions, currentAnswers)} of these decisions fall under a standing ruling
+            you have already made, and arrive pre-filled. They are filed only when you approve them.{' '}
+            <button type="button" onClick={() => setAnswers((a) => approveHeld(questions, a))}>
+              Approve all {heldPending(questions, currentAnswers)}
+            </button>
           </div>
         ) : null}
 

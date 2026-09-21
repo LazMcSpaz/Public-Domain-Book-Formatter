@@ -170,6 +170,62 @@ describe('splicing it into a ledger', () => {
   })
 })
 
+describe('queries waiting, and queries held', () => {
+  const standing = {
+    pageIndex: null,
+    quote: 'practiced / practised',
+    kind: 'inconsistent',
+    decision: 'as-printed',
+    covers: ['practiced'],
+    decidedOn: '2026-09-10'
+  }
+  const leaf = (pageIndex: number, quote: string, kind = 'inconsistent') => ({
+    pageIndex,
+    blocks: [],
+    queries: [{ quote, why: 'because', kind }]
+  })
+
+  it('counts a query with no ruling on the spot as waiting, and one a standing ruling reaches as held', () => {
+    const n = ledgerNumbers({
+      run: {
+        pageCount: 3,
+        transcriptions: [
+          leaf(1, 'they practiced it'),
+          leaf(2, 'a stray point', 'printers-error'),
+          leaf(3, 'settled')
+        ],
+        rulings: [
+          standing,
+          {
+            pageIndex: 3,
+            quote: 'settled',
+            kind: 'inconsistent',
+            decision: 'noted',
+            decidedOn: '2026-09-10'
+          }
+        ]
+      }
+    })
+    expect(n.queryTotal).toBe(3)
+    expect(n.rulings).toBe(2)
+    expect(n.queriesWaiting).toBe(2)
+    expect(n.queriesHeld).toBe(1)
+    expect(ledgerSection(n)).toMatch(
+      /\| Queries \| 3 raised .*2 rulings filed, \*\*2 waiting\*\* \(1 held under a standing ruling for approval\)/u
+    )
+  })
+
+  it('a standing ruling is never counted as settling a query by subtraction', () => {
+    // 1 raised against 1 ruling is not 0 waiting when the ruling is standing
+    // and reaches nothing.
+    const n = ledgerNumbers({
+      run: { pageCount: 1, transcriptions: [leaf(1, 'nothing it covers')], rulings: [standing] }
+    })
+    expect(n.queriesWaiting).toBe(1)
+    expect(n.queriesHeld).toBe(0)
+  })
+})
+
 describe('the shape on the ledger', () => {
   const shape = {
     pixels: false,

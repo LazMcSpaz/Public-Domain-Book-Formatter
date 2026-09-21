@@ -623,6 +623,17 @@ silently correct it; never silently keep it. Whether a reprint keeps a
 compositor's error, fixes it, or notes it is the editor's call and nobody
 else's.
 
+**A standing ruling holds; it does not settle.** The editor may rule on a
+_class_ — "British/American spelling", "practiced / practised" — naming in
+`covers` the words it reaches. A query one of those reaches is not thereby
+decided: it stays outstanding, arrives at the gate **pre-filled** with the
+ruling's decision, and is filed only when the editor approves it, one at a
+time or all at once by a button that says how many. `drive.mjs held` lists
+them; `held approve --yes` is the same approval from the conversation, and
+the `--yes` is the editor's word. Never applied unasked — that was the
+editor's ruling on the mechanism itself, and the first version of it, which
+settled such queries silently, was wrong.
+
 Queries a reader should raise: a printer's error; a word the page genuinely
 cannot settle; an inconsistency the book itself contains; anything where
 "faithful to the original" and "correct" disagree.

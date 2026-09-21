@@ -461,7 +461,12 @@ export function QuestionView({
         return (
           <div className="opts">
             {question.options.map((o) => (
-              <label key={o.value} className={`opt ${value === o.value ? 'sel' : ''}`}>
+              <label
+                key={o.value}
+                className={`opt ${value === o.value ? 'sel' : ''} ${
+                  question.held?.value === o.value && value !== o.value ? 'held' : ''
+                }`}
+              >
                 <input
                   type="radio"
                   name={question.id}
@@ -553,10 +558,34 @@ export function QuestionView({
     <div className={helpTrails ? 'help trailing' : 'help'}>{question.help}</div>
   ) : null
 
+  // An answer a standing ruling holds for this question. Shown, never set:
+  // the button is the approval, and until it is pressed the answer is what
+  // it says on the tin — pre-filled and held.
+  const heldNote = question.held ? (
+    <div className="held-note" role="note">
+      <span className="held-why">{question.held.why}</span>
+      {value === question.held.value ? (
+        <span className="held-accepted">Accepted</span>
+      ) : (
+        <button
+          type="button"
+          className="held-accept"
+          onClick={() => onChange(question.held!.value)}
+        >
+          Accept
+          {typeof question.held.value === 'string' && question.type === 'text'
+            ? ' this wording'
+            : ''}
+        </button>
+      )}
+    </div>
+  ) : null
+
   return (
     <div className="q">
       <span className="prompt">{question.prompt}</span>
       {helpTrails ? null : help}
+      {heldNote}
       {hasEvidence ? (
         <div className={readsEvidence ? 'q-row evidence-led' : 'q-row'}>
           <div className="fields">{body()}</div>
