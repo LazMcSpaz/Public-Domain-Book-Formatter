@@ -2384,6 +2384,66 @@ async function serve() {
       )
     },
 
+    /**
+     * The proofed book, projected back onto its leaves.
+     *
+     * What the two measurement plans score a reading against, built once.
+     * Corrections are keyed to assembled blocks and a block joined across a
+     * seam belongs to two leaves, so "the proofed text of leaf 120" does not
+     * exist until something puts each corrected word back on the leaf it was
+     * read from — `leafTruth`, in `@core/witness`, aligned with the witness
+     * module's own aligner so a ground truth and a witness report cannot
+     * disagree about where a word is.
+     *
+     * Per leaf: the body words with punctuation intact, the leaf's notes and
+     * its furniture kept apart, the blocks that contributed, how many words
+     * could not be placed (a merge across leaves — reported, never guessed),
+     * and whether a query on the leaf is still unruled — a "proofed" text the
+     * editor has not finished deciding is one a measurement should skip.
+     *
+     *   truth [out.json]
+     */
+    truth: async ([out = 'truth.json']) => {
+      const built = await page.evaluate(
+        async ([repo]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const gt = await import(`/@fs${repo}/src/core/witness/ground-truth.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const run = await runStore.loadRun(newest.key)
+          const bare = assemble.assembleBook(run.transcriptions)
+          const applied = editsMod.applyEdits(bare, run.edits ?? [])
+          const leaves = gt.leafTruth(run.transcriptions, bare, applied, run.rulings ?? [])
+          return {
+            book: newest.fileName,
+            leaves,
+            bodyWords: applied.blocks
+              .filter((b) => b.sourcePages.length > 0)
+              .reduce((n, b) => n + (b.text.match(/\S+/gu) ?? []).length, 0)
+          }
+        },
+        [REPO]
+      )
+      await writeFile(resolve(out), JSON.stringify(built, null, 1))
+      const placed = built.leaves.reduce((n, l) => n + l.words.length, 0)
+      const unplaced = built.leaves.reduce((n, l) => n + l.unplaced, 0)
+      return {
+        wrote: out,
+        book: built.book,
+        leaves: built.leaves.length,
+        // The invariant: every body word lands on exactly one leaf, or is
+        // reported unplaced. A total off by more than the seam-healed words
+        // is a projection that dropped or doubled something.
+        bodyWords: built.bodyWords,
+        placed,
+        unplaced,
+        unsettled: built.leaves.filter((l) => l.unsettled).map((l) => l.pageIndex),
+        emptyLeaves: built.leaves.filter((l) => l.words.length === 0).length
+      }
+    },
+
     corrections: async ([dir, ...flags]) => {
       if (!dir) throw new Error('corrections <shelf-book-directory> [--check]')
       const { readFile, writeFile } = await import('node:fs/promises')
