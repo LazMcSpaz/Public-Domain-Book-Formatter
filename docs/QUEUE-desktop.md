@@ -51,10 +51,10 @@ Status is one of `open`, `taken (<who>, <date>)`, `done (<commit>)`.
 
 ### 1. Glossary — rule on the decisions waiting (editor)
 
-`open`. Book: `Blavatsky-TheTheosophicalGlossary-1s37ewg`. Twenty-seven
+`open`. Book: `Blavatsky-TheTheosophicalGlossary-1s37ewg`. Thirty-two
 queries wait, all of one kind: a headword accented or spelt one way and its
 own text or a neighbour another (`Matrâ`/`Mâtrâ`, `Kâla`/`Kala`, `Adunaï`).
-The standing default is _leave as printed_. The crops are on sheets 1–5
+The standing default is _leave as printed_. The crops are on sheets 1–6
 already sent; the app shows the same crop at the gate:
 `node scripts/drive.mjs link review`, or open the book from the shelf on the
 tablet. Rulings save themselves to the shelf. No session is needed for this
@@ -83,6 +83,12 @@ the engines into `scripts/reading-kit/glossary/PROMPT.md`. Done when
   reference text is consistent.
 - Display lines the drafts dropped as furniture: the title-page lines and
   `PREFACE.` — put them back as headings.
+- Block kinds are the draft's guess from geometry: 378 entries are typed
+  `blockquote` (an indented first line) and six last lines were typed
+  `footnote` until assembly was found pulling them out of the text. Count
+  the kinds (`book.json`, `run.transcriptions[].blocks[].kind`) and settle
+  what an entry _is_ before layout; the reference text does not care, the
+  page does.
 - Entries the draft ran together or split across blocks (every stretch had
   some): `drive.mjs split` and `block … merge` until one block is one entry.
   This is Phase 3 work but it decides what the reference text looks like.
