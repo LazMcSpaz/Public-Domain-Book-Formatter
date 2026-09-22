@@ -46,15 +46,31 @@ else
 fi
 command -v node >/dev/null || die "node still not on PATH. Open a new terminal and run this again."
 
+# ------------------------------------------------------------ system packages
+# Kept as its own step, and loudly, because of what it asks for. This used to
+# sit under the "GitHub access" heading below, so the screen announced GitHub
+# and the very next line was a password prompt — from `sudo`, wanting the
+# Ubuntu account password. Typing the GitHub one there is the only reasonable
+# thing to do, and it fails three times and aborts the run.
+if ! command -v gh >/dev/null; then
+  say "Installing gh — sudo will ask for your UBUNTU password"
+  cat <<'NOTE'
+  This is the password you chose when Ubuntu first started on this machine.
+  It is NOT your GitHub password. GitHub is signed into further down, in a
+  browser, and never asks for a password here at all.
+
+  Nothing is shown as you type — no dots, no stars. That is normal.
+NOTE
+  sudo apt-get update -qq
+  sudo apt-get install -y -qq gh git
+fi
+
 # -------------------------------------------------------------------- github
 say "GitHub access"
 # The shelf is private, so a clone needs credentials. `gh` is used because it
 # also wires up git's credential helper, which nothing else here has to know
-# about afterwards.
-if ! command -v gh >/dev/null; then
-  sudo apt-get update -qq
-  sudo apt-get install -y -qq gh git
-fi
+# about afterwards. It signs in through a browser and a one-time code; GitHub
+# has not accepted a password for git operations since 2021.
 gh auth status >/dev/null 2>&1 || {
   echo "  a browser window will open — sign in, then come back here"
   gh auth login -h github.com -p https -w
