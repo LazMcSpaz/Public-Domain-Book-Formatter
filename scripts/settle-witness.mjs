@@ -59,11 +59,25 @@ const DOMINANCE = 8
  * vote elects the damage — a dictionary built from the most broken text on
  * the shelf. It is excluded, and the corpus is still 1.1M words without it.
  *
+ * **That exclusion was about the layer, not about the book**, and both
+ * volumes have since been read off the pixels ClearScan draws — 1.37% and
+ * 1.78% lone letters, which is the same order as everything else voting
+ * here. So the two re-readings vote and the two `-clearscan` files do not.
+ * Measured before the change: the electorate goes from 1.11M words and
+ * 55,659 forms to 1.84M and 74,182, `doctrine` from 655 to 1,859 against
+ * `doctrme` at zero either way, `ethereal` 69 to 179 against `etheral` at
+ * zero — and `thc`, the one form that stands at all, from 7 to 9 against
+ * `the` at 167,209. Nothing the old electorate settled is unsettled by it.
+ *
+ * `isis-vol2-layer` is excluded for a different fault of the same kind: it
+ * runs words together, 4,305 tokens of fifteen letters or more against the
+ * pixel reading's 669, so letting it vote would elect `knewthat`.
+ *
  * `isis-vol1` is the only proofed text here, so it is worth more than the
  * rest; a form it uses is a form the editor has seen.
  */
 const VOTERS =
-  /^(isis-vol1|isis-vol2|theosophical-glossary|key-to-theosophy|modern-panarion)\.txt$/u
+  /^(isis-vol1|isis-vol2|theosophical-glossary|key-to-theosophy|modern-panarion|secret-doctrine-sd[12])\.txt$/u
 const WEIGHT = { 'isis-vol1.txt': 3 }
 
 const SHELF = process.env.SHELF ?? '/home/user/Public-Domain-Books-Storage'
