@@ -229,3 +229,37 @@ Three faults were injected against the tests and all three caught: ranking on
 `score` instead of `noise`, dropping the score tie-break, and quoting the
 recall of the share _asked for_ rather than of the selection actually made —
 which a short book makes different, since a quarter of three leaves is one.
+
+## What a second reader is worth at the gate, measured
+
+The uncertainty gate flags every place the transcription and OCR disagree,
+and on a real book that is forty leaves of decisions with nothing to say
+which of them matter. Over the same 42 proofed leaves, taking every word of
+Tesseract's reading and asking whether PaddleOCR agrees with it:
+
+| the two engines | words | right on it |
+| --------------- | ----: | ----------: |
+| agree           | 9,841 |       98.5% |
+| disagree        |   155 |       58.7% |
+
+**A word the two engines disagree about is 27 times likelier to be wrong.**
+
+That is enough to order a gate by and not enough to decide anything with.
+150 of the errors on this set survived both engines agreeing — most of them
+the columns of _Patterns_ Vol. II, read across by both — so a pass that hid
+an agreed word would lose them silently. `gradeFlags`
+(`@core/witness/corroborate`) therefore grades and never removes:
+`corroborated` where both readers read the same thing against the
+transcription, `contested` where they differ from it and from each other,
+`dismissed` where the second reader reads what the transcription reads.
+`worstFirst` puts them in that order and drops nothing.
+
+**Two faults, both from not checking what a number meant.** In
+`compareWitnesses(transcription, reader)` it is `first` that holds the
+_transcription's_ word and `second` the reader's, so a row named from the
+argument order shows the book's own word as what the reader saw. And
+`WitnessOptions.confidence` is scored per word of the _first_ argument, which
+is the transcription here, while the scores that exist belong to the OCR
+reader — so no confidence travels through this module at all, rather than one
+that indexes the wrong sequence. Both are `PLAN-next.md`'s own standing
+lesson: check what the coordinates mean before comparing them.
