@@ -332,6 +332,38 @@ it was meant. That case is real: `Erick <i>son</i>` is one word the conversion
 broke in half and italicised half of. Refused rather than warned, because a
 warning on a run of forty is a line of output nobody reads.
 
+**The file stated a bold and nothing read it, so the book printed none.**
+A born-digital PDF names the face of every word it sets, and `EmbeddedWord`
+carried only `italic` — so on _Patterns of the Hypnotic Techniques_ Vol. I the
+whole of the volume's bold was gone before anything downstream could miss it.
+That is not decoration on this book: page 32 tells the reader to notice "the
+portion of Erickson's communication in bold type", and the portion had been
+set in the same italic as the rest of the quotation, so the sentence pointed
+at nothing. Every check was happy, for the reason the italic entry above
+gives — a block with no bold looks exactly like a block with no bold.
+
+The chain is `EmbeddedWord.bold` off the file's faces, a bold pass in
+`draftPage`, `asSource` carrying `strong` so the landing verb's source stream
+can be asked the question at all, and `readBody` rendering `<b>` — that last
+one because a correction typed from `body` against a block that looks
+unbolded throws the bold away exactly as `correct` once threw away italics.
+`RECON_CACHE_VERSION` is 4, so a reading taken before the field existed is
+refused rather than served: a v3 record gives every word a face for the
+italic and none for the bold, which is indistinguishable from a book that
+sets nothing bold.
+
+Two rules came out of landing it. **A heading's weight belongs to the
+design** — `headingStyle` decides the size, the centring and the small
+capitals, and the conversion had tagged 49 of this book's 78 headings heavy,
+which would have printed as two kinds of heading for a reason no reader could
+see; the landing verb skips them, and keeps an italic in a heading, where it
+names an article's title rather than saying "this is a heading". And **there
+is no bold italic in the engine**, so a marked run inside an italic quotation
+sets bold roman — `spansFor` puts strong first and first match wins. That is
+the same honest substitution `hasBold` and `hasSmallCaps` already make, and
+it is the book's own idiom: on leaf 93 the analogically marked words are the
+ones in _non-italic_ type.
+
 **A marker written in superscript digits is a run, exactly as `**` is.**
 A book that gathers its notes at the back of each Part cannot use a plain `1`
 marker — `(?<!\d)1(?!\d)` matches standalone digits the length of the volume —
