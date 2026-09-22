@@ -359,8 +359,18 @@ export function withoutConversionDamage(
  * The boxes are nominal. Nothing downstream of the walk reads them, and a
  * position invented here would be a worse lie than an obvious one.
  */
-export function asSource(text: string, emphasis?: readonly number[]): DraftWord[] {
+export function asSource(
+  text: string,
+  emphasis?: readonly number[],
+  strong?: readonly number[]
+): DraftWord[] {
   const marked = new Set(emphasis ?? [])
+  // Carried even when empty, because `undefined` and `false` are different
+  // answers here: the walk reads a flag the file *stated*, and a stream built
+  // without this argument would say every word is roman rather than saying
+  // nobody asked. That distinction is what `draftPage` switches its bold pass
+  // on, so dropping it loses the pass rather than the flag.
+  const heavy = new Set(strong ?? [])
   return text
     .split(/\s+/u)
     .filter((w) => w.length > 0)
@@ -368,6 +378,7 @@ export function asSource(text: string, emphasis?: readonly number[]): DraftWord[
       text: word,
       confidence: 100,
       italic: marked.has(i),
+      bold: heavy.has(i),
       bbox: { x0: i, y0: 0, x1: i + 1, y1: 1 }
     }))
 }

@@ -134,7 +134,6 @@ function headword(term, { chars }) {
   let i = source.flat.indexOf(needle)
   while (i >= 0) {
     const from = source.at[i]
-    const to = source.at[Math.min(i + needle.length - 1, source.at.length - 1)] + 1
     const before = source.raw.slice(Math.max(0, from - 3), from)
     const defines = /\.\s$/u.test(before) && /^[A-Z]/u.test(source.raw.slice(from, from + 1))
     found.push({

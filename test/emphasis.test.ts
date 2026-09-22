@@ -194,6 +194,17 @@ describe('asSource', () => {
     ])
   })
 
+  it('carries the bold too, so a re-run of the walk can read it back', () => {
+    // The landing verb rebuilds its source stream from a drafted block, so a
+    // stream that knows only the italic loses the bold pass entirely — which
+    // is not a missing flag but a missing *question*: `draftPage` switches the
+    // bold pass on when any word carries the field at all.
+    const src = asSource('Step 3 - Form two sentences', [], [0, 1])
+    expect(src.filter((w) => w.bold).map((w) => w.text)).toEqual(['Step', '3'])
+    const read = emphasisForTexts(['Step 3 - Form two sentences'], src, 'bold')
+    expect(read.emphasis).toEqual([[0, 1]])
+  })
+
   it('carries a table through its flattened view, separators and all', () => {
     // The draft's side is the flattened text; the corrected side is the cells.
     // The ` | ` has no letters in it, so the walk steps over it and the two

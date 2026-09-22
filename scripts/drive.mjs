@@ -269,7 +269,13 @@ async function serve() {
             id: b.id,
             kind: b.kind,
             pages: b.sourcePages,
-            text: markup.withMarkup(b.text, b.emphasis)
+            // Both faces, always. This is the text a correction is written
+            // against — `correct` matches on exactly these strings and
+            // replaces the block with what comes back — so a face left out
+            // here is a face the next correction silently deletes. That is not
+            // hypothetical: it is what cost this volume 188 emphasis runs when
+            // corrections were typed from the bare text.
+            text: markup.withMarkup(b.text, b.emphasis, b.strong)
           }))
         return {
           edited: say(applied.blocks),
@@ -2759,7 +2765,8 @@ async function serve() {
                 // file says so. Omitted rather than defaulted to false: a
                 // scanned leaf cannot answer the question at all, and a reader
                 // shown `false` would take that for "checked, and roman".
-                ...(w.italic === undefined ? {} : { italic: w.italic })
+                ...(w.italic === undefined ? {} : { italic: w.italic }),
+                ...(w.bold === undefined ? {} : { bold: w.bold })
               }))
           }
           return {
@@ -4032,29 +4039,53 @@ async function serve() {
           const draftMod = await import(`/@fs${repo}/src/core/draft/index.ts`)
           const emphasisMod = await import(`/@fs${repo}/src/core/draft/emphasis.ts`)
           const schema = await import(`/@fs${repo}/src/core/transcribe/index.ts`)
+          const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
           const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           const cached = await cacheMod.loadReconCache(newest.key, {
             dpi: recon.RECON_DPI,
             maxPages: null
           })
-          if (!cached) throw new Error('No cached reading on this device.')
-          const covered = new Set(cached.words.map((w) => w.pageIndex))
+          const covered = new Set((cached?.words ?? []).map((w) => w.pageIndex))
+
+          // The cache is a convenience here and never the source. A face is a
+          // fact this verb reads out of the *file*, and for the only kind of
+          // book that states one — born-digital, no pixels — the reading is
+          // `extractPageWords`, which is the same call recon itself makes and
+          // takes milliseconds a leaf. So a cache that cannot serve (none at
+          // all, a leaf it never reached, or one written before this app read
+          // the face being asked for) falls back to reading the leaf rather
+          // than refusing the book: refusing sends a session away to rebuild a
+          // cache for an answer the file will give directly.
+          let doc = null
+          const wordsFor = async (n) => {
+            if (covered.has(n)) return cached.words.filter((w) => w.pageIndex === n)
+            if (doc === null) {
+              const file = await runStore.loadSourceFile(newest.key)
+              if (!file) return null
+              doc = await pdfMod.openPdf(file)
+            }
+            if (n >= doc.numPages) return null
+            const read = await pdfMod.extractPageWords(doc, n, recon.RECON_DPI)
+            return read.words
+          }
 
           const report = []
           for (const leaf of given) {
             const n = leaf.pageIndex
-            if (!covered.has(n)) {
+            const words = await wordsFor(n)
+            if (!words || words.length === 0) {
               report.push({ leaf: n, read: false })
               continue
             }
-            const words = cached.words.filter((w) => w.pageIndex === n)
             // No vocabulary and no expected folio: this is not a draft anybody
             // reads, only a stream of words with faces on them, and hyphen
             // healing here would put the source *further* from the corrected
             // text rather than nearer it.
             const drafted = draftMod.draftPage(words)
-            const source = drafted.blocks.flatMap((b) => emphasisMod.asSource(b.text, b.emphasis))
+            const source = drafted.blocks.flatMap((b) =>
+              emphasisMod.asSource(b.text, b.emphasis, b.strong)
+            )
             // A table's cells, never its flattened view: the reader's own
             // division is what the indices have to come back in.
             // Markup first. Some readers on this volume marked the italics
@@ -4084,7 +4115,14 @@ async function serve() {
               texts.push(...(cells ?? [block.text]))
             }
             const read = emphasisMod.emphasisForTexts(texts, source)
+            // The bold by the same walk over the same alignment. Kept apart
+            // from the italic because on this book they mean different things:
+            // the italic marks a quotation, the bold marks the portion of it
+            // the hypnotist marks analogically, and leaf 14 tells the reader
+            // to notice "the portion in bold type".
+            const readBold = emphasisMod.emphasisForTexts(texts, source, 'bold')
             let put = 0
+            let putBold = 0
             let byHand = 0
             let agreed = 0
             for (const { block, from, cells, byHand: hand } of spans) {
@@ -4108,11 +4146,35 @@ async function serve() {
                 block.emphasis = flat
                 put += flat.length
               } else delete block.emphasis
+
+              const mineBold =
+                cells > 0
+                  ? readBold.emphasis.slice(from, from + cells)
+                  : [readBold.emphasis[from] ?? []]
+              const flatBold =
+                cells > 0
+                  ? emphasisMod.flattenCellEmphasis(block.cells ?? [], mineBold)
+                  : (mineBold[0] ?? [])
+              // A heading's weight belongs to the design, never to the file.
+              // `headingStyle` decides the size, the centring and the small
+              // capitals of every heading in the book, and a converted file
+              // tags whichever display lines its producer happened to set
+              // heavy — on this volume 49 of 78, which would have printed as
+              // two kinds of heading for a reason no reader could see. An
+              // italic in a heading is kept, because there it names a thing
+              // (an article's title) rather than saying "this is a heading".
+              if (block.kind === 'heading') {
+                delete block.strong
+              } else if (flatBold.length > 0) {
+                block.strong = flatBold
+                putBold += flatBold.length
+              } else delete block.strong
             }
             report.push({
               leaf: n,
               read: true,
               marked: put,
+              bold: putBold,
               inDraft: drafted.blocks.reduce((k, b) => k + (b.emphasis?.length ?? 0), 0),
               of: read.total,
               byHand,
