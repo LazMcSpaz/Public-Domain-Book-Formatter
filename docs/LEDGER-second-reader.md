@@ -166,3 +166,48 @@ rather than only in the driver, which the plan's own next section owns; and
 the cache, which is `localStorage` keyed by file, DPI and model rather than
 the recon store, because that store is capped and evicts oldest-first and a
 book's worth of text must not push a ten-minute OCR reading out.
+
+---
+
+## Which leaves to read again, measured before it was built
+
+The plan's next section says to offer the second reading "on leaves
+`assessText` flags". Measured on the 42 proofed leaves above — 214 real
+errors, ranked by each candidate signal, taking a share of the leaves and
+counting the damage reached:
+
+| share of leaves | an oracle | **noise** | `assessText` score | at random | longest first |
+| --------------: | --------: | --------: | -----------------: | --------: | ------------: |
+|             25% |       68% |   **50%** |                35% |       24% |           18% |
+|             50% |       84% |   **72%** |                58% |       59% |           38% |
+|             75% |       94% |   **89%** |                89% |       87% |           79% |
+
+**The rule as written does not work.** `assessText`'s score reaches 35% of the
+damage at a quarter of the leaves, against a coin's 24%, and by verdict the
+separation is barely there at all: `mixed` leaves average 6.6 real errors and
+`trustworthy` ones 4.0. A leaf this app calls trustworthy carries four.
+
+The reason is in `assess.ts`'s own docstring, and it is not a defect in it:
+_"a misreading shaped like a word … no statistic over word shapes will ever
+catch that"_. A second reader earns its keep on exactly those — `thc` for
+`the`, `arc` for `are` — so selecting for them with a measure of word shape
+asks a check for the one thing it says it cannot see. The rule was reasoned
+about rather than measured, which this repository has a standing lesson about.
+
+**What does work is the other half of the same assessment.** `noise` — the
+share of tokens carrying a symbol no typesetter set — reaches 50% at a quarter
+and 72% at a half, against an oracle's 68% and 84%. That is a real saving and
+worth offering.
+
+**What it must not be called is "the damaged leaves".** A quarter of the
+leaves is half the damage. `SecondReadingPlan` (`@core/witness/select`)
+therefore carries `expectedRecall` beside the selection, from the table above,
+so a caller cannot show the saving without the cost; reading everything is
+what finds everything, and it is the default. A subset offered as though it
+were the damage is the check manufacturing confidence, which is the one
+failure this ledger exists to avoid.
+
+Two faults were injected against the tests and both were caught: ranking on
+`score` instead of `noise`, and quoting the recall of the share _asked for_
+rather than of the selection actually made — which a short book makes
+different, since a quarter of three leaves is one.
