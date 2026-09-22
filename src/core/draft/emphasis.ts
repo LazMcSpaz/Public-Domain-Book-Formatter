@@ -84,6 +84,18 @@ function key(text: string): string {
   return text.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
 }
 
+/**
+ * Which of the file's faces this walk is reading.
+ *
+ * The same alignment answers both questions — a born-digital file states the
+ * face of every word, and italic and bold are two flags on the same word — so
+ * the walk is run twice rather than written twice. `Patterns` Vol. I is why
+ * bold is here: it sets the marked portion of a suggestion in bold inside an
+ * italic quote, and page 30 tells the reader to look at "the portion in bold
+ * type", which is content and not decoration.
+ */
+export type DraftFace = 'italic' | 'bold'
+
 export interface EmphasisReading {
   /** For each text handed in, the indices of its words to set in italic. */
   emphasis: number[][]
@@ -112,8 +124,11 @@ export interface EmphasisReading {
  */
 export function emphasisForTexts(
   texts: readonly string[],
-  source: readonly DraftWord[]
+  source: readonly DraftWord[],
+  face: DraftFace = 'italic'
 ): EmphasisReading {
+  const isSet = (word: DraftWord): boolean =>
+    face === 'bold' ? word.bold === true : word.italic === true
   const emphasis: number[][] = texts.map(() => [])
   const unmatched: { text: number; word: number; is: string }[] = []
   let matched = 0
@@ -177,7 +192,7 @@ export function emphasisForTexts(
 
       const mine = key(source[s]!.text)
       if (mine === here) {
-        if (source[s]!.italic === true) emphasis[t]!.push(w)
+        if (isSet(source[s]!)) emphasis[t]!.push(w)
         matched++
         s++
         w++
@@ -201,9 +216,7 @@ export function emphasisForTexts(
         // Italic if any part of it was. A word broken across a line break is
         // one word and was set in one face; where the file disagrees with
         // itself about that, the emphasis is what the page shows.
-        const any = Array.from({ length: span }, (_, k) => source[s + k]!).some(
-          (x) => x.italic === true
-        )
+        const any = Array.from({ length: span }, (_, k) => source[s + k]!).some((x) => isSet(x))
         if (any) emphasis[t]!.push(w)
         matched++
         s += span
@@ -226,7 +239,7 @@ export function emphasisForTexts(
       }
       if (cut) {
         for (let k = 0; k < took; k++) {
-          if (source[s]!.italic === true) emphasis[t]!.push(w + k)
+          if (isSet(source[s]!)) emphasis[t]!.push(w + k)
         }
         matched += took
         s++
@@ -245,7 +258,7 @@ export function emphasisForTexts(
       }
       if (found >= 0) {
         s = found
-        if (source[s]!.italic === true) emphasis[t]!.push(w)
+        if (isSet(source[s]!)) emphasis[t]!.push(w)
         matched++
         s++
         w++

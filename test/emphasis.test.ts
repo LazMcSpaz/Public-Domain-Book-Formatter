@@ -238,3 +238,54 @@ describe('cellEmphasis', () => {
     expect(cellEmphasis(cells, [3, 9, 13])).toEqual([[], [], [], []])
   })
 })
+
+/**
+ * A book can set a portion *of* an italic quotation in bold, and _Patterns of
+ * the Hypnotic Techniques_ Vol. I is one: it prints the interspersed command
+ * that way and then tells the reader, in as many words, to notice "the portion
+ * of Erickson's communication in bold type". Read as one flag the two collapse
+ * and that sentence points at nothing, so the same walk runs twice.
+ */
+describe('the same walk reads the file’s bold', () => {
+  /** A source stream where `*word` is italic and `+word` is bold. */
+  const faced = (spec: string): DraftWord[] =>
+    spec
+      .split(/\s+/u)
+      .filter(Boolean)
+      .map((token, i) => ({
+        text: token.replace(/^[*+]+/u, ''),
+        confidence: 100,
+        italic: token.includes('*'),
+        bold: token.includes('+'),
+        bbox: { x0: i * 10, y0: 0, x1: i * 10 + 8, y1: 10 }
+      }))
+
+  const quote = 'I knew a man once who really understood how to feel good about'
+  const source = faced(
+    '*I *knew *a *man *once *who *really *understood *how *to *+feel *+good *about'
+  )
+
+  it('marks the bold portion and not the whole italic quotation', () => {
+    expect(emphasisForTexts([quote], source, 'bold').emphasis[0]).toEqual([10, 11])
+  })
+
+  it('still reads the italic off the same words', () => {
+    expect(emphasisForTexts([quote], source).emphasis[0]).toEqual([
+      0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12
+    ])
+  })
+
+  it('defaults to the italic, so every caller that asked for one still gets it', () => {
+    expect(emphasisForTexts([quote], source)).toEqual(emphasisForTexts([quote], source, 'italic'))
+  })
+
+  it('carries bold across a hyphen the block healed, as the italic is carried', () => {
+    expect(
+      emphasisForTexts(['a knowledge of it'], faced('a +know- ledge of it'), 'bold').emphasis[0]
+    ).toEqual([1])
+  })
+
+  it('leaves a word roman where the file sets it roman', () => {
+    expect(emphasisForTexts([quote], faced('I knew a man'), 'bold').emphasis[0]).toEqual([])
+  })
+})

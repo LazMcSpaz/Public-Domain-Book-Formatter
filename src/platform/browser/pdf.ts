@@ -599,6 +599,17 @@ export interface EmbeddedWord {
    * book with no emphasis as a book with none to find.
    */
   italic?: boolean
+  /**
+   * True where the file sets this word in a bold face.
+   *
+   * Read for the same reason and by the same lookup as {@link italic}, and
+   * kept apart from it because the two mean different things on a book that
+   * uses both: _Patterns_ Vol. I sets a quotation in italic and the portion of
+   * it the hypnotist marks with his tonality in bold, then tells the reader to
+   * notice "the portion in bold type". Flattening the two would lose the
+   * sentence that passage is about.
+   */
+  bold?: boolean
 }
 
 /**
@@ -642,24 +653,34 @@ export async function extractPageWords(
      * `italic: true`, and the words under the second are exactly the ones set
      * in italic on the page.
      */
-    const italics = new Map<string, boolean>()
-    const isItalic = (fontName: string | undefined): boolean => {
-      if (!fontName) return false
-      const known = italics.get(fontName)
+    const faces = new Map<string, { italic: boolean; bold: boolean }>()
+    const faceOf = (fontName: string | undefined): { italic: boolean; bold: boolean } => {
+      if (!fontName) return { italic: false, bold: false }
+      const known = faces.get(fontName)
       if (known !== undefined) return known
-      let flag = false
+      let flags = { italic: false, bold: false }
       try {
-        const font = page.commonObjs.get(fontName) as { italic?: boolean; name?: string } | null
+        const font = page.commonObjs.get(fontName) as {
+          italic?: boolean
+          bold?: boolean
+          name?: string
+        } | null
         // The flag first, the name as a fallback: a font whose descriptor
-        // omits the italic angle still usually says so in its name.
-        flag = font?.italic === true || /italic|oblique/i.test(font?.name ?? '')
+        // omits the italic angle or the weight still usually says so in its
+        // name. Measured on this book: `TimesNewRoman`, `,Italic`, `,Bold` and
+        // `,BoldItalic` all four, and the words under each are exactly the
+        // ones set that way on the page.
+        flags = {
+          italic: font?.italic === true || /italic|oblique/i.test(font?.name ?? ''),
+          bold: font?.bold === true || /bold|black|heavy/i.test(font?.name ?? '')
+        }
       } catch {
         // Not loaded — leave it roman rather than guessing from the name of
         // something that was never resolved.
-        flag = false
+        flags = { italic: false, bold: false }
       }
-      italics.set(fontName, flag)
-      return flag
+      faces.set(fontName, flags)
+      return flags
     }
 
     const words: EmbeddedWord[] = []
@@ -682,7 +703,7 @@ export async function extractPageWords(
       const width = (item.width || 0) * scale
       const perChar = raw.length > 0 ? width / raw.length : 0
 
-      const italic = isItalic('fontName' in item ? item.fontName : undefined)
+      const { italic, bold } = faceOf('fontName' in item ? item.fontName : undefined)
 
       let offset = 0
       for (const part of raw.split(/(\s+)/u)) {
@@ -693,6 +714,7 @@ export async function extractPageWords(
             confidence: 100,
             pageIndex,
             italic,
+            bold,
             bbox: {
               x0: x + offset * perChar,
               y0: y,

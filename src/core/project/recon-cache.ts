@@ -44,10 +44,18 @@
  * Vol. I, whose interspersal chapters mark the buried suggestion by setting it
  * in italic and nothing else, a version-2 record served the reading and the
  * draft came back with not one word marked.
+ *
+ * **4**: `OcrWord.bold`, for the same reason and with the same failure. The
+ * same volume sets a quotation in italic and the portion of it the hypnotist
+ * marks with his tonality in bold, and then tells the reader — page 30, in as
+ * many words — to notice "the portion of Erickson's communication in bold
+ * type". Read through a version-3 record every word comes back with a face for
+ * the italic and none for the bold, so that sentence points at nothing on the
+ * page and no check anywhere reports it.
  */
 import type { CleanupPreset } from '@core/image/cleanup'
 
-export const RECON_CACHE_VERSION = 3
+export const RECON_CACHE_VERSION = 4
 
 /** What a stored reading was made under. */
 export interface ReconStamp {

@@ -49,6 +49,15 @@ export interface DraftWord {
    * same as roman, and nothing here treats it as such.
    */
   italic?: boolean
+  /**
+   * True where the file sets this word in a bold face.
+   *
+   * The same kind of fact as {@link italic} and read the same way. It matters
+   * on a book that uses bold to mark a portion *of* an italic quotation —
+   * `Patterns` Vol. I sets the interspersed command that way and then tells
+   * the reader, in as many words, to notice "the portion in bold type".
+   */
+  bold?: boolean
 }
 
 /** A run of words OCR set on one baseline. */
@@ -110,6 +119,15 @@ export interface DraftBlock {
    * absent, which is not the same as a book with nothing in italic.
    */
   emphasis?: number[]
+  /**
+   * Indices of whitespace-separated words to set bold.
+   *
+   * Same convention as `emphasis` and read off the same file, from a separate
+   * flag on the same word. A book that marks part of an italic quotation in
+   * bold needs both, and _Patterns_ Vol. I is one: it tells its reader to
+   * notice "the portion in bold type".
+   */
+  strong?: number[]
 }
 
 export interface DraftSpan {
@@ -1954,6 +1972,40 @@ export function draftPage(words: readonly DraftWord[], options: DraftOptions = {
               ', '
             )}${unplaced.length > 8 ? ', \u2026' : ''}. A scatter of these is ordinary; ` +
           'a run of them means a block has lost the words it was built from.'
+      )
+    }
+  }
+
+  // ## The bold, by the same walk
+  //
+  // Read separately because it is a separate flag on the same word, and
+  // carried separately because it means something else: on this kind of book
+  // the italic marks a quotation and the bold marks the portion *of* it that
+  // the hypnotist marks analogically. `Patterns` Vol. I says so outright —
+  // "the portion of Erickson's communication in bold type" — so a bold run
+  // lost is a sentence the reader is told to look at and cannot find.
+  //
+  // No `withoutConversionDamage` here. That filter exists for one measured
+  // fault of one converter, which italicises a share of its prepositions; the
+  // same has not been measured of its bold, and a filter applied on the
+  // strength of a guess would take marks off the page for no reason.
+  const boldened = lines.some((l) => l.words.some((w) => w.bold !== undefined))
+  if (boldened) {
+    for (const block of blocks) {
+      const source = sourceOf.get(block) ?? []
+      const texts = block.cells ? block.cells.flat() : [block.text]
+      const read = emphasisForTexts(texts, source.flat(), 'bold')
+      const flat = block.cells
+        ? flattenCellEmphasis(block.cells, read.emphasis)
+        : (read.emphasis[0] ?? [])
+      if (flat.length > 0) block.strong = flat
+    }
+    const marked = blocks.reduce((n, b) => n + (b.strong?.length ?? 0), 0)
+    if (marked > 0) {
+      structural.push(
+        `${marked} word(s) are set bold, read off the file's own faces. On a book that marks ` +
+          'part of a quotation in bold the run is the content rather than the styling, so check ' +
+          'any that look odd against the render.'
       )
     }
   }
