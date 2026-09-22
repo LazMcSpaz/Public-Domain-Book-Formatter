@@ -415,9 +415,15 @@ reports changes that were never made and misses the ones that were.
 `drive.mjs body` hands back `pristine` and `edited` for exactly this. Block
 ids (`p120b3`) are _derived_ at assembly; the stored blocks have no id at all.
 
-**Editing a book file by hand.** Prove the round trip before rewriting one:
-`json.dumps(d, indent=1, ensure_ascii=False) + "\n"` is byte-identical for
-these files, and confirming that costs one command. If instead you are
+**Editing a book file by hand.** Prove the round trip before rewriting one,
+and prove it **on that file** rather than trusting the number written here:
+`serializeBookFile` uses `JSON.stringify(wire, null, 2)`, so two spaces is
+what the app writes and what a save from the tablet will impose — but Vol. I
+of _Patterns_ sat on the shelf at one space for weeks, hand-written by a
+session that had proved the round trip against _its_ copy, and the next
+ordinary save reformatted all 18,700 lines of it. The diff is noise rather
+than damage, and it hides the nine real changes inside it. Confirming costs
+one command. If instead you are
 inserting a line by text match, anchor the search inside the object you mean —
 `"author"` occurs in `identityAnswers` and in `answers.export`, and the first
 match is not the one you want.
@@ -550,6 +556,23 @@ are what the engine sets, so the cells are where the tags now come out
 the readings already stored come out clean at the one door they all pass.
 The rule this joins: **a report that only counts cannot tell a fault from a
 hard book — render a page and look.**
+
+**And a fix to the engine does not reach a book that is already printed.**
+The cells fix above was made for Vol. II and left Vol. I printing `<i>` on
+ten of its pages, because a shelf PDF is _derived_ and goes stale in
+silence: nothing re-exports it, nothing compares it against what the current
+code would produce, and `book-files --check` is happy because it compares the
+readable files against `book.json` and never against the PDF. It was the
+editor who found it, reading page 23 on a tablet — which is the most
+expensive way this could have been found, and the reason it is written here.
+
+So **a fix to the parse or the engine is not finished at the book it was
+found on.** Re-export every book on the shelf that the fault could reach and
+check the bytes, rather than reasoning about which ones have tables in them.
+For this class the check is one pass and needs no browser: pull each page's
+text out of every shelf PDF with pdf.js and look for `<i>`, the way the
+extraction check for glyph widths already works. Seven books, a couple of
+minutes, and the answer is a number rather than an opinion.
 
 **A ragged line could not hold a single word.** The stretch that lets a
 ragged line end short sat on the interword glue, and Knuth–Plass discards
