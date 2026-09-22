@@ -332,6 +332,21 @@ it was meant. That case is real: `Erick <i>son</i>` is one word the conversion
 broke in half and italicised half of. Refused rather than warned, because a
 warning on a run of forty is a line of output nobody reads.
 
+**A sweep typed as a phrase stripped the runs the phrase spanned.** The
+tag-stop corrections on the Glossary were swept as whole phrases to pin one
+occurrence down — `Lakshmi (Sk.) “ Prosperity ”` to add the stop after the
+tag — and `sweepText` replaced the whole phrase with the replacement as typed.
+Its re-balancing could re-open a run the match _crossed_; a run that began
+and ended inside the match had nowhere to go and was dropped. **Twenty-six
+blocks** lost their bold headword and italic language tag that way, and
+nothing reported it, for the reason the two entries below give: a block with
+no bold looks exactly like a block with no bold. Found by comparing tag
+counts, pristine against edited, over the whole body — one loop, and the
+check that a bare sweep cannot run. The splice is now only the characters
+that differ, cut back to word boundaries so a re-opened tag never lands
+mid-word; the plain text that results is identical, and the twenty-six were
+rebuilt from their pristine markup with the correction replayed into it.
+
 **The file stated a bold and nothing read it, so the book printed none.**
 A born-digital PDF names the face of every word it sets, and `EmbeddedWord`
 carried only `italic` — so on _Patterns of the Hypnotic Techniques_ Vol. I the
