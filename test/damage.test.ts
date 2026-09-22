@@ -268,3 +268,59 @@ describe('the sheet', () => {
     expect(volume.blocks.map((b) => b.text).join(' ')).toContain('descrip tion')
   })
 })
+
+describe('the false positives Isis Vol. I turned up', () => {
+  // Measured on `reference/blavatsky/isis-vol1.txt`: 40 findings and about
+  // eighteen of them false, which is a check nobody would keep running.
+  const kinds = (text: string) => checkDamage(build([text])).map((f) => f.kind)
+
+  it('does not call a closing curly quote a stray apostrophe', () => {
+    // The walk tracked ' and ’ but never ‘, so an opening curly quote did not
+    // open anything and its closing partner looked like a comma mis-read.
+    expect(
+      kinds('Professor Thury’s ectenic force, and his own ‘psychic force’ are equivalent terms.')
+    ).not.toContain('stray-apostrophe')
+    expect(kinds('there is no doubt that ‘tukki’ is simply the old Tamil word.')).not.toContain(
+      'stray-apostrophe'
+    )
+  })
+
+  it('still catches a real stray apostrophe', () => {
+    // The class this check exists for, and the one the fix must not lose.
+    expect(kinds('after the examination’ I tell him to open his eyes.')).toContain(
+      'stray-apostrophe'
+    )
+  })
+
+  it('does not call a citation abbreviation a stray point', () => {
+    expect(
+      kinds('shares with “Simpl. in Phys.,” 143 ; “The Chaldean Oracles,” Cory.')
+    ).not.toContain('stray-point')
+    expect(
+      kinds(
+        'had belonged to the Alexandrian school of Platonists, “Hist. of Magic,” vol. i., p. 9.'
+      )
+    ).not.toContain('stray-point')
+  })
+
+  it('does not read a running head as a sentence', () => {
+    // Widening the capture to take a capitalised word — needed so that
+    // `Simpl.` could be recognised as an abbreviation at all — made the
+    // running head at the top of every page into a finding. On *A Modern
+    // Panarion* that was sixty of eighty-four: `A MODERN PANARION.` followed
+    // by the first lower-case word of the body. A word in full capitals
+    // before a stop is a head or an initialism, never a mis-read comma.
+    expect(kinds('A MODERN PANARION. with the Kabalah in his hand he went on.')).not.toContain(
+      'stray-point'
+    )
+    expect(kinds('thirty years after his death his MSS. and his notes were lost.')).not.toContain(
+      'stray-point'
+    )
+  })
+
+  it('still catches a comma the conversion read as a full stop', () => {
+    expect(
+      kinds('It states that from æther have come all things. and to it all will return.')
+    ).toContain('stray-point')
+  })
+})

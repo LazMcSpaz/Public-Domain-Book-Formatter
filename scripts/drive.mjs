@@ -3337,6 +3337,7 @@ async function serve() {
           const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
           const cleanupMod = await import(`/@fs${repo}/src/core/image/cleanup.ts`)
           const leafMod = await import(`/@fs${repo}/src/platform/browser/cleanup.ts`)
+          const leafMod2 = await import(`/@fs${repo}/src/core/project/leaves.ts`)
           const preset =
             clean === null ? cleanupMod.DEFAULT_CLEANUP : cleanupMod.parseCleanupPreset(clean)
           if (!preset) {
@@ -3378,6 +3379,12 @@ async function serve() {
           const engine = new ocrMod.OcrEngine()
           let doc = await pdfMod.openPdf(file)
           const leaves = doc.numPages
+          // Refused here, before a single page is rendered. Leaves count from
+          // zero and nothing used to say so, so a batch asking for 1..N got
+          // the second page onward, lost the first, and reported the count it
+          // was asked for. See `checkLeafRange`.
+          const range = leafMod2.checkLeafRange(list, leaves)
+          if (range.message !== '') throw new Error(range.message)
           const widened = []
 
           // pdf.js keeps per-page state on the document, and `page.cleanup()`

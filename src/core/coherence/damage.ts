@@ -133,6 +133,30 @@ const MIN_FRAGMENT = 2
  * the stop, which excludes `e.g.`, `i.e.` and a set of initials on its own.
  */
 const ABBREVIATIONS = new Set([
+  // The apparatus of a nineteenth-century citation, which is what these
+  // books are full of. `“Simpl. in Phys.,”` and `“Hist. of Magic,” vol. i.`
+  // were being read as commas mis-set as full stops, because the word after
+  // the stop is lower case and cannot open a sentence — which is exactly the
+  // invariant `stray-point` rests on, and exactly what an abbreviated title
+  // breaks.
+  'hist',
+  'simpl',
+  'phys',
+  'lib',
+  'bk',
+  'pt',
+  'pts',
+  'sect',
+  'sects',
+  'art',
+  'arts',
+  'pl',
+  'pls',
+  'ch',
+  'nos',
+  'ser',
+  'comm',
+  'quaest',
   'etc',
   'viz',
   'cf',
@@ -380,10 +404,27 @@ function strayPoints(blocks: readonly BookBlock[]): DamageFinding[] {
       })
     }
 
-    for (const match of text.matchAll(/([\p{Ll}]{3,})\.[ ]([\p{Ll}]+)\b/gu)) {
-      const before = match[1]!.toLocaleLowerCase()
+    // The word before the stop is captured **whole**, capital and all. It used
+    // to be a run of lower-case letters only, which matched `impl` inside
+    // `Simpl.` and `ist` inside `Hist.` — so the abbreviation lookup below was
+    // handed a fragment that is in no list, and every abbreviated citation
+    // title in an 1877 book came back as a comma mis-read. The reported text
+    // was the giveaway: findings that read `"impl. in"` and `"ist. of"`.
+    // Catching a capitalised word is still wanted — `Professor Sterry Hunt. in
+    // showing` is a real one — it just has to be recognised first.
+    for (const match of text.matchAll(/(\p{L}[\p{L}\p{M}]{2,})\.[ ]([\p{Ll}]+)\b/gu)) {
+      const word = match[1]!
+      const before = word.toLocaleLowerCase()
       const after = match[2]!.toLocaleLowerCase()
       if (ABBREVIATIONS.has(before)) continue
+      // A word in full capitals before a stop is a running head, a heading or
+      // an initialism — never a comma the conversion mis-read. Without this,
+      // widening the capture to take a capitalised word turned the head at the
+      // top of every page into a finding: `A MODERN PANARION.` followed by the
+      // first lower-case word of the body, sixty times in one book. `MSS.` and
+      // `SPR.` go the same way, and no abbreviation list would have covered
+      // them all.
+      if (word === word.toLocaleUpperCase() && /\p{L}{2,}/u.test(word)) continue
       if (!CANNOT_OPEN_A_SENTENCE.has(after)) continue
       // Not inside a run of dot leaders, where every gap looks like this.
       if (text.slice(Math.max(0, match.index - 4), match.index).includes('.')) continue
@@ -422,13 +463,25 @@ function strayPoints(blocks: readonly BookBlock[]): DamageFinding[] {
  */
 function strayApostrophes(blocks: readonly BookBlock[]): DamageFinding[] {
   const findings: DamageFinding[] = []
-  const isMark = (c: string): boolean => c === "'" || c === '’'
+  // `’` and `'` can each be a possessive, a contraction, a closing quote or
+  // a comma the conversion mis-read. `‘` can only open a quotation, so it is
+  // never a finding — but it has to be *seen*, because the walk's whole
+  // precision comes from knowing a quotation is open. Leaving it out made
+  // every closing `’` after an opening `‘` look stray: on *Isis Unveiled*
+  // Vol. I that was `‘psychic force’ are` and `‘tukki’ is`, and eighteen of
+  // that book's forty findings were this one mistake.
+  const isMark = (c: string): boolean => c === "'" || c === '\u2019'
+  const opensQuotation = (c: string): boolean => c === '\u2018' || c === '\u201b'
 
   for (const block of blocks) {
     const text = plain(block)
     let quotationOpen = false
 
     for (let i = 0; i < text.length; i++) {
+      if (opensQuotation(text[i]!)) {
+        quotationOpen = true
+        continue
+      }
       if (!isMark(text[i]!)) continue
       const before = i > 0 ? text[i - 1]! : ' '
       const after = i + 1 < text.length ? text[i + 1]! : ' '
