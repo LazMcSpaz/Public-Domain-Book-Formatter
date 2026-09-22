@@ -42,30 +42,37 @@ describe('sweepText — replacing without damaging the emphasis', () => {
     expect(block.emphasis).toEqual([1, 2])
   })
 
-  it('re-balances a match that crosses a run edge, keeping the rest marked', () => {
-    // "the astral" swallows the <i> that opens the run; without re-balancing,
-    // "body" would silently lose its italics.
+  it('changes only the word that differs, so a run the phrase reaches into is untouched', () => {
+    // "the astral" reaches into the italic run, but only "the" changes:
+    // "astral" and "body" keep their italics. An unmarked replacement cannot
+    // tell "make this roman" from "I did not type the tags", so it never
+    // strips a run it did not change.
     const { text } = sweepText('the <i>astral body</i>', 'the astral', 'an astral')
     const block = asBlock(text)
     expect(block.text).toBe('an astral body')
-    expect(block.emphasis).toEqual([2])
+    expect(block.emphasis).toEqual([1, 2])
   })
 
-  it('re-balances the mirror case, where the match swallows the closer', () => {
+  it('the mirror case: the changed word is outside the run and the run stays whole', () => {
     const { text } = sweepText('<i>the astral</i> body', 'astral body', 'astral form')
     const block = asBlock(text)
     expect(block.text).toBe('the astral form')
-    // "the" was italic before the match and stays italic after it — and
-    // nothing new becomes italic, which is what the lenient parser would do
-    // if the swallowed closer were simply dropped.
-    expect(block.emphasis).toEqual([0])
+    expect(block.emphasis).toEqual([0, 1])
   })
 
-  it('cancels a run wholly inside the match rather than re-opening it', () => {
+  it('a run wholly inside the phrase keeps its marking through the change', () => {
     const { text } = sweepText('read <i>this</i> now', 'read this now', 'read that now')
     expect(asBlock(text).text).toBe('read that now')
-    // Omitted rather than stored empty — normalizeMarkup's convention.
-    expect(asBlock(text).emphasis ?? []).toEqual([])
+    expect(asBlock(text).emphasis).toEqual([1])
+  })
+
+  it('still re-balances when the changed characters themselves cross a run edge', () => {
+    // Nothing is shared at either end here, so the whole match is spliced and
+    // the <i> it swallowed is re-opened after it, keeping "body" italic.
+    const { text } = sweepText('the <i>astral body</i>', 'the astral', 'one ethereal')
+    const block = asBlock(text)
+    expect(block.text).toBe('one ethereal body')
+    expect(block.emphasis).toEqual([2])
   })
 
   it('reads a marked replacement by the same convention as everywhere else', () => {
@@ -103,5 +110,46 @@ describe('accent folding in find', () => {
   it('still respects match-case, which does not fold', () => {
     expect(findMatches('Purânas', 'puranas', true)).toHaveLength(0)
     expect(findMatches('Purânas', 'Purânas', true)).toHaveLength(1)
+  })
+})
+
+describe('sweepText keeps the runs a phrase spans', () => {
+  it('a stop added after an italic tag stays inside the run, and the bold headword survives', () => {
+    const text = '<b>Lakshmi</b> <i>(Sk.)</i> “ Prosperity ”, fortune'
+    const { text: out, count } = sweepText(
+      text,
+      'Lakshmi (Sk.) “ Prosperity ”',
+      'Lakshmi (Sk.). “ Prosperity ”'
+    )
+    expect(count).toBe(1)
+    expect(out).toBe('<b>Lakshmi</b> <i>(Sk.).</i> “ Prosperity ”, fortune')
+  })
+
+  it('a letter changed inside a phrase leaves the runs either side of it', () => {
+    const text = '<b>Kriyasakti</b> <i>(Gk.).</i> The power'
+    const { text: out } = sweepText(text, 'Kriyasakti (Gk.).', 'Kriyasakti (Sk.).')
+    expect(out).toBe('<b>Kriyasakti</b> <i>(Sk.).</i> The power')
+  })
+
+  it('a deletion inside an italic run keeps the run', () => {
+    const text = '<b>Mutham</b> or <i>Mattam. (Sk.).</i> Temples'
+    const { text: out } = sweepText(text, 'Mattam. (Sk.).', 'Mattam (Sk.).')
+    expect(out).toBe('<b>Mutham</b> or <i>Mattam (Sk.).</i> Temples')
+  })
+
+  it('a whole-word replacement still re-balances a crossed run', () => {
+    const { text: out } = sweepText('the <i>astral body</i> is', 'the astral', 'an astral')
+    expect(out).toBe('an <i>astral body</i> is')
+  })
+
+  it('a change inside a word is spliced as the whole word, so no tag lands mid-word', () => {
+    const { text: out } = sweepText(
+      'to the <i>Bodhisvattvas</i> and',
+      'Bodhisvattvas',
+      'Bodhisattvas'
+    )
+    expect(out).toBe('to the <i>Bodhisattvas</i> and')
+    const { text: two } = sweepText('An’ancient <i>King</i>', 'An’ancient King', 'An ancient King')
+    expect(two).toBe('An ancient <i>King</i>')
   })
 })

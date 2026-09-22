@@ -9,15 +9,20 @@
  *
  * The subtlety is emphasis. Text is edited as the `<i>`/`<b>` notation, but a
  * person searches what they *read* — so the search runs over the plain text
- * and the replacement is spliced back into the notation. Three cases, all
+ * and the replacement is spliced back into the notation. Four cases, all
  * deliberate:
  *
+ *  - only the characters that differ are spliced: a phrase typed whole to
+ *    pin down one word — `Lakshmi (Sk.) “ Prosperity ”` to add a stop —
+ *    changes the stop and leaves the bold headword and the italic tag it
+ *    spans exactly as they were (measured: twenty-six blocks of a glossary
+ *    lost both before this held);
  *  - a match wholly inside a marked run keeps the marking: fixing `belleves`
  *    inside `<i>he belleves it</i>` leaves the phrase italic;
- *  - a match that crosses a run's *edge* re-balances rather than corrupting:
- *    the tags the match swallowed are re-opened (or re-closed) at the splice,
- *    so replacing `the astral` in `the <i>astral body</i>` keeps `body`
- *    italic instead of silently stripping it;
+ *  - changed characters that cross a run's *edge* re-balance rather than
+ *    corrupting: the tags the splice swallowed are re-opened (or re-closed)
+ *    at its end, so `body` in `the <i>astral body</i>` stays italic whatever
+ *    is done to `the astral`;
  *  - the replacement itself is inserted as it was typed, so `<i>` written in
  *    the replace box means italic, the same convention as everywhere else.
  *
@@ -136,10 +141,26 @@ export function sweepText(
 
   let out = markup
   // Right to left, so earlier splices do not move later indices.
-  for (const at of [...hits].reverse()) {
-    const start = toMarkup[at]!
-    const last = toMarkup[at + query.length - 1]!
-    const end = last + 1
+  for (const hit of [...hits].reverse()) {
+    // Splice only the characters that actually change. A query typed as a
+    // whole phrase usually differs from its replacement by a letter or a
+    // stop — `Lakshmi (Sk.) “ Prosperity ”` against `Lakshmi (Sk.). “ …` — and
+    // replacing the whole phrase drops every run the phrase spans: the
+    // re-balancing below can re-open a run the match *crossed*, but a run
+    // that begins and ends inside the match has nowhere to go and was
+    // silently stripped. Measured on the Glossary: twenty-six blocks lost
+    // their bold headword and italic tag that way, to sweeps that only ever
+    // meant to add a full stop. Trimming the common prefix and suffix leaves
+    // those runs where they were; the plain text that results is identical.
+    const slice = plain.slice(hit, hit + query.length)
+    const { prefix, suffix } = commonEnds(slice, replacement)
+    const core = replacement.slice(prefix, replacement.length - suffix)
+    const from = hit + prefix
+    const to = hit + query.length - suffix
+    // An insertion between two characters goes after the one before it, so
+    // a stop added after `(Sk.)` lands inside the italic run that sets it.
+    const start = from < to ? toMarkup[from]! : from > 0 ? toMarkup[from - 1]! + 1 : 0
+    const end = from < to ? toMarkup[to - 1]! + 1 : start
 
     // Tags the match swallows. A run opened inside the match and closed after
     // it (or the mirror) would leave a stray tag behind — harmless to the
@@ -160,7 +181,45 @@ export function sweepText(
       }
     }
 
-    out = out.slice(0, start) + reclose.join('') + replacement + reopen.join('') + out.slice(end)
+    out = out.slice(0, start) + reclose.join('') + core + reopen.join('') + out.slice(end)
   }
   return { text: out, count: hits.length }
+}
+
+const WORD_CHAR = /[\p{L}\p{N}\p{M}]/u
+const isWordChar = (c: string | undefined): boolean => c !== undefined && WORD_CHAR.test(c)
+
+/**
+ * How much two strings share at each end, never overlapping, and cut back
+ * to a word boundary on both sides. Whole words, because a tag the splice
+ * swallows is re-opened at the splice's end, and an end that falls inside a
+ * word puts the tag there: `the astral` → `one ethereal` shares `al` and
+ * would set `ethere<i>al`. A boundary is one the shared text has on both
+ * sides — the shared characters are the same in both strings, so only the
+ * character just past them can differ, and it has to be a non-word one in
+ * both for the cut to fall between words in both.
+ */
+function commonEnds(a: string, b: string): { prefix: number; suffix: number } {
+  const most = Math.min(a.length, b.length)
+  let prefix = 0
+  while (prefix < most && a[prefix] === b[prefix]) prefix += 1
+  while (
+    prefix > 0 &&
+    isWordChar(a[prefix - 1]) &&
+    (isWordChar(a[prefix]) || isWordChar(b[prefix]))
+  ) {
+    prefix -= 1
+  }
+  let suffix = 0
+  while (suffix < most - prefix && a[a.length - 1 - suffix] === b[b.length - 1 - suffix]) {
+    suffix += 1
+  }
+  while (
+    suffix > 0 &&
+    isWordChar(a[a.length - suffix]) &&
+    (isWordChar(a[a.length - suffix - 1]) || isWordChar(b[b.length - suffix - 1]))
+  ) {
+    suffix -= 1
+  }
+  return { prefix, suffix }
 }
