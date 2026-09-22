@@ -172,20 +172,19 @@ book's worth of text must not push a ten-minute OCR reading out.
 ## Which leaves to read again, measured before it was built
 
 The plan's next section says to offer the second reading "on leaves
-`assessText` flags". Measured on the 42 proofed leaves above — 214 real
-errors, ranked by each candidate signal, taking a share of the leaves and
-counting the damage reached:
+`assessText` flags". Measured on the 42 proofed leaves above — 214 real errors
+— with `scripts/select-ledger.mjs`, against a coin averaged over 500 shuffles:
 
-| share of leaves | an oracle | **noise** | `assessText` score | at random | longest first |
-| --------------: | --------: | --------: | -----------------: | --------: | ------------: |
-|             25% |       68% |   **50%** |                35% |       24% |           18% |
-|             50% |       84% |   **72%** |                58% |       59% |           38% |
-|             75% |       94% |   **89%** |                89% |       87% |           79% |
+| share of leaves | oracle | **noise, then score** | noise alone | score alone | longest first | random |
+| --------------: | -----: | --------------------: | ----------: | ----------: | ------------: | -----: |
+|             25% |    68% |               **50%** |         47% |         35% |           18% |    26% |
+|             50% |    84% |               **72%** |         62% |         58% |           38% |    51% |
+|             75% |    94% |               **89%** |         75% |         86% |           79% |    76% |
 
 **The rule as written does not work.** `assessText`'s score reaches 35% of the
-damage at a quarter of the leaves, against a coin's 24%, and by verdict the
-separation is barely there at all: `mixed` leaves average 6.6 real errors and
-`trustworthy` ones 4.0. A leaf this app calls trustworthy carries four.
+damage at a quarter of the leaves against a coin's 26%, and the verdict
+separates no better: `mixed` leaves average 6.6 real errors and `trustworthy`
+ones 4.0, so a leaf this app calls trustworthy carries four.
 
 The reason is in `assess.ts`'s own docstring, and it is not a defect in it:
 _"a misreading shaped like a word … no statistic over word shapes will ever
@@ -194,20 +193,39 @@ catch that"_. A second reader earns its keep on exactly those — `thc` for
 asks a check for the one thing it says it cannot see. The rule was reasoned
 about rather than measured, which this repository has a standing lesson about.
 
-**What does work is the other half of the same assessment.** `noise` — the
-share of tokens carrying a symbol no typesetter set — reaches 50% at a quarter
-and 72% at a half, against an oracle's 68% and 84%. That is a real saving and
-worth offering.
+**Noise does not work on its own either, and the first version of this table
+said it did.** `noise` — the share of tokens carrying a symbol no typesetter
+set — is **zero on 34 of the 42 leaves**. It ranks eight leaves and says
+nothing whatever about the other thirty-four, so at three quarters of the book
+it reaches 75% against a coin's 76%. Ranked on noise and then on score it
+beats the coin at every share, and that is what `planSecondReading`
+(`@core/witness/select`) does, with the page index last so one book plans the
+same way twice.
 
-**What it must not be called is "the damaged leaves".** A quarter of the
-leaves is half the damage. `SecondReadingPlan` (`@core/witness/select`)
-therefore carries `expectedRecall` beside the selection, from the table above,
-so a caller cannot show the saving without the cost; reading everything is
-what finds everything, and it is the default. A subset offered as though it
-were the damage is the check manufacturing confidence, which is the one
-failure this ledger exists to avoid.
+### Two faults in this table's own first version
 
-Two faults were injected against the tests and both were caught: ranking on
-`score` instead of `noise`, and quoting the recall of the share _asked for_
-rather than of the selection actually made — which a short book makes
-different, since a quarter of three leaves is one.
+Both flattered the signals, both were found by making the script agree with
+the module rather than by reading either, and both are worth recognising
+anywhere a ranking is scored.
+
+- **The baseline was one shuffle.** A sample of size one, quoted as though it
+  were the coin: it read 24% at a quarter of the leaves where the mean over
+  500 shuffles is 26%, and 59% at a half where the mean is 51%.
+- **The tie-break was doing the work.** The column called "noise" was sorted
+  by noise with a _score_ tie-break, and — noise being flat on four leaves in
+  five — the tie-break is what ranked most of the book. One signal was given
+  credit for another's work, and the module built from that table implemented
+  the other tie-break and so would not have reproduced its own numbers.
+
+**What a subset must not be called is "the damaged leaves".** A quarter of the
+leaves is half the damage. `SecondReadingPlan` carries `expectedRecall` beside
+the selection, from the table above, so a caller cannot show the saving
+without the cost; reading everything is what finds everything, and it is the
+default. A subset offered as though it were the damage is the check
+manufacturing confidence, which is the one failure this ledger exists to
+avoid.
+
+Three faults were injected against the tests and all three caught: ranking on
+`score` instead of `noise`, dropping the score tie-break, and quoting the
+recall of the share _asked for_ rather than of the selection actually made —
+which a short book makes different, since a quarter of three leaves is one.

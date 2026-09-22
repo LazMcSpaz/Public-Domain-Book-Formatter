@@ -11,26 +11,30 @@
  * cannot see.
  *
  * Over the 42 proofed leaves of `docs/ledger-data/second-reader`, 214 real
- * errors, taking a quarter of the leaves:
+ * errors, against a coin averaged over 500 shuffles
+ * (`scripts/select-ledger.mjs`):
  *
- *   | ordering                        | damage reached |
- *   | ------------------------------- | -------------: |
- *   | an oracle that knew the answers |            68% |
- *   | **noise**                       |        **50%** |
- *   | `assessText`'s score            |            35% |
- *   | at random                       |            24% |
- *   | longest leaves first            |            18% |
+ *   | share of leaves | oracle | **noise, then score** | noise alone | score alone | random |
+ *   | --------------: | -----: | --------------------: | ----------: | ----------: | -----: |
+ *   |             25% |    68% |               **50%** |         47% |         35% |    26% |
+ *   |             50% |    84% |               **72%** |         62% |         58% |    51% |
+ *   |             75% |    94% |               **89%** |         75% |         86% |    76% |
  *
- * So the useful half of the assessment is `noise` — the share of tokens
- * carrying symbols no typesetter set — and the `score` it shares a verdict
- * with is barely better than a coin. The verdict is no better: `mixed` leaves
- * average 6.6 real errors and `trustworthy` ones 4.0, so a leaf this app calls
+ * **Neither half of the assessment works on its own.** The score is barely
+ * better than a coin at a quarter of the leaves (35% against 26%). And noise
+ * alone is worse than one at three quarters (75% against 76%) — because
+ * **34 of the 42 leaves carry no junk character at all**, so noise ranks
+ * eight leaves and says nothing whatever about the other thirty-four. What
+ * decides those is the tie-break, and the first version of this table gave
+ * noise the credit for a score tie-break's work.
+ *
+ * Ranked on noise and then on score, it beats the coin at every share. That
+ * is the ordering below, with the page index last so one book plans the same
+ * way twice.
+ *
+ * The verdict the two share is no use either way: `mixed` leaves average 6.6
+ * real errors and `trustworthy` ones 4.0, so a leaf this app calls
  * trustworthy still carries four.
- *
- * Two things follow, and the second is the more important.
- *
- * **Rank by noise, never by score or verdict.** At half the leaves it reaches
- * 72% against an oracle's 84% and a coin's 59%.
  *
  * **Say what a subset costs.** A quarter of the leaves is half the damage, not
  * "the damaged leaves", and an offer that implies otherwise is worse than one
@@ -78,8 +82,9 @@ export interface SecondReadingPlan {
 
 /**
  * What a quarter, a half and three quarters of the leaves reached on the
- * ground-truth set, ranked by noise. Interpolated between, and never above the
- * highest measured point, because nothing was measured past it.
+ * ground-truth set, ranked as `planSecondReading` ranks. Interpolated
+ * between, and never above the highest measured point, because nothing was
+ * measured past it.
  */
 const MEASURED_RECALL: readonly (readonly [share: number, recall: number])[] = [
   [0, 0],
@@ -126,7 +131,10 @@ export function planSecondReading(
       const a = assessText(leaf.text)
       return { pageIndex: leaf.pageIndex, noise: a.noise, score: a.score, words: a.words }
     })
-    .sort((a, b) => b.noise - a.noise || a.pageIndex - b.pageIndex)
+    // Noise first, then score, then the page index. Every part of that is
+    // measured: noise is zero on four leaves in five, so score is what ranks
+    // most of a book, and the index is last only so the plan is stable.
+    .sort((a, b) => b.noise - a.noise || a.score - b.score || a.pageIndex - b.pageIndex)
 
   if (share >= 1) {
     return { leaves: ranked.map((r) => r.pageIndex), ranked, expectedRecall: null }

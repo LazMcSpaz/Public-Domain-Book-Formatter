@@ -73,6 +73,23 @@ describe('planSecondReading', () => {
     expect(plan.expectedRecall).toBeGreaterThan(expectedRecallAt(0.25))
   })
 
+  it('falls back to score where noise cannot rank, which is most of a book', () => {
+    // Measured: 34 of the 42 ground-truth leaves carry no junk character at
+    // all, so noise is zero on four leaves in five and whatever breaks the tie
+    // ranks most of the book. Drop the score tie-break and noise alone reaches
+    // 75% of the damage at three quarters of the leaves, against a coin's 76%.
+    const clean = plain(220).join(' ')
+    const flawed = caseFlipped(220, 30)
+    expect(assessText(clean).noise).toBe(assessText(flawed).noise)
+    expect(assessText(flawed).score).toBeLessThan(assessText(clean).score)
+
+    const plan = planSecondReading([
+      { pageIndex: 1, text: clean },
+      { pageIndex: 9, text: flawed }
+    ])
+    expect(plan.ranked.map((r) => r.pageIndex)).toEqual([9, 1])
+  })
+
   it('breaks ties on the page index, so one book plans the same way twice', () => {
     const same = plain(220).join(' ')
     const leaves = [5, 2, 9, 1].map((pageIndex) => ({ pageIndex, text: same }))
