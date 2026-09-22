@@ -43,8 +43,29 @@ import { join } from 'node:path'
 const SHELF = process.env.SHELF ?? '/home/user/Public-Domain-Books-Storage'
 const DIR = join(SHELF, 'reference', 'blavatsky')
 
-/** Letters only, both sides. See the note above. */
-const letters = (s) => s.toLowerCase().replace(/[^a-z]+/gu, '')
+/**
+ * Letters only, both sides, with the accents folded away. See the note above.
+ *
+ * Folded rather than dropped, and the difference is the whole point now that
+ * the Glossary is being read off the page: the first version deleted any
+ * character outside a-z, so `Purânas` reduced to `purnas` and a search for
+ * `Puranas` could not find it — the better the reading, the worse the search.
+ * A circumflex, a diaeresis or an umlaut comes off its letter (NFD, then the
+ * combining marks removed); `æ` and `œ` become `ae` and `oe`, so `Æsculapius`
+ * answers to `Aesculapius`. Typing the accent still works, since it folds the
+ * same way on both sides.
+ */
+const foldChar = (c) => {
+  const lower = c.toLowerCase()
+  if (lower === 'æ') return 'ae'
+  if (lower === 'œ') return 'oe'
+  if (lower === 'ß') return 'ss'
+  return lower
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/gu, '')
+    .replace(/[^a-z]+/gu, '')
+}
+const letters = (s) => [...s].map(foldChar).join('')
 
 /** A file, reduced once, with a map back to where each letter came from. */
 function load(name) {
@@ -52,12 +73,11 @@ function load(name) {
   const at = []
   let flat = ''
   for (let i = 0; i < raw.length; i++) {
-    const c = raw[i]
-    if (c >= 'a' && c <= 'z') {
+    // Each folded letter remembers the raw offset it came from; a ligature
+    // gives two letters that both point at the one character.
+    const folded = foldChar(raw[i])
+    for (const c of folded) {
       flat += c
-      at.push(i)
-    } else if (c >= 'A' && c <= 'Z') {
-      flat += c.toLowerCase()
       at.push(i)
     }
   }

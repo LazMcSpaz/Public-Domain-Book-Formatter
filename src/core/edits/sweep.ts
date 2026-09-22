@@ -58,15 +58,32 @@ function mapPlain(markup: string): PlainMap {
   return { plain, toMarkup }
 }
 
-/** Non-overlapping plain-text match positions, case-folded unless asked not to. */
+/**
+ * One code point's accent taken off, length preserved: `â` → `a`, `ï` → `i`,
+ * `ö` → `o`. A search typed without the accent then finds the word the page
+ * sets with one, which on a book of Sanskrit transliterations is most of the
+ * words worth searching for — and typing the accent still works, since both
+ * sides fold. Length is preserved on purpose: the match positions index the
+ * plain text, so a fold that changed a string's length would put every
+ * offset after it off by one. That is why `æ` and `œ` are left alone here
+ * (they would become two letters); the shelf search in `blavatsky.mjs`, which
+ * keeps its own offset map, folds those too.
+ */
+export function foldAccents(s: string): string {
+  let out = ''
+  for (const c of s) out += c.normalize('NFD')[0] ?? c
+  return out
+}
+
+/** Non-overlapping plain-text match positions, case- and accent-folded unless asked not to. */
 function positions(plain: string, query: string, matchCase: boolean): number[] {
   if (query.length === 0) return []
   const out: number[] = []
-  // Compared slice by slice rather than on a lowercased copy of the whole
-  // text, because case-folding can change a string's length and would put
-  // every index after the first odd character off by one.
+  // Compared slice by slice rather than on a folded copy of the whole text,
+  // because case-folding can change a string's length and would put every
+  // index after the first odd character off by one.
   const same = (a: string, b: string): boolean =>
-    matchCase ? a === b : a.toLowerCase() === b.toLowerCase()
+    matchCase ? a === b : foldAccents(a).toLowerCase() === foldAccents(b).toLowerCase()
   let i = 0
   while (i <= plain.length - query.length) {
     if (same(plain.slice(i, i + query.length), query)) {

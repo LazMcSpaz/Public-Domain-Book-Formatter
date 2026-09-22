@@ -84,3 +84,24 @@ describe('sweepText — replacing without damaging the emphasis', () => {
     expect(sweepText('text', 'text', 'text').count).toBe(0)
   })
 })
+
+describe('accent folding in find', () => {
+  it('finds an accented word from a search typed without the accent, and the reverse', () => {
+    const markup = '<b>Purânas</b> and the Puranas and <i>Neïth</i>'
+    expect(findMatches(markup, 'puranas').map((m) => m.at)).toHaveLength(2)
+    expect(findMatches(markup, 'Purânas').map((m) => m.at)).toHaveLength(2)
+    expect(findMatches(markup, 'neith')).toHaveLength(1)
+  })
+
+  it('keeps every offset where it was, because the fold preserves length', () => {
+    const markup = 'Bhûmi is the earth; Bhumi again'
+    const [first, second] = findMatches(markup, 'bhumi')
+    expect(first?.at).toBe(0)
+    expect(second?.at).toBe('Bhûmi is the earth; '.length)
+  })
+
+  it('still respects match-case, which does not fold', () => {
+    expect(findMatches('Purânas', 'puranas', true)).toHaveLength(0)
+    expect(findMatches('Purânas', 'Purânas', true)).toHaveLength(1)
+  })
+})
