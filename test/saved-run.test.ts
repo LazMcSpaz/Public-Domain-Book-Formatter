@@ -399,3 +399,32 @@ describe('migrateSavedRun — a mark declared bare, which came with v18', () => 
     ])
   })
 })
+
+describe('migrateSavedRun — the book’s shape, which came with v19', () => {
+  const shape = {
+    pixels: true,
+    textLayer: 'converted' as const,
+    externalText: true,
+    container: 'pdf' as const,
+    how: 'measured' as const,
+    evidence: ['8 of 8 sampled leaves are a photograph']
+  }
+
+  it('carries a measured shape through the round trip', () => {
+    const original = run({ shape })
+    expect(migrateSavedRun(JSON.parse(JSON.stringify(original))).shape).toEqual(shape)
+  })
+
+  it('a run written before the shape existed comes back with none, never a guess', () => {
+    const older = { ...run(), schemaVersion: 18 } as Record<string, unknown>
+    delete older['shape']
+    const migrated = migrateSavedRun(older)
+    expect(migrated.schemaVersion).toBe(CURRENT_SCHEMA_VERSION)
+    expect(migrated.shape).toBeNull()
+  })
+
+  it('a shape nothing recognises is dropped rather than routed on', () => {
+    const bad = { ...run(), shape: { ...shape, textLayer: 'photograph' } }
+    expect(migrateSavedRun(JSON.parse(JSON.stringify(bad))).shape).toBeNull()
+  })
+})

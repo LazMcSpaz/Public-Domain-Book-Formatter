@@ -155,6 +155,13 @@ export interface ViewQuestion {
   group?: string
   /** Absent on questions whose answer is a credential. */
   defaultValue?: AnswerValue
+  /**
+   * An answer prepared for the person to approve, and why — a standing
+   * ruling's decision on a query it reaches. Carried so a controller can say
+   * what is held and by what; approving is `answer <id> <value>`, which is
+   * the same act the button performs, and nothing here files it unasked.
+   */
+  held?: { value: AnswerValue; why: string }
   options?: { value: string; label: string; description?: string }[]
   /**
    * The rows of a grid question — terms, disagreements, passages — trimmed to
@@ -464,6 +471,7 @@ function viewOfQuestion(q: Question, images: Map<string, string>): ViewQuestion 
     ...(q.help ? { help: q.help } : {}),
     ...(q.required ? { required: true } : {}),
     ...(q.group ? { group: q.group } : {}),
+    ...(q.held ? { held: { value: q.held.value, why: q.held.why } } : {}),
     evidence: viewOfEvidence(q.evidence, q.id, images)
   }
   if (REDACTED_QUESTIONS.has(q.id)) return { ...base, redacted: true, evidence: [] }

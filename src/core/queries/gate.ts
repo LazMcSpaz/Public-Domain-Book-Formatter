@@ -56,6 +56,7 @@
 import type { Answers, Evidence, Question } from '@core/wizard'
 import type { RaisedQuery } from './index'
 import { outstanding, type Ruling, type RulingDecision } from './rulings'
+import { heldBecause, standingFor } from './standing'
 
 /**
  * Where a query is, in both the numbers that name it.
@@ -135,6 +136,15 @@ export function queryQuestions(
     const crop = options.crops?.[key]
     if (crop) evidence.push(crop)
     const suggestion = options.suggestions?.[key]
+    // A standing ruling that reaches this query holds an answer for it. The
+    // answer is carried as `held` — pre-filled on screen, filed only when
+    // the editor accepts it — and never as `defaultValue`, which would seed
+    // it and file it on the next press of Next. See `./standing.ts`.
+    const holding = standingFor(query, rulings)
+    const heldWhy = holding
+      ? `Pre-filled under the standing ruling “${holding.quote}” (${holding.decidedOn})` +
+        (holding.because ? `: ${holding.because}` : '.')
+      : null
 
     const decision: Question = {
       id: `${key}-decision`,
@@ -150,6 +160,7 @@ export function queryQuestions(
       // No `defaultValue`, and not `required`. See the note at the top of
       // this file: nothing is chosen for the editor, and a query they want to
       // think about can be left and will be waiting here next time.
+      ...(holding && heldWhy ? { held: { value: holding.decision, why: heldWhy } } : {}),
       group: key
     }
     const correction: Question = {
@@ -159,6 +170,9 @@ export function queryQuestions(
       help: 'Only used when the decision above is “Set it right”. The whole passage, as it should print.',
       defaultValue: '',
       ...(suggestion ? { placeholder: suggestion } : { placeholder: query.quote }),
+      ...(holding?.decision === 'corrected' && holding.correction && heldWhy
+        ? { held: { value: holding.correction, why: heldWhy } }
+        : {}),
       multiline: true,
       group: key
     }
@@ -168,11 +182,41 @@ export function queryQuestions(
       prompt: 'Why? (in your own words)',
       help: 'Goes into `rulings.md` on the shelf, so a later session knows what this edition decided and why.',
       defaultValue: '',
+      ...(holding
+        ? { held: { value: heldBecause(holding), why: 'The standing ruling’s own reasoning.' } }
+        : {}),
       multiline: true,
       group: key
     }
     return [decision, correction, because]
   })
+}
+
+/**
+ * Accept every held answer that has not been answered otherwise.
+ *
+ * The "approve all N" button, and `drive.mjs held approve`. Only questions
+ * carrying a `held` value are touched, and only where the editor has not
+ * already typed or chosen something — an answer a person gave is never
+ * overwritten by the one a ruling would have given. Returns the answers with
+ * the approvals folded in; `rulingsFromAnswers` then files them exactly as it
+ * files a hand-made ruling, because after approval that is what they are.
+ */
+export function approveHeld(questions: readonly Question[], answers: Answers): Answers {
+  const out: Answers = { ...answers }
+  for (const q of questions) {
+    if (!q.held) continue
+    const current = out[q.id]
+    const untouched = current === undefined || current === ''
+    if (untouched) out[q.id] = q.held.value
+  }
+  return out
+}
+
+/** How many held answers a set of questions still carries unapproved. */
+export function heldPending(questions: readonly Question[], answers: Answers): number {
+  return questions.filter((q) => q.held && q.type === 'choice' && answers[q.id] !== q.held.value)
+    .length
 }
 
 /**

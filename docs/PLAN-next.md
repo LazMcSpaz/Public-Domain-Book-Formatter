@@ -154,6 +154,207 @@ book and leave the defect in place.
 
 ---
 
+## Phase 5 — the ledger, which is a habit and needs to be a check — **done**
+
+**Three of eleven books on the shelf have a ledger.** _Clairvoyance_,
+_Uncommon Therapy_, _The Human Aura_, both Hall collections, _Thought
+Vibration_, the combined Panchadasi volume and _Patterns_ Vol. I were all
+finished without one; the last of those got its ledger only when a later
+session went looking for the book's score and found there was none.
+
+**The instruction is not unclear.** It is stated three times — in `CLAUDE.md`
+under how a book gets read, in `PROCESS-reading.md` at the sense pass, and as
+its own numbered section, **§7 Keep the ledger**, in `HANDOFF.md`. A rule
+written down three times and kept three times in eleven is not a comprehension
+problem. This repository already has the diagnosis, in its own words: _"Two
+things that are supposed to be standing rules turned out to be habits, and
+habits skip."_
+
+Four structural reasons, in the order they bite:
+
+1. **Nothing checks it.** `HANDOFF.md` §8, _Before you stop_, lists five
+   commands and the ledger is in none of them. `book-files.mjs --check` exists
+   for precisely this failure — it compares `corrections.md`, `notes.md`,
+   `glossary.md` and `introduction.md` against the book and exits non-zero on
+   drift, on the stated grounds that such a thing _"belongs beside the tests
+   rather than in somebody's memory"_. The ledger is the one derived file it
+   does not cover.
+2. **It lives in the wrong repository.** Ledgers are `docs/LEDGER-*.md` in the
+   formatter checkout; the books are on the shelf. Every other per-book
+   record — `corrections.md`, `queries.md`, `rulings.md`, `review.md`,
+   `about.json` — sits in the book's own directory. The ledger is the only one
+   that does not travel with its book, so finishing a book means remembering to
+   commit to a second repository.
+3. **It is written last, at the end of the longest job.** A book is read across
+   several sessions, and the ledger falls at the point where a session is
+   oldest and nearest its limit. The editor's own words for why the work is
+   spread across chats — _"to avoid confusing you or running out of my context
+   window"_ — are exactly the condition under which a final, unchecked,
+   cross-repository step gets skipped.
+4. **There is no template and nothing derives it.** `corrections.md` has
+   `correctionRows`, a pure module that rebuilds it from the book; the ledger
+   is written by hand from the memory of a conversation. This file already
+   records what that costs: _"They were built by a script in one session's
+   scratchpad, so the first session to end took the only thing that could
+   rewrite them."_ The reading section of Patterns Vol. I's ledger is blank
+   for that reason and says so.
+
+What to do, cheapest first:
+
+- **Move the ledger into the book's directory** as `books/<slug>/ledger.md`,
+  and migrate the three that exist. It then travels with the book it scores and
+  is committed by the same commit as everything else it describes.
+- **Cover it in `book-files.mjs --check`.** Not the prose — the counts. Does a
+  ledger exist; do its leaf count, correction count, note count, query count
+  and page count match `book.json`. A ledger that is merely out of date is the
+  common case and is exactly what a check catches.
+- **Derive the derivable half.** The scan, the block kinds, the edit counts,
+  the rulings tally, the export numbers and the check scores are all in the
+  artefacts. Generate those sections the way `correctionRows` generates its
+  entries, and leave the narrative — the reading, what the book cost the
+  process — for a person, above the first generated heading, exactly as the
+  other readable files keep the editor's own sentences.
+- **Put it in `HANDOFF.md` §8**, so the last list a session reads names it.
+
+The order matters and follows this repository's own rule about which fixes can
+be relied on: a check that runs beats a file in the right place, which beats an
+instruction written a fourth time.
+
+### What building it found
+
+**The shelf had already half-invented the fix, and the two halves had
+drifted.** Two books kept a `ledger.md` in the book directory _and_ a
+`docs/LEDGER-*.md` copy, and the copies were not the same file: the Isis
+ledger was **986 lines on the shelf against 905 in `docs/`**, five days
+staler, missing the whole section on the figures. So this was never a new
+convention to introduce — it was one already winning, with a duplicate
+quietly rotting beside it, which is the same disease one level up. The shelf
+copies are kept and the `docs/` ones deleted.
+
+**`--finish`, run across the shelf, found what nothing had been asked.** Ten
+books, and only _Patterns_ Vol. II comes back finished:
+
+- **88 queries across six books have never been ruled on** — 63 of them on
+  _Isis_ Vol. I. Each is a decision the editor has not made and the book is
+  carrying as printed, which may well be right, and none of them was visible.
+- **Four books made corrections and have no `corrections.md`.**
+- **Five books have a glossary whose marks nobody has checked.**
+
+**`--shelf` answers the apparatus question.** _The Human Aura_ is complete
+with no glossary and no front matter where _Clairvoyance_ — same author, same
+series, same shelf — has both. That is the gap CLAUDE.md names in those words
+and calls an unchecked habit, now a hole in a column.
+
+**And one directory is not a book at all.** `ManlyPalmerHall-CollectedBooklets`
+has no `book.json`, only `sources.md`, `notes-pending.md` and a `readings/`
+folder. Nothing had ever said so.
+
+Three faults were injected against the module and two of this file's own
+lessons recurred while writing it: a fixture with one bare mark and one
+highlight passed with the two counts swapped, and the front-matter check
+matched the _word_ "introduction" — which every book on this shelf fails,
+because all five call theirs "Before You Begin".
+
+## Phase 6 — every book carries its shape, and the flow is generated — **done**
+
+The editor's ask, in his words: _"we need a flowchart for the instructions
+since not every book presented has the same components (scan, plus OCR,
+etc)."_ The process was written for a scan and every other shape of book was
+read by a session deciding, stage by stage, what still applied.
+
+Built: `src/core/provenance` — `BookShape` (pixels; text layer `none`,
+`converted` or `typeset`; a second digitisation; `measured` or `declared`,
+with the evidence), `routeFor` (the stages that apply, each with its reason),
+and `docs/FLOW.md`, whose table is generated from the code between markers a
+test compares. `SavedRun` v19 carries the shape; recon, the EPUB opener and
+the app record it at intake; `scripts/shape.mjs` measures a shelf under Node
+with the browser's own coverage walk, moved to core; `book-files.mjs --finish`
+owes a book with no shape; `drive.mjs crops` refuses a book with no pixels by
+its shape.
+
+Measured: ten books on the shelf, eight off their files, two declared (the
+_Isis_ scan the shelf cannot hold; the Hall collection). Routes: five
+`scan-with-layer`, two `scan`, three `converted-text`. Two things the
+measurement corrected on the way: a text layer is decided by the majority of
+sampled pages and not the mean (Google's boilerplate on one leaf of _Thought
+Vibration_ made the mean say the book had one), and a scan's OCR layer is a
+**second digitisation for free** — archive.org's reading, sharing no blind
+spot with Tesseract — which is what Phase E's second reader compares against
+first on five of these ten books.
+
+## Phase 7 — standing rulings, pre-filled and held — **done**
+
+The editor's decision, in two words: _"pre-filled and held"_. A query a
+standing ruling's `covers` reach used to be settled silently — `answerFor`
+returned the standing ruling, `outstanding` dropped the query, and it never
+reached the gate or the sheet. Now it is **held**: it stays outstanding,
+arrives at the gate with the ruling's decision filled in (`Question.held`,
+which `defaultAnswers` ignores and a test holds it to), and is filed only when
+a person approves it — the Accept button on the screen, the "Approve all N"
+bar at the gate, or `drive.mjs held approve --yes`. Every filed ruling names
+the standing ruling it came from in its reasoning.
+
+Measured before building: of the 88 queries with no ruling on the shelf, **3**
+fall under an existing standing ruling by its covered words — `centre` on
+leaf 7 of _The Human Aura_ (twice, once in the combined volume) and
+`practiced` on leaf 76 of _Isis_. Small, and the point was never the count:
+those three were being reported settled by the app and unruled by the finish
+check at the same time, which is two answers to one question. Both now say
+held, `queries.md` lists the held ones apart with what each would be, the
+review sheet marks them `held` rather than settled, and the ledger's Queries
+row carries waiting and held counts matched by leaf and quote rather than
+subtracted.
+
+## Phase 8 — clean the page before Tesseract reads it — **done; `off` stays**
+
+Built as `PLAN-page-cleanup.md` asked: `@core/image/cleanup` chooses ops
+from the leaf's own tones (percentiles of its luminance histogram, so cream,
+grey and foxed paper all land on the same white), `platform/browser/cleanup`
+applies them on the **one read path** recon and `drive.mjs ocr … fresh` both
+take, the cleaned pixels reach the engine and nothing else, no preset may
+change the page's size, and the recon cache refuses a reading made under a
+different preset exactly as it refuses a different DPI.
+
+Then measured, on the ground-truth harness Phase A built: 42 leaves across
+four books, chosen by rule and written down first, four presets, one render
+and one read each, aligned against the proofed text. `off` 241 substantive
+disagreements, `gentle` 239, `gentle+despeckle` 241, `binarise` 245 — noise,
+and the rule's floor says so. The despeckle costs 2.5 seconds a leaf. The
+ledger (`docs/LEDGER-page-cleanup.md`) carries the tables, the rule with its
+floor, and the decision: **`off` stays**, and the reason the gain was never
+there — the disagreements that remain on this shelf are columns read across,
+a gutter shadow and an unmodelled face, none of which a levels curve reaches.
+
+## Phase 9 — a second OCR engine, so every book has a witness — **done**
+
+Built as `PLAN-second-reader.md` asked. PaddleOCR PP-OCRv6 (tiny, 6.4 MB,
+vendored under `public/paddle/` with its SHA-256s and Apache-2.0 licence)
+through `ppu-paddle-ocr` on `onnxruntime-web`, WASM, in the driver's
+Chromium; it reads the original render, never a cleaned one, and its lines
+go into reading order through the draft's own column geometry
+(`@core/witness/reading-order`, tested on the box fixtures). `drive.mjs
+second` writes `{ leaf: text }`, which `witness` consumed unchanged on a
+whole book's worth of leaves; `--layer` writes the scan's own OCR layer in
+the same shape, so the two witnesses are scored against each other.
+
+Measured on the cleanup ledger's 42 leaves with `scoreWitness`, written
+before the numbers: the engine's disagreements with Tesseract are real
+**60%** of the time and cover **41%** of Tesseract's real errors, 3.9 s a
+leaf; the layer, where a book has one, is a better witness on two books
+(Clairvoyance 100% precise, Patterns 72%/57%) and worthless on the third
+(The Human Aura, 8% precise), where the engine is excellent (74%/81%). Both
+together catch more than either. 142 of Tesseract's 241 errors are errors
+both engines make alike, and no witness can find those — most of them the
+columns of Patterns Vol. II, read across by both. The rule set beforehand
+asked for recall of one half and the engine gave two fifths, so it is not
+the default witness on every book; it is the witness where the book has no
+layer or a layer that fails, and the ledger says which is which.
+
+Named, not done: the `small` tier (31 MB) as the next thing to measure for
+recall; a row-major reading order for transcript tables, which neither
+engine gives; and putting the reader in the app rather than only the
+driver, which the plan's own next section owns.
+
 ## Deliberately not doing
 
 - **More review of the draft module.** Four passes have now been run over it.
@@ -172,7 +373,7 @@ book and leave the defect in place.
 ## What the third book actually showed
 
 _The Astral World_ is read, checked against two further witnesses, proofed and
-on the shelf. The full ledger is in [`LEDGER-astral-world.md`](./LEDGER-astral-world.md).
+on the shelf. The full ledger is on the shelf, at `books/SwamiPanchadasi-TheAstralWorld-1vbqzip/ledger.md`.
 Phase 2 is therefore done for a book, and the one thing it turned up that no
 amount of reading would have is worth repeating here:
 

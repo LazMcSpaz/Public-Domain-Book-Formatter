@@ -45,6 +45,8 @@
  * in italic and nothing else, a version-2 record served the reading and the
  * draft came back with not one word marked.
  */
+import type { CleanupPreset } from '@core/image/cleanup'
+
 export const RECON_CACHE_VERSION = 3
 
 /** What a stored reading was made under. */
@@ -67,12 +69,19 @@ export interface ReconStamp {
   pagesDone: number
   /** How many there are in total, so a checkpoint knows what it is short of. */
   pageCount: number
+  /**
+   * How the leaves were cleaned before OCR. Absent on a record written before
+   * cleaning existed, which read the raw render — `off`.
+   */
+  cleanup?: CleanupPreset
 }
 
 /** What the reading is wanted for now — the conditions, not the progress. */
 export interface ReconWanted {
   dpi: number
   maxPages: number | null
+  /** Left out, `off`: the raw render, which is what every reading before this was. */
+  cleanup?: CleanupPreset
 }
 
 /**
@@ -90,6 +99,11 @@ function conditionsMatch(stored: unknown, wanted: ReconWanted): stored is ReconS
   // before the field existed cannot claim to be a reading of the whole book.
   if (s.maxPages === undefined) return false
   if ((s.maxPages ?? null) !== wanted.maxPages) return false
+  // A reading taken through a different cleaning is a different reading: the
+  // words and their confidences came off different pixels. Refused exactly
+  // as a different DPI is, and for the same reason — a record is only a
+  // record of the conditions it was made under.
+  if ((s.cleanup ?? 'off') !== (wanted.cleanup ?? 'off')) return false
   return typeof s.pagesDone === 'number' && typeof s.pageCount === 'number'
 }
 
@@ -127,6 +141,7 @@ export function reconStamp(
     dpi: wanted.dpi,
     maxPages: wanted.maxPages,
     pagesDone: progress.pagesDone,
-    pageCount: progress.pageCount
+    pageCount: progress.pageCount,
+    cleanup: wanted.cleanup ?? 'off'
   }
 }

@@ -27,12 +27,24 @@
 import { chromium } from 'playwright'
 import { createServer } from 'node:http'
 import { access, mkdir, writeFile } from 'node:fs/promises'
-import { createReadStream, statSync, writeFileSync } from 'node:fs'
+import { createReadStream, existsSync, statSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 
 const PORT = Number(process.env.DRIVE_PORT ?? 7788)
 const URL_BASE = process.env.APP_URL ?? 'http://localhost:5173'
-const EXECUTABLE = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
+/**
+ * Which Chromium to drive.
+ *
+ * `CHROMIUM_PATH` wins when it is set. Otherwise the sandbox's vendored
+ * browser is used **if it is actually there**, and where it is not — any
+ * machine that is not this container — the value is left undefined so
+ * Playwright launches the copy it installed itself. Hardcoding the sandbox
+ * path was invisible here and fatal anywhere else: the launch fails with a
+ * missing executable, which reads like a broken install rather than a path
+ * that was only ever right on one machine.
+ */
+const VENDORED = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
+const EXECUTABLE = process.env.CHROMIUM_PATH ?? (existsSync(VENDORED) ? VENDORED : undefined)
 const OUT = process.env.DRIVE_OUT ?? 'screenshots'
 const REPO = resolve(import.meta.dirname, '..')
 /** Where the browser keeps its storage between runs. See `launchPersistentContext`. */
@@ -428,6 +440,8 @@ async function serve() {
       return page.evaluate(
         async ([repo, arg]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const provenance = await import(`/@fs${repo}/src/core/provenance/index.ts`)
+          const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
           const runs = await runStore.listRuns()
           if (arg === 'clear') window.__pdbfBook = null
           else if (arg) {
@@ -469,6 +483,26 @@ async function serve() {
             commentsOpen: memos.filter((m) => !m.resolved).length,
             commentsAnswered: memos.filter((m) => m.resolved).length,
             marked: marked.length,
+            // Decisions waiting, and how many of them a standing ruling holds
+            // an answer for — said here for the reason the comments are.
+            ...(run
+              ? (() => {
+                  const raised = queriesMod.collectQueries(run.transcriptions)
+                  const waiting = queriesMod.outstanding(raised, run.rulings ?? [])
+                  return {
+                    queriesWaiting: waiting.length,
+                    queriesHeld: queriesMod.held(raised, run.rulings ?? []).length
+                  }
+                })()
+              : {}),
+            // What the book is made of and which route that puts it on, so a
+            // session starting cold reads the flow off the book rather than
+            // deciding it afresh (docs/FLOW.md). Named as missing when it is.
+            shape: run?.shape
+              ? { ...run.shape, route: provenance.routeKey(run.shape) }
+              : run
+                ? 'not recorded — `node scripts/shape.mjs <book-dir> --write`'
+                : null,
             ...(memos.some((m) => !m.resolved)
               ? {
                   next: '`memos` lists what the editor asked for; sweep them before anything else.'
@@ -480,6 +514,93 @@ async function serve() {
           }
         },
         [REPO, action ?? '']
+      )
+    },
+
+    /**
+     * The queries a standing ruling holds an answer for, and their approval.
+     *
+     * The editor's ruling on standing rulings: *pre-filled and held, never
+     * applied unasked*. `held` lists each waiting query the covers of a
+     * standing ruling reach, with the decision it would be given. `held
+     * approve --yes` files those rulings — the same rulings the gate's
+     * "Approve all" button files — and the `--yes` is the approval: without
+     * it the verb only lists. Every filed ruling names the standing ruling
+     * it came from in its reasoning.
+     */
+    held: async ([action, ...flags]) => {
+      const approve = action === 'approve'
+      if (action && !approve) throw new Error('held [approve --yes]')
+      if (approve && !flags.includes('--yes')) {
+        throw new Error(
+          'held approve files rulings, so it wants the approval said: `held approve --yes`. ' +
+            'Run `held` alone to see what would be filed.'
+        )
+      }
+      return page.evaluate(
+        async ([repo, approve]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+          const raised = queriesMod.collectQueries(run.transcriptions)
+          const rulings = run.rulings ?? []
+          const holding = queriesMod.held(raised, rulings)
+          const rows = holding.map(({ query, ruling }) => ({
+            leaf: query.pageIndex,
+            quote: query.quote,
+            kind: query.kind,
+            under: ruling.quote,
+            wouldBe: ruling.decision,
+            ...(ruling.correction ? { correction: ruling.correction } : {})
+          }))
+          if (!approve || holding.length === 0) {
+            return {
+              held: rows.length,
+              rows,
+              next:
+                rows.length === 0
+                  ? 'Nothing is held.'
+                  : 'These are filed only on approval: `held approve --yes`, or the gate one at a time.'
+            }
+          }
+          const decidedOn = new Date().toISOString().slice(0, 10)
+          let next = rulings
+          for (const { query, ruling } of holding) {
+            next = queriesMod.withRuling(next, {
+              pageIndex: query.pageIndex,
+              quote: query.quote,
+              kind: query.kind,
+              decision: ruling.decision,
+              ...(ruling.decision === 'corrected' && ruling.correction
+                ? { correction: ruling.correction }
+                : {}),
+              because: queriesMod.heldBecause(ruling),
+              ...(ruling.mention ? { mention: true } : {}),
+              decidedOn
+            })
+          }
+          const saved = await runStore.saveRun(
+            project.createSavedRun({
+              ...run,
+              images: new Map(run.images.map((i) => [i.id, i.bytes])),
+              savedAt: new Date().toISOString(),
+              rulings: next
+            })
+          )
+          return {
+            approved: rows.length,
+            rows,
+            rulings: next.length,
+            stored: saved === true,
+            waiting: queriesMod.outstanding(raised, next).length,
+            next: 'Run `queries` to rewrite the sheets, then `save` to push them.'
+          }
+        },
+        [REPO, approve]
       )
     },
 
@@ -1889,6 +2010,179 @@ async function serve() {
     },
 
     /**
+     * Every passage the book prints twice, and where the two copies disagree.
+     *
+     * The second witness for a book that has no pixels. Two copies of one
+     * sentence a hundred leaves apart were converted independently, so where
+     * they point a word two different ways, one of them is wrong — and the
+     * book said so itself, for nothing.
+     *
+     * Measured on the finished _Patterns_ Vol. I: 1,535 blocks, **12 repeated
+     * passages, 6 of which point a word two ways**, in a fifth of a second.
+     * Two of the six corroborate a `damage` finding that was `shape` on its
+     * own evidence, which is the promotion this exists for.
+     *
+     * A repeated passage is **not** a fault — that book is a training manual
+     * and sets its examples out again on purpose. Only a pointing difference
+     * is reported as one; words present in one copy and not the other are
+     * listed under it as the author's own revision.
+     *
+     *   parallels               write parallels.md
+     *   parallels out.md        somewhere else
+     */
+    parallels: async (args) => {
+      const out = args.find((a) => !a.startsWith('--')) ?? 'parallels.md'
+      const built = await page.evaluate(
+        async ([repo]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const coherence = await import(`/@fs${repo}/src/core/coherence/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const run = await runStore.loadRun(newest.key)
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const found = coherence.findParallels(doc)
+          const text = new Map(doc.blocks.map((b) => [b.id, b.text.replace(/<[^>]*>/gu, '')]))
+          return {
+            pairs: found.map((p) => ({
+              here: p.here,
+              there: p.there,
+              similarity: p.similarity,
+              pointing: p.pointing,
+              wording: p.wording,
+              hereText: text.get(p.here) ?? '',
+              thereText: text.get(p.there) ?? ''
+            }))
+          }
+        },
+        [REPO]
+      )
+      const pointed = built.pairs.filter((p) => p.pointing.length > 0)
+      const lines = [
+        '# Passages the book prints twice',
+        '',
+        'Two copies of one passage were converted independently, so where they',
+        'point a word two different ways one of them is wrong — and no',
+        'photograph was needed to say so.',
+        '',
+        '**A repeat is not a fault.** Only a pointing difference is. Words one',
+        'copy has and the other lacks are listed under it as the revision they',
+        'usually are.',
+        '',
+        `${built.pairs.length} repeated · **${pointed.length} pointing the same word two ways**.`,
+        '',
+        '---',
+        ''
+      ]
+      for (const p of pointed) {
+        lines.push(
+          `## \`${p.here}\` against \`${p.there}\` — ${(p.similarity * 100).toFixed(1)}% the same words`,
+          ''
+        )
+        for (const d of p.pointing) lines.push(`- \`${d.here}\` here, \`${d.there}\` there`)
+        if (p.wording.length > 0) {
+          lines.push('', 'Wording, which is usually the author:')
+          for (const d of p.wording)
+            lines.push(`- \`${d.here || '(nothing)'}\` here, \`${d.there || '(nothing)'}\` there`)
+        }
+        lines.push('', `> ${p.hereText}`, '', `> ${p.thereText}`, '')
+      }
+      await writeFile(resolve(out), lines.join('\n'))
+      return {
+        wrote: out,
+        repeated: built.pairs.length,
+        pointing: pointed.length,
+        rows: pointed.map((p) => ({
+          here: p.here,
+          there: p.there,
+          differences: p.pointing.map((d) => `${d.here} | ${d.there}`)
+        }))
+      }
+    },
+
+    /**
+     * What a reader is handed in place of a crop, on a book with no pixels.
+     *
+     * `crops` is the safeguard of the sense pass and it does not work on a
+     * born-digital PDF: rendering such a leaf draws the **text layer again**,
+     * so the adjudicator is given back the exact characters the finding was
+     * raised on and asked whether that is what the page says. It will agree,
+     * every time. A pass that reports a book adjudicated that way has
+     * manufactured confidence, which is worse than adjudicating nothing.
+     *
+     * So this is the other door, and it carries the same strip: the paragraph,
+     * the paragraphs either side, and every passage the book prints in nearly
+     * the same words with the differences named — and **no `why`, no
+     * `expected`**. Shown a proposed reading a model confirms; shown the
+     * evidence it reads.
+     *
+     * What it cannot do is promise what a crop promises. A parallel passage is
+     * a real second witness and settles a finding outright; the neighbouring
+     * paragraphs are context, and a finding they merely make plausible is a
+     * **query for the editor**, not a correction. The manifest says which is
+     * which by whether `parallels` is empty.
+     *
+     * Named apart from `witness`, which is a different and stronger thing: a
+     * second **digitisation** of the same book by somebody else. Where one can
+     * be had, reach for it first — it shares no blind spots with our reading
+     * at all, where this shares every one a single conversion introduced
+     * twice. Two things called `witness` is how a tool stops being one tool.
+     *
+     *   concordance findings.json [out.json]
+     */
+    concordance: async ([path = 'findings.json', out = 'concordance.json']) => {
+      const { readFile } = await import('node:fs/promises')
+      const raw = JSON.parse(await readFile(resolve(REPO, path), 'utf8'))
+      const built = await page.evaluate(
+        async ([repo, raw]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const coherence = await import(`/@fs${repo}/src/core/coherence/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const run = await runStore.loadRun(newest.key)
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const findings = raw.map((f, i) => coherence.parseSenseFinding(f, i))
+          const blocks = new Map(doc.blocks.map((b) => [b.id, b.text]))
+          const located = coherence.locateFindings(findings, blocks)
+          const unplaced = located.filter((f) => f.at === null)
+          // Only the place and the words travel. Passing the finding itself
+          // would carry `why` and `expected` into the manifest, which is the
+          // one thing this door exists to prevent.
+          const places = located
+            .filter((f) => f.at !== null)
+            .map((f) => ({ blockId: f.blockId, quote: f.quote }))
+          return {
+            concordance: coherence.concordanceFor(places, doc),
+            unplaced: unplaced.map((f) => ({ blockId: f.blockId, quote: f.quote }))
+          }
+        },
+        [REPO, raw]
+      )
+      await writeFile(resolve(out), JSON.stringify(built.concordance, null, 1))
+      const withParallel = built.concordance.filter((w) => w.parallels.length > 0).length
+      return {
+        wrote: out,
+        places: built.concordance.length,
+        settledByAParallel: withParallel,
+        contextOnly: built.concordance.length - withParallel,
+        unplaced: built.unplaced,
+        note:
+          'No hypothesis in the manifest. Ask only what the book says. ' +
+          'A place with no parallel has context and no second reader: it raises ' +
+          'a query for the editor, never a correction.'
+      }
+    },
+
+    /**
      * A crop for every finding, and a manifest that does **not** carry the guess.
      *
      * This is the safeguard, in the one place it can be enforced rather than
@@ -1906,7 +2200,7 @@ async function serve() {
     crops: async ([path = 'findings.json', dir = 'crops', dpi = '200']) => {
       const { readFile, writeFile, mkdir } = await import('node:fs/promises')
       const raw = JSON.parse(await readFile(resolve(REPO, path), 'utf8'))
-      const located = await page.evaluate(
+      const { shape, located } = await page.evaluate(
         async ([repo, raw]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
@@ -1921,15 +2215,30 @@ async function serve() {
           const findings = raw.map((f, i) => coherence.parseSenseFinding(f, i))
           const blocks = new Map(doc.blocks.map((b) => [b.id, b.text]))
           const pages = new Map(doc.blocks.map((b) => [b.id, b.sourcePages]))
-          return coherence.locateFindings(findings, blocks).map((f) => ({
-            blockId: f.blockId,
-            quote: f.quote,
-            at: f.at,
-            pages: [...(pages.get(f.blockId) ?? [])]
-          }))
+          return {
+            shape: run.shape ?? null,
+            located: coherence.locateFindings(findings, blocks).map((f) => ({
+              blockId: f.blockId,
+              quote: f.quote,
+              at: f.at,
+              pages: [...(pages.get(f.blockId) ?? [])]
+            }))
+          }
         },
         [REPO, raw]
       )
+      // On a book with no pixels a "crop" is the text layer drawn again: the
+      // adjudicator is handed back the characters the finding was raised on
+      // and asked whether that is what the page says, agrees every time, and
+      // the pass reports a book adjudicated against itself. Refused by the
+      // shape rather than by a session remembering (docs/FLOW.md).
+      if (shape && !shape.pixels) {
+        throw new Error(
+          `This book has no pixels (${shape.textLayer} text, ${shape.how}), so a crop of a leaf is ` +
+            'not evidence. Use `concordance` — the paragraph, its neighbours and its parallels — ' +
+            'and raise a query where the book cannot answer.'
+        )
+      }
 
       // Crops go beside every other rendered leaf, under the driver's own
       // output directory, so one `.gitignore` line covers all of them.
@@ -2100,6 +2409,177 @@ async function serve() {
      * it is still true cannot disagree about what an entry is. `--check`
      * writes nothing and exits non-zero when the file on the shelf differs.
      */
+    /**
+     * Every condition for "done", from where the work is actually done.
+     *
+     * `book-files.mjs --finish` is the definition of finished, and two of its
+     * conditions need the assembled body — the glossary marks and the entries
+     * of `corrections.md` both quote text that exists only after assembly. Run
+     * from a shell it can only *ask* for that body; run from here it has one,
+     * and it adds the one check that needs the browser outright: whether any
+     * conversion damage is left in the text.
+     *
+     * So this is the whole list, in one place, and it exits non-zero on the
+     * first thing owed. Which is the point: the rule this repository keeps
+     * finding is that a check which runs gets followed and a sentence does
+     * not, and a check that has to be assembled from three commands is a
+     * sentence with extra steps.
+     *
+     *   finish <shelf-book-directory>
+     */
+    finish: async ([dir]) => {
+      if (!dir) throw new Error('finish <shelf-book-directory>')
+      const { execFile } = await import('node:child_process')
+      const { promisify } = await import('node:util')
+      const { readFile } = await import('node:fs/promises')
+      const { tmpdir } = await import('node:os')
+      const { join } = await import('node:path')
+      const where = resolve(REPO, dir)
+
+      // The body, written once and handed to the entries check.
+      const body = await readBody()
+      const bodyPath = join(tmpdir(), `pdbf-body-${process.pid}.json`)
+      await writeFile(bodyPath, JSON.stringify(body))
+
+      // The glossary marks, checked here rather than by the script. The
+      // script *can* be asked (`--marks`), and since `resolve-ts.mjs` that
+      // path loads from plain Node too; this verb keeps its own because it
+      // already holds the assembled body, which the script would have to be
+      // handed. The headwords come off the book file exactly as the script
+      // reads them, so the two doors cannot disagree about what the glossary
+      // holds.
+      const book = JSON.parse(await readFile(join(where, 'book.json'), 'utf8'))
+      const glossary = (book.run?.edits ?? []).find(
+        (e) => e.kind === 'section' && /glossar/iu.test(e.title ?? '')
+      )
+      const marks = glossary
+        ? await page.evaluate(
+            async ([repo, sectionText, blocks]) => {
+              const m = await import(`/@fs${repo}/src/core/annotate/marks.ts`)
+              const report = m.checkGlossaryMarks(m.glossaryHeadwords(sectionText), blocks)
+              return {
+                marked: report.marked.length,
+                unmarked: report.unmarked.map((v) => `${v.entry} — "${v.term}" is in ${v.blockId}`),
+                absent: report.absent.length
+              }
+            },
+            [REPO, glossary.text ?? '', body.edited]
+          )
+        : null
+
+      // The conversion damage still in the text: the one condition only the
+      // browser can answer, and the one no shell script can ask for.
+      const damage = await handlers.damage(['--check']).then(
+        () => null,
+        (err) => (err instanceof Error ? err.message : String(err))
+      )
+
+      const run = promisify(execFile)
+      const script = resolve(REPO, 'scripts/book-files.mjs')
+      let out = ''
+      let code = 0
+      try {
+        const r = await run(process.execPath, [script, where, '--finish', '--body', bodyPath], {
+          maxBuffer: 1 << 24
+        })
+        out = `${r.stdout}${r.stderr}`
+      } catch (err) {
+        code = typeof err.code === 'number' ? err.code : 1
+        out = `${err.stdout ?? ''}${err.stderr ?? ''}`
+      }
+      const noise = /MODULE_TYPELESS|Reparsing as ES|eliminate this warning|trace-warnings/u
+      const lines = out.split('\n').filter((l) => !noise.test(l))
+      // The script's own "run with --marks" line is the ask this verb has just
+      // answered; every other owed line stands.
+      const owed = lines
+        .filter((l) => /^ {2}· /u.test(l) && !/run with --marks/u.test(l))
+        .map((l) => l.replace(/^ {2}· /u, ''))
+      const stale = lines.filter((l) => /^ {2}(STALE|MISSING|DRIFTED|UNMARKED|WALL)\b/u.test(l))
+      if (marks !== null) for (const u of marks.unmarked) owed.push(`glossary mark missing: ${u}`)
+      if (damage !== null) owed.push(damage)
+
+      const finished = owed.length === 0 && stale.length === 0 && code === 0
+      if (finished) {
+        return {
+          finished: true,
+          checked: lines.filter((l) => /^ {2}ok\b/u.test(l)).length,
+          glossary: marks === null ? 'none' : `${marks.marked} marked, ${marks.absent} never used`
+        }
+      }
+      // A guard's fallback has to report. If the script died before saying
+      // what it owed, its last lines are the finding, not "not finished —".
+      const detail =
+        owed.length + stale.length > 0
+          ? [...owed.map((o) => `  · ${o}`), ...stale]
+          : lines
+              .filter((l) => l.trim().length > 0)
+              .slice(-8)
+              .map((l) => `  ${l}`)
+      throw new Error(
+        `${dir.split('/').filter(Boolean).pop()}: not finished —\n${detail.join('\n')}`
+      )
+    },
+
+    /**
+     * The proofed book, projected back onto its leaves.
+     *
+     * What the two measurement plans score a reading against, built once.
+     * Corrections are keyed to assembled blocks and a block joined across a
+     * seam belongs to two leaves, so "the proofed text of leaf 120" does not
+     * exist until something puts each corrected word back on the leaf it was
+     * read from — `leafTruth`, in `@core/witness`, aligned with the witness
+     * module's own aligner so a ground truth and a witness report cannot
+     * disagree about where a word is.
+     *
+     * Per leaf: the body words with punctuation intact, the leaf's notes and
+     * its furniture kept apart, the blocks that contributed, how many words
+     * could not be placed (a merge across leaves — reported, never guessed),
+     * and whether a query on the leaf is still unruled — a "proofed" text the
+     * editor has not finished deciding is one a measurement should skip.
+     *
+     *   truth [out.json]
+     */
+    truth: async ([out = 'truth.json']) => {
+      const built = await page.evaluate(
+        async ([repo]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const gt = await import(`/@fs${repo}/src/core/witness/ground-truth.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const run = await runStore.loadRun(newest.key)
+          const bare = assemble.assembleBook(run.transcriptions)
+          const applied = editsMod.applyEdits(bare, run.edits ?? [])
+          const leaves = gt.leafTruth(run.transcriptions, bare, applied, run.rulings ?? [])
+          return {
+            book: newest.fileName,
+            leaves,
+            bodyWords: applied.blocks
+              .filter((b) => b.sourcePages.length > 0)
+              .reduce((n, b) => n + (b.text.match(/\S+/gu) ?? []).length, 0)
+          }
+        },
+        [REPO]
+      )
+      await writeFile(resolve(out), JSON.stringify(built, null, 1))
+      const placed = built.leaves.reduce((n, l) => n + l.words.length, 0)
+      const unplaced = built.leaves.reduce((n, l) => n + l.unplaced, 0)
+      return {
+        wrote: out,
+        book: built.book,
+        leaves: built.leaves.length,
+        // The invariant: every body word lands on exactly one leaf, or is
+        // reported unplaced. A total off by more than the seam-healed words
+        // is a projection that dropped or doubled something.
+        bodyWords: built.bodyWords,
+        placed,
+        unplaced,
+        unsettled: built.leaves.filter((l) => l.unsettled).map((l) => l.pageIndex),
+        emptyLeaves: built.leaves.filter((l) => l.words.length === 0).length
+      }
+    },
+
     corrections: async ([dir, ...flags]) => {
       if (!dir) throw new Error('corrections <shelf-book-directory> [--check]')
       const { readFile, writeFile } = await import('node:fs/promises')
@@ -2134,6 +2614,90 @@ async function serve() {
       }
       if (!same) await writeFile(path, built.text)
       return { wrote: same ? null : path, corrections: built.words, marks: built.marks }
+    },
+
+    /**
+     * Marks in the book that the printing trade does not set.
+     *
+     * The free pass, and the one that should run before any paid reading. It
+     * costs nothing, holds no opinion, and on a finished 121-leaf volume that
+     * had already been through a full reading, 465 corrections, 14 rulings and
+     * an export it found **24 faults still in the text** — ten words the
+     * conversion had split, seven stray full stops and seven apostrophes
+     * standing where commas belong.
+     *
+     * Runs over the *assembled* book rather than the leaves, because the
+     * vocabulary that settles a split word is the whole volume's and a word
+     * broken across a page seam is only whole after assembly.
+     *
+     *   damage                       write damage.md and report the counts
+     *   damage out.md                somewhere else
+     *   damage --book <shelf-dir>    name the sheet after the edition
+     *   damage --check               write nothing, exit non-zero if anything is found
+     *
+     * `--check` is what makes this a gate rather than a habit: a book with
+     * conversion damage still in it should not reach an export, and the way to
+     * ensure that is a non-zero exit rather than somebody remembering.
+     *
+     * **Nothing here is applied.** An `attested` finding carries what the
+     * book's own vocabulary says the word was, and that is a hypothesis until
+     * a person agrees with it — `sweep --was … --now …` is how it lands, one
+     * class at a time, with every change reported.
+     */
+    damage: async (args) => {
+      const flags = args.filter((a) => a.startsWith('--'))
+      const check = flags.includes('--check')
+      const out = args.find((a) => !a.startsWith('--')) ?? 'damage.md'
+      // The edition's own title where a shelf directory is named, and the file
+      // the run came from where none is. Never the checkout's directory name,
+      // which is what a bare `resolve(REPO, '.')` would put at the head of the
+      // sheet — true of nothing and confusing on a shelf of eleven books.
+      const at = args.indexOf('--book')
+      const title = at === -1 ? null : await bookTitle(resolve(REPO, args[at + 1] ?? '.'))
+      const built = await page.evaluate(
+        async ([repo, title]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const coherence = await import(`/@fs${repo}/src/core/coherence/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const run = await runStore.loadRun(newest.key)
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          const found = coherence.checkDamage(doc)
+          const by = {}
+          for (const f of found) by[f.kind] = (by[f.kind] ?? 0) + 1
+          return {
+            text: coherence.damageSheet(found, doc, title ?? newest.fileName),
+            total: found.length,
+            attested: found.filter((f) => f.confidence === 'attested').length,
+            by,
+            rows: found.map((f) => ({
+              kind: f.kind,
+              confidence: f.confidence,
+              blockId: f.blockId,
+              found: f.found,
+              expected: f.expected ?? null
+            }))
+          }
+        },
+        [REPO, title]
+      )
+      if (check) {
+        if (built.total > 0)
+          throw new Error(
+            `${built.total} conversion faults still in the book: ` +
+              Object.entries(built.by)
+                .map(([k, n]) => `${n} ${k}`)
+                .join(', ')
+          )
+        return { clean: true }
+      }
+      await writeFile(resolve(out), built.text)
+      return { wrote: out, ...built }
     },
 
     /**
@@ -2759,21 +3323,40 @@ async function serve() {
       // read. The two look identical from outside and want opposite work: one
       // is a hole in the cache to refill, the other is a leaf that needs eyes.
       const fresh = ns.includes('fresh')
-      const pages = ns.filter((n) => n !== 'fresh').map(Number)
+      // `--clean=<preset>` reads the leaves through that cleaning, on the
+      // same path recon takes, so this verb measures what recon does.
+      const cleanFlag = ns.find((n) => n.startsWith('--clean='))
+      const clean = cleanFlag ? cleanFlag.slice('--clean='.length) : null
+      const pages = ns.filter((n) => n !== 'fresh' && !n.startsWith('--')).map(Number)
       return page.evaluate(
-        async ([repo, list, ignoreCache]) => {
+        async ([repo, list, ignoreCache, clean]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
           const ocrMod = await import(`/@fs${repo}/src/platform/browser/ocr.ts`)
           const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
           const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const cleanupMod = await import(`/@fs${repo}/src/core/image/cleanup.ts`)
+          const leafMod = await import(`/@fs${repo}/src/platform/browser/cleanup.ts`)
+          const leafMod2 = await import(`/@fs${repo}/src/core/project/leaves.ts`)
+          const preset =
+            clean === null ? cleanupMod.DEFAULT_CLEANUP : cleanupMod.parseCleanupPreset(clean)
+          if (!preset) {
+            throw new Error(
+              `\`${clean}\` is not a cleaning preset: ${cleanupMod.CLEANUP_PRESETS.join(', ')}.`
+            )
+          }
           const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           const file = await runStore.loadSourceFile(newest.key)
           if (!file) throw new Error('The scan is not stored on this device.')
-          const cached = ignoreCache
-            ? null
-            : await cacheMod.loadReconCache(newest.key, { dpi: recon.RECON_DPI, maxPages: null })
+          const cached =
+            ignoreCache || clean !== null
+              ? null
+              : await cacheMod.loadReconCache(newest.key, {
+                  dpi: recon.RECON_DPI,
+                  maxPages: null,
+                  cleanup: preset
+                })
           const text = {}
           const words = {}
           const say = (found) => found.map((w) => w.text).join(' ')
@@ -2796,6 +3379,12 @@ async function serve() {
           const engine = new ocrMod.OcrEngine()
           let doc = await pdfMod.openPdf(file)
           const leaves = doc.numPages
+          // Refused here, before a single page is rendered. Leaves count from
+          // zero and nothing used to say so, so a batch asking for 1..N got
+          // the second page onward, lost the first, and reported the count it
+          // was asked for. See `checkLeafRange`.
+          const range = leafMod2.checkLeafRange(list, leaves)
+          if (range.message !== '') throw new Error(range.message)
           const widened = []
 
           // pdf.js keeps per-page state on the document, and `page.cleanup()`
@@ -2826,7 +3415,7 @@ async function serve() {
                 continue
               }
               const rendered = await pdfMod.renderPage(doc, n, recon.RECON_DPI)
-              const result = await engine.recognize(rendered.canvas, n)
+              const result = await leafMod.recognizeLeaf(engine, rendered.canvas, n, preset)
 
               // Does the frame cut through ink? A leaf printed with margins
               // has bare paper at its edges, so ink hard against the frame
@@ -2862,7 +3451,7 @@ async function serve() {
               // the wider frame moves every word box — which is the unit the
               // crops and the illustration cuts are measured in.
               const whole = await pdfMod.renderPage(doc, n, recon.RECON_DPI, { wholeImage: true })
-              const second = await engine.recognize(whole.canvas, n)
+              const second = await leafMod.recognizeLeaf(engine, whole.canvas, n, preset)
               whole.canvas.width = 0
               whole.canvas.height = 0
               const better = second.words.length > result.words.length
@@ -2878,10 +3467,262 @@ async function serve() {
           // Said out loud: these words were read in a different frame from
           // every other leaf's, so their boxes do not line up with the cached
           // reading and a crop taken from one will not land where it should.
-          return { source: 'pixels', leaves, text, words, readWhole: widened }
+          return { source: 'pixels', cleanup: preset, leaves, text, words, readWhole: widened }
         },
-        [REPO, pages, fresh]
+        [REPO, pages, fresh, clean]
       )
+    },
+
+    /**
+     * The second reader over the named leaves (all by default), as the file
+     * `witness` consumes.
+     *
+     *   second [leaf…] [--out second.json] [--tier tiny|small] [--layer]
+     *
+     * Writes `{ "<leaf>": "text" }` — exactly the contract `witness` already
+     * takes — and reports per leaf the lines found and the time taken, naming
+     * the book and run the pixels came from. `--layer` reads the file's own
+     * text layer instead of running the engine: on a scan carrying somebody's
+     * OCR (five of ten books on the shelf) that layer is already a second
+     * digitisation, and the same file lets the two witnesses be scored against
+     * each other. Each leaf is rendered at the recon DPI, read, and released;
+     * the engine reads the original render, never a cleaned one.
+     *
+     * Cached in `localStorage` under the file, the DPI and the model id, so a
+     * whole book read once is not read again; a record under another model or
+     * DPI is never served. Not the recon store: that store is capped and
+     * evicts oldest-first, and a book's worth of second-reader text must not
+     * push a ten-minute OCR reading out. Text only, so a long book is under a
+     * megabyte; a full quota skips the cache and says so.
+     */
+    second: async (args) => {
+      const { writeFile } = await import('node:fs/promises')
+      const value = (flag) => {
+        const at = args.indexOf(flag)
+        return at === -1 ? null : (args[at + 1] ?? null)
+      }
+      const taken = new Set(
+        ['--out', '--tier'].flatMap((f) =>
+          args.indexOf(f) === -1 ? [] : [args[args.indexOf(f) + 1]]
+        )
+      )
+      const leaves = args
+        .filter((a) => !a.startsWith('--') && !taken.has(a))
+        .map(Number)
+        .filter(Number.isFinite)
+      const out = value('--out') ?? 'second.json'
+      const tier = value('--tier') ?? 'tiny'
+      const layer = args.includes('--layer')
+      const built = await page.evaluate(
+        async ([repo, leaves, tier, layer]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+          const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const secondMod = await import(`/@fs${repo}/src/platform/browser/second-reader.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const file = await runStore.loadSourceFile(newest.key)
+          if (!file) throw new Error('The scan is not stored on this device.')
+          if (!layer && !secondMod.SECOND_READER_TIERS.includes(tier)) {
+            throw new Error(
+              `\`${tier}\` is not a tier: ${secondMod.SECOND_READER_TIERS.join(', ')}.`
+            )
+          }
+          const model = layer ? 'text-layer' : secondMod.secondReaderModelId(tier)
+          const cacheKey = `pdbf.second.${newest.key}\u0000${model}\u0000${recon.RECON_DPI}`
+          let texts = {}
+          try {
+            const cached = JSON.parse(localStorage.getItem(cacheKey) ?? 'null')
+            if (cached && cached.model === model && cached.dpi === recon.RECON_DPI)
+              texts = { ...cached.texts }
+          } catch {
+            texts = {}
+          }
+          const doc = await pdfMod.openPdf(file)
+          const wanted =
+            leaves.length > 0 ? leaves : Array.from({ length: doc.numPages }, (_, i) => i)
+          const per = []
+          try {
+            for (const n of wanted) {
+              if (n < 0 || n >= doc.numPages) continue
+              if (typeof texts[n] === 'string') {
+                per.push({ leaf: n, cached: true })
+                continue
+              }
+              const t0 = performance.now()
+              if (layer) {
+                const read = await pdfMod.extractPageWords(doc, n, recon.RECON_DPI)
+                texts[n] = read.text
+                per.push({
+                  leaf: n,
+                  words: read.words.length,
+                  ms: Math.round(performance.now() - t0)
+                })
+              } else {
+                const rendered = await pdfMod.renderPage(doc, n, recon.RECON_DPI)
+                try {
+                  const read = await secondMod.readLeafSecond(rendered.canvas, n, tier)
+                  texts[n] = read.text
+                  per.push({
+                    leaf: n,
+                    lines: read.lines.length,
+                    ms: Math.round(read.ms),
+                    meanConfidence: Math.round(read.meanConfidence * 1000) / 1000
+                  })
+                } finally {
+                  rendered.canvas.width = 0
+                  rendered.canvas.height = 0
+                }
+              }
+            }
+          } finally {
+            await doc.destroy()
+          }
+          let cachedOk = true
+          try {
+            localStorage.setItem(cacheKey, JSON.stringify({ model, dpi: recon.RECON_DPI, texts }))
+          } catch {
+            cachedOk = false
+          }
+          return {
+            book: newest.fileName,
+            key: newest.key,
+            model,
+            per,
+            texts,
+            leaves: doc.numPages,
+            cachedOk
+          }
+        },
+        [REPO, leaves, tier, layer]
+      )
+      // The contract `witness` takes: leaf → text, nothing else.
+      const second = {}
+      for (const n of Object.keys(built.texts).sort((a, b) => Number(a) - Number(b))) {
+        if (leaves.length === 0 || leaves.includes(Number(n))) second[n] = built.texts[n]
+      }
+      await writeFile(resolve(REPO, out), JSON.stringify(second, null, 1))
+      const fresh = built.per.filter((p) => !p.cached)
+      return {
+        wrote: out,
+        book: built.book,
+        model: built.model,
+        read: fresh.length,
+        cached: built.per.length - fresh.length,
+        msPerLeaf: fresh.length
+          ? Math.round(fresh.reduce((n, p) => n + p.ms, 0) / fresh.length)
+          : null,
+        ...(built.cachedOk ? {} : { note: 'localStorage is full; this reading was not cached.' }),
+        per: built.per.slice(0, 12)
+      }
+    },
+
+    /**
+     * Measure the cleaning presets against the proofed text, leaf by leaf.
+     *
+     *   cleantrial trial.json --truth truth.json --leaves 13,27,51 [--presets off,gentle]
+     *
+     * For each named leaf: one render, then one read per preset through
+     * `recognizeLeaf` — the same call recon makes — and each reading aligned
+     * against that leaf's proofed words from `truth` (`drive.mjs truth`),
+     * with `compareWitnesses`. What is recorded per leaf and preset is what
+     * the plan asks for: words, agreeing, substantive disagreements, joined
+     * ones, mean confidence, and the milliseconds cleaning and reading took.
+     * `scripts/cleanup-ledger.mjs` turns the files into the ledger's table.
+     *
+     * The truth text is the leaf's furniture, body words and notes in that
+     * order, because the engine reads the running head first and the notes
+     * last, and an alignment that left the furniture out would charge every
+     * preset the same few words for reading the page correctly.
+     */
+    cleantrial: async (args) => {
+      const { readFile, writeFile } = await import('node:fs/promises')
+      const isFlagValue = (list, a) => {
+        const at = list.indexOf(a)
+        return at > 0 && list[at - 1].startsWith('--')
+      }
+      const out =
+        args.find((a) => !a.startsWith('--') && !isFlagValue(args, a)) ?? 'cleantrial.json'
+      const value = (flag) => {
+        const at = args.indexOf(flag)
+        return at === -1 ? null : (args[at + 1] ?? null)
+      }
+      const truthPath = value('--truth')
+      const leavesArg = value('--leaves')
+      if (!truthPath || !leavesArg) {
+        throw new Error('cleantrial <out.json> --truth <truth.json> --leaves 1,2,3 [--presets a,b]')
+      }
+      const truth = JSON.parse(await readFile(resolve(REPO, truthPath), 'utf8'))
+      const leaves = leavesArg.split(',').map(Number)
+      const presets = (value('--presets') ?? 'off,gentle,gentle+despeckle,binarise').split(',')
+      const byLeaf = new Map(truth.leaves.map((l) => [l.pageIndex, l]))
+      const wanted = leaves.map((n) => {
+        const l = byLeaf.get(n)
+        if (!l) throw new Error(`truth.json has no leaf ${n}`)
+        return { pageIndex: n, text: [...l.furniture, ...l.words, ...l.notes].join(' ') }
+      })
+      const rows = await page.evaluate(
+        async ([repo, wanted, presets]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const ocrMod = await import(`/@fs${repo}/src/platform/browser/ocr.ts`)
+          const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
+          const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const cleanupMod = await import(`/@fs${repo}/src/core/image/cleanup.ts`)
+          const leafMod = await import(`/@fs${repo}/src/platform/browser/cleanup.ts`)
+          const witness = await import(`/@fs${repo}/src/core/witness/index.ts`)
+          for (const p of presets) {
+            if (!cleanupMod.parseCleanupPreset(p)) throw new Error(`\`${p}\` is not a preset.`)
+          }
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const file = await runStore.loadSourceFile(newest.key)
+          if (!file) throw new Error('The scan is not stored on this device.')
+          const engine = new ocrMod.OcrEngine()
+          const doc = await pdfMod.openPdf(file)
+          const rows = []
+          try {
+            for (const { pageIndex, text } of wanted) {
+              const rendered = await pdfMod.renderPage(doc, pageIndex, recon.RECON_DPI)
+              for (const preset of presets) {
+                const read = await leafMod.recognizeLeaf(engine, rendered.canvas, pageIndex, preset)
+                const report = witness.compareWitnesses(read.text, text, {
+                  confidence: read.words.map((w) => w.confidence)
+                })
+                rows.push({
+                  book: newest.fileName,
+                  leaf: pageIndex,
+                  preset,
+                  truthWords: text.split(/\s+/u).filter(Boolean).length,
+                  words: report.words,
+                  agreeing: report.agreeing,
+                  substantive: report.disagreements.filter((d) => d.kind === 'substantive').length,
+                  joined: report.disagreements.filter((d) => d.kind === 'joined').length,
+                  meanConfidence: Math.round(read.meanConfidence * 10) / 10,
+                  cleanupMs: Math.round(read.cleanupMs),
+                  ocrMs: Math.round(read.ocrMs)
+                })
+              }
+              rendered.canvas.width = 0
+              rendered.canvas.height = 0
+            }
+          } finally {
+            await engine.dispose()
+            await doc.destroy()
+          }
+          return rows
+        },
+        [REPO, wanted, presets]
+      )
+      await writeFile(resolve(REPO, out), JSON.stringify(rows, null, 1))
+      const by = {}
+      for (const r of rows) {
+        const b = (by[r.preset] ??= { leaves: 0, substantive: 0, agreeing: 0, words: 0 })
+        b.leaves += 1
+        b.substantive += r.substantive
+        b.agreeing += r.agreeing
+        b.words += r.words
+      }
+      return { wrote: out, leaves: leaves.length, presets, by }
     },
 
     /**
@@ -3655,7 +4496,11 @@ async function serve() {
           const runs = await runStore.listRuns()
           const newest = await window.__pdbfPickBook(runStore)
           const whole = newest
-            ? await cacheMod.loadReconCache(newest.key, { dpi: recon.RECON_DPI, maxPages: null })
+            ? await cacheMod.loadReconCache(newest.key, {
+                dpi: recon.RECON_DPI,
+                maxPages: null,
+                cleanup: (await import(`/@fs${repo}/src/core/image/cleanup.ts`)).DEFAULT_CLEANUP
+              })
             : null
           // The same `wanted` the whole-reading load uses. Called without it,
           // this threw on every book — a verb whose only job is to say what is
@@ -3836,6 +4681,7 @@ async function serve() {
           )
           const notYet = queriesMod.unapplied(rulings, doc)
           const waiting = queriesMod.outstanding(raised, rulings)
+          const holding = queriesMod.held(raised, rulings)
           const title =
             typeof run.identityAnswers?.title === 'string' && run.identityAnswers.title
               ? run.identityAnswers.title
@@ -3851,6 +4697,10 @@ async function serve() {
             // that only gave the total would send somebody back to decisions
             // the editor has made.
             waiting: waiting.length,
+            // Of the waiting, how many a standing ruling holds an answer for.
+            // A nod each rather than a decision: `held approve --yes` files
+            // them, or the gate does one at a time.
+            held: holding.length,
             ruled: rulings.length,
             byKind: queriesMod.countQueries(waiting),
             // Non-empty means the book does not yet read the way the editor

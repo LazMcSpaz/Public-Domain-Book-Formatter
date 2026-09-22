@@ -39,6 +39,7 @@ import {
 import { canKeepAwake, keepAwake, type ReleaseWakeLock } from '../platform/browser/wake-lock'
 import { looksLikeEpub, openEpub } from '../platform/browser/epub'
 import { assessText, describeAssessment } from '@core/textquality'
+import { DEFAULT_CLEANUP } from '@core/image/cleanup'
 import { QuestionView } from './QuestionView'
 import { QuestionList } from './QuestionList'
 import { useAgentSurface } from './agent-surface'
@@ -113,6 +114,8 @@ import {
   queryKey,
   rulingTarget,
   rulingsFromAnswers,
+  approveHeld,
+  heldPending,
   sameRuling,
   withRuling,
   type Ruling
@@ -1343,6 +1346,7 @@ export function App(): JSX.Element {
           opened.transcriptions.map((t) => [t.pageIndex, transcriptionText(t)])
         ),
         textSource: 'embedded',
+        shape: opened.shape,
         hasApiKey: loadApiKey().length > 0,
         // Everything the recovery half would have decided is already decided,
         // so those steps are marked done rather than walked through with
@@ -1452,7 +1456,10 @@ export function App(): JSX.Element {
       // watch ten minutes of Tesseract to get back to it. Discarded rather than
       // trusted whenever it might not describe the book any more; see
       // `recon-cache`.
-      const wanted = { dpi: RECON_DPI, maxPages: null }
+      // The default preset is the ledger's choice (`DEFAULT_CLEANUP`); a
+      // cached reading taken through another preset is refused, as another
+      // DPI is, because its words came off different pixels.
+      const wanted = { dpi: RECON_DPI, maxPages: null, cleanup: DEFAULT_CLEANUP }
       // Flagged rather than silent: fetching a book's worth of thumbnails and
       // word boxes out of IndexedDB is quick but not instant, and a screen that
       // shows nothing during it looks like a file that failed to open.
@@ -1562,6 +1569,7 @@ export function App(): JSX.Element {
         lexicon: result.lexicon,
         classifications: [{ pageIndex: 0, role: 'title-page', selfReportedConfidence: 0 }],
         textSource: result.source,
+        shape: result.shape,
         cropFor: (tokenId: string) => result.crops.get(tokenId),
         contextCropFor: (tokenId: string) => result.contextCrops.get(tokenId),
         illustrationCandidates: result.illustrations.map((c) => ({
@@ -2082,6 +2090,10 @@ export function App(): JSX.Element {
     complete({
       ...stateFromTranscriptions(saved.transcriptions, saved.failures),
       rulings: [...saved.rulings],
+      // The shape the run was measured with. Kept from the run rather than
+      // from a fresh measurement, because a book opened to resume may have no
+      // file behind it to measure.
+      ...(saved.shape ? { shape: saved.shape } : {}),
       // The verdicts come back with the run. They were paid for alongside it,
       // and a reopened book that has forgotten them shows the gate every spot
       // as though nobody had ever looked.
@@ -2180,6 +2192,7 @@ export function App(): JSX.Element {
           fileSize: 0,
           savedRun: null,
           rulings: [...file.run.rulings],
+          shape: file.run.shape,
           adjudicated: spotsFromStored(file.run.adjudicated),
           // Everything the recovery half decides was decided when this book was
           // read, and none of it can be revisited without the paper. Marked
@@ -2304,7 +2317,10 @@ export function App(): JSX.Element {
           // once and an autosave firing with a stale closure would write a
           // sitting's rulings back out of the run — the one record here that
           // no amount of re-reading the scan could reproduce.
-          rulings: rulingsRef.current
+          rulings: rulingsRef.current,
+          // Measured at intake and carried unchanged; a run restored from a
+          // record that predates the shape keeps whatever that record had.
+          shape: state.shape
         })
       )
       if (!stored) {
@@ -5097,6 +5113,19 @@ export function App(): JSX.Element {
           <div className="resume-note" role="status">
             {rulingNote}
             {outboxNote ? ` ${outboxNote}` : ''}
+          </div>
+        ) : null}
+
+        {/* Queries a standing ruling holds an answer for. Pre-filled on each
+            screen and filed only on approval; this is the one-press approval,
+            and it says how many it is about to file. */}
+        {step.id === 'gate-queries' && heldPending(questions, currentAnswers) > 0 ? (
+          <div className="resume-note held-all" role="status">
+            {heldPending(questions, currentAnswers)} of these decisions fall under a standing ruling
+            you have already made, and arrive pre-filled. They are filed only when you approve them.{' '}
+            <button type="button" onClick={() => setAnswers((a) => approveHeld(questions, a))}>
+              Approve all {heldPending(questions, currentAnswers)}
+            </button>
           </div>
         ) : null}
 

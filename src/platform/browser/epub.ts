@@ -23,6 +23,7 @@ import {
 } from '@core/epub'
 import { assembleBook, type BookDocument } from '@core/assemble'
 import { assessText, type TextAssessment } from '@core/textquality'
+import { shapeOfEpub, type BookShape } from '@core/provenance'
 import type { PageTranscription, TranscribedBlock } from '@core/transcribe'
 
 export interface EpubProgress {
@@ -51,6 +52,8 @@ export interface OpenedEpub {
    * `J^? ske5>tlcal` that the user finds out about at leaf seven.
    */
   quality: TextAssessment
+  /** Never pixels; typeset only when the publisher is one that types its text. */
+  shape: BookShape
 }
 
 /** Whether a file is worth trying to open as an EPUB at all. */
@@ -209,6 +212,7 @@ export async function openEpub(
     package: pkg,
     images,
     pictures,
-    quality
+    quality,
+    shape: shapeOfEpub({ publisher: pkg.publisher })
   }
 }

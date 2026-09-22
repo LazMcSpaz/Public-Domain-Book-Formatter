@@ -56,6 +56,30 @@ describe('shouldJoin', () => {
   it('joins a hyphenated word even though it ends with punctuation-ish', () => {
     expect(shouldJoin(para('the chirur-'), para('geon his art'))).toBe(true)
   })
+
+  it('joins a continuation that opens on a parenthesis', () => {
+    // Leaf 170 of the combined Panchadasi volume ends "…is but a reflection"
+    // and leaf 171 opens "(practically perfect, however) of the original
+    // records." One sentence, and the seam rule refused it because the test
+    // for a continuation was the next block's *first character* being lower
+    // case — which an opening bracket is not. The sentence printed in two
+    // paragraphs, the second of them ten words long.
+    expect(
+      shouldJoin(
+        para('is but a reflection'),
+        para('(practically perfect, however) of the records.')
+      )
+    ).toBe(true)
+    expect(shouldJoin(para('the seven principles'), para('[or tattvas] of man'))).toBe(true)
+  })
+
+  it('does not join a bracket that opens a new sentence', () => {
+    // The bracket is not a licence on its own: what says "continuation" is
+    // still the lower-case word, and it has to be inside the bracket.
+    expect(shouldJoin(para('the alembick being set upon'), para('(Nowe the chirurgeon'))).toBe(
+      false
+    )
+  })
 })
 
 describe('joinText', () => {

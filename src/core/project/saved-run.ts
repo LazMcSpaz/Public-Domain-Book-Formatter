@@ -30,6 +30,7 @@ import type { IllustrationPlacement } from '@core/assemble'
 import { FOOTINGS, type Fact } from '@core/harvest'
 import { RULING_DECISIONS, type Ruling } from '@core/queries'
 import { EDITORIAL_QUERY_KINDS } from '@core/transcribe'
+import { parseShape, type BookShape } from '@core/provenance'
 
 /**
  * Current schema version. Bump and extend `migrateSavedRun` on any shape change.
@@ -55,13 +56,16 @@ import { EDITORIAL_QUERY_KINDS } from '@core/transcribe'
  * `image` edit for a supplied picture and as the `place` edit for one cut from
  * the scan, and v17 → v18 the `bare-mark` edit: a reference mark the page
  * prints that refers to no note, which the engine's positional pairing had no
- * way to express and which a surplus mark in an old book makes necessary.
+ * way to express and which a surplus mark in an old book makes necessary, and
+ * v18 → v19 the book's `shape`: whether the file has pixels, where its text
+ * came from and whether a second digitisation exists, measured once at intake
+ * so every later check reads it rather than re-deriving it.
  * None of them damages an older run — each is a complete transcription that simply
  * has none of the newer thing on it yet — so all upgrade in place rather than
  * being refused. That distinction is the whole reason a migration exists
  * instead of a version check.
  */
-export const CURRENT_SCHEMA_VERSION = 18
+export const CURRENT_SCHEMA_VERSION = 19
 
 /** A page the model could not read at all. Mirrors the runner's `PageFailure`. */
 export interface SavedFailure {
@@ -192,6 +196,19 @@ export interface SavedRun {
    * none and behaves exactly as it did, which is every query still waiting.
    */
   rulings: Ruling[]
+  /**
+   * What the file is made of — pixels or not, where the text came from,
+   * whether a second digitisation exists — and which route that puts the
+   * book on (`@core/provenance`).
+   *
+   * Null for a run written before the shape existed, and for one nothing
+   * could measure: `book-files.mjs --finish` owes such a book a shape, since
+   * a book whose route nobody knows cannot say its checks ran. Never guessed
+   * from `modelId` or the presence of a scan, because the guess that matters
+   * — is this text somebody's OCR? — is exactly the one a run cannot answer
+   * about itself.
+   */
+  shape: BookShape | null
 }
 
 /** The facts the resume question needs, without loading the whole run. */
@@ -336,6 +353,7 @@ export function createSavedRun(init: {
   adjudicated?: Record<string, { verdict: string; reading: string; note: string }>
   facts?: readonly Fact[]
   rulings?: readonly Ruling[]
+  shape?: BookShape | null
 }): SavedRun {
   return {
     schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -354,7 +372,8 @@ export function createSavedRun(init: {
     complete: init.complete ?? true,
     adjudicated: { ...(init.adjudicated ?? {}) },
     facts: [...(init.facts ?? [])],
-    rulings: [...(init.rulings ?? [])]
+    rulings: [...(init.rulings ?? [])],
+    shape: init.shape ?? null
   }
 }
 
@@ -435,7 +454,8 @@ export function migrateSavedRun(raw: unknown): SavedRun {
     complete: typeof raw['complete'] === 'boolean' ? raw['complete'] : true,
     adjudicated: parseAdjudicated(raw['adjudicated']),
     facts: parseFacts(raw['facts']),
-    rulings: parseRulings(raw['rulings'])
+    rulings: parseRulings(raw['rulings']),
+    shape: parseShape(raw['shape'])
   }
 }
 

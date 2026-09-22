@@ -16,11 +16,14 @@ import {
   cropToObjectUrl,
   thumbnailToBlob,
   blobOfUrl,
-  looksScanned,
+  pdfShape,
   extractPageWords
 } from './pdf'
 import { detectIllustrations, type RegionCandidate } from './illustrations'
 import { OcrEngine, type OcrWord, type OcrAssetPaths } from './ocr'
+import type { BookShape } from '@core/provenance'
+import { DEFAULT_CLEANUP, type CleanupPreset } from '@core/image/cleanup'
+import { recognizeLeaf } from './cleanup'
 
 /**
  * The resolution pages are read at, and every pixel coordinate recon produces.
@@ -75,6 +78,16 @@ export interface ReconResult {
    * apart from a scan everywhere the difference matters.
    */
   source: 'ocr' | 'embedded'
+  /**
+   * What the file is made of, measured once as it came in.
+   *
+   * Recorded on the run so every later verb reads it rather than re-deriving
+   * it, and so the shelf can say which route each book took. Null only for a
+   * cached reading written before the shape existed.
+   */
+  shape: BookShape | null
+  /** How the leaves were cleaned before OCR; `off` where nothing was OCR'd. */
+  cleanup: CleanupPreset
 }
 
 /**
@@ -124,6 +137,15 @@ export interface ReconOptions {
    * Left undefined the question is asked here.
    */
   useEmbeddedText?: boolean
+  /**
+   * How each leaf is cleaned before the engine reads it (`@core/image/cleanup`).
+   *
+   * Defaults to `DEFAULT_CLEANUP`, which is the ledger's choice and not a
+   * caller's. Settable here so the driver can measure presets against each
+   * other, and nowhere in the wizard: the app can find this out, so it does
+   * not ask.
+   */
+  cleanup?: CleanupPreset
 }
 
 export async function runRecon(
@@ -144,15 +166,16 @@ export async function runRecon(
   const total = Math.min(doc.numPages, options.maxPages ?? doc.numPages)
 
   // Is this a photograph of a book, or a book? Asked once, structurally, before
-  // ten minutes are spent OCR-ing text the file was carrying all along.
-  const embedded =
-    options.useEmbeddedText ??
-    (await looksScanned(doc).then((m) => !m.scanned && m.textPerPage > 200))
+  // ten minutes are spent OCR-ing text the file was carrying all along. The
+  // same measurement is the book's shape, kept on the run.
+  const shape = await pdfShape(doc)
+  const embedded = options.useEmbeddedText ?? (!shape.pixels && shape.textLayer !== 'none')
 
   // Tesseract is a few seconds and a worker to start. A book that needs no OCR
   // should not pay for it.
   const engine = embedded ? null : new OcrEngine(options.assets)
   await engine?.init()
+  const cleanup = options.cleanup ?? DEFAULT_CLEANUP
 
   // Whatever an earlier visit got through, if it was reading the same book the
   // same way. `from` is the first leaf this run has to do itself.
@@ -202,8 +225,12 @@ export async function runRecon(
       // The file's own words where it has them, Tesseract's where it does not.
       // Shaped identically, so nothing after this point can tell the difference
       // or has to.
+      // Through `recognizeLeaf`, never the engine directly: the cleaned
+      // pixels go to the engine and nowhere else, and everything below —
+      // the thumbnail, the illustration candidates, the crops — is cut from
+      // `rendered.canvas`, which cleaning never touches.
       const result = engine
-        ? await engine.recognize(rendered.canvas, i)
+        ? await recognizeLeaf(engine, rendered.canvas, i, cleanup)
         : await extractPageWords(doc, i, dpi).then((e) => ({
             words: e.words,
             text: e.text,
@@ -297,7 +324,9 @@ export async function runRecon(
       thumbnails,
       illustrations,
       pageText,
-      source: embedded ? 'embedded' : 'ocr'
+      source: embedded ? 'embedded' : 'ocr',
+      shape,
+      cleanup: embedded ? 'off' : cleanup
     }
   } finally {
     await engine?.dispose()

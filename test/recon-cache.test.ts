@@ -34,6 +34,24 @@ describe('reconCacheUsable — when a stored reading may be reused', () => {
     expect(reconCacheUsable({ ...good, maxPages: 5 }, { dpi: 300, maxPages: 5 })).toBe(true)
   })
 
+  /**
+   * The preset is a condition of the reading exactly as the DPI is: the words
+   * and their confidences came off different pixels. A record from before
+   * cleaning existed read the raw render, which is `off`, and says so by
+   * saying nothing.
+   */
+  it('refuses a reading cleaned a different way, and reads an old record as uncleaned', () => {
+    const gentle = reconStamp({ ...wanted, cleanup: 'gentle' }, { pagesDone: 9, pageCount: 9 })
+    expect(gentle.cleanup).toBe('gentle')
+    expect(reconCacheUsable(gentle, wanted)).toBe(false)
+    expect(reconCacheUsable(gentle, { ...wanted, cleanup: 'gentle' })).toBe(true)
+    expect(reconCacheUsable(good, { ...wanted, cleanup: 'gentle' })).toBe(false)
+    const older = { ...good, cleanup: undefined }
+    expect(reconCacheUsable(older, wanted)).toBe(true)
+    expect(reconCacheUsable(older, { ...wanted, cleanup: 'off' })).toBe(true)
+    expect(reconResumeFrom(gentle, wanted)).toBe(0)
+  })
+
   it('refuses a record written by another version of the shape', () => {
     expect(reconCacheUsable({ ...good, version: RECON_CACHE_VERSION + 1 }, wanted)).toBe(false)
     expect(reconCacheUsable({ ...good, version: RECON_CACHE_VERSION - 1 }, wanted)).toBe(false)
@@ -58,7 +76,10 @@ describe('reconCacheUsable — when a stored reading may be reused', () => {
       dpi: 150,
       maxPages: 8,
       pagesDone: 3,
-      pageCount: 8
+      pageCount: 8,
+      // Named even when off: a record that says nothing is one from before
+      // cleaning existed, and the two must stay distinguishable.
+      cleanup: 'off'
     })
   })
 

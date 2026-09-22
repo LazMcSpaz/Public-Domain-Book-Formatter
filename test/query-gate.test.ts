@@ -3,6 +3,8 @@ import {
   queryQuestions,
   queryKey,
   rulingsFromAnswers,
+  approveHeld,
+  heldPending,
   type RaisedQuery,
   type Ruling
 } from '@core/queries'
@@ -155,5 +157,90 @@ describe('what a sitting at the gate produced', () => {
       '2026-09-10'
     )
     expect(ruling).not.toHaveProperty('because')
+  })
+})
+
+/**
+ * The editor's ruling on standing rulings: *pre-filled and held*. A query a
+ * standing ruling reaches arrives with the decision filled in and is filed
+ * only when a person approves it — never applied unasked.
+ */
+describe('a query under a standing ruling', () => {
+  const standing: Ruling = {
+    pageIndex: null,
+    quote: 'practiced / practised',
+    kind: 'inconsistent',
+    decision: 'as-printed',
+    covers: ['practiced', 'practised'],
+    because: 'Both were current in 1877.',
+    decidedOn: '2026-09-10'
+  }
+  const q = query({ pageIndex: 76, quote: 'mankind practiced deception', kind: 'inconsistent' })
+  const key = queryKey(q)
+
+  it('is still asked, with the standing ruling’s decision held on the question', () => {
+    const qs = queryQuestions([q], [standing])
+    const decision = qs.find((x) => x.id === `${key}-decision`)!
+    expect(decision.held).toEqual({
+      value: 'as-printed',
+      why: 'Pre-filled under the standing ruling “practiced / practised” (2026-09-10): Both were current in 1877.'
+    })
+    const because = qs.find((x) => x.id === `${key}-because`)!
+    expect(because.held?.value).toBe(
+      'Under the standing ruling “practiced / practised” (2026-09-10): Both were current in 1877.'
+    )
+  })
+
+  /**
+   * The one property the whole design rests on. Reinstate the fault — put the
+   * held value on `defaultValue` — and this fails, because a seeded answer
+   * files on the next press of Next with nobody having looked.
+   */
+  it('seeds nothing: a held answer is not an answer until approved', () => {
+    const qs = queryQuestions([q], [standing])
+    const seeded = defaultAnswers(qs)
+    expect(seeded[`${key}-decision`]).toBeUndefined()
+    expect(rulingsFromAnswers([q], seeded, '2026-09-21')).toEqual([])
+    expect(heldPending(qs, seeded)).toBe(1)
+  })
+
+  it('approving files it as an ordinary ruling that names where it came from', () => {
+    const qs = queryQuestions([q], [standing])
+    const approved = approveHeld(qs, defaultAnswers(qs))
+    expect(heldPending(qs, approved)).toBe(0)
+    const [ruling] = rulingsFromAnswers([q], approved, '2026-09-21')
+    expect(ruling).toMatchObject({
+      pageIndex: 76,
+      quote: 'mankind practiced deception',
+      decision: 'as-printed',
+      because:
+        'Under the standing ruling “practiced / practised” (2026-09-10): Both were current in 1877.',
+      decidedOn: '2026-09-21'
+    })
+  })
+
+  it('approving all never overwrites an answer the editor already gave', () => {
+    const qs = queryQuestions([q], [standing])
+    const mine = {
+      ...defaultAnswers(qs),
+      [`${key}-decision`]: 'noted',
+      [`${key}-because`]: 'Not this one.'
+    }
+    const approved = approveHeld(qs, mine)
+    expect(approved[`${key}-decision`]).toBe('noted')
+    expect(approved[`${key}-because`]).toBe('Not this one.')
+  })
+
+  it('a corrected standing ruling holds its wording on the correction too', () => {
+    const fix: Ruling = { ...standing, decision: 'corrected', correction: 'practised' }
+    const qs = queryQuestions([q], [fix])
+    expect(qs.find((x) => x.id === `${key}-correction`)!.held?.value).toBe('practised')
+    expect(defaultAnswers(qs)[`${key}-correction`]).toBe('')
+  })
+
+  it('a query with no standing ruling over it holds nothing', () => {
+    const qs = queryQuestions([query()], [standing])
+    expect(qs.every((x) => x.held === undefined)).toBe(true)
+    expect(heldPending(qs, {})).toBe(0)
   })
 })

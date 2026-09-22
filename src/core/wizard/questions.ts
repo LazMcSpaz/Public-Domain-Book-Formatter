@@ -46,6 +46,17 @@ export interface QuestionBase {
    * which is the difference between usable and unusable on a phone.
    */
   group?: string
+  /**
+   * An answer prepared for the person to approve — **never seeded**.
+   *
+   * The query gate's standing rulings: a query a ruling reaches arrives with
+   * the decision the ruling would give already filled in, and it is filed
+   * only when the editor accepts it, one at a time or all at once by a button
+   * that says how many. `defaultAnswers` ignores this field on purpose, and a
+   * test holds it to that: a held value that seeded itself would be applied
+   * unasked, which is the one thing the editor ruled it must not be.
+   */
+  held?: { value: AnswerValue; why: string }
 }
 
 export interface ChoiceOption {

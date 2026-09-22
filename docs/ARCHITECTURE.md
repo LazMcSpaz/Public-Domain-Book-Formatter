@@ -9,8 +9,9 @@ Open PDF
   │
   ├─ RECON  (free, local, no API cost)
   │    PDF.js render @300dpi ─┐
-  │    Tesseract.js OCR       ├─ one page at a time, released after use
-  │    word crops             ─┘
+  │    clean for the engine   ├─ one page at a time, released after use;
+  │    Tesseract.js OCR       │  the cleaned pixels reach the engine and
+  │    word crops             ─┘  nothing else (@core/image/cleanup)
   │    lexicon harvest (book-wide, frequency-driven)
   │    illustration candidates (OCR boxes + an ink test on the pixels)
   │
@@ -30,24 +31,25 @@ Gates are the only stops. Everything between them runs unattended.
 
 ## Module map
 
-| Area           | Path                   | Contains                                          | Browser APIs? |
-| -------------- | ---------------------- | ------------------------------------------------- | ------------- |
-| Domain model   | `src/core/model`       | Coordinate map, flags, project types              | no            |
-| hOCR           | `src/core/hocr`        | hOCR parsing → tokens + boxes                     | no            |
-| **Lexicon**    | `src/core/lexicon`     | Term harvesting, variant clustering, prompt block | no            |
-| **Page roles** | `src/core/pages`       | Roles, dispositions, front-matter metadata        | no            |
-| **Wizard**     | `src/core/wizard`      | Question contract, step machine                   | no            |
-| **Edits**      | `src/core/edits`       | Corrections as a list, applied over the book      | no            |
-| **Image**      | `src/core/image`       | Region detection, DPI math, op engine             | no            |
-| **Layout**     | `src/core/layout`      | Frames, line breaking, pagination, notes, TOC     | no            |
-| Typeset        | `src/core/typeset`     | KDP validation                                    | no            |
-| Style          | `src/core/style`       | Profiles, resolution                              | no            |
-| **Design**     | `src/core/design`      | Interview answers → a complete style profile      | no            |
-| **Export**     | `src/core/export`      | Edition details, file naming, the honest report   | no            |
-| Ornament       | `src/core/ornament`    | Vector ornament library (paths, no files)         | no            |
-| **Control**    | `src/core/control`     | Driving the interview from outside the tab        | no            |
-| **Platform**   | `src/platform/browser` | PDF.js, Tesseract.js, fonts, PDF writer, preview  | **yes**       |
-| **App**        | `src/app`              | Wizard shell, question renderer, page preview     | **yes**       |
+| Area           | Path                   | Contains                                           | Browser APIs? |
+| -------------- | ---------------------- | -------------------------------------------------- | ------------- |
+| Domain model   | `src/core/model`       | Coordinate map, flags, project types               | no            |
+| hOCR           | `src/core/hocr`        | hOCR parsing → tokens + boxes                      | no            |
+| **Lexicon**    | `src/core/lexicon`     | Term harvesting, variant clustering, prompt block  | no            |
+| **Page roles** | `src/core/pages`       | Roles, dispositions, front-matter metadata         | no            |
+| **Wizard**     | `src/core/wizard`      | Question contract, step machine                    | no            |
+| **Edits**      | `src/core/edits`       | Corrections as a list, applied over the book       | no            |
+| **Image**      | `src/core/image`       | Region detection, DPI math, op engine              | no            |
+| **Layout**     | `src/core/layout`      | Frames, line breaking, pagination, notes, TOC      | no            |
+| Typeset        | `src/core/typeset`     | KDP validation                                     | no            |
+| Style          | `src/core/style`       | Profiles, resolution                               | no            |
+| **Design**     | `src/core/design`      | Interview answers → a complete style profile       | no            |
+| **Export**     | `src/core/export`      | Edition details, file naming, the honest report    | no            |
+| Ornament       | `src/core/ornament`    | Vector ornament library (paths, no files)          | no            |
+| **Control**    | `src/core/control`     | Driving the interview from outside the tab         | no            |
+| **Provenance** | `src/core/provenance`  | What a book is made of, and the route that decides | no            |
+| **Platform**   | `src/platform/browser` | PDF.js, Tesseract.js, fonts, PDF writer, preview   | **yes**       |
+| **App**        | `src/app`              | Wizard shell, question renderer, page preview      | **yes**       |
 
 The `core` / `platform` split is the load-bearing boundary: `core` has no DOM and
 no Node, so every rule in the flow is unit-testable without a browser.
@@ -326,9 +328,10 @@ the user's path, and both degrade to "do it again" rather than to an error.
   OCR-ing three hundred pages is ten minutes of a warm phone to arrive back
   where you were. Stored as Blobs rather than object URLs, since a URL names a
   Blob in a tab that has since closed. The rules that matter are the ones for
-  **refusing** it — a different DPI or a different page limit describes a book
-  this session does not have — and a refused reading is deleted, because unlike
-  a transcription it costs only time to replace.
+  **refusing** it — a different DPI, a different page limit or a different
+  cleaning preset describes a book this session does not have — and a refused
+  reading is deleted, because unlike a transcription it costs only time to
+  replace.
 
 The API key is stored with neither. It lives in its own place and must never
 travel with a book.

@@ -17,5 +17,11 @@ export default defineConfig({
     }
   },
   build: { outDir: resolve(__dirname, 'dist'), emptyOutDir: true },
+  // The second reader's runtime is served as the package ships it. Vite's
+  // pre-bundling rewrites ONNX Runtime's wasm glue and it then fails to find
+  // a backend (`no available backend found … K is not a function`); and a
+  // pre-bundled `ppu-paddle-ocr` would carry a second copy of the runtime,
+  // with the wasm path set on the wrong one.
+  optimizeDeps: { exclude: ['onnxruntime-web', 'ppu-paddle-ocr'] },
   server: { port: 5173 }
 })

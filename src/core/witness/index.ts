@@ -112,7 +112,14 @@ function sameLetters(a: readonly string[], b: readonly string[]): boolean {
  * this is the one place it needs a diff. Classic dynamic programming, quadratic
  * in the page — a leaf is a few hundred words, so that is nothing.
  */
-function matchingRuns(a: readonly string[], b: readonly string[]): [number, number][] {
+/**
+ * The longest common subsequence of two word lists, as matched index pairs.
+ *
+ * Exported because it is the one aligner here and `ground-truth.ts` needs the
+ * same one: a ground truth aligned by a second implementation would disagree
+ * with the witness report exactly where the two readers do.
+ */
+export function matchingRuns(a: readonly string[], b: readonly string[]): [number, number][] {
   const rows = a.length + 1
   const cols = b.length + 1
   const table = new Uint32Array(rows * cols)

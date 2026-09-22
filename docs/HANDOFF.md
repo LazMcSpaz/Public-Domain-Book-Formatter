@@ -116,6 +116,12 @@ run:
 3. **The imprint details**, if they are not already banked in a saved look.
 4. **Anything already ruled** on that edition.
 
+Then, before reading a leaf, **record what the book is made of** —
+`node scripts/shape.mjs <book-dir> --write`, or `--declare … --because …`
+where nothing can measure it — and read the route it lands on in
+[`FLOW.md`](./FLOW.md). Which stages apply is decided there, once, rather than
+by each session as it goes.
+
 Everything else — trim, face, ornaments, whether chapters open recto — has a
 sensible default and can be shown rather than asked.
 
@@ -136,13 +142,17 @@ Findings raised, confirmed, refuted, per book. A check nobody can score is
 worse than no check, because it manufactures confidence. If a sense pass
 proposes a hundred and sixty survive the pixels it is earning its place; if
 fifteen survive it is noise and should be tightened or dropped.
-`LEDGER-astral-world.md` is the shape.
+It lives at `books/<slug>/ledger.md`, **on the shelf beside the book it
+scores**, so it is committed by the same commit as everything else it
+describes. The shape is any existing one; `book-files.mjs` writes its
+`## By the numbers` section and leaves every other word to you.
 
 ## 8. Before you stop
 
 ```bash
 npm run typecheck && npm test && npm run lint && npm run format:check
-node scripts/book-files.mjs <book-dir> --check
+node scripts/book-files.mjs <book-dir> --finish     # every condition for "done"
+node scripts/drive.mjs damage --check               # no conversion damage left
 node scripts/voice.mjs audit <book-dir>/book.json
 git -C ~/Public-Domain-Book-Formatter rev-list --count origin/main..HEAD   # 0
 git -C ~/public-domain-books-storage  rev-list --count origin/main..HEAD   # 0

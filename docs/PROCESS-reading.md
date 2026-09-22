@@ -29,6 +29,34 @@ reads.
 What must never exist is a step whose **output is text** — a "clean this up"
 pass that hands back prose instead of a list of places to look.
 
+### When the book has no pixels
+
+Not every book here has a scan, and the rule has to say what happens then. A
+born-digital PDF, an EPUB, or somebody's OCR of a typescript printed back to
+PDF has **no photograph of a page anywhere in it**: `looksScanned` says so
+correctly, and rendering such a leaf draws the text layer again. That is the
+same witness in a larger typeface, not an independent one.
+
+What stands in for the pixels is the **volume's own vocabulary and its own
+repeated text**, and only where the book can actually answer:
+
+| The book can count it                                            | The book cannot count it                      |
+| ---------------------------------------------------------------- | --------------------------------------------- |
+| `descrip tion` — `description` set 29 times, `descrip` once      | a full stop where a comma belongs             |
+| `Gardiner` — the same man set `Gardner` five times               | whether a clause lost a word or never had one |
+| `learned so quickly` — the same example glossed on the next leaf | where a run-in quotation began                |
+
+The left column is **not a reading**. OCR read the characters; whether the
+space between two of them is real is a typographic question the volume settles
+by having set the word whole elsewhere — the same argument `draft/hyphens.ts`
+makes about a line-break hyphen, and it abstains the same way. The right column
+is a place to look and nothing more.
+
+That distinction is carried in the artefact rather than in anyone's memory:
+`DamageFinding.confidence` is `attested` or `shape`, and the sheet lists them
+apart. Where pixels **do** exist they remain the only accepter — a scan has a
+second reader and a text layer does not.
+
 ---
 
 ## Invariants
@@ -36,22 +64,29 @@ pass that hands back prose instead of a list of places to look.
 These are the claims worth attacking. Each is meant to be false-ifiable by
 running something, and the reviewer should try to break every one.
 
-| #   | Invariant                                                                                  | How to attack it                                                                                                                                 |
-| --- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| I1  | No step ever produces book text from an image alone.                                       | Find any path where a leaf's words are authored rather than corrected.                                                                           |
-| I2  | `transcribe` is the only writer that **merges**; every other writer replaces, and says so. | `grep -rn 'saveRun(' src/ scripts/` — there are several. Confirm each is either the wizard's own path, a fixture seeder, or an explicit replace. |
-| I3  | A batch that fails to parse changes nothing at all.                                        | Land a batch whose 2nd page is malformed; confirm page 1 did not land.                                                                           |
-| I4  | A batch merges by `pageIndex`; it never replaces silently.                                 | Land two disjoint batches; confirm both survive.                                                                                                 |
-| I5  | A batch lands in the run the app will actually open.                                       | Land after `open`; confirm `matchedRunBy` is not "starts a new run" when a run exists.                                                           |
-| I6  | No report claims a check it did not perform.                                               | Land a leaf the recon cache has no words for; confirm `ocr` says NOT CHECKED.                                                                    |
-| I7  | No report claims a book is finished when the leaf count was guessed.                       | Land with no scan stored and no app open; confirm `complete: false`.                                                                             |
-| I8  | A draft is never mistaken for a transcription.                                             | Confirm every draft carries `structural`, and that nothing reads a draft file.                                                                   |
-| I9  | Escalation is decided by measurement, never by a model's self-assessment.                  | Find any gate keyed on a model saying it felt unsure.                                                                                            |
-| I10 | A suspected printer's error is neither silently fixed nor silently kept.                   | **Currently unmet — see Gaps.**                                                                                                                  |
+| #   | Invariant                                                                                  | How to attack it                                                                                                                                       |
+| --- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| I1  | No step ever produces book text from an image alone.                                       | Find any path where a leaf's words are authored rather than corrected.                                                                                 |
+| I2  | `transcribe` is the only writer that **merges**; every other writer replaces, and says so. | `grep -rn 'saveRun(' src/ scripts/` — there are several. Confirm each is either the wizard's own path, a fixture seeder, or an explicit replace.       |
+| I3  | A batch that fails to parse changes nothing at all.                                        | Land a batch whose 2nd page is malformed; confirm page 1 did not land.                                                                                 |
+| I4  | A batch merges by `pageIndex`; it never replaces silently.                                 | Land two disjoint batches; confirm both survive.                                                                                                       |
+| I5  | A batch lands in the run the app will actually open.                                       | Land after `open`; confirm `matchedRunBy` is not "starts a new run" when a run exists.                                                                 |
+| I6  | No report claims a check it did not perform.                                               | Land a leaf the recon cache has no words for; confirm `ocr` says NOT CHECKED.                                                                          |
+| I7  | No report claims a book is finished when the leaf count was guessed.                       | Land with no scan stored and no app open; confirm `complete: false`.                                                                                   |
+| I8  | A draft is never mistaken for a transcription.                                             | Confirm every draft carries `structural`, and that nothing reads a draft file.                                                                         |
+| I9  | Escalation is decided by measurement, never by a model's self-assessment.                  | Find any gate keyed on a model saying it felt unsure.                                                                                                  |
+| I10 | A suspected printer's error is neither silently fixed nor silently kept.                   | **Currently unmet — see Gaps.**                                                                                                                        |
+| I11 | No book reaches an export with conversion damage still in it.                              | `drive.mjs damage --check` on a finished book. It exits non-zero on the first finding; run it on _Patterns_ Vol. I as it was exported and it names 16. |
+| I12 | A check never claims more authority than its evidence.                                     | Find a `DamageFinding` marked `attested` whose `expected` the book does not set at least twice, or any path that applies one without a person.         |
 
 ---
 
 ## Stage 0 — Bring the scan in
+
+_This document is written for a scan. A book of another shape — a text layer
+with no pixels, an EPUB — gets a subset of these stages, and which subset is
+not a judgement: [`FLOW.md`](./FLOW.md) lists the routes, generated from the
+same table the code reads. Record the shape first (`scripts/shape.mjs`)._
 
 ```bash
 node scripts/drive.mjs serve &                 # holds a browser on :7788
@@ -384,6 +419,70 @@ renders had passed over it.
 
 ---
 
+## Stage 6b — Sweep the conversion damage, also for free
+
+```bash
+node scripts/drive.mjs damage            # writes damage.md
+node scripts/drive.mjs damage --check    # writes nothing, exits non-zero
+```
+
+`checkConsistency` asks where the book disagrees with itself about a **word or
+a structure**. This asks a narrower question with a different provenance behind
+it: **is this a mark the printing trade sets at all?** A word split by a space,
+a doubled full stop, an apostrophe closing nothing — none of those is a
+compositor's choice this edition promises to reproduce, because no compositor
+made them.
+
+Three kinds, and what each is worth was measured on the **assembled**
+_Patterns_ Vol. I **after** it had been read, corrected in 465 places, ruled
+on, exported and marked complete:
+
+| Kind               | Found | Real | What decides it                        |
+| ------------------ | ----: | ---: | -------------------------------------- |
+| `split-word`       |     3 |    3 | the book's own vocabulary (`attested`) |
+| `stray-point`      |     7 |    6 | a sentence cannot open in lower case   |
+| `stray-apostrophe` |     6 |    6 | a left-to-right walk of the quotations |
+
+**Measure it on the assembled book, never on a reconstruction of one.** Run
+first over transcription blocks with the edits matched by `p{page}b{index}`,
+this same sweep reported 24 — eight of which did not exist. Block ids are
+derived at assembly and assembly joins across seams, so those edits landed on
+the wrong paragraphs. `drive.mjs damage` reads what the engine reads; anything
+else is a different book.
+
+**Run this before Stage 7, always.** It costs nothing, and every fault it takes
+off the book is a fault the paid reading does not have to spend a chunk
+noticing. The ordering is the whole economy of this process: free checks first,
+then a cheap pass over what they flagged, and only then a reading of the prose.
+
+**`--check` is a gate, not a report.** A book with conversion damage in it
+should not reach an export because somebody remembered to look.
+
+**Nothing here is applied.** An `attested` finding carries `expected`, which is
+what the volume's vocabulary says the word was. It is a hypothesis until a
+person agrees with the class, and it lands through `sweep --was … --now …`,
+which reports every change it makes.
+
+---
+
+## Stage 6c — Read the flagged places, and only those
+
+The sheet `damage` writes carries **the whole block** each finding sits in, not
+a window onto it. That is deliberate and it is a cost already paid once: four
+places in one chapter of _Uncommon Therapy_ went to the editor as
+undeterminable, and **three of the four answered themselves** the moment the
+paragraph was in view — the next sentence used the word, or the author set the
+same construction twice on the following leaf. The editor's remark was that
+these come to him often and resolve easily once more context is given.
+
+So this pass reads two dozen flagged paragraphs rather than three hundred
+leaves, and returns a **verdict per finding** — never text, never a rewritten
+paragraph. On a book with no pixels this is the whole of the adjudication that
+Stage 8 does with a crop, and it is honest only because Stage 6b already said
+which findings the book itself had settled and which it had not.
+
+---
+
 ## Stage 7 — Read for sense
 
 ```bash
@@ -409,6 +508,9 @@ and nothing mechanical will ever catch it.
 ---
 
 ## Stage 8 — Adjudicate every finding against the crop
+
+> **A book with no pixels cannot do this stage, and must not pretend to.** See
+> **Stage 8b**, below, before running `crops` on a born-digital PDF.
 
 ```bash
 node scripts/drive.mjs crops findings.json    # cuts a crop per finding
@@ -445,6 +547,59 @@ being long.
 
 ---
 
+## Stage 8b — When there is no crop to adjudicate against
+
+```bash
+node scripts/drive.mjs parallels                 # the free check, on its own
+node scripts/drive.mjs concordance findings.json # the manifest, in place of crops
+```
+
+`crops` is the safeguard of the sense pass, and on a born-digital PDF it does
+not work. Rendering such a leaf draws the **text layer again**, so the
+adjudicator is handed back the exact characters the finding was raised on and
+asked whether that is what the page says. It agrees, every time. A pass that
+reports a book adjudicated that way has manufactured confidence, which is
+worse than adjudicating nothing at all.
+
+Two things stand in, and they are **not** equal:
+
+| Stand-in        | What it is                                                           | Strength                                                |
+| --------------- | -------------------------------------------------------------------- | ------------------------------------------------------- |
+| `@core/witness` | a second **digitisation** — archive.org's OCR, a Gutenberg volunteer | shares no blind spots with ours; reach for it first     |
+| `findParallels` | the book's **own repeated passages**                                 | shares every blind spot one conversion introduced twice |
+
+The second is what a 1975 typescript usually has. Measured on _Patterns_
+Vol. I: 1,535 blocks, **12 repeated passages, 6 pointing one word two ways**,
+in a fifth of a second. The pair that argues for it is p7b8 against p100b12 —
+the same sixty words, converted independently a hundred leaves apart:
+
+|         | `Structure`            | `representation`            |
+| ------- | ---------------------- | --------------------------- |
+| p7b8    | clean                  | `representation'` — damaged |
+| p100b12 | `Structure'` — damaged | clean                       |
+
+Two of the six corroborate a `damage` finding that was `shape` on its own
+evidence. That is the promotion this exists for: **a parallel raises a
+finding's standing and never lowers it.**
+
+**A repeat is not a fault.** That book is a training manual and sets its
+examples out again on purpose. Only a _pointing_ difference is reported — a
+compositor setting one sentence twice does not turn a comma into an
+apostrophe, and a conversion does.
+
+`concordance` carries the same strip `crops` does: the paragraph, its
+neighbours, its parallels, and **no `why` and no `expected`**. What it cannot
+promise is what a crop promises, so the outcome differs by whether a parallel
+was found:
+
+- **a parallel** → the book settled it; this is a correction
+- **context only** → a **query for the editor**, never a correction
+
+The manifest says which by whether `parallels` is empty, so nobody has to
+remember the distinction.
+
+---
+
 ## Stage 9 — A person decides
 
 The verdicts are **a sheet to read, not a queue to approve**. Nothing reaches
@@ -467,6 +622,17 @@ The case that raised this: the 1916 leaf prints `belleves`. Not OCR noise — at
 silently correct it; never silently keep it. Whether a reprint keeps a
 compositor's error, fixes it, or notes it is the editor's call and nobody
 else's.
+
+**A standing ruling holds; it does not settle.** The editor may rule on a
+_class_ — "British/American spelling", "practiced / practised" — naming in
+`covers` the words it reaches. A query one of those reaches is not thereby
+decided: it stays outstanding, arrives at the gate **pre-filled** with the
+ruling's decision, and is filed only when the editor approves it, one at a
+time or all at once by a button that says how many. `drive.mjs held` lists
+them; `held approve --yes` is the same approval from the conversation, and
+the `--yes` is the editor's word. Never applied unasked — that was the
+editor's ruling on the mechanism itself, and the first version of it, which
+settled such queries silently, was wrong.
 
 Queries a reader should raise: a printer's error; a word the page genuinely
 cannot settle; an inconsistency the book itself contains; anything where
@@ -514,7 +680,7 @@ cannot settle; an inconsistency the book itself contains; anything where
 5. **Stage 5 has been run at chapter scale, not book scale.** 38 leaves of
    _Isis Unveiled_ Vol. I in 6 batched subagents: the batching, the seam tail
    and the checkpointing all held, and `transcribe` merged every batch by
-   `pageIndex`. What that run measured is in `LEDGER-isis-vol1.md` and the
+   `pageIndex`. What that run measured is in `books/isis-vol1-vjj34f/ledger.md` and the
    number to argue with before running the rest is there too — **968,799 tokens
    for 37 leaves, about 26k a leaf**, which projects to roughly 17M for the
    remaining 655. That is the case for Stage 2 doing more, not for more agents.

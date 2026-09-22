@@ -1,0 +1,18 @@
+{
+  "6affc702c24337832136b23de2cf9dc5db7b450991a09b3c15dad9fd01205d0e.pdf": {
+    "name": "The Human Aura",
+    "regime": "aura-loose (Acrobat Paper Capture scan)"
+  },
+  "98cbdb1da336adee6f6eba629f7b6074.pdf": {
+    "name": "Clairvoyance and Occult Powers",
+    "regime": "tight-clairvoyance (1916 letterpress, LuraDocument scan)"
+  },
+  "3b54ffef42bd8046738006a620579e4ab0cceb307bb996b8c3c678ddd09d04ac.pdf": {
+    "name": "Thought Vibration",
+    "regime": "Google Books scan, no text layer"
+  },
+  "2163dab6e4751d34585a9589239be6b17b1f4c428ee5837c5ad10933a4fc49c6.pdf": {
+    "name": "Patterns Vol. II",
+    "regime": "archive.org scan of a 1977 typescript, columns on many leaves"
+  }
+}

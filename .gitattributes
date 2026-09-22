@@ -1,0 +1,32 @@
+# Line endings are LF in the working tree, on every platform.
+#
+# Git for Windows ships with `core.autocrlf=true`, so a clone there rewrites
+# every text file to CRLF on checkout — and prettier's `endOfLine` default is
+# `lf`, which makes `npm run format:check` fail on the whole repository at
+# once. That check is one of the four run before every commit, so a Windows
+# checkout without this file cannot pass its own gate.
+#
+# The bash scripts matter twice over: CRLF in a shebang line gives
+# `bad interpreter: /usr/bin/env bash^M`, which reads like a missing
+# interpreter rather than a line ending.
+* text=auto eol=lf
+
+# Binary, and never to be touched. Marked explicitly rather than left to
+# `text=auto` to guess, because a wrong guess on a font or a wasm blob
+# corrupts it silently.
+*.pdf    binary
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.ico    binary
+*.wav    binary
+*.woff   binary
+*.woff2  binary
+*.ttf    binary
+*.otf    binary
+*.wasm   binary
+*.onnx   binary
+*.traineddata binary
+*.gz     binary
+*.zip    binary
+*.epub   binary

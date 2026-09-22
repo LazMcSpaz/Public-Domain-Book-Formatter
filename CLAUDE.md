@@ -8,7 +8,9 @@ Guidance for AI assistants (and humans) working in this repo.
 first, then the process it points at:
 [`PROCESS-reading.md`](./docs/PROCESS-reading.md) for getting the text right
 and [`PROCESS-edition.md`](./docs/PROCESS-edition.md) for turning a read book
-into a printed one.
+into a printed one. Not every book has the same parts, and
+[`FLOW.md`](./docs/FLOW.md) says which stages a book of a given shape gets —
+`drive.mjs book` reports the shape and route of the book that is open.
 
 A **browser** app (React + TypeScript + Vite) that turns public-domain books —
 scanned PDFs, or EPUBs that are already text — into print-ready **KDP**
@@ -434,7 +436,12 @@ its own HTTP cache. `curl` the module through `/@fs/...` and grep for a token
 from the change; `/src/...` returns `index.html` and will "confirm" anything.
 The first driver command after a restart often dies with `Target page,
 context or browser has been closed` — retry it. And `pkill -f vite` matches
-the shell running it, so kill from a detached script or by pid.
+the shell running it, so kill from a detached script or by pid. **The same
+rule covers `drive.mjs` itself**: `serve` holds every verb in memory, so a
+verb edited while it runs is a verb the next command does not run. `finish`
+was rewritten and re-run twice against its first version before this was
+noticed, and each time it reported an empty finding — the new code was on
+disk and the old code was answering.
 
 **"Restart" means kill vite, not check whether the port answers.** A restart
 script that starts vite only when :5173 is silent never restarts it at all, so
@@ -472,6 +479,82 @@ in all but name. What it changes is which findings are the editor's: one the
 paragraph answers was never a decision, and one it does not is raised with
 the paragraph attached, so the person deciding is not asked to go and find
 the context the reader should have brought.
+
+**And sixteen of its faults were still in the finished book.** _Patterns_
+Vol. I was read, corrected in 465 places, queried in 14, ruled on, exported and
+marked `complete: true`. Swept afterwards by a check that costs nothing and
+holds no opinion, the assembled book gave up **three words the conversion had
+split** (`descrip tion`, `induc tion`, `explici tly`), **seven stray full
+stops** (`typically. are`, `importantly. it`, `that. he`) and **six
+apostrophes standing where commas belong** (`examination' I tell`,
+`isolating' additional`, `greatest' proficiency`). Fifteen of the sixteen are
+plainly real; the sixteenth is a full stop inside an induction transcript and
+is the editor's call. The editor found three of them by reading the first
+twenty pages.
+
+**The sharpest of them is that two of the three split words were fixed once
+and missed once.** `descrip tion` and `induc tion` each stand **twice** in the
+pristine reading and **once** in the edited book: the reader met each fault,
+corrected it, and did not ask whether the volume had another. That is this
+file's own "a step done for one book is not done for the next", inside a single
+book — and it is what a sweep is for, which is why an `attested` finding lands
+through `sweep` rather than one block at a time. The `arc`/`are` substitution
+is the counter-example and the model: 15 occurrences in the pristine text, 14
+corrected, and the one left is a real arc, "the arc that started at the tip of
+his feet".
+
+Nothing had been looking. `checkConsistency` asks where the book disagrees with
+itself about a **word or a structure**, and `sense.ts` states the exclusion
+outright — _"no `style`, no `punctuation`, no `spelling`"_ — which is right for
+a photographed 1877 leaf, where a full stop mid-clause is the compositor's
+pointing and this edition promises to reproduce it, and exactly wrong for an
+OCR'd typescript, where the same character was produced by a program. The
+distinction is **provenance, not taste**: no reader of the 1975 typescript ever
+saw `descrip tion`. `checkDamage` (`@core/coherence/damage.ts`) asks the other
+question — is this a mark the printing trade sets at all? — and
+`drive.mjs damage --check` is the gate, because a book with conversion damage
+in it should not reach an export on somebody remembering.
+
+**The count was wrong the first time, and how it was wrong is the lesson.**
+The first sweep ran over a Python reconstruction of the book — transcription
+blocks with the `text` edits applied by matching `p{page}b{index}` — and
+reported **24** faults. Eight of them did not exist. Block ids are _derived at
+assembly_, and assembly joins paragraphs across page seams, so the id a
+correction is keyed to names a different block in any reconstruction that does
+not join them: the edits landed on the wrong paragraphs, leaving faults
+standing that had been fixed and manufacturing two (`amb iguity`,
+`exp erience`) that were never in the book at all. It also produced a confident
+false claim — that `here arc effective` survived to export — which the
+assembled body refutes.
+
+That is **"a leaf's text is not a block's text"**, one entry below, paid for
+again by the session that had just read it. `drive.mjs body` is what hands back
+the real thing, and a number measured against anything else is not measured.
+Three measurements shaped the checks, and each was a fault first:
+
+- **A presence test cannot see a fault that supplies its own evidence.** Asking
+  only whether the joined form is attested and neither fragment is returned
+  **zero** findings on a book with ten splits, because `tion` is "a word this
+  book uses" precisely because `descrip tion` and `induc tion` are where it uses
+  it. A frequency ceiling on the fragments finds all ten.
+- **`matchAll` consumes what it matches, and that hid six of the ten.** Scanning
+  `lines of the induc tion`, a two-word pattern takes `lines of`, then
+  `the induc`, and never considers `induc tion` as a pair at all. Every word has
+  to be tried against the one after it, which means walking the tokens.
+- **A left-to-right walk is what separates a stray apostrophe from a closing
+  quote.** A pattern match reported ten and five of them were `'hello'`,
+  `'something'`, `'vestibule'` — ordinary quoted words. Tracking whether a
+  quotation is open removed all five and kept every real one.
+
+And one check was **refuted by measurement and not shipped**. The editor's
+fourth complaint was an indentation that made no sense — a displayed quotation
+run into its paragraph (the Chomsky block on leaf 3). The obvious signal is
+paragraph length, and it is wrong: the real run-in is 1,100 characters and does
+not reach the 99th percentile, while the nine paragraphs that do are all
+legitimately long. A doubled full stop catches this one instance and is folded
+into `stray-point`; the general case has no honest signal yet and is named here
+rather than guessed at. See the module's own standard — _a rate built from one
+event flags good prose._
 
 **A PDF with no page images is text with nobody's pixels behind it, and it
 passed every check.** _Patterns of the Hypnotic Techniques_ Vol. I arrived as
@@ -748,7 +831,20 @@ node scripts/drive.mjs serve &       # hold a browser open, take commands on :77
 node scripts/drive.mjs load <book.json> <scan.pdf>   # from the shelf, not from the device
 node scripts/drive.mjs body out.json # the assembled book: block ids and the exact
                                      #   strings an edit must be written in terms of
-node scripts/drive.mjs ocr 12 16 19  # what OCR reads off named leaves, as plain text
+node scripts/drive.mjs ocr 12 16 19  # what OCR reads off named leaves, as plain text;
+                                     #   `fresh --clean=gentle` re-reads them through a
+                                     #   cleaning preset, on the same path recon takes
+node scripts/drive.mjs cleantrial t.json --truth truth.json --leaves 13,27   # every
+                                     #   preset against the proofed text, leaf by leaf;
+                                     #   `scripts/cleanup-ledger.mjs` makes the tables
+node scripts/drive.mjs second 12 16 --out second.json   # the second reader over
+                                     #   named leaves (all by default), as the file
+                                     #   `witness` consumes; `--layer` reads the scan's
+                                     #   own OCR layer instead; `--tier small` the
+                                     #   larger weights, once vendored
+node scripts/drive.mjs witness second.json   # two readings side by side: the
+                                     #   mechanical disagreements settled, the
+                                     #   substantive ones worst first
 node scripts/drive.mjs draft b.json 12 13 14   # those leaves as blocks, from the cached
                                      #   OCR — the free reading, to be corrected not trusted
 node scripts/drive.mjs transcribe <scan.pdf> b.json   # land a checked batch; merges by
@@ -760,6 +856,10 @@ node scripts/drive.mjs use <scan.pdf> # which book every later verb means
 node scripts/drive.mjs book          # what that is now; `book clear` forgets it
 node scripts/drive.mjs link review   # a URL that opens this book where decisions wait
 node scripts/drive.mjs queries q.md  # decisions waiting on the editor, as a sheet
+node scripts/drive.mjs held          # the waiting queries a standing ruling holds an
+                                     #   answer for; `held approve --yes` files them,
+                                     #   naming the ruling each came from — the
+                                     #   `--yes` is the editor's word, never implied
 node scripts/drive.mjs memos         # notes the editor left for the assistant, with
                                      #   the text each sits in; `memos resolve <id>
                                      #   "<what was done>"` answers one — the memo
@@ -775,6 +875,18 @@ node scripts/drive.mjs reading       # every passage the editor marked while rea
 node scripts/drive.mjs sweep --was "belleves"   # find across the whole book; free
 node scripts/drive.mjs sweep --was "belleves" --now "believes"   # fix them all,
                                      #   emphasis kept, every change reported
+node scripts/drive.mjs parallels     # passages the book prints twice, and
+                                     #   where the two copies point one word
+                                     #   two ways. The second witness a book
+                                     #   with no pixels has. Free
+node scripts/drive.mjs concordance f.json   # what a reader is handed instead of
+                                     #   a crop on such a book: the paragraph,
+                                     #   its neighbours, its parallels — and
+                                     #   never the hypothesis
+node scripts/drive.mjs damage        # marks the printing trade does not set:
+                                     #   split words, stray points, stray
+                                     #   apostrophes. Free, no pixels needed.
+                                     #   `--check` exits non-zero: a gate
 node scripts/drive.mjs runs          # readings held here; `runs drop <n>` removes one
 node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` work it
 
@@ -794,6 +906,26 @@ node scripts/book-files.mjs <book-dir> --check   # do the readable files still
                                      #   describe the book? regenerates them
                                      #   without --check; `--body body.json`
                                      #   checks corrections.md's entries too
+node scripts/drive.mjs finish <book-dir>          # the same list, from where the
+                                     #   work is done: adds the two checks that
+                                     #   need the browser (damage, glossary
+                                     #   marks) that the script can only ask for
+node scripts/book-files.mjs <book-dir> --finish  # every condition for "done",
+                                     #   named, with a non-zero exit. The list
+                                     #   is the thing to change when the
+                                     #   definition of finished changes
+node scripts/book-files.mjs --shelf books/       # one row per book: what each
+                                     #   has and what it is missing. Answers
+                                     #   "has this book got the apparatus the
+                                     #   last one got?", which was a habit
+node scripts/shape.mjs <book-dir> --write        # what the book is made of —
+                                     #   pixels, where its text came from, a
+                                     #   second digitisation — measured off the
+                                     #   scan and recorded as `run.shape`;
+                                     #   `--declare … --because …` where nothing
+                                     #   can measure it; `--shelf books/` one row
+                                     #   per book; `--flow` regenerates the table
+                                     #   in docs/FLOW.md
 node scripts/drive.mjs corrections <book-dir>    # rewrite corrections.md's entries
                                      #   from the book as it stands, keeping the
                                      #   prose above them; `--check` writes nothing
@@ -932,6 +1064,70 @@ Path aliases: `@core`, `@platform` (defined in `tsconfig.json`,
   never be added is a pass whose output is text: a "clean this up" step that
   hands back prose instead of a list of places to look.
 
+- **When there are no pixels, the book's own text is the witness — and only
+  where the book can actually answer.** Not every book here has a scan. A
+  born-digital PDF, an EPUB, somebody's 2016 OCR of a 1975 typescript printed
+  back to PDF: `looksScanned` says, correctly, that the page is not a
+  photograph, and a "crop" of such a leaf is the **text layer drawn again**.
+  That is not an independent witness, it is the same witness in a larger
+  typeface, and the rule above has nothing to accept a reading with. Both
+  volumes of _Patterns_ are this, and the ruling on leaf 38 of Vol. I says so
+  in as many words: _"This copy is born-digital and has no independent witness."_
+
+  What stands in for the pixels is the **volume's own vocabulary and its own
+  repeated text** — and the substitution is honest only where the book really
+  does answer. It answered `Gardiner`/`Gardner` (five settings against two),
+  `assymetry` against another book's title page, and `learned so quickly`
+  against the same example glossed on the next leaf. Those were not guesses;
+  the evidence was counted. It cannot answer whether a full stop should be a
+  comma, because a stray stop has no attested form to be counted against.
+
+  So the distinction is drawn at **what the book can count**, and it is carried
+  in the artefact rather than left to a tired session's judgement:
+  `DamageFinding.confidence` is `attested` where the volume settled it and
+  `shape` where it did not, and the two are listed apart on the sheet. An
+  `attested` finding is the same argument `draft/hyphens.ts` already makes
+  about a line-break hyphen — OCR read the characters, and whether the space
+  between them is real is a typographic question the book answers by having set
+  the word whole three hundred pages away. A `shape` finding is a place to
+  look, and nothing more.
+
+  **The sense pass has the same problem, and `crops` is where it bites.** That
+  verb is the safeguard of the whole pass — a finding becomes an edit only
+  after a reader with the leaf has said what the paper says — and on a
+  born-digital PDF it renders the text layer again. The adjudicator is handed
+  back the exact characters the finding was raised on and asked whether that is
+  what the page says; it agrees, every time, and the pass reports a book
+  adjudicated against itself. That is worse than adjudicating nothing, because
+  it manufactures confidence.
+
+  Two things stand in, and they are not equal. **A second digitisation is the
+  strong one** (`@core/witness`): archive.org's OCR, a Gutenberg volunteer —
+  readings that share no blind spots with ours at all. Reach for it first.
+  **The book's own repeated passages are the weak one** (`findParallels`), and
+  they are what a 1975 typescript usually has instead. Measured on _Patterns_
+  Vol. I: 1,535 blocks gave 12 repeated passages, **6 of which point one word
+  two ways**, in a fifth of a second — and two of the six corroborate a
+  `damage` finding that was `shape` on its own evidence. p7b8 prints
+  `Structure` and `representation'`; p100b12, a hundred leaves away, prints
+  `Structure'` and `representation,`. Each copy is damaged where the other is
+  clean, and neither needed a photograph.
+
+  `drive.mjs concordance` is the door, and it carries the same strip `crops`
+  does: the paragraph, its neighbours, its parallels, and **no `why` and no
+  `expected`**. What it cannot promise is what a crop promises — so a place
+  with a parallel is settled, and a place with only context **raises a query
+  for the editor rather than a correction**. The manifest says which by whether
+  `parallels` is empty.
+
+  Two things this does **not** license. It is not permission to repair a scanned
+  book from its vocabulary: where pixels exist they remain the only accepter,
+  because a scan has a second reader and a text layer does not. And it is not
+  permission to apply an `attested` finding automatically — `checkDamage`
+  writes nothing, `expected` is a hypothesis, and a class lands through
+  `sweep --was … --now …` with every change reported, once a person has agreed
+  the class is real.
+
 - **What needs reading is a structural question, not a statistical one.** Good
   OCR of a clean scan is made of `chirnrgeon` and `thc` — shaped exactly like
   words — so no measurement of word shapes can decide whether a file's text can
@@ -1021,6 +1217,21 @@ Path aliases: `@core`, `@platform` (defined in `tsconfig.json`,
 - **Junicode is vendored by hand** into `public/fonts/junicode/` (see the README
   there). It is not on npm and is loaded on demand; until it is present the app
   substitutes EB Garamond and says so.
+- **`ppu-paddle-ocr` 6.6.0 and `onnxruntime-web` 1.30.0, pinned exactly** — the
+  second reader (`src/platform/browser/second-reader.ts`). Its weights are
+  **vendored** into `public/paddle/` (`scripts/fetch-paddle-models.mjs`, with
+  the SHA-256s and the Apache-2.0 licence beside them), never fetched from the
+  Hugging Face host the package defaults to, which some networks refuse. The
+  runtime's 14 MB wasm rides as a hashed Vite asset through the package's
+  export map (`onnxruntime-web/ort-wasm-simd-threaded.wasm?url`; a deep
+  `dist/` path is refused), and `wasmPaths` is set **before** the engine's
+  module is imported, because that module sets a CDN path at import time
+  unless one is already there. Both packages are excluded from Vite's
+  dependency pre-bundling: pre-bundled, the runtime's wasm glue fails with
+  `no available backend found … K is not a function`, and a pre-bundled
+  engine would carry a second copy of the runtime with the path set on the
+  wrong one. Everything is loaded lazily, so a wizard user who never asks for
+  a second reading downloads none of it.
 
 ## Verifying UI work
 
@@ -2038,11 +2249,103 @@ closed`, which is indistinguishable from the flake the first command after a
 --check` → `transcribe`, 215 queries ruled under the rulings carried from
   Vol. I, the eight Part I notes paired under superscript markers, six bare
   marks declared, and the edition exported at 232 pages with no warnings
-  (`docs/LEDGER-patterns-vol2.md`). Four app faults came out of looking at
+  (`books/…VolII…/ledger.md` on the shelf). Four app faults came out of looking at
   its pages: table cells kept their tags, a ragged line could not hold one
   word, a token joined by a dash or a slash could not break, and the
   contents listed every heading level — each above under _What has actually
   gone wrong_, each fixed with a test that fails against the fault.
+- **Also done**: **every book carries its shape, and the flow is a table
+  generated from it** (`src/core/provenance`, `docs/FLOW.md`). Not every book
+  presented has the same parts, and the process is written for the fullest
+  case — so which stages applied to _Patterns_ Vol. I was decided well by one
+  session and decided again from scratch for Vol. II, and nothing in a book
+  file said which decision had been made. Three questions now, each a fact
+  about the file: are there pixels (does one image cover the sampled pages);
+  what text does it carry and where from (`none`, `converted` — somebody's
+  OCR — or `typeset`, which needs a compositor or a digital-text publisher
+  named, because a converted layer is made of words shaped exactly like right
+  ones and the default has to be the safe error); and is there a second
+  digitisation (true by construction for a scan with an OCR layer, which is
+  archive.org's reading and not ours). `shapeOfPdf` decides from the majority
+  of sampled pages, never the mean — Google's boilerplate on the first leaf of
+  _Thought Vibration_ made the mean say the book had a text layer. `routeFor`
+  turns a shape into the stages that apply, with the reason for each,
+  `docs/FLOW.md` carries that table between markers a test compares against
+  the code, and `book-files.mjs --finish` owes a book with no recorded shape.
+  Measured on the shelf under Node (`scripts/shape.mjs`, the browser's own
+  coverage walk moved to core so both run one implementation): eight books
+  measured, two declared with their reasons — the _Isis_ scan the shelf cannot
+  hold, and a collection built from twenty-seven readings — and every one of
+  the ten resolves to a route. The one consumer wired so far is the one that
+  matters most: `drive.mjs crops` refuses a book with no pixels by its shape
+  rather than by a session remembering, since a crop of such a leaf is the
+  hypothesis shown back to the adjudicator. `scripts/resolve-ts.mjs` came with
+  it — a resolver hook so a shelf script can load a core module that imports
+  another, which is what had kept `marks.ts` out of reach from plain Node.
+- **Also done**: **a standing ruling holds a query; it no longer settles one.**
+  The editor's decision on the mechanism, in his words: _pre-filled and held_.
+  A ruling on a class (`pageIndex: null`, its `covers` naming the words it
+  reaches) used to settle every query it reached silently — `answerFor`
+  returned it, `outstanding` dropped the query, and nobody saw the leaf. Now
+  such a query stays outstanding and arrives at the gate with the decision
+  filled in as `Question.held`, a field `defaultAnswers` ignores on purpose
+  and a test holds it to: put the value on `defaultValue` instead and the
+  test fails, because a seeded answer files on the next press of Next with
+  nobody having looked. Approval is the Accept button on the question, the
+  "Approve all N" bar at the gate, or `drive.mjs held approve --yes`; each
+  files an ordinary ruling whose reasoning names the standing ruling it came
+  from. `queries.md` lists held queries apart with what each would be, the
+  review sheet marks them held rather than settled, and the ledger's Queries
+  row counts waiting and held by matching leaf and quote. Measured on the
+  shelf first: three of the 88 unruled queries were under a standing ruling,
+  and those three were being reported settled by the app and unruled by
+  `--finish` at the same time. `standing.ts` is free of value imports so
+  `ledger.ts` can load it under plain Node — the `@core/queries` chain stops
+  at a TypeScript parameter property Node's type stripping cannot read.
+- **Also done**: **a leaf can be cleaned before the engine reads it, and the
+  measurement says not to** (`src/core/image/cleanup`,
+  `platform/browser/cleanup`, `docs/LEDGER-page-cleanup.md`). Every mature
+  scan pipeline does its cheapest quality work between the render and the
+  OCR, and the ops were already here, wired only to illustrations. Now
+  `cleanupOps` chooses them from the leaf's own tones — levels anchored to
+  the 85th and 2nd percentiles of its luminance histogram, so cream, grey and
+  foxed paper all land on the same white, and a blank or a plate gets no
+  levels at all — and `recognizeLeaf` is the **one read path** recon and
+  `drive.mjs ocr … fresh --clean=<preset>` both take, so the verb measures
+  what recon does. Two rules held by construction and by test: the cleaned
+  pixels reach the engine and nothing else, every crop and thumbnail still
+  cut from the original render; and no preset changes the page's size, so
+  every word box stays in original-page pixels. The recon cache refuses a
+  reading taken through a different preset, as it refuses a different DPI.
+  Measured on the ground-truth harness before any default was set — 42
+  leaves across four books, chosen by rule and written down first, aligned
+  against the proofed text — **no preset beats the raw render**: two fewer
+  substantive disagreements in ten thousand words is the engine's own noise,
+  the despeckle costs 2.5 s a leaf, and binarising loses, as the plan said it
+  would. `DEFAULT_CLEANUP` is `off` and the ledger says why; the machinery
+  stays for the shelf that is foxed where this one is not.
+- **Also done**: **a second OCR engine, so a book with no layer has a
+  witness** (`src/platform/browser/second-reader.ts`,
+  `@core/witness/reading-order`, `@core/witness/score`,
+  `docs/LEDGER-second-reader.md`). `@core/witness` had done the valuable part
+  since the first book — two readings side by side, the mechanical
+  disagreements settled without anyone looking, the substantive ones handed
+  back worst first — and the second reading came only from a scan's own OCR
+  layer, so half the shelf had one reader. PaddleOCR PP-OCRv6 now reads the
+  original render in the driver's Chromium (never a cleaned one: two readers
+  that share a step share its blind spots), its line boxes go into reading
+  order through the draft's own column geometry, and `drive.mjs second`
+  writes exactly the file `witness` already takes. Measured on the cleanup
+  ledger's 42 leaves with a rule written before the numbers: three in five of
+  what it raises is a real error, it catches two in five of Tesseract's, and
+  its best is where nothing else reads the leaf — 74% precise and 81%
+  complete on _The Human Aura_, whose own layer is 8% precise. Where a scan's
+  layer is good it stays the better witness (100% precise on _Clairvoyance_),
+  and both together catch more than either; `second --layer` writes the layer
+  in the same shape so the two are scored alike. What no witness can find is
+  written down: 142 of 241 errors both engines make the same way, most of
+  them columns read across. Driver-only for now, by the plan's own
+  sequencing; the app is the next step.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with
