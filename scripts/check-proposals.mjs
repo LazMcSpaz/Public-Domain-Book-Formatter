@@ -62,6 +62,10 @@ const files = new Map()
 // the first load happens before there is a book, and the app is entitled to
 // see a shelf with nothing on it rather than a name that resolves to nothing.
 let slug = null
+// Whether anything asked for the scan. The query gate must not: a link to it
+// takes the light route, and fetching the scan is minutes of download and
+// Tesseract for a recovery half this book finished long ago.
+let scanAsked = false
 await page.route('https://api.github.com/**', async (route) => {
   const url = route.request().url()
   if (process.env.PDBF_TRACE) console.log('  stub:', route.request().method(), url)
@@ -80,6 +84,7 @@ await page.route('https://api.github.com/**', async (route) => {
       body: JSON.stringify(slug ? [{ name: slug, type: 'dir' }] : [])
     })
   }
+  if (path === SCAN_PATH) scanAsked = true
   const held = files.get(path)
   if (held === undefined) return route.fulfill({ status: 404, body: '{}' })
   // `getBytes` asks for the raw media type and `getText` for JSON; the stub
@@ -161,6 +166,8 @@ const built = await page.evaluate(async (repo) => {
   }
 }, REPO)
 
+const SCAN_PATH = 'scans/deadbeef.pdf'
+
 const card = {
   key: built.key,
   fileName: 'no-scan.pdf',
@@ -173,7 +180,11 @@ const card = {
   complete: true,
   // The whole point: no scan anywhere, so the shelf is the only source of
   // pixels the gate can have.
-  scanPath: null
+  // Set, and that is the point: a book whose scan the shelf *does* hold still
+  // opens the light way when the link names the query gate. With this null the
+  // check passes against the fault, because the light route was already the
+  // only route for a book with no scan.
+  scanPath: SCAN_PATH
 }
 
 const b64 = (text) => Buffer.from(text).toString('base64')
@@ -241,6 +252,9 @@ if (plain.length !== 3) {
 }
 // The one that matters. A proposal arriving selected is the forbidden thing
 // wearing a menu's clothes, and it files on the next press of Next.
+if (scanAsked) {
+  problems.push('the scan was fetched — a link to the query gate must take the light route')
+}
 if (checked.length > 0) {
   problems.push(
     `${checked.length} option(s) arrived selected: ${checked.map((c) => c.value).join(', ')}`
@@ -255,6 +269,7 @@ if (overflow > 1) {
 
 console.log(`landed at : ${where}`)
 console.log(`offered   : ${values.join(', ')}`)
+console.log(`scan asked: ${scanAsked}`)
 console.log(`selected  : ${checked.length}`)
 console.log(`overflow  : ${overflow}px at 430px`)
 console.log('→ screenshots/14-query-proposals.png')

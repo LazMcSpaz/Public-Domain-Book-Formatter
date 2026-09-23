@@ -1848,6 +1848,22 @@ export function App(): JSX.Element {
         if (link.slug && !openedFromLink.current) {
           const wanted = books.find((b) => b.dir === link.slug || shelfSlug(b.key) === link.slug)
           openedFromLink.current = true
+          // A link to the query gate takes the light route **even when the
+          // scan is on the shelf**. The heavy one fetches the scan and runs
+          // recon, which on the Theosophical Glossary is twelve megabytes and
+          // Tesseract over 393 leaves — and every one of those minutes buys
+          // the recovery half of a flow this book finished weeks ago. What the
+          // gate needs is the words, the rulings and the proposals, all of
+          // which are in the book file; the crop is a help rather than a
+          // requirement, and where one is wanted it is cut in advance by a
+          // session that has the paper (`drive.mjs querycrops`) and fetched
+          // one at a time.
+          //
+          // Only for a book the reading has finished. `readFromShelf` marks
+          // the whole recovery half complete, which is true of a book that was
+          // read and false of one that was not — so an unfinished book still
+          // takes the door that can finish it, whatever the link says.
+          const rulesOnly = link.at === 'gate-queries' && wanted?.complete === true
           // A book whose scan is not on the shelf cannot be opened the full
           // way: the scan is what `openFromShelf` fetches and recon is what
           // lands the flow, so without one it stores the book and asks for the
@@ -1876,7 +1892,7 @@ export function App(): JSX.Element {
                 'there at all, the book has no `about.json` card, or it is on a branch ' +
                 `other than the one being read (${config.branch}).`
             )
-          } else if (wanted.scanPath) {
+          } else if (wanted.scanPath && !rulesOnly) {
             void openFromShelf(wanted)
           } else {
             void readFromShelf(wanted)
