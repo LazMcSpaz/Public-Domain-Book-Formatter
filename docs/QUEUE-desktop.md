@@ -329,8 +329,8 @@ shelf's checks exist to prevent. Finding the missing chunk is the editor's.
 
 ### 12. Proposals for the queries waiting on the editor
 
-`open`. Books: the Glossary (59 waiting), _Isis_ Vol. I (62), _The Key to
-Theosophy_ (12). **One book at a time**, and only a book no other session
+`open`; the Glossary `taken (desktop session, 2026-09-23)`. Books: the Glossary
+(59 waiting), _Isis_ Vol. I (62), _The Key to Theosophy_ (12). **One book at a time**, and only a book no other session
 holds.
 
 The gate now offers the reader's answers as options with nothing selected
