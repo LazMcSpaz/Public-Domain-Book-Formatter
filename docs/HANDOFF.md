@@ -114,7 +114,8 @@ run:
 1. **The scan**, and confirmation of which printing it is.
 2. **Whether this book stands alone or joins others in a volume.**
 3. **The imprint details**, if they are not already banked in a saved look.
-4. **Anything already ruled** on that edition.
+4. **Anything already ruled** on that edition. Rulings that hold for every
+   book are in `RULINGS.md` at the shelf's root, and a new book inherits them.
 
 Then, before reading a leaf, **record what the book is made of** —
 `node scripts/shape.mjs <book-dir> --write`, or `--declare … --because …`

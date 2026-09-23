@@ -9,7 +9,9 @@
  * — and `<kit>/queries-<from>-<to>.json`. Every sweep must replace exactly
  * one match; anything else is printed as CHECK and not retried, because a
  * `--was` short enough to be a class has to be counted before it is landed.
- * Rulings: a printer's error is `corrected` with the reader's fix, an
+ * Rulings: a printer's error is `corrected` with the reader's fix, under
+ * the shelf's standing ruling 1 (`RULINGS.md`: fix clear typos and damaged
+ * type, which every book inherits), an
  * `unclear` is `noted`, and an `inconsistent` is left for the editor and
  * listed. Runs the driver on `DRIVE_PORT` (default 7788).
  */
@@ -53,7 +55,8 @@ if (existsSync(corrPath)) {
 }
 
 const WHY = {
-  'printers-error': 'Editor: fix clear typos and damaged type.',
+  'printers-error':
+    'Editor: fix clear typos and damaged type (standing ruling 1, RULINGS.md on the shelf).',
   unclear:
     'Editor: where the scan cannot settle a mark, read from the word and flag it; otherwise as printed.'
 }
