@@ -331,6 +331,20 @@ Assembling around a gap would print a volume that skips fifty pages with
 nothing on the page to say so, which is exactly the silent failure this
 shelf's checks exist to prevent. Finding the missing chunk is the editor's.
 
+### 12a. A crop beside every waiting query, on every book
+
+`open`, and part of readying any book from here on. The editor rules from a
+tablet and wants the paper beside **every** decision, not only the ones a
+scan too large for the shelf forced. `drive.mjs querycrops` cuts them once
+from a session that has the scan; they go to `books/<dir>/queries/<key>.jpg`
+and the gate fetches them one at a time, so opening the book to rule on it
+still pulls down a book file rather than a volume of pixels.
+
+`book-files.mjs --finish` owes a book any that are missing and names the
+leaves, so this is a check rather than a habit. Done: the Glossary (59),
+_The Key to Theosophy_ (12), _Isis_ Vol. I (62, cut earlier). Owed by every
+book read from now on, _A Modern Panarion_ first.
+
 ### 12. Proposals for the queries waiting on the editor
 
 `open`; the Glossary `done (shelf dc3b4ed)`: 90 proposals on 58 of its 59
@@ -403,6 +417,10 @@ Then one of:
   against the unfixed code. Touch no book file and not the shelf."
 - **Item 11** — "Take item 11: name the missing Secret Doctrine Vol. I
   leaves in `report.md` and stop. Do not assemble around the gap."
+- **Item 12a** — _for the session that has just finished reading a book._
+  "Cut the query crops for <book> with `drive.mjs querycrops`, put them in
+  `books/<dir>/queries/`, and check with `book-files.mjs <book-dir> --finish`
+  that no waiting query is left without one."
 - **Item 12** — _for a session whose book is already open and whose recon
   cache is warm._
   "Take item 12 for <book>: write proposals for the queries waiting on the
