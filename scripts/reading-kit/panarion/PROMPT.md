@@ -33,6 +33,10 @@ Unlike _The Key to Theosophy_'s, this Google copy is not cropped: running heads 
 - **The draft drops italics entirely** in this book: every `<i>` has to be added from the image (`séance` is italic every time).
 - **A letter or quotation in small type** is `blockquote`, even where the draft types it `footnote` because it falls at the foot of a leaf; a footnote here is only what stands under a rule with a mark. A lead-in in text type (`And further :`) run into the quotation's first line stays one block (rule 10), typed by what most of it is.
 - **Where ink covers a whole line, ours leaves the line out** and the other engine keeps it: compare the two on every inked passage and read the line from the image.
+- **From leaf 67 the scan is in colour**, with red crayon as well as black ink from a former owner. Under red, ours drops or scrambles whole lines; the other engine reads them nearly perfectly. On an inked leaf start from the other engine's lines, then check each against the image (it still reads `m` as `ni`/`in`/`n` and `n` as `u`).
+- **The draft leaves every line-end hyphen and its space in** (`alle- gorical`): join them all, keeping a hyphen only in a real compound (`mustard-seed`).
+- **The source line under a title** (`[From The Spiritual Scientist.]`) is `caption`, with square brackets and the paper's name in italic; the draft makes it `heading` with round brackets.
+- **Straight and curly apostrophes both occur** (`lad's` straight, `Delessert’s` curly, leaf 76): set each as printed.
 - **Pen underlining and ink blots** from a former owner cross some passages; the words beneath are legible, and ours turns the ink into junk. Read under it.
 - **Italic worn type** prints many `e` as an open `c` (`exposurc`, `hcr`); at 8× a real wrong sort shows no stub of crossbar at all (`allowcd`). Only that is a printers-error.
 
