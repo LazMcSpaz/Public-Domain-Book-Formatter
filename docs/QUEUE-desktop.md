@@ -147,7 +147,7 @@ over 3,098 blocks after each stretch.
 
 ### 3. Glossary — the end-of-book passes
 
-`taken (desktop session, 2026-09-23)`. Book: the Glossary. In this order, each a commit:
+`done (shelf cb3ad10)`. Book: the Glossary. In this order, each a commit:
 
 > **The cloud session is applying standing rulings 2, 3 and 4 to this book's
 > 31 remaining class queries (16:0x UTC), after seven hours with no Glossary
@@ -190,6 +190,27 @@ over 3,098 blocks after each stretch.
 - The two names for one book: the directory is
   `Blavatsky-TheTheosophicalGlossary-1s37ewg` and the app's own derived slug
   is `c77f…-1s37ewg`. Settle which the shelf uses before the export exists.
+
+Done 2026-09-23, every pass a commit and recorded in the book's `ledger.md`
+(shelf `5872913` … `cb3ad10`). Left over, for whoever is next:
+
+- **59 queries wait on the editor**, 27 of them new from the sense pass —
+  oddities the photograph confirms are in the 1892 book (`Augiras`,
+  `Bardesanes (B.C. 155 to 228)`, `the Norse Purcæ`). Crop sheets 7–10 on the
+  desktop (`~/glossary-kit/sheet-*.jpg`); the same crops are at the gate.
+- **The space before `;` `:` `!` on leaves 0–29** was closed up by the same
+  early readers who closed the quotation marks; the as-printed ruling covers
+  it and this item did not. One more pass over the renders.
+- **`damage --check` fails on five places that are as printed** (three
+  abbreviations, a possessive, `Mac Gregor`). A gate that cannot pass is
+  worth a look before export.
+- **Every other book with a healed page seam has italics one word late**
+  until it is re-assembled with formatter `58c5a31`, and its PDF until it is
+  re-exported. Not done: this item does not export.
+- A cloud session applied the standing rulings to this book (`ec93b52`)
+  while this item held it. Nothing was lost — its file was built on this
+  item's latest and the two were merged — but the claim line is what
+  prevents the case where it would be.
 
 ### 4. Merge both branches to main
 
