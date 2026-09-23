@@ -387,7 +387,7 @@ Stated up front so the reviewer spends their time on the unknown.
 3. **Attack B2 and B5 with real pixels, not fixtures.** Every geometric bug
    here so far appeared only when a real page went through; synthetic-box tests
    found none of them. Use a scan other than the two in
-   `~/public-domain-books-storage/scans/`.
+   `~/Public-Domain-Books-Storage/scans/`.
 4. **Assume every report field is lying until checked.** Three of the four bugs
    in Stage D were of exactly one kind: a field claiming a check had happened,
    or a book was finished, when neither was true. That is this codebase's

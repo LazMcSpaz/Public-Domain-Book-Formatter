@@ -34,16 +34,61 @@ here rather than in a cloud session are three, and each item says which.
 ### Setting the machine up, once
 
 ```bash
-git clone <formatter> ~/Public-Domain-Book-Formatter
-git clone <shelf>     ~/public-domain-books-storage        # HANDOFF.md assumes this path
-cd ~/Public-Domain-Book-Formatter && npm install && npx playwright install chromium
-npm run dev &  &&  node scripts/drive.mjs serve &         # :5173 and :7788
+git clone https://github.com/LazMcSpaz/Public-Domain-Book-Formatter.git ~/Public-Domain-Book-Formatter
+cd ~/Public-Domain-Book-Formatter
+git checkout claude/pdf-text-cleaning-workflow-evyna3
+npm install && npx playwright install --with-deps chromium
 ```
+
+**The shelf will not clone whole.** It is 1.05 GiB packed and 1.2 GB checked
+out, and a plain `git clone` of it dies part way with `fetch-pack: unexpected
+disconnect` — measured, on a home connection. Git has no resume, so retrying
+starts from nothing. Clone it **blobless and sparse** instead: the commit
+history is small, and only the files named below are ever downloaded. Other
+books are added by widening the list, and their blobs arrive on demand.
+
+```bash
+git clone --filter=blob:none --no-checkout \
+  https://github.com/LazMcSpaz/Public-Domain-Books-Storage.git ~/Public-Domain-Books-Storage
+cd ~/Public-Domain-Books-Storage
+git sparse-checkout set --no-cone \
+  '/books/Blavatsky-TheTheosophicalGlossary-1s37ewg/**' \
+  '/voice/**' \
+  '/scans/c77f699e62cfb22ddae9c6dc67b110d9187d107bdd7a65557690479df6aa62e1.pdf'
+git checkout claude/pdf-text-cleaning-workflow-evyna3
+```
+
+Then, from the formatter, with the dev server and driver up:
+
+```bash
+npm run dev &                                              # :5173
+node scripts/drive.mjs serve &                             # :7788
+node scripts/drive.mjs load ~/Public-Domain-Books-Storage/books/Blavatsky-TheTheosophicalGlossary-1s37ewg/book.json \
+  ~/Public-Domain-Books-Storage/scans/c77f699e62cfb22ddae9c6dc67b110d9187d107bdd7a65557690479df6aa62e1.pdf
+node scripts/drive.mjs use ~/Public-Domain-Books-Storage/scans/c77f699e62cfb22ddae9c6dc67b110d9187d107bdd7a65557690479df6aa62e1.pdf
+```
+
+Opening it runs recon once — render, OCR and harvest over 393 leaves, roughly
+ten minutes — and caches it in the driver's profile. The second engine's
+reading is **not** redone: `second.json` and `witness.json` sit beside the
+book and the reading kit reads them from there.
 
 Opening a book on this machine for the first time runs recon (render, OCR,
 harvest — about ten minutes on the Glossary) and caches it in the driver's
 profile. The second engine's reading is **not** redone: it is on the shelf
 beside the book (`second.json`), and the reading kit reads it from there.
+
+## One thing the editor has to decide before the shelf gets worse
+
+**Fifty loose PDFs sit at the shelf's root, 778 MB of them** — page-range
+chunks named `coo1-ark--13960-…`, downloaded while fetching a volume and
+committed where they fell. They are two thirds of the repository, they are
+not `scans/` and nothing reads them. Deleting them now frees nothing: git
+keeps every version, so the 1.05 GiB stays in the history and every future
+clone still pays for it. Only a history rewrite (`git filter-repo`, then a
+force push, then every other clone re-made) actually removes them, and that
+is destructive and the editor's call, not a session's. Until it is decided,
+clone the shelf blobless and sparse, as above.
 
 ## The queue
 

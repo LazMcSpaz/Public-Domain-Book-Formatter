@@ -54,7 +54,7 @@ pushed, leaving a tree that looked like a week-old commit while the remote held
 everything. Assume nothing about what is on disk.
 
 ```bash
-for r in ~/Public-Domain-Book-Formatter ~/public-domain-books-storage; do
+for r in ~/Public-Domain-Book-Formatter ~/Public-Domain-Books-Storage; do
   git -C $r fetch origin -q
   echo "$r behind $(git -C $r rev-list --count HEAD..origin/main) ahead $(git -C $r rev-list --count origin/main..HEAD)"
 done

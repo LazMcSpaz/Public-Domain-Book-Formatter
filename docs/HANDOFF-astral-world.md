@@ -29,7 +29,7 @@ not a book you never chose, it is one that got lost. Just set it again.
 
 The shelf is a **separate repository**, `LazMcSpaz/Public-Domain-Books-Storage`.
 Attach it with `list_repos` then `add_repo` — it may already be attached, so
-check `/home/user/public-domain-books-storage` before assuming you cannot
+check `/home/user/Public-Domain-Books-Storage` before assuming you cannot
 reach it. **The browser's IndexedDB is a cache of the shelf, not the
 record.** This container gets reclaimed. Work that only exists locally is
 work you are about to lose.

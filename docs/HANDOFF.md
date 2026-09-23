@@ -18,7 +18,7 @@ written for one particular book, and is worth reading as a worked example.
 warning, including after a successful push. Run this first, every session:
 
 ```bash
-for r in ~/Public-Domain-Book-Formatter ~/public-domain-books-storage; do
+for r in ~/Public-Domain-Book-Formatter ~/Public-Domain-Books-Storage; do
   git -C $r fetch origin -q
   echo "$r behind $(git -C $r rev-list --count HEAD..origin/main) ahead $(git -C $r rev-list --count origin/main..HEAD)"
 done
@@ -32,7 +32,7 @@ was running.
 
 **Both repositories have to be present.** The formatter is the session's own
 checkout. The shelf is private and may not be attached: if
-`~/public-domain-books-storage` is missing, attach it with the `add_repo` tool
+`~/Public-Domain-Books-Storage` is missing, attach it with the `add_repo` tool
 (`owner: LazMcSpaz`, `repo: Public-Domain-Books-Storage`, `access: push`),
 clone it to that path if the tool says to, and then call `register_repo_root`
 so its own instructions load. Nothing else in this document works without it,
@@ -55,7 +55,7 @@ for prose gets a _proposal_ in its resolution, never a landed edit.
 
 - **The formatter** (`~/Public-Domain-Book-Formatter`, public) is the app and
   the tooling. Code, tests, `scripts/`, these docs.
-- **The shelf** (`~/public-domain-books-storage`, private) is the books. It is
+- **The shelf** (`~/Public-Domain-Books-Storage`, private) is the books. It is
   **the source of truth**; the browser's IndexedDB is a cache of it.
 
 On the shelf:
@@ -155,7 +155,7 @@ node scripts/book-files.mjs <book-dir> --finish     # every condition for "done"
 node scripts/drive.mjs damage --check               # no conversion damage left
 node scripts/voice.mjs audit <book-dir>/book.json
 git -C ~/Public-Domain-Book-Formatter rev-list --count origin/main..HEAD   # 0
-git -C ~/public-domain-books-storage  rev-list --count origin/main..HEAD   # 0
+git -C ~/Public-Domain-Books-Storage  rev-list --count origin/main..HEAD   # 0
 ```
 
 And commit per unit of work rather than per session. Forty tool calls with
