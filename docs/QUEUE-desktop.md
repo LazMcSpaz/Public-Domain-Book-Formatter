@@ -256,7 +256,7 @@ setting, and whether an edition may be built from it is the editor's.
 
 ### 10. The four uploads of 22 September
 
-`taken (second desktop session, ~/pdbf-b, 2026-09-23)`. At the shelf root, and none of them is public domain — 1954, 1975,
+`done (shelf c2e1044)`: shapes in `sources/SHAPES.md` (Pólya is `scan-with-layer`, not `converted`); Vol. 2's scan at `scans/082d3fae….pdf`, `second.json` and `witness.json` in `books/GrinderBandler-TheStructureOfMagicVolII-082d3f/`; no book files, since nothing is landed. At the shelf root, and none of them is public domain — 1954, 1975,
 1976 and a journal piece — so treat them as reading and reference text, not
 as editions to publish. Measured:
 
