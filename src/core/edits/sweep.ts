@@ -150,40 +150,144 @@ export function sweepText(
     // that begins and ends inside the match has nowhere to go and was
     // silently stripped. Measured on the Glossary: twenty-six blocks lost
     // their bold headword and italic tag that way, to sweeps that only ever
-    // meant to add a full stop. Trimming the common prefix and suffix leaves
-    // those runs where they were; the plain text that results is identical.
+    // meant to add a full stop. The plain text that results is identical.
+    //
+    // And each changed stretch is spliced on its own, right to left, because
+    // trimming only the shared ends is not enough: a phrase carrying two
+    // changes — the spaces inside `“Abatur”` and `“Logos”` — spliced
+    // everything between them as plain text, and a run lying wholly between
+    // (`<i>Third</i>`) was dropped. Measured on the Glossary: nine blocks lost
+    // italics and bold that way to a pass that only ever changed spaces.
     const slice = plain.slice(hit, hit + query.length)
-    const { prefix, suffix } = commonEnds(slice, replacement)
-    const core = replacement.slice(prefix, replacement.length - suffix)
-    const from = hit + prefix
-    const to = hit + query.length - suffix
-    // An insertion between two characters goes after the one before it, so
-    // a stop added after `(Sk.)` lands inside the italic run that sets it.
-    const start = from < to ? toMarkup[from]! : from > 0 ? toMarkup[from - 1]! + 1 : 0
-    const end = from < to ? toMarkup[to - 1]! + 1 : start
-
-    // Tags the match swallows. A run opened inside the match and closed after
-    // it (or the mirror) would leave a stray tag behind — harmless to the
-    // parser, which is forgiving, but it silently strips the marking from the
-    // words outside the match. Re-balancing at the splice keeps them marked.
-    const swallowed = out.slice(start, end).match(/<\/?[bi]>/gu) ?? []
-    const reopen: string[] = []
-    const reclose: string[] = []
-    for (const tag of swallowed) {
-      if (tag[1] === '/') {
-        const open = reopen.findIndex((t) => t === `<${tag[2]}>`)
-        // A closer whose opener is also in the match cancels it; one whose
-        // opener is *before* the match must close again ahead of the splice.
-        if (open >= 0) reopen.splice(open, 1)
-        else reclose.push(tag)
-      } else {
-        reopen.push(tag)
-      }
+    for (const h of hunks(slice, replacement).reverse()) {
+      const core = replacement.slice(h.bFrom, h.bTo)
+      const from = hit + h.aFrom
+      const to = hit + h.aTo
+      out = spliceAt(out, toMarkup, from, to, core)
     }
-
-    out = out.slice(0, start) + reclose.join('') + core + reopen.join('') + out.slice(end)
   }
   return { text: out, count: hits.length }
+}
+
+/**
+ * Replace plain characters `[from, to)` of the notation with `core`,
+ * re-balancing any tag the replaced stretch swallows.
+ */
+function spliceAt(out: string, toMarkup: number[], from: number, to: number, core: string): string {
+  // An insertion between two characters goes after the one before it, so
+  // a stop added after `(Sk.)` lands inside the italic run that sets it.
+  const start = from < to ? toMarkup[from]! : from > 0 ? toMarkup[from - 1]! + 1 : 0
+  const end = from < to ? toMarkup[to - 1]! + 1 : start
+
+  // Tags the stretch swallows. A run opened inside it and closed after it
+  // (or the mirror) would leave a stray tag behind — harmless to the parser,
+  // which is forgiving, but it silently strips the marking from the words
+  // outside. Re-balancing at the splice keeps them marked.
+  const swallowed = out.slice(start, end).match(/<\/?[bi]>/gu) ?? []
+  const reopen: string[] = []
+  const reclose: string[] = []
+  for (const tag of swallowed) {
+    if (tag[1] === '/') {
+      const open = reopen.findIndex((t) => t === `<${tag[2]}>`)
+      // A closer whose opener is also inside cancels it; one whose opener is
+      // *before* the stretch must close again ahead of the splice.
+      if (open >= 0) reopen.splice(open, 1)
+      else reclose.push(tag)
+    } else {
+      reopen.push(tag)
+    }
+  }
+  return out.slice(0, start) + reclose.join('') + core + reopen.join('') + out.slice(end)
+}
+
+interface Hunk {
+  aFrom: number
+  aTo: number
+  bFrom: number
+  bTo: number
+}
+
+/** Past this many cells the diff is not worth it and the ends are trimmed instead. */
+const HUNK_CELLS = 250_000
+
+/**
+ * Where two strings differ, as stretches in order, each widened to whole
+ * words and merged where they then touch. Whole words for the reason
+ * `commonEnds` gives: a tag re-opened at a splice's end must not land inside
+ * a word. A character-level longest common subsequence finds the stretches;
+ * a match is a phrase, so the table is small, and past `HUNK_CELLS` the old
+ * single stretch between the shared ends is used.
+ */
+function hunks(a: string, b: string): Hunk[] {
+  const n = a.length
+  const m = b.length
+  if (n * m > HUNK_CELLS) {
+    const { prefix, suffix } = commonEnds(a, b)
+    return [{ aFrom: prefix, aTo: n - suffix, bFrom: prefix, bTo: m - suffix }]
+  }
+  // lcs[i][j] = LCS length of a[i..] and b[j..].
+  const w = m + 1
+  const lcs = new Uint16Array((n + 1) * w)
+  for (let i = n - 1; i >= 0; i -= 1) {
+    for (let j = m - 1; j >= 0; j -= 1) {
+      lcs[i * w + j] =
+        a[i] === b[j]
+          ? lcs[(i + 1) * w + j + 1]! + 1
+          : Math.max(lcs[(i + 1) * w + j]!, lcs[i * w + j + 1]!)
+    }
+  }
+  const raw: Hunk[] = []
+  let i = 0
+  let j = 0
+  let open: Hunk | null = null
+  while (i < n || j < m) {
+    if (i < n && j < m && a[i] === b[j]) {
+      if (open) raw.push(open)
+      open = null
+      i += 1
+      j += 1
+      continue
+    }
+    open ??= { aFrom: i, aTo: i, bFrom: j, bTo: j }
+    if (j < m && (i === n || lcs[i * w + j + 1]! >= lcs[(i + 1) * w + j]!)) {
+      j += 1
+      open.bTo = j
+    } else {
+      i += 1
+      open.aTo = i
+    }
+  }
+  if (open) raw.push(open)
+
+  // Widen each to word boundaries. The characters outside a hunk are shared,
+  // so widening moves both sides together.
+  const widened = raw.map((h) => {
+    let { aFrom, aTo, bFrom, bTo } = h
+    while (
+      aFrom > 0 &&
+      isWordChar(a[aFrom - 1]) &&
+      (isWordChar(a[aFrom]) || isWordChar(b[bFrom]))
+    ) {
+      aFrom -= 1
+      bFrom -= 1
+    }
+    while (aTo < n && isWordChar(a[aTo]) && (isWordChar(a[aTo - 1]) || isWordChar(b[bTo - 1]))) {
+      aTo += 1
+      bTo += 1
+    }
+    return { aFrom, aTo, bFrom, bTo }
+  })
+  const merged: Hunk[] = []
+  for (const h of widened) {
+    const last = merged[merged.length - 1]
+    if (last && h.aFrom <= last.aTo) {
+      last.aTo = Math.max(last.aTo, h.aTo)
+      last.bTo = Math.max(last.bTo, h.bTo)
+    } else {
+      merged.push({ ...h })
+    }
+  }
+  return merged
 }
 
 const WORD_CHAR = /[\p{L}\p{N}\p{M}]/u

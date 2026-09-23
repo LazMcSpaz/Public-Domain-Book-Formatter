@@ -152,4 +152,34 @@ describe('sweepText keeps the runs a phrase spans', () => {
     const { text: two } = sweepText('An’ancient <i>King</i>', 'An’ancient King', 'An ancient King')
     expect(two).toBe('An ancient <i>King</i>')
   })
+
+  it('two changes in one phrase keep a run that sits between them', () => {
+    // Measured on the Glossary: a quotation-spacing pass swept 190 phrases,
+    // and nine blocks lost italics that lay between two changed marks —
+    // `<i>Third</i>` between `“Abatur”` and `“Logos”`, and on p10b0 two
+    // headwords and three tags. Trimming only the shared ends spliced the
+    // whole stretch between the first and last change as plain text.
+    const text = 'the <i>Third Life</i> or “Abatur”. He corresponds to the <i>Third</i> “Logos” in'
+    const { text: out, count } = sweepText(
+      text,
+      'Third Life or “Abatur”. He corresponds to the Third “Logos” in',
+      'Third Life or “ Abatur ”. He corresponds to the Third “ Logos ” in'
+    )
+    expect(count).toBe(1)
+    expect(out).toBe(
+      'the <i>Third Life</i> or “ Abatur ”. He corresponds to the <i>Third</i> “ Logos ” in'
+    )
+  })
+
+  it('a bold headword and its tag between two changes survive too', () => {
+    const text = 'during “pralaya” <i>(q.v.).</i> <b>Âdi-nâtha</b> <i>(Sk.).</i> The “first” Lord'
+    const { text: out } = sweepText(
+      text,
+      'during “pralaya” (q.v.). Âdi-nâtha (Sk.). The “first” Lord',
+      'during “ pralaya ” (q.v.). Âdi-nâtha (Sk.). The “ first ” Lord'
+    )
+    expect(out).toBe(
+      'during “ pralaya ” <i>(q.v.).</i> <b>Âdi-nâtha</b> <i>(Sk.).</i> The “ first ” Lord'
+    )
+  })
 })

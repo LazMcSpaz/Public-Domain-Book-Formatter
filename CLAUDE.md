@@ -347,6 +347,19 @@ that differ, cut back to word boundaries so a re-opened tag never lands
 mid-word; the plain text that results is identical, and the twenty-six were
 rebuilt from their pristine markup with the correction replayed into it.
 
+**"The characters that differ" was only the two ends, and it bit again.**
+That fix trimmed the text a match shares with its replacement at the start
+and the end, so a phrase carrying **two** changes still spliced everything
+between them as plain text. The Glossary's quotation-spacing pass, which
+only ever added spaces inside marks, swept 190 such phrases and took the
+italics and bold off thirteen blocks — `<i>Third</i>` lying between
+`“Abatur”` and `“Logos”`, two headwords and three tags on one block. The
+tag-count loop above caught it within the hour, which is the argument for
+running it after every sweep and not once at the end. `sweepText` now diffs
+the match against its replacement and splices each changed stretch alone;
+the test that pins it has two changes with a run between them, because a
+fixture with one change passes against the fault.
+
 **The file stated a bold and nothing read it, so the book printed none.**
 A born-digital PDF names the face of every word it sets, and `EmbeddedWord`
 carried only `italic` — so on _Patterns of the Hypnotic Techniques_ Vol. I the
