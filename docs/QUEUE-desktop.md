@@ -37,8 +37,24 @@ here rather than in a cloud session are three, and each item says which.
 git clone https://github.com/LazMcSpaz/Public-Domain-Book-Formatter.git ~/Public-Domain-Book-Formatter
 cd ~/Public-Domain-Book-Formatter
 git checkout claude/pdf-text-cleaning-workflow-evyna3
-npm install && npx playwright install --with-deps chromium
+node -v && which npm          # see the warning below before going further
+npm ci                        # `ci`, not `install`: the lockfile is committed
+npx playwright install --with-deps chromium
+npm test                      # 2,376 passing means the machine is ready
 ```
+
+**On WSL, check which Node is answering before installing anything.** Windows
+PATH interop puts the Windows `node` and `npm` ahead of Ubuntu's, and the
+install fails in a way that names neither: esbuild's postinstall spawns
+`cmd.exe`, `cmd.exe` refuses the `\\wsl.localhost\…` UNC path, falls back to
+`C:\Windows`, and reports `Cannot find module 'C:\Windows\install.js'`. The
+`EPERM … rmdir` warnings above it are the same cause. `which npm` returning
+anything under `/mnt/c/` is the tell. Install Node **inside** the
+distribution — nvm, then `nvm install` with no argument, which reads the
+`.nvmrc` in this repo and gives Node 22, the version the suite is proven
+against. `npm ci` after that, from a shell where `which npm` is under your
+home directory. Playwright's browsers are per-Node too, so a
+`playwright install` run under the Windows Node has to be run again.
 
 **The shelf will not clone whole.** It is 1.05 GiB packed and 1.2 GB checked
 out, and a plain `git clone` of it dies part way with `fetch-pack: unexpected
