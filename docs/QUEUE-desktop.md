@@ -238,7 +238,7 @@ rewrite is the editor's call, above.
 
 ### 9. The Secret Doctrine, ordered and assembled
 
-`taken (second desktop session, ~/pdbf-b, 2026-09-23)`. Thirty-one files, 169 MB, Theosophical University Press online
+`done (shelf 69cd4b9)`: Vol. II ordered, merged (811 leaves, rebuildable; `scripts/decrypt-chunks.mjs` + `merge-scan.mjs --manifest`) and built from its text layer, with `report.md` beside it; not exported. **Vol. I is missing pp. 359–411** and is ordered, not assembled. The chunks are ClearScan: `converted-text`, not a retypesetting. See `DECISIONS-2026-09-23.md` on the shelf. Thirty-one files, 169 MB, Theosophical University Press online
 edition, **already carrying text** — so this needs no OCR and no reading
 pass. What it needs is the order, and the order is legible: some chunks open
 on a part head (`BOOK I., PART II. THE EVOLUTION OF SYMBOLISM`, `BOOK
