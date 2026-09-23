@@ -40,6 +40,8 @@ Unlike _The Key to Theosophy_'s, this Google copy is not cropped: running heads 
 - **The draft leaves every line-end hyphen and its space in** (`alle- gorical`): join them all, keeping a hyphen only in a real compound (`mustard-seed`).
 - **The source line under a title** (`[From The Spiritual Scientist.]`) is `caption`, with square brackets and the paper's name in italic; the draft makes it `heading` with round brackets.
 - **An italic `!` or `?` slants with its word and goes inside the tag** (`<i>Homo !</i>`); a roman one after an italic word goes outside.
+- **The draft types the last line or two of a leaf `footnote`** even on a leaf with no notes: those are `paragraph`. Margin specks come out as `*` or `.` at a line's start or end: remove them.
+- **An italic `;` or `:` at the end of an italic run** slants with it and goes inside the tag, like `!` and `?`.
 - **A date or place line under a signature** is `caption` (usually italic); the draft types it `paragraph`.
 - **Small-capital openings** (`DEAR SIR`, `DESPITE`) come out of both engines in mixed case: set them in plain capitals.
 - **Straight and curly apostrophes both occur**, but most are curly and the draft straightens many; check each one on the image (`lad's` straight, `Delessert’s` curly, leaf 76), and set each as printed.
