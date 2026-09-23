@@ -119,7 +119,7 @@ Status is one of `open`, `taken (<who>, <date>)`, `done (<commit>)`.
 
 ### 1. Glossary — rule on the decisions waiting (editor)
 
-`open`. Book: `Blavatsky-TheTheosophicalGlossary-1s37ewg`. Thirty-two
+`open`. Book: `Blavatsky-TheTheosophicalGlossary-1s37ewg`. **Forty-nine**
 queries wait, all of one kind: a headword accented or spelt one way and its
 own text or a neighbour another (`Matrâ`/`Mâtrâ`, `Kâla`/`Kala`, `Adunaï`).
 The standing default is _leave as printed_. The crops are on sheets 1–6
@@ -214,7 +214,7 @@ step is the app.
 
 ### 8. Organise the shelf and write down what is on it
 
-`open`. Books: none — this touches no `book.json`, so it is safe beside any
+`done (shelf 9ed3f73)`. Books: none — this touches no `book.json`, so it is safe beside any
 reading. Fifty PDFs sit loose at the shelf root and a hundred and sixteen
 across the repository, named by SHA-256 or by a download slug, and until now
 nothing said what any of them were.
@@ -273,6 +273,56 @@ and put `second.json` and `witness.json` on the shelf beside the book, which
 is the once-per-book step the reading kit expects. That is hours of machine
 time and almost no judgement, which makes it the right thing to leave
 running.
+
+### 11. The Secret Doctrine Vol. I — the missing pages
+
+`open`. Book: `Blavatsky-TheSecretDoctrineVolI-tup`. Vol. II is built; Vol. I
+is ordered and **not** assembled, because pp. 359–411 are not among the
+chunks. Nothing can fill that gap from what is here, so the job is to say
+precisely which leaves are absent, in `report.md` beside the book, and stop.
+Assembling around a gap would print a volume that skips fifty pages with
+nothing on the page to say so, which is exactly the silent failure this
+shelf's checks exist to prevent. Finding the missing chunk is the editor's.
+
+## Handing an idle session its next item
+
+A session that finishes its item stops and waits. This is the list of what
+to type into it, so whoever is watching picks a line rather than composing
+one. **One book at a time**: never hand an item to a session while another
+holds the same book (the status line above says who holds what).
+
+Every hand-off carries the same preamble, because a session may be fresh:
+
+> Always `git pull --rebase` before pushing; other sessions push to this
+> branch. Read `docs/QUEUE-desktop.md`. Claim the item in that file and push
+> before you start. Work it through without stopping to ask questions;
+> anything needing the editor goes in a file, not a question to me. Push
+> each finished piece.
+
+Then one of:
+
+- **Item 3** — _for the session whose checkout already has the Glossary
+  open, since its recon cache is warm._
+  "Take item 3, the Glossary end-of-book passes. Work them in the order the
+  item lists. Do not export an edition and do not rule on any query."
+- **Item 6** — _for a session with a browser free._
+  "Take item 6, starting with The Key to Theosophy: its scan is at
+  `sources/blavatsky-other/blavatsky_the_key_to_theosophy_1889.pdf`. Record
+  its shape first, then recon, then the second reader, then read it with the
+  reading kit. One book; stop at the end of it."
+- **Item 5, the machine half only** — _the queries in it are the editor's._
+  "Take the second-witness half of item 5: run the second reader over Isis
+  Vol. I and write `second.json` and `witness.json` beside the book. Do not
+  touch its sixty-two queries; those are the editor's."
+- **Item 7** — _for a session with no browser and no shelf._
+  "Take item 7, the two app gaps. Tests for both, and each test must fail
+  against the unfixed code. Touch no book file and not the shelf."
+- **Item 11** — "Take item 11: name the missing Secret Doctrine Vol. I
+  leaves in `report.md` and stop. Do not assemble around the gap."
+
+**What is never handed out:** items 1 and 5's queries, which are rulings only
+the editor makes; item 4, the merge, which waits on the editor's word; and
+any export of an edition.
 
 ## What the cloud session does meanwhile
 
