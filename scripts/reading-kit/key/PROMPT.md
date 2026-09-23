@@ -42,6 +42,8 @@ This Google copy was cropped at the top: the running head and folio are gone on 
 - **The Enquirer's questions are set in a heavier, Clarendon-like face** from about leaf 95 on, as is the septenary table. **Do not mark it `<b>`**: whether it becomes bold is the editor's decision, and until then no leaf carries it, so the book stays one way. Note it in your report only if it changes.
 - **A capital on a half-cut line** often survives only as its feet. Set it only where every lower-case letter after it is read off the page and leaves one possible word (`Pythagorean`); otherwise stop the line there.
 - **Accent-shaped specks** sit over vowels (`consciousnéss`, `reve̊red`) and both engines take them for accents; this book sets no accent on English words.
+- **The draft sometimes drops a whole line**, most often a footnote's first line or a half-cut first line; the other engine usually keeps it. On every leaf with a footnote, compare the two readings of the note's opening.
+- **Footnote marks print as a solid round blob** (`•`) and a full stop can print heavy and raised (`see•`): the first is `*`, the second `.`.
 - **A sub-head can have no block at all** (leaf 108) and a section numeral usually has none: note it in your report with the leaf.
 - **Lines are lost at the foot of some leaves as well as the head**: record it in `cut.note`.
 - **Greek and Hebrew**: print accents and breathings only sometimes (`τὸ πᾶν` on one leaf, `παν` bare on the next). Set exactly what each occurrence prints. The section numeral above a section title (`III.`, `IV.`) sometimes has no block: note it in your report, do not add a block.
