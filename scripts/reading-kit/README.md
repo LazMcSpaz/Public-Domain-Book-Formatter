@@ -90,6 +90,13 @@ with "That run could not be read back" even though `transcribe` landed the batch
 names no scan, so set `scan` in the file (round trip proved) before `shape.mjs
 --write`.
 
+A second one: a run is keyed by the scan's modification time, and **checking
+out another branch in the shelf rewrites the scan and changes it**, so the
+next `use` names a run that is not there. Fast-forward `main` without a
+checkout — `git push origin refs/remotes/origin/<branch>:refs/heads/main`,
+which the server refuses unless it is a fast-forward — and if it has happened,
+`touch -m -d @<the key's seconds> <scan>` puts the time back.
+
 ## Rules the scripts hold, and one they cannot
 
 - A reader is given an image and a text and asked where they differ. It
