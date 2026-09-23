@@ -11,6 +11,13 @@
  * (scanner junk) are dropped; fields `transcribe` does not know are stripped,
  * because it refuses a page carrying one. Prints every printer's-error fix,
  * which is the list `corrections-<from>-<to>.json` is written from.
+ *
+ * A reader may also give a block a `kind` where the draft guessed it wrong —
+ * the draft types by geometry, and on a book set in two sizes a quotation in
+ * small type comes out `footnote`, which assembly then pulls out of the text.
+ * Only the kinds in `RETYPE` are taken, and every change is counted. A page's
+ * `cut` (what the scan lost at the head of the leaf) is written to
+ * `<kit>/cuts-<from>-<to>.json` rather than raised as a query on every leaf.
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -48,8 +55,11 @@ const BLOCK = new Set([
   'continuesNext'
 ])
 const KINDS = new Set(['printers-error', 'inconsistent', 'unclear'])
+const RETYPE = new Set(['paragraph', 'heading', 'blockquote', 'footnote', 'caption'])
 let blocks = 0
 let changed = 0
+let retyped = 0
+const cuts = []
 let emptied = 0
 const queries = []
 for (let s = Number(from); s <= Number(to); s += 5) {
@@ -70,7 +80,14 @@ for (let s = Number(from); s <= Number(to); s += 5) {
       if (slot.text !== b.text) changed++
       if (String(b.text).trim() === '') emptied++
       slot.text = b.text
+      if (b.kind && b.kind !== slot.kind) {
+        if (RETYPE.has(b.kind)) {
+          slot.kind = b.kind
+          retyped++
+        } else console.error(`leaf ${page.leaf} block ${b.i}: kind ${b.kind} not taken`)
+      }
     }
+    if (page.cut) cuts.push({ leaf: page.leaf, ...page.cut })
     for (const q of page.queries ?? []) queries.push({ leaf: page.leaf, ...q })
   }
 }
@@ -96,10 +113,11 @@ const out = draft.map((p) => {
 })
 writeFileSync(`${K}/batch-${tag}.json`, JSON.stringify(out, null, 1) + '\n')
 writeFileSync(`${K}/queries-${tag}.json`, JSON.stringify(queries, null, 1) + '\n')
+if (cuts.length) writeFileSync(`${K}/cuts-${tag}.json`, JSON.stringify(cuts, null, 1) + '\n')
 const kinds = {}
 for (const q of queries) kinds[q.kind ?? '?'] = (kinds[q.kind ?? '?'] ?? 0) + 1
 console.log(
-  `${blocks} blocks read back, ${changed} changed, ${emptied} emptied; ` +
+  `${blocks} blocks read back, ${changed} changed, ${emptied} emptied, ${retyped} retyped; ` +
     `${out.reduce((s, p) => s + p.blocks.length, 0)} blocks over ${out.length} leaves; queries ${JSON.stringify(kinds)}`
 )
 for (const q of queries.filter((q) => q.kind === 'printers-error'))
