@@ -149,6 +149,13 @@ over 3,098 blocks after each stretch.
 
 `taken (desktop session, 2026-09-23)`. Book: the Glossary. In this order, each a commit:
 
+> **The cloud session is applying standing rulings 2, 3 and 4 to this book's
+> 31 remaining class queries (16:0x UTC), after seven hours with no Glossary
+> commit from the desktop.** It files rulings and sweeps their fixes, and
+> touches nothing else in item 3's list. Rulings commute by construction
+> (`withRuling` collapses on the query key), so those cannot conflict; the
+> sweeps are ordinary `text` edits and can, so pull before pushing.
+
 - Quotation-mark spacing on leaves 0–29, which three readers normalised
   before the editor ruled _as printed_: re-check against the 400 DPI renders
   and restore what the page sets, per occurrence.
