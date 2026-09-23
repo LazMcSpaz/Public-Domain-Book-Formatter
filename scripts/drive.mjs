@@ -56,24 +56,49 @@ if (!verb || verb === 'serve') await serve()
 else await send(verb, rest)
 
 /** Client mode: hand the command to the browser that is already open. */
+//
+// `node:http` rather than `fetch`, because `fetch` gives up on a reply whose
+// headers have not arrived in five minutes — and `second` over a whole book,
+// `ocr fresh`, or a recon takes far longer. It then landed in the catch below
+// and reported "Nothing is listening", while the browser carried on with the
+// command and wrote its output with nobody waiting. A verb here takes as long
+// as it takes; only a refused connection means the driver is not running.
 async function send(verb, args) {
-  let res
-  try {
-    res = await fetch(`http://127.0.0.1:${PORT}/`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ verb, args })
-    })
-  } catch {
-    console.error(
-      `Nothing is listening on ${PORT}. Start the browser first:\n` +
-        '  node scripts/drive.mjs serve &'
+  const { request } = await import('node:http')
+  const body = JSON.stringify({ verb, args })
+  const { status, text } = await new Promise((done, fail) => {
+    const req = request(
+      {
+        host: '127.0.0.1',
+        port: PORT,
+        method: 'POST',
+        path: '/',
+        headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) }
+      },
+      (res) => {
+        let text = ''
+        res.setEncoding('utf8')
+        res.on('data', (chunk) => (text += chunk))
+        res.on('end', () => done({ status: res.statusCode ?? 0, text }))
+        res.on('error', fail)
+      }
     )
+    req.setTimeout(0)
+    req.on('error', fail)
+    req.end(body)
+  }).catch((err) => {
+    if (err?.code === 'ECONNREFUSED') {
+      console.error(
+        `Nothing is listening on ${PORT}. Start the browser first:\n` +
+          '  node scripts/drive.mjs serve &'
+      )
+    } else {
+      console.error(`The driver on ${PORT} did not answer: ${err?.message ?? err}`)
+    }
     process.exit(1)
-  }
-  const text = await res.text()
+  })
   console.log(text)
-  process.exit(res.ok ? 0 : 1)
+  process.exit(status >= 200 && status < 300 ? 0 : 1)
 }
 
 async function serve() {
