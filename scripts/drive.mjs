@@ -1082,7 +1082,13 @@ async function serve() {
               run: {
                 ...run,
                 key: was.run.key ?? run.key,
-                fileName: was.run.fileName ?? run.fileName
+                fileName: was.run.fileName ?? run.fileName,
+                // The shape is written into the book file by \`shape.mjs\`,
+                // which never touches this browser's store — so the run
+                // here usually has none, and spreading it over the file
+                // erased a shape the file had. The Key to Theosophy lost
+                // its recorded shape to the next save exactly that way.
+                shape: run.shape ?? was.run.shape ?? null
               },
               answers,
               voice: was.voice ?? {},
