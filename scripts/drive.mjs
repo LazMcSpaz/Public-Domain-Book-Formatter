@@ -28,7 +28,7 @@ import { chromium } from 'playwright'
 import { createServer } from 'node:http'
 import { access, mkdir, writeFile } from 'node:fs/promises'
 import { createReadStream, existsSync, statSync, writeFileSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { dirname, isAbsolute, resolve } from 'node:path'
 
 const PORT = Number(process.env.DRIVE_PORT ?? 7788)
 const URL_BASE = process.env.APP_URL ?? 'http://localhost:5173'
@@ -2954,7 +2954,8 @@ async function serve() {
       )
 
       const { writeFile, mkdir } = await import('node:fs/promises')
-      const dir = `${OUT}/${outDir}`
+      // An absolute path is where the crops go; a relative one is under DRIVE_OUT.
+      const dir = isAbsolute(outDir) ? outDir : `${OUT}/${outDir}`
       await mkdir(dir, { recursive: true })
       let bytesWritten = 0
       for (const crop of result.cut) {

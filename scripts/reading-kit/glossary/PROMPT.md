@@ -28,6 +28,8 @@ To look closer at a word, crop the render — there is no PIL or ImageMagick on 
 - **A worn `e` prints as `c`** (`Hc` for `He`, `thc` for `the`), and **both** engines pass it through, so agreement is no evidence. It is a broken sort: transcribe as printed and raise a printers-error.
 - In the **bold headword face** a `c` looks like an `o` (`Rosiorucians`, `Reuohlin` = Rosicrucians, Reuchlin), and ours reads a bold `S` as `8`, `S8` or `B` (`S8amgha`, `Battd` = Sattâ, `Bet` = Set). More tag misreadings: `(Tib.)` as `(7+.)`, `(Heb.)` as `(H¢b.)` or `(Hcb.)`.
 - An **italic circumflex** prints as a short acute-like tick (`Krî`, `Anugîtâ`); on a Sanskrit word it is a circumflex. A straight prime-like tick after an `S` (`S'ambhala`) is an apostrophe set straight — keep it straight.
+- In the bold face a `V` also looks like a `Y` (`Yidyâ`, `Yirtues` = Vidyâ, Virtues). Hebrew and Greek transliterations carry their own printed marks (`Sinaï`, `Sôd`, `Kykeôn`) — keep them.
+- A dash is sometimes set as two short rules (`shows--as`): transcribe as printed and raise a printers-error with the em dash as `fix`.
 - A tight line runs words together in ours (`Toacquire`, `withthe`); separate them.
 - Numbered series (the Rabbis, ~leaves 274–275) set the number bold with the name: `<b>7 Rabbi Gikatilla</b>`. Ours misreads those numbers (`8` for 3, `§` for 4); read them off the page.
 - The contributor sign-off is printed in small capitals with spacing that varies (`[w. w. w.]`, `[w.w.w.]`). Keep it lower case as the earlier leaves have it, spacing as printed; it is settled by one sweep later.
