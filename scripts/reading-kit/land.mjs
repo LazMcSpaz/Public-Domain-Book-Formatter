@@ -85,6 +85,12 @@ for (let s = Number(from); s <= Number(to); s += 5) {
       slot.text = b.text
       if (b.kind && b.kind !== slot.kind) {
         if (RETYPE.has(b.kind)) {
+          // A table that was really prose: its cells are what the table is
+          // regenerated from, so they go with the kind.
+          if (slot.kind === 'table') {
+            delete slot.cells
+            delete slot.headerRow
+          }
           slot.kind = b.kind
           retyped++
         } else console.error(`leaf ${page.leaf} block ${b.i}: kind ${b.kind} not taken`)
