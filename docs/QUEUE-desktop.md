@@ -329,7 +329,8 @@ shelf's checks exist to prevent. Finding the missing chunk is the editor's.
 
 ### 12. Proposals for the queries waiting on the editor
 
-`open`; the Glossary `taken (desktop session, 2026-09-23)`. Books: the Glossary
+`open`; the Glossary `done (shelf dc3b4ed)`: 90 proposals on 58 of its 59
+queries, none on one. Books: the Glossary
 (59 waiting), _Isis_ Vol. I (62), _The Key to Theosophy_ (12). **One book at a time**, and only a book no other session
 holds.
 
@@ -358,8 +359,9 @@ The rules are the ones the module is built on, and none of them is new:
 
 Work it into a JSON file — `[{ "leaf": 170, "quote": "…", "decision":
 "corrected", "correction": "…", "because": "…" }]` — then
-`drive.mjs propose p.json --by="<which session>"`, then `save`, which writes
-`proposals.md` beside the book. `propose` refuses a proposal whose words match
+`drive.mjs propose p.json --by="<which session>"`, then `save`, and then
+`card <shelf-book-dir>`, which is what writes `proposals.md` beside the book
+(`save` writes only `book.json`). `propose` refuses a proposal whose words match
 no waiting query, so a silent miss is not possible. Do not rule on anything.
 
 ## Handing an idle session its next item
