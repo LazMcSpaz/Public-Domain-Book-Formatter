@@ -256,6 +256,31 @@ git merge-base --is-ancestor HEAD origin/main && echo "local is behind"
 git fetch origin main && git reset --hard FETCH_HEAD
 ```
 
+**`drive.mjs save` writes the browser's run over the book file, and nothing
+checked whose book it was.** A desktop session took the Glossary's
+`corrections.md` while the editor was ruling on it in the app, worked out for
+itself that it must not write `book.json`, and stopped. It was right, and its
+instinct was the only thing standing there.
+
+Measured rather than feared, by doing it. With _The Key to Theosophy_ loaded
+in the driver's browser and the Glossary's `book.json` named as the
+destination, `save` wrote The Key's run into the Glossary's file: **267
+rulings replaced by 100**, 827 edits by 69, three megabytes of book by one.
+Not a book with its decisions lost — a different book entirely, under the
+right name, with a commit message saying whatever the session was doing.
+
+That is `landed.ts`'s fault reproduced on the side of the door that had
+nothing on it. `save` now compares the file it is about to overwrite against
+the run it is writing — rulings by leaf and quote, edits by id — and
+**refuses**, naming the first ruling that would go. `--force` is for a run
+meant to supersede the file, which is the one case this cannot tell from a
+loss. Refusing costs a reload; writing costs work the editor will never know
+is gone.
+
+Two rules for a session, and neither is new: **never `save` a book you did not
+load this session**, and **never `save` at all while the editor is working in
+the app** — the shelf is the source of truth and it has moved under you.
+
 **The app reads `main`, and a session's work was six commits away from it.**
 The editor opened a link to the Theosophical Glossary and the app said _"this
 link names a book that is not on the shelf"_ — with the book sitting in the

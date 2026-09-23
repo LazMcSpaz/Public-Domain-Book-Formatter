@@ -37,7 +37,16 @@ here rather than in a cloud session are three, and each item says which.
 5. **One branch until it is merged.** Both repositories are on
    `claude/pdf-text-cleaning-workflow-evyna3`; the desktop works there too
    until item 4 lands, then `main`.
-6. **`main` is what the editor sees, and it is fast-forwarded at every
+6. **Never `save` a book you did not load this session, and never `save`
+   while the editor is working in the app.** `drive.mjs save` writes the
+   browser's run over the book file wholesale. It now refuses when the file
+   carries rulings or edits the run does not — but the refusal is a net, not
+   a licence: the shelf is the source of truth and it moves under you, so a
+   verb that writes `book.json` is the one thing to be sure about before
+   running it. `corrections`, `querycrops`, `second`, `witness` and
+   `book-files.mjs` all leave `book.json` alone and are safe beside the
+   editor.
+7. **`main` is what the editor sees, and it is fast-forwarded at every
    natural stopping point.** Not a tidying step and not item 4's business —
    the deployed app is built by a workflow that fires on a push to the
    formatter's `main`, and `loadShelf` defaults to `branch: 'main'`, so a
@@ -227,7 +236,9 @@ Done 2026-09-23, every pass a commit and recorded in the book's `ledger.md`
   item's latest and the two were merged — but the claim line is what
   prevents the case where it would be.
 
-Close-out: `corrections.md` for the Glossary `taken (desktop session,
+Close-out: `corrections.md` for the Glossary `open` — the claim below was
+made by a session that died to a transport error without writing anything;
+released 2026-09-23. `taken (desktop session,
 2026-09-23)`.
 
 ### 4. Merge both branches to main
@@ -238,7 +249,8 @@ since, the accent fold, the sweep fix and the reading kit are branch-only.
 
 ### 5. Isis Unveiled Vol. I — the queries, and a second witness
 
-`open` for the queries (the editor's); the second reader `taken (desktop
+`open` for the queries (the editor's); the second reader `open` — claimed by
+a session that died before it started, released 2026-09-23. Was `taken (desktop
 session, 2026-09-23)`. Book: Isis Vol. I. Sixty-two queries wait on the editor at the gate
 (the scan is too large for the shelf, so the crops are pre-cut under
 `queries/`). Then a second engine over the volume with the kit's once-per-book

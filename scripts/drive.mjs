@@ -1037,7 +1037,11 @@ async function serve() {
      * in. Carrying the answers back means a verdict reached here survives
      * without having to walk the rest of the book to make it stick.
      */
-    save: async ([bookPath, out]) => {
+    save: async (args) => {
+      // Flags are taken out first, so `save book.json --force` cannot end up
+      // writing the book to a file called `--force`.
+      const flags = args.filter((a) => a.startsWith('--'))
+      let [bookPath, out] = args.filter((a) => !a.startsWith('--'))
       const { readFile, writeFile } = await import('node:fs/promises')
       // With no output named, the book goes back where it came from. The old
       // default was `book.out.json` in the current directory — which, run from
@@ -1138,6 +1142,51 @@ async function serve() {
       )
       const { json, pictures } = result
       const path = resolve(REPO, out)
+
+      // Refuse a save that would delete a decision made since this book was
+      // loaded.
+      //
+      // `save` writes the browser's run over the book file wholesale, so a
+      // session that loaded a book at ten past and saves it at twenty has
+      // written the file as it was at ten past — and every ruling the editor
+      // filed from the tablet in between is simply gone, with the commit
+      // message saying whatever the session was doing. That is the fault
+      // `landed.ts` guards the *app's* flush against, word for word, and the
+      // desktop side of the same door had nothing on it at all.
+      //
+      // It came within one step of happening: a session took the Glossary's
+      // `corrections.md` while the editor was ruling in the app, worked out
+      // for itself that it must not write `book.json`, and was right. The
+      // next session's instinct is not a mechanism.
+      //
+      // Refusing costs a reload; writing costs work the editor will never
+      // know is gone. Rulings are matched by leaf and quote and edits by id,
+      // which is what each is keyed by everywhere else. `--force` is for the
+      // one case this cannot tell from a loss: a book file being rebuilt on
+      // purpose from a run that is meant to supersede it.
+      const proposed = JSON.parse(json)
+      if (bookPath && bookPath !== '-') {
+        const ruleKey = (r) => `${r.pageIndex}\u0000${(r.quote ?? '').trim().toLowerCase()}`
+        const had = original.run?.rulings ?? []
+        const has = new Set((proposed.run?.rulings ?? []).map(ruleKey))
+        const lostRulings = had.filter((r) => !has.has(ruleKey(r)))
+        const hasEdits = new Set((proposed.run?.edits ?? []).map((e) => e.id))
+        const lostEdits = (original.run?.edits ?? []).filter((e) => !hasEdits.has(e.id))
+        if ((lostRulings.length > 0 || lostEdits.length > 0) && !flags.includes('--force')) {
+          throw new Error(
+            `Refusing to write ${out}: the book file on disk carries ` +
+              `${lostRulings.length} ruling(s) and ${lostEdits.length} edit(s) this run does ` +
+              'not have, so saving would delete them. That is what it looks like when the ' +
+              'editor has been working in the app since this book was loaded. Re-load the ' +
+              'book from the shelf and redo the work, or pass `--force` if this run is meant ' +
+              'to supersede the file.' +
+              (lostRulings.length > 0
+                ? ` First ruling that would go: leaf ${lostRulings[0].pageIndex}, ` +
+                  `“${(lostRulings[0].quote ?? '').slice(0, 60)}”.`
+                : '')
+          )
+        }
+      }
       // Written once and skipped ever after, the scan's own rule: the bytes are
       // named by their content, so a picture already on disk under that name is
       // that picture and rewriting it would only churn the repository.
@@ -1155,7 +1204,7 @@ async function serve() {
         written.push(picture.path)
       }
       await writeFile(path, json)
-      const parsed = JSON.parse(json)
+      const parsed = proposed
       const verdicts = parsed.answers?.['gate-uncertainties'] ?? {}
       const fixes = Object.entries(verdicts).filter(
         ([id, v]) => /-fix$/.test(id) && v && Object.keys(v).length > 0
