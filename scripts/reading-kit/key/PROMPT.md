@@ -44,7 +44,7 @@ This Google copy was cropped at the top: the running head and folio are gone on 
 - **Accent-shaped specks** sit over vowels (`consciousnéss`, `reve̊red`) and both engines take them for accents; this book sets no accent on English words.
 - **The draft sometimes drops a whole line**, most often a footnote's first line or a half-cut first line; the other engine usually keeps it. On every leaf with a footnote, compare the two readings of the note's opening.
 - **Footnote marks print as a solid round blob** (`•`) and a full stop can print heavy and raised (`see•`): the first is `*`, the second `.`.
-- **A sub-head can have no block at all** (leaf 108) and a section numeral usually has none: note it in your report with the leaf.
+- **The draft sometimes has no block at all** for a footnote, a sub-head or a section numeral (`VII.`) that the page prints. Put it in with the page's `add` list: `after` is the `i` it follows (`-1` for the top of the leaf), `kind` one of the five below, `text` read off the page like any other block. Add only what you can see printed; never a line the scan lost.
 - **Lines are lost at the foot of some leaves as well as the head**: record it in `cut.note`.
 - **Greek and Hebrew**: print accents and breathings only sometimes (`τὸ πᾶν` on one leaf, `παν` bare on the next). Set exactly what each occurrence prints. The section numeral above a section title (`III.`, `IV.`) sometimes has no block: note it in your report, do not add a block.
 - **The page's own spellings stand**: `ecstacy`, `Budhism`, `phænomena`, `Boëhme`. They are not printer's errors.
@@ -60,6 +60,7 @@ Write `OUT` — shape:
 
 ```json
 [{"leaf": N, "blocks": [{"i": 0, "text": "...", "kind": "only where the draft's is wrong"}, ...],
+  "add": [{"after": 3, "kind": "footnote", "text": "only for a block the draft left out altogether"}],
   "cut": {"lines": "none|part|whole|more", "firstWords": "the first words you set on this leaf", "note": "what the scan lost here, and anything you left out"},
   "queries": [{"quote": "exact words as printed", "why": "...", "kind": "printers-error|inconsistent|unclear", "fix": "only for printers-error: the word as it should read"}]}]
 ```

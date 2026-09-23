@@ -18,6 +18,9 @@
  * Only the kinds in `RETYPE` are taken, and every change is counted. A page's
  * `cut` (what the scan lost at the head of the leaf) is written to
  * `<kit>/cuts-<from>-<to>.json` rather than raised as a query on every leaf.
+ * And a page's `add` — `[{after, kind, text}]` — puts in a block the draft
+ * left out altogether (a footnote, a sub-head, a section numeral), read off
+ * the page by the reader; `after` is the `i` it follows, -1 for the top.
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -88,8 +91,24 @@ for (let s = Number(from); s <= Number(to); s += 5) {
       }
     }
     if (page.cut) cuts.push({ leaf: page.leaf, ...page.cut })
+    for (const a of page.add ?? []) {
+      if (!RETYPE.has(a.kind) || !String(a.text ?? '').trim()) {
+        console.error(`leaf ${page.leaf}: an added block needs a kind and a text`)
+        continue
+      }
+      ;(target.added ??= []).push(a)
+    }
     for (const q of page.queries ?? []) queries.push({ leaf: page.leaf, ...q })
   }
+}
+let added = 0
+for (const p of draft) {
+  // Highest `after` first, so each insertion leaves the indices below it alone.
+  for (const a of (p.added ?? []).sort((x, y) => y.after - x.after)) {
+    p.blocks.splice(Math.max(0, a.after + 1), 0, { kind: a.kind, text: a.text })
+    added++
+  }
+  delete p.added
 }
 const out = draft.map((p) => {
   const page = {}
@@ -117,7 +136,7 @@ if (cuts.length) writeFileSync(`${K}/cuts-${tag}.json`, JSON.stringify(cuts, nul
 const kinds = {}
 for (const q of queries) kinds[q.kind ?? '?'] = (kinds[q.kind ?? '?'] ?? 0) + 1
 console.log(
-  `${blocks} blocks read back, ${changed} changed, ${emptied} emptied, ${retyped} retyped; ` +
+  `${blocks} blocks read back, ${changed} changed, ${emptied} emptied, ${retyped} retyped, ${added} added; ` +
     `${out.reduce((s, p) => s + p.blocks.length, 0)} blocks over ${out.length} leaves; queries ${JSON.stringify(kinds)}`
 )
 for (const q of queries.filter((q) => q.kind === 'printers-error'))
