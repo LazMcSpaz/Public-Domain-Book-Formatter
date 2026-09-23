@@ -227,6 +227,9 @@ Done 2026-09-23, every pass a commit and recorded in the book's `ledger.md`
   item's latest and the two were merged — but the claim line is what
   prevents the case where it would be.
 
+Close-out: `corrections.md` for the Glossary `taken (desktop session,
+2026-09-23)`.
+
 ### 4. Merge both branches to main
 
 `open`, when the editor says. Both repositories, fast-forward if possible.
@@ -235,7 +238,8 @@ since, the accent fold, the sweep fix and the reading kit are branch-only.
 
 ### 5. Isis Unveiled Vol. I — the queries, and a second witness
 
-`open`. Book: Isis Vol. I. Sixty-two queries wait on the editor at the gate
+`open` for the queries (the editor's); the second reader `taken (desktop
+session, 2026-09-23)`. Book: Isis Vol. I. Sixty-two queries wait on the editor at the gate
 (the scan is too large for the shelf, so the crops are pre-cut under
 `queries/`). Then a second engine over the volume with the kit's once-per-book
 step, which this book has never had.
