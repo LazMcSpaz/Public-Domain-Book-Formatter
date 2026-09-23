@@ -147,7 +147,7 @@ over 3,098 blocks after each stretch.
 
 ### 3. Glossary — the end-of-book passes
 
-`open`, after 2. Book: the Glossary. In this order, each a commit:
+`taken (desktop session, 2026-09-23)`. Book: the Glossary. In this order, each a commit:
 
 - Quotation-mark spacing on leaves 0–29, which three readers normalised
   before the editor ruled _as printed_: re-check against the 400 DPI renders
