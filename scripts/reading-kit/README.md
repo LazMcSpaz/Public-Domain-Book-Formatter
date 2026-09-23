@@ -61,6 +61,10 @@ node scripts/drive.mjs queries <shelf>/books/<slug>/queries.md
 git -C <shelf> add books/<slug> && git -C <shelf> commit && git -C <shelf> push
 ```
 
+A reader who needs a closer look uses `crop.mjs` (pure Node, since the
+desktop has no image library): `node scripts/reading-kit/crop.mjs <png>
+<out.png> x y w h [scale]`.
+
 `apply.mjs` lists what it left for the editor. Cut crops for those leaves
 and send them as one sheet:
 

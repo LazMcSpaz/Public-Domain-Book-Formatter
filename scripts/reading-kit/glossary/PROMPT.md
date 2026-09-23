@@ -10,6 +10,8 @@ Brief: `BRIEF` — an array, one entry per leaf:
 
 Use `WORKDIR` for any scratch files of your own. Do not write anywhere else.
 
+To look closer at a word, crop the render — there is no PIL or ImageMagick on the desktop, and you do not need to write a cropper: `node scripts/reading-kit/crop.mjs <image> WORKDIR/c.png <x> <y> <w> <h> [scale]` (run from the formatter checkout; pixels of the 400 DPI render; `scale` 2 or 3 to enlarge an accent, 0.5 to see a whole column).
+
 ## What each engine is bad at on this book (confirmed against crops)
 
 - **Ours** drops every circumflex (`Purdnas` for `Purânas`) and every `æ`/`œ` ligature (`Ather` for `Æther`, `Judzus` for `Judæus`); mangles the language tag (`(S%.)` for `(Sk.)`); reads a leading `Â` as `K`.
@@ -23,6 +25,13 @@ Use `WORKDIR` for any scratch files of your own. Do not write anywhere else.
 - The circumflex rule is for Sanskrit, Persian and Hebrew transliterations. **French, Egyptian and Norse words carry their own printed accents** — `Lévi`, `Ré`, `Thmé`, `Örgelmir`, `Bör`, `Müller` — do not "correct" a plainly printed acute or umlaut. A worn circumflex sort prints as a short grave-like tick; on a Sanskrit word that is a circumflex.
 - Both engines drop Greek letters (`Ω`, `βαφη`) and read small capitals badly; check any entry with either against the image.
 - The book uses old-style figures: a zero looks like a small `o`. In a number it is a zero.
+- **A worn `e` prints as `c`** (`Hc` for `He`, `thc` for `the`), and **both** engines pass it through, so agreement is no evidence. It is a broken sort: transcribe as printed and raise a printers-error.
+- In the **bold headword face** a `c` looks like an `o` (`Rosiorucians`, `Reuohlin` = Rosicrucians, Reuchlin), and ours reads a bold `S` as `8`, `S8` or `B` (`S8amgha`, `Battd` = Sattâ, `Bet` = Set). More tag misreadings: `(Tib.)` as `(7+.)`, `(Heb.)` as `(H¢b.)` or `(Hcb.)`.
+- An **italic circumflex** prints as a short acute-like tick (`Krî`, `Anugîtâ`); on a Sanskrit word it is a circumflex. A straight prime-like tick after an `S` (`S'ambhala`) is an apostrophe set straight — keep it straight.
+- A tight line runs words together in ours (`Toacquire`, `withthe`); separate them.
+- Numbered series (the Rabbis, ~leaves 274–275) set the number bold with the name: `<b>7 Rabbi Gikatilla</b>`. Ours misreads those numbers (`8` for 3, `§` for 4); read them off the page.
+- The contributor sign-off is printed in small capitals with spacing that varies (`[w. w. w.]`, `[w.w.w.]`). Keep it lower case as the earlier leaves have it, spacing as printed; it is settled by one sweep later.
+- A block the brief types `table` is regenerated from its cells, so prose written into it is thrown away. If a `table` block is really prose (entries the draft mistook for columns), correct the text and **say so in your report** with the leaf and `i`.
 
 ## Output
 
@@ -41,7 +50,7 @@ Every block, corrected or not, with its `i`. Scanner junk (a signature letter, p
 2. **Accents and ligatures are the main prize.** Read them off the image. Where the image genuinely cannot settle an accent, set the letter bare and raise a query (`unclear`).
 3. **Mark emphasis**: `<b>headword</b>`, `<i>…</i>` for italic runs (the whole language tag `(Sk.)` is italic). Small capitals: plain capitals.
 4. **Leave out** the running head and folio.
-5. **Clear typos and damaged type** (a misspelling the page plainly makes, a tag missing its full stop, an unpaired quotation mark, a broken sort): transcribe **as printed** in the block, and raise a query with `kind: "printers-error"` and `fix` giving the word as it should read. The editor has ruled this class is corrected; the record still has to show what the page printed.
+5. **Clear typos and damaged type** (a misspelling the page plainly makes, a tag missing its full stop, an unpaired quotation mark, a broken sort): transcribe **as printed** in the block, and raise a query with `kind: "printers-error"` and `fix` giving the word as it should read. The editor has ruled this class is corrected; the record still has to show what the page printed. A printers-error `fix` is applied without anyone looking again, so it must be certain: if the fix means **choosing** — where an unclosed quotation should close, which of two words was meant — it is not a printers-error; raise it `inconsistent` with no fix.
 6. **Do not query** pointing that merely varies between entries (a stop inside one bracket and outside another, a comma inside a quotation), or a headword out of alphabetical order — the editor has ruled those stay as printed.
 7. Anything that is genuinely the editor's — the book contradicting itself about a word, a sentence that does not construe — `kind: "inconsistent"` or `"unclear"`, transcribed as printed, **no fix proposed**.
 8. If a block holds two entries run together, or an entry is split across two blocks, do not restructure — correct the text and note it in your report.
