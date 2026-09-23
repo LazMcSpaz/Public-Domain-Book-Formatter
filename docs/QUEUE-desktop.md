@@ -223,7 +223,7 @@ rewrite is the editor's call, above.
 
 ### 9. The Secret Doctrine, ordered and assembled
 
-`open`. Thirty-one files, 169 MB, Theosophical University Press online
+`taken (second desktop session, ~/pdbf-b, 2026-09-23)`. Thirty-one files, 169 MB, Theosophical University Press online
 edition, **already carrying text** — so this needs no OCR and no reading
 pass. What it needs is the order, and the order is legible: some chunks open
 on a part head (`BOOK I., PART II. THE EVOLUTION OF SYMBOLISM`, `BOOK
