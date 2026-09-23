@@ -130,12 +130,20 @@ one; it is listed so nothing else touches the book while it is being ruled.
 
 ### 2. Glossary — read leaves 270 to 392
 
-`taken (desktop session, 2026-09-22)`. Book: the Glossary. Four stretches through
+`done (shelf 544b63d)`. Book: the Glossary. Four stretches through
 `scripts/reading-kit/README.md`, exactly as 0–269 were read. Land each
 stretch before starting the next; send a crop sheet for whatever
 `apply.mjs` leaves for the editor. Fold anything a reader reports about
 the engines into `scripts/reading-kit/glossary/PROMPT.md`. Done when
 `drive.mjs transcribe` reports `stillMissing: 0`.
+
+Read 2026-09-22/23 on the desktop, 123 leaves in four stretches (shelf
+`14c2d06`, `f25e18c`, `513689a`, `544b63d`); `transcribe` reports 393 of 393,
+`complete: true`. Sixty printer's errors swept one-for-one, 88 rulings filed
+under the standing rules, and **seventeen queries left for the editor** on
+crop sheets 7–9 (`~/glossary-kit/sheet-{7,8,9}.jpg` on the desktop; the
+same crops are at the gate). Tag counts pristine against edited: no drift
+over 3,098 blocks after each stretch.
 
 ### 3. Glossary — the end-of-book passes
 
@@ -157,6 +165,13 @@ the engines into `scripts/reading-kit/glossary/PROMPT.md`. Done when
   the kinds (`book.json`, `run.transcriptions[].blocks[].kind`) and settle
   what an entry _is_ before layout; the reference text does not care, the
   page does.
+- Matter the page sets in columns that the drafts set as prose, one row a
+  block: Myer's Tetrad (leaf 329), the Brahmanical/Buddhist parallel with its
+  brace (339), the sum run into the next paragraph (353), the Yuga table
+  (385, blocks 2–17). Rebuild each as a `table` block against the render.
+- Leaves 270–392 add their own share of `blockquote` entries (35 in the last
+  stretch alone); two more last lines typed `footnote` (370, 376) were set as
+  paragraphs before landing, so none reached the book this time.
 - Entries the draft ran together or split across blocks (every stretch had
   some): `drive.mjs split` and `block … merge` until one block is one entry.
   This is Phase 3 work but it decides what the reference text looks like.

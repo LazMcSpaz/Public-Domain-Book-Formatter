@@ -48,7 +48,14 @@ kind, and anything the next stretch should know. Fold what is new into
 PROMPT.md's engine notes before the next stretch — that is how the brief
 got its list.
 
-When all six are back:
+When all six are back, two things a reader cannot fix go into
+`<kit>/ruled-<tag>.json` by hand before `land.mjs`, because a reader changes
+text and never a block's kind: a block the draft typed `footnote` that is a
+paragraph's last line (assembly pulls a footnote out of the text, and the
+line is lost from the body), and a `table` holding prose (its text is
+regenerated from its cells). Count the kinds first; every stretch of the
+Glossary had one or the other. And read the reports for any `fix` that
+means choosing, which is the editor's rather than a printer's error.
 
 ```bash
 node scripts/reading-kit/land.mjs <kit> <from> <to>      # → batch-, queries-<tag>.json; prints the PE fixes
