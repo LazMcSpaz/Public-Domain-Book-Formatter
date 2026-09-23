@@ -77,8 +77,24 @@ export async function registerWorker(): Promise<boolean> {
     // sub-path on Pages and an absolute `/sw.js` is a 404 there — which would
     // fail silently, leaving an app that simply never works offline.
     const url = new URL('sw.js', new URL(import.meta.env.BASE_URL, window.location.href))
-    await navigator.serviceWorker.register(url, {
+    const registration = await navigator.serviceWorker.register(url, {
       scope: new URL(import.meta.env.BASE_URL, window.location.href).pathname
+    })
+    // Ask for the current worker every start-up, rather than relying on the
+    // browser to notice. `register()` on an already-registered scope usually
+    // triggers an update check and on iOS is the least reliable about it —
+    // and an installed app resumes from the app switcher for days without
+    // ever making a navigation, which is the request the worker's
+    // network-first rule catches a new build on. The cost of that was an
+    // editor on an older build being told a link named a book that is not on
+    // the shelf, when the book was there and his copy of the app was the
+    // thing that could not see it.
+    //
+    // Deliberately not awaited: this is a start-up path, and a device on a
+    // bad connection must not be held here. A failure is the behaviour that
+    // shipped before it.
+    void registration.update().catch(() => {
+      // Offline, or the worker is gone. Either way the app runs.
     })
     return true
   } catch {

@@ -1857,7 +1857,25 @@ export function App(): JSX.Element {
           // Unveiled* is exactly this case: 357 MB of photographed leaves, too
           // large for the shelf, with seventy-seven queries waiting on it.
           if (!wanted) {
-            setShelfNote(`This link names a book (${link.slug}) that is not on the shelf.`)
+            // Say what the shelf *does* hold, and what the two likely causes
+            // are. The first version named the slug and stopped, which is a
+            // dead end on a tablet: it cost two round trips on the Theosophical
+            // Glossary, once when the card really was missing and once when the
+            // card was there and the app on the device was an older build that
+            // only matched the computed name. Those are different faults with
+            // the same message, and the difference is visible in the listing —
+            // so the listing goes in the message.
+            const names = books.map((b) => b.dir).sort()
+            const shown = names.slice(0, 6).join(', ')
+            setShelfNote(
+              `This link names a book (${link.slug}) that is not in the ${names.length} ` +
+                `book${names.length === 1 ? '' : 's'} this shelf lists` +
+                (names.length > 0 ? `: ${shown}${names.length > 6 ? ', …' : ''}` : '') +
+                '. If the book is there under that name, this app is an older build — ' +
+                'close it and open it again to pick up the current one. If it is not ' +
+                'there at all, the book has no `about.json` card, or it is on a branch ' +
+                `other than the one being read (${config.branch}).`
+            )
           } else if (wanted.scanPath) {
             void openFromShelf(wanted)
           } else {
