@@ -285,8 +285,9 @@ export function rulingsMarkdown(
   const lines: string[] = [
     `# Editorial rulings — ${book.title}`,
     '',
-    'What this edition decided, and when. Written by the editor; nothing here',
-    'was proposed by a reader.',
+    'What this edition decided, and when. Every one of these was settled by the',
+    'editor. Where the decision was taken from a reading proposal rather than',
+    'written from scratch, the reason says so — see `proposals.md`.',
     ''
   ]
 

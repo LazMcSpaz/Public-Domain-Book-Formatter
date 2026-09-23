@@ -31,7 +31,7 @@
  */
 import type { PageTranscription } from '@core/transcribe'
 import type { BookShape } from '@core/provenance'
-import type { Ruling } from '@core/queries'
+import type { QueryProposal, Ruling } from '@core/queries'
 import type { SavedRun, SavedFailure, SavedUsage } from './saved-run'
 import type { Fact } from '@core/harvest'
 import type { BookEdit } from '@core/edits'
@@ -52,6 +52,7 @@ export const CARRIED_FIELDS = [
   'adjudicated',
   'facts',
   'rulings',
+  'proposals',
   'usage',
   'modelId',
   'shape'
@@ -134,6 +135,7 @@ export interface MergeBatchResult {
     adjudicated: Record<string, { verdict: string; reading: string; note: string }>
     facts: readonly Fact[]
     rulings: readonly Ruling[]
+    proposals: readonly QueryProposal[]
     shape: BookShape | null
   }
   report: MergeReport
@@ -224,6 +226,7 @@ export function mergeBatchIntoRun(input: MergeBatchInput): MergeBatchResult {
       adjudicated: held?.adjudicated ?? {},
       facts: held?.facts ?? [],
       rulings: held?.rulings ?? [],
+      proposals: held?.proposals ?? [],
       // Measured once at intake; a batch of leaves says nothing about it.
       shape: held?.shape ?? null,
       // A book is finished when every leaf has been read — a *coverage* test,

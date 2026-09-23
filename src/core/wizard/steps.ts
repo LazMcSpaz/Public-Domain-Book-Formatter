@@ -29,7 +29,14 @@ import { TYPICAL_FLAG_RATE, estimateAdjudicationCost } from '@core/adjudicate'
 import type { BookDocument } from '@core/assemble'
 import { defaultVoice, type EditorVoice } from '@core/annotate'
 import type { AdjudicatedSpot } from '@core/adjudicate'
-import { outstanding, queryKey, queryQuestions, type RaisedQuery, type Ruling } from '@core/queries'
+import {
+  outstanding,
+  queryKey,
+  queryQuestions,
+  type QueryProposal,
+  type RaisedQuery,
+  type Ruling
+} from '@core/queries'
 import {
   BODY_FONTS,
   fontForPeriod,
@@ -214,6 +221,14 @@ export interface WizardState {
   queries: RaisedQuery[]
   rulings: Ruling[]
   /**
+   * Answers a reading session would give, offered at the gate as options.
+   *
+   * Never selected and never the only way forward — `@core/queries/proposals`
+   * holds the four properties that keep a menu a menu — so a state with none
+   * asks exactly what the gate asked before they existed.
+   */
+  proposals: QueryProposal[]
+  /**
    * A crop of the leaf a query sits on, by query key.
    *
    * A `ref` the shell resolves, never an object URL, and cut only for the
@@ -327,6 +342,7 @@ export function initialState(): WizardState {
     harvestInterest: '',
     queries: [],
     rulings: [],
+    proposals: [],
     answers: {},
     completed: []
   }
@@ -1303,6 +1319,7 @@ const gateQueries: Step = {
   canEnter: (s) => s.completed.includes('gate-structure') && s.document !== null,
   questions: (s) =>
     queryQuestions(s.queries, s.rulings, {
+      proposals: s.proposals,
       crops: Object.fromEntries(
         outstanding(s.queries, s.rulings).flatMap((q) => {
           const key = queryKey(q)

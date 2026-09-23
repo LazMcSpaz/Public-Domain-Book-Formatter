@@ -29,7 +29,13 @@ import {
   type SavedRun,
   type ScanPointer
 } from '@core/project'
-import { collectQueries, queriesMarkdown, rulingsMarkdown } from '@core/queries'
+import {
+  collectQueries,
+  proposalsMarkdown,
+  queriesMarkdown,
+  rulingsMarkdown,
+  usableProposals
+} from '@core/queries'
 import type { EditorVoice } from '@core/annotate'
 import { fetchVoice, pushBook, pushImage, pushScan, pushVoice } from './shelf'
 import { loadAnnotationCheckpoint, loadRun, loadSourceFile } from './run-store'
@@ -80,10 +86,18 @@ export interface ShelfPushInput {
  * one in the driver: two conventions for the same directory agree until the
  * day one of them changes.
  */
-export function editorialSheets(run: SavedRun): { queries?: string; rulings?: string } {
+export function editorialSheets(run: SavedRun): {
+  queries?: string
+  rulings?: string
+  proposals?: string
+} {
   const raised = collectQueries(run.transcriptions)
   const rulings = run.rulings ?? []
-  if (raised.length === 0 && rulings.length === 0) return {}
+  // Its own sheet, never a column of `queries.md`: that file carries no
+  // proposed fix, for the reason its own doc comment gives, and putting the
+  // reader's answer under the question is exactly what it refuses.
+  const proposals = usableProposals(run.proposals ?? [])
+  if (raised.length === 0 && rulings.length === 0 && proposals.length === 0) return {}
   const title =
     typeof run.identityAnswers?.['title'] === 'string' && run.identityAnswers['title']
       ? (run.identityAnswers['title'] as string)
@@ -91,7 +105,8 @@ export function editorialSheets(run: SavedRun): { queries?: string; rulings?: st
   const book = { title, fileName: run.fileName }
   return {
     ...(raised.length > 0 ? { queries: queriesMarkdown(book, raised, rulings) } : {}),
-    ...(rulings.length > 0 ? { rulings: rulingsMarkdown(book, rulings) } : {})
+    ...(rulings.length > 0 ? { rulings: rulingsMarkdown(book, rulings) } : {}),
+    ...(proposals.length > 0 ? { proposals: proposalsMarkdown(book, proposals) } : {})
   }
 }
 

@@ -28,7 +28,7 @@ import { normalizeMarkup } from '@core/transcribe'
 import type { ImageEditOp } from '@core/model'
 import type { IllustrationPlacement } from '@core/assemble'
 import { FOOTINGS, type Fact } from '@core/harvest'
-import { RULING_DECISIONS, type Ruling } from '@core/queries'
+import { RULING_DECISIONS, type QueryProposal, type Ruling } from '@core/queries'
 import { EDITORIAL_QUERY_KINDS } from '@core/transcribe'
 import { parseShape, type BookShape } from '@core/provenance'
 
@@ -59,13 +59,18 @@ import { parseShape, type BookShape } from '@core/provenance'
  * way to express and which a surplus mark in an old book makes necessary, and
  * v18 → v19 the book's `shape`: whether the file has pixels, where its text
  * came from and whether a second digitisation exists, measured once at intake
- * so every later check reads it rather than re-deriving it.
+ * so every later check reads it rather than re-deriving it, and v19 → v20 the
+ * **proposals**: complete answers a reading session would give to a query,
+ * carried so the query gate can offer them as options with nothing selected.
+ * They are not rulings and never become ones except by being chosen at the
+ * gate, which is why they are a field of their own rather than rulings with a
+ * flag on them — see `@core/queries/proposals`.
  * None of them damages an older run — each is a complete transcription that simply
  * has none of the newer thing on it yet — so all upgrade in place rather than
  * being refused. That distinction is the whole reason a migration exists
  * instead of a version check.
  */
-export const CURRENT_SCHEMA_VERSION = 19
+export const CURRENT_SCHEMA_VERSION = 20
 
 /** A page the model could not read at all. Mirrors the runner's `PageFailure`. */
 export interface SavedFailure {
@@ -196,6 +201,20 @@ export interface SavedRun {
    * none and behaves exactly as it did, which is every query still waiting.
    */
   rulings: Ruling[]
+  /**
+   * Answers a reading session would give to the queries, for the editor to
+   * pick among at the gate.
+   *
+   * Stored beside the rulings rather than among them, and typed differently,
+   * because the two must never be confused: a ruling is the edition's decision
+   * and a proposal is somebody's opinion about what it should be. Only a
+   * person choosing one at the gate turns the second into the first
+   * (`rulingsFromAnswers`), and nothing else in the app reads this field.
+   *
+   * Additive like every field before it: a run written under v19 restores with
+   * none, and a gate with no proposals asks exactly what it asked before.
+   */
+  proposals: QueryProposal[]
   /**
    * What the file is made of — pixels or not, where the text came from,
    * whether a second digitisation exists — and which route that puts the
@@ -353,6 +372,7 @@ export function createSavedRun(init: {
   adjudicated?: Record<string, { verdict: string; reading: string; note: string }>
   facts?: readonly Fact[]
   rulings?: readonly Ruling[]
+  proposals?: readonly QueryProposal[]
   shape?: BookShape | null
 }): SavedRun {
   return {
@@ -373,6 +393,7 @@ export function createSavedRun(init: {
     adjudicated: { ...(init.adjudicated ?? {}) },
     facts: [...(init.facts ?? [])],
     rulings: [...(init.rulings ?? [])],
+    proposals: [...(init.proposals ?? [])],
     shape: init.shape ?? null
   }
 }
@@ -455,6 +476,7 @@ export function migrateSavedRun(raw: unknown): SavedRun {
     adjudicated: parseAdjudicated(raw['adjudicated']),
     facts: parseFacts(raw['facts']),
     rulings: parseRulings(raw['rulings']),
+    proposals: parseProposals(raw['proposals']),
     shape: parseShape(raw['shape'])
   }
 }
@@ -493,6 +515,45 @@ function parseRulings(raw: unknown): Ruling[] {
         : {}),
       decidedOn: str(item['decidedOn'], new Date(0).toISOString().slice(0, 10)),
       ...(item['mention'] === true ? { mention: true } : {})
+    })
+  }
+  return out
+}
+
+/**
+ * Read the proposals back, keeping only the ones that could be acted on.
+ *
+ * Stricter than `parseRulings`, and deliberately so. A malformed ruling costs
+ * one decision that has to be made again; a malformed **proposal** would put
+ * an option on the editor's screen that does nothing when it is chosen — a
+ * `corrected` with no wording files nothing, a proposal with no reasoning asks
+ * for trust where the gate asks for judgement. Both are dropped here as well
+ * as at the gate, because a record that only the gate can be relied on to
+ * filter is a record the next reader of this file has to filter again.
+ *
+ * `pageIndex` must be a number: there is no standing proposal, and one with no
+ * leaf would match against whatever query shared its words.
+ */
+function parseProposals(raw: unknown): QueryProposal[] {
+  if (!Array.isArray(raw)) return []
+  const out: QueryProposal[] = []
+  for (const item of raw) {
+    if (!isObject(item)) continue
+    const decision = RULING_DECISIONS.find((d) => d === item['decision'])
+    const quote = str(item['quote'], '')
+    const because = str(item['because'], '')
+    const correction = typeof item['correction'] === 'string' ? item['correction'] : ''
+    if (!decision || !quote || because.trim() === '') continue
+    if (typeof item['pageIndex'] !== 'number') continue
+    if (decision === 'corrected' && correction.trim() === '') continue
+    out.push({
+      pageIndex: item['pageIndex'],
+      quote,
+      decision,
+      ...(correction ? { correction } : {}),
+      because,
+      ...(typeof item['by'] === 'string' ? { by: item['by'] } : {}),
+      ...(typeof item['proposedOn'] === 'string' ? { proposedOn: item['proposedOn'] } : {})
     })
   }
   return out

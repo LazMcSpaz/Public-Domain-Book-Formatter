@@ -33,6 +33,7 @@ export * from './rulings'
 export * from './standing'
 export * from './gate'
 export * from './locate'
+export * from './proposals'
 
 /** A query with the leaf it was raised on. */
 export interface RaisedQuery extends EditorialQuery {

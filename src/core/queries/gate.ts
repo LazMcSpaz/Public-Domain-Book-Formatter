@@ -43,6 +43,24 @@
  * as a **placeholder**, which is text the editor has to accept by typing over
  * or leaving, never a value that arrives answered.
  *
+ * ## And what it may also do: offer whole answers, as options
+ *
+ * The editor's ruling on this, in his words: the reader has a sense of the
+ * right answer most of the time and is thinking about it anyway, so taking it
+ * should cost a tap rather than a paragraph of dictation. That does not
+ * reopen the rule above, because the rule was about *one* suggestion sitting
+ * where the answer goes. A handful of complete alternatives, **none
+ * selected**, above the three plain decisions that are always offered and a
+ * box to write something else in, is a menu — which is how every other
+ * question in this app is asked.
+ *
+ * `./proposals.ts` holds the type and the four properties that keep it the
+ * second thing rather than the first. The two this file is responsible for:
+ * a proposal is an `option` and never a `defaultValue` or a `held` value, so
+ * `defaultAnswers` seeds nothing and no press of Next files one; and
+ * `DECISIONS` is appended unconditionally, so there is never a screen whose
+ * only way forward is one of the reader's wordings.
+ *
  * ## Why three questions and not one
  *
  * A ruling is a decision plus, sometimes, a wording plus, usually, a reason.
@@ -57,6 +75,14 @@ import type { Answers, Evidence, Question } from '@core/wizard'
 import type { RaisedQuery } from './index'
 import { outstanding, type Ruling, type RulingDecision } from './rulings'
 import { heldBecause, standingFor } from './standing'
+import {
+  describeProposal,
+  proposalIndex,
+  proposalValue,
+  proposalsFor,
+  usableProposals,
+  type QueryProposal
+} from './proposals'
 
 /**
  * Where a query is, in both the numbers that name it.
@@ -115,6 +141,17 @@ export interface QueryGateOptions {
    * only. Never an answer: see the note at the top of this file.
    */
   suggestions?: Record<string, string>
+  /**
+   * Complete answers the reader would give, offered as **options** beside the
+   * three plain decisions and never as a selected value.
+   *
+   * The distinction the note above draws is between one suggestion sitting
+   * where the answer goes and a menu of alternatives with nothing chosen;
+   * `./proposals.ts` states the four properties that keep this the second
+   * thing, and the tests hold it to them. Matched to a query by its leaf and
+   * its words, exactly as a ruling is.
+   */
+  proposals?: readonly QueryProposal[]
 }
 
 /**
@@ -146,17 +183,34 @@ export function queryQuestions(
         (holding.because ? `: ${holding.because}` : '.')
       : null
 
+    // What the reader would have answered, as options to pick among. First,
+    // because that is the ergonomics the editor asked for — the tap is the
+    // point — and harmless to the rule as long as the two conditions below
+    // hold: nothing is selected, and the three plain decisions are always
+    // underneath. `usableProposals` drops any that could not be acted on, so
+    // no dead choice reaches the screen.
+    const offered = usableProposals(proposalsFor(query, options.proposals ?? []))
+    const proposalOptions = offered.map((proposal, index) => ({
+      value: proposalValue(index),
+      ...describeProposal(proposal)
+    }))
+
     const decision: Question = {
       id: `${key}-decision`,
       type: 'choice',
       prompt: `${whereItIs(query)}: what should this edition do?`,
       help: query.why,
       evidence,
-      options: DECISIONS.map((d) => ({
-        value: d.value,
-        label: d.label,
-        description: d.description
-      })),
+      options: [
+        ...proposalOptions,
+        // Unconditional. A screen whose only way forward is one of the
+        // reader's wordings is the forbidden thing wearing a menu's clothes.
+        ...DECISIONS.map((d) => ({
+          value: d.value,
+          label: d.label,
+          description: d.description
+        }))
+      ],
       // No `defaultValue`, and not `required`. See the note at the top of
       // this file: nothing is chosen for the editor, and a query they want to
       // think about can be left and will be waiting here next time.
@@ -167,7 +221,10 @@ export function queryQuestions(
       id: `${key}-correction`,
       type: 'text',
       prompt: 'If it is set right, what should it read?',
-      help: 'Only used when the decision above is “Set it right”. The whole passage, as it should print.',
+      help:
+        'Only used when the decision above is “Set it right”. The whole passage, as it ' +
+        'should print. Leave it empty to take the wording from the option you picked; ' +
+        'anything typed here wins over it.',
       defaultValue: '',
       ...(suggestion ? { placeholder: suggestion } : { placeholder: query.quote }),
       ...(holding?.decision === 'corrected' && holding.correction && heldWhy
@@ -180,7 +237,10 @@ export function queryQuestions(
       id: `${key}-because`,
       type: 'text',
       prompt: 'Why? (in your own words)',
-      help: 'Goes into `rulings.md` on the shelf, so a later session knows what this edition decided and why.',
+      help:
+        'Goes into `rulings.md` on the shelf, so a later session knows what this edition ' +
+        'decided and why. Leave it empty to keep the reasoning of the option you picked; ' +
+        'either way the ruling records that it came from a proposal.',
       defaultValue: '',
       ...(holding
         ? { held: { value: heldBecause(holding), why: 'The standing ruling’s own reasoning.' } }
@@ -235,21 +295,48 @@ export function heldPending(questions: readonly Question[], answers: Answers): n
 export function rulingsFromAnswers(
   raised: readonly RaisedQuery[],
   answers: Answers,
-  decidedOn: string
+  decidedOn: string,
+  proposals: readonly QueryProposal[] = []
 ): Ruling[] {
   const out: Ruling[] = []
   for (const query of raised) {
     const key = queryKey(query)
-    const decision = answers[`${key}-decision`]
-    if (typeof decision !== 'string' || decision === '') continue
+    const answer = answers[`${key}-decision`]
+    if (typeof answer !== 'string' || answer === '') continue
+
+    // A proposal the editor picked. It becomes an ordinary ruling here and
+    // nowhere else: the type carries no `decidedOn` precisely so that nothing
+    // can file one without a person having chosen it, and this is the choosing.
+    // The list is filtered the same way the options were built, so the n-th
+    // option and the n-th proposal are the same thing — read it any other way
+    // and a dropped proposal shifts every answer after it onto its neighbour.
+    const picked = proposalIndex(answer)
+    const proposal =
+      picked === null ? null : (usableProposals(proposalsFor(query, proposals))[picked] ?? null)
+    if (picked !== null && !proposal) continue
+
+    const decision = proposal ? proposal.decision : answer
     if (decision !== 'as-printed' && decision !== 'corrected' && decision !== 'noted') continue
 
+    // Typed text wins over the proposal's, for both fields. Picking an option
+    // and then editing the wording beneath it is the editor amending the
+    // proposal, not contradicting themselves, and the amendment is the answer.
     const correction = answers[`${key}-correction`]
-    const text = typeof correction === 'string' ? correction.trim() : ''
+    const typed = typeof correction === 'string' ? correction.trim() : ''
+    const text = typed || (proposal?.correction ?? '').trim()
     if (decision === 'corrected' && text === '') continue
 
     const why = answers[`${key}-because`]
-    const because = typeof why === 'string' ? why.trim() : ''
+    const said = typeof why === 'string' ? why.trim() : ''
+    const reasoning = said || (proposal?.because ?? '').trim()
+    // Whose idea it was, kept. A ruling the editor reached unaided and one they
+    // accepted from a proposal are different things to a reader auditing this
+    // edition a year from now, and the difference is invisible in the filed
+    // ruling unless it is written down.
+    const because = proposal
+      ? `${reasoning}${reasoning.endsWith('.') || reasoning === '' ? '' : '.'} ` +
+        `Chosen from a reading proposal${proposal.by ? ` by ${proposal.by}` : ''}.`.trim()
+      : reasoning
 
     out.push({
       pageIndex: query.pageIndex,

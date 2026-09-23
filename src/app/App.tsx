@@ -118,6 +118,7 @@ import {
   heldPending,
   sameRuling,
   withRuling,
+  type QueryProposal,
   type Ruling
 } from '@core/queries'
 import { outboxFor, queueForShelf } from '../platform/browser/run-store'
@@ -313,6 +314,16 @@ export function App(): JSX.Element {
    * too.
    */
   const rulingsRef = useRef<Ruling[]>([])
+  /**
+   * The proposals, for the same saves and the same reason.
+   *
+   * This field has the exact shape of the fault `rulings` had until v12: a
+   * record nothing wrote, blanked by `persistRun` on every autosave. Nothing
+   * in the app produces a proposal — a reading session writes them — so
+   * losing them here would be invisible until the gate stopped offering
+   * options, which is a gate that looks like it never had any.
+   */
+  const proposalsRef = useRef<QueryProposal[]>([])
 
   /** Which leaf each query sits on, by the key its questions are grouped under. */
   const queryPagesRef = useRef<Map<string, number>>(new Map())
@@ -2087,9 +2098,14 @@ export function App(): JSX.Element {
     // The rulings come back with the run for the same reason the corrections
     // do, and more so: a query is a decision, and nothing can recompute one.
     rulingsRef.current = [...saved.rulings]
+    proposalsRef.current = [...saved.proposals]
     complete({
       ...stateFromTranscriptions(saved.transcriptions, saved.failures),
       rulings: [...saved.rulings],
+      // Offered at the gate as options, never as answers. They come back with
+      // the run because the gate is worked on a tablet that may never have
+      // seen the session that wrote them.
+      proposals: [...saved.proposals],
       // The shape the run was measured with. Kept from the run rather than
       // from a fresh measurement, because a book opened to resume may have no
       // file behind it to measure.
@@ -2182,6 +2198,7 @@ export function App(): JSX.Element {
         setEdits(file.run.edits)
         lastQueuedRef.current = file.run.edits
         rulingsRef.current = [...file.run.rulings]
+        proposalsRef.current = [...file.run.proposals]
         setError(null)
         setAnswers({})
 
@@ -2192,6 +2209,7 @@ export function App(): JSX.Element {
           fileSize: 0,
           savedRun: null,
           rulings: [...file.run.rulings],
+          proposals: [...file.run.proposals],
           shape: file.run.shape,
           adjudicated: spotsFromStored(file.run.adjudicated),
           // Everything the recovery half decides was decided when this book was
@@ -2318,6 +2336,11 @@ export function App(): JSX.Element {
           // sitting's rulings back out of the run — the one record here that
           // no amount of re-reading the scan could reproduce.
           rulings: rulingsRef.current,
+          // Through the ref for the reason above, and urgently: nothing in the
+          // app writes a proposal, so `state.proposals` read through a closure
+          // built at mount is empty for the life of the session and every
+          // autosave would erase the lot.
+          proposals: proposalsRef.current,
           // Measured at intake and carried unchanged; a run restored from a
           // record that predates the shape keeps whatever that record had.
           shape: state.shape
@@ -2491,7 +2514,17 @@ export function App(): JSX.Element {
   const fileRulings = useCallback(async (): Promise<void> => {
     const raised = state.queries
     if (raised.length === 0) return
-    const made = rulingsFromAnswers(raised, currentAnswers, new Date().toISOString().slice(0, 10))
+    // The proposals go in because an answer naming one is only half a ruling
+    // without them: the decision, the wording and the reasoning all live on
+    // the proposal, and `rulingsFromAnswers` is where they are stamped into an
+    // ordinary ruling. Passing an empty list here would silently drop every
+    // decision the editor made by picking an option rather than typing one.
+    const made = rulingsFromAnswers(
+      raised,
+      currentAnswers,
+      new Date().toISOString().slice(0, 10),
+      proposalsRef.current
+    )
     const before = rulingsRef.current
     const fresh = made.filter((ruling) => {
       const had = before.find((p) => sameRuling(p, ruling))

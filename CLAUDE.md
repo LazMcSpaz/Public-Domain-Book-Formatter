@@ -256,6 +256,32 @@ git merge-base --is-ancestor HEAD origin/main && echo "local is behind"
 git fetch origin main && git reset --hard FETCH_HEAD
 ```
 
+**The app reads `main`, and a session's work was six commits away from it.**
+The editor opened a link to the Theosophical Glossary and the app said _"this
+link names a book that is not on the shelf"_ — with the book sitting in the
+shelf repository, its card written, its 804 corrections pushed. Everything had
+gone to the working branch. `loadShelf` defaults to `branch: 'main'` and the
+deployed app is built by a workflow that fires on a push to `main`, so **both
+halves of what the editor touches are `main` and nothing a session does reaches
+them until somebody merges.** Twelve of the shelf's books listed because their
+cards had been merged weeks ago; the Glossary's card was on the branch alone,
+so the one book that had just been worked on was the one book invisible.
+
+Worse was sitting behind it, silent. The formatter's `main` was seven commits
+behind and still computed a book's shelf path from its key, so a ruling made
+from the tablet on any of the nine renamed directories would have been refused
+as "not on the shelf yet" — the fault the entry below this one describes, fixed
+on a branch and deployed nowhere.
+
+So a stopping point is **both branches fast-forwarded**, not a push. The
+editor's standing instruction, in his words: do that at every natural stopping
+point. What it costs is that the app can move under him mid-session; what it
+replaces is work that exists and cannot be reached.
+
+```bash
+git checkout main && git merge --ff-only origin/<branch> && git push -u origin main
+```
+
 **A read of a file can answer for the write that follows it.** Every ruling
 the editor made at the query gate on _Isis Unveiled_ failed with
 `422: Invalid request. "sha" wasn't supplied.` — a message about a field in a
@@ -891,6 +917,10 @@ npm run check:outbox                 # with the dev server up: does a mark made
 npm run check:crop                   # with the dev server up: for a book whose scan
                                      #   is too large for the shelf, does the query
                                      #   gate draw the crop cut for it in advance?
+npm run check:proposals              # with the dev server up: does the query gate
+                                     #   offer the reader's answers and choose none
+                                     #   of them? Asserted against the DOM's own
+                                     #   `checked`, which no stylesheet can lie about
 npm run check:cache                  # with the dev server up: can a read of a book
                                      #   file answer the sha lookup for the write that
                                      #   follows it, or a later read of the book itself?
@@ -930,6 +960,10 @@ node scripts/drive.mjs use <scan.pdf> # which book every later verb means
 node scripts/drive.mjs book          # what that is now; `book clear` forgets it
 node scripts/drive.mjs link review   # a URL that opens this book where decisions wait
 node scripts/drive.mjs queries q.md  # decisions waiting on the editor, as a sheet
+node scripts/drive.mjs propose p.json --by="the Glossary session"   # answers the
+                                     #   reader would give, offered at the gate as
+                                     #   options with nothing selected. Not rulings:
+                                     #   only the editor picking one files anything
 node scripts/drive.mjs held          # the waiting queries a standing ruling holds an
                                      #   answer for; `held approve --yes` files them,
                                      #   naming the ruling each came from — the
@@ -1038,6 +1072,17 @@ silently keep it. There is deliberately no field for a proposed fix — a
 suggestion beside a question is an answer in all but name, and the answer is
 the editor's. `parsePageTranscription` refuses any field it does not know, so a
 query can no longer be dropped with a green report beside it.
+
+**A `proposal` is not that field, and the difference is the whole of it.** The
+rule above is about _one_ answer sitting where the answer goes. A handful of
+complete alternatives, none selected, above the three plain decisions that are
+always offered and a box to write something else in, is a menu — which is how
+every other question in this app is asked. They live apart from the query
+(`run.proposals`, `@core/queries/proposals`), they are typed differently from a
+`Ruling` so nothing can file one by mistaking it for the other, and they are
+written by `drive.mjs propose` rather than by a reading. What must never happen
+is the thing `defaultValue` and `held` would both do: an option that arrives
+chosen files on the next press of Next with nobody having looked.
 
 **Before committing: typecheck + test + format:check + lint.**
 
@@ -2420,6 +2465,51 @@ closed`, which is indistinguishable from the flake the first command after a
   written down: 142 of 241 errors both engines make the same way, most of
   them columns read across. Driver-only for now, by the plan's own
   sequencing; the app is the next step.
+- **Also done**: **the reader's answers are offered at the query gate, and the
+  editor takes one with a tap** (`src/core/queries/proposals.ts`, `drive.mjs
+propose`, `npm run check:proposals`). The editor's instruction, in his words:
+  the reader has a sense of the right answer most of the time and is thinking
+  about it anyway, so picking the right one should cost a tap rather than a
+  paragraph of dictation. Fifty-nine queries on one book is several evenings of
+  it, and a decision that never makes the trip is a book that keeps an error
+  its editor settled weeks ago.
+
+  It does not reopen the rule it looks like it reopens. That rule is about
+  **one** suggestion sitting where the answer goes; four properties keep this a
+  menu instead, and each is a test that fails against its own removal.
+  **Nothing is selected** — a proposal is an `option`, never a `defaultValue`
+  and never a `held` value, so `defaultAnswers` seeds nothing. **The three
+  plain decisions are appended unconditionally**, so there is never a screen
+  whose only way forward is one of the reader's wordings. **A proposal says in
+  full what choosing it would file**, the exact corrected reading included,
+  because an option whose consequence is invisible is not a choice. And **it is
+  a different type from a `Ruling`**, with no `decidedOn`, so the only thing
+  that can turn one into a filed ruling is a person choosing it —
+  `rulingsFromAnswers`, which stamps the date and records in the reasoning that
+  the decision came from a proposal and whose it was. A ruling the editor
+  reached unaided and one they accepted are different things to a reader
+  auditing this edition later.
+
+  Three smaller decisions, each paid for by the alternative. Typed text wins
+  over the proposal's for both the wording and the reason, because picking an
+  option and then editing beneath it is an amendment rather than a
+  contradiction. The answer `proposed-N` is read back through
+  `usableProposals`, the same filter the options were built with — read the raw
+  list and a dropped proposal shifts every answer after it onto its neighbour,
+  so the editor taps the second option and the first one's correction is filed.
+  And `parseProposals` is **stricter than `parseRulings`**: a malformed ruling
+  costs a decision that has to be made again, while a malformed proposal puts
+  an option on the editor's screen that does nothing when it is chosen.
+
+  `proposals.md` is its own sheet on the shelf and never a column of
+  `queries.md`, which carries no proposed fix for the reason its own doc
+  comment gives. `npm run check:proposals` asserts the two invisible properties
+  against the DOM the editor actually meets — a radio the app leaves unchecked
+  and a browser checks anyway would pass every unit test and file a ruling
+  nobody made — and both halves were fault-injected. `QuestionView` gained
+  `value={o.value}` on its radios so a check can name an option from outside
+  the closure.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

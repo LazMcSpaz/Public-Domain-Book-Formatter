@@ -470,6 +470,12 @@ export function QuestionView({
                 <input
                   type="radio"
                   name={question.id}
+                  // The option this radio *is*, in the DOM rather than only in
+                  // the closure. A controlled radio does not need it to work,
+                  // and everything reading the page from outside does: a check
+                  // asking whether the query gate arrived with an answer
+                  // already chosen could otherwise only go by the label text.
+                  value={o.value}
                   checked={value === o.value}
                   onChange={() => onChange(o.value)}
                 />

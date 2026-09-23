@@ -3927,7 +3927,10 @@ async function serve() {
       wrote.push('about.json')
       for (const [name, text] of [
         ['queries.md', built.sheets.queries],
-        ['rulings.md', built.sheets.rulings]
+        ['rulings.md', built.sheets.rulings],
+        // Its own file and never a column of `queries.md`: what the reader
+        // would answer, for the editor to look at away from the gate.
+        ['proposals.md', built.sheets.proposals]
       ]) {
         if (!text) continue
         await writeFile(resolve(where, name), text.endsWith('\n') ? text : `${text}\n`)
@@ -6060,6 +6063,132 @@ async function serve() {
      * the one field a *query* is forbidden to have — a ruling is the answer, so
      * it may carry one.
      */
+    /**
+     * What the reader would answer, written where the gate can offer it.
+     *
+     * The editor's instruction, in his words: the reader has a sense of the
+     * right answer most of the time and is thinking about it anyway, so taking
+     * it should cost a tap rather than a paragraph of dictation. A proposal is
+     * **not** a ruling and this verb cannot make one — `@core/queries/proposals`
+     * holds the four properties that keep a menu a menu, and the one this verb
+     * is responsible for is that nothing it writes has any effect on the book
+     * until a person picks it at the gate.
+     *
+     * A file rather than a command line, because the unit is a sitting: fifty
+     * nine queries typed one `rule`-shaped command at a time is the dictation
+     * this exists to remove. The file is an array of
+     * `{ leaf, quote, decision, correction?, because }`.
+     *
+     * Three refusals, each because the alternative is silent. A proposal whose
+     * words match no query raised on that leaf reaches nothing and looks
+     * exactly like one that does. A proposal on a query the editor has already
+     * ruled on is an option on a screen nobody will see. And `corrected` with
+     * no wording, or anything with no reasoning, is a dead choice —
+     * `usableProposals` drops both at the gate and `parseProposals` drops them
+     * off the record, so writing one is writing something that will vanish
+     * without a word.
+     *
+     * `propose <file.json> [--by "<who>"] [--replace]` — `--replace` clears
+     * this book's existing proposals first, which is what a session that has
+     * re-read the whole sheet wants; without it the file is folded in, each
+     * query's proposals replaced by the ones the file gives for it.
+     */
+    propose: async ([file, ...flags]) => {
+      if (!file) throw new Error('propose <file.json> [--by "<who>"] [--replace]')
+      const by = flags.find((f) => f.startsWith('--by='))?.slice('--by='.length) ?? ''
+      const replace = flags.includes('--replace')
+      const raw = JSON.parse(readFileSync(resolve(file), 'utf8'))
+      const given = Array.isArray(raw) ? raw : Array.isArray(raw?.proposals) ? raw.proposals : null
+      if (!given) throw new Error('That file is not an array of proposals.')
+      const proposals = given.map((p) => ({
+        pageIndex: typeof p.leaf === 'number' ? p.leaf : p.pageIndex,
+        quote: String(p.quote ?? ''),
+        decision: String(p.decision ?? ''),
+        ...(p.correction ? { correction: String(p.correction) } : {}),
+        because: String(p.because ?? ''),
+        ...(by || p.by ? { by: String(p.by ?? by) } : {}),
+        proposedOn: new Date().toISOString().slice(0, 10)
+      }))
+      return page.evaluate(
+        async ([repo, incoming, clear]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+
+          const raised = queriesMod.collectQueries(run.transcriptions)
+          const waiting = queriesMod.outstanding(raised, run.rulings ?? [])
+          const same = (a, b) => a.trim().toLowerCase() === b.trim().toLowerCase()
+
+          const taken = []
+          const refused = []
+          for (const p of incoming) {
+            const asked = raised.find((q) => q.pageIndex === p.pageIndex && same(q.quote, p.quote))
+            if (!asked) {
+              refused.push({ ...p, why: 'no query was raised on that leaf with those words' })
+              continue
+            }
+            if (!waiting.some((q) => q.pageIndex === p.pageIndex && same(q.quote, p.quote))) {
+              refused.push({ ...p, why: 'that query has already been ruled on' })
+              continue
+            }
+            if (!['as-printed', 'corrected', 'noted'].includes(p.decision)) {
+              refused.push({ ...p, why: `\`${p.decision}\` is not a decision` })
+              continue
+            }
+            if (p.decision === 'corrected' && !(p.correction ?? '').trim()) {
+              refused.push({ ...p, why: 'a corrected proposal has to say what it should read' })
+              continue
+            }
+            if (!p.because.trim()) {
+              refused.push({ ...p, why: 'a proposal with no reasoning asks for trust' })
+              continue
+            }
+            taken.push(p)
+          }
+
+          // Folded in per query: the ones this file gives for a query replace
+          // whatever that query had, and every other query keeps its own. A
+          // plain append would stack a re-read sitting's answers on top of the
+          // first sitting's and push the good ones past MAX_PROPOSALS, where
+          // the editor would never see them.
+          const touched = new Set(taken.map((p) => `${p.pageIndex}\u0000${p.quote.toLowerCase()}`))
+          const kept = clear
+            ? []
+            : (run.proposals ?? []).filter(
+                (p) => !touched.has(`${p.pageIndex}\u0000${p.quote.toLowerCase()}`)
+              )
+          const proposals = [...kept, ...taken]
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            proposals
+          })
+          const stored = await runStore.saveRun(next)
+          // What the gate will actually show, counted through the same
+          // function that builds the options — a number measured anywhere else
+          // is a number about a different screen.
+          const offered = waiting.filter(
+            (q) => queriesMod.usableProposals(queriesMod.proposalsFor(q, proposals)).length > 0
+          ).length
+          return {
+            taken: taken.length,
+            refused,
+            proposals: proposals.length,
+            queriesWaiting: waiting.length,
+            queriesWithAnOption: offered,
+            stored: stored === true,
+            next: 'Run `save` to write `proposals.md` and push it.'
+          }
+        },
+        [REPO, proposals, replace]
+      )
+    },
+
     rule: async ([leaf, quote, decision, correction = '-', because = '', ...flags]) => {
       if (!quote || !decision) {
         throw new Error(

@@ -18,6 +18,7 @@
     "check:install": "PUBLIC_BASE=/Public-Domain-Book-Formatter/ vite build && node scripts/check-install.mjs",
     "check:outbox": "node scripts/check-outbox.mjs",
     "check:crop": "node scripts/check-query-crop.mjs",
+    "check:proposals": "node scripts/check-proposals.mjs",
     "check:cache": "node scripts/check-shelf-cache.mjs"
   },
   "devDependencies": {
