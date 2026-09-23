@@ -37,6 +37,21 @@ here rather than in a cloud session are three, and each item says which.
 5. **One branch until it is merged.** Both repositories are on
    `claude/pdf-text-cleaning-workflow-evyna3`; the desktop works there too
    until item 4 lands, then `main`.
+6. **`main` is what the editor sees, and it is fast-forwarded at every
+   natural stopping point.** Not a tidying step and not item 4's business —
+   the deployed app is built by a workflow that fires on a push to the
+   formatter's `main`, and `loadShelf` defaults to `branch: 'main'`, so a
+   book worked on this branch is a book the editor's tablet cannot list,
+   open or rule on. It cost him a broken link to a book that was finished and
+   pushed. His standing instruction is to do it at every stopping point:
+
+   ```bash
+   git checkout main && git merge --ff-only origin/<branch> && git push -u origin main
+   git checkout <branch>
+   ```
+
+   Fast-forward only. A merge commit here means somebody pushed to `main`
+   directly, and that is worth stopping to look at rather than resolving.
 
 ### Setting the machine up, once
 
@@ -312,6 +327,41 @@ Assembling around a gap would print a volume that skips fifty pages with
 nothing on the page to say so, which is exactly the silent failure this
 shelf's checks exist to prevent. Finding the missing chunk is the editor's.
 
+### 12. Proposals for the queries waiting on the editor
+
+`open`. Books: the Glossary (59 waiting), _Isis_ Vol. I (62), _The Key to
+Theosophy_ (12). **One book at a time**, and only a book no other session
+holds.
+
+The gate now offers the reader's answers as options with nothing selected
+(`drive.mjs propose`, `@core/queries/proposals`), so a query the reader has a
+view on costs the editor a tap instead of a paragraph of dictation. Writing
+those views is this item.
+
+The rules are the ones the module is built on, and none of them is new:
+
+- **A proposal is not a ruling and does not touch the book.** Nothing you
+  write here has any effect until the editor picks it.
+- **Read the passage before proposing anything** — the whole block, the block
+  before, the block after, and the crop where there is one. Three of four
+  findings put to the editor on _Uncommon Therapy_ were answered by the next
+  sentence. A proposal written off the query's quote alone is a guess with a
+  reason attached.
+- **Give two where two are genuinely arguable**, and one where only one is.
+  Never pad to three: an option nobody would take is an option the editor
+  reads and discards, and the sheet is the thing being shortened.
+- **Propose nothing where you do not know.** A query with no proposal is the
+  honest answer and the gate asks it exactly as it asked it before. Coverage
+  is not the measure; a proposal the editor takes is.
+- `because` is what goes into `rulings.md` if it is taken, so write it as the
+  edition's reasoning and not as an argument to the editor.
+
+Work it into a JSON file — `[{ "leaf": 170, "quote": "…", "decision":
+"corrected", "correction": "…", "because": "…" }]` — then
+`drive.mjs propose p.json --by="<which session>"`, then `save`, which writes
+`proposals.md` beside the book. `propose` refuses a proposal whose words match
+no waiting query, so a silent miss is not possible. Do not rule on anything.
+
 ## Handing an idle session its next item
 
 A session that finishes its item stops and waits. This is the list of what
@@ -347,6 +397,11 @@ Then one of:
   against the unfixed code. Touch no book file and not the shelf."
 - **Item 11** — "Take item 11: name the missing Secret Doctrine Vol. I
   leaves in `report.md` and stop. Do not assemble around the gap."
+- **Item 12** — _for a session whose book is already open and whose recon
+  cache is warm._
+  "Take item 12 for <book>: write proposals for the queries waiting on the
+  editor. Read the whole block and its neighbours before each one, propose
+  nothing where you do not know, and rule on nothing."
 
 **What is never handed out:** items 1 and 5's queries, which are rulings only
 the editor makes; item 4, the merge, which waits on the editor's word; and
