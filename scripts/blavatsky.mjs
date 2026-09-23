@@ -144,6 +144,11 @@ function search(source, term, { limit, chars }) {
  * back one line per leaf and every entry on a page runs together; and
  * "punctuation then a capital after the term" scores the sentence boundary
  * in that last example as a headword.
+ *
+ * Since 2026-09-23 the file is the book as read through the pipeline, one
+ * block to a line, so the line start the first rule wanted is now the best
+ * signal there is and ranks first; the full stop and space stays as a second
+ * signal for any source still set a leaf to a line.
  */
 function headword(term, { chars }) {
   const file = join(DIR, 'theosophical-glossary.txt')
@@ -155,9 +160,18 @@ function headword(term, { chars }) {
   while (i >= 0) {
     const from = source.at[i]
     const before = source.raw.slice(Math.max(0, from - 3), from)
-    const defines = /\.\s$/u.test(before) && /^[A-Z]/u.test(source.raw.slice(from, from + 1))
+    // Since the Glossary was read through the pipeline its file has one entry
+    // to a line, and a line start is the surer signal: an entry that follows
+    // `(See “ Thallath ”.)` has `.)` before it, not `. `, and was ranked
+    // below a mention.
+    const atLine = from === 0 || source.raw[from - 1] === '\n'
+    const opens = atLine || /\.\s$/u.test(before)
+    // A capital, accented or not: `[A-Z]` let no entry opening on `Â`, `Æ` or
+    // `Ö` count as one, so `akasa` found a mention and never the entry.
+    const defines = opens && /^\p{Lu}/u.test(source.raw.slice(from, from + 1))
     found.push({
       defines,
+      atLine: defines && atLine,
       where: whereIn(source.raw, from),
       entry: source.raw
         .slice(from, from + chars)
@@ -167,7 +181,9 @@ function headword(term, { chars }) {
     })
     i = source.flat.indexOf(needle, i + 1)
   }
-  return found.sort((a, b) => Number(b.defines) - Number(a.defines))
+  return found.sort(
+    (a, b) => Number(b.atLine) - Number(a.atLine) || Number(b.defines) - Number(a.defines)
+  )
 }
 
 const args = process.argv.slice(2)
