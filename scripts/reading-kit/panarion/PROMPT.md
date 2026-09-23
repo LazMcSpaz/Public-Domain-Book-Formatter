@@ -92,6 +92,8 @@ Write `OUT` — shape:
   "queries": [{"quote": "exact words as printed", "why": "...", "kind": "printers-error|inconsistent|unclear", "fix": "only for printers-error: the word as it should read"}]}]
 ```
 
+**Write `OUT` after each leaf you finish** (the whole array so far), not only at the end: a reader that stalls must not lose the leaves it has read. Crop where the two readings disagree or something looks wrong, not every line of every leaf.
+
 Every block, corrected or not, with its `i`. Scanner junk (a signature letter, pen marks, specks, the platen edge, "Digitized by Google", a library stamp) — set the block's text to `""`; do not query it.
 
 ## Rules
