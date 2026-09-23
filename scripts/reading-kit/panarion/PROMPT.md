@@ -30,6 +30,9 @@ Unlike _The Key to Theosophy_'s, this Google copy is not cropped: running heads 
 - **Figures are old-style**: `1` reads as `I`, `5` as `s` (`sth` for _5th_), `9` as `g`, `8` as `S`. Check every figure.
 - **Ligatures and accents**: both engines drop `œ`/`Œ` (`manœuvres`, `Œdipus`) and ours drops `à`, `è`, `é` (`vis-à-vis`, `Molière`, `séance`, `exposé`); the circumflex prints as a tall caret (`Samâj`, `deus-ex-machinâ`). Specks over vowels (`nicè`, `Galileó`) are not accents.
 - **Spacing before `;` `:` `?` `!` varies by line and by leaf** in this book: some touch, some carry a thin space. Crop at 2–3× and set each as printed; do not normalise.
+- **The draft drops italics entirely** in this book: every `<i>` has to be added from the image (`séance` is italic every time).
+- **A letter or quotation in small type** is `blockquote`, even where the draft types it `footnote` because it falls at the foot of a leaf; a footnote here is only what stands under a rule with a mark. A lead-in in text type (`And further :`) run into the quotation's first line stays one block (rule 10), typed by what most of it is.
+- **Where ink covers a whole line, ours leaves the line out** and the other engine keeps it: compare the two on every inked passage and read the line from the image.
 - **Pen underlining and ink blots** from a former owner cross some passages; the words beneath are legible, and ours turns the ink into junk. Read under it.
 - **Italic worn type** prints many `e` as an open `c` (`exposurc`, `hcr`); at 8× a real wrong sort shows no stub of crossbar at all (`allowcd`). Only that is a printers-error.
 
