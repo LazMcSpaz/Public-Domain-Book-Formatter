@@ -199,7 +199,7 @@ step, which this book has never had.
 
 ### 6. The other Blavatsky books, to Phase 2
 
-`open`; _The Key to Theosophy_ `taken (second desktop session, ~/pdbf-b, 2026-09-23)`. One at a time, in this order: _The Key to Theosophy_, _A Modern
+`open`; _The Key to Theosophy_ **read** (shelf 191d907): all 336 leaves landed, 112 queries waiting, Phase 2 not started — the Google scan loses lines at the head of most leaves (`cuts.md`), and whether to find a second copy first is in `DECISIONS-2026-09-23.md`. Brief: `scripts/reading-kit/key/PROMPT.md`. One at a time, in this order: _The Key to Theosophy_, _A Modern
 Panarion_, then _The Secret Doctrine_ I and II and _Isis_ II. Each gets its
 own kit directory and its own `scripts/reading-kit/<book>/PROMPT.md`, written
 after its first stretch from what the readers report. Shape recorded first
