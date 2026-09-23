@@ -256,7 +256,7 @@ step, which this book has never had.
 
 ### 6. The other Blavatsky books, to Phase 2
 
-`open`; _The Key to Theosophy_ **finished** (shelf 4e7e0f0): read, 100 of 112 queries ruled under standing ruling 1 (`RULINGS.md` on the shelf), 12 left for the editor, damage clean; no edition. Its scan loses lines at the head of most leaves (`cuts.md`). _A Modern Panarion_ `taken (second desktop session, ~/pdbf-b, 2026-09-23)`. One at a time, in this order: _The Key to Theosophy_, _A Modern
+`open`; _The Key to Theosophy_ **finished** (shelf 4e7e0f0): read, 100 of 112 queries ruled under standing ruling 1 (`RULINGS.md` on the shelf), 12 left for the editor, damage clean; no edition. Its scan loses lines at the head of most leaves (`cuts.md`). _A Modern Panarion_ **read and ruled** (shelf, 2026-09-24): all 514 leaves, 126 of 144 queries ruled under standing ruling 1, 18 left for the editor, damage clean, figures on 412/415 not yet cut; no edition. Brief: `scripts/reading-kit/panarion/PROMPT.md`. One at a time, in this order: _The Key to Theosophy_, _A Modern
 Panarion_, then _The Secret Doctrine_ I and II and _Isis_ II. Each gets its
 own kit directory and its own `scripts/reading-kit/<book>/PROMPT.md`, written
 after its first stretch from what the readers report. Shape recorded first
