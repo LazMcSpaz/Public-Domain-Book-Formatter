@@ -2954,14 +2954,35 @@ async function serve() {
                 // wants to look at the paper. Reported either way: the sheet
                 // says which crops point at the passage and which are a leaf.
                 if (!box) whole.push({ key, leaf: pageIndex, quote: query.quote })
-                const x0 = box ? Math.max(0, Math.floor(box.x0 - PAD)) : 0
                 const y0 = box ? Math.max(0, Math.floor(box.y0 - PAD)) : 0
-                const x1 = box
-                  ? Math.min(rendered.canvas.width, Math.ceil(box.x1 + PAD))
-                  : rendered.canvas.width
                 const y1 = box
                   ? Math.min(rendered.canvas.height, Math.ceil(box.y1 + PAD))
                   : rendered.canvas.height
+                // Wide as the *lines*, not as the phrase.
+                //
+                // The union of the matched words is a few words across, and
+                // 120 px either side of it on a leaf 2,500 px wide cuts the
+                // sentence off mid-word: the first crops of the Glossary read
+                // `The Demiurgos, who, like` and `and those of Chin`, which is
+                // a passage nobody can rule on. The editor is reading it in
+                // its setting, and a setting is lines.
+                //
+                // Measured off the leaf's own ink rather than guessed at: every
+                // word whose box falls in the band being cut, which is the
+                // measure those lines are actually set to and needs no
+                // assumption about margins. A spread photographed as one leaf
+                // gives both printed pages this way, which is wider than
+                // wanted and never narrower — the failure that matters is the
+                // one that hides the words.
+                const inBand = box ? words.filter((w) => w.bbox.y1 > y0 && w.bbox.y0 < y1) : []
+                const lines =
+                  inBand.length > 0
+                    ? cropMod.unionBox(inBand.map((w) => ({ id: w.id, bbox: w.bbox })))
+                    : box
+                const x0 = lines ? Math.max(0, Math.floor(lines.x0 - PAD)) : 0
+                const x1 = lines
+                  ? Math.min(rendered.canvas.width, Math.ceil(lines.x1 + PAD))
+                  : rendered.canvas.width
                 const cutCanvas = document.createElement('canvas')
                 cutCanvas.width = x1 - x0
                 cutCanvas.height = y1 - y0

@@ -462,6 +462,35 @@ if (finish) {
           : '')
     )
   }
+  // The paper beside every waiting decision.
+  //
+  // The gate's own ruling is that a query can be settled from the words and
+  // the crop is a help — true, and the editor's standing requirement is that
+  // he wants that help at every one of them. So cutting them is part of
+  // readying a book rather than something done only for a book whose scan the
+  // shelf cannot hold, which is the one case that used to force it.
+  //
+  // Named by `queryKey`, imported rather than reimplemented: a crop written
+  // under a key the gate computes differently is a crop the gate never asks
+  // for, and nothing anywhere would say it exists under another name.
+  if (outstanding.length > 0) {
+    const { queryKey } = await import('../src/core/queries/key.ts')
+    const missing = []
+    for (const t of book.run?.transcriptions ?? []) {
+      for (const q of t.queries ?? []) {
+        if (settled.has(`${t.pageIndex}\u0000${q.quote}`)) continue
+        const key = queryKey({ pageIndex: t.pageIndex, quote: q.quote })
+        if (!existsSync(join(dir, 'queries', `${key}.jpg`))) missing.push(t.pageIndex)
+      }
+    }
+    if (missing.length > 0) {
+      owed.push(
+        `${missing.length} waiting quer${missing.length === 1 ? 'y has' : 'ies have'} no crop ` +
+          `on the shelf (leaf ${[...new Set(missing)].join(', ')}) — ` +
+          '`drive.mjs querycrops` cuts them, from a session that has the scan'
+      )
+    }
+  }
   // The two habits CLAUDE.md names and nothing enforces. Neither can be
   // settled from the book file alone, so they are *asked* rather than judged:
   // an unanswerable question in front of a person beats a silent omission.

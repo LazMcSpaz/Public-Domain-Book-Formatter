@@ -75,6 +75,9 @@ import type { Answers, Evidence, Question } from '@core/wizard'
 import type { RaisedQuery } from './index'
 import { outstanding, type Ruling, type RulingDecision } from './rulings'
 import { heldBecause, standingFor } from './standing'
+// Its own module, so a shelf script can name a crop the same way the gate
+// asks for one. See `./key.ts`.
+import { queryKey } from './key'
 import {
   describeProposal,
   proposalIndex,
@@ -95,16 +98,6 @@ import {
  */
 export function whereItIs(query: RaisedQuery): string {
   return query.folio ? `Leaf ${query.pageIndex} · page ${query.folio}` : `Leaf ${query.pageIndex}`
-}
-
-/** The id a query's questions are grouped under, and keyed by. */
-export function queryKey(query: RaisedQuery): string {
-  // The leaf plus a digest of the words. Not the words themselves: an id goes
-  // in a DOM attribute and into `localStorage`, and a quote carries quotation
-  // marks, Greek, and the odd newline.
-  let hash = 0
-  for (const ch of query.quote) hash = (hash * 31 + ch.charCodeAt(0)) | 0
-  return `q-${query.pageIndex}-${(hash >>> 0).toString(36)}`
 }
 
 const DECISIONS: { value: RulingDecision; label: string; description: string }[] = [
