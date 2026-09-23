@@ -27,6 +27,9 @@ Unlike _The Key to Theosophy_'s, this Google copy is not cropped: running heads 
 
 - **Articles** open with a title (`heading`), often a bracketed editor's headnote in small type (`blockquote`, brackets as printed), and close with a signature, a place and a date (`caption`). A printer's signature mark at the foot (`3`, `B`) has no block and needs none.
 - **Ours misreads italic** badly and the other engine reads it well: `Zhe`/`7%e` for _The_, `Ais` for _his_, `Aas` for _has_, `fo` for _to_, `/ie` for _lie_, `a//` for _all_, `dews` for _deus_, `fif?y` for _fifty_. Trust the other engine's letters in italic, then the image.
+- **Circumflexes and diaereses: trust the other engine** (`Hindû`, `Brâhman`, `Nirvâna`, `reïncarnation`); ours turns `û` into `i`/`ii`/`il`. Never change `Hindi` to `Hindû` by pattern: the language may be meant. Each occurrence off the image.
+- **The other engine drops the `l` of `fl` and the `i` of `fi`** (`feld`, `effgies`, `foored`); ours reads ligatures correctly.
+- **An italic `t` can lose its cross-stroke and read as `l`** (`Rile` for `Rite`): a printers-error only when the stroke is truly gone at 5×.
 - **Figures are old-style**: `1` reads as `I`, `5` as `s` (`sth` for _5th_), `9` as `g`, `8` as `S`. Check every figure.
 - **Ligatures and accents**: both engines drop `œ`/`Œ` (`manœuvres`, `Œdipus`) and ours drops `à`, `è`, `é` (`vis-à-vis`, `Molière`, `séance`, `exposé`); the circumflex prints as a tall caret (`Samâj`, `deus-ex-machinâ`). Specks over vowels (`nicè`, `Galileó`) are not accents.
 - **Spacing before `;` `:` `?` `!` varies by line and by leaf** in this book: some touch, some carry a thin space. Crop at 2–3× and set each as printed; do not normalise.
@@ -99,7 +102,7 @@ Every block, corrected or not, with its `i`. Scanner junk (a signature letter, p
 6. **Clear typos and damaged type** (a misspelling the page plainly makes, an unpaired quotation mark, a broken sort): transcribe **as printed** and raise a query with `kind: "printers-error"` and `fix` giving the word as it should read. The editor's standing ruling (`RULINGS.md` on the shelf) is that this class is corrected, so your `fix` is applied without anyone looking again: propose one only where it is certain. It covers a misspelling the page plainly makes, a broken or turned sort, and an unpaired quotation mark; not pointing that merely varies, and not a period spelling. If the fix means **choosing** (where an unclosed quotation should close, which of two words was meant) it is not a printers-error: raise it `inconsistent` with no fix.
 7. **Before raising anything, read the whole block it sits in and the blocks either side**, and look for the same word or construction elsewhere on your leaves. A finding the paragraph settles is not a query.
 8. Anything that is genuinely the editor's — the book contradicting itself, a sentence that does not construe — `kind: "inconsistent"` or `"unclear"`, transcribed as printed, **no fix proposed**.
-9. A word broken by a hyphen across two blocks is set whole in the first block and removed from the second, as the readers of 35–44 did.
+9. A word broken by a hyphen across two blocks **or across two leaves** is set whole in the first block and removed from the second, as the readers of 35–44 did.
 10. If a block holds two paragraphs run together, or one is split across two blocks, do not restructure — correct the text and note it in your report with the leaf and `i`.
 11. A block the brief types `table` is regenerated from its cells, so prose written into it is thrown away. If a `table` block is really prose (the contents page is the likeliest), correct the text and **say so in your report**.
 
