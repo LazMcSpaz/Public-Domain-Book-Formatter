@@ -98,6 +98,7 @@ import {
   parseAbout,
   scanPath,
   shelfEntries,
+  shelfSlug,
   voicePath,
   type ShelfAbout,
   type ShelfConfig
@@ -106,6 +107,60 @@ import { normalizeVoice, type EditorVoice } from '@core/annotate'
 import { toBase64 } from '@core/project'
 
 const API = 'https://api.github.com'
+
+/**
+ * Which shelf directory each book lives in, as the listing last found it.
+ *
+ * A book's path used to be computed from its key alone, and a directory
+ * renamed by hand to something readable — `Blavatsky-TheTheosophicalGlossary`
+ * for a key whose file is a SHA — was then a book the app could list and not
+ * open, whose rulings could not flush, and which a save would have written a
+ * second time under the computed name. The listing is the one place that sees
+ * the real directory, so it records it here, and every read and write asks.
+ * Kept in `localStorage` so a flush on a device that has not listed the shelf
+ * this session still finds it; a lost record is refilled by the next listing.
+ */
+const DIRS = 'pdbf.shelf.dirs'
+/** This tab's copy, so a device that will not store the record still has it until reload. */
+const dirsHere = new Map<string, string>()
+
+function knownDirs(): Record<string, string> {
+  let stored: Record<string, string> = {}
+  try {
+    const raw = localStorage.getItem(DIRS)
+    const parsed = raw ? (JSON.parse(raw) as unknown) : null
+    if (parsed && typeof parsed === 'object') stored = parsed as Record<string, string>
+  } catch {
+    // No storage here; this tab's copy is all there is.
+  }
+  return { ...stored, ...Object.fromEntries(dirsHere) }
+}
+
+function rememberDir(key: string, dir: string): void {
+  dirsHere.set(key, dir)
+  try {
+    localStorage.setItem(DIRS, JSON.stringify({ ...knownDirs(), [key]: dir }))
+  } catch {
+    // A device that will not store it lists the shelf again next session.
+  }
+}
+
+/** The directory a book is known to live in, or the computed one. Synchronous. */
+export function knownShelfDir(key: string): string {
+  return knownDirs()[key] ?? shelfSlug(key)
+}
+
+/**
+ * The directory a book lives in, listing the shelf if this device has not
+ * seen it yet. Falls back to the computed name, which is right for a book the
+ * shelf has never held.
+ */
+export async function shelfDirFor(config: ShelfConfig, key: string): Promise<string> {
+  const known = knownDirs()[key]
+  if (known) return known
+  await readShelf(config)
+  return knownShelfDir(key)
+}
 
 /**
  * Every read of the shelf goes to the network.
@@ -387,14 +442,15 @@ export async function pushBook(
    */
   sheets?: { queries?: string; rulings?: string }
 ): Promise<string> {
-  const path = bookPath(key)
+  const dir = await shelfDirFor(config, key)
+  const path = bookPath(key, dir)
   const message = commitMessage(about.fileName, what)
   await putFile(config, path, toBase64(new TextEncoder().encode(json)), message)
   // The card second: it describes what is in the book file, so writing it first
   // would leave a listing promising a book that is not there yet.
   await putFile(
     config,
-    aboutPath(key),
+    aboutPath(key, dir),
     toBase64(new TextEncoder().encode(JSON.stringify(about, null, 2))),
     message
   )
@@ -403,8 +459,8 @@ export async function pushBook(
   // `save`, while throwing here would report a book that is already on the
   // shelf as unsaved and invite somebody to push it again.
   for (const [text, where] of [
-    [sheets?.queries, queriesPath(key)],
-    [sheets?.rulings, rulingsPath(key)]
+    [sheets?.queries, queriesPath(key, dir)],
+    [sheets?.rulings, rulingsPath(key, dir)]
   ] as const) {
     if (!text) continue
     try {
@@ -477,14 +533,17 @@ export async function readShelf(config: ShelfConfig): Promise<ShelfAbout[]> {
   for (const entry of entries) {
     const text = await getText(config, `${entry.path.replace(/book\.json$/, '')}about.json`)
     const about = text ? parseAbout(text) : null
-    if (about) out.push(about)
+    if (about) {
+      rememberDir(about.key, entry.slug)
+      out.push({ ...about, dir: entry.slug })
+    }
   }
   return out.sort((a, b) => b.savedAt.localeCompare(a.savedAt))
 }
 
 /** Everything the shelf holds about one book, ready to be put back. */
 export async function fetchBook(config: ShelfConfig, key: string): Promise<string | null> {
-  return getText(config, bookPath(key))
+  return getText(config, bookPath(key, await shelfDirFor(config, key)))
 }
 
 /**

@@ -314,6 +314,20 @@ code, so the new assertion never ran and the check passed for a reason that had
 nothing to do with what it asserts. That is this file's own rule about tests,
 found in the check written to enforce it.
 
+**A directory renamed on the shelf was a book the app could not reach.**
+Every shelf path was computed from the run key — the file's stem and a
+digest — and nine of sixteen books sit in directories a person renamed to
+something readable (`Blavatsky-TheTheosophicalGlossary-1s37ewg` for a key
+whose file is a SHA). The listing showed such a book and opening it fetched a
+path that does not exist; a flush of the editor's rulings was refused as "not
+on the shelf yet"; and a save would have written the whole book a second time
+under the computed name, a fork nobody would notice until two copies
+disagreed. The listing is the one place that sees the real directory, so it
+records it (`shelfDirFor`, `knownShelfDir`) and every read and write asks;
+the computed name is only the default for a book the shelf has never held.
+A directory with no `about.json` card is still invisible to the listing, so
+a book put up by hand needs `drive.mjs card` as well as `save`.
+
 **A correction typed as plain text throws the paragraph's italics away.**
 `correct <blockId> <file>` takes the file verbatim, and a file written from the
 bare text has no `<i>` in it — so on _Patterns of the Hypnotic Techniques_

@@ -107,7 +107,7 @@ import {
   storedFileKeys
 } from '../platform/browser/run-store'
 import { collectBookBatch, submitBookBatch } from '../platform/browser/batch-run'
-import { fetchBook, getBytes, readShelf } from '../platform/browser/shelf'
+import { fetchBook, getBytes, knownShelfDir, readShelf } from '../platform/browser/shelf'
 import { flushOutbox } from '../platform/browser/shelf-outbox'
 import {
   collectQueries,
@@ -1113,7 +1113,7 @@ export function App(): JSX.Element {
     if (!book) return undefined
     const config = loadShelf()
     if (!shelfReady(config)) return undefined
-    return `shelf:${queryCropPath(book, key)}`
+    return `shelf:${queryCropPath(book, key, knownShelfDir(book))}`
   }, [])
 
   // Object URLs must be revoked — the rule `releaseRecon` exists for. A gate
@@ -1835,7 +1835,7 @@ export function App(): JSX.Element {
         // is the same path the intake button uses, so a link cannot open a
         // book any differently from a person clicking on it.
         if (link.slug && !openedFromLink.current) {
-          const wanted = books.find((b) => shelfSlug(b.key) === link.slug)
+          const wanted = books.find((b) => b.dir === link.slug || shelfSlug(b.key) === link.slug)
           openedFromLink.current = true
           // A book whose scan is not on the shelf cannot be opened the full
           // way: the scan is what `openFromShelf` fetches and recon is what

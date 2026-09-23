@@ -48,7 +48,7 @@ import { join, resolve } from 'node:path'
 
 const REPO = resolve(import.meta.dirname, '..')
 const URL_BASE = process.env.PDBF_URL ?? 'http://localhost:5173'
-const CHROME = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
+const CHROME = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
 const PORT = 8443
 
 // The file under test is JSON, so that its own body served in place of the

@@ -28,7 +28,7 @@ import {
   type ShelfConfig
 } from '@core/sync'
 import { parseBookFile, serializeBookFile, toBase64 } from '@core/project'
-import { getText, putFile } from './shelf'
+import { getText, putFile, shelfDirFor } from './shelf'
 import { clearQueued, outboxFor } from './run-store'
 import { landedFor, rememberLanded } from './landed'
 
@@ -100,7 +100,7 @@ async function sendQueue(config: ShelfConfig, bookKey: string): Promise<FlushRes
     }
   }
 
-  const path = bookPath(bookKey)
+  const path = bookPath(bookKey, await shelfDirFor(config, bookKey))
   const text = await getText(config, path)
   if (text === null) {
     return {

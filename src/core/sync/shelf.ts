@@ -132,8 +132,17 @@ export function shelfSlug(key: string): string {
   return `${stem || 'book'}-${(h >>> 0).toString(36)}`
 }
 
-export function bookPath(key: string): string {
-  return `${SHELF_ROOT}/${shelfSlug(key)}/book.json`
+/**
+ * Where a book's file sits. `dir` is the directory its card was found in when
+ * that is known, because a directory can be renamed by hand to something a
+ * person can read — nine of the shelf's sixteen books were — and a path
+ * computed from the key then names a directory that does not exist: a flush
+ * of the editor's rulings is refused as "not on the shelf yet", and a save
+ * writes a second copy of the book beside the first. The computed name is
+ * only the default, for a book the shelf has never held.
+ */
+export function bookPath(key: string, dir: string = shelfSlug(key)): string {
+  return `${SHELF_ROOT}/${dir}/book.json`
 }
 
 /**
@@ -145,8 +154,8 @@ export function bookPath(key: string): string {
  * put a title and a page count on a button. This is the card in the catalogue;
  * `book.json` is the book.
  */
-export function aboutPath(key: string): string {
-  return `${SHELF_ROOT}/${shelfSlug(key)}/about.json`
+export function aboutPath(key: string, dir: string = shelfSlug(key)): string {
+  return `${SHELF_ROOT}/${dir}/about.json`
 }
 
 /**
@@ -174,8 +183,8 @@ export function aboutPath(key: string): string {
  * original at three times the size: measured on this book, 275 KB a crop as PNG
  * against 81 as JPEG at quality 0.9, or 21 MB against 6.4 over seventy-nine.
  */
-export function queryCropPath(key: string, query: string): string {
-  return `${SHELF_ROOT}/${shelfSlug(key)}/queries/${query}.jpg`
+export function queryCropPath(key: string, query: string, dir: string = shelfSlug(key)): string {
+  return `${SHELF_ROOT}/${dir}/queries/${query}.jpg`
 }
 
 /**
@@ -186,8 +195,8 @@ export function queryCropPath(key: string, query: string): string {
  * chat session survives exactly as long as the session does, which is the one
  * property it must not have.
  */
-export function queriesPath(key: string): string {
-  return `${SHELF_ROOT}/${shelfSlug(key)}/queries.md`
+export function queriesPath(key: string, dir: string = shelfSlug(key)): string {
+  return `${SHELF_ROOT}/${dir}/queries.md`
 }
 
 /**
@@ -199,8 +208,8 @@ export function queriesPath(key: string): string {
  * session six months from now reads to find out what this edition already
  * settled.
  */
-export function rulingsPath(key: string): string {
-  return `${SHELF_ROOT}/${shelfSlug(key)}/rulings.md`
+export function rulingsPath(key: string, dir: string = shelfSlug(key)): string {
+  return `${SHELF_ROOT}/${dir}/rulings.md`
 }
 
 /** What the catalogue card says. */
@@ -225,6 +234,11 @@ export interface ShelfAbout {
   complete: boolean
   /** Where the pixels are, when they were small enough to send. */
   scanPath: string | null
+  /**
+   * The directory the card was found in. Filled by the listing, never written
+   * to the card: it is where the book *is*, which the card cannot know.
+   */
+  dir?: string
 }
 
 export function parseAbout(text: string): ShelfAbout | null {

@@ -137,3 +137,36 @@ describe('the sha a write is made against', () => {
     expect(put).toBeDefined()
   })
 })
+
+describe('a book whose directory was renamed by hand', () => {
+  // Nine of the shelf's sixteen books sit in a directory a person renamed —
+  // `Blavatsky-TheTheosophicalGlossary-1s37ewg` for a key whose file is a SHA —
+  // and the app computed every path from the key, so it listed such a book and
+  // could not open it, and a save would have written a second copy.
+  const KEY = 'c77f699e.pdf\u000012200914\u00001790126201946'
+  const DIR = 'Blavatsky-TheTheosophicalGlossary-1s37ewg'
+  const realFetch = globalThis.fetch
+  afterEach(() => {
+    globalThis.fetch = realFetch
+  })
+
+  it('is read from the directory its card was found in', async () => {
+    const asked: string[] = []
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      asked.push(url)
+      const path = new URL(url).pathname.replace(/^\/repos\/someone\/shelf\/contents\//, '')
+      const body = (text: string): Response =>
+        new Response(text, { status: 200, headers: { 'content-type': 'text/plain' } })
+      if (path === 'books') return Response.json([{ name: DIR, type: 'dir' }])
+      if (path === `books/${DIR}/about.json`)
+        return body(JSON.stringify({ key: KEY, fileName: 'c77f699e.pdf' }))
+      if (path === `books/${DIR}/book.json`) return body('{"the":"book"}')
+      return new Response('', { status: 404 })
+    }) as typeof fetch
+    const { fetchBook } = await import('@platform/browser/shelf')
+    expect(await fetchBook(config, KEY)).toBe('{"the":"book"}')
+    expect(asked.some((u) => u.includes(`books/${DIR}/book.json`))).toBe(true)
+    expect(asked.some((u) => u.includes('books/c77f699e-'))).toBe(false)
+  })
+})
