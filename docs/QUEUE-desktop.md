@@ -123,7 +123,7 @@ one; it is listed so nothing else touches the book while it is being ruled.
 
 ### 2. Glossary — read leaves 270 to 392
 
-`open`. Book: the Glossary. Four stretches through
+`taken (desktop session, 2026-09-22)`. Book: the Glossary. Four stretches through
 `scripts/reading-kit/README.md`, exactly as 0–269 were read. Land each
 stretch before starting the next; send a crop sheet for whatever
 `apply.mjs` leaves for the editor. Fold anything a reader reports about
