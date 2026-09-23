@@ -16,14 +16,22 @@ To look closer at a word, crop the render — there is no PIL or ImageMagick on 
 
 A collection, published after her death: articles and letters from newspapers and magazines of the 1870s and 1880s, each under its own title, often with the original paper's name and date, and sometimes with the letter it answers quoted in smaller type. Footnotes at the foot of the leaf, marked `*`, `†`, `‡`; Greek, Sanskrit, Hebrew and French set in the text.
 
-## If the scan cuts the head of a leaf
+## This copy keeps its running heads
 
-_The Key to Theosophy_'s Google copy was cropped at the top, and this one comes from the same source, so look for it on every leaf. There the running head and folio were gone on every leaf, and usually the first line of text too, whole on some leaves and in half on others, and several lines at a time later in the book; nothing was missing _between_ leaves except those lines. Wherever this copy does the same:
+Unlike _The Key to Theosophy_'s, this Google copy is not cropped: running heads and folios survive, and no leaf of 0–29 lost text. The draft sometimes keeps a running head as a block (`THE HOLMES CONTROVERSY. 20`): set that block to `""`. Record `cut` on every leaf all the same, `"lines": "none"` where nothing is lost; if a leaf **is** cut:
 
-- **Do not raise a query about it.** Record it once per leaf in the page's `cut` field (see Output).
-- **Nothing above the cut is supplied**, not even a closing quotation mark whose partner survives. A mark you cannot see is not set; say so in `cut.note`.
-- A lost line sometimes leaves no trace at all. The sign is a leaf that opens mid-sentence where the one before ended a sentence, or the reverse; record it as `whole`.
-- A half-cut line: set a letter only where what survives of it settles it (the lower half of most lower-case letters does; capitals and `c`/`e`/`o` often do not). **Never supply a word from the sense of the passage.** Where a word cannot be read off what is left, stop the line there, begin the block at the first word you can read, and say what was left out in `cut.note`.
+- **Nothing above the cut is supplied**, not even a closing quotation mark whose partner survives. Say so in `cut.note`.
+- A half-cut line: set a letter only where what survives of it settles it. **Never supply a word from the sense of the passage.** Stop the line where a word cannot be read, and say so in `cut.note`.
+
+## What the readers of leaves 0–29 found
+
+- **Articles** open with a title (`heading`), often a bracketed editor's headnote in small type (`blockquote`, brackets as printed), and close with a signature, a place and a date (`caption`). A printer's signature mark at the foot (`3`, `B`) has no block and needs none.
+- **Ours misreads italic** badly and the other engine reads it well: `Zhe`/`7%e` for _The_, `Ais` for _his_, `Aas` for _has_, `fo` for _to_, `/ie` for _lie_, `a//` for _all_, `dews` for _deus_, `fif?y` for _fifty_. Trust the other engine's letters in italic, then the image.
+- **Figures are old-style**: `1` reads as `I`, `5` as `s` (`sth` for _5th_), `9` as `g`, `8` as `S`. Check every figure.
+- **Ligatures and accents**: both engines drop `œ`/`Œ` (`manœuvres`, `Œdipus`) and ours drops `à`, `è`, `é` (`vis-à-vis`, `Molière`, `séance`, `exposé`); the circumflex prints as a tall caret (`Samâj`, `deus-ex-machinâ`). Specks over vowels (`nicè`, `Galileó`) are not accents.
+- **Spacing before `;` `:` `?` `!` varies by line and by leaf** in this book: some touch, some carry a thin space. Crop at 2–3× and set each as printed; do not normalise.
+- **Pen underlining and ink blots** from a former owner cross some passages; the words beneath are legible, and ours turns the ink into junk. Read under it.
+- **Italic worn type** prints many `e` as an open `c` (`exposurc`, `hcr`); at 8× a real wrong sort shows no stub of crossbar at all (`allowcd`). Only that is a printers-error.
 
 ## What each engine was bad at on _The Key to Theosophy_
 

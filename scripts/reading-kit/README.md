@@ -80,6 +80,16 @@ node scripts/drive.mjs querycrops <kit>/qc <leaf...>
 node scripts/reading-kit/sheet.mjs <shelf>/books/<slug>/book.json <kit>/qc <kit>/sheet-N.jpg <leaf...>
 ```
 
+## A driver trap
+
+After `drive.mjs open <scan>` on a book that has no run yet, the driver's idea of
+the current book can name a run that does not exist, and the first `save` fails
+with "That run could not be read back" even though `transcribe` landed the batch.
+`drive.mjs use <scan>` sets it right; run it after `open` and before the first
+`save`. A book's first save is `save - <shelf>/books/<slug>/book.json`, and it
+names no scan, so set `scan` in the file (round trip proved) before `shape.mjs
+--write`.
+
 ## Rules the scripts hold, and one they cannot
 
 - A reader is given an image and a text and asked where they differ. It
