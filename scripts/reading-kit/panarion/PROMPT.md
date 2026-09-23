@@ -36,7 +36,10 @@ Unlike _The Key to Theosophy_'s, this Google copy is not cropped: running heads 
 - **From leaf 67 the scan is in colour**, with red crayon as well as black ink from a former owner. Under red, ours drops or scrambles whole lines; the other engine reads them nearly perfectly. On an inked leaf start from the other engine's lines, then check each against the image (it still reads `m` as `ni`/`in`/`n` and `n` as `u`).
 - **The draft leaves every line-end hyphen and its space in** (`alle- gorical`): join them all, keeping a hyphen only in a real compound (`mustard-seed`).
 - **The source line under a title** (`[From The Spiritual Scientist.]`) is `caption`, with square brackets and the paper's name in italic; the draft makes it `heading` with round brackets.
-- **Straight and curly apostrophes both occur** (`lad's` straight, `Delessert’s` curly, leaf 76): set each as printed.
+- **An italic `!` or `?` slants with its word and goes inside the tag** (`<i>Homo !</i>`); a roman one after an italic word goes outside.
+- **A date or place line under a signature** is `caption` (usually italic); the draft types it `paragraph`.
+- **Small-capital openings** (`DEAR SIR`, `DESPITE`) come out of both engines in mixed case: set them in plain capitals.
+- **Straight and curly apostrophes both occur**, but most are curly and the draft straightens many: (`lad's` straight, `Delessert’s` curly, leaf 76), and set each as printed.
 - **Pen underlining and ink blots** from a former owner cross some passages; the words beneath are legible, and ours turns the ink into junk. Read under it.
 - **Italic worn type** prints many `e` as an open `c` (`exposurc`, `hcr`); at 8× a real wrong sort shows no stub of crossbar at all (`allowcd`). Only that is a printers-error.
 
