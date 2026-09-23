@@ -158,6 +158,8 @@ const ABBREVIATIONS = new Set([
   'comm',
   'quaest',
   'etc',
+  // `per cent.`: the period's form, and a figure, not a word, precedes `per`.
+  'cent',
   'viz',
   'cf',
   'ibid',

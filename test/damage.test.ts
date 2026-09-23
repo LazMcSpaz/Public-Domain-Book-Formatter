@@ -147,6 +147,14 @@ describe('a stray full stop', () => {
     ).toEqual([])
   })
 
+  // A Modern Panarion, leaf 332: the period sets "per cent." with its stop,
+  // and a figure rather than a word follows `per`, so only the list catches it.
+  it('leaves “per cent.” alone', () => {
+    expect(
+      of(build(['together with 1½ per cent. to the chief assayer, were deposited.']), 'stray-point')
+    ).toEqual([])
+  })
+
   it('reports a doubled stop where a quotation was run in', () => {
     const found = of(
       build(['his formulation of modern transformational linguistics.. . . forms part of it']),
