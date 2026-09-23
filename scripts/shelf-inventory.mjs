@@ -40,9 +40,9 @@ const MOVE = process.argv.includes('--move')
 
 /** Which pile a file belongs to, decided by what its opening leaves say. */
 const GROUPS = [
-  ['blavatsky-secret-doctrine', /secret doctrine|cosmic evolution|anthropogenesis|stanza [ivx]/iu],
   // Vol. I runs 'THE VEIL OF ISIS' as its head, so the title never appears.
   ['blavatsky-isis-unveiled', /isis unveiled|veil of isis|coo1-ark/iu],
+  ['blavatsky-secret-doctrine', /secret doctrine|cosmic evolution|anthropogenesis|stanza [ivx]/iu],
   ['blavatsky-other', /blavatsky|theosophical glossary|key to theosophy|modern panarion/iu],
   ['manly-hall-lectures', /manuscript (lecture|series)|manly p(alme)?r? hall/iu],
   [
@@ -112,10 +112,17 @@ if (existsSync(booksDir)) {
 
 const rows = []
 const seen = []
-for (const [dir, where] of [
+const places = [
   [SHELF, 'root'],
   [`${SHELF}/scans`, 'scans']
-]) {
+]
+// Every pile under sources/, so a file stays in the inventory after --move.
+if (existsSync(`${SHELF}/sources`)) {
+  for (const g of readdirSync(`${SHELF}/sources`)) {
+    places.push([`${SHELF}/sources/${g}`, `sources/${g}`])
+  }
+}
+for (const [dir, where] of places) {
   if (!existsSync(dir)) continue
   for (const f of readdirSync(dir).filter((n) => n.toLowerCase().endsWith('.pdf'))) {
     seen.push({ f, where, path: `${dir}/${f}` })
