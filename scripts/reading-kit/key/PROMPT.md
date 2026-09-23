@@ -21,12 +21,15 @@ A dialogue. Each turn opens with the speaker in small capitals — `ENQUIRER.` a
 This Google copy was cropped at the top: the running head and folio are gone on every leaf, and usually the first line of text too, whole on some leaves and in half on others. Nothing is missing _between_ leaves; what looks like a missing page is the lost top line. So:
 
 - **Do not raise a query about it.** Record it once per leaf in the page's `cut` field (see Output).
+- **Nothing above the cut is supplied**, not even a closing quotation mark whose partner survives. A mark you cannot see is not set; say so in `cut.note`.
+- A lost line sometimes leaves no trace at all. The sign is a leaf that opens mid-sentence where the one before ended a sentence, or the reverse; record it as `whole`.
 - A half-cut line: set a letter only where what survives of it settles it (the lower half of most lower-case letters does; capitals and `c`/`e`/`o` often do not). **Never supply a word from the sense of the passage.** Where a word cannot be read off what is left, stop the line there, begin the block at the first word you can read, and say what was left out in `cut.note`.
 
 ## What each engine is bad at on this book (reported by the readers of leaves 0–29)
 
 - **Speaker labels.** Ours: `TreosopHIST.`, `Tueo.`, `Turo.`, `Tureo.`, `Treo.`, `Taro.`, `Tuco.`, `ExqQ.`, `ENxQ.`, `Enq.`, and `ENQ..` from a speck. The other: `Evq.`, `Taro`. They are always one of `ENQUIRER.`, `THEOSOPHIST.`, `ENQ.`, `THEO.` as the page prints them; set them in plain capitals.
 - **Worn sorts.** In this printing a worn `n` prints as `u` and a worn `e` as `c` (`Ou`, `Diffcreuce`, `makiug`, `Schocls`). **Both** engines copy that faithfully, so agreement is no evidence. Transcribe as printed and raise a printers-error. But a letter that is only damaged while the word still reads plainly as the right word (a nicked `h` in `honour`) is not a printer's error: transcribe the word and raise nothing.
+- **Faint arches are not worn sorts.** The scan is thresholded thin, so the hairlines of `n`, `h`, `m` drop out all over (`beginuiug`, `tlie`, `ou`). Where the letter's shape is otherwise whole and the word reads plainly, transcribe the word and raise nothing; zoom to 3× before deciding. Raise a printers-error only for a fully formed wrong letter (a `c` with no crossbar at all), or a sort that has **lost an ascender and become another real word** (`out` for `but`), which neither engine will flag.
 - **Figures.** In this face `3` looks like `8`, and the other engine reads `9` as `g` and `1` as `I`. Check every number against the image.
 - **Greek.** Both engines lose it entirely. Read it off the image letter by letter with the accents and breathings the page prints (`ἡ γνῶσις τῶν ὄντων`); where a mark is a blot, set the letter bare and raise `unclear`.
 - **Ours** turns the opening double quote into `*`, `««`, `we`, `‘“` or `®`, turns `‘` into `¢`, drops opening quotes altogether, reads `†` as `t` or `t+`, and puts `|`, `:`, `’`, `-`, `+` or `TTT` where there is a speck or pen stroke. It reads `c`/`e`/`o` wrongly in the small type (`sceptios`, `Chuist`) and runs words together on a tight line (`Iwill`). It drops `æ` (`Encyclopædia`) and circumflexes (`bonâ fide`).
@@ -40,7 +43,7 @@ This Google copy was cropped at the top: the running head and folio are gone on 
 
 ## Block kinds
 
-The draft guessed each block's `kind` from its geometry, and this book sets quotations and footnotes in the same small type, so it gets some wrong. Where a kind is plainly wrong, give the right one as `"kind"` on that block in your output: `paragraph`, `heading`, `blockquote`, `footnote` or `caption`. A quotation set in small type within the text is `blockquote`, not `footnote`; a section sub-head is `heading`; the end of a speech typed `footnote` is `paragraph`. A footnote is only what stands below the rule at the foot of the leaf.
+The draft guessed each block's `kind` from its geometry, and this book sets quotations and footnotes in the same small type, so it gets some wrong. Where a kind is plainly wrong, give the right one as `"kind"` on that block in your output: `paragraph`, `heading`, `blockquote`, `footnote` or `caption`. **The draft types the continuation of almost every speech as `blockquote`**, because of the hanging indent under the speaker label: those are `paragraph`. A quotation set in small type within the text is `blockquote`, not `footnote`; the italic sub-heads come out `paragraph` or `blockquote` and are `heading`; a section sub-head is `heading`; the end of a speech typed `footnote` is `paragraph`. A footnote is only what stands below the rule at the foot of the leaf.
 
 ## Output
 
@@ -64,7 +67,8 @@ Every block, corrected or not, with its `i`. Scanner junk (a signature letter, p
 6. **Clear typos and damaged type** (a misspelling the page plainly makes, an unpaired quotation mark, a broken sort): transcribe **as printed** and raise a query with `kind: "printers-error"` and `fix` giving the word as it should read. Nobody has ruled on this book yet: nothing you raise is applied without the editor, so raise every one. If the fix means **choosing** (where an unclosed quotation should close, which of two words was meant) it is not a printers-error: raise it `inconsistent` with no fix.
 7. **Before raising anything, read the whole block it sits in and the blocks either side**, and look for the same word or construction elsewhere on your leaves. A finding the paragraph settles is not a query.
 8. Anything that is genuinely the editor's — the book contradicting itself, a sentence that does not construe — `kind: "inconsistent"` or `"unclear"`, transcribed as printed, **no fix proposed**.
-9. If a block holds two paragraphs or speaker turns run together, or one is split across two blocks, do not restructure — correct the text and note it in your report with the leaf and `i`.
-10. A block the brief types `table` is regenerated from its cells, so prose written into it is thrown away. If a `table` block is really prose (the contents page is the likeliest), correct the text and **say so in your report**.
+9. A word broken by a hyphen across two blocks is set whole in the first block and removed from the second, as the readers of 35–44 did.
+10. If a block holds two paragraphs or speaker turns run together, or one is split across two blocks, do not restructure — correct the text and note it in your report with the leaf and `i`.
+11. A block the brief types `table` is regenerated from its cells, so prose written into it is thrown away. If a `table` block is really prose (the contents page is the likeliest), correct the text and **say so in your report**.
 
 Work leaf by leaf. Report back only: blocks changed per leaf, queries by kind, and anything a later batch should know about this book's type or either engine that is not already above.
