@@ -27,7 +27,14 @@
 import { chromium } from 'playwright'
 import { createServer } from 'node:http'
 import { access, mkdir, writeFile } from 'node:fs/promises'
-import { createReadStream, existsSync, statSync, writeFileSync } from 'node:fs'
+import {
+  createReadStream,
+  existsSync,
+  readdirSync,
+  readFileSync,
+  statSync,
+  writeFileSync
+} from 'node:fs'
 import { dirname, isAbsolute, resolve } from 'node:path'
 
 const PORT = Number(process.env.DRIVE_PORT ?? 7788)
@@ -47,6 +54,34 @@ const VENDORED = '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
 const EXECUTABLE = process.env.CHROMIUM_PATH ?? (existsSync(VENDORED) ? VENDORED : undefined)
 const OUT = process.env.DRIVE_OUT ?? 'screenshots'
 const REPO = resolve(import.meta.dirname, '..')
+
+/**
+ * The directory the shelf actually holds a book in, read off a checkout.
+ *
+ * A book's shelf path used to be computed from its key alone, and nine of the
+ * sixteen books here sit in a directory a person renamed to something a reader
+ * can see — `Blavatsky-TheTheosophicalGlossary-1s37ewg` for a key whose file is
+ * a SHA. The app's own listing is where that is normally learnt, and the
+ * driver's Chromium has no shelf token and no listing to learn it from; a
+ * checkout is the one place this side can look. Returns null when there is no
+ * checkout or no card matching the key, and the caller keeps the computed name
+ * — which is right for a book the shelf has never held.
+ */
+function shelfDirForKey(key) {
+  const shelf = process.env.SHELF ?? '/home/user/Public-Domain-Books-Storage'
+  const books = resolve(shelf, 'books')
+  if (!existsSync(books)) return null
+  for (const dir of readdirSync(books)) {
+    const card = resolve(books, dir, 'about.json')
+    if (!existsSync(card)) continue
+    try {
+      if (JSON.parse(readFileSync(card, 'utf8')).key === key) return dir
+    } catch {
+      // A card that will not parse names no book; the next one might.
+    }
+  }
+  return null
+}
 /** Where the browser keeps its storage between runs. See `launchPersistentContext`. */
 const PROFILE = process.env.DRIVE_PROFILE ?? resolve(REPO, '.drive-profile')
 
@@ -4704,16 +4739,25 @@ async function serve() {
     link: async ([at = 'review', leaf]) => {
       const site =
         process.env.PDBF_SITE ?? 'https://lazmcspaz.github.io/Public-Domain-Book-Formatter/'
-      return page.evaluate(
+      const found = await page.evaluate(
         async ([repo, base, where, whichLeaf]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
-          const shelf = await import(`/@fs${repo}/src/core/sync/index.ts`)
+          const shelf = await import(`/@fs${repo}/src/platform/browser/shelf.ts`)
           const wizard = await import(`/@fs${repo}/src/core/wizard/index.ts`)
           const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
           const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book on this device.')
           const run = await runStore.loadRun(newest.key)
-          const slug = shelf.shelfSlug(newest.key)
+          // The directory the shelf *holds* this book in, not the one computed
+          // from its key. Nine of sixteen books sit in a directory a person
+          // renamed to something readable, and a link built from the computed
+          // name is unreadable at best — `c77f699e…-1s37ewg` for the
+          // Theosophical Glossary — and names a book nobody can find on the
+          // shelf at worst. The app matches a link on either, so this is
+          // legibility first; the reach matters the day the match stops being
+          // generous. Falls back to the computed name, which is right for a
+          // book the shelf has never held.
+          const slug = shelf.knownShelfDir(newest.key)
           const raised = run ? queriesMod.collectQueries(run.transcriptions) : []
           // What is *waiting*, not what was raised. This said 109 for a book
           // with 32 of them already ruled on — a number that is wrong in the
@@ -4727,6 +4771,7 @@ async function serve() {
               ...(Number.isFinite(Number(whichLeaf)) ? { leaf: Number(whichLeaf) } : {})
             }),
             book: run?.fileName ?? newest.fileName,
+            key: newest.key,
             slug,
             queriesRaised: raised.length,
             queriesWaiting: waiting.length,
@@ -4739,6 +4784,21 @@ async function serve() {
         },
         [REPO, site, at, leaf ?? '']
       )
+      // The page can only know a renamed directory if it has listed the shelf,
+      // and the driver's Chromium has no token to list one with. A checkout
+      // does know, so ask it and rewrite the slug in place. Belt and braces:
+      // whichever of the two answers, the link names the directory the shelf
+      // really holds rather than the name computed from the key.
+      const onShelf = shelfDirForKey(found.key)
+      if (onShelf && onShelf !== found.slug) {
+        found.url = found.url.replace(
+          `book=${encodeURIComponent(found.slug)}`,
+          `book=${encodeURIComponent(onShelf)}`
+        )
+        found.computedSlug = found.slug
+        found.slug = onShelf
+      }
+      return found
     },
 
     /**
