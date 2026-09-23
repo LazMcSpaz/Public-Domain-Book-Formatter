@@ -44,6 +44,9 @@ This Google copy was cropped at the top: the running head and folio are gone on 
 - **Accent-shaped specks** sit over vowels (`consciousnéss`, `reve̊red`) and both engines take them for accents; this book sets no accent on English words.
 - **Long quotations in small type** (Sinnett, Walker, Conelly, the verse): `blockquote`, one per block even where the draft splits them a line at a time. A lead-in line in text type ("Mr. Conelly proceeds—") is `paragraph`. Rows of printed dots between stanzas: `* * * * *`.
 - **A section numeral (`XII.`) is printed above every section title and the draft never gives it a block: add it** with the `add` list, kind `heading`, directly above the title.
+- **A speaker label can lose a letter that never inked** (`NQ.` for `ENQ.`, leaf 276): set what prints and raise a printers-error; do not repair it silently.
+- **To tell a real `c`-for-`e` from a lost hairline**, crop at 8× beside a plain `c` on the same line: a lost hairline leaves a stub of crossbar pointing left; a wrong sort has only the ball at the top.
+- **The last leaves may be an appendix, notes or the publisher's advertisements.** Transcribe them as printed like any other leaf; only scanner junk is set to `""`.
 - **A full stop can print with a short tail** and read as a comma at 1–2×. At 4× compare it with a real comma on the same leaf before raising anything.
 - **Side-labelled definitions** (`THE HIGHER SELF is …`, leaves 186–187): the draft scatters the labels as fragments. Put each label at the start of its entry's text.
 - **The draft sometimes drops a whole line**, most often a footnote's first line or a half-cut first line; the other engine usually keeps it. On every leaf with a footnote, compare the two readings of the note's opening.
