@@ -30,6 +30,9 @@ Unlike _The Key to Theosophy_'s, this Google copy is not cropped: running heads 
 - **Circumflexes and diaereses: trust the other engine** (`Hindû`, `Brâhman`, `Nirvâna`, `reïncarnation`); ours turns `û` into `i`/`ii`/`il`. Never change `Hindi` to `Hindû` by pattern: the language may be meant. Each occurrence off the image.
 - **The other engine drops the `l` of `fl` and the `i` of `fi`** (`feld`, `effgies`, `foored`); ours reads ligatures correctly.
 - **An italic `t` can lose its cross-stroke and read as `l`** (`Rile` for `Rite`): a printers-error only when the stroke is truly gone at 5×.
+- **This printing drops the full stop between two sentences** now and then: a sentence-width gap before a capital (`their cooling And`). Both engines miss it; it is a printers-error.
+- **A comma often prints as a heavy teardrop** that reads as a full stop at 1–2× (`which.`, `desire.`); crop at 6× before raising a stop mid-clause. A real stray full stop mid-sentence (`must. we`) also occurs.
+- **The decimal point is the raised point** (`985,953·75`); ours reads it as `°`.
 - **Figures are old-style**: `1` reads as `I`, `5` as `s` (`sth` for _5th_), `9` as `g`, `8` as `S`. Check every figure.
 - **Ligatures and accents**: both engines drop `œ`/`Œ` (`manœuvres`, `Œdipus`) and ours drops `à`, `è`, `é` (`vis-à-vis`, `Molière`, `séance`, `exposé`); the circumflex prints as a tall caret (`Samâj`, `deus-ex-machinâ`). Specks over vowels (`nicè`, `Galileó`) are not accents.
 - **Spacing before `;` `:` `?` `!` varies by line and by leaf** in this book: some touch, some carry a thin space. Crop at 2–3× and set each as printed; do not normalise.
