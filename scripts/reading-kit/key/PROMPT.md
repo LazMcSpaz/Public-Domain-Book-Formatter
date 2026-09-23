@@ -37,7 +37,10 @@ This Google copy was cropped at the top: the running head and folio are gone on 
 - **Blackletter** (the imprint, the dedication) defeats both engines. Read it off the image.
 - **Small words between display lines** (`BY`, `OF THE`) are dropped by ours; the other usually keeps them.
 - **Italic capitals** set the section sub-heads (`THE MEANING OF THE NAME.`): plain capitals, no `<i>`, since the italic is the heading's design. Small capitals in running text (`MYSTERIES`): plain capitals.
-- **Spacing before `;` `:` `?` and inside quotation marks varies on a single page** (`lies;` and `principles ;`; `“ greater ”` and `“greater”` a few lines apart). Transcribe each occurrence as printed: a gap as wide as a word space is a space. Do not normalise in either direction.
+- **Spacing before `;` `:` `?` `!`**: the compositor sets a thin space there nearly everywhere, narrower than a word space. **Any visible gap is set as one space; only a mark touching its word is set close** (`serious?`). Inside quotation marks the same: a visible gap after `“` or before `”` is a space. Do not normalise, in either direction, what you can see.
+- **Thresholding.** The scan is thresholded thin: most `e` crossbars and many `n`/`h`/`m` arches have dropped out. At 1–2× `the` looks like `thc`. Only at 4× does a truly open `c` for `e` (`trec`) separate from a lost hairline. The footnote type, which prints heavy, shows this in nearly every `e`; that is not a worn sort and not bold type.
+- **Lines are lost at the foot of some leaves as well as the head**: record it in `cut.note`.
+- **Greek and Hebrew**: print accents and breathings only sometimes (`τὸ πᾶν` on one leaf, `παν` bare on the next). Set exactly what each occurrence prints. The section numeral above a section title (`III.`, `IV.`) sometimes has no block: note it in your report, do not add a block.
 - **The page's own spellings stand**: `ecstacy`, `Budhism`, `phænomena`, `Boëhme`. They are not printer's errors.
 - **This copy carries a former owner's handwriting** on the half-title and pen marks in places: set such a block to `""`.
 
