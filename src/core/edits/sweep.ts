@@ -207,31 +207,43 @@ interface Hunk {
   bTo: number
 }
 
-/** Past this many cells the diff is not worth it and the ends are trimmed instead. */
-const HUNK_CELLS = 250_000
+/**
+ * Past this many cells the middle is not diffed and becomes one stretch. Only
+ * the stretch between the first and last difference is diffed, so this binds
+ * only when two changes are thousands of characters apart.
+ */
+const HUNK_CELLS = 4_000_000
 
 /**
  * Where two strings differ, as stretches in order, each widened to whole
- * words and merged where they then touch. Whole words for the reason
- * `commonEnds` gives: a tag re-opened at a splice's end must not land inside
- * a word. A character-level longest common subsequence finds the stretches;
- * a match is a phrase, so the table is small, and past `HUNK_CELLS` the old
- * single stretch between the shared ends is used.
+ * words and merged where they then touch (see `widen`). The shared ends are set aside first and a character-level longest
+ * common subsequence finds the stretches in what is left — which is what
+ * keeps this cheap when a whole block is the match, as it is when a
+ * correction is replayed onto re-derived markup. Diffing the whole block
+ * instead ran past the cap there and fell back to one stretch, and a run
+ * between two changes was dropped again.
  */
 function hunks(a: string, b: string): Hunk[] {
   const n = a.length
   const m = b.length
-  if (n * m > HUNK_CELLS) {
-    const { prefix, suffix } = commonEnds(a, b)
-    return [{ aFrom: prefix, aTo: n - suffix, bFrom: prefix, bTo: m - suffix }]
+  let head = 0
+  while (head < n && head < m && a[head] === b[head]) head += 1
+  let tail = 0
+  while (tail < n - head && tail < m - head && a[n - 1 - tail] === b[m - 1 - tail]) tail += 1
+  const an = n - head - tail
+  const bm = m - head - tail
+  if (an * bm > HUNK_CELLS) {
+    return widen(a, b, [{ aFrom: head, aTo: n - tail, bFrom: head, bTo: m - tail }])
   }
-  // lcs[i][j] = LCS length of a[i..] and b[j..].
-  const w = m + 1
-  const lcs = new Uint16Array((n + 1) * w)
-  for (let i = n - 1; i >= 0; i -= 1) {
-    for (let j = m - 1; j >= 0; j -= 1) {
+  const ai = (k: number): string => a[head + k]!
+  const bj = (k: number): string => b[head + k]!
+  // lcs[i][j] = LCS length of the middles from i and j on.
+  const w = bm + 1
+  const lcs = new Uint16Array((an + 1) * w)
+  for (let i = an - 1; i >= 0; i -= 1) {
+    for (let j = bm - 1; j >= 0; j -= 1) {
       lcs[i * w + j] =
-        a[i] === b[j]
+        ai(i) === bj(j)
           ? lcs[(i + 1) * w + j + 1]! + 1
           : Math.max(lcs[(i + 1) * w + j]!, lcs[i * w + j + 1]!)
     }
@@ -240,25 +252,38 @@ function hunks(a: string, b: string): Hunk[] {
   let i = 0
   let j = 0
   let open: Hunk | null = null
-  while (i < n || j < m) {
-    if (i < n && j < m && a[i] === b[j]) {
+  while (i < an || j < bm) {
+    if (i < an && j < bm && ai(i) === bj(j)) {
       if (open) raw.push(open)
       open = null
       i += 1
       j += 1
       continue
     }
-    open ??= { aFrom: i, aTo: i, bFrom: j, bTo: j }
-    if (j < m && (i === n || lcs[i * w + j + 1]! >= lcs[(i + 1) * w + j]!)) {
+    open ??= { aFrom: head + i, aTo: head + i, bFrom: head + j, bTo: head + j }
+    if (j < bm && (i === an || lcs[i * w + j + 1]! >= lcs[(i + 1) * w + j]!)) {
       j += 1
-      open.bTo = j
+      open.bTo = head + j
     } else {
       i += 1
-      open.aTo = i
+      open.aTo = head + i
     }
   }
   if (open) raw.push(open)
+  return widen(a, b, raw)
+}
 
+/**
+ * Each stretch widened to word boundaries, then merged where they touch.
+ * Whole words, because a tag the splice swallows is re-opened at the splice's
+ * end, and an end that falls inside a word puts the tag there: `the astral`
+ * → `one ethereal` shares `al` and would set `ethere<i>al`. A boundary is one
+ * the shared text has on both sides — the characters outside a stretch are
+ * the same in both strings, so only the character just past them can differ,
+ * and it has to be a non-word one in both for the cut to fall between words.
+ */
+function widen(a: string, b: string, raw: readonly Hunk[]): Hunk[] {
+  const n = a.length
   // Widen each to word boundaries. The characters outside a hunk are shared,
   // so widening moves both sides together.
   const widened = raw.map((h) => {
@@ -292,38 +317,3 @@ function hunks(a: string, b: string): Hunk[] {
 
 const WORD_CHAR = /[\p{L}\p{N}\p{M}]/u
 const isWordChar = (c: string | undefined): boolean => c !== undefined && WORD_CHAR.test(c)
-
-/**
- * How much two strings share at each end, never overlapping, and cut back
- * to a word boundary on both sides. Whole words, because a tag the splice
- * swallows is re-opened at the splice's end, and an end that falls inside a
- * word puts the tag there: `the astral` → `one ethereal` shares `al` and
- * would set `ethere<i>al`. A boundary is one the shared text has on both
- * sides — the shared characters are the same in both strings, so only the
- * character just past them can differ, and it has to be a non-word one in
- * both for the cut to fall between words in both.
- */
-function commonEnds(a: string, b: string): { prefix: number; suffix: number } {
-  const most = Math.min(a.length, b.length)
-  let prefix = 0
-  while (prefix < most && a[prefix] === b[prefix]) prefix += 1
-  while (
-    prefix > 0 &&
-    isWordChar(a[prefix - 1]) &&
-    (isWordChar(a[prefix]) || isWordChar(b[prefix]))
-  ) {
-    prefix -= 1
-  }
-  let suffix = 0
-  while (suffix < most - prefix && a[a.length - 1 - suffix] === b[b.length - 1 - suffix]) {
-    suffix += 1
-  }
-  while (
-    suffix > 0 &&
-    isWordChar(a[a.length - suffix]) &&
-    (isWordChar(a[a.length - suffix - 1]) || isWordChar(b[b.length - suffix - 1]))
-  ) {
-    suffix -= 1
-  }
-  return { prefix, suffix }
-}

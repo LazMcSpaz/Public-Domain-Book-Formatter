@@ -171,6 +171,25 @@ describe('sweepText keeps the runs a phrase spans', () => {
     )
   })
 
+  it('two changes inside a long match keep the run between them', () => {
+    // A whole block replayed as one match — which is how a correction is
+    // carried onto re-derived markup — is long enough that diffing all of it
+    // was abandoned for the old two-ends trim, and `<i>Sodality</i>` between
+    // `i.e..` and `Geñ.` was dropped again. Only the middle needs the diff.
+    const pad = 'word '.repeat(400)
+    const text = `${pad}assembly ”, <i>i.e..</i> into the <i>Sodality</i> of Simeon and Levi <i>(Geñ.</i> xlix ${pad}`
+    const plain = text.replace(/<[^>]+>/g, '')
+    const { text: out, count } = sweepText(
+      text,
+      plain,
+      plain.replace('i.e..', 'i.e.,').replace('Geñ.', 'Gen.')
+    )
+    expect(count).toBe(1)
+    expect(out).toBe(
+      `${pad}assembly ”, <i>i.e.,</i> into the <i>Sodality</i> of Simeon and Levi <i>(Gen.</i> xlix ${pad}`
+    )
+  })
+
   it('a bold headword and its tag between two changes survive too', () => {
     const text = 'during “pralaya” <i>(q.v.).</i> <b>Âdi-nâtha</b> <i>(Sk.).</i> The “first” Lord'
     const { text: out } = sweepText(

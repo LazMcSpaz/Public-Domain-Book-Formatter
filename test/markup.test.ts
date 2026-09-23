@@ -199,6 +199,44 @@ describe('emphasis survives the journey to the page', () => {
     expect(joined.emphasis?.map((i) => words[i])).toEqual(['then'])
   })
 
+  it('keeps the italics on their words when the seam heals a hyphen', () => {
+    // `inspira-` + `tion` is one word once joined, so everything after it
+    // sits one index earlier than the first half's word count says. Shifting
+    // by that count put the Glossary's `<i>mâyâvic</i> principle` on
+    // "principle" — at every healed seam in every book, italic and bold alike.
+    const built = assembleBook([
+      parsePageTranscription(
+        {
+          role: 'body',
+          blocks: [{ kind: 'paragraph', text: 'or Self-', continuesNext: true }],
+          uncertain: [],
+          furniture: {}
+        },
+        0
+      ),
+      parsePageTranscription(
+        {
+          role: 'body',
+          blocks: [
+            {
+              kind: 'paragraph',
+              text: 'identity; the <i>mâyâvic</i> principle, <b>Ahamkâra</b>.',
+              continuesPrevious: true
+            }
+          ],
+          uncertain: [],
+          furniture: {}
+        },
+        1
+      )
+    ])
+    expect(built.blocks).toHaveLength(1)
+    const joined = built.blocks[0]!
+    const words = joined.text.split(/\s+/u)
+    expect(joined.emphasis?.map((i) => words[i])).toEqual(['mâyâvic'])
+    expect(joined.strong?.map((i) => words[i])).toEqual(['Ahamkâra.'])
+  })
+
   it('forgets the emphasis when the user retypes the text', () => {
     // The indices point into the old wording; keeping them would italicise
     // whichever words now happen to sit at those positions.

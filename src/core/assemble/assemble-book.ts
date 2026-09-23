@@ -659,21 +659,27 @@ export function assembleBook(
       const acrossSeam = previous !== undefined && !previous.sourcePages.includes(page.pageIndex)
       if (joinable && shouldJoin(previous, block, acrossSeam)) {
         // Emphasis is carried as word indices, so the second half's italics have
-        // to move along by however many words the first half had — or they land
-        // on the wrong words once the two are one paragraph.
+        // to move along by however many words come before it in the joined
+        // paragraph — or they land on the wrong words once the two are one.
+        //
+        // Measured on the *joined* text, as the footnote join above already
+        // was: `joinText` heals a hyphen across the seam, which makes two
+        // words one, so the first half's own word count is one too many.
+        // Shifting by it put every italic and bold after a healed seam one
+        // word late — the Glossary's `<i>mâyâvic</i> principle` printed
+        // "mâyâvic <i>principle</i>".
+        const joined = stripSoftHyphens(joinText(previous.text, block.text))
+        const shift = wordCount(joined) - wordCount(block.text)
         if (block.emphasis?.length) {
           previous.emphasis = [
             ...(previous.emphasis ?? []),
-            ...shiftEmphasis(block.emphasis, wordCount(previous.text))
+            ...shiftEmphasis(block.emphasis, shift)
           ]
         }
         if (block.strong?.length) {
-          previous.strong = [
-            ...(previous.strong ?? []),
-            ...shiftEmphasis(block.strong, wordCount(previous.text))
-          ]
+          previous.strong = [...(previous.strong ?? []), ...shiftEmphasis(block.strong, shift)]
         }
-        previous.text = stripSoftHyphens(joinText(previous.text, block.text))
+        previous.text = joined
         if (!previous.sourcePages.includes(page.pageIndex)) {
           previous.sourcePages.push(page.pageIndex)
         }
