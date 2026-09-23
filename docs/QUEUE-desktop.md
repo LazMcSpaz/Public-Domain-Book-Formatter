@@ -21,13 +21,20 @@ here rather than in a cloud session are three, and each item says which.
    book; while an item is _taken_, the other side does not write to that
    book. The claim is the status line in this file, committed and pushed
    before the work starts.
-2. **Every session opens with the sync check** in `HANDOFF.md` §1 and closes
+2. **Two sessions on one machine need two checkouts.** A second Claude in
+   the same directory shares its working tree, its branch, its `node_modules`
+   and its ports, and the two will overwrite each other's commits and fight
+   over the driver. Give the second its own clone (`~/pdbf-b` and
+   `~/shelf-b`), its own ports (`DRIVE_PORT=7798`, `npm run dev -- --port
+5183`), and work that touches different files. Both still pull with
+   `--rebase` before pushing.
+3. **Every session opens with the sync check** in `HANDOFF.md` §1 and closes
    with a push. Commit per unit of work: a stretch, a pass, a fix.
-3. **Desktop → cloud** is the commit history: `ledger.md`, `queries.md`,
+4. **Desktop → cloud** is the commit history: `ledger.md`, `queries.md`,
    `rulings.md`, and comments left in the book editor (`drive.mjs memos`
    lists them). **Cloud → desktop** is this file, the crop sheets, and task
    cards in the desktop app, each carrying the item's prompt.
-4. **One branch until it is merged.** Both repositories are on
+5. **One branch until it is merged.** Both repositories are on
    `claude/pdf-text-cleaning-workflow-evyna3`; the desktop works there too
    until item 4 lands, then `main`.
 
@@ -189,6 +196,68 @@ after its first stretch from what the readers report. Shape recorded first
 recon runs, so a long recon looks frozen at 9%; it should report leaves
 done. And the second reader exists only behind the driver; the plan's next
 step is the app.
+
+### 8. Organise the shelf and write down what is on it
+
+`open`. Books: none — this touches no `book.json`, so it is safe beside any
+reading. Fifty PDFs sit loose at the shelf root and a hundred and sixteen
+across the repository, named by SHA-256 or by a download slug, and until now
+nothing said what any of them were.
+
+```bash
+node scripts/shelf-inventory.mjs ~/Public-Domain-Books-Storage          # writes INVENTORY.md
+node scripts/shelf-inventory.mjs ~/Public-Domain-Books-Storage --move   # git mv the loose ones
+```
+
+It opens every PDF and classifies it on **what its opening leaves say**,
+because the names carry nothing: Isis Vol. I runs `THE VEIL OF ISIS` as its
+head and never prints its own title, which is why thirty-five of its chunks
+read as unsorted the first time. `--move` touches only the root, never
+`scans/`, whose paths every `book.json` names. Review the renames, commit,
+push. Then look at whatever it still calls `unsorted` and either widen a
+pattern or say in `INVENTORY.md` what the file is.
+
+It does **not** shrink the repository. Git keeps every blob for ever, so the
+778 MB at the root is 778 MB of history wherever the files now sit. That
+rewrite is the editor's call, above.
+
+### 9. The Secret Doctrine, ordered and assembled
+
+`open`. Thirty-one files, 169 MB, Theosophical University Press online
+edition, **already carrying text** — so this needs no OCR and no reading
+pass. What it needs is the order, and the order is legible: some chunks open
+on a part head (`BOOK I., PART II. THE EVOLUTION OF SYMBOLISM`, `BOOK
+II.-PART I. ANTHROPOGENESIS`), and the rest open on a folio (`86 THE SECRET
+DOCTRINE`, `412 THE SECRET DOCTRINE`). Sort by part, then by opening folio,
+and check the seams join: the last folio of one chunk and the first of the
+next must be consecutive, and a gap is a missing chunk rather than something
+to paper over.
+
+Record the shape before anything else (`scripts/shape.mjs`, `textSource:
+converted` unless the publisher is named) and read `docs/FLOW.md` for the
+route that shape lands on. Stop at a built book and a report. **Do not
+export an edition**: this is a modern press's transcription, not the 1888
+setting, and whether an edition may be built from it is the editor's.
+
+### 10. The four uploads of 22 September
+
+`open`. At the shelf root, and none of them is public domain — 1954, 1975,
+1976 and a journal piece — so treat them as reading and reference text, not
+as editions to publish. Measured:
+
+| File                            | Pages | Text layer     | What that means                           |
+| ------------------------------- | ----: | -------------- | ----------------------------------------- |
+| The Structure of Magic Vol. 2   |   204 | **none**       | a photograph: recon, then the reading kit |
+| The Structure of Magic Vol. 1   |   243 | somebody's OCR | `converted`: the damage check, then read  |
+| Patterns of Plausible Inference |   208 | somebody's OCR | `converted`, and not occult — reference   |
+| Lakoff on Linguistics (Wilks)   |    21 | somebody's OCR | a short piece; reference                  |
+
+Vol. 2 is the only real OCR job of the four. Record each shape, then for
+Vol. 2 run recon and the second reader (`drive.mjs second`, then `witness`)
+and put `second.json` and `witness.json` on the shelf beside the book, which
+is the once-per-book step the reading kit expects. That is hours of machine
+time and almost no judgement, which makes it the right thing to leave
+running.
 
 ## What the cloud session does meanwhile
 
