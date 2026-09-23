@@ -33,6 +33,8 @@ Unlike _The Key to Theosophy_'s, this Google copy is not cropped: running heads 
 - **This printing drops the full stop between two sentences** now and then: a sentence-width gap before a capital (`their cooling And`). Both engines miss it; it is a printers-error.
 - **A comma often prints as a heavy teardrop** that reads as a full stop at 1–2× (`which.`, `desire.`); crop at 6× before raising a stop mid-clause. A real stray full stop mid-sentence (`must. we`) also occurs.
 - **The decimal point is the raised point** (`985,953·75`); ours reads it as `°`.
+- **Pictures and diagrams** (leaves 412, 415): the draft reads a figure's lines and lettering as junk text and may split the paragraph round it a line at a time. Take the junk out, leave the figure without a block, and **name the leaf and what the figure is in your report** so it can be cut from the scan.
+- **Check your first crop.** The scale printed with an image has been wrong for this render: crop a wide band first, find the line, then zoom.
 - **Figures are old-style**: `1` reads as `I`, `5` as `s` (`sth` for _5th_), `9` as `g`, `8` as `S`. Check every figure.
 - **Ligatures and accents**: both engines drop `œ`/`Œ` (`manœuvres`, `Œdipus`) and ours drops `à`, `è`, `é` (`vis-à-vis`, `Molière`, `séance`, `exposé`); the circumflex prints as a tall caret (`Samâj`, `deus-ex-machinâ`). Specks over vowels (`nicè`, `Galileó`) are not accents.
 - **Spacing before `;` `:` `?` `!` varies by line and by leaf** in this book: some touch, some carry a thin space. Crop at 2–3× and set each as printed; do not normalise.
