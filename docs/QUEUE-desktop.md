@@ -236,9 +236,9 @@ Done 2026-09-23, every pass a commit and recorded in the book's `ledger.md`
   item's latest and the two were merged — but the claim line is what
   prevents the case where it would be.
 
-Close-out: `corrections.md` for the Glossary `taken (desktop session,
-2026-09-23, second attempt)` — the first claim died to a transport error
-without writing anything.
+Close-out: `corrections.md` for the Glossary `done (shelf 7b3fffc)`: 650
+corrections, `book-files.mjs --check --body` in step, `book.json` untouched;
+`--finish` now owes only the editor's rulings.
 
 ### 4. Merge both branches to main
 
@@ -248,8 +248,29 @@ since, the accent fold, the sweep fix and the reading kit are branch-only.
 
 ### 5. Isis Unveiled Vol. I — the queries, and a second witness
 
-`open` for the queries (the editor's); the second reader `taken (desktop
-session, 2026-09-23, second attempt)` — the first claim died before it started. Book: Isis Vol. I. Sixty-two queries wait on the editor at the gate
+`open` for the queries (the editor's); the second reader `done (shelf caf3779)`.
+
+**What the desktop session did, 2026-09-23.** Wrote the Glossary's
+`corrections.md` (650) and ran the second reader over all 693 leaves of Isis
+Vol. I, then recon and `witness`, with `second.json` and `witness.json` now
+beside the book. No query and no `book.json` was touched on either book. The
+scan had to be rebuilt from its nineteen chunks (byte-exact, 356,942,489, so
+the reading's key matched once the file's time was set to the millisecond),
+and **one chunk, `t6640b80d_p0038_0074`, is filed under
+`sources/blavatsky-secret-doctrine/`**, where the sorting commit `9ed3f73` put
+it; `scan.md` still says the chunks are at the repository root. The blobless
+shelf clone could not fetch the book's directory as one pack (connection
+reset), so its blobs were fetched one at a time. **The result is weaker than it
+looks:** the vendored tiny tier reads body type and skips the small type of
+extracts and footnotes, a median 35% of each leaf's words against the
+edition's text, so the 32.8% agreement is mostly omission; the `small` tier
+is not vendored here and is the next thing to try. And **the shelf's `main`
+cannot be fast-forwarded**: the editor's rulings from the app land on `main`
+(18 on the Glossary, following the item-12 proposals), and the branch has
+commits `main` lacks. Disjoint files, so a merge would be clean, but under
+rule 7 it was left for whoever decides; the formatter's `main` was
+fast-forwarded as usual. The editor's 10 `corrected` rulings are filed and
+not yet applied to the text. Book: Isis Vol. I. Sixty-two queries wait on the editor at the gate
 (the scan is too large for the shelf, so the crops are pre-cut under
 `queries/`). Then a second engine over the volume with the kit's once-per-book
 step, which this book has never had.
