@@ -2588,6 +2588,54 @@ async function serve() {
           )
         : null
 
+      // A `corrected` ruling the book does not yet read.
+      //
+      // The editor decides at the gate and the decision does nothing until an
+      // edit lands — `rulings.ts` keeps the two apart on purpose, precisely so
+      // this can be checked rather than assumed. Nothing was checking it: a
+      // desktop session reported ten of the editor's Glossary rulings filed
+      // and unapplied, found by reading `queries`' output rather than by
+      // anything that would have said so on its own. That is the gap where a
+      // book quietly keeps an error its editor is certain was fixed, and it
+      // grows every time he rules.
+      //
+      // Here rather than in `book-files.mjs` because `unapplied` wants the
+      // assembled, corrected text — which this verb already holds, and which a
+      // shell script would have to be handed.
+      //
+      // The document is assembled and corrected here rather than synthesised
+      // from the body's blocks, and that is not fussiness: `book-text.ts`
+      // records what synthesising cost. Handed `doc.blocks` alone, this check
+      // reported three of eight corrections on *Isis Unveiled* as outstanding
+      // after they had been made — a correction that landed in a **footnote**
+      // is invisible to a document with no notes on it, and a guard that cries
+      // wolf is what stops anyone reading the guard. `queries` builds it this
+      // way already; one recipe, so the two cannot disagree.
+      const notApplied = await page.evaluate(
+        async ([repo]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const q = await import(`/@fs${repo}/src/core/queries/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+          const doc = editsMod.applyEdits(
+            assemble.assembleBook(run.transcriptions),
+            run.edits ?? []
+          )
+          return q
+            .unapplied(run.rulings ?? [], doc)
+            .map(
+              (r) =>
+                `leaf ${r.pageIndex}: “${(r.quote ?? '').slice(0, 50)}” should read ` +
+                `“${(r.correction ?? '').slice(0, 50)}”`
+            )
+        },
+        [REPO]
+      )
+
       // The conversion damage still in the text: the one condition only the
       // browser can answer, and the one no shell script can ask for.
       const damage = await handlers.damage(['--check']).then(
@@ -2617,6 +2665,14 @@ async function serve() {
         .map((l) => l.replace(/^ {2}· /u, ''))
       const stale = lines.filter((l) => /^ {2}(STALE|MISSING|DRIFTED|UNMARKED|WALL)\b/u.test(l))
       if (marks !== null) for (const u of marks.unmarked) owed.push(`glossary mark missing: ${u}`)
+      if (notApplied.length > 0) {
+        owed.push(
+          `${notApplied.length} ruling(s) the editor made say the book should read something ` +
+            `it does not — apply them with \`sweep --was … --now …\`:\n      ` +
+            notApplied.slice(0, 8).join('\n      ') +
+            (notApplied.length > 8 ? `\n      …and ${notApplied.length - 8} more` : '')
+        )
+      }
       if (damage !== null) owed.push(damage)
 
       const finished = owed.length === 0 && stale.length === 0 && code === 0

@@ -59,8 +59,24 @@ here rather than in a cloud session are three, and each item says which.
    git checkout <branch>
    ```
 
-   Fast-forward only. A merge commit here means somebody pushed to `main`
-   directly, and that is worth stopping to look at rather than resolving.
+   **`main` moves on its own, so a fast-forward is not always possible, and
+   that is not a fault.** The query gate writes the editor's rulings straight
+   to `main`, so the moment he rules on anything the two sides have diverged —
+   eighteen commits of "1 query ruled on" did exactly that on the 23rd. When
+   `--ff-only` is refused, do not force and do not rewind: **his rulings live
+   on `main` and exist nowhere else.** Check what the two sides touched, and
+   merge if nothing is touched by both:
+
+   ```bash
+   BASE=$(git merge-base origin/main origin/<branch>)
+   comm -12 <(git diff --name-only $BASE origin/main | sort) \
+            <(git diff --name-only $BASE origin/<branch> | sort)   # empty is clean
+   ```
+
+   Empty means the merge is clean by construction rather than by luck: merge
+   into `main`, push, then fast-forward the branch to `main` so both sides
+   agree. Not empty means a book was written from two places at once — stop,
+   and say which file and which book.
 
 ### Setting the machine up, once
 
