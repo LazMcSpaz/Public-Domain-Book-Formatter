@@ -4019,31 +4019,45 @@ async function serve() {
           const key = parsed.run.key
           // The run under the file's own key, or — because a scan rebuilt on
           // this machine carries a fresh date and `load` re-keys the run to
-          // match it — the book this browser has open, when it is the same
-          // book. `save` keeps the shelf's key on the file for that reason,
-          // and the check that it *is* the same book is the file name and the
-          // leaf count: sheets built from some other volume's run would be
-          // written beside this one with nothing to say so.
+          // match it — the book this browser has open. `__pdbfBook` is the
+          // one designated way every verb here knows which book is meant
+          // (see its own doc comment above), and `load`/`use` set it, so it
+          // is asked first rather than guessed at. Comparing *file names*
+          // here used to be the check, and it is not a safe one on this
+          // shelf: `load`'s run always carries the scan's *on-disk* name —
+          // `scans/<sha256>.pdf`, the shelf's own convention — while the
+          // book file records the original upload's name, so the two agree
+          // only when a session happened to load the book from a
+          // readable-named copy earlier. Measured on this shelf: three of
+          // ten books loaded straight from their shelf scan failed the old
+          // check and fell back to writing no sheets, silently, for a
+          // reason that had nothing to do with whether it was the same
+          // book. The leaf count is kept as the sanity guard — a book file
+          // is checked against the run its own directory's scan produced,
+          // not against whichever run happens to be current.
           let run = await runStore.loadRun(key)
           if (!run) {
-            const open = await window.__pdbfPickBook(runStore)
-            const candidate = open ? await runStore.loadRun(open.key) : null
+            const currentKey = window.__pdbfBook
+            const candidate = currentKey
+              ? await runStore.loadRun(currentKey)
+              : await (async () => {
+                  const open = await window.__pdbfPickBook(runStore)
+                  return open ? await runStore.loadRun(open.key) : null
+                })()
             const same =
-              candidate &&
-              candidate.fileName === parsed.run.fileName &&
-              candidate.transcriptions.length === parsed.run.transcriptions.length
+              candidate && candidate.transcriptions.length === parsed.run.transcriptions.length
             if (same) run = candidate
           }
-          if (!run) {
-            throw new Error(
-              `That book file is filed under a key this browser has no run for (${key}), ` +
-                'and the book open here is not it. The sheets are built from the run, so ' +
-                'nothing was written.'
-            )
-          }
+          // No run: the card alone still needs none, since `catalogueCard`
+          // reads only the parsed file — so a book like Vol. I of *Isis
+          // Unveiled*, whose scan is too large for any shelf and so has no
+          // leaf this browser could ever hold, still gets an about.json.
+          // The sheets are a different promise (they read `run.rulings`)
+          // and are left untouched rather than guessed at.
           return {
             card: shelfSave.catalogueCard(key, json, parsed.scan?.path ?? null),
-            sheets: shelfSave.editorialSheets(run)
+            sheets: run ? shelfSave.editorialSheets(run) : null,
+            cardOnly: !run
           }
         },
         [REPO, json]
@@ -4051,18 +4065,20 @@ async function serve() {
       const wrote = []
       await writeFile(resolve(where, 'about.json'), `${JSON.stringify(built.card, null, 1)}\n`)
       wrote.push('about.json')
-      for (const [name, text] of [
-        ['queries.md', built.sheets.queries],
-        ['rulings.md', built.sheets.rulings],
-        // Its own file and never a column of `queries.md`: what the reader
-        // would answer, for the editor to look at away from the gate.
-        ['proposals.md', built.sheets.proposals]
-      ]) {
-        if (!text) continue
-        await writeFile(resolve(where, name), text.endsWith('\n') ? text : `${text}\n`)
-        wrote.push(name)
+      if (built.sheets) {
+        for (const [name, text] of [
+          ['queries.md', built.sheets.queries],
+          ['rulings.md', built.sheets.rulings],
+          // Its own file and never a column of `queries.md`: what the reader
+          // would answer, for the editor to look at away from the gate.
+          ['proposals.md', built.sheets.proposals]
+        ]) {
+          if (!text) continue
+          await writeFile(resolve(where, name), text.endsWith('\n') ? text : `${text}\n`)
+          wrote.push(name)
+        }
       }
-      return { directory: where, wrote, card: built.card }
+      return { directory: where, wrote, card: built.card, cardOnly: built.cardOnly }
     },
 
     /**
