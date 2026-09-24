@@ -535,6 +535,18 @@ the finished edition rather than the paper. Read the path out of the book file
 rather than reaching for the PDF sitting next to it, and check `drive.mjs
 runs` for keys that should not be there. `runs drop <n>` removes one.
 
+**A footnote correction is keyed by the note's number, and the number moves.**
+`note-text` names its note `fn<n>`, and `n` is the note's place in reading
+order across the whole book. Land any leaf **ahead of** a note — a preface read
+after the body, a leaf re-landed with a note the draft had dropped — and every
+note after it is renumbered, so every `note-text` correction after it applies
+its text to a different note. Nothing reports it: the notes still pair and
+still print. On _Isis Unveiled_ Vol. I the Preface and _Before the Veil_ were
+landed after the body and put 49 notes in front; five older corrections moved
+(leaf 30's `†` printed Gibbon's title), and were remapped by page and position
+before the save. **After landing leaves in front of a read body, run
+`drive.mjs pairs` and read the notes the corrections sit on.**
+
 **A leaf's text is not a block's text.** Assembly joins paragraphs across page
 seams, so the raw transcription of leaf 120 ends mid-word and the block
 carries the whole paragraph. Diffing an edit against a transcription therefore
