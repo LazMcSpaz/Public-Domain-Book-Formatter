@@ -5545,16 +5545,24 @@ async function serve() {
      *
      *   node scripts/drive.mjs block p74b12 drop
      *   node scripts/drive.mjs block p97b5 retype heading 2
+     *   node scripts/drive.mjs block p216b5 merge      # join the block after it on
+     *
+     * `merge` is the other half of a figure: a diagram set mid-paragraph on the
+     * leaf breaks the paragraph in two, and once the garbled labels between the
+     * halves are dropped the halves can be one paragraph again. It joins the
+     * block that follows *as the book stands now*, after every earlier edit,
+     * and says which block that was, because a merge applied before the drops
+     * would swallow a caption instead.
      *
      * Reversible, like every other edit here: both are entries on the edit
      * list, and `withEdit` collapses a second one on the same block.
      */
     block: async ([blockId, action, blockKind, level]) => {
       if (!blockId || !action) {
-        throw new Error('block <blockId> drop | block <blockId> retype <kind> [level]')
+        throw new Error('block <blockId> drop | merge | retype <kind> [level]')
       }
-      if (action !== 'drop' && action !== 'retype') {
-        throw new Error(`\`${action}\` is not a thing to do to a block. Try drop or retype.`)
+      if (action !== 'drop' && action !== 'retype' && action !== 'merge') {
+        throw new Error(`\`${action}\` is not a thing to do to a block. Try drop, merge or retype.`)
       }
       if (action === 'retype' && !blockKind) throw new Error('block <blockId> retype <kind>')
 
@@ -5579,6 +5587,8 @@ async function serve() {
           // nothing answers — the same rule `bare` follows. An edit naming a
           // block the book has not got changes nothing and says it did.
           if (!block) throw new Error(`No block \`${blockId}\` in this book.`)
+          const following = doc.blocks[doc.blocks.indexOf(block) + 1]
+          if (action === 'merge' && !following) throw new Error(`\`${blockId}\` is the last block.`)
 
           if (action === 'retype' && !schema.BLOCK_KINDS.includes(blockKind)) {
             throw new Error(
@@ -5589,12 +5599,14 @@ async function serve() {
           const edit =
             action === 'drop'
               ? { kind: 'drop', blockId }
-              : {
-                  kind: 'retype',
-                  blockId,
-                  blockKind,
-                  ...(level === undefined || level === null ? {} : { level: Number(level) })
-                }
+              : action === 'merge'
+                ? { kind: 'merge', blockId }
+                : {
+                    kind: 'retype',
+                    blockId,
+                    blockKind,
+                    ...(level === undefined || level === null ? {} : { level: Number(level) })
+                  }
           const edits = editsMod.withEdit(run.edits ?? [], edit)
           const next = project.createSavedRun({
             ...run,
@@ -5608,6 +5620,9 @@ async function serve() {
             was: block.kind,
             did: action,
             ...(action === 'retype' ? { now: blockKind } : {}),
+            ...(action === 'merge'
+              ? { joined: following.id, joinedText: following.text.slice(0, 90) }
+              : {}),
             text: block.text.slice(0, 90),
             stored: stored === true,
             edits: edits.length,
