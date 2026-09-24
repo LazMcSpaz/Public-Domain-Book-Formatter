@@ -155,6 +155,20 @@ describe('a stray full stop', () => {
     ).toEqual([])
   })
 
+  // The Theosophical Glossary, leaves 161, 229 and 260: all three as printed.
+  it('leaves a roman chapter number and an abbreviated title alone', () => {
+    for (const text of [
+      'In Genesis xxxii. the God-Sun first strives with Jacob.',
+      '(Hieronymus’ Comment. to Matthew, Book II., chapter xii.)',
+      '(See A Dict. of Christian Biography, Vol. IV.)'
+    ])
+      expect(of(build([text]), 'stray-point')).toEqual([])
+  })
+
+  it('still reports a stop before a word no roman numeral spells', () => {
+    expect(of(build(['He was ill. the doctor came at once.']), 'stray-point')).toHaveLength(1)
+  })
+
   it('reports a doubled stop where a quotation was run in', () => {
     const found = of(
       build(['his formulation of modern transformational linguistics.. . . forms part of it']),
@@ -207,6 +221,15 @@ describe('a stray apostrophe', () => {
   it('leaves a possessive alone', () => {
     expect(
       of(build(["It is the authors' intention to present these patterns."]), 'stray-apostrophe')
+    ).toEqual([])
+  })
+
+  it('leaves the possessive of a name ending in z alone', () => {
+    expect(
+      of(
+        build(['from the German annalist Archenholz\u2019 work on England (1788)']),
+        'stray-apostrophe'
+      )
     ).toEqual([])
   })
 

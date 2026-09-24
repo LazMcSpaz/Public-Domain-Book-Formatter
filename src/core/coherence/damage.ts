@@ -189,6 +189,10 @@ const ABBREVIATIONS = new Set([
   'sr',
   'st',
   'approx',
+  // The Theosophical Glossary's citations: `(A Dict. of Christian
+  // Biography)` and `(Hieronymus’ Comment. to Matthew)`.
+  'dict',
+  'comment',
   'est',
   'esp',
   'anon'
@@ -389,6 +393,9 @@ function splitWords(blocks: readonly BookBlock[]): DamageFinding[] {
  * word that cannot open a sentence, which is the invariant doing the work
  * here; see `CANNOT_OPEN_A_SENTENCE`.
  */
+/** A lower-case roman numeral of two letters or more, and only a valid one. */
+const ROMAN = /^(?=[ivxlc]{2})c{0,3}(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})$/u
+
 function strayPoints(blocks: readonly BookBlock[]): DamageFinding[] {
   const findings: DamageFinding[] = []
   for (const block of blocks) {
@@ -419,6 +426,9 @@ function strayPoints(blocks: readonly BookBlock[]): DamageFinding[] {
       const before = word.toLocaleLowerCase()
       const after = match[2]!.toLocaleLowerCase()
       if (ABBREVIATIONS.has(before)) continue
+      // A chapter or verse in small roman numerals — `In Genesis xxxii. the
+      // God-Sun` — is a citation, and a citation's stop is not a sentence's.
+      if (ROMAN.test(word)) continue
       // A word in full capitals before a stop is a running head, a heading or
       // an initialism — never a comma the conversion mis-read. Without this,
       // widening the capture to take a capitalised word turned the head at the
@@ -504,7 +514,10 @@ function strayApostrophes(blocks: readonly BookBlock[]): DamageFinding[] {
       const word = /([\p{L}][\p{L}\p{M}-]{2,})$/u.exec(text.slice(0, i))
       const next = /^ ([\p{L}]+)/u.exec(text.slice(i + 1))
       if (!word || !next) continue
-      if (word[1]!.toLocaleLowerCase().endsWith('s')) continue
+      // A name ending in any sibilant takes the bare apostrophe for its
+      // possessive in these books, not only one ending in `s`: `the German
+      // annalist Archenholz’ work` (the Theosophical Glossary, leaf 121).
+      if (/[sxz]$/u.test(word[1]!.toLocaleLowerCase())) continue
 
       const at = i - word[1]!.length
       const end = i + 1 + next[0].length
