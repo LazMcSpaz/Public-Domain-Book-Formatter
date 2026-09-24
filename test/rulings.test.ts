@@ -369,6 +369,100 @@ describe('rulings the book has not caught up with', () => {
   })
 })
 
+/**
+ * The Glossary's rulings, which standing ruling 1 writes as the word put right
+ * rather than as the passage. Fifteen of the twenty-six this check reported on
+ * that book were already in it, and the eleven that were real were hard to
+ * find among them. Each case below is one of the fifteen, with the control
+ * that says the check still sees the ruling when it has not landed.
+ */
+describe('a ruling written as the part that changes', () => {
+  const leaf = (page: number, text: string): BookBlock =>
+    para(text, { id: `p${page}b0`, sourcePages: [page] })
+
+  it('reads a broken sort transcribed whole as nothing to apply', () => {
+    const sort = ruling({ quote: 'suspect the esoteric meaning', correction: 'esoteric' })
+    expect(unapplied([sort], prose('none of them seem to suspect the esoteric meaning'))).toEqual(
+      []
+    )
+  })
+
+  it('keeps the pointing the correction does not give', () => {
+    const moon = ruling({ quote: 'the Moon, called also Sekhet', correction: 'Moon' })
+    expect(
+      unapplied([moon], prose('The cat-headed goddess, the Moon, called also Sekhet.'))
+    ).toEqual([])
+  })
+
+  it('puts the pointing it does give in place of the quote’s', () => {
+    const gyn = ruling({ pageIndex: 133, quote: 'teacher or guru,', correction: 'guru.' })
+    const mended = book({
+      blocks: [
+        leaf(133, 'Knowledge acquired under the tuition of an adept teacher or guru.'),
+        leaf(368, 'as every teacher or guru, having authority, takes upon himself')
+      ]
+    })
+    expect(unapplied([gyn], mended)).toEqual([])
+  })
+
+  it('still flags it on its own leaf when it has not landed', () => {
+    const gyn = ruling({ pageIndex: 133, quote: 'teacher or guru,', correction: 'guru.' })
+    const unmended = book({
+      blocks: [
+        leaf(133, 'Knowledge acquired under the tuition of an adept teacher or guru,'),
+        leaf(368, 'Knowledge of the guru. And every teacher or guru, having authority')
+      ]
+    })
+    expect(unapplied([gyn], unmended)).toHaveLength(1)
+  })
+
+  it('replaces only as much of the quote’s pointing as it has to', () => {
+    const tag = ruling({ quote: 'Sraddha (Sk). Lit.,', correction: '(Sk.)' })
+    expect(unapplied([tag], prose('Sraddha (Sk.). Lit., faith, respect, reverence.'))).toEqual([])
+    expect(unapplied([tag], prose('Sraddha (Sk). Lit., faith, respect, reverence.'))).toHaveLength(
+      1
+    )
+  })
+
+  it('keeps the quote’s pointing outside the reach of the correction’s', () => {
+    const tag = ruling({ quote: 'the \u201c(Heb) truth', correction: '(Heb.)' })
+    expect(unapplied([tag], prose('the \u201c(Heb.) truth'))).toEqual([])
+  })
+
+  it('reads a book that spaces its quotation marks as the ruling does not', () => {
+    const god = ruling({ quote: 'commonly translated \u201cGod\u2019,', correction: 'God\u201d' })
+    expect(
+      unapplied([god], prose('This deity-name is commonly translated \u201c God \u201d , meaning'))
+    ).toEqual([])
+    expect(
+      unapplied([god], prose('This deity-name is commonly translated \u201c God\u2019 , meaning'))
+    ).toHaveLength(1)
+  })
+
+  it('finds the word through the accent it puts right', () => {
+    const they = ruling({ quote: 'Th\u00e8y have a mystic meaning', correction: 'They' })
+    expect(unapplied([they], prose('They have a mystic meaning.'))).toEqual([])
+    expect(unapplied([they], prose('Th\u00e8y have a mystic meaning.'))).toHaveLength(1)
+  })
+
+  it('is not undone by a later ruling on an accent in the same sentence', () => {
+    const pandu = ruling({
+      quote: 'literally; \u2019the father of the Pandavas',
+      correction: 'literally; the father of the Pandavas'
+    })
+    expect(unapplied([pandu], prose('literally; the father of the P\u00e2ndavas Princes'))).toEqual(
+      []
+    )
+  })
+
+  it('does not mistake a doubled word taken out for a word confirmed', () => {
+    const doubled = ruling({ quote: 'the the cat', correction: 'the cat' })
+    expect(unapplied([doubled], prose('and the the cat sat'))).toHaveLength(1)
+    const single = ruling({ quote: 'of the the', correction: 'the' })
+    expect(unapplied([single], prose('the heart of the the matter'))).toHaveLength(1)
+  })
+})
+
 describe('the record for the shelf', () => {
   it('groups by what was decided and says when', () => {
     const md = rulingsMarkdown({ title: 'The Human Aura', fileName: 'aura.pdf' }, [

@@ -41,7 +41,7 @@
  */
 import { standingFor, type HeldQuery } from './standing'
 import { bookText, type BookDocument } from '@core/assemble'
-import type { EditorialQueryKind } from '@core/transcribe'
+import { withMarkup, type EditorialQueryKind } from '@core/transcribe'
 import type { RaisedQuery } from './index'
 
 /** What the editor decided to do about it. */
@@ -223,33 +223,213 @@ export function settled(
  */
 export function unapplied(rulings: readonly Ruling[], book: BookDocument): Ruling[] {
   const marked = bookText(book).toLowerCase()
-  const plain = stripInlineMarkup(marked)
+  const views = NOTATIONS.map((fold) => fold(marked))
+  const leaves = new Map<number, string[]>()
+  const onLeaf = (page: number): string[] => {
+    let found = leaves.get(page)
+    if (!found) {
+      const text = leafText(book, page).toLowerCase()
+      found = text === '' ? views : NOTATIONS.map((fold) => fold(text))
+      leaves.set(page, found)
+    }
+    return found
+  }
   return rulings.filter((ruling) => {
     if (ruling.decision !== 'corrected') return false
-    const wanted = (ruling.correction ?? '').trim().toLowerCase()
-    if (wanted === '') return true
+    const written = (ruling.correction ?? '').trim().toLowerCase()
+    if (written === '') return true
     const quote = ruling.quote.trim().toLowerCase()
+    const placed = inPlace(written, quote)
 
-    // A ruling whose two forms are the same words once the tags come off is a
-    // ruling about the emphasis and nothing else. Stripping would make it
-    // compare equal to itself, so it is read with the markup left in.
-    const aboutMarkupOnly = stripInlineMarkup(wanted) === stripInlineMarkup(quote)
-    const has = (needle: string): boolean =>
-      aboutMarkupOnly
-        ? marked.includes(needle)
-        : marked.includes(needle) || plain.includes(stripInlineMarkup(needle))
-
-    if (!has(wanted)) return true
-
-    // The printed form still being in the book usually means the correction
-    // half-landed — one occurrence mended and another missed. It means nothing
-    // when the correction *contains* the printed form, which is what a
-    // correction that only adds something does: closing a quotation turns
-    // `he awoke.` into `he awoke.”`, and the first will always be inside the
-    // second. Asking then reports every such ruling as unapplied forever.
-    if (wanted.includes(quote)) return false
-    return has(quote)
+    // A word written as it should read, which the query already quotes that
+    // way: a broken sort transcribed whole. There is nothing to apply, and the
+    // question left is only whether the book still has the word.
+    if (placed === 'confirms') return !has(views, NOTATIONS.length - 1, written)
+    const printed = ruling.pageIndex === null ? views : onLeaf(ruling.pageIndex)
+    return !placed.some((wanted) => landed(wanted, quote, views, printed))
   })
+}
+
+/**
+ * Does the book read `wanted` rather than `quote`?
+ *
+ * `printed` is where the printed form is looked for: the ruling's own leaf,
+ * where it has one. A ruling is about a place, and a short quote is ordinary
+ * prose somewhere else: `teacher or guru,` ends an entry wrongly on leaf 133
+ * of the Glossary and is right in the middle of a sentence on leaf 368, and
+ * asked of the whole book the mended ruling read as half-landed for ever. A
+ * standing ruling, which names no leaf, is still asked of the whole book.
+ */
+function landed(
+  wanted: string,
+  quote: string,
+  views: readonly string[],
+  printed: readonly string[]
+): boolean {
+  // The loosest notation in which the two forms still differ. A ruling whose
+  // two forms are the same words once the tags come off is a ruling about the
+  // emphasis, and is read with the markup left in; one that differs only in
+  // an accent is read with the accents in; and so on down the ladder.
+  let level = NOTATIONS.length - 1
+  while (level > 0 && NOTATIONS[level](wanted) === NOTATIONS[level](quote)) level--
+
+  if (!has(views, level, wanted)) return false
+
+  // The printed form still being in the book usually means the correction
+  // half-landed — one occurrence mended and another missed. It means nothing
+  // when the correction *contains* the printed form, which is what a
+  // correction that only adds something does: closing a quotation turns
+  // `he awoke.` into `he awoke.”`, and the first will always be inside the
+  // second. Asking then reports every such ruling as unapplied forever.
+  if (NOTATIONS[level](wanted).includes(NOTATIONS[level](quote))) return true
+  return !has(printed, level, quote)
+}
+
+/**
+ * What one leaf prints: the body and set-apart blocks drawn from it — a block
+ * joined across a seam belongs to both of its leaves — and the notes printed
+ * at its foot. Empty for a leaf nothing in the book came from, and the caller
+ * then asks the whole book, since an answer about nothing is no answer.
+ */
+function leafText(doc: BookDocument, page: number): string {
+  const marked = (b: { text: string; emphasis?: number[]; strong?: number[] }): string =>
+    withMarkup(b.text, b.emphasis, b.strong)
+  return [
+    ...[...doc.blocks, ...doc.asides].filter((b) => b.sourcePages.includes(page)).map(marked),
+    ...doc.footnotes.filter((n) => n.pageIndex === page).map(marked)
+  ].join('\n')
+}
+
+/**
+ * Is this passage in the book, in any notation up to `level`?
+ *
+ * Either answer counts, for the reason the doc comment above gives: a quote is
+ * written by a person from a sheet, and the book carries tags, spacing and
+ * accents the person did not type.
+ */
+function has(views: readonly string[], level: number, needle: string): boolean {
+  for (let i = 0; i <= level; i++) if (views[i].includes(NOTATIONS[i](needle))) return true
+  return false
+}
+
+/**
+ * The ways a quote and the book can differ without differing in what they say,
+ * strictest first. Each includes the one before it.
+ *
+ * - **As written**, tags and all.
+ * - **Tags off** (`stripInlineMarkup`).
+ * - **Spacing folded.** A book that sets a thin space inside its quotation
+ *   marks and before `;` — the Glossary does, by ruling, `“ God ”` — reads to
+ *   a person as `“God”`, which is how a ruling gets written. Every space
+ *   beside a quotation mark and before closing pointing goes.
+ * - **Accents folded.** A later ruling on a name's accent (`Pandavas` to
+ *   `Pândavas`) must not make an earlier ruling on the same sentence read as
+ *   undone.
+ */
+const NOTATIONS: readonly ((text: string) => string)[] = [
+  (text) => text,
+  (text) => stripInlineMarkup(text),
+  (text) => foldSpacing(stripInlineMarkup(text)),
+  (text) => foldAccents(foldSpacing(stripInlineMarkup(text)))
+]
+
+function foldSpacing(text: string): string {
+  return text
+    .replace(/\s*([\u201c\u201d\u2018\u2019"])\s*/gu, '$1')
+    .replace(/\s+([,;:.!?)\]])/gu, '$1')
+    .replace(/([([])\s+/gu, '$1')
+}
+
+function foldAccents(text: string): string {
+  return text.normalize('NFD').replace(/\p{M}+/gu, '')
+}
+
+/**
+ * A correction written as the part of the quote that changes, put back into
+ * the quote — every way it can be, see below — or `'confirms'` where the part
+ * it names is already there.
+ *
+ * Standing ruling 1 has the reader raise a broken sort "carrying the word as
+ * it should read", so a ruling is as often `guru.` against the quote `teacher
+ * or guru,` as it is the whole passage mended. Checked as written, such a
+ * correction is either missing from the book (`guru.` beside the leaf-368
+ * `guru, having`) or present while the quote is too, and on the Glossary
+ * fifteen of twenty-six rulings reported outstanding were one or the other,
+ * every one already read by the book.
+ *
+ * So the correction's words are found in the quote — once, at word boundaries
+ * — and the pointing either side of them is taken from the correction where it
+ * gives any and from the quote where it does not: `God”` in `translated
+ * “God’,` reads `translated “God”,`, and `Moon` in `the Moon, called` keeps
+ * its comma. A correction that is the whole quote, or not found in it once, is
+ * returned as written.
+ *
+ * What this cannot see, and says so: a ruling whose entire fix is deleting the
+ * pointing beside a word, written as the bare word (`et` for `et. seq.`), reads
+ * as the word confirmed. Write such a ruling as the passage (`et seq.`).
+ */
+function inPlace(correction: string, quote: string): string[] | 'confirms' {
+  if (correction.includes(quote)) return [correction]
+  const parts = /^([^\p{L}\p{N}]*)(.*?)([^\p{L}\p{N}]*)$/su.exec(correction)
+  if (!parts) return [correction]
+  const [, lead, core, trail] = parts
+  if (core === '' || core.length >= quote.length) return [correction]
+  // Pointing the correction sets apart with a space is not pointing on the
+  // word: `(See “ Suryavansa ”.)` is a whole passage retyped, not a fragment.
+  if (/\s/u.test(lead) || /\s/u.test(trail)) return [correction]
+  const word = /[\p{L}\p{N}]/u
+  // Found through the accents, because the commonest fragment is the accent
+  // itself put right — `They` for the quote's `Thèy` — and the place in the
+  // quote is the same place either way. Folded a character at a time so the
+  // offsets still count in the quote's own characters.
+  const bare = [...quote].map((c) => foldAccents(c)).join('')
+  const needle = foldAccents(core)
+  if (bare.length !== quote.length || needle.length !== core.length) return [correction]
+  const at: number[] = []
+  for (let i = bare.indexOf(needle); i !== -1; i = bare.indexOf(needle, i + 1)) {
+    const before = quote[i - 1] ?? ' '
+    const after = quote[i + core.length] ?? ' '
+    if (!word.test(before) && !word.test(after)) at.push(i)
+  }
+  if (at.length !== 1) return [correction]
+  const from = at[0]
+  const to = from + core.length
+  const edge = (c: string | undefined): boolean =>
+    c !== undefined && !/\s/u.test(c) && !word.test(c)
+  let first = from
+  while (edge(quote[first - 1])) first--
+  let last = to
+  while (edge(quote[last])) last++
+
+  // How much of the quote's own pointing the correction's replaces is not
+  // written down: `(Sk.)` against `(Sk). Lit.` replaces the `)` and keeps the
+  // stop after it, `India—` against `India--“ they` replaces the two hyphens
+  // and keeps the quotation mark. So every reach is tried, and the ruling has
+  // landed if the book reads any of them. Where the correction gives no
+  // pointing on a side, the quote's stays.
+  const starts = lead ? range(first, from) : [from]
+  const ends = trail ? range(to, last) : [to]
+  const puts = new Set<string>()
+  for (const s of starts)
+    for (const e of ends)
+      puts.add(
+        quote.slice(0, s) +
+          (lead || quote.slice(s, from)) +
+          core +
+          (trail || quote.slice(to, e)) +
+          quote.slice(e)
+      )
+  if (!puts.has(quote)) return [...puts]
+  // A single word the quote already has is a confirmation. Several words that
+  // come out unchanged are not: `the cat` against `the the cat` is a doubled
+  // word being taken out, and must be checked as written.
+  return /\s/u.test(core) ? [correction] : 'confirms'
+}
+
+function range(from: number, to: number): number[] {
+  const out: number[] = []
+  for (let i = from; i <= to; i++) out.push(i)
+  return out
 }
 
 /**
