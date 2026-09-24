@@ -403,8 +403,7 @@ every book read from now on.
 ### 12. Proposals for the queries waiting on the editor
 
 `open`; the Glossary `done (shelf dc3b4ed)`: 90 proposals on 58 of its 59
-queries, none on one. _A Modern Panarion_ `done (shelf 222ce58)`: 28 on all
-18. _The Key to Theosophy_ `done (shelf d5d7fda)`: 12 on 9, none on leaves
+queries, none on one. _A Modern Panarion_ `done (shelf 222ce58)`: 28 on all 18. _The Key to Theosophy_ `done (shelf d5d7fda)`: 12 on 9, none on leaves
 22, 29 and 164, which the page cannot settle. Isis Vol. I is left. Books: the Glossary
 (59 waiting), _Isis_ Vol. I (62), _The Key to Theosophy_ (12). **One book at a time**, and only a book no other session
 holds.
