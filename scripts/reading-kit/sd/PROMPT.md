@@ -72,7 +72,7 @@ Every block, corrected or not, with its `i`. `level` on every heading block, whe
 ## Rules
 
 1. **The page's words and spelling as 1888 printed them**, as far as the two readings and the book can show it. The words you may write that neither reading has are only: a word the first reading split, joined; a line-end hyphen healed; a note mark's glyph; and the stop of rule 7 above; the letters of rule 5.
-2. **No space** before `, . ; : ! ?`, none just inside a quotation mark, curly quotes `“ ” ‘ ’`, `—` for a dash (the readings give `--`, `—`, or `-`).
+2. **Quotation marks:** the first reading's were curled by machine from straight quotes and are often turned the wrong way or shifted across a word space (`that” these` for `that “these`). Take where each mark stands, and which way it faces, from the second reading and the sense of the quotation. **No space** before `, . ; : ! ?`, none just inside a quotation mark, curly quotes `“ ” ‘ ’`, `—` for a dash (the readings give `--`, `—`, or `-`).
 3. **Before raising anything, read the whole block it sits in and the blocks either side**, and search the book (`lex.py --ctx`). A finding the paragraph or the book settles is not a query.
 4. **An unclosed or unopened quotation mark** is left as printed and raised `inconsistent` with no fix — the editor's standing ruling is to leave these unpaired. **One term set two ways** is left as each place prints it and raised `inconsistent`; it is settled by count across the book afterwards.
 5. What is genuinely the editor's — the book contradicting itself, a sentence that does not construe in either reading — `inconsistent` or `unclear`, transcribed as the first reading has it, **no fix**.
