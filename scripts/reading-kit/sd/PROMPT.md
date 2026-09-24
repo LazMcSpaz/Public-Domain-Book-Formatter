@@ -30,6 +30,7 @@ python3 scripts/reading-kit/sd/lex.py --ctx "tc be" 5                           
    - `ü`: `ii` or a dotted `i.i` (`Miiller`, `Mi.iller`) → `Müller`.
    - `æ`/`Æ`: first reading `re`, `<e`, `;:e`, `/E`, `JE`, `.iE`, `ce`; second `z`, `Z`, `@`, `ae` → `æ`/`Æ` (`archæology`, `Æther`, `æons`).
    - `ô`, `é`: `6`, `»é` (`r6le` → `rôle`).
+   - **A split in the first reading**: ClearScan breaks a word with a space exactly where an accented letter sits (`Brahm a`, `M uller`, `Sankarach arya`, `Kashin ath`). That split is a trace too, even where the second reading shows none (it reads Müller as plain `Miller` throughout).
      Do **not** normalise a word the book sets two ways across leaves; that is done later, by count, across the whole book.
 6. **Words run together**: where both readings run two ordinary words together (`ofthe`, `monopolisethe`, `copperandgold`), the word space was lost in conversion, not by the compositor: put it back, with no query. A printer's error is a wrong letter, not a lost space.
 7. **Punctuation**: where one reading has a stop the sentence needs and the other has none (`could ensue` / `could ensue.`), take the stop. Where both construe, keep the first reading.
@@ -39,7 +40,7 @@ python3 scripts/reading-kit/sd/lex.py --ctx "tc be" 5                           
 - **Running heads and folios** often sit at the front of block 0 rather than in a block of their own — check its first words. They are `THE SECRET DOCTRINE.`, `PROEM.`, `INTRODUCTORY.`, `CONTENTS.`, a section's own head (`THE ABSOLUTE KNOWS ITSELF NOT.`), and a folio (`55`, `xxiii`). Leave them out: cut them from the text, or set a block holding only one to `""`. They are usually already gone; the second reading always has one at its front.
 - **Footnote marks** are `*`, `†`, `‡`, `§`, `‖`, `¶`, doubled on a busy leaf. The first reading gives `*` as `•` or `*`, `†` as `t`, `+` or `f`, `‡` as `:!:`, `t` or `I`. A note stands at the foot of the leaf with its mark at its head. A note that **runs over** from the previous leaf has no mark on this leaf — its first block is a `footnote` beginning mid-sentence; do not give it one.
 - **Letter-spaced heads** come through as single letters (`S T A N Z A`, `P RO E M`): set them as words.
-- **The Stanzas** of the Book of Dzyan are set in capitals, each sloka numbered (`1. THE ETERNAL PARENT WRAPPED IN HER EVER INVISIBLE ROBES HAD SLUMBERED …`). Keep the capitals; each sloka is its own `blockquote`, and the commentary after it is `paragraph`.
+- **The Stanzas** of the Book of Dzyan are set in capitals, each sloka numbered (`1. THE ETERNAL PARENT WRAPPED IN HER EVER INVISIBLE ROBES HAD SLUMBERED …`). Keep the capitals; each sloka is its own `blockquote`, and the commentary after it is `paragraph`. The draft types the Stanza heads and `COMMENTARY.` as `blockquote` and the slokas as `paragraph`: retype them on every Stanza leaf (a Stanza head is `heading` level 2, `COMMENTARY.` level 3).
 - **Small capitals** come through mixed case (`DocTRINE`, `ABsOLUTE`): set them in full capitals.
 - **Figures**: the first reading gives `r` for 1, `o` for 0, `s` for 5, `S` for 8, spaced apart (`r o,sSo`); the second reading's numbers are nearly always right. `\V` is `W`; `Y` inside a word is `v`.
 - **Italics are lost in both readings**. Do not add `<i>` anywhere; nothing here can say where it went.
