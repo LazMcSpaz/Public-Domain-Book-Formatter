@@ -129,3 +129,12 @@ briefs (`brief.mjs … --text-only`) and prompts from `sd/PROMPT.md`. Landing
 and applying are the same as above. Two things `land.mjs` gained for it, and
 any book may use them: a reader's `level` on a heading, and `join: true` on a
 block that only continues the one before it.
+
+**Before `transcribe`, run `balance.mjs` on the batch.** A footnote sits on
+the leaf its mark is on, and the engine pairs marks with notes positionally
+through the whole book, so one leaf that does not balance sets every later
+note of that marker under the wrong reference while `pairs` still reports
+every note claimed. It prints each leaf where the running drift moves: a
+note the draft typed `paragraph`, a `*` inside garbled Greek (declare it
+`bare`), a diagram whose marks are in the picture. On _The Secret Doctrine_
+three stretches landed before it existed, with 143 of 237 notes misplaced.

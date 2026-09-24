@@ -143,6 +143,13 @@ for (const page of pages) {
     // A mark in the text, hard against the word it refers from.
     t = t.replace(/(?<=[\p{L}.,;:”’)])\+/gu, () => (counts.marks++, '†'))
     t = t.replace(/(?<=[\p{L}.,;:”’)])•/gu, () => (counts.marks++, '*'))
+    // A note the draft typed as body: it opens with its mark and a space.
+    // Left as a paragraph, nothing claims it and its leaf's mark takes the
+    // next note of that marker in the book.
+    if (block.kind !== 'footnote' && /^(\*\*|[*†‡§‖¶•])\s+\S/u.test(t)) {
+      block.kind = 'footnote'
+      counts.marks++
+    }
     if (block.kind === 'footnote') {
       const m = t.match(/^(•+|[t+](?= [A-Z“‘]))/u)
       if (m) {
