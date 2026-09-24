@@ -40,7 +40,10 @@ export type SecondReaderTier = (typeof SECOND_READER_TIERS)[number]
 
 /** The model id a cached reading is keyed by; changes when the weights do. */
 export function secondReaderModelId(tier: SecondReaderTier): string {
-  return `ppu-paddle-ocr@6.6.0/pp-ocrv6-${tier}`
+  // `per-box`: see `serviceFor`. A reading taken with the package's default
+  // strategy is a different reading, and naming it the same would serve it
+  // from the cache as though it were this one.
+  return `ppu-paddle-ocr@6.6.0/pp-ocrv6-${tier}/per-box`
 }
 
 export interface SecondReading {
@@ -96,7 +99,20 @@ async function serviceFor(tier: SecondReaderTier): Promise<Service> {
         // `.ort` files are already optimised; re-optimising costs time and
         // changes nothing, per the models repository's own note.
         session: { graphOptimizationLevel: 'disabled', executionProviders: ['wasm'] },
-        processing: { engine: 'canvas-native' }
+        processing: { engine: 'canvas-native' },
+        // Each detected box read on its own. The package's default,
+        // `per-line`, merges every box sharing a line's height before reading
+        // it, and a scan carries one box that shares every line's height: the
+        // tall region the detector draws over a leaf's margin, 794 by 1740
+        // pixels on Isis Unveiled. Merged with it, every body line it spans
+        // became one huge crop, squashed to the recogniser's 48 pixels and
+        // read as nothing — twenty-nine consecutive lines of leaf 304 came back
+        // empty and were dropped, while the footnotes below it read cleanly.
+        // That is what the Isis agreement of 32.8% was measuring. Costs about
+        // two and a half times the time a leaf; see the second-reader ledger.
+        // The empty dictionary is the package's own default: the dictionary
+        // comes from `model.charactersDictionary` above.
+        recognition: { strategy: 'per-box', charactersDictionary: [] }
       }) as unknown as Service
       await service.initialize()
       return service
