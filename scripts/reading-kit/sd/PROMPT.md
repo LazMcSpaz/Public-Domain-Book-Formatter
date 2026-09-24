@@ -30,7 +30,7 @@ python3 scripts/reading-kit/sd/lex.py --ctx "tc be" 5                           
    - `ü`: `ii` or a dotted `i.i` (`Miiller`, `Mi.iller`) → `Müller`.
    - `æ`/`Æ`: first reading `re`, `<e`, `;:e`, `/E`, `JE`, `.iE`, `ce`; second `z`, `Z`, `@`, `ae` → `æ`/`Æ` (`archæology`, `Æther`, `æons`).
    - `ô`, `é`: `6`, `»é` (`r6le` → `rôle`).
-   - **A split in the first reading**: ClearScan breaks a word with a space exactly where an accented letter sits (`Brahm a`, `M uller`, `Sankarach arya`, `Kashin ath`). That split is a trace too, even where the second reading shows none (it reads Müller as plain `Miller` throughout).
+   - **A split in the first reading**: ClearScan breaks a word with a space exactly where an accented letter sits (`Brahm a`, `M uller`, `Sankarach arya`, `Kashin ath`). That split is a trace too, even where the second reading shows none (it reads Müller as plain `Miller` throughout). A split **right after a word's capital** is not a trace: ClearScan splits there with no accent anywhere (`B uddhas`, `M anushi`, `N OUME NO N`). Only a split inside the word, at a vowel, counts.
      Do **not** normalise a word the book sets two ways across leaves; that is done later, by count, across the whole book.
 6. **Words run together**: where both readings run two ordinary words together (`ofthe`, `monopolisethe`, `copperandgold`), the word space was lost in conversion, not by the compositor: put it back, with no query. A printer's error is a wrong letter, not a lost space.
 7. **Punctuation**: where one reading has a stop the sentence needs and the other has none (`could ensue` / `could ensue.`), take the stop. Where both construe, keep the first reading.
