@@ -139,6 +139,7 @@ import {
   summarize as summarizeOutbox,
   type OutboxSummary,
   type ShelfAbout,
+  shelfProgress,
   shelfSlug
 } from '@core/sync'
 import {
@@ -1655,6 +1656,13 @@ export function App(): JSX.Element {
   const [shelfBooks, setShelfBooks] = useState<ShelfAbout[]>([])
   const [shelfNote, setShelfNote] = useState<string | null>(null)
   const [shelfBusy, setShelfBusy] = useState(false)
+  /**
+   * The one card opened to show its actions. A card is a summary until it is
+   * tapped; then it extends to offer the ways into the book. One at a time,
+   * because a shelf of sixteen cards each with three buttons is the wall of
+   * chrome the cards exist to replace.
+   */
+  const [openShelfCard, setOpenShelfCard] = useState<string | null>(null)
 
   const saveToShelf = useCallback(
     async (what: string): Promise<void> => {
@@ -1862,8 +1870,9 @@ export function App(): JSX.Element {
           // Only for a book the reading has finished. `readFromShelf` marks
           // the whole recovery half complete, which is true of a book that was
           // read and false of one that was not — so an unfinished book still
-          // takes the door that can finish it, whatever the link says.
-          const rulesOnly = link.at === 'gate-queries' && wanted?.complete === true
+          // takes the door that can finish it, whatever the link says. The
+          // rule lives in `landFromShelf`, which the shelf cards go through
+          // too, so a link and a tap cannot land differently.
           // A book whose scan is not on the shelf cannot be opened the full
           // way: the scan is what `openFromShelf` fetches and recon is what
           // lands the flow, so without one it stores the book and asks for the
@@ -1892,10 +1901,8 @@ export function App(): JSX.Element {
                 'there at all, the book has no `about.json` card, or it is on a branch ' +
                 `other than the one being read (${config.branch}).`
             )
-          } else if (wanted.scanPath && !rulesOnly) {
-            void openFromShelf(wanted)
           } else {
-            void readFromShelf(wanted)
+            void landFromShelf(wanted, link.at)
           }
         }
       } catch {
@@ -2288,6 +2295,27 @@ export function App(): JSX.Element {
       }
     },
     [chooseProofView, stateFromTranscriptions]
+  )
+
+  /**
+   * Open a book from the shelf and land at `at`, or where the flow decides.
+   *
+   * The one door for a review link and for a tap on a shelf card, so the two
+   * cannot land differently. The rule is the link's: a book whose reading is
+   * finished takes the light route to the query gate even when its scan is on
+   * the shelf, because every decision there can be made from the words and
+   * the scan is tens of megabytes and ten minutes of OCR that buy nothing. A
+   * book still being read takes the door that can finish it — the scan, when
+   * there is one — whatever was asked for.
+   */
+  const landFromShelf = useCallback(
+    async (about: ShelfAbout, at: StepId | null): Promise<void> => {
+      landAt.current = at
+      const rulesOnly = at === 'gate-queries' && about.complete
+      if (about.scanPath && !rulesOnly) await openFromShelf(about)
+      else await readFromShelf(about)
+    },
+    [openFromShelf, readFromShelf]
   )
 
   /**
@@ -4466,45 +4494,86 @@ export function App(): JSX.Element {
                   </div>
                 ) : (
                   <ul className="shelf-books">
-                    {shelfBooks.map((book) => (
-                      <li key={book.key} className="shelf-book">
-                        <div className="shelf-book-name">{titleOfBook(book.fileName)}</div>
-                        <div className="shelf-book-what">
-                          {book.pageCount} leaves
-                          {book.complete ? '' : ' · read only partway'}
-                          {book.marked > 0 ? ` · ${book.marked} marked` : ''}
-                          {book.notes > 0 ? ` · ${book.notes} notes` : ''}
-                          {book.corrections > 0 ? ` · ${book.corrections} corrections` : ''}
-                        </div>
-                        <div className="shelf-book-when">{describeAge(book.savedAt)}</div>
-                        <div className="actions">
-                          {/* Read is the primary action, and it is the one that
-                              does not fetch the scan — tens of megabytes and
-                              ten minutes of OCR that a reading pass never
-                              looks at. */}
+                    {shelfBooks.map((book) => {
+                      const progress = shelfProgress(book)
+                      const open = openShelfCard === book.key
+                      const waiting = book.queries?.waiting ?? 0
+                      return (
+                        <li
+                          key={book.key}
+                          className={`shelf-book stage-${progress.stage}${open ? ' open' : ''}`}
+                          style={{ '--progress': progress.fraction } as React.CSSProperties}
+                        >
+                          {/* The whole face of the card is the one control:
+                              a tap opens it, a second tap closes it. The
+                              actions live below, and only on the open card,
+                              so a shelf of sixteen reads as sixteen titles
+                              and not as forty-eight buttons. */}
                           <button
                             type="button"
-                            className="primary"
-                            disabled={shelfBusy}
-                            onClick={() => void readFromShelf(book)}
+                            className="shelf-book-face"
+                            aria-expanded={open}
+                            onClick={() => setOpenShelfCard(open ? null : book.key)}
                           >
-                            Read
+                            <div className="shelf-book-name">{titleOfBook(book.fileName)}</div>
+                            <div className="shelf-book-progress">{progress.summary}</div>
+                            <div className="shelf-book-bar" aria-hidden="true">
+                              <span style={{ width: `${Math.round(progress.fraction * 100)}%` }} />
+                            </div>
+                            <div className="shelf-book-what">
+                              {book.pageCount} leaves
+                              {book.corrections > 0 ? ` · ${book.corrections} corrections` : ''}
+                              {book.marked > 0 ? ` · ${book.marked} marked` : ''}
+                              {book.notes > 0 ? ` · ${book.notes} notes` : ''}
+                              {' · '}
+                              {describeAge(book.savedAt)}
+                            </div>
                           </button>
-                          <button
-                            type="button"
-                            disabled={shelfBusy}
-                            onClick={() => void openFromShelf(book)}
-                            title={
-                              book.scanPath
-                                ? 'Brings the scan down as well, so passages can be checked against the paper'
-                                : 'The scan is not on the shelf for this book'
-                            }
-                          >
-                            {book.scanPath ? 'Open with the scan' : 'Open the work'}
-                          </button>
-                        </div>
-                      </li>
-                    ))}
+                          {open ? (
+                            <div className="shelf-book-more">
+                              {/* Ordered by what the card says is left. A book
+                                  with decisions waiting leads with them; one
+                                  with none leads with reading. Every door is
+                                  the same door a review link opens, so a tap
+                                  and a link cannot land differently. */}
+                              {waiting > 0 ? (
+                                <button
+                                  type="button"
+                                  className="primary"
+                                  disabled={shelfBusy}
+                                  onClick={() => void landFromShelf(book, 'gate-queries')}
+                                >
+                                  Work through the {waiting} {waiting === 1 ? 'query' : 'queries'}
+                                </button>
+                              ) : null}
+                              {/* Reading does not fetch the scan — tens of
+                                  megabytes and ten minutes of OCR that a
+                                  reading pass never looks at. */}
+                              <button
+                                type="button"
+                                className={waiting > 0 ? undefined : 'primary'}
+                                disabled={shelfBusy}
+                                onClick={() => void readFromShelf(book)}
+                              >
+                                Read the book
+                              </button>
+                              <button
+                                type="button"
+                                disabled={shelfBusy}
+                                onClick={() => void openFromShelf(book)}
+                                title={
+                                  book.scanPath
+                                    ? 'Brings the scan down as well, so passages can be checked against the paper'
+                                    : 'The scan is not on the shelf for this book'
+                                }
+                              >
+                                {book.scanPath ? 'Open with the scan' : 'Open the work'}
+                              </button>
+                            </div>
+                          ) : null}
+                        </li>
+                      )
+                    })}
                   </ul>
                 )}
               </div>

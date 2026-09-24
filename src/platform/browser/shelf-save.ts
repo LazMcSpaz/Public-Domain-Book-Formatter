@@ -131,6 +131,8 @@ export function catalogueCard(key: string, json: string, scanPath: string | null
     marked: summary.marked,
     facts: summary.facts,
     complete: summary.complete,
+    read: summary.read,
+    queries: summary.queries,
     scanPath
   }
 }

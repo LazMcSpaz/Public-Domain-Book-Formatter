@@ -2547,6 +2547,23 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   `value={o.value}` on its radios so a check can name an option from outside
   the closure.
 
+- **Also done**: **the shelf says how far each book has got, and a card
+  opens into its doors** (`src/core/sync/progress.ts`, `scripts/screenshot-shelf.mjs`).
+  The intake listed a book as leaves, marks and notes, which is what a book
+  _has_ and not what is left to do with it. The catalogue card now carries
+  `read` (leaves with a transcription) and `queries` (raised, waiting, held),
+  counted by `ledgerNumbers` so the card and the ledger cannot disagree, and
+  `shelfProgress` turns a card into a stage, a fraction and one sentence. The
+  fraction tints the card from maroon (not started) to green (read and
+  ruled) through `color-mix`, filling to 0.7 as the leaves are read and the
+  rest as the queries close; the sentence says the same in words. A card
+  written before the counts existed reads as **not counted**, never as
+  "nothing waiting" — a green card over decisions nobody has looked at is
+  the one report the shelf must never make. Tapping a card opens it into its
+  actions, led by _Work through the N queries_ when any wait; that button and
+  a review link go through one door (`landFromShelf`), so a tap and a link
+  cannot land differently. Cards on the shelf gain the counts at their next
+  save or `drive.mjs card`.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

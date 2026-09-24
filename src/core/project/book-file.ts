@@ -53,6 +53,7 @@
  */
 import type { EditorVoice } from '@core/annotate'
 import { correctsTheBook } from '@core/edits'
+import { ledgerNumbers } from './ledger'
 import { CURRENT_SCHEMA_VERSION, migrateSavedRun, type SavedRun } from './saved-run'
 import { migrateAnnotationCheckpoint, type AnnotationCheckpoint } from './annotation-checkpoint'
 
@@ -332,10 +333,26 @@ export interface BookFileSummary {
   facts: number
   images: number
   complete: boolean
+  /** Leaves with a transcription: how far an unfinished reading has got. */
+  read: number
+  /**
+   * The decisions, counted the way the ledger counts them (`ledgerNumbers`),
+   * so the shelf card and the ledger cannot disagree about how many are
+   * waiting: a query is waiting until a ruling names its leaf and quote, and
+   * held when a standing ruling's covers reach it.
+   */
+  queries: { raised: number; waiting: number; held: number }
 }
 
 export function summarizeBookFile(file: BookFile): BookFileSummary {
+  const numbers = ledgerNumbers(file)
   return {
+    read: file.run.transcriptions.length,
+    queries: {
+      raised: numbers.queryTotal,
+      waiting: numbers.queriesWaiting,
+      held: numbers.queriesHeld
+    },
     fileName: file.run.fileName,
     savedAt: file.savedAt,
     pageCount: file.run.pageCount,

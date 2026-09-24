@@ -26,8 +26,10 @@ export {
   voicePath,
   type ShelfAbout,
   type ShelfConfig,
-  type ShelfEntry
+  type ShelfEntry,
+  type ShelfQueries
 } from './shelf'
+export { shelfProgress, type ShelfProgress, type ShelfStage } from './progress'
 export {
   commutes,
   entriesBetween,

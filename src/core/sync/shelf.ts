@@ -232,6 +232,19 @@ export interface ShelfAbout {
   facts: number
   /** Whether the paid pass reached the end of the book. */
   complete: boolean
+  /**
+   * Leaves that have a transcription — how far the reading has got, for a
+   * book that is not `complete`. Zero on a card written before the field
+   * existed, which `shelfProgress` treats as "not counted", not as unread.
+   */
+  read: number
+  /**
+   * The editor's decisions: queries raised by the readers, those still
+   * waiting on the editor, and — of the waiting — those a standing ruling
+   * holds an answer for. `null` on a card written before the field existed:
+   * a card that does not know must not say "nothing waiting".
+   */
+  queries: ShelfQueries | null
   /** Where the pixels are, when they were small enough to send. */
   scanPath: string | null
   /**
@@ -239,6 +252,19 @@ export interface ShelfAbout {
    * to the card: it is where the book *is*, which the card cannot know.
    */
   dir?: string
+}
+
+export interface ShelfQueries {
+  raised: number
+  waiting: number
+  held: number
+}
+
+function parseQueries(v: unknown): ShelfQueries | null {
+  if (typeof v !== 'object' || v === null) return null
+  const q = v as Record<string, unknown>
+  const n = (name: string): number => (typeof q[name] === 'number' ? (q[name] as number) : 0)
+  return { raised: n('raised'), waiting: n('waiting'), held: n('held') }
 }
 
 export function parseAbout(text: string): ShelfAbout | null {
@@ -263,6 +289,8 @@ export function parseAbout(text: string): ShelfAbout | null {
     marked: n('marked'),
     facts: n('facts'),
     complete: v['complete'] !== false,
+    read: n('read'),
+    queries: parseQueries(v['queries']),
     scanPath: typeof v['scanPath'] === 'string' ? v['scanPath'] : null
   }
 }
