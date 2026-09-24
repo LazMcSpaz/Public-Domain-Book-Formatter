@@ -115,3 +115,17 @@ which the server refuses unless it is a fast-forward — and if it has happened,
   against edited over the whole body (`drive.mjs body`) — a block with no
   bold looks exactly like a block with no bold. See CLAUDE.md, "A sweep
   typed as a phrase stripped the runs the phrase spanned."
+
+## A book with no pixels: `sd/`
+
+_The Secret Doctrine_ is TUP's ClearScan conversion: no page images, so no
+renders, no second engine and no crops (`docs/FLOW.md`, `converted-text`).
+What stands in for the image is a second reading of the same leaf (Tesseract
+over the page ClearScan draws, `reference/blavatsky/secret-doctrine-sd1.txt`
+on the shelf, keyed to leaves as `<kit>/second.json`) and the book's own
+vocabulary (`sd/lex.py`). `sd/stretch.sh <kit> <from> <to>` drafts, takes the
+conversion's mechanical damage off (`sd/rules.mjs`), and writes text-only
+briefs (`brief.mjs … --text-only`) and prompts from `sd/PROMPT.md`. Landing
+and applying are the same as above. Two things `land.mjs` gained for it, and
+any book may use them: a reader's `level` on a heading, and `join: true` on a
+block that only continues the one before it.

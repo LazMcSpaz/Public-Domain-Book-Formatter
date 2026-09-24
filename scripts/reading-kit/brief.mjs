@@ -17,6 +17,11 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { resolve } from 'node:path'
 
 const [, , kit, draftPath, from, to, size = '5'] = process.argv
+/**
+ * A book with no pixels (`run.shape.pixels === false`) is read from two
+ * readings and no image: the brief carries none and asks for none.
+ */
+const textOnly = process.argv.includes('--text-only')
 if (!kit || !draftPath || !from || !to) {
   console.error('usage: brief.mjs <kit> <ruled.json> <from> <to> [size]')
   process.exit(2)
@@ -42,10 +47,10 @@ for (let start = Number(from); start <= Number(to); start += step) {
       .filter((g) => g.kind === 'substantive')
       .map((g) => ({ ours: g.first, other: g.second }))
     const image = `${K}/shots/hi-${pad(p.pageIndex)}.png`
-    if (!existsSync(image)) missing += 1
+    if (!textOnly && !existsSync(image)) missing += 1
     return {
       leaf: p.pageIndex,
-      image,
+      ...(textOnly ? {} : { image }),
       blocks: p.blocks.map((b, i) => ({ i, kind: b.kind, text: b.text })),
       secondReader: second[String(p.pageIndex)] ?? '',
       disagreements: rows

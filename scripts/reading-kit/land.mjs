@@ -21,6 +21,11 @@
  * And a page's `add` — `[{after, kind, text}]` — puts in a block the draft
  * left out altogether (a footnote, a sub-head, a section numeral), read off
  * the page by the reader; `after` is the `i` it follows, -1 for the top.
+ * A block marked `join: true` continues the one before it on the same leaf
+ * and is folded into it — the draft cuts a paragraph or a note wherever the
+ * text layer's lines misled it, and a reader can say so without renumbering.
+ * Joining runs before `add`, so an added block's `after` still names the `i`
+ * the reader saw; a join never crosses a leaf.
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
@@ -83,6 +88,11 @@ for (let s = Number(from); s <= Number(to); s += 5) {
       if (slot.text !== b.text) changed++
       if (String(b.text).trim() === '') emptied++
       slot.text = b.text
+      // A heading's level, where the reader set one: a text layer carries none.
+      if ([1, 2, 3].includes(b.level)) slot.level = b.level
+      // A block that only continues the one before it (a paragraph or a note
+      // the draft cut at a line) is folded into it after every text is in.
+      if (b.join === true) slot.join = true
       if (b.kind && b.kind !== slot.kind) {
         if (RETYPE.has(b.kind)) {
           // A table that was really prose: its cells are what the table is
@@ -107,11 +117,29 @@ for (let s = Number(from); s <= Number(to); s += 5) {
     for (const q of page.queries ?? []) queries.push({ leaf: page.leaf, ...q })
   }
 }
+let joinedBlocks = 0
+for (const p of draft) {
+  const kept = []
+  for (const b of p.blocks) {
+    const prev = [...kept].reverse().find((k) => String(k.text).trim() !== '')
+    if (b.join && prev && String(b.text).trim() !== '') {
+      const glue = /[-—]$/u.test(prev.text) ? '' : ' '
+      prev.text = `${prev.text.trimEnd()}${glue}${String(b.text).trimStart()}`
+      joinedBlocks++
+      continue
+    }
+    delete b.join
+    kept.push(b)
+  }
+  p.blocks = kept
+}
 let added = 0
 for (const p of draft) {
   // Highest `after` first, so each insertion leaves the indices below it alone.
   for (const a of (p.added ?? []).sort((x, y) => y.after - x.after)) {
-    p.blocks.splice(Math.max(0, a.after + 1), 0, { kind: a.kind, text: a.text })
+    const block = { kind: a.kind, text: a.text }
+    if (a.kind === 'heading' && [1, 2, 3].includes(a.level)) block.level = a.level
+    p.blocks.splice(Math.max(0, a.after + 1), 0, block)
     added++
   }
   delete p.added
@@ -142,7 +170,7 @@ if (cuts.length) writeFileSync(`${K}/cuts-${tag}.json`, JSON.stringify(cuts, nul
 const kinds = {}
 for (const q of queries) kinds[q.kind ?? '?'] = (kinds[q.kind ?? '?'] ?? 0) + 1
 console.log(
-  `${blocks} blocks read back, ${changed} changed, ${emptied} emptied, ${retyped} retyped, ${added} added; ` +
+  `${blocks} blocks read back, ${changed} changed, ${emptied} emptied, ${retyped} retyped, ${joinedBlocks} joined, ${added} added; ` +
     `${out.reduce((s, p) => s + p.blocks.length, 0)} blocks over ${out.length} leaves; queries ${JSON.stringify(kinds)}`
 )
 for (const q of queries.filter((q) => q.kind === 'printers-error'))
