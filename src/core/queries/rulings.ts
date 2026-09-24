@@ -244,6 +244,15 @@ export function unapplied(rulings: readonly Ruling[], book: BookDocument): Rulin
     // to `the Eternal`, leaf 180 of *Isis Unveiled* — is the same string once
     // everything is lower-cased, so every view below calls it one thing and
     // it can never be judged. It is read with its case, tags off.
+    // A correction written as an instruction, `(the label is dropped)`: the
+    // printed words are to go. Patterns Vol. I rules two places this way, and
+    // read as text the instruction is never in the book. It has landed when
+    // the quote is gone from its own leaf.
+    if (DELETION.test(written)) {
+      const gone = (views: readonly string[]): boolean =>
+        !views.some((v, i) => v.includes(NOTATIONS[i](ruling.quote.trim().toLowerCase())))
+      return !gone(ruling.pageIndex === null ? views : onLeaf(ruling.pageIndex))
+    }
     const rawWanted = (ruling.correction ?? '').trim()
     const rawQuote = ruling.quote.trim()
     if (written === rawQuote.toLowerCase() && rawWanted !== rawQuote) {
@@ -306,6 +315,9 @@ function landed(
   if (NOTATIONS[level](wanted).includes(NOTATIONS[level](quote))) return true
   return !has(printed, level, quote)
 }
+
+/** A correction that says the printed words go, rather than what replaces them. */
+const DELETION = /^\([^()]*\b(?:dropped|removed|deleted|omitted|struck out)\b[^()]*\)$/u
 
 /**
  * What one leaf prints: the body and set-apart blocks drawn from it — a block

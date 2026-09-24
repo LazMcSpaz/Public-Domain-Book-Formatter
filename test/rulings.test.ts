@@ -489,6 +489,18 @@ describe('a ruling written as the part that changes', () => {
     expect(unapplied([cap], set('eternal'))).toHaveLength(1)
   })
 
+  it('reads a correction written as a deletion against the leaf it names', () => {
+    const drop = ruling({ pageIndex: 3, quote: 'FOOTNOTE', correction: '(the label is dropped)' })
+    const leaf = (page: number, text: string): BookBlock =>
+      para(text, { id: `p${page}b0`, sourcePages: [page] })
+    expect(
+      unapplied([drop], book({ blocks: [leaf(3, 'Chomsky'), leaf(95, 'FOOTNOTES TO PART II')] }))
+    ).toEqual([])
+    expect(
+      unapplied([drop], book({ blocks: [leaf(3, 'FOOTNOTE'), leaf(95, 'FOOTNOTES')] }))
+    ).toHaveLength(1)
+  })
+
   it('does not mistake a doubled word taken out for a word confirmed', () => {
     const doubled = ruling({ quote: 'the the cat', correction: 'the cat' })
     expect(unapplied([doubled], prose('and the the cat sat'))).toHaveLength(1)

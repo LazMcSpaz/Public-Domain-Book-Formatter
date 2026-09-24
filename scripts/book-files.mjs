@@ -473,7 +473,11 @@ if (finish) {
   // Named by `queryKey`, imported rather than reimplemented: a crop written
   // under a key the gate computes differently is a crop the gate never asks
   // for, and nothing anywhere would say it exists under another name.
-  if (outstanding.length > 0) {
+  //
+  // A book with no pixels owes none. Its "crop" is the text layer drawn again,
+  // which is the hypothesis shown back to the person deciding, and the shape
+  // on record says so; `drive.mjs concordance` is that book's door.
+  if (outstanding.length > 0 && book.run?.shape?.pixels !== false) {
     const { queryKey } = await import('../src/core/queries/key.ts')
     const missing = []
     for (const t of book.run?.transcriptions ?? []) {
