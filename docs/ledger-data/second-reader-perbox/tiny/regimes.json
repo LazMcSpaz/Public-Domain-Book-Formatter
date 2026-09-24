@@ -1,0 +1,18 @@
+{
+  "human-aura": {
+    "name": "The Human Aura",
+    "regime": "aura-loose (Acrobat Paper Capture scan, OCR layer)"
+  },
+  "clairvoyance": {
+    "name": "Clairvoyance and Occult Powers",
+    "regime": "tight-clairvoyance (1916 letterpress, LuraDocument scan, OCR layer)"
+  },
+  "thought-vibration": {
+    "name": "Thought Vibration",
+    "regime": "Google Books scan, no text layer"
+  },
+  "patterns-vol2": {
+    "name": "Patterns Vol. II",
+    "regime": "archive.org scan of a 1977 typescript, columns on many leaves, OCR layer"
+  }
+}

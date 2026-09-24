@@ -263,3 +263,76 @@ is the transcription here, while the scores that exist belong to the OCR
 reader — so no confidence travels through this module at all, rather than one
 that indexes the wrong sequence. Both are `PLAN-next.md`'s own standing
 lesson: check what the coordinates mean before comparing them.
+
+---
+
+## The small tier, and the fault the Isis number was hiding (2026-09-24)
+
+The `small` tier (PP-OCRv6 small, 31 MB, the full dictionary) is vendored
+beside the tiny one in `public/paddle/small/`, with its SHA-256s and the same
+Apache-2.0 licence (`public/paddle/README.md`). It was measured on the same 42
+leaves, against the same Tesseract reading and the same proofed text, and then
+measured again after a fault in how both tiers were called was found and
+fixed. The rows are under `docs/ledger-data/second-reader-small/` (the package's
+default strategy) and `docs/ledger-data/second-reader-perbox/<tier>/`.
+
+### Over the 42 leaves
+
+| Engine          | Raised | Real | Precision | Caught |  Recall | Both wrong | ms/leaf |
+| --------------- | -----: | ---: | --------: | -----: | ------: | ---------: | ------: |
+| tiny, per-line  |    167 |  101 |   **60%** |     99 | **41%** |        142 |    3859 |
+| small, per-line |    104 |   83 |   **80%** |     79 | **33%** |        162 |   13839 |
+| tiny, per-box   |    170 |  105 |   **62%** |    102 | **42%** |        139 |    4266 |
+| small, per-box  |    105 |   83 |   **79%** |     81 | **34%** |        160 |   13569 |
+
+Book by book, the small tier is the more precise everywhere it is measured —
+_The Human Aura_ 74% to 96%, _Clairvoyance_ 46% to 59%, _Thought Vibration_ 60%
+to 100%, _Patterns_ Vol. II 61% to 80% (per-line) — and raises about a third
+fewer disagreements, at three and a half times the time. What it gives up is
+recall: 41% to 33% overall, almost all of it on _Patterns_ Vol. II (37% to
+22%), whose transcript columns both tiers read across. By the rule written
+before the first numbers, neither tier earns a place as the default witness
+on every book, and the small tier fails it the other way from the tiny one.
+
+### What the Isis number actually measured
+
+The reason this was measured was _Isis Unveiled_ Vol. I, where the tiny tier
+agreed with the reading on 32.8% of words, and the working explanation was that
+it skips the small type of extracts and footnotes. **That explanation was
+wrong.** Measured on twelve Isis leaves spaced through the volume (100 to 650),
+as the share of the reading's words the second reader also has:
+
+| Engine          |      Body | Footnotes | ms/leaf |
+| --------------- | --------: | --------: | ------: |
+| tiny, per-line  |     29.6% |     66.1% |   ~4000 |
+| small, per-line |     29.8% |     69.4% |   10833 |
+| tiny, per-box   | **95.5%** | **94.0%** |    7197 |
+| small, per-box  | **97.3%** | **98.9%** |   24020 |
+
+Both tiers read the first dozen body lines of a leaf and its footnotes, and
+nothing in between. The detector found every line: printing what the
+recogniser returned, twenty-nine consecutive body lines of leaf 304 came back
+as empty strings, which `readLeafSecond` drops. The package's default
+recognition strategy, `per-line`, merges every box that shares a line's height
+before it reads them, and this scan's detector draws one tall region (794 by
+1,740 pixels) down the leaf's margin. Every body line it spans was merged with
+it into one crop the height of the column, squashed to the recogniser's 48
+pixels, and read as nothing. Changed one thing at a time on unread leaves: the
+detector's size cap, the confidence floor, a batch size of one and the crop
+cap changed nothing; `per-box` did. It is now what `readLeafSecond` asks for,
+and the model id carries `/per-box` so a reading cached under the old strategy
+is not served as this one.
+
+On the 42 ledger leaves the fix moves almost nothing, because those scans do
+not carry the tall region; on Isis it is the difference between a witness and
+a third of one. **The Isis `second.json` on the shelf was taken with the old
+strategy and should be taken again** — a whole volume is about 80 minutes at
+the tiny tier and four and a half hours at the small — and its `witness.json`
+rebuilt from it. Until then the Isis agreement figure describes the fault, not
+the book.
+
+**Which tier.** Where the witness exists to find errors on a clean single
+column, the tiny tier: it catches more, and at a third of the time. Where its
+disagreements are going to a person, and a false alarm costs that person a
+look, the small tier's four in five against three in five is worth the time.
+Both are vendored; `second --tier small` chooses.
