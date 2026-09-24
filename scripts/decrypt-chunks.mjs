@@ -4,10 +4,9 @@
  * The Theosophical University Press chunks of The Secret Doctrine are all
  * encrypted with an empty user password: pdf.js opens them without asking, and
  * `pdf-lib` refuses them outright, so `merge-scan.mjs` cannot copy a page. What
- * decrypts them is mupdf, which is **not** a dependency of this app and should
- * not become one for a step run once per volume:
+ * decrypts them is mupdf, a dev dependency (it is used by scripts only, never
+ * by the app, and `reading-kit/sd/images.mjs` needs it too):
  *
- *   npm install --no-save mupdf
  *   node scripts/decrypt-chunks.mjs <chunks.json> --root <shelf> --out <dir>
  *   node scripts/merge-scan.mjs --manifest <chunks.json> --root <shelf> --decrypted <dir> --out <vol.pdf>
  *
@@ -36,7 +35,7 @@ let mupdf
 try {
   mupdf = await import('mupdf')
 } catch {
-  console.error('mupdf is not installed. `npm install --no-save mupdf`, then run this again.')
+  console.error('mupdf is not installed. `npm install`, then run this again.')
   process.exit(1)
 }
 

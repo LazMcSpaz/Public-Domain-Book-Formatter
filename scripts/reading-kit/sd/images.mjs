@@ -9,7 +9,6 @@
  * a figure can be set from them. Greek and Hebrew were converted to (garbled)
  * text rather than kept, so this does not answer those.
  *
- *   npm install --no-save mupdf
  *   node scripts/reading-kit/sd/images.mjs <file.pdf> <out-dir> <leaf> [leaf ...]
  */
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
