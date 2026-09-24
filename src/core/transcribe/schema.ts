@@ -228,6 +228,11 @@ const PAGE_ROLES: readonly PageRole[] = [
   'glossary',
   'colophon',
   'blank',
+  // A role the type has had since the scanning library's own leaf was given
+  // one, and this list had not: a reading that named it was refused as an
+  // "unknown page role", so Isis Unveiled's HathiTrust leaves could not be
+  // landed as what they are.
+  'digitization-notice',
   'unknown'
 ]
 

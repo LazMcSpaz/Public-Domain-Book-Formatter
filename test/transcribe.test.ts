@@ -118,6 +118,16 @@ describe('parsePageTranscription', () => {
 
 // ---------------------------------------------------------------- prompt ----
 
+describe('the page roles a reading may name', () => {
+  it('takes the scanning library’s own leaf', () => {
+    const parsed = parsePageTranscription(
+      { role: 'digitization-notice', blocks: [], uncertain: [], furniture: {} },
+      0
+    )
+    expect(parsed.role).toBe('digitization-notice')
+  })
+})
+
 describe('buildSystemPrompt', () => {
   it('states the facsimile stance and forbids modernizing when preserving', () => {
     const p = buildSystemPrompt({
