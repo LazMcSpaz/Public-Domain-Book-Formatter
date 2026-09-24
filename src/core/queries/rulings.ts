@@ -234,10 +234,22 @@ export function unapplied(rulings: readonly Ruling[], book: BookDocument): Rulin
     }
     return found
   }
+  // Case kept, for the one kind of ruling the lower-cased views cannot see.
+  const cased = NOTATIONS.slice(1).map((fold) => fold(bookText(book)))
   return rulings.filter((ruling) => {
     if (ruling.decision !== 'corrected') return false
     const written = (ruling.correction ?? '').trim().toLowerCase()
     if (written === '') return true
+    // A ruling that changes nothing but a capital — `the eternal gave Brahman`
+    // to `the Eternal`, leaf 180 of *Isis Unveiled* — is the same string once
+    // everything is lower-cased, so every view below calls it one thing and
+    // it can never be judged. It is read with its case, tags off.
+    const rawWanted = (ruling.correction ?? '').trim()
+    const rawQuote = ruling.quote.trim()
+    if (written === rawQuote.toLowerCase() && rawWanted !== rawQuote) {
+      const inBook = (t: string): boolean => cased.some((v, i) => v.includes(NOTATIONS[i + 1](t)))
+      return !inBook(rawWanted) || inBook(rawQuote)
+    }
     // A footnote is quoted from the leaf with its reference mark at its head,
     // and the book holds the note without it: assembly takes the mark off to
     // set it as a raised figure. `† Ibid, Vol. II.` on leaf 199 of *The Key to

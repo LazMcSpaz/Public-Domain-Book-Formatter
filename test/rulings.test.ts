@@ -469,6 +469,26 @@ describe('a ruling written as the part that changes', () => {
     expect(unapplied([ibid], note('Ibid, Vol. II., p. 281.'))).toHaveLength(1)
   })
 
+  it('reads a ruling that changes only a capital, with the case kept', () => {
+    const cap = ruling({
+      quote:
+        'the Sacred Knowledge (Veda), the first-born insists. Provoked, the eternal gave Brahman a wife',
+      correction:
+        'the Sacred Knowledge (Veda), the first-born insists. Provoked, the Eternal gave Brahman a wife'
+    })
+    const set = (word: string): BookDocument =>
+      book({
+        blocks: [
+          para(
+            `the Sacred Knowledge (Veda), the first-born insists. Provoked, the ${word} gave Brahman a wife`,
+            { emphasis: [3] }
+          )
+        ]
+      })
+    expect(unapplied([cap], set('Eternal'))).toEqual([])
+    expect(unapplied([cap], set('eternal'))).toHaveLength(1)
+  })
+
   it('does not mistake a doubled word taken out for a word confirmed', () => {
     const doubled = ruling({ quote: 'the the cat', correction: 'the cat' })
     expect(unapplied([doubled], prose('and the the cat sat'))).toHaveLength(1)
