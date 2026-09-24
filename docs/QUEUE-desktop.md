@@ -297,6 +297,15 @@ not yet applied to the text. Book: Isis Vol. I. Sixty-two queries wait on the ed
 `queries/`). Then a second engine over the volume with the kit's once-per-book
 step, which this book has never had.
 
+**2026-09-24 (cloud):** the scan rebuilt from its nineteen chunks and loaded
+under the reading's key (the misfiled `_p0038_0074` moved; `scan.md` has the
+recipe and the mtime trap). The Preface and _Before the Veil_ (leaves 17–57),
+never read before, are read and the reading is **complete**. Nine rulings the
+book did not read are applied, 99 proposals on the waiting queries (73 now,
+with the front matter's two and leaf 247's points). **The Isis `second.json`
+predates the second reader's per-box fix and should be retaken** (see the
+second-reader ledger): it read a third of each leaf.
+
 ### 6. The other Blavatsky books, to Phase 2
 
 `open`; _The Key to Theosophy_ **finished** (shelf 4e7e0f0): read, 100 of 112 queries ruled under standing ruling 1 (`RULINGS.md` on the shelf), 12 left for the editor, damage clean; no edition. Its scan loses lines at the head of most leaves (`cuts.md`). _A Modern Panarion_ **read and ruled** (shelf, 2026-09-24): all 514 leaves, 126 of 144 queries ruled under standing ruling 1, 18 left for the editor, damage clean, figures on 412/415 not yet cut; no edition. Brief: `scripts/reading-kit/panarion/PROMPT.md`. One at a time, in this order: _The Key to Theosophy_, _A Modern
