@@ -252,6 +252,12 @@ Done 2026-09-23, every pass a commit and recorded in the book's `ledger.md`
   item's latest and the two were merged — but the claim line is what
   prevents the case where it would be.
 
+**2026-09-24 (cloud):** the 26 rulings `finish` called unapplied were 11
+real, swept (shelf `3684cb9`), and 15 the check could not read, which it now
+can (formatter `78576cb`, `13845b9`). `Mac Gregor` settled under ruling 3 and
+the damage gate passes (shelf `f5c07b1`, formatter `40dbbeb`). `finish` owes
+only the editor's 41 queries.
+
 Close-out: `corrections.md` for the Glossary `done (shelf 7b3fffc)`: 650
 corrections, `book-files.mjs --check --body` in step, `book.json` untouched;
 `--finish` now owes only the editor's rulings.
@@ -389,13 +395,17 @@ still pulls down a book file rather than a volume of pixels.
 
 `book-files.mjs --finish` owes a book any that are missing and names the
 leaves, so this is a check rather than a habit. Done: the Glossary (59),
-_The Key to Theosophy_ (12), _Isis_ Vol. I (62, cut earlier). Owed by every
-book read from now on, _A Modern Panarion_ first.
+_The Key to Theosophy_ (12; leaf 79's re-cut by hand, `locateQuote` had
+matched the footnote's `Atma, Buddhi`), _Isis_ Vol. I (62, cut earlier),
+_A Modern Panarion_ (18, shelf `4d2dcdf`; leaf 207 is the whole leaf). Owed by
+every book read from now on.
 
 ### 12. Proposals for the queries waiting on the editor
 
 `open`; the Glossary `done (shelf dc3b4ed)`: 90 proposals on 58 of its 59
-queries, none on one. Books: the Glossary
+queries, none on one. _A Modern Panarion_ `done (shelf 222ce58)`: 28 on all
+18. _The Key to Theosophy_ `done (shelf d5d7fda)`: 12 on 9, none on leaves
+22, 29 and 164, which the page cannot settle. Isis Vol. I is left. Books: the Glossary
 (59 waiting), _Isis_ Vol. I (62), _The Key to Theosophy_ (12). **One book at a time**, and only a book no other session
 holds.
 
