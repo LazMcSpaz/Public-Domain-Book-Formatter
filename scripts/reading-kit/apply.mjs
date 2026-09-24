@@ -39,12 +39,45 @@ const json = (out) => {
   }
 }
 
+/**
+ * The words `was` has that `now` does not, counted: a pair that mends a word
+ * trades one for another and loses nothing, and one that drops a word beside
+ * the fix loses it. Punctuation is not a word, so moving a stop is free.
+ */
+function wordsLost(was, now) {
+  const words = (s) => s.replace(/<\/?(?:i|em|b|strong)>/giu, '').match(/[\p{L}\p{N}]+/gu) ?? []
+  const left = words(now)
+  const before = words(was)
+  // A word mended in place is the same count on both sides.
+  if (left.length >= before.length) return []
+  const pool = [...left]
+  return before.filter((w) => {
+    const i = pool.indexOf(w)
+    if (i === -1) return true
+    pool.splice(i, 1)
+    return false
+  })
+}
+
 const corrPath = `${K}/corrections-${tag}.json`
 let ok = 0
 let pairs = []
 if (existsSync(corrPath)) {
   pairs = JSON.parse(readFileSync(corrPath, 'utf8'))
   for (const [was, now] of pairs) {
+    // A pair is written by hand with words either side of the fix to make it
+    // unique, and those words have to come back out exactly. On *A Modern
+    // Panarion* three did not: `error He confounds` went in as `error.
+    // confounds`, and the book lost a word for every fix it gained. A
+    // correction that takes a word out is sometimes the point (a doubled
+    // word), so this holds the pair back and names it rather than guessing.
+    const lost = wordsLost(was, now)
+    if (lost.length > 0 && !process.env.ALLOW_WORD_LOSS) {
+      console.log(
+        `  CHECK drops ${JSON.stringify(lost)}: ${JSON.stringify(was)} → ${JSON.stringify(now)}`
+      )
+      continue
+    }
     const n = json(run(['sweep', '--was', was, '--now', now]))?.replaced
     if (n === 1) ok++
     else console.log(`  CHECK ${n ?? 'no reply'}: ${JSON.stringify(was)}`)

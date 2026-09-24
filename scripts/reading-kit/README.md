@@ -104,6 +104,11 @@ which the server refuses unless it is a fast-forward — and if it has happened,
 - A sweep must replace exactly one match; `apply.mjs` prints CHECK and exits
   non-zero otherwise. A `--was` short enough to be a class is counted
   first — `(Zend).` matched fourteen of the book's own settings once.
+- A pair whose `now` has fewer words than its `was` is held back and printed
+  as `CHECK drops [...]`: the words written either side of a fix to make it
+  unique have to come back out whole. Three pairs on _A Modern Panarion_
+  each cost the book a word (`error He confounds` → `error. confounds`). A
+  doubled word taken out is a real case; run it with `ALLOW_WORD_LOSS=1`.
 - `land.mjs` strips any field `transcribe` does not know, because it refuses
   a page carrying one and a batch refused is a stretch not landed.
 - What no script can check: after each stretch, compare tag counts pristine

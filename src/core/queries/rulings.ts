@@ -238,8 +238,18 @@ export function unapplied(rulings: readonly Ruling[], book: BookDocument): Rulin
     if (ruling.decision !== 'corrected') return false
     const written = (ruling.correction ?? '').trim().toLowerCase()
     if (written === '') return true
-    const quote = ruling.quote.trim().toLowerCase()
-    const placed = inPlace(written, quote)
+    // A footnote is quoted from the leaf with its reference mark at its head,
+    // and the book holds the note without it: assembly takes the mark off to
+    // set it as a raised figure. `† Ibid, Vol. II.` on leaf 199 of *The Key to
+    // Theosophy* was mended and read as outstanding for that alone.
+    const quote = ruling.quote
+      .trim()
+      .toLowerCase()
+      .replace(/^[*\u2020\u2021\u00a7\u00b6\u2016\u00b9\u00b2\u00b3\u2070-\u2079]+\s*/u, '')
+    const placed = inPlace(
+      written.replace(/^[*\u2020\u2021\u00a7\u00b6\u2016\u00b9\u00b2\u00b3\u2070-\u2079]+\s*/u, ''),
+      quote
+    )
 
     // A word written as it should read, which the query already quotes that
     // way: a broken sort transcribed whole. There is nothing to apply, and the

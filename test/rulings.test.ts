@@ -455,6 +455,20 @@ describe('a ruling written as the part that changes', () => {
     )
   })
 
+  it('reads a note quoted with its reference mark against the note the book holds', () => {
+    const ibid = ruling({
+      pageIndex: 199,
+      quote: '\u2020 Ibid, Vol. II., p. 281.',
+      correction: 'Ibid.,'
+    })
+    const note = (text: string): BookDocument =>
+      book({
+        footnotes: [{ id: 'fn47', originalMarker: '\u2020', text, pageIndex: 199, orphaned: false }]
+      })
+    expect(unapplied([ibid], note('Ibid., Vol. II., p. 281.'))).toEqual([])
+    expect(unapplied([ibid], note('Ibid, Vol. II., p. 281.'))).toHaveLength(1)
+  })
+
   it('does not mistake a doubled word taken out for a word confirmed', () => {
     const doubled = ruling({ quote: 'the the cat', correction: 'the cat' })
     expect(unapplied([doubled], prose('and the the cat sat'))).toHaveLength(1)
