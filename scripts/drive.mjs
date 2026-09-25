@@ -4776,6 +4776,47 @@ async function serve() {
       return { wrote: file, words: wanted.length }
     },
 
+    /**
+     * The recon store's own records, read raw: every key, and the stamp on
+     * each. `loadReconCache` *deletes* a record whose stamp does not match
+     * what it was asked for, so asking through it is not a way to find out
+     * why a reading is refused. This reads the object store directly and
+     * changes nothing.
+     */
+    cachestat: async () => {
+      return page.evaluate(async () => {
+        const db = await new Promise((ok, no) => {
+          const r = indexedDB.open('pdbf')
+          r.onsuccess = () => ok(r.result)
+          r.onerror = () => no(r.error)
+        })
+        const out = { stores: [...db.objectStoreNames], recon: [] }
+        if (!db.objectStoreNames.contains('recon')) return out
+        const rows = await new Promise((ok, no) => {
+          const r = db.transaction('recon', 'readonly').objectStore('recon').getAll()
+          r.onsuccess = () => ok(r.result)
+          r.onerror = () => no(r.error)
+        })
+        for (const rec of rows) {
+          out.recon.push({
+            key: rec.key,
+            version: rec.version,
+            dpi: rec.dpi,
+            maxPages: rec.maxPages,
+            pagesDone: rec.pagesDone,
+            pageCount: rec.pageCount,
+            cleanup: rec.cleanup,
+            source: rec.source,
+            words: Array.isArray(rec.words) ? rec.words.length : null,
+            savedAt: rec.savedAt
+          })
+        }
+        const est = navigator.storage?.estimate ? await navigator.storage.estimate() : null
+        out.quota = est ? { usage: est.usage, quota: est.quota } : null
+        return out
+      })
+    },
+
     /** What this browser is actually holding, when something says it is not. */
     diag: async () => {
       return page.evaluate(

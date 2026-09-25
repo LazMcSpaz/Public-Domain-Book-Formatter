@@ -21,6 +21,6 @@ node scripts/reading-kit/brief.mjs "$KIT" "$KIT/ruled-$TAG.json" $FROM $TO 5 --t
 for s in $(seq $FROM 5 $TO); do
   e=$(( s + 4 > TO ? TO : s + 4 )); b=$(pad $s)-$(pad $e)
   mkdir -p "$KIT/work/$b"
-  sed -e "s|BRIEF|$KIT/briefs/$b.json|; s|WORKDIR|$KIT/work/$b/|; s|OUT|$KIT/done/$b.json|; s|KITDIR|$KIT|" "$HERE/PROMPT.md" > "$KIT/work/$b/prompt.md"
+  sed -e "s|BRIEF|$KIT/briefs/$b.json|; s|WORKDIR|$KIT/work/$b/|; s|OUT|$KIT/done/$b.json|; s|KITDIR|$KIT|" "${SD_PROMPT:-$HERE/PROMPT.md}" > "$KIT/work/$b/prompt.md"
 done
 echo "$TAG briefed: $(ls $KIT/work | grep -c .) prompt(s) under $KIT/work"
