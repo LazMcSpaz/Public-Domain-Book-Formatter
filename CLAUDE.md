@@ -535,6 +535,26 @@ the finished edition rather than the paper. Read the path out of the book file
 rather than reaching for the PDF sitting next to it, and check `drive.mjs
 runs` for keys that should not be there. `runs drop <n>` removes one.
 
+**A sweep matches the string, not the word, and `--now` is live.** On _The
+Secret Doctrine_ Vol. I, `sweep --was Herschel --now Herschell --case` was
+run to settle one `Herschel` against fourteen `Herschell`s, and it ran
+through all fifteen — a sweep is a text replacement, and `Herschel` is the
+opening of `Herschell` — and a retry made it `Herschellll`. Nothing was
+lost, because the pristine text is untouched and the corrections sheet is
+a diff against it, but the count had to be taken again afterwards.
+`variants.mjs` says `SWEEP UNSAFE … also inside a longer word` for exactly
+this, and the rule is: **read that line, and sweep a phrase long enough to
+be the whole word** (`Kant, Herschel and Laplace`). And there is no dry
+run: a `sweep` with `--now` writes, and the "find" is the same command
+without it.
+
+**`save`'s second argument is the output path.** A session handed it a
+commit message and the whole book went to a file named by the message,
+twice, in the formatter checkout — with the book on the shelf left as it
+was, and the sheets beside it rewritten from the run, so the directory
+described a book its own file did not hold. `save` now refuses an output
+that does not end in `.json`; the commit message is written at the commit.
+
 **A footnote correction is keyed by the note's number, and the number moves.**
 `note-text` names its note `fn<n>`, and `n` is the note's place in reading
 order across the whole book. Land any leaf **ahead of** a note — a preface read

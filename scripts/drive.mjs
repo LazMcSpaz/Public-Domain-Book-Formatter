@@ -1053,6 +1053,16 @@ async function serve() {
         }
         out = bookPath
       }
+      // The second argument is where the book goes, and a session that took
+      // it for a commit message wrote three megabytes of book to a file
+      // called `the count across the book` in the checkout, twice. A book
+      // file ends in `.json`; anything else here is almost certainly prose.
+      if (!/\.json$/iu.test(out)) {
+        throw new Error(
+          `save writes the book to its second argument, and \`${out}\` does not look like ` +
+            'a book file. There is no message argument: the commit is yours to write.'
+        )
+      }
       // No original when one is being made for the first time — writing a book
       // file out of a seeded run is how the round trip gets something to test
       // against without a real book having been read.
@@ -2844,12 +2854,20 @@ async function serve() {
             assemble.assembleBook(run.transcriptions),
             run.edits ?? []
           )
-          const found = coherence.checkDamage(doc)
+          // A finding the editor has ruled as printed, on its own leaf, is
+          // the book's and not the conversion's: it leaves the count and is
+          // listed on the sheet as honoured, never dropped in silence.
+          const { kept: found, honoured } = coherence.honourRulings(
+            coherence.checkDamage(doc),
+            run.rulings ?? [],
+            doc
+          )
           const by = {}
           for (const f of found) by[f.kind] = (by[f.kind] ?? 0) + 1
           return {
-            text: coherence.damageSheet(found, doc, title ?? newest.fileName),
+            text: coherence.damageSheet(found, doc, title ?? newest.fileName, honoured),
             total: found.length,
+            honoured: honoured.length,
             attested: found.filter((f) => f.confidence === 'attested').length,
             by,
             rows: found.map((f) => ({

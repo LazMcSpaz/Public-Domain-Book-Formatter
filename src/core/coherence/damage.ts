@@ -195,7 +195,23 @@ const ABBREVIATIONS = new Set([
   'comment',
   'est',
   'esp',
-  'anon'
+  'anon',
+  // `1 et seq. for easier reading` — the Latin of a citation, not a stop.
+  'seq',
+  'seqq',
+  // Months, in a dated citation: `Nos. 10 and 11, of Jan. and Feb. 1887`.
+  // `mar` is left out: it is a word, and a month abbreviated before a
+  // lower-case function word is rare enough to look at.
+  'jan',
+  'feb',
+  'apr',
+  'jun',
+  'jul',
+  'aug',
+  'sept',
+  'oct',
+  'nov',
+  'dec'
 ])
 
 /**
@@ -554,6 +570,92 @@ export function checkDamage(doc: BookDocument): DamageFinding[] {
 }
 
 /**
+ * The part of a ruling this check needs: which leaf, which words, and whether
+ * the editor said to leave them.
+ *
+ * Structural rather than imported from `@core/queries`, so a shelf script
+ * running under plain Node can load this module without dragging in a chain
+ * Node's type stripping cannot read (CLAUDE.md, on `standing.ts`).
+ */
+export interface DamageRuling {
+  pageIndex: number | null
+  quote: string
+  decision: string
+}
+
+export interface HonouredFinding {
+  finding: DamageFinding
+  ruling: DamageRuling
+}
+
+/**
+ * The findings, less those the editor has already ruled are the book's own.
+ *
+ * `checkDamage` asks whether a mark is one the printing trade sets, and on
+ * leaf 377 of *The Secret Doctrine* the answer is no and the mark is still
+ * right: `“Egg’ or` opens with a double mark and closes with a single, the
+ * render shows exactly that, and the editor ruled it as printed. A gate that
+ * cannot honour that ruling fails the book for ever, or is switched off —
+ * and a gate switched off is worse than none.
+ *
+ * So a finding is honoured, and taken out of the count, when a ruling
+ * **filed on its leaf** says `as-printed` over words that overlap it. Only a
+ * filed leaf ruling: a standing ruling holds a query for approval and files
+ * one of these when the editor approves, so the gate goes green when the
+ * editor has looked and not before. A `corrected` ruling is not honoured,
+ * because its sweep removes the finding by itself, and one that has not is a
+ * finding still. Nothing is dropped silently: the honoured list comes back
+ * beside the kept one, and the sheet prints it.
+ */
+export function honourRulings(
+  findings: readonly DamageFinding[],
+  rulings: readonly DamageRuling[],
+  doc: BookDocument
+): { kept: DamageFinding[]; honoured: HonouredFinding[] } {
+  const blocks = new Map(
+    [...doc.blocks, ...doc.sections.flatMap((s) => s.blocks)].map((b) => [b.id, b])
+  )
+  const asPrinted = rulings.filter((r) => r.decision === 'as-printed' && r.pageIndex !== null)
+  const kept: DamageFinding[] = []
+  const honoured: HonouredFinding[] = []
+  for (const finding of findings) {
+    const block = blocks.get(finding.blockId)
+    const text = block ? loose(plain(block)) : loose(finding.context)
+    const found = loose(finding.found)
+    const ruling = asPrinted.find((r) => {
+      if (!finding.pages.includes(r.pageIndex as number)) return false
+      const quote = loose(r.quote)
+      if (!quote) return false
+      // The two overlap in the block, or one contains the other outright —
+      // the second for a quote the block no longer carries verbatim.
+      if (quote.includes(found) || found.includes(quote)) return true
+      const q = text.indexOf(quote)
+      if (q === -1) return false
+      for (let at = text.indexOf(found); at !== -1; at = text.indexOf(found, at + 1)) {
+        if (at < q + quote.length && q < at + found.length) return true
+      }
+      return false
+    })
+    if (ruling) honoured.push({ finding, ruling })
+    else kept.push(finding)
+  }
+  return { kept, honoured }
+}
+
+/**
+ * Text as a reader matches it: letters and digits only, lower case.
+ *
+ * A query is typed from the screen and a finding is cut from the text, and
+ * the two disagree about curl and about where a space falls beside a mark
+ * more often than about words — the leaf-377 query reads `Egg ‘or` over a
+ * text that prints `Egg’ or`. Punctuation is what the finding is *about*, so
+ * it cannot be what decides whether the ruling reaches it.
+ */
+function loose(s: string): string {
+  return s.toLocaleLowerCase().replace(/[^\p{L}\p{N}]+/gu, '')
+}
+
+/**
  * The findings as a sheet to read, grouped by kind and carrying the whole block.
  *
  * **The whole block, not the window, and that is the point of the sheet.**
@@ -577,7 +679,8 @@ export function checkDamage(doc: BookDocument): DamageFinding[] {
 export function damageSheet(
   findings: readonly DamageFinding[],
   doc: BookDocument,
-  title = 'this book'
+  title = 'this book',
+  honoured: readonly HonouredFinding[] = []
 ): string {
   const blocks = new Map(
     [...doc.blocks, ...doc.sections.flatMap((s) => s.blocks)].map((b) => [b.id, b])
@@ -613,7 +716,8 @@ export function damageSheet(
     '**Nothing here has been changed.** `expected` is what the volume’s own',
     'vocabulary says, and it is a hypothesis until a person agrees with it.',
     '',
-    `${attested.length} settled by the book itself · ${shape.length} needing eyes.`,
+    `${attested.length} settled by the book itself · ${shape.length} needing eyes` +
+      (honoured.length > 0 ? ` · ${honoured.length} honoured by a ruling.` : '.'),
     '',
     '---',
     '',
@@ -629,6 +733,24 @@ export function damageSheet(
     '',
     '## Needing eyes',
     '',
-    shape.length === 0 ? '*None.*\n' : shape.map(entry).join('\n')
+    shape.length === 0 ? '*None.*\n' : shape.map(entry).join('\n'),
+    ...(honoured.length === 0
+      ? []
+      : [
+          '---',
+          '',
+          '## Honoured by a ruling',
+          '',
+          'The editor has ruled these as printed, on the leaf each sits on. They',
+          'are not counted, and they are listed so nothing leaves the sheet in',
+          'silence.',
+          '',
+          ...honoured.map(
+            (h) =>
+              `- \`${h.finding.found}\` — ${h.finding.blockId}, leaf ${h.ruling.pageIndex}: ` +
+              `ruled as printed over \`${h.ruling.quote}\`.`
+          ),
+          ''
+        ])
   ].join('\n')
 }

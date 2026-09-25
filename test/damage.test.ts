@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { checkDamage, damageSheet, type DamageFinding } from '@core/coherence'
+import { checkDamage, damageSheet, honourRulings, type DamageFinding } from '@core/coherence'
 import type { BookBlock, BookDocument } from '@core/assemble'
 
 let nextId = 0
@@ -353,5 +353,93 @@ describe('the false positives Isis Vol. I turned up', () => {
     expect(
       kinds('It states that from æther have come all things. and to it all will return.')
     ).toContain('stray-point')
+  })
+})
+
+/**
+ * Two stops the trade does set: the Latin of a citation and a month in a date.
+ *
+ * Both came off *The Secret Doctrine* Vol. I, where the gate failed the book
+ * on `1 et seq. for easier reading` and `Nos. 10 and 11, of Jan. and Feb.`.
+ */
+describe('abbreviations a citation uses', () => {
+  it('lets `et seq.` and a month pass', () => {
+    const d = build([
+      'The latter are made to run from 1 et seq. for easier reading.',
+      'See PATH, Nos. 10 and 11, of Jan. and Feb. 1887, on the subject.'
+    ])
+    expect(of(d, 'stray-point')).toEqual([])
+  })
+
+  it('still catches the comma read as a stop beside them', () => {
+    const d = build([
+      'The latter are made to run from 1 et seq. for easier reading. It is fine. the rest'
+    ])
+    expect(of(d, 'stray-point').map((f) => f.found)).toEqual(['fine. the'])
+  })
+})
+
+/**
+ * A ruling the editor filed on the leaf takes the finding out of the count.
+ *
+ * `“Egg’ or` on leaf 377 of *The Secret Doctrine*: a double mark opens and a
+ * single one closes, the render shows exactly that, and the editor ruled it
+ * as printed. The gate has to be able to hear that, and only that.
+ */
+describe('a finding under an as-printed ruling', () => {
+  const egg = () => {
+    nextId = 0
+    return doc([
+      block('The Mundane Egg’ or the Circle, is a symbol of the world.', 'paragraph', [377]),
+      block('It is fine. the rest', 'paragraph', [378])
+    ])
+  }
+
+  it('is honoured when the ruling is on its leaf and over its words', () => {
+    const d = egg()
+    const all = checkDamage(d)
+    expect(all.map((f) => f.found)).toEqual(['Egg’ or', 'fine. the'])
+    const { kept, honoured } = honourRulings(
+      all,
+      // Typed from the screen with a straight quote and a different curl: the
+      // match has to fold both, or the ruling never reaches the finding.
+      [{ pageIndex: 377, quote: "Egg 'or the Circle", decision: 'as-printed' }],
+      d
+    )
+    expect(honoured.map((h) => h.finding.found)).toEqual(['Egg’ or'])
+    expect(kept.map((f) => f.found)).toEqual(['fine. the'])
+  })
+
+  it('is kept under a ruling on another leaf, over other words, or that corrects', () => {
+    const d = egg()
+    const all = checkDamage(d)
+    const keptUnder = (r: Parameters<typeof honourRulings>[1][number]) =>
+      honourRulings(all, [r], d).kept.length
+    expect(keptUnder({ pageIndex: 378, quote: 'Egg ‘or the Circle', decision: 'as-printed' })).toBe(
+      2
+    )
+    expect(
+      keptUnder({ pageIndex: 377, quote: 'symbol of the world', decision: 'as-printed' })
+    ).toBe(2)
+    expect(keptUnder({ pageIndex: 377, quote: 'Egg ‘or the Circle', decision: 'corrected' })).toBe(
+      2
+    )
+    // A standing ruling holds the query for approval; it files nothing yet.
+    expect(
+      keptUnder({ pageIndex: null, quote: 'Egg ‘or the Circle', decision: 'as-printed' })
+    ).toBe(2)
+  })
+
+  it('is listed on the sheet rather than dropped', () => {
+    const d = egg()
+    const { kept, honoured } = honourRulings(
+      checkDamage(d),
+      [{ pageIndex: 377, quote: 'Egg ‘or the Circle', decision: 'as-printed' }],
+      d
+    )
+    const sheet = damageSheet(kept, d, 'Test', honoured)
+    expect(sheet).toContain('1 honoured by a ruling')
+    expect(sheet).toContain('## Honoured by a ruling')
+    expect(sheet).toContain('`Egg’ or` — p0b0, leaf 377')
   })
 })

@@ -54,6 +54,9 @@ export {
 export {
   checkDamage,
   damageSheet,
+  honourRulings,
+  type DamageRuling,
+  type HonouredFinding,
   type DamageFinding,
   type DamageKind,
   type DamageConfidence
