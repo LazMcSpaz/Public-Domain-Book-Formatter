@@ -23,7 +23,7 @@ for n in $(seq $FROM $TO); do
 done
 # A leaf the scan clipped reads narrower than the book's measure, and neither
 # engine says so: name it here, so its reader can be told (edges.mjs).
-narrow=$(node scripts/reading-kit/edges.mjs $(for n in $(seq $FROM $TO); do echo "$KIT/shots/hi-$(pad $n).png"; done) | grep NARROW)
+narrow=$(node scripts/reading-kit/edges.mjs $(for n in $(seq $FROM $TO); do echo "$KIT/shots/hi-$(pad $n).png"; done) | grep -E "NARROW|SHORT LINES")
 [ -n "$narrow" ] && echo "CLIPPED? $narrow"
 node scripts/reading-kit/brief.mjs "$KIT" "$KIT/ruled-$TAG.json" $FROM $TO 5 || exit 1
 for s in $(seq $FROM 5 $TO); do

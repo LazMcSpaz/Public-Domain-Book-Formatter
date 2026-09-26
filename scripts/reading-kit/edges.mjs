@@ -10,6 +10,8 @@
  * block against the median of them all. A page with its margin intact reads
  * at the book's measure; leaf 52 reads 58 px narrow at 400 DPI, where no other
  * leaf of its first sixty was more than 14. A narrow leaf is printed NARROW.
+ * Far narrower is not a clip but a page of short lines (the Würzburg
+ * register on leaves 79 and 80 reads 300 px short): that is said too.
  * Pure Node (zlib only), 8-bit PNGs as `drive.mjs leaf` writes them.
  */
 import { readFileSync } from 'node:fs'
@@ -101,6 +103,6 @@ for (const o of out) {
   const w = o.right - o.left
   const short = median - w
   console.log(
-    `${o.leaf}\tleft ${o.left}\tright ${o.right}\twidth ${w}\tshort ${short}${short > 25 ? '\tNARROW' : ''}`
+    `${o.leaf}\tleft ${o.left}\tright ${o.right}\twidth ${w}\tshort ${short}${short > 150 ? '\tSHORT LINES (a list, verse or a table: look)' : short > 25 ? '\tNARROW' : ''}`
   )
 }
