@@ -5563,7 +5563,9 @@ async function serve() {
       const now = flag('now')
       const bare = argv.includes('--bare')
       if (!blockId || (!from && was === null)) {
-        throw new Error('correct <blockId> <file> | correct <blockId> --was <text> --now <text>')
+        throw new Error(
+          'correct <blockId|fnN> <file> | correct <blockId|fnN> --was <text> --now <text>'
+        )
       }
 
       let replacement = null
@@ -5592,8 +5594,17 @@ async function serve() {
             assemble.assembleBook(run.transcriptions),
             run.edits ?? []
           )
-          const block = doc.blocks.find((b) => b.id === blockId)
-          if (!block) throw new Error(`No block \`${blockId}\` in this book.`)
+          // A footnote is named by its id (`fn12`, as `notes` hands it back) and
+          // corrected through the `note-text` record, which is what a sweep
+          // writes for one. Wanted when a note-text edit has landed on the
+          // wrong note (its number moved under it) and two notes now carry
+          // the same words, which no sweep can tell apart.
+          const isNote = /^fn\d+$/u.test(blockId)
+          const block = isNote
+            ? doc.footnotes.find((n) => n.id === blockId)
+            : doc.blocks.find((b) => b.id === blockId)
+          if (!block)
+            throw new Error(`No ${isNote ? 'note' : 'block'} \`${blockId}\` in this book.`)
           // With the `<i>` and `<b>` tags on, exactly as `body` hands it back
           // and exactly as `applyEdits` reads it in — a correction typed
           // against the bare text would strip every emphasis in the block.
@@ -5639,7 +5650,10 @@ async function serve() {
             )
           }
 
-          const edits = editsMod.withEdit(run.edits ?? [], { kind: 'text', blockId, text })
+          const edits = editsMod.withEdit(
+            run.edits ?? [],
+            isNote ? { kind: 'note-text', noteId: blockId, text } : { kind: 'text', blockId, text }
+          )
           const next = project.createSavedRun({
             ...run,
             images: new Map(run.images.map((i) => [i.id, i.bytes])),

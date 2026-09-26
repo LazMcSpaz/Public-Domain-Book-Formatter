@@ -285,33 +285,41 @@ function hunks(a: string, b: string): Hunk[] {
 function widen(a: string, b: string, raw: readonly Hunk[]): Hunk[] {
   const n = a.length
   // Widen each to word boundaries. The characters outside a hunk are shared,
-  // so widening moves both sides together.
-  const widened = raw.map((h) => {
+  // so widening moves both sides together — which is true only up to the
+  // next hunk, so that is as far as it may go. Widening past it once moved
+  // the two strings out of step (its characters differ between them), and
+  // the splice duplicated text: a whole note replaced on Isis Vol. II came
+  // out `Franck  : “ Die Kabbal Kabbala.””`. Stopped at a neighbour, two
+  // hunks meet exactly, and merging them keeps both sides in step.
+  const merged: Hunk[] = []
+  raw.forEach((h, k) => {
     let { aFrom, aTo, bFrom, bTo } = h
+    const floor = merged[merged.length - 1]?.aTo ?? 0
+    const ceiling = raw[k + 1]?.aFrom ?? n
     while (
-      aFrom > 0 &&
+      aFrom > floor &&
       isWordChar(a[aFrom - 1]) &&
       (isWordChar(a[aFrom]) || isWordChar(b[bFrom]))
     ) {
       aFrom -= 1
       bFrom -= 1
     }
-    while (aTo < n && isWordChar(a[aTo]) && (isWordChar(a[aTo - 1]) || isWordChar(b[bTo - 1]))) {
+    while (
+      aTo < ceiling &&
+      isWordChar(a[aTo]) &&
+      (isWordChar(a[aTo - 1]) || isWordChar(b[bTo - 1]))
+    ) {
       aTo += 1
       bTo += 1
     }
-    return { aFrom, aTo, bFrom, bTo }
-  })
-  const merged: Hunk[] = []
-  for (const h of widened) {
     const last = merged[merged.length - 1]
-    if (last && h.aFrom <= last.aTo) {
-      last.aTo = Math.max(last.aTo, h.aTo)
-      last.bTo = Math.max(last.bTo, h.bTo)
+    if (last && aFrom <= last.aTo) {
+      last.aTo = aTo
+      last.bTo = bTo
     } else {
-      merged.push({ ...h })
+      merged.push({ aFrom, aTo, bFrom, bTo })
     }
-  }
+  })
   return merged
 }
 

@@ -202,3 +202,39 @@ describe('sweepText keeps the runs a phrase spans', () => {
     )
   })
 })
+
+describe('sweepText: a replacement that shares little with what it replaces', () => {
+  // A stretch widened to whole words moved both strings together, which is
+  // only true across text the two share; nothing stopped it widening into
+  // the next stretch, where they differ, and the splice then duplicated
+  // text. Replacing a whole note on Isis Unveiled Vol. II gave
+  // `Franck  : “ Die Kabbal Kabbala.””` for `Franck : “ Die Kabbala.”`.
+  const cases: [string, string][] = [
+    [
+      'See Olshausen : “ Biblischer Commentar über sämmtliche Schriften des Neuen Testaments,” ii.',
+      'Franck : “ Die Kabbala.”'
+    ],
+    ['the astral body of man', 'one ethereal form of a man'],
+    [
+      'Jacolliot seems to have very logically demonstrated',
+      'Let us remember that Col. Van Kennedy'
+    ],
+    ['a b c d e f', 'fed cab a'],
+    ['Abatur, the Third Life', 'Abatur ; Third ; Life']
+  ]
+  for (const [was, now] of cases) {
+    it(`gives exactly the replacement: ${now}`, () => {
+      expect(sweepText(was, was, now, true).text).toBe(now)
+    })
+  }
+
+  it('keeps a run lying wholly outside the changes', () => {
+    const r = sweepText(
+      'Franck on the <i>Kabbala</i> and Molitor',
+      'Franck on the',
+      'See Franck, on the',
+      true
+    )
+    expect(r.text).toBe('See Franck, on the <i>Kabbala</i> and Molitor')
+  })
+})
