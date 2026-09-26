@@ -389,6 +389,11 @@ function splitWords(blocks: readonly BookBlock[]): DamageFinding[] {
       const right = words[i + 1]!
       const gap = text.slice(left.index + left[0].length, right.index)
       if (gap !== ' ') continue
+      // A word is only letters to this walk, so the `th` of `19th` is a word
+      // of its own and `19th in` would read as `th in`. A token glued to a
+      // digit on either side is part of something longer.
+      if (/\d/u.test(text[left.index - 1] ?? '')) continue
+      if (/\d/u.test(text[right.index + right[0].length] ?? '')) continue
 
       const a = left[0].toLocaleLowerCase()
       const b = right[0].toLocaleLowerCase()
