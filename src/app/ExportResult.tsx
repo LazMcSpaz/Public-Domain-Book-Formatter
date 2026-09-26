@@ -39,6 +39,15 @@ export interface ExportResultProps {
    * is a shelf.
    */
   bank?: { files: BankFile[]; count: number } | null
+  /**
+   * Open the cover studio with everything this screen already knows.
+   *
+   * Offered here because this is the one moment the page count is a *measured*
+   * fact rather than a guess, and the page count is the spine. Sending the user
+   * away with a number to write down was the old answer, and the number is the
+   * commonest thing to get wrong.
+   */
+  onComposeCover?: () => void
 }
 
 export function ExportResult({
@@ -46,7 +55,8 @@ export function ExportResult({
   pdf,
   note,
   savedNote,
-  bank
+  bank,
+  onComposeCover
 }: ExportResultProps): JSX.Element {
   return (
     <div className="result">
@@ -120,6 +130,13 @@ export function ExportResult({
           Your cover needs the final page count for its spine
           {pdf ? `: ${pdf.pageCount} pages.` : ', which the interior would have told you.'}
         </div>
+        {pdf && onComposeCover ? (
+          <div className="actions">
+            <button type="button" onClick={onComposeCover}>
+              Compose the cover — {pdf.pageCount} pages of spine
+            </button>
+          </div>
+        ) : null}
         <ul className="checks">
           {result.validation.checks.map((check) => (
             <li key={check.id} className={check.level}>

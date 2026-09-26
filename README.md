@@ -128,6 +128,27 @@ resumed session is complete rather than degraded.
 - **Real small capitals**, and the ligatures that pdf-lib's embedder cannot
   write widths for.
 
+## Covers
+
+`#cover` is the second arm: the flat KDP sheet — back, spine, front — with the
+spine computed from the page count and the paper, the type set in the same
+embeddable faces as the interior, and the whole thing written as a PDF and
+previewed from its own bytes. It stands alone, so a book this app never set can
+still have a cover; the export screen links into it carrying the _measured_ page
+count, which is the number that sets the spine.
+
+A look — arrangement, palette, faces, ornament — can be banked and applied to
+the next volume, which is how a collection ends up looking like one. Cover art
+can come from a plate already cut out of the book's own scan, from a file of
+your own, from a Replicate model, or from nowhere at all: type, a rule and a
+fleuron is a perfectly good cover for a plain reprint. Whatever the source, the
+picture is held to the same rule as everything else here — it prints at the
+resolution it has, and the app says what that works out to in DPI at the size it
+will be printed rather than quietly enlarging it.
+
+The reasoning, and what is left to do, is in
+[`docs/PLAN-cover.md`](./docs/PLAN-cover.md).
+
 ## The one manual step
 
 Junicode is not on npm — it is not a Google font — so it is not installed by

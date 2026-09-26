@@ -47,7 +47,7 @@ described below is not what was built.)_
 
 ### Non-Goals (handled externally by the user)
 
-- **Book covers** — out of scope. _But the tool must report final page count, which the user needs for spine-width math._
+- ~~**Book covers** — out of scope. _But the tool must report final page count, which the user needs for spine-width math._~~ — **reversed.** The carve-out was the argument: the page count _is_ the spine, this app is the only thing that knows it, and the old answer was to print the number on a screen and send the user elsewhere with it in their head. Everything else a cover needs was already here — the trim, the title and author read off the original title page, plates cut at render resolution, the ornament library, six embeddable faces and the DPI rule. See [`docs/PLAN-cover.md`](./docs/PLAN-cover.md).
 - **Public-domain status verification** — out of scope. The user verifies this elsewhere.
 - **Index regeneration** — templated structure available but optional/low-priority; recreating old indexes is rarely worth it.
 

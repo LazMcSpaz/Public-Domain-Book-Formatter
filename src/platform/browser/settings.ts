@@ -29,6 +29,16 @@ const BANK_STORAGE = 'pdbf.bank'
  * someone, so the credential lives here and the book files never see it.
  */
 const SHELF_STORAGE = 'pdbf.shelf'
+/**
+ * The Replicate token, for making cover art.
+ *
+ * Beside the API key and the shelf token, under exactly the same rules: the
+ * user's own, sent only to Replicate, never written into a book file, never
+ * logged, and never carried across the control channel. A third credential is
+ * a third thing that could be published by accident, so it lives where the
+ * other two live rather than anywhere more convenient.
+ */
+const REPLICATE_STORAGE = 'pdbf.replicate'
 const CONTROL_STORAGE = 'pdbf.control'
 const REVIEW_PREFIX = 'pdbf.review.'
 const CURSOR_PREFIX = 'pdbf.cursor.'
@@ -81,6 +91,17 @@ export function saveApiKey(key: string): void {
   if (!store) return
   if (key.trim()) store.setItem(KEY_STORAGE, key.trim())
   else store.removeItem(KEY_STORAGE)
+}
+
+export function loadReplicateToken(): string {
+  return safeLocalStorage()?.getItem(REPLICATE_STORAGE) ?? ''
+}
+
+export function saveReplicateToken(token: string): void {
+  const store = safeLocalStorage()
+  if (!store) return
+  if (token.trim()) store.setItem(REPLICATE_STORAGE, token.trim())
+  else store.removeItem(REPLICATE_STORAGE)
 }
 
 /** The shelf configuration, or empty strings when it has not been set up. */
