@@ -251,10 +251,10 @@ export function ShelfCarousel(props: ShelfCarouselProps): JSX.Element {
         {books.map((book, i) => {
           // Where this card sits, in steps from the middle; fractional while a
           // finger is on the shelf, so every card answers the drag at once.
-          const d = i - index + drag / -step
+          const x = (i - index) * step + drag
+          const d = x / step
           const far = Math.abs(d)
           if (far > DRAWN_RADIUS) return null
-          const x = (i - index) * step + drag
           const near = Math.min(far, 2)
           const scale = 1 - near * 0.13
           const opacity = far > 2.4 ? 0 : 1 - near * 0.38
