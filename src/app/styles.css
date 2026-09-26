@@ -15,6 +15,12 @@
   --ok: #5cc28a;
   --warn: #e3a55a;
   --err: #ff8f80;
+  --ui: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --surface: linear-gradient(170deg, #1c1c22 0%, #16161b 55%, #131317 100%);
+  --edge: rgb(255 255 255 / 7%);
+  --lift: inset 0 1px 0 rgb(255 255 255 / 6%), 0 26px 50px -32px rgb(0 0 0 / 85%);
+  --well: rgb(255 255 255 / 3.5%);
+  accent-color: var(--accent);
   font-family: ui-serif, Georgia, 'Iowan Old Style', serif;
 }
 
@@ -33,6 +39,10 @@
   --ok: #3f7d4e;
   --warn: #b5651d;
   --err: #a3372c;
+  --surface: linear-gradient(170deg, #ffffff 0%, #fcfbf8 100%);
+  --edge: rgb(60 40 20 / 11%);
+  --lift: inset 0 1px 0 #fff, 0 18px 40px -30px rgb(60 40 20 / 45%);
+  --well: rgb(60 40 20 / 3.5%);
 }
 
 /* Unstyled controls take the ground they sit on. Zero specificity, so every
@@ -3662,4 +3672,573 @@ textarea.galley-plain {
   line-height: 0.82;
   padding: 0.05em 0.06em 0 0;
   font-family: var(--book-heading);
+}
+
+/* === the house style ======================================================
+   The shelf's cards set the look: dark lacquered surfaces with a lit top
+   edge, pills for anything pressed, a sans face for the controls and the
+   book's serif for what is read. This section carries that look to every
+   other screen by restyling the shared parts (panels, options, buttons,
+   fields, bars, tabs, the step rail) rather than screen by screen. It sits
+   last so it wins at equal specificity, and it takes every colour from the
+   tokens, so the light theme follows it without a second copy. */
+
+/* --- the step rail -------------------------------------------------------- */
+.rail {
+  background: linear-gradient(180deg, var(--panel) 0%, var(--bg) 100%);
+  border-right: 1px solid var(--edge);
+  font-family: var(--ui);
+}
+.rail h1 {
+  font-family: ui-serif, Georgia, 'Iowan Old Style', serif;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+}
+.rail h1 small {
+  margin-top: 4px;
+  font-family: var(--ui);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rail ol {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rail li {
+  align-items: center;
+  padding: 8px 10px;
+  margin: 0 -10px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-size: 0.86rem;
+  line-height: 1.3;
+  transition: background 0.2s ease;
+}
+.rail li .dot {
+  border-color: color-mix(in oklab, var(--muted) 45%, transparent);
+}
+.rail li.done .dot {
+  color: var(--accent-ink);
+  box-shadow: 0 0 10px color-mix(in oklab, var(--ok) 55%, transparent);
+}
+.rail li.active {
+  background: color-mix(in oklab, var(--accent) 13%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 28%, transparent);
+}
+.rail li.active .dot {
+  box-shadow: 0 0 12px color-mix(in oklab, var(--accent) 60%, transparent);
+}
+.rail li.gate .label::after {
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+}
+.rail-settings {
+  text-decoration: none;
+  font-family: var(--ui);
+}
+.rail-settings:hover {
+  color: var(--ink);
+}
+
+/* On a phone the rail is a slim bar: the title and the two links on one row,
+   and the steps as a row of dots with only the current step named. It was a
+   list that filled the first screen before a single question was seen. */
+@media (max-width: 860px) {
+  .rail {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'title settings theme'
+      'steps steps steps';
+    align-items: center;
+    column-gap: 10px;
+    row-gap: 10px;
+    padding: 12px 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--edge);
+    background: var(--panel);
+  }
+  .rail h1 {
+    grid-area: title;
+    margin: 0;
+    font-size: 1rem;
+    min-width: 0;
+  }
+  .rail h1 small {
+    margin-top: 1px;
+    font-size: 0.64rem;
+  }
+  .rail-settings {
+    grid-area: settings;
+    margin: 0;
+    font-size: 0.78rem;
+  }
+  .rail .theme-toggle {
+    grid-area: theme;
+    margin: 0;
+  }
+  .rail ol {
+    grid-area: steps;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+  }
+  .rail li {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    flex: none;
+  }
+  .rail li:not(.active) .label {
+    display: none;
+  }
+  .rail li.active {
+    padding: 4px 12px 4px 5px;
+    gap: 8px;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--accent) 13%, transparent);
+    border: 1px solid color-mix(in oklab, var(--accent) 28%, transparent);
+  }
+  .rail li .dot {
+    width: 14px;
+    height: 14px;
+    font-size: 0.5rem;
+  }
+}
+
+/* --- the heading of each step --------------------------------------------- */
+.step-head h2 {
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+.step-head p {
+  max-width: 62ch;
+  font-family: var(--ui);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+@media (max-width: 860px) {
+  .step-head h2 {
+    font-size: 1.55rem;
+  }
+}
+
+/* --- panels ---------------------------------------------------------------
+   Every boxed question, progress block and sheet is one kind of object. */
+.q,
+.progress,
+.drop,
+.proof,
+.galley-page {
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: 22px;
+  box-shadow: var(--lift);
+}
+.q {
+  padding: 24px 26px;
+  margin-bottom: 18px;
+}
+.progress {
+  padding: 24px 26px;
+}
+.q > label.prompt,
+.q > .prompt {
+  font-size: 1.1rem;
+  letter-spacing: -0.005em;
+  margin-bottom: 6px;
+}
+.q .help,
+.hint,
+.progress .meta {
+  font-family: var(--ui);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+.q .help.trailing {
+  border-top-color: var(--edge);
+}
+@media (max-width: 860px) {
+  .q,
+  .progress {
+    padding: 18px;
+    border-radius: 18px;
+  }
+}
+
+/* The drop target reads as a slot to fill rather than a card. */
+.drop {
+  border: 1.5px dashed color-mix(in oklab, var(--muted) 35%, transparent);
+  background: var(--well);
+  box-shadow: none;
+}
+.drop:hover,
+.drop.over {
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+}
+.drop span {
+  font-family: var(--ui);
+}
+
+.resume-note,
+.held-note {
+  border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
+  border-left-width: 1px;
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--accent) 9%, transparent);
+  font-family: var(--ui);
+}
+
+/* --- choices -------------------------------------------------------------- */
+.opts {
+  gap: 10px;
+}
+.opt {
+  align-items: center;
+  padding: 14px 18px;
+  border: 1px solid var(--edge);
+  border-radius: 16px;
+  background: var(--well);
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.25s ease,
+    transform 0.15s ease;
+}
+.opt:hover {
+  background: color-mix(in oklab, var(--accent) 6%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 25%, var(--edge));
+}
+.opt:active {
+  transform: scale(0.995);
+}
+.opt.sel {
+  border-color: color-mix(in oklab, var(--accent) 60%, transparent);
+  background: linear-gradient(
+    100deg,
+    color-mix(in oklab, var(--accent) 17%, transparent),
+    color-mix(in oklab, var(--accent) 5%, transparent)
+  );
+  box-shadow: 0 14px 34px -22px color-mix(in oklab, var(--accent) 90%, transparent);
+}
+.opt input[type='radio'],
+.opt input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  margin: 0;
+}
+.opt .t {
+  font-size: 1rem;
+}
+.opt .d {
+  font-family: var(--ui);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+/* --- buttons ---------------------------------------------------------------
+   The primary action is the lit pill the shelf's cards end in; everything else
+   is a quiet pill beside it. */
+:where(button, select) {
+  border-radius: 999px;
+  font-family: var(--ui);
+  padding: 7px 16px;
+}
+:where(button) {
+  transition:
+    transform 0.15s ease,
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.25s ease;
+}
+:where(button:active:not(:disabled)) {
+  transform: scale(0.97);
+}
+button.primary {
+  font-family: var(--ui);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  border-radius: 999px;
+  padding: 13px 30px;
+  color: var(--accent-ink);
+  background: linear-gradient(
+    100deg,
+    color-mix(in oklab, var(--accent) 76%, #fff) 0%,
+    var(--accent) 100%
+  );
+  box-shadow: 0 14px 32px -16px color-mix(in oklab, var(--accent) 85%, transparent);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.25s ease;
+}
+button.primary:hover:not(:disabled) {
+  box-shadow: 0 18px 38px -14px color-mix(in oklab, var(--accent) 95%, transparent);
+}
+button.primary:active:not(:disabled) {
+  transform: scale(0.97);
+}
+button.ghost {
+  font-family: var(--ui);
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--raise);
+  border-color: var(--edge);
+}
+.actions {
+  gap: 12px;
+}
+.pager button {
+  border-radius: 999px;
+}
+:where(button, select, a, input, textarea):focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 80%, #fff);
+  outline-offset: 2px;
+}
+
+/* --- fields --------------------------------------------------------------- */
+.q input[type='text'],
+.q > textarea,
+.q .fields > textarea,
+.page-edit textarea,
+textarea.galley-plain {
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  background: var(--well);
+  padding: 12px 14px;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.q input[type='text']:focus,
+.q > textarea:focus,
+.q .fields > textarea:focus,
+.page-edit textarea:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--accent) 70%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 18%, transparent);
+}
+.page-edit-row.changed textarea {
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+}
+
+/* --- progress -------------------------------------------------------------- */
+.bar,
+.pager-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--ink) 8%, transparent);
+}
+.bar > i,
+.pager-bar > i {
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--accent) 55%, transparent),
+    var(--accent)
+  );
+  box-shadow: 0 0 12px color-mix(in oklab, var(--accent) 55%, transparent);
+}
+
+/* --- evidence and tables --------------------------------------------------- */
+.q-evidence img {
+  border-color: var(--edge);
+  border-radius: 10px;
+  box-shadow: 0 12px 26px -16px rgb(0 0 0 / 70%);
+}
+.q-evidence figcaption {
+  font-family: var(--ui);
+}
+.terms th {
+  font-family: var(--ui);
+  letter-spacing: 0.1em;
+  border-bottom-color: var(--edge);
+}
+.terms td {
+  border-bottom-color: var(--edge);
+}
+.terms tbody tr {
+  transition: background 0.15s ease;
+}
+.terms tbody tr:hover {
+  background: var(--well);
+}
+.terms img {
+  border-radius: 6px;
+}
+.terms .sig {
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.terms .verdict button {
+  border-radius: 999px;
+  border-color: var(--edge);
+  background: var(--raise);
+  min-width: 32px;
+}
+.checks .level {
+  border-radius: 999px;
+  font-family: var(--ui);
+  font-weight: 600;
+}
+
+/* --- the workbench ---------------------------------------------------------- */
+.proof-view-toggle {
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: var(--raise);
+}
+.proof-view-toggle button {
+  font-family: var(--ui);
+  border-radius: 999px;
+  padding: 7px 16px;
+  background: transparent;
+}
+.proof-view-toggle button + button {
+  border-left: 0;
+}
+.proof-view-toggle button.selected {
+  color: var(--accent-ink);
+  background: linear-gradient(100deg, color-mix(in oklab, var(--accent) 76%, #fff), var(--accent));
+  box-shadow: 0 8px 20px -12px color-mix(in oklab, var(--accent) 90%, transparent);
+}
+.galley-toolbar {
+  border: 1px solid var(--edge);
+  border-radius: 18px;
+  padding: 8px 12px;
+  background: color-mix(in oklab, var(--panel) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--lift);
+  font-family: var(--ui);
+}
+.galley-toolbar select,
+.galley-toolbar button {
+  border-radius: 999px;
+  border-color: var(--edge);
+  background: var(--raise);
+  padding: 4px 11px;
+}
+.galley-toolbar select:disabled,
+.galley-toolbar button:disabled {
+  background: transparent;
+}
+.galley-toolbar .galley-done {
+  color: var(--accent-ink);
+}
+.galley-active {
+  border-color: color-mix(in oklab, var(--accent) 55%, transparent);
+  border-radius: 14px;
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 10%, transparent);
+}
+.galley-hint {
+  font-family: var(--ui);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(button),
+  .opt,
+  button.primary {
+    transition: none;
+  }
+}
+
+/* The workbench's own small buttons: the same quiet pill, in the control face.
+   Listed by container because each had its own square rule. */
+.proof-bar button,
+.proof-split button,
+.proof-actions button,
+.proof-annotation-bar button,
+.notes-head button,
+.notes-actions button,
+.proof-history button,
+.galley-findbar button,
+.galley-print-bar button,
+.galley-marks-row button,
+.page-edit-head button,
+.proof-outbox button,
+.galley-add button {
+  font-family: var(--ui);
+  border-radius: 999px;
+  border-color: var(--edge);
+  background: var(--raise);
+  padding-inline: 12px;
+}
+.galley-add button {
+  border-style: dashed;
+  background: transparent;
+}
+.proof-bar .proof-flagged {
+  border-color: color-mix(in oklab, var(--accent) 55%, transparent);
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+}
+.proof-bar .proof-flagged.proof-marked {
+  color: var(--accent-ink);
+  border-color: transparent;
+  background: linear-gradient(100deg, color-mix(in oklab, var(--accent) 76%, #fff), var(--accent));
+}
+.galley-outline button {
+  font-family: var(--ui);
+  border-radius: 10px;
+}
+
+/* The notes pass: the same panels as every other gate. */
+.notes-bar,
+.notes-intro,
+.note {
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: 18px;
+  box-shadow: var(--lift);
+}
+.notes-bar {
+  font-family: var(--ui);
+}
+.notes-intro input,
+.notes-intro textarea,
+.note textarea {
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  background: var(--well);
+}
+
+/* A pill is one line: a squeezed one wraps into an oval. */
+.proof-annotation-bar button,
+.proof-split button,
+.proof-bar button,
+.galley-add button {
+  white-space: nowrap;
+}
+@media (max-width: 480px) {
+  .proof-view-toggle {
+    display: flex;
+    width: 100%;
+  }
+  .proof-view-toggle button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 7px 6px;
+    font-size: 0.78rem;
+    line-height: 1.2;
+  }
+  .proof-annotation-bar {
+    flex-wrap: wrap;
+  }
 }
