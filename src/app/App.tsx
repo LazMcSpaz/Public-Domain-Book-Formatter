@@ -139,9 +139,7 @@ import {
   summarize as summarizeOutbox,
   type OutboxSummary,
   type ShelfAbout,
-  shelfProgress,
-  shelfSlug,
-  shelfTitle
+  shelfSlug
 } from '@core/sync'
 import {
   bodyKeyFor,
@@ -203,6 +201,8 @@ import { PreviewPane } from './PreviewPane'
 import { ProofSheet } from './ProofSheet'
 import { BookEditor } from './BookEditor'
 import { BookReader } from './BookReader'
+import { ShelfCarousel } from './ShelfCarousel'
+import { ThemeToggle } from './theme'
 
 /** A cache key that changes whenever the stack that produced the pixels does. */
 function retouchKey(id: string, ops: readonly unknown[]): string {
@@ -1657,13 +1657,6 @@ export function App(): JSX.Element {
   const [shelfBooks, setShelfBooks] = useState<ShelfAbout[]>([])
   const [shelfNote, setShelfNote] = useState<string | null>(null)
   const [shelfBusy, setShelfBusy] = useState(false)
-  /**
-   * The one card opened to show its actions. A card is a summary until it is
-   * tapped; then it extends to offer the ways into the book. One at a time,
-   * because a shelf of sixteen cards each with three buttons is the wall of
-   * chrome the cards exist to replace.
-   */
-  const [openShelfCard, setOpenShelfCard] = useState<string | null>(null)
 
   const saveToShelf = useCallback(
     async (what: string): Promise<void> => {
@@ -4429,6 +4422,7 @@ export function App(): JSX.Element {
         <a className="rail-settings" href="#settings">
           Settings
         </a>
+        <ThemeToggle />
       </nav>
 
       <main className="main">
@@ -4480,88 +4474,14 @@ export function App(): JSX.Element {
                     shelf when you save one from the workbench.
                   </div>
                 ) : (
-                  <ul className="shelf-books">
-                    {shelfBooks.map((book) => {
-                      const progress = shelfProgress(book)
-                      const open = openShelfCard === book.key
-                      const waiting = book.queries?.waiting ?? 0
-                      return (
-                        <li
-                          key={book.key}
-                          className={`shelf-book stage-${progress.stage}${open ? ' open' : ''}`}
-                          style={{ '--progress': progress.fraction } as React.CSSProperties}
-                        >
-                          {/* The whole face of the card is the one control:
-                              a tap opens it, a second tap closes it. The
-                              actions live below, and only on the open card,
-                              so a shelf of sixteen reads as sixteen titles
-                              and not as forty-eight buttons. */}
-                          <button
-                            type="button"
-                            className="shelf-book-face"
-                            aria-expanded={open}
-                            onClick={() => setOpenShelfCard(open ? null : book.key)}
-                          >
-                            <div className="shelf-book-name">{shelfTitle(book)}</div>
-                            <div className="shelf-book-progress">{progress.summary}</div>
-                            <div className="shelf-book-bar" aria-hidden="true">
-                              <span style={{ width: `${Math.round(progress.fraction * 100)}%` }} />
-                            </div>
-                            <div className="shelf-book-what">
-                              {book.pageCount} leaves
-                              {book.corrections > 0 ? ` · ${book.corrections} corrections` : ''}
-                              {book.marked > 0 ? ` · ${book.marked} marked` : ''}
-                              {book.notes > 0 ? ` · ${book.notes} notes` : ''}
-                              {' · '}
-                              {describeAge(book.savedAt)}
-                            </div>
-                          </button>
-                          {open ? (
-                            <div className="shelf-book-more">
-                              {/* Ordered by what the card says is left. A book
-                                  with decisions waiting leads with them; one
-                                  with none leads with reading. Every door is
-                                  the same door a review link opens, so a tap
-                                  and a link cannot land differently. */}
-                              {waiting > 0 ? (
-                                <button
-                                  type="button"
-                                  className="primary"
-                                  disabled={shelfBusy}
-                                  onClick={() => void landFromShelf(book, 'gate-queries')}
-                                >
-                                  Work through the {waiting} {waiting === 1 ? 'query' : 'queries'}
-                                </button>
-                              ) : null}
-                              {/* Reading does not fetch the scan — tens of
-                                  megabytes and ten minutes of OCR that a
-                                  reading pass never looks at. */}
-                              <button
-                                type="button"
-                                className={waiting > 0 ? undefined : 'primary'}
-                                disabled={shelfBusy}
-                                onClick={() => void readFromShelf(book)}
-                              >
-                                Read the book
-                              </button>
-                              <button
-                                type="button"
-                                disabled={shelfBusy}
-                                onClick={() => void openFromShelf(book)}
-                                title={
-                                  book.scanPath
-                                    ? 'Brings the scan down as well, so passages can be checked against the paper'
-                                    : 'The scan is not on the shelf for this book'
-                                }
-                              >
-                                {book.scanPath ? 'Open with the scan' : 'Open the work'}
-                              </button>
-                            </div>
-                          ) : null}
-                        </li>
-                      )
-                    })}
-                  </ul>
+                  <ShelfCarousel
+                    books={shelfBooks}
+                    busy={shelfBusy}
+                    describeAge={describeAge}
+                    onQueries={(book) => void landFromShelf(book, 'gate-queries')}
+                    onRead={(book) => void readFromShelf(book)}
+                    onOpen={(book) => void openFromShelf(book)}
+                  />
                 )}
               </div>
             ) : (

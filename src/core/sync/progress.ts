@@ -94,6 +94,19 @@ export function shelfProgress(about: ShelfAbout): ShelfProgress {
  * extension goes.
  */
 export function shelfTitle(about: Pick<ShelfAbout, 'fileName' | 'dir'>): string {
+  const { title, author } = shelfTitleParts(about)
+  return author ? `${title} · ${author}` : title
+}
+
+/**
+ * The same name as `shelfTitle`, with the title and the author kept apart, so
+ * a card can set the title large and the author under it. `author` is null
+ * when the directory does not name one — the file name is not guessed at.
+ */
+export function shelfTitleParts(about: Pick<ShelfAbout, 'fileName' | 'dir'>): {
+  title: string
+  author: string | null
+} {
   const dir = about.dir ?? ''
   const parts = dir.split('-').filter(Boolean)
   if (parts.length >= 2 && /^[A-Z]/.test(parts[0])) {
@@ -101,12 +114,12 @@ export function shelfTitle(about: Pick<ShelfAbout, 'fileName' | 'dir'>): string 
     const spaced = (s: string) =>
       s.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
     const [author, ...title] = parts
-    return `${spaced(title.join(' '))} · ${spaced(author)}`
+    return { title: spaced(title.join(' ')), author: spaced(author) }
   }
-  return (
+  const title =
     about.fileName
       .replace(/\.(pdf|epub)$/i, '')
       .replace(/[_-]+/g, ' ')
       .trim() || about.fileName
-  )
+  return { title, author: null }
 }

@@ -8,7 +8,10 @@
  * asks for before shipping UI. Needs the dev server up.
  *
  *   node scripts/screenshot-shelf.mjs            → screenshots/shelf.png
- *   node scripts/screenshot-shelf.mjs --open 2   → with the third card open
+ *   node scripts/screenshot-shelf.mjs --at 2     → with the third card in the middle
+ *   node scripts/screenshot-shelf.mjs --drag -90 → mid-swipe, the finger still down
+ *   node scripts/screenshot-shelf.mjs --phone    → at a phone's width
+ *   node scripts/screenshot-shelf.mjs --light    → on the paper ground
  */
 import { chromium } from 'playwright'
 import { mkdirSync } from 'node:fs'
@@ -16,9 +19,12 @@ import { resolve } from 'node:path'
 
 const URL_BASE = process.env.PDBF_URL ?? 'http://localhost:5173'
 const CHROME = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
-const openIndex = process.argv.includes('--open')
-  ? Number(process.argv[process.argv.indexOf('--open') + 1])
-  : -1
+const argOf = (name) =>
+  process.argv.includes(name) ? Number(process.argv[process.argv.indexOf(name) + 1]) : null
+const at = argOf('--at')
+const drag = argOf('--drag')
+const phone = process.argv.includes('--phone')
+const light = process.argv.includes('--light')
 
 const cards = [
   {
@@ -62,13 +68,19 @@ const cards = [
 ]
 
 const browser = await chromium.launch({ executablePath: CHROME })
-const page = await browser.newPage({ viewport: { width: 1000, height: 900 } })
-await page.addInitScript(() => {
+const page = await browser.newPage({
+  viewport: phone ? { width: 390, height: 844 } : { width: 1100, height: 960 },
+  deviceScaleFactor: 2,
+  hasTouch: phone
+})
+await page.addInitScript((light) => {
+  localStorage.setItem('pdbf.theme', light ? 'light' : 'dark')
+  localStorage.removeItem('pdbf.shelf.place')
   localStorage.setItem(
     'pdbf.shelf',
     JSON.stringify({ repo: 'LazMcSpaz/Test-Shelf', branch: 'main', token: 'github_pat_harness' })
   )
-})
+}, light)
 await page.route('https://api.github.com/**', async (route) => {
   const url = route.request().url()
   if (/\/repos\/[^/]+\/[^/]+$/.test(url)) {
@@ -109,18 +121,31 @@ await page.route('https://api.github.com/**', async (route) => {
 })
 
 await page.goto(URL_BASE, { waitUntil: 'networkidle' })
-await page.waitForSelector('.shelf-book', { timeout: 15000 })
-if (openIndex >= 0) {
-  await page.locator('.shelf-book-face').nth(openIndex).click()
-  await page.waitForSelector('.shelf-book-more')
+await page.waitForSelector('.deck-card', { timeout: 15000 })
+if (at !== null) {
+  await page.locator('.deck-dot').nth(at).click()
+}
+await page.waitForTimeout(800)
+if (drag !== null) {
+  const box = await page.locator('.deck-stage').boundingBox()
+  const x = box.x + box.width / 2
+  const y = box.y + box.height * 0.8
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  for (let i = 1; i <= 10; i++) await page.mouse.move(x + (drag * i) / 10, y)
+  await page.waitForTimeout(100)
 }
 mkdirSync(resolve(import.meta.dirname, '..', 'screenshots'), { recursive: true })
-const out = resolve(
-  import.meta.dirname,
-  '..',
-  'screenshots',
-  `shelf${openIndex >= 0 ? '-open' : ''}.png`
-)
-await page.locator('.shelf').screenshot({ path: out })
+const name = [
+  'shelf',
+  at !== null ? `at${at}` : '',
+  drag !== null ? `drag${drag}` : '',
+  phone ? 'phone' : '',
+  light ? 'light' : ''
+]
+  .filter(Boolean)
+  .join('-')
+const out = resolve(import.meta.dirname, '..', 'screenshots', `${name}.png`)
+await page.screenshot({ path: out, fullPage: true })
 console.log(`wrote ${out}`)
 await browser.close()
