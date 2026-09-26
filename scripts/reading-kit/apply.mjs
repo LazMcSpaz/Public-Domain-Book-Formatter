@@ -59,6 +59,50 @@ function wordsLost(was, now) {
   })
 }
 
+// Refuse to sweep a stretch whose readings are not in the run. A sweep is a
+// text replacement over whatever the run holds, so run before `transcribe`
+// has landed the batch (or after it refused) it corrects the unread drafts of
+// those leaves instead, and the next landing buries the edits under text they
+// were never written against. On *The Secret Doctrine* Vol. II that is what
+// happened when a malformed batch was refused and this ran anyway. The test
+// is cheap and needs no new verb: a sample of each leaf's reading must be in
+// the pristine body `drive.mjs body` hands back.
+{
+  const batchPath = `${K}/batch-${tag}.json`
+  if (existsSync(batchPath) && !process.env.SKIP_LANDED_CHECK) {
+    const batch = JSON.parse(readFileSync(batchPath, 'utf8'))
+    const bodyPath = `${K}/.landed-check.json`
+    run(['body', bodyPath])
+    const body = existsSync(bodyPath) ? JSON.parse(readFileSync(bodyPath, 'utf8')) : null
+    const flat = (t) =>
+      String(t)
+        .replace(/<[^>]+>/gu, '')
+        .replace(/\s+/gu, ' ')
+    const haystack = body ? body.pristine.map((b) => flat(b.text)).join(' ') : ''
+    const samples = batch
+      .map((leaf) => {
+        // Footnotes are pulled out of the body at assembly, so only the
+        // body's own blocks can be looked for there.
+        const texts = (leaf.blocks ?? [])
+          .filter((b) => b.kind !== 'footnote')
+          .map((b) => flat(b.text))
+          .filter((t) => t.length > 80)
+        const t = texts[Math.floor(texts.length / 2)]
+        return t ? { leaf: leaf.pageIndex, probe: t.slice(20, 80) } : null
+      })
+      .filter(Boolean)
+    const missing = samples.filter((s) => !haystack.includes(s.probe))
+    if (!body || missing.length > samples.length / 10) {
+      console.log(
+        `REFUSED: ${missing.length} of ${samples.length} leaves in ${tag} do not read as the ` +
+          `batch has them (first: leaf ${missing[0]?.leaf ?? '?'}). Land the batch with ` +
+          '`drive.mjs transcribe` first; nothing was swept or filed.'
+      )
+      process.exit(2)
+    }
+  }
+}
+
 const corrPath = `${K}/corrections-${tag}.json`
 let ok = 0
 let pairs = []
