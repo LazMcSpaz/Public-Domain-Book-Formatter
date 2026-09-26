@@ -196,6 +196,23 @@ const out = draft.map((p) => {
   if (qs.length) page.queries = qs
   return page
 })
+// A footnote left typed as body text keeps its mark at its head, which the
+// engine then counts as a reference in the text, and every note of that mark
+// after it is set one reference early. On Isis Vol. II three leaves did that
+// and 93 of 123 notes stood under the wrong mark, with every count balanced.
+// Named here, where it is one line to fix, rather than found by `pairs`.
+for (const page of out) {
+  for (const b of page.blocks) {
+    if (
+      b.kind !== 'footnote' &&
+      /^(\*{1,3}|†{1,2}|‡{1,2}|§{1,2}|‖|¶)\s/u.test(String(b.text).replace(/<[^>]+>/gu, ''))
+    ) {
+      console.error(
+        `  NOTE?  ${page.pageIndex}  a ${b.kind} opens with a mark: ${String(b.text).slice(0, 60)}`
+      )
+    }
+  }
+}
 writeFileSync(`${K}/batch-${tag}.json`, JSON.stringify(out, null, 1) + '\n')
 writeFileSync(`${K}/queries-${tag}.json`, JSON.stringify(queries, null, 1) + '\n')
 if (cuts.length) writeFileSync(`${K}/cuts-${tag}.json`, JSON.stringify(cuts, null, 1) + '\n')
