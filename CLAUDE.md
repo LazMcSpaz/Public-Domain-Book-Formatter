@@ -984,6 +984,9 @@ npm run check:cache                  # with the dev server up: can a read of a b
                                      #   (it could, and did — twice, one ruling lost)
 node scripts/screenshot-flow.mjs     # drive the wizard headlessly, screenshot each screen
 node scripts/screenshot-cover.mjs    # the cover studio at #cover, front and flat sheet
+node scripts/cover-front.mjs s.json out.png   # a cover whose design is settled,
+                                     #   as a picture: spec in, PNG out, no clicking
+                                     #   (`--sheet` for the whole flat cover)
 ```
 
 Working _on a book_ (see **How the work is actually done**, above):
@@ -2635,6 +2638,29 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   its icon would be judged against something that is not the book — and the
   **DPI is reported** rather than rounded up to look respectable, because a
   picture of a cover uploaded to a printer is a rejected book.
+
+- **Also done**: **the plain board — a frame, a device over the type, and the
+  label arrangement.** What a reprint from one tradition actually wants is the
+  cloth binding's paper label: an emblem, a compact block of type near the head,
+  a border, and an empty board. None of the three existed. **The frame** is
+  struck an eighth of an inch inside the safe line, because trim wanders by up
+  to a sixteenth and a line parallel to the edge is the one place that shows;
+  front only, since a border round the back would run under the rectangle KDP
+  prints the barcode over. It brings `frontTypeArea` with it — the safe area
+  lies _outside_ the frame, so setting type to it would strike a centred line
+  through the border, which is a cover that prints rather than a cover that
+  errors. **The device on the front** is the look's own press mark placed a
+  second time, under its own id: the same artwork prints a third of an inch on
+  the fold and an inch on the board, and one raster serving both is the wrong
+  picture at whichever it was not made for. It is charged against the type's
+  height budget rather than merely offsetting it, so the title is fitted to the
+  space that is left. **`label`** is the arrangement: everything in one block
+  near the head, distinct from `typographic`, which is the jobbing printer's
+  page with the author at the foot and the space between doing the work. The
+  test that the device is _charged_ passed against the reinstated fault first —
+  at 6×9 a short title's size is settled by the measure and the height budget
+  never binds — so the fixture is a tall device over a long title, where it
+  does.
 
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a

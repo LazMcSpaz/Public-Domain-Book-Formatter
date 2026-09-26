@@ -269,6 +269,19 @@ export function lookQuestions(state: CoverInterviewState): Question[] {
       defaultValue: look.rule
     },
     {
+      id: 'cover-frame',
+      type: 'choice',
+      group: 'ornament',
+      prompt: 'A frame round the front cover?',
+      help: 'Struck in the accent colour, an eighth of an inch inside the safe line so a trim that wanders does not show. Front only: the back cover\u2019s border would run under the barcode.',
+      options: [
+        { value: 'none', label: 'No frame' },
+        { value: 'plain', label: 'A plain frame' },
+        { value: 'double', label: 'A double frame' }
+      ],
+      defaultValue: look.frontFrame
+    },
+    {
       id: 'cover-ornament',
       type: 'choice',
       group: 'ornament',
@@ -281,6 +294,19 @@ export function lookQuestions(state: CoverInterviewState): Question[] {
       defaultValue: look.ornamentId ?? ''
     }
   )
+
+  // Likewise: where a book is being set from a press with no device, whether
+  // that device also prints on the front is not a question about this book.
+  if (look.pressMark) {
+    out.push({
+      id: 'cover-mark-front',
+      type: 'confirm',
+      group: 'ornament',
+      prompt: 'Print the mark on the front as well?',
+      help: 'Above the title, at about an inch. It prints at the foot of the spine either way.',
+      defaultValue: look.markOnFront
+    })
+  }
 
   // Never ask what is not relevant yet: below KDP's floor the spine cannot
   // carry text at all, so the question is withdrawn rather than answered and
@@ -523,6 +549,8 @@ export function coverFromAnswers(
     titleFont: text(answers, 'cover-title-font', doc.look.titleFont),
     titleCase: text(answers, 'cover-title-case', doc.look.titleCase),
     rule: text(answers, 'cover-rule', doc.look.rule),
+    frontFrame: text(answers, 'cover-frame', doc.look.frontFrame),
+    markOnFront: flag(answers, 'cover-mark-front', doc.look.markOnFront),
     ornamentId: text(answers, 'cover-ornament', doc.look.ornamentId ?? '') || null,
     groundPattern:
       (text(answers, 'cover-ground-pattern', doc.look.groundPattern ?? '') as GroundPattern | '') ||

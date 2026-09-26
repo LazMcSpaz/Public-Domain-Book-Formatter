@@ -31,7 +31,7 @@
 import type { FontRef, TextMeasurer } from '@core/layout'
 import type { OrnamentArt } from '@core/ornament'
 import { sizeAfterOps } from '@core/image'
-import { worksLabel, type CoverDocument, type Hex } from './document'
+import { worksLabel, type CoverDocument, type FrameStyle, type Hex } from './document'
 import { GROUND_IMAGE_ID, groundPattern, isImageGround, PATTERN_OPACITY } from './patterns'
 import {
   contains,
@@ -204,6 +204,48 @@ export const PRESS_MARK_ID = '__press-mark__'
  * numbers rather than a rule.
  */
 export const MIN_MARK_WIDTH_IN = 0.2
+
+/**
+ * The id the front cover's device is placed under.
+ *
+ * Its own id rather than the spine's, although both draw the same artwork.
+ * The two print at very different sizes — a third of an inch on the fold
+ * against an inch or more on the board — and the renderer rasterises a mark at
+ * the size it was placed at, so one raster serving both would be wrong at
+ * whichever it was not made for.
+ */
+export const FRONT_MARK_ID = '__front-mark__'
+
+/**
+ * How far in from the trim the frame is struck.
+ *
+ * Not the quarter inch the safe area asks for. Trim varies by up to a
+ * sixteenth, and on a line parallel to the edge that variation is the one
+ * place it is plainly visible — a border a sixteenth narrower down one side
+ * than the other reads as a crooked book. An eighth of an inch inside the safe
+ * line, the same wobble is a sixteenth in three eighths and nobody sees it.
+ */
+export const FRAME_INSET_IN = 0.375
+
+/**
+ * How much clear space the frame keeps between itself and the type.
+ *
+ * Without it the type box is still the safe area, which is *outside* the
+ * frame — so a centred line long enough to fill the measure would be struck
+ * through by the frame's own sides.
+ */
+export const FRAME_CLEARANCE_IN = 0.14
+
+const FRAME_PLAIN_PT = 1.25
+const FRAME_DOUBLE_OUTER_PT = 1.5
+const FRAME_DOUBLE_INNER_PT = 0.6
+const FRAME_DOUBLE_GAP_PT = 3.5
+
+/** How wide the front's device prints, as a share of the type's own measure. */
+const FRONT_MARK_FRACTION = 0.2
+
+/** And never wider than this, however wide the trim is. */
+const FRONT_MARK_MAX_IN = 1.4
 
 /** Title sizes are searched in this range, largest first. */
 const TITLE_MAX_PT = 64
@@ -453,6 +495,89 @@ export function fitArt(
   }
 }
 
+/**
+ * The area of the front panel type may occupy.
+ *
+ * The safe area, unless a frame is struck — in which case it is whatever the
+ * frame leaves, because the safe area lies *outside* the frame and setting to
+ * it would run a centred line of any length through the border.
+ */
+export function frontTypeArea(geometry: CoverGeometry, frame: FrameStyle): Rect {
+  if (frame === 'none') return geometry.frontSafe
+  const inset = FRAME_INSET_IN + FRAME_CLEARANCE_IN
+  const panel = geometry.front
+  return {
+    x: panel.x + inset,
+    y: panel.y + inset,
+    width: panel.width - inset * 2,
+    height: panel.height - inset * 2
+  }
+}
+
+/** Four fills making the outline of a rectangle, drawn inside its own edge. */
+function strokeRect(
+  items: CoverItem[],
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  thickness: number,
+  color: Hex
+): void {
+  if (width <= thickness * 2 || height <= thickness * 2) return
+  const bar = (bx: number, by: number, bw: number, bh: number): FillItem => ({
+    kind: 'fill',
+    xPt: bx,
+    yPt: by,
+    widthPt: bw,
+    heightPt: bh,
+    color
+  })
+  // Sides drawn between the two horizontals rather than corner to corner: at
+  // this thickness an overlapped corner is invisible, and a butted one stays
+  // right if the frame is ever drawn at partial opacity.
+  items.push(bar(x, y, width, thickness))
+  items.push(bar(x, y + height - thickness, width, thickness))
+  items.push(bar(x, y + thickness, thickness, height - thickness * 2))
+  items.push(bar(x + width - thickness, y + thickness, thickness, height - thickness * 2))
+}
+
+/**
+ * The frame round the front cover, in the accent colour.
+ *
+ * Drawn after the picture so it sits on top of a bled one, and before the
+ * type, which it must never touch — `frontTypeArea` is what keeps them apart.
+ */
+function drawFrontFrame(
+  items: CoverItem[],
+  geometry: CoverGeometry,
+  style: FrameStyle,
+  color: Hex
+): void {
+  if (style === 'none') return
+  const panel = geometry.front
+  const x = pt(panel.x + FRAME_INSET_IN)
+  const y = pt(panel.y + FRAME_INSET_IN)
+  const width = pt(panel.width - FRAME_INSET_IN * 2)
+  const height = pt(panel.height - FRAME_INSET_IN * 2)
+
+  if (style === 'plain') {
+    strokeRect(items, x, y, width, height, FRAME_PLAIN_PT, color)
+    return
+  }
+  strokeRect(items, x, y, width, height, FRAME_DOUBLE_OUTER_PT, color)
+  const step = FRAME_DOUBLE_OUTER_PT + FRAME_DOUBLE_GAP_PT
+  strokeRect(
+    items,
+    x + step,
+    y + step,
+    width - step * 2,
+    height - step * 2,
+    FRAME_DOUBLE_INNER_PT,
+    color
+  )
+}
+
 function ruleItem(
   x: number,
   y: number,
@@ -608,7 +733,7 @@ export function composeCover(doc: CoverDocument, options: ComposeOptions): Compo
   const hasArt = Boolean(art.id) && sized.width > 0 && sized.height > 0
 
   let arrangement = look.arrangement
-  if (!hasArt && arrangement !== 'typographic') {
+  if (!hasArt && arrangement !== 'typographic' && arrangement !== 'label') {
     warnings.push(
       `The "${arrangement}" arrangement wants a picture and none is chosen; the front was set typographically instead.`
     )
@@ -644,7 +769,9 @@ function layFrontCover(
 ): PlacedArt | null {
   const { look, content } = doc
   const palette = look.palette
-  const safe = geometry.frontSafe
+  // Not `geometry.frontSafe`: a frame is struck inside the safe line, so where
+  // type may go is whatever the frame leaves. Unframed the two are the same.
+  const safe = frontTypeArea(geometry, look.frontFrame)
   const panel = geometry.front
   const smallCaps = look.titleCase === 'small-caps' && measurer.hasSmallCaps(look.titleFont)
   if (look.titleCase === 'small-caps' && !smallCaps) {
@@ -734,6 +861,13 @@ function layFrontCover(
     }
   }
 
+  // --- the frame ---------------------------------------------------------
+  //
+  // After the picture, so a bled plate is framed rather than covering the
+  // border, and before the type, which `frontTypeArea` has already kept clear
+  // of it.
+  drawFrontFrame(items, geometry, look.frontFrame, palette.accent)
+
   // --- the band, over the art -------------------------------------------
   let typeTop = pt(safe.y)
   let typeBox = { widthPt: pt(safe.width), heightPt: pt(safe.height) }
@@ -770,6 +904,13 @@ function layFrontCover(
     typeBox = { widthPt: pt(safe.width), heightPt: pt(safe.height * 0.22) }
   } else if (arrangement === 'classic-centered') {
     typeBox = { widthPt: pt(safe.width), heightPt: pt(safe.height * 0.38) }
+  } else if (arrangement === 'label') {
+    // A label sits near the head and holds everything: the empty board below
+    // it is the design, so the block must not drift down into it. Started a
+    // little below the safe line rather than on it, because type hard against
+    // a frame reads as having been pushed there.
+    typeTop = pt(safe.y + safe.height * 0.06)
+    typeBox = { widthPt: pt(safe.width), heightPt: pt(safe.height * 0.34) }
   } else {
     // Typographic. With no picture to balance against, type starting at the top
     // safe line reads as a page that lost its illustration. The old jobbing
@@ -781,6 +922,32 @@ function layFrontCover(
   }
 
   let y = typeTop
+
+  // --- the device, over the type ------------------------------------------
+  //
+  // Placed before anything else and charged against the type's own height
+  // budget, so the title is fitted to the space that is actually left rather
+  // than to the space there would have been without it.
+  if (look.markOnFront && look.pressMark) {
+    const mark = look.pressMark
+    const widthIn = Math.min(safe.width * FRONT_MARK_FRACTION, FRONT_MARK_MAX_IN)
+    const heightIn = widthIn * (mark.heightPx / mark.widthPx)
+    items.push({
+      kind: 'image',
+      id: FRONT_MARK_ID,
+      xPt: pt(panel.x + panel.width / 2) - pt(widthIn) / 2,
+      yPt: y,
+      widthPt: pt(widthIn),
+      heightPt: pt(heightIn),
+      srcX: 0,
+      srcY: 0,
+      srcWidth: mark.widthPx,
+      srcHeight: mark.heightPx
+    })
+    const consumed = pt(heightIn) + pt(widthIn) * 0.32
+    y += consumed
+    typeBox = { widthPt: typeBox.widthPt, heightPt: Math.max(0, typeBox.heightPt - consumed) }
+  }
 
   // --- series line -------------------------------------------------------
   if (content.series.trim()) {
@@ -841,7 +1008,7 @@ function layFrontCover(
     // No rule above the titles. The pair is closed underneath and open at the
     // top, so the series line above it reads as belonging to the cover rather
     // than being boxed in with the titles.
-    const ruleWidth = geometry.frontSafe.width * 0.62
+    const ruleWidth = safe.width * 0.62
     y += labelSize * 0.5
 
     const fitted = fitTitlesTogether(
@@ -931,7 +1098,7 @@ function layFrontCover(
       look.rule,
       geometry.front,
       y,
-      geometry.frontSafe.width * 0.5,
+      safe.width * 0.5,
       overArt ? palette.overArt : palette.accent,
       ornament
     )
@@ -974,7 +1141,7 @@ function layFrontCover(
       font,
       sizePt: size,
       xPt: pt(panel.x + panel.width / 2) - width / 2,
-      yPt: pt(geometry.frontSafe.y + geometry.frontSafe.height) - metrics.descent,
+      yPt: pt(safe.y + safe.height) - metrics.descent,
       color: overArt ? palette.overArt : palette.ink,
       widthPt: width,
       ascentPt: metrics.ascent,

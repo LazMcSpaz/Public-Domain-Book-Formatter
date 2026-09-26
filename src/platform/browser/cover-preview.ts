@@ -23,6 +23,7 @@ import type { ComposedCover, CoverDocument } from '@core/cover'
 import {
   composeCover,
   DEFAULT_ICON_WIDTH_PX,
+  FRONT_MARK_ID,
   frontIconPlan,
   GROUND_IMAGE_ID,
   GROUND_IMAGE_SRC,
@@ -99,16 +100,22 @@ async function buildCover(
   // because its pixels depend on where the composer put it: the size is read
   // back off the placed rectangle so the device is drawn at the resolution it
   // prints at, and tinted with the look's own accent.
+  //
+  // Once per placement, not once per look: the same artwork prints a third of
+  // an inch wide on the fold and an inch or more on the board, and a raster
+  // made for one of those is the wrong picture at the other — too coarse going
+  // up, pixels thrown away coming down.
   const images = new Map(options.images ?? [])
-  const markItem = composed.items.find((i) => i.kind === 'image' && i.id === PRESS_MARK_ID)
-  if (markItem && markItem.kind === 'image' && doc.look.pressMark) {
+  for (const id of [PRESS_MARK_ID, FRONT_MARK_ID]) {
+    const markItem = composed.items.find((i) => i.kind === 'image' && i.id === id)
+    if (!markItem || markItem.kind !== 'image' || !doc.look.pressMark) continue
     const mark = await renderPressMark({
       dataUrl: doc.look.pressMark.dataUrl,
       widthIn: markItem.widthPt / 72,
       heightIn: markItem.heightPt / 72,
       color: doc.look.palette.accent
     })
-    images.set(PRESS_MARK_ID, mark.bytes)
+    images.set(id, mark.bytes)
     // The composer sized the item from the *source's* proportions; the raster
     // may have fewer pixels than were asked for, and the writer crops by the
     // source rectangle, so it has to be told what actually came back.

@@ -37,13 +37,26 @@ export type Arrangement =
   | 'full-bleed'
   /** No picture at all: type, rule and ornament, in the jobbing-printer manner. */
   | 'typographic'
+  /**
+   * The label cover: every word held in one block near the head, and the rest
+   * of the board left empty.
+   *
+   * Distinct from `typographic`, which is the jobbing-printer's page — title
+   * at the head, author at the foot, and the space between them doing the
+   * work. This is the cloth binding's paper label, and the difference is
+   * whether the type is one thing or two. It is what a series of reprints from
+   * one tradition usually wants, because a device over a compact block is a
+   * mark on a plain board rather than a decoration on a busy one.
+   */
+  | 'label'
 
 export const ARRANGEMENTS: readonly Arrangement[] = [
   'classic-centered',
   'plate-window',
   'banded',
   'full-bleed',
-  'typographic'
+  'typographic',
+  'label'
 ]
 
 export const ARRANGEMENT_LABEL: Readonly<Record<Arrangement, string>> = {
@@ -51,7 +64,8 @@ export const ARRANGEMENT_LABEL: Readonly<Record<Arrangement, string>> = {
   'plate-window': 'Plate in a window, type around it',
   banded: 'Banded — a title panel over the art',
   'full-bleed': 'Full-bleed art with the type over it',
-  typographic: 'Typographic — no picture'
+  typographic: 'Typographic — no picture',
+  label: 'Label — all the type in one block near the head'
 }
 
 /** How a title is set. */
@@ -76,6 +90,20 @@ export interface CoverPalette {
 
 /** A rule under or around the type. */
 export type RuleStyle = 'none' | 'single' | 'double' | 'ornamented'
+
+/**
+ * A frame struck round the front cover's border.
+ *
+ * The oldest device on a printed board, and the one that does most for a
+ * reprint that has no picture: it turns an empty panel into a deliberate one.
+ * Front only, and that is not an oversight — a frame round the back cover
+ * would run straight through the rectangle KDP prints the barcode over, so the
+ * one panel where it cannot be drawn honestly is the one where it would be
+ * covered up.
+ */
+export type FrameStyle = 'none' | 'plain' | 'double'
+
+export const FRAME_STYLES: readonly FrameStyle[] = ['none', 'plain', 'double']
 
 /**
  * The reusable look — what a *collection* shares.
@@ -104,6 +132,8 @@ export interface CoverLook {
    */
   titleSizePt: number | null
   rule: RuleStyle
+  /** A frame round the front cover's border, struck in the accent colour. */
+  frontFrame: FrameStyle
   /** Ornament id from the shipped library, or null. */
   ornamentId: string | null
   /** Whether the spine carries the title and author (thickness permitting). */
@@ -138,6 +168,17 @@ export interface CoverLook {
    * stays sharp on a fold three-eighths of an inch wide.
    */
   pressMark: PressMark | null
+  /**
+   * Whether that mark also prints on the front, above the type.
+   *
+   * A second decision rather than a consequence of having a mark, because the
+   * two placements say different things: on the spine a device is a
+   * publisher's signature, and on the front it is part of the design — an
+   * emblem the book is *about*, as often as not, which is why a series of
+   * reprints from one tradition wants it and a general list does not. Part of
+   * the look, so a collection cannot have it on volume one and not volume two.
+   */
+  markOnFront: boolean
   /**
    * A texture across the whole wrap, or none.
    *
@@ -255,11 +296,13 @@ export function defaultLook(): CoverLook {
     titleCase: 'small-caps',
     titleSizePt: null,
     rule: 'single',
+    frontFrame: 'none',
     ornamentId: null,
     spineText: true,
     imprintOnFront: false,
     announceWorks: false,
     pressMark: null,
+    markOnFront: false,
     groundPattern: null
   }
 }
@@ -363,11 +406,13 @@ export function normalizeLook(raw: unknown): CoverLook {
     titleCase: oneOf(raw['titleCase'], ['as-typed', 'upper', 'small-caps'] as const, d.titleCase),
     titleSizePt: typeof size === 'number' && Number.isFinite(size) && size > 0 ? size : null,
     rule: oneOf(raw['rule'], ['none', 'single', 'double', 'ornamented'] as const, d.rule),
+    frontFrame: oneOf(raw['frontFrame'], FRAME_STYLES, d.frontFrame),
     ornamentId: typeof raw['ornamentId'] === 'string' ? raw['ornamentId'] : null,
     spineText: bool(raw['spineText'], d.spineText),
     imprintOnFront: bool(raw['imprintOnFront'], d.imprintOnFront),
     announceWorks: bool(raw['announceWorks'], d.announceWorks),
     pressMark: normalizeMark(raw['pressMark']),
+    markOnFront: bool(raw['markOnFront'], d.markOnFront),
     groundPattern: (GROUND_PATTERNS as readonly string[]).includes(raw['groundPattern'] as string)
       ? (raw['groundPattern'] as GroundPattern)
       : null
