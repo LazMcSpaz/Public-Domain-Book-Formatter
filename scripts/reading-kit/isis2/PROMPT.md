@@ -27,6 +27,12 @@ To look closer, crop the render: `node scripts/reading-kit/crop.mjs <image> WORK
 - **Opening quotation marks**: ours renders `“` as `¢`, `«`, `*` or `‘‘`. The page sets a thin space inside its quotation marks in many places; set what you see.
 - **The draft leaves every line-end hyphen and its space in** (`alle- gorical`): join them, keeping a hyphen only in a real compound.
 - **The draft types a paragraph's last lines `footnote`** at the foot of a leaf with no notes: those are `paragraph`.
+- **The draft cuts paragraphs where the text layer's lines misled it.** A block that continues the one before it on the same leaf (it starts flush left, or mid-sentence, where the one before ends without a full stop) gets `"join": true` in your output; it is folded into the block before it at landing. Where a block runs the first line of the *next* paragraph onto the end of this one, move those words to the start of the next block. A continued footnote split line by line is joined the same way.
+- **The drop capital** at a chapter or preface opening is dropped or misread (`\ A TERE`, `| N`): check the first word of every opening.
+- **Italic runs come out as garbage in ours** (`Z%e` for The, `Zo` for to, `Met/odists`, `Awbala`, `Za/mud`): italic initials read as `Z`, `/`, `aw`. Where ours is nonsense, look for an italic run; the second reader usually has the letters right there, and often has figures right that ours misses (`354` against `324`).
+- **The quotation marks print as two straight strokes**; they are `“ ”`. Ours drops an opening `“ ` with its space, and the spaces before `;` `:` `?` `!`, which this compositor keeps in most places (and not all: check each).
+- **Two short notes on one printed line** come as one block: split them with `add`. And **specks print grey where real marks print black**: a grey `*` with no note under it is a speck.
+- **Your first leaf may open with the tail of a word the previous batch set whole** (`kins of`, `ble of`). Leave it and say so in your report; it is removed at landing, where both batches are in view.
 - The editor's decisions on Vol. I are in `/home/user/Public-Domain-Books-Storage/books/isis-vol1-vjj34f/rulings.md`, and they govern this volume too: he keeps a great deal as printed and corrects plain compositor's slips. Read it once before your first query.
 
 ## Block kinds
@@ -61,7 +67,7 @@ Every block, corrected or not, with its `i`. Scanner junk (a signature letter, p
 7. **Before raising anything, read the whole block it sits in and the blocks either side**, and look for the same word or construction elsewhere on your leaves. A finding the paragraph settles is not a query.
 8. Anything that is genuinely the editor's — the book contradicting itself, a sentence that does not construe — `kind: "inconsistent"` or `"unclear"`, transcribed as printed, **no fix proposed**.
 9. A word broken by a hyphen across two blocks **or across two leaves** is set whole in the first block and removed from the second, as earlier readers of this book did. If it is broken across the **last** leaf of your batch, set it whole on that leaf and say so in your report, so the next batch removes the tail.
-10. If a block holds two paragraphs run together, or one is split across two blocks, do not restructure — correct the text and note it in your report with the leaf and `i`.
+10. If one paragraph is split across two blocks on a leaf, mark the second `"join": true` (see above). If a block holds two paragraphs run together, do not restructure: correct the text and note it in your report with the leaf and `i`.
 11. A block the brief types `table` is regenerated from its cells, so prose written into it is thrown away. If a `table` block is really prose (the contents page is the likeliest), correct the text and **say so in your report**.
 
 Work leaf by leaf. Report back only: blocks changed per leaf, queries by kind, and anything a later batch should know about this book's type or either engine that is not already above.

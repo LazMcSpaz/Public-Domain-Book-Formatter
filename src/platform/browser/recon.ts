@@ -100,6 +100,14 @@ export interface ReconResult {
  */
 export interface ReconPartial {
   pagesDone: number
+  /**
+   * Leaves in the whole book, which is what makes this a checkpoint. Carried
+   * here because the runner is the one place that has opened the file: the
+   * caller once supplied it from React state set only after the run, got 0,
+   * fell back to `pageText.length`, and so wrote every checkpoint as a finished
+   * reading. A recon stopped at leaf 660 of 747 then opened as the whole book.
+   */
+  pageCount: number
   words: OcrWord[]
   pageText: string[]
   thumbnails: Map<number, Blob>
@@ -208,6 +216,7 @@ export async function runRecon(
   const checkpoint = (pagesDone: number): void =>
     onCheckpoint?.({
       pagesDone,
+      pageCount: total,
       words,
       pageText,
       thumbnails: thumbBlobs,

@@ -527,6 +527,20 @@ above the passage** put the thing being decided past the fold on a phone —
 `HELP_TRAILS_AT` now sets long help below the evidence and the options, where
 it reads as the reference it is.
 
+**A recon checkpoint was written as a finished reading, and opened as the
+whole book.** `reconCacheUsable` tells a checkpoint from a finished record by
+`pagesDone < pageCount`, and the one caller that wrote checkpoints supplied
+`pageCount` from React state that is set only after the run, so it got 0 and
+fell back to `pageText.length`: every checkpoint claimed to be complete. On
+_Isis Unveiled_ Vol. II the servers died at leaf 660 of 747, the reopen was
+handed 660 leaves as the book, and the flow moved on to the identity gate.
+Found only because the scan's own text layer, read for the second witness,
+came back with 747. The runner is the one place that has opened the file, so
+`ReconPartial.pageCount` carries its total now; `drive.mjs cachestat recount
+<scan.pdf>` puts a record's true length back, measured off the file with
+pdf.js, so it resumes rather than starting again. **After any interrupted
+recon, compare the recorded page count with the file's.**
+
 **The PDF in a book's directory is the _export_. The scan is
 `scans/<sha256>.pdf`, and `book.json` names it in `scan.path`.** Handing
 `drive.mjs load` the exported book instead of the scan does not fail: it
@@ -1056,6 +1070,7 @@ node scripts/drive.mjs damage        # marks the printing trade does not set:
                                      #   apostrophes. Free, no pixels needed.
                                      #   `--check` exits non-zero: a gate
 node scripts/drive.mjs runs          # readings held here; `runs drop <n>` removes one
+node scripts/drive.mjs cachestat recount <scan.pdf>   # a recon record's true length, off the file
 node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` work it
 
 node scripts/drive.mjs figures f.md   # every picture the reading already found,
