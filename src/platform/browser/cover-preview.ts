@@ -11,11 +11,19 @@
  * It returns the bytes as well as the picture, so the studio's download button
  * hands over the file it just showed rather than building a second one.
  *
+ * `renderFrontCover` is the same act with the sheet cropped to the front panel
+ * — the picture of a book rather than the sheet it prints on, which is what the
+ * app needs to show a book on a shelf. It shares `buildCover` with the preview
+ * on purpose: an icon composed by a second path could show a front cover the
+ * PDF does not contain. See `@core/cover/icon` for where it cuts, and why.
+ *
  * Browser-only.
  */
 import type { ComposedCover, CoverDocument } from '@core/cover'
 import {
   composeCover,
+  DEFAULT_ICON_WIDTH_PX,
+  frontIconPlan,
   GROUND_IMAGE_ID,
   GROUND_IMAGE_SRC,
   PRESS_MARK_ID,
@@ -63,10 +71,25 @@ function checkCancelled(signal: AbortSignal | undefined): void {
   if (signal?.aborted) throw new DOMException('Cancelled', 'AbortError')
 }
 
-export async function renderCoverPreview(
+/**
+ * Compose the cover, render the pictures it turned out to need, and write the
+ * PDF.
+ *
+ * Everything up to the bytes, shared by the preview and the icon, because the
+ * two must be looking at the same cover. A second path that composed its own
+ * would be a second renderer by the back door: the icon is the front of the
+ * sheet the studio shows and the button downloads, or it is a picture of
+ * something that was never printed.
+ */
+async function buildCover(
   doc: CoverDocument,
-  options: CoverPreviewOptions = {}
-): Promise<CoverPreview> {
+  options: CoverPreviewOptions
+): Promise<{
+  composed: ComposedCover
+  validation: CoverValidationReport
+  pdf: CoverPdfResult
+  substitutions: [string, string][]
+}> {
   const fonts = await fontTableFor([doc.look.titleFont, doc.look.authorFont, doc.look.bodyFont])
   checkCancelled(options.signal)
 
@@ -126,33 +149,106 @@ export async function renderCoverPreview(
       : { pageCountMeasured: options.pageCountMeasured })
   })
 
-  const { url, widthPx, heightPx } = await rasterize(pdf.bytes, options.scale ?? 2, options.signal)
+  return { composed, validation, pdf, substitutions: [...fonts.substitutions.entries()] }
+}
+
+export async function renderCoverPreview(
+  doc: CoverDocument,
+  options: CoverPreviewOptions = {}
+): Promise<CoverPreview> {
+  const built = await buildCover(doc, options)
+  const raster = await rasterize(built.pdf.bytes, options.scale ?? 2, options.signal)
 
   return {
-    url,
-    widthPx,
-    heightPx,
-    bytes: pdf.bytes,
-    composed,
-    validation,
-    pdf,
-    substitutions: [...fonts.substitutions.entries()]
+    url: URL.createObjectURL(raster.blob),
+    widthPx: raster.widthPx,
+    heightPx: raster.heightPx,
+    bytes: built.pdf.bytes,
+    ...built
+  }
+}
+
+export interface FrontCoverOptions {
+  /**
+   * How wide the icon should be, in pixels. Clamped by `frontIconPlan`, and the
+   * height follows from the trim rather than from anything asked for here.
+   */
+  widthPx?: number
+  /** PNG bytes for the cover's picture, keyed by `CoverArt.id`. */
+  images?: ReadonlyMap<string, Uint8Array>
+  pageCountMeasured?: boolean
+  signal?: AbortSignal
+}
+
+export interface FrontCover {
+  /**
+   * PNG bytes, **not** an object URL.
+   *
+   * An icon exists to be *kept* — written into a book file, put on the shelf,
+   * shown on a card weeks later — and a `blob:` URL names a Blob in the tab
+   * that minted it, so a stored one resolves to nothing and looks exactly like
+   * a cover that failed to render. Same rule the recon cache runs on: store
+   * bytes, mint URLs at the point of use.
+   */
+  bytes: Uint8Array
+  widthPx: number
+  heightPx: number
+  /** Across the printed front cover. A screen figure: see `frontIconPlan`. */
+  dpi: number
+  composed: ComposedCover
+  validation: CoverValidationReport
+  pdf: CoverPdfResult
+  substitutions: [string, string][]
+}
+
+/**
+ * The front panel alone, cut out of the rendered sheet.
+ *
+ * What the app needs to show a book as a book. The cover is composed and
+ * written exactly as the studio writes it, and only the rasterising differs:
+ * pdf.js is given the crop's offset and a canvas the size of the crop, so a
+ * 2400-pixel icon of a 700-page book does not also rasterise the back cover
+ * and the spine to throw them away.
+ */
+export async function renderFrontCover(
+  doc: CoverDocument,
+  options: FrontCoverOptions = {}
+): Promise<FrontCover> {
+  const built = await buildCover(doc, options)
+  const plan = frontIconPlan(built.composed.geometry, options.widthPx ?? DEFAULT_ICON_WIDTH_PX)
+  const raster = await rasterize(built.pdf.bytes, plan.scale, options.signal, plan)
+  const bytes = new Uint8Array(await raster.blob.arrayBuffer())
+
+  return {
+    bytes,
+    widthPx: raster.widthPx,
+    heightPx: raster.heightPx,
+    dpi: plan.dpi,
+    ...built
   }
 }
 
 async function rasterize(
   bytes: Uint8Array,
   scale: number,
-  signal: AbortSignal | undefined
-): Promise<{ url: string; widthPx: number; heightPx: number }> {
+  signal: AbortSignal | undefined,
+  /** A window onto the sheet, in points from its top-left. Omitted: all of it. */
+  crop?: { xPt: number; yPt: number; widthPx: number; heightPx: number }
+): Promise<{ blob: Blob; widthPx: number; heightPx: number }> {
   const pdf = await openPdf(bytes.buffer.slice(0) as ArrayBuffer)
   try {
     checkCancelled(signal)
     const page = await pdf.getPage(1)
-    const viewport = page.getViewport({ scale })
+    // The offsets are in device pixels and shift the whole page, so a negative
+    // offset moves the crop's corner to the canvas's. pdf.js clips to the
+    // canvas, which is what keeps the cost proportional to the picture wanted
+    // rather than to the sheet.
+    const viewport = crop
+      ? page.getViewport({ scale, offsetX: -crop.xPt * scale, offsetY: -crop.yPt * scale })
+      : page.getViewport({ scale })
     const canvas = document.createElement('canvas')
-    canvas.width = Math.ceil(viewport.width)
-    canvas.height = Math.ceil(viewport.height)
+    canvas.width = crop ? crop.widthPx : Math.ceil(viewport.width)
+    canvas.height = crop ? crop.heightPx : Math.ceil(viewport.height)
     const ctx = canvas.getContext('2d')
     if (!ctx) throw new Error('Could not acquire a 2D canvas context')
     // Not white: a cover's ground is painted by the composer, and filling white
@@ -162,7 +258,7 @@ async function rasterize(
 
     const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
     if (!blob) throw new Error('Could not encode the cover preview')
-    return { url: URL.createObjectURL(blob), widthPx: canvas.width, heightPx: canvas.height }
+    return { blob, widthPx: canvas.width, heightPx: canvas.height }
   } finally {
     await pdf.destroy()
   }

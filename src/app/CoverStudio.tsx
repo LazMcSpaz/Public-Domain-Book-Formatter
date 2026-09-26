@@ -29,6 +29,7 @@ import {
   describeGeometry,
   describeProvenance,
   coverGeometry,
+  MAX_ICON_WIDTH_PX,
   newSavedCoverLook,
   requiredPixels,
   SUGGESTED_ART_MODELS,
@@ -40,10 +41,11 @@ import {
 } from '@core/cover'
 import { fixedWidthMeasurer } from '@core/layout'
 import { QuestionView } from './QuestionView'
-import { downloadPdf } from '../platform/browser/download'
+import { downloadPdf, downloadPng } from '../platform/browser/download'
 import {
   releaseCoverPreview,
   renderCoverPreview,
+  renderFrontCover,
   type CoverPreview
 } from '../platform/browser/cover-preview'
 import { listCoverLooks, saveCoverLook } from '../platform/browser/run-store'
@@ -99,15 +101,34 @@ function CoverGroup({ id, children }: { id: string; children: React.ReactNode })
   )
 }
 
-function fileName(doc: CoverDocument): string {
+/**
+ * What a downloaded file is called.
+ *
+ * The suffix carries the *kind* as well as the extension, because a PNG of the
+ * front cover and the cover file itself end up in the same downloads folder and
+ * only the name distinguishes them. Uploading the wrong one to KDP is a
+ * rejection at best.
+ */
+function fileName(doc: CoverDocument, suffix: string): string {
   const slug =
     doc.content.title
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
       .slice(0, 60) || 'cover'
-  return `${slug}-cover.pdf`
+  return `${slug}-${suffix}`
 }
+
+/**
+ * How wide a downloaded front cover is rendered, in DPI across the trim.
+ *
+ * Computed from the trim rather than fixed in pixels, so a 5×8 and an 8.5×11
+ * both come out at the same density instead of the same size. 300 is print
+ * standard, which this is not — it is a picture of the front, and the number is
+ * reported rather than implied. Very wide trims meet `MAX_ICON_WIDTH_PX` first
+ * and come out a little softer, which the note says.
+ */
+const FRONT_PNG_DPI = 300
 
 export function CoverStudio({ onClose }: { onClose: () => void }): JSX.Element {
   const handoff = useMemo(() => takeCoverHandoffFacts(), [])
@@ -142,6 +163,8 @@ export function CoverStudio({ onClose }: { onClose: () => void }): JSX.Element {
   const [genNotes, setGenNotes] = useState<string[]>([])
   const [lookName, setLookName] = useState('')
   const [savedNote, setSavedNote] = useState<string | null>(null)
+  const [frontNote, setFrontNote] = useState<string | null>(null)
+  const [frontBusy, setFrontBusy] = useState(false)
   /**
    * Why the picture the user chose is not on the cover.
    *
@@ -296,6 +319,29 @@ export function CoverStudio({ onClose }: { onClose: () => void }): JSX.Element {
       return null
     }
   }, [doc.trimSize, doc.pageCount, doc.paper])
+
+  // The front panel on its own, as a picture. The other button hands over the
+  // printable sheet; this one is the book as it looks in a hand, which is what
+  // anything that *lists* books needs and what the flat sheet cannot be cropped
+  // into by eye without cutting into the bleed or the fold.
+  const downloadFront = useCallback(async () => {
+    setFrontBusy(true)
+    setFrontNote(null)
+    try {
+      const asked = Math.round((geometry?.trim.widthIn ?? 6) * FRONT_PNG_DPI)
+      const front = await renderFrontCover(doc, { images: artBytes, widthPx: asked })
+      downloadPng(front.bytes, fileName(doc, 'front.png'))
+      setFrontNote(
+        `${front.widthPx} × ${front.heightPx} px, ${Math.round(front.dpi)} DPI across the ` +
+          `printed front${asked > MAX_ICON_WIDTH_PX ? ' (capped)' : ''}. A picture of the ` +
+          `cover, not a cover file.`
+      )
+    } catch (error) {
+      setFrontNote(error instanceof Error ? error.message : String(error))
+    } finally {
+      setFrontBusy(false)
+    }
+  }, [doc, artBytes, geometry])
 
   const frame = useMemo(() => artFrame(doc, fixedWidthMeasurer()), [doc])
 
@@ -670,11 +716,15 @@ export function CoverStudio({ onClose }: { onClose: () => void }): JSX.Element {
                 <button
                   type="button"
                   className="primary"
-                  onClick={() => downloadPdf(preview.bytes, fileName(doc))}
+                  onClick={() => downloadPdf(preview.bytes, fileName(doc, 'cover.pdf'))}
                 >
                   Download the cover
                 </button>
+                <button type="button" disabled={frontBusy} onClick={() => void downloadFront()}>
+                  {frontBusy ? 'Rendering the front…' : 'Front cover as a picture'}
+                </button>
               </div>
+              {frontNote ? <div className="help">{frontNote}</div> : null}
               {preview.pdf.missingImages.length > 0 ? (
                 <div className="help warn">
                   The picture was placed but its pixels never arrived, so nothing was drawn there.

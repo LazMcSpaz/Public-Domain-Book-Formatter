@@ -6,10 +6,12 @@
  * change ships with a picture of the cover it produces rather than a hope.
  *
  * What it exercises, in order: an empty studio, a filled-in typographic cover,
- * and the picture path end to end — a plate uploaded, cropped to the frame,
- * embedded, and measured for DPI at the size it prints. The last one is the
- * whole point: everything before it is text, and the picture is where a cover
- * gets expensive to be wrong about.
+ * the picture path end to end — a plate uploaded, cropped to the frame,
+ * embedded, and measured for DPI at the size it prints — and the front cover cut
+ * out on its own. The picture path is the one that matters most: everything
+ * before it is text, and the picture is where a cover gets expensive to be wrong
+ * about. The front crop is here because it is the only part of this arm whose
+ * output is judged by looking at it rather than by a number.
  *
  *   npm run dev
  *   node scripts/screenshot-cover.mjs
@@ -143,6 +145,16 @@ await page.locator('.cover-preview').screenshot({ path: `${OUT}/cover-with-plate
 
 const checks = await page.locator('.checks li').allTextContents()
 console.log(checks.map((c) => `  ${c}`).join('\n'))
+
+// The front cover on its own — the picture the app shows a book *as*. Taken
+// through the button rather than by cropping the screenshot, because the point
+// of the plan in `@core/cover/icon` is that the cut lands on the trim and not
+// on the bleed, and a crop measured here would only be testing this script.
+const download = page.waitForEvent('download')
+await page.getByRole('button', { name: 'Front cover as a picture' }).click()
+const front = await download
+await front.saveAs(`${OUT}/cover-front.png`)
+console.log(`\n  front: ${(await page.locator('.cover-preview .help').last().textContent()) ?? ''}`)
 
 await browser.close()
 

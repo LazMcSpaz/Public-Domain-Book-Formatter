@@ -2621,6 +2621,21 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   assumed**, exactly as the batch endpoint is: if a browser may not call it the
   question withdraws itself and the other three doors are undiminished.
 
+- **Also done**: **the front cover on its own** (`src/core/cover/icon.ts`,
+  `renderFrontCover`). A cover file is a flat sheet — back, spine, front, plus
+  the bleed the printer cuts off — which is what KDP wants and is nothing like
+  what a person recognises as a book. Anywhere books are _listed_, including
+  this app's own shelf, needs the front panel trimmed. It is cut out of the
+  rendered sheet rather than composed separately, so an icon cannot show a front
+  cover the PDF does not contain, and pdf.js is given the crop's offset and a
+  canvas the size of the crop so a large icon of a long book does not rasterise
+  the back cover to throw it away. Two things the pure module exists to get
+  right: the cut lands on the **trim, not the bleed** — an eighth of an inch of
+  artwork nobody will ever see, at the wrong proportion, so a cover judged by
+  its icon would be judged against something that is not the book — and the
+  **DPI is reported** rather than rounded up to look respectable, because a
+  picture of a cover uploaded to a printer is a rejected book.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with
