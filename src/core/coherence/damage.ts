@@ -93,8 +93,8 @@ export interface DamageFinding {
   /**
    * What the book's own vocabulary says the words were: `description`.
    *
-   * Present only on an `attested` finding, and **never applied by anything in
-   * this module**. It is the hypothesis, carried so a sheet can show it beside
+   * Present on every split word, including the `shape` tier where one half
+   * is a common word, and **never applied by anything in this module**. It is the hypothesis, carried so a sheet can show it beside
    * the evidence that produced it.
    */
   expected?: string
@@ -124,6 +124,22 @@ const JOINED_FLOOR = 2
 
 /** The shortest fragment worth pairing. Below this, ordinary words collide. */
 const MIN_FRAGMENT = 2
+
+/**
+ * A lower-case letter standing alone that no English sentence sets as a word.
+ *
+ * `a` is a word and `I` is written upper case, so a lower-case `i` or `t`
+ * standing alone is a piece of something: `i t would`, `t hat one`. Only
+ * lower case counts, because upper-case letters are what a book uses for
+ * variables and sets (`X as Y`, `set B`) and those are words in their place.
+ */
+const LONE_LETTER = /^[b-z]$/u
+
+/** A word set with an initial capital and the rest lower case. */
+const TITLE_CASE = /^\p{Lu}[\p{Ll}\p{M}'’-]+$/u
+
+/** Words that stand before a letter when the letter itself is the subject. */
+const NAMES_A_LETTER = new Set(['the', 'a', 'an', 'to', 'of', 'and', 'or', 'as', 'letter'])
 
 /**
  * Abbreviations that legitimately take a full stop mid-sentence.
@@ -350,6 +366,15 @@ function vocabulary(blocks: readonly BookBlock[]): Map<string, number> {
  * The space must be exactly one and it must be a space — a line break carries
  * no claim about whether the words are one, and a book with a hard break
  * inside a block would flag on every line of it.
+ *
+ * **Both halves rare is `attested`; one half rare is `shape`.** The strict
+ * rule returned nothing on the same volume while it still held `i t`,
+ * `t hat`, `be fore` and `let ters`: a split whose half is a common word
+ * (`be`, `let`) or a single letter never passes a test that needs both
+ * halves rare. So a second tier takes a pair where only one half is rare, or
+ * is a lone lower-case letter, and the joined word is the book's. It is a
+ * place to look rather than a verdict, because a common word beside a rare
+ * one is sometimes just two words: `came in sight` is not `insight`.
  */
 function splitWords(blocks: readonly BookBlock[]): DamageFinding[] {
   const seen = vocabulary(blocks)
@@ -367,11 +392,30 @@ function splitWords(blocks: readonly BookBlock[]): DamageFinding[] {
 
       const a = left[0].toLocaleLowerCase()
       const b = right[0].toLocaleLowerCase()
-      if (a.length < MIN_FRAGMENT || b.length < MIN_FRAGMENT) continue
-
       const joined = a + b
       if (count(joined) < JOINED_FLOOR) continue
-      if (count(a) >= FRAGMENT_CEILING || count(b) >= FRAGMENT_CEILING) continue
+      // Two title-case halves are a name, `Sakya Muni` or `Du Bois`, however
+      // the book elsewhere runs them together. Capitals throughout are a
+      // heading, where a split is still a split.
+      if (TITLE_CASE.test(left[0]) && TITLE_CASE.test(right[0])) continue
+
+      const rare = (raw: string, word: string): boolean =>
+        raw.length < MIN_FRAGMENT ? LONE_LETTER.test(raw) : count(word) < FRAGMENT_CEILING
+      const rareA = rare(left[0], a)
+      const rareB = rare(right[0], b)
+      const strict = a.length >= MIN_FRAGMENT && b.length >= MIN_FRAGMENT && rareA && rareB
+      if (!strict) {
+        // The loose tier: one rare half is enough, but a single letter that
+        // is a word (`a`, `I`, a variable) never takes part — `a part` is two
+        // words, where `i t` is a word broken twice over.
+        if (!rareA && !rareB) continue
+        if ((a.length < MIN_FRAGMENT && !rareA) || (b.length < MIN_FRAGMENT && !rareB)) continue
+        // A lone letter after an article or preposition is a letter being
+        // named (`the m and the n`), and one before a stop is an abbreviation
+        // or an initial (`turn to p. 47`).
+        if (b.length < MIN_FRAGMENT && NAMES_A_LETTER.has(a)) continue
+        if (b.length < MIN_FRAGMENT && text[right.index + 1] === '.') continue
+      }
 
       const at = left.index
       const end = right.index + right[0].length
@@ -384,7 +428,7 @@ function splitWords(blocks: readonly BookBlock[]): DamageFinding[] {
           `the book sets ${joined} ${count(joined)} times, ` +
           `${a} ${count(a)} and ${b} ${count(b)}`,
         context: around(text, at, end - at),
-        confidence: 'attested',
+        confidence: strict ? 'attested' : 'shape',
         expected: joined
       })
     }
