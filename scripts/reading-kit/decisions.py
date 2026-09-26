@@ -14,6 +14,7 @@ def drive(*args):
 def js(out):
     try: return json.loads(out[out.index('{'):])
     except Exception: return None
+sys.argv[1] = os.path.abspath(sys.argv[1])
 D = json.load(open(sys.argv[1]))
 phase = sys.argv[2]
 log = open(f'{sys.argv[1]}.{phase}.log', 'a')
