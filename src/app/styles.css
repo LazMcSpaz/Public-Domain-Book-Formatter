@@ -723,24 +723,24 @@ body {
   letter-spacing: 0.06em;
   padding: 3px 0;
   border-radius: 4px;
-  background: #e6e2d8;
-  color: #5c5546;
+  background: color-mix(in oklab, var(--muted) 18%, var(--panel));
+  color: var(--muted);
 }
 .checks li.ok .level {
-  background: #dfe8db;
-  color: #3f5c37;
+  background: color-mix(in oklab, var(--ok) 18%, var(--panel));
+  color: var(--ok);
 }
 .checks li.warn .level {
-  background: #f2e6cd;
-  color: #7a5b1e;
+  background: color-mix(in oklab, var(--warn) 18%, var(--panel));
+  color: var(--warn);
 }
 .checks li.pending .level {
-  background: #e4e6ea;
-  color: #4d5560;
+  background: color-mix(in oklab, var(--muted) 14%, var(--panel));
+  color: var(--muted);
 }
 .checks li.fail .level {
-  background: #f0dad6;
-  color: #8c2f22;
+  background: color-mix(in oklab, var(--err) 18%, var(--panel));
+  color: var(--err);
 }
 .checks .check-label {
   font-weight: 600;
