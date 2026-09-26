@@ -117,6 +117,69 @@ describe('a word the conversion split', () => {
   })
 })
 
+/**
+ * The loose tier: a split one of whose halves is a common word or a letter.
+ *
+ * All four came out of _Patterns_ Vol. I after the strict rule had reported
+ * nothing on it. Each fixture carries the halves often enough that the strict
+ * rule is blind to it, which is the condition the tier exists for.
+ */
+describe('a word split where one half is an ordinary word', () => {
+  const common = [
+    'It was before the war, and before the flood, and before anything.',
+    'Let it be. Let it be so. Let it be said. Let it be.',
+    'The letters were read. The letters were burnt.',
+    'He knew that it was so, and that it was late, and that it was over.',
+    'I think it is. I know it is. I said it is.'
+  ]
+  const found = (line: string) => of(build([...common, line]), 'split-word')
+
+  it.each([
+    ['as he had been be fore the trance', 'be fore', 'before'],
+    ['repeating the let ters of the alphabet', 'let ters', 'letters'],
+    ['this suggests t hat one of the differences', 't hat', 'that'],
+    ['in a deep trance, i t would be difficult', 'i t', 'it']
+  ])('finds `%s`, as a place to look rather than a verdict', (line, split, joined) => {
+    const hits = found(line)
+    expect(hits.map((f) => f.found)).toEqual([split])
+    expect(hits[0]!.expected).toBe(joined)
+    expect(hits[0]!.confidence).toBe('shape')
+  })
+
+  it('keeps a split with two rare halves attested', () => {
+    const hits = of(
+      build(['The description was long.', 'Another description.', 'Two of descrip tion.']),
+      'split-word'
+    )
+    expect(hits[0]!.confidence).toBe('attested')
+  })
+
+  it('leaves a letter named as a letter alone', () => {
+    const words = ['The theme was them.', 'Then them, then them again.']
+    expect(of(build([...words, 'Here the m and the n are convertible.']), 'split-word')).toEqual([])
+  })
+
+  it('leaves an abbreviation after a word alone', () => {
+    // `see` is no article, so only the stop after the letter tells `see p.`
+    // from `seep`.
+    const words = ['The water will seep.', 'It will seep again.']
+    expect(of(build([...words, 'For the rest, see p. 47 of it.']), 'split-word')).toEqual([])
+  })
+
+  it('leaves a two-word name alone', () => {
+    const words = ['The sakyamuni legend.', 'Of sakyamuni again.']
+    expect(of(build([...words, 'A biography of Sakya Muni, the Buddha.']), 'split-word')).toEqual(
+      []
+    )
+  })
+
+  it('leaves a word beside an article alone', () => {
+    // `a` is a word, never the rare half: `a part` is two words.
+    const words = ['It was apart from us.', 'We stood apart.', 'A part of it.']
+    expect(of(build([...words, 'He was a part of the whole.']), 'split-word')).toEqual([])
+  })
+})
+
 /** A full stop no compositor sets. */
 describe('a stray full stop', () => {
   it('reports a comma the conversion read as a period', () => {
