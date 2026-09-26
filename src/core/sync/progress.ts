@@ -78,3 +78,35 @@ export function shelfProgress(about: ShelfAbout): ShelfProgress {
     summary: `Read; ${q.waiting} of ${q.raised} queries waiting${held}.`
   }
 }
+
+/**
+ * A name to put on a card.
+ *
+ * The card carries no title of its own (the real one is settled at the export
+ * gate, long after the card is first written), so the name is read off what
+ * there is. The directory comes first: a person renamed it to be read, as
+ * `Blavatsky-TheSecretDoctrineVolI-tup`, where the file under it is often a
+ * SHA-256 and printed as sixty-four hex digits on a phone. Author, then the
+ * title in capitals-run-together, then a short tag; the tag goes, and each
+ * run of capitals is spaced out. A directory not in that shape (the computed
+ * `isis-vol1-vjj34f`, starting lower case) is not guessed at, and the file
+ * name is made readable instead: dashes and underscores become spaces and the
+ * extension goes.
+ */
+export function shelfTitle(about: Pick<ShelfAbout, 'fileName' | 'dir'>): string {
+  const dir = about.dir ?? ''
+  const parts = dir.split('-').filter(Boolean)
+  if (parts.length >= 2 && /^[A-Z]/.test(parts[0])) {
+    if (parts.length >= 3 && /^[a-z0-9]{3,8}$/.test(parts[parts.length - 1])) parts.pop()
+    const spaced = (s: string) =>
+      s.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2')
+    const [author, ...title] = parts
+    return `${spaced(title.join(' '))} · ${spaced(author)}`
+  }
+  return (
+    about.fileName
+      .replace(/\.(pdf|epub)$/i, '')
+      .replace(/[_-]+/g, ' ')
+      .trim() || about.fileName
+  )
+}

@@ -21,7 +21,15 @@ const openIndex = process.argv.includes('--open')
   : -1
 
 const cards = [
-  { dir: 'a', fileName: 'the-human-aura.pdf', pageCount: 96, complete: false, read: 0 },
+  {
+    // A renamed directory over a file named by its digest, as most of the
+    // real shelf is: the card is named from the directory.
+    dir: 'Blavatsky-TheTheosophicalGlossary-1s37ewg',
+    fileName: 'c77f699e62cfb22ddae9c6dc67b110d9187d107bdd7a65557690479df6aa62e1.pdf',
+    pageCount: 390,
+    complete: false,
+    read: 0
+  },
   {
     dir: 'b',
     fileName: 'isis-unveiled-vol1.pdf',
@@ -31,7 +39,7 @@ const cards = [
     corrections: 120
   },
   {
-    dir: 'c',
+    dir: 'Blavatsky-TheSecretDoctrineVolI-tup',
     fileName: 'blavatsky-secret-doctrine-vol1-tup.pdf',
     pageCount: 720,
     complete: true,

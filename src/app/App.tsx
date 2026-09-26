@@ -140,7 +140,8 @@ import {
   type OutboxSummary,
   type ShelfAbout,
   shelfProgress,
-  shelfSlug
+  shelfSlug,
+  shelfTitle
 } from '@core/sync'
 import {
   bodyKeyFor,
@@ -1825,20 +1826,6 @@ export function App(): JSX.Element {
       setShelfBusy(false)
     }
   }, [])
-
-  /**
-   * A title to put on a card, from the file name the book was read under.
-   *
-   * The catalogue card carries no title of its own — the real one is settled at
-   * the export gate, long after the card is first written — so this is the file
-   * name made readable rather than a claim about the book. Dashes and
-   * underscores become spaces and the extension goes; nothing else is guessed.
-   */
-  const titleOfBook = (fileName: string): string =>
-    fileName
-      .replace(/\.(pdf|epub)$/i, '')
-      .replace(/[_-]+/g, ' ')
-      .trim() || fileName
 
   /** What is on the shelf, listed once at start-up when one is configured. */
   useEffect(() => {
@@ -4515,7 +4502,7 @@ export function App(): JSX.Element {
                             aria-expanded={open}
                             onClick={() => setOpenShelfCard(open ? null : book.key)}
                           >
-                            <div className="shelf-book-name">{titleOfBook(book.fileName)}</div>
+                            <div className="shelf-book-name">{shelfTitle(book)}</div>
                             <div className="shelf-book-progress">{progress.summary}</div>
                             <div className="shelf-book-bar" aria-hidden="true">
                               <span style={{ width: `${Math.round(progress.fraction * 100)}%` }} />
