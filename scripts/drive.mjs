@@ -337,9 +337,21 @@ async function serve() {
             // corrections were typed from the bare text.
             text: markup.withMarkup(b.text, b.emphasis, b.strong)
           }))
+        // The book's own footnotes, both faces, carrying the leaf that printed
+        // each: a note's id (`fn12`) does not say, and the corrections sheet
+        // needs it. The editor's notes are left out; they are not corrections.
+        const sayNotes = (notes) =>
+          notes
+            .filter((n) => n.originalMarker)
+            .map((n) => ({
+              id: n.id,
+              leaf: n.pageIndex,
+              text: markup.withMarkup(n.text, n.emphasis, n.strong)
+            }))
         return {
           edited: say(applied.blocks),
           pristine: say(bare.blocks),
+          notes: { edited: sayNotes(applied.footnotes), pristine: sayNotes(bare.footnotes) },
           // What the contents and the running heads will be built from. A
           // chapter opened by a number over a name is one entry here and two
           // heading blocks above, which is worth being able to see rather
@@ -2790,7 +2802,12 @@ async function serve() {
       const built = await page.evaluate(
         async ([repo, existing, title, doc]) => {
           const edits = await import(`/@fs${repo}/src/core/edits/index.ts`)
-          const rows = edits.correctionRows(doc.pristine, doc.edited)
+          // The body and the book's own footnotes: a sheet built from the body alone
+          // listed no note correction at all.
+          const rows = edits.correctionRows(
+            [...doc.pristine, ...(doc.notes?.pristine ?? [])],
+            [...doc.edited, ...(doc.notes?.edited ?? [])]
+          )
           return {
             text: edits.correctionsMarkdown(edits.correctionsHeader(existing, title), rows),
             words: rows.words.length,

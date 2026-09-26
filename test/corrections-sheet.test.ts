@@ -144,3 +144,42 @@ describe('the corrections file', () => {
     )
   })
 })
+
+describe('correctionRows: the book’s own footnotes', () => {
+  // A note is `fnN`, numbered through the book, with nothing in its id to say
+  // which leaf printed it. The sheet was built from the body alone and listed
+  // no note correction at all: 101 of them on The Secret Doctrine Vol. I.
+  const body = [
+    { id: 'p58b1', text: 'the Biblischer Commentar, cited below' },
+    { id: 'p64b2', text: 'can he found in the temple' }
+  ]
+  const notesBefore = [
+    {
+      id: 'fn60',
+      leaf: 58,
+      text: 'See Olshausen : “ Biblischer Commentar über sammtliche Schriften.”'
+    },
+    { id: 'fn61', leaf: 58, text: 'Unchanged note.' }
+  ]
+  const notesAfter = [
+    {
+      id: 'fn60',
+      leaf: 58,
+      text: 'See Olshausen : “ Biblischer Commentar über sämmtliche Schriften.”'
+    },
+    { id: 'fn61', leaf: 58, text: 'Unchanged note.' }
+  ]
+  const editedBody = [body[0]!, { id: 'p64b2', text: 'can be found in the temple' }]
+
+  it('lists a note’s correction on the leaf that printed the note', () => {
+    const rows = correctionRows([...body, ...notesBefore], [...editedBody, ...notesAfter])
+    const note = rows.words.find((r) => r.blockId === 'fn60')
+    expect(note?.leaf).toBe(58)
+    expect(note?.now).toContain('sämmtliche')
+  })
+
+  it('sorts it among the leaves, after the body text of its own leaf', () => {
+    const rows = correctionRows([...body, ...notesBefore], [...editedBody, ...notesAfter])
+    expect(rows.words.map((r) => r.blockId)).toEqual(['fn60', 'p64b2'])
+  })
+})

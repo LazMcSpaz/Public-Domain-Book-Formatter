@@ -25,6 +25,14 @@
 export interface SheetBlock {
   id: string
   text: string
+  /**
+   * The leaf, for a text whose id does not carry one: a footnote is `fn12`,
+   * numbered through the book, and printed on the leaf `pageIndex` names.
+   * Without it a note's corrections could not be placed or sorted, and the
+   * sheet listed none of them: 101 on _The Secret Doctrine_ Vol. I, a sheet
+   * that described the body and was silent about the notes.
+   */
+  leaf?: number
 }
 
 /** One change, with the words either side of it. */
@@ -59,6 +67,10 @@ const placeOf = (id: string): [number, number] => {
   const m = /^p(\d+)b(\d+)/u.exec(id)
   return m ? [Number(m[1]), Number(m[2])] : [Number.MAX_SAFE_INTEGER, 0]
 }
+
+/** Where a text sits: its leaf, and its order on it (a note after the body). */
+const placeOfBlock = (block: SheetBlock): [number, number] =>
+  block.leaf === undefined ? placeOf(block.id) : [block.leaf, Number.MAX_SAFE_INTEGER]
 
 interface Hunk {
   i1: number
@@ -166,7 +178,7 @@ const window = (words: string[], from: number, to: number): string => {
  */
 export function correctionRows(pristine: SheetBlock[], edited: SheetBlock[]): CorrectionRows {
   const before = new Map(pristine.map((b) => [b.id, bare(b.text)]))
-  const rows: { row: CorrectionRow; mark: boolean }[] = []
+  const rows: { row: CorrectionRow; mark: boolean; at: [number, number] }[] = []
   const seen = new Set<string>()
   for (const block of edited) {
     const old = before.get(block.id)
@@ -177,7 +189,7 @@ export function correctionRows(pristine: SheetBlock[], edited: SheetBlock[]): Co
     const b = wordsOf(now)
     for (const h of wordHunks(a, b)) {
       const row: CorrectionRow = {
-        leaf: placeOf(block.id)[0],
+        leaf: placeOfBlock(block)[0],
         blockId: block.id,
         printed: window(a, h.i1, h.i2),
         now: window(b, h.j1, h.j2)
@@ -189,12 +201,12 @@ export function correctionRows(pristine: SheetBlock[], edited: SheetBlock[]): Co
       // correction within three words of a mark puts different words in
       // the two windows, and the mark was being listed as a word change.
       const mark = isMarkRestoration(a.slice(h.i1, h.i2).join(' '), b.slice(h.j1, h.j2).join(' '))
-      rows.push({ row, mark })
+      rows.push({ row, mark, at: placeOfBlock(block) })
     }
   }
   rows.sort((x, y) => {
-    const [lx, bx] = placeOf(x.row.blockId)
-    const [ly, by] = placeOf(y.row.blockId)
+    const [lx, bx] = x.at
+    const [ly, by] = y.at
     return lx - ly || bx - by
   })
   return {

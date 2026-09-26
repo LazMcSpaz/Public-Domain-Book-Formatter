@@ -342,7 +342,12 @@ if (flags.includes('--body') && corrArg && !corrArg.startsWith('--')) {
       ? `${exp.title}*, *${exp.seriesLine}`
       : exp.title
     : basename(dir)
-  const rows = correctionRows(body.pristine, body.edited)
+  // With the footnotes where the body file carries them (`drive.mjs body`
+  // does since it began to): the same rows `drive.mjs corrections` writes.
+  const rows = correctionRows(
+    [...body.pristine, ...(body.notes?.pristine ?? [])],
+    [...body.edited, ...(body.notes?.edited ?? [])]
+  )
   const text = correctionsMarkdown(correctionsHeader(had, title), rows)
   const note = `${rows.words.length} corrections, ${rows.marks.length} reference marks`
   if (had === text) console.log(`  ok      corrections.md  (${note})`)
