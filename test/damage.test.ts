@@ -166,6 +166,13 @@ describe('a word split where one half is an ordinary word', () => {
     expect(of(build([...words, 'For the rest, see p. 47 of it.']), 'split-word')).toEqual([])
   })
 
+  it('leaves an ordinal alone, whose letters the walk sees without their digits', () => {
+    const words = ['A thin line.', 'Very thin indeed.']
+    expect(
+      of(build([...words, 'Given the week beginning Oct. 19th in the Hall.']), 'split-word')
+    ).toEqual([])
+  })
+
   it('leaves a two-word name alone', () => {
     const words = ['The sakyamuni legend.', 'Of sakyamuni again.']
     expect(of(build([...words, 'A biography of Sakya Muni, the Buddha.']), 'split-word')).toEqual(
