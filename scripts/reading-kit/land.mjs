@@ -118,6 +118,32 @@ for (let s = Number(from); s <= Number(to); s += 5) {
   }
 }
 let joinedBlocks = 0
+// An added block's `after` names the `i` the reader saw, so it is resolved to
+// that block *object* before any join takes blocks out of the list: it once
+// was an index into the list after joining, which put a note one block early
+// for every join above it, and several adds sharing one `after` were spliced
+// at the same index in turn and so came out in reverse (Isis Vol. II, the
+// Würzburg register on leaf 79, twenty-four lines added after one block).
+for (const p of draft) {
+  const anchored = new Map()
+  const top = []
+  for (const a of p.added ?? []) {
+    const block = { kind: a.kind, text: a.text }
+    if (a.kind === 'heading' && [1, 2, 3].includes(a.level)) block.level = a.level
+    const at = a.after >= 0 ? p.blocks[a.after] : null
+    if (a.after >= 0 && !at) {
+      console.error(
+        `leaf ${p.pageIndex}: an added block names block ${a.after}, which is not there`
+      )
+      continue
+    }
+    if (at) anchored.set(at, [...(anchored.get(at) ?? []), block])
+    else top.push(block)
+  }
+  delete p.added
+  p.anchored = anchored
+  p.top = top
+}
 for (const p of draft) {
   const kept = []
   for (const b of p.blocks) {
@@ -126,6 +152,10 @@ for (const p of draft) {
       const glue = /[-—]$/u.test(prev.text) ? '' : ' '
       prev.text = `${prev.text.trimEnd()}${glue}${String(b.text).trimStart()}`
       joinedBlocks++
+      // What was to follow the joined block follows what it joined.
+      const after = p.anchored.get(b)
+      if (after) p.anchored.set(prev, [...(p.anchored.get(prev) ?? []), ...after])
+      p.anchored.delete(b)
       continue
     }
     delete b.join
@@ -135,14 +165,16 @@ for (const p of draft) {
 }
 let added = 0
 for (const p of draft) {
-  // Highest `after` first, so each insertion leaves the indices below it alone.
-  for (const a of (p.added ?? []).sort((x, y) => y.after - x.after)) {
-    const block = { kind: a.kind, text: a.text }
-    if (a.kind === 'heading' && [1, 2, 3].includes(a.level)) block.level = a.level
-    p.blocks.splice(Math.max(0, a.after + 1), 0, block)
-    added++
+  const out = [...p.top]
+  for (const b of p.blocks) {
+    out.push(b)
+    // In the order the reader listed them: that is printed order.
+    out.push(...(p.anchored.get(b) ?? []))
   }
-  delete p.added
+  added += out.length - p.blocks.length
+  p.blocks = out
+  delete p.anchored
+  delete p.top
 }
 const out = draft.map((p) => {
   const page = {}
