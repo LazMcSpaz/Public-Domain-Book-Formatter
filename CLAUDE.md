@@ -992,6 +992,9 @@ node scripts/drive.mjs serve &       # hold a browser open, take commands on :77
 node scripts/drive.mjs load <book.json> <scan.pdf>   # from the shelf, not from the device
 node scripts/drive.mjs body out.json # the assembled book: block ids and the exact
                                      #   strings an edit must be written in terms of
+node scripts/drive.mjs notes n.json --full   # the book's own footnotes with their
+                                     #   text: `body` hands back blocks only, and a
+                                     #   count taken without the notes is not a count
 node scripts/drive.mjs ocr 12 16 19  # what OCR reads off named leaves, as plain text;
                                      #   `fresh --clean=gentle` re-reads them through a
                                      #   cleaning preset, on the same path recon takes

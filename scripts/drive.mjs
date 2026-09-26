@@ -1925,12 +1925,19 @@ async function serve() {
      * the wrong order, and the leaf numbers are here so somebody can go and
      * look rather than nod at a total.
      */
-    notes: async ([out = '']) => {
+    notes: async (argv) => {
+      // `notes [out] [--full]` — with `--full` each record carries the note's
+      // whole text in the notation `sweep` matches against, because `body`
+      // hands back blocks only and a count taken without the notes is not a
+      // count of the book.
+      const full = argv.includes('--full')
+      const out = argv.find((a) => !a.startsWith('--')) ?? ''
       const found = await page.evaluate(
-        async ([repo]) => {
+        async ([repo, full]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
           const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const markup = await import(`/@fs${repo}/src/core/transcribe/markup.ts`)
           const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
           const run = await runStore.loadRun(newest.key)
@@ -1944,10 +1951,11 @@ async function serve() {
             pageIndex: n.pageIndex,
             orphaned: n.orphaned,
             words: n.text.split(/\s+/u).filter(Boolean).length,
-            opening: n.text.slice(0, 60)
+            opening: n.text.slice(0, 60),
+            ...(full ? { text: markup.withMarkup(n.text, n.emphasis, n.strong) } : {})
           }))
         },
-        [REPO]
+        [REPO, full]
       )
       if (out) {
         const { writeFile } = await import('node:fs/promises')
