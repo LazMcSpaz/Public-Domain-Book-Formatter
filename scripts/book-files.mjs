@@ -331,7 +331,7 @@ if (flags.includes('--marks') && bodyArg && !bodyArg.startsWith('--')) {
  */
 const corrArg = flags[flags.indexOf('--body') + 1]
 if (flags.includes('--body') && corrArg && !corrArg.startsWith('--')) {
-  const { correctionRows, correctionsHeader, correctionsMarkdown } =
+  const { correctionRows, correctionsHeader, correctionsMarkdown, cutShortBlocks } =
     await import('../src/core/edits/corrections-sheet.ts')
   const body = JSON.parse(readFileSync(corrArg, 'utf8'))
   const path = join(dir, 'corrections.md')
@@ -348,6 +348,13 @@ if (flags.includes('--body') && corrArg && !corrArg.startsWith('--')) {
     [...body.pristine, ...(body.notes?.pristine ?? [])],
     [...body.edited, ...(body.notes?.edited ?? [])]
   )
+  // A paragraph an edit stopped at the page seam: the rest of it is gone from
+  // the book and nothing else notices (cutShortBlocks). Not a stale file but a
+  // damaged book, so it counts against --check whatever the sheet says.
+  for (const c of cutShortBlocks(body.pristine, body.edited)) {
+    stale += 1
+    console.log(`  CUT     ${c.blockId}  ends "…${c.editedEnds}"; printed "…${c.pristineEnds}"`)
+  }
   const text = correctionsMarkdown(correctionsHeader(had, title), rows)
   const note = `${rows.words.length} corrections, ${rows.marks.length} reference marks`
   if (had === text) console.log(`  ok      corrections.md  (${note})`)

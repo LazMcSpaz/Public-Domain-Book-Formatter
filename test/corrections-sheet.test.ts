@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   claimedCounts,
+  cutShortBlocks,
   correctionRows,
   correctionsHeader,
   correctionsMarkdown,
@@ -181,5 +182,44 @@ describe('correctionRows: the book’s own footnotes', () => {
   it('sorts it among the leaves, after the body text of its own leaf', () => {
     const rows = correctionRows([...body, ...notesBefore], [...editedBody, ...notesAfter])
     expect(rows.words.map((r) => r.blockId)).toEqual(['fn60', 'p64b2'])
+  })
+})
+
+describe('cutShortBlocks', () => {
+  // Patterns Vol. II leaf 64: the correction of `over the the door` held the
+  // paragraph only to the page seam, and 800 characters were gone.
+  const pristine = [
+    {
+      id: 'p64b3',
+      text: 'Finally, you could walk over the the door (where you know for certain you last had them with you) and walk into the house again to re-activate the motor programs of the <i>R-operator</i>.'
+    },
+    {
+      id: 'p245b1',
+      text: '. . _ _ _ · -- - · · · ·-··-- ·----- t E? f!.!! .-- ·---- · · · · · · · - · · ---- ·--'
+    },
+    { id: 'p3b1', text: 'A paragraph whose last word was set wrongly as hte end.' }
+  ]
+  const edited = [
+    { id: 'p64b3', text: 'Finally, you could walk over the door' },
+    { id: 'p245b1', text: '* † ‡' },
+    { id: 'p3b1', text: 'A paragraph whose last word was set wrongly as the end.' }
+  ]
+
+  it('names a block an edit stopped at the seam', () => {
+    const cut = cutShortBlocks(pristine, edited)
+    expect(cut.map((c) => c.blockId)).toEqual(['p64b3'])
+    expect(cut[0]!.pristineEnds).toContain('R-operator')
+  })
+
+  it('passes the same block with its tail restored, and a correction at the end', () => {
+    const whole = [
+      {
+        id: 'p64b3',
+        text: 'Finally, you could walk over the door (where you know for certain you last had them with you) and walk into the house again to re-activate the motor programs of the <i>R-operator</i>.'
+      },
+      edited[1]!,
+      edited[2]!
+    ]
+    expect(cutShortBlocks(pristine, whole)).toEqual([])
   })
 })

@@ -263,3 +263,44 @@ export function claimedCounts(text: string): { words: number; marks: number } | 
   const m = COUNTS.exec(text)
   return m ? { words: Number(m[1]), marks: Number(m[2]) } : null
 }
+
+/** A block whose edited text stops short of where its pristine text ends. */
+export interface CutShort {
+  blockId: string
+  /** Where the edited text now stops, and where the printed paragraph did. */
+  editedEnds: string
+  pristineEnds: string
+}
+
+/**
+ * Blocks an edit has cut off before the end of their paragraph.
+ *
+ * A correction written against one leaf's text rather than the assembled block
+ * holds the paragraph only to the page seam, and everything the next leaf
+ * contributed is gone from the book: on _Patterns_ Vol. II eight hundred
+ * characters, on _Clairvoyance_ two paragraph tails, and every check was happy,
+ * because a shorter paragraph looks exactly like a paragraph. CLAUDE.md names
+ * the fault; this is the check for it. A block is named when its edited text
+ * is shorter than the pristine and the pristine's last words are not among the
+ * edited text's last words. A tail of fewer than three real words (a diagram's
+ * garbled caption replaced on purpose) says nothing either way and is skipped.
+ */
+export function cutShortBlocks(pristine: SheetBlock[], edited: SheetBlock[]): CutShort[] {
+  const before = new Map(pristine.map((b) => [b.id, bare(b.text)]))
+  const out: CutShort[] = []
+  for (const block of edited) {
+    const old = before.get(block.id)
+    if (old === undefined) continue
+    const now = bare(block.text)
+    if (now.length >= old.length - 15) continue
+    const lastOld = wordsOf(old)
+      .filter((w) => /\p{L}{2,}/u.test(w))
+      .slice(-8)
+    if (lastOld.length < 3) continue
+    const lastNow = new Set(wordsOf(now).slice(-20))
+    const kept = lastOld.filter((w) => lastNow.has(w)).length
+    if (kept >= 3) continue
+    out.push({ blockId: block.id, editedEnds: now.slice(-50), pristineEnds: old.slice(-50) })
+  }
+  return out
+}

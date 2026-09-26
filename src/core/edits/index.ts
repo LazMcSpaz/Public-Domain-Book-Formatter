@@ -50,6 +50,7 @@ export {
   claimedCounts,
   correctionRows,
   correctionsHeader,
+  cutShortBlocks,
   correctionsMarkdown,
   isMarkRestoration,
   wordHunks,
@@ -57,6 +58,7 @@ export {
   CONTEXT_WORDS,
   type CorrectionRow,
   type CorrectionRows,
+  type CutShort,
   type SheetBlock
 } from './corrections-sheet'
 export {
