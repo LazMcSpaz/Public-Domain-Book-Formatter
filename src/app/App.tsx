@@ -1524,7 +1524,7 @@ export function App(): JSX.Element {
           // anything that cannot be had again.
           onCheckpoint: (p) => {
             if (loadPrefs().keepScans !== false) {
-              void saveReconCheckpoint(key, p, state.pageCount || p.pageText.length, wanted)
+              void saveReconCheckpoint(key, p, p.pageCount, wanted)
             }
           }
         }))

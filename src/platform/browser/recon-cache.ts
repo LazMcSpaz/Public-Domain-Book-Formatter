@@ -270,6 +270,7 @@ export async function loadReconCheckpoint(
     if (!(record.thumbnails instanceof Map)) return null
     return {
       pagesDone,
+      pageCount: record.pageCount,
       words: record.words,
       pageText: record.pageText,
       thumbnails: record.thumbnails,

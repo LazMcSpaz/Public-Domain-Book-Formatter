@@ -4791,7 +4791,58 @@ async function serve() {
      * why a reading is refused. This reads the object store directly and
      * changes nothing.
      */
-    cachestat: async () => {
+    cachestat: async ([sub, scan] = []) => {
+      // `cachestat recount <scan.pdf>` puts a checkpoint's true length back.
+      // Before the fix in `ReconPartial.pageCount` every checkpoint was written
+      // with its own progress as the book's length, so a recon that stopped
+      // at leaf 660 of 747 was stored as 660 of 660 and opened as the whole
+      // book. The count is measured off the file, never typed: pdf.js opens
+      // it here, in Node, and the record keeps every leaf it has so a reopen
+      // resumes at 661 rather than starting again.
+      if (sub === 'recount') {
+        if (!scan) throw new Error('cachestat recount <scan.pdf>')
+        const path = resolve(scan)
+        const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs')
+        const doc = await getDocument({ data: new Uint8Array(readFileSync(path)) }).promise
+        const pages = doc.numPages
+        await doc.destroy()
+        const prefix = `${path.split('/').pop()}\u0000${statSync(path).size}\u0000`
+        return page.evaluate(
+          async ([prefix, pages]) => {
+            const db = await new Promise((ok, no) => {
+              const r = indexedDB.open('pdbf')
+              r.onsuccess = () => ok(r.result)
+              r.onerror = () => no(r.error)
+            })
+            const store = () => db.transaction('recon', 'readwrite').objectStore('recon')
+            const rows = await new Promise((ok, no) => {
+              const r = store().getAll()
+              r.onsuccess = () => ok(r.result)
+              r.onerror = () => no(r.error)
+            })
+            const hits = rows.filter((r) => typeof r.key === 'string' && r.key.startsWith(prefix))
+            if (hits.length !== 1) return { error: `${hits.length} readings of that file here` }
+            const rec = hits[0]
+            const was = { pagesDone: rec.pagesDone, pageCount: rec.pageCount }
+            if (rec.pagesDone > pages)
+              return { error: 'the reading has more leaves than the file', was, pages }
+            if (rec.pageCount === pages) return { unchanged: true, was, pages }
+            rec.pageCount = pages
+            await new Promise((ok, no) => {
+              const r = store().put(rec)
+              r.onsuccess = () => ok()
+              r.onerror = () => no(r.error)
+            })
+            return {
+              key: rec.key,
+              was,
+              now: { pagesDone: rec.pagesDone, pageCount: pages },
+              resumesAt: rec.pagesDone
+            }
+          },
+          [prefix, pages]
+        )
+      }
       return page.evaluate(async () => {
         const db = await new Promise((ok, no) => {
           const r = indexedDB.open('pdbf')
