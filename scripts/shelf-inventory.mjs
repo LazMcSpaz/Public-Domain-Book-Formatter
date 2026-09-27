@@ -119,6 +119,8 @@ const places = [
 // Every pile under sources/, so a file stays in the inventory after --move.
 if (existsSync(`${SHELF}/sources`)) {
   for (const g of readdirSync(`${SHELF}/sources`)) {
+    // A note beside the piles (SHAPES.md) is not a pile.
+    if (!statSync(`${SHELF}/sources/${g}`).isDirectory()) continue
     places.push([`${SHELF}/sources/${g}`, `sources/${g}`])
   }
 }
