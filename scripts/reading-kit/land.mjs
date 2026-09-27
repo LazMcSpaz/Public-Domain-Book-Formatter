@@ -255,6 +255,14 @@ for (let k = 1; k < out.length; k++) {
     console.error(
       `  SEAM?  ${out[k - 1].pageIndex}→${out[k].pageIndex}  …${end.slice(-30)} | ${start.slice(0, 30)}…`
     )
+  } else if (/\p{L}-$/u.test(end)) {
+    // The other half: assembly joins this seam and takes the hyphen out
+    // (`joinText`), which is right for a word the line broke and wrong for
+    // a compound — "spirit-" / "matter" on leaves 435–436 printed as
+    // "spiritmatter". Set a compound whole on the first leaf instead.
+    console.error(
+      `  HYPHEN? ${out[k - 1].pageIndex}→${out[k].pageIndex}  joined without its hyphen: …${end.slice(-30)} | ${start.slice(0, 30)}…`
+    )
   }
 }
 writeFileSync(`${K}/batch-${tag}.json`, JSON.stringify(out, null, 1) + '\n')
