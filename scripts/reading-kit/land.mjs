@@ -211,6 +211,18 @@ for (const page of out) {
         `  NOTE?  ${page.pageIndex}  a ${b.kind} opens with a mark: ${String(b.text).slice(0, 60)}`
       )
     }
+    // A section sign in a citation (`Strom., v. 14, § 110`) is not a reference
+    // mark, and the engine cannot tell: it claims the next § note, and every §
+    // note after it is set one reference early (Isis Vol. II leaf 228, seven
+    // notes). Named here so it is declared bare (`drive.mjs bare`) on landing.
+    if (b.kind !== 'footnote') {
+      for (const m of String(b.text).matchAll(/§\s*\d/gu)) {
+        const at = m.index ?? 0
+        console.error(
+          `  BARE?  ${page.pageIndex}  a § in a citation: …${String(b.text).slice(Math.max(0, at - 40), at + 8)}`
+        )
+      }
+    }
   }
 }
 writeFileSync(`${K}/batch-${tag}.json`, JSON.stringify(out, null, 1) + '\n')
