@@ -13,7 +13,9 @@ import { fixedWidthMeasurer } from '@core/layout'
 import {
   composeCover,
   coverGeometry,
+  coverOffsetX,
   DEFAULT_FIGURE_OPACITY,
+  FIGURE_ANCHOR_X,
   defaultCover,
   figureFrame,
   figureOpacity,
@@ -78,6 +80,41 @@ describe('figureOpacity', () => {
   })
 })
 
+describe('coverOffsetX', () => {
+  // A 100-wide box holding a 150-wide picture: 50 of overflow to spend.
+  it('centres what it is given no anchor for', () => {
+    expect(coverOffsetX(100, 150, 0.5)).toBe(-25)
+  })
+
+  it('shifts the picture so the anchor lands on the centre line', () => {
+    // The anchor sits at 0.6 of the picture, which is 90 from its left edge;
+    // putting that at 50 means drawing from -40.
+    expect(coverOffsetX(100, 150, 0.6)).toBe(-40)
+    // And left of centre pulls it the other way.
+    expect(coverOffsetX(100, 150, 0.4)).toBe(-10)
+  })
+
+  it('never pulls the picture off an edge, however far the anchor asks', () => {
+    // A ground that came away from the trim would leave a band of bare cover,
+    // which is the one thing a bleeding ground exists to prevent.
+    expect(coverOffsetX(100, 150, 0.95)).toBe(-50)
+    expect(coverOffsetX(100, 150, 0.05)).toBe(0)
+  })
+
+  it('has nothing to spend when the picture only just covers the box', () => {
+    expect(coverOffsetX(100, 100, 0.9)).toBe(0)
+  })
+})
+
+describe('FIGURE_ANCHOR_X', () => {
+  it('names a point inside the artwork for every figure', () => {
+    for (const [figure, anchor] of Object.entries(FIGURE_ANCHOR_X)) {
+      expect(anchor, figure).toBeGreaterThan(0)
+      expect(anchor, figure).toBeLessThan(1)
+    }
+  })
+})
+
 describe('the composer', () => {
   it('places nothing when no figure is chosen', () => {
     expect(figureOf(cover())).toBeUndefined()
@@ -106,6 +143,16 @@ describe('the composer', () => {
       })
     )
     expect(item!.opacity).toBe(MIN_FIGURE_OPACITY)
+  })
+
+  it('lets the editor go below the reliable tint, having been told', () => {
+    const item = figureOf(
+      cover((d) => {
+        d.look.groundFigure = 'isis-winged'
+        d.look.groundFigureOpacity = 0.03
+      })
+    )
+    expect(item!.opacity).toBe(0.03)
   })
 
   it('leaves the pixel count to whatever draws it', () => {

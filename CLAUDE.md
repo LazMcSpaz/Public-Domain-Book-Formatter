@@ -2682,6 +2682,22 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   wants the **detail**: fine hatching averages out to nothing at the one size
   and is the whole character of the thing at the other.
 
+  **A figure is not centred by its bounding box** (`FIGURE_ANCHOR_X`,
+  `coverOffsetX`). Isis is a symmetrical statue photographed slightly
+  off-axis, so centre-cropping her box put the sun disc on her head a tenth of
+  an inch right of the centre line the device above the title is printed on,
+  which is plainly visible once the two are meant to agree. The artwork
+  therefore declares which point of itself belongs on that line, and the crop
+  shifts to honour it — clamped at the edges, because a ground pulled far
+  enough to satisfy an anchor would come away from the trim and leave a band
+  of bare cover, which is the one failure a bleeding ground exists to prevent.
+  The number was measured wrongly first, and instructively: the ink centroid
+  of the artwork's topmost band looks like the crown and is in fact the **wing
+  tips**, which rise as high as the horns, so it overshot and moved her too
+  far. Fitted instead against the disc's position on the finished cover, at
+  two anchors, solved for the centre line and confirmed by eye with the tint
+  stretched.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

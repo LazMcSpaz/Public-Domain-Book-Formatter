@@ -23,6 +23,7 @@ import type { ComposedCover, CoverDocument } from '@core/cover'
 import {
   composeCover,
   DEFAULT_ICON_WIDTH_PX,
+  FIGURE_ANCHOR_X,
   FIGURE_SRC,
   FRONT_MARK_ID,
   frontIconPlan,
@@ -152,7 +153,8 @@ async function buildCover(
       src: FIGURE_SRC[doc.look.groundFigure],
       widthIn: figureItem.widthPt / 72,
       heightIn: figureItem.heightPt / 72,
-      color: doc.look.palette.ink
+      color: doc.look.palette.ink,
+      anchorX: FIGURE_ANCHOR_X[doc.look.groundFigure]
     })
     images.set(GROUND_FIGURE_ID, figure.bytes)
     figureItem.srcWidth = figure.widthPx

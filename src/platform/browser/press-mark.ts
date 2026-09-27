@@ -35,6 +35,8 @@
  * Browser-only.
  */
 
+import { coverOffsetX } from '@core/cover'
+
 /** How finely the mark is rendered, in dots per inch of printed size. */
 const MARK_DPI = 600
 
@@ -157,6 +159,14 @@ export async function renderGroundImage(input: {
   heightIn: number
   /** `#rrggbb` — the ink the texture prints in. */
   color: string
+  /**
+   * Which part of the source should sit on the box's centre line, 0–1.
+   *
+   * Omitted for a texture, which has no subject to line anything up with.
+   * A *figure* does — see `FIGURE_ANCHOR_X` — and the crop is shifted to put
+   * it where the design says, clamped so the picture still covers the box.
+   */
+  anchorX?: number
 }): Promise<{ bytes: Uint8Array; widthPx: number; heightPx: number }> {
   const img = await loadMark(input.src)
   const widthPx = Math.max(1, Math.round(input.widthIn * GROUND_DPI))
@@ -174,7 +184,8 @@ export async function renderGroundImage(input: {
   const scale = Math.max(widthPx / naturalW, heightPx / naturalH)
   const drawW = naturalW * scale
   const drawH = naturalH * scale
-  ctx.drawImage(img, (widthPx - drawW) / 2, (heightPx - drawH) / 2, drawW, drawH)
+  const x = coverOffsetX(widthPx, drawW, input.anchorX ?? 0.5)
+  ctx.drawImage(img, x, (heightPx - drawH) / 2, drawW, drawH)
 
   const image = ctx.getImageData(0, 0, widthPx, heightPx)
   const data = image.data

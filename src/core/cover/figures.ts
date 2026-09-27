@@ -51,12 +51,19 @@ export const FIGURE_NOTE: Readonly<Record<GroundFigure, string>> = {
 /**
  * How strongly a figure prints, and the range the question offers.
  *
- * The floor is the press's, not a taste: below it the tint is not reliably
- * held. The ceiling is the design's — past a fifth the figure stops being a
- * ground and starts competing with the title, which is a different cover and
- * should be asked for as one.
+ * The floor is the press's, not a taste. Five per cent is where a
+ * print-on-demand press is *relied* on to hold a tint, and `patterns.ts` says
+ * so; three is where it stops being reliable and starts depending on the
+ * machine, the stock and the day. It is the floor rather than the
+ * recommendation because the editor asked for three with the risk stated, and
+ * on a question of this kind the editor decides and a printed proof settles
+ * it. Below three there is nothing to argue about: it will not print.
+ *
+ * The ceiling is the design's — past a fifth the figure stops being a ground
+ * and starts competing with the title, which is a different cover and should
+ * be asked for as one.
  */
-export const MIN_FIGURE_OPACITY = 0.04
+export const MIN_FIGURE_OPACITY = 0.03
 export const MAX_FIGURE_OPACITY = 0.2
 export const DEFAULT_FIGURE_OPACITY = 0.05
 
@@ -93,6 +100,51 @@ export function figureFramePt(geometry: CoverGeometry): {
     widthPt: pt(frame.width),
     heightPt: pt(frame.height)
   }
+}
+
+/**
+ * Where a figure's own subject sits across its artwork, as a fraction of the
+ * width, and what should therefore land on the panel's centre line.
+ *
+ * A figure is not centred by its bounding box. Isis is a symmetrical statue
+ * photographed very slightly off-axis, so her wing tips put the box's centre
+ * 2.7 per cent of the width to the left of the sun disc on her head — a fifth
+ * of an inch on a 6-inch cover, which is plainly visible when a device is
+ * printed above the title on that same centre line and the two do not agree.
+ *
+ * Measured on the **rendered cover** rather than on the artwork, and the first
+ * attempt is worth recording because it was wrong in a way that looked right.
+ * The obvious measurement is the ink centroid of the artwork's topmost band,
+ * on the reasoning that the top of the figure is the crown and nothing else.
+ * It is not: her wing tips rise as high as her horns do, so that band is the
+ * *wings*, and it answered 0.522 — an overshoot that put the disc a hundredth
+ * of the cover left of centre instead of right of it. Restricted to the middle
+ * third the same band is empty until a tenth of the way down, which is what
+ * says the wings were what it had been reading.
+ *
+ * So the anchor is fitted against the thing it is for: the disc's position on
+ * the finished cover, measured at two anchors and solved for the one that puts
+ * it on the centre line. 0.517 of the cover uncorrected, 0.500 at 0.514 —
+ * confirmed by eye with the tint stretched, where the horns straddle the
+ * centre rather than sitting to one side of it.
+ */
+export const FIGURE_ANCHOR_X: Readonly<Record<GroundFigure, number>> = {
+  'isis-winged': 0.514,
+  'isis-winged-plain': 0.514
+}
+
+/**
+ * Where to draw a covered picture so its anchor lands on the box's centre.
+ *
+ * Clamped to the edges, and that is the whole reason this is a function rather
+ * than a subtraction: a ground pulled far enough across to satisfy its anchor
+ * would come away from the trim on the other side and leave a band of bare
+ * cover down one edge — the one failure a bleeding ground exists to prevent.
+ * An anchor that cannot be honoured is honoured as far as it goes.
+ */
+export function coverOffsetX(boxWidth: number, drawWidth: number, anchorX: number): number {
+  const wanted = boxWidth / 2 - anchorX * drawWidth
+  return Math.min(0, Math.max(boxWidth - drawWidth, wanted))
 }
 
 /** Clamp a requested opacity into what a press will hold. */
