@@ -29,7 +29,13 @@ export {
   type ShelfEntry,
   type ShelfQueries
 } from './shelf'
-export { shelfProgress, shelfTitle, type ShelfProgress, type ShelfStage } from './progress'
+export {
+  shelfProgress,
+  shelfTitle,
+  shelfTitleParts,
+  type ShelfProgress,
+  type ShelfStage
+} from './progress'
 export {
   commutes,
   entriesBetween,

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { prepareInstall } from '../platform/browser/install'
 import { Settings } from './Settings'
+import { applyTheme, readTheme } from './theme'
 import './styles.css'
 
 /**
@@ -42,6 +43,10 @@ function Root(): JSX.Element {
   }
   return <App />
 }
+
+// The ground is chosen before the first paint, so a light preference never
+// flashes dark on the way in.
+applyTheme(readTheme())
 
 // Asked for once, at start-up, and never awaited: an app that waited on a
 // service worker to draw its first screen would be an app that does not open

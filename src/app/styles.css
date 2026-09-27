@@ -1,14 +1,75 @@
 :root {
+  /* Dark is the default ground. The paper look is kept whole under
+     [data-theme='light'], and the reading view's own grounds still win over
+     both while it is mounted. */
+  color-scheme: dark;
+  --bg: #0d0d10;
+  --panel: #16161b;
+  --raise: #1e1e24;
+  --ink: #ecebe6;
+  --muted: #9b988f;
+  --line: #2b2b33;
+  --accent: #d6a064;
+  --accent-ink: #1a1208;
+  --accent-soft: #2a2219;
+  --ok: #5cc28a;
+  --warn: #e3a55a;
+  --err: #ff8f80;
+  --ui: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --surface: linear-gradient(170deg, #1c1c22 0%, #16161b 55%, #131317 100%);
+  --edge: rgb(255 255 255 / 7%);
+  --lift: inset 0 1px 0 rgb(255 255 255 / 6%), 0 26px 50px -32px rgb(0 0 0 / 85%);
+  --well: rgb(255 255 255 / 3.5%);
+  accent-color: var(--accent);
+  font-family: ui-serif, Georgia, 'Iowan Old Style', serif;
+}
+
+:root[data-theme='light'],
+:root[data-reading='paper'] {
+  color-scheme: light;
   --bg: #fbfaf7;
   --panel: #fff;
+  --raise: #f6f3ee;
   --ink: #23201b;
   --muted: #6f675c;
   --line: #e0d9cc;
   --accent: #8a5a2b;
+  --accent-ink: #fff;
   --accent-soft: #f3ebe0;
   --ok: #3f7d4e;
   --warn: #b5651d;
-  font-family: ui-serif, Georgia, 'Iowan Old Style', serif;
+  --err: #a3372c;
+  --surface: linear-gradient(170deg, #ffffff 0%, #fcfbf8 100%);
+  --edge: rgb(60 40 20 / 11%);
+  --lift: inset 0 1px 0 #fff, 0 18px 40px -30px rgb(60 40 20 / 45%);
+  --well: rgb(60 40 20 / 3.5%);
+}
+
+/* Unstyled controls take the ground they sit on. Zero specificity, so every
+   classed rule below still wins. */
+:where(button, select) {
+  color: var(--ink);
+  background-color: var(--raise);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 0.9rem;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+:where(button:hover:not(:disabled)) {
+  border-color: color-mix(in oklab, var(--accent) 45%, var(--line));
+}
+:where(button:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+:where(input, textarea) {
+  color: var(--ink);
+  background-color: var(--panel);
+}
+:where(a) {
+  color: var(--accent);
 }
 
 * {
@@ -366,7 +427,7 @@ body {
   font-size: 0.95rem;
   border: 1px solid var(--line);
   border-radius: 5px;
-  background: #fff;
+  background: var(--panel);
 }
 .q > textarea,
 .q .fields > textarea {
@@ -422,7 +483,7 @@ body {
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #fff;
+  background: var(--panel);
   resize: vertical;
 }
 .page-edit-row.changed textarea {
@@ -446,7 +507,7 @@ body {
   border: 1px solid var(--line);
   border-radius: 4px;
   max-width: 150px;
-  background: #fff;
+  background: var(--panel);
 }
 .q-evidence figcaption {
   font-size: 0.72rem;
@@ -543,7 +604,7 @@ body {
   display: block;
   max-height: 30px;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--panel);
   border-radius: 3px;
 }
 .terms .crop-missing {
@@ -564,7 +625,7 @@ body {
   font-size: 0.66rem;
   font-family: ui-sans-serif, system-ui;
   color: var(--warn);
-  background: #fdf3e8;
+  background: color-mix(in oklab, var(--warn) 12%, var(--panel));
   border-radius: 3px;
   padding: 1px 5px;
   margin-right: 3px;
@@ -579,7 +640,7 @@ body {
   font-size: 0.78rem;
   font-family: ui-sans-serif, system-ui;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--panel);
   border-radius: 4px;
   padding: 3px 8px;
   cursor: pointer;
@@ -609,7 +670,7 @@ body {
   font-size: 0.8rem;
   font-family: ui-sans-serif, system-ui;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--panel);
   border-radius: 5px;
   padding: 5px 11px;
   cursor: pointer;
@@ -622,7 +683,7 @@ body {
   border: 1px solid var(--line);
   border-left: 3px solid var(--accent);
   border-radius: 6px;
-  background: rgba(0, 0, 0, 0.015);
+  background: color-mix(in oklab, var(--ink) 3%, transparent);
   display: flex;
   flex-direction: column;
   gap: 4px;
@@ -672,24 +733,24 @@ body {
   letter-spacing: 0.06em;
   padding: 3px 0;
   border-radius: 4px;
-  background: #e6e2d8;
-  color: #5c5546;
+  background: color-mix(in oklab, var(--muted) 18%, var(--panel));
+  color: var(--muted);
 }
 .checks li.ok .level {
-  background: #dfe8db;
-  color: #3f5c37;
+  background: color-mix(in oklab, var(--ok) 18%, var(--panel));
+  color: var(--ok);
 }
 .checks li.warn .level {
-  background: #f2e6cd;
-  color: #7a5b1e;
+  background: color-mix(in oklab, var(--warn) 18%, var(--panel));
+  color: var(--warn);
 }
 .checks li.pending .level {
-  background: #e4e6ea;
-  color: #4d5560;
+  background: color-mix(in oklab, var(--muted) 14%, var(--panel));
+  color: var(--muted);
 }
 .checks li.fail .level {
-  background: #f0dad6;
-  color: #8c2f22;
+  background: color-mix(in oklab, var(--err) 18%, var(--panel));
+  color: var(--err);
 }
 .checks .check-label {
   font-weight: 600;
@@ -711,7 +772,7 @@ button.primary {
   font-size: 0.95rem;
   font-weight: 600;
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-ink);
   border: 0;
   border-radius: 6px;
   padding: 11px 26px;
@@ -731,7 +792,7 @@ button.ghost {
   cursor: pointer;
 }
 .err {
-  color: #a3372c;
+  color: var(--err);
   font-size: 0.88rem;
 }
 .hint {
@@ -906,7 +967,7 @@ button.ghost {
   display: block;
   height: 420px;
   width: auto;
-  background: #fff;
+  background: var(--panel);
   /* A printed leaf has a spine side; the shadow falls away from it. */
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.16);
 }
@@ -933,7 +994,7 @@ button.ghost {
 .proof {
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--panel);
   overflow: hidden;
 }
 .proof.empty {
@@ -954,7 +1015,7 @@ button.ghost {
   padding: 5px 10px;
   border: 1px solid var(--line);
   border-radius: 5px;
-  background: #fff;
+  background: var(--panel);
   cursor: pointer;
 }
 .proof-bar button:disabled {
@@ -1013,7 +1074,7 @@ button.ghost {
 .proof-scan img {
   width: 100%;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--panel);
   border-radius: 3px;
 }
 .proof-scan figcaption {
@@ -1059,7 +1120,7 @@ button.ghost {
   padding: 3px 6px;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #fff;
+  background: var(--panel);
 }
 .proof-seam {
   font-size: 0.75rem;
@@ -1078,7 +1139,7 @@ button.ghost {
   padding: 3px 8px;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #fff;
+  background: var(--panel);
   color: var(--muted);
   cursor: pointer;
 }
@@ -1164,7 +1225,7 @@ button.ghost {
   padding: 2px 7px;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #fff;
+  background: var(--panel);
   color: var(--muted);
   cursor: pointer;
 }
@@ -1200,7 +1261,7 @@ button.ghost {
   max-height: 180px;
   margin: 0 auto 6px;
   border: 1px solid var(--line);
-  background: #fff;
+  background: var(--panel);
   border-radius: 3px;
 }
 .proof-placement {
@@ -1223,7 +1284,7 @@ button.ghost {
   padding: 3px 4px;
   border: 1px solid var(--line);
   border-radius: 3px;
-  background: #fff;
+  background: var(--panel);
 }
 .proof-placement input[type='number'] {
   width: 5.5em;
@@ -1244,7 +1305,7 @@ button.ghost {
   padding: 3px 8px;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #fff;
+  background: var(--panel);
   color: var(--muted);
   cursor: pointer;
 }
@@ -1261,7 +1322,7 @@ button.ghost {
 .proof-sections {
   border-top: 1px solid var(--line);
   padding: 12px 14px 14px;
-  background: #fbf8f3;
+  background: var(--raise);
 }
 .proof-sections-bar {
   display: flex;
@@ -1277,7 +1338,7 @@ button.ghost {
   padding: 8px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fff;
+  background: var(--panel);
 }
 .proof-section-title {
   font: inherit;
@@ -1311,7 +1372,7 @@ button.ghost {
   display: block;
   max-width: 320px;
   margin: 0 auto;
-  background: #fff;
+  background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 3px;
   cursor: crosshair;
@@ -1383,7 +1444,7 @@ button.ghost {
   padding: 3px 8px;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #fff;
+  background: var(--panel);
   color: var(--muted);
   cursor: pointer;
 }
@@ -1450,6 +1511,14 @@ button.ghost {
   font-size: 0.85rem;
   color: var(--muted);
 }
+.theme-toggle {
+  display: block;
+  margin-top: 10px;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
 
 /* A pending destructive action. Deliberately loud: it is the only thing in the
    app that cannot be undone. */
@@ -1504,7 +1573,7 @@ button.ghost {
   padding: 3px 8px;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #fff;
+  background: var(--panel);
   color: var(--muted);
   cursor: pointer;
 }
@@ -1522,7 +1591,7 @@ button.ghost {
   border: 1px solid var(--line);
   border-radius: 6px;
   margin-bottom: 10px;
-  background: #fff;
+  background: var(--panel);
 }
 .note.dropped {
   opacity: 0.45;
@@ -1535,7 +1604,7 @@ button.ghost {
   line-height: 1.6;
 }
 .note-passage b {
-  background: #fdf0c8;
+  background: color-mix(in oklab, #f5c518 26%, var(--panel));
   padding: 0 2px;
 }
 .note-passage .muted {
@@ -1571,7 +1640,7 @@ button.ghost {
 }
 /* An assertion the book itself never made — the part worth checking. */
 mark.claim {
-  background: #ffe9e0;
+  background: color-mix(in oklab, var(--err) 18%, var(--panel));
   border-bottom: 1px solid #e8a184;
   padding: 0 1px;
 }
@@ -1592,7 +1661,7 @@ mark.claim {
   border: 1px solid var(--line);
   border-radius: 6px;
   margin-bottom: 14px;
-  background: #fff;
+  background: var(--panel);
 }
 .notes-intro.dropped {
   opacity: 0.45;
@@ -1652,7 +1721,7 @@ mark.claim {
   padding: 4px 10px;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #fff;
+  background: var(--panel);
   color: var(--muted);
   cursor: pointer;
 }
@@ -1696,7 +1765,7 @@ mark.claim {
   max-width: 100%;
   max-height: 70vh;
   box-shadow: 0 1px 6px rgba(0, 0, 0, 0.18);
-  background: #fff;
+  background: var(--panel);
 }
 
 /* --- evidence that has to be read, not just glanced at --------------------- */
@@ -1746,7 +1815,7 @@ mark.claim {
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #fff;
+  background: var(--panel);
 }
 @media (max-width: 900px) {
   .q-evidence.readable {
@@ -1782,7 +1851,7 @@ mark.claim {
   position: fixed;
   z-index: 60;
   padding: 8px;
-  background: #fff;
+  background: var(--panel);
   border: 1px solid var(--line);
   border-radius: 5px;
   box-shadow: 0 6px 22px rgba(0, 0, 0, 0.22);
@@ -1836,7 +1905,7 @@ mark.claim {
   max-width: 100%;
   border: 1px solid var(--line);
   border-radius: 3px;
-  background: #fff;
+  background: var(--panel);
   cursor: zoom-in;
 }
 
@@ -2216,7 +2285,7 @@ mark.claim {
   padding: 8px 10px 10px;
   border: 1px solid var(--accent);
   border-radius: 6px;
-  background: #fffdf8;
+  background: var(--raise);
 }
 .galley-active .galley-block {
   margin-bottom: 0;
@@ -2245,7 +2314,7 @@ mark.claim {
   padding: 3px 9px;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #fff;
+  background: var(--panel);
   color: var(--ink);
   cursor: pointer;
 }
@@ -2353,7 +2422,7 @@ textarea.galley-plain {
   margin: 8px 0 12px 24px;
   padding: 6px 8px;
   border-left: 3px solid var(--line);
-  background: #f5f5f4;
+  background: var(--raise);
   border-radius: 0 4px 4px 0;
   font-size: 0.85rem;
 }
@@ -2367,7 +2436,7 @@ textarea.galley-plain {
   margin: 8px 0 12px 24px;
   padding: 8px;
   border-left: 3px dashed var(--warn);
-  background: #fdf6ec;
+  background: color-mix(in oklab, var(--warn) 10%, var(--panel));
   border-radius: 0 4px 4px 0;
   font-size: 0.85rem;
 }
@@ -2376,7 +2445,7 @@ textarea.galley-plain {
 }
 .galley-memo.resolved {
   border-left-color: var(--ok);
-  background: #f0f6f1;
+  background: color-mix(in oklab, var(--ok) 10%, var(--panel));
 }
 .galley-memo.resolved .proof-annotation-label {
   color: var(--ok);
@@ -2439,7 +2508,7 @@ textarea.galley-plain {
   padding: 3px 9px;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #fff;
+  background: var(--panel);
   color: var(--ink);
   cursor: pointer;
 }
@@ -2615,7 +2684,7 @@ textarea.galley-plain {
   padding: 4px 10px;
   border: 1px solid var(--line);
   border-radius: 6px;
-  background: #fff;
+  background: var(--panel);
   color: var(--ink);
   cursor: pointer;
 }
@@ -2658,7 +2727,7 @@ textarea.galley-plain {
   padding: 1px 6px;
   border: 1px solid var(--line);
   border-radius: 4px;
-  background: #fff;
+  background: var(--panel);
   color: var(--ink);
   cursor: pointer;
 }
@@ -2963,103 +3032,390 @@ textarea.galley-plain {
   padding: 3px 10px;
 }
 
-.shelf-books {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: 12px;
-  grid-template-columns: repeat(auto-fill, minmax(17em, 1fr));
+/* --- the shelf as a deck --------------------------------------------------
+   One card in the middle, the neighbours tucked behind it and swiped left and
+   right (`ShelfCarousel.tsx`). The card is a dark object on any ground, and its
+   colour says how far the book has got: crimson not started, amber being read,
+   gold with decisions waiting, green complete — as a wash through a gradient
+   rather than a fill, so the title stays the loudest thing on it. The sentence
+   under the bar says the same in words, for anyone who cannot read colour. */
+
+.deck {
+  --deck-card-h: 440px;
+  --deck-lift: 56px;
+  margin: 4px -8px 0;
+}
+.deck-card,
+.deck-actions,
+.deck-dot {
+  --tint: #8a8a94;
+}
+.stage-unread {
+  --tint: #c9404f;
+}
+.stage-reading {
+  --tint: #e39240;
+}
+.stage-deciding {
+  --tint: #d9b449;
+}
+.stage-done {
+  --tint: #3fbf7f;
 }
 
-/* A card is tinted by how far its book has got: maroon for one not started,
-   green for one done, and the two mixed by `--progress` (0..1, set on the
-   card by the app from `shelfProgress`). The mix is only a wash over the
-   panel — the tint says "how far" at a glance, and the sentence under the
-   title says it in words for anyone who cannot read colour. */
-:root {
-  --shelf-start: #7a1f2e;
-  --shelf-end: #1f5c3a;
-}
-.shelf-book {
-  --shelf-tint: color-mix(
-    in oklab,
-    var(--shelf-start) calc((1 - var(--progress, 0)) * 100%),
-    var(--shelf-end)
-  );
-  display: flex;
-  flex-direction: column;
-  background: color-mix(in oklab, var(--shelf-tint) 9%, var(--panel));
-  border: 1px solid color-mix(in oklab, var(--shelf-tint) 35%, var(--line));
-  border-left: 5px solid var(--shelf-tint);
-  border-radius: 8px;
+.deck-stage {
+  position: relative;
+  height: calc(var(--deck-card-h) + var(--deck-lift) + 26px);
   overflow: hidden;
+  touch-action: pan-y;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: grab;
+  outline: none;
+  /* The row fades out at its edges rather than being cut off by them. */
+  mask-image: linear-gradient(90deg, transparent 0, #000 9%, #000 91%, transparent 100%);
 }
-.shelf-book.open {
-  box-shadow: 0 2px 10px color-mix(in oklab, var(--shelf-tint) 25%, transparent);
+.deck-stage.dragging {
+  cursor: grabbing;
 }
-/* The face of the card is one button: the whole card is the tap target. */
-.shelf-book-face {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
+.deck-stage:focus-visible .deck-card.current {
+  outline: 2px solid color-mix(in oklab, var(--tint) 70%, #fff);
+  outline-offset: 4px;
+}
+
+.deck-card {
+  position: absolute;
+  top: var(--deck-lift);
+  left: 50%;
+  width: var(--card-w, 300px);
+  height: var(--deck-card-h);
+  border-radius: 30px;
+  color: #f1efe9;
+  background:
+    radial-gradient(
+      120% 62% at 50% 0%,
+      color-mix(in oklab, var(--tint) 46%, transparent) 0%,
+      transparent 62%
+    ),
+    radial-gradient(
+      90% 50% at 100% 100%,
+      color-mix(in oklab, var(--tint) 22%, transparent) 0%,
+      transparent 70%
+    ),
+    linear-gradient(170deg, #1d1d23 0%, #131317 55%, #0f0f12 100%);
+  border: 1px solid color-mix(in oklab, var(--tint) 30%, rgb(255 255 255 / 7%));
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 9%),
+    0 34px 60px -26px rgb(0 0 0 / 80%);
+  transform-origin: 50% 60%;
+  transition:
+    transform 0.62s cubic-bezier(0.2, 0.9, 0.25, 1),
+    opacity 0.5s ease,
+    filter 0.5s ease,
+    box-shadow 0.5s ease;
+  will-change: transform, opacity;
+  cursor: inherit;
+}
+.deck-stage.dragging .deck-card,
+.deck-stage.dragging .deck-cover {
+  transition: none;
+}
+.deck-card.current {
+  box-shadow:
+    inset 0 1px 0 rgb(255 255 255 / 12%),
+    0 34px 60px -26px rgb(0 0 0 / 85%),
+    0 20px 70px -30px color-mix(in oklab, var(--tint) 75%, transparent);
+}
+/* A sheen across the top left, like light caught on a lacquered board. */
+.deck-card-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(125deg, rgb(255 255 255 / 7%) 0%, rgb(255 255 255 / 0%) 32%);
+  pointer-events: none;
+}
+
+/* The cover stands off the card: its top breaks the card's edge, it drifts
+   against the card as it moves, and it casts a shadow onto it. */
+.deck-cover {
+  position: absolute;
+  top: calc(var(--deck-lift) * -1 + 8px);
+  left: 0;
+  right: 0;
+  margin: 0 auto;
+  width: 48%;
+  aspect-ratio: 2 / 3;
+  border-radius: 4px 9px 9px 4px;
+  overflow: hidden;
+  box-shadow:
+    0 26px 40px -14px rgb(0 0 0 / 75%),
+    0 6px 14px rgb(0 0 0 / 45%),
+    0 0 0 1px rgb(255 255 255 / 6%);
+  transition: transform 0.62s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+.deck-cover img {
+  display: block;
   width: 100%;
-  padding: 14px 16px;
-  margin: 0;
-  background: none;
-  border: 0;
-  border-radius: 0;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
 }
-.shelf-book-face:hover {
-  background: color-mix(in oklab, var(--shelf-tint) 6%, transparent);
+/* The spine: a crease of light and shade down the bound edge. */
+.deck-cover::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    rgb(0 0 0 / 38%) 0%,
+    rgb(255 255 255 / 14%) 3%,
+    rgb(0 0 0 / 12%) 6%,
+    transparent 11%
+  );
+  pointer-events: none;
 }
-.shelf-book-face:focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: -2px;
+.deck-cover-blank {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  background:
+    repeating-linear-gradient(45deg, rgb(255 255 255 / 1.6%) 0 2px, transparent 2px 5px),
+    linear-gradient(160deg, #4a4a52 0%, #34343b 55%, #2a2a30 100%);
 }
-.shelf-book-name {
-  font-size: 1.05rem;
-  font-weight: 600;
-  line-height: 1.3;
-}
-.shelf-book-progress {
-  font-size: 0.86rem;
-  color: var(--ink);
-}
-.shelf-book-bar {
-  height: 4px;
+.deck-cover-frame {
+  position: absolute;
+  inset: 9%;
+  border: 1px solid rgb(255 255 255 / 14%);
   border-radius: 2px;
-  background: color-mix(in oklab, var(--shelf-tint) 18%, var(--line));
+}
+.deck-cover-q {
+  font-family: ui-serif, Georgia, serif;
+  font-size: 3.4rem;
+  line-height: 1;
+  color: rgb(255 255 255 / 38%);
+  text-shadow: 0 1px 0 rgb(0 0 0 / 40%);
+}
+
+.deck-card-body {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 0 24px 24px;
+  display: flex;
+  flex-direction: column;
+}
+.deck-title {
+  margin: 0;
+  font-size: 1.5rem;
+  font-weight: 600;
+  line-height: 1.18;
+  letter-spacing: -0.01em;
+  color: #fff;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
   overflow: hidden;
 }
-.shelf-book-bar span {
+.deck-author {
+  margin-top: 6px;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.74rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: rgb(255 255 255 / 58%);
+}
+.deck-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}
+.deck-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 11px 4px 9px;
+  border-radius: 999px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: color-mix(in oklab, var(--tint) 55%, #fff);
+  background: color-mix(in oklab, var(--tint) 16%, transparent);
+  border: 1px solid color-mix(in oklab, var(--tint) 32%, transparent);
+}
+.deck-chip-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--tint);
+  box-shadow: 0 0 10px var(--tint);
+}
+.deck-pct {
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: rgb(255 255 255 / 62%);
+}
+.deck-bar {
+  margin-top: 10px;
+  height: 5px;
+  border-radius: 3px;
+  background: rgb(255 255 255 / 8%);
+  overflow: hidden;
+}
+.deck-bar span {
   display: block;
   height: 100%;
-  background: var(--shelf-tint);
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--tint) 55%, transparent),
+    var(--tint)
+  );
+  box-shadow: 0 0 12px color-mix(in oklab, var(--tint) 60%, transparent);
 }
-.shelf-book-what {
-  font-size: 0.8rem;
+.deck-summary {
+  margin: 12px 0 0;
+  min-height: 2.8em;
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: rgb(255 255 255 / 74%);
+}
+
+/* --- beneath the row ------------------------------------------------------ */
+.deck-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  margin-top: 2px;
+}
+.deck-arrow {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 50%;
+  color: var(--ink);
+  background: var(--raise);
+  border: 1px solid var(--line);
+  transition:
+    transform 0.2s ease,
+    background 0.2s ease;
+}
+.deck-arrow:hover:not(:disabled) {
+  transform: scale(1.06);
+}
+.deck-arrow:active:not(:disabled) {
+  transform: scale(0.94);
+}
+.deck-dots {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 60vw;
+  overflow: hidden;
+}
+.deck-dot {
+  flex: none;
+  width: 7px;
+  height: 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--tint) 40%, var(--line));
+  transition:
+    width 0.35s cubic-bezier(0.2, 0.9, 0.25, 1),
+    background 0.35s ease;
+}
+.deck-dot.on {
+  width: 26px;
+  background: var(--tint);
+}
+
+.deck-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  max-width: 32em;
+  margin: 20px auto 0;
+  padding: 0 8px;
+}
+.deck-primary,
+.deck-secondary {
+  min-height: 48px;
+  border-radius: 999px;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.92rem;
+  font-weight: 600;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.25s ease,
+    background 0.25s ease;
+}
+.deck-primary:active:not(:disabled),
+.deck-secondary:active:not(:disabled) {
+  transform: scale(0.97);
+}
+.deck-primary {
+  flex: 1 1 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 22px 0 26px;
+  color: #141210;
+  border: 0;
+  background: linear-gradient(
+    100deg,
+    color-mix(in oklab, var(--tint) 80%, #fff) 0%,
+    var(--tint) 100%
+  );
+  box-shadow: 0 12px 30px -12px color-mix(in oklab, var(--tint) 80%, transparent);
+}
+.deck-go {
+  letter-spacing: -0.12em;
+  opacity: 0.55;
+  font-size: 1.1rem;
+}
+.deck-secondary {
+  flex: 1 1 0;
+  padding: 0 18px;
+  color: var(--ink);
+  background: var(--raise);
+  border: 1px solid var(--line);
+}
+.deck-meta {
+  flex-basis: 100%;
+  text-align: center;
+  margin-top: 4px;
+  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-size: 0.78rem;
   color: var(--muted);
 }
-/* The actions, shown on the open card only. */
-.shelf-book-more {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  padding: 0 16px 14px;
+
+@media (max-width: 480px) {
+  .deck {
+    --deck-card-h: 410px;
+    --deck-lift: 50px;
+  }
+  .deck-title {
+    font-size: 1.35rem;
+  }
 }
-/* A finger, not a pointer. */
-.shelf-book-more button {
-  min-height: 40px;
-  padding: 0 14px;
+
+@media (prefers-reduced-motion: reduce) {
+  .deck-card,
+  .deck-cover,
+  .deck-dot {
+    transition-duration: 0.01s;
+  }
 }
-/* No dark re-mix: the reading ground is set on the root only while the
-   reading view is mounted and removed on leaving it, so the shelf is never
-   on a dark ground and a rule for one could not be looked at. */
 
 .shelf-none .actions {
   margin-top: 8px;
@@ -3316,4 +3672,573 @@ textarea.galley-plain {
   line-height: 0.82;
   padding: 0.05em 0.06em 0 0;
   font-family: var(--book-heading);
+}
+
+/* === the house style ======================================================
+   The shelf's cards set the look: dark lacquered surfaces with a lit top
+   edge, pills for anything pressed, a sans face for the controls and the
+   book's serif for what is read. This section carries that look to every
+   other screen by restyling the shared parts (panels, options, buttons,
+   fields, bars, tabs, the step rail) rather than screen by screen. It sits
+   last so it wins at equal specificity, and it takes every colour from the
+   tokens, so the light theme follows it without a second copy. */
+
+/* --- the step rail -------------------------------------------------------- */
+.rail {
+  background: linear-gradient(180deg, var(--panel) 0%, var(--bg) 100%);
+  border-right: 1px solid var(--edge);
+  font-family: var(--ui);
+}
+.rail h1 {
+  font-family: ui-serif, Georgia, 'Iowan Old Style', serif;
+  font-size: 1.15rem;
+  letter-spacing: -0.01em;
+}
+.rail h1 small {
+  margin-top: 4px;
+  font-family: var(--ui);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rail ol {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.rail li {
+  align-items: center;
+  padding: 8px 10px;
+  margin: 0 -10px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  font-size: 0.86rem;
+  line-height: 1.3;
+  transition: background 0.2s ease;
+}
+.rail li .dot {
+  border-color: color-mix(in oklab, var(--muted) 45%, transparent);
+}
+.rail li.done .dot {
+  color: var(--accent-ink);
+  box-shadow: 0 0 10px color-mix(in oklab, var(--ok) 55%, transparent);
+}
+.rail li.active {
+  background: color-mix(in oklab, var(--accent) 13%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 28%, transparent);
+}
+.rail li.active .dot {
+  box-shadow: 0 0 12px color-mix(in oklab, var(--accent) 60%, transparent);
+}
+.rail li.gate .label::after {
+  border-radius: 999px;
+  padding: 1px 7px;
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  background: color-mix(in oklab, var(--accent) 12%, transparent);
+}
+.rail-settings {
+  text-decoration: none;
+  font-family: var(--ui);
+}
+.rail-settings:hover {
+  color: var(--ink);
+}
+
+/* On a phone the rail is a slim bar: the title and the two links on one row,
+   and the steps as a row of dots with only the current step named. It was a
+   list that filled the first screen before a single question was seen. */
+@media (max-width: 860px) {
+  .rail {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    grid-template-areas:
+      'title settings theme'
+      'steps steps steps';
+    align-items: center;
+    column-gap: 10px;
+    row-gap: 10px;
+    padding: 12px 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--edge);
+    background: var(--panel);
+  }
+  .rail h1 {
+    grid-area: title;
+    margin: 0;
+    font-size: 1rem;
+    min-width: 0;
+  }
+  .rail h1 small {
+    margin-top: 1px;
+    font-size: 0.64rem;
+  }
+  .rail-settings {
+    grid-area: settings;
+    margin: 0;
+    font-size: 0.78rem;
+  }
+  .rail .theme-toggle {
+    grid-area: theme;
+    margin: 0;
+  }
+  .rail ol {
+    grid-area: steps;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    padding: 0;
+  }
+  .rail li {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    background: none;
+    flex: none;
+  }
+  .rail li:not(.active) .label {
+    display: none;
+  }
+  .rail li.active {
+    padding: 4px 12px 4px 5px;
+    gap: 8px;
+    border-radius: 999px;
+    background: color-mix(in oklab, var(--accent) 13%, transparent);
+    border: 1px solid color-mix(in oklab, var(--accent) 28%, transparent);
+  }
+  .rail li .dot {
+    width: 14px;
+    height: 14px;
+    font-size: 0.5rem;
+  }
+}
+
+/* --- the heading of each step --------------------------------------------- */
+.step-head h2 {
+  font-size: 2rem;
+  font-weight: 600;
+  letter-spacing: -0.015em;
+  line-height: 1.15;
+  text-wrap: balance;
+}
+.step-head p {
+  max-width: 62ch;
+  font-family: var(--ui);
+  font-size: 0.95rem;
+  line-height: 1.55;
+}
+@media (max-width: 860px) {
+  .step-head h2 {
+    font-size: 1.55rem;
+  }
+}
+
+/* --- panels ---------------------------------------------------------------
+   Every boxed question, progress block and sheet is one kind of object. */
+.q,
+.progress,
+.drop,
+.proof,
+.galley-page {
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: 22px;
+  box-shadow: var(--lift);
+}
+.q {
+  padding: 24px 26px;
+  margin-bottom: 18px;
+}
+.progress {
+  padding: 24px 26px;
+}
+.q > label.prompt,
+.q > .prompt {
+  font-size: 1.1rem;
+  letter-spacing: -0.005em;
+  margin-bottom: 6px;
+}
+.q .help,
+.hint,
+.progress .meta {
+  font-family: var(--ui);
+  font-size: 0.86rem;
+  line-height: 1.55;
+}
+.q .help.trailing {
+  border-top-color: var(--edge);
+}
+@media (max-width: 860px) {
+  .q,
+  .progress {
+    padding: 18px;
+    border-radius: 18px;
+  }
+}
+
+/* The drop target reads as a slot to fill rather than a card. */
+.drop {
+  border: 1.5px dashed color-mix(in oklab, var(--muted) 35%, transparent);
+  background: var(--well);
+  box-shadow: none;
+}
+.drop:hover,
+.drop.over {
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+}
+.drop span {
+  font-family: var(--ui);
+}
+
+.resume-note,
+.held-note {
+  border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
+  border-left-width: 1px;
+  border-radius: 14px;
+  background: color-mix(in oklab, var(--accent) 9%, transparent);
+  font-family: var(--ui);
+}
+
+/* --- choices -------------------------------------------------------------- */
+.opts {
+  gap: 10px;
+}
+.opt {
+  align-items: center;
+  padding: 14px 18px;
+  border: 1px solid var(--edge);
+  border-radius: 16px;
+  background: var(--well);
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.25s ease,
+    transform 0.15s ease;
+}
+.opt:hover {
+  background: color-mix(in oklab, var(--accent) 6%, transparent);
+  border-color: color-mix(in oklab, var(--accent) 25%, var(--edge));
+}
+.opt:active {
+  transform: scale(0.995);
+}
+.opt.sel {
+  border-color: color-mix(in oklab, var(--accent) 60%, transparent);
+  background: linear-gradient(
+    100deg,
+    color-mix(in oklab, var(--accent) 17%, transparent),
+    color-mix(in oklab, var(--accent) 5%, transparent)
+  );
+  box-shadow: 0 14px 34px -22px color-mix(in oklab, var(--accent) 90%, transparent);
+}
+.opt input[type='radio'],
+.opt input[type='checkbox'] {
+  width: 18px;
+  height: 18px;
+  flex: none;
+  margin: 0;
+}
+.opt .t {
+  font-size: 1rem;
+}
+.opt .d {
+  font-family: var(--ui);
+  font-size: 0.84rem;
+  line-height: 1.5;
+}
+
+/* --- buttons ---------------------------------------------------------------
+   The primary action is the lit pill the shelf's cards end in; everything else
+   is a quiet pill beside it. */
+:where(button, select) {
+  border-radius: 999px;
+  font-family: var(--ui);
+  padding: 7px 16px;
+}
+:where(button) {
+  transition:
+    transform 0.15s ease,
+    background 0.2s ease,
+    border-color 0.2s ease,
+    box-shadow 0.25s ease;
+}
+:where(button:active:not(:disabled)) {
+  transform: scale(0.97);
+}
+button.primary {
+  font-family: var(--ui);
+  font-weight: 650;
+  letter-spacing: 0.01em;
+  border-radius: 999px;
+  padding: 13px 30px;
+  color: var(--accent-ink);
+  background: linear-gradient(
+    100deg,
+    color-mix(in oklab, var(--accent) 76%, #fff) 0%,
+    var(--accent) 100%
+  );
+  box-shadow: 0 14px 32px -16px color-mix(in oklab, var(--accent) 85%, transparent);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.25s ease;
+}
+button.primary:hover:not(:disabled) {
+  box-shadow: 0 18px 38px -14px color-mix(in oklab, var(--accent) 95%, transparent);
+}
+button.primary:active:not(:disabled) {
+  transform: scale(0.97);
+}
+button.ghost {
+  font-family: var(--ui);
+  border-radius: 999px;
+  color: var(--ink);
+  background: var(--raise);
+  border-color: var(--edge);
+}
+.actions {
+  gap: 12px;
+}
+.pager button {
+  border-radius: 999px;
+}
+:where(button, select, a, input, textarea):focus-visible {
+  outline: 2px solid color-mix(in oklab, var(--accent) 80%, #fff);
+  outline-offset: 2px;
+}
+
+/* --- fields --------------------------------------------------------------- */
+.q input[type='text'],
+.q > textarea,
+.q .fields > textarea,
+.page-edit textarea,
+textarea.galley-plain {
+  border: 1px solid var(--edge);
+  border-radius: 14px;
+  background: var(--well);
+  padding: 12px 14px;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+.q input[type='text']:focus,
+.q > textarea:focus,
+.q .fields > textarea:focus,
+.page-edit textarea:focus {
+  outline: none;
+  border-color: color-mix(in oklab, var(--accent) 70%, transparent);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 18%, transparent);
+}
+.page-edit-row.changed textarea {
+  background: color-mix(in oklab, var(--accent) 8%, transparent);
+}
+
+/* --- progress -------------------------------------------------------------- */
+.bar,
+.pager-bar {
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--ink) 8%, transparent);
+}
+.bar > i,
+.pager-bar > i {
+  border-radius: inherit;
+  background: linear-gradient(
+    90deg,
+    color-mix(in oklab, var(--accent) 55%, transparent),
+    var(--accent)
+  );
+  box-shadow: 0 0 12px color-mix(in oklab, var(--accent) 55%, transparent);
+}
+
+/* --- evidence and tables --------------------------------------------------- */
+.q-evidence img {
+  border-color: var(--edge);
+  border-radius: 10px;
+  box-shadow: 0 12px 26px -16px rgb(0 0 0 / 70%);
+}
+.q-evidence figcaption {
+  font-family: var(--ui);
+}
+.terms th {
+  font-family: var(--ui);
+  letter-spacing: 0.1em;
+  border-bottom-color: var(--edge);
+}
+.terms td {
+  border-bottom-color: var(--edge);
+}
+.terms tbody tr {
+  transition: background 0.15s ease;
+}
+.terms tbody tr:hover {
+  background: var(--well);
+}
+.terms img {
+  border-radius: 6px;
+}
+.terms .sig {
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.terms .verdict button {
+  border-radius: 999px;
+  border-color: var(--edge);
+  background: var(--raise);
+  min-width: 32px;
+}
+.checks .level {
+  border-radius: 999px;
+  font-family: var(--ui);
+  font-weight: 600;
+}
+
+/* --- the workbench ---------------------------------------------------------- */
+.proof-view-toggle {
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid var(--edge);
+  border-radius: 999px;
+  background: var(--raise);
+}
+.proof-view-toggle button {
+  font-family: var(--ui);
+  border-radius: 999px;
+  padding: 7px 16px;
+  background: transparent;
+}
+.proof-view-toggle button + button {
+  border-left: 0;
+}
+.proof-view-toggle button.selected {
+  color: var(--accent-ink);
+  background: linear-gradient(100deg, color-mix(in oklab, var(--accent) 76%, #fff), var(--accent));
+  box-shadow: 0 8px 20px -12px color-mix(in oklab, var(--accent) 90%, transparent);
+}
+.galley-toolbar {
+  border: 1px solid var(--edge);
+  border-radius: 18px;
+  padding: 8px 12px;
+  background: color-mix(in oklab, var(--panel) 88%, transparent);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  box-shadow: var(--lift);
+  font-family: var(--ui);
+}
+.galley-toolbar select,
+.galley-toolbar button {
+  border-radius: 999px;
+  border-color: var(--edge);
+  background: var(--raise);
+  padding: 4px 11px;
+}
+.galley-toolbar select:disabled,
+.galley-toolbar button:disabled {
+  background: transparent;
+}
+.galley-toolbar .galley-done {
+  color: var(--accent-ink);
+}
+.galley-active {
+  border-color: color-mix(in oklab, var(--accent) 55%, transparent);
+  border-radius: 14px;
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--accent) 10%, transparent);
+}
+.galley-hint {
+  font-family: var(--ui);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :where(button),
+  .opt,
+  button.primary {
+    transition: none;
+  }
+}
+
+/* The workbench's own small buttons: the same quiet pill, in the control face.
+   Listed by container because each had its own square rule. */
+.proof-bar button,
+.proof-split button,
+.proof-actions button,
+.proof-annotation-bar button,
+.notes-head button,
+.notes-actions button,
+.proof-history button,
+.galley-findbar button,
+.galley-print-bar button,
+.galley-marks-row button,
+.page-edit-head button,
+.proof-outbox button,
+.galley-add button {
+  font-family: var(--ui);
+  border-radius: 999px;
+  border-color: var(--edge);
+  background: var(--raise);
+  padding-inline: 12px;
+}
+.galley-add button {
+  border-style: dashed;
+  background: transparent;
+}
+.proof-bar .proof-flagged {
+  border-color: color-mix(in oklab, var(--accent) 55%, transparent);
+  background: color-mix(in oklab, var(--accent) 10%, transparent);
+}
+.proof-bar .proof-flagged.proof-marked {
+  color: var(--accent-ink);
+  border-color: transparent;
+  background: linear-gradient(100deg, color-mix(in oklab, var(--accent) 76%, #fff), var(--accent));
+}
+.galley-outline button {
+  font-family: var(--ui);
+  border-radius: 10px;
+}
+
+/* The notes pass: the same panels as every other gate. */
+.notes-bar,
+.notes-intro,
+.note {
+  background: var(--surface);
+  border: 1px solid var(--edge);
+  border-radius: 18px;
+  box-shadow: var(--lift);
+}
+.notes-bar {
+  font-family: var(--ui);
+}
+.notes-intro input,
+.notes-intro textarea,
+.note textarea {
+  border: 1px solid var(--edge);
+  border-radius: 12px;
+  background: var(--well);
+}
+
+/* A pill is one line: a squeezed one wraps into an oval. */
+.proof-annotation-bar button,
+.proof-split button,
+.proof-bar button,
+.galley-add button {
+  white-space: nowrap;
+}
+@media (max-width: 480px) {
+  .proof-view-toggle {
+    display: flex;
+    width: 100%;
+  }
+  .proof-view-toggle button {
+    flex: 1 1 0;
+    min-width: 0;
+    padding: 7px 6px;
+    font-size: 0.78rem;
+    line-height: 1.2;
+  }
+  .proof-annotation-bar {
+    flex-wrap: wrap;
+  }
 }
