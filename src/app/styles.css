@@ -4242,3 +4242,93 @@ textarea.galley-plain {
     flex-wrap: wrap;
   }
 }
+
+/* --- the reading queue ------------------------------------------------------
+   Scans read one after another in this browser. The count of books left is
+   the biggest thing on it, because it is read from across a room. */
+.shelf-head-actions {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.shelf-read-all {
+  font-size: 0.8rem;
+  padding: 4px 14px;
+  color: var(--accent-ink);
+  border: 0;
+  background: linear-gradient(100deg, color-mix(in oklab, var(--accent) 76%, #fff), var(--accent));
+  box-shadow: 0 8px 20px -12px color-mix(in oklab, var(--accent) 90%, transparent);
+}
+.queue-panel {
+  margin: 0 0 18px;
+  padding: 18px 20px;
+  border-radius: 20px;
+  border: 1px solid var(--edge);
+  background: var(--surface);
+  box-shadow: var(--lift);
+  font-family: var(--ui);
+}
+.queue-panel.running {
+  border-color: color-mix(in oklab, var(--accent) 35%, var(--edge));
+}
+.queue-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.queue-eyebrow {
+  font-size: 0.7rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.queue-count {
+  font-family: ui-serif, Georgia, 'Iowan Old Style', serif;
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.queue-actions {
+  display: flex;
+  gap: 8px;
+}
+.queue-actions button.primary {
+  padding: 8px 20px;
+}
+.queue-now {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.88rem;
+}
+.queue-now strong {
+  font-family: ui-serif, Georgia, 'Iowan Old Style', serif;
+  font-size: 1rem;
+}
+.queue-now span {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.queue-note {
+  margin: 10px 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.5;
+}
+.queue-failed {
+  margin: 10px 0 0;
+  padding-left: 18px;
+  font-size: 0.82rem;
+  color: var(--err);
+}
+.deck-scan-note {
+  margin: 6px 0 0;
+  font-family: var(--ui);
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  color: color-mix(in oklab, var(--tint) 55%, #fff);
+}

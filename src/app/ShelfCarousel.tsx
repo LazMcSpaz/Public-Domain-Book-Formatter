@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import {
+  hasReadableScan,
   shelfProgress,
   shelfTitleParts,
   type ShelfAbout,
@@ -32,7 +33,27 @@ export interface ShelfCarouselProps {
   onRead: (book: ShelfAbout) => void
   onOpen: (book: ShelfAbout) => void
   describeAge: (iso: string) => string
+  /** Books whose scan has been read and put on the shelf beside them. */
+  readOnShelf?: ReadonlySet<string>
+  /** Books waiting in the reading queue, or being read now. */
+  queued?: ReadonlySet<string>
+  /** Read this book's scan here and put the reading on the shelf. */
+  onReadScan?: (book: ShelfAbout) => void
 }
+
+/** What a card says about its scan's reading, if anything. */
+function scanNote(
+  book: ShelfAbout,
+  readOnShelf: ReadonlySet<string>,
+  queued: ReadonlySet<string>
+): string | null {
+  if (book.complete || !hasReadableScan(book)) return null
+  if (queued.has(book.key)) return 'Queued to read in this browser'
+  if (readOnShelf.has(book.key)) return 'Scan read · ready to transcribe'
+  return null
+}
+
+const NONE: ReadonlySet<string> = new Set()
 
 const PLACE_STORAGE = 'pdbf.shelf.place'
 /** How far a release has to have travelled, as a share of a step, to move on. */
@@ -69,6 +90,7 @@ function writePlace(key: string): void {
 
 export function ShelfCarousel(props: ShelfCarouselProps): JSX.Element {
   const { books, busy, coverFor, onQueries, onRead, onOpen, describeAge } = props
+  const { readOnShelf = NONE, queued = NONE, onReadScan } = props
 
   const [index, setIndex] = useState(() => {
     const kept = readPlace()
@@ -230,6 +252,12 @@ export function ShelfCarousel(props: ShelfCarouselProps): JSX.Element {
 
   const activeProgress = progress[index]!
   const waiting = active.queries?.waiting ?? 0
+  const owesReading =
+    !!onReadScan &&
+    hasReadableScan(active) &&
+    !active.complete &&
+    !readOnShelf.has(active.key) &&
+    !queued.has(active.key)
 
   return (
     <div className="deck">
@@ -265,6 +293,7 @@ export function ShelfCarousel(props: ShelfCarouselProps): JSX.Element {
               book={book}
               progress={progress[i]!}
               cover={coverFor?.(book) ?? null}
+              note={scanNote(book, readOnShelf, queued)}
               depth={d}
               current={i === index}
               style={{
@@ -342,21 +371,41 @@ export function ShelfCarousel(props: ShelfCarouselProps): JSX.Element {
             </span>
           </button>
         ) : null}
+        {/* A book nobody has transcribed yet has nothing to read; what it
+            wants is its scan read, which this browser can do and hand on. */}
+        {owesReading ? (
+          <button
+            type="button"
+            className={waiting > 0 ? 'deck-secondary' : 'deck-primary'}
+            disabled={busy}
+            onClick={() => onReadScan?.(active)}
+            title="Reads the scan here, saving as it goes, and puts the reading on the shelf for a session to transcribe from"
+          >
+            <span>Read the scan in this browser</span>
+            {waiting > 0 ? null : (
+              <span className="deck-go" aria-hidden="true">
+                ›››
+              </span>
+            )}
+          </button>
+        ) : null}
         {/* Reading does not fetch the scan — tens of megabytes and ten
             minutes of OCR that a reading pass never looks at. */}
-        <button
-          type="button"
-          className={waiting > 0 ? 'deck-secondary' : 'deck-primary'}
-          disabled={busy}
-          onClick={() => onRead(active)}
-        >
-          <span>Read the book</span>
-          {waiting > 0 ? null : (
-            <span className="deck-go" aria-hidden="true">
-              ›››
-            </span>
-          )}
-        </button>
+        {activeProgress.stage === 'unread' ? null : (
+          <button
+            type="button"
+            className={waiting > 0 || owesReading ? 'deck-secondary' : 'deck-primary'}
+            disabled={busy}
+            onClick={() => onRead(active)}
+          >
+            <span>Read the book</span>
+            {waiting > 0 || owesReading ? null : (
+              <span className="deck-go" aria-hidden="true">
+                ›››
+              </span>
+            )}
+          </button>
+        )}
         <button
           type="button"
           className="deck-secondary"
@@ -387,6 +436,8 @@ interface BookCardProps {
   book: ShelfAbout
   progress: ShelfProgress
   cover: string | null
+  /** A line about the scan's reading: queued, or on the shelf. */
+  note: string | null
   /** Steps from the middle, fractional while dragging; signed. */
   depth: number
   current: boolean
@@ -395,7 +446,7 @@ interface BookCardProps {
 }
 
 function BookCard(props: BookCardProps): JSX.Element {
-  const { book, progress, cover, depth, current, style, onSelect } = props
+  const { book, progress, cover, note, depth, current, style, onSelect } = props
   const { title, author } = shelfTitleParts(book)
   const pct = Math.round(progress.fraction * 100)
   // The cover drifts against the card as it moves, a little further than the
@@ -430,6 +481,7 @@ function BookCard(props: BookCardProps): JSX.Element {
           <span style={{ width: `${pct}%` }} />
         </div>
         <p className="deck-summary">{progress.summary}</p>
+        {note ? <p className="deck-scan-note">{note}</p> : null}
       </div>
     </article>
   )

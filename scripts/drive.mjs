@@ -4808,6 +4808,69 @@ async function serve() {
      * why a reading is refused. This reads the object store directly and
      * changes nothing.
      */
+    /**
+     * Load a reading of the scan that a browser put on the shelf.
+     *
+     * The editor's own browser reads scans while they are away — one book or a
+     * queue of them — and puts each reading beside its book as
+     * `recon.json.gz`. This loads one into the driver's recon cache under the
+     * book's key, so `draft`, `ocr` and the landing checks use it at once
+     * instead of spending ten minutes reading the scan again here.
+     *
+     * The words, the text of each leaf and the vocabulary travel; the crops and
+     * thumbnails do not (they are cut from the scan when wanted). The file is
+     * refused, not half-loaded, if it is a checkpoint or was taken by an app
+     * whose words have a different shape (`parseReconHandoff`).
+     */
+    reconimport: async ([file] = []) => {
+      if (!file) throw new Error('reconimport <books/<dir>/recon.json.gz>')
+      const { gunzipSync } = await import('node:zlib')
+      const path = resolve(file)
+      const json = gunzipSync(readFileSync(path)).toString('utf8')
+      const tmp = resolve(OUT, `recon-import-${Date.now()}.json`)
+      await mkdir(OUT, { recursive: true })
+      await writeFile(tmp, json)
+      return page.evaluate(
+        async ([repo, url]) => {
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const res = await fetch(url)
+          if (!res.ok) throw new Error(`reading the file: ${res.status}`)
+          const handoff = project.parseReconHandoff(JSON.parse(await res.text()))
+          const saved = await cacheMod.saveReconCache(
+            handoff.key,
+            {
+              pageCount: handoff.pageCount,
+              words: handoff.words,
+              lexicon: handoff.lexicon,
+              pageText: handoff.pageText,
+              source: handoff.source,
+              ...(handoff.shape ? { shape: handoff.shape } : {}),
+              crops: new Map(),
+              contextCrops: new Map(),
+              thumbnails: new Map(),
+              illustrations: []
+            },
+            { dpi: handoff.dpi, maxPages: null, cleanup: handoff.cleanup }
+          )
+          const runs = await runStore.listRuns()
+          return {
+            saved,
+            key: handoff.key.split('\u0000')[0],
+            leaves: handoff.pageCount,
+            words: handoff.words.length,
+            source: handoff.source,
+            readOn: handoff.savedAt,
+            // The cache is keyed by the book; without its run here, no verb
+            // will look for it until the book is loaded.
+            bookLoadedHere: runs.some((r) => r.key === handoff.key)
+          }
+        },
+        [REPO, `http://127.0.0.1:${PORT}/file?path=${encodeURIComponent(tmp)}`]
+      )
+    },
+
     cachestat: async ([sub, scan] = []) => {
       // `cachestat recount <scan.pdf>` puts a checkpoint's true length back.
       // Before the fix in `ReconPartial.pageCount` every checkpoint was written

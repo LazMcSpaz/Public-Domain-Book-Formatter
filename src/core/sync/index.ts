@@ -52,3 +52,14 @@ export {
   type RulingEntry,
   type ShelfState
 } from './outbox'
+export {
+  booksNeedingRecon,
+  hasReadableScan,
+  newReconQueue,
+  parseReconQueue,
+  queueFailed,
+  queueFinished,
+  queueRemaining,
+  type ReconQueueFailure,
+  type ReconQueueState
+} from './recon-queue'

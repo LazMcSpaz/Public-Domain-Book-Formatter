@@ -1071,6 +1071,12 @@ node scripts/drive.mjs damage        # marks the printing trade does not set:
                                      #   `--check` exits non-zero: a gate
 node scripts/drive.mjs runs          # readings held here; `runs drop <n>` removes one
 node scripts/drive.mjs cachestat recount <scan.pdf>   # a recon record's true length, off the file
+node scripts/drive.mjs reconimport <books/<dir>/recon.json.gz>   # a reading the
+                                     #   editor's browser took and put on the shelf
+                                     #   ("Read the scan in this browser", or the
+                                     #   queue): loaded into the driver's recon
+                                     #   cache under the book's key, so recon is
+                                     #   not run again here. `load` the book too
 node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` work it
 
 node scripts/drive.mjs figures f.md   # every picture the reading already found,

@@ -107,7 +107,19 @@ import {
   storedFileKeys
 } from '../platform/browser/run-store'
 import { collectBookBatch, submitBookBatch } from '../platform/browser/batch-run'
-import { fetchBook, getBytes, knownShelfDir, readShelf } from '../platform/browser/shelf'
+import {
+  fetchBook,
+  getBytes,
+  knownShelfDir,
+  readShelf,
+  shelfDirFor,
+  shelfHas
+} from '../platform/browser/shelf'
+import {
+  pushReconToShelf,
+  readScanFromShelf,
+  type ShelfReadProgress
+} from '../platform/browser/recon-handoff'
 import { flushOutbox } from '../platform/browser/shelf-outbox'
 import {
   collectQueries,
@@ -139,7 +151,16 @@ import {
   summarize as summarizeOutbox,
   type OutboxSummary,
   type ShelfAbout,
-  shelfSlug
+  type ReconQueueState,
+  booksNeedingRecon,
+  hasReadableScan,
+  newReconQueue,
+  parseReconQueue,
+  queueFailed,
+  queueFinished,
+  queueRemaining,
+  shelfSlug,
+  shelfTitle
 } from '@core/sync'
 import {
   bodyKeyFor,
@@ -153,6 +174,7 @@ import {
   pendingBatches,
   summarize as summarizeRun,
   parseBookFile,
+  reconHandoffPath,
   summarizeCheckpoint,
   summarizeTicket,
   type AnnotationCheckpoint,
@@ -202,6 +224,7 @@ import { ProofSheet } from './ProofSheet'
 import { BookEditor } from './BookEditor'
 import { BookReader } from './BookReader'
 import { ShelfCarousel } from './ShelfCarousel'
+import { ReconQueuePanel } from './ReconQueuePanel'
 import { ThemeToggle } from './theme'
 
 /** A cache key that changes whenever the stack that produced the pixels does. */
@@ -237,6 +260,9 @@ function lostNote(lost: readonly string[]): string {
  * disagreeing about what the book is.
  */
 type ProofView = 'leaves' | 'book' | 'reading'
+
+/** Where the reading queue is written down, so a reload offers the rest back. */
+const RECON_QUEUE_STORAGE = 'pdbf.reconQueue'
 
 export function App(): JSX.Element {
   const [state, setState] = useState<WizardState>(initialState)
@@ -457,6 +483,12 @@ export function App(): JSX.Element {
    * rather than at the end.
    */
   const [resumeNote, setResumeNote] = useState<string | null>(null)
+  /**
+   * Where this browser's reading of the scan went: up to the shelf beside the
+   * book, so a session can load it instead of reading the scan again. Said on
+   * every step, because the editor may close the tab the moment it is there.
+   */
+  const [handoffNote, setHandoffNote] = useState<string | null>(null)
   /**
    * How far through the current gate the user had worked.
    *
@@ -1281,6 +1313,7 @@ export function App(): JSX.Element {
     setPdf(null)
     setBuildNote(null)
     setResumeNote(null)
+    setHandoffNote(null)
     if (reconRef.current) releaseRecon(reconRef.current)
     reconRef.current = null
     for (const url of previewUrlsRef.current.values()) URL.revokeObjectURL(url)
@@ -1560,6 +1593,41 @@ export function App(): JSX.Element {
         void saveReconCache(fileKeyRef.current, result, wanted)
       }
 
+      // Hand the reading on. A book that is on the shelf gets its reading put
+      // beside it, so the session that transcribes it loads this instead of
+      // spending ten minutes reading the scan again. Never awaited into the
+      // flow: the gate is the same with or without it, and a failed upload is
+      // reported rather than standing in the way.
+      const shelf = loadShelf()
+      if (shelfReady(shelf)) {
+        const handKey = fileKeyRef.current
+        void (async () => {
+          try {
+            const dir = await shelfDirFor(shelf, handKey)
+            // A reading reused from this device may already be up there; one
+            // taken just now replaces whatever was.
+            if (cached && (await shelfHas(shelf, reconHandoffPath(dir)))) {
+              setHandoffNote('The reading of the scan is on the shelf, ready for a session to use.')
+              return
+            }
+            setHandoffNote('Putting the reading of the scan on the shelf…')
+            const sent = await pushReconToShelf(shelf, handKey, file.name, result, wanted)
+            setHandoffNote(
+              sent.sent
+                ? `The reading of the scan is on the shelf (${(sent.bytes / 1e6).toFixed(1)} MB), ` +
+                    'ready for a session to transcribe from. You can stop here.'
+                : null
+            )
+          } catch (err) {
+            setHandoffNote(
+              'The scan was read, but the reading could not be put on the shelf (' +
+                (err instanceof Error ? err.message : String(err)) +
+                '). It is kept on this device; opening the book here again will try once more.'
+            )
+          }
+        })()
+      }
+
       // Has this book already been paid for? Looked up after the free pass
       // rather than before it, because the crops and thumbnails it produces are
       // what make a resumed session complete rather than partial.
@@ -1819,6 +1887,140 @@ export function App(): JSX.Element {
       setShelfBusy(false)
     }
   }, [])
+
+  /**
+   * Books whose scan has been read and handed on: a `recon.json.gz` beside the
+   * book. Asked of the shelf rather than remembered, one request a book, after
+   * every listing — which is what decides who the queue owes a reading to.
+   */
+  const [readOnShelf, setReadOnShelf] = useState<ReadonlySet<string>>(new Set())
+  useEffect(() => {
+    const config = loadShelf()
+    if (!shelfReady(config) || shelfBooks.length === 0) return
+    let live = true
+    void (async () => {
+      const found = new Set<string>()
+      for (const b of shelfBooks) {
+        if (!hasReadableScan(b) || b.complete) continue
+        const dir = b.dir ?? knownShelfDir(b.key)
+        if (await shelfHas(config, reconHandoffPath(dir)).catch(() => false)) found.add(b.key)
+      }
+      if (live) setReadOnShelf(found)
+    })()
+    return () => {
+      live = false
+    }
+  }, [shelfBooks])
+
+  /**
+   * The reading queue: scans read one after another, straight off the shelf,
+   * each reading put back beside its book as soon as it is done.
+   *
+   * Written to this device as it moves, so a reload offers the rest back rather
+   * than forgetting it; inside a book, the recon checkpoint carries the leaves.
+   * The running copy lives in a ref, so a book queued while the loop is going
+   * is seen by the loop.
+   */
+  const [reconQueue, setReconQueueState] = useState<ReconQueueState | null>(() => {
+    try {
+      return parseReconQueue(JSON.parse(localStorage.getItem(RECON_QUEUE_STORAGE) ?? 'null'))
+    } catch {
+      return null
+    }
+  })
+  const reconQueueRef = useRef<ReconQueueState | null>(reconQueue)
+  const setReconQueue = useCallback((next: ReconQueueState | null): void => {
+    reconQueueRef.current = next
+    setReconQueueState(next)
+    try {
+      if (next) localStorage.setItem(RECON_QUEUE_STORAGE, JSON.stringify(next))
+      else localStorage.removeItem(RECON_QUEUE_STORAGE)
+    } catch {
+      /* the queue still runs; it just will not survive a reload */
+    }
+  }, [])
+  const [queueRunning, setQueueRunning] = useState(false)
+  const [queueNow, setQueueNow] = useState<{
+    title: string
+    progress: ShelfReadProgress
+  } | null>(null)
+  const queueAbortRef = useRef<AbortController | null>(null)
+  const shelfBooksRef = useRef<ShelfAbout[]>([])
+  shelfBooksRef.current = shelfBooks
+
+  const runReconQueue = useCallback(async (): Promise<void> => {
+    const config = loadShelf()
+    if (!shelfReady(config) || queueAbortRef.current) return
+    const abort = new AbortController()
+    queueAbortRef.current = abort
+    setQueueRunning(true)
+    // The screen, and so the tab, stays up for the whole queue.
+    const release = keepAwake()
+    const wanted = { dpi: RECON_DPI, maxPages: null, cleanup: DEFAULT_CLEANUP }
+    try {
+      for (;;) {
+        const state = reconQueueRef.current
+        if (!state || abort.signal.aborted) break
+        const key = queueRemaining(state)[0]
+        if (key === undefined) break
+        const about = shelfBooksRef.current.find((b) => b.key === key)
+        if (!about) {
+          setReconQueue(queueFailed(state, key, 'no longer on the shelf'))
+          continue
+        }
+        const title = shelfTitle(about)
+        try {
+          const outcome = await readScanFromShelf(config, about, {
+            wanted,
+            signal: abort.signal,
+            onProgress: (progress) => setQueueNow({ title, progress })
+          })
+          const after = reconQueueRef.current ?? state
+          if (outcome.sent) {
+            setReconQueue(queueFinished(after, key))
+            setReadOnShelf((set) => new Set([...set, key]))
+          } else {
+            setReconQueue(queueFailed(after, key, outcome.reason))
+          }
+        } catch (err) {
+          // Stopped by the editor: the book stays in the queue and its leaves
+          // in the checkpoint, so Carry on picks it up where it was.
+          if (abort.signal.aborted) break
+          setReconQueue(
+            queueFailed(
+              reconQueueRef.current ?? state,
+              key,
+              err instanceof Error ? err.message : String(err)
+            )
+          )
+        }
+      }
+    } finally {
+      release()
+      queueAbortRef.current = null
+      setQueueRunning(false)
+      setQueueNow(null)
+    }
+  }, [setReconQueue])
+
+  /** Queue books for reading and start, or add them to the queue already going. */
+  const queueReconFor = useCallback(
+    (keys: string[]): void => {
+      const current = reconQueueRef.current
+      const next =
+        current && queueRemaining(current).length > 0
+          ? { ...current, keys: [...new Set([...current.keys, ...keys])] }
+          : newReconQueue(keys)
+      setReconQueue(next)
+      void runReconQueue()
+    },
+    [runReconQueue, setReconQueue]
+  )
+
+  const owedReading = useMemo(
+    () => booksNeedingRecon(shelfBooks, readOnShelf),
+    [shelfBooks, readOnShelf]
+  )
 
   /** What is on the shelf, listed once at start-up when one is configured. */
   useEffect(() => {
@@ -4442,6 +4644,7 @@ export function App(): JSX.Element {
         </div>
 
         {error ? <p className="err">{error}</p> : null}
+        {handoffNote ? <div className="resume-note">{handoffNote}</div> : null}
 
         {/* --- intake --- */}
         {step.id === 'intake' && !progressInfo ? (
@@ -4459,15 +4662,42 @@ export function App(): JSX.Element {
               <div className="shelf">
                 <div className="shelf-head">
                   <span className="prompt">Your shelf</span>
-                  <button
-                    type="button"
-                    className="shelf-refresh"
-                    disabled={shelfBusy}
-                    onClick={() => void refreshShelf()}
-                  >
-                    {shelfBusy ? 'Fetching…' : 'Refresh'}
-                  </button>
+                  <span className="shelf-head-actions">
+                    {owedReading.length > 0 && !queueRunning ? (
+                      <button
+                        type="button"
+                        className="shelf-read-all"
+                        title="Reads each scan in this browser, one after another, and puts every reading on the shelf for a session to transcribe from"
+                        onClick={() => queueReconFor(owedReading.map((b) => b.key))}
+                      >
+                        Read {owedReading.length} unread{' '}
+                        {owedReading.length === 1 ? 'scan' : 'scans'}
+                      </button>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="shelf-refresh"
+                      disabled={shelfBusy}
+                      onClick={() => void refreshShelf()}
+                    >
+                      {shelfBusy ? 'Fetching…' : 'Refresh'}
+                    </button>
+                  </span>
                 </div>
+                {reconQueue ? (
+                  <ReconQueuePanel
+                    queue={reconQueue}
+                    running={queueRunning}
+                    current={queueNow}
+                    titleOf={(key) => {
+                      const b = shelfBooks.find((x) => x.key === key)
+                      return b ? shelfTitle(b) : key.split('\u0000')[0]!
+                    }}
+                    onStop={() => queueAbortRef.current?.abort()}
+                    onResume={() => void runReconQueue()}
+                    onDismiss={() => setReconQueue(null)}
+                  />
+                ) : null}
                 {shelfBooks.length === 0 ? (
                   <div className="help">
                     Nothing on {loadShelf().repo} yet, or it has not been listed. A book reaches the
@@ -4481,6 +4711,9 @@ export function App(): JSX.Element {
                     onQueries={(book) => void landFromShelf(book, 'gate-queries')}
                     onRead={(book) => void readFromShelf(book)}
                     onOpen={(book) => void openFromShelf(book)}
+                    readOnShelf={readOnShelf}
+                    queued={reconQueue ? new Set(queueRemaining(reconQueue)) : new Set<string>()}
+                    onReadScan={(book) => queueReconFor([book.key])}
                   />
                 )}
               </div>

@@ -75,6 +75,17 @@ export {
   type ReconWanted
 } from './recon-cache'
 export {
+  RECON_HANDOFF_FILE,
+  RECON_HANDOFF_FORMAT,
+  RECON_HANDOFF_VERSION,
+  parseReconHandoff,
+  reconHandoff,
+  reconHandoffPath,
+  type HandoffWord,
+  type ReconHandoff,
+  type ReconHandoffInput
+} from './recon-handoff'
+export {
   mergeBatchIntoRun,
   CARRIED_FIELDS,
   DECIDED_FIELDS,
