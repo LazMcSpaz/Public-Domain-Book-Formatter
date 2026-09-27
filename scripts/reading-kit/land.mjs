@@ -215,6 +215,14 @@ for (const page of out) {
     // mark, and the engine cannot tell: it claims the next § note, and every §
     // note after it is set one reference early (Isis Vol. II leaf 228, seven
     // notes). Named here so it is declared bare (`drive.mjs bare`) on landing.
+    // Asterisks set as an omission (`the Word * * * “ shall be used`, Isis
+    // Vol. II leaf 406) are three reference marks to the engine, and each
+    // claims a note: every `*` note after them was set three early.
+    if (b.kind !== 'footnote' && /\*\s+\*\s+\*/u.test(String(b.text))) {
+      console.error(
+        `  OMIT?  ${page.pageIndex}  asterisks as an omission, declare each bare: …${String(b.text).match(/.{0,30}\*\s+\*\s+\*.{0,10}/u)[0]}`
+      )
+    }
     if (b.kind !== 'footnote') {
       for (const m of String(b.text).matchAll(/§\s*\d/gu)) {
         const at = m.index ?? 0
