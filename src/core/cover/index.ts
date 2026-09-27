@@ -13,6 +13,7 @@
  */
 export * from './geometry'
 export * from './patterns'
+export * from './figures'
 export * from './document'
 export * from './compose'
 export * from './validate'

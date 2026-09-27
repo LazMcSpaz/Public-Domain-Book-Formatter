@@ -37,6 +37,7 @@ import {
 } from './geometry'
 import { ART_BRIEFS, BRIEF_LABEL, BRIEF_NOTE, SUGGESTED_ART_MODELS } from './art'
 import { GROUND_PATTERNS, PATTERN_LABEL, PATTERN_NOTE, type GroundPattern } from './patterns'
+import { FIGURE_LABEL, FIGURE_NOTE, GROUND_FIGURES, type GroundFigure } from './figures'
 import { describeSavedCoverLook, type SavedCoverLook } from './profile'
 
 /** A plate the app already cut out of this book's scan, offered as cover art. */
@@ -267,6 +268,37 @@ export function lookQuestions(state: CoverInterviewState): Question[] {
         { value: 'none', label: 'Nothing' }
       ],
       defaultValue: look.rule
+    },
+    {
+      id: 'cover-figure',
+      type: 'choice',
+      group: 'ornament',
+      prompt: 'A figure behind the title?',
+      help: 'One large picture on the front panel, printed very faint and bled off three edges. Unlike a texture it stops at the fold, because a picture with a centre shows a fold that has crept.',
+      options: [
+        { value: '', label: 'None' },
+        ...GROUND_FIGURES.map((f) => ({
+          value: f,
+          label: FIGURE_LABEL[f],
+          description: FIGURE_NOTE[f]
+        }))
+      ],
+      defaultValue: look.groundFigure ?? ''
+    },
+    {
+      id: 'cover-figure-opacity',
+      type: 'choice',
+      group: 'ornament',
+      prompt: 'How faint?',
+      help: `Five per cent is the floor a print-on-demand press will hold; under it a tint mottles rather than lightens. Past a fifth the figure competes with the title.`,
+      options: [
+        { value: '0.04', label: '4% — the very edge of what prints' },
+        { value: '0.05', label: '5% — barely there' },
+        { value: '0.08', label: '8% — a visible ghost' },
+        { value: '0.12', label: '12% — plainly a picture' },
+        { value: '0.2', label: '20% — a picture the title sits on' }
+      ],
+      defaultValue: String(look.groundFigureOpacity)
     },
     {
       id: 'cover-frame',
@@ -550,6 +582,11 @@ export function coverFromAnswers(
     titleCase: text(answers, 'cover-title-case', doc.look.titleCase),
     rule: text(answers, 'cover-rule', doc.look.rule),
     frontFrame: text(answers, 'cover-frame', doc.look.frontFrame),
+    groundFigure:
+      (text(answers, 'cover-figure', doc.look.groundFigure ?? '') as GroundFigure | '') || null,
+    groundFigureOpacity: Number(
+      text(answers, 'cover-figure-opacity', String(doc.look.groundFigureOpacity))
+    ),
     markOnFront: flag(answers, 'cover-mark-front', doc.look.markOnFront),
     ornamentId: text(answers, 'cover-ornament', doc.look.ornamentId ?? '') || null,
     groundPattern:

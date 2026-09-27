@@ -31,3 +31,28 @@ is a hole, and the disc's inner edge is kept when the svastika is not.
 
 The Om is welded to the disc in the source and is not separable without cutting
 the outline geometrically. It is present in all three.
+
+## Isis, winged
+
+`isis-winged.svg` (the engraved trace), `isis-winged-solid.svg` (the massed
+silhouette).
+
+Traced from a photograph of a modern resin statue, cut at the hem — the plinth
+is not in it. The pose and the iconography are ancient and nobody owns them;
+the drape, the wing curve and the proportions are that sculptor's, so a close
+trace is not as unencumbered as a redrawing from the ancient sources would be.
+Worth knowing before one goes on a cover for sale.
+
+**A global threshold cannot trace this and the reason generalises.** The
+statue's gold is dark ochre, so the ridges of the feathers and the valleys
+between them both fall under any level that separates the figure from the
+paper, and the wings come out as two black blobs. What separates them is
+*local* contrast — each pixel against the mean of its neighbourhood — with the
+truly black areas forced solid underneath, and the outline traced separately at
+the paper threshold and stroked, or the gold skirt dissolves into the white
+background.
+
+Two files because a ground at five per cent wants a mass and a device at an
+inch wants the detail: the hatching averages out to nothing at the first size
+and is the whole character of the thing at the second. `FIGURE_SRC` in
+`src/core/cover/figures.ts` points the ground figure at whichever is chosen.

@@ -33,6 +33,7 @@ import type { OrnamentArt } from '@core/ornament'
 import { sizeAfterOps } from '@core/image'
 import { worksLabel, type CoverDocument, type FrameStyle, type Hex } from './document'
 import { GROUND_IMAGE_ID, groundPattern, isImageGround, PATTERN_OPACITY } from './patterns'
+import { figureFramePt, figureOpacity, GROUND_FIGURE_ID } from './figures'
 import {
   contains,
   coverGeometry,
@@ -721,6 +722,31 @@ export function composeCover(doc: CoverDocument, options: ComposeOptions): Compo
         opacity: PATTERN_OPACITY[look.groundPattern]
       })
     }
+  }
+
+  // The ground figure, over the front panel and under everything on it.
+  //
+  // After the pattern, because a book that has both wants the figure in front
+  // of the texture rather than behind it, and before every panel, because
+  // nothing on the front should have to compete with a ground for the eye.
+  // Its pixels are the renderer's: a vector source has no pixel count until
+  // something has drawn it, which is the same bargain the picture-backed
+  // pattern strikes two blocks up.
+  if (look.groundFigure) {
+    const frame = figureFramePt(geometry)
+    items.push({
+      kind: 'image',
+      id: GROUND_FIGURE_ID,
+      xPt: frame.xPt,
+      yPt: frame.yPt,
+      widthPt: frame.widthPt,
+      heightPt: frame.heightPt,
+      srcX: 0,
+      srcY: 0,
+      srcWidth: 0,
+      srcHeight: 0,
+      opacity: figureOpacity(look.groundFigureOpacity)
+    })
   }
 
   // Art dimensions after retouching — the op stack can crop, and the DPI check

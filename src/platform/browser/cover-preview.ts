@@ -23,8 +23,10 @@ import type { ComposedCover, CoverDocument } from '@core/cover'
 import {
   composeCover,
   DEFAULT_ICON_WIDTH_PX,
+  FIGURE_SRC,
   FRONT_MARK_ID,
   frontIconPlan,
+  GROUND_FIGURE_ID,
   GROUND_IMAGE_ID,
   GROUND_IMAGE_SRC,
   PRESS_MARK_ID,
@@ -137,6 +139,24 @@ async function buildCover(
     images.set(GROUND_IMAGE_ID, ground.bytes)
     groundItem.srcWidth = ground.widthPx
     groundItem.srcHeight = ground.heightPx
+  }
+
+  // The ground figure, rendered like the picture-backed pattern and for the
+  // same reason: the size is read back off the placed rectangle, so the
+  // picture is drawn at the resolution it prints at. `renderGroundImage`
+  // already covers and centre-crops, which is exactly what a figure bleeding
+  // off three edges needs, so there is no second fit here to disagree with it.
+  const figureItem = composed.items.find((i) => i.kind === 'image' && i.id === GROUND_FIGURE_ID)
+  if (figureItem && figureItem.kind === 'image' && doc.look.groundFigure) {
+    const figure = await renderGroundImage({
+      src: FIGURE_SRC[doc.look.groundFigure],
+      widthIn: figureItem.widthPt / 72,
+      heightIn: figureItem.heightPt / 72,
+      color: doc.look.palette.ink
+    })
+    images.set(GROUND_FIGURE_ID, figure.bytes)
+    figureItem.srcWidth = figure.widthPx
+    figureItem.srcHeight = figure.heightPx
   }
 
   const pdf = await renderCoverPdf(composed, fonts, {

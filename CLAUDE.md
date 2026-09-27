@@ -2662,6 +2662,26 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   never binds — so the fixture is a tall device over a long title, where it
   does.
 
+- **Also done**: **the ground figure** (`src/core/cover/figures.ts`) — one
+  large picture behind the front cover's type, bled off three edges and
+  printing at around five per cent. It is deliberately **not** another entry in
+  the ground-pattern list, and the difference is the whole module: a pattern is
+  allover, so it has no alignment to notice and can run across a fold that
+  creeps by an eighth of an inch, while a figure has a centre and a pair of
+  wing tips and a reader can see that the fold has moved it. So a figure stops
+  dead at the fold and the back cover keeps its plain ground — which is the
+  invariant the tests pin, because the failure is not an error but a faint
+  picture half-printed on the back of a book somebody has already bought. The
+  tint is clamped rather than trusted: under about four per cent a
+  print-on-demand press mottles instead of lightening, and past a fifth the
+  figure stops being a ground and competes with the title. No new fitting code
+  — `renderGroundImage` already covers and centre-crops, which is exactly what
+  bleeding off three edges needs, so there is no second fit to disagree with
+  the first. Shipped with two traces of the same artwork, because a ground at
+  five per cent wants a **mass** and the same figure as a device at an inch
+  wants the **detail**: fine hatching averages out to nothing at the one size
+  and is the whole character of the thing at the other.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

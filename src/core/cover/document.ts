@@ -16,6 +16,7 @@
  */
 import type { ImageEditOp } from '@core/model'
 import { GROUND_PATTERNS, type GroundPattern } from './patterns'
+import { DEFAULT_FIGURE_OPACITY, figureOpacity, GROUND_FIGURES, type GroundFigure } from './figures'
 import type { PaperStock } from './geometry'
 
 /**
@@ -187,6 +188,16 @@ export interface CoverLook {
    * that must not change between volumes.
    */
   groundPattern: GroundPattern | null
+  /**
+   * One large picture behind the front cover's type, or none.
+   *
+   * Not a second texture: a figure has a centre and a pair of edges, so it
+   * prints on the front panel alone rather than across a fold that creeps.
+   * See `figures.ts`.
+   */
+  groundFigure: GroundFigure | null
+  /** How strongly that figure prints. Clamped to what a press will hold. */
+  groundFigureOpacity: number
 }
 
 /** A supplied device, as bytes and the proportions to place it by. */
@@ -303,7 +314,9 @@ export function defaultLook(): CoverLook {
     announceWorks: false,
     pressMark: null,
     markOnFront: false,
-    groundPattern: null
+    groundPattern: null,
+    groundFigure: null,
+    groundFigureOpacity: DEFAULT_FIGURE_OPACITY
   }
 }
 
@@ -415,7 +428,15 @@ export function normalizeLook(raw: unknown): CoverLook {
     markOnFront: bool(raw['markOnFront'], d.markOnFront),
     groundPattern: (GROUND_PATTERNS as readonly string[]).includes(raw['groundPattern'] as string)
       ? (raw['groundPattern'] as GroundPattern)
-      : null
+      : null,
+    groundFigure: (GROUND_FIGURES as readonly string[]).includes(raw['groundFigure'] as string)
+      ? (raw['groundFigure'] as GroundFigure)
+      : null,
+    groundFigureOpacity: figureOpacity(
+      typeof raw['groundFigureOpacity'] === 'number'
+        ? raw['groundFigureOpacity']
+        : d.groundFigureOpacity
+    )
   }
 }
 
