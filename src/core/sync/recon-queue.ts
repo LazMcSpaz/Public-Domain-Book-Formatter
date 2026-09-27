@@ -89,3 +89,41 @@ export function parseReconQueue(raw: unknown): ReconQueueState | null {
   )
   return { keys: r['keys'], done: r['done'], failed, startedAt: r['startedAt'] }
 }
+
+/**
+ * Whether a book is ticked when the editor is asked which scans to read.
+ *
+ * A book mostly transcribed already gets little from a fresh reading of its
+ * scan — a few leaves still to land, and the checks — at the cost of the whole
+ * scan's time, so it is offered unticked and the choice is the editor's. Half
+ * is the line: a book put on the shelf unread carries one leaf, and a book
+ * nearly finished carries nearly all of them, so nothing real sits near it.
+ */
+export function pickedByDefault(about: Pick<ShelfAbout, 'read' | 'pageCount'>): boolean {
+  if (about.pageCount <= 0) return true
+  return about.read / about.pageCount < 0.5
+}
+
+/** Take a book out of the queue. One already read or failed stays in the record. */
+export function queueRemove(state: ReconQueueState, key: string): ReconQueueState {
+  if (!queueRemaining(state).includes(key)) return state
+  return { ...state, keys: state.keys.filter((k) => k !== key) }
+}
+
+/**
+ * Move a waiting book one place earlier (`-1`) or later (`1`) among the books
+ * still to read. Books already settled keep their places; a move past either
+ * end is no move.
+ */
+export function queueMove(state: ReconQueueState, key: string, by: -1 | 1): ReconQueueState {
+  const remaining = queueRemaining(state)
+  const at = remaining.indexOf(key)
+  const other = remaining[at + by]
+  if (at < 0 || other === undefined) return state
+  const keys = [...state.keys]
+  const i = keys.indexOf(key)
+  const j = keys.indexOf(other)
+  keys[i] = other
+  keys[j] = key
+  return { ...state, keys }
+}

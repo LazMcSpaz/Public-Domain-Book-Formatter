@@ -3,9 +3,12 @@ import {
   booksNeedingRecon,
   newReconQueue,
   parseReconQueue,
+  pickedByDefault,
   queueFailed,
   queueFinished,
+  queueMove,
   queueRemaining,
+  queueRemove,
   type ShelfAbout
 } from '../src/core/sync'
 
@@ -57,5 +60,31 @@ describe('the queue', () => {
     expect(parseReconQueue(JSON.parse(JSON.stringify(q)))).toEqual(q)
     expect(parseReconQueue({ keys: 'a' })).toBeNull()
     expect(parseReconQueue(null)).toBeNull()
+  })
+})
+
+describe('controlling the queue', () => {
+  it('ticks a new book and leaves a mostly transcribed one to the editor', () => {
+    expect(pickedByDefault(card('new', { pageCount: 248, read: 1 }))).toBe(true)
+    expect(pickedByDefault(card('nearly', { pageCount: 102, read: 94 }))).toBe(false)
+    expect(pickedByDefault(card('empty', { pageCount: 0, read: 0 }))).toBe(true)
+  })
+
+  it('takes a waiting book out, and leaves a settled one in the record', () => {
+    let q = queueFinished(newReconQueue(['a', 'b', 'c']), 'a')
+    q = queueRemove(q, 'b')
+    expect(queueRemaining(q)).toEqual(['c'])
+    expect(queueRemove(q, 'a')).toBe(q)
+  })
+
+  it('reorders among the books still to read, past a settled one', () => {
+    let q = queueFinished(newReconQueue(['a', 'b', 'c', 'd']), 'b')
+    q = queueMove(q, 'c', -1)
+    expect(queueRemaining(q)).toEqual(['c', 'a', 'd'])
+    q = queueMove(q, 'd', 1)
+    expect(queueRemaining(q)).toEqual(['c', 'a', 'd'])
+    q = queueMove(q, 'c', 1)
+    expect(queueRemaining(q)).toEqual(['a', 'c', 'd'])
+    expect(q.done).toEqual(['b'])
   })
 })

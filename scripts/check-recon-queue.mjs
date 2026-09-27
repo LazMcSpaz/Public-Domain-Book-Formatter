@@ -23,6 +23,13 @@ const books = [
     dir: 'Anon-TheTypesetBook-bbb222',
     fileName: 'test-digital.pdf',
     scan: 'public/test-digital.pdf'
+  },
+  // Mostly transcribed already: offered unticked, and the one the check skips.
+  {
+    dir: 'Anon-TheNearlyDoneBook-ccc333',
+    fileName: 'nearly-done.pdf',
+    scan: 'public/test-book.pdf',
+    read: 8
   }
 ].map((b, i) => ({
   ...b,
@@ -86,7 +93,7 @@ async function stub(page) {
           marked: 0,
           facts: 0,
           complete: false,
-          read: 0,
+          read: b.read ?? 0,
           scanPath: b.scanPath
         })
       })
@@ -124,31 +131,66 @@ await stub(page)
 await page.goto(URL_BASE, { waitUntil: 'networkidle' })
 await page.waitForSelector('.deck-card', { timeout: 15000 })
 
+const [scanned, typeset, nearly] = books
+const pathOf = (b) => `books/${b.dir}/recon.json.gz`
+const firstUpload = () => [...uploads.keys()][0]
+
+// The picker: every book owed a reading, the mostly transcribed one unticked.
 const readAll = page.locator('.shelf-read-all')
 const label = await readAll.textContent()
-if (!/Read 2 unread scans/.test(label ?? '')) fail(`the button says "${label}"`)
-
-// Stop after the first book is on the shelf, reload, and carry on.
+if (!/\(3\)/.test(label ?? '')) fail(`the button says "${label}"`)
 await readAll.click()
-const t0 = Date.now()
-while (uploads.size < 1 && Date.now() - t0 < 240_000) await page.waitForTimeout(500)
-if (uploads.size < 1) fail('no reading reached the shelf within four minutes')
+const boxes = page.locator('.queue-picker .queue-item')
+if ((await boxes.count()) !== 3) fail(`the picker offers ${await boxes.count()} books, not 3`)
+const ticked = await page.locator('.queue-picker input:checked').count()
+if (ticked !== 2) fail(`${ticked} books arrive ticked, not the 2 unread ones`)
+const nearlyRow = page.locator('.queue-picker .queue-item', { hasText: 'Nearly Done' })
+if (await nearlyRow.locator('input').isChecked()) fail('the mostly transcribed book arrived ticked')
+if (!/8 of 8 already transcribed/.test((await nearlyRow.textContent()) ?? '')) {
+  fail('the picker does not say how much of the partial book is transcribed')
+}
+await page.locator('.queue-picker').screenshot({ path: 'screenshots/recon-queue-picker.png' })
+await page.locator('.queue-picker-actions button.primary').click()
+
+await page.waitForSelector('.queue-item.now', { timeout: 30_000 })
+await page.locator('.queue-panel').screenshot({ path: 'screenshots/recon-queue-running.png' })
+// Stop at once, move the second book to the front, and survive a reload.
 await page.locator('.queue-actions button', { hasText: 'Stop' }).click()
 await page.waitForSelector('.queue-actions button:has-text("Carry on")', { timeout: 60_000 })
-const stored = await page.evaluate(() => localStorage.getItem('pdbf.reconQueue'))
-if (!stored) fail('a stopped queue was not written down')
-
+await page
+  .locator('.queue-item', { hasText: 'Typeset Book' })
+  .getByRole('button', { name: /earlier/ })
+  .click()
 await page.reload({ waitUntil: 'networkidle' })
 await page.waitForSelector('.queue-panel', { timeout: 15000 })
-const left = await page.locator('.queue-count').textContent()
-console.log(`  after a reload the panel says: ${left}`)
+const order = await page
+  .locator('.queue-panel:not(.queue-picker) .queue-what strong')
+  .allTextContents()
+console.log(`  after Stop, a move and a reload the queue reads: ${order.join(' / ')}`)
+if (!/Typeset/.test(order[0] ?? '')) fail('the moved book is not first after a reload')
+
 await page.locator('.queue-actions button', { hasText: 'Carry on' }).click()
 const t1 = Date.now()
 while (uploads.size < 2 && Date.now() - t1 < 240_000) await page.waitForTimeout(500)
 await page.waitForSelector('.queue-eyebrow:has-text("Reading finished")', { timeout: 60_000 })
+if (firstUpload() !== pathOf(typeset)) fail(`the first reading to land was ${firstUpload()}`)
+
+// Add the partial book, then skip it while it is being read.
+await page.locator('.shelf-read-all').click()
+await page.locator('.queue-picker .queue-item input').first().check()
+await page.locator('.queue-picker-actions button.primary').click()
+await page.locator('.queue-item.now button', { hasText: 'Skip' }).click({ timeout: 30_000 })
+await page.waitForSelector('.queue-eyebrow:has-text("Reading finished")', { timeout: 60_000 })
+// Nothing may still be reading behind a panel that says finished: a skip that
+// only took the book off the list would upload it here, a little later.
+await page.waitForFunction(() => !document.querySelector('.queue-panel.running'), null, {
+  timeout: 120_000
+})
+await page.waitForTimeout(3000)
+if (uploads.has(pathOf(nearly))) fail('a skipped book still had its reading put on the shelf')
 await page.screenshot({ path: 'screenshots/recon-queue-done.png' })
 
-for (const b of books) {
+for (const b of [scanned, typeset]) {
   const path = `books/${b.dir}/recon.json.gz`
   const bytes = uploads.get(path)
   if (!bytes) {
@@ -174,9 +216,12 @@ for (const b of books) {
 
 const notes = await page.locator('.deck-scan-note').allTextContents()
 if (!notes.some((n) => /ready to transcribe/.test(n))) fail('no card says its scan was read')
-if (await page.locator('.shelf-read-all').count())
-  fail('the button still offers to read scans already read')
+// Only the skipped book is still owed a reading.
+const offer = await page.locator('.shelf-read-all').textContent()
+if (!/\(1\)/.test(offer ?? '')) fail(`after the queue, the button says "${offer}", not (1)`)
 
 await browser.close()
 if (failed) process.exit(1)
-console.log('ok — every unread scan was read, handed on, and a stopped queue survived a reload')
+console.log(
+  'ok — the picker, a reorder that survived a reload, a skip, and both readings on the shelf'
+)

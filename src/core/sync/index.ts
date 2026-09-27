@@ -57,9 +57,12 @@ export {
   hasReadableScan,
   newReconQueue,
   parseReconQueue,
+  pickedByDefault,
   queueFailed,
   queueFinished,
+  queueMove,
   queueRemaining,
+  queueRemove,
   type ReconQueueFailure,
   type ReconQueueState
 } from './recon-queue'

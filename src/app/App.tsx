@@ -158,7 +158,9 @@ import {
   parseReconQueue,
   queueFailed,
   queueFinished,
+  queueMove,
   queueRemaining,
+  queueRemove,
   shelfSlug,
   shelfTitle
 } from '@core/sync'
@@ -224,7 +226,7 @@ import { ProofSheet } from './ProofSheet'
 import { BookEditor } from './BookEditor'
 import { BookReader } from './BookReader'
 import { ShelfCarousel } from './ShelfCarousel'
-import { ReconQueuePanel } from './ReconQueuePanel'
+import { ReconPicker, ReconQueuePanel } from './ReconQueuePanel'
 import { ThemeToggle } from './theme'
 
 /** A cache key that changes whenever the stack that produced the pixels does. */
@@ -1941,10 +1943,15 @@ export function App(): JSX.Element {
   }, [])
   const [queueRunning, setQueueRunning] = useState(false)
   const [queueNow, setQueueNow] = useState<{
+    key: string
     title: string
     progress: ShelfReadProgress
   } | null>(null)
   const queueAbortRef = useRef<AbortController | null>(null)
+  /** The book being read now, and its own stop — what Skip pulls. */
+  const bookAbortRef = useRef<{ key: string; abort: AbortController } | null>(null)
+  /** The picker of scans to read, open or not. */
+  const [pickingScans, setPickingScans] = useState(false)
   const shelfBooksRef = useRef<ShelfAbout[]>([])
   shelfBooksRef.current = shelfBooks
 
@@ -1969,11 +1976,17 @@ export function App(): JSX.Element {
           continue
         }
         const title = shelfTitle(about)
+        // Its own stop, pulled by the queue's: Skip ends this book and leaves
+        // the queue running, Stop ends both.
+        const book = new AbortController()
+        const pass = (): void => book.abort()
+        abort.signal.addEventListener('abort', pass)
+        bookAbortRef.current = { key, abort: book }
         try {
           const outcome = await readScanFromShelf(config, about, {
             wanted,
-            signal: abort.signal,
-            onProgress: (progress) => setQueueNow({ title, progress })
+            signal: book.signal,
+            onProgress: (progress) => setQueueNow({ key, title, progress })
           })
           const after = reconQueueRef.current ?? state
           if (outcome.sent) {
@@ -1986,6 +1999,9 @@ export function App(): JSX.Element {
           // Stopped by the editor: the book stays in the queue and its leaves
           // in the checkpoint, so Carry on picks it up where it was.
           if (abort.signal.aborted) break
+          // Skipped: already out of the queue, its leaves still in the
+          // checkpoint for whenever it is queued again.
+          if (book.signal.aborted) continue
           setReconQueue(
             queueFailed(
               reconQueueRef.current ?? state,
@@ -1993,6 +2009,9 @@ export function App(): JSX.Element {
               err instanceof Error ? err.message : String(err)
             )
           )
+        } finally {
+          abort.signal.removeEventListener('abort', pass)
+          bookAbortRef.current = null
         }
       }
     } finally {
@@ -2017,10 +2036,33 @@ export function App(): JSX.Element {
     [runReconQueue, setReconQueue]
   )
 
+  /** Take a book out of the queue; the one being read now is skipped. */
+  const dropFromQueue = useCallback(
+    (key: string): void => {
+      const state = reconQueueRef.current
+      if (!state) return
+      setReconQueue(queueRemove(state, key))
+      if (bookAbortRef.current?.key === key) bookAbortRef.current.abort.abort()
+    },
+    [setReconQueue]
+  )
+  const moveInQueue = useCallback(
+    (key: string, by: -1 | 1): void => {
+      const state = reconQueueRef.current
+      if (state) setReconQueue(queueMove(state, key, by))
+    },
+    [setReconQueue]
+  )
+
   const owedReading = useMemo(
     () => booksNeedingRecon(shelfBooks, readOnShelf),
     [shelfBooks, readOnShelf]
   )
+  /** What the picker offers: owed a reading and not already waiting in the queue. */
+  const pickable = useMemo(() => {
+    const waiting = new Set(reconQueue ? queueRemaining(reconQueue) : [])
+    return owedReading.filter((b) => !waiting.has(b.key))
+  }, [owedReading, reconQueue])
 
   /** What is on the shelf, listed once at start-up when one is configured. */
   useEffect(() => {
@@ -4663,15 +4705,16 @@ export function App(): JSX.Element {
                 <div className="shelf-head">
                   <span className="prompt">Your shelf</span>
                   <span className="shelf-head-actions">
-                    {owedReading.length > 0 && !queueRunning ? (
+                    {pickable.length > 0 && !pickingScans ? (
                       <button
                         type="button"
                         className="shelf-read-all"
-                        title="Reads each scan in this browser, one after another, and puts every reading on the shelf for a session to transcribe from"
-                        onClick={() => queueReconFor(owedReading.map((b) => b.key))}
+                        title="Choose scans to read in this browser, one after another; every reading goes on the shelf for a session to transcribe from"
+                        onClick={() => setPickingScans(true)}
                       >
-                        Read {owedReading.length} unread{' '}
-                        {owedReading.length === 1 ? 'scan' : 'scans'}
+                        {queueRunning
+                          ? `Add scans to the queue (${pickable.length})`
+                          : `Read unread scans (${pickable.length})`}
                       </button>
                     ) : null}
                     <button
@@ -4684,6 +4727,17 @@ export function App(): JSX.Element {
                     </button>
                   </span>
                 </div>
+                {pickingScans && pickable.length > 0 ? (
+                  <ReconPicker
+                    books={pickable}
+                    adding={queueRunning}
+                    onCancel={() => setPickingScans(false)}
+                    onRead={(keys) => {
+                      setPickingScans(false)
+                      if (keys.length > 0) queueReconFor(keys)
+                    }}
+                  />
+                ) : null}
                 {reconQueue ? (
                   <ReconQueuePanel
                     queue={reconQueue}
@@ -4696,6 +4750,9 @@ export function App(): JSX.Element {
                     onStop={() => queueAbortRef.current?.abort()}
                     onResume={() => void runReconQueue()}
                     onDismiss={() => setReconQueue(null)}
+                    onRemove={dropFromQueue}
+                    onMove={moveInQueue}
+                    aboutOf={(key) => shelfBooks.find((x) => x.key === key)}
                   />
                 ) : null}
                 {shelfBooks.length === 0 ? (
