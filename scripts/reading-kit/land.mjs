@@ -237,8 +237,12 @@ for (let k = 1; k < out.length; k++) {
   const a = lastBody(out[k - 1])
   const b = firstBody(out[k])
   if (!a || !b) continue
-  const end = String(a.text).replace(/<[^>]+>/gu, '').trimEnd()
-  const start = String(b.text).replace(/<[^>]+>/gu, '').trimStart()
+  const end = String(a.text)
+    .replace(/<[^>]+>/gu, '')
+    .trimEnd()
+  const start = String(b.text)
+    .replace(/<[^>]+>/gu, '')
+    .trimStart()
   if (/\p{L}-$/u.test(end) && /^\p{Lu}/u.test(start)) {
     console.error(
       `  SEAM?  ${out[k - 1].pageIndex}→${out[k].pageIndex}  …${end.slice(-30)} | ${start.slice(0, 30)}…`
