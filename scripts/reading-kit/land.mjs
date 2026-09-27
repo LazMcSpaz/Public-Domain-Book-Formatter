@@ -225,6 +225,26 @@ for (const page of out) {
     }
   }
 }
+// A compound broken by the page edge whose second half is capitalised —
+// "the dying Gautama-" on leaf 336, "Buddha is thus addressed" on 337 — is
+// never joined by assembly, which reads a capital as a new paragraph, so the
+// book prints one sentence as two paragraphs. Named here so the pair is merged
+// on landing (`drive.mjs block <id> merge`, then the space taken out).
+const lastBody = (p) =>
+  [...p.blocks].reverse().find((b) => b.kind !== 'footnote' && String(b.text).trim())
+const firstBody = (p) => p.blocks.find((b) => b.kind !== 'footnote' && String(b.text).trim())
+for (let k = 1; k < out.length; k++) {
+  const a = lastBody(out[k - 1])
+  const b = firstBody(out[k])
+  if (!a || !b) continue
+  const end = String(a.text).replace(/<[^>]+>/gu, '').trimEnd()
+  const start = String(b.text).replace(/<[^>]+>/gu, '').trimStart()
+  if (/\p{L}-$/u.test(end) && /^\p{Lu}/u.test(start)) {
+    console.error(
+      `  SEAM?  ${out[k - 1].pageIndex}→${out[k].pageIndex}  …${end.slice(-30)} | ${start.slice(0, 30)}…`
+    )
+  }
+}
 writeFileSync(`${K}/batch-${tag}.json`, JSON.stringify(out, null, 1) + '\n')
 writeFileSync(`${K}/queries-${tag}.json`, JSON.stringify(queries, null, 1) + '\n')
 if (cuts.length) writeFileSync(`${K}/cuts-${tag}.json`, JSON.stringify(cuts, null, 1) + '\n')
