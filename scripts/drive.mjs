@@ -4838,8 +4838,17 @@ async function serve() {
           const res = await fetch(url)
           if (!res.ok) throw new Error(`reading the file: ${res.status}`)
           const handoff = project.parseReconHandoff(JSON.parse(await res.text()))
+          // Filed under the run this device holds for the same file. A key is
+          // name, size and modification time, and the time is the one part
+          // that moves between devices — the driver's copy of a scan is not
+          // the editor's — so the book is matched on name and size, the way
+          // the app itself opens books (`findRunForFile`).
+          const runs = await runStore.listRuns()
+          const prefix = handoff.key.split('\u0000').slice(0, 2).join('\u0000') + '\u0000'
+          const here = runs.filter((r) => r.key === handoff.key || r.key.startsWith(prefix))
+          const key = here.length === 1 ? here[0].key : handoff.key
           const saved = await cacheMod.saveReconCache(
-            handoff.key,
+            key,
             {
               pageCount: handoff.pageCount,
               words: handoff.words,
@@ -4854,17 +4863,24 @@ async function serve() {
             },
             { dpi: handoff.dpi, maxPages: null, cleanup: handoff.cleanup }
           )
-          const runs = await runStore.listRuns()
           return {
             saved,
-            key: handoff.key.split('\u0000')[0],
+            key: key.split('\u0000')[0],
+            ...(key !== handoff.key
+              ? { rekeyed: 'to the run this device holds for the same file' }
+              : {}),
             leaves: handoff.pageCount,
             words: handoff.words.length,
             source: handoff.source,
             readOn: handoff.savedAt,
             // The cache is keyed by the book; without its run here, no verb
             // will look for it until the book is loaded.
-            bookLoadedHere: runs.some((r) => r.key === handoff.key)
+            bookLoadedHere: here.length === 1,
+            ...(here.length > 1
+              ? {
+                  warning: `${here.length} runs here for this file; filed under the reading's own key`
+                }
+              : {})
           }
         },
         [REPO, `http://127.0.0.1:${PORT}/file?path=${encodeURIComponent(tmp)}`]
