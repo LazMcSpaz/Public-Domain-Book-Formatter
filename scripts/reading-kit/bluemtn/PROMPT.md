@@ -44,6 +44,15 @@ Continuous prose in six chapters, a clean 1930 setting in a modern face. Each le
 - **A chapter opening can carry an epigraph** in small type: `blockquote`. The draft runs the body's first line into it; move that line back to the body paragraph and check the epigraph's closing `”`.
 - **Check the kind of every block near the foot.** The draft types a note below the rule `paragraph`, and the last body line above the rule `footnote`.
 - **The contents page**: dot leaders are not text. Set each entry as `Chapter I` and its folio, and nothing between.
+- **Nested speech opens `“ ‘` with a space between the marks**; ours reads it as `“¢`, `“‘`, `“1` or a lone `“`. A closing single `’` is read as `”`, and `‘` as `®`.
+- **`I` is read as `1`** (`1 alone`, `1. e.` for `i. e.`).
+- **Letterspaced words** (`a l w a y s`) are justification: set the word whole.
+- **Ours shuffles lines** around a quotation broken at a line end, and can move a word or a line's opening words into the wrong block (typed `heading`) or out of order. Check the order of the text against the page, not only the words.
+- **A very short line of dialogue comes through typed `blockquote`** with the next paragraph's first line run into it, and the rest of that paragraph as a separate block. Retype it `paragraph`, `join` the continuation, and report the run-together paragraph (rule 10).
+- **The running head can come through as a paragraph** with a junk prefix (`~~ 128 THE PEOPLE OF`): set it to `""`.
+- **An em dash opening a line** gets a space before it in ours (`himself —to`): close it up.
+- **Footnotes in the smaller type** carry the thin space before `;` and `:` too.
+- **A word hyphenated across two leaves** is set whole at the end of the first leaf and removed from the start of the next (rule 9 across leaves); say so in your report.
 
 ## Block kinds
 
