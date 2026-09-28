@@ -5547,7 +5547,7 @@ export function App(): JSX.Element {
                         images={drawableImageBytes()}
                       />
                     ) : null}
-                    <div className="actions">
+                    <div className={step.id === 'gate-queries' ? 'actions pinned' : 'actions'}>
                       <button
                         type="button"
                         className="primary"

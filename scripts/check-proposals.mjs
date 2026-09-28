@@ -232,6 +232,27 @@ await page.screenshot({ path: 'screenshots/14b-query-proposals-phone.png', fullP
 const overflow = await page.evaluate(
   () => document.documentElement.scrollWidth - document.documentElement.clientWidth
 )
+// And a tablet held upright, which is where the editor rules. The button that
+// files the ruling is pinned to the bottom of the window (the editor asked
+// for it by name): measured as a box inside the viewport while the top of the
+// query is in view, not assumed from the stylesheet.
+await page.setViewportSize({ width: 820, height: 1180 })
+await page.evaluate(() => window.scrollTo(0, 0))
+await page.waitForTimeout(400)
+await page.screenshot({ path: 'screenshots/14c-query-proposals-tablet.png' })
+const pinned = await page.evaluate(() => {
+  const bar = document.querySelector('.pager, .actions.pinned')
+  if (!bar) return { found: false }
+  const r = bar.getBoundingClientRect()
+  return {
+    found: true,
+    inView: r.top >= 0 && r.bottom <= window.innerHeight + 1,
+    box: [Math.round(r.top), Math.round(r.bottom), Math.round(r.height)],
+    text: bar.textContent.slice(0, 60),
+    cls: bar.className,
+    scrolls: document.documentElement.scrollHeight > window.innerHeight
+  }
+})
 await page.setViewportSize({ width: 1100, height: 1400 })
 
 const values = decisionRadios.map((r) => r.value)
@@ -263,6 +284,11 @@ if (checked.length > 0) {
 if (!decisionRadios.some((r) => /the spirits of heaven/u.test(r.label))) {
   problems.push('no option says what it would make the page read')
 }
+if (!pinned.found) {
+  problems.push('the gate has no button bar to pin')
+} else if (pinned.scrolls && !pinned.inView) {
+  problems.push('on a tablet the button that files a ruling is below the fold, not pinned')
+}
 if (overflow > 1) {
   problems.push(`the page scrolls sideways by ${overflow}px at 430px wide`)
 }
@@ -272,6 +298,7 @@ console.log(`offered   : ${values.join(', ')}`)
 console.log(`scan asked: ${scanAsked}`)
 console.log(`selected  : ${checked.length}`)
 console.log(`overflow  : ${overflow}px at 430px`)
+console.log(`pinned    : ${JSON.stringify(pinned)}`)
 console.log('→ screenshots/14-query-proposals.png')
 
 await browser.close()

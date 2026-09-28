@@ -348,11 +348,28 @@ body {
   background: var(--accent);
   transition: width 0.2s;
 }
+/* Pinned to the bottom of the window at every width, not only on a phone.
+   One query at the gate is its passage, its crop and its options, which is
+   taller than a tablet held upright too, and the editor asked for the button
+   that files a ruling to stay where the thumb is rather than at the end of the
+   page. The last screen's own actions are pinned the same way (`.pinned`). */
+.pager,
+.actions.pinned {
+  position: sticky;
+  bottom: 0;
+  z-index: 40;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+}
 .pager {
   display: flex;
   align-items: center;
   gap: 10px;
   margin: 18px 0 4px;
+  padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
+}
+.actions.pinned {
+  padding: 10px 0 calc(10px + env(safe-area-inset-bottom));
 }
 .pager .pager-count {
   flex: 1;
@@ -376,13 +393,8 @@ body {
      editor are taller than a phone, and a "next" button you have to scroll to
      the end of the page to reach is one the user stops pressing. */
   .pager {
-    position: sticky;
-    bottom: 0;
-    z-index: 40;
     margin: 14px -18px 0;
     padding: 10px 18px calc(10px + env(safe-area-inset-bottom));
-    background: var(--bg);
-    border-top: 1px solid var(--line);
   }
   .pager button {
     min-width: 0;
