@@ -22,6 +22,19 @@ Continuous prose in six chapters, a clean 1930 setting in a modern face. Each le
 - **Stray marks at line ends.** Ours puts `)`, `|`, `-`, `:` or `,` where there is a speck or the platen edge (`of a most )`, `surround us, -`, `8 : THE PEOPLE OF`). Delete what the page does not print.
 - **Letter slips in ordinary words** (`eartuly` for `earthly`): read every word; where the page prints the right word, set it and raise nothing.
 - **Spacing before `;` `:` `?` `!` and inside quotation marks**: this compositor sometimes sets a space there (`the year around ;`, `(“ Mountains”`). Any visible gap is one space; a mark touching its word is set close. Do not normalise, in either direction, what you can see.
+- **Opening quotation mark read as `*`** (`* prestige”`, `* Nirvana.”`), as `~`, or doubled (`““ sacred`). A `*` in running text is a footnote mark only if the leaf has a `*` note at its foot.
+- **This compositor sets a thin space before `;` `:` `?` `!` and inside quotation marks, almost everywhere** (`around ;`, `“ fathers ”`, `told ?`). Ours drops it about half the time. Set one space wherever a gap is visible; set close only a mark that touches its word (`”?` after a closing quote is usually close). A closing `”` after a full stop or comma sits close (`“ Empire,”`).
+- **Line-end hyphens are left in by ours** (`millen- niums`, `con- served`): join them. A real compound keeps its hyphen (`self-defense`, `good-natured`).
+- **Random capitals and false accents** from specks (`surVeyors`, `thé`): set the plain word.
+- **The running head, the folio, a `|` from the border or platen** sometimes come through as blocks of their own: set them to `""`. On a chapter opening the folio sits at the foot and the draft types it `heading`: set it to `""`.
+- **The draft drops centred display lines** (a chapter title, `CONTENTS`, `Publishers’ Preface`): put them in with `add`, kind `heading`, `after: -1` for the top of the leaf.
+- **A `‡` note can say "See note at bottom of next page"** and be printed on the next leaf headed `‡` again: transcribe both as printed.
+- **The thin space before `;` is there at nearly every occurrence** but narrow: crop at 0.6 or larger before setting one close. The same for the space before a closing `”` after a bare word (`Club ”`).
+- **Ours also reads an opening `“` as `‘`** (`‘sepulchres`), puts a spurious `“` before a plain word (`“mist.`), and reads a full stop as a comma (`presumption, Three`).
+- **An em dash at a line end keeps a space after it in ours** (`origin— which`): close it up as the page sets it.
+- **Ours sometimes pulls a word out of its line into a block of its own** (`memory`, `| oumbs.`): put the word back where the page prints it and set the stray block to `""`.
+- **The second reader loses `fl`** (`fying`, `fowers`): a `fl`/`f` disagreement is its error. An empty disagreements list does not mean a leaf is clean.
+- **The peoples' names vary in this translation** (`Todas`/`Todds`, `Kurumbas`/`Kouroumbs`/`Moulou-Kouroumbs`, `Badagas`/`Baddagues`, `chicaris`): set each as printed; they are not errors.
 - **The contents page**: dot leaders are not text. Set each entry as `Chapter I` and its folio, and nothing between.
 
 ## Block kinds
@@ -33,7 +46,7 @@ The draft guessed each block's `kind` from its geometry. Where it is plainly wro
 Write `OUT` — shape:
 
 ```json
-[{"leaf": N, "blocks": [{"i": 0, "text": "...", "kind": "only where the draft's is wrong"}, ...],
+[{"leaf": N, "blocks": [{"i": 0, "text": "...", "kind": "only where the draft's is wrong", "join": "true only on a block that continues the one before it"}, ...],
   "add": [{"after": 3, "kind": "footnote", "text": "only for a block the draft left out altogether"}],
   "queries": [{"quote": "exact words as printed", "why": "...", "kind": "printers-error|inconsistent|unclear", "fix": "only for printers-error: the word as it should read"}]}]
 ```
@@ -51,7 +64,7 @@ Every block, corrected or not, with its `i`. Scanner junk (specks, the platen ed
 7. **Before raising anything, read the whole block it sits in and the blocks either side**, and look for the same word or construction elsewhere on your leaves. A finding the paragraph settles is not a query.
 8. Anything that is genuinely the editor's — the book contradicting itself, a sentence that does not construe — `kind: "inconsistent"` or `"unclear"`, transcribed as printed, **no fix proposed**.
 9. A word broken by a hyphen across two blocks is set whole in the first block and removed from the second.
-10. If a block holds two paragraphs run together, or one is split across two blocks, do not restructure — correct the text and note it in your report with the leaf and `i`.
+10. **The draft cuts one paragraph or one footnote into several blocks** wherever a speck or a line misled it (a note of four lines as four blocks, a paragraph's last line typed `footnote`). Mark each block that only continues the one before it on the same leaf with `"join": true`, and give it the right `kind` if it has one of its own; it is folded into the block before it. A paragraph broken across two *leaves* is not joined: assembly does that. If a block holds two paragraphs run together, do not restructure — note it in your report with the leaf, the `i` and the words the second paragraph starts with.
 11. A block the brief types `table` is regenerated from its cells, so prose written into it is thrown away. If a `table` block is really prose, correct the text and **say so in your report**.
 
 Work leaf by leaf. Report back only: blocks changed per leaf, queries by kind, and anything a later batch should know about this book's type or either engine that is not already above.
