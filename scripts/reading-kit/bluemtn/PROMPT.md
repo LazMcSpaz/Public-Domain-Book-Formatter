@@ -40,6 +40,9 @@ Continuous prose in six chapters, a clean 1930 setting in a modern face. Each le
 - **Inner quotations are single** (`‘ You do … you,’`) and ours reads them as double, and a closing `”` as a straight `"` or `7`.
 - **A quotation of several numbered paragraphs** opens each with `“` and closes only at the end: that is the convention, not an error.
 - **A short table set in the text** (the temperatures on leaf 65): set it as its own block, one row to a line, rows separated by a newline, dot leaders dropped, and say so in your report.
+- **Ours reads `†` or `f` as `{`, an opening `‘` as `¢`, an opening `“` as `~~`,** and drops a full stop that sits before a closing `”` (`Nilguiri.”`).
+- **A chapter opening can carry an epigraph** in small type: `blockquote`. The draft runs the body's first line into it; move that line back to the body paragraph and check the epigraph's closing `”`.
+- **Check the kind of every block near the foot.** The draft types a note below the rule `paragraph`, and the last body line above the rule `footnote`.
 - **The contents page**: dot leaders are not text. Set each entry as `Chapter I` and its folio, and nothing between.
 
 ## Block kinds
