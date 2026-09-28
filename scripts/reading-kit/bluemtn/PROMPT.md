@@ -35,6 +35,11 @@ Continuous prose in six chapters, a clean 1930 setting in a modern face. Each le
 - **Ours sometimes pulls a word out of its line into a block of its own** (`memory`, `| oumbs.`): put the word back where the page prints it and set the stray block to `""`.
 - **The second reader loses `fl`** (`fying`, `fowers`): a `fl`/`f` disagreement is its error. An empty disagreements list does not mean a leaf is clean.
 - **The peoples' names vary in this translation** (`Todas`/`Todds`, `Kurumbas`/`Kouroumbs`/`Moulou-Kouroumbs`, `Badagas`/`Baddagues`, `chicaris`): set each as printed; they are not errors.
+- **Fractions** (`6¼`, `¼%`): ours reads `¼` as `4` or `Y`, the other drops it. Check every figure by eye.
+- **Latin names are italic** (`<i>Presbytis jubatus,</i>`, the comma inside the run as the page sets it); the draft loses the italic.
+- **Inner quotations are single** (`‘ You do … you,’`) and ours reads them as double, and a closing `”` as a straight `"` or `7`.
+- **A quotation of several numbered paragraphs** opens each with `“` and closes only at the end: that is the convention, not an error.
+- **A short table set in the text** (the temperatures on leaf 65): set it as its own block, one row to a line, rows separated by a newline, dot leaders dropped, and say so in your report.
 - **The contents page**: dot leaders are not text. Set each entry as `Chapter I` and its folio, and nothing between.
 
 ## Block kinds
