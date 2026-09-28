@@ -2,7 +2,9 @@
  * Fold a stretch's reader output back into its draft and shape it for
  * `drive.mjs transcribe`.
  *
- *   node scripts/reading-kit/land.mjs <kit> <from> <to>
+ *   node scripts/reading-kit/land.mjs <kit> <from> <to> [size]
+ *
+ * `size` is the leaves per reader, 5 unless given (the NLP kit uses 10).
  *
  * Reads `<kit>/ruled-<from>-<to>.json` (the draft, rules applied) and every
  * `<kit>/done/NNN-NNN.json` the readers wrote for it; writes
@@ -30,7 +32,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
-const [, , kit, from, to] = process.argv
+const [, , kit, from, to, size = '5'] = process.argv
 if (!kit || !from || !to) {
   console.error('usage: land.mjs <kit> <from> <to>')
   process.exit(2)
@@ -70,8 +72,9 @@ let retyped = 0
 const cuts = []
 let emptied = 0
 const queries = []
-for (let s = Number(from); s <= Number(to); s += 5) {
-  const name = `${pad(s)}-${pad(Math.min(s + 4, Number(to)))}`
+const per = Number(size)
+for (let s = Number(from); s <= Number(to); s += per) {
+  const name = `${pad(s)}-${pad(Math.min(s + per - 1, Number(to)))}`
   for (const page of JSON.parse(readFileSync(`${K}/done/${name}.json`, 'utf8'))) {
     const target = byLeaf.get(page.leaf)
     if (!target) {

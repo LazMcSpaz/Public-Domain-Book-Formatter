@@ -39,9 +39,43 @@ const letters = (t) => (t.match(/\p{L}/gu) ?? []).length
 let heads = 0
 let junk = 0
 let bars = 0
+let tables = 0
+let tails = 0
 for (const page of pages) {
   for (const b of page.blocks ?? []) {
-    const t = b.text ?? ''
+    // A recto with the dark page edge comes back as one `table` holding the
+    // whole leaf and a tail of edge specks (`| . 1 i ] : ;`): it is prose.
+    if (b.kind === 'table') {
+      b.kind = 'paragraph'
+      delete b.cells
+      b.text = (b.text ?? '').replace(/ *\| */gu, ' ')
+      tables++
+    }
+    // Trailing edge specks: three or more one- and two-character tokens with
+    // at most one letter each, at the very end of the block.
+    {
+      const words = (b.text ?? '').split(/(\s+)/u)
+      let k = words.length
+      let n = 0
+      while (k > 0) {
+        const w = words[k - 1]
+        if (/^\s*$/u.test(w)) {
+          k--
+          continue
+        }
+        if (w.length <= 2 && (w.match(/\p{L}/gu) ?? []).length <= 1 && !/^(I|a|A)$/u.test(w)) {
+          k--
+          n++
+          continue
+        }
+        break
+      }
+      if (n >= 3) {
+        b.text = words.slice(0, k).join('').trimEnd()
+        tails++
+      }
+    }
+    const t = b.text
     if (t && head(t)) {
       b.text = ''
       heads++
@@ -76,4 +110,6 @@ for (const page of pages) {
   }
 }
 writeFileSync(outPath, JSON.stringify(pages, null, 1) + '\n')
-console.log(`nlp rules: ${heads} running heads, ${junk} junk blocks emptied; ${bars} bars`)
+console.log(
+  `nlp rules: ${heads} running heads, ${junk} junk blocks emptied; ${bars} bars; ${tables} leaf-tables retyped, ${tails} junk tails`
+)
