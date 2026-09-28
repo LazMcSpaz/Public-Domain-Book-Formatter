@@ -5,6 +5,9 @@
 # No second reader: an empty second.json and witness.json stand in.
 #
 #   scripts/reading-kit/nlp/stretch.sh <kit> <from> <to>
+#
+# PER=5 in the environment briefs five leaves to a reader: an output filter
+# stops some readers of copyrighted books, and a smaller batch gets through.
 set -u
 KIT=$(cd "$1" && pwd); FROM=$2; TO=$3
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -21,9 +24,10 @@ for n in $(seq $FROM $TO); do
   src=$(ls -t ${DRIVE_OUT:-screenshots}/hi-$n.png 2>/dev/null | head -1)
   [ -n "$src" ] && mv "$src" "$f"
 done
-node scripts/reading-kit/brief.mjs "$KIT" "$KIT/ruled-$TAG.json" $FROM $TO 10 || exit 1
-for s in $(seq $FROM 10 $TO); do
-  e=$(( s + 9 > TO ? TO : s + 9 )); b=$(pad $s)-$(pad $e)
+PER=${PER:-10}
+node scripts/reading-kit/brief.mjs "$KIT" "$KIT/ruled-$TAG.json" $FROM $TO $PER || exit 1
+for s in $(seq $FROM $PER $TO); do
+  e=$(( s + PER - 1 > TO ? TO : s + PER - 1 )); b=$(pad $s)-$(pad $e)
   mkdir -p "$KIT/work/$b"
   python3 - "$HERE/PROMPT.md" "$KIT/BOOK.md" "$KIT/work/$b/prompt.md" "$KIT/briefs/$b.json" "$KIT/work/$b/" "$KIT/done/$b.json" <<'PY'
 import sys
