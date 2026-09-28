@@ -22,7 +22,7 @@ Use `WORKDIR` for scratch files. Do not write anywhere else. To look closer: `no
 6. **Boxed matter** (sidebars, tips, "Remember", "Warning", exercise boxes, the Dummies icons): keep the text, typed `blockquote`, and start it with the box's label in square brackets if it has one (`[Tip] …`, `[Remember] …`, `[Try this] …`). The icon picture itself is not text.
 7. **Dialogue and transcripts** (a trainer and a participant, a script to say to a client): keep each speaker's turn as its own paragraph, with the speaker label as printed.
 8. **Split blocks**: where the draft cut one paragraph into several blocks, mark each continuation `"join": true`. Where one block holds two paragraphs, split it: keep the first in the block and `add` the second after it.
-9. **Tables and diagrams**: a table becomes one `paragraph` per row, cells separated by `|`, and say so in your report. A diagram's labels are not text unless they read as a sentence; delete scattered label fragments and say "diagram on leaf N" in your report.
+9. **Tables and diagrams**: a table becomes one `paragraph` per row, cells separated by ` | `, and say so in your report. A diagram or chart keeps its caption (`Figure 3`, typed `caption`), and **its labels are content for study**: add one `caption` block after it that describes the diagram in a sentence and gives every label in reading order — `[Diagram: a circle headed KIDS (needs), in four quadrants. Financing: want good interest rate; …]`. Delete the scattered label fragments OCR made of it. A purely decorative picture gets only its caption.
 10. **Front and back matter**: a copyright page, contents, index, "about the author", advertisements — correct them only roughly; the words matter less there. An index or contents may be left as the draft has it, only junk removed.
 
 What to leave alone: thin spaces, straight versus curly quotes, italics and bold (keep any `<i>`/`<b>` already there; do not add them), the book's own typos (set as printed, no query), and a word split across two leaves (leave both halves as printed; assembly joins them).
@@ -39,6 +39,6 @@ Write `OUTFILE` — shape:
   "queries": []}]
 ```
 
-Every block, corrected or not, with its `i`. `level` only on headings, `join` only where it applies, `add` only where needed. Work leaf by leaf and check the JSON parses before you finish.
+Build the output with a small script (Node or Python) that reads the brief, applies your corrections and writes the file — do not paste long passages of the book into your replies. Every block, corrected or not, with its `i`. `level` only on headings, `join` only where it applies, `add` only where needed. Work leaf by leaf and check the JSON parses before you finish.
 
 Report back only: blocks changed per leaf (a number each), any tables or diagrams, any query, and anything a later batch should know about this book's type or the OCR that is not already above — in a few lines.
