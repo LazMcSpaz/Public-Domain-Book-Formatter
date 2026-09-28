@@ -52,7 +52,9 @@ Continuous prose in six chapters, a clean 1930 setting in a modern face. Each le
 - **The running head can come through as a paragraph** with a junk prefix (`~~ 128 THE PEOPLE OF`): set it to `""`.
 - **An em dash opening a line** gets a space before it in ours (`himself —to`): close it up.
 - **Footnotes in the smaller type** carry the thin space before `;` and `:` too.
-- **A word hyphenated across two leaves** is set whole at the end of the first leaf and removed from the start of the next (rule 9 across leaves); say so in your report.
+- **The draft drops italics throughout from leaf 160 on**: book titles (`<i>Ramayana</i>`, `<i>Mahabharata</i>` — roman on some leaves, italic on others: check each), native terms (`<i>Rishis</i>`, `<i>teralli</i>`), words stressed for emphasis. The second reader writes an italic `a` as `α` (`Ramayanα`): that marks italic, not a spelling. Notes can set a word **bold** (`<b>Pourana</b>`).
+- **`is` is read as `1s`.** A closing `”?` or `”!` after a spaced quote is set close (`“ giants ”?`).
+- **A word hyphenated across two leaves** (`particu-` at the foot, `lar—they` at the head of the next): leave both halves exactly as printed. Assembly joins them; setting the word whole by hand has left the tail doubled on the next leaf.
 
 ## Block kinds
 
@@ -80,7 +82,7 @@ Every block, corrected or not, with its `i`. Scanner junk (specks, the platen ed
 6. **Clear typos and damaged type** (a misspelling the page plainly makes, an unpaired quotation mark, a broken sort): transcribe **as printed** and raise a query with `kind: "printers-error"` and `fix` giving the word as it should read. The editor's standing ruling is that this class is corrected, so your `fix` is applied without anyone looking again: propose one only where it is certain. If the fix means **choosing** (where an unclosed quotation should close, which of two words was meant) it is not a printers-error: raise it `inconsistent` with no fix. A period or translator's spelling the book uses consistently is not an error.
 7. **Before raising anything, read the whole block it sits in and the blocks either side**, and look for the same word or construction elsewhere on your leaves. A finding the paragraph settles is not a query.
 8. Anything that is genuinely the editor's — the book contradicting itself, a sentence that does not construe — `kind: "inconsistent"` or `"unclear"`, transcribed as printed, **no fix proposed**.
-9. A word broken by a hyphen across two blocks is set whole in the first block and removed from the second.
+9. A word broken by a hyphen across two blocks of one leaf is set whole in the first block and removed from the second. Across two leaves, leave it as printed.
 10. **The draft cuts one paragraph or one footnote into several blocks** wherever a speck or a line misled it (a note of four lines as four blocks, a paragraph's last line typed `footnote`). Mark each block that only continues the one before it on the same leaf with `"join": true`, and give it the right `kind` if it has one of its own; it is folded into the block before it. A paragraph broken across two *leaves* is not joined: assembly does that. If a block holds two paragraphs run together, do not restructure — note it in your report with the leaf, the `i` and the words the second paragraph starts with.
 11. A block the brief types `table` is regenerated from its cells, so prose written into it is thrown away. If a `table` block is really prose, correct the text and **say so in your report**.
 
