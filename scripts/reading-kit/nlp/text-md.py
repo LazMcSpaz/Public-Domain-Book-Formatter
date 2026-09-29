@@ -11,13 +11,20 @@ import json, re, sys
 
 body, book, out, title = sys.argv[1:5]
 b = json.load(open(body))
-# `body` carries no heading level; the transcriptions do, in the same order.
-levels = [bl.get('level') for p in json.load(open(book))['run']['transcriptions'] for bl in p['blocks'] if bl['kind'] == 'heading' and bl['text'].strip()]
-heads = [x for x in b['edited'] if x['kind'] == 'heading']
-if len(levels) != len(heads):
-    sys.exit(f'{len(heads)} headings in the body, {len(levels)} in the book: cannot pair levels')
-for x, lv in zip(heads, levels):
-    x['level'] = lv
+# `body` carries no heading level; the transcriptions do. A block id is
+# `p<leaf>b<index>` into that leaf's transcribed blocks, so each heading is
+# looked up by its own id: pairing the two lists by position broke the day
+# one heading in the book was not a heading in the body (a run of headings
+# joined into one chapter, a retype).
+by_leaf = {p['pageIndex']: p['blocks'] for p in json.load(open(book))['run']['transcriptions']}
+for x in b['edited']:
+    if x['kind'] != 'heading':
+        continue
+    m = re.match(r'p(\d+)b(\d+)', x['id'])
+    blocks = by_leaf.get(int(m[1]), []) if m else []
+    i = int(m[2]) if m else -1
+    if 0 <= i < len(blocks) and blocks[i].get('kind') == 'heading':
+        x['level'] = blocks[i].get('level')
 def md(t):
     t = re.sub(r'</?i>', '*', t)
     t = re.sub(r'</?b>', '**', t)
