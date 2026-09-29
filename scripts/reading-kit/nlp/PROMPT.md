@@ -8,7 +8,7 @@ BOOKNOTES
 
 ## Inputs
 
-Brief: `BRIEF` — an array, one entry per leaf: `leaf`, `image` (a 300 DPI PNG — read it with the Read tool), `blocks` `[{i, kind, text}]` (keep `i`). Ignore `secondReader` and `disagreements`; they are empty.
+Brief: `BRIEF` — an array, one entry per leaf: `leaf`, `image` (a 300 DPI PNG — read it with the Read tool), `blocks` `[{i, kind, text}]` (keep `i`).
 
 Use `WORKDIR` for scratch files. Do not write anywhere else. To look closer: `node scripts/reading-kit/crop.mjs <image> WORKDIR/c.png <x> <y> <w> <h> [scale]` (run from `/home/user/Public-Domain-Book-Formatter`).
 
