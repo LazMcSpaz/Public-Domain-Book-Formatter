@@ -16,14 +16,19 @@ b = json.load(open(body))
 # looked up by its own id: pairing the two lists by position broke the day
 # one heading in the book was not a heading in the body (a run of headings
 # joined into one chapter, a retype).
-by_leaf = {p['pageIndex']: p['blocks'] for p in json.load(open(book))['run']['transcriptions']}
+run = json.load(open(book))['run']
+by_leaf = {p['pageIndex']: p['blocks'] for p in run['transcriptions']}
+# A `retype` edit is the later word on a heading's level, so it wins.
+retyped = {e['blockId']: e.get('level') for e in run.get('edits', []) if e.get('kind') == 'retype'}
 for x in b['edited']:
     if x['kind'] != 'heading':
         continue
     m = re.match(r'p(\d+)b(\d+)', x['id'])
     blocks = by_leaf.get(int(m[1]), []) if m else []
     i = int(m[2]) if m else -1
-    if 0 <= i < len(blocks) and blocks[i].get('kind') == 'heading':
+    if x['id'] in retyped:
+        x['level'] = retyped[x['id']]
+    elif 0 <= i < len(blocks) and blocks[i].get('kind') == 'heading':
         x['level'] = blocks[i].get('level')
 def md(t):
     t = re.sub(r'</?i>', '*', t)
