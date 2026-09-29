@@ -1077,6 +1077,10 @@ node scripts/drive.mjs reconimport <books/<dir>/recon.json.gz>   # a reading the
                                      #   queue): loaded into the driver's recon
                                      #   cache under the book's key, so recon is
                                      #   not run again here. `load` the book too
+node scripts/drive.mjs epub <book.epub> e.json 1 2 3   # spine documents read by the
+                                     #   app's own importer, as a batch for
+                                     #   `transcribe` — how a shelf EPUB that
+                                     #   holds only its first leaf gets the rest
 node scripts/drive.mjs state         # the gate as JSON; `answer` and `advance` work it
 
 node scripts/drive.mjs figures f.md   # every picture the reading already found,

@@ -4479,6 +4479,57 @@ async function serve() {
     },
 
     /**
+     * An EPUB's spine documents as a batch for `transcribe`, read by the app's
+     * own importer.
+     *
+     * A book put on the shelf by `shelf-new-book.ts` holds its first leaf and
+     * nothing more, and the wizard's EPUB door builds a fresh run rather than
+     * filling one that exists. So the rest of the spine had no way in except a
+     * session converting the markup itself — a second implementation of
+     * `openEpub`, disagreeing with the first about what a `<blockquote>` is.
+     * This runs `openEpub` in the page and writes the named documents (all of
+     * them by default) as `{ pages }`, with the text-quality verdict beside
+     * them. Nothing is stored: `transcribe` is still the one verb that lands.
+     *
+     *   epub <book.epub> <out.json> [spine index...]
+     */
+    epub: async ([epubPath, out, ...ns]) => {
+      if (!epubPath || !out) throw new Error('epub <book.epub> <out.json> [spine index...]')
+      const { writeFile } = await import('node:fs/promises')
+      const full = resolve(REPO, epubPath)
+      const wanted = ns.map(Number)
+      if (wanted.some((n) => !Number.isInteger(n) || n < 0)) {
+        throw new Error('Spine indices are whole numbers, counted from 0.')
+      }
+      const read = await page.evaluate(
+        async ([repo, url, list]) => {
+          const epub = await import(`/@fs${repo}/src/platform/browser/epub.ts`)
+          const res = await fetch(url)
+          if (!res.ok) throw new Error(`fetching the EPUB: ${res.status}`)
+          const opened = await epub.openEpub(await res.arrayBuffer())
+          const pages = opened.transcriptions.filter(
+            (t) => list.length === 0 || list.includes(t.pageIndex)
+          )
+          return {
+            spine: opened.transcriptions.length,
+            pictures: opened.pictures.length,
+            quality: opened.quality,
+            pages
+          }
+        },
+        [REPO, `http://127.0.0.1:${PORT}/file?path=${encodeURIComponent(full)}`, wanted]
+      )
+      await writeFile(resolve(REPO, out), JSON.stringify({ pages: read.pages }, null, 1))
+      return {
+        wrote: out,
+        spine: read.spine,
+        documents: read.pages.map((p) => ({ pageIndex: p.pageIndex, blocks: p.blocks.length })),
+        pictures: read.pictures,
+        quality: read.quality
+      }
+    },
+
+    /**
      * The free reading, shaped like a page and ready to be corrected.
      *
      * With no API there is nothing that turns a leaf into blocks, and asking a
