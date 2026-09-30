@@ -190,6 +190,16 @@ if (onLeaf(0).length !== 1 || onLeaf(0)[0]?.correction !== 'Sekhem') {
 if (onLeaf(1).length !== 1 || onLeaf(1)[0]?.decision !== 'as-printed') {
   problems.push(`leaf 1 was not filed as printed (${JSON.stringify(onLeaf(1))})`)
 }
+// And the card the shelf lists the book by. It carries the query counts the
+// intake shows, and a flush that files rulings without it leaves the book
+// listed as waiting on decisions that were made: Isis Vol. II said "96
+// waiting" for two days after every one of them was ruled.
+const card = JSON.parse(files.get(built.aboutPath) ?? '{}')
+if (puts.filter((p) => p.path === built.aboutPath).length === 0) {
+  problems.push('the shelf card was never rewritten, so the shelf still lists the old count')
+} else if (card.queries?.waiting !== 1 || card.queries?.held !== 0) {
+  problems.push(`the shelf card counts ${JSON.stringify(card.queries)}, not 1 waiting and 0 held`)
+}
 if (onLeaf(2).length !== 0) {
   problems.push('the query no standing ruling holds was filed — only what was approved may be')
 }
@@ -197,6 +207,7 @@ if (onLeaf(2).length !== 0) {
 console.log(`button    : ${label}`)
 console.log(`book puts : ${bookPuts.map((p) => p.message).join(' | ') || 'none'}`)
 console.log(`filed     : ${rulings.filter((r) => r.pageIndex !== null).length} leaf rulings`)
+console.log(`card      : ${JSON.stringify(JSON.parse(files.get(built.aboutPath) ?? '{}').queries ?? null)}`)
 
 await browser.close()
 if (problems.length > 0) {

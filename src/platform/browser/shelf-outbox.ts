@@ -18,6 +18,7 @@
  * Browser-only.
  */
 import {
+  aboutPath,
   bookPath,
   isRuling,
   landedRulings,
@@ -31,6 +32,7 @@ import { parseBookFile, serializeBookFile, toBase64 } from '@core/project'
 import { getText, putFile, shelfDirFor } from './shelf'
 import { clearQueued, outboxFor } from './run-store'
 import { landedFor, rememberLanded } from './landed'
+import { catalogueCard } from './shelf-save'
 
 /** What a flush did, in the words the interface has to be able to say. */
 export interface FlushResult {
@@ -100,7 +102,8 @@ async function sendQueue(config: ShelfConfig, bookKey: string): Promise<FlushRes
     }
   }
 
-  const path = bookPath(bookKey, await shelfDirFor(config, bookKey))
+  const dir = await shelfDirFor(config, bookKey)
+  const path = bookPath(bookKey, dir)
   const text = await getText(config, path)
   if (text === null) {
     return {
@@ -180,16 +183,30 @@ async function sendQueue(config: ShelfConfig, bookKey: string): Promise<FlushRes
 
   const marks = merged.applied.filter((entry) => entry.edit?.kind === 'highlight').length
   const rulings = merged.applied.filter(isRuling).length
-  await putFile(
-    config,
-    path,
-    toBase64(new TextEncoder().encode(json)),
+  const message =
     rulings > 0 && rulings === merged.applied.length
       ? `${rulings} ${rulings === 1 ? 'query' : 'queries'} ruled on`
       : marks > 0
         ? `${marks} passages marked while reading`
         : `${merged.applied.length} changes from a reading session`
-  )
+  await putFile(config, path, toBase64(new TextEncoder().encode(json)), message)
+  // The catalogue card, rewritten from the file just written. The shelf lists
+  // a book by its card, and its query counts are what say how far the book has
+  // got: a flush that filed rulings and left the card alone left *Isis* Vol.
+  // II listed as "96 waiting" for two days with every one of them ruled. Never
+  // fatal, for the reason `pushBook` gives its sheets: the rulings are up, and
+  // the next flush or save writes the card again.
+  try {
+    const card = catalogueCard(bookKey, json, file.scan?.path ?? null)
+    await putFile(
+      config,
+      aboutPath(bookKey, dir),
+      toBase64(new TextEncoder().encode(JSON.stringify(card, null, 2))),
+      message
+    )
+  } catch {
+    /* the card can wait for the next write */
+  }
   // What the shelf demonstrably holds now, for the next read to be checked
   // against. Before the queue is cleared: if the record will not save, the
   // entries staying queued is the safer of the two ways to be wrong.
