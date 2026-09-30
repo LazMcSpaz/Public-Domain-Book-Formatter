@@ -994,6 +994,8 @@ function spansFor(
 interface FlowableOptions {
   suppressFirstIndent: boolean
   dropCap: boolean
+  /** Set the block this way rather than as its kind's style does. */
+  alignment?: Alignment
   /** The block's text with reference marks already renumbered, if it has any. */
   text?: string
   /** Footnote references found in that text. */
@@ -1117,7 +1119,7 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
       sizePt,
       measurer: ctx.measurer,
       lineWidths: measure,
-      alignment: style.alignment,
+      alignment: opts.alignment ?? style.alignment,
       firstLineIndentPt: firstIndent,
       ...(attachments.length > 0 ? { attachments } : {}),
       ...(block.kind === 'paragraph' || block.kind === 'blockquote'
@@ -1153,7 +1155,7 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
             sizePt: size,
             measurer: ctx.measurer,
             lineWidths: measure,
-            alignment: style.alignment
+            alignment: opts.alignment ?? style.alignment
           }),
           font,
           size,
@@ -1917,8 +1919,33 @@ export function layout(
 
   // Asides — dedication, epigraph, colophon — sit after the copyright page and
   // before the body, each on its own page, as they are in a printed book.
+  //
+  // "Each" is a leaf of the original, not a block of it. A dedication is read
+  // back one line to a block, because on the paper each line is set apart, and
+  // giving every block a page of its own printed *Isis Unveiled*'s six-line
+  // dedication across six leaves, "THE AUTHOR" alone on the first. So the
+  // blocks one leaf gave are stacked on one page, and a paragraph that sets in
+  // a single line is centred, as display matter is: a dedication's lines are
+  // centred on the paper, and a long colophon, which is prose, is left alone.
+  const asideLeaves: BookBlock[][] = []
   for (const aside of doc.asides) {
-    const flow = buildFlowable(aside, ctx, { suppressFirstIndent: true, dropCap: false })
+    const last = asideLeaves[asideLeaves.length - 1]
+    const leaf = aside.sourcePages[0]
+    if (last && leaf !== undefined && last[0]!.sourcePages[0] === leaf) last.push(aside)
+    else asideLeaves.push([aside])
+  }
+  for (const leaf of asideLeaves) {
+    const lines = leaf.flatMap((aside) => {
+      const natural = buildFlowable(aside, ctx, { suppressFirstIndent: true, dropCap: false })
+      return aside.kind === 'paragraph' && natural.lines.length === 1
+        ? buildFlowable(aside, ctx, {
+            suppressFirstIndent: true,
+            dropCap: false,
+            alignment: 'center'
+          }).lines
+        : natural.lines
+    })
+    const flow = { lines }
 
     // Sunk a third down the leaf, as a dedication is set. The sink is dropped
     // on any continuation page: it is there to place the first line, not to

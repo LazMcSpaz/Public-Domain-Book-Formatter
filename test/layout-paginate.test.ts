@@ -768,6 +768,39 @@ describe('layout — an aside longer than its page', () => {
     }
   })
 
+  /**
+   * *Isis Unveiled* Vol. I: a dedication read back one line to a block, as the
+   * paper sets each line apart. It printed across six leaves, "THE AUTHOR"
+   * alone on the first.
+   */
+  it('sets the lines one leaf gave on one page, centred', () => {
+    const line = (text: string, leaf: number): BookBlock => ({
+      ...block('paragraph', text),
+      sourcePages: [leaf]
+    })
+    const dedication = [
+      line('THE AUTHOR', 9),
+      line('Dedicates these Volumes', 9),
+      line('TO THE', 9),
+      line('THEOSOPHICAL SOCIETY,', 9)
+    ]
+    const book = run(doc([block('paragraph', PROSE)], [...dedication, line('For my father.', 10)]))
+    const asides = book.pages.filter((p) => p.kind === 'aside')
+    expect(asides).toHaveLength(2)
+    expect(textOf(asides[0]!)).toContain('THE AUTHOR')
+    expect(textOf(asides[0]!)).toContain('THEOSOPHICAL SOCIETY')
+    expect(textOf(asides[1]!)).toContain('For my father.')
+    // Centred: a short line starts well in from the frame's left edge.
+    const toThe = lines(asides[0]!).find((l) =>
+      l.runs
+        .map((r) => r.text)
+        .join(' ')
+        .replace(/\s+/g, ' ')
+        .includes('TO THE')
+    )!
+    expect(toThe.runs[0]!.xPt).toBeGreaterThan(asides[0]!.frame.xPt + 40)
+  })
+
   it('still sets a short aside on one leaf, sunk down the page', () => {
     const book = run(doc([block('paragraph', PROSE)], [block('epigraph', 'For my father.')]))
     const asides = book.pages.filter((p) => p.kind === 'aside')
