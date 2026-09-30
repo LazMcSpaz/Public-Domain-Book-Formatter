@@ -13,8 +13,13 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { fixedWidthMeasurer } from '@core/layout'
 import {
+  backAnchorTarget,
+  backAnchorX,
+  backFigureFrame,
   coverFromAnswers,
   defaultLook,
+  FIGURE_FADE_IN,
+  GROUND_FIGURE_BACK_ID,
   lookQuestions,
   normalizeLook,
   type CoverInterviewState
@@ -313,5 +318,132 @@ describe('the figure has its own colour', () => {
     const next = coverFromAnswers(base, { 'cover-figure-ink': '#f0d890' })
     expect(next.look.palette.figure).toBe('#f0d890')
     expect(next.look.palette.ink).toBe('#ffffff')
+  })
+})
+
+describe('the companion on the back', () => {
+  const geometry = coverGeometry({ trimSize: '6x9', pageCount: 690, paper: 'bw-white' })
+
+  function backOf(doc: CoverDocument) {
+    return composeCover(doc, { measurer }).items.find(
+      (i) => i.kind === 'image' && i.id === GROUND_FIGURE_BACK_ID
+    )
+  }
+
+  it('is drawn in a box the mirror of the front’s, so the two are one scale', () => {
+    // The fault this pins is not an error but a picture a quarter larger on one
+    // panel than on the other, which no count would report.
+    const back = backFigureFrame(geometry)
+    const front = figureFrame(geometry)
+    expect(back.width).toBeCloseTo(front.width, 6)
+    expect(back.height).toBeCloseTo(front.height, 6)
+  })
+
+  it('starts at the sheet’s edge and stops at the back fold', () => {
+    const back = backFigureFrame(geometry)
+    expect(back.x).toBe(0)
+    expect(back.y).toBe(0)
+    expect(back.x + back.width).toBeCloseTo(geometry.spine.x, 6)
+  })
+
+  it('leaves the spine to its type', () => {
+    const back = backFigureFrame(geometry)
+    expect(back.x + back.width).toBeLessThanOrEqual(geometry.spine.x + 1e-9)
+    expect(figureFrame(geometry).x).toBeGreaterThanOrEqual(
+      geometry.spine.x + geometry.spineIn - 1e-9
+    )
+  })
+
+  it('has faded to nothing well before the fold', () => {
+    // The gap between the two pictures: the back's fade, the whole spine, and
+    // the front's fade. Nothing within it can be seen to be out of register.
+    const quiet = FIGURE_FADE_IN + geometry.spineIn + FIGURE_FADE_IN
+    expect(quiet).toBeGreaterThan(2)
+    expect(FIGURE_FADE_IN).toBeGreaterThanOrEqual(0.75)
+  })
+
+  it('aims at the back panel’s centre line, not the box’s', () => {
+    const target = backAnchorTarget(geometry)
+    const frame = backFigureFrame(geometry)
+    expect(target * frame.width).toBeCloseTo(geometry.back.x + geometry.back.width / 2, 6)
+  })
+
+  it('mirrors the figure’s own anchor', () => {
+    for (const f of GROUND_FIGURES) {
+      expect(backAnchorX(f)).toBeCloseTo(1 - FIGURE_ANCHOR_X[f], 9)
+    }
+  })
+
+  it('puts the mirrored anchor where the target asks', () => {
+    // The arithmetic the mirrored draw depends on: a source point a fraction a
+    // from its own left lands 1 - a from the drawn rectangle's left.
+    const boxWidth = 600
+    const drawWidth = 700
+    const anchor = 0.3
+    // Reachable within the clamp: an anchor the picture cannot deliver without
+    // coming away from an edge is honoured only as far as it goes, which is a
+    // different property and is pinned above.
+    const target = 0.7
+    const mirrored = 1 - anchor
+    const x = coverOffsetX(boxWidth, drawWidth, mirrored, target)
+    // A mirrored draw puts a source point `anchor` from its own left at
+    // `1 - anchor` from the drawn rectangle's left.
+    expect(x + drawWidth * mirrored).toBeCloseTo(boxWidth * target, 6)
+  })
+
+  it('is placed only when asked for, and only under a figure', () => {
+    expect(backOf(cover((d) => (d.look.groundFigure = 'arcade')))).toBeUndefined()
+    expect(backOf(cover((d) => (d.look.groundFigureBack = true)))).toBeUndefined()
+    const both = backOf(
+      cover((d) => {
+        d.look.groundFigure = 'arcade'
+        d.look.groundFigureBack = true
+      })
+    )
+    expect(both).toBeDefined()
+  })
+
+  it('prints at the same tint as the figure it companions', () => {
+    const doc = cover((d) => {
+      d.look.groundFigure = 'arcade'
+      d.look.groundFigureBack = true
+      d.look.groundFigureOpacity = 0.08
+    })
+    const items = composeCover(doc, { measurer }).items
+    const front = items.find((i) => i.kind === 'image' && i.id === GROUND_FIGURE_ID)
+    const back = backOf(doc)
+    expect(front?.kind).toBe('image')
+    expect(back?.kind).toBe('image')
+    if (front?.kind !== 'image' || back?.kind !== 'image') return
+    expect(back.opacity).toBe(0.08)
+    expect(back.opacity).toBe(front.opacity)
+  })
+
+  it('goes under the spine’s own type', () => {
+    const doc = cover((d) => {
+      d.look.groundFigure = 'arcade'
+      d.look.groundFigureBack = true
+    })
+    const items = composeCover(doc, { measurer }).items
+    const back = items.findIndex((i) => i.kind === 'image' && i.id === GROUND_FIGURE_BACK_ID)
+    const firstText = items.findIndex((i) => i.kind === 'text')
+    expect(back).toBeGreaterThanOrEqual(0)
+    expect(firstText).toBeGreaterThan(back)
+  })
+
+  it('is asked for only once there is a figure, and read back as a flag', () => {
+    const none = lookQuestions(interviewState(cover(() => {})))
+    expect(none.some((q) => q.id === 'cover-figure-back')).toBe(false)
+    const asked = lookQuestions(interviewState(cover((d) => (d.look.groundFigure = 'arcade'))))
+    const q = asked.find((qq) => qq.id === 'cover-figure-back')
+    expect(q).toBeDefined()
+    // A confirm, not a two-option choice: `flag` reads booleans, and a choice
+    // answering 'yes' into it is a question that changes nothing.
+    expect(q!.type).toBe('confirm')
+    const next = coverFromAnswers(
+      cover((d) => (d.look.groundFigure = 'arcade')),
+      { 'cover-figure-back': true }
+    )
+    expect(next.look.groundFigureBack).toBe(true)
   })
 })

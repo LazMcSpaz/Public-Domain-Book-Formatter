@@ -21,13 +21,17 @@
  */
 import type { ComposedCover, CoverDocument } from '@core/cover'
 import {
+  backAnchorTarget,
+  backAnchorX,
   composeCover,
   DEFAULT_ICON_WIDTH_PX,
   FIGURE_ANCHOR_X,
   FIGURE_SRC,
   FIGURE_ZOOM,
+  FIGURE_FADE_IN,
   FRONT_MARK_ID,
   frontIconPlan,
+  GROUND_FIGURE_BACK_ID,
   GROUND_FIGURE_ID,
   GROUND_IMAGE_ID,
   GROUND_IMAGE_SRC,
@@ -159,11 +163,37 @@ async function buildCover(
       // reads as a tint of the type rather than as a picture behind it.
       color: doc.look.palette.figure,
       anchorX: FIGURE_ANCHOR_X[doc.look.groundFigure],
-      zoom: FIGURE_ZOOM[doc.look.groundFigure]
+      zoom: FIGURE_ZOOM[doc.look.groundFigure],
+      // Only where there is a companion to meet: on its own a figure's edge at
+      // the fold is the boundary of a figured board against a plain one, which
+      // is a decision. Between two fades it would be the one hard join left.
+      fadeLeftIn: doc.look.groundFigureBack ? FIGURE_FADE_IN : 0
     })
     images.set(GROUND_FIGURE_ID, figure.bytes)
     figureItem.srcWidth = figure.widthPx
     figureItem.srcHeight = figure.heightPx
+  }
+
+  // The companion on the back: the same artwork mirrored, in a box the mirror
+  // of the front's so the two are one scale, with the tint faded out well short
+  // of the fold. The composer's own geometry, not a second computation of it.
+  const backItem = composed.items.find((i) => i.kind === 'image' && i.id === GROUND_FIGURE_BACK_ID)
+  if (backItem && backItem.kind === 'image' && doc.look.groundFigure) {
+    const geometry = composed.geometry
+    const back = await renderGroundImage({
+      src: FIGURE_SRC[doc.look.groundFigure],
+      widthIn: backItem.widthPt / 72,
+      heightIn: backItem.heightPt / 72,
+      color: doc.look.palette.figure,
+      anchorX: backAnchorX(doc.look.groundFigure),
+      targetX: backAnchorTarget(geometry),
+      zoom: FIGURE_ZOOM[doc.look.groundFigure],
+      mirrorX: true,
+      fadeRightIn: FIGURE_FADE_IN
+    })
+    images.set(GROUND_FIGURE_BACK_ID, back.bytes)
+    backItem.srcWidth = back.widthPx
+    backItem.srcHeight = back.heightPx
   }
 
   const pdf = await renderCoverPdf(composed, fonts, {

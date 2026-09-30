@@ -33,7 +33,13 @@ import type { OrnamentArt } from '@core/ornament'
 import { sizeAfterOps } from '@core/image'
 import { worksLabel, type CoverDocument, type FrameStyle, type Hex } from './document'
 import { GROUND_IMAGE_ID, groundPattern, isImageGround, PATTERN_OPACITY } from './patterns'
-import { figureFramePt, figureOpacity, GROUND_FIGURE_ID } from './figures'
+import {
+  backFigureFramePt,
+  figureFramePt,
+  figureOpacity,
+  GROUND_FIGURE_BACK_ID,
+  GROUND_FIGURE_ID
+} from './figures'
 import {
   contains,
   coverGeometry,
@@ -747,6 +753,27 @@ export function composeCover(doc: CoverDocument, options: ComposeOptions): Compo
       srcHeight: 0,
       opacity: figureOpacity(look.groundFigureOpacity)
     })
+
+    // And its companion on the back and the spine, at the same tint, fading
+    // out before the fold. Placed in its own item rather than as one picture
+    // across the wrap: two boxes that never touch cannot misregister, and one
+    // that spans the fold always can.
+    if (look.groundFigureBack) {
+      const back = backFigureFramePt(geometry)
+      items.push({
+        kind: 'image',
+        id: GROUND_FIGURE_BACK_ID,
+        xPt: back.xPt,
+        yPt: back.yPt,
+        widthPt: back.widthPt,
+        heightPt: back.heightPt,
+        srcX: 0,
+        srcY: 0,
+        srcWidth: 0,
+        srcHeight: 0,
+        opacity: figureOpacity(look.groundFigureOpacity)
+      })
+    }
   }
 
   // Art dimensions after retouching — the op stack can crop, and the DPI check

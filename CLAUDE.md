@@ -2713,6 +2713,38 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   opposite of the guess that went into the question's help text first, and
   visible in a picture only once the two were put side by side.
 
+  **A plain back beside a figured front, and the fade that joins them**
+  (`backFigureFrame`, `FIGURE_FADE_IN`, `groundFigureBack`). A figure stops at
+  the fold, so the back was a bare board — which reads as an unfinished cover
+  rather than a restrained one. The obvious repair is to carry the picture
+  across the whole wrap and it is the one thing this module exists to refuse.
+  So the back carries a **second** printing of the same artwork, mirrored, in
+  its own box, and the two are joined by not meeting: each fades to nothing
+  three quarters of an inch from the fold, which with the spine between them
+  leaves about three inches of plain board around it. Nothing registers because
+  nothing touches — the same bargain the allover patterns strike, reached from
+  the other end.
+
+  Two things were settled by measuring the sheet rather than by looking at it.
+  **The box has to be the mirror of the front's**, not the back panel plus the
+  spine: covering is a scale, so the wider box drew the same arcade 8.06 inches
+  wide against the front's 6.43, and a binding showing one picture at two sizes
+  is wrong at a glance whatever the tint. Equal boxes are equal scales by
+  construction. And **the front has to fade too**: with only the companion
+  faded, a column scan of the sheet read 4.8 points of spread across the back,
+  zero for the six tenths of an inch before the fold, and 4.8 again the instant
+  it crossed — the fade had moved the one visible join rather than removed it.
+  Faded both sides, the scan is zero from 6.0 to 7.75 inches with the fold at
+  7.68 inside it.
+
+  The same scan settled a thing the eye got wrong in the other direction. The
+  back's arcade plainly _looked_ stronger than the front's on the first render,
+  and both measured 4.78 — what differs is that the front panel has a white
+  frame and type beside it to adapt against, and the back has nothing. The
+  fade itself is baked into the picture's own alpha rather than asked of the
+  PDF, since it is rasterised here anyway and a soft edge in the pixels needs
+  nothing of the writer, the composer or the KDP checks.
+
   **A picture with no overflow cannot be positioned** (`FIGURE_ZOOM`,
   `coverScale`). Covering is the _minimum_ scale that fills the box, so a
   figure whose proportions are the panel's is drawn at very nearly its own size

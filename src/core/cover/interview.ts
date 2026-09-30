@@ -333,6 +333,17 @@ export function lookQuestions(state: CoverInterviewState): Question[] {
         defaultValue: String(look.groundFigureOpacity)
       },
       {
+        id: 'cover-figure-back',
+        // A `confirm`, not a two-option `choice`: `flag` reads booleans, and a
+        // choice answering 'yes' into it is the fault `frontTitleBorder` shipped
+        // — every test passed and no book ever drew the thing.
+        type: 'confirm',
+        group: 'ornament',
+        prompt: 'Does the back carry it too?',
+        help: 'The same picture mirrored across the back and the spine, at the same tint, fading out before it reaches the fold. It fades rather than meets: the fold creeps by up to an eighth of an inch, so two halves of one scene joined at it will not join on the printed copy.',
+        defaultValue: look.groundFigureBack
+      },
+      {
         id: 'cover-figure-ink',
         type: 'text',
         group: 'ornament',
@@ -603,6 +614,7 @@ export function coverFromAnswers(
     groundFigureOpacity: Number(
       text(answers, 'cover-figure-opacity', String(doc.look.groundFigureOpacity))
     ),
+    groundFigureBack: flag(answers, 'cover-figure-back', doc.look.groundFigureBack),
     markOnFront: flag(answers, 'cover-mark-front', doc.look.markOnFront),
     ornamentId: text(answers, 'cover-ornament', doc.look.ornamentId ?? '') || null,
     groundPattern:

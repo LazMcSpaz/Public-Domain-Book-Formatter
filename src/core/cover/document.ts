@@ -208,6 +208,13 @@ export interface CoverLook {
   groundFigure: GroundFigure | null
   /** How strongly that figure prints. Clamped to what a press will hold. */
   groundFigureOpacity: number
+  /**
+   * Whether the back and the spine carry a mirrored companion of that figure.
+   *
+   * It fades to nothing before the fold, so the two are never asked to meet —
+   * which is what lets a figure reach the back at all. See `figures.ts`.
+   */
+  groundFigureBack: boolean
 }
 
 /** A supplied device, as bytes and the proportions to place it by. */
@@ -332,7 +339,8 @@ export function defaultLook(): CoverLook {
     markOnFront: false,
     groundPattern: null,
     groundFigure: null,
-    groundFigureOpacity: DEFAULT_FIGURE_OPACITY
+    groundFigureOpacity: DEFAULT_FIGURE_OPACITY,
+    groundFigureBack: false
   }
 }
 
@@ -456,7 +464,8 @@ export function normalizeLook(raw: unknown): CoverLook {
       typeof raw['groundFigureOpacity'] === 'number'
         ? raw['groundFigureOpacity']
         : d.groundFigureOpacity
-    )
+    ),
+    groundFigureBack: bool(raw['groundFigureBack'], d.groundFigureBack)
   }
 }
 

@@ -219,10 +219,117 @@ export function coverScale(
  * would come away from the trim on the other side and leave a band of bare
  * cover down one edge — the one failure a bleeding ground exists to prevent.
  * An anchor that cannot be honoured is honoured as far as it goes.
+ *
+ * `targetX` is where in the *box* the anchor should land, and it is 0.5 for
+ * every figure on the front, whose box is the front panel. The companion on the
+ * back needs it: its box is the back panel **and the spine**, so the middle of
+ * the box is not the middle of the panel a reader looks at, and centring on the
+ * box would set the back's arcade three quarters of an inch off the panel it
+ * prints on.
  */
-export function coverOffsetX(boxWidth: number, drawWidth: number, anchorX: number): number {
-  const wanted = boxWidth / 2 - anchorX * drawWidth
+export function coverOffsetX(
+  boxWidth: number,
+  drawWidth: number,
+  anchorX: number,
+  targetX = 0.5
+): number {
+  const wanted = boxWidth * targetX - anchorX * drawWidth
   return Math.min(0, Math.max(boxWidth - drawWidth, wanted))
+}
+
+/**
+ * The companion ground on the back and the spine, and why it fades.
+ *
+ * The front's figure stops dead at the fold, which leaves the back a plain
+ * board — and a plain board beside a figured one reads as an unfinished cover
+ * rather than a restrained one. The obvious repair is to carry the picture
+ * across the whole wrap, and it is the one thing this module exists to refuse:
+ * the fold creeps by up to an eighth of an inch, so two halves of one scene
+ * meeting at it will not meet on the printed copy.
+ *
+ * So the companion is a *second* printing of the same artwork, mirrored, in its
+ * own box, whose tint **falls to nothing before it reaches the fold**. Nothing
+ * has to register, because nothing meets: at the fold both sides are the bare
+ * ground, and where the fold actually lands decides nothing a reader can see.
+ * That is the same bargain the allover patterns strike, reached the other way
+ * round — they survive the fold by having no alignment, this survives it by
+ * having no ink there.
+ *
+ * Mirrored because the two panels are then a pair opening from the spine, which
+ * is what a bound board does, and because the fade makes the join moot: the
+ * question "do the two arcades line up?" is never put.
+ */
+export const GROUND_FIGURE_BACK_ID = '__ground-figure-back__'
+
+/**
+ * The back panel, out to the bleed on three edges, stopping at the back fold.
+ *
+ * The **mirror of the front's box**, and that is the whole of why it stops
+ * short of the spine rather than crossing it. Covering is a scale, so a box
+ * that included the spine would be a quarter wider than the front's and draw
+ * the same arcade a quarter larger — measured, 8.06 inches of artwork against
+ * 6.43 — and two panels of one binding showing one picture at two sizes is
+ * plainly wrong at a glance, whatever the tint. Equal boxes are equal scales by
+ * construction, with nothing to keep in step.
+ *
+ * What the spine loses is a faint gradient of picture. What it gains is being
+ * clean under the type it carries, which is the one thing printed on it.
+ */
+export function backFigureFrame(geometry: CoverGeometry): Rect {
+  return { x: 0, y: 0, width: geometry.spine.x, height: geometry.fullHeightIn }
+}
+
+/** The same rectangle in points, which is what the composer places in. */
+export function backFigureFramePt(geometry: CoverGeometry): {
+  xPt: number
+  yPt: number
+  widthPt: number
+  heightPt: number
+} {
+  const frame = backFigureFrame(geometry)
+  return {
+    xPt: pt(frame.x),
+    yPt: pt(frame.y),
+    widthPt: pt(frame.width),
+    heightPt: pt(frame.height)
+  }
+}
+
+/**
+ * How far from a fold a figure's tint has fallen to nothing, in inches.
+ *
+ * Spent on both sides: the last three quarters of an inch of the back panel,
+ * and the first three quarters of the front. With the spine between them that
+ * is three inches of plain board around the fold, and nothing anywhere near it
+ * that a reader could see was out of register.
+ *
+ * The front's half is not optional trimming. Measured on the sheet with only
+ * the companion faded, a column scan reads 4.8 points of spread across the
+ * back, zero for the six tenths of an inch before the fold, and 4.8 again the
+ * instant it crosses — the fade had moved the one visible join rather than
+ * removed it. Fading both sides is what takes the scan to zero through the
+ * whole of the middle.
+ *
+ * Three quarters of an inch is the floor rather than a preference: a tint
+ * dropping from full to nothing across much less is a soft edge, and a soft
+ * edge is still an edge.
+ */
+export const FIGURE_FADE_IN = 0.75
+
+/**
+ * Where the anchor should land in the companion's box, as a fraction of it.
+ *
+ * The back *panel's* centre line — not the box's, which includes the spine.
+ */
+export function backAnchorTarget(geometry: CoverGeometry): number {
+  const frame = backFigureFrame(geometry)
+  if (frame.width <= 0) return 0.5
+  return (geometry.back.x + geometry.back.width / 2) / frame.width
+}
+
+/** The anchor of a mirrored figure: the same point of a picture flipped. */
+export function backAnchorX(figure: GroundFigure): number {
+  return 1 - FIGURE_ANCHOR_X[figure]
 }
 
 /** Clamp a requested opacity into what a press will hold. */

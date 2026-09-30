@@ -168,10 +168,29 @@ export async function renderGroundImage(input: {
    */
   anchorX?: number
   /**
+   * Where in the box the anchor should land, 0–1. The centre for anything on
+   * the front; see `backAnchorTarget` for why the companion needs its own.
+   */
+  targetX?: number
+  /**
    * How much larger than covering requires to draw it, so the anchor has room
    * to move it. See `FIGURE_ZOOM`; a texture never needs it.
    */
   zoom?: number
+  /** Draw the artwork flipped, so the two panels are a pair about the spine. */
+  mirrorX?: boolean
+  /**
+   * Inches of the box's right edge over which the tint falls to nothing.
+   *
+   * Baked into the picture's own alpha rather than asked of the PDF, because
+   * the picture is rasterised here anyway and a soft edge in the pixels needs
+   * nothing of the writer, the composer or the KDP checks. It is what lets a
+   * figure reach the back at all: a companion that dies before the fold is
+   * never asked to line up with the one on the other side of it.
+   */
+  fadeRightIn?: number
+  /** The same on the left edge, which is a front figure's own edge at the fold. */
+  fadeLeftIn?: number
 }): Promise<{ bytes: Uint8Array; widthPx: number; heightPx: number }> {
   const img = await loadMark(input.src)
   const widthPx = Math.max(1, Math.round(input.widthIn * GROUND_DPI))
@@ -189,8 +208,21 @@ export async function renderGroundImage(input: {
   const scale = coverScale(widthPx, heightPx, naturalW, naturalH, input.zoom ?? 1)
   const drawW = naturalW * scale
   const drawH = naturalH * scale
-  const x = coverOffsetX(widthPx, drawW, input.anchorX ?? 0.5)
-  ctx.drawImage(img, x, (heightPx - drawH) / 2, drawW, drawH)
+  const x = coverOffsetX(widthPx, drawW, input.anchorX ?? 0.5, input.targetX ?? 0.5)
+  const top = (heightPx - drawH) / 2
+  if (input.mirrorX) {
+    // Flip about the drawn rectangle's own right edge, so the box coordinates
+    // the offset was computed in are the ones the picture lands in: a source
+    // point a fraction `a` from its left arrives `1 - a` from the rectangle's,
+    // which is why the caller passes `backAnchorX` rather than the anchor.
+    ctx.save()
+    ctx.translate(x + drawW, 0)
+    ctx.scale(-1, 1)
+    ctx.drawImage(img, 0, top, drawW, drawH)
+    ctx.restore()
+  } else {
+    ctx.drawImage(img, x, top, drawW, drawH)
+  }
 
   const image = ctx.getImageData(0, 0, widthPx, heightPx)
   const data = image.data
@@ -203,6 +235,28 @@ export async function renderGroundImage(input: {
     data[i + 1] = g
     data[i + 2] = b
     data[i + 3] = Math.round(coverage * 255)
+  }
+
+  // The fade, applied after the tint so it multiplies the coverage rather than
+  // the source's own greys. Smoothstepped: a linear ramp ends on a visible
+  // corner where the slope meets zero, and a fade with an edge on it is the
+  // thing this is for avoiding.
+  const rightPx = Math.round((input.fadeRightIn ?? 0) * GROUND_DPI)
+  const leftPx = Math.round((input.fadeLeftIn ?? 0) * GROUND_DPI)
+  if (rightPx > 0 || leftPx > 0) {
+    const smooth = (t: number) => t * t * (3 - 2 * t)
+    for (let px = 0; px < widthPx; px++) {
+      let factor = 1
+      if (leftPx > 0 && px < leftPx) factor = smooth(px / leftPx)
+      if (rightPx > 0 && px > widthPx - rightPx) {
+        factor = Math.min(factor, smooth((widthPx - px) / rightPx))
+      }
+      if (factor >= 1) continue
+      for (let y = 0; y < heightPx; y++) {
+        const i = (y * widthPx + px) * 4 + 3
+        data[i] = Math.round(data[i]! * factor)
+      }
+    }
   }
   ctx.putImageData(image, 0, 0)
 
