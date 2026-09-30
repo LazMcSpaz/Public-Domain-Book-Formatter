@@ -23,9 +23,14 @@
  */
 import { pt, type CoverGeometry, type Rect } from './geometry'
 
-export type GroundFigure = 'isis-winged' | 'isis-winged-plain'
+export type GroundFigure = 'isis-winged' | 'isis-winged-plain' | 'arcade' | 'arcade-detailed'
 
-export const GROUND_FIGURES: readonly GroundFigure[] = ['isis-winged', 'isis-winged-plain']
+export const GROUND_FIGURES: readonly GroundFigure[] = [
+  'isis-winged',
+  'isis-winged-plain',
+  'arcade',
+  'arcade-detailed'
+]
 
 /** The id a ground figure is placed under, for the renderer to find. */
 export const GROUND_FIGURE_ID = '__ground-figure__'
@@ -33,19 +38,27 @@ export const GROUND_FIGURE_ID = '__ground-figure__'
 /** Where each figure's artwork lives, relative to the app. */
 export const FIGURE_SRC: Readonly<Record<GroundFigure, string>> = {
   'isis-winged': '/devices/isis-winged-solid.svg',
-  'isis-winged-plain': '/devices/isis-winged.svg'
+  'isis-winged-plain': '/devices/isis-winged.svg',
+  arcade: '/devices/arcade.svg',
+  'arcade-detailed': '/devices/arcade-detailed.svg'
 }
 
 export const FIGURE_LABEL: Readonly<Record<GroundFigure, string>> = {
   'isis-winged': 'Isis, winged — the massed silhouette',
-  'isis-winged-plain': 'Isis, winged — the engraved trace'
+  'isis-winged-plain': 'Isis, winged — the engraved trace',
+  arcade: 'An arcade of horseshoe arches',
+  'arcade-detailed': 'An arcade of horseshoe arches — the fuller cut'
 }
 
 export const FIGURE_NOTE: Readonly<Record<GroundFigure, string>> = {
   'isis-winged':
     'Solid shapes, which is what a ground at five per cent needs: a mass holds its tint where a mesh of fine lines breaks up into dots.',
   'isis-winged-plain':
-    'The full trace, feather by feather. Better where the figure prints stronger than about a tenth; at five per cent the hatching averages out and the silhouette is the honest choice.'
+    'The full trace, feather by feather. Better where the figure prints stronger than about a tenth; at five per cent the hatching averages out and the silhouette is the honest choice.',
+  arcade:
+    'A receding colonnade rather than a figure: it fills the board edge to edge and draws the eye down the middle, where a figure holds one shape in the centre. Its proportions are almost the front panel’s own, so it prints nearly whole.',
+  'arcade-detailed':
+    'The same arcade with the fainter stonework kept. More ink, which reads better at the lowest tints; it goes muddy sooner where the figure prints stronger.'
 }
 
 /**
@@ -130,7 +143,15 @@ export function figureFramePt(geometry: CoverGeometry): {
  */
 export const FIGURE_ANCHOR_X: Readonly<Record<GroundFigure, number>> = {
   'isis-winged': 0.514,
-  'isis-winged-plain': 0.514
+  'isis-winged-plain': 0.514,
+  // The dark doorway the colonnade recedes into, measured in the middle band
+  // where it is the only mass. It is all but centred already, and on a 6×9 the
+  // arcade's proportions are so near the panel's that there is barely a
+  // fortieth of an inch of overflow to spend — so this asks for a shift the
+  // clamp mostly refuses, which is the clamp doing its job rather than failing
+  // to. The number is here for the trim where it is not true.
+  arcade: 0.495,
+  'arcade-detailed': 0.495
 }
 
 /**

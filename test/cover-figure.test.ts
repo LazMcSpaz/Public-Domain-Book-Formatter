@@ -16,6 +16,10 @@ import {
   coverOffsetX,
   DEFAULT_FIGURE_OPACITY,
   FIGURE_ANCHOR_X,
+  FIGURE_LABEL,
+  FIGURE_NOTE,
+  FIGURE_SRC,
+  GROUND_FIGURES,
   defaultCover,
   figureFrame,
   figureOpacity,
@@ -106,11 +110,23 @@ describe('coverOffsetX', () => {
   })
 })
 
-describe('FIGURE_ANCHOR_X', () => {
+describe('the figure library', () => {
   it('names a point inside the artwork for every figure', () => {
     for (const [figure, anchor] of Object.entries(FIGURE_ANCHOR_X)) {
       expect(anchor, figure).toBeGreaterThan(0)
       expect(anchor, figure).toBeLessThan(1)
+    }
+  })
+
+  it('gives every figure artwork, a label and a note', () => {
+    // A figure added to the list and left out of one of these tables is a
+    // choice the interview offers and the renderer cannot draw — which is a
+    // blank front cover rather than an error.
+    for (const figure of GROUND_FIGURES) {
+      expect(FIGURE_SRC[figure], figure).toMatch(/^\/devices\/.+\.svg$/)
+      expect(FIGURE_LABEL[figure]?.length, figure).toBeGreaterThan(0)
+      expect(FIGURE_NOTE[figure]?.length, figure).toBeGreaterThan(0)
+      expect(FIGURE_ANCHOR_X[figure], figure).toBeGreaterThan(0)
     }
   })
 })

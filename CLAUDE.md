@@ -2698,6 +2698,16 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   two anchors, solved for the centre line and confirmed by eye with the tint
   stretched.
 
+  **A scene traces differently from an object**, which the arcade added to the
+  library shows: one thing on white paper has a silhouette to find, and a
+  colonnade has no background at all, so every mark comes out of local contrast
+  and the first pass read marble veining and JPEG noise as detail. Raising the
+  contrast a mark must clear and dropping contours under about forty square
+  pixels is what turns flat stone white and spends the ink on the architecture.
+  Such a trace is a quarter of a megabyte against a device's twenty kilobytes,
+  which costs nothing as a ground — it is rasterised at the size it prints —
+  and would matter inside a book file.
+
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

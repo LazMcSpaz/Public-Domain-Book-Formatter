@@ -56,3 +56,30 @@ Two files because a ground at five per cent wants a mass and a device at an
 inch wants the detail: the hatching averages out to nothing at the first size
 and is the whole character of the thing at the second. `FIGURE_SRC` in
 `src/core/cover/figures.ts` points the ground figure at whichever is chosen.
+
+## The arcade
+
+`arcade.svg` (the cleaner cut), `arcade-detailed.svg` (more of the stonework).
+
+Traced from a photograph of a colonnade of horseshoe arches, used as a **ground
+figure** rather than a device: it fills the board and draws the eye down the
+middle where a device holds one shape in the centre. Its proportions are within
+half a per cent of a 6×9 front panel's, so it prints very nearly whole — which
+also means there is almost no overflow for `FIGURE_ANCHOR_X` to spend, and the
+anchor clamps. That is the clamp working, not failing.
+
+**A scene is harder to trace than an object, and for a reason worth
+remembering.** The Isis is one thing on white paper, so there is a silhouette to
+find; a colonnade has no background at all and every mark has to come out of
+local contrast. The first pass read the marble's own veining and the JPEG's
+noise as detail and came back sandblasted. What fixed it was raising the
+contrast a mark must clear — bias 20 to 24 against a 28-pixel neighbourhood —
+and dropping any contour under about forty square pixels, which turns the flat
+stone white and spends the ink on the arch profiles, the muqarnas, the zellij
+and the floor. The blotching that remains is real: sun falling across stone,
+kept because it gives the stone some body.
+
+They are big for SVGs — a quarter of a megabyte each, where a device is twenty
+kilobytes — because a scene has two orders of magnitude more contours than an
+emblem. That costs nothing as a ground, which is rasterised at the size it
+prints, and would matter if one ever travelled inside a book file.
