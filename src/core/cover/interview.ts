@@ -286,21 +286,6 @@ export function lookQuestions(state: CoverInterviewState): Question[] {
       defaultValue: look.groundFigure ?? ''
     },
     {
-      id: 'cover-figure-opacity',
-      type: 'choice',
-      group: 'ornament',
-      prompt: 'How faint?',
-      help: `Five per cent is the floor a print-on-demand press will hold; under it a tint mottles rather than lightens. Past a fifth the figure competes with the title.`,
-      options: [
-        { value: '0.04', label: '4% — the very edge of what prints' },
-        { value: '0.05', label: '5% — barely there' },
-        { value: '0.08', label: '8% — a visible ghost' },
-        { value: '0.12', label: '12% — plainly a picture' },
-        { value: '0.2', label: '20% — a picture the title sits on' }
-      ],
-      defaultValue: String(look.groundFigureOpacity)
-    },
-    {
       id: 'cover-frame',
       type: 'choice',
       group: 'ornament',
@@ -326,6 +311,37 @@ export function lookQuestions(state: CoverInterviewState): Question[] {
       defaultValue: look.ornamentId ?? ''
     }
   )
+
+  // How faint the figure prints, and what colour it prints in, are questions
+  // about a figure — so they wait until there is one, the way the device's own
+  // follow-up does below.
+  if (look.groundFigure) {
+    out.push(
+      {
+        id: 'cover-figure-opacity',
+        type: 'choice',
+        group: 'ornament',
+        prompt: 'How faint?',
+        help: `Five per cent is where a print-on-demand press is relied on to hold a tint; three is where it starts depending on the machine and the stock, and is offered because the editor decides and a proof settles it. Past a fifth the figure competes with the title.`,
+        options: [
+          { value: '0.03', label: '3% — hardly there, and not guaranteed to print' },
+          { value: '0.05', label: '5% — barely there' },
+          { value: '0.08', label: '8% — a visible ghost' },
+          { value: '0.12', label: '12% — plainly a picture' },
+          { value: '0.2', label: '20% — a picture the title sits on' }
+        ],
+        defaultValue: String(look.groundFigureOpacity)
+      },
+      {
+        id: 'cover-figure-ink',
+        type: 'text',
+        group: 'ornament',
+        prompt: 'What colour does the figure print in?',
+        help: 'Its own colour rather than the ink\u2019s, because a ghost behind white type is usually warmer than the type. Reach for a saturated colour rather than a pale one: at three per cent both lift the ground by the same few points, and it is the saturated one that lifts it unevenly enough to have a hue at all — measured over a brown board, a pale gold came back two points warmer than the ground and a full gold six.',
+        defaultValue: look.palette.figure
+      }
+    )
+  }
 
   // Likewise: where a book is being set from a press with no device, whether
   // that device also prints on the front is not a question about this book.
@@ -597,7 +613,8 @@ export function coverFromAnswers(
       ...doc.look.palette,
       ground: text(answers, 'cover-ground', doc.look.palette.ground),
       ink: text(answers, 'cover-ink', doc.look.palette.ink),
-      accent: text(answers, 'cover-accent', doc.look.palette.accent)
+      accent: text(answers, 'cover-accent', doc.look.palette.accent),
+      figure: text(answers, 'cover-figure-ink', doc.look.palette.figure)
     }
   })
 

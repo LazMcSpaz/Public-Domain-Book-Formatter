@@ -154,7 +154,10 @@ async function buildCover(
       src: FIGURE_SRC[doc.look.groundFigure],
       widthIn: figureItem.widthPt / 72,
       heightIn: figureItem.heightPt / 72,
-      color: doc.look.palette.ink,
+      // The figure's own colour, not the ink: see `CoverPalette.figure`. The
+      // ground *pattern* above stays on the ink, because it is allover and
+      // reads as a tint of the type rather than as a picture behind it.
+      color: doc.look.palette.figure,
       anchorX: FIGURE_ANCHOR_X[doc.look.groundFigure],
       zoom: FIGURE_ZOOM[doc.look.groundFigure]
     })

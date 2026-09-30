@@ -13,6 +13,13 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { fixedWidthMeasurer } from '@core/layout'
 import {
+  coverFromAnswers,
+  defaultLook,
+  lookQuestions,
+  normalizeLook,
+  type CoverInterviewState
+} from '@core/cover'
+import {
   composeCover,
   coverGeometry,
   coverOffsetX,
@@ -251,5 +258,60 @@ describe('the composer', () => {
     const firstText = items.findIndex((i) => i.kind === 'text')
     expect(figure).toBeGreaterThanOrEqual(0)
     expect(firstText).toBeGreaterThan(figure)
+  })
+})
+
+function interviewState(doc: CoverDocument): CoverInterviewState {
+  return {
+    doc,
+    pageCountMeasured: true,
+    bankedLooks: [],
+    plates: [],
+    hasReplicateToken: false,
+    replicateAvailable: null
+  }
+}
+
+describe('the figure has its own colour', () => {
+  it('falls back to the look it came from, not to the shipped default', () => {
+    // A look banked before this role existed had its figure drawn in whatever
+    // ink it carried. Taking the default here would repaint every one of them.
+    const look = normalizeLook({ ...defaultLook(), palette: { ink: '#ffffff' } })
+    expect(look.palette.figure).toBe('#ffffff')
+    expect(look.palette.figure).not.toBe(defaultLook().palette.figure)
+  })
+
+  it('keeps a stated figure colour apart from the ink', () => {
+    const look = normalizeLook({
+      ...defaultLook(),
+      palette: { ink: '#ffffff', figure: '#f0d890' }
+    })
+    expect(look.palette.ink).toBe('#ffffff')
+    expect(look.palette.figure).toBe('#f0d890')
+  })
+
+  it('refuses a colour that is not one', () => {
+    const look = normalizeLook({ ...defaultLook(), palette: { ink: '#ffffff', figure: 'gold' } })
+    expect(look.palette.figure).toBe('#ffffff')
+  })
+
+  it('is asked for only once there is a figure to colour', () => {
+    const noFigure = lookQuestions(interviewState(cover(() => {})))
+    expect(noFigure.some((q) => q.id === 'cover-figure-ink')).toBe(false)
+    expect(noFigure.some((q) => q.id === 'cover-figure-opacity')).toBe(false)
+
+    const withFigure = lookQuestions(interviewState(cover((d) => (d.look.groundFigure = 'arcade'))))
+    expect(withFigure.some((q) => q.id === 'cover-figure-ink')).toBe(true)
+    expect(withFigure.some((q) => q.id === 'cover-figure-opacity')).toBe(true)
+  })
+
+  it('reads the answer back onto the figure alone', () => {
+    const base = cover((d) => {
+      d.look.groundFigure = 'arcade'
+      d.look.palette.ink = '#ffffff'
+    })
+    const next = coverFromAnswers(base, { 'cover-figure-ink': '#f0d890' })
+    expect(next.look.palette.figure).toBe('#f0d890')
+    expect(next.look.palette.ink).toBe('#ffffff')
   })
 })

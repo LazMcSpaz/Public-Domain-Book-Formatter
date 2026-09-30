@@ -87,6 +87,16 @@ export interface CoverPalette {
    * is a different decision, and the one that goes wrong most often.
    */
   overArt: Hex
+  /**
+   * The ground figure's own colour.
+   *
+   * Its own role rather than the ink's because a figure and the type it sits
+   * behind are never the same decision: white type over a dark board wants a
+   * *warm* ghost, and a figure taking the ink would be the one colour that
+   * cannot be asked for. Absent, it falls back to the ink, which is what every
+   * look banked before this field existed was drawn with.
+   */
+  figure: Hex
 }
 
 /** A rule under or around the type. */
@@ -294,7 +304,13 @@ export interface CoverDocument {
 }
 
 export function defaultPalette(): CoverPalette {
-  return { ground: '#f4efe4', ink: '#22201c', accent: '#7a2e2e', overArt: '#f7f4ec' }
+  return {
+    ground: '#f4efe4',
+    ink: '#22201c',
+    accent: '#7a2e2e',
+    overArt: '#f7f4ec',
+    figure: '#22201c'
+  }
 }
 
 export function defaultLook(): CoverLook {
@@ -411,7 +427,11 @@ export function normalizeLook(raw: unknown): CoverLook {
       ground: hex(rawPalette['ground'], d.palette.ground),
       ink: hex(rawPalette['ink'], d.palette.ink),
       accent: hex(rawPalette['accent'], d.palette.accent),
-      overArt: hex(rawPalette['overArt'], d.palette.overArt)
+      overArt: hex(rawPalette['overArt'], d.palette.overArt),
+      // The ink is the fallback, not the shipped default: a look banked before
+      // this role existed had its figure drawn in whatever ink it carried, and
+      // taking the default here would repaint it.
+      figure: hex(rawPalette['figure'], hex(rawPalette['ink'], d.palette.ink))
     },
     titleFont: str(raw['titleFont'], d.titleFont),
     authorFont: str(raw['authorFont'], d.authorFont),

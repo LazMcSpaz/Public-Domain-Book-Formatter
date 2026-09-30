@@ -2698,6 +2698,21 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   two anchors, solved for the centre line and confirmed by eye with the tint
   stretched.
 
+  **A ghost is not the ink, and a pale colour is the wrong way to make one
+  yellow** (`CoverPalette.figure`). The figure was tinted with `palette.ink`,
+  which on a cover with white type and a brown board is the one colour it
+  cannot be: asked for a warm ground behind white lettering there was nothing
+  to answer with. It has its own palette role now, falling back to the
+  _incoming_ ink rather than the shipped default so a look banked before the
+  field existed keeps the appearance it was banked with. Which colour to reach
+  for was measured off the rendered PNG rather than judged: over `#3b2a1c` at
+  three per cent, a pale gold (`#f0d890`) and a full gold (`#ffd700`) lift the
+  ground by the same six points of luminance, and the pale one comes back two
+  points warmer than the ground where the full one comes back six. So at a
+  ground's tint the **saturated** colour is what has a hue at all — the
+  opposite of the guess that went into the question's help text first, and
+  visible in a picture only once the two were put side by side.
+
   **A picture with no overflow cannot be positioned** (`FIGURE_ZOOM`,
   `coverScale`). Covering is the _minimum_ scale that fills the box, so a
   figure whose proportions are the panel's is drawn at very nearly its own size
