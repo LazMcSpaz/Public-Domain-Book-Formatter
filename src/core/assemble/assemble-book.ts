@@ -150,6 +150,17 @@ export interface ChapterEntry {
    * contents, or when the parse was not sound enough to trust.
    */
   synopsis?: string
+  /**
+   * The chapter's name as the original contents gives it, where the body
+   * prints only a number.
+   *
+   * *Isis Unveiled* opens every chapter with "CHAPTER I." and nothing more;
+   * the name, "THE CHURCH: WHERE IS IT?", is printed only on the contents
+   * page. So the contents this edition sets can name the chapter only if the
+   * name is carried from that page. Absent whenever the body names the
+   * chapter itself, which is the ordinary case.
+   */
+  contentsTitle?: string
   /** Index into `blocks` where the chapter starts. */
   blockIndex: number
   sourcePage: number
@@ -773,10 +784,16 @@ export function assembleBook(
     }
     const claimed = new Set<SynopsisEntry>()
     for (const chapter of chapters) {
-      const labelled = chapter.label ? (byLabel.get(synopsisKey(chapter.label)) ?? []) : []
+      // A chapter the body heads with its number alone ("CHAPTER I.") has no
+      // label, the number being all there is: the number is then its title,
+      // and the only name the two pages share.
+      const numberOnly = !chapter.label && isNumberLine(chapter.title)
+      const number = chapter.label ?? (numberOnly ? chapter.title : '')
+      const labelled = number ? (byLabel.get(synopsisKey(number)) ?? []) : []
       const found = byTitle.get(synopsisKey(chapter.title)) ?? labelled.find((e) => !claimed.has(e))
       if (!found || claimed.has(found)) continue
       chapter.synopsis = found.synopsis
+      if (numberOnly && found.title) chapter.contentsTitle = found.title
       claimed.add(found)
     }
     for (const entry of described) {

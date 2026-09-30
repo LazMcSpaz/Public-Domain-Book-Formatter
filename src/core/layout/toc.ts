@@ -80,8 +80,19 @@ export function layoutWithToc(
       .filter((chapter) => chapter.level <= profile.contentsDepth)
       .map((chapter) => ({
         id: chapter.id,
-        title: titled(chapter.title),
-        ...(chapter.label ? { label: chapter.label } : {}),
+        // A chapter the body only numbers is named as the original contents
+        // named it, with the number set as its label.
+        ...(chapter.contentsTitle
+          ? {
+              title: chapter.contentsTitle,
+              label: chapter.label
+                ? `${chapter.label} ${titled(chapter.title)}`
+                : titled(chapter.title)
+            }
+          : {
+              title: titled(chapter.title),
+              ...(chapter.label ? { label: chapter.label } : {})
+            }),
         level: chapter.level,
         // Only when the style asks. The descriptions are long — twenty of them
         // turn a one-leaf contents into four — so this is a preference and not a

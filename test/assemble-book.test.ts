@@ -10,6 +10,7 @@ import {
   stripLeadingMarker
 } from '@core/assemble'
 import type { PageTranscription, TranscribedBlock } from '@core/transcribe'
+import { applyEdits } from '@core/edits'
 import type { BookDocument } from '@core/assemble'
 import type { PageRole } from '@core/pages'
 
@@ -556,6 +557,87 @@ describe('assembleBook — descriptions in the contents', () => {
     ])
     const found = doc.chapters.find((c) => c.title === 'THE ASTRAL SENSES.')
     expect(found?.synopsis).toContain('skeptical person')
+  })
+
+  /**
+   * *Isis Unveiled*: the body opens each chapter with "CHAPTER I." and
+   * nothing more, and only the contents page names it and lists its topics,
+   * one to a line with a folio each, under a part heading.
+   */
+  it('names a chapter the body only numbers, from its topics-and-folios entry', () => {
+    const doc = assembleBook([
+      page(
+        0,
+        [
+          { kind: 'heading', text: 'TABLE OF CONTENTS.' },
+          { kind: 'heading', text: 'PREFACE ........ i' },
+          { kind: 'heading', text: 'Volume Second.' },
+          { kind: 'heading', text: 'THE “INFALLIBILITY” OF RELIGION.' },
+          { kind: 'heading', text: 'CHAPTER I.' },
+          { kind: 'heading', text: 'THE CHURCH: WHERE IS IT?' },
+          para('Church statistics ........ 1'),
+          para('Catholic “miracles” and spiritualistic ‘phenomena’ ........ 4'),
+          { kind: 'heading', text: 'CHAPTER II.' },
+          { kind: 'heading', text: 'CHRISTIAN CRIMES AND HEATHEN VIRTUES.' },
+          para('Sorceries of Catherine of Medicis ........ 55'),
+          para('Occult arts practised by the clergy ........ 59')
+        ],
+        'table-of-contents'
+      ),
+      page(
+        1,
+        [{ kind: 'heading', text: 'CHAPTER I.', level: 1 }, para('Body.')],
+        'chapter-opening'
+      ),
+      page(
+        2,
+        [{ kind: 'heading', text: 'CHAPTER II.', level: 1 }, para('Body.')],
+        'chapter-opening'
+      )
+    ])
+    const one = doc.chapters.find((c) => c.title === 'CHAPTER I.')
+    const two = doc.chapters.find((c) => c.title === 'CHAPTER II.')
+    expect(one?.contentsTitle).toBe('THE CHURCH: WHERE IS IT?')
+    expect(one?.synopsis).toBe(
+      'Church statistics \u2014 Catholic “miracles” and spiritualistic ‘phenomena’'
+    )
+    expect(two?.contentsTitle).toBe('CHRISTIAN CRIMES AND HEATHEN VIRTUES.')
+    expect(two?.synopsis).toBe(
+      'Sorceries of Catherine of Medicis \u2014 Occult arts practised by the clergy'
+    )
+  })
+
+  it('carries a contents title through a correction to the book', () => {
+    const doc = assembleBook([
+      page(
+        0,
+        [
+          { kind: 'heading', text: 'CHAPTER I.' },
+          { kind: 'heading', text: 'THE CHURCH: WHERE IS IT?' },
+          para('Church statistics ........ 1'),
+          para('Catholic “miracles” and spiritualistic ‘phenomena’ ........ 4'),
+          { kind: 'heading', text: 'CHAPTER II.' },
+          { kind: 'heading', text: 'CHRISTIAN CRIMES.' },
+          para('Sorceries of Catherine of Medicis ........ 55'),
+          para('Occult arts practised by the clergy ........ 59')
+        ],
+        'table-of-contents'
+      ),
+      page(
+        1,
+        [{ kind: 'heading', text: 'CHAPTER I.', level: 1 }, para('Body.')],
+        'chapter-opening'
+      ),
+      page(
+        2,
+        [{ kind: 'heading', text: 'CHAPTER II.', level: 1 }, para('Body.')],
+        'chapter-opening'
+      )
+    ])
+    const edited = applyEdits(doc, [{ kind: 'text', blockId: 'p1b1', text: 'Body, corrected.' }])
+    expect(edited.chapters.find((c) => c.title === 'CHAPTER I.')?.contentsTitle).toBe(
+      'THE CHURCH: WHERE IS IT?'
+    )
   })
 
   it('adds none to a book that had no contents page at all', () => {

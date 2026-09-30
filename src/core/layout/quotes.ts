@@ -116,7 +116,8 @@ export function withTypographicQuotes(doc: BookDocument): BookDocument {
       // The analytical contents is the one place in this book where a long
       // stretch of the original's *prose* is set outside the body, and it was
       // the one place still printing typewriter marks.
-      ...(c.synopsis ? { synopsis: typographicQuotes(c.synopsis) } : {})
+      ...(c.synopsis ? { synopsis: typographicQuotes(c.synopsis) } : {}),
+      ...(c.contentsTitle ? { contentsTitle: typographicQuotes(c.contentsTitle) } : {})
     })),
     footnotes: doc.footnotes.map((f) => ({ ...f, text: typographicQuotes(f.text) })),
     sections: doc.sections.map((s) => ({

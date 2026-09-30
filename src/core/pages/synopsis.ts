@@ -158,16 +158,28 @@ export function readSynopsis(blocks: readonly SynopsisBlock[]): SynopsisEntry[] 
   let label = ''
   let title = ''
   let description: string[] = []
+  // Which description lines were topics with a folio of their own. See below.
+  let topics: boolean[] = []
   let folio: number | null = null
   let open = false
 
   const close = (): void => {
     if (!open) return
-    const synopsis = description.join(' ').replace(/\s+/g, ' ').trim()
+    // An analytical contents sets its matter one topic to a line, each with its
+    // own folio, where the other kind sets a paragraph. The folios go, for the
+    // reason the whole page does, and the topics run in as the old reprints set
+    // them: joined by a dash. A line that is only part of a topic (it wrapped,
+    // and the folio is on the line after) joins the next with a space.
+    const synopsis = description
+      .map((line, i) => (i === 0 ? line : `${topics[i - 1] ? ' \u2014 ' : ' '}${line}`))
+      .join('')
+      .replace(/\s+/g, ' ')
+      .trim()
     if (title || label) entries.push({ label, title, synopsis, originalFolio: folio })
     label = ''
     title = ''
     description = []
+    topics = []
     folio = null
     open = false
   }
@@ -189,8 +201,17 @@ export function readSynopsis(blocks: readonly SynopsisBlock[]): SynopsisEntry[] 
       // A heading arriving mid-entry means the previous one never printed a
       // folio. Closing here rather than merging keeps two chapters from being
       // run into one entry with both descriptions stuck together.
-      if (description.length > 0) close()
+      //
+      // So does a known folio: in the leader-dot form the folio is on the
+      // entry's own line (`PREFACE ........ i`), so an entry that has one and
+      // meets another heading is complete, not the first half of a title.
+      if (description.length > 0 || folio !== null) close()
       if (!open && CONTENTS_TITLE.test(text)) continue
+      // A number line under a title that has no number of its own starts a new
+      // entry: the title was a part or volume heading standing over the
+      // chapters, `THE “INFALLIBILITY” OF RELIGION.` over `CHAPTER I.`, and
+      // run on it would be read as the first half of chapter one's name.
+      if (open && title && !label && isNumberLine(text)) close()
       open = true
 
       // Leader dots and a number at the end of the line: the folio belongs to
@@ -215,7 +236,21 @@ export function readSynopsis(blocks: readonly SynopsisBlock[]): SynopsisEntry[] 
     // Anything else is description — but only once an entry has been opened.
     // Text before the first heading is the contents' own title or a stray
     // running head, and attaching it to nothing would invent an entry.
-    if (open) description.push(text)
+    //
+    // A description line with leader dots and a folio is one topic of an
+    // analytical contents. Its folio is stripped here as the heading's is, and
+    // the first one found stands for the entry's where the heading printed
+    // none, since that is where the chapter's matter begins.
+    if (!open) continue
+    const topic = TRAILING_FOLIO.exec(text)
+    if (topic) {
+      if (folio === null) folio = romanToNumber(topic[2]!)
+      description.push(topic[1]!.trim())
+      topics.push(true)
+    } else {
+      description.push(text)
+      topics.push(false)
+    }
   }
   close()
   return entries
@@ -234,11 +269,17 @@ export function readSynopsis(blocks: readonly SynopsisBlock[]): SynopsisEntry[] 
  * it (SPEC §4): both halves are counted off the entries themselves.
  */
 export function synopsisLooksSound(entries: readonly SynopsisEntry[]): boolean {
-  if (entries.length < 2) return false
-  const described = entries.filter((e) => e.synopsis.length > 40).length
-  if (described < entries.length * 0.6) return false
-  const folios = entries.map((e) => e.originalFolio).filter((n): n is number => n !== null)
-  if (folios.length < entries.length * 0.6) return false
+  // The chapters, which are what the rules below are about. A line that has
+  // neither a number nor a description — `PREFACE ........ i`, or a part
+  // heading standing over the chapters — is the contents listing something
+  // else, and its folio counts in another sequence: the preface's roman `i`
+  // is 1, and so is chapter one's page, which is not a folio going backwards.
+  const chapters = entries.filter((e) => e.label || e.synopsis)
+  if (chapters.length < 2) return false
+  const described = chapters.filter((e) => e.synopsis.length > 40).length
+  if (described < chapters.length * 0.6) return false
+  const folios = chapters.map((e) => e.originalFolio).filter((n): n is number => n !== null)
+  if (folios.length < chapters.length * 0.6) return false
   return folios.every((n, i) => i === 0 || n > folios[i - 1]!)
 }
 

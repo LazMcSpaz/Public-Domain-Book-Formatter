@@ -837,12 +837,21 @@ function chaptersOf(
   blocks: readonly BookBlock[],
   before: BookDocument['chapters']
 ): BookDocument['chapters'] {
-  const synopses = new Map(
-    before.filter((c) => c.synopsis !== undefined).map((c) => [c.id, c.synopsis!])
+  // The name a contents page gave a chapter the body only numbers comes from
+  // the same page and is carried the same way.
+  const recovered = new Map(
+    before
+      .filter((c) => c.synopsis !== undefined || c.contentsTitle !== undefined)
+      .map((c) => [c.id, c])
   )
   return deriveChapters(blocks).map((chapter) => {
-    const synopsis = synopses.get(chapter.id)
-    return synopsis === undefined ? chapter : { ...chapter, synopsis }
+    const from = recovered.get(chapter.id)
+    if (!from) return chapter
+    return {
+      ...chapter,
+      ...(from.synopsis !== undefined ? { synopsis: from.synopsis } : {}),
+      ...(from.contentsTitle !== undefined ? { contentsTitle: from.contentsTitle } : {})
+    }
   })
 }
 
