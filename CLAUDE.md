@@ -1166,6 +1166,12 @@ node scripts/shape.mjs <book-dir> --write        # what the book is made of —
                                      #   can measure it; `--shelf books/` one row
                                      #   per book; `--flow` regenerates the table
                                      #   in docs/FLOW.md
+npx vite-node --config vitest.config.ts scripts/epub-of.ts <book-dir> <out-dir>
+                                     #   the book as an EPUB to read fast: the
+                                     #   same assembled text and note pairing
+                                     #   as the PDF, a chapter per file, notes
+                                     #   a tap away. Pack with `zip -X0` of
+                                     #   mimetype first, then META-INF OEBPS
 node scripts/drive.mjs corrections <book-dir>    # rewrite corrections.md's entries
                                      #   from the book as it stands, keeping the
                                      #   prose above them; `--check` writes nothing
