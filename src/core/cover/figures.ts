@@ -144,14 +144,71 @@ export function figureFramePt(geometry: CoverGeometry): {
 export const FIGURE_ANCHOR_X: Readonly<Record<GroundFigure, number>> = {
   'isis-winged': 0.514,
   'isis-winged-plain': 0.514,
-  // The dark doorway the colonnade recedes into, measured in the middle band
-  // where it is the only mass. It is all but centred already, and on a 6×9 the
-  // arcade's proportions are so near the panel's that there is barely a
-  // fortieth of an inch of overflow to spend — so this asks for a shift the
-  // clamp mostly refuses, which is the clamp doing its job rather than failing
-  // to. The number is here for the trim where it is not true.
-  arcade: 0.495,
-  'arcade-detailed': 0.495
+  // The doorway the colonnade recedes into: the centre line splits its
+  // opening, and in a one-point perspective that is the same line the arch
+  // apex above it stands on.
+  //
+  // Three measurements were wrong before this one, all the same way. A band's
+  // ink centroid, the widest run clearing half a band's peak, and the largest
+  // connected mass each answered with the colonnade rather than the doorway —
+  // every band across this picture crosses piers, arch profiles and floor
+  // tiles too, and at this threshold the whole picture is one connected shape.
+  // What separates the doorway from all of it is that it is **solid**: ink on
+  // every row of its band, where a pier is ink only at its edges. Measured
+  // that way on the rendered cover, with the picture and the number taken from
+  // the same pixels so they cannot disagree, and landed to within half a pixel
+  // of the centre line on a twelve-hundred-pixel render.
+  arcade: 0.519,
+  'arcade-detailed': 0.519
+}
+
+/**
+ * How much larger than covering requires a figure is drawn.
+ *
+ * Covering is the *minimum* scale that fills the box, so a figure whose
+ * proportions match the panel's is drawn at very nearly its own size and has
+ * no overflow — and a picture with no overflow cannot be moved, because every
+ * pixel of slack is already spent on filling the box. The arcade is that case:
+ * its proportions are within half a per cent of a 6×9 front panel's, which
+ * leaves four pixels of travel on a twelve-hundred-pixel render, so an anchor
+ * asking for ten gets four and the difference is invisible to everything
+ * except the eye that asked.
+ *
+ * So a figure that needs to be positioned says how much room to leave. It is
+ * not simply always 1.1, because the room is paid for out of the picture: at
+ * 1.05 the arcade gives up about a quarter of an inch off the top and the foot
+ * and a third of an inch across, which it can afford because its edges are
+ * wall and ceiling, and a figure whose subject runs to its own edge could not.
+ *
+ * 1.03 was measured and does honour the arcade's anchor — by about half a
+ * thousandth of an inch, which is no margin at all: a re-traced file or a
+ * nudged anchor would put it over, and a clamped anchor prints a cover that is
+ * slightly wrong and raises nothing. The extra two per cent is that margin,
+ * and the test that checks each figure's anchor against its artwork on disk is
+ * what would say so.
+ */
+export const FIGURE_ZOOM: Readonly<Record<GroundFigure, number>> = {
+  // Half again as wide as the panel already: all the slack anyone could want.
+  'isis-winged': 1,
+  'isis-winged-plain': 1,
+  arcade: 1.05,
+  'arcade-detailed': 1.05
+}
+
+/**
+ * The scale at which a picture covers a box, times whatever room the figure
+ * asks for beyond it.
+ */
+export function coverScale(
+  boxWidth: number,
+  boxHeight: number,
+  naturalWidth: number,
+  naturalHeight: number,
+  zoom = 1
+): number {
+  if (naturalWidth <= 0 || naturalHeight <= 0) return 1
+  const cover = Math.max(boxWidth / naturalWidth, boxHeight / naturalHeight)
+  return cover * Math.max(1, zoom)
 }
 
 /**

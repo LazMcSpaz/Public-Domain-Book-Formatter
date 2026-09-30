@@ -2698,6 +2698,28 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   two anchors, solved for the centre line and confirmed by eye with the tint
   stretched.
 
+  **A picture with no overflow cannot be positioned** (`FIGURE_ZOOM`,
+  `coverScale`). Covering is the *minimum* scale that fills the box, so a
+  figure whose proportions are the panel's is drawn at very nearly its own size
+  and has no slack — the arcade's are within half a per cent of a 6×9's, which
+  left four pixels of travel on a twelve-hundred-pixel render, so an anchor
+  asking for seventeen got four and nothing said so. A figure now declares how
+  much larger than covering to draw it, paid for out of its own edges. The
+  check is against **the artwork on disk**, not a number kept beside the
+  anchor: what decides the slack is the file's own proportions, and a constant
+  repeating them is a constant that can come to disagree with them.
+
+  Finding where to put it took four measurements, three of them wrong in the
+  same way. A band's ink centroid, the widest run clearing half a band's peak,
+  and the largest connected mass each answered with the colonnade rather than
+  the doorway — every band across that picture crosses piers, arch profiles and
+  floor tiles too, and at a tracing threshold the whole scene is one connected
+  shape. What separates the doorway is that it is **solid**: ink on every row
+  of its band, where a pier is ink only at its edges. The measurement that
+  worked draws the picture and reports the number **from the same pixels**, so
+  the two cannot disagree — which is what the earlier ones could do, one of
+  them confidently, by a quarter of an inch, in the wrong direction.
+
   **A scene traces differently from an object**, which the arcade added to the
   library shows: one thing on white paper has a silhouette to find, and a
   colonnade has no background at all, so every mark comes out of local contrast

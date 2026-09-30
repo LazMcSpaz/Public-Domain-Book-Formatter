@@ -8,6 +8,8 @@
  * wrong is not an error but a faint picture half-printed on the back cover of
  * a book somebody has already bought.
  */
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { fixedWidthMeasurer } from '@core/layout'
 import {
@@ -19,6 +21,8 @@ import {
   FIGURE_LABEL,
   FIGURE_NOTE,
   FIGURE_SRC,
+  FIGURE_ZOOM,
+  coverScale,
   GROUND_FIGURES,
   defaultCover,
   figureFrame,
@@ -110,6 +114,37 @@ describe('coverOffsetX', () => {
   })
 })
 
+describe('coverScale', () => {
+  it('is the smaller picture’s scale — whichever axis binds', () => {
+    // A 200×100 box and a 100×100 picture: width binds, so 2.
+    expect(coverScale(200, 100, 100, 100)).toBe(2)
+    // Turn it round and height binds.
+    expect(coverScale(100, 200, 100, 100)).toBe(2)
+  })
+
+  it('leaves room beyond covering when a figure asks for it', () => {
+    expect(coverScale(200, 100, 100, 100, 1.05)).toBeCloseTo(2.1, 6)
+  })
+
+  it('never draws a picture smaller than covering', () => {
+    // A zoom under one would pull the ground off the trim, which is the one
+    // thing a bleeding ground exists to prevent.
+    expect(coverScale(200, 100, 100, 100, 0.5)).toBe(2)
+  })
+
+  it('has nothing to spend when the picture’s proportions are the box’s', () => {
+    // The constraint `FIGURE_ZOOM` exists for: a figure shaped like the panel
+    // covers it exactly, so there is no overflow and no anchor can move it.
+    const scale = coverScale(100, 150, 200, 300)
+    const drawWidth = 200 * scale
+    expect(drawWidth).toBeCloseTo(100, 6)
+    expect(coverOffsetX(100, drawWidth, 0.9)).toBeCloseTo(0, 6)
+    // With room asked for, the same anchor moves it.
+    const zoomed = 200 * coverScale(100, 150, 200, 300, 1.2)
+    expect(coverOffsetX(100, zoomed, 0.9)).toBeLessThan(-1)
+  })
+})
+
 describe('the figure library', () => {
   it('names a point inside the artwork for every figure', () => {
     for (const [figure, anchor] of Object.entries(FIGURE_ANCHOR_X)) {
@@ -127,6 +162,36 @@ describe('the figure library', () => {
       expect(FIGURE_LABEL[figure]?.length, figure).toBeGreaterThan(0)
       expect(FIGURE_NOTE[figure]?.length, figure).toBeGreaterThan(0)
       expect(FIGURE_ANCHOR_X[figure], figure).toBeGreaterThan(0)
+      expect(FIGURE_ZOOM[figure], figure).toBeGreaterThanOrEqual(1)
+    }
+  })
+
+  it('leaves every figure enough room for the anchor it asks for', () => {
+    // Against the artwork on disk rather than a number kept beside the anchor,
+    // because the thing that decides how much room there is *is* the file's
+    // own proportions, and a constant repeating them is a constant that can
+    // come to disagree with them.
+    //
+    // The failure this catches happened: the arcade shipped at a zoom of 1.03,
+    // which left its anchor a pixel and a half short on a 6×9, and nothing
+    // said so — a clamped anchor prints a cover that is very slightly wrong
+    // and raises nothing.
+    const box = { width: 6.125, height: 9.25 } // a 6×9 front panel, out to the bleed
+    for (const figure of GROUND_FIGURES) {
+      const file = readFileSync(join('public', FIGURE_SRC[figure]), 'utf8')
+      const viewBox = /viewBox="([-\d.\s]+)"/.exec(file)
+      expect(viewBox, figure).not.toBeNull()
+      const [, , w, h] = viewBox![1]!.trim().split(/\s+/).map(Number)
+      expect(w! > 0 && h! > 0, figure).toBe(true)
+
+      const scale = coverScale(box.width, box.height, w!, h!, FIGURE_ZOOM[figure])
+      const drawWidth = w! * scale
+      const anchor = FIGURE_ANCHOR_X[figure]
+      const wanted = box.width / 2 - anchor * drawWidth
+      const clamped = coverOffsetX(box.width, drawWidth, anchor)
+      // Within a hundredth of an inch of what it asked for — three pixels on a
+      // 300 DPI proof, which is not a shift anybody can see.
+      expect(Math.abs(clamped - wanted), figure).toBeLessThan(0.01)
     }
   })
 })

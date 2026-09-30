@@ -35,7 +35,7 @@
  * Browser-only.
  */
 
-import { coverOffsetX } from '@core/cover'
+import { coverOffsetX, coverScale } from '@core/cover'
 
 /** How finely the mark is rendered, in dots per inch of printed size. */
 const MARK_DPI = 600
@@ -167,6 +167,11 @@ export async function renderGroundImage(input: {
    * it where the design says, clamped so the picture still covers the box.
    */
   anchorX?: number
+  /**
+   * How much larger than covering requires to draw it, so the anchor has room
+   * to move it. See `FIGURE_ZOOM`; a texture never needs it.
+   */
+  zoom?: number
 }): Promise<{ bytes: Uint8Array; widthPx: number; heightPx: number }> {
   const img = await loadMark(input.src)
   const widthPx = Math.max(1, Math.round(input.widthIn * GROUND_DPI))
@@ -181,7 +186,7 @@ export async function renderGroundImage(input: {
   // Cover: the biggest centred crop of the source with the sheet's proportions.
   const naturalW = img.naturalWidth || widthPx
   const naturalH = img.naturalHeight || heightPx
-  const scale = Math.max(widthPx / naturalW, heightPx / naturalH)
+  const scale = coverScale(widthPx, heightPx, naturalW, naturalH, input.zoom ?? 1)
   const drawW = naturalW * scale
   const drawH = naturalH * scale
   const x = coverOffsetX(widthPx, drawW, input.anchorX ?? 0.5)

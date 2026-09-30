@@ -25,6 +25,7 @@ import {
   DEFAULT_ICON_WIDTH_PX,
   FIGURE_ANCHOR_X,
   FIGURE_SRC,
+  FIGURE_ZOOM,
   FRONT_MARK_ID,
   frontIconPlan,
   GROUND_FIGURE_ID,
@@ -154,7 +155,8 @@ async function buildCover(
       widthIn: figureItem.widthPt / 72,
       heightIn: figureItem.heightPt / 72,
       color: doc.look.palette.ink,
-      anchorX: FIGURE_ANCHOR_X[doc.look.groundFigure]
+      anchorX: FIGURE_ANCHOR_X[doc.look.groundFigure],
+      zoom: FIGURE_ZOOM[doc.look.groundFigure]
     })
     images.set(GROUND_FIGURE_ID, figure.bytes)
     figureItem.srcWidth = figure.widthPx
