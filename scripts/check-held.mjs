@@ -207,7 +207,9 @@ if (onLeaf(2).length !== 0) {
 console.log(`button    : ${label}`)
 console.log(`book puts : ${bookPuts.map((p) => p.message).join(' | ') || 'none'}`)
 console.log(`filed     : ${rulings.filter((r) => r.pageIndex !== null).length} leaf rulings`)
-console.log(`card      : ${JSON.stringify(JSON.parse(files.get(built.aboutPath) ?? '{}').queries ?? null)}`)
+console.log(
+  `card      : ${JSON.stringify(JSON.parse(files.get(built.aboutPath) ?? '{}').queries ?? null)}`
+)
 
 await browser.close()
 if (problems.length > 0) {
