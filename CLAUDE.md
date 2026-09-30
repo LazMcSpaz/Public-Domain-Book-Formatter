@@ -2699,7 +2699,7 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   stretched.
 
   **A picture with no overflow cannot be positioned** (`FIGURE_ZOOM`,
-  `coverScale`). Covering is the *minimum* scale that fills the box, so a
+  `coverScale`). Covering is the _minimum_ scale that fills the box, so a
   figure whose proportions are the panel's is drawn at very nearly its own size
   and has no slack — the arcade's are within half a per cent of a 6×9's, which
   left four pixels of travel on a twelve-hundred-pixel render, so an anchor
