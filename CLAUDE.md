@@ -365,6 +365,20 @@ code, so the new assertion never ran and the check passed for a reason that had
 nothing to do with what it asserts. That is this file's own rule about tests,
 found in the check written to enforce it.
 
+**Every ruling from the tablet took the pictures off the book.** A picture on
+the shelf is a path, not bytes, so a book file read back holds it in
+`imagePaths` and not in `run.images`. `serializeBookFile` listed pictures from
+`run.images` alone. The outbox reads the file, folds a ruling in and writes it
+back, so the first "1 query ruled on" emptied the list: _Isis_ Vol. II's
+fifteen figures and _Patterns_ Vol. I's fifteen were placed by edits that named
+pixels the file no longer listed. The whole-book save from a device that
+opened a book to read did the same to the scan, writing `scan: null` over the
+pointer. Nothing reported either. The ledger's `Pictures 15 → 0`, noticed while
+rebuilding the numbers for another reason, was the only sign. The writer now
+lists every named picture, and `keptFromShelf` carries the shelf's scan and the
+names of pictures the book still places into a save from a device that holds
+neither. Both books were restored from their last good commits.
+
 **A directory renamed on the shelf was a book the app could not reach.**
 Every shelf path was computed from the run key — the file's stem and a
 digest — and nine of sixteen books sit in directories a person renamed to

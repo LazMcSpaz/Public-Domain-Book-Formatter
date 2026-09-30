@@ -212,17 +212,30 @@ export function serializeBookFile(input: {
 }): string {
   const { images, ...run } = input.run
   const paths = input.imagePaths ?? {}
+  // A picture already on the shelf is named and not carried, so the run has
+  // no bytes for it: it is in `paths` and not in `images`. Writing the list
+  // from `images` alone dropped every such picture, which is what the outbox
+  // did on every ruling from the tablet — the fifteen figures of Isis Vol. II
+  // lost their pixels on the first "1 query ruled on", with the edits that
+  // place them still in the book.
+  const carried = new Set(images.map((image) => image.id))
+  const namedOnly = Object.entries(paths)
+    .filter(([id, path]) => !carried.has(id) && path)
+    .map(([id, path]) => ({ id, path }))
   const wire: WireFile = {
     format: BOOK_FILE_FORMAT,
     version: BOOK_FILE_VERSION,
     savedAt: input.savedAt ?? new Date().toISOString(),
     runSchema: input.run.schemaVersion,
     run,
-    images: images.map((image) =>
-      paths[image.id]
-        ? { id: image.id, path: paths[image.id]! }
-        : { id: image.id, base64: toBase64(image.bytes) }
-    ),
+    images: [
+      ...images.map((image) =>
+        paths[image.id]
+          ? { id: image.id, path: paths[image.id]! }
+          : { id: image.id, base64: toBase64(image.bytes) }
+      ),
+      ...namedOnly
+    ],
     answers: input.answers,
     voice: input.voice,
     notesCheckpoint: input.notesCheckpoint ?? null,
@@ -230,6 +243,31 @@ export function serializeBookFile(input: {
   }
   // Indented: this is a file a person may open, and a repository will diff.
   return JSON.stringify(wire, null, 2)
+}
+
+/**
+ * What a whole-book save must keep from the copy already on the shelf.
+ *
+ * A device that opened a book to read holds no scan and may hold none of the
+ * pictures, and it knows nothing is missing: the shelf does. Saving from such
+ * a device wrote `scan: null` over the pointer (_Patterns_ Vol. I lost its scan
+ * to "your corrections, from the editor") and would have dropped every picture
+ * it had not fetched. So the shelf's scan stands when the device has none, and
+ * a picture the book still places keeps the name the shelf gave it. A picture
+ * no image edit places any more is let go — that is a deletion the editor made.
+ */
+export function keptFromShelf(
+  run: Pick<SavedRun, 'edits' | 'images'>,
+  shelf: Pick<BookFile, 'scan' | 'imagePaths'> | null
+): { scan: ScanPointer | null; imagePaths: Record<string, string> } {
+  if (!shelf) return { scan: null, imagePaths: {} }
+  const placed = new Set(run.edits.flatMap((e) => (e.kind === 'image' ? [e.imageId] : [])))
+  const held = new Set(run.images.map((image) => image.id))
+  const imagePaths: Record<string, string> = {}
+  for (const [id, path] of Object.entries(shelf.imagePaths)) {
+    if (placed.has(id) && !held.has(id)) imagePaths[id] = path
+  }
+  return { scan: shelf.scan, imagePaths }
 }
 
 function isObject(v: unknown): v is Record<string, unknown> {

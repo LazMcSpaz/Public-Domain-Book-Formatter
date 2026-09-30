@@ -58,6 +58,7 @@ export {
   BOOK_FILE_VERSION,
   bookFileName,
   fromBase64,
+  keptFromShelf,
   parseBookFile,
   serializeBookFile,
   summarizeBookFile,

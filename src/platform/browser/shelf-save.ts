@@ -22,6 +22,7 @@
  */
 import { scanRefusal, type ShelfAbout, type ShelfConfig } from '@core/sync'
 import {
+  keptFromShelf,
   parseBookFile,
   serializeBookFile,
   summarizeBookFile,
@@ -37,7 +38,7 @@ import {
   usableProposals
 } from '@core/queries'
 import type { EditorVoice } from '@core/annotate'
-import { fetchVoice, pushBook, pushImage, pushScan, pushVoice } from './shelf'
+import { fetchBook, fetchVoice, pushBook, pushImage, pushScan, pushVoice } from './shelf'
 import { loadAnnotationCheckpoint, loadRun, loadSourceFile } from './run-store'
 import { loadReviewProgress, loadVoice, saveVoice } from './settings'
 
@@ -141,7 +142,19 @@ export async function pushBookToShelf(
   config: ShelfConfig,
   input: ShelfPushInput
 ): Promise<ShelfPushResult> {
-  let scan: ScanPointer | null = null
+  // The copy already on the shelf, for what this device does not hold: its
+  // scan pointer and the pictures it never fetched (`keptFromShelf`). A book
+  // not on the shelf yet has nothing to keep; a read that fails is not a
+  // reason to refuse the save, only to keep nothing.
+  let kept: ReturnType<typeof keptFromShelf> = { scan: null, imagePaths: {} }
+  try {
+    const existing = await fetchBook(config, input.key)
+    if (existing) kept = keptFromShelf(input.run, parseBookFile(existing))
+  } catch {
+    /* nothing on the shelf to keep */
+  }
+
+  let scan: ScanPointer | null = kept.scan
   let scanNote = ''
   if (input.scanFile) {
     const refusal = scanRefusal(input.scanFile.size)
@@ -154,7 +167,7 @@ export async function pushBookToShelf(
       const { path } = await pushScan(config, input.scanFile, input.scanFile.name)
       scan = { path, fileName: input.scanFile.name, bytes: input.scanFile.size, key: input.key }
     }
-  } else {
+  } else if (!scan) {
     scanNote =
       ' The scan itself is not on this device, so only the reading went up — enough to open the ' +
       'book anywhere, not enough to check a word against the page.'
@@ -169,7 +182,7 @@ export async function pushBookToShelf(
   // A picture that will not upload falls back to being carried inline rather
   // than being left out. The failure costs repository tidiness; leaving it out
   // would cost the picture, and nothing is ever drawn in place of one.
-  const imagePaths: Record<string, string> = {}
+  const imagePaths: Record<string, string> = { ...kept.imagePaths }
   for (const image of input.run.images) {
     try {
       const { path } = await pushImage(config, image.bytes, input.run.fileName)
