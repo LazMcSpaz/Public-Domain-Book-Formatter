@@ -1121,7 +1121,9 @@ node scripts/drive.mjs figure cut 193 0.527,0.532,0.389,0.175 --beside p193b1 --
                                      #   where the original set it: `--after <block>` at its
                                      #   printed size, `--in <block> --at "<phrase>"` mid-
                                      #   paragraph, `--beside … --side left|right` with the
-                                     #   text run past it; `figure list`, `figure drop <id>`
+                                     #   text run past it; `figure list`, `figure drop <id>`;
+                                     #   `--from <pdf>` cuts from another copy of the
+                                     #   same printing (a book read from an EPUB)
 node scripts/contact-sheets.mjs <renders> <out>  # the whole book, small, many to
                                      #   a sheet: the only thing that answers
                                      #   "is there a picture we have missed?"

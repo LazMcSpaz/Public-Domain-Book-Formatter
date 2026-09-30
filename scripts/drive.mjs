@@ -3314,7 +3314,7 @@ async function serve() {
       if (action !== 'cut') {
         throw new Error(
           'figure cut <leaf> <x,y,w,h> (--after <block> | --in <block> --at "<phrase>" | ' +
-            '--beside <block> --at "<phrase>" --side left|right) [--width <in>] [--caption "…"]'
+            '--beside <block> --at "<phrase>" --side left|right) [--width <in>] [--caption "…"] [--from <pdf>]'
         )
       }
       const leaf = Number(positional[1])
@@ -3342,9 +3342,22 @@ async function serve() {
       if (widthIn !== null && !(widthIn > 0)) throw new Error('--width is inches, greater than 0.')
       const caption = flag('caption')
       const dpi = Number(flag('dpi') ?? '300')
+      // `--from <pdf>`: cut from another copy of the same edition rather than
+      // the book's own source. Instant Rapport was read from an EPUB, which
+      // has no pages to cut, and its charts came back only when a scan of the
+      // same printing arrived. The pixels are fetched over the /file route, as
+      // `load` fetches a scan, never pushed through the debug protocol.
+      const fromPath = flag('from')
+      let fromUrl = null
+      if (fromPath) {
+        const { existsSync } = await import('node:fs')
+        const full = resolve(REPO, fromPath)
+        if (!existsSync(full)) throw new Error(`No file at ${full}.`)
+        fromUrl = `http://127.0.0.1:${PORT}/file?path=${encodeURIComponent(full)}`
+      }
 
       return page.evaluate(
-        async ([repo, leaf, box, blockId, mode, phrase, side, widthIn, caption, dpi]) => {
+        async ([repo, leaf, box, blockId, mode, phrase, side, widthIn, caption, dpi, fromUrl]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const pdf = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
@@ -3354,7 +3367,12 @@ async function serve() {
           if (!newest) throw new Error('No book on this device.')
           const run = await runStore.loadRun(newest.key)
           if (!run) throw new Error('That book has no reading stored here.')
-          const file = await runStore.loadSourceFile(newest.key)
+          const file = fromUrl
+            ? await fetch(fromUrl).then(async (r) => {
+                if (!r.ok) throw new Error(`fetching the other copy: ${r.status}`)
+                return new File([await r.arrayBuffer()], 'from.pdf', { type: 'application/pdf' })
+              })
+            : await runStore.loadSourceFile(newest.key)
           if (!file) throw new Error('The scan is not stored on this device.')
 
           // The host block, against the book as it stands — the same text
@@ -3473,7 +3491,8 @@ async function serve() {
           side,
           widthIn,
           caption,
-          dpi
+          dpi,
+          fromUrl
         ]
       )
     },
