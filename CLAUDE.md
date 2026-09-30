@@ -379,6 +379,17 @@ lists every named picture, and `keptFromShelf` carries the shelf's scan and the
 names of pictures the book still places into a save from a device that holds
 neither. Both books were restored from their last good commits.
 
+**"Approve all" approved nothing until Next was pressed.** The button filled
+the held answers in on screen and stopped: rulings are filed by
+`fileRulings`, which only a press of Next called. The editor approved 68 held
+queries on _Isis_ Vol. II, saw the count stay where it was, reconnected the
+shelf in Settings, was taken out of the book, and none of the 68 had left the
+screen. A button that says it approves is read as having approved, so it now
+files at once, through the same `fileRulings` a press of Next uses.
+`npm run check:held` asserts it against the stubbed shelf with no Next pressed,
+and that the one query no standing ruling holds stays unruled; with the fix
+taken out it fails on all three counts.
+
 **A directory renamed on the shelf was a book the app could not reach.**
 Every shelf path was computed from the run key — the file's stem and a
 digest — and nine of sixteen books sit in directories a person renamed to
@@ -1023,6 +1034,9 @@ npm run check:proposals              # with the dev server up: does the query ga
                                      #   offer the reader's answers and choose none
                                      #   of them? Asserted against the DOM's own
                                      #   `checked`, which no stylesheet can lie about
+npm run check:held                   # with the dev server up: does "Approve all" at
+                                     #   the query gate file what it approves, with no
+                                     #   Next pressed, and nothing it did not?
 npm run check:cache                  # with the dev server up: can a read of a book
                                      #   file answer the sha lookup for the write that
                                      #   follows it, or a later read of the book itself?

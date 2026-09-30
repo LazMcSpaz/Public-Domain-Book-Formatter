@@ -19,6 +19,7 @@
     "check:outbox": "node scripts/check-outbox.mjs",
     "check:crop": "node scripts/check-query-crop.mjs",
     "check:proposals": "node scripts/check-proposals.mjs",
+    "check:held": "node scripts/check-held.mjs",
     "check:cache": "node scripts/check-shelf-cache.mjs",
     "check:queue": "node scripts/check-recon-queue.mjs"
   },

@@ -2797,73 +2797,76 @@ export function App(): JSX.Element {
    * set, so without this the last press of a long sitting would re-queue every
    * ruling in it.
    */
-  const fileRulings = useCallback(async (): Promise<void> => {
-    const raised = state.queries
-    if (raised.length === 0) return
-    // The proposals go in because an answer naming one is only half a ruling
-    // without them: the decision, the wording and the reasoning all live on
-    // the proposal, and `rulingsFromAnswers` is where they are stamped into an
-    // ordinary ruling. Passing an empty list here would silently drop every
-    // decision the editor made by picking an option rather than typing one.
-    const made = rulingsFromAnswers(
-      raised,
-      currentAnswers,
-      new Date().toISOString().slice(0, 10),
-      proposalsRef.current
-    )
-    const before = rulingsRef.current
-    const fresh = made.filter((ruling) => {
-      const had = before.find((p) => sameRuling(p, ruling))
-      return !had || JSON.stringify(had) !== JSON.stringify(ruling)
-    })
-    if (fresh.length === 0) return
-
-    let next = before
-    for (const ruling of fresh) next = withRuling(next, ruling)
-    rulingsRef.current = next
-
-    // The device first: it is the store that cannot fail for want of a
-    // connection, and `persistRun` reads the ref that was just set.
-    const run = transcriptionRef.current
-    let kept = false
-    if (run) {
-      kept = await persistRun(
-        run,
-        state.answers['gate-identity'] ?? {},
-        loadPrefs().modelId,
-        editsRef.current,
-        suppliedBytesRef.current,
-        true,
-        state.adjudicated
+  const fileRulings = useCallback(
+    async (answers: Answers = currentAnswers): Promise<void> => {
+      const raised = state.queries
+      if (raised.length === 0) return
+      // The proposals go in because an answer naming one is only half a ruling
+      // without them: the decision, the wording and the reasoning all live on
+      // the proposal, and `rulingsFromAnswers` is where they are stamped into an
+      // ordinary ruling. Passing an empty list here would silently drop every
+      // decision the editor made by picking an option rather than typing one.
+      const made = rulingsFromAnswers(
+        raised,
+        answers,
+        new Date().toISOString().slice(0, 10),
+        proposalsRef.current
       )
-    }
-    // Claims nothing the write has not confirmed — the autosave indicator's
-    // rule, and the reason a failure here is worth a sentence rather than a
-    // silence.
-    const count = `${fresh.length} ${fresh.length === 1 ? 'ruling' : 'rulings'}`
-    if (!kept) {
-      setRulingNote(
-        `${count} could not be saved on this device. Do not close the tab — ` +
-          'free up storage and press Next again.'
-      )
-      return
-    }
-    setRulingNote(`${count} saved on this device.`)
+      const before = rulingsRef.current
+      const fresh = made.filter((ruling) => {
+        const had = before.find((p) => sameRuling(p, ruling))
+        return !had || JSON.stringify(had) !== JSON.stringify(ruling)
+      })
+      if (fresh.length === 0) return
 
-    const key = fileKeyRef.current
-    const config = shelfConfig
-    if (!key || !config || !shelfReady(config)) return
-    const madeAt = new Date().toISOString()
-    // One entry per query, keyed by the query, so ruling twice in a sitting
-    // replaces rather than queues twice. Awaited before anything is reported,
-    // the batch ticket's rule: a change said to be queued that no store took is
-    // discovered a fortnight later with the work gone.
-    for (const ruling of fresh) {
-      await queueForShelf({ id: `ruling:${rulingTarget(ruling)}`, bookKey: key, ruling, madeAt })
-    }
-    setOutbox(summarizeOutbox(await outboxFor(key)))
-    await emptyOutbox()
-  }, [state, currentAnswers, persistRun, shelfConfig, emptyOutbox])
+      let next = before
+      for (const ruling of fresh) next = withRuling(next, ruling)
+      rulingsRef.current = next
+
+      // The device first: it is the store that cannot fail for want of a
+      // connection, and `persistRun` reads the ref that was just set.
+      const run = transcriptionRef.current
+      let kept = false
+      if (run) {
+        kept = await persistRun(
+          run,
+          state.answers['gate-identity'] ?? {},
+          loadPrefs().modelId,
+          editsRef.current,
+          suppliedBytesRef.current,
+          true,
+          state.adjudicated
+        )
+      }
+      // Claims nothing the write has not confirmed — the autosave indicator's
+      // rule, and the reason a failure here is worth a sentence rather than a
+      // silence.
+      const count = `${fresh.length} ${fresh.length === 1 ? 'ruling' : 'rulings'}`
+      if (!kept) {
+        setRulingNote(
+          `${count} could not be saved on this device. Do not close the tab — ` +
+            'free up storage and press Next again.'
+        )
+        return
+      }
+      setRulingNote(`${count} saved on this device.`)
+
+      const key = fileKeyRef.current
+      const config = shelfConfig
+      if (!key || !config || !shelfReady(config)) return
+      const madeAt = new Date().toISOString()
+      // One entry per query, keyed by the query, so ruling twice in a sitting
+      // replaces rather than queues twice. Awaited before anything is reported,
+      // the batch ticket's rule: a change said to be queued that no store took is
+      // discovered a fortnight later with the work gone.
+      for (const ruling of fresh) {
+        await queueForShelf({ id: `ruling:${rulingTarget(ruling)}`, bookKey: key, ruling, madeAt })
+      }
+      setOutbox(summarizeOutbox(await outboxFor(key)))
+      await emptyOutbox()
+    },
+    [state, currentAnswers, persistRun, shelfConfig, emptyOutbox]
+  )
 
   useEffect(() => {
     if (!isProofing) return
@@ -5456,7 +5459,17 @@ export function App(): JSX.Element {
           <div className="resume-note held-all" role="status">
             {heldPending(questions, currentAnswers)} of these decisions fall under a standing ruling
             you have already made, and arrive pre-filled. They are filed only when you approve them.{' '}
-            <button type="button" onClick={() => setAnswers((a) => approveHeld(questions, a))}>
+            <button
+              type="button"
+              onClick={() => {
+                // Filed at once, not on the next press of Next. The button
+                // says it approves, and an approval that only fills the
+                // screens was taken for filed: the editor approved 68 on Isis
+                // Vol. II, left the book, and none of them reached the shelf.
+                setAnswers((a) => approveHeld(questions, a))
+                void fileRulings(approveHeld(questions, currentAnswers))
+              }}
+            >
               Approve all {heldPending(questions, currentAnswers)}
             </button>
           </div>
