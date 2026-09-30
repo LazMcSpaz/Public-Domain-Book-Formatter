@@ -13,8 +13,9 @@ import * as pdfjs from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.mjs?url'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import {
-  largestImageCoverage,
-  SCANNED_COVERAGE,
+  pageInk,
+  isPhotograph,
+  hiddenShare,
   shapeOfPdf,
   type BookShape,
   type PdfMeasurement
@@ -463,16 +464,20 @@ export async function pageImageExtent(
  * born-digital page is not — and that is a fact about the file rather than a
  * guess about its contents.
  *
- * So: does one image cover most of the page? Then whatever text is there was
- * produced by somebody's OCR, and this app should read the pixels itself.
+ * So: does one image cover most of the page — or is everything visible on it a
+ * picture, with the text laid invisibly over pieces of the scan (`isPhotograph`)?
+ * Then whatever text is there was produced by somebody's OCR, and this app
+ * should read the pixels itself.
  */
 export interface PageMakeup {
-  /** True when a single image covers most of the page — i.e. it is a scan. */
+  /** True when the page is a photograph, whole or in pieces — i.e. it is a scan. */
   scanned: boolean
   /** Characters of embedded text, whoever produced it. */
   textLength: number
   /** Fraction of the page covered by the largest image drawn on it. */
   imageCoverage: number
+  /** Share of its glyphs drawn invisibly, or null with no text (`hiddenShare`). */
+  hiddenShare: number | null
 }
 
 /** The opcodes the coverage walk needs, as this build numbers them. */
@@ -486,6 +491,13 @@ const COVERAGE_OPS = {
     pdfjs.OPS.paintImageXObject,
     pdfjs.OPS.paintImageMaskXObject,
     pdfjs.OPS.paintInlineImageXObject
+  ],
+  textMode: pdfjs.OPS.setTextRenderingMode,
+  text: [
+    pdfjs.OPS.showText,
+    pdfjs.OPS.showSpacedText,
+    pdfjs.OPS.nextLineShowText,
+    pdfjs.OPS.nextLineSetSpacingShowText
   ]
 }
 
@@ -500,7 +512,7 @@ export async function pageMakeup(doc: PDFDocumentProxy, pageIndex: number): Prom
     // legacy pdf.js build. Only the opcode numbers and the matrix multiply
     // come from the build loaded here.
     const ops = await page.getOperatorList()
-    const largest = largestImageCoverage(ops.fnArray, ops.argsArray, area, COVERAGE_OPS, (a, b) =>
+    const ink = pageInk(ops.fnArray, ops.argsArray, area, COVERAGE_OPS, (a, b) =>
       pdfjs.Util.transform(a, b)
     )
 
@@ -510,7 +522,12 @@ export async function pageMakeup(doc: PDFDocumentProxy, pageIndex: number): Prom
       0
     )
 
-    return { scanned: largest >= SCANNED_COVERAGE, textLength, imageCoverage: largest }
+    return {
+      scanned: isPhotograph(ink),
+      textLength,
+      imageCoverage: ink.largest,
+      hiddenShare: hiddenShare(ink)
+    }
   } finally {
     page.cleanup()
   }
@@ -559,7 +576,8 @@ export async function measurePdf(doc: PDFDocumentProxy, sample = 8): Promise<Pdf
       page: i,
       coverage: makeup.imageCoverage,
       scanned: makeup.scanned,
-      text: makeup.textLength
+      text: makeup.textLength,
+      hidden: makeup.hiddenShare
     })
   }
   let producer: string | null = null

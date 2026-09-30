@@ -11,7 +11,7 @@
  *   node scripts/shape.mjs --shelf <books-dir>        one row per book: shape, how, route
  *   node scripts/shape.mjs --flow                     regenerate the route table in docs/FLOW.md
  *
- * The measurement is the browser's own — `largestImageCoverage` over each
+ * The measurement is the browser's own — `pageInk` and `isPhotograph` over each
  * sampled page's operator list, and the file's producer — run here under
  * pdf.js's legacy build so a shelf of books can be classified without opening
  * a tab. The classification (`shapeOfPdf`) and the route (`routeFor`) are
@@ -43,8 +43,7 @@ const positional = args.filter(
 const { shapeOfPdf, declaredShape, parseShape, describeShape } =
   await import('../src/core/provenance/shape.ts')
 const { routeKey, withRouteTable } = await import('../src/core/provenance/route.ts')
-const { largestImageCoverage, SCANNED_COVERAGE } =
-  await import('../src/core/provenance/coverage.ts')
+const { pageInk, isPhotograph, hiddenShare } = await import('../src/core/provenance/coverage.ts')
 
 if (flag('--flow')) {
   const p = resolve(dirname(new URL(import.meta.url).pathname), '..', 'docs', 'FLOW.md')
@@ -68,6 +67,13 @@ async function measure(path, sample = 8) {
       pdfjs.OPS.paintImageXObject,
       pdfjs.OPS.paintImageMaskXObject,
       pdfjs.OPS.paintInlineImageXObject
+    ],
+    textMode: pdfjs.OPS.setTextRenderingMode,
+    text: [
+      pdfjs.OPS.showText,
+      pdfjs.OPS.showSpacedText,
+      pdfjs.OPS.nextLineShowText,
+      pdfjs.OPS.nextLineSetSpacingShowText
     ]
   }
   const data = new Uint8Array(readFileSync(path))
@@ -80,16 +86,18 @@ async function measure(path, sample = 8) {
       const page = await doc.getPage(i + 1)
       const vp = page.getViewport({ scale: 1 })
       const list = await page.getOperatorList()
-      const coverage = largestImageCoverage(
-        list.fnArray,
-        list.argsArray,
-        vp.width * vp.height,
-        ops,
-        (a, b) => pdfjs.Util.transform(a, b)
+      const ink = pageInk(list.fnArray, list.argsArray, vp.width * vp.height, ops, (a, b) =>
+        pdfjs.Util.transform(a, b)
       )
       const content = await page.getTextContent()
       const text = content.items.reduce((n, it) => n + ('str' in it ? it.str.length : 0), 0)
-      samples.push({ page: i, coverage, scanned: coverage >= SCANNED_COVERAGE, text })
+      samples.push({
+        page: i,
+        coverage: ink.largest,
+        scanned: isPhotograph(ink),
+        text,
+        hidden: hiddenShare(ink)
+      })
       page.cleanup()
     }
     let producer = null

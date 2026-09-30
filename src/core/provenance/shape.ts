@@ -88,6 +88,12 @@ export interface PageSample {
   scanned: boolean
   /** Characters of embedded text on the page, whoever produced them. */
   text: number
+  /**
+   * Share of the page's glyphs drawn invisibly (`hiddenShare`), or null when
+   * it draws none. Optional so a measurement taken before it existed still
+   * reads; it only ever adds evidence, never changes `scanned`.
+   */
+  hidden?: number | null
 }
 
 /** A PDF, as sampled across the book. */
@@ -108,6 +114,19 @@ export interface PdfMeasurement {
  * not by the mean — the mean said that book had a text layer.
  */
 export const TEXT_LAYER_FLOOR = 200
+
+/**
+ * `SCANNED_COVERAGE`, restated so this file keeps importing nothing but
+ * types (see `PageSample.scanned`). A test holds the two equal.
+ */
+export const SCANNED_IN_ONE = 0.66
+
+/**
+ * A leaf with at least this share of its glyphs invisible, and not itself a
+ * photograph, is part pixels and part font — Acrobat Capture's formatted
+ * text. Reported, never decided: see `coverage.ts`.
+ */
+export const PARTLY_HIDDEN = 0.2
 
 /**
  * Producers that only a typesetting pipeline writes.
@@ -144,6 +163,22 @@ export function shapeOfPdf(m: PdfMeasurement): BookShape {
     `${scanned} of ${sampled} sampled leaves are a photograph`,
     `${withText} of ${sampled} sampled leaves carry more than ${TEXT_LAYER_FLOOR} characters of text`
   ]
+  const pieces = m.samples.filter((s) => s.scanned && s.coverage < SCANNED_IN_ONE).length
+  if (pieces > 0) {
+    evidence.push(
+      `${pieces} of those are a photograph in pieces: strips of the scan under an invisible text layer, no visible type`
+    )
+  }
+  const partial = m.samples.filter(
+    (s) => !s.scanned && typeof s.hidden === 'number' && s.hidden >= PARTLY_HIDDEN
+  ).length
+  if (partial > 0) {
+    evidence.push(
+      `${partial} of ${sampled} sampled leaves keep part of the page as pixels and redraw the words the OCR ` +
+        'recognised in a font: a crop there shows the OCR’s reading as often as the paper, so whether ' +
+        'the book has pixels is for a person to declare'
+    )
+  }
   if (m.producer) evidence.push(`producer: ${m.producer}`)
   if (m.creator) evidence.push(`creator: ${m.creator}`)
 

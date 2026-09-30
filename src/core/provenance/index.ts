@@ -9,7 +9,12 @@
  */
 export {
   largestImageCoverage,
+  pageInk,
+  isPhotograph,
+  hiddenShare,
   SCANNED_COVERAGE,
+  VISIBLE_GLYPH_ALLOWANCE,
+  type PageInk,
   type CoverageOps,
   type MatrixMultiply
 } from './coverage'
@@ -20,6 +25,8 @@ export {
   parseShape,
   describeShape,
   TEXT_LAYER_FLOOR,
+  SCANNED_IN_ONE,
+  PARTLY_HIDDEN,
   type BookShape,
   type TextLayer,
   type Container,

@@ -3,7 +3,11 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
   largestImageCoverage,
+  pageInk,
+  isPhotograph,
+  hiddenShare,
   SCANNED_COVERAGE,
+  SCANNED_IN_ONE,
   shapeOfPdf,
   shapeOfEpub,
   declaredShape,
@@ -29,7 +33,9 @@ const OPS = {
   transform: 12,
   formBegin: 74,
   formEnd: 75,
-  image: [85, 83, 86]
+  image: [85, 83, 86],
+  textMode: 38,
+  text: [44, 45, 46, 47]
 }
 
 /** `pdfjs.Util.transform`, verbatim: the product of two PDF matrices. */
@@ -92,6 +98,100 @@ describe('largestImageCoverage — is this page a photograph?', () => {
     const fn = [OPS.transform, OPS.image[1]!]
     const args = [[PAGE.w, 0, 0, PAGE.h, 0, 0], ['mask']]
     expect(largestImageCoverage(fn, args, PAGE.w * PAGE.h, OPS, multiply)).toBeCloseTo(1, 5)
+  })
+})
+
+/** `n` glyphs as pdf.js hands them: objects, with spacing numbers between. */
+const glyphs = (n: number): unknown[] => [
+  Array.from({ length: n }, (_, i) =>
+    i % 5 === 4 ? [{ unicode: 'a' }, -120] : [{ unicode: 'a' }]
+  ).flat()
+]
+
+/**
+ * A leaf as Acrobat's Capture writes it: the scan cut into `strips` pictures,
+ * each a line of type, and text over them — `hidden` glyphs in mode 3 and
+ * `visible` glyphs in a font that prints.
+ */
+function captured(strips: number, hidden: number, visible: number) {
+  const fn: number[] = []
+  const args: unknown[] = []
+  for (let i = 0; i < strips; i++) {
+    fn.push(OPS.save, OPS.transform, OPS.image[1]!, OPS.restore)
+    args.push(null, [PAGE.w * 0.7, 0, 0, 14, 60, 60 + i * 16], ['strip'], null)
+  }
+  if (hidden) {
+    const g = glyphs(hidden)
+    fn.push(OPS.save, OPS.textMode, OPS.text[0]!, OPS.restore)
+    args.push(null, [3], g, null)
+  }
+  if (visible) {
+    const g = glyphs(visible)
+    fn.push(OPS.textMode, OPS.text[1]!)
+    args.push([0], g)
+  }
+  return { fn, args }
+}
+
+describe('isPhotograph — a scan in pieces is still a scan', () => {
+  it('counts glyphs as the walk sees them, spacing numbers aside', () => {
+    const { fn, args } = captured(0, 0, 40)
+    expect(pageInk(fn, args, PAGE.w * PAGE.h, OPS, multiply).visibleGlyphs).toBe(40)
+  })
+
+  it('strips of the scan under an invisible layer, no visible type: a photograph', () => {
+    // The Structure of Magic Vol. I, leaf 40: 46 pictures, none a tenth of the
+    // page, 2,466 glyphs all in mode 3. The largest-image test called it type.
+    const { fn, args } = captured(40, 2400, 0)
+    const ink = pageInk(fn, args, PAGE.w * PAGE.h, OPS, multiply)
+    expect(ink.largest).toBeLessThan(0.1)
+    expect(ink.images).toBe(40)
+    expect(isPhotograph(ink)).toBe(true)
+    expect(hiddenShare(ink)).toBe(1)
+  })
+
+  it('a folio set in a font does not turn the strips into type', () => {
+    const { fn, args } = captured(40, 2400, 6)
+    expect(isPhotograph(pageInk(fn, args, PAGE.w * PAGE.h, OPS, multiply))).toBe(true)
+  })
+
+  it('Capture’s formatted text — half the words redrawn in a font — is not a photograph', () => {
+    // Lakoff's pamphlet: 777 glyphs hidden under bitmaps, 652 printed in a
+    // font. A crop there shows the OCR's reading as often as the paper.
+    const { fn, args } = captured(80, 777, 652)
+    const ink = pageInk(fn, args, PAGE.w * PAGE.h, OPS, multiply)
+    expect(isPhotograph(ink)).toBe(false)
+    expect(hiddenShare(ink)!).toBeGreaterThan(0.5)
+  })
+
+  it('a typeset page with a picture on it is type', () => {
+    const { fn, args } = captured(2, 0, 2000)
+    expect(isPhotograph(pageInk(fn, args, PAGE.w * PAGE.h, OPS, multiply))).toBe(false)
+  })
+
+  it('invisible text with no picture under it is not a photograph', () => {
+    const { fn, args } = captured(0, 2000, 0)
+    expect(isPhotograph(pageInk(fn, args, PAGE.w * PAGE.h, OPS, multiply))).toBe(false)
+  })
+
+  it('the rendering mode is graphics state: a restore puts the printing mode back', () => {
+    // `captured` sets mode 3 inside save/restore and the visible text after
+    // it without a mode of its own — so this leaks unless restore undoes it.
+    const fn = [OPS.save, OPS.textMode, OPS.restore, OPS.text[0]!]
+    const args = [null, [3], null, glyphs(100)]
+    const ink = pageInk(fn, args, PAGE.w * PAGE.h, OPS, multiply)
+    expect(ink.hiddenGlyphs).toBe(0)
+    expect(ink.visibleGlyphs).toBeGreaterThan(0)
+  })
+
+  it('one image across the page is a photograph whatever its text does', () => {
+    const fn = [OPS.transform, OPS.image[0]!, OPS.textMode, OPS.text[0]!]
+    const args = [[PAGE.w, 0, 0, PAGE.h, 0, 0], ['scan'], [0], glyphs(900)]
+    expect(isPhotograph(pageInk(fn, args, PAGE.w * PAGE.h, OPS, multiply))).toBe(true)
+  })
+
+  it('shape.ts restates the coverage threshold, and the two agree', () => {
+    expect(SCANNED_IN_ONE).toBe(SCANNED_COVERAGE)
   })
 })
 

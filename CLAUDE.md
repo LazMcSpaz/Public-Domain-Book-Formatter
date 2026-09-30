@@ -766,6 +766,23 @@ The display verdict needs three lines (`SHAPE_FLOOR_LINES`): `flush` is a
 share of the inner lines, a two-line run has one, and a rate built from one
 event called an indented opening line on a scanned leaf of _Isis_ a list.
 
+**A scan cut into strips is still a scan, and the test for one looked for a
+single picture.** `looksScanned` asked whether one image covers the page.
+Acrobat's Paper Capture writes a leaf as forty-odd strips of the scan, one per
+line of type, with its OCR invisibly over them. So _The Structure of Magic_
+Vol. I measured 0 of 8 leaves photographed, and its shape had to be declared
+by hand beside a render showing a librarian's handwritten call number. The
+page does two things at once: none of its text prints, and all of its ink is
+pictures. `pageInk` counts glyphs by rendering mode alongside the largest
+image, and `isPhotograph` takes either shape: one image across the page, or
+pictures under an invisible layer with no more than one visible glyph in
+twenty. Capture's _other_ mode is deliberately **not** a photograph. It redraws
+every word it recognised in a font and keeps bitmaps only of the words it
+could not, so on the Lakoff pamphlet about half the glyphs print. A crop there
+shows the OCR's reading as often as the paper, so the measure says so in the
+evidence and leaves the book to a declaration. Re-measured, every other book
+on the shelf came out as it was.
+
 **Two columns with white between them were read as one, and the lines came
 back shuffled.** _Patterns_ Vol. II sets a hundred and ten of its leaves as a
 narrow transcript column in one face beside a wider commentary column in
