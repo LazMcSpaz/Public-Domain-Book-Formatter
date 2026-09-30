@@ -570,7 +570,10 @@ describe('assembleBook — descriptions in the contents', () => {
         0,
         [
           { kind: 'heading', text: 'TABLE OF CONTENTS.' },
-          { kind: 'heading', text: 'PREFACE ........ i' },
+          { kind: 'heading', text: 'PREFACE ........ iv' },
+          // Set under the preface's line, so it is the preface's entry, and
+          // its roman folio is front matter's: iv above chapter one at 1.
+          para('Mrs. Elizabeth Thompson and Baroness Burdett-Coutts.'),
           { kind: 'heading', text: 'Volume Second.' },
           { kind: 'heading', text: 'THE “INFALLIBILITY” OF RELIGION.' },
           { kind: 'heading', text: 'CHAPTER I.' },

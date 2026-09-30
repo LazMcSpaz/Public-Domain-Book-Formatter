@@ -39,6 +39,12 @@ export interface SynopsisEntry {
    * `synopsisLooksSound` can say whether the parse is worth offering at all.
    */
   originalFolio: number | null
+  /**
+   * The folio was printed in roman numerals: front matter's sequence, which
+   * restarts beside the body's arabic one (`PREFACE ........ iv` above
+   * chapter one at 1). Present only when true.
+   */
+  romanFolio?: true
 }
 
 /** The blocks this reads. Structural only — no platform types, no pixels. */
@@ -161,7 +167,12 @@ export function readSynopsis(blocks: readonly SynopsisBlock[]): SynopsisEntry[] 
   // Which description lines were topics with a folio of their own. See below.
   let topics: boolean[] = []
   let folio: number | null = null
+  let roman = false
   let open = false
+  const folioOf = (text: string): number | null => {
+    roman = /[ivxlc]/i.test(text)
+    return romanToNumber(text)
+  }
 
   const close = (): void => {
     if (!open) return
@@ -175,12 +186,20 @@ export function readSynopsis(blocks: readonly SynopsisBlock[]): SynopsisEntry[] 
       .join('')
       .replace(/\s+/g, ' ')
       .trim()
-    if (title || label) entries.push({ label, title, synopsis, originalFolio: folio })
+    if (title || label)
+      entries.push({
+        label,
+        title,
+        synopsis,
+        originalFolio: folio,
+        ...(roman && folio !== null ? { romanFolio: true as const } : {})
+      })
     label = ''
     title = ''
     description = []
     topics = []
     folio = null
+    roman = false
     open = false
   }
 
@@ -192,7 +211,7 @@ export function readSynopsis(blocks: readonly SynopsisBlock[]): SynopsisEntry[] 
     if (asFolio) {
       // The folio ends its entry wherever it appears, whatever the block was
       // called. This is the one unambiguous full stop on the page.
-      folio = romanToNumber(asFolio[1]!)
+      folio = folioOf(asFolio[1]!)
       close()
       continue
     }
@@ -219,7 +238,7 @@ export function readSynopsis(blocks: readonly SynopsisBlock[]): SynopsisEntry[] 
       // where it closes the entry above.
       const trailing = TRAILING_FOLIO.exec(text)
       const heading = trailing ? trailing[1]!.trim() : text
-      if (trailing) folio = romanToNumber(trailing[2]!)
+      if (trailing) folio = folioOf(trailing[2]!)
 
       const split = NUMBER_THEN_TITLE.exec(heading)
       if (split && !label) {
@@ -244,7 +263,7 @@ export function readSynopsis(blocks: readonly SynopsisBlock[]): SynopsisEntry[] 
     if (!open) continue
     const topic = TRAILING_FOLIO.exec(text)
     if (topic) {
-      if (folio === null) folio = romanToNumber(topic[2]!)
+      if (folio === null) folio = folioOf(topic[2]!)
       description.push(topic[1]!.trim())
       topics.push(true)
     } else {
@@ -278,8 +297,13 @@ export function synopsisLooksSound(entries: readonly SynopsisEntry[]): boolean {
   if (chapters.length < 2) return false
   const described = chapters.filter((e) => e.synopsis.length > 40).length
   if (described < chapters.length * 0.6) return false
-  const folios = chapters.map((e) => e.originalFolio).filter((n): n is number => n !== null)
-  if (folios.length < chapters.length * 0.6) return false
+  const found = chapters.filter((e) => e.originalFolio !== null)
+  if (found.length < chapters.length * 0.6) return false
+  // Roman folios are front matter's own sequence and are left out of the
+  // ascending rule when the contents also has arabic ones: a preface at iv
+  // above chapter one at 1 is two sequences, not a folio going backwards.
+  const arabic = found.filter((e) => !e.romanFolio)
+  const folios = (arabic.length > 0 ? arabic : found).map((e) => e.originalFolio!)
   return folios.every((n, i) => i === 0 || n > folios[i - 1]!)
 }
 

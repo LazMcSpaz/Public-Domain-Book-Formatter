@@ -107,21 +107,29 @@ const starts = new Set(doc.chapters.map((c) => c.id))
 interface Chapter {
   file: string
   title: string
+  /** What the original contents page said is in it, where it said anything. */
+  synopsis: string | null
+  level: number
   body: string[]
   notes: string[]
 }
 const chapters: Chapter[] = []
-const heads = new Map(doc.chapters.map((c) => [c.id, c.title]))
+const heads = new Map(doc.chapters.map((c) => [c.id, c]))
 let current: Chapter | null = null
 const figuresUsed: string[] = []
 
 doc.blocks.forEach((block, i) => {
   if (block.kind === 'footnote') return
   if (!current || starts.has(block.id)) {
-    const name = heads.get(block.id) ?? 'Opening'
+    const head = heads.get(block.id)
+    const name = head ? (cleanHeads.get(head.title.trim()) ?? head.title) : 'Opening'
     current = {
       file: `c${String(chapters.length + 1).padStart(3, '0')}.xhtml`,
-      title: cleanHeads.get(name.trim()) ?? name,
+      // A chapter the body only numbers is named as the original contents
+      // named it, as the printed contents does.
+      title: head?.contentsTitle ? `${name} ${head.contentsTitle}` : name,
+      synopsis: head?.synopsis ?? null,
+      level: head?.level ?? 1,
       body: [],
       notes: []
     }
@@ -228,6 +236,8 @@ table { border-collapse: collapse; margin: 0.8em auto; font-size: 0.9em; }
 td, th { padding: 0.1em 0.5em; vertical-align: top; }
 .title { text-align: center; margin-top: 20%; }
 .title p { text-indent: 0; margin: 0.6em 0; }
+p.entry { text-indent: 0; margin-top: 1em; text-align: center; font-variant: small-caps; }
+p.synopsis { text-indent: 0; font-size: 0.85em; text-align: left; }
 `
 )
 
@@ -255,6 +265,28 @@ const nav = page(
 )
 writeFileSync(join(out, 'OEBPS', 'nav.xhtml'), nav)
 
+// The original's analytical contents, where the book had one: each chapter
+// with the topics its contents page listed, linked, and none of the original's
+// page numbers, which describe another edition.
+const described = chapters.some((c) => c.synopsis)
+if (described) {
+  writeFileSync(
+    join(out, 'OEBPS', 'contents.xhtml'),
+    page(
+      'Contents',
+      '<h1>Contents</h1>' +
+        chapters
+          .filter((c) => c.level === 1)
+          .map(
+            (c) =>
+              `<p class="entry"><a href="${c.file}">${esc(c.title)}</a></p>` +
+              (c.synopsis ? `<p class="synopsis">${esc(c.synopsis)}</p>` : '')
+          )
+          .join('\n')
+    )
+  )
+}
+
 const pictures = [...new Set(figuresUsed)]
 for (const src of pictures) copyFileSync(join(dir, src), join(out, 'OEBPS', src))
 
@@ -263,12 +295,15 @@ const manifest = [
   `<item id="nav" href="nav.xhtml" media-type="application/xhtml+xml" properties="nav"/>`,
   `<item id="css" href="style.css" media-type="text/css"/>`,
   `<item id="title" href="title.xhtml" media-type="application/xhtml+xml"/>`,
+  ...(described
+    ? [`<item id="contents" href="contents.xhtml" media-type="application/xhtml+xml"/>`]
+    : []),
   ...chapters.map(
     (c, i) => `<item id="c${i}" href="${c.file}" media-type="application/xhtml+xml"/>`
   ),
   ...pictures.map((p, i) => `<item id="img${i}" href="${p}" media-type="image/png"/>`)
 ]
-const spine = ['title', 'nav', ...chapters.map((_, i) => `c${i}`)]
+const spine = ['title', ...(described ? ['contents'] : ['nav']), ...chapters.map((_, i) => `c${i}`)]
   .map((ref) => `<itemref idref="${ref}"/>`)
   .join('')
 writeFileSync(
