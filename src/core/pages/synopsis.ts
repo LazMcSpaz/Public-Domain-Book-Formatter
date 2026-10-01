@@ -109,6 +109,21 @@ const NUMBER_LINE = /^\s*(lesson|chapter|part|book|section)\b[\s.]*[0-9ivxlcdm]*
 const BARE_NUMBER_LINE = /^\s*[0-9]+\s*\.?\s*$|^\s*[ivxlcdm]+\s*\.?\s*$/i
 
 /**
+ * A number line that names its series: `MANUSCRIPT LECTURE No. 3`, `TALK No. 5`.
+ *
+ * Hall's lectures were issued as a numbered series and each opens with its
+ * number over its title. Read as a complete heading, the number became a
+ * chapter of its own, opening recto and carrying no text, which cost every
+ * lecture in the collection two leaves. A word or two may stand before the
+ * series noun only when `No.` introduces the number: without it they are a
+ * title that names a division (`SUMMARY OF PART III`, `PREFACE TO PART II.`),
+ * complete in itself. The number is required, unlike in `NUMBER_LINE`:
+ * `THE LAST LECTURE` is a title.
+ */
+const NAMED_NUMBER_LINE =
+  /^(?:(?:[a-z]+\s+){1,2}(?:lesson|chapter|part|book|section|lecture|talk|discourse)\s+(?:no\.?\s*|number\s+)|(?:lecture|talk|discourse)\s+(?:(?:no\.?\s*|number\s+))?)(?:[0-9]+|[ivxlcdm]+)\s*\.?$/i
+
+/**
  * Whether a heading is a bare number line — `LESSON III.`, `CHAPTER IV` — as
  * against a title that happens to begin with one of those words.
  *
@@ -120,7 +135,9 @@ const BARE_NUMBER_LINE = /^\s*[0-9]+\s*\.?\s*$|^\s*[ivxlcdm]+\s*\.?\s*$/i
  */
 export function isNumberLine(text: string): boolean {
   const trimmed = text.trim()
-  return NUMBER_LINE.test(trimmed) || BARE_NUMBER_LINE.test(trimmed)
+  return (
+    NUMBER_LINE.test(trimmed) || BARE_NUMBER_LINE.test(trimmed) || NAMED_NUMBER_LINE.test(trimmed)
+  )
 }
 
 /**

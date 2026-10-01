@@ -988,6 +988,39 @@ describe('deriveChapters — divisions above chapters', () => {
     expect(doc.chapters[0]!.label).toBe('I')
   })
 
+  it('joins a numbered lecture of a series to its title', () => {
+    // Hall's collected lectures: every lecture cost two leaves when its number
+    // opened a chapter of its own.
+    const doc = assembleBook([
+      leaf([
+        heading('MANUSCRIPT LECTURE No. 3'),
+        heading('Teacher and Pupil, Part I'),
+        { kind: 'paragraph', text: 'There are many who aspire to teach.' }
+      ])
+    ])
+    expect(doc.chapters).toHaveLength(1)
+    expect(doc.chapters[0]!.title).toBe('Teacher and Pupil, Part I')
+    expect(doc.chapters[0]!.label).toBe('MANUSCRIPT LECTURE No. 3')
+  })
+
+  it.each([
+    'THE LAST LECTURE',
+    'SUMMARY OF PART III',
+    'FOOTNOTES FOR CHAPTER 6',
+    'PREFACE TO PART II.'
+  ])('does not take the title `%s` for a number line', (title) => {
+    // The last three stand in other books on this shelf above a heading of
+    // their own, and are complete divisions rather than numbers.
+    const doc = assembleBook([
+      leaf([
+        heading(title),
+        heading('Teacher and Pupil'),
+        { kind: 'paragraph', text: 'There are many who aspire to teach.' }
+      ])
+    ])
+    expect(doc.chapters).toHaveLength(2)
+  })
+
   it('does not join two titles neither of which is a number', () => {
     // The other half of the rule, and what the guard is for: a division above a
     // chapter is complete in itself and must stand apart from it.

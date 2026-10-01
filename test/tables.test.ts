@@ -295,6 +295,73 @@ describe('a table on the page', () => {
     }
   })
 
+  it('closes up the gaps before letting a table of short words overflow', () => {
+    // Nine one-word columns that fit the measure with their gaps narrowed and
+    // overflowed with them at full width: the words cannot wrap, so the columns
+    // were squeezed below their own words. Hall's diagrams, measured.
+    const probe = run(doc([tableBlock([['a', 'b']])]))
+    const frame = probe.pages.find((p) => lines(p).length > 0)!.frame
+    const sizePt = defaultStyleProfile().bodyFontSize * 0.92
+    const letters = Math.floor((frame.widthPt * 0.75) / 9 / (sizePt * 0.5))
+    const word = (c: string) => c.repeat(letters)
+    const row = 'abcdefghi'.split('').map(word)
+    const book = run(doc([tableBlock([row, row])]))
+    expect(book.warnings).toEqual([])
+    const page = book.pages.find((p) =>
+      lines(p).some((l) => l.runs.some((r) => r.text === row[8]))
+    )!
+    const right = page.frame.xPt + page.frame.widthPt
+    for (const r of runsSaying(book, row[8]!)) {
+      expect(r.xPt + letters * sizePt * 0.5).toBeLessThanOrEqual(right + 0.01)
+    }
+  })
+
+  it('sets a diagram too wide at the usual size a little smaller, words whole', () => {
+    // Hall's Key table: nine one-word columns that no gap lets fit at the usual
+    // size and that fit at four-fifths of it.
+    const probe = run(doc([tableBlock([['a', 'b']])]))
+    const frame = probe.pages.find((p) => lines(p).length > 0)!.frame
+    const base = defaultStyleProfile().bodyFontSize * 0.92
+    // Words alone just inside the measure, so the gaps are what overflow it.
+    const letters = Math.floor(frame.widthPt / 9 / (base * 0.5))
+    const row = 'abcdefghi'.split('').map((c) => c.repeat(letters))
+    const book = run(doc([tableBlock([row, row])]))
+    expect(book.warnings).toEqual([])
+    const set = runsSaying(book, row[8]!)[0]!
+    expect(set.sizePt).toBeLessThan(base)
+    expect(set.sizePt).toBeGreaterThanOrEqual(defaultStyleProfile().bodyFontSize * 0.75)
+  })
+
+  it('keeps the full gap on a table of sentences, which wraps instead', () => {
+    // Patterns' transcripts: two columns of prose that no gap would let fit.
+    // Narrowing their gap would reset finished books for nothing.
+    const long = 'a sentence long enough that it has to wrap within its column'
+    const book = run(doc([tableBlock([[long, `${long} again`]])]))
+    const page = book.pages.find((p) => lines(p).length > 0)!
+    const sizePt = defaultStyleProfile().bodyFontSize * 0.92
+    const gap = sizePt * 1.4
+    const second = runsSaying(book, 'again')[0]!
+    const columnTwo = page.frame.xPt + (page.frame.widthPt - gap) / 2 + gap
+    expect(second.xPt).toBeGreaterThanOrEqual(columnTwo - 0.01)
+  })
+
+  it('leaves a table that wraps cleanly at the full gap exactly as it was', () => {
+    // Patterns' two-column transcripts: cells of short words too wide together
+    // for the usual gap and narrow enough for a tighter one. They wrap cleanly
+    // and printed wrapped in finished books, and nothing about them overflows.
+    const probe = run(doc([tableBlock([['a', 'b']])]))
+    const frame = probe.pages.find((p) => lines(p).length > 0)!.frame
+    const size = defaultStyleProfile().bodyFontSize * 0.92
+    const total = Math.floor((frame.widthPt - 1.0 * size) / (size * 0.5))
+    const prose = (c: string, length: number) =>
+      Array.from({ length }, (_, k) => (k % 4 === 3 && k < length - 1 ? ' ' : c)).join('')
+    const left = Math.floor(total / 2)
+    const book = run(doc([tableBlock([[prose('a', left), prose('b', total - left)]])]))
+    const second = runsSaying(book, 'bbb')[0]!
+    const page = book.pages.find((p) => lines(p).some((l) => l.runs.includes(second)))!
+    expect(second.xPt).toBeCloseTo(page.frame.xPt + left * size * 0.5 + 1.4 * size, 1)
+  })
+
   it('centres a table narrower than the measure rather than stretching it', () => {
     const book = run(doc([tableBlock([['i', 'ii']])]))
     const page = book.pages.find((p) => lines(p).some((l) => l.runs.some((r) => r.text === 'i')))!

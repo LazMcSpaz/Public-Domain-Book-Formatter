@@ -233,8 +233,26 @@ const LIST_HANG_EMS = 1.4
  * size exactly makes a page of figures shout over the text around it.
  */
 const TABLE_SIZE_RATIO = 0.92
+/**
+ * The smallest a table is set, as a share of the body, to keep its words whole.
+ *
+ * Hall's eight- and nine-column diagrams do not fit the measure at the usual
+ * size whatever the gap, and a diagram whose words wrap is no longer a
+ * diagram. Three-quarters of 12 point is 9, which still reads.
+ */
+const TABLE_MIN_SIZE_RATIO = 0.75
 /** Space between columns, in ems of the table's own size. */
 const TABLE_GUTTER_EMS = 1.4
+/**
+ * The closest columns may come before a table is left to overflow.
+ *
+ * A diagram of eight or nine one-word columns, as Hall's lectures set them,
+ * fits the measure with room to spare and overflowed by a fixed 1.4 ems per
+ * gap: the words cannot wrap, so the columns were squeezed below their words
+ * instead. The gap gives way only for a table that would otherwise overflow,
+ * and only as far as it needs.
+ */
+const TABLE_MIN_GUTTER_EMS = 0.6
 /** The narrowest a column may be squeezed, in ems, before it is left to overflow. */
 const TABLE_MIN_COLUMN_EMS = 2.5
 const TABLE_RULE_THICKNESS = 0.5
@@ -1541,7 +1559,7 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
   }, 0)
   const cellIndex = (r: number, c: number): number => (cellStart[r] ?? 0) + c
 
-  const sizePt = ctx.profile.bodyFontSize * TABLE_SIZE_RATIO
+  const baseSizePt = ctx.profile.bodyFontSize * TABLE_SIZE_RATIO
   const family = ctx.profile.bodyFont
   const bodyFont: FontRef = { family, style: 'regular' }
   // Column heads are set in italic: it is the one contrast available in every
@@ -1554,18 +1572,62 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
   const columns = Math.max(...rows.map((row) => row.length))
   const cellAt = (row: readonly string[], c: number): string => (row[c] ?? '').trim()
 
-  const natural: number[] = []
-  for (let c = 0; c < columns; c++) {
-    let widest = 0
-    rows.forEach((row, r) => {
-      widest = Math.max(widest, ctx.measurer.widthOf(cellAt(row, c), fontFor(r), sizePt))
-    })
-    natural.push(widest)
+  const widestOf = (size: number, unit: (cell: string) => string[]): number[] => {
+    const widths: number[] = []
+    for (let c = 0; c < columns; c++) {
+      let widest = 0
+      rows.forEach((row, r) => {
+        for (const piece of unit(cellAt(row, c))) {
+          widest = Math.max(widest, ctx.measurer.widthOf(piece, fontFor(r), size))
+        }
+      })
+      widths.push(widest)
+    }
+    return widths
   }
+  const wholeCells = (cell: string): string[] => [cell]
+  const singleWords = (cell: string): string[] => cell.split(/\s+/u).filter(Boolean)
 
-  const gutter = sizePt * TABLE_GUTTER_EMS
-  const available = Math.max(1, ctx.measureWidth - gutter * (columns - 1))
-  const widths = fitColumns(natural, available, sizePt * TABLE_MIN_COLUMN_EMS)
+  // The usual setting: the usual size, the usual gap, cells wrapped to fit.
+  const baseNatural = widestOf(baseSizePt, wholeCells)
+  const baseGap = baseSizePt * TABLE_GUTTER_EMS
+  const baseWidths = fitColumns(
+    baseNatural,
+    Math.max(1, ctx.measureWidth - baseGap * (columns - 1)),
+    baseSizePt * TABLE_MIN_COLUMN_EMS
+  )
+
+  // It is kept unless it overflows: unless some column is narrower than a word
+  // in it, which no wrapping can mend. Only then does the gap close up, and then
+  // the type step down to TABLE_MIN_SIZE_RATIO of the body, and only as far as
+  // lets every cell stand unbroken. So every table that set cleanly before,
+  // wrapped or not, is set exactly as it was; Hall's diagrams of one-word
+  // columns, which overflowed, are the tables this reaches.
+  const longestWords = widestOf(baseSizePt, singleWords)
+  const baseSpan = baseWidths.reduce((a, b) => a + b, 0) + baseGap * Math.max(0, columns - 1)
+  const overflows =
+    baseSpan > ctx.measureWidth + 0.01 ||
+    baseWidths.some((w, c) => w + 0.01 < (longestWords[c] ?? 0))
+  const baseTotal = baseNatural.reduce((a, b) => a + b, 0)
+  const tightAtBase = baseTotal + baseSizePt * TABLE_MIN_GUTTER_EMS * Math.max(0, columns - 1)
+  const fittingSize = tightAtBase > 0 ? (baseSizePt * ctx.measureWidth) / tightAtBase : baseSizePt
+  const minSize = ctx.profile.bodyFontSize * TABLE_MIN_SIZE_RATIO
+  const sizePt =
+    overflows && tightAtBase > ctx.measureWidth && fittingSize >= minSize ? fittingSize : baseSizePt
+  const natural = sizePt === baseSizePt ? baseNatural : widestOf(sizePt, wholeCells)
+  const naturalTotal = natural.reduce((a, b) => a + b, 0)
+  const roomy = sizePt * TABLE_GUTTER_EMS
+  const neededGap = columns < 2 ? roomy : (ctx.measureWidth - naturalTotal) / (columns - 1)
+  const gutter =
+    overflows && neededGap < roomy && neededGap >= sizePt * TABLE_MIN_GUTTER_EMS ? neededGap : roomy
+  const widths =
+    sizePt === baseSizePt && gutter === baseGap
+      ? baseWidths
+      : fitColumns(
+          natural,
+          Math.max(1, ctx.measureWidth - gutter * (columns - 1)),
+          sizePt * TABLE_MIN_COLUMN_EMS
+        )
 
   // A table narrower than the measure is centred in it.
   const tableWidth = widths.reduce((a, b) => a + b, 0) + gutter * (columns - 1)
