@@ -607,7 +607,8 @@ describe('characters no compositor set', () => {
     expect(
       found(
         'the 3rd and 21st, a 3me partie, an 8vo of 1877, NA2CO3 and 2HKC4H4O6, ' +
-          'McDONALD, FitzEdward Hall, an eBay listing, 2π and 2α, 10ⁿ, 2bc'
+          'McDONALD, FitzEdward Hall, an eBay listing, 2π and 2α, 10ⁿ, 2bc, ' +
+          '13deg. 10m. 35sec., 1d. 23h. 20min.'
       )
     ).toEqual([])
   })
