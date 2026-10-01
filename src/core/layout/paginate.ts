@@ -27,6 +27,7 @@ import type { BookBlock, BookDocument, BookSection, Illustration } from '@core/a
 import { effectiveDpi } from '@core/image'
 // The flattened view's coordinates, from the one place they are defined.
 import { cellEmphasis } from '@core/transcribe/schema'
+import { shiftEmphasis } from '@core/transcribe/markup'
 import {
   breakParagraph,
   fontForWord,
@@ -983,6 +984,19 @@ interface BuildContext {
  * Decided here, in the engine, so the width the breaker measures and the glyphs
  * the writer draws come from one answer.
  */
+/**
+ * The number a list item prints before its words, when it is stored apart from
+ * them and the words do not already open with it.
+ */
+export function listMarkerToPrint(
+  block: { kind: string; marker?: string },
+  text: string
+): string | null {
+  const marker = block.kind === 'list-item' ? block.marker?.trim() : undefined
+  if (!marker) return null
+  return text.trimStart().startsWith(marker) ? null : marker
+}
+
 function spansFor(
   ctx: BuildContext,
   family: string,
@@ -1081,14 +1095,25 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
   // `smcp` maps *lower case* to small capitals, so the text is handed over as
   // written; upper-casing it first would defeat the feature and give full caps
   // in a face that had the real thing.
-  const source = opts.text ?? block.text
+  // A list item's number may be stored apart from its words (`marker`), as the
+  // readings of Hall's lectures and of *Clairvoyance* store it, and it printed
+  // nowhere: 146 numbered items on the shelf set with a hanging indent and
+  // nothing hanging in it. It is set here, at layout, rather than folded into
+  // the text at assembly, because a correction replaces a block's whole text
+  // and would take a folded number away with it. Items that carry their number
+  // in their words are left alone.
+  const listMarker = listMarkerToPrint(block, opts.text ?? block.text)
+  const markerWords = listMarker ? listMarker.split(/\s+/u).length : 0
+  const source = listMarker ? `${listMarker} ${opts.text ?? block.text}` : (opts.text ?? block.text)
   const text = wantsSmallCaps && !realSmallCaps ? source.toLocaleUpperCase() : source
 
   // Reference marks ride on the end of the word they follow, set smaller and
   // lifted. They are given to the breaker rather than concatenated into the
   // text because they occupy width — a line breaker that did not know about
   // them would set every line carrying one fractionally too long.
-  const references = opts.references ?? []
+  const references = (opts.references ?? []).map((ref) =>
+    markerWords ? { ...ref, wordIndex: ref.wordIndex + markerWords } : ref
+  )
   const attachments: Attachment[] = references.map((ref) => ({
     wordIndex: ref.wordIndex,
     text: ref.mark,
@@ -1106,7 +1131,15 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
    */
   const spans =
     style.style === 'regular'
-      ? spansFor(ctx, family, style.style, block.emphasis, block.strong)
+      ? spansFor(
+          ctx,
+          family,
+          style.style,
+          markerWords && block.emphasis
+            ? shiftEmphasis(block.emphasis, markerWords)
+            : block.emphasis,
+          markerWords && block.strong ? shiftEmphasis(block.strong, markerWords) : block.strong
+        )
       : []
 
   // A paragraph with a figure in it or beside it is built round the figure.
