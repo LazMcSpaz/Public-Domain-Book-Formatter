@@ -185,6 +185,30 @@ function lettersIn(text: string): number {
   return (text.match(/\p{L}/gu) ?? []).length
 }
 
+/**
+ * Pieces with a compound's own hyphen kept on the piece *before* it.
+ *
+ * The hyphenator does not always split at the far side of the mark:
+ * `self-reliant,` comes back `["self", "-re", "liant,"]` and `broad-minded`
+ * as `["broad", "-", "minded"]`. The piece before the break then ends in a
+ * letter, so the break was given a drawn hyphen, and a line ending there set
+ * "self-" over "-reliant" — the mark twice, on three of Hall's pages.
+ */
+function markEndsPiece(pieces: string[]): string[] {
+  const out: string[] = []
+  for (const piece of pieces) {
+    const lead = /^[-\u2010\u2011]+/u.exec(piece)?.[0] ?? ''
+    if (lead && out.length > 0) {
+      out[out.length - 1] += lead
+      const rest = piece.slice(lead.length)
+      if (rest) out.push(rest)
+    } else {
+      out.push(piece)
+    }
+  }
+  return out
+}
+
 /** A token cut at the marks a line may end on, or whole where a cut would leave a scrap. */
 export function segmentsOf(word: string): string[] {
   const parts = word.split(BREAK_AFTER)
@@ -358,7 +382,7 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
     }
 
     const pieces = segmentsOf(word).flatMap((segment) =>
-      hyphenate ? hyphenate(segment) : [segment]
+      hyphenate ? markEndsPiece(hyphenate(segment)) : [segment]
     )
     if (pieces.length <= 1) {
       items.push(box(word, width(word, i), i))

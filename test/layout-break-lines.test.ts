@@ -211,6 +211,28 @@ describe('a compound breaks at its own hyphen without gaining another', () => {
     }).map((line) => line.words.map((w) => w.text).join(''))
     expect(lines.join('|')).toContain('extra-')
   })
+
+  /**
+   * The real hyphenator does not always put the mark on the piece before it:
+   * `self-reliant,` comes back `["self", "-re", "liant,"]`, and Hall's lectures
+   * printed "self-" over "-reliant" on one page and "broad-" over "-minded" on
+   * another.
+   */
+  it('keeps the mark on one side when the hyphenator hands it to the next piece', () => {
+    for (const word of ['self-reliant,', 'broad-minded', 'sub-races']) {
+      for (let w = 20; w <= 90; w += 5) {
+        const lines = breakParagraph(`a ${word} man`, {
+          font,
+          sizePt: 10,
+          measurer,
+          lineWidths: w,
+          alignment: 'justify',
+          hyphenate: englishHyphenator()
+        }).map((line) => line.words.map((x) => x.text).join(''))
+        expect(lines.join('|'), `${word} at ${w}`).not.toMatch(/-\|-|--/)
+      }
+    }
+  })
 })
 
 /**
