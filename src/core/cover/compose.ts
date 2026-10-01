@@ -1158,7 +1158,9 @@ function layFrontCover(
     y += fitted.sizePt * 0.35
 
     if (content.subtitle.trim()) {
-      const size = Math.max(10, fitted.sizePt * SUBTITLE_RATIO)
+      // The editor's size where one is set: on a reprinted multi-volume work
+      // the subtitle names the volume and is read as hard as the title is.
+      const size = Math.max(10, fitted.sizePt * (look.subtitleRatio ?? SUBTITLE_RATIO))
       const lines = wrapText(
         content.subtitle,
         typeBox.widthPt,

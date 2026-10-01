@@ -296,25 +296,66 @@ export function backFigureFramePt(geometry: CoverGeometry): {
 }
 
 /**
- * How far from a fold a figure's tint has fallen to nothing, in inches.
+ * How far a figure's tint takes to climb from nothing to full, in inches.
  *
- * Spent on both sides: the last three quarters of an inch of the back panel,
- * and the first three quarters of the front. With the spine between them that
- * is three inches of plain board around the fold, and nothing anywhere near it
- * that a reader could see was out of register.
+ * Spent at **every** trim edge, not only at the fold, and the reason is what a
+ * reader sees rather than what the fold needs. A figure faded on one side and
+ * cut square on the other three announces that the fade is a repair: the eye
+ * meets three hard edges and one soft one and asks what is wrong with that
+ * side. Ringed, the same fade is a vignette — the figure sits in the middle of
+ * the board and dissolves into the ground wherever it runs out, which is a
+ * thing bindings have done for as long as they have had grounds.
  *
- * The front's half is not optional trimming. Measured on the sheet with only
- * the companion faded, a column scan reads 4.8 points of spread across the
- * back, zero for the six tenths of an inch before the fold, and 4.8 again the
- * instant it crosses — the fade had moved the one visible join rather than
- * removed it. Fading both sides is what takes the scan to zero through the
- * whole of the middle.
+ * It costs nothing at the trim and gains something: a tint that has already
+ * reached nothing by the trim line cannot show a trim that wandered, where a
+ * picture bled to the edge at full strength ends in a band whose width is
+ * whatever the guillotine did that morning.
+ *
+ * The fold is the one edge whose fade is load-bearing, and that one was
+ * measured. With only the back's companion faded, a column scan of the sheet
+ * read 4.8 points of spread across the back, zero for the six tenths of an
+ * inch before the fold, and 4.8 again the instant it crossed — the fade had
+ * moved the one visible join rather than removed it.
  *
  * Three quarters of an inch is the floor rather than a preference: a tint
  * dropping from full to nothing across much less is a soft edge, and a soft
  * edge is still an edge.
  */
 export const FIGURE_FADE_IN = 0.75
+
+/**
+ * Where a figure's tint reaches nothing, as an inset from each edge of its own
+ * box, with the width of the ramp back to full.
+ *
+ * Insets rather than one number because a figure's box is not its trim: three
+ * of its edges carry the bleed the printer cuts off, and the fourth is the
+ * fold, which is already a trim edge. Reaching nothing at the **trim** on all
+ * four is what makes the four look alike on the book in a reader's hands.
+ */
+export interface FigureFade {
+  leftIn: number
+  rightIn: number
+  topIn: number
+  bottomIn: number
+  widthIn: number
+}
+
+/**
+ * The fade for a figure whose box meets the fold on the named edge.
+ *
+ * `left` for the front's, whose box starts at the fold; `right` for the back's
+ * companion, whose box ends at it.
+ */
+export function figureFade(geometry: CoverGeometry, foldEdge: 'left' | 'right'): FigureFade {
+  const bleed = geometry.bleedIn
+  return {
+    leftIn: foldEdge === 'left' ? 0 : bleed,
+    rightIn: foldEdge === 'right' ? 0 : bleed,
+    topIn: bleed,
+    bottomIn: bleed,
+    widthIn: FIGURE_FADE_IN
+  }
+}
 
 /**
  * Where the anchor should land in the companion's box, as a fraction of it.

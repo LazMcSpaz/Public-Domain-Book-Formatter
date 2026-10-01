@@ -18,6 +18,7 @@ import {
   backFigureFrame,
   coverFromAnswers,
   defaultLook,
+  figureFade,
   FIGURE_FADE_IN,
   GROUND_FIGURE_BACK_ID,
   lookQuestions,
@@ -445,5 +446,103 @@ describe('the companion on the back', () => {
       { 'cover-figure-back': true }
     )
     expect(next.look.groundFigureBack).toBe(true)
+  })
+})
+
+describe('the fade rings the figure', () => {
+  const geo = coverGeometry({ trimSize: '6x9', pageCount: 690, paper: 'bw-white' })
+
+  it('reaches nothing at the trim on three edges and at the fold on the fourth', () => {
+    const front = figureFade(geo, 'left')
+    // The fold is already a trim edge, so the front's box starts at zero inset;
+    // its other three carry the bleed the printer cuts off.
+    expect(front.leftIn).toBe(0)
+    expect(front.rightIn).toBe(geo.bleedIn)
+    expect(front.topIn).toBe(geo.bleedIn)
+    expect(front.bottomIn).toBe(geo.bleedIn)
+  })
+
+  it('is the mirror of that on the back’s companion', () => {
+    const back = figureFade(geo, 'right')
+    expect(back.rightIn).toBe(0)
+    expect(back.leftIn).toBe(geo.bleedIn)
+    expect(back.topIn).toBe(geo.bleedIn)
+    expect(back.bottomIn).toBe(geo.bleedIn)
+  })
+
+  it('ramps over the same width on every edge', () => {
+    // The property the editor asked for in as many words: a fade on one side
+    // and a cut edge on the other three reads as a repair.
+    for (const edge of ['left', 'right'] as const) {
+      const fade = figureFade(geo, edge)
+      expect(fade.widthIn).toBe(FIGURE_FADE_IN)
+    }
+    expect(FIGURE_FADE_IN).toBeGreaterThanOrEqual(0.75)
+  })
+
+  it('still clears the fold by more than the fold can creep', () => {
+    // Measured on the sheet: the two fades plus the spine leave the middle
+    // plain, so where the fold actually falls decides nothing visible.
+    expect(FIGURE_FADE_IN * 2 + geo.spineIn).toBeGreaterThan(2)
+  })
+})
+
+describe('the subtitle’s size', () => {
+  function subtitleSize(doc: CoverDocument): number {
+    const item = composeCover(doc, { measurer }).items.find(
+      (i) => i.kind === 'text' && i.text === doc.content.subtitle
+    )
+    expect(item?.kind).toBe('text')
+    return item?.kind === 'text' ? item.sizePt : 0
+  }
+
+  function titleSize(doc: CoverDocument): number {
+    const item = composeCover(doc, { measurer }).items.find(
+      (i) => i.kind === 'text' && i.text === doc.content.title.toUpperCase()
+    )
+    return item?.kind === 'text' ? item.sizePt : 0
+  }
+
+  const withSubtitle = (ratio: number | null) =>
+    cover((d) => {
+      d.content.subtitle = 'Science'
+      d.look.titleCase = 'upper'
+      d.look.titleSizePt = 26
+      d.look.subtitleRatio = ratio
+    })
+
+  it('is a share of the title, so a longer title carries it down', () => {
+    const doc = withSubtitle(0.7)
+    expect(titleSize(doc)).toBe(26)
+    expect(subtitleSize(doc)).toBeCloseTo(26 * 0.7, 6)
+  })
+
+  it('keeps its small default where nothing is asked for', () => {
+    const asked = subtitleSize(withSubtitle(null))
+    expect(asked).toBeLessThan(26 * 0.5)
+    expect(asked).toBeGreaterThan(0)
+  })
+
+  it('refuses a share that is not a positive number', () => {
+    for (const bad of ['0.7', 0, -1, Number.NaN, null, undefined]) {
+      const look = normalizeLook({ ...defaultLook(), subtitleRatio: bad })
+      expect(look.subtitleRatio).toBeNull()
+    }
+    expect(normalizeLook({ ...defaultLook(), subtitleRatio: 0.7 }).subtitleRatio).toBe(0.7)
+  })
+
+  it('is asked for, and the answer reaches the look', () => {
+    const q = lookQuestions(interviewState(cover(() => {}))).find(
+      (qq) => qq.id === 'cover-subtitle-size'
+    )
+    expect(q).toBeDefined()
+    expect(q!.type).toBe('choice')
+    const next = coverFromAnswers(
+      cover(() => {}),
+      { 'cover-subtitle-size': '0.7' }
+    )
+    expect(next.look.subtitleRatio).toBe(0.7)
+    // And the empty option means the default, not a share of nothing.
+    expect(coverFromAnswers(next, { 'cover-subtitle-size': '' }).look.subtitleRatio).toBeNull()
   })
 })

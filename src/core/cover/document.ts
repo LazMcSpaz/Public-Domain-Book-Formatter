@@ -142,6 +142,22 @@ export interface CoverLook {
    * deliberate, and a collection of reprints has both.
    */
   titleSizePt: number | null
+  /**
+   * The subtitle's size as a share of the title's, or `null` for the default.
+   *
+   * The default share is small on purpose — a subtitle is usually an
+   * explanatory phrase, and one set near the title's size would compete with
+   * it. But a reprinted multi-volume work often has no such thing: *Isis
+   * Unveiled* is "Science" and "Theology", *The Secret Doctrine*
+   * "Cosmogenesis" and "Anthropogenesis", and those name the volume as
+   * squarely as the title names the work. A reader looking along a shelf for
+   * the second volume is looking for that word.
+   *
+   * A share rather than a size in points, because the title's own size is
+   * usually fitted: bank a look, give volume two a longer title, and a
+   * subtitle pinned in points would stay put while the title shrank past it.
+   */
+  subtitleRatio: number | null
   rule: RuleStyle
   /** A frame round the front cover's border, struck in the accent colour. */
   frontFrame: FrameStyle
@@ -329,6 +345,7 @@ export function defaultLook(): CoverLook {
     bodyFont: 'EB Garamond',
     titleCase: 'small-caps',
     titleSizePt: null,
+    subtitleRatio: null,
     rule: 'single',
     frontFrame: 'none',
     ornamentId: null,
@@ -429,6 +446,9 @@ export function normalizeLook(raw: unknown): CoverLook {
   if (!isRecord(raw)) return d
   const rawPalette = isRecord(raw['palette']) ? raw['palette'] : {}
   const size = raw['titleSizePt']
+  const subtitleRatio = raw['subtitleRatio']
+  const positive = (v: unknown): number | null =>
+    typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null
   return {
     arrangement: oneOf(raw['arrangement'], ARRANGEMENTS, d.arrangement),
     palette: {
@@ -445,7 +465,8 @@ export function normalizeLook(raw: unknown): CoverLook {
     authorFont: str(raw['authorFont'], d.authorFont),
     bodyFont: str(raw['bodyFont'], d.bodyFont),
     titleCase: oneOf(raw['titleCase'], ['as-typed', 'upper', 'small-caps'] as const, d.titleCase),
-    titleSizePt: typeof size === 'number' && Number.isFinite(size) && size > 0 ? size : null,
+    titleSizePt: positive(size),
+    subtitleRatio: positive(subtitleRatio),
     rule: oneOf(raw['rule'], ['none', 'single', 'double', 'ornamented'] as const, d.rule),
     frontFrame: oneOf(raw['frontFrame'], FRAME_STYLES, d.frontFrame),
     ornamentId: typeof raw['ornamentId'] === 'string' ? raw['ornamentId'] : null,

@@ -257,6 +257,20 @@ export function lookQuestions(state: CoverInterviewState): Question[] {
       defaultValue: doc.look.groundPattern ?? ''
     },
     {
+      id: 'cover-subtitle-size',
+      type: 'choice',
+      group: 'look',
+      prompt: 'How big is the subtitle beside the title?',
+      help: 'A share of the title rather than a size of its own, so a longer title on the next volume carries its subtitle down with it. Small is right for an explanatory phrase; a reprinted multi-volume work, where the subtitle names the volume, is read along a shelf and wants more.',
+      options: [
+        { value: '', label: 'Small — an explanatory phrase under the title' },
+        { value: '0.55', label: 'Over half the title' },
+        { value: '0.7', label: 'Two thirds — the subtitle names the volume' },
+        { value: '1', label: 'The title’s own size — two halves of one name' }
+      ],
+      defaultValue: look.subtitleRatio === null ? '' : String(look.subtitleRatio)
+    },
+    {
       id: 'cover-rule',
       type: 'choice',
       group: 'ornament',
@@ -608,6 +622,15 @@ export function coverFromAnswers(
     titleFont: text(answers, 'cover-title-font', doc.look.titleFont),
     titleCase: text(answers, 'cover-title-case', doc.look.titleCase),
     rule: text(answers, 'cover-rule', doc.look.rule),
+    subtitleRatio: (() => {
+      const asked = text(
+        answers,
+        'cover-subtitle-size',
+        doc.look.subtitleRatio === null ? '' : String(doc.look.subtitleRatio)
+      )
+      const n = Number(asked)
+      return asked.trim() !== '' && Number.isFinite(n) && n > 0 ? n : null
+    })(),
     frontFrame: text(answers, 'cover-frame', doc.look.frontFrame),
     groundFigure:
       (text(answers, 'cover-figure', doc.look.groundFigure ?? '') as GroundFigure | '') || null,

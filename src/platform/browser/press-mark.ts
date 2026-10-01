@@ -35,7 +35,7 @@
  * Browser-only.
  */
 
-import { coverOffsetX, coverScale } from '@core/cover'
+import { coverOffsetX, coverScale, type FigureFade } from '@core/cover'
 
 /** How finely the mark is rendered, in dots per inch of printed size. */
 const MARK_DPI = 600
@@ -180,17 +180,16 @@ export async function renderGroundImage(input: {
   /** Draw the artwork flipped, so the two panels are a pair about the spine. */
   mirrorX?: boolean
   /**
-   * Inches of the box's right edge over which the tint falls to nothing.
+   * Where the tint reaches nothing at each edge, and how wide the ramp is.
    *
    * Baked into the picture's own alpha rather than asked of the PDF, because
    * the picture is rasterised here anyway and a soft edge in the pixels needs
    * nothing of the writer, the composer or the KDP checks. It is what lets a
-   * figure reach the back at all: a companion that dies before the fold is
-   * never asked to line up with the one on the other side of it.
+   * figure reach the back at all — a companion that dies before the fold is
+   * never asked to line up with the one on the other side — and what makes the
+   * other three edges look like the same decision rather than like a repair.
    */
-  fadeRightIn?: number
-  /** The same on the left edge, which is a front figure's own edge at the fold. */
-  fadeLeftIn?: number
+  fade?: FigureFade
 }): Promise<{ bytes: Uint8Array; widthPx: number; heightPx: number }> {
   const img = await loadMark(input.src)
   const widthPx = Math.max(1, Math.round(input.widthIn * GROUND_DPI))
@@ -238,21 +237,37 @@ export async function renderGroundImage(input: {
   }
 
   // The fade, applied after the tint so it multiplies the coverage rather than
-  // the source's own greys. Smoothstepped: a linear ramp ends on a visible
-  // corner where the slope meets zero, and a fade with an edge on it is the
-  // thing this is for avoiding.
-  const rightPx = Math.round((input.fadeRightIn ?? 0) * GROUND_DPI)
-  const leftPx = Math.round((input.fadeLeftIn ?? 0) * GROUND_DPI)
-  if (rightPx > 0 || leftPx > 0) {
-    const smooth = (t: number) => t * t * (3 - 2 * t)
+  // the source's own greys.
+  const fade = input.fade
+  if (fade && fade.widthIn > 0) {
+    // Smoothstepped: a linear ramp ends on a visible corner where its slope
+    // meets zero, and a fade with an edge on it is the thing this is for
+    // avoiding. The two axes are combined with `min` rather than multiplied,
+    // so a corner fades at the rate of the edge it is nearest rather than at
+    // the two of them compounded.
+    const ramp = (distance: number, over: number): number => {
+      if (over <= 0) return distance > 0 ? 1 : 0
+      const t = Math.min(1, Math.max(0, distance / over))
+      return t * t * (3 - 2 * t)
+    }
+    const over = fade.widthIn * GROUND_DPI
+    const left = fade.leftIn * GROUND_DPI
+    const right = widthPx - fade.rightIn * GROUND_DPI
+    const top = fade.topIn * GROUND_DPI
+    const bottom = heightPx - fade.bottomIn * GROUND_DPI
+    const columns = new Float32Array(widthPx)
     for (let px = 0; px < widthPx; px++) {
-      let factor = 1
-      if (leftPx > 0 && px < leftPx) factor = smooth(px / leftPx)
-      if (rightPx > 0 && px > widthPx - rightPx) {
-        factor = Math.min(factor, smooth((widthPx - px) / rightPx))
-      }
-      if (factor >= 1) continue
-      for (let y = 0; y < heightPx; y++) {
+      columns[px] = Math.min(ramp(px - left, over), ramp(right - px, over))
+    }
+    const rows = new Float32Array(heightPx)
+    for (let y = 0; y < heightPx; y++) {
+      rows[y] = Math.min(ramp(y - top, over), ramp(bottom - y, over))
+    }
+    for (let y = 0; y < heightPx; y++) {
+      const row = rows[y]!
+      for (let px = 0; px < widthPx; px++) {
+        const factor = Math.min(row, columns[px]!)
+        if (factor >= 1) continue
         const i = (y * widthPx + px) * 4 + 3
         data[i] = Math.round(data[i]! * factor)
       }

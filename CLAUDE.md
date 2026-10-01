@@ -2745,6 +2745,43 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   PDF, since it is rasterised here anyway and a soft edge in the pixels needs
   nothing of the writer, the composer or the KDP checks.
 
+  **And a fade on one edge is a repair; on four it is a vignette**
+  (`figureFade`). Faded at the fold and cut square at the other three, the
+  figure announced that something had been fixed on that side: the eye meets
+  three hard edges and one soft one and asks what is wrong with the soft one.
+  The fade now reaches nothing at **every** trim edge — zero inset at the fold,
+  which is already a trim edge, and the bleed on the other three — and it costs
+  nothing at the cut while gaining something, since a tint already at nothing
+  by the trim line cannot show a trim that wandered.
+
+  Measuring it took three goes and each failure is a shape worth knowing. A
+  **percentile spread** per band measures the picture, not the fade: the
+  arcade's own content varies eightfold between a column of piers and an open
+  doorway, which is far more than the thing being looked for. Dividing by an
+  identical render with `FIGURE_FADE_IN` at zero removes that — but **mean
+  luminance above the ground is linear in the tint where a median deviation is
+  not**, and the first ratio, built on the deviation, had the ramp saturating a
+  third of an inch in, which is not what a smoothstep over three quarters does.
+  And the ground has to be the look's own colour rather than a corner of the
+  sheet: sampled, the corner is bare in the faded render and carries the figure
+  at full strength in the reference, so the two subtractions used different
+  zeros and the ratios came back above one and below zero. With all three
+  fixed, and the tint raised to the ceiling so the signal clears the metric's
+  noise, the four edges agree within 0.05 at every distance and the ramp
+  matches the smoothstep — 0.80 against 0.78 at half an inch, 0.97 against 0.95
+  at two thirds, 1.00 by three quarters. The one band that disagrees is 0.35in,
+  which reads near 1.00 on all four edges because the frame rule is struck at
+  0.375in and sits inside it.
+
+  **A subtitle can be the volume's name** (`CoverLook.subtitleRatio`). The
+  subtitle set at 0.42 of the title, which is right for an explanatory phrase
+  and wrong for a reprinted multi-volume work: _Isis Unveiled_ is "Science" and
+  "Theology", _The Secret Doctrine_ "Cosmogenesis" and "Anthropogenesis", and a
+  reader looking along a shelf for the second volume is looking for that word.
+  A **share** rather than a size in points, because the title's own size is
+  usually fitted — bank a look, give volume two a longer title, and a subtitle
+  pinned in points would stay put while the title shrank past it.
+
   **A picture with no overflow cannot be positioned** (`FIGURE_ZOOM`,
   `coverScale`). Covering is the _minimum_ scale that fills the box, so a
   figure whose proportions are the panel's is drawn at very nearly its own size

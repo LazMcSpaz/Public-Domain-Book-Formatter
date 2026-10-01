@@ -28,7 +28,7 @@ import {
   FIGURE_ANCHOR_X,
   FIGURE_SRC,
   FIGURE_ZOOM,
-  FIGURE_FADE_IN,
+  figureFade,
   FRONT_MARK_ID,
   frontIconPlan,
   GROUND_FIGURE_BACK_ID,
@@ -164,10 +164,8 @@ async function buildCover(
       color: doc.look.palette.figure,
       anchorX: FIGURE_ANCHOR_X[doc.look.groundFigure],
       zoom: FIGURE_ZOOM[doc.look.groundFigure],
-      // Only where there is a companion to meet: on its own a figure's edge at
-      // the fold is the boundary of a figured board against a plain one, which
-      // is a decision. Between two fades it would be the one hard join left.
-      fadeLeftIn: doc.look.groundFigureBack ? FIGURE_FADE_IN : 0
+      // Every edge, not only the fold: see `figureFade`.
+      fade: figureFade(composed.geometry, 'left')
     })
     images.set(GROUND_FIGURE_ID, figure.bytes)
     figureItem.srcWidth = figure.widthPx
@@ -189,7 +187,7 @@ async function buildCover(
       targetX: backAnchorTarget(geometry),
       zoom: FIGURE_ZOOM[doc.look.groundFigure],
       mirrorX: true,
-      fadeRightIn: FIGURE_FADE_IN
+      fade: figureFade(geometry, 'right')
     })
     images.set(GROUND_FIGURE_BACK_ID, back.bytes)
     backItem.srcWidth = back.widthPx
