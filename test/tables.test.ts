@@ -431,3 +431,43 @@ describe('correcting a table at the proof step', () => {
     expect(fixed.blocks[0]!.cells).toBeUndefined()
   })
 })
+
+/**
+ * Manuscript 43's temperaments: a letter, a label, a word, a dash and a
+ * sentence. Every column wider than a fifth of the measure was clipped to a
+ * fifth, so "The Motive" broke over two lines while the sentence beside it,
+ * which had to wrap anyway, kept the room it could have given.
+ */
+describe('a short label in a table with a long sentence beside it', () => {
+  it('is set whole while the sentence wraps', () => {
+    const book = run(
+      doc([
+        tableBlock([
+          [
+            'a.',
+            'The Motive Force',
+            'temperament',
+            '-',
+            'Physical strength predominating over every other power of the body and the mind.'
+          ],
+          ['b.', 'The Vital', '"', '-', 'Courage and ambition predominating.']
+        ])
+      ])
+    )
+    const lines = book.pages
+      .flatMap((p) => p.items)
+      .filter((i): i is PositionedLine => i.kind === 'line')
+    const the = lines.find((l) =>
+      l.runs.some((r) => r.text === 'The' || r.text.startsWith('The '))
+    )!
+    const motive = lines.find((l) =>
+      l.runs.some((r) => r.text === 'Force' || r.text.endsWith(' Force'))
+    )!
+    expect(motive.baselinePt).toBeCloseTo(the.baselinePt, 3)
+    // and the sentence did have to wrap, or this tests nothing
+    const sentenceLines = lines.filter((l) =>
+      l.runs.some((r) => /predominating|body|mind\./.test(r.text))
+    )
+    expect(new Set(sentenceLines.map((l) => Math.round(l.baselinePt))).size).toBeGreaterThan(1)
+  })
+})

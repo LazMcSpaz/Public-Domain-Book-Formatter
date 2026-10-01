@@ -87,13 +87,23 @@ export function typographicQuotes(text: string): string {
   return out
 }
 
+/**
+ * A cell holding nothing but a double quote is a ditto mark, not a quotation:
+ * a typescript repeats the word above it that way down a column. Turned by the
+ * rule above it opens, since nothing precedes it, and a column of “ under a
+ * word reads as three quotations nobody closes. Printers set a ditto as a
+ * closing mark.
+ */
+const overCell = (cell: string): string =>
+  cell.trim() === '"' ? cell.replace('"', '”') : typographicQuotes(cell)
+
 const overBlock = (b: BookBlock): BookBlock => {
   const text = typographicQuotes(b.text)
   if (text === b.text && !b.cells) return b
   return {
     ...b,
     text,
-    ...(b.cells ? { cells: b.cells.map((row) => row.map(typographicQuotes)) } : {})
+    ...(b.cells ? { cells: b.cells.map((row) => row.map(overCell)) } : {})
   }
 }
 

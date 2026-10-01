@@ -66,3 +66,28 @@ describe('a numbered list item', () => {
     expect(runs(book).filter((r) => r.text === '1.')).toHaveLength(1)
   })
 })
+
+/**
+ * Manuscript 43's lettered list opens under a heading, and the rule that sets
+ * a paragraph flush after a heading took the first item's *hang* away with
+ * its indent: "a." stood in line with the text of b. to i.
+ */
+describe('a list opening under a heading', () => {
+  it('hangs its first marker as far out as the rest', () => {
+    const head: BookBlock = {
+      id: 'p0b0',
+      kind: 'heading',
+      level: 2,
+      text: 'The Parts',
+      sourcePages: [0]
+    }
+    const book = run([
+      head,
+      item('p0b1', 'Atman the spirit.', { marker: 'a.' }),
+      item('p0b2', 'Buddhi the soul.', { marker: 'b.' })
+    ])
+    const a = runs(book).find((r) => r.text === 'a.')!
+    const b = runs(book).find((r) => r.text === 'b.')!
+    expect(a.xPt).toBeCloseTo(b.xPt, 3)
+  })
+})

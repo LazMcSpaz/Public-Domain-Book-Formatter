@@ -87,3 +87,39 @@ describe('the whole document', () => {
     expect(out.chapters[0]!.synopsis).toBe('The man who has much to say about “horse sense.”')
   })
 })
+
+/**
+ * Manuscript 43 sets its temperaments down a column with `"` under
+ * "temperament" twice — a typist's ditto. Turned as a quotation it opened, and
+ * the column printed two quotations nobody closed.
+ */
+describe('a ditto mark in a table', () => {
+  it('is set as a closing mark, while a quotation in a cell still opens', async () => {
+    const { withTypographicQuotes } = await import('@core/layout')
+    const table = {
+      id: 'p0b0',
+      kind: 'table' as const,
+      text: '',
+      sourcePages: [0],
+      cells: [
+        ['a.', 'The Motive', 'temperament'],
+        ['b.', 'The Vital', '"'],
+        ['c.', '"called"', ' " ']
+      ]
+    }
+    const doc = {
+      blocks: [table],
+      footnotes: [],
+      chapters: [],
+      asides: [],
+      illustrations: [],
+      sections: [],
+      skipped: [],
+      synopsesUnmatched: []
+    }
+    const cells = withTypographicQuotes(doc).blocks[0]!.cells!
+    expect(cells[1]![2]).toBe('”')
+    expect(cells[2]![2]).toBe(' ” ')
+    expect(cells[2]![1]).toBe('“called”')
+  })
+})

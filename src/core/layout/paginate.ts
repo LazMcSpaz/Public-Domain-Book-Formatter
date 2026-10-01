@@ -1079,7 +1079,11 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
   const indentLeft = style.indentLeftEms * sizePt
   const indentRight = style.indentRightEms * sizePt
   const measure = Math.max(1, ctx.measureWidth - indentLeft - indentRight)
-  const firstIndent = opts.suppressFirstIndent ? 0 : style.firstLineIndentEms * sizePt
+  // Suppressing the first indent takes away a paragraph's *indent*, never a
+  // list item's *hang*: a list opening under a heading set its first marker
+  // flush with the text and every later one hanging out of it.
+  const naturalIndent = style.firstLineIndentEms * sizePt
+  const firstIndent = opts.suppressFirstIndent && naturalIndent > 0 ? 0 : naturalIndent
   /**
    * A negative first-line indent is a *hanging* indent: line one starts to the
    * left of the block and every line after it is inset. The breaker is told
@@ -1642,8 +1646,21 @@ function fitColumns(natural: readonly number[], available: number, minWidth: num
   if (total <= available) return [...natural]
 
   const fair = available / natural.length
-  const widths = natural.map((n) => Math.max(minWidth, Math.min(n, fair)))
-  const wanting = natural.map((n, i) => ({ n, i })).filter(({ n }) => n > fair)
+  // A column is set whole if it fits once every narrower column has been set
+  // whole — what a fair share alone missed: in a row of `a.`, `-`, a label, a
+  // word and a sentence, the two scraps leave room for the label, and clipping
+  // it to a fifth of the measure broke "The Motive" over two lines beside a
+  // sentence that could have wrapped instead. A table with no such column is
+  // set exactly as before.
+  const whole = new Set<number>()
+  let left = available
+  for (const { n, i } of natural.map((n, i) => ({ n, i })).sort((a, b) => a.n - b.n)) {
+    if (n > left / (natural.length - whole.size)) break
+    whole.add(i)
+    left -= n
+  }
+  const widths = natural.map((n, i) => (whole.has(i) ? n : Math.max(minWidth, Math.min(n, fair))))
+  const wanting = natural.map((n, i) => ({ n, i })).filter(({ n, i }) => !whole.has(i) && n > fair)
   const surplus = available - widths.reduce((a, b) => a + b, 0)
   if (surplus > 0 && wanting.length > 0) {
     const asked = wanting.reduce((a, { n }) => a + n, 0)
