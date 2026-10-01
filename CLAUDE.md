@@ -1114,6 +1114,10 @@ node scripts/drive.mjs damage        # marks the printing trade does not set:
                                      #   split words, stray points, stray
                                      #   apostrophes. Free, no pixels needed.
                                      #   `--check` exits non-zero: a gate
+node scripts/drive.mjs annotate p284b12 --after "Triangle." note.txt --id ed-columns
+                                     #   a footnote of the editor's own, hung after a
+                                     #   phrase the block prints once; `annotate drop
+                                     #   <id>` takes it out
 node scripts/drive.mjs runs          # readings held here; `runs drop <n>` removes one
 node scripts/drive.mjs cachestat recount <scan.pdf>   # a recon record's true length, off the file
 node scripts/drive.mjs reconimport <books/<dir>/recon.json.gz>   # a reading the

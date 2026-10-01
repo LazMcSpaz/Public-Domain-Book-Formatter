@@ -5718,6 +5718,107 @@ async function serve() {
       )
     },
 
+    /**
+     * A footnote the *editor* wrote, hung after a phrase in a block.
+     *
+     * The `note` edit has existed since the proof step was built, and only the
+     * galley and the notes gate could make one, so a session that settled how a
+     * passage should be set and owed the reader a sentence saying so had to
+     * hand the sentence to the editor to type. This is that sentence's door.
+     *
+     *   node scripts/drive.mjs annotate p289b7 --after "Triangle." note.txt
+     *   node scripts/drive.mjs annotate drop ed-columns
+     *
+     * Located by the words, as everything here is: `--after` names the phrase
+     * the mark follows, and a phrase the block does not print exactly once is
+     * refused rather than guessed. The text may carry `<i>`. `--id` names the
+     * note, so running it again replaces rather than adding a second mark;
+     * `drop` takes one out.
+     */
+    annotate: async (argv) => {
+      const flag = (name) => {
+        const i = argv.indexOf(`--${name}`)
+        return i === -1 ? null : argv[i + 1]
+      }
+      const positional = argv.filter(
+        (a, i) => !a.startsWith('--') && !argv[i - 1]?.startsWith('--')
+      )
+      const dropping = positional[0] === 'drop'
+      const blockId = dropping ? null : positional[0]
+      const from = dropping ? null : positional[1]
+      const after = flag('after')
+      const noteId = dropping ? positional[1] : (flag('id') ?? `ed-${Date.now().toString(36)}`)
+      if (dropping ? !noteId : !blockId || !from || after === null) {
+        throw new Error(
+          'annotate <blockId> --after "<phrase>" <file> [--id <noteId>] | annotate drop <noteId>'
+        )
+      }
+      let text = null
+      if (from) {
+        const { readFile } = await import('node:fs/promises')
+        text = (await readFile(resolve(REPO, from), 'utf8')).trim()
+        if (!text) throw new Error(`${from} is empty. A note with no words is not a note.`)
+      }
+
+      return page.evaluate(
+        async ([repo, blockId, after, noteId, text, dropping]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+          const prior = run.edits ?? []
+
+          let edits
+          let at = null
+          if (dropping) {
+            edits = prior.filter((e) => !(e.kind === 'note' && e.noteId === noteId))
+            if (edits.length === prior.length) {
+              throw new Error(`No note \`${noteId}\` of the editor's in this book.`)
+            }
+          } else {
+            // Against the book as it stands, edits included, because `at` is
+            // an offset into the block's *current* text.
+            const doc = editsMod.applyEdits(assemble.assembleBook(run.transcriptions), prior)
+            const block = doc.blocks.find((b) => b.id === blockId)
+            if (!block) throw new Error(`No block \`${blockId}\` in this book.`)
+            const parts = block.text.split(after)
+            if (parts.length !== 2) {
+              throw new Error(
+                `\`${after}\` appears ${parts.length - 1} time(s) in block ${blockId}, ` +
+                  'not once. Name a phrase the block prints exactly once.'
+              )
+            }
+            at = parts[0].length + after.length
+            edits = [
+              ...prior.filter((e) => !(e.kind === 'note' && e.noteId === noteId)),
+              { kind: 'note', noteId, blockId, at, text }
+            ]
+          }
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            edits
+          })
+          const stored = await runStore.saveRun(next)
+          return {
+            noteId,
+            blockId,
+            at,
+            dropped: dropping,
+            stored: stored === true,
+            edits: edits.length,
+            next: '`save` writes it to the book file; nothing has left this device yet.'
+          }
+        },
+        [REPO, blockId, after, noteId, text, dropping]
+      )
+    },
+
     correct: async (argv) => {
       const flag = (name) => {
         const i = argv.indexOf(`--${name}`)
