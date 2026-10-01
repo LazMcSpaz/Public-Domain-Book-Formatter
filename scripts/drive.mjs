@@ -2907,14 +2907,27 @@ async function serve() {
         [REPO, title]
       )
       if (check) {
-        if (built.total > 0)
+        // `greek` is a reading list and never a gate: measured on the shelf it
+        // names a handful of real garblings among a book's rare names and
+        // Greek-born English, and a gate that fails on `Fylfot` gets switched
+        // off. It is reported here so it is not forgotten.
+        const greek = built.by.greek ?? 0
+        const faults = built.total - greek
+        if (faults > 0)
           throw new Error(
-            `${built.total} conversion faults still in the book: ` +
+            `${faults} conversion faults still in the book: ` +
               Object.entries(built.by)
+                .filter(([k]) => k !== 'greek')
                 .map(([k, n]) => `${n} ${k}`)
-                .join(', ')
+                .join(', ') +
+              (greek > 0 ? ` (and ${greek} possible Greek garblings to read, not counted)` : '')
           )
-        return { clean: true }
+        return greek > 0
+          ? {
+              clean: true,
+              toRead: `${greek} possible Greek garblings: run without --check for the sheet`
+            }
+          : { clean: true }
       }
       await writeFile(resolve(out), built.text)
       return { wrote: out, ...built }

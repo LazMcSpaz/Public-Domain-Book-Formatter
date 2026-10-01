@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { checkDamage, damageSheet, honourRulings, type DamageFinding } from '@core/coherence'
 import type { BookBlock, BookDocument } from '@core/assemble'
+import ENGLISH from './fixtures/english-words.json'
 
 let nextId = 0
 function block(text: string, kind: BookBlock['kind'] = 'paragraph', pages = [0]): BookBlock {
@@ -626,5 +627,77 @@ describe('characters no compositor set', () => {
       ]
     })
     expect(of(d, 'garbled').map((f) => [f.blockId, f.found])).toEqual([['fn9', 'C<esarea.']])
+  })
+})
+
+describe('punctuation set inside a word', () => {
+  const found = (t: string) => of(build([t]), 'garbled').map((f) => f.found)
+
+  it('reports a bang, a semicolon or a colon between letters', () => {
+    expect(found('respectively called AOT, AOAI, om, OT!JAB, “the fifth')).toEqual(['OT!JAB,'])
+    expect(found('the demi-hero 1-‘Li;apxa:yhas. (See Plutarch')).toEqual(['1-‘Li;apxa:yhas.'])
+  })
+
+  it('leaves a formula alone, where the bracket is the notation', () => {
+    expect(found('the general term [(k + 1)/k]ᵏ, and [a² + b² + ab]h/3, respectively')).toEqual([])
+  })
+})
+
+/**
+ * Greek read as Latin letters alone. The check learns English from the book,
+ * so the fixture has to be a book's English: every lower-case word of _The
+ * Key to Theosophy_, set as often as that book sets it up to six times. The
+ * rare words matter as much as the common ones, because a word set once is
+ * judged against the trigrams the rest of the book shares with it. The words
+ * under test were taken out of it, or they would be scored as the book's own.
+ */
+describe('Greek the conversion read as Latin letters', () => {
+  const filler = (): string[] => {
+    const words = (ENGLISH as [string, number][]).flatMap(([w, n]) => Array<string>(n).fill(w))
+    const out: string[] = []
+    for (let i = 0; i < words.length; i += 12) out.push(words.slice(i, i + 12).join(' ') + '.')
+    return out
+  }
+  const greek = (...texts: string[]) =>
+    of(build([...filler(), ...texts]), 'greek').map((f) => [f.found, f.expected ?? null])
+
+  it('reports a Greek word read as Latin letters', () => {
+    expect(greek('Saturn is not only Xpbvos, time, but also the father.')).toEqual([
+      ['Xpbvos', null]
+    ])
+  })
+
+  it('names the Greek word a garbling matches, through a reading no transliterator writes', () => {
+    // `ρ` read as `p`: the one tell in `Moipa`.
+    expect(greek('The Greeks called her Moipa, the allotted portion.')).toEqual([
+      ['Moipa', 'Μοῖρα']
+    ])
+  })
+
+  it('leaves a transliteration alone, which romanises the word on purpose', () => {
+    expect(
+      greek(
+        'Socrates had a daimonion, and the powers were called Dunameis.',
+        // `Δήλιος` reaches it, through five readings no transliterator writes.
+        'Hazy as the rambling imagination of a pulpit orator.'
+      )
+    ).toEqual([])
+  })
+
+  it('leaves an English word the book sets once alone', () => {
+    expect(
+      greek('In the spring the odor was faint, the data were few and the count was zero.')
+    ).toEqual([])
+  })
+
+  it('reports a whole run once its worst word is Greek-shaped', () => {
+    expect(
+      greek('the Keys of the Empire of the Dead, TOU Oavrirov apx-,J, to that day').map((r) => r[0])
+    ).toEqual(['TOU', 'Oavrirov', 'apx-,J'])
+  })
+
+  it('is listed for reading and counted apart from the conversion damage', () => {
+    const findings = of(build([...filler(), 'Saturn is not only Xpbvos, time.']), 'greek')
+    expect(findings.every((f) => f.confidence === 'shape')).toBe(true)
   })
 })
