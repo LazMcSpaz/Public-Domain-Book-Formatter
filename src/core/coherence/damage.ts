@@ -741,10 +741,11 @@ const GARBLE: readonly { pattern: RegExp; why: string }[] = [
 
 /**
  * Digits with letters that are ordinary print: ordinals in English and French
- * (`3me`), book formats, and chemical formulas with or without a coefficient.
+ * (`3me`), book formats, a nineteenth-century `13deg.` or `20min.` (the paper
+ * prints them so), and chemical formulas with or without a coefficient.
  */
 const DIGITS_ALLOWED =
-  /^(?:\d+(?:st|nd|rd|th|d|s|vo|mo|to|fo|me|e|er|re)|\d+[a-z]{1,2}|\d+\p{Lm}+|[A-Z]?\d+|\d*(?:[A-Z][a-z]?\d*)+|[ivxlc]+\d+|\d+[A-Z])$/u
+  /^(?:\d+(?:st|nd|rd|th|d|s|vo|mo|to|fo|me|e|er|re|deg|min|sec)|\d+[a-z]{1,2}|\d+\p{Lm}+|[A-Z]?\d+|\d*(?:[A-Z][a-z]?\d*)+|[ivxlc]+\d+|\d+[A-Z])$/u
 
 /** A capital after a lower-case letter that is a name, not a fault. */
 const CASE_ALLOWED = /^(?:Mc|Mac|Fitz|De|Di|Da|Du|La|Le|Van|Von)\p{Lu}|^[ei]\p{Lu}\p{Ll}+s?$/u
