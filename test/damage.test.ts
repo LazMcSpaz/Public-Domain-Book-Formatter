@@ -513,3 +513,117 @@ describe('a finding under an as-printed ruling', () => {
     expect(sheet).toContain('`Egg’ or` — p0b0, leaf 377')
   })
 })
+
+describe('a note that prints its own mark', () => {
+  const note = (text: string, marker = '*') => ({
+    id: 'fn7',
+    originalMarker: marker,
+    text,
+    pageIndex: 330,
+    orphaned: false
+  })
+
+  it('reports a mark the scan ran into the first word', () => {
+    const d = doc([], { footnotes: [note('*Eve is the trinity of nature.')] })
+    const found = of(d, 'marked-note')
+    expect(found).toHaveLength(1)
+    expect(found[0]).toMatchObject({ blockId: 'fn7', found: '*', pages: [330] })
+  })
+
+  it('leaves a note whose text starts with its words alone', () => {
+    const d = doc([], { footnotes: [note('Eve is the trinity of nature.')] })
+    expect(of(d, 'marked-note')).toHaveLength(0)
+  })
+
+  it('leaves the editor’s own note alone, which has no printed mark', () => {
+    const d = doc([], { footnotes: [note('* is how the original marks it.', '')] })
+    expect(of(d, 'marked-note')).toHaveLength(0)
+  })
+})
+
+describe('a paragraph a page break split where the seam rule cannot see', () => {
+  const pair = (end: string, opens: string, pages: [number, number] = [120, 121]) => {
+    nextId = 0
+    return doc([block(end, 'paragraph', [pages[0]]), block(opens, 'paragraph', [pages[1]])])
+  }
+
+  it('reports a next leaf that opens on a quotation mark and a lower-case word', () => {
+    const d = pair(
+      '“It was enough,” exclaims the professor,',
+      '“to make David Hume turn in his grave.'
+    )
+    const found = of(d, 'seam-split')
+    expect(found).toHaveLength(1)
+    expect(found[0]).toMatchObject({ blockId: 'p0b0', pages: [120, 121] })
+  })
+
+  it('reports a next leaf that opens on an ellipsis', () => {
+    const d = pair(
+      'impressions of all our actions ;',
+      '. . . it may be, too, that there are tests.'
+    )
+    expect(of(d, 'seam-split')).toHaveLength(1)
+  })
+
+  it('leaves a quotation that opens a new sentence alone', () => {
+    const d = pair('He was content with that.', '“to be or not to be” was all he said.')
+    expect(of(d, 'seam-split')).toHaveLength(0)
+  })
+
+  it('leaves two paragraphs on one leaf alone', () => {
+    const d = pair('he adds,', '“much more deserving of the term.', [121, 121])
+    expect(of(d, 'seam-split')).toHaveLength(0)
+  })
+
+  it('leaves a capitalised quotation alone, which the seam rule is right not to join', () => {
+    const d = pair('he said,', '“Many are called.')
+    expect(of(d, 'seam-split')).toHaveLength(0)
+  })
+})
+
+describe('characters no compositor set', () => {
+  const found = (text: string) => of(build([text]), 'garbled').map((f) => f.found)
+
+  it('reports a replacement character', () => {
+    expect(found('the cycle of Men Exist ago� Spontaneous')).toEqual(['ago�'])
+  })
+
+  it('reports a letter fused with a symbol no word carries', () => {
+    expect(found('the Bishop of C<esarea—that self-constituted')).toEqual(['C<esarea—that'])
+    expect(found('\\Vhat is the meaning')).toEqual(['\\Vhat'])
+  })
+
+  it('reports letters and digits interleaved, as a date read as letters is', () => {
+    expect(found('London, October, r8S8.')).toEqual(['r8S8'])
+    expect(found('the Greek Av8pw11 or man')).toEqual(['Av8pw11'])
+  })
+
+  it('reports small capitals read as two cases, and a capital I for an l', () => {
+    expect(found('STANZA V.—THE EvoLUTION OF THE SECOND RACE')).toEqual(['EvoLUTION'])
+    expect(found('the pIan of the work')).toEqual(['pIan'])
+  })
+
+  it('leaves ordinals, formats, formulas and names alone', () => {
+    expect(
+      found(
+        'the 3rd and 21st, a 3me partie, an 8vo of 1877, NA2CO3 and 2HKC4H4O6, ' +
+          'McDONALD, FitzEdward Hall, an eBay listing, 2π and 2α, 10ⁿ, 2bc'
+      )
+    ).toEqual([])
+  })
+
+  it('reports in the book’s own footnotes, keyed by the note', () => {
+    const d = doc([], {
+      footnotes: [
+        {
+          id: 'fn9',
+          originalMarker: '*',
+          text: 'Max Mi.iller, in C<esarea.',
+          pageIndex: 4,
+          orphaned: false
+        }
+      ]
+    })
+    expect(of(d, 'garbled').map((f) => [f.blockId, f.found])).toEqual([['fn9', 'C<esarea.']])
+  })
+})

@@ -55,7 +55,7 @@
  *
  * Pure: no DOM, no I/O, no network.
  */
-import type { BookBlock, BookDocument } from '@core/assemble'
+import type { BookBlock, BookDocument, Footnote } from '@core/assemble'
 
 /** What kind of damage was found. A closed list, and short on purpose. */
 export type DamageKind =
@@ -65,6 +65,12 @@ export type DamageKind =
   | 'stray-point'
   /** An apostrophe standing where a comma belongs: `examination' I tell`. */
   | 'stray-apostrophe'
+  /** A footnote that prints its own reference mark at its head: `*Eve is…`. */
+  | 'marked-note'
+  /** A paragraph a page break cut in two where the seam rule could not see it. */
+  | 'seam-split'
+  /** Characters no compositor set: `rSSS`, `C<esarea`, `Av8pw11`, `�`. */
+  | 'garbled'
 
 /**
  * How much authority the finding carries.
@@ -613,9 +619,167 @@ function strayApostrophes(blocks: readonly BookBlock[]): DamageFinding[] {
 export function checkDamage(doc: BookDocument): DamageFinding[] {
   const blocks = [...doc.blocks, ...doc.sections.flatMap((s) => s.blocks)]
   const order = new Map(blocks.map((b, i) => [b.id, i]))
-  return [...splitWords(blocks), ...strayPoints(blocks), ...strayApostrophes(blocks)].sort(
-    (a, b) => (order.get(a.blockId) ?? 0) - (order.get(b.blockId) ?? 0)
+  const inBody = [
+    ...splitWords(blocks),
+    ...strayPoints(blocks),
+    ...strayApostrophes(blocks),
+    ...seamSplits(doc.blocks),
+    ...garbled(blocks)
+  ].sort((a, b) => (order.get(a.blockId) ?? 0) - (order.get(b.blockId) ?? 0))
+  // Notes after the body, in their own reading order: they are keyed by `fnN`,
+  // which no block order knows.
+  return [...inBody, ...markedNotes(doc.footnotes), ...garbledNotes(doc.footnotes)]
+}
+
+/** A reference mark, as `prepareFootnotes` knows them. */
+const MARK = /^[*†‡§‖¶⁂]+/u
+
+/**
+ * A footnote whose text opens with its own mark.
+ *
+ * The mark is set in the body and the note is printed under the rule with the
+ * engine's number at its head, so a mark left at the start of the text prints
+ * twice: `¹ *Eve is the trinity…`. The reading strips a mark followed by a
+ * space; one the scan ran into the first word (`*Eve`) survives, and nothing
+ * reported the three on the two *Isis* volumes until a reader saw one.
+ */
+function markedNotes(notes: readonly Footnote[]): DamageFinding[] {
+  return notes
+    .filter((n) => n.originalMarker !== '' && MARK.test(n.text.trimStart()))
+    .map((n) => {
+      const text = n.text.replace(/<[^>]*>/gu, '').trimStart()
+      return {
+        kind: 'marked-note' as const,
+        blockId: n.id,
+        pages: [n.pageIndex],
+        found: text.match(MARK)![0],
+        against: 'a note prints its mark from the body, never at its own head',
+        context: around(text, 0, 1),
+        confidence: 'shape' as const
+      }
+    })
+}
+
+/** Closing punctuation a paragraph may end on. */
+const CLOSED = /[.!?:;—–]["”’)\]]*\s*[*†‡§‖¶⁂\d\s]*$|[.!?]["”’]?\s*$/u
+
+/**
+ * A paragraph a page break cut in two, of the shapes the seam rule misses.
+ *
+ * Assembly joins a paragraph across a leaf when the next leaf opens lower
+ * case. A quotation mark before the lower-case word hides it — `in the eyes of
+ * the educated | “heathen” the spiritual…` — and so does a run-on line that
+ * opens on an ellipsis. Twenty-two such splits were in the two *Isis* volumes
+ * after the seam pass, every one a paragraph printed as two.
+ *
+ * `shape`, because the leaf decides: a line on the paper that is indented
+ * really is a new paragraph (two of the eighteen ellipsis-and-quote openings
+ * measured on *Isis* Vol. I were). Only a paragraph ending open is a
+ * candidate, and only one whose successor begins on a *later* leaf.
+ */
+function seamSplits(blocks: readonly BookBlock[]): DamageFinding[] {
+  const findings: DamageFinding[] = []
+  for (let i = 0; i + 1 < blocks.length; i++) {
+    const block = blocks[i]!
+    const next = blocks[i + 1]!
+    if (block.kind !== 'paragraph' || next.kind !== 'paragraph') continue
+    const last = Math.max(...block.sourcePages)
+    if (!(next.sourcePages[0]! > last)) continue
+    const text = plain(block).trimEnd()
+    const opens = plain(next).trimStart()
+    const quoted = /^["“‘'(]\s*\p{Ll}/u.test(opens)
+    const ellipsis = /^(?:\. ){2,}|^\.\.\.|^…/u.test(opens)
+    if (!quoted && !ellipsis) continue
+    if (CLOSED.test(text) && !ellipsis) continue
+    findings.push({
+      kind: 'seam-split',
+      blockId: block.id,
+      pages: [last, next.sourcePages[0]!],
+      found: `${text.slice(-30)} | ${opens.slice(0, 30)}`,
+      against: quoted
+        ? 'the next leaf opens on a quotation mark and a lower-case word'
+        : 'the next leaf opens on an ellipsis',
+      context: around(text, text.length, 0),
+      confidence: 'shape'
+    })
+  }
+  return findings
+}
+
+/**
+ * Tokens no compositor set, in four shapes.
+ *
+ * A text layer is made of words shaped like right ones, which is why no
+ * measure of word shapes can say a layer is sound. What it *can* say is that
+ * some tokens are not words of any language the book prints: a replacement
+ * character where the OCR gave up; a letter fused with a symbol no word
+ * carries (`C<esarea`, `\Vhat`); letters and digits interleaved where neither
+ * a formula nor an ordinal is (`rSSS` beside `1888`, `Av8pw11` for Greek the
+ * OCR read as Latin); and capitals after a lower-case letter inside a word
+ * (`EvoLUTION`, small capitals read as two cases). Measured on the shelf before
+ * it was added: six hits over the two *Isis* volumes, which a reader proofed,
+ * and some two hundred passages over the two TUP-converted *Secret Doctrine*
+ * volumes, which no one had.
+ */
+const GARBLE: readonly { pattern: RegExp; why: string }[] = [
+  { pattern: /\S*�\S*/gu, why: 'the conversion gave up on a character here' },
+  {
+    pattern: /\S*\p{L}[<>\\#$%¢¤¦]\S*|\S*[<>\\#$%¢¤¦]\p{L}\S*/gu,
+    why: 'a letter fused with a symbol no word carries'
+  },
+  {
+    pattern:
+      /(?<![\p{L}\d])(?=[\p{L}\d]*\p{Script=Latin})(?=[\p{L}\d]*\d)[\p{Script=Latin}\d]{2,}(?![\p{L}\d])/gu,
+    why: 'letters and digits interleaved'
+  },
+  {
+    pattern:
+      /(?<!\p{L})\p{Script=Latin}*(?:(?=\p{Script=Latin})\p{Ll})\p{Lu}{2,}\p{Script=Latin}*(?!\p{L})|(?<!\p{L})(?:(?=\p{Script=Latin})\p{Ll})+\p{Lu}\p{Script=Latin}+(?!\p{L})/gu,
+    why: 'capitals after a lower-case letter inside a word'
+  }
+]
+
+/**
+ * Digits with letters that are ordinary print: ordinals in English and French
+ * (`3me`), book formats, and chemical formulas with or without a coefficient.
+ */
+const DIGITS_ALLOWED =
+  /^(?:\d+(?:st|nd|rd|th|d|s|vo|mo|to|fo|me|e|er|re)|\d+[a-z]{1,2}|\d+\p{Lm}+|[A-Z]?\d+|\d*(?:[A-Z][a-z]?\d*)+|[ivxlc]+\d+|\d+[A-Z])$/u
+
+/** A capital after a lower-case letter that is a name, not a fault. */
+const CASE_ALLOWED = /^(?:Mc|Mac|Fitz|De|Di|Da|Du|La|Le|Van|Von)\p{Lu}|^[ei]\p{Lu}\p{Ll}+s?$/u
+
+function garbledIn(id: string, pages: number[], raw: string): DamageFinding[] {
+  const text = raw.replace(/<[^>]*>/gu, '')
+  const found = new Map<number, DamageFinding>()
+  for (const { pattern, why } of GARBLE) {
+    for (const match of text.matchAll(pattern)) {
+      const token = match[0]
+      if (why.startsWith('letters and digits') && DIGITS_ALLOWED.test(token)) continue
+      if (why.startsWith('capitals') && CASE_ALLOWED.test(token)) continue
+      if (found.has(match.index)) continue
+      found.set(match.index, {
+        kind: 'garbled',
+        blockId: id,
+        pages,
+        found: token,
+        against: why,
+        context: around(text, match.index, token.length),
+        confidence: 'shape'
+      })
+    }
+  }
+  return [...found.entries()].sort((a, b) => a[0] - b[0]).map(([, f]) => f)
+}
+
+function garbled(blocks: readonly BookBlock[]): DamageFinding[] {
+  return blocks.flatMap((b) =>
+    b.kind === 'table' ? [] : garbledIn(b.id, [...b.sourcePages], b.text)
   )
+}
+
+function garbledNotes(notes: readonly Footnote[]): DamageFinding[] {
+  return notes.flatMap((n) => garbledIn(n.id, [n.pageIndex], n.text))
 }
 
 /**

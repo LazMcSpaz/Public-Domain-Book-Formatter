@@ -1112,8 +1112,12 @@ node scripts/drive.mjs concordance f.json   # what a reader is handed instead of
                                      #   never the hypothesis
 node scripts/drive.mjs damage        # marks the printing trade does not set:
                                      #   split words, stray points, stray
-                                     #   apostrophes. Free, no pixels needed.
-                                     #   `--check` exits non-zero: a gate
+                                     #   apostrophes, a note printing its own
+                                     #   mark, a paragraph split where the next
+                                     #   leaf opens on `“` + lower case or an
+                                     #   ellipsis, and garbled tokens (`rSSS`,
+                                     #   `C<esarea`, `EvoLUTION`, `�`). Free, no
+                                     #   pixels needed. `--check` exits non-zero
 node scripts/drive.mjs annotate p284b12 --after "Triangle." note.txt --id ed-columns
                                      #   a footnote of the editor's own, hung after a
                                      #   phrase the block prints once; `annotate drop
