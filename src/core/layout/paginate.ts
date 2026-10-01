@@ -1164,6 +1164,31 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
   }
 
   const dropCap = opts.dropCap && block.kind === 'paragraph' && text.trim().length > 0
+  if (block.kind === 'verse' && text.includes('\n')) {
+    return {
+      lines: spacedForSize(
+        verseLines(text, {
+          font,
+          sizePt,
+          ctx,
+          measure,
+          indentLeft,
+          attachments,
+          spans,
+          markToNote
+        }),
+        sizePt,
+        ctx
+      ),
+      blockId: block.id,
+      spaceBefore: style.spaceBefore,
+      spaceAfter: style.spaceAfter,
+      startsChapter: false,
+      chapter: null,
+      keepWithNext: false,
+      orphanControl: false
+    }
+  }
   if (!dropCap) {
     const broken = breakParagraph(text, {
       font,
@@ -1249,6 +1274,83 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
       markToNote
     })
   )
+}
+
+/** How far a verse line typed with leading space is set in, in ems. */
+const VERSE_STEP_EMS = 1.5
+/** How far a verse line too long for the measure turns over, in ems. */
+const VERSE_TURNOVER_EMS = 1
+
+/**
+ * A verse's lines, each where the original broke it.
+ *
+ * Verse was set as an indented paragraph, so the line breaks a reading kept
+ * inside one ran together: Hall's Stanzas, the quatrains quoted in *Isis*, a
+ * copyright notice typed in three stepped lines. Each line is broken on its
+ * own here and the results stacked. A line typed with leading space is set in
+ * a step, and a line too long for the measure turns over indented, as verse
+ * does. Italics and reference marks index the whole block's words, so each
+ * line takes its own share of them, re-counted from its first word.
+ */
+function verseLines(
+  text: string,
+  o: {
+    font: FontRef
+    sizePt: number
+    ctx: BuildContext
+    measure: number
+    indentLeft: number
+    attachments: readonly Attachment[]
+    spans: readonly TextSpan[]
+    markToNote: Map<string, string>
+  }
+): FlowLine[] {
+  const out: FlowLine[] = []
+  let first = 0
+  for (const raw of text.split('\n')) {
+    const words = countWords(raw)
+    const line = raw.trim()
+    if (line.length === 0) {
+      out.push({ runs: [] })
+      continue
+    }
+    const inset = /^\s/u.test(raw) ? VERSE_STEP_EMS * o.sizePt : 0
+    const turn = VERSE_TURNOVER_EMS * o.sizePt
+    const local = (w: number): boolean => w >= first && w < first + words
+    const spans = o.spans
+      .map((s) => ({
+        font: s.font,
+        words: new Set([...s.words].filter(local).map((w) => w - first))
+      }))
+      .filter((s) => s.words.size > 0)
+    const attachments = o.attachments
+      .filter((a) => local(a.wordIndex))
+      .map((a) => ({ ...a, wordIndex: a.wordIndex - first }))
+    const width = Math.max(1, o.measure - inset)
+    const broken = breakParagraph(line, {
+      font: o.font,
+      sizePt: o.sizePt,
+      measurer: o.ctx.measurer,
+      lineWidths: [width, Math.max(1, width - turn)],
+      alignment: 'left',
+      firstLineIndentPt: 0,
+      ...(attachments.length > 0 ? { attachments } : {}),
+      ...(spans.length > 0 ? { spans } : {})
+    })
+    out.push(
+      ...toFlowLines(
+        broken,
+        o.font,
+        o.sizePt,
+        [o.indentLeft + inset, o.indentLeft + inset + turn],
+        o.markToNote,
+        undefined,
+        spans
+      )
+    )
+    first += words
+  }
+  return out
 }
 
 /** Whitespace-separated words, the breaker's own unit of indexing. */
