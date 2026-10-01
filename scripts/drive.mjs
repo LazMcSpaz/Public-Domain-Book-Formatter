@@ -4125,7 +4125,10 @@ async function serve() {
         [REPO, json]
       )
       const wrote = []
-      await writeFile(resolve(where, 'about.json'), `${JSON.stringify(built.card, null, 1)}\n`)
+      // Written exactly as the app writes it (`pushBook`: two spaces, no final
+      // newline), or every card this verb touches turns into a whole-file diff
+      // the next time a ruling from the tablet rewrites it.
+      await writeFile(resolve(where, 'about.json'), JSON.stringify(built.card, null, 2))
       wrote.push('about.json')
       if (built.sheets) {
         for (const [name, text] of [
