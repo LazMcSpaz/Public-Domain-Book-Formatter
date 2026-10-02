@@ -26,7 +26,7 @@ import { headingRunEnd } from '@core/assemble'
 import type { BookBlock, BookDocument, BookSection, Illustration } from '@core/assemble'
 import { effectiveDpi } from '@core/image'
 // The flattened view's coordinates, from the one place they are defined.
-import { cellEmphasis } from '@core/transcribe/schema'
+import { CELL_SEPARATOR, cellEmphasis } from '@core/transcribe/schema'
 import { shiftEmphasis } from '@core/transcribe/markup'
 import {
   breakParagraph,
@@ -1808,6 +1808,78 @@ function fitColumns(natural: readonly number[], available: number, minWidth: num
 }
 
 /**
+ * A table's cells with their reference marks taken out, and the references
+ * the footnote pass found in it, sorted onto the cells they fall in.
+ *
+ * `prepareFootnotes` reads a table as its flattened view, so it claims the
+ * notes a table's marks refer to and strips the marks from that view. The
+ * engine sets the *cells*, which still carried the printed marks, and no line
+ * of the table named a note: every note the table claimed was numbered and
+ * then had no page to go to. On _The Secret Doctrine_ Vol. I one table of the
+ * principles carries five marks, and from that table to the end of the volume
+ * every note printed under the reference before its own. So the cells are
+ * read back out of the prepared view, which is `tableToText` with the marks
+ * gone, and each reference is given the cell its word sits in.
+ *
+ * A prepared view that does not split back into the table's own shape is left
+ * alone: the cells are set as they were, and the notes go unreferenced as
+ * they did before, which the export reports as notes with no page.
+ */
+function tableNotes(
+  block: BookBlock,
+  prep: { text: string; references: readonly NoteReference[] } | undefined
+): {
+  cells: string[][]
+  byCell: Map<number, NoteReference[]>
+  markToNote: Map<string, string>
+} {
+  const original = (block.cells ?? []).map((row) => [...row])
+  const byCell = new Map<number, NoteReference[]>()
+  const markToNote = new Map<string, string>()
+  if (!prep || prep.references.length === 0) return { cells: original, byCell, markToNote }
+  const lines = prep.text.split('\n')
+  const cells = lines.map((line) => line.split(CELL_SEPARATOR))
+  const sameShape =
+    cells.length === original.length &&
+    cells.every((row, r) => row.length === Math.max(1, original[r]!.length))
+  if (!sameShape) return { cells: original, byCell, markToNote }
+  // Rows with no cells flatten to an empty line; give them back their shape.
+  const shaped = cells.map((row, r) => (original[r]!.length === 0 ? [] : row))
+  // The cells in the order the engine indexes them: empty rows dropped.
+  const kept = shaped.filter((row) => row.length > 0)
+  const words = (text: string): number => text.split(/\s+/u).filter(Boolean).length
+  /** Where each cell's word 0 sits in the flattened view, as `flattenCellEmphasis` counts. */
+  const starts: { at: number; length: number; afterSeparator: boolean }[] = []
+  let at = 0
+  for (const row of kept) {
+    row.forEach((text, c) => {
+      if (c > 0) at++ // the separator is a word in the flattened view
+      const length = words(text)
+      starts.push({ at, length, afterSeparator: c > 0 })
+      at += length
+    })
+  }
+  for (const ref of prep.references) {
+    // The last cell whose words begin at or before the reference's word. A
+    // mark that opens a cell counts the separator before it as its word, and
+    // so lands on that cell's first word, which is where it is printed.
+    let cell = -1
+    for (let k = 0; k < starts.length; k++) {
+      const s = starts[k]!
+      if (s.at <= ref.wordIndex || (s.afterSeparator && s.at === ref.wordIndex + 1)) cell = k
+    }
+    if (cell < 0) cell = 0
+    const start = starts[cell]!
+    const wordIndex = Math.max(0, Math.min(start.length - 1, ref.wordIndex - start.at))
+    const list = byCell.get(cell) ?? []
+    list.push({ ...ref, wordIndex })
+    byCell.set(cell, list)
+    markToNote.set(ref.mark, ref.noteId)
+  }
+  return { cells: shaped, byCell, markToNote }
+}
+
+/**
  * A table, as one flowable per row.
  *
  * A row at a time rather than a table at a time, and every row unbreakable, is
@@ -1823,8 +1895,13 @@ function fitColumns(natural: readonly number[], available: number, minWidth: num
  * heads only need repeating once the break is known, and the break depends on
  * how many rows fit. It belongs with the two-pass contents, not here.
  */
-function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
-  const rows = (block.cells ?? []).filter((row) => row.length > 0)
+function buildTableFlowables(
+  block: BookBlock,
+  ctx: BuildContext,
+  prep?: { text: string; references: readonly NoteReference[] }
+): Flowable[] {
+  const notes = tableNotes(block, prep)
+  const rows = notes.cells.filter((row) => row.length > 0)
   if (rows.length === 0) return []
 
   /**
@@ -1963,12 +2040,20 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
         const marked = hasHead && r === 0 ? [] : (perCell[cellIndex(r, c)] ?? [])
         const spans: TextSpan[] =
           marked.length > 0 ? [{ words: new Set(marked), font: { family, style: 'italic' } }] : []
+        const refs = notes.byCell.get(cellIndex(r, c)) ?? []
+        const attachments: Attachment[] = refs.map((ref) => ({
+          wordIndex: ref.wordIndex,
+          text: ref.mark,
+          sizePt: sizePt * MARK_SIZE_RATIO,
+          risePt: sizePt * MARK_RISE_RATIO
+        }))
         const broken = breakParagraph(cellAt(row, c), {
           font,
           sizePt,
           measurer: ctx.measurer,
           lineWidths: width,
           alignment: 'left',
+          ...(attachments.length > 0 ? { attachments } : {}),
           // The breaker, not only the renderer: italic advances differ from
           // roman, and a cell measured in roman then drawn partly in italic
           // wraps its column in the wrong places.
@@ -1984,7 +2069,7 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
           font,
           sizePt,
           offsets.length > 0 ? offsets : [columnX[c] ?? 0],
-          undefined,
+          refs.length > 0 ? notes.markToNote : undefined,
           undefined,
           spans.length > 0 ? spans : undefined
         )
@@ -1994,7 +2079,14 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
       const lines: FlowLine[] = Array.from({ length: height }, (_, i) => {
         const runs = perColumn.flatMap((col) => col[i]?.runs ?? [])
         const overfull = perColumn.some((col) => col[i]?.overfull === true)
-        return { runs, ...(overfull ? { overfull: true } : {}) }
+        // The notes the row's cells refer to on this line, left to right, so
+        // the page they print on reserves them as it would a paragraph's.
+        const noteIds = perColumn.flatMap((col) => col[i]?.noteIds ?? [])
+        return {
+          runs,
+          ...(overfull ? { overfull: true } : {}),
+          ...(noteIds.length > 0 ? { noteIds } : {})
+        }
       })
 
       // Head rule and foot rule, hung off the last line of the row they close.
@@ -2430,17 +2522,14 @@ export function layout(
   // Reference marks are located and renumbered before anything is broken,
   // because a mark occupies width and so is a line-breaking input.
   //
-  // A table's text is hidden from the search. Its cells are set column by
-  // column, so a mark found inside one has no word to ride on and no line to
-  // land on — and a note claimed by a block that never prints its mark would be
-  // reported as "the page was not laid out", which is a lie about a note the
-  // reader will find missing. Hidden, it stays an orphan: reported truthfully,
-  // and collected as an endnote when the structure gate asked for that.
-  const prepared = prepareFootnotes(
-    doc.blocks.map((b) => (b.kind === 'table' ? { id: b.id, text: '' } : b)),
-    doc.footnotes,
-    doc.bareMarks
-  )
+  // A table's marks are searched like any other block's. They used to be
+  // hidden, on the ground that a cell had no word for a mark to ride on, and
+  // hiding them did worse than orphan the table's notes: a note left waiting
+  // takes the next mark of its kind *anywhere* in the book. On _The Secret
+  // Doctrine_ Vol. I a table of the principles carries five marks, and from
+  // it to the end of the volume every note printed under the reference
+  // before its own. `tableNotes` gives each reference its cell now.
+  const prepared = prepareFootnotes(doc.blocks, doc.footnotes, doc.bareMarks)
 
   // A reference mark on a chapter title is part of that heading's text, and the
   // contents and the running head both take their title from `doc.chapters` —
@@ -2552,7 +2641,9 @@ export function layout(
       return
     }
     if (block.kind === 'table') {
-      flowables.push(...buildTableFlowables(block, ctx).map((f) => ({ ...f, blockId: block.id })))
+      flowables.push(
+        ...buildTableFlowables(block, ctx, prep).map((f) => ({ ...f, blockId: block.id }))
+      )
       pushIllustrationsAfter(i)
       return
     }
