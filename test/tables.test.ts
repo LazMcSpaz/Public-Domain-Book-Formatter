@@ -471,3 +471,78 @@ describe('a short label in a table with a long sentence beside it', () => {
     expect(new Set(sentenceLines.map((l) => Math.round(l.baselinePt))).size).toBeGreaterThan(1)
   })
 })
+
+/**
+ * The editor's rule: wrapping in a cell is a small thing, a table cut in two
+ * by a page break almost never acceptable. Rows were separate flowables, so a
+ * page could break between any two; a table that fits a page is now one item.
+ */
+describe('a table kept on one page', () => {
+  const rowsOf = (n: number): string[][] =>
+    Array.from({ length: n }, (_, i) => [String(1700 + i), `crop-${i}`])
+  const pagesOf = (book: LaidOutBook, n: number): Set<number> =>
+    new Set(
+      book.pages
+        .filter((p) =>
+          lines(p).some((l) =>
+            l.runs.some((r) => /^crop-\d+$/u.test(r.text) && Number(r.text.slice(5)) < n)
+          )
+        )
+        .map((p) => p.index)
+    )
+  const para = (i: number): BookBlock => ({
+    id: `p0b${i + 1}`,
+    kind: 'paragraph',
+    text: `Line ${i} of the text.`,
+    sourcePages: [0]
+  })
+
+  it('moves whole to the next page wherever the text before it ends', () => {
+    // Every number of lines before it, so some of them put it across a break.
+    for (let before = 0; before < 45; before++) {
+      const book = run(
+        doc([...Array.from({ length: before }, (_, i) => para(i)), tableBlock(rowsOf(12))])
+      )
+      expect(pagesOf(book, 12).size).toBe(1)
+    }
+  })
+
+  // Nine short words a cell wrap at the table's usual size and take two
+  // pages; a couple of points smaller they do not, and the table fits one.
+  const wordy = (rows: number): string[][] =>
+    Array.from({ length: rows }, (_, i) => {
+      const cell = `r${i} ` + Array.from({ length: 9 }, () => 'abc').join(' ')
+      return [cell, cell]
+    })
+  const sizesOf = (book: LaidOutBook): number[] => [
+    ...new Set(
+      book.pages.flatMap((p) =>
+        lines(p).flatMap((l) =>
+          l.runs.filter((r) => /^r\d+$/u.test(r.text)).map((r) => r.sizePt ?? 0)
+        )
+      )
+    )
+  ]
+  const pagesSaying = (book: LaidOutBook): number =>
+    book.pages.filter((p) => lines(p).some((l) => l.runs.some((r) => /^r\d+$/u.test(r.text))))
+      .length
+
+  it('sets a table too tall at its size smaller, to keep it on one page', () => {
+    const book = run(doc([tableBlock(wordy(20))]))
+    const body = defaultStyleProfile().bodyFontSize
+    expect(pagesSaying(book)).toBe(1)
+    const [size] = sizesOf(book)
+    expect(sizesOf(book)).toHaveLength(1)
+    expect(size!).toBeLessThan(body * 0.92)
+    expect(size!).toBeGreaterThanOrEqual(body - 4)
+  })
+
+  it('breaks a table longer than a page at every allowed size, and says so', () => {
+    const book = run(doc([tableBlock(wordy(40))]))
+    expect(pagesSaying(book)).toBeGreaterThan(1)
+    expect(book.warnings.some((w) => /longer than a page/u.test(w.text))).toBe(true)
+    for (const size of sizesOf(book)) {
+      expect(size).toBeGreaterThanOrEqual(defaultStyleProfile().bodyFontSize - 4)
+    }
+  })
+})

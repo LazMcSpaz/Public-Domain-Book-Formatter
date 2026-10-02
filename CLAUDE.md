@@ -995,6 +995,13 @@ proportions: propose from sense, accept from pixels.
   The contents printed its folio line only once the number was known, so pass
   two ran a line per entry longer, the guard caught the length change, and the
   safe fallback was pass one — which has no page numbers in it at all.
+- **A table stays on one page.** The editor's rule: a wrapped cell is a small
+  thing, a table split by a page break almost never acceptable. A table that
+  fits a page is one unbreakable item; one too tall is tried smaller, half a
+  point at a time to 4 points under the body, because a smaller size wraps
+  its cells less and so takes fewer lines (every line takes one body-leading
+  slot whatever its size). Only a table longer than a page at every allowed
+  size breaks between rows, and the export names it.
 - **A guard's fallback has to report.** That contents shipped with no numbers
   and `warnings: 0` beside it. Silence is the failure mode, not the error.
 
