@@ -1116,8 +1116,11 @@ node scripts/drive.mjs damage        # marks the printing trade does not set:
                                      #   mark, a paragraph split where the next
                                      #   leaf opens on `“` + lower case or an
                                      #   ellipsis, and garbled tokens (`rSSS`,
-                                     #   `C<esarea`, `EvoLUTION`, `�`). Free, no
-                                     #   pixels needed. `--check` exits non-zero
+                                     #   `C<esarea`, `EvoLUTION`, `OT!JAB`, `�`).
+                                     #   Also Greek read as plain Latin letters
+                                     #   (`Xpbvos`, `Moipa` → Μοῖρα), listed to
+                                     #   read and not counted. Free, no pixels
+                                     #   needed. `--check` exits non-zero
 node scripts/drive.mjs annotate p284b12 --after "Triangle." note.txt --id ed-columns
                                      #   a footnote of the editor's own, hung after a
                                      #   phrase the block prints once; `annotate drop

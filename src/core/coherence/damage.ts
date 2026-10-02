@@ -56,6 +56,7 @@
  * Pure: no DOM, no I/O, no network.
  */
 import type { BookBlock, BookDocument, Footnote } from '@core/assemble'
+import { greekModel, greekWordsIn, hasGreek } from './greek'
 
 /** What kind of damage was found. A closed list, and short on purpose. */
 export type DamageKind =
@@ -71,6 +72,8 @@ export type DamageKind =
   | 'seam-split'
   /** Characters no compositor set: `rSSS`, `C<esarea`, `Av8pw11`, `�`. */
   | 'garbled'
+  /** Greek the conversion read as Latin letters alone: `Moipa`, `Xpbvos`. */
+  | 'greek'
 
 /**
  * How much authority the finding carries.
@@ -626,9 +629,27 @@ export function checkDamage(doc: BookDocument): DamageFinding[] {
     ...seamSplits(doc.blocks),
     ...garbled(blocks)
   ].sort((a, b) => (order.get(a.blockId) ?? 0) - (order.get(b.blockId) ?? 0))
+  const units = [
+    ...blocks
+      .filter((b) => b.kind !== 'table')
+      .map((b) => ({ id: b.id, pages: [...b.sourcePages], text: b.text })),
+    ...doc.footnotes.map((n) => ({ id: n.id, pages: [n.pageIndex], text: n.text }))
+  ]
+  const greek = greekGarbles(units)
+  const greekIn = (id: string) => greek.filter((f) => f.blockId === id)
+  const withGreek = (findings: DamageFinding[], ids: readonly string[]): DamageFinding[] =>
+    ids.flatMap((id) => [...findings.filter((f) => f.blockId === id), ...greekIn(id)])
   // Notes after the body, in their own reading order: they are keyed by `fnN`,
-  // which no block order knows.
-  return [...inBody, ...markedNotes(doc.footnotes), ...garbledNotes(doc.footnotes)]
+  // which no block order knows. Greek sits with the rest of its block's damage,
+  // because a run of it is read and mended as one passage.
+  const bodyIds = [...new Set([...inBody.map((f) => f.blockId), ...greek.map((f) => f.blockId)])]
+    .filter((id) => order.has(id))
+    .sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0))
+  const noteIds = doc.footnotes.map((n) => n.id)
+  return [
+    ...withGreek(inBody, bodyIds),
+    ...withGreek([...markedNotes(doc.footnotes), ...garbledNotes(doc.footnotes)], noteIds)
+  ]
 }
 
 /** A reference mark, as `prepareFootnotes` knows them. */
@@ -724,8 +745,12 @@ function seamSplits(blocks: readonly BookBlock[]): DamageFinding[] {
 const GARBLE: readonly { pattern: RegExp; why: string }[] = [
   { pattern: /\S*�\S*/gu, why: 'the conversion gave up on a character here' },
   {
-    pattern: /\S*\p{L}[<>\\#$%¢¤¦]\S*|\S*[<>\\#$%¢¤¦]\p{L}\S*/gu,
+    pattern: /\S*\p{L}[<>\\#$%¢¤¦€£]\S*|\S*[<>\\#$%¢¤¦€£]\p{L}\S*/gu,
     why: 'a letter fused with a symbol no word carries'
+  },
+  {
+    pattern: /\S*\p{Script=Latin}[!?;:•\]]+\p{Script=Latin}\S*/gu,
+    why: 'punctuation set inside a word'
   },
   {
     pattern:
@@ -747,30 +772,39 @@ const GARBLE: readonly { pattern: RegExp; why: string }[] = [
 const DIGITS_ALLOWED =
   /^(?:\d+(?:st|nd|rd|th|d|s|vo|mo|to|fo|me|e|er|re|deg|min|sec)|\d+[a-z]{1,2}|\d+\p{Lm}+|[A-Z]?\d+|\d*(?:[A-Z][a-z]?\d*)+|[ivxlc]+\d+|\d+[A-Z])$/u
 
+/** A formula, where a bracket or a colon between letters is the notation: `ab]h/3`. */
+const FORMULA = /[/=^{}_\u00b2\u00b3\u00b9\u2070-\u209f\u1d2c-\u1d6a∑∞]/u
+
 /** A capital after a lower-case letter that is a name, not a fault. */
 const CASE_ALLOWED = /^(?:Mc|Mac|Fitz|De|Di|Da|Du|La|Le|Van|Von)\p{Lu}|^[ei]\p{Lu}\p{Ll}+s?$/u
 
-function garbledIn(id: string, pages: number[], raw: string): DamageFinding[] {
-  const text = raw.replace(/<[^>]*>/gu, '')
-  const found = new Map<number, DamageFinding>()
+/** Where `GARBLE` hits in a text with markup already out, earliest first. */
+function garbleHits(text: string): { at: number; token: string; why: string }[] {
+  const found = new Map<number, { at: number; token: string; why: string }>()
   for (const { pattern, why } of GARBLE) {
     for (const match of text.matchAll(pattern)) {
       const token = match[0]
       if (why.startsWith('letters and digits') && DIGITS_ALLOWED.test(token)) continue
       if (why.startsWith('capitals') && CASE_ALLOWED.test(token)) continue
+      if (why.startsWith('punctuation') && FORMULA.test(token)) continue
       if (found.has(match.index)) continue
-      found.set(match.index, {
-        kind: 'garbled',
-        blockId: id,
-        pages,
-        found: token,
-        against: why,
-        context: around(text, match.index, token.length),
-        confidence: 'shape'
-      })
+      found.set(match.index, { at: match.index, token, why })
     }
   }
-  return [...found.entries()].sort((a, b) => a[0] - b[0]).map(([, f]) => f)
+  return [...found.values()].sort((a, b) => a.at - b.at)
+}
+
+function garbledIn(id: string, pages: number[], raw: string): DamageFinding[] {
+  const text = raw.replace(/<[^>]*>/gu, '')
+  return garbleHits(text).map(({ at, token, why }) => ({
+    kind: 'garbled' as const,
+    blockId: id,
+    pages,
+    found: token,
+    against: why,
+    context: around(text, at, token.length),
+    confidence: 'shape' as const
+  }))
 }
 
 function garbled(blocks: readonly BookBlock[]): DamageFinding[] {
@@ -781,6 +815,130 @@ function garbled(blocks: readonly BookBlock[]): DamageFinding[] {
 
 function garbledNotes(notes: readonly Footnote[]): DamageFinding[] {
   return notes.flatMap((n) => garbledIn(n.id, [n.pageIndex], n.text))
+}
+
+/** What the Greek check reads: a block or a note, by id. */
+interface TextUnit {
+  id: string
+  pages: number[]
+  text: string
+}
+
+/** How far each way a neighbour counts as "beside" a word, in words. */
+const GREEK_REACH = 2
+/** Score above which a word is listed on its own shape alone. */
+const GREEK_ALONE = 1.5
+/** Lower score enough when the word sits beside other damage or Greek. */
+const GREEK_BESIDE = 0.3
+/**
+ * Lowest score at which a match to a known Greek word is believed, and only
+ * for five letters or more: the confusions are loose enough that `Bach`
+ * matches `βαφη`, and a short word matches something by chance.
+ */
+const GREEK_KNOWN = -0.5
+/** A word set more often than this is the book's vocabulary, not damage. */
+const GREEK_RARE = 2
+
+/** `Nov.`, `Ahr.`, `lbs.`: an abbreviation, which is rare and short by nature. */
+const ABBREVIATED = /^[“‘"'(]*\p{Lu}?\p{Ll}{1,3}\.[”’"'),;:†‡*]*$/u
+/** A Latin letter with a diacritic: Sanskrit, French, German. Greek read as Latin carries none. */
+const ACCENTED_LATIN = /[\u00c0-\u024f]/u
+/**
+ * Mathematics and initials: `x²/[n(n`, `Pr{T/N}`, `LL.B.`, `K.F.R.C.`.
+ * Pólya's formulas and a lecturer's radio stations were the whole of what
+ * this check found in two books with no Greek in them. A garbling that
+ * carries a digit is `garbled`'s already.
+ */
+const NOT_A_WORD = /[\d=^{}_/+\u00b2\u00b3\u00b9\u2070-\u209f∑∞]|^(?:\p{L}{1,2}\.)+\p{L}{0,2}\.?$/u
+const ANY_ROMAN = /^(?=[ivxlcdm]+$)m{0,3}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})$/iu
+const EDGES = /^[“”‘’"'()[\],.;:!?†‡*§]+|[“”‘’"'()[\],.;:!?†‡*§]+$/gu
+
+/**
+ * Greek the conversion read as Latin letters and left word-shaped.
+ *
+ * See `greek.ts` for the models. This is the walk: every word of a block or a
+ * note, scored where it is rare enough to be damage, and listed where it looks
+ * Greek on its own, or less so but beside a `garbled` hit or real Greek, or
+ * where it can be matched letter by letter to a Greek word the shelf prints.
+ * Greek comes in runs, so the neighbour is the strongest evidence there is.
+ */
+function greekGarbles(units: readonly TextUnit[]): DamageFinding[] {
+  const vocabulary = new Map<string, number>()
+  const own: string[] = []
+  const read = units.map((unit) => {
+    const text = unit.text.replace(/<[^>]*>/gu, '')
+    own.push(...greekWordsIn(text))
+    const words = [...text.matchAll(/[^\s—–]+/gu)].map((m) => ({
+      at: m.index,
+      raw: m[0],
+      core: m[0].replace(EDGES, '')
+    }))
+    for (const w of words) {
+      if (/^[A-Za-z]+$/u.test(w.core)) {
+        const key = w.core.toLowerCase()
+        vocabulary.set(key, (vocabulary.get(key) ?? 0) + 1)
+      }
+    }
+    return { unit, text, words }
+  })
+  const model = greekModel(vocabulary, own)
+
+  const out: DamageFinding[] = []
+  for (const { unit, text, words } of read) {
+    const hits = garbleHits(text)
+    const bad = words.map(
+      (w) =>
+        hasGreek(w.raw) ||
+        hits.some((h) => h.at < w.at + w.raw.length && w.at < h.at + h.token.length)
+    )
+    const scores = words.map((w, i) => {
+      const letters = w.raw.replace(/[^A-Za-z]/gu, '')
+      if (bad[i] || letters.length < 3) return undefined
+      if (
+        ACCENTED_LATIN.test(w.raw) ||
+        ABBREVIATED.test(w.raw) ||
+        NOT_A_WORD.test(w.core) ||
+        ANY_ROMAN.test(letters)
+      ) {
+        return undefined
+      }
+      if ((vocabulary.get(letters.toLowerCase()) ?? 0) > GREEK_RARE) return undefined
+      return { letters, score: model.score(letters) }
+    })
+    // A neighbour is evidence when it is damage, real Greek, or Greek-shaped
+    // enough to be listed on its own: a run spreads from its worst word. Two
+    // rare names side by side are not evidence of anything, which is why a
+    // merely middling neighbour no longer counts.
+    const strong = scores.map((s) => (s?.score ?? -Infinity) > GREEK_ALONE)
+    words.forEach((w, i) => {
+      const s = scores[i]
+      if (s === undefined) return
+      const beside = words.some((_, j) => {
+        if (j === i || Math.abs(j - i) > GREEK_REACH) return false
+        return bad[j] || strong[j]
+      })
+      let why: string | undefined
+      let expected: string | undefined
+      if (strong[i]) why = 'Latin letters in the shape of a Greek word'
+      else if (beside && s.score > GREEK_BESIDE) why = 'Greek-shaped, beside other damage or Greek'
+      else if (s.letters.length >= 5 && s.score > GREEK_KNOWN) {
+        expected = model.couldBe(s.letters)
+        if (expected !== undefined) why = 'a Greek word the shelf prints, read as Latin'
+      }
+      if (why === undefined) return
+      out.push({
+        kind: 'greek',
+        blockId: unit.id,
+        pages: unit.pages,
+        found: w.core,
+        against: why,
+        context: around(text, w.at, w.raw.length),
+        confidence: 'shape',
+        ...(expected === undefined ? {} : { expected })
+      })
+    })
+  }
+  return out
 }
 
 /**
