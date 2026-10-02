@@ -1000,6 +1000,52 @@ which made it the witness for two study books whose italic had been left
 alone: 110 runs restored on _Persuasion Engineering_, 168 on _Uncommon
 Therapy_.
 
+**Four books had nothing that could name their italic, so the pixels do.**
+_NLP For Dummies_, _Coaching with NLP_, _The Structure of Magic_ Vol. II and
+_Instant Rapport_ carried almost no italic, and neither witness above could
+help: an OCR layer drawn in one invisible face names no face, and Vol. II
+has no layer at all. `strokeLean` (`@core/image/slant`) cuts each word from
+a 300-DPI render and finds the shear that stacks its stems sharpest;
+`italicWords` judges it against its own page's median, so a page shot a
+degree off reads the same. `scripts/slant-witness.ts` feeds it the layer's
+boxes, or Tesseract's (`--words`), maps scan pages onto an EPUB's chapters
+(`--book`), and writes what `emphasis-of.ts` takes. 1,125 blocks were
+retagged across the four, every sample cropped and italic on the paper.
+
+Every rule in it was a wrong answer first, found by cropping the findings:
+
+- **A box set between two lines leans however its fragments do.** `was`,
+  `want`, `I've` on _Persuasion Engineering_. It is told by the blank band
+  across its ink — and measured on the ink, not the box, because a test of
+  the box's own proportions held for a text layer's line-high boxes and
+  threw out sixty real italic words on Tesseract's tight ones.
+- **A word with no upright stem has no lean to find.** `were`, `owe`,
+  `know`: every shear scores alike and one wins by a hair. On _Uncommon
+  Therapy_ that was 158 roman `were`s. A lean must beat upright by 3%.
+- **Running heads are italic as often as not.** `Representational Systems`
+  spelled the body's own words and was placed on them; a run recurring in a
+  page's head or foot band is dropped.
+- **A match inside a longer word is not a match.** `checkEmphasis` placed
+  the head `PART` on `particular`; the words a run lands on must now spell
+  it.
+- **A witness is a floor on what the book printed.** The named-face witness
+  restored 110 runs on _Persuasion Engineering_ and missed 25 more the
+  pixels found (`where do they place the picture`), because a face the
+  regex did not know was a face it said nothing about.
+
+**Notes gathered at the back of a chapter can be footnotes, and notation is
+what stands in the way.** _The Structure of Magic_ prints `S¹`, `NP²`,
+`Noun Phrase¹` in the same digits as its marks, and the claiming walk runs
+the length of the book, so an index took the next chapter's note. Vol. I
+needed 56 indices declared bare (a superscript straight after one or two
+capitals or a grammatical category) and one repeated mark; then all 54
+notes sat in their own chapters. Two rules from doing it: a correction to a
+note paragraph stays a correction (`note-text`), or `corrections.md` loses
+its record when the paragraph becomes a note; and a note the paper prints
+no mark for — Vol. II's Part III note 1 — is the editor's, so it stays where
+the book prints it, with a query. `body-of.ts` now says which block claims
+each note, and `text.md` sets the note under it.
+
 **A file was written over without being read.** A new test file was given the
 name of an existing one, `test/emphasis.test.ts`, and the write replaced 302
 lines of someone else's tests with no warning. Caught only because `git
@@ -1251,6 +1297,11 @@ npx vite-node --config vitest.config.ts scripts/emphasis-of.ts <book.json> w.jso
                                      #   italic the witness saw and the book sets in
                                      #   roman (`checkEmphasis`); `--restore` writes
                                      #   the batch that puts it back, text unchanged
+npx vite-node --config vitest.config.ts scripts/slant-witness.ts <scan.pdf> w.json [--words t.json] [--book book.json]
+                                     #   italic read off the pixels, for a scan whose
+                                     #   layer names no face or that has none; take it
+                                     #   to emphasis-of.ts with --no-headings, and crop
+                                     #   a sample before landing
 npx vite-node --config vitest.config.ts scripts/checks-of.ts books/*/book.json --out d/
                                      #   every deterministic check — damage, apparatus,
                                      #   consistency, rulings not yet in the text —
