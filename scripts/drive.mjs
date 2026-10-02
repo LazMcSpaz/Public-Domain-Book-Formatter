@@ -5157,6 +5157,44 @@ async function serve() {
      * The verdicts themselves are in the book file on the shelf; this only
      * clears the copy this browser is holding.
      */
+    /**
+     * Set the open book's gate answers from a file: its design, its edition.
+     *
+     *   node scripts/drive.mjs answers a.json     # { "design": {...}, "export": {...} }
+     *
+     * The answers live in this browser's review record until `save` writes
+     * them into `book.json`, and the wizard was the only thing that could
+     * write that record, so a book designed from the conversation had no way
+     * to keep its design. Each section given is merged over what the book
+     * already holds, key by key; a section not given is left alone.
+     */
+    answers: async ([from]) => {
+      if (!from) throw new Error('answers <file.json>  ({ "design": {...}, "export": {...} })')
+      const { readFile } = await import('node:fs/promises')
+      const given = JSON.parse(await readFile(resolve(REPO, from), 'utf8'))
+      return page.evaluate(
+        async ([repo, given]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const key = `pdbf.review.${newest.key}`
+          const had = JSON.parse(localStorage.getItem(key) ?? '{}')
+          const next = { ...had }
+          for (const [section, values] of Object.entries(given)) {
+            next[section] = { ...(had[section] ?? {}), ...values }
+          }
+          localStorage.setItem(key, JSON.stringify(next))
+          return {
+            book: newest.fileName,
+            sections: Object.keys(given),
+            answers: next,
+            next: '`save` writes them into the book file.'
+          }
+        },
+        [REPO, given]
+      )
+    },
+
     forget: async () => {
       return page.evaluate(() => {
         const keys = Object.keys(localStorage).filter((k) => k.startsWith('pdbf.review.'))

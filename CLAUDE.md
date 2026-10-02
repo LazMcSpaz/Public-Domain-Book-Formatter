@@ -1128,6 +1128,8 @@ npx vite-node --config vitest.config.ts scripts/emphasis-of.ts <book.json> w.jso
                                      #   italic the witness saw and the book sets in
                                      #   roman (`checkEmphasis`); `--restore` writes
                                      #   the batch that puts it back, text unchanged
+node scripts/drive.mjs answers a.json  # the open book's design and edition answers,
+                                     #   merged in; `save` writes them to book.json
 node scripts/drive.mjs correct --batch b.json   # many whole-block replacements,
                                      #   one save; same tag guard as `correct`
 node scripts/drive.mjs annotate p284b12 --after "Triangle." note.txt --id ed-columns
