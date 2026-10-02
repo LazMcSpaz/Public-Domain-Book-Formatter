@@ -7,6 +7,7 @@
  */
 export {
   applyEdits,
+  bareMarksMoved,
   blockOf,
   countEdited,
   correctsTheBook,

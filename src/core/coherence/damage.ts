@@ -74,6 +74,10 @@ export type DamageKind =
   | 'garbled'
   /** Greek the conversion read as Latin letters alone: `Moipa`, `Xpbvos`. */
   | 'greek'
+  /** A table run into a paragraph: mostly figures and one- or two-letter tokens. */
+  | 'table-as-prose'
+  /** A whole book with almost no italic, which no book of any length sets. */
+  | 'italics-absent'
 
 /**
  * How much authority the finding carries.
@@ -627,7 +631,8 @@ export function checkDamage(doc: BookDocument): DamageFinding[] {
     ...strayPoints(blocks),
     ...strayApostrophes(blocks),
     ...seamSplits(doc.blocks),
-    ...garbled(blocks)
+    ...garbled(blocks),
+    ...tablesAsProse(blocks)
   ].sort((a, b) => (order.get(a.blockId) ?? 0) - (order.get(b.blockId) ?? 0))
   const units = [
     ...blocks
@@ -647,8 +652,103 @@ export function checkDamage(doc: BookDocument): DamageFinding[] {
     .sort((a, b) => (order.get(a) ?? 0) - (order.get(b) ?? 0))
   const noteIds = doc.footnotes.map((n) => n.id)
   return [
+    ...italicsAbsent(doc),
     ...withGreek(inBody, bodyIds),
     ...withGreek([...markedNotes(doc.footnotes), ...garbledNotes(doc.footnotes)], noteIds)
+  ]
+}
+
+/** A token a table is made of and prose is not: a figure, a symbol, a rule. */
+const TABLE_TOKEN = /^[\d·.,;:'’"“”()\-—|{}!]+$|^\p{L}{1,2}[.,;:]?$/u
+/** Fewest tokens before a paragraph's share of them means anything. */
+const TABLE_MIN_TOKENS = 30
+/** Share of table tokens past which a paragraph is a table set as prose. */
+const TABLE_SHARE = 0.6
+
+/**
+ * A table run into a paragraph.
+ *
+ * Leaf 640 of _The Secret Doctrine_ Vol. II, Hellenbach's table of the
+ * elements, landed as two paragraphs of `Row I j Group I I Group! …` and sat
+ * in the book through a reading and a class sweep. A table set as prose is
+ * mostly figures and one- or two-letter symbols, which prose never is. Measured
+ * over the shelf before the threshold was set: at 60% of thirty tokens or more
+ * it names that table, a contents page run into _A Modern Panarion_'s body, a
+ * number table on _Isis_ Vol. II leaf 413, and the residue of diagrams, and
+ * nothing else.
+ */
+function tablesAsProse(blocks: readonly BookBlock[]): DamageFinding[] {
+  const out: DamageFinding[] = []
+  for (const block of blocks) {
+    if (block.kind === 'table') continue
+    const text = plain(block)
+    const tokens = text.split(/\s+/u).filter(Boolean)
+    if (tokens.length < TABLE_MIN_TOKENS) continue
+    const share = tokens.filter((t) => TABLE_TOKEN.test(t)).length / tokens.length
+    if (share < TABLE_SHARE) continue
+    out.push({
+      kind: 'table-as-prose',
+      blockId: block.id,
+      pages: [...block.sourcePages],
+      found: tokens.slice(0, 8).join(' '),
+      against: `${Math.round(share * 100)}% of its ${tokens.length} tokens are figures or one- and two-letter symbols, which is a table`,
+      context: around(text, 0, 0),
+      confidence: 'shape'
+    })
+  }
+  return out
+}
+
+/** A book shorter than this has too little prose to say its italic is missing. */
+const ITALIC_MIN_WORDS = 5000
+/**
+ * Fewest italic runs per ten thousand words a book can set and still have
+ * kept its italic. Measured on the shelf: the books that kept theirs set 22 to
+ * 417 (a lecture series at the low end, a glossary at the high); the eleven
+ * that came in at 0 to 3 had lost theirs to a conversion, as both volumes of
+ * _The Secret Doctrine_ had (0.1 and 0.2 before their italic was put back).
+ */
+const ITALIC_FLOOR = 5
+
+/**
+ * A whole book with almost no italic.
+ *
+ * Every other check here looks at a place; this one looks at the book, because
+ * a missing italic has no place: a block with no `<i>` looks exactly like a
+ * block that never had any. One finding, on the book's first body block. If
+ * the source truly sets none, an `as-printed` ruling quoting `no italic` on
+ * that leaf says so and takes it off the count.
+ */
+function italicsAbsent(doc: BookDocument): DamageFinding[] {
+  let words = 0
+  let runs = 0
+  const count = (b: { text: string; emphasis?: readonly number[] }) => {
+    words += b.text.split(/\s+/u).filter(Boolean).length
+    const e = [...(b.emphasis ?? [])].sort((x, y) => x - y)
+    e.forEach((w, i) => {
+      if (i === 0 || w !== e[i - 1]! + 1) runs++
+    })
+  }
+  doc.blocks.forEach(count)
+  doc.footnotes.forEach(count)
+  if (words < ITALIC_MIN_WORDS) return []
+  const rate = (runs / words) * 10000
+  if (rate >= ITALIC_FLOOR) return []
+  const first = doc.blocks.find((b) => b.kind === 'paragraph') ?? doc.blocks[0]
+  if (!first) return []
+  return [
+    {
+      kind: 'italics-absent',
+      blockId: first.id,
+      pages: [...first.sourcePages],
+      found: 'no italic',
+      against:
+        `${runs} italic runs in ${words} words (${rate.toFixed(1)} per 10,000; a book that kept ` +
+        `its italic sets 22 or more). Find a witness that saw the type (PROCESS-reading, ` +
+        `Stage 4b); if the source truly sets none, rule it as printed quoting "no italic"`,
+      context: '',
+      confidence: 'shape'
+    }
   ]
 }
 

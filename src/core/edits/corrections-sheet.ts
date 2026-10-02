@@ -285,6 +285,9 @@ export interface CutShort {
  * edited text's last words. A tail of fewer than three real words (a diagram's
  * garbled caption replaced on purpose) says nothing either way and is skipped.
  */
+/** Characters of a paragraph's printed ending that, kept, prove it was not cut. */
+const ENDING = 20
+
 export function cutShortBlocks(pristine: SheetBlock[], edited: SheetBlock[]): CutShort[] {
   const before = new Map(pristine.map((b) => [b.id, bare(b.text)]))
   const out: CutShort[] = []
@@ -293,6 +296,10 @@ export function cutShortBlocks(pristine: SheetBlock[], edited: SheetBlock[]): Cu
     if (old === undefined) continue
     const now = bare(block.text)
     if (now.length >= old.length - 15) continue
+    // Still ending as the printed paragraph ended: shorter because junk was
+    // replaced, not because the tail went. On leaf 481 of _The Secret
+    // Doctrine_ Vol. II the tail's only lettered words were the junk.
+    if (now.endsWith(old.slice(-ENDING))) continue
     const lastOld = wordsOf(old)
       .filter((w) => /\p{L}{2,}/u.test(w))
       .slice(-8)

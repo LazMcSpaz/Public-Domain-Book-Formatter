@@ -890,6 +890,50 @@ never had. `contentsDepth` on the style profile, 6 by default so a book laid
 out before the question existed keeps what it got; the original's contents
 page is the guide for setting it lower.
 
+**Fifteen thousand italic runs were missing and nothing could tell.** TUP's
+ClearScan layer of _The Secret Doctrine_ kept 3 italic runs in Vol. I and 8 in
+Vol. II; the paper prints 6,155 and 9,265. Every check was happy, for the
+reason the other italic entries give: a block with no `<i>` looks exactly like
+a block that never had any. Found only because a verification pass asked.
+The type was still there: ClearScan builds a font per cluster of glyph shapes,
+italic clusters apart from roman, and the slant of a line's strokes says which
+(`scripts/italic-witness.mjs`, roman near -2 degrees, italic at 10 to 16).
+`checkEmphasis` (`@core/coherence/emphasis.ts`) places each witnessed run in
+the book and names the ones set roman; 60 sampled against the paper were all
+italic. Then the same question over the shelf: **eleven books carry almost
+no italic** (0 to 3 runs per 10,000 words, against 85 to 400 in the books
+that kept theirs). `damage` now reports that rate as `italics-absent`, and
+PROCESS-reading's Stage 4b makes italic part of the reading. The rule:
+**ask what can see the type before the first batch, not after the last.**
+
+**Greek can be garbled into words.** The class sweep restored some three
+hundred Greek and Hebrew places that `garbled` could see, and a later check
+found 24 more it could not: `Moipa` for Μοῖρα, `Xpbvos` for Χρόνος, `TOU
+Oavrirov` for τοῦ θανάτου. They are made of letters and pass every shape
+test. `damage` lists them as `greek`, from a trigram model of Greek garbled
+through OCR's own confusions against the book's own English (`greek.ts`). It
+is a list to read, and the lean is towards names: 0 to 12 words in a book with
+no Greek.
+
+**Taking out a garbled mark moved every bare-mark declaration after it.** A
+declaration says "the second `*` in this block", so removing a `*` that was
+OCR junk made it name a real mark. On _The Secret Doctrine_ notes went
+unclaimed and one sat under the wrong reference, and `orphaned` said 0 for a
+while because something claimed each one. `correct` now refuses a change to a
+block carrying a declaration when the count of that marker moves.
+
+**A no-break space binds nothing.** The engine and the markup both split words
+on `\s`, which includes U+00A0, and italic is stored by word index, so the
+engine cannot treat it differently without moving italic onto the wrong words.
+A table cell that must not break is a short cell: a cell the paper sets over
+two lines is two rows.
+
+**A file was written over without being read.** A new test file was given the
+name of an existing one, `test/emphasis.test.ts`, and the write replaced 302
+lines of someone else's tests with no warning. Caught only because `git
+status` said `M` where a new file says `??`. **Before writing a new file, list
+the path.**
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what
@@ -1121,6 +1165,19 @@ node scripts/drive.mjs damage        # marks the printing trade does not set:
                                      #   (`Xpbvos`, `Moipa` → Μοῖρα), listed to
                                      #   read and not counted. Free, no pixels
                                      #   needed. `--check` exits non-zero
+node scripts/italic-witness.mjs <scan.pdf> w.json   # which words a ClearScan PDF
+                                     #   prints in italic, measured off its glyphs'
+                                     #   slant: the witness for the check below
+npx vite-node --config vitest.config.ts scripts/emphasis-of.ts <book.json> w.json out.json
+                                     #   italic the witness saw and the book sets in
+                                     #   roman (`checkEmphasis`); `--restore` writes
+                                     #   the batch that puts it back, text unchanged
+node scripts/drive.mjs answers a.json  # the open book's design and edition answers,
+                                     #   merged in; `save` writes them to book.json
+node scripts/drive.mjs correct --batch b.json   # many whole-block replacements,
+                                     #   one save; same tag guard as `correct`.
+                                     #   Both forms refuse a change that moves a
+                                     #   bare-mark declaration (`--marks-checked`)
 node scripts/drive.mjs annotate p284b12 --after "Triangle." note.txt --id ed-columns
                                      #   a footnote of the editor's own, hung after a
                                      #   phrase the block prints once; `annotate drop
@@ -2378,6 +2435,33 @@ closed`, which is indistinguishable from the flake the first command after a
   restart throws. And **`querycrops` first reached for `cropWordsFromPage`**,
   which opens the PDF and renders the page itself: twelve leaves opened
   thirteen documents over a 357 MB file and rendered every leaf twice.
+
+  **And the pixels are sometimes in a different file altogether.** A book read
+  from an EPUB or from somebody's conversion has no pages to cut, so its
+  queries reached the editor as a passage of type and nothing else — the exact
+  condition the crops exist to end, arrived at from the other direction.
+  `figure cut --from <scan.pdf>` already took a second copy of the same
+  edition, and `querycrops --from` now does too: _Instant Rapport_ was read
+  from a 2018 calibre EPUB and a photographed copy of the 1989 Warner printing
+  came to the shelf afterwards.
+
+  What changes with it is **where the page number comes from**, and it is the
+  thing to get right. A query's leaf names a page of the file the book was
+  _read_ from, and that is not this file — the EPUB's leaf 2 is a chapter and
+  the scan's page 2 is a half-title — so the quote is **searched for**: every
+  page read through its own text layer, scored by `locateQuote`, best page
+  wins, and a quote no page clears the floor for is reported rather than cut
+  from the page the query happened to name. Measured on this book, all three
+  outstanding queries placed at 1.00 on pages 105, 205 and 236. The layer only
+  chooses the page; the crop is still rendered at `RECON_DPI` and boxed by the
+  app's own OCR, because a box measured by one engine and a box measured by
+  another are not the same box.
+
+  `--pad` came with it, and the reason is worth keeping: 120 px is a line of
+  _Isis_'s type and had been a law rather than a default. The notice that
+  closes _Instant Rapport_ is an eight-line boxed panel the editor has to keep
+  or drop **whole**, and 120 gave him the first three lines — enough to see it
+  is boxed, not enough to answer the question he was asked.
 
 - **Also done**: **a figure where the original set it, at the size the original
   printed it** (`IllustrationPlacement`; `drive.mjs figure`). The editor's

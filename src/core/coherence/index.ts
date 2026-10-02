@@ -26,6 +26,12 @@
  * only after a reader with the crop has said what the paper says. See **A model
  * may propose a reading; only pixels may accept one** in CLAUDE.md.
  */
+export {
+  checkEmphasis,
+  type EmphasisWitness,
+  type DroppedEmphasis,
+  type EmphasisReport
+} from './emphasis'
 export { checkConsistency, type ConsistencyFinding, type ConsistencyKind } from './consistency'
 export {
   parseSenseFinding,

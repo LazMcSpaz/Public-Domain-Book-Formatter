@@ -222,4 +222,21 @@ describe('cutShortBlocks', () => {
     ]
     expect(cutShortBlocks(pristine, whole)).toEqual([])
   })
+
+  // The Secret Doctrine Vol. II leaf 481: Hebrew the conversion had turned to
+  // junk was read back, the block got shorter, and every word with letters in
+  // its tail was junk the correction replaced. The paragraph still ends where
+  // the printed one does, in figures, so nothing was cut.
+  it('passes a block that still ends as the printed one did', () => {
+    const before = [
+      {
+        id: 'p481b6',
+        text: 'Thus: iT., iT � i ‘\\!)’ � iT., iT � iT., iT � iT., iT � 5, 10, 5, 1 200, 300, 1 5, 10, 5, 1'
+      }
+    ]
+    const after = [
+      { id: 'p481b6', text: 'Thus: אהיה אשר אהיה 5, 10, 5, 1 200, 300, 1 5, 10, 5, 1' }
+    ]
+    expect(cutShortBlocks(before, after)).toEqual([])
+  })
 })
