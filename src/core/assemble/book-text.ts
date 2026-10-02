@@ -38,8 +38,12 @@ import type { BookDocument } from './assemble-book'
  */
 export function bookText(doc: BookDocument): string {
   const parts: string[] = []
-  const marked = (b: { text: string; emphasis?: number[]; strong?: number[] }): string =>
-    withMarkup(b.text, b.emphasis, b.strong)
+  const marked = (b: {
+    text: string
+    emphasis?: number[]
+    strong?: number[]
+    smallCaps?: number[]
+  }): string => withMarkup(b.text, b.emphasis, b.strong, b.smallCaps)
 
   for (const section of doc.sections.filter((s) => s.placement === 'front')) {
     parts.push(section.label ?? '', section.title, ...section.blocks.map(marked))

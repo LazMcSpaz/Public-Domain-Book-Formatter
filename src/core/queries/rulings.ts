@@ -326,8 +326,12 @@ const DELETION = /^\([^()]*\b(?:dropped|removed|deleted|omitted|struck out)\b[^(
  * then asks the whole book, since an answer about nothing is no answer.
  */
 function leafText(doc: BookDocument, page: number): string {
-  const marked = (b: { text: string; emphasis?: number[]; strong?: number[] }): string =>
-    withMarkup(b.text, b.emphasis, b.strong)
+  const marked = (b: {
+    text: string
+    emphasis?: number[]
+    strong?: number[]
+    smallCaps?: number[]
+  }): string => withMarkup(b.text, b.emphasis, b.strong, b.smallCaps)
   return [
     ...[...doc.blocks, ...doc.asides].filter((b) => b.sourcePages.includes(page)).map(marked),
     ...doc.footnotes.filter((n) => n.pageIndex === page).map(marked)
@@ -475,7 +479,7 @@ function range(from: number, to: number): number[] {
  * line, which a general tag-stripper would do to a note quoting an inequality.
  */
 function stripInlineMarkup(text: string): string {
-  return text.replace(/<\/?(?:i|em|b|strong)>/gi, '')
+  return text.replace(/<\/?(?:i|em|b|strong|sc)>/gi, '')
 }
 
 const HEADING: Record<RulingDecision, string> = {

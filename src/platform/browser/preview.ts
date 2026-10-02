@@ -90,7 +90,11 @@ export async function renderPreview(
   profile: StyleProfile,
   options: PreviewOptions
 ): Promise<PreviewResult> {
-  const fonts = await fontTableFor([profile.bodyFont, profile.headingFont])
+  const fonts = await fontTableFor([
+    profile.bodyFont,
+    profile.headingFont,
+    ...(profile.smallCapsFont ? [profile.smallCapsFont] : [])
+  ])
   checkCancelled(options.signal)
 
   const book = layout(doc, profile, fonts, {

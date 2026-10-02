@@ -31,6 +31,7 @@ import { shiftEmphasis } from '@core/transcribe/markup'
 import {
   breakParagraph,
   fontForWord,
+  sizeForWord,
   type Alignment,
   type Attachment,
   type BrokenLine,
@@ -618,7 +619,7 @@ function toFlowLines(
         // italic.
         text: w.text,
         font: fontForWord(w.sourceIndex, spans, font),
-        sizePt: w.sizePt ?? sizePt,
+        sizePt: w.sizePt ?? sizeForWord(w.sourceIndex, spans, sizePt),
         xPt: w.xPt + offset,
         ...(w.risePt ? { risePt: w.risePt } : {})
       }
@@ -968,9 +969,17 @@ function breakNote(note: PreparedNote, ctx: BuildContext): NoteBlock {
   const markSize = sizePt * MARK_SIZE_RATIO
   const hang = ctx.measurer.widthOf(note.mark, font, markSize) + sizePt * NOTE_HANG_GAP_RATIO
 
-  const spans = spansFor(ctx, ctx.profile.bodyFont, 'regular', note.emphasis, note.strong)
+  const spans = spansFor(
+    ctx,
+    ctx.profile.bodyFont,
+    'regular',
+    note.emphasis,
+    note.strong,
+    note.smallCaps
+  )
+  const noteText = smallCapsAsCapitals(ctx, ctx.profile.bodyFont, note.text, note.smallCaps)
 
-  const broken = breakParagraph(note.text, {
+  const broken = breakParagraph(noteText, {
     font,
     sizePt,
     measurer: ctx.measurer,
@@ -1039,14 +1048,72 @@ export function listMarkerToPrint(
   return text.trimStart().startsWith(marker) ? null : marker
 }
 
+/**
+ * The face a run of small capitals is drawn from, and how much larger it is
+ * set: the profile's named face where it has small capitals, else the text's
+ * own where that has them, else none — and then the words print as full
+ * capitals (see `smallCapsAsCapitals`), never as capitals shrunk.
+ */
+function smallCapsFace(
+  ctx: BuildContext,
+  family: string
+): { family: string; scale: number } | null {
+  const named = ctx.profile.smallCapsFont
+  if (named && ctx.measurer.hasSmallCaps(named)) {
+    const scale = named === family ? 1 : (ctx.measurer.smallCapScale?.(family, named) ?? 1)
+    return { family: named, scale }
+  }
+  if (ctx.measurer.hasSmallCaps(family)) return { family, scale: 1 }
+  return null
+}
+
+/**
+ * A block's small-capital words set in full capitals, where no face has
+ * small capitals to draw them with.
+ *
+ * The notation writes them in the case a full-size letter would take —
+ * `<sc>spirit</sc>` — so without a small-caps face they would print in lower
+ * case. Capitals are the honest substitute, and what these words printed as
+ * before small capitals could be marked at all.
+ */
+function smallCapsAsCapitals(
+  ctx: BuildContext,
+  family: string,
+  text: string,
+  smallCaps: readonly number[] | undefined,
+  noSpans = false
+): string {
+  if (!smallCaps?.length || (!noSpans && smallCapsFace(ctx, family))) return text
+  const marked = new Set(smallCaps)
+  let index = 0
+  return text
+    .split(/(\s+)/u)
+    .map((part) => {
+      if (part.length === 0 || /^\s+$/u.test(part)) return part
+      return marked.has(index++) ? part.toLocaleUpperCase() : part
+    })
+    .join('')
+}
+
 function spansFor(
   ctx: BuildContext,
   family: string,
   base: FontStyle,
   emphasis: readonly number[] | undefined,
-  strong: readonly number[] | undefined
+  strong: readonly number[] | undefined,
+  smallCaps?: readonly number[]
 ): TextSpan[] {
   const spans: TextSpan[] = []
+  // First, because first match wins: a small-capital word is that before it
+  // is anything else, there being no italic or bold small capitals here.
+  const caps = smallCaps?.length ? smallCapsFace(ctx, family) : null
+  if (caps) {
+    spans.push({
+      words: new Set(smallCaps),
+      font: { family: caps.family, style: 'regular', smallCaps: true },
+      ...(caps.scale !== 1 ? { scale: caps.scale } : {})
+    })
+  }
   if (strong?.length) {
     const style: FontStyle = ctx.measurer.hasBold(family) ? 'bold' : 'italic'
     spans.push({ words: new Set(strong), font: { family, style } })
@@ -1154,7 +1221,18 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
   const listMarker = listMarkerToPrint(block, opts.text ?? block.text)
   const markerWords = listMarker ? listMarker.split(/\s+/u).length : 0
   const source = listMarker ? `${listMarker} ${opts.text ?? block.text}` : (opts.text ?? block.text)
-  const text = wantsSmallCaps && !realSmallCaps ? source.toLocaleUpperCase() : source
+  const capsWords =
+    markerWords && block.smallCaps ? shiftEmphasis(block.smallCaps, markerWords) : block.smallCaps
+  // Small-capital words with no span to draw them — no face has small
+  // capitals, or the block is italic and takes no spans — print as capitals.
+  const cased = smallCapsAsCapitals(
+    ctx,
+    family,
+    source,
+    capsWords,
+    blockStyle(block, ctx.profile).style !== 'regular'
+  )
+  const text = wantsSmallCaps && !realSmallCaps ? cased.toLocaleUpperCase() : cased
 
   // Reference marks ride on the end of the word they follow, set smaller and
   // lifted. They are given to the breaker rather than concatenated into the
@@ -1187,7 +1265,8 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
           markerWords && block.emphasis
             ? shiftEmphasis(block.emphasis, markerWords)
             : block.emphasis,
-          markerWords && block.strong ? shiftEmphasis(block.strong, markerWords) : block.strong
+          markerWords && block.strong ? shiftEmphasis(block.strong, markerWords) : block.strong,
+          capsWords
         )
       : []
 
@@ -2559,6 +2638,13 @@ export function layout(
             ...(note.strong?.length
               ? {
                   strong: note.originalMarker.trim() ? note.strong.map((i) => i + 1) : note.strong
+                }
+              : {}),
+            ...(note.smallCaps?.length
+              ? {
+                  smallCaps: note.originalMarker.trim()
+                    ? note.smallCaps.map((i) => i + 1)
+                    : note.smallCaps
                 }
               : {}),
             sourcePages: []
