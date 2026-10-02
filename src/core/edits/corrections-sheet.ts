@@ -283,7 +283,8 @@ export interface CutShort {
  * the fault; this is the check for it. A block is named when its edited text
  * is shorter than the pristine and the pristine's last words are not among the
  * edited text's last words. A tail of fewer than three real words (a diagram's
- * garbled caption replaced on purpose) says nothing either way and is skipped.
+ * garbled caption replaced on purpose) says nothing either way and is skipped,
+ * and so is a tail that stands elsewhere in the book: moved, not lost.
  */
 /** Characters of a paragraph's printed ending that, kept, prove it was not cut. */
 const ENDING = 20
@@ -291,6 +292,11 @@ const ENDING = 20
 export function cutShortBlocks(pristine: SheetBlock[], edited: SheetBlock[]): CutShort[] {
   const before = new Map(pristine.map((b) => [b.id, bare(b.text)]))
   const out: CutShort[] = []
+  // Every block as it now stands, so a tail that was moved to where the paper
+  // sets it is told from one that was lost. _Persuasion Engineering_ leaf 15's
+  // last line had been read onto the end of the leaf's first paragraph; put
+  // back, it is still in the book, only not at the end of that block.
+  const everything = edited.map((b) => bare(b.text)).join('\n')
   for (const block of edited) {
     const old = before.get(block.id)
     if (old === undefined) continue
@@ -307,6 +313,9 @@ export function cutShortBlocks(pristine: SheetBlock[], edited: SheetBlock[]): Cu
     const lastNow = new Set(wordsOf(now).slice(-20))
     const kept = lastOld.filter((w) => lastNow.has(w)).length
     if (kept >= 3) continue
+    // The printed tail stands elsewhere in the book: moved, not cut.
+    const tail = old.slice(-3 * ENDING).replace(/^\S*\s/u, '')
+    if (tail.length >= ENDING && !now.includes(tail) && everything.includes(tail)) continue
     out.push({ blockId: block.id, editedEnds: now.slice(-50), pristineEnds: old.slice(-50) })
   }
   return out
