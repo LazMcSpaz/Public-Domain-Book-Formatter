@@ -239,4 +239,31 @@ describe('cutShortBlocks', () => {
     ]
     expect(cutShortBlocks(before, after)).toEqual([])
   })
+
+  // Persuasion Engineering leaf 15: the leaf's last line had been read onto
+  // the end of its first paragraph. Put back where the paper sets it, the
+  // first paragraph is shorter and ends differently, and nothing is lost.
+  it('passes a tail that was moved to where the paper sets it', () => {
+    const line = 'to triple your income. Which means you need to prospect 300'
+    const before = [
+      {
+        id: 'p14b4',
+        text: `it would be nice if some guy could show you how the products work. ${line}`
+      },
+      {
+        id: 'p15b3',
+        text: 'So if you are closing thirty of them, then you need to see three hundred people.'
+      }
+    ]
+    const after = [
+      { id: 'p14b4', text: 'it would be nice if some guy could show you how the products work.' },
+      {
+        id: 'p15b3',
+        text: `So if you are closing thirty of them, then you need to see three hundred ${line} people.`
+      }
+    ]
+    expect(cutShortBlocks(before, after)).toEqual([])
+    // The same edit with the line put nowhere is a cut.
+    expect(cutShortBlocks(before, [after[0]!, before[1]!]).map((c) => c.blockId)).toEqual(['p14b4'])
+  })
 })
