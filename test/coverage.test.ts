@@ -162,3 +162,53 @@ describe('a line the book sets somewhere other than the paper does', () => {
     )
   })
 })
+
+describe('a line out of the paper’s order by a little, across blocks', () => {
+  it('is reported where a leaf’s top line ended the paragraph before it', () => {
+    const [a, b, c, d] = PARAGRAPHS as [string, string, string, string]
+    // Leaf 6 opens a paragraph; its second line was set at the end of leaf
+    // 5's last paragraph, two lines back — Persuasion Engineering leaf 113.
+    const [first, second, ...rest] = lines(d)
+    const moved = doc([
+      block('p5b0', a, [5]),
+      block('p5b1', b, [5]),
+      block('p5b2', `${c} ${second}`, [5, 6]),
+      block('p6b0', [first, ...rest].join(' '), [6]),
+      ...PARAGRAPHS.map((t, i) => block(`p90b${i}`, t, [90]))
+    ])
+    const found = checkCoverage(moved, [paper(5, [a, b, c]), paper(6, [d])]).filter(
+      (f) => f.kind === 'moved'
+    )
+    expect(found).toMatchObject([{ page: 6, blockId: 'p5b2', lines: [second] }])
+  })
+
+  it('is not reported in boxed matter, which floats on the paper', () => {
+    const [a, b, c, d] = PARAGRAPHS as [string, string, string, string]
+    const [first, second, ...rest] = lines(d)
+    const moved = doc([
+      block('p5b0', a, [5]),
+      block('p5b1', b, [5]),
+      block('p5b2', `${c} ${second}`, [5, 6], 'blockquote'),
+      block('p6b0', [first, ...rest].join(' '), [6]),
+      ...PARAGRAPHS.map((t, i) => block(`p90b${i}`, t, [90]))
+    ])
+    expect(
+      checkCoverage(moved, [paper(5, [a, b, c]), paper(6, [d])]).filter((f) => f.kind === 'moved')
+    ).toEqual([])
+  })
+
+  it('is not reported after boxed matter the reading set below the text it sits above', () => {
+    const [a, b, c, d] = PARAGRAPHS as [string, string, string, string]
+    // The paper prints a tip (d) above paragraph c; the reading set it after.
+    const book6 = doc([
+      block('p5b0', a, [5]),
+      block('p5b1', b, [5]),
+      block('p5b2', c, [5]),
+      block('p5b3', d, [5], 'blockquote'),
+      ...PARAGRAPHS.map((t, i) => block(`p90b${i}`, t, [90]))
+    ])
+    expect(
+      checkCoverage(book6, [paper(5, [a, b, d, c])]).filter((f) => f.kind === 'moved')
+    ).toEqual([])
+  })
+})

@@ -5440,8 +5440,35 @@ async function serve() {
      * Nothing here proposes a fix. That is the point of the channel.
      */
     queries: async ([out = 'queries.md']) => {
+      // Written beside a shelf book, the sheets take the edition's title from
+      // its book file. The run in the browser knows only the scan's file name,
+      // which on a shelf is a SHA, and every regeneration put it at the head
+      // of all three sheets in place of the title somebody had typed there.
+      // Where the book file names no title, a title already on the sheet is
+      // kept, unless it is itself a file name.
+      const { existsSync, readFileSync } = await import('node:fs')
+      const besideBook = resolve(REPO, out, '..')
+      const exportTitle = (() => {
+        try {
+          return JSON.parse(readFileSync(resolve(besideBook, 'book.json'), 'utf8')).answers?.export
+            ?.title
+            ? 'book'
+            : null
+        } catch {
+          return null
+        }
+      })()
+      const onSheet = existsSync(resolve(REPO, out))
+        ? (/ — (.+)$/u.exec(readFileSync(resolve(REPO, out), 'utf8').split('\n')[0] ?? '')?.[1] ??
+          null)
+        : null
+      const shelfTitle = exportTitle
+        ? `*${await bookTitle(besideBook)}*`
+        : onSheet && !/\.(pdf|epub)$/iu.test(onSheet)
+          ? onSheet
+          : null
       const rendered = await page.evaluate(
-        async ([repo]) => {
+        async ([repo, shelfTitle]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
           const shelf = await import(`/@fs${repo}/src/core/sync/index.ts`)
@@ -5465,9 +5492,10 @@ async function serve() {
           const waiting = queriesMod.outstanding(raised, rulings)
           const holding = queriesMod.held(raised, rulings)
           const title =
-            typeof run.identityAnswers?.title === 'string' && run.identityAnswers.title
+            shelfTitle ??
+            (typeof run.identityAnswers?.title === 'string' && run.identityAnswers.title
               ? run.identityAnswers.title
-              : run.fileName
+              : run.fileName)
           const book = { title, fileName: run.fileName }
           return {
             markdown: queriesMod.queriesMarkdown(book, raised, rulings),
@@ -5495,7 +5523,7 @@ async function serve() {
             reviewShelfPath: shelf.rulingsPath(newest.key).replace(/rulings\.md$/u, 'review.md')
           }
         },
-        [REPO]
+        [REPO, shelfTitle]
       )
       const { writeFile } = await import('node:fs/promises')
       await writeFile(resolve(REPO, out), rendered.markdown, 'utf8')

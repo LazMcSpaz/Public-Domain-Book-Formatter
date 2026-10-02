@@ -959,22 +959,31 @@ Publica- tions`: `split-word`'s tokens keep a trailing hyphen, so it tried
   another work: measured, every one of the hundred-odd in the Blavatsky
   volumes closes a quotation from somebody else.
 - **Nothing compared the book with a second reading of its own paper**
-  (`checkCoverage`, `@core/witness/coverage.ts`). A reader who drops two
-  lines, or sets a leaf's last line at the end of its first paragraph, leaves
-  text that is sound by every internal measure. A scan with an OCR layer
-  carries a second reading for nothing, and walked a printed line at a time it
-  found _Persuasion Engineering_ leaf 15's last line 265 words early, two
-  runs of lines swapped inside a paragraph on leaf 123 of _The Structure of
-  Magic_ Vol. I, and a heading and two paragraphs missing from leaf 86 of
-  _Coaching with NLP_. The first version aligned whole leaves word by word
-  and reported hundreds of "missing" runs that were the layer's own junk; a
-  line is judged only where the book knows its words, running heads (folio
-  stripped) and left-out leaves are skipped, and a row of cells is never
-  "moved", because its columns interleave on the paper.
+  (`checkCoverage`, `@core/witness/coverage.ts`). A reader who drops a line,
+  or sets a leaf's first line at the end of the previous leaf's paragraph,
+  leaves text that is sound by every internal measure. A scan with an OCR
+  layer carries a second reading for nothing, and walked a printed line at a
+  time it found _Persuasion Engineering_'s leaf-15 and leaf-113 lines set a
+  paragraph early, two runs of lines swapped on leaf 123 of _The Structure of
+  Magic_ Vol. I and the line opening its note 8 lost on leaf 72, two dropped
+  lines in _NLP For Dummies_ (leaves 203 and 218), and a heading and two
+  paragraphs gone from leaf 86 of _Coaching with NLP_. Most dropped lines
+  show up as **order**, not absence: the missing test needs a whole line's
+  shingles gone, and a lost line's words are usually scattered through its
+  neighbours, but the line after it then lands behind the line before it. The
+  first version aligned whole leaves word by word and reported hundreds of
+  "missing" runs that were the layer's own junk; a line is judged only where
+  the book knows its words, running heads (folio stripped) and left-out
+  leaves are skipped, and rows of cells and boxed matter are never "moved",
+  because the paper interleaves the one and floats the other.
 
 All four run without a browser: `scripts/checks-of.ts` over any number of
 shelf books, `scripts/coverage-of.ts` over one. A shelf-wide question is now a
-minute, not a load per book.
+minute, not a load per book. And `italic-witness.mjs` now believes a face the
+file **names** (`Times-Italic`, `Helvetica-Oblique`) instead of measuring it,
+which made it the witness for two study books whose italic had been left
+alone: 110 runs restored on _Persuasion Engineering_, 168 on _Uncommon
+Therapy_.
 
 **A file was written over without being read.** A new test file was given the
 name of an existing one, `test/emphasis.test.ts`, and the write replaced 302

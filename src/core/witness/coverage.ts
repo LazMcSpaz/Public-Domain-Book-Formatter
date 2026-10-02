@@ -19,9 +19,13 @@
  *   run of lines almost none of whose shingles appear is a run the book
  *   lacks.
  * - **moved**: does the book carry it where the paper does? Each line found
- *   is placed at the median position of its shingles, and a line placed far
- *   *behind* the line before it was set somewhere earlier than the paper
- *   prints it. _Persuasion Engineering_ leaf 15 is the case it was measured
+ *   is placed at the median position of its shingles, and a line placed
+ *   *behind* the line before it — far behind, or a little behind and in
+ *   another block — is out of the paper's order. That is two faults with one
+ *   signature: a line set out of its place, and a line dropped just before
+ *   this one, whose loss runs two paragraphs together. The second is the
+ *   commoner: the missing test needs a whole line to be absent, and a dropped
+ *   line's words are often scattered through its neighbours. _Persuasion Engineering_ leaf 15 is the case it was measured
  *   on: the leaf's last line ("to triple your income. Which means you need
  *   to prospect 300") had been set at the end of the leaf's first paragraph,
  *   265 words back, and every other check was content. _The Structure of
@@ -84,6 +88,12 @@ const MIN_WORDS = 5
 const LONE_LINE_WORDS = 12
 /** A line found this many words behind the one before it was set elsewhere. */
 const MOVED_BACK = 80
+/**
+ * Fewer words back are enough when the line sits in a different block from
+ * the one before it: a leaf's top line set at the end of the previous leaf's
+ * paragraph is a couple of lines back and a whole paragraph away.
+ */
+const MOVED_ACROSS = 8
 /** A line set on this many leaves is furniture. */
 const FURNITURE_LEAVES = 3
 
@@ -180,6 +190,10 @@ export function checkCoverage(doc: BookDocument, layer: readonly LayerLeaf[]): C
     // in an order no shingle of the book's can match. Their words are the
     // cells' own, which is how they are told from a line the book has lost.
     const rows = near.filter((b) => b.kind === 'table' || / \| /u.test(b.text))
+    // Boxed matter — a tip, a sidebar, a displayed quotation — floats on the
+    // paper, set wherever it fits beside the text it interrupts, and a
+    // reading sets it after the paragraph. Its order says nothing.
+    const floating = new Set(near.filter((b) => b.kind === 'blockquote').map((b) => b.id))
     const cellWords = new Set(rows.flatMap((b) => words(b.text)))
     const rowish = new Set(rows.map((b) => b.id))
 
@@ -198,6 +212,7 @@ export function checkCoverage(doc: BookDocument, layer: readonly LayerLeaf[]): C
       runWords = 0
     }
     let last: number | null = null
+    let lastOwner: string | null = null
     for (const raw of joinHyphens(leaf.lines)) {
       const line = raw.trim()
       const w = words(line)
@@ -237,17 +252,28 @@ export function checkCoverage(doc: BookDocument, layer: readonly LayerLeaf[]): C
       // A row of cells, as a table or as the `a | b` paragraph a study reading
       // sets one as, holds columns the paper prints side by side: their lines
       // alternate on the leaf, so any order the book sets them in reads as moved.
-      const inRow = rowish.has(owner[here]!)
-      if (!inRow && last !== null && here < last - MOVED_BACK && w.length >= MIN_WORDS + 1) {
+      const inRow =
+        rowish.has(owner[here]!) ||
+        floating.has(owner[here]!) ||
+        (lastOwner !== null && floating.has(lastOwner))
+      const otherBlock = lastOwner !== null && owner[here] !== lastOwner
+      const back = last === null ? 0 : last - here
+      if (
+        !inRow &&
+        last !== null &&
+        (back > MOVED_BACK || (otherBlock && back > MOVED_ACROSS)) &&
+        w.length >= MIN_WORDS + 1
+      ) {
         findings.push({
           kind: 'moved',
           page: leaf.page,
           lines: [line],
           blockId: owner[here],
-          against: `the book sets this line ${last - here} words before the line the paper prints ahead of it`
+          against: `the book sets this line ${back} words before the line the paper prints ahead of it: a line dropped just before it, or this one set out of its place`
         })
       }
       last = here + w.length
+      lastOwner = owner[Math.min(owner.length - 1, here + w.length - 1)] ?? null
     }
     flush()
   }
