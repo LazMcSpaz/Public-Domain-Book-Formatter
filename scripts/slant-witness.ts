@@ -36,6 +36,11 @@ import { applyEdits } from '@core/edits'
 import { italicWords, pageRoman, strokeSlant, type GrayImage } from '@core/image'
 
 const DPI = 300
+/** The share of a page's height its running head, and its foot, sit in. */
+const HEAD_BAND = 0.09
+const FOOT_BAND = 0.06
+/** Pages a run must recur on in those bands to be taken for furniture. */
+const FURNITURE_PAGES = 3
 const argv = process.argv.slice(2).filter((a) => !a.includes('slant-witness'))
 const flag = (name: string): string | null => {
   const at = argv.indexOf(name)
@@ -165,6 +170,8 @@ interface Run {
   bbox: [number, number, number, number]
 }
 const runs: Run[] = []
+/** Where on its page each run sits, as a share of the page's height, and the scan page. */
+const placed: { band: boolean; scanPage: number }[] = []
 let pagesRead = 0
 let wordsMeasured = 0
 let unplacedPages = 0
@@ -216,6 +223,9 @@ for (let p = first!; p <= last!; p++) {
     let k = i
     while (k < words.length && italic[k]) k++
     const run = words.slice(i, k)
+    const top = Math.min(...run.map((w) => w.y0)) / height
+    const foot = Math.max(...run.map((w) => w.y1)) / height
+    placed.push({ band: top < HEAD_BAND || foot > 1 - FOOT_BAND, scanPage: p })
     runs.push({
       page: leaf,
       text: joined(run),
@@ -238,11 +248,30 @@ for (let p = first!; p <= last!; p++) {
     i = k - 1
   }
 }
-writeFileSync(outPath, JSON.stringify(runs, null, 1))
+// **Running heads and folios are the book's furniture, and set in italic as
+// often as not.** The book does not print them, so the comparison should
+// never see them — and an edition-wide comparison sees them everywhere: on
+// _The Structure of Magic_ Vol. II the head `Representational Systems`
+// spells the body's `representational systems` and was placed there, on a
+// dozen leaves. A run is furniture when it sits in the head or foot band of
+// its page and the same words sit there on three pages or more.
+const letterKey = (t: string): string => t.toLowerCase().replace(/[^\p{L}]+/gu, '')
+const bandPages = new Map<string, Set<number>>()
+runs.forEach((r, i) => {
+  if (!placed[i]!.band) return
+  const set = bandPages.get(letterKey(r.text)) ?? new Set<number>()
+  set.add(placed[i]!.scanPage)
+  bandPages.set(letterKey(r.text), set)
+})
+const kept = runs.filter(
+  (r, i) => !placed[i]!.band || (bandPages.get(letterKey(r.text))?.size ?? 0) < FURNITURE_PAGES
+)
+writeFileSync(outPath, JSON.stringify(kept, null, 1))
 console.log({
   pagesRead,
   wordsMeasured,
-  runs: runs.length,
+  runs: kept.length,
+  furnitureLeftOut: runs.length - kept.length,
   ...(leafOf ? { pagesMatchingNoLeaf: unplacedPages } : {}),
   ...(unrendered.length > 0 ? { pagesThatWouldNotRender: unrendered } : {})
 })

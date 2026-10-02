@@ -118,6 +118,31 @@ describe('italic the paper prints and the book sets roman', () => {
     expect(r.dropped).toEqual([])
   })
 
+  it('is never placed inside a longer word', () => {
+    // A running head the book does not print, matched as letters inside a
+    // word of the text: `PART` in `particular`, on Vol. II of The Structure
+    // of Magic.
+    const d = doc([block('p3b0', 'you experienced seeing a particular color or movement', [3])])
+    const r = checkEmphasis(d, [{ page: 3, text: 'PART' }])
+    expect(r.dropped).toEqual([])
+    expect(r.unplaced).toBe(1)
+  })
+
+  it('is not placed by its context on words that do not spell it', () => {
+    const d = doc([
+      block(
+        'p3b0',
+        'his voice drops at the end of the sentence. Say the following two sentences',
+        [3]
+      ),
+      block('p3b1', 'the sentence, say the words, in a corner of the room', [3])
+    ])
+    const r = checkEmphasis(d, [
+      { page: 3, text: 'PART', before: 'end of the sentence.', after: 'following two' }
+    ])
+    expect(r.dropped).toEqual([])
+  })
+
   it('takes the best match on the leaf, not the best in each block', () => {
     const d = doc([
       block('p3b0', 'the gods were imprisoned or incarnated', [3]),
