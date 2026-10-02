@@ -557,6 +557,30 @@ describe('layout — a figure placed where the original set it', () => {
       for (const w of HOST.split(/\s+/)) expect(all).toContain(w.replace(/-$/, ''))
     })
 
+    /**
+     * Manuscript 43's seven planes were anchored at "Seven", the last word of a
+     * line. Narrowing that line pushed the word down, narrowing the next let it
+     * back, and after four passes the figure hung from one line while the
+     * narrowing began at the other: the picture was drawn over "right
+     * represents the Seven". Whatever word is named, no line beside the figure
+     * may reach under it.
+     */
+    it('never sets text under the figure, wherever the word falls', () => {
+      const offsets = [...HOST.slice(0, 900).matchAll(/\S+/g)].map((m) => m.index!)
+      for (const at of offsets) {
+        const book = run(docWith({ kind: 'beside', widthIn: 1.8, at, side: 'right' }))
+        const p = pageWithImage(book)
+        const item = images(p)[0]!
+        const under = lines(p).filter(
+          (l) =>
+            l.baselinePt > item.yPt &&
+            l.baselinePt - leading < item.yPt + item.heightPt &&
+            rightEdge(l) > item.xPt - 0.5
+        )
+        expect(under.map((l) => `${at}: ${l.runs.map((r) => r.text).join(' ')}`)).toEqual([])
+      }
+    })
+
     it('holds the slots beside a figure taller than its paragraph', () => {
       const short = `${PROSE}Attach to the ${WORD} three hydroxyl groups.`
       const book = run(
