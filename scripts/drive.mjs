@@ -4230,8 +4230,25 @@ async function serve() {
       const { readFile, writeFile } = await import('node:fs/promises')
       const where = resolve(REPO, dir)
       const json = await readFile(resolve(where, 'book.json'), 'utf8')
+      // The sheets are headed with the book's name, as `queries` heads them:
+      // the export title where the book has reached that gate, else whatever
+      // a person already wrote at the head of the sheet. The run in this
+      // browser carries the scan's on-disk name, `<sha256>.pdf`, which is
+      // what three sheets on Patterns Vol. I were retitled to by this verb.
+      const onSheet = (() => {
+        try {
+          const head = readFileSync(resolve(where, 'queries.md'), 'utf8').split('\n')[0] ?? ''
+          const named = / — (.+)$/u.exec(head)?.[1] ?? null
+          return named && !/\.(pdf|epub)$/iu.test(named) ? named : null
+        } catch {
+          return null
+        }
+      })()
+      const sheetTitle = JSON.parse(json).answers?.export?.title
+        ? `*${await bookTitle(where)}*`
+        : onSheet
       const built = await page.evaluate(
-        async ([repo, json]) => {
+        async ([repo, json, sheetTitle]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const shelfSave = await import(`/@fs${repo}/src/platform/browser/shelf-save.ts`)
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
@@ -4276,11 +4293,22 @@ async function serve() {
           // and are left untouched rather than guessed at.
           return {
             card: shelfSave.catalogueCard(key, json, parsed.scan?.path ?? null),
-            sheets: run ? shelfSave.editorialSheets(run) : null,
+            // Named as the book file names it, never as the scan on this
+            // disk is named: the file is the shelf's, the run is a cache.
+            sheets: run
+              ? shelfSave.editorialSheets({
+                  ...run,
+                  fileName: parsed.run.fileName ?? run.fileName,
+                  identityAnswers: {
+                    ...(run.identityAnswers ?? {}),
+                    ...(sheetTitle ? { title: sheetTitle } : {})
+                  }
+                })
+              : null,
             cardOnly: !run
           }
         },
-        [REPO, json]
+        [REPO, json, sheetTitle]
       )
       const wrote = []
       // Written exactly as the app writes it (`pushBook`: two spaces, no final
