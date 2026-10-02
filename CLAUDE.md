@@ -718,8 +718,10 @@ reported **24** faults. Eight of them did not exist. Block ids are _derived at
 assembly_, and assembly joins paragraphs across page seams, so the id a
 correction is keyed to names a different block in any reconstruction that does
 not join them: the edits landed on the wrong paragraphs, leaving faults
-standing that had been fixed and manufacturing two (`amb iguity`,
-`exp erience`) that were never in the book at all. It also produced a confident
+standing that had been fixed and putting two (`amb iguity`, `exp erience`)
+in paragraphs that never held them. Both turned out to be real all the same:
+they sit in note 22, where nothing looked until the word checks were handed
+the notes (**The checks read the book against itself**, below). It also produced a confident
 false claim — that `here arc effective` survived to export — which the
 assembled body refutes.
 
@@ -927,6 +929,61 @@ on `\s`, which includes U+00A0, and italic is stored by word index, so the
 engine cannot treat it differently without moving italic onto the wrong words.
 A table cell that must not break is a short cell: a cell the paper sets over
 two lines is two rows.
+
+**The checks read the book against itself, and the faults were where it could
+not see.** A pass over the nine NLP and hypnosis books, after every one of
+them reported finished, turned up five classes no check could reach, and each
+is now one:
+
+- **The notes were never read.** `split-word`, `stray-point` and
+  `stray-apostrophe` walked body blocks only, so `amb iguity` and
+  `exp erience` sat in a footnote of _Patterns_ Vol. I through an export. The
+  book's own notes now go through the same walks, in one vocabulary with the
+  body; the editor's notes do not, being this edition's prose.
+- **A line-end hyphen kept its space.** `sincer- ity`, `tenu- ously`, `Meta
+Publica- tions`: `split-word`'s tokens keep a trailing hyphen, so it tried
+  `sincer-` against `ity` and saw nothing. `hyphen-break` is its own kind,
+  `attested` where the book sets the word or the compound twice elsewhere,
+  and blind to a suspended `pre- and post-`.
+- **The apparatus was never asked what the reader asks of it**
+  (`checkApparatus`, `@core/coherence/apparatus.ts`). _The Structure of
+  Magic_ Vol. I prints 48 superscript marks and no notes, its notes having
+  been read as paragraphs under "FOOTNOTES FOR CHAPTER 1"; Vol. II prints 20
+  and **one**, the note a reader typed as a footnote while its section went
+  in as paragraphs, so the section began with a continuation. Vol. II's
+  Part II marks run ⁴ ⁵ ⁶ ⁵ ⁷. And _Patterns_ Vol. I was exported saying
+  "(see page 103)" four times, naming pages of the 1975 typescript. Four
+  kinds: `notes-as-text`, `unclaimed-mark`, `mark-sequence`,
+  `page-reference`. Notation is not a mark — `d⁻¹`, `c¹`, `NP¹`, `(1/6)⁶`,
+  `mc²`, a linguist's `*the boy are` — and a bare `(p. 278)` is a citation of
+  another work: measured, every one of the hundred-odd in the Blavatsky
+  volumes closes a quotation from somebody else.
+- **Nothing compared the book with a second reading of its own paper**
+  (`checkCoverage`, `@core/witness/coverage.ts`). A reader who drops a line,
+  or sets a leaf's first line at the end of the previous leaf's paragraph,
+  leaves text that is sound by every internal measure. A scan with an OCR
+  layer carries a second reading for nothing, and walked a printed line at a
+  time it found _Persuasion Engineering_'s leaf-15 and leaf-113 lines set a
+  paragraph early, two runs of lines swapped on leaf 123 of _The Structure of
+  Magic_ Vol. I and the line opening its note 8 lost on leaf 72, two dropped
+  lines in _NLP For Dummies_ (leaves 203 and 218), and a heading and two
+  paragraphs gone from leaf 86 of _Coaching with NLP_. Most dropped lines
+  show up as **order**, not absence: the missing test needs a whole line's
+  shingles gone, and a lost line's words are usually scattered through its
+  neighbours, but the line after it then lands behind the line before it. The
+  first version aligned whole leaves word by word and reported hundreds of
+  "missing" runs that were the layer's own junk; a line is judged only where
+  the book knows its words, running heads (folio stripped) and left-out
+  leaves are skipped, and rows of cells and boxed matter are never "moved",
+  because the paper interleaves the one and floats the other.
+
+All four run without a browser: `scripts/checks-of.ts` over any number of
+shelf books, `scripts/coverage-of.ts` over one. A shelf-wide question is now a
+minute, not a load per book. And `italic-witness.mjs` now believes a face the
+file **names** (`Times-Italic`, `Helvetica-Oblique`) instead of measuring it,
+which made it the witness for two study books whose italic had been left
+alone: 110 runs restored on _Persuasion Engineering_, 168 on _Uncommon
+Therapy_.
 
 **A file was written over without being read.** A new test file was given the
 name of an existing one, `test/emphasis.test.ts`, and the write replaced 302
@@ -1179,6 +1236,15 @@ npx vite-node --config vitest.config.ts scripts/emphasis-of.ts <book.json> w.jso
                                      #   italic the witness saw and the book sets in
                                      #   roman (`checkEmphasis`); `--restore` writes
                                      #   the batch that puts it back, text unchanged
+npx vite-node --config vitest.config.ts scripts/checks-of.ts books/*/book.json --out d/
+                                     #   every deterministic check — damage, apparatus,
+                                     #   consistency, rulings not yet in the text —
+                                     #   over shelf books with no browser; `--check`
+                                     #   exits non-zero on anything left after rulings
+npx vite-node --config vitest.config.ts scripts/coverage-of.ts <book.json> [--second s.json]
+                                     #   lines the paper prints that the book lacks or
+                                     #   sets elsewhere, against the scan's own OCR
+                                     #   layer (or a `second` reading)
 node scripts/drive.mjs answers a.json  # the open book's design and edition answers,
                                      #   merged in; `save` writes them to book.json
 node scripts/drive.mjs correct --batch b.json   # many whole-block replacements,

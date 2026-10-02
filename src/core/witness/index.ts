@@ -215,3 +215,4 @@ export function joinsSettled(report: WitnessReport): { at: number; was: string; 
     .filter((d) => d.kind === 'joined' && d.first !== d.second)
     .map((d) => ({ at: d.at, was: d.first, joined: d.second }))
 }
+export { checkCoverage, type LayerLeaf, type CoverageFinding, type CoverageKind } from './coverage'
