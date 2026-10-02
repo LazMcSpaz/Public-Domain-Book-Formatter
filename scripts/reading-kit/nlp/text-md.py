@@ -4,7 +4,9 @@
 
 Reads `drive.mjs body` output (the edited blocks, in reading order) and
 writes headings as #/##/###, paragraphs as paragraphs, boxes as block
-quotes, captions in italics. Emphasis tags are kept as Markdown. A view of
+quotes, captions in italics. Emphasis tags are kept as Markdown. The book's
+own footnotes follow the paragraph that carries their mark, as `body`
+reports it from the engine's pairing; any it could not place close the file. A view of
 book.json, regenerated after every stretch; nothing reads it back.
 """
 import json, re, sys
@@ -34,6 +36,11 @@ def md(t):
     t = re.sub(r'</?i>', '*', t)
     t = re.sub(r'</?b>', '**', t)
     return t.strip()
+notes = (b.get('notes') or {}).get('edited') or []
+under = {}
+for n in notes:
+    if n.get('block'):
+        under.setdefault(n['block'], []).append(n)
 lines = [f'# {title}', '', '_Transcribed for study from the scan; read at the study standard (words and structure checked against the page; spacing, quotation style and most italics not). Not for publication._', '']
 for x in b['edited']:
     t = md(x['text'])
@@ -51,5 +58,12 @@ for x in b['edited']:
         lines += [f'> Note: {t}', '']
     else:
         lines += [t, '']
+    for n in under.get(x['id'], []):
+        lines += [f"> {n.get('marker', '')} {md(n['text'])}", '']
+loose = [n for n in notes if 'block' in n and not n['block']]
+if loose:
+    lines += ['## Notes the text does not mark', '']
+    for n in loose:
+        lines += [f"> {n.get('marker', '')} {md(n['text'])}", '']
 open(out, 'w').write('\n'.join(lines))
 print(out, sum(len(l.split()) for l in lines), 'words')

@@ -20,6 +20,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { assembleBook } from '@core/assemble'
 import { applyEdits } from '@core/edits'
 import { withMarkup } from '@core/transcribe/markup'
+import { prepareFootnotes } from '@core/layout/footnotes'
 
 const [bookPath, out] = process.argv.slice(-2)
 if (!bookPath?.endsWith('.json') || !out?.endsWith('.json')) {
@@ -33,16 +34,35 @@ type Faced = { text: string; emphasis?: number[]; strong?: number[] }
 const faces = (b: Faced): string => withMarkup(b.text, b.emphasis, b.strong)
 const say = (blocks: (Faced & { id: string; kind: string })[]) =>
   blocks.map((b) => ({ id: b.id, kind: b.kind, text: faces(b) }))
+// Where each note is referred from, by the engine's own claiming walk: a
+// reader of the text needs a note beside the sentence its mark is on, and a
+// second rule for finding it would disagree with the page somewhere.
+const claimedBy = new Map<string, string>()
+prepareFootnotes(applied.blocks, applied.footnotes, applied.bareMarks ?? []).blocks.forEach(
+  (pb, i) => {
+    for (const r of pb.references) claimedBy.set(r.noteId, applied.blocks[i]!.id)
+  }
+)
 // The book's own notes only: the editor's are not corrections.
-const notes = (list: (Faced & { id: string; pageIndex: number; originalMarker: string })[]) =>
-  list.filter((n) => n.originalMarker).map((n) => ({ id: n.id, leaf: n.pageIndex, text: faces(n) }))
+const notes = (
+  list: (Faced & { id: string; pageIndex: number; originalMarker: string })[],
+  placed = false
+) =>
+  list
+    .filter((n) => n.originalMarker)
+    .map((n) => ({
+      id: n.id,
+      leaf: n.pageIndex,
+      text: faces(n),
+      ...(placed ? { marker: n.originalMarker, block: claimedBy.get(n.id) ?? null } : {})
+    }))
 
 writeFileSync(
   out,
   JSON.stringify({
     edited: say(applied.blocks),
     pristine: say(bare.blocks),
-    notes: { edited: notes(applied.footnotes), pristine: notes(bare.footnotes) }
+    notes: { edited: notes(applied.footnotes, true), pristine: notes(bare.footnotes) }
   })
 )
 console.log(`${applied.blocks.length} blocks, ${applied.footnotes.length} notes → ${out}`)
