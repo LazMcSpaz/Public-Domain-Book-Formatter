@@ -815,6 +815,14 @@ describe('a line-end hyphen left with its space', () => {
     expect(found[0]).toMatchObject({ expected: 'sincerity', confidence: 'shape' })
   })
 
+  it('keeps the hyphen when the left half is a compound already', () => {
+    const found = of(
+      build(['Being overwhelmed and being out-of- control can scare people.']),
+      'hyphen-break'
+    )
+    expect(found).toMatchObject([{ expected: 'out-of-control', confidence: 'shape' }])
+  })
+
   it('leaves a suspended hyphen alone', () => {
     expect(of(build(['Both pre- and post-hypnotic suggestion work.']), 'hyphen-break')).toEqual([])
   })

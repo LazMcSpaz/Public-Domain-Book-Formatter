@@ -504,7 +504,10 @@ function hyphenBreaks(passages: readonly Passage[]): DamageFinding[] {
       const compound = `${left}-${right}`
       const asOne = count(joined)
       const asCompound = count(compound)
-      const expected = asCompound > asOne ? compound : joined
+      // A left half that is itself a compound (`out-of-`, `dishing-up-`) was
+      // broken at one of its own hyphens: the book's count decides, and with
+      // none to go on the compound is the likelier word.
+      const expected = asCompound > asOne || (asOne === 0 && left.includes('-')) ? compound : joined
       const attested = Math.max(asOne, asCompound) >= JOINED_FLOOR
       findings.push({
         kind: 'hyphen-break',
