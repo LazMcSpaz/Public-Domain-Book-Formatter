@@ -509,6 +509,20 @@ on the shelf, and each measured over the shelf before its threshold was set:
 | `table-as-prose` | a paragraph that is mostly figures and symbols             | yes                  |
 | `italics-absent` | a book under 5 italic runs per 10,000 words                | yes, or a ruling     |
 | `greek`          | Greek read as Latin words (`Moipa`, `Xpbvos`)              | no: a list to read   |
+| `hyphen-break`   | a line-end hyphen left with its space (`sincer- ity`)      | yes                  |
+
+The word kinds (`split-word`, `hyphen-break`, `stray-point`,
+`stray-apostrophe`) read the book's own footnotes as well as its blocks.
+
+Beside them, `checkApparatus` asks what a reader with the finished book asks
+of its apparatus — a mark no note claims, notes set as body text under a
+notes heading, marks that do not count up, and a reference to one of the
+book's own pages, which an edition renumbers — and `checkCoverage` asks
+whether the book carries every line its scan's OCR layer reads, and in the
+paper's order. Both are findings to read rather than gates; a book that sets
+its notes as a section on purpose says so with an as-printed ruling.
+`scripts/checks-of.ts` and `scripts/coverage-of.ts` run them over shelf books
+with no browser.
 
 `transcribe` reports all but the book-level one for the leaves it lands, so the
 reader meets them while the leaf is open (Stage 4b).

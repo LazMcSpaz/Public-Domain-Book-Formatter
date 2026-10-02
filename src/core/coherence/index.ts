@@ -32,6 +32,7 @@ export {
   type DroppedEmphasis,
   type EmphasisReport
 } from './emphasis'
+export { checkApparatus, type ApparatusFinding, type ApparatusKind } from './apparatus'
 export { checkConsistency, type ConsistencyFinding, type ConsistencyKind } from './consistency'
 export {
   parseSenseFinding,
@@ -63,6 +64,7 @@ export {
   honourRulings,
   type DamageRuling,
   type HonouredFinding,
+  type RulableFinding,
   type DamageFinding,
   type DamageKind,
   type DamageConfidence
