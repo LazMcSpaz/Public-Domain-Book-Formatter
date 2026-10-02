@@ -63,6 +63,8 @@ export const ITALIC_LEAN = 8
  * _Persuasion Engineering_ was a roman word whose box straddled two lines.
  */
 export const ITALIC_MOST = 19
+/** The least {@link Lean.sharpness} an italic verdict needs. */
+export const MIN_SHARPNESS = 1.03
 /** Fewest letters a word needs to be judged on its own slant. */
 export const MIN_LETTERS = 3
 /** Fewest ink pixels worth measuring: below it a box is a speck or a blank. */
@@ -112,11 +114,30 @@ export function otsuThreshold(hist: ArrayLike<number>): number {
   return threshold
 }
 
+/** How a box's strokes lean, and how sharply that lean beats standing upright. */
+export interface Lean {
+  /** Degrees, positive leaning right as an italic does. */
+  degrees: number
+  /**
+   * The best shear's score over the upright one. A word with stems peaks
+   * hard at its lean; a word built of diagonals and bowls — `were`, `owe`,
+   * `row`, `know` — scores nearly the same at every angle, and its "lean"
+   * is whichever angle wins by a hair. Measured: 1.003 to 1.004 for those,
+   * 1.054 and up for every italic word checked on _Persuasion Engineering_.
+   */
+  sharpness: number
+}
+
 /**
  * The angle a box's strokes lean at, in degrees, positive leaning right as an
  * italic does; or null when the box holds too little ink to say.
  */
 export function strokeSlant(image: GrayImage, box: PixelBox): number | null {
+  return strokeLean(image, box)?.degrees ?? null
+}
+
+/** {@link strokeSlant}, with how sharply the lean was found. */
+export function strokeLean(image: GrayImage, box: PixelBox): Lean | null {
   const x0 = Math.max(0, Math.floor(box.x0))
   const y0 = Math.max(0, Math.floor(box.y0))
   const x1 = Math.min(image.width, Math.ceil(box.x1))
@@ -181,15 +202,18 @@ export function strokeSlant(image: GrayImage, box: PixelBox): number | null {
   // between whole degrees, which matters only near the threshold.
   const left = scores.get(bestAt - 1)
   const right = scores.get(bestAt + 1)
-  if (left === undefined || right === undefined) return bestAt
+  const sharpness = bestScore / scores.get(0)!
+  if (left === undefined || right === undefined) return { degrees: bestAt, sharpness }
   const bend = left - 2 * bestScore + right
-  return bend < 0 ? bestAt + (left - right) / (2 * bend) : bestAt
+  return { degrees: bend < 0 ? bestAt + (left - right) / (2 * bend) : bestAt, sharpness }
 }
 
 /** A word as the witness needs it: how many letters, and how it leans. */
 export interface SlantedWord {
   letters: number
   slant: number | null
+  /** {@link Lean.sharpness}; a word without it is taken to be sharp enough. */
+  sharpness?: number
 }
 
 /** The middle of a list of numbers, or null for an empty one. */
@@ -220,7 +244,13 @@ export function italicWords(words: readonly SlantedWord[]): boolean[] {
   if (roman === null) return words.map(() => false)
   const judged = words.map((w) => w.letters >= MIN_LETTERS && w.slant !== null)
   const lean = words.map((w) => (w.slant === null ? null : w.slant - roman))
-  const own = words.map((_, i) => judged[i]! && lean[i]! >= ITALIC_LEAN && lean[i]! <= ITALIC_MOST)
+  const own = words.map(
+    (w, i) =>
+      judged[i]! &&
+      lean[i]! >= ITALIC_LEAN &&
+      lean[i]! <= ITALIC_MOST &&
+      (w.sharpness ?? Infinity) >= MIN_SHARPNESS
+  )
   return own.map((italic, i) => {
     if (italic || judged[i]) return italic
     let before = i - 1

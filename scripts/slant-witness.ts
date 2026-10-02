@@ -33,7 +33,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import * as mupdf from 'mupdf'
 import { assembleBook } from '@core/assemble'
 import { applyEdits } from '@core/edits'
-import { italicWords, pageRoman, strokeSlant, type GrayImage } from '@core/image'
+import { italicWords, pageRoman, strokeLean, type GrayImage } from '@core/image'
 
 const DPI = 300
 /** The share of a page's height its running head, and its foot, sit in. */
@@ -213,7 +213,10 @@ for (let p = first!; p <= last!; p++) {
   pixmap.destroy()
   page.destroy()
   const image: GrayImage = { data, width, height }
-  const slanted = words.map((w) => ({ letters: letters(w.text), slant: strokeSlant(image, w) }))
+  const slanted = words.map((w) => {
+    const lean = strokeLean(image, w)
+    return { letters: letters(w.text), slant: lean?.degrees ?? null, sharpness: lean?.sharpness }
+  })
   wordsMeasured += slanted.filter((s) => s.slant !== null).length
   const italic = italicWords(slanted)
   const roman = pageRoman(slanted)

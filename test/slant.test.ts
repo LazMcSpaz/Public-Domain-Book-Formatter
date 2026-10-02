@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { italicWords, otsuThreshold, strokeSlant, type GrayImage } from '@core/image'
+import { italicWords, otsuThreshold, strokeLean, strokeSlant, type GrayImage } from '@core/image'
 
 /**
  * A word drawn as a scan draws it: dark stems on light paper, each stem
@@ -99,6 +99,25 @@ describe('the slant of a word’s strokes', () => {
     expect(strokeSlant(two, { x0: 0, y0: 0, x1: line.width, y1: line.height })).not.toBeNull()
   })
 
+  it('finds a word of bowls and diagonals leaning hardly at all, however it leans', () => {
+    // `were`, `owe`, `know`: no upright stem, so every shear scores alike.
+    const width = 120
+    const height = 44
+    const data = new Uint8Array(width * height).fill(235)
+    for (const cx of [16, 40, 64, 88]) {
+      for (let y = 18; y < 36; y++) {
+        for (let x = cx - 9; x <= cx + 9; x++) {
+          const r = Math.hypot(x - cx, y - 27)
+          if (r > 5 && r < 8) data[y * width + x] = 25
+        }
+      }
+    }
+    const bowls = { data, width, height }
+    expect(strokeLean(bowls, all(bowls))!.sharpness).toBeLessThan(1.03)
+    const stems = word(12)
+    expect(strokeLean(stems, all(stems))!.sharpness).toBeGreaterThan(1.03)
+  })
+
   it('cuts ink from paper where the two populations part', () => {
     const hist = new Array(256).fill(0)
     hist[20] = 100
@@ -141,6 +160,19 @@ describe('which of a page’s words are italic', () => {
       false,
       false,
       true
+    ])
+  })
+
+  it('takes no lean from a word that leans by a hair at every angle', () => {
+    const blunt = { slant: 14, letters: 4, sharpness: 1.004 }
+    const sharp = { slant: 14, letters: 4, sharpness: 1.09 }
+    expect(italicWords([w(0), w(0), blunt, w(0), sharp, w(0)])).toEqual([
+      false,
+      false,
+      false,
+      false,
+      true,
+      false
     ])
   })
 
