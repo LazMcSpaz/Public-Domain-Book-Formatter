@@ -515,6 +515,21 @@ this volume carries its journal citation on its title, so the contents read
 `prepareFootnotes`' own output, because the numbered pass has to name a chapter
 exactly as the layout does or the folios stop matching.
 
+**A table's marks were hidden from the footnote search, and the notes they
+named took marks further on.** The layout blanked every table's text before
+`prepareFootnotes` ran, on the reasoning that a cell had no word for a mark to
+ride on, so the note would be reported as an orphan. It was not: a note left
+waiting takes the next mark of its kind **anywhere in the book**. On _The
+Secret Doctrine_ Vol. I a table of the principles (p202b3) carries five marks,
+and from it to the end of the volume every note printed under the reference
+before its own, with `notesDropped` empty beside it. `drive.mjs pairs` was
+right the whole time, because it does not blank tables, which is how the two
+were found to disagree: the printed note sequence, read out of the PDF, parted
+from `pairs` at the table. Cells now carry their marks (`tableNotes`). **Two
+passes that ask the same question with different inputs are a fault waiting
+for a book to show it**; compare the printed notes with `pairs` after any
+export of a book with notes.
+
 **One block can carry the same marker twice, and the engine could only see
 one.** `prepareFootnotes` asked each note for its _first_ match in a block —
 and assembly joins a paragraph across a page seam, so a paragraph running from
