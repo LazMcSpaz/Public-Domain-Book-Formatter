@@ -336,6 +336,8 @@ export interface SplicedBlock {
   emphasis: number[]
   /** The block's strong runs, moved the same way and for the same reason. */
   strong: number[]
+  /** The block's small-capital runs, likewise. */
+  smallCaps: number[]
 }
 
 /**
@@ -355,7 +357,8 @@ export function spliceRunInto(
   blockText: string,
   emphasis: readonly number[] | undefined,
   run: DroppedRun,
-  strong?: readonly number[]
+  strong?: readonly number[],
+  smallCaps?: readonly number[]
 ): SplicedBlock | null {
   const inserted = run.text.split(/\s+/u).filter((w) => w.length > 0).length
   const shift = (marks: readonly number[] | undefined, from: number): number[] =>
@@ -368,7 +371,8 @@ export function spliceRunInto(
     return {
       text: `${run.text} ${blockText}`.trim(),
       emphasis: shift(emphasis, 0),
-      strong: shift(strong, 0)
+      strong: shift(strong, 0),
+      smallCaps: shift(smallCaps, 0)
     }
   }
 
@@ -384,5 +388,10 @@ export function spliceRunInto(
     .replace(/\s+/gu, ' ')
     .trim()
   const before = head.split(/\s+/u).filter((w) => w.length > 0).length
-  return { text, emphasis: shift(emphasis, before), strong: shift(strong, before) }
+  return {
+    text,
+    emphasis: shift(emphasis, before),
+    strong: shift(strong, before),
+    smallCaps: shift(smallCaps, before)
+  }
 }

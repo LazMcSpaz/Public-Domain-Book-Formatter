@@ -371,6 +371,17 @@ export interface StyleProfile {
    * the page was built on.
    */
   quoteIndentEms: number
+  /**
+   * The face small capitals in running text are drawn from; empty is the
+   * text's own face.
+   *
+   * Four of the seven faces offered have no small capitals, and the engine
+   * never fakes them by shrinking capitals, so a book set in one printed its
+   * small-capital phrases as full capitals. Naming a face that has them —
+   * EB Garamond in Hall's Libre Caslon Text — borrows its small capitals,
+   * sized to stand as tall as the text's lower case.
+   */
+  smallCapsFont: string
   ornaments: OrnamentChoices
   /** Front-matter visual toggles. */
   frontMatter: {

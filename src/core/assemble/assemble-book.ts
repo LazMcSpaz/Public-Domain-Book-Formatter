@@ -91,6 +91,8 @@ export interface Footnote {
   emphasis?: number[]
   /** Word indices the note sets bold. See `TranscribedBlock.strong`. */
   strong?: number[]
+  /** Word indices the note sets in small capitals. See `TranscribedBlock.smallCaps`. */
+  smallCaps?: number[]
   /** Page the note was printed on. */
   pageIndex: number
   /** True when no body text referenced this marker. */
@@ -627,6 +629,12 @@ export function assembleBook(
               ...block.strong.map((i) => i + shift)
             ]
           }
+          if (block.smallCaps?.length) {
+            previousNote.smallCaps = [
+              ...(previousNote.smallCaps ?? []),
+              ...block.smallCaps.map((i) => i + shift)
+            ]
+          }
           previousNote.text = joined
           continue
         }
@@ -650,12 +658,14 @@ export function assembleBook(
         const shift = wordCount(raw) - wordCount(text)
         const emphasis = block.emphasis?.map((i) => i - shift).filter((i) => i >= 0)
         const strong = block.strong?.map((i) => i - shift).filter((i) => i >= 0)
+        const smallCaps = block.smallCaps?.map((i) => i - shift).filter((i) => i >= 0)
         footnotes.push({
           id: `fn${footnotes.length + 1}`,
           originalMarker: marker,
           text,
           ...(emphasis?.length ? { emphasis } : {}),
           ...(strong?.length ? { strong } : {}),
+          ...(smallCaps?.length ? { smallCaps } : {}),
           pageIndex: page.pageIndex,
           orphaned: false
         })
@@ -689,6 +699,12 @@ export function assembleBook(
         }
         if (block.strong?.length) {
           previous.strong = [...(previous.strong ?? []), ...shiftEmphasis(block.strong, shift)]
+        }
+        if (block.smallCaps?.length) {
+          previous.smallCaps = [
+            ...(previous.smallCaps ?? []),
+            ...shiftEmphasis(block.smallCaps, shift)
+          ]
         }
         previous.text = joined
         if (!previous.sourcePages.includes(page.pageIndex)) {

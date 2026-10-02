@@ -56,7 +56,7 @@ export interface CorrectionRows {
 /** Words shown either side of a change. */
 export const CONTEXT_WORDS = 3
 
-const TAG = /<\/?(?:i|b|strong|em)>/gu
+const TAG = /<\/?(?:i|b|strong|em|sc)>/gu
 
 const bare = (text: string): string => text.replace(TAG, '')
 

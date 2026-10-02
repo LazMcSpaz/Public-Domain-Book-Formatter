@@ -172,7 +172,7 @@ function NoteChip({
    */
   onBare?: () => void
 }): JSX.Element {
-  const current = withMarkup(note.text, note.emphasis, note.strong)
+  const current = withMarkup(note.text, note.emphasis, note.strong, note.smallCaps)
   return (
     <div className="proof-annotation galley-note galley-fn">
       <span className="proof-annotation-bar">
@@ -454,7 +454,7 @@ export function BookEditor({
       for (const { note } of list) anchorOf.set(note.id, blockId)
     }
     for (const note of doc.footnotes) {
-      const text = withMarkup(note.text, note.emphasis, note.strong)
+      const text = withMarkup(note.text, note.emphasis, note.strong, note.smallCaps)
       for (const m of findMatches(text, find.query, find.matchCase)) {
         out.push({
           passageId:
@@ -511,7 +511,7 @@ export function BookEditor({
     // note, the `note` edit itself for an authored one.
     for (const note of doc.footnotes) {
       if (!note.originalMarker) continue
-      const text = withMarkup(note.text, note.emphasis, note.strong)
+      const text = withMarkup(note.text, note.emphasis, note.strong, note.smallCaps)
       const swept = sweepText(text, find.query, find.replace, find.matchCase)
       if (swept.count === 0) continue
       next = withEdit(next, { kind: 'note-text', noteId: note.id, text: swept.text })

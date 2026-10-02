@@ -137,6 +137,24 @@ export interface BreakParagraphOptions {
 export interface TextSpan {
   words: ReadonlySet<number>
   font: FontRef
+  /**
+   * Size relative to the paragraph's, where the face set here is not the
+   * paragraph's own: small capitals borrowed from another face are scaled to
+   * stand as tall as the text's lower case. Absent is 1.
+   */
+  scale?: number
+}
+
+/** The size a word is set at: the paragraph's, scaled where a span says so. */
+export function sizeForWord(
+  index: number,
+  spans: readonly TextSpan[] | undefined,
+  sizePt: number
+): number {
+  if (spans) {
+    for (const span of spans) if (span.words.has(index)) return sizePt * (span.scale ?? 1)
+  }
+  return sizePt
 }
 
 /** The face a word is set in: the first span that claims it, or the default. */
@@ -334,7 +352,9 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
   /** A word's own face — italic or bold where a span claims it. */
   const fontAt = (index: number): FontRef => fontForWord(index, options.spans, font)
   const width = (s: string, index = -1): number =>
-    measurer.widthOf(s, index >= 0 ? fontAt(index) : font, sizePt)
+    index >= 0
+      ? measurer.widthOf(s, fontAt(index), sizeForWord(index, options.spans, sizePt))
+      : measurer.widthOf(s, font, sizePt)
 
   const spaceWidth = width(' ')
   const hyphenWidth = width('-')

@@ -7,7 +7,7 @@
  * ways across a `contenteditable`:
  *
  *  - `htmlOfMarkup` renders the notation as HTML that contains nothing but
- *    `<i>`, `<b>` and escaped text, so a block can be shown (and edited) with
+ *    `<i>`, `<b>`, `<sc>` and escaped text, so a block can be shown (and edited) with
  *    its emphasis visible rather than as tags.
  *  - `markupOfNodes` walks the edited DOM back to the notation, so what the
  *    editor commits is exactly the string a textarea would have held. Ctrl+I
@@ -51,8 +51,9 @@ const escapeHtml = (s: string): string =>
  * the notation means rather than a variant of it.
  */
 export function htmlOfMarkup(raw: string): string {
-  const { text, emphasis, strong } = parseInlineMarkup(raw)
+  const { text, emphasis, strong, smallCaps } = parseInlineMarkup(raw)
   const marks = [
+    { words: new Set(smallCaps), tag: 'sc', inside: false },
     { words: new Set(strong), tag: 'b', inside: false },
     { words: new Set(emphasis), tag: 'i', inside: false }
   ]
@@ -87,6 +88,8 @@ export function htmlOfMarkup(raw: string): string {
 /** Tag names that mean italic, beyond what inline style may add. */
 const ITALIC_NAMES = new Set(['I', 'EM', 'CITE', 'VAR'])
 const STRONG_NAMES = new Set(['B', 'STRONG'])
+/** Small capitals: `<sc>` is not HTML, and a page shows it as a custom element. */
+const SMALL_CAPS_NAMES = new Set(['SC'])
 
 const styledItalic = (node: RichNode): boolean =>
   (node.style?.fontStyle ?? '').startsWith('italic') || node.style?.fontStyle === 'oblique'
@@ -112,10 +115,15 @@ const styledBold = (node: RichNode): boolean => {
  *    exactly as the notation's reader would take it.
  */
 export function markupOfNodes(nodes: ArrayLike<RichNode>): string {
-  return serialize(nodes, false, false)
+  return serialize(nodes, false, false, false)
 }
 
-function serialize(nodes: ArrayLike<RichNode>, insideI: boolean, insideB: boolean): string {
+function serialize(
+  nodes: ArrayLike<RichNode>,
+  insideI: boolean,
+  insideB: boolean,
+  insideSc: boolean
+): string {
   let out = ''
   for (let i = 0; i < nodes.length; i += 1) {
     const node = nodes[i]!
@@ -132,12 +140,19 @@ function serialize(nodes: ArrayLike<RichNode>, insideI: boolean, insideB: boolea
     }
     const italic = !insideI && (ITALIC_NAMES.has(name) || styledItalic(node))
     const bold = !insideB && (STRONG_NAMES.has(name) || styledBold(node))
-    let inner = serialize(node.childNodes, insideI || italic, insideB || bold)
+    const smallCaps = !insideSc && SMALL_CAPS_NAMES.has(name)
+    let inner = serialize(
+      node.childNodes,
+      insideI || italic,
+      insideB || bold,
+      insideSc || smallCaps
+    )
     // Marking nothing is not a mark: an empty <i></i> left behind by an editor
     // would otherwise emit a tag pair the notation reads as an unclosed run.
     if (inner.trim().length > 0) {
       if (italic) inner = `<i>${inner}</i>`
       if (bold) inner = `<b>${inner}</b>`
+      if (smallCaps) inner = `<sc>${inner}</sc>`
     }
     out += inner
     // Block-level children separate words: two <div> lines pasted in must not

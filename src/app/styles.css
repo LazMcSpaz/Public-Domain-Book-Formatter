@@ -4451,3 +4451,9 @@ textarea.galley-plain {
   flex-wrap: wrap;
   margin-top: 14px;
 }
+
+/* Small capitals in the book's own text: `<sc>` from the notation, shown as
+   what it prints as. The PDF draws them from a real small-caps face. */
+sc {
+  font-variant-caps: small-caps;
+}

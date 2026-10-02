@@ -35,6 +35,7 @@ export const BLOCK_FIELDS = [
   'headerRow',
   'emphasis',
   'strong',
+  'smallCaps',
   'level',
   'marker',
   'continuesPrevious',
