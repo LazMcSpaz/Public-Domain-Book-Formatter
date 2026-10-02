@@ -361,6 +361,16 @@ export interface StyleProfile {
    * chapters. 7 is none, which every book laid out before this existed keeps.
    */
   sideHeadsFrom: number
+  /**
+   * How far a quotation is set in from the left margin, in ems.
+   *
+   * 2 is the verse's own inset, which is right for a book that quotes and
+   * versifies. Where a book's commentary is set *deeper* than the text it
+   * comments on — the Stanzas of Dzyan in Hall's class notes, whose key says
+   * indented text is commentary — the two at one inset lose the distinction
+   * the page was built on.
+   */
+  quoteIndentEms: number
   ornaments: OrnamentChoices
   /** Front-matter visual toggles. */
   frontMatter: {

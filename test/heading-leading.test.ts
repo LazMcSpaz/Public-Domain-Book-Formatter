@@ -115,3 +115,51 @@ describe('a side head', () => {
     expect(head.xPt).toBeGreaterThan(body.xPt)
   })
 })
+
+/**
+ * The Stanzas of Dzyan set each verse at the list's inset and its commentary
+ * one step deeper; the printed key says indented text is commentary. At one
+ * inset for both, the key described nothing on the page.
+ */
+describe('the quotation inset', () => {
+  const blocks: BookBlock[] = [
+    { id: 'p0b0', kind: 'heading', level: 1, text: 'Stanza VII', sourcePages: [0] },
+    {
+      id: 'p0b1',
+      kind: 'verse',
+      text: '1. Behold the beginning of sentient formless life.\nFirst the Divine, the One.',
+      sourcePages: [0]
+    },
+    {
+      id: 'p0b2',
+      kind: 'blockquote',
+      text: 'In this verse the origin of sentient life is discussed.',
+      sourcePages: [0]
+    }
+  ]
+  const xOf = (quoteIndentEms: number, word: string) => {
+    const book = layout(
+      doc(blocks),
+      { ...defaultStyleProfile(), quoteIndentEms },
+      fixedWidthMeasurer(0.5),
+      {
+        edition: { title: 'T', author: 'A', editionDate: '2026' }
+      }
+    )
+    return book.pages
+      .flatMap((p) => p.items)
+      .filter((i): i is PositionedLine => i.kind === 'line')
+      .flatMap((l) => l.runs)
+      .find((r) => r.text === word)!.xPt
+  }
+
+  it('sets commentary deeper than verse when the profile asks', () => {
+    expect(xOf(4, 'In') - xOf(4, '1.')).toBeGreaterThan(10)
+  })
+
+  it('keeps the two at one inset by default', () => {
+    expect(defaultStyleProfile().quoteIndentEms).toBe(2)
+    // a quotation's ems are 0.94 of the body's, so the two differ by a hair
+    expect(Math.abs(xOf(2, 'In') - xOf(2, '1.'))).toBeLessThan(2)
+  })
+})

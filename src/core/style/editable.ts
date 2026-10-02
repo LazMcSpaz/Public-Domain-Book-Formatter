@@ -317,6 +317,20 @@ export function styleQuestions(
       ]
     },
     {
+      id: 'quoteIndentEms',
+      type: 'choice',
+      prompt: 'How far in are quotations set?',
+      help:
+        'Verse is set in two ems. Quotations usually sit at the same inset; a book whose ' +
+        'commentary is set deeper than the text it comments on needs them further in, or ' +
+        'the two read as one.',
+      defaultValue: String(profile.quoteIndentEms),
+      options: [
+        { value: '2', label: 'With the verse' },
+        { value: '4', label: 'Deeper than the verse' }
+      ]
+    },
+    {
       id: 'chaptersOpenRecto',
       type: 'confirm',
       prompt: 'Start every chapter on a right-hand page?',
@@ -496,6 +510,7 @@ export function applyStyleAnswers(profile: StyleProfile, answers: Answers): Styl
     contentsSynopsis: pickBool(answers, 'contentsSynopsis', profile.contentsSynopsis),
     contentsDepth: pickNumber(answers, 'contentsDepth', profile.contentsDepth),
     sideHeadsFrom: pickNumber(answers, 'sideHeadsFrom', profile.sideHeadsFrom),
+    quoteIndentEms: pickNumber(answers, 'quoteIndentEms', profile.quoteIndentEms),
     ornaments: {
       chapterOpener: pickOrnament(answers, 'ornamentChapter', profile.ornaments.chapterOpener),
       sectionDivider: pickOrnament(answers, 'ornamentDivider', profile.ornaments.sectionDivider),

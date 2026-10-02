@@ -107,6 +107,7 @@ export const BANKED_STYLE_KEYS: readonly (keyof StyleProfile)[] = [
   'contentsSynopsis',
   'contentsDepth',
   'sideHeadsFrom',
+  'quoteIndentEms',
   'ornaments',
   'frontMatter'
 ]

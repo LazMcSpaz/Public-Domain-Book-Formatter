@@ -26,6 +26,8 @@ const profile = (over: Partial<StyleProfile> = {}): StyleProfile =>
     pageNumber: 'bottom-center',
     contentsSynopsis: true,
     contentsDepth: 6,
+    sideHeadsFrom: 7,
+    quoteIndentEms: 2,
     ornaments: {},
     frontMatter: { titlePage: true, copyrightPage: true, halfTitle: false, titleBorder: false },
     ...over

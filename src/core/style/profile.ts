@@ -52,6 +52,10 @@ function bool(v: unknown, fallback: boolean): boolean {
 }
 
 /** A heading level: a whole number from 1 to 6, anything else the fallback. */
+function inset(v: unknown, fallback: number): number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 8 ? v : fallback
+}
+
 function sideLevel(v: unknown, fallback: number): number {
   return typeof v === 'number' && Number.isInteger(v) && v >= 2 && v <= 7 ? v : fallback
 }
@@ -143,6 +147,7 @@ export function normalizeStyleProfile(raw: unknown): StyleProfile {
     contentsSynopsis: bool(raw['contentsSynopsis'], d.contentsSynopsis),
     contentsDepth: depth(raw['contentsDepth'], d.contentsDepth),
     sideHeadsFrom: sideLevel(raw['sideHeadsFrom'], d.sideHeadsFrom),
+    quoteIndentEms: inset(raw['quoteIndentEms'], d.quoteIndentEms),
     ornaments: {
       chapterOpener:
         typeof rawOrn['chapterOpener'] === 'string' ? (rawOrn['chapterOpener'] as string) : null,
@@ -179,6 +184,7 @@ export function mergeStyle(base: StyleProfile, patch: Partial<StyleProfile>): St
   if (patch.dropCap !== undefined) next.dropCap = patch.dropCap
   if (patch.contentsDepth !== undefined) next.contentsDepth = patch.contentsDepth
   if (patch.sideHeadsFrom !== undefined) next.sideHeadsFrom = patch.sideHeadsFrom
+  if (patch.quoteIndentEms !== undefined) next.quoteIndentEms = patch.quoteIndentEms
   if (patch.paragraphIndentEms !== undefined) next.paragraphIndentEms = patch.paragraphIndentEms
   if (patch.paragraphSpacingEms !== undefined) next.paragraphSpacingEms = patch.paragraphSpacingEms
   if (patch.hyphenate !== undefined) next.hyphenate = patch.hyphenate

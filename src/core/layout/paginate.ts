@@ -527,7 +527,7 @@ function blockStyle(block: BookBlock, profile: StyleProfile): BlockStyle {
       return {
         ...base,
         scale: 0.94,
-        indentLeftEms: 2,
+        indentLeftEms: profile.quoteIndentEms,
         indentRightEms: 2,
         firstLineIndentEms: 0,
         spaceBefore: 1,
