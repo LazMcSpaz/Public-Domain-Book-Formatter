@@ -4249,63 +4249,30 @@ async function serve() {
         : onSheet
       const built = await page.evaluate(
         async ([repo, json, sheetTitle]) => {
-          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const shelfSave = await import(`/@fs${repo}/src/platform/browser/shelf-save.ts`)
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
           const parsed = project.parseBookFile(json)
           const key = parsed.run.key
-          // The run under the file's own key, or — because a scan rebuilt on
-          // this machine carries a fresh date and `load` re-keys the run to
-          // match it — the book this browser has open. `__pdbfBook` is the
-          // one designated way every verb here knows which book is meant
-          // (see its own doc comment above), and `load`/`use` set it, so it
-          // is asked first rather than guessed at. Comparing *file names*
-          // here used to be the check, and it is not a safe one on this
-          // shelf: `load`'s run always carries the scan's *on-disk* name —
-          // `scans/<sha256>.pdf`, the shelf's own convention — while the
-          // book file records the original upload's name, so the two agree
-          // only when a session happened to load the book from a
-          // readable-named copy earlier. Measured on this shelf: three of
-          // ten books loaded straight from their shelf scan failed the old
-          // check and fell back to writing no sheets, silently, for a
-          // reason that had nothing to do with whether it was the same
-          // book. The leaf count is kept as the sanity guard — a book file
-          // is checked against the run its own directory's scan produced,
-          // not against whichever run happens to be current.
-          let run = await runStore.loadRun(key)
-          if (!run) {
-            const currentKey = window.__pdbfBook
-            const candidate = currentKey
-              ? await runStore.loadRun(currentKey)
-              : await (async () => {
-                  const open = await window.__pdbfPickBook(runStore)
-                  return open ? await runStore.loadRun(open.key) : null
-                })()
-            const same =
-              candidate && candidate.transcriptions.length === parsed.run.transcriptions.length
-            if (same) run = candidate
-          }
-          // No run: the card alone still needs none, since `catalogueCard`
-          // reads only the parsed file — so a book like Vol. I of *Isis
-          // Unveiled*, whose scan is too large for any shelf and so has no
-          // leaf this browser could ever hold, still gets an about.json.
-          // The sheets are a different promise (they read `run.rulings`)
-          // and are left untouched rather than guessed at.
+          // Everything both the card and the sheets read is in the book file
+          // — its transcriptions, its rulings, its proposals — so both are
+          // built from the file **on disk** and from nothing in this
+          // browser. The sheets used to come from the run cached here under
+          // the file's key, and a cache is whatever some earlier session
+          // left in it: on Patterns Vol. II that run predated four rulings
+          // the book file already held, and `card` rewrote rulings.md
+          // without them, with nothing to say so. It also meant a book
+          // whose scan no shelf can hold, and so has no run here at all
+          // (Vol. I of *Isis Unveiled*), got a card and no sheets.
           return {
             card: shelfSave.catalogueCard(key, json, parsed.scan?.path ?? null),
-            // Named as the book file names it, never as the scan on this
-            // disk is named: the file is the shelf's, the run is a cache.
-            sheets: run
-              ? shelfSave.editorialSheets({
-                  ...run,
-                  fileName: parsed.run.fileName ?? run.fileName,
-                  identityAnswers: {
-                    ...(run.identityAnswers ?? {}),
-                    ...(sheetTitle ? { title: sheetTitle } : {})
-                  }
-                })
-              : null,
-            cardOnly: !run
+            sheets: shelfSave.editorialSheets({
+              ...parsed.run,
+              identityAnswers: {
+                ...(parsed.run.identityAnswers ?? {}),
+                ...(sheetTitle ? { title: sheetTitle } : {})
+              }
+            }),
+            cardOnly: false
           }
         },
         [REPO, json, sheetTitle]
