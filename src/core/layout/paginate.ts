@@ -1606,18 +1606,32 @@ function buildFigureFlowable(
       ...(p.spans.length > 0 ? { spans: p.spans } : {})
     })
 
-  let start = lineOfWord(breakWith(measure), wordAt)
-  let broken: BrokenLine[] = []
-  for (let pass = 0; pass < 4; pass++) {
-    const widths = [
-      ...Array.from({ length: start }, () => measure),
+  const narrowedFrom = (from: number): BrokenLine[] =>
+    breakWith([
+      ...Array.from({ length: from }, () => measure),
       ...Array.from({ length: slots }, () => narrow),
       measure
-    ]
-    broken = breakWith(widths)
+    ])
+  // `start` is always the line the narrowing in `broken` begins at, because
+  // the figure hangs from it. A word at the end of a line can flip: narrowed
+  // from its line it moves down, narrowed from the next it moves back. Ending
+  // the search there once left the narrowing on one line and the figure on
+  // the other, drawn over the text. On a flip the earlier line wins, so the
+  // figure starts a line above its word rather than over a full one.
+  let start = lineOfWord(breakWith(measure), wordAt)
+  let broken = narrowedFrom(start)
+  const tried = new Set([start])
+  for (let pass = 0; pass < 4; pass++) {
     const found = lineOfWord(broken, wordAt)
     if (found === start) break
+    if (tried.has(found)) {
+      start = Math.min(start, found)
+      broken = narrowedFrom(start)
+      break
+    }
+    tried.add(found)
     start = found
+    broken = narrowedFrom(start)
   }
 
   const left = placement.side === 'left' ? indentLeft + widthPt + gutter : indentLeft
