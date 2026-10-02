@@ -2379,6 +2379,33 @@ closed`, which is indistinguishable from the flake the first command after a
   which opens the PDF and renders the page itself: twelve leaves opened
   thirteen documents over a 357 MB file and rendered every leaf twice.
 
+  **And the pixels are sometimes in a different file altogether.** A book read
+  from an EPUB or from somebody's conversion has no pages to cut, so its
+  queries reached the editor as a passage of type and nothing else — the exact
+  condition the crops exist to end, arrived at from the other direction.
+  `figure cut --from <scan.pdf>` already took a second copy of the same
+  edition, and `querycrops --from` now does too: _Instant Rapport_ was read
+  from a 2018 calibre EPUB and a photographed copy of the 1989 Warner printing
+  came to the shelf afterwards.
+
+  What changes with it is **where the page number comes from**, and it is the
+  thing to get right. A query's leaf names a page of the file the book was
+  _read_ from, and that is not this file — the EPUB's leaf 2 is a chapter and
+  the scan's page 2 is a half-title — so the quote is **searched for**: every
+  page read through its own text layer, scored by `locateQuote`, best page
+  wins, and a quote no page clears the floor for is reported rather than cut
+  from the page the query happened to name. Measured on this book, all three
+  outstanding queries placed at 1.00 on pages 105, 205 and 236. The layer only
+  chooses the page; the crop is still rendered at `RECON_DPI` and boxed by the
+  app's own OCR, because a box measured by one engine and a box measured by
+  another are not the same box.
+
+  `--pad` came with it, and the reason is worth keeping: 120 px is a line of
+  _Isis_'s type and had been a law rather than a default. The notice that
+  closes _Instant Rapport_ is an eight-line boxed panel the editor has to keep
+  or drop **whole**, and 120 gave him the first three lines — enough to see it
+  is boxed, not enough to answer the question he was asked.
+
 - **Also done**: **a figure where the original set it, at the size the original
   printed it** (`IllustrationPlacement`; `drive.mjs figure`). The editor's
   standing ruling on _Isis Unveiled_ (leaf 193): reproduce the illustrations
