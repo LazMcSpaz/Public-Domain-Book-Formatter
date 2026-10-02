@@ -2,7 +2,7 @@
  * Italic a witness saw and the book sets in roman, read straight out of
  * `book.json` with no browser, and the batch that puts it back.
  *
- *   npx vite-node --config vitest.config.ts scripts/emphasis-of.ts <book.json> <witness.json> <out.json> [--restore]
+ *   npx vite-node --config vitest.config.ts scripts/emphasis-of.ts <book.json> <witness.json> <out.json> [--restore] [--no-headings]
  *
  * Without `--restore`, `out.json` is the findings `checkEmphasis` returns.
  * With it, `out.json` is the batch `drive.mjs correct --batch` lands: each
@@ -10,7 +10,8 @@
  * `<i>` merged into what it already carries. The plain text of every entry is
  * checked identical to the block's before it is written, so the batch can
  * add tags and nothing else. The witness is whatever saw the type: for a
- * ClearScan PDF, `scripts/italic-witness.mjs`.
+ * ClearScan PDF, `scripts/italic-witness.mjs`; for a photographed scan,
+ * `scripts/slant-witness.ts`. `--no-headings` leaves headings to the design.
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { assembleBook } from '@core/assemble'
@@ -18,17 +19,31 @@ import { applyEdits } from '@core/edits'
 import { checkEmphasis } from '@core/coherence'
 import { withMarkup } from '@core/transcribe/markup'
 
-const args = process.argv.filter((a) => a !== '--restore')
+const args = process.argv.filter((a) => a !== '--restore' && a !== '--no-headings')
 const restore = process.argv.includes('--restore')
+const noHeadings = process.argv.includes('--no-headings')
 const [bookPath, witnessPath, out] = args.slice(-3)
 if (!bookPath?.endsWith('.json') || !witnessPath || !out) {
-  throw new Error('emphasis-of.ts <book.json> <witness.json> <out.json> [--restore]')
+  throw new Error(
+    'emphasis-of.ts <book.json> <witness.json> <out.json> [--restore] [--no-headings]'
+  )
 }
 const book = JSON.parse(readFileSync(bookPath, 'utf8'))
 const doc = applyEdits(assembleBook(book.run.transcriptions), book.run.edits ?? [])
 const report = checkEmphasis(doc, JSON.parse(readFileSync(witnessPath, 'utf8')))
-const { dropped, agreed, unplaced, ambiguous } = report
-console.log({ dropped: dropped.length, agreed, unplaced, ambiguous })
+const { agreed, unplaced, ambiguous } = report
+// `--no-headings` leaves a heading's italic to the design, which is where
+// `headingStyle` decides it: a book that sets every section head in an
+// italic display face has that in its design, not in its words.
+const headings = new Set(doc.blocks.filter((b) => b.kind === 'heading').map((b) => b.id))
+const dropped = noHeadings ? report.dropped.filter((f) => !headings.has(f.blockId)) : report.dropped
+console.log({
+  dropped: dropped.length,
+  ...(noHeadings ? { inHeadingsLeft: report.dropped.length - dropped.length } : {}),
+  agreed,
+  unplaced,
+  ambiguous
+})
 if (!restore) {
   writeFileSync(out, JSON.stringify(dropped, null, 1))
   process.exit(0)

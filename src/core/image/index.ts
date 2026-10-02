@@ -5,3 +5,4 @@
 export * from './detect-regions'
 export * from './dpi'
 export * from './engine'
+export * from './slant'
