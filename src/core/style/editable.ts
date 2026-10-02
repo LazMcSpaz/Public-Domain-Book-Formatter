@@ -302,6 +302,21 @@ export function styleQuestions(
       ]
     },
     {
+      id: 'sideHeadsFrom',
+      type: 'choice',
+      prompt: 'Are the smaller headings set against the left margin?',
+      help:
+        'A typescript marks its sections with a word against the left margin, often ' +
+        'underlined, and runs the text on beneath it. Centred in a larger size they read ' +
+        'as chapters. A side head is set flush left at the size of the text.',
+      defaultValue: String(profile.sideHeadsFrom),
+      options: [
+        { value: '7', label: 'No — centre every heading' },
+        { value: '3', label: 'Third-level headings and below' },
+        { value: '2', label: 'Every heading under a chapter title' }
+      ]
+    },
+    {
       id: 'chaptersOpenRecto',
       type: 'confirm',
       prompt: 'Start every chapter on a right-hand page?',
@@ -480,6 +495,7 @@ export function applyStyleAnswers(profile: StyleProfile, answers: Answers): Styl
     pageNumber: pick(answers, 'pageNumber', profile.pageNumber) as PageNumberPosition,
     contentsSynopsis: pickBool(answers, 'contentsSynopsis', profile.contentsSynopsis),
     contentsDepth: pickNumber(answers, 'contentsDepth', profile.contentsDepth),
+    sideHeadsFrom: pickNumber(answers, 'sideHeadsFrom', profile.sideHeadsFrom),
     ornaments: {
       chapterOpener: pickOrnament(answers, 'ornamentChapter', profile.ornaments.chapterOpener),
       sectionDivider: pickOrnament(answers, 'ornamentDivider', profile.ornaments.sectionDivider),

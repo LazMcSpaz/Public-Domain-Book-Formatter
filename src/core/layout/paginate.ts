@@ -486,6 +486,12 @@ interface BlockStyle {
   spaceAfter: number
 }
 
+/** A heading the profile sets as a side head: flush left, at the body size. */
+function isSideHead(block: BookBlock, profile: StyleProfile): boolean {
+  const level = block.level ?? 1
+  return block.kind === 'heading' && level > 1 && level >= profile.sideHeadsFrom
+}
+
 function blockStyle(block: BookBlock, profile: StyleProfile): BlockStyle {
   const base: BlockStyle = {
     alignment: 'justify',
@@ -500,6 +506,15 @@ function blockStyle(block: BookBlock, profile: StyleProfile): BlockStyle {
 
   switch (block.kind) {
     case 'heading':
+      if (isSideHead(block, profile)) {
+        return {
+          ...base,
+          alignment: 'left',
+          firstLineIndentEms: 0,
+          spaceBefore: 1,
+          spaceAfter: 0
+        }
+      }
       return {
         ...base,
         alignment: profile.headingStyle.centered ? 'center' : 'left',
@@ -707,13 +722,34 @@ function ornamentLines(art: OrnamentArt, ctx: BuildContext): FlowLine[] {
  * paragraph in the book — the fault is only ever in oversized type.
  */
 function spacedForSize(lines: FlowLine[], sizePt: number, ctx: BuildContext): FlowLine[] {
-  const perLine = Math.max(1, Math.ceil(leadingFor(sizePt) / ctx.leading))
-  if (perLine === 1 || lines.length < 2) return lines
-  return lines.flatMap((line, i) =>
-    i === lines.length - 1
-      ? [line]
-      : [line, ...Array.from({ length: perLine - 1 }, (): FlowLine => ({ runs: [] }))]
-  )
+  const own = leadingFor(sizePt)
+  if (own <= ctx.leading || lines.length < 2) return lines
+  // Each line is set at its own leading, not a whole number of slots: a head
+  // at 1.15 times the body took two slots a line, so a two-line head had a
+  // full blank line through the middle of it and read as two heads. The lines
+  // still hold whole slots, the last line sits on its slot, and the ones above
+  // it drop by the remainder, so the head stays as close to what follows it as
+  // it was and only the space above it changes.
+  const span = Math.ceil(((lines.length - 1) * own) / ctx.leading - 1e-9)
+  const out: FlowLine[] = []
+  lines.forEach((line, i) => {
+    const want = span * ctx.leading - (lines.length - 1 - i) * own
+    const slot = Math.floor(want / ctx.leading + 1e-9)
+    while (out.length < slot) out.push({ runs: [] })
+    const drop = want - slot * ctx.leading
+    out.push(drop > 1e-6 ? lowered(line, drop) : line)
+  })
+  return out
+}
+
+/** A line drawn `dropPt` below its slot's baseline, decorations and all. */
+function lowered(line: FlowLine, dropPt: number): FlowLine {
+  const down = (r: TextRun): TextRun => ({ ...r, risePt: (r.risePt ?? 0) - dropPt })
+  return {
+    ...line,
+    runs: line.runs.map(down),
+    ...(line.decorations ? { decorations: line.decorations.map(down) } : {})
+  }
 }
 
 /**
@@ -1070,7 +1106,10 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
   // capitals, which is a different texture and an honest one. What is never
   // done is synthesising them by scaling capitals down: the strokes come out
   // too light for the size, and it is the tell of a cheap reprint.
-  const wantsSmallCaps = block.kind === 'heading' && ctx.profile.headingStyle.smallCaps
+  const wantsSmallCaps =
+    block.kind === 'heading' &&
+    ctx.profile.headingStyle.smallCaps &&
+    !isSideHead(block, ctx.profile)
   const realSmallCaps = wantsSmallCaps && ctx.measurer.hasSmallCaps(family)
   const font: FontRef = realSmallCaps
     ? { family, style: style.style, smallCaps: true }

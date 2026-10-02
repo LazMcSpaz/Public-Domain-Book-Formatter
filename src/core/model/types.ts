@@ -351,6 +351,16 @@ export interface StyleProfile {
    * question was asked keeps getting.
    */
   contentsDepth: number
+  /**
+   * The heading level from which heads are *side heads*: set flush left at
+   * the body size, with no small capitals, over the paragraph they head.
+   *
+   * A typescript marks its sections with an underlined word against the left
+   * margin — Hall's "Versatility." and "Poise." — and centring those in the
+   * size of a part title made a lecture of short talks read as a book of
+   * chapters. 7 is none, which every book laid out before this existed keeps.
+   */
+  sideHeadsFrom: number
   ornaments: OrnamentChoices
   /** Front-matter visual toggles. */
   frontMatter: {
