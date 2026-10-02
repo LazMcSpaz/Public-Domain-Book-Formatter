@@ -3064,11 +3064,64 @@ async function serve() {
      * `querycrops <outDir> [leaf...]` — all outstanding queries, or only those
      * on the named leaves. Given in batches because each leaf is a render plus
      * an OCR pass and a book's worth is minutes, not seconds.
+     *
+     * **`--from <scan.pdf>` cuts from another copy of the same edition**, which
+     * is the only route for a book that was never read off pixels. *Instant
+     * Rapport* was read from an EPUB and a photographed copy of the 1989 Warner
+     * printing arrived afterwards; `figure cut --from` already takes that
+     * second file, and a query gate promising the paper beside every decision
+     * has the same need. Without it such a book's queries reach the editor as a
+     * passage of type and nothing else, which is the condition this whole verb
+     * exists to end.
+     *
+     * What changes with it is **where the page number comes from**. A query's
+     * `pageIndex` names a leaf of the file the book was read from, and that
+     * file is not this one: the EPUB's leaf 2 is a chapter and the scan's page
+     * 2 is a half-title. So the quote is *searched for* — every page of the
+     * scan read through its own text layer, scored by `locateQuote`, best page
+     * wins — and a quote the scan cannot place is reported rather than cropped
+     * from the page the query happened to name. That is the same refusal the
+     * verb already makes inside a leaf, applied to choosing one.
+     *
+     * The layer only chooses the page. The crop is cut exactly as it is for a
+     * book's own scan — rendered at `RECON_DPI`, read by the app's own OCR,
+     * boxed by `locateQuote` — because a box measured by one engine and a box
+     * measured by another are not the same box, and everything downstream here
+     * assumes the first.
      */
-    querycrops: async ([outDir = 'querycrops', ...only]) => {
-      const wanted = only.map(Number).filter(Number.isFinite)
+    querycrops: async (argv) => {
+      const flag = (name) => {
+        const i = argv.indexOf(`--${name}`)
+        return i === -1 ? null : argv[i + 1]
+      }
+      const positional = argv.filter(
+        (a, i) => !a.startsWith('--') && !argv[i - 1]?.startsWith('--')
+      )
+      const outDir = positional[0] ?? 'querycrops'
+      const wanted = positional.slice(1).map(Number).filter(Number.isFinite)
+      // `--pad <px>`: how much of the setting comes with the passage.
+      //
+      // 120 is a line of *Isis*'s type at `RECON_DPI` and it is a default
+      // rather than a law — the books here are not set to one size, and a
+      // query is not always about a word. The notice that closes *Instant
+      // Rapport* is an eight-line panel the editor has to keep or drop whole,
+      // and 120 gave him the first three lines of it: enough to see it is
+      // boxed, not enough to answer the question he was asked.
+      const padPx = flag('pad') === null ? 120 : Number(flag('pad'))
+      if (!(padPx >= 0)) throw new Error('--pad is pixels, zero or more.')
+      // The pixels ride the /file route, as `load` and `figure cut --from`
+      // fetch a scan — never base64 through the debug protocol, which is how a
+      // large file kills the tab with an error that reads like a navigation.
+      const fromPath = flag('from')
+      let fromUrl = null
+      if (fromPath) {
+        const { existsSync } = await import('node:fs')
+        const full = resolve(REPO, fromPath)
+        if (!existsSync(full)) throw new Error(`No file at ${full}.`)
+        fromUrl = `http://127.0.0.1:${PORT}/file?path=${encodeURIComponent(full)}`
+      }
       const result = await page.evaluate(
-        async ([repo, leaves]) => {
+        async ([repo, leaves, fromUrl, pad]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
           const ocrMod = await import(`/@fs${repo}/src/platform/browser/ocr.ts`)
@@ -3080,19 +3133,19 @@ async function serve() {
           if (!newest) throw new Error('No book open on this device.')
           const run = await runStore.loadRun(newest.key)
           if (!run) throw new Error('That book has no stored reading.')
-          const file = await runStore.loadSourceFile(newest.key)
-          if (!file) throw new Error('The scan is not stored on this device.')
+          let file = null
+          if (fromUrl) {
+            const got = await fetch(fromUrl)
+            if (!got.ok) throw new Error(`Could not read that file: ${got.status}`)
+            file = new File([await got.blob()], 'from.pdf', { type: 'application/pdf' })
+          } else {
+            file = await runStore.loadSourceFile(newest.key)
+            if (!file) throw new Error('The scan is not stored on this device.')
+          }
 
           const raised = queriesMod.collectQueries(run.transcriptions)
           let waiting = queriesMod.outstanding(raised, run.rulings ?? [])
           if (leaves.length > 0) waiting = waiting.filter((q) => leaves.includes(q.pageIndex))
-
-          const byLeaf = new Map()
-          for (const q of waiting) {
-            const list = byLeaf.get(q.pageIndex) ?? []
-            list.push(q)
-            byLeaf.set(q.pageIndex, list)
-          }
 
           const engine = new ocrMod.OcrEngine()
           await engine.init()
@@ -3100,8 +3153,66 @@ async function serve() {
           const unplaced = []
           /** Queries given the whole leaf because the passage could not be found. */
           const whole = []
+          /** Which page of a `--from` scan each query was found on, for the report. */
+          const foundOn = []
           try {
             const doc = await pdfMod.openPdf(file)
+
+            /**
+             * Which page of this file each query is on.
+             *
+             * Without `--from` that is what the query says and nothing has to
+             * be searched. With it the query's leaf names a page of a
+             * *different* file — the EPUB the book was read from — so the only
+             * honest answer is to go and find the words. Every page is read
+             * through its own text layer, which costs milliseconds against the
+             * seconds an OCR pass costs, and the best-scoring page wins.
+             *
+             * A quote no page clears `locateQuote`'s floor for gets no page at
+             * all. Falling back to the leaf the query named would be the one
+             * mistake this verb refuses everywhere else: a crop of the wrong
+             * page is not a weaker version of the right one, because the
+             * editor rules on what is in front of them.
+             */
+            const byLeaf = new Map()
+            const put = (n, q) => {
+              const list = byLeaf.get(n) ?? []
+              list.push(q)
+              byLeaf.set(n, list)
+            }
+            if (!fromUrl) {
+              for (const q of waiting) put(q.pageIndex, q)
+            } else {
+              const best = new Map(waiting.map((q) => [q, { page: -1, score: 0 }]))
+              for (let n = 0; n < doc.numPages; n++) {
+                let read
+                try {
+                  read = await pdfMod.extractPageWords(doc, n, reconMod.RECON_DPI)
+                } catch {
+                  continue
+                }
+                if (read.words.length === 0) continue
+                for (const q of waiting) {
+                  const hit = queriesMod.locateQuote(q.quote, read.words)
+                  if (hit && hit.score > best.get(q).score)
+                    best.set(q, { page: n, score: hit.score })
+                }
+              }
+              for (const [q, where] of best) {
+                if (where.page < 0) {
+                  unplaced.push({ key: queriesMod.queryKey(q), leaf: q.pageIndex, quote: q.quote })
+                  continue
+                }
+                foundOn.push({
+                  key: queriesMod.queryKey(q),
+                  leaf: q.pageIndex,
+                  page: where.page,
+                  score: Number(where.score.toFixed(2))
+                })
+                put(where.page, q)
+              }
+            }
+
             for (const [pageIndex, queries] of [...byLeaf.entries()].sort((a, b) => a[0] - b[0])) {
               // OCR at the resolution the boxes are meant to be read in. Any
               // other scale and every box points at the wrong pixels.
@@ -3120,13 +3231,15 @@ async function serve() {
               // navigation and is actually memory. One render, one document,
               // and the canvas released before the next leaf.
               //
-              // Padded by about a line of this book's type, measured rather
-              // than guessed: the editor is reading a passage in its setting,
-              // so the lines either side are what make a compositor's slip
-              // legible as one. At 44 px the box clipped the first letter of
-              // the first matched word — an OCR box is drawn to the ink, and an
-              // `S` that opens a note sits a hair outside it.
-              const PAD = 120
+              // Padded by about a line of *Isis*'s type, measured rather than
+              // guessed: the editor is reading a passage in its setting, so the
+              // lines either side are what make a compositor's slip legible as
+              // one. At 44 px the box clipped the first letter of the first
+              // matched word — an OCR box is drawn to the ink, and an `S` that
+              // opens a note sits a hair outside it. `--pad` moves it, because
+              // another book is set to another size and another query asks
+              // about more than a word.
+              const PAD = pad
               for (const query of queries) {
                 const key = queriesMod.queryKey(query)
                 const found = queriesMod.locateQuote(query.quote, words)
@@ -3221,10 +3334,11 @@ async function serve() {
             outstanding: waiting.length,
             cut,
             unplaced,
-            whole
+            whole,
+            foundOn
           }
         },
-        [REPO, wanted]
+        [REPO, wanted, fromUrl, padPx]
       )
 
       const { writeFile, mkdir } = await import('node:fs/promises')
@@ -3250,7 +3364,12 @@ async function serve() {
         // Named rather than counted: a whole leaf is evidence and a crop is
         // evidence pointed at the passage, and the editor is owed the
         // difference.
-        ...(result.whole.length > 0 ? { wholeLeaf: result.whole } : {})
+        ...(result.whole.length > 0 ? { wholeLeaf: result.whole } : {}),
+        // Which page of the other copy each crop came off, with the score that
+        // chose it. The leaf a query names and the page its words are on are
+        // two different numbers here, and a session that does not print both
+        // has no way to check the search picked the right page.
+        ...(result.foundOn.length > 0 ? { from: fromPath, foundOn: result.foundOn } : {})
       }
     },
 
