@@ -1234,3 +1234,61 @@ describe('the contents goes as deep as the style says', () => {
     expect(text).not.toContain('Eidetic images:')
   })
 })
+
+/**
+ * _The Secret Doctrine_ Vol. I sets the seven principles as a table whose
+ * cells carry five reference marks. `prepareFootnotes` claimed the five notes
+ * off the table's flattened view, and the engine set the cells, which still
+ * carried the printed marks and named no note: the five notes were numbered
+ * and had no page, and from that table to the end of the volume every note
+ * printed under the reference before its own.
+ */
+describe('layout — reference marks in a table', () => {
+  const doc = build([
+    page(0, [
+      { kind: 'paragraph', text: `${PROSE.repeat(2)}` },
+      {
+        kind: 'table',
+        text: 'Gross body.* | Sthulopadhi.† \n Vital force.‡ | Prana',
+        cells: [
+          ['Gross body.*', 'Sthulopadhi.†'],
+          ['Vital force.‡', 'Prana']
+        ]
+      },
+      { kind: 'footnote', text: 'Annamaya kosa.', marker: '*' },
+      { kind: 'footnote', text: 'Sthula upadhi.', marker: '†' },
+      { kind: 'footnote', text: 'Pranamaya kosa.', marker: '‡' }
+    ]),
+    page(1, [
+      { kind: 'paragraph', text: `${PROSE.repeat(5)}After the table.* ${PROSE.repeat(2)}` },
+      { kind: 'footnote', text: 'The note after the table.', marker: '*' }
+    ])
+  ])
+  const pageWith = (book: LaidOutBook, needle: string): LaidOutPage =>
+    book.pages.find((p) => textOf(p).includes(needle))!
+
+  it('sets each cell’s note on the table’s page, and the next note under its own mark', () => {
+    const book = run(doc)
+    expect(book.notesDropped).toEqual([])
+    expect(book.notesPlaced).toBe(4)
+    const table = pageWith(book, 'Sthulopadhi.').index
+    for (const note of ['Annamaya', 'upadhi.', 'Pranamaya']) {
+      expect(pageWith(book, note).index).toBe(table)
+    }
+    expect(pageWith(book, 'The note after').index).toBe(pageWith(book, 'After the table.').index)
+  })
+
+  it('takes the printed marks out of the cells and raises the new ones on their words', () => {
+    const book = run(doc)
+    const all = book.pages.flatMap((p) => lines(p)).flatMap((l) => l.runs)
+    expect(all.some((r) => /[*†‡]/u.test(r.text))).toBe(false)
+    // The mark rides on its cell's line, beside the word it follows.
+    const raisedOn = (word: string): string[] =>
+      book.pages
+        .flatMap((p) => lines(p))
+        .filter((l) => l.runs.some((r) => r.text.includes(word)))
+        .flatMap((l) => l.runs.filter((r) => (r.risePt ?? 0) > 0).map((r) => r.text))
+    expect(raisedOn('body.')).toEqual(['1', '2'])
+    expect(raisedOn('force.')).toEqual(['3'])
+  })
+})
