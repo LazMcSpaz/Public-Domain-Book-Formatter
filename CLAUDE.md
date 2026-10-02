@@ -1121,6 +1121,15 @@ node scripts/drive.mjs damage        # marks the printing trade does not set:
                                      #   (`Xpbvos`, `Moipa` → Μοῖρα), listed to
                                      #   read and not counted. Free, no pixels
                                      #   needed. `--check` exits non-zero
+node scripts/italic-witness.mjs <scan.pdf> w.json   # which words a ClearScan PDF
+                                     #   prints in italic, measured off its glyphs'
+                                     #   slant: the witness for the check below
+npx vite-node --config vitest.config.ts scripts/emphasis-of.ts <book.json> w.json out.json
+                                     #   italic the witness saw and the book sets in
+                                     #   roman (`checkEmphasis`); `--restore` writes
+                                     #   the batch that puts it back, text unchanged
+node scripts/drive.mjs correct --batch b.json   # many whole-block replacements,
+                                     #   one save; same tag guard as `correct`
 node scripts/drive.mjs annotate p284b12 --after "Triangle." note.txt --id ed-columns
                                      #   a footnote of the editor's own, hung after a
                                      #   phrase the block prints once; `annotate drop

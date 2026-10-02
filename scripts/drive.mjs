@@ -5833,6 +5833,75 @@ async function serve() {
     },
 
     correct: async (argv) => {
+      // `correct --batch <file.json>`: many whole-block replacements in one
+      // save, each `{ "id": "p12b3" | "fn40", "text": "<marked text>" }`. Made
+      // for restoring italics a conversion dropped, which is thousands of
+      // blocks on one volume and one save per block was an hour of saves.
+      // The same guard as the single form: no entry may take a block's tags
+      // to zero.
+      if (argv[0] === '--batch') {
+        const { readFile } = await import('node:fs/promises')
+        const entries = JSON.parse(await readFile(resolve(REPO, argv[1]), 'utf8'))
+        return page.evaluate(
+          async ([repo, entries]) => {
+            const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+            const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+            const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+            const markup = await import(`/@fs${repo}/src/core/transcribe/markup.ts`)
+            const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+            const newest = await window.__pdbfPickBook(runStore)
+            if (!newest) throw new Error('No book on this device.')
+            const run = await runStore.loadRun(newest.key)
+            if (!run) throw new Error('That book has no reading stored here.')
+            const doc = editsMod.applyEdits(
+              assemble.assembleBook(run.transcriptions),
+              run.edits ?? []
+            )
+            const blocks = new Map(doc.blocks.map((b) => [b.id, b]))
+            const notes = new Map(doc.footnotes.map((n) => [n.id, n]))
+            const tags = (t) => (t.match(/<(?:i|b|strong|em)>/gu) ?? []).length
+            let edits = run.edits ?? []
+            let changed = 0
+            const refused = []
+            for (const { id, text } of entries) {
+              const isNote = /^fn\d+$/u.test(id)
+              const block = isNote ? notes.get(id) : blocks.get(id)
+              if (!block) {
+                refused.push(`${id}: no such ${isNote ? 'note' : 'block'}`)
+                continue
+              }
+              const before = markup.withMarkup(block.text, block.emphasis, block.strong)
+              if (text === before) continue
+              if (tags(before) > 0 && tags(text) === 0) {
+                refused.push(`${id}: would drop every tag`)
+                continue
+              }
+              edits = editsMod.withEdit(
+                edits,
+                isNote
+                  ? { kind: 'note-text', noteId: id, text }
+                  : { kind: 'text', blockId: id, text }
+              )
+              changed++
+            }
+            const next = project.createSavedRun({
+              ...run,
+              images: new Map(run.images.map((i) => [i.id, i.bytes])),
+              savedAt: new Date().toISOString(),
+              edits
+            })
+            const stored = await runStore.saveRun(next)
+            return {
+              entries: entries.length,
+              changed,
+              refused,
+              stored: stored === true,
+              edits: edits.length
+            }
+          },
+          [REPO, entries]
+        )
+      }
       const flag = (name) => {
         const i = argv.indexOf(`--${name}`)
         return i === -1 ? null : argv[i + 1]
