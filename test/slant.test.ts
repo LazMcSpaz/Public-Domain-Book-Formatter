@@ -12,9 +12,12 @@ function word(degrees: number, stems = 5, opts: { ink?: number; paper?: number }
   const data = new Uint8Array(width * height).fill(opts.paper ?? 235)
   const ink = opts.ink ?? 25
   const t = Math.tan((degrees * Math.PI) / 180)
+  // The baseline at row 36 and the x-height at row 18, with the first stem
+  // an ascender: ink concentrated through the middle, as a boxed word's is.
+  const BASE = 36
   for (let s = 0; s < stems; s++) {
-    for (let y = 4; y < 40; y++) {
-      const lift = 39 - y
+    for (let y = s === 0 ? 4 : 18; y < BASE; y++) {
+      const lift = BASE - 1 - y
       for (let w = 0; w < 4; w++) {
         const x = Math.round(8 + s * 14 + w + lift * t)
         if (x >= 0 && x < width) data[y * width + x] = ink
@@ -23,10 +26,10 @@ function word(degrees: number, stems = 5, opts: { ink?: number; paper?: number }
   }
   // A bowl: a ring at x-height, which leans with the stems but has no column.
   const cx = 8 + stems * 14 + 8
-  for (let y = 20; y < 40; y++) {
+  for (let y = 18; y < BASE; y++) {
     for (let x = cx - 8; x <= cx + 8; x++) {
-      const r = Math.hypot(x - cx - (39 - y) * t, y - 30)
-      if (r > 6 && r < 9 && x < width) data[y * width + x] = ink
+      const r = Math.hypot(x - cx - (BASE - 1 - y) * t, y - 27)
+      if (r > 5 && r < 8 && x < width) data[y * width + x] = ink
     }
   }
   return { data, width, height }
@@ -80,6 +83,20 @@ describe('the slant of a word’s strokes', () => {
     const faint = word(12, 5, { ink: 210, paper: 235 })
     expect(strokeSlant(faint, all(faint))).toBeNull()
     expect(strokeSlant(blank, { x0: 50, y0: 0, x1: 60, y1: 10 })).toBeNull()
+  })
+
+  it('says nothing of a box set between two lines, which holds the foot of one and the head of the next', () => {
+    const line = word(0)
+    const two = {
+      width: line.width,
+      height: line.height * 2,
+      data: new Uint8Array(line.width * line.height * 2)
+    }
+    two.data.set(line.data, 0)
+    two.data.set(line.data, line.data.length)
+    // The box from the middle of the first line to the middle of the second.
+    expect(strokeSlant(two, { x0: 0, y0: 26, x1: line.width, y1: 26 + line.height })).toBeNull()
+    expect(strokeSlant(two, { x0: 0, y0: 0, x1: line.width, y1: line.height })).not.toBeNull()
   })
 
   it('cuts ink from paper where the two populations part', () => {

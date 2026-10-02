@@ -72,6 +72,15 @@ const LEAST = -15
 const MOST = 35
 /** Below this spread between paper and ink a box has no type in it. */
 const MIN_CONTRAST = 40
+/**
+ * How much denser than the box as a whole its middle third must be. A word
+ * boxed on its line is densest through its x-height: every italic word
+ * measured on _Persuasion Engineering_ came out between 1.5 and 2.2. A box
+ * the OCR set between two lines holds the foot of one and the head of the
+ * next with white between, and every such box there came out at 1.0 or
+ * under — `I've`, `was`, `want`, roman words read as leaning.
+ */
+const MIN_MIDDLE = 1.2
 
 /**
  * Otsu's threshold over a 256-bin luminance histogram: the cut that best
@@ -137,12 +146,15 @@ export function strokeSlant(image: GrayImage, box: PixelBox): number | null {
     }
   }
   if (xs.length < MIN_INK) return null
+  // `ys` counts up from the foot, so the middle third is the same either way.
+  const height = y1 - y0
+  const middle = ys.filter((y) => y >= height / 3 && y < (2 * height) / 3).length
+  if (middle / (height / 3) < MIN_MIDDLE * (xs.length / height)) return null
 
   // Each row is pushed left by its height times the tangent, so a stem that
   // leans by exactly that angle lands in one column. Rows are measured up
   // from the box's foot, which keeps every shifted column non-negative for
   // a forward lean and bounded for a back one.
-  const height = y1 - y0
   const width = x1 - x0
   const pad = Math.ceil(height * Math.tan((Math.max(-LEAST, MOST) * Math.PI) / 180)) + 1
   const columns = new Float64Array(width + 2 * pad)
