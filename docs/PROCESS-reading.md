@@ -294,6 +294,61 @@ newest, which is how every other verb finds the book.
 
 ---
 
+## Stage 4b — What must already be right when a leaf lands
+
+Every rule here was a verification pass finding, weeks later, a fault the
+reading had been looking straight at. On _The Secret Doctrine_ the class sweep
+after reading turned up some three hundred garbled Greek and Hebrew places,
+leaf 640's periodic table run into two paragraphs of prose, two symbol figures
+left as `forms:fi and 0`, and **all but eleven of fifteen thousand italic runs
+missing**. Each was cheaper to catch on the leaf it sat on than in the book. So
+these are rules for the batch, not for a later pass, and each names what
+enforces it.
+
+1. **Italic is part of the reading, not a finish.** A block with no `<i>` looks
+   exactly like a block that never had any, so nothing downstream will miss it.
+   Before the first batch, find out what can see the type. A ClearScan or
+   other converted PDF keeps its glyph shapes behind the layer:
+   `scripts/italic-witness.mjs` measures them. A born-digital PDF names its
+   faces, and the draft already carries them. A photographed scan has no
+   witness but the reader's eye, so the reader marks italic while correcting
+   the draft, exactly as it corrects a letter. After each batch, where there is
+   a witness, `scripts/emphasis-of.ts` lists what the batch set in roman, and
+   `--restore` puts it back. `damage` reports a book whose italic rate is far
+   below any book that kept its italics (`italics-absent`), which is the alarm
+   for the case nobody thought to check.
+2. **A script that is not Latin is read off the pixels in the batch.** Greek and
+   Hebrew in a converted layer arrive as Latin junk (`1rpwr6”yoPoP`) or as
+   Latin words (`Moipa`, `Xpbvos`). Neither is a reading. `damage` lists both
+   (`garbled`, and `greek` for the word-shaped kind); read them after each
+   batch, while the leaf is still open, rather than as a sweep.
+3. **Matter set in columns lands as a `table`.** One printed line is one row.
+   A cell set over two lines with a brace (Group VIII of the periodic table)
+   is two rows, the second empty but for that cell. Running a long cell into
+   one line starves every other column and breaks `Ag 107·6` across two lines.
+   A no-break space does not hold them together, because the engine splits
+   words on `\s`, which includes it. `damage` names a paragraph that is mostly
+   figures and one- or two-letter tokens (`table-as-prose`).
+4. **A symbol set inside a line is a figure, cut in the same session.** Leave
+   nothing of what the conversion made of it (`forms:fi and 0`). `figure cut
+<leaf> <box> --in <block> --at "<phrase>"` sets it within the paragraph;
+   `--at` names the word the figure goes _before_. Where the book prints a
+   character for the symbol elsewhere (卐 in _The Secret Doctrine_ Vol. II),
+   use the character instead.
+5. **A correction that adds or removes a reference mark moves every bare-mark
+   declaration after it.** Declarations count occurrences ("the second `*` in
+   this block"), so taking a garbled `*` out of a block makes the declaration
+   name a real mark. On _The Secret Doctrine_ that left notes unclaimed and a
+   note under the wrong reference. `correct` refuses such a change on a block
+   that carries a declaration; re-declare, run `pairs`, and read the notes
+   either side.
+6. **Front matter gets its role when it lands.** The title page, copyright,
+   dedication and old contents of _The Secret Doctrine_ Vol. II printed as body
+   until a later pass. `transcribe` takes a `role` per page; the leaves before
+   the first chapter are read for it in the first batch.
+
+---
+
 ## Stage 5 — Scale it across a book
 
 A conversation that has read three hundred pages of one author is the exact
@@ -442,6 +497,21 @@ on, exported and marked complete:
 | `split-word`       |     3 |    3 | the book's own vocabulary (`attested`) |
 | `stray-point`      |     7 |    6 | a sentence cannot open in lower case   |
 | `stray-apostrophe` |     6 |    6 | a left-to-right walk of the quotations |
+
+Added since, each from a fault a later pass found on _The Secret Doctrine_ or
+on the shelf, and each measured over the shelf before its threshold was set:
+
+| Kind             | What it names                                              | Counted by `--check` |
+| ---------------- | ---------------------------------------------------------- | -------------------- |
+| `marked-note`    | a note that prints its own reference mark                  | yes                  |
+| `seam-split`     | a paragraph a page break cut where the seam rule can't see | yes                  |
+| `garbled`        | `rSSS`, `C<esarea`, `EvoLUTION`, `OT!JAB`, `�`             | yes                  |
+| `table-as-prose` | a paragraph that is mostly figures and symbols             | yes                  |
+| `italics-absent` | a book under 5 italic runs per 10,000 words                | yes, or a ruling     |
+| `greek`          | Greek read as Latin words (`Moipa`, `Xpbvos`)              | no: a list to read   |
+
+`transcribe` reports all but the book-level one for the leaves it lands, so the
+reader meets them while the leaf is open (Stage 4b).
 
 **Measure it on the assembled book, never on a reconstruction of one.** Run
 first over transcription blocks with the edits matched by `p{page}b{index}`,

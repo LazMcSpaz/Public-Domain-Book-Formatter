@@ -1898,7 +1898,33 @@ async function serve() {
             // 239 † notes. Named the moment the leaf lands, over the leaves
             // that landed, because a check that has to be remembered is the
             // check that is not run. A floor, not a verdict — the leaf decides.
-            continuationShaped: coherence.checkNoteContinuations(parsed)
+            continuationShaped: coherence.checkNoteContinuations(parsed),
+            // The conversion damage on the leaves that just landed: garbled
+            // Greek, a table set as prose, a mark a note prints of its own.
+            // On *The Secret Doctrine* all three were found by a sweep weeks
+            // after the leaves were read, and each was cheaper on its leaf.
+            // Over the assembled book, because a seam joins leaves; reported
+            // for the landed leaves only. PROCESS-reading, Stage 4b.
+            damage: await (async () => {
+              if (!saved) return null
+              const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+              const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+              const doc = editsMod.applyEdits(
+                assemble.assembleBook(run.transcriptions),
+                run.edits ?? []
+              )
+              const landed = new Set(parsed.map((p) => p.pageIndex))
+              const here = coherence
+                .checkDamage(doc)
+                .filter((f) => f.kind !== 'italics-absent' && f.pages.some((p) => landed.has(p)))
+              const by = {}
+              for (const f of here) by[f.kind] = (by[f.kind] ?? 0) + 1
+              return {
+                total: here.length,
+                by,
+                first: here.slice(0, 12).map((f) => `${f.kind} ${f.blockId}: ${f.found}`)
+              }
+            })()
           }
         },
         [REPO, file, pages, mode === 'replace']
@@ -5914,6 +5940,11 @@ async function serve() {
                 refused.push(`${id}: would drop every tag`)
                 continue
               }
+              const moved = editsMod.bareMarksMoved(run.edits ?? [], id, before, text)
+              if (moved.length) {
+                refused.push(`${id}: moves the bare-mark declaration for ${moved.join(', ')}`)
+                continue
+              }
               edits = editsMod.withEdit(
                 edits,
                 isNote
@@ -5952,6 +5983,7 @@ async function serve() {
       const was = flag('was')
       const now = flag('now')
       const bare = argv.includes('--bare')
+      const marksChecked = argv.includes('--marks-checked')
       if (!blockId || (!from && was === null)) {
         throw new Error(
           'correct <blockId|fnN> <file> | correct <blockId|fnN> --was <text> --now <text>'
@@ -5965,7 +5997,7 @@ async function serve() {
       }
 
       return page.evaluate(
-        async ([repo, blockId, replacement, was, now, bare]) => {
+        async ([repo, blockId, replacement, was, now, bare, marksChecked]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
           const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
@@ -6040,6 +6072,20 @@ async function serve() {
             )
           }
 
+          // **A bare-mark declaration counts occurrences** ("the second `*`
+          // in this block"), so a correction that adds or removes that mark
+          // moves the declaration onto a different one. Taking OCR junk
+          // asterisks out of *The Secret Doctrine* did exactly that: notes
+          // unclaimed, one under the wrong reference, `orphaned` still 0.
+          // Refused until the declarations have been looked at again.
+          const moved = editsMod.bareMarksMoved(run.edits ?? [], blockId, before, text)
+          if (moved.length && !marksChecked) {
+            throw new Error(
+              `Block ${blockId} carries a bare-mark declaration for ${moved.join(', ')} and this ` +
+                'correction changes how many of them it prints, which moves the declaration onto ' +
+                'another mark. Re-declare with `bare`, run `pairs`, and pass --marks-checked.'
+            )
+          }
           const edits = editsMod.withEdit(
             run.edits ?? [],
             isNote ? { kind: 'note-text', noteId: blockId, text } : { kind: 'text', blockId, text }
@@ -6061,7 +6107,7 @@ async function serve() {
             next: '`shelf push` sends it to the shelf; nothing has left this device yet.'
           }
         },
-        [REPO, blockId, replacement, was, now, bare]
+        [REPO, blockId, replacement, was, now, bare, marksChecked]
       )
     },
 

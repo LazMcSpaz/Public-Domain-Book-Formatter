@@ -701,3 +701,72 @@ describe('Greek the conversion read as Latin letters', () => {
     expect(findings.every((f) => f.confidence === 'shape')).toBe(true)
   })
 })
+
+describe('a table run into a paragraph', () => {
+  // Leaf 640 of The Secret Doctrine Vol. II, as the conversion left it.
+  const garbled =
+    '5 Rb ss·z S r 87·2 Y S9·s Zr go N b 94 M o g6 - roo 1 Pd ro6 Ag ro7 · 6 6 A g ro7·6 ' +
+    'Cd I I I ‘6 In “3 ‘4 Sn I I 8 Sb 122 Te 125 J 126’5 -- 7: Cs 132·5 B a 136·8 · La ‘39 ' +
+    'Ce 140 Di 144 - - -- 8 I - - - - - - - --'
+
+  it('names a paragraph made of figures and symbols', () => {
+    const found = of(build([garbled]), 'table-as-prose')
+    expect(found).toHaveLength(1)
+    expect(found[0]!.against).toContain('table')
+  })
+
+  it('leaves prose with figures in it alone', () => {
+    const prose =
+      'At 6 a.m. the thermometer stood at 57 degrees, and by noon it had risen to 61; the ' +
+      'observers at Ootacamund recorded the same on the 12th, the 13th and the 14th of May, ' +
+      'and the Collector wrote that in thirty years he had never known it otherwise.'
+    expect(of(build([prose]), 'table-as-prose')).toEqual([])
+  })
+
+  it('leaves a table that is a table alone', () => {
+    nextId = 0
+    const d = doc([{ ...block(garbled, 'table'), cells: [['5', 'Rb 85·2']] }])
+    expect(of(d, 'table-as-prose')).toEqual([])
+  })
+})
+
+describe('a book with almost no italic', () => {
+  const sentence =
+    'The reader who has followed the argument so far will see that the doctrine rests on ' +
+    'the observation of nature and on the testimony of those who have practised it. '
+  const book = (italicEvery: number, sentences = 300) =>
+    build(
+      Array.from({ length: sentences }, (_, i) =>
+        i % italicEvery === 0 ? sentence.replace('doctrine', '<i>doctrine</i>') : sentence
+      )
+    )
+  // build() reads `<i>` as text, so emphasis is set the way the engine stores it.
+  const withItalic = (d: BookDocument, every: number): BookDocument => ({
+    ...d,
+    blocks: d.blocks.map((b, i) => (i % every === 0 ? { ...b, emphasis: [16] } : b))
+  })
+
+  it('names a long book that sets almost none', () => {
+    const found = of(build(Array.from({ length: 300 }, () => sentence)), 'italics-absent')
+    expect(found).toHaveLength(1)
+    expect(found[0]!.found).toBe('no italic')
+  })
+
+  it('leaves a book that kept its italic alone', () => {
+    expect(of(withItalic(book(1000), 3), 'italics-absent')).toEqual([])
+  })
+
+  it('says nothing of a text too short to judge', () => {
+    expect(of(build(Array.from({ length: 20 }, () => sentence)), 'italics-absent')).toEqual([])
+  })
+
+  it('is honoured by a ruling that the source sets none', () => {
+    const d = build(Array.from({ length: 300 }, () => sentence))
+    const { kept } = honourRulings(
+      checkDamage(d).filter((f) => f.kind === 'italics-absent'),
+      [{ pageIndex: 0, quote: 'no italic', decision: 'as-printed' }],
+      d
+    )
+    expect(kept).toEqual([])
+  })
+})

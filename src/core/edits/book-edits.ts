@@ -36,7 +36,7 @@ import {
   type BlockKind,
   type TranscribedBlock
 } from '@core/transcribe'
-import { deriveChapters } from '@core/assemble'
+import { deriveChapters, footnoteMarkerPattern } from '@core/assemble'
 import type {
   BareMark,
   BookBlock,
@@ -1014,4 +1014,41 @@ export function editTarget(edit: BookEdit): string {
   // the block alone would make declaring the second undo the first.
   if (edit.kind === 'bare-mark') return `${edit.blockId}\u0000${edit.marker}\u0000${edit.nth}`
   return edit.blockId
+}
+
+/** Characters a reference mark is made of, run together into one mark. */
+const MARK_RUN = /[*†‡§‖¶⁂]+/gu
+
+/** How many times `marker` is printed in `text`, counted as the claiming walk counts. */
+function markCount(text: string, marker: string): number {
+  if (/^[*†‡§‖¶⁂]+$/u.test(marker)) {
+    // A run is one mark: `**` is not two `*`, and must not count as them.
+    return [...text.matchAll(MARK_RUN)].filter((m) => m[0] === marker).length
+  }
+  const pattern = footnoteMarkerPattern(marker)
+  return pattern ? [...text.matchAll(new RegExp(pattern.source, 'gu'))].length : 0
+}
+
+/**
+ * The markers of a block's bare-mark declarations whose count a change would
+ * move.
+ *
+ * A declaration names a mark by occurrence ("the second `*` in this block"),
+ * so a correction that adds or removes one of that marker moves the
+ * declaration onto another. Taking OCR junk asterisks out of _The Secret
+ * Doctrine_ did exactly that, leaving notes unclaimed and one under the wrong
+ * reference, with `orphaned` at 0 because something claimed each of them.
+ * `drive.mjs correct` refuses such a change until the declarations have been
+ * looked at again.
+ */
+export function bareMarksMoved(
+  edits: readonly BookEdit[],
+  blockId: string,
+  before: string,
+  after: string
+): string[] {
+  const markers = new Set(
+    edits.flatMap((e) => (e.kind === 'bare-mark' && e.blockId === blockId ? [e.marker] : []))
+  )
+  return [...markers].filter((m) => markCount(before, m) !== markCount(after, m))
 }

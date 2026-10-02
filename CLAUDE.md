@@ -890,6 +890,50 @@ never had. `contentsDepth` on the style profile, 6 by default so a book laid
 out before the question existed keeps what it got; the original's contents
 page is the guide for setting it lower.
 
+**Fifteen thousand italic runs were missing and nothing could tell.** TUP's
+ClearScan layer of _The Secret Doctrine_ kept 3 italic runs in Vol. I and 8 in
+Vol. II; the paper prints 6,155 and 9,265. Every check was happy, for the
+reason the other italic entries give: a block with no `<i>` looks exactly like
+a block that never had any. Found only because a verification pass asked.
+The type was still there: ClearScan builds a font per cluster of glyph shapes,
+italic clusters apart from roman, and the slant of a line's strokes says which
+(`scripts/italic-witness.mjs`, roman near -2 degrees, italic at 10 to 16).
+`checkEmphasis` (`@core/coherence/emphasis.ts`) places each witnessed run in
+the book and names the ones set roman; 60 sampled against the paper were all
+italic. Then the same question over the shelf: **eleven books carry almost
+no italic** (0 to 3 runs per 10,000 words, against 85 to 400 in the books
+that kept theirs). `damage` now reports that rate as `italics-absent`, and
+PROCESS-reading's Stage 4b makes italic part of the reading. The rule:
+**ask what can see the type before the first batch, not after the last.**
+
+**Greek can be garbled into words.** The class sweep restored some three
+hundred Greek and Hebrew places that `garbled` could see, and a later check
+found 24 more it could not: `Moipa` for Μοῖρα, `Xpbvos` for Χρόνος, `TOU
+Oavrirov` for τοῦ θανάτου. They are made of letters and pass every shape
+test. `damage` lists them as `greek`, from a trigram model of Greek garbled
+through OCR's own confusions against the book's own English (`greek.ts`). It
+is a list to read, and the lean is towards names: 0 to 12 words in a book with
+no Greek.
+
+**Taking out a garbled mark moved every bare-mark declaration after it.** A
+declaration says "the second `*` in this block", so removing a `*` that was
+OCR junk made it name a real mark. On _The Secret Doctrine_ notes went
+unclaimed and one sat under the wrong reference, and `orphaned` said 0 for a
+while because something claimed each one. `correct` now refuses a change to a
+block carrying a declaration when the count of that marker moves.
+
+**A no-break space binds nothing.** The engine and the markup both split words
+on `\s`, which includes U+00A0, and italic is stored by word index, so the
+engine cannot treat it differently without moving italic onto the wrong words.
+A table cell that must not break is a short cell: a cell the paper sets over
+two lines is two rows.
+
+**A file was written over without being read.** A new test file was given the
+name of an existing one, `test/emphasis.test.ts`, and the write replaced 302
+lines of someone else's tests with no warning. Caught only because `git
+status` said `M` where a new file says `??`. **Before writing a new file, list
+the path.**
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what
@@ -1131,7 +1175,9 @@ npx vite-node --config vitest.config.ts scripts/emphasis-of.ts <book.json> w.jso
 node scripts/drive.mjs answers a.json  # the open book's design and edition answers,
                                      #   merged in; `save` writes them to book.json
 node scripts/drive.mjs correct --batch b.json   # many whole-block replacements,
-                                     #   one save; same tag guard as `correct`
+                                     #   one save; same tag guard as `correct`.
+                                     #   Both forms refuse a change that moves a
+                                     #   bare-mark declaration (`--marks-checked`)
 node scripts/drive.mjs annotate p284b12 --after "Triangle." note.txt --id ed-columns
                                      #   a footnote of the editor's own, hung after a
                                      #   phrase the block prints once; `annotate drop
