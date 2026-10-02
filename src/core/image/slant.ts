@@ -75,14 +75,18 @@ const MOST = 35
 /** Below this spread between paper and ink a box has no type in it. */
 const MIN_CONTRAST = 40
 /**
- * How much denser than the box as a whole its middle third must be. A word
- * boxed on its line is densest through its x-height: every italic word
- * measured on _Persuasion Engineering_ came out between 1.5 and 2.2. A box
- * the OCR set between two lines holds the foot of one and the head of the
- * next with white between, and every such box there came out at 1.0 or
- * under — `I've`, `was`, `want`, roman words read as leaning.
+ * The longest blank band a box's ink may hold across it, as a share of the
+ * ink's height. A box the OCR set between two lines holds the foot of one
+ * and the head of the next with white between, and its strokes lean however
+ * those fragments happen to: on _Persuasion Engineering_ `was`, `want` and
+ * `I've` read as italic that way, with a blank band of 0.41 to 0.51 across
+ * them. Every italic word measured there and on _The Structure of Magic_
+ * Vol. II had 0.17 or less — an `i`'s dot is the usual gap. Measured on the
+ * ink rather than the box, because Tesseract boxes tight to the ink and a
+ * text layer boxes the whole line, and a test of the box's own proportions
+ * read the one as the other.
  */
-const MIN_MIDDLE = 1.2
+const MAX_BLANK_BAND = 0.3
 
 /**
  * Otsu's threshold over a 256-bin luminance histogram: the cut that best
@@ -167,10 +171,20 @@ export function strokeLean(image: GrayImage, box: PixelBox): Lean | null {
     }
   }
   if (xs.length < MIN_INK) return null
-  // `ys` counts up from the foot, so the middle third is the same either way.
   const height = y1 - y0
-  const middle = ys.filter((y) => y >= height / 3 && y < (2 * height) / 3).length
-  if (middle / (height / 3) < MIN_MIDDLE * (xs.length / height)) return null
+  const inkRows = new Array<number>(height).fill(0)
+  for (const y of ys) inkRows[y]!++
+  let low = 0
+  let high = height - 1
+  while (low < high && inkRows[low] === 0) low++
+  while (high > low && inkRows[high] === 0) high--
+  let band = 0
+  let run = 0
+  for (let y = low; y <= high; y++) {
+    run = inkRows[y] === 0 ? run + 1 : 0
+    if (run > band) band = run
+  }
+  if (band / (high - low + 1) > MAX_BLANK_BAND) return null
 
   // Each row is pushed left by its height times the tangent, so a stem that
   // leans by exactly that angle lands in one column. Rows are measured up

@@ -87,16 +87,25 @@ describe('the slant of a word’s strokes', () => {
 
   it('says nothing of a box set between two lines, which holds the foot of one and the head of the next', () => {
     const line = word(0)
+    const leading = 12
     const two = {
       width: line.width,
-      height: line.height * 2,
-      data: new Uint8Array(line.width * line.height * 2)
+      height: line.height * 2 + leading,
+      data: new Uint8Array(line.width * (line.height * 2 + leading)).fill(235)
     }
     two.data.set(line.data, 0)
-    two.data.set(line.data, line.data.length)
+    two.data.set(line.data, line.width * (line.height + leading))
     // The box from the middle of the first line to the middle of the second.
-    expect(strokeSlant(two, { x0: 0, y0: 26, x1: line.width, y1: 26 + line.height })).toBeNull()
+    expect(
+      strokeSlant(two, { x0: 0, y0: 26, x1: line.width, y1: 26 + line.height + leading })
+    ).toBeNull()
     expect(strokeSlant(two, { x0: 0, y0: 0, x1: line.width, y1: line.height })).not.toBeNull()
+  })
+
+  it('measures a word boxed tight to its ink, as Tesseract boxes it', () => {
+    const img = word(12)
+    // Rows 4 to 35 hold all the ink: no line spacing above or below it.
+    near(strokeSlant(img, { x0: 0, y0: 4, x1: img.width, y1: 36 }), 12)
   })
 
   it('finds a word of bowls and diagonals leaning hardly at all, however it leans', () => {
