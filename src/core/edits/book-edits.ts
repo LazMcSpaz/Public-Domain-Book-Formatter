@@ -490,7 +490,8 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
             text: edit.text,
             ...(block.cells ? { cells: undefined } : {}),
             ...(block.emphasis ? { emphasis: undefined } : {}),
-            ...(block.strong ? { strong: undefined } : {})
+            ...(block.strong ? { strong: undefined } : {}),
+            ...(block.smallCaps ? { smallCaps: undefined } : {})
           })
         )
         break
@@ -539,6 +540,7 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
           text,
           emphasis: runsFor(block.emphasis, half),
           strong: runsFor(block.strong, half),
+          smallCaps: runsFor(block.smallCaps, half),
           ...(block.cells ? { cells: undefined } : {})
         })
         blocks.splice(index, 1, {
@@ -581,6 +583,7 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
             text: `${block.text.trim()}${joiner}${next.text.trim()}`.trim(),
             emphasis: joined(block.emphasis, next.emphasis),
             strong: joined(block.strong, next.strong),
+            smallCaps: joined(block.smallCaps, next.smallCaps),
             ...(block.cells ? { cells: undefined } : {})
           }),
           sourcePages: [...new Set([...block.sourcePages, ...next.sourcePages])].sort(
@@ -646,12 +649,13 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
         kind: 'paragraph',
         text: corrected.replace(/\s+/gu, ' ').trim()
       })
-      const { emphasis: _emphasis, strong: _strong, ...rest } = note
+      const { emphasis: _emphasis, strong: _strong, smallCaps: _smallCaps, ...rest } = note
       return {
         ...rest,
         text: marked.text,
         ...(marked.emphasis?.length ? { emphasis: marked.emphasis } : {}),
-        ...(marked.strong?.length ? { strong: marked.strong } : {})
+        ...(marked.strong?.length ? { strong: marked.strong } : {}),
+        ...(marked.smallCaps?.length ? { smallCaps: marked.smallCaps } : {})
       }
     })
     .filter((note) => note.text.trim().length > 0)
@@ -672,6 +676,7 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
       text: marked.text,
       ...(marked.emphasis?.length ? { emphasis: marked.emphasis } : {}),
       ...(marked.strong?.length ? { strong: marked.strong } : {}),
+      ...(marked.smallCaps?.length ? { smallCaps: marked.smallCaps } : {}),
       pageIndex: block.sourcePages[0] ?? 0,
       orphaned: false,
       anchor: { blockId: note.blockId, at: note.at }

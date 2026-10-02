@@ -148,6 +148,8 @@ export function normalizeStyleProfile(raw: unknown): StyleProfile {
     contentsDepth: depth(raw['contentsDepth'], d.contentsDepth),
     sideHeadsFrom: sideLevel(raw['sideHeadsFrom'], d.sideHeadsFrom),
     quoteIndentEms: inset(raw['quoteIndentEms'], d.quoteIndentEms),
+    smallCapsFont:
+      typeof raw['smallCapsFont'] === 'string' ? (raw['smallCapsFont'] as string) : d.smallCapsFont,
     ornaments: {
       chapterOpener:
         typeof rawOrn['chapterOpener'] === 'string' ? (rawOrn['chapterOpener'] as string) : null,
@@ -185,6 +187,7 @@ export function mergeStyle(base: StyleProfile, patch: Partial<StyleProfile>): St
   if (patch.contentsDepth !== undefined) next.contentsDepth = patch.contentsDepth
   if (patch.sideHeadsFrom !== undefined) next.sideHeadsFrom = patch.sideHeadsFrom
   if (patch.quoteIndentEms !== undefined) next.quoteIndentEms = patch.quoteIndentEms
+  if (patch.smallCapsFont !== undefined) next.smallCapsFont = patch.smallCapsFont
   if (patch.paragraphIndentEms !== undefined) next.paragraphIndentEms = patch.paragraphIndentEms
   if (patch.paragraphSpacingEms !== undefined) next.paragraphSpacingEms = patch.paragraphSpacingEms
   if (patch.hyphenate !== undefined) next.hyphenate = patch.hyphenate

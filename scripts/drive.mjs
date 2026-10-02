@@ -335,7 +335,7 @@ async function serve() {
             // here is a face the next correction silently deletes. That is not
             // hypothetical: it is what cost this volume 188 emphasis runs when
             // corrections were typed from the bare text.
-            text: markup.withMarkup(b.text, b.emphasis, b.strong)
+            text: markup.withMarkup(b.text, b.emphasis, b.strong, b.smallCaps)
           }))
         // The book's own footnotes, both faces, carrying the leaf that printed
         // each: a note's id (`fn12`) does not say, and the corrections sheet
@@ -346,7 +346,7 @@ async function serve() {
             .map((n) => ({
               id: n.id,
               leaf: n.pageIndex,
-              text: markup.withMarkup(n.text, n.emphasis, n.strong)
+              text: markup.withMarkup(n.text, n.emphasis, n.strong, n.smallCaps)
             }))
         return {
           edited: say(applied.blocks),
@@ -1990,7 +1990,7 @@ async function serve() {
             orphaned: n.orphaned,
             words: n.text.split(/\s+/u).filter(Boolean).length,
             opening: n.text.slice(0, 60),
-            ...(full ? { text: markup.withMarkup(n.text, n.emphasis, n.strong) } : {})
+            ...(full ? { text: markup.withMarkup(n.text, n.emphasis, n.strong, n.smallCaps) } : {})
           }))
         },
         [REPO, full]
@@ -6149,7 +6149,12 @@ async function serve() {
           // With the `<i>` and `<b>` tags on, exactly as `body` hands it back
           // and exactly as `applyEdits` reads it in — a correction typed
           // against the bare text would strip every emphasis in the block.
-          const before = markup.withMarkup(block.text, block.emphasis, block.strong)
+          const before = markup.withMarkup(
+            block.text,
+            block.emphasis,
+            block.strong,
+            block.smallCaps
+          )
 
           let text = replacement
           if (text === null) {
@@ -6182,7 +6187,7 @@ async function serve() {
           // a line of output nobody reads. `--bare` is the way to say it was
           // meant, which is a real case: `Erick <i>son</i>` is one word the
           // conversion broke and italicised half of.
-          const tags = (t) => (t.match(/<(?:i|b|strong|em)>/gu) ?? []).length
+          const tags = (t) => (t.match(/<(?:i|b|strong|em|sc)>/gu) ?? []).length
           if (!bare && tags(before) > 0 && tags(text) === 0) {
             throw new Error(
               `Block ${blockId} sets ${tags(before)} run(s) in italic or bold and the ` +
@@ -6516,7 +6521,12 @@ async function serve() {
           let replaced = 0
 
           for (const block of doc.blocks) {
-            const text = markup.withMarkup(block.text, block.emphasis, block.strong)
+            const text = markup.withMarkup(
+              block.text,
+              block.emphasis,
+              block.strong,
+              block.smallCaps
+            )
             const matches = editsMod.findMatches(text, was, matchCase)
             if (matches.length === 0) continue
             found.push({
@@ -6556,7 +6566,7 @@ async function serve() {
           // `note-text` record that exists for exactly this reach.
           for (const note of doc.footnotes) {
             if (!note.originalMarker) continue
-            const text = markup.withMarkup(note.text, note.emphasis, note.strong)
+            const text = markup.withMarkup(note.text, note.emphasis, note.strong, note.smallCaps)
             const matches = editsMod.findMatches(text, was, matchCase)
             if (matches.length === 0) continue
             found.push({

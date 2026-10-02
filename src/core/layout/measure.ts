@@ -49,6 +49,17 @@ export interface TextMeasurer {
    * a bold smeared out of the regular outlines.
    */
   hasBold(family: string): boolean
+  /**
+   * How much larger a run of `capsFamily`'s small capitals must be set to
+   * stand as tall as `textFamily`'s lower case.
+   *
+   * A face's own small capitals are drawn for its own x-height, so borrowing
+   * them from another face means matching heights: EB Garamond's stand 453
+   * units high against Libre Caslon Text's x-height of 530, and at the same
+   * point size they sat visibly short of the text around them. Optional, and
+   * 1 where it is absent or either height is unknown.
+   */
+  smallCapScale?(textFamily: string, capsFamily: string): number
 }
 
 /**
@@ -110,6 +121,9 @@ export function cachedMeasurer(inner: TextMeasurer): TextMeasurer {
     // behind the same wrapper that caches measurements would invite the two to
     // be invalidated on different schedules.
     hasSmallCaps: (family) => inner.hasSmallCaps(family),
-    hasBold: (family) => inner.hasBold(family)
+    hasBold: (family) => inner.hasBold(family),
+    ...(inner.smallCapScale
+      ? { smallCapScale: (text: string, caps: string) => inner.smallCapScale!(text, caps) }
+      : {})
   }
 }

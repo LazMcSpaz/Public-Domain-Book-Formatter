@@ -31,6 +31,7 @@ import { shiftEmphasis } from '@core/transcribe/markup'
 import {
   breakParagraph,
   fontForWord,
+  sizeForWord,
   type Alignment,
   type Attachment,
   type BrokenLine,
@@ -235,13 +236,17 @@ const LIST_HANG_EMS = 1.4
  */
 const TABLE_SIZE_RATIO = 0.92
 /**
- * The smallest a table is set, as a share of the body, to keep its words whole.
+ * How far below the body a table may be set, in points: to keep its words
+ * whole, or to keep it on one page.
  *
  * Hall's eight- and nine-column diagrams do not fit the measure at the usual
  * size whatever the gap, and a diagram whose words wrap is no longer a
- * diagram. Three-quarters of 12 point is 9, which still reads.
+ * diagram. The editor's limit is four points under the book's size: 8 point
+ * under a body of 12, which still reads.
  */
-const TABLE_MIN_SIZE_RATIO = 0.75
+const TABLE_MAX_DROP_PT = 4
+/** The step a table's type is tried down by, in points, to fit it on a page. */
+const TABLE_SHRINK_STEP_PT = 0.5
 /** Space between columns, in ems of the table's own size. */
 const TABLE_GUTTER_EMS = 1.4
 /**
@@ -614,7 +619,7 @@ function toFlowLines(
         // italic.
         text: w.text,
         font: fontForWord(w.sourceIndex, spans, font),
-        sizePt: w.sizePt ?? sizePt,
+        sizePt: w.sizePt ?? sizeForWord(w.sourceIndex, spans, sizePt),
         xPt: w.xPt + offset,
         ...(w.risePt ? { risePt: w.risePt } : {})
       }
@@ -964,9 +969,17 @@ function breakNote(note: PreparedNote, ctx: BuildContext): NoteBlock {
   const markSize = sizePt * MARK_SIZE_RATIO
   const hang = ctx.measurer.widthOf(note.mark, font, markSize) + sizePt * NOTE_HANG_GAP_RATIO
 
-  const spans = spansFor(ctx, ctx.profile.bodyFont, 'regular', note.emphasis, note.strong)
+  const spans = spansFor(
+    ctx,
+    ctx.profile.bodyFont,
+    'regular',
+    note.emphasis,
+    note.strong,
+    note.smallCaps
+  )
+  const noteText = smallCapsAsCapitals(ctx, ctx.profile.bodyFont, note.text, note.smallCaps)
 
-  const broken = breakParagraph(note.text, {
+  const broken = breakParagraph(noteText, {
     font,
     sizePt,
     measurer: ctx.measurer,
@@ -1000,6 +1013,8 @@ interface BuildContext {
   measurer: TextMeasurer
   measureWidth: number
   leading: number
+  /** Lines a page holds, so a table can be kept to one. */
+  pageSlots?: number
   hyphenate?: (word: string) => string[]
 }
 
@@ -1033,14 +1048,72 @@ export function listMarkerToPrint(
   return text.trimStart().startsWith(marker) ? null : marker
 }
 
+/**
+ * The face a run of small capitals is drawn from, and how much larger it is
+ * set: the profile's named face where it has small capitals, else the text's
+ * own where that has them, else none — and then the words print as full
+ * capitals (see `smallCapsAsCapitals`), never as capitals shrunk.
+ */
+function smallCapsFace(
+  ctx: BuildContext,
+  family: string
+): { family: string; scale: number } | null {
+  const named = ctx.profile.smallCapsFont
+  if (named && ctx.measurer.hasSmallCaps(named)) {
+    const scale = named === family ? 1 : (ctx.measurer.smallCapScale?.(family, named) ?? 1)
+    return { family: named, scale }
+  }
+  if (ctx.measurer.hasSmallCaps(family)) return { family, scale: 1 }
+  return null
+}
+
+/**
+ * A block's small-capital words set in full capitals, where no face has
+ * small capitals to draw them with.
+ *
+ * The notation writes them in the case a full-size letter would take —
+ * `<sc>spirit</sc>` — so without a small-caps face they would print in lower
+ * case. Capitals are the honest substitute, and what these words printed as
+ * before small capitals could be marked at all.
+ */
+function smallCapsAsCapitals(
+  ctx: BuildContext,
+  family: string,
+  text: string,
+  smallCaps: readonly number[] | undefined,
+  noSpans = false
+): string {
+  if (!smallCaps?.length || (!noSpans && smallCapsFace(ctx, family))) return text
+  const marked = new Set(smallCaps)
+  let index = 0
+  return text
+    .split(/(\s+)/u)
+    .map((part) => {
+      if (part.length === 0 || /^\s+$/u.test(part)) return part
+      return marked.has(index++) ? part.toLocaleUpperCase() : part
+    })
+    .join('')
+}
+
 function spansFor(
   ctx: BuildContext,
   family: string,
   base: FontStyle,
   emphasis: readonly number[] | undefined,
-  strong: readonly number[] | undefined
+  strong: readonly number[] | undefined,
+  smallCaps?: readonly number[]
 ): TextSpan[] {
   const spans: TextSpan[] = []
+  // First, because first match wins: a small-capital word is that before it
+  // is anything else, there being no italic or bold small capitals here.
+  const caps = smallCaps?.length ? smallCapsFace(ctx, family) : null
+  if (caps) {
+    spans.push({
+      words: new Set(smallCaps),
+      font: { family: caps.family, style: 'regular', smallCaps: true },
+      ...(caps.scale !== 1 ? { scale: caps.scale } : {})
+    })
+  }
   if (strong?.length) {
     const style: FontStyle = ctx.measurer.hasBold(family) ? 'bold' : 'italic'
     spans.push({ words: new Set(strong), font: { family, style } })
@@ -1148,7 +1221,18 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
   const listMarker = listMarkerToPrint(block, opts.text ?? block.text)
   const markerWords = listMarker ? listMarker.split(/\s+/u).length : 0
   const source = listMarker ? `${listMarker} ${opts.text ?? block.text}` : (opts.text ?? block.text)
-  const text = wantsSmallCaps && !realSmallCaps ? source.toLocaleUpperCase() : source
+  const capsWords =
+    markerWords && block.smallCaps ? shiftEmphasis(block.smallCaps, markerWords) : block.smallCaps
+  // Small-capital words with no span to draw them — no face has small
+  // capitals, or the block is italic and takes no spans — print as capitals.
+  const cased = smallCapsAsCapitals(
+    ctx,
+    family,
+    source,
+    capsWords,
+    blockStyle(block, ctx.profile).style !== 'regular'
+  )
+  const text = wantsSmallCaps && !realSmallCaps ? cased.toLocaleUpperCase() : cased
 
   // Reference marks ride on the end of the word they follow, set smaller and
   // lifted. They are given to the breaker rather than concatenated into the
@@ -1181,7 +1265,8 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
           markerWords && block.emphasis
             ? shiftEmphasis(block.emphasis, markerWords)
             : block.emphasis,
-          markerWords && block.strong ? shiftEmphasis(block.strong, markerWords) : block.strong
+          markerWords && block.strong ? shiftEmphasis(block.strong, markerWords) : block.strong,
+          capsWords
         )
       : []
 
@@ -1816,7 +1901,7 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
   const baseTotal = baseNatural.reduce((a, b) => a + b, 0)
   const tightAtBase = baseTotal + baseSizePt * TABLE_MIN_GUTTER_EMS * Math.max(0, columns - 1)
   const fittingSize = tightAtBase > 0 ? (baseSizePt * ctx.measureWidth) / tightAtBase : baseSizePt
-  const minSize = ctx.profile.bodyFontSize * TABLE_MIN_SIZE_RATIO
+  const minSize = ctx.profile.bodyFontSize - TABLE_MAX_DROP_PT
   const sizePt =
     overflows && tightAtBase > ctx.measureWidth && fittingSize >= minSize ? fittingSize : baseSizePt
   const natural = sizePt === baseSizePt ? baseNatural : widestOf(sizePt, wholeCells)
@@ -1834,98 +1919,164 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
           sizePt * TABLE_MIN_COLUMN_EMS
         )
 
-  // A table narrower than the measure is centred in it.
-  const tableWidth = widths.reduce((a, b) => a + b, 0) + gutter * (columns - 1)
-  const tableLeft = Math.max(0, (ctx.measureWidth - tableWidth) / 2)
+  /**
+   * Every row at one size, gap and set of column widths, as a flowable each.
+   * A function of the three so the table can be tried smaller to fit a page.
+   */
+  const setRows = (sizePt: number, gutter: number, widths: number[]): Flowable[] => {
+    // A table narrower than the measure is centred in it.
+    const tableWidth = widths.reduce((a, b) => a + b, 0) + gutter * (columns - 1)
+    const tableLeft = Math.max(0, (ctx.measureWidth - tableWidth) / 2)
 
-  const columnX: number[] = []
-  let x = tableLeft
-  for (let c = 0; c < columns; c++) {
-    columnX.push(x)
-    x += (widths[c] ?? 0) + gutter
+    const columnX: number[] = []
+    let x = tableLeft
+    for (let c = 0; c < columns; c++) {
+      columnX.push(x)
+      x += (widths[c] ?? 0) + gutter
+    }
+
+    const bodyRows = hasHead ? rows.slice(1) : rows
+    const alignRight = Array.from({ length: columns }, (_, c) =>
+      isFigureColumn(bodyRows.map((row) => cellAt(row, c)))
+    )
+
+    const ruleDrop = ctx.measurer.metrics(bodyFont, sizePt).ascent + sizePt * TABLE_RULE_DROP_EMS
+    const ruleAt = (): FlowLine['rule'] => ({
+      xPt: tableLeft,
+      yPt: ruleDrop,
+      widthPt: tableWidth,
+      thicknessPt: TABLE_RULE_THICKNESS
+    })
+
+    const flowables: Flowable[] = []
+
+    rows.forEach((row, r) => {
+      const font = fontFor(r)
+      // Each cell broken to its own column, then the columns zipped back together
+      // line by line — line 2 of a wrapped cell shares its slot with line 2 of
+      // every other wrapped cell in the row, which is what makes a row of unequal
+      // cells still sit on the baseline grid.
+      const perColumn = Array.from({ length: columns }, (_, c) => {
+        const width = Math.max(1, widths[c] ?? 1)
+        // Emphasis inside a head row would have to be roman to show at all, and
+        // the head is set in italic entire — the same refusal an epigraph gets.
+        const marked = hasHead && r === 0 ? [] : (perCell[cellIndex(r, c)] ?? [])
+        const spans: TextSpan[] =
+          marked.length > 0 ? [{ words: new Set(marked), font: { family, style: 'italic' } }] : []
+        const broken = breakParagraph(cellAt(row, c), {
+          font,
+          sizePt,
+          measurer: ctx.measurer,
+          lineWidths: width,
+          alignment: 'left',
+          // The breaker, not only the renderer: italic advances differ from
+          // roman, and a cell measured in roman then drawn partly in italic
+          // wraps its column in the wrong places.
+          ...(spans.length > 0 ? { spans } : {})
+        })
+        const offsets = broken.map((line) => {
+          const base = columnX[c] ?? 0
+          if (!alignRight[c]) return base
+          return base + Math.max(0, width - naturalWidth(line, ctx.measurer, font, sizePt))
+        })
+        return toFlowLines(
+          broken,
+          font,
+          sizePt,
+          offsets.length > 0 ? offsets : [columnX[c] ?? 0],
+          undefined,
+          undefined,
+          spans.length > 0 ? spans : undefined
+        )
+      })
+
+      const height = Math.max(1, ...perColumn.map((lines) => lines.length))
+      const lines: FlowLine[] = Array.from({ length: height }, (_, i) => {
+        const runs = perColumn.flatMap((col) => col[i]?.runs ?? [])
+        const overfull = perColumn.some((col) => col[i]?.overfull === true)
+        return { runs, ...(overfull ? { overfull: true } : {}) }
+      })
+
+      // Head rule and foot rule, hung off the last line of the row they close.
+      // Only when the table has heads: a lone rule under the last row of a table
+      // with no heads is a line across the page with nothing to close.
+      const last = lines[lines.length - 1]
+      if (last && hasHead && (r === 0 || r === rows.length - 1)) last.rule = ruleAt()
+
+      flowables.push({
+        lines,
+        spaceBefore: r === 0 ? 1 : 0,
+        spaceAfter: r === rows.length - 1 ? 1 : 0,
+        startsChapter: false,
+        chapter: null,
+        keepWithNext: hasHead && r === 0,
+        orphanControl: false,
+        unbreakable: true
+      })
+    })
+
+    return flowables
   }
 
-  const bodyRows = hasHead ? rows.slice(1) : rows
-  const alignRight = Array.from({ length: columns }, (_, c) =>
-    isFigureColumn(bodyRows.map((row) => cellAt(row, c)))
-  )
-
-  const ruleDrop = ctx.measurer.metrics(bodyFont, sizePt).ascent + sizePt * TABLE_RULE_DROP_EMS
-  const ruleAt = (): FlowLine['rule'] => ({
-    xPt: tableLeft,
-    yPt: ruleDrop,
-    widthPt: tableWidth,
-    thicknessPt: TABLE_RULE_THICKNESS
-  })
-
-  const flowables: Flowable[] = []
-
-  rows.forEach((row, r) => {
-    const font = fontFor(r)
-    // Each cell broken to its own column, then the columns zipped back together
-    // line by line — line 2 of a wrapped cell shares its slot with line 2 of
-    // every other wrapped cell in the row, which is what makes a row of unequal
-    // cells still sit on the baseline grid.
-    const perColumn = Array.from({ length: columns }, (_, c) => {
-      const width = Math.max(1, widths[c] ?? 1)
-      // Emphasis inside a head row would have to be roman to show at all, and
-      // the head is set in italic entire — the same refusal an epigraph gets.
-      const marked = hasHead && r === 0 ? [] : (perCell[cellIndex(r, c)] ?? [])
-      const spans: TextSpan[] =
-        marked.length > 0 ? [{ words: new Set(marked), font: { family, style: 'italic' } }] : []
-      const broken = breakParagraph(cellAt(row, c), {
-        font,
-        sizePt,
-        measurer: ctx.measurer,
-        lineWidths: width,
-        alignment: 'left',
-        // The breaker, not only the renderer: italic advances differ from
-        // roman, and a cell measured in roman then drawn partly in italic
-        // wraps its column in the wrong places.
-        ...(spans.length > 0 ? { spans } : {})
-      })
-      const offsets = broken.map((line) => {
-        const base = columnX[c] ?? 0
-        if (!alignRight[c]) return base
-        return base + Math.max(0, width - naturalWidth(line, ctx.measurer, font, sizePt))
-      })
-      return toFlowLines(
-        broken,
-        font,
-        sizePt,
-        offsets.length > 0 ? offsets : [columnX[c] ?? 0],
-        undefined,
-        undefined,
-        spans.length > 0 ? spans : undefined
+  /**
+   * **A table is kept on one page.** The editor's rule: wrapping in a cell is
+   * a small thing, a table cut in two by a page break almost never acceptable.
+   * Rows used to be separate flowables, so a page could break between any two
+   * of them. A table that fits a page is now one unbreakable item, which moves
+   * whole to the next page if it must. One too tall at its size is tried
+   * smaller, half a point at a time to TABLE_MAX_DROP_PT under the body,
+   * since a smaller size wraps its cells less and so takes fewer lines. Only a
+   * table longer than a page at every allowed size breaks between rows, and
+   * it says so.
+   */
+  const slotsOf = (set: readonly Flowable[]): number =>
+    set.reduce((n, f) => n + f.lines.length, 0) + 2
+  let set = setRows(sizePt, gutter, widths)
+  const pageSlots = ctx.pageSlots
+  if (pageSlots !== undefined && slotsOf(set) > pageSlots) {
+    for (
+      let size = sizePt - TABLE_SHRINK_STEP_PT;
+      size >= minSize - 0.001;
+      size -= TABLE_SHRINK_STEP_PT
+    ) {
+      const natural = widestOf(size, wholeCells)
+      const gap = size * TABLE_GUTTER_EMS
+      const tried = setRows(
+        size,
+        gap,
+        fitColumns(
+          natural,
+          Math.max(1, ctx.measureWidth - gap * (columns - 1)),
+          size * TABLE_MIN_COLUMN_EMS
+        )
       )
-    })
-
-    const height = Math.max(1, ...perColumn.map((lines) => lines.length))
-    const lines: FlowLine[] = Array.from({ length: height }, (_, i) => {
-      const runs = perColumn.flatMap((col) => col[i]?.runs ?? [])
-      const overfull = perColumn.some((col) => col[i]?.overfull === true)
-      return { runs, ...(overfull ? { overfull: true } : {}) }
-    })
-
-    // Head rule and foot rule, hung off the last line of the row they close.
-    // Only when the table has heads: a lone rule under the last row of a table
-    // with no heads is a line across the page with nothing to close.
-    const last = lines[lines.length - 1]
-    if (last && hasHead && (r === 0 || r === rows.length - 1)) last.rule = ruleAt()
-
-    flowables.push({
-      lines,
-      spaceBefore: r === 0 ? 1 : 0,
-      spaceAfter: r === rows.length - 1 ? 1 : 0,
+      if (slotsOf(tried) <= pageSlots) {
+        set = tried
+        break
+      }
+    }
+  }
+  if (pageSlots !== undefined && slotsOf(set) > pageSlots) {
+    const first = set[0]
+    if (first) {
+      first.warning =
+        `A table of ${slotsOf(set)} lines is longer than a page even at ` +
+        `${minSize} pt, so it breaks between rows.`
+    }
+    return set
+  }
+  return [
+    {
+      lines: set.flatMap((f) => f.lines),
+      spaceBefore: 1,
+      spaceAfter: 1,
       startsChapter: false,
       chapter: null,
-      keepWithNext: hasHead && r === 0,
+      keepWithNext: false,
       orphanControl: false,
       unbreakable: true
-    })
-  })
-
-  return flowables
+    }
+  ]
 }
 
 /**
@@ -2077,6 +2228,7 @@ export function layout(
     measurer,
     measureWidth: rectoFrame.widthPt,
     leading,
+    pageSlots: slotsPerPage,
     // The style has the final say: a hyphenator can be supplied and still
     // declined, which is what `hyphenate: false` on the profile means.
     ...(options.hyphenate && profile.hyphenate ? { hyphenate: options.hyphenate } : {})
@@ -2486,6 +2638,13 @@ export function layout(
             ...(note.strong?.length
               ? {
                   strong: note.originalMarker.trim() ? note.strong.map((i) => i + 1) : note.strong
+                }
+              : {}),
+            ...(note.smallCaps?.length
+              ? {
+                  smallCaps: note.originalMarker.trim()
+                    ? note.smallCaps.map((i) => i + 1)
+                    : note.smallCaps
                 }
               : {}),
             sourcePages: []

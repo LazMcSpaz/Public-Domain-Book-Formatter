@@ -44,6 +44,16 @@ const ITALIC_TAGS = new Set(['i', 'em', 'cite', 'var'])
  */
 const STRONG_TAGS = new Set(['b', 'strong'])
 /**
+ * Tags that mean "set this in small capitals".
+ *
+ * The letters inside are written in the case the page shows them at full
+ * size: `<sc>spirit</sc>` is all small capitals and `<sc>Soul</sc>` a full
+ * capital S before them, which is how `smcp` reads a word and how a
+ * compositor sets one. Whether the run prints in real small capitals, and in
+ * which face, is the engine's to decide.
+ */
+const SMALL_CAPS_TAGS = new Set(['sc'])
+/**
  * Tags whose content is kept but whose meaning the book expresses another way.
  *
  * `sup` is the interesting one: it is nearly always a footnote reference mark,
@@ -69,6 +79,11 @@ export interface InlineMarkup {
    * omitted entirely where there is none.
    */
   strong: number[]
+  /**
+   * Indices of whitespace-separated words to set in small capitals, ascending.
+   * Same convention as `emphasis`, and omitted by callers where there is none.
+   */
+  smallCaps: number[]
 }
 
 /** Anything that looks like a tag, closing or not, with or without attributes. */
@@ -84,20 +99,26 @@ const TAG = /<\s*(\/?)\s*([a-zA-Z][a-zA-Z0-9]*)\b[^>]*>/gu
  * in the printed text.
  */
 export function parseInlineMarkup(raw: string): InlineMarkup {
-  if (!raw.includes('<')) return { text: raw, emphasis: [], strong: [] }
+  if (!raw.includes('<')) return { text: raw, emphasis: [], strong: [], smallCaps: [] }
 
   // Walk the source once, building the clean text and remembering the character
   // ranges each kind of tag covered. Words are counted afterwards, from the
   // clean text, so the indices match what the breaker will produce.
   let text = ''
-  const ranges = { italic: [] as Range[], strong: [] as Range[] }
-  const open = { italic: [] as number[], strong: [] as number[] }
+  const ranges = { italic: [] as Range[], strong: [] as Range[], smallCaps: [] as Range[] }
+  const open = { italic: [] as number[], strong: [] as number[], smallCaps: [] as number[] }
   let last = 0
 
   for (const match of raw.matchAll(TAG)) {
     const [whole, closing, rawName] = match
     const name = (rawName ?? '').toLowerCase()
-    const kind = ITALIC_TAGS.has(name) ? 'italic' : STRONG_TAGS.has(name) ? 'strong' : null
+    const kind = ITALIC_TAGS.has(name)
+      ? 'italic'
+      : STRONG_TAGS.has(name)
+        ? 'strong'
+        : SMALL_CAPS_TAGS.has(name)
+          ? 'smallCaps'
+          : null
     if (!kind && !TRANSPARENT_TAGS.has(name)) continue
 
     text += raw.slice(last, match.index)
@@ -115,18 +136,19 @@ export function parseInlineMarkup(raw: string): InlineMarkup {
 
   // An unclosed tag marks the rest of the block, which is what it asked for and
   // the least surprising reading of a mistake.
-  for (const kind of ['italic', 'strong'] as const) {
+  for (const kind of ['italic', 'strong', 'smallCaps'] as const) {
     for (const start of open[kind]) ranges[kind].push({ start, end: text.length })
   }
 
-  if (ranges.italic.length === 0 && ranges.strong.length === 0) {
-    return { text, emphasis: [], strong: [] }
+  if (ranges.italic.length === 0 && ranges.strong.length === 0 && ranges.smallCaps.length === 0) {
+    return { text, emphasis: [], strong: [], smallCaps: [] }
   }
 
   // Map character ranges onto word indices, counting words exactly as
   // `itemsFromText` does — by splitting on whitespace.
   const emphasis = new Set<number>()
   const strong = new Set<number>()
+  const smallCaps = new Set<number>()
   let index = 0
   let cursor = 0
   for (const word of text.split(/(\s+)/u)) {
@@ -139,13 +161,19 @@ export function parseInlineMarkup(raw: string): InlineMarkup {
       const hits = (rs: Range[]): boolean => rs.some((r) => r.start < end && r.end > start)
       if (hits(ranges.italic)) emphasis.add(index)
       if (hits(ranges.strong)) strong.add(index)
+      if (hits(ranges.smallCaps)) smallCaps.add(index)
       index += 1
     }
     cursor += word.length
   }
 
   const sorted = (set: Set<number>): number[] => [...set].sort((a, b) => a - b)
-  return { text, emphasis: sorted(emphasis), strong: sorted(strong) }
+  return {
+    text,
+    emphasis: sorted(emphasis),
+    strong: sorted(strong),
+    smallCaps: sorted(smallCaps)
+  }
 }
 
 interface Range {
@@ -175,10 +203,12 @@ interface Range {
 export function withMarkup(
   text: string,
   emphasis: readonly number[] | undefined,
-  strong?: readonly number[]
+  strong?: readonly number[],
+  smallCaps?: readonly number[]
 ): string {
-  if (!emphasis?.length && !strong?.length) return text
+  if (!emphasis?.length && !strong?.length && !smallCaps?.length) return text
   const marks = [
+    { words: new Set(smallCaps ?? []), tag: 'sc', inside: false },
     { words: new Set(strong ?? []), tag: 'b', inside: false },
     { words: new Set(emphasis ?? []), tag: 'i', inside: false }
   ]

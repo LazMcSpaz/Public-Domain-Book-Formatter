@@ -296,6 +296,19 @@ export async function loadFonts(families: readonly string[]): Promise<FontTable>
       return face ? face.font.availableFeatures.includes('smcp') : false
     },
 
+    smallCapScale(textFamily, capsFamily) {
+      const text = faces.get(`${resolve(textFamily)}|regular`)
+      const caps = faces.get(`${resolve(capsFamily)}|regular`)
+      if (!text || !caps || text === caps) return 1
+      // The text's x-height from its own table, and the small capitals'
+      // height measured off the glyph `smcp` turns an x into: a font's tables
+      // carry an x-height but nothing about its small capitals.
+      const xHeight = text.font.xHeight / text.font.unitsPerEm
+      const glyph = caps.font.layout('x', { ...LAYOUT_FEATURES, smcp: true }).glyphs[0]
+      const scHeight = glyph ? glyph.bbox.maxY / caps.font.unitsPerEm : 0
+      return xHeight > 0 && scHeight > 0 ? xHeight / scHeight : 1
+    },
+
     hasBold(family) {
       // The bold face either loaded or it did not. Reported from the table
       // rather than from `FONT_URLS`, so a face whose file failed to fetch is

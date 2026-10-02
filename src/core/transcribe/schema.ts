@@ -70,6 +70,11 @@ export interface TranscribedBlock {
    * never a bold smeared out of the regular outlines.
    */
   strong?: number[]
+  /**
+   * Indices of whitespace-separated words to set in small capitals, from
+   * `<sc>` in the inline markup. Same convention as `emphasis`.
+   */
+  smallCaps?: number[]
   /** Heading level 1–6, only meaningful when `kind` is 'heading'. */
   level?: number
   /**
@@ -373,7 +378,8 @@ export function normalizeMarkup<T extends TranscribedBlock>(block: T): T {
     ...block,
     text: markup.text,
     ...(markup.emphasis.length > 0 ? { emphasis: markup.emphasis } : {}),
-    ...(markup.strong.length > 0 ? { strong: markup.strong } : {})
+    ...(markup.strong.length > 0 ? { strong: markup.strong } : {}),
+    ...(markup.smallCaps.length > 0 ? { smallCaps: markup.smallCaps } : {})
   }
 }
 
@@ -434,13 +440,21 @@ export function normalizeTable<T extends TranscribedBlock>(block: T): T {
       perCell((m) => m.strong)
     )
   )
-  const { emphasis: _emphasis, strong: _strong, ...rest } = block
+  const smallCaps = union(
+    block.smallCaps,
+    flattenCellEmphasis(
+      cells,
+      perCell((m) => m.smallCaps)
+    )
+  )
+  const { emphasis: _emphasis, strong: _strong, smallCaps: _smallCaps, ...rest } = block
   return {
     ...rest,
     cells,
     text: tableToText(cells),
     ...(emphasis.length > 0 ? { emphasis } : {}),
-    ...(strong.length > 0 ? { strong } : {})
+    ...(strong.length > 0 ? { strong } : {}),
+    ...(smallCaps.length > 0 ? { smallCaps } : {})
   } as T
 }
 
@@ -557,6 +571,7 @@ export const BLOCK_FIELDS = new Set([
   'headerRow',
   'emphasis',
   'strong',
+  'smallCaps',
   'level',
   'marker',
   'continuesPrevious',
@@ -648,6 +663,10 @@ export function parsePageTranscription(raw: unknown, pageIndex: number): PageTra
     const strong = [...new Set([...markup.strong, ...given(b['strong'])])].sort((x, y) => x - y)
     if (emphasis.length > 0) block.emphasis = emphasis
     if (strong.length > 0) block.strong = strong
+    const smallCaps = [...new Set([...markup.smallCaps, ...given(b['smallCaps'])])].sort(
+      (x, y) => x - y
+    )
+    if (smallCaps.length > 0) block.smallCaps = smallCaps
     const level = b['level']
     if (typeof level === 'number' && Number.isFinite(level)) {
       block.level = Math.min(6, Math.max(1, Math.round(level)))

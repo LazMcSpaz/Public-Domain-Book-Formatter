@@ -80,7 +80,11 @@ export async function renderInterior(
   profile: StyleProfile,
   options: InteriorOptions
 ): Promise<Interior> {
-  const fonts = await fontTableFor([profile.bodyFont, profile.headingFont])
+  const fonts = await fontTableFor([
+    profile.bodyFont,
+    profile.headingFont,
+    ...(profile.smallCapsFont ? [profile.smallCapsFont] : [])
+  ])
 
   // Two passes, so the contents page carries measured page numbers rather than
   // the original edition's — which describe a pagination this book no longer

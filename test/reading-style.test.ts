@@ -28,6 +28,7 @@ const profile = (over: Partial<StyleProfile> = {}): StyleProfile =>
     contentsDepth: 6,
     sideHeadsFrom: 7,
     quoteIndentEms: 2,
+    smallCapsFont: '',
     ornaments: {},
     frontMatter: { titlePage: true, copyrightPage: true, halfTitle: false, titleBorder: false },
     ...over

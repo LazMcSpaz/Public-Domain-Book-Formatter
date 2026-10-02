@@ -126,6 +126,9 @@ export interface StyleQuestionOptions {
  * Every field of a profile, as questions, with the profile's own values as the
  * defaults — so the form opens showing what is currently set.
  */
+/** The answer that means "the text's own face" for the small-capitals face. */
+const SAME_FACE = 'same'
+
 export function styleQuestions(
   profile: StyleProfile,
   options: StyleQuestionOptions = {}
@@ -315,6 +318,18 @@ export function styleQuestions(
         { value: '3', label: 'Third-level headings and below' },
         { value: '2', label: 'Every heading under a chapter title' }
       ]
+    },
+    {
+      id: 'smallCapsFont',
+      type: 'choice',
+      prompt: 'Which face draws the small capitals in the text?',
+      help:
+        'Not every typeface has small capitals, and they are never faked by shrinking ' +
+        'capitals. A face that has none can borrow them from one that does; they are ' +
+        'sized to stand as tall as the text’s lower case. Without either, small ' +
+        'capitals print as full capitals.',
+      defaultValue: profile.smallCapsFont || SAME_FACE,
+      options: [{ value: SAME_FACE, label: 'The text’s own face' }, ...families]
     },
     {
       id: 'quoteIndentEms',
@@ -511,6 +526,9 @@ export function applyStyleAnswers(profile: StyleProfile, answers: Answers): Styl
     contentsDepth: pickNumber(answers, 'contentsDepth', profile.contentsDepth),
     sideHeadsFrom: pickNumber(answers, 'sideHeadsFrom', profile.sideHeadsFrom),
     quoteIndentEms: pickNumber(answers, 'quoteIndentEms', profile.quoteIndentEms),
+    smallCapsFont: ((v) => (v === SAME_FACE ? '' : v))(
+      pick(answers, 'smallCapsFont', profile.smallCapsFont || SAME_FACE)
+    ),
     ornaments: {
       chapterOpener: pickOrnament(answers, 'ornamentChapter', profile.ornaments.chapterOpener),
       sectionDivider: pickOrnament(answers, 'ornamentDivider', profile.ornaments.sectionDivider),
