@@ -2925,6 +2925,41 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   a review link go through one door (`landFromShelf`), so a tap and a link
   cannot land differently. Cards on the shelf gain the counts at their next
   save or `drive.mjs card`.
+- **Also done**: **italic, bold and small capitals over part of a word**
+  (`InlinePart`, `@core/transcribe/markup`; SavedRun v21). The editor's ruling
+  on leaf 13 of Barker's Introduction to _The Mahatma Letters_, which sets
+  `<i>un</i>spiritual`: the engine prints what the page prints, and a book of
+  letters whose printer set every underline in italic will ask again. Emphasis
+  had been word indices only, so the reader marked the whole word. A tag
+  boundary that falls **among a word's letters** is now a **part** — the word,
+  offsets within its token, the style — and nothing wider: a tag covering every
+  letter of a word, or none (`<i>(</i>word`), still marks the whole word, a
+  superscript mark is not a letter (`“<i>Presence.</i>”¹` stays one italic
+  word), and every block marked before reads exactly as it did. `withMarkup`
+  and `htmlOfMarkup` (one walk now, `renderMarkup`) write a part back as the
+  mid-word tags it came from, so `drive.mjs body`, the galley and a correction
+  typed against them keep it. Assembly, `applyEdits`, `spliceRunInto`, the
+  gathered-notes converter and a sweep carry parts by **characters**, through
+  `settleParts`, the reader's rule re-applied after a change of text. In the
+  engine a word with a part is cut into stretches, each measured in and drawn
+  from its own face, intersected with the hyphenator's pieces and placed hard
+  against each other — boxes with nothing between them, so a line still breaks
+  only where the hyphenator says. The PDF draws the two from two font
+  resources and still copies out as one word. Every new test was
+  fault-injected against the link it covers (37 faults, each caught).
+  Deliberately left at word granularity: **tables** (a part in a cell folds
+  into its word at `normalizeTable`, which is what it printed before) and
+  **drop-cap paragraphs**, which take no spans at all, whole words included;
+  and the born-digital italic witness, which reads a face per word. Two
+  things came with it: a `split` inside a word put every whole-word run after
+  it one word early, and a sweep read `<sc>` as letters. **What it changed on
+  the shelf** was measured before anything was printed: some 380 places,
+  nearly all an italic run ending at an em dash with no space after it
+  (`<i>refusing</i>—as`), which printed the word after the dash in italic and
+  now does not — and SD Vol. II's p594b2, whose tags sit a few letters off
+  their words from an older correction and now print visibly mid-word, so
+  that paragraph wants repairing against its pristine markup before the
+  volume is re-exported.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

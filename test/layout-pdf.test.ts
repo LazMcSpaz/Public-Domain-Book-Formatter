@@ -319,6 +319,70 @@ describe('renderPdf — a strong run reaches the page', () => {
   })
 })
 
+/**
+ * Italic over part of a word, which is how the printer of _The Mahatma
+ * Letters_ set a writer's underlining: `<i>un</i>spiritual`, the prefix alone.
+ *
+ * The end of that chain, for the same reason as the emphasis test above: the
+ * pure tests say the engine placed two runs, and only the file can say the
+ * two runs are two faces and still one word to a reader copying it out.
+ */
+describe('renderPdf — italic over part of a word', () => {
+  const partly = async () => {
+    const fonts = diskFontTable()
+    const body: BookBlock = {
+      ...block('paragraph', 'The writer was unspiritual in every way he could be.'),
+      parts: [{ word: 3, from: 0, to: 2, style: 'italic' }]
+    }
+    const book = layout(
+      { ...DOCUMENT, blocks: [block('heading', 'Of the Air', 1), body] },
+      { ...defaultStyleProfile(), dropCap: false },
+      fonts,
+      { edition: EDITION, hyphenate: englishHyphenator() }
+    )
+    const pdf = await renderPdf(book, fonts, { title: EDITION.title, author: EDITION.author })
+    return { book, pdf }
+  }
+
+  /** Every text item on every page, in drawing order. */
+  const itemsOf = async (bytes: Uint8Array) => {
+    const reopened = await reopen(bytes)
+    const items: { str: string; fontName: string }[] = []
+    for (let i = 0; i < reopened.numPages; i++) {
+      const content = await (await reopened.getPage(i + 1)).getTextContent()
+      for (const item of content.items) {
+        if ('str' in item) items.push({ str: item.str, fontName: item.fontName })
+      }
+    }
+    await reopened.destroy()
+    return items
+  }
+
+  it('draws the prefix and the rest of the word from two font resources', async () => {
+    const { pdf } = await partly()
+    const items = await itemsOf(pdf.bytes)
+    const un = items.find((i) => i.str === 'un')
+    const rest = items.find((i) => i.str.startsWith('spiritual'))
+    const roman = items.find((i) => i.str.trim() === 'writer')
+    expect(un).toBeDefined()
+    expect(rest).toBeDefined()
+    expect(un!.fontName).not.toBe(rest!.fontName)
+    expect(rest!.fontName).toBe(roman!.fontName)
+  })
+
+  it('still copies out as one word', async () => {
+    // The two runs abut, so a reader of the file finds no space between them:
+    // what a search matches and a screen reader says is `unspiritual`.
+    const { pdf } = await partly()
+    const items = await itemsOf(pdf.bytes)
+    // Two runs — the prefix is its own item — and still the one word.
+    expect(items.some((i) => i.str === 'un')).toBe(true)
+    const text = items.map((i) => i.str).join('')
+    expect(text).toContain('unspiritual')
+    expect(text).not.toContain('un spiritual')
+  })
+})
+
 describe('renderPdf — the real output', () => {
   /**
    * The end-to-end half of `fonts-coverage.test.ts`. That file proves the
