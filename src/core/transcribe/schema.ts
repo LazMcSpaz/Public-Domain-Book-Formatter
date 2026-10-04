@@ -9,7 +9,13 @@
  * Pure: types, the JSON schema, and a strict parser. No I/O, no client.
  */
 import type { PageRole } from '@core/pages'
-import { parseInlineMarkup, type InlineMarkup } from './markup'
+import {
+  parseInlineMarkup,
+  readParts,
+  settleParts,
+  type InlineMarkup,
+  type InlinePart
+} from './markup'
 
 /** Structural role of a run of text within the page. */
 export type BlockKind =
@@ -75,6 +81,14 @@ export interface TranscribedBlock {
    * `<sc>` in the inline markup. Same convention as `emphasis`.
    */
   smallCaps?: number[]
+  /**
+   * Styles covering part of a word rather than the whole of it —
+   * `<i>un</i>spiritual`, the prefix and nothing else. See `InlinePart` and
+   * the module note in `markup.ts` for exactly when one is made. Absent on
+   * nearly every block. Never set on a table, whose cells are set word by
+   * word (see `normalizeTable`).
+   */
+  parts?: InlinePart[]
   /** Heading level 1–6, only meaningful when `kind` is 'heading'. */
   level?: number
   /**
@@ -379,8 +393,63 @@ export function normalizeMarkup<T extends TranscribedBlock>(block: T): T {
     text: markup.text,
     ...(markup.emphasis.length > 0 ? { emphasis: markup.emphasis } : {}),
     ...(markup.strong.length > 0 ? { strong: markup.strong } : {}),
-    ...(markup.smallCaps.length > 0 ? { smallCaps: markup.smallCaps } : {})
+    ...(markup.smallCaps.length > 0 ? { smallCaps: markup.smallCaps } : {}),
+    ...(markup.parts?.length ? { parts: markup.parts } : {})
   }
+}
+
+/**
+ * A block's stored parts made sound against its text: malformed ones dropped,
+ * offsets clamped, a part on a word that is not there dropped, one covering a
+ * whole word promoted to it — `settleParts`, for a block read back from
+ * anywhere that did not make it. A block with no `parts` field comes back
+ * untouched, which is every block stored before parts existed.
+ */
+export function settleBlockParts<T extends TranscribedBlock>(block: T): T {
+  if (block.parts === undefined) return block
+  const { parts, ...rest } = block
+  const settled = settleParts(block.text, { ...block, parts: readParts(parts) })
+  return {
+    ...rest,
+    ...(settled.emphasis.length > 0 ? { emphasis: settled.emphasis } : {}),
+    ...(settled.strong.length > 0 ? { strong: settled.strong } : {}),
+    ...(settled.smallCaps.length > 0 ? { smallCaps: settled.smallCaps } : {}),
+    ...(settled.parts.length > 0 ? { parts: settled.parts } : {})
+  } as T
+}
+
+/**
+ * The words a list of parts touches in one style — what a part becomes where
+ * only whole words can be set.
+ */
+function partWords(parts: readonly InlinePart[] | undefined, style: InlinePart['style']): number[] {
+  return (parts ?? []).filter((p) => p.style === style).map((p) => p.word)
+}
+
+/**
+ * A table's parts folded into the whole words they sit on.
+ *
+ * **A table keeps word granularity.** The engine sets a table a cell at a
+ * time, splitting the flattened view's indices back onto the cells with
+ * `cellEmphasis`, and honours italic there and nothing else; carrying a part
+ * through that arithmetic would mean a second copy of it for the one kind of
+ * block that has no case for one. So a tag that falls inside a word in a cell
+ * marks the word, exactly as every tag did before parts existed.
+ */
+function foldParts<T extends TranscribedBlock>(block: T): T {
+  if (!block.parts) return block
+  const { parts, ...rest } = block
+  const union = (own: readonly number[] | undefined, found: number[]): number[] =>
+    [...new Set([...(own ?? []), ...found])].sort((a, b) => a - b)
+  const emphasis = union(block.emphasis, partWords(parts, 'italic'))
+  const strong = union(block.strong, partWords(parts, 'strong'))
+  const smallCaps = union(block.smallCaps, partWords(parts, 'smallCaps'))
+  return {
+    ...rest,
+    ...(emphasis.length > 0 ? { emphasis } : {}),
+    ...(strong.length > 0 ? { strong } : {}),
+    ...(smallCaps.length > 0 ? { smallCaps } : {})
+  } as T
 }
 
 /**
@@ -405,7 +474,7 @@ export function normalizeTable<T extends TranscribedBlock>(block: T): T {
     .map((row) => row.map((cell) => cell.trim()))
     .filter((row) => row.some((cell) => cell.length > 0))
   if (!rows.some((row) => row.some((cell) => cell.includes('<')))) {
-    return { ...block, cells: rows, text: tableToText(rows) }
+    return { ...foldParts(block), cells: rows, text: tableToText(rows) }
   }
   // A tag inside a cell is read the way a tag inside a paragraph is, and for
   // the same reason: a reader setting a transcript's analysis column writes
@@ -422,32 +491,34 @@ export function normalizeTable<T extends TranscribedBlock>(block: T): T {
   // carried are folded into the block's own through the one flattening rule.
   const parsed = rows.map((row) => row.map((cell) => parseInlineMarkup(cell)))
   const cells = parsed.map((row) => row.map((markup) => markup.text.trim()))
+  // A part in a cell marks the word, as `foldParts` says and for its reason.
   const perCell = (pick: (markup: InlineMarkup) => number[]): number[][] =>
     parsed.flatMap((row) => row.map(pick))
   const union = (own: readonly number[] | undefined, found: number[]): number[] =>
     [...new Set([...(own ?? []), ...found])].sort((a, b) => a - b)
+  const folded = foldParts(block)
   const emphasis = union(
-    block.emphasis,
+    folded.emphasis,
     flattenCellEmphasis(
       cells,
-      perCell((m) => m.emphasis)
+      perCell((m) => [...m.emphasis, ...partWords(m.parts, 'italic')])
     )
   )
   const strong = union(
-    block.strong,
+    folded.strong,
     flattenCellEmphasis(
       cells,
-      perCell((m) => m.strong)
+      perCell((m) => [...m.strong, ...partWords(m.parts, 'strong')])
     )
   )
   const smallCaps = union(
-    block.smallCaps,
+    folded.smallCaps,
     flattenCellEmphasis(
       cells,
-      perCell((m) => m.smallCaps)
+      perCell((m) => [...m.smallCaps, ...partWords(m.parts, 'smallCaps')])
     )
   )
-  const { emphasis: _emphasis, strong: _strong, smallCaps: _smallCaps, ...rest } = block
+  const { emphasis: _emphasis, strong: _strong, smallCaps: _smallCaps, ...rest } = folded
   return {
     ...rest,
     cells,
@@ -572,6 +643,7 @@ export const BLOCK_FIELDS = new Set([
   'emphasis',
   'strong',
   'smallCaps',
+  'parts',
   'level',
   'marker',
   'continuesPrevious',
@@ -667,6 +739,23 @@ export function parsePageTranscription(raw: unknown, pageIndex: number): PageTra
       (x, y) => x - y
     )
     if (smallCaps.length > 0) block.smallCaps = smallCaps
+    // Parts, from mid-word tags or named outright, and made sound against the
+    // text the way every part is — a part on a word the block does not have is
+    // dropped, and one covering a whole word becomes it. Only where there are
+    // any, so a block with none is built exactly as before.
+    const named = readParts(b['parts'])
+    if ((markup.parts?.length ?? 0) > 0 || named.length > 0) {
+      const settled = settleParts(markup.text, {
+        emphasis,
+        strong,
+        smallCaps,
+        parts: [...(markup.parts ?? []), ...named]
+      })
+      if (settled.emphasis.length > 0) block.emphasis = settled.emphasis
+      if (settled.strong.length > 0) block.strong = settled.strong
+      if (settled.smallCaps.length > 0) block.smallCaps = settled.smallCaps
+      if (settled.parts.length > 0) block.parts = settled.parts
+    }
     const level = b['level']
     if (typeof level === 'number' && Number.isFinite(level)) {
       block.level = Math.min(6, Math.max(1, Math.round(level)))

@@ -36,6 +36,7 @@ export const BLOCK_FIELDS = [
   'emphasis',
   'strong',
   'smallCaps',
+  'parts',
   'level',
   'marker',
   'continuesPrevious',

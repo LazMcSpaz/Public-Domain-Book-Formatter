@@ -14,16 +14,18 @@
  *    and a hand-typed tag produce the same edit; `normalizeMarkup` remains
  *    the one reader on the way in.
  *
- * Word granularity is inherited from the notation itself: emphasis lands on
- * whitespace-separated words (see `@core/transcribe/markup`), so italicising
- * half a word italicises the word. Books emphasise words, not fragments.
+ * Granularity is inherited from the notation itself (see
+ * `@core/transcribe/markup`): emphasis lands on whitespace-separated words,
+ * and on part of one only where a tag falls among its letters — Ctrl+I over
+ * `un` in `unspiritual` sets `<i>un</i>spiritual`, which the book now prints
+ * as written, and `htmlOfMarkup` shows back the same way.
  *
  * Pure: `markupOfNodes` takes a *structural* tree — anything with `nodeType`,
  * `nodeName`, `nodeValue` and `childNodes`, which real DOM nodes satisfy —
  * so the walk is unit-testable without a browser and `src/core` stays free of
  * DOM types.
  */
-import { parseInlineMarkup } from '@core/transcribe'
+import { parseInlineMarkup, renderMarkup } from '@core/transcribe'
 
 /** What the serialiser needs of a DOM node. Real nodes satisfy it as-is. */
 export interface RichNode {
@@ -48,41 +50,14 @@ const escapeHtml = (s: string): string =>
  *
  * Contiguous marked words share one pair of tags and `<b>` nests outside
  * `<i>`, the same conventions `withMarkup` prints, so the editor shows what
- * the notation means rather than a variant of it.
+ * the notation means rather than a variant of it. It is `withMarkup`'s own
+ * walk (`renderMarkup`) with the words escaped, so the two cannot come to
+ * disagree — which a second copy of the loop, as this once was, could, and
+ * would have the day a part of a word was added to one and not the other.
  */
 export function htmlOfMarkup(raw: string): string {
-  const { text, emphasis, strong, smallCaps } = parseInlineMarkup(raw)
-  const marks = [
-    { words: new Set(smallCaps), tag: 'sc', inside: false },
-    { words: new Set(strong), tag: 'b', inside: false },
-    { words: new Set(emphasis), tag: 'i', inside: false }
-  ]
-
-  let out = ''
-  let index = 0
-  for (const part of text.split(/(\s+)/u)) {
-    if (part.length === 0) continue
-    if (/^\s+$/u.test(part)) {
-      out += part
-      continue
-    }
-    for (const mark of [...marks].reverse()) {
-      if (mark.inside && !mark.words.has(index)) {
-        out = out.replace(/(\s*)$/u, `</${mark.tag}>$1`)
-        mark.inside = false
-      }
-    }
-    for (const mark of marks) {
-      if (!mark.inside && mark.words.has(index)) {
-        out += `<${mark.tag}>`
-        mark.inside = true
-      }
-    }
-    out += escapeHtml(part)
-    index += 1
-  }
-  for (const mark of [...marks].reverse()) if (mark.inside) out += `</${mark.tag}>`
-  return out
+  const { text, ...styling } = parseInlineMarkup(raw)
+  return renderMarkup(text, styling, escapeHtml)
 }
 
 /** Tag names that mean italic, beyond what inline style may add. */
