@@ -26,7 +26,7 @@ import { join } from 'node:path'
 import { assembleBook } from '@core/assemble'
 import { applyEdits } from '@core/edits'
 import { headingsWithoutMarks, prepareFootnotes } from '@core/layout/footnotes'
-import { parseInlineMarkup } from '@core/transcribe/markup'
+import { parseInlineMarkup, type InlinePart } from '@core/transcribe/markup'
 
 const [dir, out] = process.argv.slice(-2)
 if (!dir || !out || dir === out) throw new Error('epub-of.ts <book-dir> <out-dir>')
@@ -46,7 +46,8 @@ function inline(
   text: string,
   emphasis: readonly number[] = [],
   strong: readonly number[] = [],
-  refs: ReadonlyMap<number, string[]> = new Map()
+  refs: ReadonlyMap<number, string[]> = new Map(),
+  wordParts: readonly InlinePart[] = []
 ): string {
   const it = new Set(emphasis)
   const bold = new Set(strong)
@@ -67,19 +68,33 @@ function inline(
       continue
     }
     word += 1
-    const want = (it.has(word) ? 'i' : '') + (bold.has(word) ? 'b' : '')
-    const face = want === 'ib' ? 'bi' : want
-    if (face !== open) {
-      // A space already written belongs outside the run being closed.
-      const trailing = html.endsWith(' ')
-      if (trailing) html = html.slice(0, -1)
-      close()
-      if (trailing) html += ' '
-      if (face === 'bi') html += '<i><b>'
-      else if (face) html += `<${face}>`
-      open = face
+    // A word set partly in a face is written a stretch at a time, cut where
+    // its parts begin and end; any other word is one stretch.
+    const mine = wordParts.filter((p) => p.word === word)
+    const cuts = [...new Set([0, part.length, ...mine.flatMap((p) => [p.from, p.to])])]
+      .filter((c) => c >= 0 && c <= part.length)
+      .sort((a, b) => a - b)
+    for (let k = 1; k < cuts.length; k++) {
+      const from = cuts[k - 1]!
+      const to = cuts[k]!
+      const covers = (style: InlinePart['style']): boolean =>
+        mine.some((p) => p.style === style && p.from <= from && p.to >= to)
+      const want =
+        (it.has(word) || covers('italic') ? 'i' : '') +
+        (bold.has(word) || covers('strong') ? 'b' : '')
+      const face = want === 'ib' ? 'bi' : want
+      if (face !== open) {
+        // A space already written belongs outside the run being closed.
+        const trailing = html.endsWith(' ')
+        if (trailing) html = html.slice(0, -1)
+        close()
+        if (trailing) html += ' '
+        if (face === 'bi') html += '<i><b>'
+        else if (face) html += `<${face}>`
+        open = face
+      }
+      html += esc(part.slice(from, to))
     }
-    html += esc(part)
     for (const ref of refs.get(word) ?? []) html += ref
   }
   close()
@@ -146,10 +161,10 @@ doc.blocks.forEach((block, i) => {
     const link = `<a epub:type="noteref" href="#n${num}" id="r${num}" class="ref">${num}</a>`
     refs.set(ref.wordIndex, [...(refs.get(ref.wordIndex) ?? []), link])
     chapter.notes.push(
-      `<aside epub:type="footnote" id="n${num}" class="note"><p><a href="#r${num}">${num}.</a> ${inline(note.text, note.emphasis, note.strong)}</p></aside>`
+      `<aside epub:type="footnote" id="n${num}" class="note"><p><a href="#r${num}">${num}.</a> ${inline(note.text, note.emphasis, note.strong, new Map(), note.parts)}</p></aside>`
     )
   }
-  const html = inline(prep.text, block.emphasis, block.strong, refs)
+  const html = inline(prep.text, block.emphasis, block.strong, refs, block.parts)
   switch (block.kind) {
     case 'heading': {
       const level = Math.min(6, Math.max(2, (block.level ?? 1) + 1))
@@ -201,8 +216,8 @@ doc.blocks.forEach((block, i) => {
           .map((p) => {
             const m = parseInlineMarkup(p)
             return paras.length > 1
-              ? `<p>${inline(m.text, m.emphasis, m.strong)}</p>`
-              : inline(m.text, m.emphasis, m.strong)
+              ? `<p>${inline(m.text, m.emphasis, m.strong, new Map(), m.parts)}</p>`
+              : inline(m.text, m.emphasis, m.strong, new Map(), m.parts)
           })
           .join('')}</figcaption>`
       : ''

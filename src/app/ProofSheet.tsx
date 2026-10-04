@@ -508,7 +508,7 @@ export function ProofSheet({
             // by retyping the paragraph. `applyEdits` reads them straight back.
             const text =
               currentText.get(block.id) ??
-              withMarkup(block.text, block.emphasis, block.strong, block.smallCaps)
+              withMarkup(block.text, block.emphasis, block.strong, block.smallCaps, block.parts)
             const kind = currentKind.get(block.id) ?? block.kind
             const isDropped = dropped.has(block.id)
             // A memo or a highlight is a message about the block, not a change

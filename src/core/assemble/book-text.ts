@@ -27,7 +27,7 @@
  *
  * Pure: no DOM, no I/O.
  */
-import { withMarkup } from '@core/transcribe'
+import { withMarkup, type InlinePart } from '@core/transcribe'
 import type { BookDocument } from './assemble-book'
 
 /**
@@ -43,7 +43,8 @@ export function bookText(doc: BookDocument): string {
     emphasis?: number[]
     strong?: number[]
     smallCaps?: number[]
-  }): string => withMarkup(b.text, b.emphasis, b.strong, b.smallCaps)
+    parts?: InlinePart[]
+  }): string => withMarkup(b.text, b.emphasis, b.strong, b.smallCaps, b.parts)
 
   for (const section of doc.sections.filter((s) => s.placement === 'front')) {
     parts.push(section.label ?? '', section.title, ...section.blocks.map(marked))

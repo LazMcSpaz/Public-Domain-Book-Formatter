@@ -19,7 +19,7 @@
 import { readFileSync, writeFileSync } from 'node:fs'
 import { assembleBook } from '@core/assemble'
 import { applyEdits } from '@core/edits'
-import { withMarkup } from '@core/transcribe/markup'
+import { partsIn, withMarkup, type InlinePart } from '@core/transcribe/markup'
 import { prepareFootnotes } from '@core/layout/footnotes'
 
 const [bookPath, out] = process.argv.slice(-2)
@@ -30,8 +30,9 @@ const book = JSON.parse(readFileSync(bookPath, 'utf8'))
 const bare = assembleBook(book.run.transcriptions)
 const applied = applyEdits(bare, book.run.edits ?? [])
 
-type Faced = { text: string; emphasis?: number[]; strong?: number[] }
-const faces = (b: Faced): string => withMarkup(b.text, b.emphasis, b.strong)
+type Faced = { text: string; emphasis?: number[]; strong?: number[]; parts?: InlinePart[] }
+const faces = (b: Faced): string =>
+  withMarkup(b.text, b.emphasis, b.strong, undefined, partsIn(b.parts, ['italic', 'strong']))
 const say = (blocks: (Faced & { id: string; kind: string })[]) =>
   blocks.map((b) => ({ id: b.id, kind: b.kind, text: faces(b) }))
 // Where each note is referred from, by the engine's own claiming walk: a

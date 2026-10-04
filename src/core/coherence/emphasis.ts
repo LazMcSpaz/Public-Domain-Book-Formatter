@@ -28,7 +28,20 @@
  * Pure: no DOM, no I/O.
  */
 import type { BookDocument } from '@core/assemble'
-import { withMarkup } from '@core/transcribe/markup'
+import { partsIn, withMarkup, type InlinePart } from '@core/transcribe/markup'
+
+/**
+ * A block or note in the notation, with its italic and its bold — the faces
+ * the witness can see — including where either covers only part of a word.
+ */
+function italicMarkup(b: {
+  text: string
+  emphasis?: readonly number[]
+  strong?: readonly number[]
+  parts?: readonly InlinePart[]
+}): string {
+  return withMarkup(b.text, b.emphasis, b.strong, undefined, partsIn(b.parts, ['italic', 'strong']))
+}
 
 /** One run of text a witness read as italic, on the leaf it read it from. */
 export interface EmphasisWitness {
@@ -224,10 +237,8 @@ export function checkEmphasis(
   const units: Unit[] = [
     ...[...doc.blocks, ...doc.sections.flatMap((s) => s.blocks)]
       .filter((b) => b.kind !== 'table')
-      .map((b) => unitOf(b.id, [...b.sourcePages], withMarkup(b.text, b.emphasis, b.strong))),
-    ...doc.footnotes.map((n) =>
-      unitOf(n.id, [n.pageIndex], withMarkup(n.text, n.emphasis, n.strong))
-    )
+      .map((b) => unitOf(b.id, [...b.sourcePages], italicMarkup(b))),
+    ...doc.footnotes.map((n) => unitOf(n.id, [n.pageIndex], italicMarkup(n)))
   ]
   const byPage = new Map<number, Unit[]>()
   for (const u of units) {
