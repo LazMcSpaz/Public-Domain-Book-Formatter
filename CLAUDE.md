@@ -1044,7 +1044,11 @@ note paragraph stays a correction (`note-text`), or `corrections.md` loses
 its record when the paragraph becomes a note; and a note the paper prints
 no mark for — Vol. II's Part III note 1 — is the editor's, so it stays where
 the book prints it, with a query. `body-of.ts` now says which block claims
-each note, and `text.md` sets the note under it.
+each note, and `text.md` sets the note under it. The conversion is
+`gatheredNotesToFootnotes` (`@core/edits/gathered-notes`), run by
+`scripts/notes-to-footnotes.ts`: it reproduces both volumes' conversions
+exactly, and a note with no mark in its own chapter stops it by name rather
+than letting the next chapter's mark take it.
 
 **A file was written over without being read.** A new test file was given the
 name of an existing one, `test/emphasis.test.ts`, and the write replaced 302
@@ -1302,6 +1306,11 @@ npx vite-node --config vitest.config.ts scripts/slant-witness.ts <scan.pdf> w.js
                                      #   layer names no face or that has none; take it
                                      #   to emphasis-of.ts with --no-headings, and crop
                                      #   a sample before landing
+npx vite-node --config vitest.config.ts scripts/notes-to-footnotes.ts <book.json> <out.json> [--keep <head-leaf>:<note>]
+                                     #   notes gathered under "FOOTNOTES FOR …" set as
+                                     #   footnotes, notation declared bare; exits
+                                     #   non-zero naming a note its chapter has no
+                                     #   mark for. Check with `pairs` before landing
 npx vite-node --config vitest.config.ts scripts/checks-of.ts books/*/book.json --out d/
                                      #   every deterministic check — damage, apparatus,
                                      #   consistency, rulings not yet in the text —

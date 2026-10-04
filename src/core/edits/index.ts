@@ -70,3 +70,8 @@ export {
   type ProofSheetInput,
   type Attention
 } from './proof-sheet'
+export {
+  gatheredNotesToFootnotes,
+  type GatheredNotesOptions,
+  type GatheredNotesResult
+} from './gathered-notes'
