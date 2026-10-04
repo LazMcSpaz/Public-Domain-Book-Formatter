@@ -1338,6 +1338,12 @@ node scripts/drive.mjs reconimport <books/<dir>/recon.json.gz>   # a reading the
                                      #   queue): loaded into the driver's recon
                                      #   cache under the book's key, so recon is
                                      #   not run again here. `load` the book too
+node scripts/drive.mjs reconexport <books/<dir>/recon.json.gz>   # the other
+                                     #   way: the driver's own finished reading,
+                                     #   written as that file for the session to
+                                     #   commit. The driver has no shelf token, so
+                                     #   without this a recon done here lives only
+                                     #   in `.drive-profile`
 node scripts/drive.mjs epub <book.epub> e.json 1 2 3   # spine documents read by the
                                      #   app's own importer, as a batch for
                                      #   `transcribe` — how a shelf EPUB that

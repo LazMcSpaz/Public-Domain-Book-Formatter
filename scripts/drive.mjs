@@ -5176,6 +5176,89 @@ async function serve() {
       )
     },
 
+    /**
+     * Write this device's reading of the current book as the shelf's hand-off
+     * file, the other direction from `reconimport`.
+     *
+     * The app puts a finished reading beside its book through
+     * `pushReconToShelf`, but only from a browser holding a shelf token, and
+     * the driver's never does. So a book recon'd here lived in
+     * `.drive-profile` alone: a container reset cost an hour of Tesseract on
+     * _The Mahatma Letters_ (540 leaves). This builds the same file through the
+     * same `reconHandoff` and writes it to disk for the session to commit,
+     * so a checkpoint is refused here on the same terms as there.
+     */
+    reconexport: async ([out] = []) => {
+      if (!out || !/\.json\.gz$/u.test(out)) {
+        throw new Error('reconexport <books/<dir>/recon.json.gz>')
+      }
+      const built = await page.evaluate(
+        async ([repo]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
+          const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const cleanup = await import(`/@fs${repo}/src/core/image/cleanup.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const wanted = {
+            dpi: recon.RECON_DPI,
+            maxPages: null,
+            cleanup: cleanup.DEFAULT_CLEANUP
+          }
+          const result = await cacheMod.loadReconCache(newest.key, wanted)
+          if (!result) {
+            throw new Error(
+              'No finished reading of this book here. A checkpoint is not one; let recon finish.'
+            )
+          }
+          // The cache mints object URLs for its crops and thumbnails, and
+          // none of them is wanted here.
+          for (const m of [result.crops, result.contextCrops, result.thumbnails]) {
+            for (const url of m?.values() ?? []) URL.revokeObjectURL(url)
+          }
+          const handoff = project.reconHandoff({
+            key: newest.key,
+            fileName: newest.key.split('\u0000')[0],
+            dpi: wanted.dpi,
+            cleanup: wanted.cleanup,
+            pageCount: result.pageCount,
+            source: result.source,
+            ...(result.shape ? { shape: result.shape } : {}),
+            words: result.words,
+            lexicon: result.lexicon,
+            pageText: result.pageText
+          })
+          const json = JSON.stringify(handoff)
+          // Read back through the parser `reconimport` uses, so a file this
+          // writes is one that verb takes.
+          project.parseReconHandoff(JSON.parse(json))
+          const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'))
+          const bytes = new Uint8Array(await new Response(stream).arrayBuffer())
+          return {
+            base64: project.toBase64(bytes),
+            key: newest.key.split('\u0000')[0],
+            leaves: result.pageCount,
+            words: result.words.length,
+            source: result.source
+          }
+        },
+        [REPO]
+      )
+      const path = resolve(out)
+      await mkdir(dirname(path), { recursive: true })
+      const bytes = Buffer.from(built.base64, 'base64')
+      await writeFile(path, bytes)
+      return {
+        wrote: path,
+        bytes: bytes.length,
+        key: built.key,
+        leaves: built.leaves,
+        words: built.words,
+        source: built.source
+      }
+    },
+
     cachestat: async ([sub, scan] = []) => {
       // `cachestat recount <scan.pdf>` puts a checkpoint's true length back.
       // Before the fix in `ReconPartial.pageCount` every checkpoint was written
