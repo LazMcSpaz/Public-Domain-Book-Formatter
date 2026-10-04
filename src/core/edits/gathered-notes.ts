@@ -45,7 +45,13 @@
  */
 import { assembleBook, type BookBlock } from '@core/assemble'
 import type { PageTranscription, TranscribedBlock } from '@core/transcribe/schema'
-import { parseInlineMarkup, withMarkup } from '@core/transcribe/markup'
+import {
+  parseInlineMarkup,
+  partsIn,
+  withMarkup,
+  type InlinePart,
+  type InlineStyling
+} from '@core/transcribe/markup'
 import { prepareFootnotes } from '@core/layout/footnotes'
 import { applyEdits, type BookEdit } from './book-edits'
 
@@ -70,6 +76,12 @@ const superscript = (n: number): string =>
   [...String(n)].map((d) => SUPERSCRIPT[Number(d)]).join('')
 const squeeze = (t: string): string => t.replace(/\s+/g, ' ').trim()
 const plain = (t: string): string => t.replace(/<[^>]+>/g, '')
+/**
+ * A block in the notation, italic and bold only — what a note carries over —
+ * with its parts of words in those faces as well as its whole words.
+ */
+const faced = (text: string, b: InlineStyling): string =>
+  withMarkup(text, b.emphasis, b.strong, undefined, partsIn(b.parts, ['italic', 'strong']))
 
 /** A superscript straight after this is notation: `S¹`, `NP²`, `Noun Phrase¹`. */
 const NOTATION_BEFORE = /(?:^|[^\p{L}])(?:\p{Lu}{1,2}|Noun|Phrase|Verb|Adjective|Adverb)$/u
@@ -145,7 +157,7 @@ export function gatheredNotesToFootnotes(
         continue
       }
 
-      let markup = withMarkup(text, block.emphasis, block.strong)
+      let markup = faced(text, block)
       const hosts = hostsOf(page.pageIndex, text)
       const host = hosts.length === 1 ? hosts[0]! : null
       if (!host && hosts.some((h) => editsByBlock.has(h.id))) {
@@ -159,11 +171,11 @@ export function gatheredNotesToFootnotes(
           if (host.sourcePages.length > 1) throw new Error(`${host.id}: words edited across a seam`)
           corrections.push({
             printed: squeeze(text).replace(/^\d+\.\s*/, ''),
-            markup: withMarkup(now.text, now.emphasis, now.strong)
+            markup: faced(now.text, now)
           })
           report.push(`leaf ${page.pageIndex}: ${host.id}'s correction kept as a note-text edit`)
         } else if (host.sourcePages.length === 1) {
-          markup = withMarkup(now.text, now.emphasis, now.strong)
+          markup = faced(now.text, now)
         } else {
           // Joined across a seam: a change of tags only, so this leaf's share
           // of them is found by word position.
@@ -176,7 +188,15 @@ export function gatheredNotesToFootnotes(
           if (at < 0) throw new Error(`${host.id}: leaf ${page.pageIndex}'s words not found in it`)
           const share = (xs?: readonly number[]) =>
             (xs ?? []).filter((i) => i >= at && i < at + mine.length).map((i) => i - at)
-          markup = withMarkup(text, share(now.emphasis), share(now.strong))
+          const shareParts = (xs?: readonly InlinePart[]): InlinePart[] =>
+            (xs ?? [])
+              .filter((p) => p.word >= at && p.word < at + mine.length)
+              .map((p) => ({ ...p, word: p.word - at }))
+          markup = faced(text, {
+            emphasis: share(now.emphasis),
+            strong: share(now.strong),
+            parts: shareParts(now.parts)
+          })
         }
         for (const e of editsByBlock.get(host.id)!) superseded.add(e)
         report.push(`leaf ${page.pageIndex}: ${host.id} carried its edits in`)
@@ -196,6 +216,7 @@ export function gatheredNotesToFootnotes(
         text: parsed.text,
         ...(parsed.emphasis.length ? { emphasis: parsed.emphasis } : {}),
         ...(parsed.strong.length ? { strong: parsed.strong } : {}),
+        ...(parsed.parts?.length ? { parts: parsed.parts } : {}),
         ...(m ? { marker: superscript(Number(m[2])) } : {})
       })
     }

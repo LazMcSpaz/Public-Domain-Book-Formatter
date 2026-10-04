@@ -25,11 +25,17 @@ import {
   type SynopsisEntry
 } from '@core/pages'
 import {
+  joinStyling,
+  moveParts,
   normalizeTable,
+  partsAfterDeleting,
+  settleParts,
   shiftEmphasis,
   wordCount,
   type BlockKind,
+  type InlinePart,
   type PageTranscription,
+  type SettledStyling,
   type TranscribedBlock
 } from '@core/transcribe'
 
@@ -93,6 +99,8 @@ export interface Footnote {
   strong?: number[]
   /** Word indices the note sets in small capitals. See `TranscribedBlock.smallCaps`. */
   smallCaps?: number[]
+  /** Styles over part of a word. See `TranscribedBlock.parts`. */
+  parts?: InlinePart[]
   /** Page the note was printed on. */
   pageIndex: number
   /** True when no body text referenced this marker. */
@@ -384,6 +392,67 @@ export function stripSoftHyphens(text: string): string {
   return text.replace(/\u00AD/gu, '')
 }
 
+/** One soft hyphen, as `partsAfterDeleting` asks for the characters it deletes. */
+const SOFT_HYPHEN = /\u00AD/u
+
+/** The styling a block or note stores. */
+interface Styled {
+  text: string
+  emphasis?: number[]
+  strong?: number[]
+  smallCaps?: number[]
+  parts?: InlinePart[]
+}
+
+/** A settled styling as the fields a block stores: each only where it has something. */
+function stylingOf(settled: SettledStyling): Omit<Styled, 'text'> {
+  return {
+    ...(settled.emphasis.length > 0 ? { emphasis: settled.emphasis } : {}),
+    ...(settled.strong.length > 0 ? { strong: settled.strong } : {}),
+    ...(settled.smallCaps.length > 0 ? { smallCaps: settled.smallCaps } : {}),
+    ...(settled.parts.length > 0 ? { parts: settled.parts } : {})
+  }
+}
+
+/**
+ * Carry `next`'s styling onto `into` for a join whose text is `joined`, before
+ * `into.text` is replaced with it.
+ *
+ * The whole-word indices move along by the words `into` contributes, measured
+ * on the joined text so a healed hyphen is counted once — the rule both joins
+ * in this file have always followed, unchanged where neither side has a part.
+ * Where either has one, `joinStyling` does the same for the indices and keeps
+ * each part on its own characters, the healed word included.
+ */
+function carryStyling(into: Styled, next: TranscribedBlock, joined: string): void {
+  if (!into.parts?.length && !next.parts?.length) {
+    const shift = wordCount(joined) - wordCount(next.text)
+    if (next.emphasis?.length) {
+      into.emphasis = [...(into.emphasis ?? []), ...shiftEmphasis(next.emphasis, shift)]
+    }
+    if (next.strong?.length) {
+      into.strong = [...(into.strong ?? []), ...shiftEmphasis(next.strong, shift)]
+    }
+    if (next.smallCaps?.length) {
+      into.smallCaps = [...(into.smallCaps ?? []), ...shiftEmphasis(next.smallCaps, shift)]
+    }
+    return
+  }
+  const settled = joinStyling(
+    into.text,
+    into,
+    stripSoftHyphens(next.text),
+    { ...next, parts: partsAfterDeleting(next.text, next.parts, SOFT_HYPHEN) },
+    joined
+  )
+  const fields = stylingOf(settled)
+  delete into.emphasis
+  delete into.strong
+  delete into.smallCaps
+  delete into.parts
+  Object.assign(into, fields)
+}
+
 /**
  * A block with the scan's artefacts off it, structure included.
  *
@@ -616,25 +685,7 @@ export function assembleBook(
           // Measured against the *joined* text rather than the note's old word
           // count, because `joinText` heals a hyphen across the seam — which
           // merges two words into one and moves every index after it by one.
-          const shift = wordCount(joined) - wordCount(block.text)
-          if (block.emphasis?.length) {
-            previousNote.emphasis = [
-              ...(previousNote.emphasis ?? []),
-              ...block.emphasis.map((i) => i + shift)
-            ]
-          }
-          if (block.strong?.length) {
-            previousNote.strong = [
-              ...(previousNote.strong ?? []),
-              ...block.strong.map((i) => i + shift)
-            ]
-          }
-          if (block.smallCaps?.length) {
-            previousNote.smallCaps = [
-              ...(previousNote.smallCaps ?? []),
-              ...block.smallCaps.map((i) => i + shift)
-            ]
-          }
+          carryStyling(previousNote, block, joined)
           previousNote.text = joined
           continue
         }
@@ -659,13 +710,34 @@ export function assembleBook(
         const emphasis = block.emphasis?.map((i) => i - shift).filter((i) => i >= 0)
         const strong = block.strong?.map((i) => i - shift).filter((i) => i >= 0)
         const smallCaps = block.smallCaps?.map((i) => i - shift).filter((i) => i >= 0)
+        // A part keeps to its characters rather than to a word count: the mark
+        // may have been printed hard against the note's first word, and taking
+        // it off then moves that word's letters rather than the word.
+        const settled = block.parts?.length
+          ? settleParts(text, {
+              ...(emphasis ? { emphasis } : {}),
+              ...(strong ? { strong } : {}),
+              ...(smallCaps ? { smallCaps } : {}),
+              parts: moveParts(
+                raw,
+                partsAfterDeleting(block.text.trim(), block.parts, SOFT_HYPHEN),
+                text,
+                (offset) =>
+                  offset - (raw.length - raw.trimStart().length) - (raw.trim().length - text.length)
+              )
+            })
+          : null
         footnotes.push({
           id: `fn${footnotes.length + 1}`,
           originalMarker: marker,
           text,
-          ...(emphasis?.length ? { emphasis } : {}),
-          ...(strong?.length ? { strong } : {}),
-          ...(smallCaps?.length ? { smallCaps } : {}),
+          ...(settled
+            ? stylingOf(settled)
+            : {
+                ...(emphasis?.length ? { emphasis } : {}),
+                ...(strong?.length ? { strong } : {}),
+                ...(smallCaps?.length ? { smallCaps } : {})
+              }),
           pageIndex: page.pageIndex,
           orphaned: false
         })
@@ -690,22 +762,7 @@ export function assembleBook(
         // word late — the Glossary's `<i>mâyâvic</i> principle` printed
         // "mâyâvic <i>principle</i>".
         const joined = stripSoftHyphens(joinText(previous.text, block.text))
-        const shift = wordCount(joined) - wordCount(block.text)
-        if (block.emphasis?.length) {
-          previous.emphasis = [
-            ...(previous.emphasis ?? []),
-            ...shiftEmphasis(block.emphasis, shift)
-          ]
-        }
-        if (block.strong?.length) {
-          previous.strong = [...(previous.strong ?? []), ...shiftEmphasis(block.strong, shift)]
-        }
-        if (block.smallCaps?.length) {
-          previous.smallCaps = [
-            ...(previous.smallCaps ?? []),
-            ...shiftEmphasis(block.smallCaps, shift)
-          ]
-        }
+        carryStyling(previous, block, joined)
         previous.text = joined
         if (!previous.sourcePages.includes(page.pageIndex)) {
           previous.sourcePages.push(page.pageIndex)
@@ -719,6 +776,11 @@ export function assembleBook(
           ...block,
           id: `p${page.pageIndex}b${blockIndex}`,
           text: stripSoftHyphens(block.text),
+          // Taking a soft hyphen out of a word moves the letters after it, and
+          // a part is measured in letters.
+          ...(block.parts?.length
+            ? { parts: partsAfterDeleting(block.text, block.parts, SOFT_HYPHEN) }
+            : {}),
           sourcePages: [page.pageIndex]
         })
       )

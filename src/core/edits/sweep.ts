@@ -24,14 +24,24 @@
  *    at its end, so `body` in `the <i>astral body</i>` stays italic whatever
  *    is done to `the astral`;
  *  - the replacement itself is inserted as it was typed, so `<i>` written in
- *    the replace box means italic, the same convention as everywhere else.
+ *    the replace box means italic, the same convention as everywhere else;
+ *  - a tag *inside* a changed word — italic over part of it, `<i>un</i>spirtual`
+ *    — stays where it is when the change is elsewhere in the word: changes are
+ *    widened to whole words, and a word that carries a part of a word in one
+ *    face would otherwise lose it to a fix of one of its other letters.
  *
  * Pure: string work. The callers decide what a hit becomes — a `text` edit,
  * a rewritten section blob — through the same paths a hand edit takes.
  */
 
-/** The only tags the notation prints — see `withMarkup`. */
-const NOTATION_TAG = /<\/?[bi]>/y
+/**
+ * The only tags the notation prints — see `withMarkup`. Small capitals among
+ * them: a word set partly in small capitals is printed `un<sc>spirit</sc>ual`,
+ * and a search that read the tag as letters could not find the word.
+ */
+const NOTATION_TAG = /<\/?(?:[bi]|sc)>/y
+/** The same tags, to find every one in a stretch. */
+const NOTATION_TAGS = /<\/?(?:[bi]|sc)>/gu
 
 export interface PlainMap {
   /** The text with the tags removed — what a reader searches. */
@@ -183,12 +193,24 @@ function spliceAt(out: string, toMarkup: number[], from: number, to: number, cor
   // (or the mirror) would leave a stray tag behind — harmless to the parser,
   // which is forgiving, but it silently strips the marking from the words
   // outside. Re-balancing at the splice keeps them marked.
-  const swallowed = out.slice(start, end).match(/<\/?[bi]>/gu) ?? []
+  const swallowed = out.slice(start, end).match(NOTATION_TAGS) ?? []
+
+  // Unless every tag swallowed sits in letters the change leaves alone — the
+  // stretch's shared head or tail. Widening a change to whole words is what
+  // brings a tag inside a word into the stretch at all, and that only happens
+  // to a word set partly in one face: `<i>un</i>spirtual` fixed to
+  // `unspiritual` keeps its `un` italic. Each tag goes back at its place in
+  // the new characters, so nothing needs re-balancing.
+  if (swallowed.length > 0) {
+    const kept = keptInPlace(out.slice(start, end), core)
+    if (kept !== null) return out.slice(0, start) + kept + out.slice(end)
+  }
+
   const reopen: string[] = []
   const reclose: string[] = []
   for (const tag of swallowed) {
     if (tag[1] === '/') {
-      const open = reopen.findIndex((t) => t === `<${tag[2]}>`)
+      const open = reopen.findIndex((t) => t === `<${tag.slice(2)}`)
       // A closer whose opener is also inside cancels it; one whose opener is
       // *before* the stretch must close again ahead of the splice.
       if (open >= 0) reopen.splice(open, 1)
@@ -198,6 +220,53 @@ function spliceAt(out: string, toMarkup: number[], from: number, to: number, cor
     }
   }
   return out.slice(0, start) + reclose.join('') + core + reopen.join('') + out.slice(end)
+}
+
+/**
+ * `core` with the tags of `stretch` put back where they stood, when every one
+ * of them stands in the characters the two share at their head or their tail;
+ * null when any falls among the characters that change, which is re-balanced
+ * as before.
+ */
+function keptInPlace(stretch: string, core: string): string | null {
+  const tags: { at: number; tag: string }[] = []
+  let plain = ''
+  let i = 0
+  while (i < stretch.length) {
+    if (stretch[i] === '<') {
+      NOTATION_TAG.lastIndex = i
+      if (NOTATION_TAG.test(stretch)) {
+        tags.push({ at: plain.length, tag: stretch.slice(i, NOTATION_TAG.lastIndex) })
+        i = NOTATION_TAG.lastIndex
+        continue
+      }
+    }
+    plain += stretch[i]
+    i += 1
+  }
+  let head = 0
+  while (head < plain.length && head < core.length && plain[head] === core[head]) head += 1
+  let tail = 0
+  while (
+    tail < plain.length - head &&
+    tail < core.length - head &&
+    plain[plain.length - 1 - tail] === core[core.length - 1 - tail]
+  ) {
+    tail += 1
+  }
+  const placed: { at: number; tag: string }[] = []
+  for (const { at, tag } of tags) {
+    if (at <= head) placed.push({ at, tag })
+    else if (at >= plain.length - tail) placed.push({ at: at - plain.length + core.length, tag })
+    else return null
+  }
+  let result = ''
+  let cursor = 0
+  for (const { at, tag } of placed) {
+    result += core.slice(cursor, at) + tag
+    cursor = at
+  }
+  return result + core.slice(cursor)
 }
 
 interface Hunk {
