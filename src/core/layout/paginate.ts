@@ -27,7 +27,14 @@ import type { BookBlock, BookDocument, BookSection, Illustration } from '@core/a
 import { effectiveDpi } from '@core/image'
 // The flattened view's coordinates, from the one place they are defined.
 import { CELL_SEPARATOR, cellEmphasis } from '@core/transcribe/schema'
-import { parseInlineMarkup, shiftEmphasis } from '@core/transcribe/markup'
+import {
+  moveParts,
+  parseInlineMarkup,
+  partsByWord,
+  shiftEmphasis,
+  shiftParts,
+  type InlinePart
+} from '@core/transcribe/markup'
 import {
   breakParagraph,
   fontForWord,
@@ -616,13 +623,30 @@ function toFlowLines(
       return {
         // Italic or bold where a span claims it. A hyphenated fragment keeps
         // its host word's index, so both halves of a split italic word stay
-        // italic.
+        // italic. A stretch of a word set in several faces — the `un` of
+        // `<i>un</i>spiritual` — carries its own face, measured in it by the
+        // breaker, and is drawn in exactly that.
         text: w.text,
-        font: fontForWord(w.sourceIndex, spans, font),
-        sizePt: w.sizePt ?? sizeForWord(w.sourceIndex, spans, sizePt),
+        font: w.font ?? fontForWord(w.sourceIndex, spans, font),
+        sizePt:
+          w.sizePt ??
+          (w.font ? sizePt * (w.scale ?? 1) : sizeForWord(w.sourceIndex, spans, sizePt)),
         xPt: w.xPt + offset,
         ...(w.risePt ? { risePt: w.risePt } : {})
       }
+    })
+    // Stretches of one word move as one under optical margins, or a share of
+    // the hang would open a gap inside the word.
+    const joined = line.words.map((w, k) => {
+      const before = line.words[k - 1]
+      return (
+        before !== undefined &&
+        w.font !== undefined &&
+        before.font !== undefined &&
+        w.sizePt === undefined &&
+        before.sizePt === undefined &&
+        w.sourceIndex === before.sourceIndex
+      )
     })
 
     // Whether this line reaches the right margin, which decides if there is an
@@ -633,7 +657,14 @@ function toFlowLines(
     const reach = last ? last.xPt - offset + widthOfRun(last, optical, font) : 0
     const flushRight = last !== undefined && reach >= line.widthPt - FLUSH_TOLERANCE_PT
 
-    const runs = optical ? [...hangPunctuation(placed, optical, font, { flushRight })] : placed
+    const runs = optical
+      ? [
+          ...hangPunctuation(placed, optical, font, {
+            flushRight,
+            ...(joined.some(Boolean) ? { joined } : {})
+          })
+        ]
+      : placed
 
     return {
       runs,
@@ -994,11 +1025,16 @@ function keyLines(paragraphs: readonly string[], ctx: BuildContext): FlowLine[] 
     if (!mark) return { ...parsed, mark: '' }
     // The mark was the paragraph's first word; every index after it moves down.
     const shift = (runs: readonly number[]): number[] => runs.filter((i) => i > 0).map((i) => i - 1)
+    const parts = shiftParts(
+      (parsed.parts ?? []).filter((part) => part.word > 0),
+      -1
+    )
     return {
       text: parsed.text.slice(mark[0].length),
       emphasis: shift(parsed.emphasis),
       strong: shift(parsed.strong),
       smallCaps: shift(parsed.smallCaps),
+      ...(parts.length > 0 ? { parts } : {}),
       mark: mark[1]!
     }
   })
@@ -1010,7 +1046,15 @@ function keyLines(paragraphs: readonly string[], ctx: BuildContext): FlowLine[] 
   )
   const lines: FlowLine[] = []
   for (const p of read) {
-    const spans = spansFor(ctx, ctx.profile.bodyFont, 'regular', p.emphasis, p.strong, p.smallCaps)
+    const spans = spansFor(
+      ctx,
+      ctx.profile.bodyFont,
+      'regular',
+      p.emphasis,
+      p.strong,
+      p.smallCaps,
+      p.parts
+    )
     const broken = breakParagraph(p.text, {
       font,
       sizePt,
@@ -1046,15 +1090,26 @@ function breakNote(note: PreparedNote, ctx: BuildContext): NoteBlock {
   const markSize = sizePt * MARK_SIZE_RATIO
   const hang = ctx.measurer.widthOf(note.mark, font, markSize) + sizePt * NOTE_HANG_GAP_RATIO
 
+  // Small capitals with no face to draw them come out as capitals first, so a
+  // part is placed against the letters that will actually be set.
+  const cased = smallCapsAsCapitals(
+    ctx,
+    ctx.profile.bodyFont,
+    note.text,
+    note.smallCaps,
+    false,
+    note.parts
+  )
   const spans = spansFor(
     ctx,
     ctx.profile.bodyFont,
     'regular',
     note.emphasis,
     note.strong,
-    note.smallCaps
+    note.smallCaps,
+    cased.parts
   )
-  const noteText = smallCapsAsCapitals(ctx, ctx.profile.bodyFont, note.text, note.smallCaps)
+  const noteText = cased.text
 
   const broken = breakParagraph(noteText, {
     font,
@@ -1158,18 +1213,64 @@ function smallCapsAsCapitals(
   family: string,
   text: string,
   smallCaps: readonly number[] | undefined,
-  noSpans = false
-): string {
-  if (!smallCaps?.length || (!noSpans && smallCapsFace(ctx, family))) return text
-  const marked = new Set(smallCaps)
+  noSpans = false,
+  parts?: readonly InlinePart[]
+): { text: string; parts?: InlinePart[] } {
+  const capsParts = (parts ?? []).filter((p) => p.style === 'smallCaps')
+  const kept = parts?.length ? { parts: [...parts] } : {}
+  if ((!smallCaps?.length && capsParts.length === 0) || (!noSpans && smallCapsFace(ctx, family))) {
+    return { text, ...kept }
+  }
+  if (!parts?.length) {
+    const marked = new Set(smallCaps)
+    let index = 0
+    return {
+      text: text
+        .split(/(\s+)/u)
+        .map((part) => {
+          if (part.length === 0 || /^\s+$/u.test(part)) return part
+          return marked.has(index++) ? part.toLocaleUpperCase() : part
+        })
+        .join('')
+    }
+  }
+  // A part of a word in small capitals is set in capitals over just its
+  // letters, and the other parts are carried across, since a capital is not
+  // always one character long.
+  const whole = new Set(smallCaps ?? [])
+  const upper = new Set<number>()
   let index = 0
-  return text
-    .split(/(\s+)/u)
-    .map((part) => {
-      if (part.length === 0 || /^\s+$/u.test(part)) return part
-      return marked.has(index++) ? part.toLocaleUpperCase() : part
-    })
-    .join('')
+  for (const match of text.matchAll(/\S+/gu)) {
+    for (let k = 0; k < match[0].length; k++) {
+      if (whole.has(index) || capsParts.some((p) => p.word === index && k >= p.from && k < p.to)) {
+        upper.add(match.index + k)
+      }
+    }
+    index += 1
+  }
+  return capitalised(text, parts, (at) => upper.has(at))
+}
+
+/**
+ * `text` with the characters `upper` names set in capitals, and `parts`
+ * carried across — a capital is not always one character (`ß` is `SS`), and a
+ * part after one would otherwise fall a letter early.
+ */
+function capitalised(
+  text: string,
+  parts: readonly InlinePart[],
+  upper: (at: number) => boolean
+): { text: string; parts: InlinePart[] } {
+  const to: number[] = []
+  let out = ''
+  let at = 0
+  for (const ch of text) {
+    for (let k = 0; k < ch.length; k++) to[at + k] = out.length
+    out += upper(at) ? ch.toLocaleUpperCase() : ch
+    at += ch.length
+  }
+  to[text.length] = out.length
+  return { text: out, parts: moveParts(text, parts, out, (o) => to[o] ?? out.length) }
 }
 
 function spansFor(
@@ -1178,25 +1279,36 @@ function spansFor(
   base: FontStyle,
   emphasis: readonly number[] | undefined,
   strong: readonly number[] | undefined,
-  smallCaps?: readonly number[]
+  smallCaps?: readonly number[],
+  parts?: readonly InlinePart[]
 ): TextSpan[] {
   const spans: TextSpan[] = []
+  /** A style's parts as a span carries them, or nothing where there are none. */
+  const partsOf = (style: InlinePart['style']): Pick<TextSpan, 'parts'> => {
+    const byWord = partsByWord(parts, style)
+    return byWord.size > 0 ? { parts: byWord } : {}
+  }
+  const capsParts = partsOf('smallCaps')
+  const strongParts = partsOf('strong')
+  const italicParts = partsOf('italic')
   // First, because first match wins: a small-capital word is that before it
-  // is anything else, there being no italic or bold small capitals here.
-  const caps = smallCaps?.length ? smallCapsFace(ctx, family) : null
+  // is anything else, there being no italic or bold small capitals here. The
+  // same order decides a character that two parts claim.
+  const caps = smallCaps?.length || capsParts.parts ? smallCapsFace(ctx, family) : null
   if (caps) {
     spans.push({
       words: new Set(smallCaps),
       font: { family: caps.family, style: 'regular', smallCaps: true },
-      ...(caps.scale !== 1 ? { scale: caps.scale } : {})
+      ...(caps.scale !== 1 ? { scale: caps.scale } : {}),
+      ...capsParts
     })
   }
-  if (strong?.length) {
+  if (strong?.length || strongParts.parts) {
     const style: FontStyle = ctx.measurer.hasBold(family) ? 'bold' : 'italic'
-    spans.push({ words: new Set(strong), font: { family, style } })
+    spans.push({ words: new Set(strong), font: { family, style }, ...strongParts })
   }
-  if (emphasis?.length) {
-    spans.push({ words: new Set(emphasis), font: { family, style: 'italic' } })
+  if (emphasis?.length || italicParts.parts) {
+    spans.push({ words: new Set(emphasis), font: { family, style: 'italic' }, ...italicParts })
   }
   return base === 'regular' ? spans : []
 }
@@ -1300,6 +1412,7 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
   const source = listMarker ? `${listMarker} ${opts.text ?? block.text}` : (opts.text ?? block.text)
   const capsWords =
     markerWords && block.smallCaps ? shiftEmphasis(block.smallCaps, markerWords) : block.smallCaps
+  const partsHere = markerWords && block.parts ? shiftParts(block.parts, markerWords) : block.parts
   // Small-capital words with no span to draw them — no face has small
   // capitals, or the block is italic and takes no spans — print as capitals.
   const cased = smallCapsAsCapitals(
@@ -1307,9 +1420,16 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
     family,
     source,
     capsWords,
-    blockStyle(block, ctx.profile).style !== 'regular'
+    blockStyle(block, ctx.profile).style !== 'regular',
+    partsHere
   )
-  const text = wantsSmallCaps && !realSmallCaps ? cased.toLocaleUpperCase() : cased
+  const upperAll = wantsSmallCaps && !realSmallCaps
+  // A part is carried through the capitals, which may not be one character
+  // each; where there are none the text is cased as it always was.
+  const capped =
+    upperAll && cased.parts?.length ? capitalised(cased.text, cased.parts, () => true) : null
+  const text = capped ? capped.text : upperAll ? cased.text.toLocaleUpperCase() : cased.text
+  const textParts = capped ? capped.parts : cased.parts
 
   // Reference marks ride on the end of the word they follow, set smaller and
   // lifted. They are given to the breaker rather than concatenated into the
@@ -1343,7 +1463,8 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
             ? shiftEmphasis(block.emphasis, markerWords)
             : block.emphasis,
           markerWords && block.strong ? shiftEmphasis(block.strong, markerWords) : block.strong,
-          capsWords
+          capsWords,
+          textParts
         )
       : []
 
@@ -1523,11 +1644,15 @@ function verseLines(
     const turn = VERSE_TURNOVER_EMS * o.sizePt
     const local = (w: number): boolean => w >= first && w < first + words
     const spans = o.spans
-      .map((s) => ({
-        font: s.font,
-        words: new Set([...s.words].filter(local).map((w) => w - first))
-      }))
-      .filter((s) => s.words.size > 0)
+      .map((s) => {
+        const parts = localParts(s.parts, local, first)
+        return {
+          font: s.font,
+          words: new Set([...s.words].filter(local).map((w) => w - first)),
+          ...(parts ? { parts } : {})
+        }
+      })
+      .filter((s) => s.words.size > 0 || s.parts !== undefined)
     const attachments = o.attachments
       .filter((a) => local(a.wordIndex))
       .map((a) => ({ ...a, wordIndex: a.wordIndex - first }))
@@ -1556,6 +1681,21 @@ function verseLines(
     first += words
   }
   return out
+}
+
+/**
+ * A span's parts on the words `keep` names, renumbered from `first` — the
+ * share of them one line of verse, or one side of a figure, takes.
+ */
+function localParts(
+  parts: TextSpan['parts'],
+  keep: (word: number) => boolean,
+  first: number
+): TextSpan['parts'] {
+  if (!parts) return undefined
+  const out = new Map<number, ReadonlyArray<readonly [number, number]>>()
+  for (const [word, ranges] of parts) if (keep(word)) out.set(word - first, ranges)
+  return out.size > 0 ? out : undefined
 }
 
 /** Whitespace-separated words, the breaker's own unit of indexing. */
@@ -1709,14 +1849,24 @@ function buildFigureFlowable(
     const words = text.split(/\s+/u).filter((w) => w.length > 0)
     const before = words.slice(0, wordAt).join(' ')
     const after = words.slice(wordAt).join(' ')
-    const spansBefore = p.spans.map((s) => ({
-      ...s,
-      words: new Set([...s.words].filter((i) => i < wordAt))
-    }))
-    const spansAfter = p.spans.map((s) => ({
-      ...s,
-      words: new Set([...s.words].filter((i) => i >= wordAt).map((i) => i - wordAt))
-    }))
+    const spansBefore = p.spans.map((s) => {
+      const { parts: _parts, ...rest } = s
+      const parts = localParts(s.parts, (i) => i < wordAt, 0)
+      return {
+        ...rest,
+        words: new Set([...s.words].filter((i) => i < wordAt)),
+        ...(parts ? { parts } : {})
+      }
+    })
+    const spansAfter = p.spans.map((s) => {
+      const { parts: _parts, ...rest } = s
+      const parts = localParts(s.parts, (i) => i >= wordAt, wordAt)
+      return {
+        ...rest,
+        words: new Set([...s.words].filter((i) => i >= wordAt).map((i) => i - wordAt)),
+        ...(parts ? { parts } : {})
+      }
+    })
     const attBefore = p.attachments.filter((a) => a.wordIndex < wordAt)
     const attAfter = p.attachments
       .filter((a) => a.wordIndex >= wordAt)
@@ -2840,6 +2990,11 @@ export function layout(
                   smallCaps: note.originalMarker.trim()
                     ? note.smallCaps.map((i) => i + 1)
                     : note.smallCaps
+                }
+              : {}),
+            ...(note.parts?.length
+              ? {
+                  parts: note.originalMarker.trim() ? shiftParts(note.parts, 1) : note.parts
                 }
               : {}),
             sourcePages: []

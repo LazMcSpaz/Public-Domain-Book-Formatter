@@ -41,7 +41,7 @@
  */
 import { standingFor, type HeldQuery } from './standing'
 import { bookText, type BookDocument } from '@core/assemble'
-import { withMarkup, type EditorialQueryKind } from '@core/transcribe'
+import { withMarkup, type EditorialQueryKind, type InlinePart } from '@core/transcribe'
 import type { RaisedQuery } from './index'
 
 /** What the editor decided to do about it. */
@@ -331,7 +331,8 @@ function leafText(doc: BookDocument, page: number): string {
     emphasis?: number[]
     strong?: number[]
     smallCaps?: number[]
-  }): string => withMarkup(b.text, b.emphasis, b.strong, b.smallCaps)
+    parts?: InlinePart[]
+  }): string => withMarkup(b.text, b.emphasis, b.strong, b.smallCaps, b.parts)
   return [
     ...[...doc.blocks, ...doc.asides].filter((b) => b.sourcePages.includes(page)).map(marked),
     ...doc.footnotes.filter((n) => n.pageIndex === page).map(marked)

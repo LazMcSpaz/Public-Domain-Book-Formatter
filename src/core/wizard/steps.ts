@@ -15,7 +15,13 @@ import type { BookShape } from '@core/provenance'
 import type { LexiconEntry } from '@core/lexicon'
 import type { BookMetadata, PageClassification } from '@core/pages'
 import { isFrontMatter } from '@core/pages'
-import { spotId, withMarkup, type DroppedRun, type VerificationFinding } from '@core/transcribe'
+import {
+  partsIn,
+  spotId,
+  withMarkup,
+  type DroppedRun,
+  type VerificationFinding
+} from '@core/transcribe'
 import {
   describeAge,
   describeTicket,
@@ -997,7 +1003,13 @@ const gateUncertainties: Step = {
         // With the italics showing. They are content the original prints and
         // this edition has to, and a plain box cannot show them — so someone
         // correcting a word here would silently discard them.
-        text: withMarkup(block.text, block.emphasis, block.strong),
+        text: withMarkup(
+          block.text,
+          block.emphasis,
+          block.strong,
+          undefined,
+          partsIn(block.parts, ['italic', 'strong'])
+        ),
         kind: block.kind,
         alsoFromPages: rest
       })

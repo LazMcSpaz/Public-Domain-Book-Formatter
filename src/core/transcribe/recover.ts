@@ -23,6 +23,7 @@
  * Pure: two texts in, runs out.
  */
 import type { OcrWordLike } from './types'
+import { settleParts, type InlinePart } from './markup'
 
 /**
  * How likely a gap is to be a real dropped clause rather than OCR noise.
@@ -338,6 +339,11 @@ export interface SplicedBlock {
   strong: number[]
   /** The block's small-capital runs, likewise. */
   smallCaps: number[]
+  /**
+   * The block's parts — italic over part of a word — moved the same way.
+   * Present only when the block had some.
+   */
+  parts?: InlinePart[]
 }
 
 /**
@@ -358,22 +364,36 @@ export function spliceRunInto(
   emphasis: readonly number[] | undefined,
   run: DroppedRun,
   strong?: readonly number[],
-  smallCaps?: readonly number[]
+  smallCaps?: readonly number[],
+  parts?: readonly InlinePart[]
 ): SplicedBlock | null {
   const inserted = run.text.split(/\s+/u).filter((w) => w.length > 0).length
   const shift = (marks: readonly number[] | undefined, from: number): number[] =>
     (marks ?? []).map((i) => (i < from ? i : i + inserted))
+  // A part rides on its word, so it moves exactly as the word's index does —
+  // and is then made sound against the new text, which is where a part on a
+  // word the splice cut through is clamped rather than left past its end.
+  const spliced = (text: string, from: number): SplicedBlock => {
+    const out = {
+      text,
+      emphasis: shift(emphasis, from),
+      strong: shift(strong, from),
+      smallCaps: shift(smallCaps, from)
+    }
+    if (!parts?.length) return out
+    const settled = settleParts(text, {
+      ...out,
+      parts: parts.map((p) => (p.word < from ? p : { ...p, word: p.word + inserted }))
+    })
+    const { parts: kept, ...lists } = settled
+    return { text, ...lists, ...(kept.length > 0 ? { parts: kept } : {}) }
+  }
 
   const anchor = run.after.trim()
   if (!anchor) {
     // A run dropped from the very start of the page goes at the front, so every
     // word of the block moves along by all of it.
-    return {
-      text: `${run.text} ${blockText}`.trim(),
-      emphasis: shift(emphasis, 0),
-      strong: shift(strong, 0),
-      smallCaps: shift(smallCaps, 0)
-    }
+    return spliced(`${run.text} ${blockText}`.trim(), 0)
   }
 
   const at = blockText.indexOf(anchor)
@@ -388,10 +408,5 @@ export function spliceRunInto(
     .replace(/\s+/gu, ' ')
     .trim()
   const before = head.split(/\s+/u).filter((w) => w.length > 0).length
-  return {
-    text,
-    emphasis: shift(emphasis, before),
-    strong: shift(strong, before),
-    smallCaps: shift(smallCaps, before)
-  }
+  return spliced(text, before)
 }

@@ -335,7 +335,7 @@ async function serve() {
             // here is a face the next correction silently deletes. That is not
             // hypothetical: it is what cost this volume 188 emphasis runs when
             // corrections were typed from the bare text.
-            text: markup.withMarkup(b.text, b.emphasis, b.strong, b.smallCaps)
+            text: markup.withMarkup(b.text, b.emphasis, b.strong, b.smallCaps, b.parts)
           }))
         // The book's own footnotes, both faces, carrying the leaf that printed
         // each: a note's id (`fn12`) does not say, and the corrections sheet
@@ -346,7 +346,7 @@ async function serve() {
             .map((n) => ({
               id: n.id,
               leaf: n.pageIndex,
-              text: markup.withMarkup(n.text, n.emphasis, n.strong, n.smallCaps)
+              text: markup.withMarkup(n.text, n.emphasis, n.strong, n.smallCaps, n.parts)
             }))
         return {
           edited: say(applied.blocks),
@@ -1990,7 +1990,9 @@ async function serve() {
             orphaned: n.orphaned,
             words: n.text.split(/\s+/u).filter(Boolean).length,
             opening: n.text.slice(0, 60),
-            ...(full ? { text: markup.withMarkup(n.text, n.emphasis, n.strong, n.smallCaps) } : {})
+            ...(full
+              ? { text: markup.withMarkup(n.text, n.emphasis, n.strong, n.smallCaps, n.parts) }
+              : {})
           }))
         },
         [REPO, full]
@@ -6300,7 +6302,13 @@ async function serve() {
                 refused.push(`${id}: no such ${isNote ? 'note' : 'block'}`)
                 continue
               }
-              const before = markup.withMarkup(block.text, block.emphasis, block.strong)
+              const before = markup.withMarkup(
+                block.text,
+                block.emphasis,
+                block.strong,
+                undefined,
+                markup.partsIn(block.parts, ['italic', 'strong'])
+              )
               if (text === before) continue
               if (tags(before) > 0 && tags(text) === 0) {
                 refused.push(`${id}: would drop every tag`)
@@ -6400,7 +6408,8 @@ async function serve() {
             block.text,
             block.emphasis,
             block.strong,
-            block.smallCaps
+            block.smallCaps,
+            block.parts
           )
 
           let text = replacement
@@ -6772,7 +6781,8 @@ async function serve() {
               block.text,
               block.emphasis,
               block.strong,
-              block.smallCaps
+              block.smallCaps,
+              block.parts
             )
             const matches = editsMod.findMatches(text, was, matchCase)
             if (matches.length === 0) continue
@@ -6813,7 +6823,13 @@ async function serve() {
           // `note-text` record that exists for exactly this reach.
           for (const note of doc.footnotes) {
             if (!note.originalMarker) continue
-            const text = markup.withMarkup(note.text, note.emphasis, note.strong, note.smallCaps)
+            const text = markup.withMarkup(
+              note.text,
+              note.emphasis,
+              note.strong,
+              note.smallCaps,
+              note.parts
+            )
             const matches = editsMod.findMatches(text, was, matchCase)
             if (matches.length === 0) continue
             found.push({

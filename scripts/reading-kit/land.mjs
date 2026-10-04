@@ -60,6 +60,7 @@ const BLOCK = new Set([
   'headerRow',
   'emphasis',
   'strong',
+  'parts',
   'level',
   'marker',
   'continuesNext'

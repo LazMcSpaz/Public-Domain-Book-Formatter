@@ -15,6 +15,7 @@ export {
   tableToText,
   normalizeTable,
   normalizeMarkup,
+  settleBlockParts,
   transcriptionText,
   checkableText,
   type PageTranscription,
@@ -27,9 +28,24 @@ export {
 export {
   parseInlineMarkup,
   withMarkup,
+  renderMarkup,
   shiftEmphasis,
+  shiftParts,
+  settleParts,
+  joinStyling,
+  moveParts,
+  partsAfterDeleting,
+  partsByWord,
+  partsIn,
+  readParts,
+  stylingFields,
   wordCount,
-  type InlineMarkup
+  INLINE_STYLES,
+  type InlineMarkup,
+  type InlinePart,
+  type InlineStyle,
+  type InlineStyling,
+  type SettledStyling
 } from './markup'
 export {
   findDroppedRuns,

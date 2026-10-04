@@ -17,7 +17,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { assembleBook } from '@core/assemble'
 import { applyEdits } from '@core/edits'
 import { checkEmphasis } from '@core/coherence'
-import { withMarkup } from '@core/transcribe/markup'
+import { partsIn, withMarkup, type InlinePart } from '@core/transcribe/markup'
 
 const args = process.argv.filter((a) => a !== '--restore' && a !== '--no-headings')
 const restore = process.argv.includes('--restore')
@@ -85,8 +85,15 @@ function rebuild(marked: string, add: [number, number][]): string {
 }
 
 const marked = new Map<string, string>()
-for (const b of doc.blocks) marked.set(b.id, withMarkup(b.text, b.emphasis, b.strong))
-for (const n of doc.footnotes) marked.set(n.id, withMarkup(n.text, n.emphasis, n.strong))
+const faces = (b: {
+  text: string
+  emphasis?: number[]
+  strong?: number[]
+  parts?: InlinePart[]
+}): string =>
+  withMarkup(b.text, b.emphasis, b.strong, undefined, partsIn(b.parts, ['italic', 'strong']))
+for (const b of doc.blocks) marked.set(b.id, faces(b))
+for (const n of doc.footnotes) marked.set(n.id, faces(n))
 const ranges = new Map<string, [number, number][]>()
 for (const f of dropped) {
   const list = ranges.get(f.blockId) ?? []

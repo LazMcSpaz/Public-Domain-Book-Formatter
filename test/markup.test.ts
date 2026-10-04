@@ -60,10 +60,16 @@ describe('inline markup becomes emphasis', () => {
     expect(text).not.toContain('<')
     expect(text).toContain('how to project the astral body.')
     // Word 7 is "nature—how": the em dash is not whitespace, so the breaker
-    // treats it as one word and the emphasis takes the whole of it. That is the
-    // word-granularity tradeoff, and this is the case where it shows — the
-    // alternative is threading character ranges through the hyphenator.
-    expect(emphasis).toEqual([7, 8, 9, 10, 11, 12])
+    // treats it as one word. This used to be the case where word granularity
+    // showed — the emphasis took the whole of it and "nature—" printed in
+    // italic. The tag falls among the word's letters, so it is a part now:
+    // "how" alone, offsets 7 to 10 of the word, and the rest of the run whole.
+    expect(emphasis).toEqual([8, 9, 10, 11, 12])
+    expect(
+      parseInlineMarkup(
+        'and next to nothing of a practical nature—<em>how to project the astral body.</em>'
+      ).parts
+    ).toEqual([{ word: 7, from: 7, to: 10, style: 'italic' }])
   })
 
   it('keeps a superscript footnote mark as the bare digit the note machinery looks for', () => {

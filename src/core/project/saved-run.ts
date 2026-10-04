@@ -24,7 +24,7 @@
  */
 import { BLOCK_KINDS, type PageTranscription } from '@core/transcribe'
 import { HIGHLIGHT_TAGS, isHighlightTag, type BookEdit } from '@core/edits'
-import { normalizeMarkup } from '@core/transcribe'
+import { normalizeMarkup, settleBlockParts } from '@core/transcribe'
 import type { ImageEditOp } from '@core/model'
 import type { IllustrationPlacement } from '@core/assemble'
 import { FOOTINGS, type Fact } from '@core/harvest'
@@ -64,13 +64,15 @@ import { parseShape, type BookShape } from '@core/provenance'
  * carried so the query gate can offer them as options with nothing selected.
  * They are not rulings and never become ones except by being chosen at the
  * gate, which is why they are a field of their own rather than rulings with a
- * flag on them — see `@core/queries/proposals`.
+ * flag on them — see `@core/queries/proposals`. v20 → v21 a block's `parts`:
+ * italic, bold or small capitals over part of a word (`<i>un</i>spiritual`),
+ * where every earlier version could only mark whole words.
  * None of them damages an older run — each is a complete transcription that simply
  * has none of the newer thing on it yet — so all upgrade in place rather than
  * being refused. That distinction is the whole reason a migration exists
  * instead of a version check.
  */
-export const CURRENT_SCHEMA_VERSION = 20
+export const CURRENT_SCHEMA_VERSION = 21
 
 /** A page the model could not read at all. Mirrors the runner's `PageFailure`. */
 export interface SavedFailure {
@@ -455,7 +457,11 @@ export function migrateSavedRun(raw: unknown): SavedRun {
     // their edition printing angle brackets.
     transcriptions: (transcriptions as PageTranscription[]).map((page) => ({
       ...page,
-      blocks: page.blocks.map((b) => normalizeMarkup(b))
+      // And a block's parts — italic over part of a word — made sound against
+      // its text, since nothing else will check a stored record's offsets: a
+      // malformed one is dropped and one on a word that is not there goes,
+      // rather than reaching the engine. A block with none is untouched.
+      blocks: page.blocks.map((b) => settleBlockParts(normalizeMarkup(b)))
     })),
     failures: rawFailures.filter(isObject).map((f) => ({
       pageIndex: num(f['pageIndex'], 0),

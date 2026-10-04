@@ -31,9 +31,12 @@
 import type { ImageEditOp } from '@core/model'
 import { sizeAfterOps } from '@core/image'
 import {
+  moveParts,
   normalizeMarkup,
   normalizeTable,
+  settleParts,
   type BlockKind,
+  type InlinePart,
   type TranscribedBlock
 } from '@core/transcribe'
 import { deriveChapters, footnoteMarkerPattern } from '@core/assemble'
@@ -341,6 +344,11 @@ export type BookEdit =
    */
   | { kind: 'bare-mark'; blockId: string; marker: string; nth: number; bare: boolean }
 
+/** A list as a block stores it: absent rather than empty. */
+function orNothing<T>(list: T[]): T[] | undefined {
+  return list.length > 0 ? list : undefined
+}
+
 /** How a split block's halves are named, so the ids stay deterministic. */
 const splitId = (id: string, half: number): string => `${id}/${half}`
 
@@ -497,7 +505,8 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
             ...(block.cells ? { cells: undefined } : {}),
             ...(block.emphasis ? { emphasis: undefined } : {}),
             ...(block.strong ? { strong: undefined } : {}),
-            ...(block.smallCaps ? { smallCaps: undefined } : {})
+            ...(block.smallCaps ? { smallCaps: undefined } : {}),
+            ...(block.parts ? { parts: undefined } : {})
           })
         )
         break
@@ -533,22 +542,71 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
         // reported by nothing, because a block with the wrong words marked
         // looks exactly like a block with the right ones marked.
         const wordsInFirst = first.split(/\s+/u).filter(Boolean).length
+        // A split inside a word leaves its two ends on either side, so the
+        // second half's word 0 is the *same* word as the first half's last.
+        // Counting the second half from `wordsInFirst` regardless put every run
+        // after a mid-word split one word early; a run on the word itself goes
+        // to both ends of it, as its letters do.
+        const midWord =
+          at > 0 && /\S/u.test(block.text[at - 1] ?? '') && /\S/u.test(block.text[at] ?? '')
+        const secondFrom = midWord ? wordsInFirst - 1 : wordsInFirst
         const runsFor = (runs: readonly number[] | undefined, half: 1 | 2) => {
           if (!runs || runs.length === 0) return undefined
           const kept =
             half === 1
               ? runs.filter((w) => w < wordsInFirst)
-              : runs.filter((w) => w >= wordsInFirst).map((w) => w - wordsInFirst)
+              : runs.filter((w) => w >= secondFrom).map((w) => w - secondFrom)
           return kept.length > 0 ? kept : undefined
         }
-        const halfOf = (half: 1 | 2, text: string) => ({
-          ...block,
-          text,
-          emphasis: runsFor(block.emphasis, half),
-          strong: runsFor(block.strong, half),
-          smallCaps: runsFor(block.smallCaps, half),
-          ...(block.cells ? { cells: undefined } : {})
-        })
+        // Parts keep to their characters, cut with the text: a part on the
+        // word the split runs through is shared between its two ends, and an
+        // end it now covers entirely becomes that word, whole.
+        const before = block.text.slice(0, at)
+        const after = block.text.slice(at)
+        const partsFor = (half: 1 | 2, text: string): InlinePart[] =>
+          half === 1
+            ? moveParts(
+                block.text,
+                block.parts,
+                text,
+                (o) => o - (before.length - before.trimStart().length)
+              )
+            : moveParts(
+                block.text,
+                block.parts,
+                text,
+                (o) => o - at - (after.length - after.trimStart().length)
+              )
+        const halfOf = (half: 1 | 2, text: string) => {
+          const emphasis = runsFor(block.emphasis, half)
+          const strong = runsFor(block.strong, half)
+          const smallCaps = runsFor(block.smallCaps, half)
+          if (!block.parts?.length) {
+            return {
+              ...block,
+              text,
+              emphasis,
+              strong,
+              smallCaps,
+              ...(block.cells ? { cells: undefined } : {})
+            }
+          }
+          const settled = settleParts(text, {
+            ...(emphasis ? { emphasis } : {}),
+            ...(strong ? { strong } : {}),
+            ...(smallCaps ? { smallCaps } : {}),
+            parts: partsFor(half, text)
+          })
+          return {
+            ...block,
+            text,
+            emphasis: orNothing(settled.emphasis),
+            strong: orNothing(settled.strong),
+            smallCaps: orNothing(settled.smallCaps),
+            parts: orNothing(settled.parts),
+            ...(block.cells ? { cells: undefined } : {})
+          }
+        }
         blocks.splice(index, 1, {
           ...normalizeTable(halfOf(1, first)),
           id: splitId(block.id, 1),
@@ -583,13 +641,53 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
           const out = [...(a ?? []), ...(b ?? []).map((w) => w + shift)]
           return out.length > 0 ? out : undefined
         }
+        const head = `${block.text.trim()}${joiner}`
+        const whole = `${head}${next.text.trim()}`
+        const text = whole.trim()
+        // Parts keep to their characters: the first block's move back by any
+        // space it opened with, the second's along by everything before it.
+        const merged =
+          block.parts?.length || next.parts?.length
+            ? settleParts(text, {
+                emphasis: joined(block.emphasis, next.emphasis) ?? [],
+                strong: joined(block.strong, next.strong) ?? [],
+                smallCaps: joined(block.smallCaps, next.smallCaps) ?? [],
+                parts: [
+                  ...moveParts(
+                    block.text,
+                    block.parts,
+                    text,
+                    (o) => o - (block.text.length - block.text.trimStart().length)
+                  ),
+                  ...moveParts(
+                    next.text,
+                    next.parts,
+                    text,
+                    (o) =>
+                      o -
+                      (next.text.length - next.text.trimStart().length) +
+                      head.length -
+                      (whole.length - whole.trimStart().length)
+                  )
+                ]
+              })
+            : null
         blocks.splice(index, 2, {
           ...normalizeTable({
             ...block,
-            text: `${block.text.trim()}${joiner}${next.text.trim()}`.trim(),
-            emphasis: joined(block.emphasis, next.emphasis),
-            strong: joined(block.strong, next.strong),
-            smallCaps: joined(block.smallCaps, next.smallCaps),
+            text,
+            ...(merged
+              ? {
+                  emphasis: orNothing(merged.emphasis),
+                  strong: orNothing(merged.strong),
+                  smallCaps: orNothing(merged.smallCaps),
+                  parts: orNothing(merged.parts)
+                }
+              : {
+                  emphasis: joined(block.emphasis, next.emphasis),
+                  strong: joined(block.strong, next.strong),
+                  smallCaps: joined(block.smallCaps, next.smallCaps)
+                }),
             ...(block.cells ? { cells: undefined } : {})
           }),
           sourcePages: [...new Set([...block.sourcePages, ...next.sourcePages])].sort(
@@ -661,13 +759,20 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
         kind: 'paragraph',
         text: corrected.replace(/\s+/gu, ' ').trim()
       })
-      const { emphasis: _emphasis, strong: _strong, smallCaps: _smallCaps, ...rest } = note
+      const {
+        emphasis: _emphasis,
+        strong: _strong,
+        smallCaps: _smallCaps,
+        parts: _parts,
+        ...rest
+      } = note
       return {
         ...rest,
         text: marked.text,
         ...(marked.emphasis?.length ? { emphasis: marked.emphasis } : {}),
         ...(marked.strong?.length ? { strong: marked.strong } : {}),
-        ...(marked.smallCaps?.length ? { smallCaps: marked.smallCaps } : {})
+        ...(marked.smallCaps?.length ? { smallCaps: marked.smallCaps } : {}),
+        ...(marked.parts?.length ? { parts: marked.parts } : {})
       }
     })
     .filter((note) => note.text.trim().length > 0)
@@ -689,6 +794,7 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
       ...(marked.emphasis?.length ? { emphasis: marked.emphasis } : {}),
       ...(marked.strong?.length ? { strong: marked.strong } : {}),
       ...(marked.smallCaps?.length ? { smallCaps: marked.smallCaps } : {}),
+      ...(marked.parts?.length ? { parts: marked.parts } : {}),
       pageIndex: block.sourcePages[0] ?? 0,
       orphaned: false,
       anchor: { blockId: note.blockId, at: note.at }

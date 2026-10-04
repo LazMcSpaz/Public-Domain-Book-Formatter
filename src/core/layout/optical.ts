@@ -76,7 +76,17 @@ export function hangPunctuation(
   runs: readonly TextRun[],
   measurer: TextMeasurer,
   font: FontRef,
-  options: { flushRight: boolean }
+  options: {
+    flushRight: boolean
+    /**
+     * `joined[i]` is true where run `i` is the next stretch of the same word
+     * as run `i - 1` — a word set in two faces, `<i>un</i>spiritual`. Such
+     * runs move together: the shift is shared out between *words*, because a
+     * share falling between two stretches of one word would open a gap in it.
+     * Absent, every run is a word of its own, as it always was.
+     */
+    joined?: readonly boolean[]
+  }
 ): readonly TextRun[] {
   if (runs.length === 0) return runs
 
@@ -112,15 +122,23 @@ export function hangPunctuation(
    * hanging exactly where the breaker put it. No break moves and no line
    * changes width, which is the property this module exists to preserve.
    */
+  /** Which word each run belongs to, counting from 0 along the line. */
+  const wordOf: number[] = []
+  for (let i = 0; i < out.length; i++) {
+    wordOf.push(i === 0 ? 0 : wordOf[i - 1]! + (options.joined?.[i] ? 0 : 1))
+  }
+  const words = (wordOf[wordOf.length - 1] ?? 0) + 1
   const spread = (shift: number, towardsTheEnd: boolean): void => {
-    if (out.length === 1) {
-      out[0] = { ...out[0]!, xPt: out[0]!.xPt + (towardsTheEnd ? shift : -shift) }
+    if (words === 1) {
+      for (let i = 0; i < out.length; i++) {
+        out[i] = { ...out[i]!, xPt: out[i]!.xPt + (towardsTheEnd ? shift : -shift) }
+      }
       return
     }
     for (let i = 0; i < out.length; i++) {
-      // 0 at the first run, 1 at the last. A right hang moves the last run by
-      // the whole shift and the first not at all; a left hang, the reverse.
-      const along = i / (out.length - 1)
+      // 0 at the first word, 1 at the last. A right hang moves the last word
+      // by the whole shift and the first not at all; a left hang, the reverse.
+      const along = wordOf[i]! / (words - 1)
       const share = towardsTheEnd ? along : along - 1
       out[i] = { ...out[i]!, xPt: out[i]!.xPt + shift * share }
     }
