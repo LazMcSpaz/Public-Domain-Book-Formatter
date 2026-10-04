@@ -6017,6 +6017,84 @@ async function serve() {
      * note, so running it again replaces rather than adding a second mark;
      * `drop` takes one out.
      */
+    // `insert <afterBlockId> <kind> <file> [--id <id>] [--header]`: a block
+    // the editor wrote, standing in the body after the named block. A table's
+    // file is rows on lines and cells divided by `|`; `--header` makes the
+    // first row its column heads. `insert drop <id>` takes one out.
+    insert: async (argv) => {
+      const flag = (name) => {
+        const i = argv.indexOf(`--${name}`)
+        return i === -1 ? null : argv[i + 1]
+      }
+      const positional = argv.filter((a, i) => !a.startsWith('--') && !(argv[i - 1] === '--id'))
+      const dropping = positional[0] === 'drop'
+      const insertId = dropping ? positional[1] : (flag('id') ?? `ins-${Date.now().toString(36)}`)
+      const [afterBlockId, blockKind, from] = dropping ? [] : positional
+      if (dropping ? !insertId : !afterBlockId || !blockKind || !from) {
+        throw new Error(
+          'insert <afterBlockId> <kind> <file> [--id <id>] [--header] | insert drop <id>'
+        )
+      }
+      let text = null
+      if (from) {
+        const { readFile } = await import('node:fs/promises')
+        text = (await readFile(resolve(REPO, from), 'utf8')).trim()
+        if (!text) throw new Error(`${from} is empty.`)
+      }
+      const headerRow = argv.includes('--header')
+      return page.evaluate(
+        async ([repo, insertId, afterBlockId, blockKind, text, headerRow, dropping]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+          const prior = run.edits ?? []
+          const others = prior.filter((e) => !(e.kind === 'insert' && e.insertId === insertId))
+          if (dropping && others.length === prior.length) {
+            throw new Error(`No inserted block \`${insertId}\` in this book.`)
+          }
+          const edits = dropping
+            ? others
+            : [
+                ...others,
+                {
+                  kind: 'insert',
+                  insertId,
+                  afterBlockId,
+                  blockKind,
+                  text,
+                  ...(headerRow ? { headerRow: true } : {})
+                }
+              ]
+          const doc = editsMod.applyEdits(assemble.assembleBook(run.transcriptions), edits)
+          const block = doc.blocks.find((b) => b.id === `ins/${insertId}`)
+          if (!dropping && !block) {
+            throw new Error(`No block \`${afterBlockId}\` to follow in the book as it stands.`)
+          }
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            edits
+          })
+          const stored = await runStore.saveRun(next)
+          return {
+            insertId,
+            dropped: dropping,
+            stored: stored === true,
+            kind: block?.kind ?? null,
+            rows: block?.cells?.length ?? null,
+            edits: edits.length
+          }
+        },
+        [REPO, insertId, afterBlockId ?? null, blockKind ?? null, text, headerRow, dropping]
+      )
+    },
+
     annotate: async (argv) => {
       const flag = (name) => {
         const i = argv.indexOf(`--${name}`)

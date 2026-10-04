@@ -1360,6 +1360,11 @@ node scripts/drive.mjs figure set <id> --caption-file c.txt --after p244b4
                                      #   caption of several lines is the figure's
                                      #   key, set as notes are, each line's
                                      #   printed mark hung (SD I, leaf 245)
+node scripts/drive.mjs insert p640b3 table t.txt --id modern --header
+                                     #   a block the editor wrote, after the
+                                     #   named block: a table (rows on lines,
+                                     #   cells by `|`), a caption, a heading;
+                                     #   `insert drop <id>` takes it out
 node scripts/contact-sheets.mjs <renders> <out>  # the whole book, small, many to
                                      #   a sheet: the only thing that answers
                                      #   "is there a picture we have missed?"
