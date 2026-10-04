@@ -1174,6 +1174,30 @@ describe('applyEdits — a block the editor wrote, inside the body', () => {
     expect(doc.blocks.map((b) => b.text)).not.toContain('BOOK TWO')
   })
 
+  it('keeps a table the editor wrote as rows and cells', () => {
+    // The Secret Doctrine Vol. II, leaf 640: Hellenbach's table printed as
+    // the paper sets it, and the editor's table of modern symbols after it.
+    // Collapsed to one line, as prose is, the rows ran together into one.
+    const doc = applyEdits(book(), [
+      {
+        kind: 'insert',
+        insertId: 'modern',
+        afterBlockId: 'p0b2',
+        blockKind: 'table',
+        text: 'Row | Group I\n1 | Li lithium\n2 | Na sodium',
+        headerRow: true
+      }
+    ])
+    const table = doc.blocks.find((b) => b.id === 'ins/modern')!
+    expect(table.kind).toBe('table')
+    expect(table.headerRow).toBe(true)
+    expect(table.cells).toEqual([
+      ['Row', 'Group I'],
+      ['1', 'Li lithium'],
+      ['2', 'Na sodium']
+    ])
+  })
+
   it('is left out when it is empty', () => {
     const doc = applyEdits(book(), [
       {

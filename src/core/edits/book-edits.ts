@@ -110,6 +110,12 @@ export type BookEdit =
        * book's own openings use.
        */
       label?: string
+      /**
+       * For a table: its first row is column heads. A table's `text` is the
+       * flattened view, rows on lines and cells divided by `|`, the shape
+       * `tableToText` writes and `parseTableText` reads.
+       */
+      headerRow?: boolean
     }
   /**
    * Two paragraphs were run together. Splits at `at`, a character offset into
@@ -612,15 +618,21 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   // leaf.
   for (const edit of inserted.values()) {
     if (edit.text.trim().length === 0) continue
-    const block = normalizeMarkup({
-      id: `ins/${edit.insertId}`,
-      kind: edit.blockKind,
-      text: edit.text.replace(/\s+/gu, ' ').trim(),
-      // Written, not read: there is no leaf behind it to point at.
-      sourcePages: [],
-      ...(edit.blockKind === 'heading' ? { level: edit.level ?? 1 } : {}),
-      ...(edit.blockKind === 'heading' && edit.label?.trim() ? { label: edit.label.trim() } : {})
-    })
+    // A table keeps its line breaks: they are its rows. Anything else is
+    // prose, where a line break typed into the editor's words means nothing.
+    const isTable = edit.blockKind === 'table'
+    const block = normalizeMarkup(
+      normalizeTable({
+        id: `ins/${edit.insertId}`,
+        kind: edit.blockKind,
+        text: isTable ? edit.text.trim() : edit.text.replace(/\s+/gu, ' ').trim(),
+        // Written, not read: there is no leaf behind it to point at.
+        sourcePages: [],
+        ...(edit.blockKind === 'heading' ? { level: edit.level ?? 1 } : {}),
+        ...(edit.blockKind === 'heading' && edit.label?.trim() ? { label: edit.label.trim() } : {}),
+        ...(isTable && edit.headerRow ? { headerRow: true } : {})
+      })
+    )
     if (edit.afterBlockId === null) {
       blocks.unshift(block)
       continue
