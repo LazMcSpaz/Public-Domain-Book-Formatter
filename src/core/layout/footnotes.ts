@@ -21,6 +21,7 @@
  * Pure: text in, text and positions out.
  */
 import { footnoteMarkerPattern, type BareMark, type Footnote } from '@core/assemble'
+import type { InlinePart } from '@core/transcribe/markup'
 
 /** A reference mark, resolved to the word it sits on. */
 export interface NoteReference {
@@ -68,6 +69,8 @@ export interface PreparedNote {
   strong?: number[]
   /** Word indices set in small capitals. See `Footnote.smallCaps`. */
   smallCaps?: number[]
+  /** Styles over part of a word. See `Footnote.parts`. */
+  parts?: InlinePart[]
 }
 
 export interface PreparedFootnotes {
@@ -353,7 +356,8 @@ export function prepareFootnotes(
         text: note.text,
         ...(note.emphasis?.length ? { emphasis: note.emphasis } : {}),
         ...(note.strong?.length ? { strong: note.strong } : {}),
-        ...(note.smallCaps?.length ? { smallCaps: note.smallCaps } : {})
+        ...(note.smallCaps?.length ? { smallCaps: note.smallCaps } : {}),
+        ...(note.parts?.length ? { parts: note.parts } : {})
       })
       remaining.delete(note.id)
 
