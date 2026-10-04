@@ -26,6 +26,7 @@ import { join } from 'node:path'
 import { assembleBook } from '@core/assemble'
 import { applyEdits } from '@core/edits'
 import { headingsWithoutMarks, prepareFootnotes } from '@core/layout/footnotes'
+import { parseInlineMarkup } from '@core/transcribe/markup'
 
 const [dir, out] = process.argv.slice(-2)
 if (!dir || !out || dir === out) throw new Error('epub-of.ts <book-dir> <out-dir>')
@@ -189,10 +190,24 @@ doc.blocks.forEach((block, i) => {
   for (const fig of figuresAfter.get(block.id) ?? []) {
     const src = imagePath.get(fig.id)!
     figuresUsed.push(src)
-    const cap = fig.caption ? `<figcaption>${esc(fig.caption)}</figcaption>` : ''
-    chapter.body.push(
-      `<figure><img src="../${src}" alt="${esc(fig.caption ?? 'Figure')}"/>${cap}</figure>`
-    )
+    // A caption of several paragraphs is the figure's key, set as notes are;
+    // the engine reads it the same way (`captionKey`).
+    const paras = (fig.caption ?? '')
+      .split(/\n+/u)
+      .map((p) => p.trim())
+      .filter(Boolean)
+    const cap = paras.length
+      ? `<figcaption${paras.length > 1 ? ' class="key"' : ''}>${paras
+          .map((p) => {
+            const m = parseInlineMarkup(p)
+            return paras.length > 1
+              ? `<p>${inline(m.text, m.emphasis, m.strong)}</p>`
+              : inline(m.text, m.emphasis, m.strong)
+          })
+          .join('')}</figcaption>`
+      : ''
+    const alt = parseInlineMarkup(paras[0] ?? 'Figure').text
+    chapter.body.push(`<figure><img src="../${src}" alt="${esc(alt)}"/>${cap}</figure>`)
   }
 })
 
@@ -228,6 +243,8 @@ blockquote { margin: 0.7em 1.5em; font-size: 0.95em; }
 blockquote p { text-indent: 0; }
 p.verse, p.item { text-indent: 0; margin-left: 1.5em; }
 p.caption, figcaption { text-align: center; font-size: 0.9em; text-indent: 0; }
+figcaption.key { text-align: left; font-size: 0.85em; }
+figcaption.key p { text-indent: 0; margin: 0.2em 0; }
 figure { margin: 1em 0; text-align: center; } figure img { max-width: 100%; }
 a.ref { font-size: 0.7em; vertical-align: super; line-height: 0; text-decoration: none; }
 section.notes { margin-top: 2em; border-top: 1px solid #999; font-size: 0.85em; }

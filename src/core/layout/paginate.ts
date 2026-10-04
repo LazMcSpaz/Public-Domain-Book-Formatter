@@ -27,7 +27,7 @@ import type { BookBlock, BookDocument, BookSection, Illustration } from '@core/a
 import { effectiveDpi } from '@core/image'
 // The flattened view's coordinates, from the one place they are defined.
 import { CELL_SEPARATOR, cellEmphasis } from '@core/transcribe/schema'
-import { shiftEmphasis } from '@core/transcribe/markup'
+import { parseInlineMarkup, shiftEmphasis } from '@core/transcribe/markup'
 import {
   breakParagraph,
   fontForWord,
@@ -878,8 +878,10 @@ function buildIllustrationFlowable(
   const sizePt = ctx.profile.bodyFontSize * CAPTION_SIZE_RATIO
 
   const captionText = illustration.caption?.trim() ?? ''
-  const captionLines =
-    captionText.length > 0
+  const key = captionKey(captionText)
+  const captionLines = key
+    ? keyLines(key, ctx)
+    : captionText.length > 0
       ? toFlowLines(
           breakParagraph(captionText, {
             font,
@@ -953,6 +955,81 @@ function buildIllustrationFlowable(
     ownPage: isPlate,
     contentHeightPt: heightPt + captionSlots * ctx.leading
   }
+}
+
+/** A reference mark opening a paragraph of a figure's key: `*`, `†`, `‡`… */
+const KEY_MARK = /^([*†‡§‖¶⁂]+)\s+/u
+
+/**
+ * A caption that is a figure's **key** rather than its title, as paragraphs.
+ *
+ * Some figures carry reference marks drawn into the engraving and print the
+ * notes they refer to directly beneath the picture: _The Secret Doctrine_
+ * Vol. I sets its diagram of the planes that way on leaf 245. Set as page
+ * footnotes the notes were numbered against a line of type that repeated the
+ * figure's own labels, and the page could break between the notes and the
+ * picture. As a caption they travel with it. A caption of more than one
+ * paragraph is taken as a key; one paragraph is a title, set as before.
+ */
+function captionKey(caption: string): string[] | null {
+  const paragraphs = caption
+    .split(/\n+/u)
+    .map((p) => p.trim())
+    .filter(Boolean)
+  return paragraphs.length > 1 ? paragraphs : null
+}
+
+/**
+ * A key set as the book's footnotes are set: roman, at the notes' size, each
+ * paragraph's printed mark hung in the margin so the marks line up down the
+ * key as they do down a page of notes. `<i>` and `<b>` read as everywhere.
+ */
+function keyLines(paragraphs: readonly string[], ctx: BuildContext): FlowLine[] {
+  const font: FontRef = { family: ctx.profile.bodyFont, style: 'regular' }
+  const sizePt = ctx.profile.bodyFontSize * NOTE_SIZE_RATIO
+  const markSize = sizePt * MARK_SIZE_RATIO
+  const read = paragraphs.map((raw) => {
+    const parsed = parseInlineMarkup(raw)
+    const mark = KEY_MARK.exec(parsed.text)
+    if (!mark) return { ...parsed, mark: '' }
+    // The mark was the paragraph's first word; every index after it moves down.
+    const shift = (runs: readonly number[]): number[] => runs.filter((i) => i > 0).map((i) => i - 1)
+    return {
+      text: parsed.text.slice(mark[0].length),
+      emphasis: shift(parsed.emphasis),
+      strong: shift(parsed.strong),
+      smallCaps: shift(parsed.smallCaps),
+      mark: mark[1]!
+    }
+  })
+  const hang = Math.max(
+    0,
+    ...read
+      .filter((p) => p.mark)
+      .map((p) => ctx.measurer.widthOf(p.mark, font, markSize) + sizePt * NOTE_HANG_GAP_RATIO)
+  )
+  const lines: FlowLine[] = []
+  for (const p of read) {
+    const spans = spansFor(ctx, ctx.profile.bodyFont, 'regular', p.emphasis, p.strong, p.smallCaps)
+    const broken = breakParagraph(p.text, {
+      font,
+      sizePt,
+      measurer: ctx.measurer,
+      lineWidths: Math.max(1, ctx.measureWidth - hang),
+      alignment: 'left',
+      ...(ctx.hyphenate ? { hyphenate: ctx.hyphenate } : {}),
+      ...(spans.length > 0 ? { spans } : {})
+    })
+    const set = toFlowLines(broken, font, sizePt, [hang], undefined, undefined, spans)
+    const first = set[0]
+    if (first && p.mark) {
+      first.decorations = [
+        { text: p.mark, font, sizePt: markSize, xPt: 0, risePt: sizePt * MARK_RISE_RATIO }
+      ]
+    }
+    lines.push(...set)
+  }
+  return lines
 }
 
 /**

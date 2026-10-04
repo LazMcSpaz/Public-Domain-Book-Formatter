@@ -3415,6 +3415,69 @@ async function serve() {
       )
       const action = positional[0]
 
+      // `figure set <imageId> [--caption-file <file>] [--after <blockId>]`:
+      // change what a supplied picture says under it, or the block it follows,
+      // without cutting it again. A caption of several lines is the figure's
+      // key, set as notes are (`captionKey` in the engine).
+      if (action === 'set') {
+        const imageId = positional[1]
+        if (!imageId)
+          throw new Error('figure set <imageId> [--caption-file <file>] [--after <blockId>]')
+        const captionFile = flag('caption-file')
+        const after = flag('after')
+        const { readFile } = await import('node:fs/promises')
+        const caption =
+          captionFile === null ? null : (await readFile(resolve(REPO, captionFile), 'utf8')).trim()
+        return page.evaluate(
+          async ([repo, imageId, caption, after]) => {
+            const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+            const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+            const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+            const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+            const newest = await window.__pdbfPickBook(runStore)
+            if (!newest) throw new Error('No book on this device.')
+            const run = await runStore.loadRun(newest.key)
+            if (!run) throw new Error('That book has no reading stored here.')
+            const had = (run.edits ?? []).find((e) => e.kind === 'image' && e.imageId === imageId)
+            if (!had) throw new Error(`No supplied picture \`${imageId}\` on this book.`)
+            if (after !== null) {
+              const doc = editsMod.applyEdits(
+                assemble.assembleBook(run.transcriptions),
+                run.edits ?? []
+              )
+              if (!doc.blocks.some((b) => b.id === after)) {
+                throw new Error(`No block \`${after}\` in the book as it stands.`)
+              }
+            }
+            const edits = (run.edits ?? []).map((e) =>
+              e === had
+                ? {
+                    ...e,
+                    ...(after !== null ? { afterBlockId: after } : {}),
+                    ...(caption !== null ? { caption } : {})
+                  }
+                : e
+            )
+            const next = project.createSavedRun({
+              ...run,
+              images: new Map(run.images.map((i) => [i.id, i.bytes])),
+              savedAt: new Date().toISOString(),
+              edits
+            })
+            const stored = await runStore.saveRun(next)
+            const doc = editsMod.applyEdits(assemble.assembleBook(run.transcriptions), edits)
+            const fig = doc.illustrations.find((i) => i.id === imageId)
+            return {
+              set: imageId,
+              stored: stored === true,
+              after: fig?.anchorAfterBlockId ?? null,
+              caption: fig?.caption ?? null
+            }
+          },
+          [REPO, imageId, caption, after]
+        )
+      }
+
       if (action === 'list' || action === 'drop') {
         const imageId = positional[1] ?? null
         if (action === 'drop' && !imageId) throw new Error('figure drop <imageId>')

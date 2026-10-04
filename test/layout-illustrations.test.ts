@@ -268,6 +268,46 @@ describe('layout — setting an illustration', () => {
     expect(left).toBeCloseTo(right, 1)
   })
 
+  /**
+   * _The Secret Doctrine_ Vol. I, leaf 245: a diagram whose engraving carries
+   * `*`, `†` and `‡`, with the three notes printed beneath it. As footnotes
+   * they were numbered against a line repeating the figure's labels and set on
+   * the page before the picture. A caption of several paragraphs is the key.
+   */
+  it('sets a caption of several marked paragraphs as a key, like notes', () => {
+    const doc = inline()
+    doc.illustrations[0]!.caption =
+      '* The <i>Arupa</i> or formless world.\n† The archetypal world.\n‡ The four lower planes.'
+    const book = run(doc)
+    const page = book.pages.find((p) => images(p).length > 0)!
+    const item = images(page)[0]!
+    const body = defaultStyleProfile().bodyFontSize
+    const key = lines(page).filter(
+      (l) =>
+        l.baselinePt > item.yPt + item.heightPt &&
+        l.runs.length > 0 &&
+        l.runs.every((r) => r.sizePt < body)
+    )
+    const said = key.map((l) => l.runs.map((r) => r.text).join(' ')).filter((t) => /\p{L}/u.test(t))
+    expect(said).toEqual([
+      '* The Arupa or formless world.',
+      '† The archetypal world.',
+      '‡ The four lower planes.'
+    ])
+    // Each paragraph's printed mark is raised and hangs left of its words.
+    for (const line of key.filter((l) => /\p{L}/u.test(l.runs.map((r) => r.text).join('')))) {
+      const [mark, ...words] = line.runs
+      expect(mark!.risePt ?? 0).toBeGreaterThan(0)
+      expect(Math.min(...words.map((r) => r.xPt))).toBeGreaterThan(mark!.xPt)
+    }
+    // Roman, with the marked word in italic, at the notes' size.
+    const runs = key.flatMap((l) => l.runs).filter((r) => !(r.risePt ?? 0))
+    expect(runs.find((r) => r.text.includes('Arupa'))!.font.style).toBe('italic')
+    expect(runs.find((r) => r.text.includes('archetypal'))!.font.style).toBe('regular')
+    expect(runs.some((r) => r.text.includes('<'))).toBe(false)
+    expect(runs[0]!.sizePt).toBeLessThan(defaultStyleProfile().bodyFontSize * 0.85)
+  })
+
   it('keeps the caption on the picture’s page', () => {
     const book = run(inline('Fig. 1. The alembick.'))
     const page = book.pages.find((p) => images(p).length > 0)!

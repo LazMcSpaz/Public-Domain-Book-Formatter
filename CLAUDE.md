@@ -1354,6 +1354,12 @@ node scripts/drive.mjs figure cut 193 0.527,0.532,0.389,0.175 --beside p193b1 --
                                      #   text run past it; `figure list`, `figure drop <id>`;
                                      #   `--from <pdf>` cuts from another copy of the
                                      #   same printing (a book read from an EPUB)
+node scripts/drive.mjs figure set <id> --caption-file c.txt --after p244b4
+                                     #   a supplied figure's caption or anchor,
+                                     #   changed without cutting it again. A
+                                     #   caption of several lines is the figure's
+                                     #   key, set as notes are, each line's
+                                     #   printed mark hung (SD I, leaf 245)
 node scripts/contact-sheets.mjs <renders> <out>  # the whole book, small, many to
                                      #   a sheet: the only thing that answers
                                      #   "is there a picture we have missed?"
