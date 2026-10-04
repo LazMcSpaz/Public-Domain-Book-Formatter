@@ -710,7 +710,8 @@ function parseEdits(raw: unknown): BookEdit[] {
             ...(typeof level === 'number' ? { level } : {}),
             // Dropped when absent rather than stored empty, so an insert
             // written before labels existed round-trips byte for byte.
-            ...(label.trim() ? { label } : {})
+            ...(label.trim() ? { label } : {}),
+            ...(value['headerRow'] === true ? { headerRow: true } : {})
           })
         }
         break

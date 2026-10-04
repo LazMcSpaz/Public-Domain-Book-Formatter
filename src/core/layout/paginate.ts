@@ -2718,9 +2718,36 @@ export function layout(
       return
     }
     if (block.kind === 'table') {
-      flowables.push(
-        ...buildTableFlowables(block, ctx, prep).map((f) => ({ ...f, blockId: block.id }))
-      )
+      const set = buildTableFlowables(block, ctx, prep).map((f) => ({ ...f, blockId: block.id }))
+      // A caption standing directly over a table is its title, and goes where
+      // the table goes. The table is one unbreakable item and moves whole to
+      // the next page when it must, which left the caption alone at the foot
+      // of the page before: the editor's table of modern symbols on leaf 640
+      // of The Secret Doctrine Vol. II was introduced on one page and set on
+      // the next. `keepWithNext` cannot hold it, since it only asks for one
+      // line of what follows and an unbreakable table has no first line to
+      // spare. So the two become one item. A table too long for a page breaks
+      // between rows, and its caption then rides on the first.
+      const title = flowables[flowables.length - 1]
+      const first = set[0]
+      if (
+        first &&
+        previous?.kind === 'caption' &&
+        title?.blockId === previous.id &&
+        !title.startsChapter
+      ) {
+        flowables.pop()
+        set[0] = {
+          ...first,
+          lines: [
+            ...title.lines,
+            ...Array.from({ length: title.spaceAfter }, () => ({ runs: [] })),
+            ...first.lines
+          ],
+          spaceBefore: title.spaceBefore
+        }
+      }
+      flowables.push(...set)
       pushIllustrationsAfter(i)
       return
     }

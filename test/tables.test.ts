@@ -546,3 +546,53 @@ describe('a table kept on one page', () => {
     }
   })
 })
+
+/**
+ * A caption over a table is its title. The editor's table of modern symbols
+ * on leaf 640 of The Secret Doctrine Vol. II was introduced at the foot of one
+ * page and set on the next, because the table moves whole and the caption
+ * before it had no reason to follow.
+ */
+describe('a caption over a table stays with it', () => {
+  it('moves to the next page with the table rather than staying behind', () => {
+    const rows = Array.from({ length: 12 }, (_, r) => [`Row ${r}`, `Cell ${r}`])
+    // Enough prose to leave room for the caption, not the table.
+    for (let n = 1; n < 80; n++) {
+      const doc: BookDocument = {
+        blocks: [
+          {
+            id: 'p0b0',
+            kind: 'paragraph',
+            text: 'Prose fills the page. '.repeat(n),
+            sourcePages: [0]
+          },
+          {
+            id: 'p0b1',
+            kind: 'caption',
+            text: 'The editor’s table of the same.',
+            sourcePages: [0]
+          },
+          { ...tableBlock(rows), id: 'p0b2' }
+        ],
+        footnotes: [],
+        chapters: [],
+        asides: [],
+        illustrations: [],
+        sections: [],
+        skipped: [],
+        synopsesUnmatched: []
+      }
+      const book = run(doc)
+      const pageOf = (text: string) =>
+        book.pages.findIndex((p) => lines(p).some((l) => l.runs.some((r) => r.text.includes(text))))
+      const caption = pageOf('editor’s')
+      const table = pageOf('Row')
+      // Only a layout that actually pushes the table on is a test of this.
+      if (table > pageOf('fills')) {
+        expect(caption).toBe(table)
+        return
+      }
+    }
+    throw new Error('no prose length pushed the table onto the next page')
+  })
+})
