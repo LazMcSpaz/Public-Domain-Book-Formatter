@@ -28,7 +28,7 @@ export {
   type BareMark,
   type IllustrationSource
 } from './assemble-book'
-export { bookText } from './book-text'
+export { bookText, synopsesPrinted } from './book-text'
 export { folioRuns, leafOfFolio, type FolioRun } from './folios'
 export {
   leafStart,

@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest'
-import { assembleBook } from '@core/assemble'
-import { applyEdits, type BookEdit } from '@core/edits'
+import { assembleBook, type BookDocument } from '@core/assemble'
+import {
+  applyEdits,
+  findMatches,
+  sweepText,
+  synopsesOf,
+  withEdit,
+  type BookEdit
+} from '@core/edits'
 import {
   contentsPages,
   fixedWidthMeasurer,
@@ -12,6 +19,8 @@ import {
   type LayoutOptions,
   type PositionedLine
 } from '@core/layout'
+import { unapplied, type Ruling } from '@core/queries'
+import { migrateSavedRun } from '@core/project'
 import { defaultStyleProfile } from '@core/style'
 import type { PageRole } from '@core/pages'
 import type { PageTranscription, TranscribedBlock } from '@core/transcribe'
@@ -422,5 +431,118 @@ describe('a contents whose numbers change its length', () => {
     expect(fallen.warnings.some((w) => /without page numbers/u.test(w.text))).toBe(true)
     expect(contentsText(fallen)).not.toMatch(/Page \d/u)
     expect(contentsText(fallen)).not.toMatch(/more of it; \d/u)
+  })
+})
+
+describe('a correction to the original contents', () => {
+  const doc = assembleBook(letters())
+  const ruled: Ruling[] = [
+    {
+      pageIndex: 0,
+      quote: 'The opening topics re-received; 1.',
+      kind: 'printers-error',
+      decision: 'corrected',
+      correction: 'The opening topics received; 1.',
+      decidedOn: '2026-10-05'
+    },
+    {
+      pageIndex: 0,
+      quote: 'The zanzibar qeustion raised',
+      kind: 'printers-error',
+      decision: 'corrected',
+      correction: 'The zanzibar question raised',
+      decidedOn: '2026-10-05'
+    }
+  ]
+
+  /** What `drive.mjs sweep --was … --now …` does to the contents. */
+  const sweep = (d: BookDocument, edits: BookEdit[], was: string, now: string): BookEdit[] => {
+    let out = edits
+    for (const synopsis of synopsesOf(d)) {
+      if (findMatches(synopsis.text, was).length === 0) continue
+      out = withEdit(out, {
+        kind: 'synopsis-text',
+        synopsisId: synopsis.id,
+        text: sweepText(synopsis.text, was, now).text
+      })
+    }
+    return out
+  }
+
+  it('is reported until it lands', () => {
+    expect(unapplied(ruled, doc)).toEqual(ruled)
+  })
+
+  it('lands through a sweep, over the reading as printed', () => {
+    let edits: BookEdit[] = []
+    edits = sweep(doc, edits, 're-received', 'received')
+    edits = sweep(applyEdits(doc, edits), edits, 'qeustion', 'question')
+    expect(edits).toEqual([expect.objectContaining({ kind: 'synopsis-text', synopsisId: 'p0b3' })])
+    const fixed = applyEdits(doc, edits)
+    const one = fixed.chapters.find((c) => c.title === 'LETTER No. I')!
+    expect(one.synopsis).toBe(
+      'The opening topics received; 1. The zanzibar question raised—its consequences; 3. ' +
+        'Remarks; 4.'
+    )
+    // The pristine reading is untouched: the page still says what it said.
+    expect(doc.chapters.find((c) => c.title === 'LETTER No. I')!.synopsis).toContain('re-received')
+    expect(unapplied(ruled, fixed)).toEqual([])
+  })
+
+  /**
+   * Taking three letters out before the first reference moves every
+   * reference's characters; they are read again from the corrected text, so
+   * each still names its digits and its page.
+   */
+  /**
+   * A ruling is about its leaf. The same words printed somewhere else are not
+   * the fault it settled, and asked of the whole book they read as the fault
+   * left standing — the check has to know what the contents leaf prints.
+   */
+  it('asks the contents leaf what it prints, not the whole book', () => {
+    const elsewhere = letters()
+    elsewhere[6] = leaf(
+      6,
+      [p('Delta: the zanzibar qeustion raised again, as printed.')],
+      'body',
+      '4'
+    )
+    const both = assembleBook(elsewhere)
+    const fixed = applyEdits(both, sweep(both, [], 'qeustion', 'question'))
+    expect(fixed.blocks.some((b) => b.text.includes('zanzibar qeustion raised'))).toBe(true)
+    expect(unapplied([ruled[1]!], fixed)).toEqual([])
+  })
+
+  it('reads the references again from the corrected text', () => {
+    const fixed = applyEdits(doc, sweep(doc, [], 're-received', 'received'))
+    const one = fixed.chapters.find((c) => c.title === 'LETTER No. I')!
+    const refs = one.synopsisSource!.references!
+    expect(refs.map((r) => one.synopsis!.slice(r.start, r.end))).toEqual(['1', '3', '4'])
+    expect(refs.map((r) => r.from)).toEqual([1, 3, 4])
+    const book = layoutWithToc(fixed, defaultStyleProfile(), measurer, options)
+    expect(contentsText(book)).toContain(
+      `raised—its consequences; ${pageWith(book, 'zanzibar').folio}.`
+    )
+  })
+
+  it('removes a description it empties', () => {
+    const emptied = applyEdits(doc, [{ kind: 'synopsis-text', synopsisId: 'p0b3', text: '' }])
+    expect(emptied.chapters.find((c) => c.title === 'LETTER No. I')!.synopsis).toBeUndefined()
+  })
+
+  it('leaves a book with none of these edits exactly as it was', () => {
+    const memo: BookEdit = { kind: 'memo', memoId: 'm', blockId: 'p3b1', at: 0, text: 'look' }
+    expect(applyEdits(doc, [memo]).chapters).toEqual(applyEdits(doc, []).chapters)
+    expect(applyEdits(doc, [memo]).synopsesUnmatched).toBe(doc.synopsesUnmatched)
+  })
+
+  it('is kept when the run is stored and read back', () => {
+    const edit: BookEdit = { kind: 'synopsis-text', synopsisId: 'p0b3', text: 'Fixed; 1.' }
+    const restored = migrateSavedRun({
+      schemaVersion: 21,
+      transcriptions: letters(),
+      edits: [edit]
+    })
+    expect(restored.edits).toEqual([edit])
   })
 })

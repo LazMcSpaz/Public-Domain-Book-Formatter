@@ -352,6 +352,23 @@ async function serve() {
           edited: say(applied.blocks),
           pristine: say(bare.blocks),
           notes: { edited: sayNotes(applied.footnotes), pristine: sayNotes(bare.footnotes) },
+          // The original contents' descriptions, whole, keyed by the contents
+          // block each opened with: the strings a `synopsis-text` edit is
+          // written against, page references as the original prints them.
+          synopses: {
+            edited: edits.synopsesOf(applied).map((s) => ({
+              id: s.id,
+              entry: s.name,
+              pages: s.pages,
+              text: s.text
+            })),
+            pristine: edits.synopsesOf(bare).map((s) => ({
+              id: s.id,
+              entry: s.name,
+              pages: s.pages,
+              text: s.text
+            }))
+          },
           // What the contents and the running heads will be built from. A
           // chapter opened by a number over a name is one entry here and two
           // heading blocks above, which is worth being able to see rather
@@ -365,13 +382,15 @@ async function serve() {
             // chapter. Reported because a synopsis that failed to match is
             // silent otherwise: the contents still prints, just plainer, and
             // nothing says the prose was read and then dropped.
-            synopsis: c.synopsis ? `${c.synopsis.slice(0, 60)}…` : null
+            synopsis: c.synopsis ? `${c.synopsis.slice(0, 60)}…` : null,
+            synopsisId: c.synopsisSource?.id ?? null
           })),
           // A description read off the original contents that no chapter
           // claimed. Silent otherwise: the contents still prints, only
           // plainer, so nothing looks broken and the prose was read and
           // thrown away.
-          synopsesUnmatched: applied.synopsesUnmatched.map((x) => x.title),
+          // A letter the contents names by its number has no title.
+          synopsesUnmatched: applied.synopsesUnmatched.map((x) => x.title || x.label),
           sections: applied.sections.map((s) => ({
             id: s.id,
             placement: s.placement,
@@ -2837,11 +2856,12 @@ async function serve() {
       const built = await page.evaluate(
         async ([repo, existing, title, doc]) => {
           const edits = await import(`/@fs${repo}/src/core/edits/index.ts`)
-          // The body and the book's own footnotes: a sheet built from the body alone
-          // listed no note correction at all.
+          // The body, the book's own footnotes and the original contents'
+          // descriptions: a sheet built from the body alone listed no note
+          // correction at all, and none of the contents' either.
           const rows = edits.correctionRows(
-            [...doc.pristine, ...(doc.notes?.pristine ?? [])],
-            [...doc.edited, ...(doc.notes?.edited ?? [])]
+            [...doc.pristine, ...(doc.notes?.pristine ?? []), ...(doc.synopses?.pristine ?? [])],
+            [...doc.edited, ...(doc.notes?.edited ?? []), ...(doc.synopses?.edited ?? [])]
           )
           return {
             text: edits.correctionsMarkdown(edits.correctionsHeader(existing, title), rows),
@@ -6753,7 +6773,9 @@ async function serve() {
      * block at a time. Without `--now` this is a dry run and only reports the
      * matches, each with context; with it, every match is replaced — body
      * blocks as ordinary `text` edits, written divisions by rewriting their
-     * own record — and the count per block is reported so nothing changes in
+     * own record, the book's notes and the original contents' descriptions
+     * through `note-text` and `synopsis-text` — and the count per block is
+     * reported so nothing changes in
      * silence. The search reads through the notation the way a person reads
      * the page, and the replacement keeps the emphasis around it
      * (`@core/edits/sweep`).
@@ -6877,6 +6899,31 @@ async function serve() {
             if (now !== null) {
               const swept = editsMod.sweepText(edit.text, was, now, matchCase)
               edits = editsMod.withEdit(edits, { ...edit, text: swept.text })
+              replaced += swept.count
+            }
+          }
+
+          // The original contents' descriptions — read off the contents leaves
+          // and carried on their chapters, never blocks — swept through the
+          // `synopsis-text` record that exists for exactly this reach. The text
+          // is the description as printed, page references and all, so a ruling
+          // quoted from the contents is found here as written.
+          for (const synopsis of editsMod.synopsesOf(doc)) {
+            const matches = editsMod.findMatches(synopsis.text, was, matchCase)
+            if (matches.length === 0) continue
+            found.push({
+              synopsis: synopsis.id,
+              entry: synopsis.name,
+              pages: synopsis.pages,
+              matches: matches.map((m) => m.context)
+            })
+            if (now !== null) {
+              const swept = editsMod.sweepText(synopsis.text, was, now, matchCase)
+              edits = editsMod.withEdit(edits, {
+                kind: 'synopsis-text',
+                synopsisId: synopsis.id,
+                text: swept.text
+              })
               replaced += swept.count
             }
           }

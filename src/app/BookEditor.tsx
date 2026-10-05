@@ -38,6 +38,7 @@ import {
   memosOf,
   clearMemo,
   sweepText,
+  synopsesOf,
   withEdit,
   type BookEdit,
   type MemoEdit
@@ -463,6 +464,14 @@ export function BookEditor({
         })
       }
     }
+    // And the original contents' descriptions, which print in the contents
+    // and are corrected through their own record. One jumps to the chapter it
+    // describes; one nothing claimed has nowhere in the column to go.
+    for (const synopsis of synopsesOf(doc)) {
+      for (const m of findMatches(synopsis.text, find.query, find.matchCase)) {
+        out.push({ passageId: synopsis.chapterId ?? 'contents-unmatched', context: m.context })
+      }
+    }
     return out
   }, [passages, doc, printedNotes, find.open, find.query, find.matchCase])
 
@@ -522,6 +531,13 @@ export function BookEditor({
       const swept = sweepText(edit.text, find.query, find.replace, find.matchCase)
       if (swept.count === 0) continue
       next = withEdit(next, { ...edit, text: swept.text })
+      total += swept.count
+    }
+    // The original contents' descriptions, through the `synopsis-text` record.
+    for (const synopsis of synopsesOf(doc)) {
+      const swept = sweepText(synopsis.text, find.query, find.replace, find.matchCase)
+      if (swept.count === 0) continue
+      next = withEdit(next, { kind: 'synopsis-text', synopsisId: synopsis.id, text: swept.text })
       total += swept.count
     }
     if (next !== edits) onChange(next)

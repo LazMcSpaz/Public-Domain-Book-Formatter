@@ -66,13 +66,15 @@ import { parseShape, type BookShape } from '@core/provenance'
  * gate, which is why they are a field of their own rather than rulings with a
  * flag on them — see `@core/queries/proposals`. v20 → v21 a block's `parts`:
  * italic, bold or small capitals over part of a word (`<i>un</i>spiritual`),
- * where every earlier version could only mark whole words.
+ * where every earlier version could only mark whole words. v21 → v22 the
+ * `synopsis-text` edit: a correction to a synopsis read off the original
+ * contents, which is not a block and which no edit could reach before.
  * None of them damages an older run — each is a complete transcription that simply
  * has none of the newer thing on it yet — so all upgrade in place rather than
  * being refused. That distinction is the whole reason a migration exists
  * instead of a version check.
  */
-export const CURRENT_SCHEMA_VERSION = 21
+export const CURRENT_SCHEMA_VERSION = 22
 
 /** A page the model could not read at all. Mirrors the runner's `PageFailure`. */
 export interface SavedFailure {
@@ -840,6 +842,13 @@ function parseEdits(raw: unknown): BookEdit[] {
         const noteId = str(value['noteId'], '')
         if (noteId && typeof value['text'] === 'string') {
           out.push({ kind: 'note-text', noteId, text: value['text'] })
+        }
+        break
+      }
+      case 'synopsis-text': {
+        const synopsisId = str(value['synopsisId'], '')
+        if (synopsisId && typeof value['text'] === 'string') {
+          out.push({ kind: 'synopsis-text', synopsisId, text: value['text'] })
         }
         break
       }

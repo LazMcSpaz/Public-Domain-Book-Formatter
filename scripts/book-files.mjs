@@ -345,8 +345,8 @@ if (flags.includes('--body') && corrArg && !corrArg.startsWith('--')) {
   // With the footnotes where the body file carries them (`drive.mjs body`
   // does since it began to): the same rows `drive.mjs corrections` writes.
   const rows = correctionRows(
-    [...body.pristine, ...(body.notes?.pristine ?? [])],
-    [...body.edited, ...(body.notes?.edited ?? [])]
+    [...body.pristine, ...(body.notes?.pristine ?? []), ...(body.synopses?.pristine ?? [])],
+    [...body.edited, ...(body.notes?.edited ?? []), ...(body.synopses?.edited ?? [])]
   )
   // A paragraph an edit stopped at the page seam: the rest of it is gone from
   // the book and nothing else notices (cutShortBlocks). Not a stale file but a

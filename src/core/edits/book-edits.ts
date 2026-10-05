@@ -50,6 +50,7 @@ import {
   startFootnote,
   type Footnote
 } from '@core/assemble'
+import { withSynopsisTexts } from './synopsis-text'
 import type {
   BareMark,
   BookBlock,
@@ -215,6 +216,13 @@ export type BookEdit =
    * means "this is not part of the book", and it is undoable like any edit.
    */
   | { kind: 'note-text'; noteId: string; text: string }
+  /**
+   * A synopsis from the original contents, corrected — see `./synopsis-text`.
+   * `synopsisId` is the contents block the entry opened with (`p22b0`); the
+   * text is the whole synopsis as it should print, page references as the
+   * original gives them. An empty text removes the synopsis.
+   */
+  | { kind: 'synopsis-text'; synopsisId: string; text: string }
   /**
    * A note the editor leaves *for the assistant* — "this page breaks badly",
    * "check this word against the scan" — anchored the way an authored note is,
@@ -385,6 +393,8 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   const authored = new Map<string, BookEdit & { kind: 'note' }>()
   /** Corrections to the book's own footnotes, keyed so re-editing replaces. */
   const noteTexts = new Map<string, string>()
+  /** Corrections to the original contents' synopses, the same way. */
+  const synopsisTexts = new Map<string, string>()
   /** Pictures the editor added, keyed so re-captioning one replaces it. */
   const supplied = new Map<string, BookEdit & { kind: 'image' }>()
   /** Divisions the editor wrote, keyed so editing one replaces it. */
@@ -450,6 +460,11 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
 
     if (edit.kind === 'note-text') {
       noteTexts.set(edit.noteId, edit.text)
+      continue
+    }
+
+    if (edit.kind === 'synopsis-text') {
+      synopsisTexts.set(edit.synopsisId, edit.text)
       continue
     }
 
@@ -916,6 +931,13 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
     .filter((m) => m.bare)
     .map(({ bare: _bare, ...m }) => m)
 
+  const contents = withSynopsisTexts(
+    chaptersOf(body, doc.chapters),
+    doc.synopsesUnmatched,
+    synopsisTexts,
+    doc.skipped
+  )
+
   return {
     ...doc,
     blocks: body,
@@ -925,8 +947,10 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
     // Chapters are derived from the blocks, so retyping a paragraph into a
     // heading has to be able to add one — and dropping a heading has to be able
     // to remove one. Recomputed rather than patched, for the same reason the
-    // engine re-runs instead of mutating.
-    chapters: chaptersOf(body, doc.chapters),
+    // engine re-runs instead of mutating. The contents' synopses ride on them,
+    // with any correction to one applied (`./synopsis-text`).
+    chapters: contents.chapters,
+    synopsesUnmatched: contents.unmatched,
     // Only the marks still declared bare. A `bare: false` is the editor taking
     // the declaration back, and what it has to produce is a document with no
     // trace of it — not one carrying a flag the engine has to remember to read
@@ -1055,6 +1079,7 @@ export function blockOf(edit: BookEdit): string | null {
     edit.kind === 'section' ||
     edit.kind === 'insert' ||
     edit.kind === 'note-text' ||
+    edit.kind === 'synopsis-text' ||
     edit.kind === 'retouch' ||
     edit.kind === 'place'
   ) {
@@ -1094,6 +1119,7 @@ export function countEdited(edits: readonly BookEdit[]): number {
     if (!correctsTheBook(edit)) continue
     if (edit.kind === 'anchor') touched.add(edit.illustrationId)
     else if (edit.kind === 'note-text') touched.add(edit.noteId)
+    else if (edit.kind === 'synopsis-text') touched.add(edit.synopsisId)
     else if (edit.kind === 'note') touched.add(edit.noteId)
     else if (edit.kind === 'image') touched.add(edit.imageId)
     else if (edit.kind === 'section') touched.add(edit.sectionId)
@@ -1165,6 +1191,7 @@ export function withEdit(edits: readonly BookEdit[], edit: BookEdit): BookEdit[]
     edit.kind === 'memo' ||
     edit.kind === 'highlight' ||
     edit.kind === 'note-text' ||
+    edit.kind === 'synopsis-text' ||
     edit.kind === 'retouch' ||
     edit.kind === 'place' ||
     edit.kind === 'bare-mark'
@@ -1186,6 +1213,7 @@ export function editTarget(edit: BookEdit): string {
   if (edit.kind === 'anchor') return edit.illustrationId
   if (edit.kind === 'note') return edit.noteId
   if (edit.kind === 'note-text') return edit.noteId
+  if (edit.kind === 'synopsis-text') return edit.synopsisId
   if (edit.kind === 'image') return edit.imageId
   if (edit.kind === 'section') return edit.sectionId
   if (edit.kind === 'insert') return edit.insertId

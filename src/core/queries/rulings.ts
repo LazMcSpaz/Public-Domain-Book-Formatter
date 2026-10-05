@@ -40,7 +40,7 @@
  * Pure: no DOM, no I/O.
  */
 import { standingFor, type HeldQuery } from './standing'
-import { bookText, type BookDocument } from '@core/assemble'
+import { bookText, synopsesPrinted, type BookDocument } from '@core/assemble'
 import { withMarkup, type EditorialQueryKind, type InlinePart } from '@core/transcribe'
 import type { RaisedQuery } from './index'
 
@@ -344,7 +344,11 @@ function leafText(doc: BookDocument, page: number): string {
   }): string => withMarkup(b.text, b.emphasis, b.strong, b.smallCaps, b.parts)
   return [
     ...[...doc.blocks, ...doc.asides].filter((b) => b.sourcePages.includes(page)).map(marked),
-    ...doc.footnotes.filter((n) => n.pageIndex === page).map(marked)
+    ...doc.footnotes.filter((n) => n.pageIndex === page).map(marked),
+    // A leaf of the original contents prints the descriptions read off it.
+    ...synopsesPrinted(doc)
+      .filter((s) => s.pages.includes(page))
+      .map((s) => s.text)
   ].join('\n')
 }
 
