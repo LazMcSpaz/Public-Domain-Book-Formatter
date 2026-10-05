@@ -2971,6 +2971,47 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   were put back on the words the italic witness reads off the chunk, and
   the shelf's PDFs of the six books this reaches are stale until
   re-exported.
+- **Also done**: **an analytical contents whose page references point at
+  this edition** (`src/core/pages/synopsis.ts`, `src/core/layout/contents-pages.ts`,
+  `src/core/assemble/{seams,folios}.ts`; the `synopsis-text` edit, SavedRun
+  v22). _The Mahatma Letters_ (1923) has twenty leaves of contents, each
+  letter run into one paragraph — `Letter No. XXa.—From A. O. Hume…; 123.
+Death by drink—…; 124.` — and none of it reached the page: the parser knew
+  only the heading shape and refused the parse outright. It now reads the
+  run-in shape beside the old one (every other book on the shelf parses to
+  exactly what it did, measured), and all 148 letters find their chapters,
+  `Letter No. III.` under `LETTER No. IIIa.` included. The 457 references
+  after the groups of topics are kept as structure beside the prose and set
+  at layout to **the page of this edition on which the first word of that
+  1923 page falls** — exact, not ±1, which took three measured facts: which
+  leaf prints that folio (`folioRuns`, off `furniture.folio`, never the
+  `+43` this scan happens to have), where that leaf's text begins inside a
+  paragraph assembly joined across it (`seams`, kept sound through `text`,
+  `split` and `merge`), and on which page that word was set (`blockPages`
+  `turns`). A count shaped like a reference — leaf 30's `lacking in
+intuition; 4. Europeans on probation` — is told from a page by the
+  sequence: the references are the longest run of the whole contents that
+  never goes backwards, and a 4 between 328 and 329 is not in it — read
+  across entries, because a count at the head of a letter has nothing before
+  it in its own entry to contradict it. A volume binding two works paged from
+  1 answers a folio from the work after the contents that cites it. The
+  two-pass guard compared page counts,
+  which is the wrong invariant once numbers inside the descriptions change
+  their length; it now requires every number the contents prints to equal
+  what its own layout gives when asked again, allows one more pass for a
+  front-matter folio the contents' new length moved, and falls back with a
+  warning that says so. A reference no leaf answers prints without a number
+  and is reported, never guessed. Ten editorial rulings sat inside the
+  contents with nothing able to apply them; a `synopsis-text` edit corrects a
+  description over the pristine reading as `note-text` does a note, `sweep`
+  reaches it, `bookText` carries it so `unapplied` stops reporting a landed
+  ruling, and `corrections.md` lists it. Measured on the shelf copy, read and
+  not written: all ten land through sweeps, and all 457 references resolve;
+  the sweeps themselves are still to be run on the book. One fault came out of
+  running the real book rather than the fixture: a 1923 page that opens on
+  `SECTION II` begins on a block the layout sets as the line over its title
+  and records no page for, so six references had no answer until such a
+  block was given the page of the opening it belongs to.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with
