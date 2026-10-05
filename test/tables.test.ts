@@ -362,6 +362,29 @@ describe('a table on the page', () => {
     expect(second.xPt).toBeCloseTo(page.frame.xPt + left * size * 0.5 + 1.4 * size, 1)
   })
 
+  it('closes up a grid of short entries rather than wrap one of them', () => {
+    // Hellenbach's table of the elements (SD II, leaf 640): nine columns of a
+    // symbol and a weight, and "Fe 56. Co 58·6" broke down the eighth column at
+    // the usual gap. Read across its row, a wrapped cell reads as two entries.
+    const probe = run(doc([tableBlock([['a', 'b']])]))
+    const frame = probe.pages.find((p) => lines(p).length > 0)!.frame
+    const size = defaultStyleProfile().bodyFontSize * 0.92
+    const perMeasure = frame.widthPt / (size * 0.5)
+    const wide = 'Fe 56. Co 58·6'
+    // Too wide for the usual gaps of 1.4 ems, narrow enough for 0.6 ems.
+    const k = Math.floor((perMeasure - 15 - wide.length) / 8)
+    const short = 'Zz ' + 'q'.repeat(Math.max(1, k - 3))
+    const row = [...Array.from({ length: 8 }, () => short), wide]
+    const book = run(doc([tableBlock([row, row.map((c) => c.replace('Fe', 'Ni'))])]))
+    expect(book.warnings).toEqual([])
+    const onLines = (word: string) =>
+      book.pages.flatMap((p) =>
+        lines(p).filter((l) => l.runs.some((r) => r.text.split(/\s+/u).includes(word)))
+      )
+    expect(onLines('Fe').length).toBe(1)
+    expect(onLines('Fe')[0]).toBe(onLines('58·6')[0])
+  })
+
   it('centres a table narrower than the measure rather than stretching it', () => {
     const book = run(doc([tableBlock([['i', 'ii']])]))
     const page = book.pages.find((p) => lines(p).some((l) => l.runs.some((r) => r.text === 'i')))!

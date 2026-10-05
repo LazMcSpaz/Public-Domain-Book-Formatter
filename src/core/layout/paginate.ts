@@ -266,6 +266,8 @@ const TABLE_GUTTER_EMS = 1.4
  * and only as far as it needs.
  */
 const TABLE_MIN_GUTTER_EMS = 0.6
+/** The most words a cell of a grid holds: more, and the table is prose in columns. */
+const TABLE_GRID_WORDS = 4
 /** The narrowest a column may be squeezed, in ems, before it is left to overflow. */
 const TABLE_MIN_COLUMN_EMS = 2.5
 const TABLE_RULE_THICKNESS = 0.5
@@ -2194,9 +2196,10 @@ function buildTableFlowables(
   // It is kept unless it overflows: unless some column is narrower than a word
   // in it, which no wrapping can mend. Only then does the gap close up, and then
   // the type step down to TABLE_MIN_SIZE_RATIO of the body, and only as far as
-  // lets every cell stand unbroken. So every table that set cleanly before,
-  // wrapped or not, is set exactly as it was; Hall's diagrams of one-word
-  // columns, which overflowed, are the tables this reaches.
+  // lets every cell stand unbroken. So every table that set cleanly before is
+  // set exactly as it was, wrapped or not, but for a grid of short entries
+  // (below); Hall's diagrams of one-word columns, which overflowed, are the
+  // tables this reaches.
   const longestWords = widestOf(baseSizePt, singleWords)
   const baseSpan = baseWidths.reduce((a, b) => a + b, 0) + baseGap * Math.max(0, columns - 1)
   const overflows =
@@ -2206,14 +2209,29 @@ function buildTableFlowables(
   const tightAtBase = baseTotal + baseSizePt * TABLE_MIN_GUTTER_EMS * Math.max(0, columns - 1)
   const fittingSize = tightAtBase > 0 ? (baseSizePt * ctx.measureWidth) / tightAtBase : baseSizePt
   const minSize = ctx.profile.bodyFontSize - TABLE_MAX_DROP_PT
+  // A grid of short entries that wraps one of them is mended the same way. On
+  // Hellenbach's table of the elements (SD II, leaf 640) "Fe 56. Co 58·6" broke
+  // down the eighth column, and a table read across its rows is misread with a
+  // line broken in one cell. The editor's ruling there: close the gap, then
+  // step the type down within the same four points, until every cell stands
+  // whole. Only where every cell is a few words: a transcript's columns of
+  // sentences wrap as they always have, and finished books keep their pages.
+  const grid = rows.every((row) =>
+    row.every((cell) => singleWords(cell).length <= TABLE_GRID_WORDS)
+  )
+  const wraps =
+    grid && !overflows && columns > 1 && baseWidths.some((w, c) => w + 0.01 < (baseNatural[c] ?? 0))
+  const mend = overflows || wraps
   const sizePt =
-    overflows && tightAtBase > ctx.measureWidth && fittingSize >= minSize ? fittingSize : baseSizePt
+    mend && tightAtBase > ctx.measureWidth && fittingSize >= minSize ? fittingSize : baseSizePt
   const natural = sizePt === baseSizePt ? baseNatural : widestOf(sizePt, wholeCells)
   const naturalTotal = natural.reduce((a, b) => a + b, 0)
   const roomy = sizePt * TABLE_GUTTER_EMS
   const neededGap = columns < 2 ? roomy : (ctx.measureWidth - naturalTotal) / (columns - 1)
   const gutter =
-    overflows && neededGap < roomy && neededGap >= sizePt * TABLE_MIN_GUTTER_EMS ? neededGap : roomy
+    mend && neededGap < roomy && neededGap >= sizePt * TABLE_MIN_GUTTER_EMS * 0.999
+      ? neededGap
+      : roomy
   const widths =
     sizePt === baseSizePt && gutter === baseGap
       ? baseWidths
