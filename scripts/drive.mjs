@@ -6196,7 +6196,11 @@ async function serve() {
                 }
               ]
           const doc = editsMod.applyEdits(assemble.assembleBook(run.transcriptions), edits)
-          const block = doc.blocks.find((b) => b.id === `ins/${insertId}`)
+          // A footnote leaves the body for the notes, so that is where to look.
+          const block =
+            blockKind === 'footnote'
+              ? doc.footnotes.find((n) => n.id === `fn-ins/${insertId}`)
+              : doc.blocks.find((b) => b.id === `ins/${insertId}`)
           if (!dropping && !block) {
             throw new Error(`No block \`${afterBlockId}\` to follow in the book as it stands.`)
           }
@@ -6634,6 +6638,48 @@ async function serve() {
           }
         },
         [REPO, blockId, action, blockKind ?? null, level ?? null]
+      )
+    },
+
+    /**
+     * The edits that name a block, and a way to take one back.
+     *
+     * `block`, `correct` and `split` all check their block against the book as
+     * it stands, which is right for a new edit and wrong for undoing one: a
+     * block retyped to `footnote` has left the body, so nothing could name it
+     * again to put it back. `edits <blockId>` lists every edit keyed to the
+     * block; `edits <blockId> drop <kind>` withdraws that block's edits of that
+     * kind, so the book reads as if they had never been made.
+     */
+    edits: async ([blockId, action, kind]) => {
+      if (!blockId) throw new Error('edits <blockId> [drop <kind>]')
+      if (action && (action !== 'drop' || !kind)) throw new Error('edits <blockId> drop <kind>')
+      return page.evaluate(
+        async ([repo, blockId, kind]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+          const all = run.edits ?? []
+          const names = (e) =>
+            e.blockId === blockId || e.noteId === blockId || e.insertId === blockId
+          const mine = all.filter(names)
+          if (!kind) return { blockId, edits: mine }
+          const dropped = mine.filter((e) => e.kind === kind)
+          if (dropped.length === 0) throw new Error(`No \`${kind}\` edit names \`${blockId}\`.`)
+          const edits = all.filter((e) => !(names(e) && e.kind === kind))
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            edits
+          })
+          const stored = await runStore.saveRun(next)
+          return { blockId, dropped, stored: stored === true, edits: edits.length }
+        },
+        [REPO, blockId, kind ?? null]
       )
     },
 
