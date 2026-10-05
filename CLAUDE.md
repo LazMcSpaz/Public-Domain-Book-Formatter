@@ -939,6 +939,26 @@ unclaimed and one sat under the wrong reference, and `orphaned` said 0 for a
 while because something claimed each one. `correct` now refuses a change to a
 block carrying a declaration when the count of that marker moves.
 
+**A scan can lose the head of every leaf, and nothing reports it.** The Google
+scan _The Key to Theosophy_ was read from had cut the running head and the
+first line or two off 288 of its leaves. Each seam read straight across the
+gap (`The name Theosophy dates from sophical system.`), every leaf drafted
+and landed cleanly, and the reference marks in the lost lines went with
+them, so every note after the first missing mark printed under the wrong
+reference. A second copy of the same printing (Cornell's, on archive.org)
+supplied every line; the measure that found them is word 4-grams of the
+second copy's OCR that the book lacks. Strip only our own tags from our own
+text when doing it — a `<[^>]+>` run over OCR text eats everything between a
+stray `<` and `>`, which hid a third of the losses on the first pass.
+
+**A footnote read as a paragraph is refiled by a retype.** `block <id>
+retype footnote` lifts the block out of the body in `applyEdits`, by
+assembly's own two rules (a printed mark starts a note, no mark continues
+the note above), in reading order and named after its block so no `fnN`
+moves; `insert <after> footnote <file>` puts back a note the reading folded
+into another. A lifted block has left the body, so `edits <id>` and `edits
+<id> drop <kind>` are how it is reached again.
+
 **A no-break space binds nothing.** The engine and the markup both split words
 on `\s`, which includes U+00A0, and italic is stored by word index, so the
 engine cannot treat it differently without moving italic onto the wrong words.
@@ -1371,6 +1391,10 @@ node scripts/drive.mjs insert p640b3 table t.txt --id modern --header
                                      #   named block: a table (rows on lines,
                                      #   cells by `|`), a caption, a heading;
                                      #   `insert drop <id>` takes it out
+node scripts/drive.mjs edits p13b5                  # every edit that names a block;
+                                     #   `edits p13b5 drop retype` withdraws one,
+                                     #   which is how a block lifted into the notes
+                                     #   is reached again
 node scripts/contact-sheets.mjs <renders> <out>  # the whole book, small, many to
                                      #   a sheet: the only thing that answers
                                      #   "is there a picture we have missed?"
