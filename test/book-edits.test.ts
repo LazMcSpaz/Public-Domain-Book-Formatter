@@ -1438,4 +1438,24 @@ describe('a footnote read as a paragraph, refiled by a retype', () => {
       ['fn1', 'Says Mosheim, of Ammonius.']
     ])
   })
+
+  it('files a note the editor inserts on the page of the block it follows', () => {
+    // A note the reading folded into the one above it (leaf 113 of The Key)
+    // is cut out with a note-text edit and put back as a block of its own.
+    const doc = applyEdits(misread(), [
+      { kind: 'retype', blockId: 'p0b1', blockKind: 'footnote' },
+      {
+        kind: 'insert',
+        insertId: 'dagger',
+        afterBlockId: 'p1b0',
+        blockKind: 'footnote',
+        text: '† The second note on page 1.'
+      }
+    ])
+    expect(doc.footnotes.map((n) => [n.originalMarker, n.text, n.pageIndex])).toEqual([
+      ['*', 'Also called Analogeticists.', 0],
+      ['*', 'Says Mosheim of Ammonius.', 1],
+      ['†', 'The second note on page 1.', 1]
+    ])
+  })
 })

@@ -867,9 +867,17 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   // the note above it. It is filed in reading order, after the notes of its
   // own page and every page before, and named after its block rather than
   // numbered, so every `fnN` a `note-text` edit is keyed to keeps its note.
+  // A block the editor inserted has no leaf of its own; it is on the page of
+  // the block it was put after, which is where its note was printed.
   const notes: Footnote[] = [...footnotes]
+  let lastPage = 0
+  const pageOf = new Map<string, number>()
+  for (const block of blocks) {
+    lastPage = block.sourcePages[0] ?? lastPage
+    pageOf.set(block.id, lastPage)
+  }
   for (const block of blocks.filter((b) => b.kind === 'footnote')) {
-    const page = block.sourcePages[0] ?? 0
+    const page = pageOf.get(block.id) ?? 0
     let at = notes.length
     while (at > 0 && notes[at - 1]!.pageIndex > page) at--
     const above = notes[at - 1]
