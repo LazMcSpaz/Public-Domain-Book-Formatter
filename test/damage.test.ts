@@ -186,6 +186,20 @@ describe('a word split where one half is an ordinary word', () => {
     const words = ['It was apart from us.', 'We stood apart.', 'A part of it.']
     expect(of(build([...words, 'He was a part of the whole.']), 'split-word')).toEqual([])
   })
+
+  it('leaves the tail of a possessive after an initial alone', () => {
+    // A word starts at a letter, so the `’s` of `K.H.’s` comes back as a
+    // lone `s`, and `s own` reads as `sown`: nine findings on The Mahatma
+    // Letters, every one a possessive after a stop.
+    const words = ['The seed was sown.', 'Sown again.', 'They had sown it.']
+    for (const line of ['in the Master K.H.’s own words', 'Madam B.’s he said', "Mr. S.'s way"]) {
+      expect(of(build([...words, 'They went their way.', line]), 'split-word')).toEqual([])
+    }
+    // An apostrophe after a space opens a quotation, and a split inside one
+    // is still a split.
+    const quoted = of(build([...words, "He said 'sow n seed' at the time."]), 'split-word')
+    expect(quoted.map((f) => f.found)).toEqual(['sow n'])
+  })
 })
 
 /** A full stop no compositor sets. */

@@ -418,6 +418,17 @@ function splitWords(blocks: readonly Passage[]): DamageFinding[] {
       // digit on either side is part of something longer.
       if (/\d/u.test(text[left.index - 1] ?? '')) continue
       if (/\d/u.test(text[right.index + right[0].length] ?? '')) continue
+      // Nor can a word start at an apostrophe, so the `’s` of `K.H.’s own`
+      // comes back as a lone `s` and `s own` reads as `sown`: nine of them on
+      // The Mahatma Letters, every one a possessive after an initial's stop.
+      // Only an apostrophe closing onto a letter or a stop: one after a space
+      // opens a quotation, and `'induc tion'` is still a split.
+      if (
+        /['’]/u.test(text[left.index - 1] ?? '') &&
+        /[\p{L}.]/u.test(text[left.index - 2] ?? '')
+      ) {
+        continue
+      }
 
       const a = left[0].toLocaleLowerCase()
       const b = right[0].toLocaleLowerCase()

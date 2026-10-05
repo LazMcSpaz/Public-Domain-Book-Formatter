@@ -2956,10 +2956,12 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   the shelf** was measured before anything was printed: some 380 places,
   nearly all an italic run ending at an em dash with no space after it
   (`<i>refusing</i>—as`), which printed the word after the dash in italic and
-  now does not — and SD Vol. II's p594b2, whose tags sit a few letters off
-  their words from an older correction and now print visibly mid-word, so
-  that paragraph wants repairing against its pristine markup before the
-  volume is re-exported.
+  now does not — and SD Vol. II's p594b2, whose italic, restored from the
+  witness, sat three letters left of its words and now printed visibly
+  mid-word. Its pristine has no markup to repair from, so the fifteen runs
+  were put back on the words the italic witness reads off the chunk, and
+  the shelf's PDFs of the six books this reaches are stale until
+  re-exported.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with
