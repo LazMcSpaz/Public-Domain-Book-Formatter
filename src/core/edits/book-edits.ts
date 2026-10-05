@@ -39,7 +39,14 @@ import {
   type InlinePart,
   type TranscribedBlock
 } from '@core/transcribe'
-import { deriveChapters, footnoteMarkerPattern } from '@core/assemble'
+import {
+  continueFootnote,
+  deriveChapters,
+  footnoteMarkerPattern,
+  isFootnoteRunover,
+  startFootnote,
+  type Footnote
+} from '@core/assemble'
 import type {
   BareMark,
   BookBlock,
@@ -850,21 +857,56 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
     .map((illustration) => withRetouching(illustration, retouched.get(illustration.id)))
     .map((illustration) => withPlacement(illustration, placements))
 
+  // **A note read as a paragraph goes back under the page.** A reading that
+  // set a footnote in the body leaves its mark claiming whatever note comes
+  // next — on The Key to Theosophy the two notes on page 2 were read that way,
+  // and every note after them printed one reference early. Assembly has
+  // already pulled the book's notes out of the flow, so a block retyped to
+  // `footnote` is lifted out here, by the same two rules assembly applies: a
+  // block that prints its own mark starts a note, one that does not continues
+  // the note above it. It is filed in reading order, after the notes of its
+  // own page and every page before, and named after its block rather than
+  // numbered, so every `fnN` a `note-text` edit is keyed to keeps its note.
+  // A block the editor inserted has no leaf of its own; it is on the page of
+  // the block it was put after, which is where its note was printed.
+  const notes: Footnote[] = [...footnotes]
+  let lastPage = 0
+  const pageOf = new Map<string, number>()
+  for (const block of blocks) {
+    lastPage = block.sourcePages[0] ?? lastPage
+    pageOf.set(block.id, lastPage)
+  }
+  for (const block of blocks.filter((b) => b.kind === 'footnote')) {
+    const page = pageOf.get(block.id) ?? 0
+    let at = notes.length
+    while (at > 0 && notes[at - 1]!.pageIndex > page) at--
+    const above = notes[at - 1]
+    if (above && isFootnoteRunover(block)) {
+      // A copy: the note above may be the assembled document's own object.
+      const joined: Footnote = { ...above }
+      continueFootnote(joined, block)
+      notes[at - 1] = joined
+      continue
+    }
+    notes.splice(at, 0, startFootnote(block, `fn-${block.id}`, page))
+  }
+  const body = blocks.filter((b) => b.kind !== 'footnote')
+
   const stillBare: BareMark[] = [...bared.values()]
     .filter((m) => m.bare)
     .map(({ bare: _bare, ...m }) => m)
 
   return {
     ...doc,
-    blocks,
+    blocks: body,
     sections: builtSections,
-    footnotes,
+    footnotes: notes,
     illustrations: [...illustrations, ...suppliedIllustrations],
     // Chapters are derived from the blocks, so retyping a paragraph into a
     // heading has to be able to add one — and dropping a heading has to be able
     // to remove one. Recomputed rather than patched, for the same reason the
     // engine re-runs instead of mutating.
-    chapters: chaptersOf(blocks, doc.chapters),
+    chapters: chaptersOf(body, doc.chapters),
     // Only the marks still declared bare. A `bare: false` is the editor taking
     // the declaration back, and what it has to produce is a document with no
     // trace of it — not one carrying a flag the engine has to remember to read

@@ -676,71 +676,11 @@ export function assembleBook(
         // a marker by mistake is caught by the check rather than by the silence
         // this rule would otherwise create.
         const previousNote = footnotes[footnotes.length - 1]
-        if (previousNote !== undefined && !block.marker && printedMarker(block.text) === null) {
-          const joined = stripSoftHyphens(joinText(previousNote.text, block.text))
-          // Word indices again, and the same trap the marker strip has: the
-          // continuation's emphasis is counted from its own first word, so it
-          // has to be shifted past everything already in the note.
-          //
-          // Measured against the *joined* text rather than the note's old word
-          // count, because `joinText` heals a hyphen across the seam — which
-          // merges two words into one and moves every index after it by one.
-          carryStyling(previousNote, block, joined)
-          previousNote.text = joined
+        if (previousNote !== undefined && isFootnoteRunover(block)) {
+          continueFootnote(previousNote, block)
           continue
         }
-        // The declared marker, or the one the note's own text opens with, or
-        // `*` — in that order. The bare `*` fallback used to come second and
-        // mislabelled every note whose transcriber left the mark in the text
-        // and omitted the field: the page's `†` stayed in the text, the note
-        // was filed as `*`, and `markOrphanFootnotes` then looked for a mark
-        // the body does not carry. Where the field disagrees with the text,
-        // the field still wins here and `verifyPage` reports the disagreement
-        // — assembly must stay total, and a contradiction inside one leaf is
-        // something for a person rather than something to resolve silently.
-        const marker = block.marker ?? printedMarker(block.text) ?? '*'
-        const raw = stripSoftHyphens(block.text.trim())
-        const text = stripLeadingMarker(raw, marker)
-        // Emphasis is word indices, and stripping the marker removes leading
-        // words — so the indices shift back by however many were removed, or
-        // the italics the reading recovered land on the wrong words. They
-        // used to be dropped here entirely, which printed every footnote's
-        // book titles in roman and said nothing.
-        const shift = wordCount(raw) - wordCount(text)
-        const emphasis = block.emphasis?.map((i) => i - shift).filter((i) => i >= 0)
-        const strong = block.strong?.map((i) => i - shift).filter((i) => i >= 0)
-        const smallCaps = block.smallCaps?.map((i) => i - shift).filter((i) => i >= 0)
-        // A part keeps to its characters rather than to a word count: the mark
-        // may have been printed hard against the note's first word, and taking
-        // it off then moves that word's letters rather than the word.
-        const settled = block.parts?.length
-          ? settleParts(text, {
-              ...(emphasis ? { emphasis } : {}),
-              ...(strong ? { strong } : {}),
-              ...(smallCaps ? { smallCaps } : {}),
-              parts: moveParts(
-                raw,
-                partsAfterDeleting(block.text.trim(), block.parts, SOFT_HYPHEN),
-                text,
-                (offset) =>
-                  offset - (raw.length - raw.trimStart().length) - (raw.trim().length - text.length)
-              )
-            })
-          : null
-        footnotes.push({
-          id: `fn${footnotes.length + 1}`,
-          originalMarker: marker,
-          text,
-          ...(settled
-            ? stylingOf(settled)
-            : {
-                ...(emphasis?.length ? { emphasis } : {}),
-                ...(strong?.length ? { strong } : {}),
-                ...(smallCaps?.length ? { smallCaps } : {})
-              }),
-          pageIndex: page.pageIndex,
-          orphaned: false
-        })
+        footnotes.push(startFootnote(block, `fn${footnotes.length + 1}`, page.pageIndex))
         continue
       }
 
@@ -1010,6 +950,90 @@ function escapeRegExp(s: string): string {
  * The marker must be followed by punctuation or whitespace, so "1662 was the
  * year" is never mistaken for a marker plus text.
  */
+/**
+ * A note paragraph with no mark of its own: the runover of the note above it.
+ * One rule for assembly and for a block an edit has refiled as a note, so the
+ * two cannot disagree about what continues what.
+ */
+export function isFootnoteRunover(block: TranscribedBlock): boolean {
+  return !block.marker && printedMarker(block.text) === null
+}
+
+/** Join a runover paragraph onto the note it continues, styling and all. */
+export function continueFootnote(previousNote: Footnote, block: TranscribedBlock): void {
+  const joined = stripSoftHyphens(joinText(previousNote.text, block.text))
+  // Word indices again, and the same trap the marker strip has: the
+  // continuation's emphasis is counted from its own first word, so it
+  // has to be shifted past everything already in the note.
+  //
+  // Measured against the *joined* text rather than the note's old word
+  // count, because `joinText` heals a hyphen across the seam — which
+  // merges two words into one and moves every index after it by one.
+  carryStyling(previousNote, block, joined)
+  previousNote.text = joined
+}
+
+/**
+ * A note from a block that prints its own mark: the mark taken off the text
+ * and the word indices shifted to match. `id` is the caller's — assembly
+ * numbers notes in reading order, and an edit that refiles a body block as a
+ * note names it after that block, so every number already in use stays put.
+ */
+export function startFootnote(block: TranscribedBlock, id: string, pageIndex: number): Footnote {
+  // The declared marker, or the one the note's own text opens with, or
+  // `*` — in that order. The bare `*` fallback used to come second and
+  // mislabelled every note whose transcriber left the mark in the text
+  // and omitted the field: the page's `†` stayed in the text, the note
+  // was filed as `*`, and `markOrphanFootnotes` then looked for a mark
+  // the body does not carry. Where the field disagrees with the text,
+  // the field still wins here and `verifyPage` reports the disagreement
+  // — assembly must stay total, and a contradiction inside one leaf is
+  // something for a person rather than something to resolve silently.
+  const marker = block.marker ?? printedMarker(block.text) ?? '*'
+  const raw = stripSoftHyphens(block.text.trim())
+  const text = stripLeadingMarker(raw, marker)
+  // Emphasis is word indices, and stripping the marker removes leading
+  // words — so the indices shift back by however many were removed, or
+  // the italics the reading recovered land on the wrong words. They
+  // used to be dropped here entirely, which printed every footnote's
+  // book titles in roman and said nothing.
+  const shift = wordCount(raw) - wordCount(text)
+  const emphasis = block.emphasis?.map((i) => i - shift).filter((i) => i >= 0)
+  const strong = block.strong?.map((i) => i - shift).filter((i) => i >= 0)
+  const smallCaps = block.smallCaps?.map((i) => i - shift).filter((i) => i >= 0)
+  // A part keeps to its characters rather than to a word count: the mark
+  // may have been printed hard against the note's first word, and taking
+  // it off then moves that word's letters rather than the word.
+  const settled = block.parts?.length
+    ? settleParts(text, {
+        ...(emphasis ? { emphasis } : {}),
+        ...(strong ? { strong } : {}),
+        ...(smallCaps ? { smallCaps } : {}),
+        parts: moveParts(
+          raw,
+          partsAfterDeleting(block.text.trim(), block.parts, SOFT_HYPHEN),
+          text,
+          (offset) =>
+            offset - (raw.length - raw.trimStart().length) - (raw.trim().length - text.length)
+        )
+      })
+    : null
+  return {
+    id,
+    originalMarker: marker,
+    text,
+    ...(settled
+      ? stylingOf(settled)
+      : {
+          ...(emphasis?.length ? { emphasis } : {}),
+          ...(strong?.length ? { strong } : {}),
+          ...(smallCaps?.length ? { smallCaps } : {})
+        }),
+    pageIndex,
+    orphaned: false
+  }
+}
+
 /**
  * The reference mark a note's own text opens with, or null.
  *
