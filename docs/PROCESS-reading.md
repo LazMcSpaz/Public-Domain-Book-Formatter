@@ -718,6 +718,26 @@ the `--yes` is the editor's word. Never applied unasked — that was the
 editor's ruling on the mechanism itself, and the first version of it, which
 settled such queries silently, was wrong.
 
+**Every query goes to the gate with the reader's answer beside it.** The
+editor's standing instruction, 5 October 2026, after a sitting where it saved
+him the dictation: whoever raises a query also writes what they think the
+ruling should be, as a proposal (`drive.mjs propose`), so that taking it costs
+one tap. A proposal says in full what choosing it files: the decision, the
+exact corrected wording where there is one, and the evidence for it. Where the
+evidence points two ways, offer both. It is offered and never chosen: nothing
+is selected, the three plain decisions and the box stay beneath it, and a
+proposal is a different type from a ruling, so only the editor picking one
+files anything (`@core/queries/proposals`).
+
+Write it from evidence, not from sense alone: the crop, a second printing of
+the same plates, the book's own usage, a standing ruling it falls under. On
+_The Mahatma Letters_ the 1948 printing's text layer read `my` where its page
+prints the same broken `mv` as 1923, so a second printing is checked on its
+pixels like everything else. And the proposals go up with the queries they
+answer: `drive.mjs queries` names every waiting query that has none
+(`withoutProposal`), `drive.mjs book` counts them, and the list should be empty
+whenever queries are pushed to the shelf.
+
 Queries a reader should raise: a printer's error; a word the page genuinely
 cannot settle; an inconsistency the book itself contains; anything where
 "faithful to the original" and "correct" disagree.

@@ -1455,6 +1455,15 @@ written by `drive.mjs propose` rather than by a reading. What must never happen
 is the thing `defaultValue` and `held` would both do: an option that arrives
 chosen files on the next press of Next with nobody having looked.
 
+**And every query goes up with one.** The editor's standing instruction (5
+October 2026): a query reaches the gate with the reader's answer offered beside
+it, the decision and the exact wording and the evidence, so taking it is a tap
+rather than a paragraph of dictation. Write them from evidence (the crop, a
+second printing checked on its pixels, the book's own usage), and before the
+queries are pushed. `drive.mjs queries` names any waiting query without one
+(`withoutProposal`) and `drive.mjs book` counts them; see PROCESS-reading.md,
+_Editorial queries_.
+
 **Before committing: typecheck + test + format:check + lint.**
 
 ## The design philosophy that drives the UI

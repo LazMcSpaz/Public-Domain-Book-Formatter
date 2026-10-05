@@ -569,7 +569,14 @@ async function serve() {
                   const waiting = queriesMod.outstanding(raised, run.rulings ?? [])
                   return {
                     queriesWaiting: waiting.length,
-                    queriesHeld: queriesMod.held(raised, run.rulings ?? []).length
+                    queriesHeld: queriesMod.held(raised, run.rulings ?? []).length,
+                    // Owed a proposal each, by the editor's standing
+                    // instruction; `queries` names them.
+                    queriesWithoutProposal: waiting.filter(
+                      (q) =>
+                        queriesMod.usableProposals(queriesMod.proposalsFor(q, run.proposals ?? []))
+                          .length === 0
+                    ).length
                   }
                 })()
               : {}),
@@ -5634,6 +5641,16 @@ async function serve() {
           const notYet = queriesMod.unapplied(rulings, doc)
           const waiting = queriesMod.outstanding(raised, rulings)
           const holding = queriesMod.held(raised, rulings)
+          // The editor's standing instruction (5 October 2026): every query
+          // reaches the gate with the reader's answer offered beside it, so
+          // taking it costs a tap. Counted through the same functions that
+          // build the gate's options, and named, because a list is something
+          // to act on.
+          const unanswered = waiting.filter(
+            (q) =>
+              queriesMod.usableProposals(queriesMod.proposalsFor(q, run.proposals ?? [])).length ===
+              0
+          )
           const title =
             shelfTitle ??
             (typeof run.identityAnswers?.title === 'string' && run.identityAnswers.title
@@ -5660,6 +5677,9 @@ async function serve() {
             // decided it should. Named rather than counted: a count here is
             // something to nod at and a list is something to act on.
             decidedButNotPrinted: notYet.map((r) => ({ leaf: r.pageIndex, quote: r.quote })),
+            // Waiting queries the gate would show with no proposal: owed one
+            // each, `drive.mjs propose` (docs/PROCESS-reading.md, Stage 9).
+            withoutProposal: unanswered.map((q) => ({ leaf: q.pageIndex, quote: q.quote })),
             leaves: [...new Set(waiting.map((q) => q.pageIndex))],
             shelfPath: shelf.queriesPath(newest.key),
             rulingsShelfPath: shelf.rulingsPath(newest.key),
