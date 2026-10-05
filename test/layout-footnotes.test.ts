@@ -1292,3 +1292,54 @@ describe('layout — reference marks in a table', () => {
     expect(raisedOn('force.')).toEqual(['3'])
   })
 })
+
+describe('a heading at the foot of a page', () => {
+  // The letters of The Mahatma Letters number their answers with headings,
+  // `(1)` over the answer, and the first carries a note. At 7x10 one came to
+  // rest on the last line of page 165 with its answer on 166: the stranding
+  // guard asked for one line under the heading, against a body area measured
+  // before the heading's own note had taken its lines, and a paragraph under
+  // orphan control will not start on one line anyway. So the heading is slid
+  // down the page a word at a time, and on every page it lands on, the answer
+  // has to start there too.
+  const FOLLOWER =
+    'Thereupon the company dispersed into the gardens and the conversation turned to other matters entirely. '.repeat(
+      3
+    )
+  const NOTE =
+    'A note long enough to take several lines at the foot of the page it is set on, ' +
+    'because the room a note takes is room the text below the heading cannot have. '.repeat(3)
+
+  const book = (filler: number, noted: boolean): LaidOutBook =>
+    run(
+      build([
+        page(0, [
+          { kind: 'heading', text: 'Of the Air', level: 1 },
+          {
+            kind: 'paragraph',
+            text: Array.from({ length: filler }, (_, i) =>
+              i % 7 === 0 ? 'chirurgeon' : 'air'
+            ).join(' ')
+          },
+          { kind: 'heading', text: noted ? '(1)*' : '(1)', level: 3 },
+          { kind: 'paragraph', text: FOLLOWER },
+          ...(noted ? [{ kind: 'footnote' as const, text: NOTE, marker: '*' }] : [])
+        ])
+      ])
+    )
+
+  for (const noted of [false, true]) {
+    it(`never leaves it without its text${noted ? ', when it carries a note' : ''}`, () => {
+      const stranded: number[] = []
+      for (let filler = 300; filler <= 900; filler += 3) {
+        const laid = book(filler, noted)
+        const at = laid.pages.find((p) =>
+          lines(p).some((l) => l.runs.some((r) => r.text === '(1)'))
+        )
+        expect(at, `filler ${filler}`).toBeDefined()
+        if (!textOf(at!).includes('Thereupon')) stranded.push(filler)
+      }
+      expect(stranded).toEqual([])
+    })
+  }
+})

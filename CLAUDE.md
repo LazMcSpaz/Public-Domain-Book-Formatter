@@ -1144,6 +1144,12 @@ proportions: propose from sense, accept from pixels.
   its cells less and so takes fewer lines (every line takes one body-leading
   slot whatever its size). Only a table longer than a page at every allowed
   size breaks between rows, and the export names it.
+- **A heading needs what follows it to fit, notes included.** The stranding
+  guard asked for one line under a heading, measured before the heading's own
+  note had reserved its lines, and a paragraph under orphan control will not
+  start on one line anyway. So `(1)`, the first of K.H.'s numbered answers in
+  _The Mahatma Letters_, sat alone at the foot of page 165. `firstTakeOf` is
+  what the next item can open with, and the room is counted after the notes.
 - **A guard's fallback has to report.** That contents shipped with no numbers
   and `warnings: 0` beside it. Silence is the failure mode, not the error.
 

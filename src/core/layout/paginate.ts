@@ -2570,6 +2570,23 @@ function heldBoundary(flow: Flowable, placed: number, take: number, remaining: n
 }
 
 /**
+ * The fewest lines an item can open a page's last stretch with — what a
+ * heading above it needs room for if it is not to stand alone.
+ *
+ * Two for a paragraph under orphan control, since its first line will not sit
+ * alone at the foot; the whole of anything that does not break, and of a
+ * heading under a heading, which is short and travels whole. An item that
+ * opens a page of its own cannot share this one, and asks for the one line it
+ * always did.
+ */
+function firstTakeOf(next: Flowable): number {
+  if (next.startsChapter || next.ownPage) return 1
+  if (next.unbreakable || next.keepWithNext) return Math.max(1, next.lines.length)
+  if (next.orphanControl && next.lines.length >= 2) return 2
+  return 1
+}
+
+/**
  * How many level-less headings it takes before the book's shape is doubted.
  * A pamphlet with three chapters and no levels is fine; a volume with dozens
  * is a reading that never measured the type.
@@ -3196,8 +3213,32 @@ export function layout(
       }
 
       // A heading with nothing under it is stranded; move it with its text.
-      if (flow.keepWithNext && take === remaining && bodySlots - slot - take < 1) {
-        take = 0
+      //
+      // "Something under it" is what the next item can actually start a page
+      // with, and the room it is measured in is what is left once the notes
+      // have taken theirs. Asking for one line against `bodySlots` stranded
+      // `(1)` at the foot of page 165 of The Mahatma Letters, twice over: the
+      // answer under it is a paragraph under orphan control, which will not
+      // start on one line, and the heading carries a note whose lines were
+      // not yet reserved when the room was counted.
+      if (flow.keepWithNext && take === remaining) {
+        const next = flowables[i + 1]
+        const needed = next ? firstTakeOf(next) : 1
+        const gap = next ? Math.max(flow.spaceAfter, next.spaceBefore) : 0
+        const claimed = new Set(current().noteIds)
+        let noteLines = pageNoteLines
+        const claim = (ids: readonly string[] | undefined): void => {
+          for (const id of ids ?? []) {
+            if (claimed.has(id) || !noteBlocks.has(id)) continue
+            claimed.add(id)
+            noteLines += noteLinesOf(id)
+          }
+        }
+        for (let k = 0; k < take; k++) claim(flow.lines[placed + k]!.noteIds)
+        for (let k = 0; k < Math.min(needed, next?.lines.length ?? 0); k++) {
+          claim(next!.lines[k]!.noteIds)
+        }
+        if (bodySlotsFor(noteLines) - slot - take - gap < needed) take = 0
       }
 
       // An illustration is not a paragraph: half of one on each side of a page
