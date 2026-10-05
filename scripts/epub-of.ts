@@ -314,7 +314,10 @@ if (described) {
       'Contents',
       '<h1>Contents</h1>' +
         chapters
-          .filter((c) => c.level === 1)
+          // A chapter below the top level is listed when its contents
+          // described it: The Mahatma Letters describes every letter, and a
+          // letter is a level-2 chapter under its section.
+          .filter((c) => c.level === 1 || c.synopsis)
           .map(
             (c) =>
               `<p class="entry"><a href="${c.file}">${esc(c.title)}</a></p>` +
