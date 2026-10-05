@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { readSynopsis, synopsisKey, synopsisLooksSound } from '@core/pages'
+import { abbreviatedRange, readSynopsis, synopsisKey, synopsisLooksSound } from '@core/pages'
 
 /**
  * The original contents page, read for its prose.
@@ -227,5 +227,235 @@ describe('a contents set with leader dots', () => {
       { kind: 'caption', text: 'Page 9' }
     ])
     expect(entry).toMatchObject({ label: 'LESSON I', title: 'THE ASTRAL SENSES', originalFolio: 9 })
+  })
+})
+
+/**
+ * The run-in shape: *The Mahatma Letters* (1923), whose contents sets each
+ * letter as one paragraph — the label run into it and ended by an em dash, the
+ * topics joined by dashes, and a page of the 1923 printing after every group
+ * of them. Every string below is the shelf's own transcription of leaves 18
+ * to 38, cut down where the middle of an entry says nothing new.
+ */
+describe('a contents that runs each entry into a paragraph', () => {
+  const leaf = (page: number, blocks: { kind: string; text: string }[]) =>
+    blocks.map((b, i) => ({ ...b, id: `p${page}b${i}`, page }))
+
+  const contents = [
+    ...leaf(18, [
+      h('CONTENTS'),
+      p('Page'),
+      p('Compiler’s Preface - - - - - - - - - - - 6'),
+      p('Introduction - - - - - - - - - - - - 8'),
+      h('SECTION I'),
+      h('THE OCCULT WORLD SERIES'),
+      p(
+        'Letter No. I.—London newspaper Test; 1. Solomons of Science—experimental ' +
+          'knowledge—vril of the coming age—skeletons of giants; 2. Hooke—Newton; 3.'
+      ),
+      p('Letter No. III.—“ Brooch ” phenomenon—postal address in N.W.P.—Pillow incidents; 10.')
+    ]),
+    ...leaf(20, [p('Letter No. XVI,—The Devachan Letter—Devachan allegorically described')]),
+    // The leaf turns in the middle of letter XVI.
+    ...leaf(21, [
+      p('by Buddha—who goes to Devachan; 100. The Ego enjoys perfect bliss; 101.'),
+      p('Letter No. XIX.—Post mortem conditions of suicides and victims of accidents; 123.'),
+      p(
+        '<sc>Letter No.</sc> XX<sc>a</sc>.—From A. O. Hume to K.H. Queries re ' +
+          'spiritualistic phenomena—shells—suicides and accidents; 123. Death by drink; 124.'
+      )
+    ]),
+    ...leaf(29, [
+      p('Letter No. LV.—The ordeal of the aspirant; 322. Christian-mission-Coulomb conspiracy—')
+    ]),
+    // And letter LV turns the leaf on a dash.
+    ...leaf(30, [
+      p('correspondence with the “ Inner Circle ”—pledge themselves to K.H.; 324.'),
+      p('Letter No. LVI.—Condition of A. O. Hume—a fakir; 325. “ Mr. Isaacs ”; 327.'),
+      p(
+        'Letter No. LVII.—Adepts and their methods not understood; 328; C.C.M. on the ' +
+          'list of failures—not a medium—the best of men but lacking in intuition; 4. ' +
+          'Europeans on probation—3 fail—probation of societies; 329. Hume and Fern; 330.'
+      ),
+      p('Letter No. LIX.—Pythagoras and the number 2—the dual monad in manifestation—the per-')
+    ]),
+    ...leaf(31, [
+      p('fect square—the WORD—The Great Deep; 347. Nothing was ever lost by trying; 348.'),
+      p('Letter No. LXX.—The probation of A.P.S.'),
+      h('SECTION IV'),
+      h('THE PHŒNIX VENTURE AND THE CONDITION OF INDIA'),
+      p('Letter No. LXXVII.—Colonel Gordon—a Howrah Branch—Eclectic; 377. Women as angels.')
+    ]),
+    ...leaf(38, [
+      p('Letter No. CXLIIb.—Comment by K.H. on Damodar’s memorandum; 488.'),
+      p(
+        'MARS AND MERCURY. Sinnett reopens the controversy—quotations “ from the Secret ' +
+          'Doctrine ”—the whole theory prove false; 489-92.'
+      )
+    ])
+  ]
+  const entries = readSynopsis(contents)
+  const named = (label: string) => entries.find((e) => e.label === label)!
+
+  it('opens an entry at each label, which ends at the dash', () => {
+    expect(entries.map((e) => e.label || e.title)).toEqual([
+      'SECTION I',
+      'Letter No. I',
+      'Letter No. III',
+      'Letter No. XVI',
+      'Letter No. XIX',
+      'Letter No. XXa',
+      'Letter No. LV',
+      'Letter No. LVI',
+      'Letter No. LVII',
+      'Letter No. LIX',
+      'Letter No. LXX',
+      'SECTION IV',
+      'Letter No. LXXVII',
+      'Letter No. CXLIIb',
+      'MARS AND MERCURY'
+    ])
+    expect(named('Letter No. I')).toMatchObject({ title: '', id: 'p18b6', pages: [18] })
+    expect(named('Letter No. I').synopsis).toMatch(/^London newspaper Test; 1\. Solomons/)
+  })
+
+  it('reads a comma before the dash as the point it stands for', () => {
+    expect(named('Letter No. XVI').synopsis).toMatch(/^The Devachan Letter—/)
+  })
+
+  it('reads the label through the small capitals it is set in', () => {
+    expect(named('Letter No. XXa').synopsis).toMatch(/^From A\. O\. Hume to K\.H\. Queries/)
+    expect(named('Letter No. XXa').synopsis).not.toContain('<sc>')
+  })
+
+  /**
+   * Letter XVI runs from the foot of leaf 20 to the head of 21, as a
+   * paragraph that opens in lower case; letter LIX breaks a word there.
+   */
+  it('carries an entry over the leaf it ran onto', () => {
+    expect(named('Letter No. XVI').synopsis).toBe(
+      'The Devachan Letter—Devachan allegorically described by Buddha—who goes to ' +
+        'Devachan; 100. The Ego enjoys perfect bliss; 101.'
+    )
+    expect(named('Letter No. XVI').pages).toEqual([20, 21])
+    expect(named('Letter No. LIX').synopsis).toContain('the perfect square—the WORD')
+    expect(named('Letter No. LV').synopsis).toContain('conspiracy—correspondence with the')
+  })
+
+  it('takes a title in capitals and a point for an entry named rather than numbered', () => {
+    const mars = entries.find((e) => e.title === 'MARS AND MERCURY')!
+    expect(mars.label).toBe('')
+    expect(mars.synopsis).toMatch(/^Sinnett reopens the controversy/)
+    expect(mars.references).toEqual([expect.objectContaining({ from: 489, to: 492 })])
+  })
+
+  it('keeps a heading over the letters as an entry, closed by the first letter', () => {
+    expect(entries[0]).toMatchObject({ label: 'SECTION I', title: 'THE OCCULT WORLD SERIES' })
+    expect(entries[0]!.synopsis).toBe('')
+    expect(entries[0]!.references).toBeUndefined()
+  })
+
+  /**
+   * `Compiler’s Preface - - - 6` and `Introduction - - - 8` stand above the
+   * first section. They describe nothing and the body lists both itself, so
+   * they are not entries — they are read past like anything else before the
+   * first one (and the contents prints each once: see the layout tests).
+   */
+  it('takes nothing from the lines above the first entry', () => {
+    expect(entries.some((e) => /Preface|Introduction/u.test(e.title + e.synopsis))).toBe(false)
+  })
+
+  it('keeps every reference as structure, in its place in the text', () => {
+    const one = named('Letter No. I')
+    expect(one.references!.map((r) => [r.from, r.to])).toEqual([
+      [1, 1],
+      [2, 2],
+      [3, 3]
+    ])
+    const [first] = one.references!
+    expect(one.synopsis.slice(first!.start, first!.end)).toBe('1')
+    expect(one.originalFolio).toBe(1)
+  })
+
+  it('expands a range as the book abbreviates it', () => {
+    const mars = entries.find((e) => e.title === 'MARS AND MERCURY')!
+    const [range] = mars.references!
+    expect(mars.synopsis.slice(range!.start, range!.end)).toBe('489-92')
+  })
+
+  /**
+   * Leaf 30, exactly: `lacking in intuition; 4. Europeans on probation`. The
+   * `4.` is a count — "Four Europeans were placed on probation", on the 1923
+   * page 328 — and it has every mark of a reference but one. The references
+   * around it run 328, 329, 330; a page 4 between them would send the reader
+   * from the middle of letter LVII to the first leaf of the book.
+   */
+  it('does not read a count that opens a group as a page', () => {
+    const lvii = named('Letter No. LVII')
+    expect(lvii.references!.map((r) => r.from)).toEqual([328, 329, 330])
+    expect(lvii.synopsis).toContain('lacking in intuition; 4. Europeans on probation')
+    expect(lvii.originalFolio).toBe(328)
+  })
+
+  /**
+   * Why the sequence is the whole contents and not one entry: put the same
+   * count at the head of a letter and, read alone, nothing comes before it to
+   * contradict it. The letter before ended at 327, and that is what does.
+   */
+  it('reads the sequence across entries, not within one', () => {
+    const [, lvii] = readSynopsis([
+      p('Letter No. LVI.—Condition of A. O. Hume; 325. “ Mr. Isaacs ”; 327.'),
+      p('Letter No. LVII.—Lacking in intuition; 4. Europeans on probation; 329. Hume; 330.')
+    ])
+    expect(lvii!.references!.map((r) => r.from)).toEqual([329, 330])
+  })
+
+  it('closes a group on a semicolon as the book sometimes does', () => {
+    // `; 328; C.C.M. on the list` — the stop set as a semicolon.
+    expect(named('Letter No. LVII').references![0]).toMatchObject({ from: 328, to: 328 })
+  })
+
+  it('leaves a letter with no reference without one', () => {
+    expect(named('Letter No. LXX')).toMatchObject({
+      synopsis: 'The probation of A.P.S.',
+      references: [],
+      originalFolio: null
+    })
+  })
+
+  it('is sound, two letters on one page and all', () => {
+    // XIX and XXa both begin on the 1923 page 123, and the contents says so.
+    expect(named('Letter No. XIX').originalFolio).toBe(123)
+    expect(named('Letter No. XXa').originalFolio).toBe(123)
+    expect(synopsisLooksSound(entries)).toBe(true)
+  })
+
+  it('still refuses two chapters of the older shape claiming one page', () => {
+    const two = [
+      { label: 'LESSON I', title: 'A', synopsis: 'x'.repeat(50), originalFolio: 5 },
+      { label: 'LESSON II', title: 'B', synopsis: 'y'.repeat(50), originalFolio: 5 }
+    ]
+    expect(synopsisLooksSound(two)).toBe(false)
+  })
+})
+
+describe('the name a heading with a reference mark goes by', () => {
+  it('is the name without the mark', () => {
+    expect(synopsisKey('LETTER No. X¹')).toBe(synopsisKey('Letter No. X'))
+    expect(synopsisKey('LETTER No. CXXVII¹²')).toBe(synopsisKey('Letter No. CXXVII.'))
+  })
+})
+
+describe('a range of this edition’s pages, in the book’s own form', () => {
+  it('writes the shared leading digits once', () => {
+    expect(abbreviatedRange('52', '53')).toBe('52-3')
+    expect(abbreviatedRange('178', '179')).toBe('178-9')
+    expect(abbreviatedRange('489', '492')).toBe('489-92')
+    expect(abbreviatedRange('79', '81')).toBe('79-81')
+  })
+
+  it('writes ends of different lengths whole, and one page once', () => {
+    expect(abbreviatedRange('99', '100')).toBe('99-100')
+    expect(abbreviatedRange('61', '61')).toBe('61')
   })
 })
