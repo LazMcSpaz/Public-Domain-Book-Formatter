@@ -259,6 +259,15 @@ export function unapplied(rulings: readonly Ruling[], book: BookDocument): Rulin
       const inBook = (t: string): boolean => cased.some((v, i) => v.includes(NOTATIONS[i + 1](t)))
       return !inBook(rawWanted) || inBook(rawQuote)
     }
+    // A correction that is its quote word for word files a reading the book
+    // already has: a broken sort transcribed whole and ruled set right, as on
+    // leaf 376 of The Mahatma Letters. Read as a change it can never land,
+    // since the "printed" form is the corrected one; all there is to ask is
+    // whether the book still reads it.
+    if (rawWanted === rawQuote) {
+      const printed = ruling.pageIndex === null ? views : onLeaf(ruling.pageIndex)
+      return !has(printed, NOTATIONS.length - 1, written)
+    }
     // A footnote is quoted from the leaf with its reference mark at its head,
     // and the book holds the note without it: assembly takes the mark off to
     // set it as a raised figure. `† Ibid, Vol. II.` on leaf 199 of *The Key to

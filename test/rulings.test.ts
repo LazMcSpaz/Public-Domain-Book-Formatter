@@ -387,6 +387,30 @@ describe('a ruling written as the part that changes', () => {
     )
   })
 
+  it('reads a correction that is the whole quote as the reading it confirms', () => {
+    // The Mahatma Letters, leaf 376: an italic `sorcery` whose o printed open,
+    // transcribed whole and ruled set right with the quote as its wording. The
+    // book has nothing to change, and the check said so on every run.
+    const sort = ruling({
+      pageIndex: 376,
+      quote: 'full and well defined charges of sorcery, etc.?',
+      correction: 'full and well defined charges of sorcery, etc.?'
+    })
+    const book376 = book({
+      blocks: [
+        para('therein contained full and well defined charges of sorcery, etc.?', {
+          id: 'p376b2',
+          sourcePages: [376],
+          emphasis: [7]
+        })
+      ]
+    })
+    expect(unapplied([sort], book376)).toEqual([])
+    expect(
+      unapplied([sort], prose('full and well defined charges of sercery, etc.?'))
+    ).toHaveLength(1)
+  })
+
   it('keeps the pointing the correction does not give', () => {
     const moon = ruling({ quote: 'the Moon, called also Sekhet', correction: 'Moon' })
     expect(
