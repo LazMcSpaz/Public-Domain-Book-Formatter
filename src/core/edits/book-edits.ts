@@ -44,6 +44,9 @@ import {
   deriveChapters,
   footnoteMarkerPattern,
   isFootnoteRunover,
+  seamsAfterMerge,
+  seamsAfterRetyping,
+  seamsAfterSplit,
   startFootnote,
   type Footnote
 } from '@core/assemble'
@@ -516,6 +519,12 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
             ...(block.parts ? { parts: undefined } : {})
           })
         )
+        // Where each later leaf begins, moved with the words (`@core/assemble`).
+        if (block.seams) {
+          const { seams: _old, ...retyped } = blocks[index]!
+          const seams = seamsAfterRetyping(block.seams, block.text, retyped.text)
+          blocks[index] = seams ? { ...retyped, seams } : retyped
+        }
         break
 
       case 'retype': {
@@ -614,15 +623,23 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
             ...(block.cells ? { cells: undefined } : {})
           }
         }
+        // Each half covers the leaves its own words came from, and carries the
+        // seams that fall in it — where the block was joined across leaves.
+        const leaves = seamsAfterSplit(block, wordsInFirst, secondFrom)
+        const cut = (half: 1 | 2, made: BookBlock): BookBlock => {
+          if (!leaves) return made
+          const { seams: _seams, ...rest } = made
+          return { ...rest, ...leaves[half - 1] }
+        }
         blocks.splice(index, 1, {
-          ...normalizeTable(halfOf(1, first)),
+          ...cut(1, normalizeTable(halfOf(1, first))),
           id: splitId(block.id, 1),
           // The first half no longer runs on: the second half is what follows
           // it, and it is right here.
           continuesNext: false
         })
         blocks.splice(index + 1, 0, {
-          ...normalizeTable(halfOf(2, second)),
+          ...cut(2, normalizeTable(halfOf(2, second))),
           id: splitId(block.id, 2),
           continuesPrevious: false
         })
@@ -679,6 +696,7 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
                 ]
               })
             : null
+        const seams = seamsAfterMerge(block, next, shift)
         blocks.splice(index, 2, {
           ...normalizeTable({
             ...block,
@@ -700,6 +718,8 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
           sourcePages: [...new Set([...block.sourcePages, ...next.sourcePages])].sort(
             (a, b) => a - b
           ),
+          // The second block's leaves begin where it now stands in the first.
+          ...(seams ? { seams } : {}),
           ...(next.continuesNext === undefined ? {} : { continuesNext: next.continuesNext })
         })
         // The block that was absorbed no longer exists, but "after it" is still

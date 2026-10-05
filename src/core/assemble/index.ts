@@ -29,3 +29,12 @@ export {
   type IllustrationSource
 } from './assemble-book'
 export { bookText } from './book-text'
+export { folioRuns, leafOfFolio, type FolioRun } from './folios'
+export {
+  leafStart,
+  seamsAfterMerge,
+  seamsAfterRetyping,
+  seamsAfterSplit,
+  type Seam,
+  type SplitHalf
+} from './seams'

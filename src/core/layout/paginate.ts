@@ -433,6 +433,14 @@ interface FlowLine {
    * page that has not been chosen yet.
    */
   rule?: { xPt: number; yPt: number; widthPt: number; thicknessPt: number }
+  /**
+   * The first word of the block that begins on this line, in the block's own
+   * word count — a word broken over from the line above began there, not
+   * here. Absent on a line where no word begins. What lets the layout say on
+   * which page a word *inside* a paragraph fell (`BlockPage.turns`), and not
+   * only where the paragraph opened.
+   */
+  firstWord?: number
 }
 
 /** A footnote broken to the measure, ready to be set at the foot of a page. */
@@ -668,12 +676,33 @@ function toFlowLines(
         ]
       : placed
 
+    // The first word that begins here: a stretch carrying the same word as
+    // the line above's last is that word broken over, and began up there.
+    const above = broken[i - 1]?.words.filter((w) => w.sizePt === undefined) ?? []
+    const carried = above[above.length - 1]?.sourceIndex
+    const begins = line.words.find((w) => w.sizePt === undefined && w.sourceIndex !== carried)
+
     return {
       runs,
       ...(line.overfull ? { overfull: true } : {}),
-      ...(noteIds.length > 0 ? { noteIds } : {})
+      ...(noteIds.length > 0 ? { noteIds } : {}),
+      ...(begins ? { firstWord: begins.sourceIndex } : {})
     }
   })
+}
+
+/**
+ * Lines whose `firstWord` counts from somewhere other than the block's first
+ * word — the words after a figure set into a paragraph, a drop capital's
+ * paragraph that lost its first word to the initial, a verse line — moved
+ * into the block's own count.
+ */
+function fromWord(lines: FlowLine[], offset: number): FlowLine[] {
+  if (offset === 0) return lines
+  for (const line of lines) {
+    if (line.firstWord !== undefined) line.firstWord = Math.max(0, line.firstWord + offset)
+  }
+  return lines
 }
 
 /**
@@ -1535,14 +1564,18 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
     // heading's own lines so the two can never be separated by a page break.
     const flourish = isChapter ? findOrnament(ctx.profile.ornaments.chapterOpener) : null
     const lines = spacedForSize(
-      toFlowLines(
-        broken,
-        font,
-        sizePt,
-        hang > 0 ? [indentLeft - hang, indentLeft] : [indentLeft],
-        markToNote,
-        ctx.profile.opticalMargins ? ctx.measurer : undefined,
-        spans
+      // Counted in the block's words: a list's number set before them is not one.
+      fromWord(
+        toFlowLines(
+          broken,
+          font,
+          sizePt,
+          hang > 0 ? [indentLeft - hang, indentLeft] : [indentLeft],
+          markToNote,
+          ctx.profile.opticalMargins ? ctx.measurer : undefined,
+          spans
+        ),
+        -markerWords
       ),
       sizePt,
       ctx
@@ -1670,14 +1703,17 @@ function verseLines(
       ...(spans.length > 0 ? { spans } : {})
     })
     out.push(
-      ...toFlowLines(
-        broken,
-        o.font,
-        o.sizePt,
-        [o.indentLeft + inset, o.indentLeft + inset + turn],
-        o.markToNote,
-        undefined,
-        spans
+      ...fromWord(
+        toFlowLines(
+          broken,
+          o.font,
+          o.sizePt,
+          [o.indentLeft + inset, o.indentLeft + inset + turn],
+          o.markToNote,
+          undefined,
+          spans
+        ),
+        first
       )
     )
     first += words
@@ -1893,7 +1929,7 @@ function buildFigureFlowable(
 
     const linesBefore = set(before, p.firstIndent, spansBefore, attBefore)
     // Resumes flush: it is the same sentence, not a new paragraph.
-    const linesAfter = set(after, 0, spansAfter, attAfter)
+    const linesAfter = fromWord(set(after, 0, spansAfter, attAfter), wordAt)
     const held: FlowLine[] = [
       ...Array.from({ length: IMAGE_SPACE_SLOTS }, () => ({ runs: [], holdWithNext: true })),
       ...Array.from({ length: slots }, (_, i): FlowLine => ({
@@ -2466,7 +2502,7 @@ function buildDropCapFlowable(
     })
     const offsets = [...Array.from({ length: depth }, () => indentLeft + capWidth), indentLeft]
     return {
-      lines: toFlowLines(broken, font, sizePt, offsets, notes.markToNote),
+      lines: fromWord(toFlowLines(broken, font, sizePt, offsets, notes.markToNote), shift),
       capSize,
       capWidth
     }
@@ -2575,6 +2611,8 @@ export function layout(
   const chapterPages: LaidOutBook['chapterPages'] = []
   /** First page each block opens on — recorded as its first line is placed. */
   const blockPagesMap = new Map<string, number>()
+  /** Each further page a block runs on to, with the first word that begins there. */
+  const blockTurns = new Map<string, { word: number; pageIndex: number }[]>()
   const warnings: LayoutWarning[] = []
 
   // A heading with no level is a level-1 heading to everything below, and a
@@ -3264,6 +3302,20 @@ export function layout(
       ) {
         blockPagesMap.set(flow.blockId, current().index)
       }
+      // And where it runs on to another page, the first word that begins
+      // there — so a word inside a long paragraph has a page, not only the
+      // paragraph's opening (`BlockPage.turns`).
+      if (take > 0 && placed > 0 && flow.blockId !== undefined) {
+        const opened = blockPagesMap.get(flow.blockId)
+        const turns = blockTurns.get(flow.blockId) ?? []
+        const last = turns[turns.length - 1]?.pageIndex ?? opened
+        const word = flow.lines
+          .slice(placed, placed + take)
+          .find((line) => line.firstWord !== undefined)?.firstWord
+        if (opened !== undefined && last !== current().index && word !== undefined) {
+          blockTurns.set(flow.blockId, [...turns, { word, pageIndex: current().index }])
+        }
+      }
 
       if (flow.chapter && !headingRecorded) {
         headingRecorded = true
@@ -3410,11 +3462,22 @@ export function layout(
     widthPt: trim.widthPt,
     heightPt: trim.heightPt,
     chapterPages,
-    blockPages: [...blockPagesMap].map(([blockId, pageIndex]) => ({
-      blockId,
-      pageIndex,
-      folio: folioFor(pages[pageIndex]!, frontMatterPageCount)
-    })),
+    blockPages: [...blockPagesMap].map(([blockId, pageIndex]) => {
+      const turns = blockTurns.get(blockId)
+      return {
+        blockId,
+        pageIndex,
+        folio: folioFor(pages[pageIndex]!, frontMatterPageCount),
+        ...(turns
+          ? {
+              turns: turns.map((t) => ({
+                ...t,
+                folio: folioFor(pages[t.pageIndex]!, frontMatterPageCount)
+              }))
+            }
+          : {})
+      }
+    }),
     fontsUsed: collectFonts(laidOut),
     warnings,
     notesPlaced: placedIds.size,

@@ -205,6 +205,21 @@ export interface LaidOutPage {
   chapterTitle: string | null
 }
 
+/** Where a block was set: the page it opens on, and every page it runs on to. */
+export interface BlockPage {
+  blockId: string
+  pageIndex: number
+  folio: string | null
+  /**
+   * Each further page the block runs on to, with the first of its words that
+   * begins there, in the block's own word count. Absent on a block set on one
+   * page. A word belongs to the last turn at or before it, or to the opening
+   * page — which is how a page of the original that begins in the middle of a
+   * paragraph is found on the page of this edition its first word fell on.
+   */
+  turns?: { word: number; pageIndex: number; folio: string | null }[]
+}
+
 /** The finished book, plus the facts downstream steps ask of it. */
 export interface LaidOutBook {
   pages: LaidOutPage[]
@@ -227,7 +242,7 @@ export interface LaidOutBook {
    * this is what lets an editing view say "page 47 begins here" without a
    * second renderer estimating anything.
    */
-  blockPages: { blockId: string; pageIndex: number; folio: string | null }[]
+  blockPages: BlockPage[]
   /** Fonts actually used, so an embedder knows what to subset. */
   fontsUsed: FontRef[]
   /** Lines that would not fit their measure. Empty is the good case, and real. */

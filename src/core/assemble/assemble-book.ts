@@ -24,6 +24,8 @@ import {
   type PageRole,
   type SynopsisEntry
 } from '@core/pages'
+import { folioRuns, type FolioRun } from './folios'
+import type { Seam } from './seams'
 import {
   joinStyling,
   moveParts,
@@ -57,6 +59,11 @@ export interface BookBlock extends TranscribedBlock {
   id: string
   /** Pages this block's text came from (more than one when a seam was joined). */
   sourcePages: number[]
+  /**
+   * Where each later page's text begins, for a block joined across a seam —
+   * see `./seams`. Absent on a block read from one leaf.
+   */
+  seams?: Seam[]
   /**
    * A number line set small above this heading: "BOOK ONE" over "THE HUMAN
    * AURA".
@@ -377,6 +384,12 @@ export interface BookDocument {
    * away. Reported, never dropped.
    */
   synopsesUnmatched: { title: string; label: string; synopsis: string }[]
+  /**
+   * Which leaf carries which page of the original, read off the folios the
+   * leaves print — see `./folios`. What a page reference in the original's
+   * contents is resolved through. Absent on a document nobody assembled.
+   */
+  folios?: FolioRun[]
 }
 
 /** A hyphen at the end of a block that continues — a word split by the page break. */
@@ -706,6 +719,10 @@ export function assembleBook(
         previous.text = joined
         if (!previous.sourcePages.includes(page.pageIndex)) {
           previous.sourcePages.push(page.pageIndex)
+          // Where this leaf's text begins in the joined block, counted on the
+          // joined text so a healed hyphen is the word it makes (`./seams`).
+          const word = wordCount(joined) - wordCount(block.text)
+          previous.seams = [...(previous.seams ?? []), { page: page.pageIndex, word }]
         }
         previous.continuesNext = block.continuesNext
         continue
@@ -838,7 +855,8 @@ export function assembleBook(
     illustrations,
     sections: [],
     skipped,
-    synopsesUnmatched
+    synopsesUnmatched,
+    folios: folioRuns(ordered)
   }
 }
 
