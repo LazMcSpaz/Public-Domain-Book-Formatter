@@ -83,3 +83,27 @@ describe('which leaf carries a page of the original', () => {
     expect(assembleBook(book).folios).toEqual(runs)
   })
 })
+
+/**
+ * *The Human Aura* and *The Astral World* bound as one volume: each has its
+ * own contents and each numbers its pages from 1, so every folio is printed
+ * twice. On its own a folio names no leaf; cited from a work's contents it
+ * names the leaf in the work that follows that contents.
+ */
+describe('a volume that binds two works', () => {
+  const bound = folioRuns([
+    leaf(2, 'table-of-contents'),
+    ...Array.from({ length: 10 }, (_, i) => leaf(4 + i, 'body', String(i + 1))),
+    leaf(20, 'table-of-contents'),
+    ...Array.from({ length: 10 }, (_, i) => leaf(22 + i, 'body', String(i + 1)))
+  ])
+
+  it('gives no answer for a folio both works print, with nothing to choose between them', () => {
+    expect(leafOfFolio(bound, 5)).toBeNull()
+  })
+
+  it('answers from the work whose contents cites it', () => {
+    expect(leafOfFolio(bound, 5, 2)).toBe(8)
+    expect(leafOfFolio(bound, 5, 20)).toBe(26)
+  })
+})

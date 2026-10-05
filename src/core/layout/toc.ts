@@ -162,10 +162,12 @@ export function layoutWithToc(
 
   // The page references in each entry's description, in the entry's order.
   // Kept apart from the text, which carries them as the original printed them.
-  const references: ContentsReference[][] = entries.map((entry) => {
-    const chapter = doc.chapters.find((c) => c.id === entry.id)
-    return entry.synopsis !== undefined ? (chapter?.synopsisSource?.references ?? []) : []
-  })
+  const sources = entries.map((entry) =>
+    entry.synopsis !== undefined
+      ? doc.chapters.find((c) => c.id === entry.id)?.synopsisSource
+      : undefined
+  )
+  const references: ContentsReference[][] = sources.map((source) => source?.references ?? [])
 
   // The entries as one pass prints them: with the numbers a pass measured, or
   // with none and every reference taken out.
@@ -195,7 +197,7 @@ export function layoutWithToc(
         return pageIndex === undefined ? null : (book.pages[pageIndex]?.folio ?? null)
       }),
       references: entries.map((entry, i) =>
-        references[i]!.map((ref) => pages.printed(ref, entry.synopsis ?? ''))
+        references[i]!.map((ref) => pages.printed(ref, entry.synopsis ?? '', sources[i]?.pages[0]))
       )
     }
   }

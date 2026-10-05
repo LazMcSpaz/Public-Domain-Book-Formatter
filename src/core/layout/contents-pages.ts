@@ -43,10 +43,14 @@ export function pageOfWord(entry: BlockPage, word: number): number {
 
 /** Answers "which page of this edition" for pages of the original, against one layout. */
 export interface ContentsPages {
-  /** The page index the first word of the original's page `folio` fell on, or null. */
-  pageOfFolio(folio: number): number | null
+  /**
+   * The page index the first word of the original's page `folio` fell on, or
+   * null. `citedFrom` is the leaf the reference was read from, which picks
+   * the work a folio belongs to in a volume that binds two (`leafOfFolio`).
+   */
+  pageOfFolio(folio: number, citedFrom?: number): number | null
   /** What a reference prints in this edition — a page or a range — or null. */
-  printed(ref: ContentsReference, original: string): string | null
+  printed(ref: ContentsReference, original: string, citedFrom?: number): string | null
 }
 
 export function contentsPages(
@@ -94,19 +98,19 @@ export function contentsPages(
     return null
   }
 
-  const pageOfFolio = (folio: number): number | null => {
-    const leaf = leafOfFolio(doc.folios ?? [], folio)
+  const pageOfFolio = (folio: number, citedFrom?: number): number | null => {
+    const leaf = leafOfFolio(doc.folios ?? [], folio, citedFrom)
     return leaf === null ? null : pageOfLeaf(leaf)
   }
 
   return {
     pageOfFolio,
-    printed(ref, original) {
-      const from = pageOfFolio(ref.from)
+    printed(ref, original, citedFrom) {
+      const from = pageOfFolio(ref.from, citedFrom)
       if (from === null) return null
       const first = laid.pages[from]?.folio ?? null
       if (first === null) return null
-      const to = ref.to === ref.from ? from : pageOfFolio(ref.to)
+      const to = ref.to === ref.from ? from : pageOfFolio(ref.to, citedFrom)
       const last = to === null ? null : (laid.pages[to]?.folio ?? null)
       // A range keeps the book's own sign; a range whose end has no page is
       // the page it begins on, which is where the reader is sent first.

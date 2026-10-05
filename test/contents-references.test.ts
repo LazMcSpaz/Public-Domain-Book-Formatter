@@ -295,6 +295,35 @@ describe('matching a letter’s description to the letter', () => {
 })
 
 /**
+ * Two works bound in one volume, each with its own contents and each paged
+ * from 1. A reference in the second work's contents names the second work's
+ * page 1, and the only thing that says so is which contents it was read from.
+ */
+describe('references in a volume that binds two works', () => {
+  const described = (n: string, page: number) =>
+    p(`Letter No. ${n}.—A letter of the work described here at some length; ${page}.`)
+  const doc = assembleBook([
+    leaf(0, [h('CONTENTS'), described('I', 1), described('II', 2)], 'table-of-contents'),
+    leaf(1, [h('LETTER No. I'), p(`${run('one', 80)}.`)], 'body', '1'),
+    leaf(2, [h('LETTER No. II'), p(`${run('two', 80)}.`)], 'body', '2'),
+    leaf(3, [h('CONTENTS'), described('III', 1), described('IV', 2)], 'table-of-contents'),
+    leaf(4, [h('LETTER No. III'), p(`${run('three', 80)}.`)], 'body', '1'),
+    leaf(5, [h('LETTER No. IV'), p(`${run('four', 80)}.`)], 'body', '2')
+  ])
+  const book = layoutWithToc(doc, defaultStyleProfile(), measurer, options)
+  const folioOf = (title: string): string =>
+    book.pages[book.chapterPages.find((c) => c.title === title)!.pageIndex]!.folio!
+
+  it('sends each to the page of its own work', () => {
+    const text = contentsText(book)
+    expect(folioOf('LETTER No. I')).not.toBe(folioOf('LETTER No. III'))
+    expect(text).toContain(`at some length; ${folioOf('LETTER No. I')}.`)
+    expect(text).toContain(`at some length; ${folioOf('LETTER No. III')}.`)
+    expect(book.warnings.some((w) => /cannot place/u.test(w.text))).toBe(false)
+  })
+})
+
+/**
  * The preface and introduction stand above the letters in the original's
  * contents, set with dashes for leaders. The body prints both as chapters and
  * the contents lists the body's chapters, so each is listed once — the leader

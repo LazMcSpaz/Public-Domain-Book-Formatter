@@ -85,12 +85,26 @@ export function folioRuns(
 
 /**
  * The leaf that carries a folio of the original, or null where the book
- * never prints it — or prints it twice, in two runs, which is no answer
- * either.
+ * never prints it.
+ *
+ * A volume that binds two works prints each folio twice — *The Human Aura*
+ * and *The Astral World* both start again at page 1 — and a folio in two runs
+ * is no answer on its own. `after` is the leaf that cites it, the contents
+ * leaf a reference was read from, and a work's contents stands before the
+ * work: so the run that begins after it, and nearest it, is the one meant.
+ * With no such run, or nothing said, two runs are still no answer.
  */
-export function leafOfFolio(runs: readonly FolioRun[], folio: number): number | null {
+export function leafOfFolio(
+  runs: readonly FolioRun[],
+  folio: number,
+  after?: number
+): number | null {
   const found = runs.filter((run) => folio >= run.folio && folio < run.folio + run.length)
-  if (found.length !== 1) return null
-  const run = found[0]!
-  return run.leaf + (folio - run.folio)
+  const run =
+    found.length === 1
+      ? found[0]!
+      : after === undefined
+        ? undefined
+        : found.filter((r) => r.leaf > after).sort((a, b) => a.leaf - b.leaf)[0]
+  return run ? run.leaf + (folio - run.folio) : null
 }
