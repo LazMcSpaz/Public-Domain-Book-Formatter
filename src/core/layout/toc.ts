@@ -19,15 +19,45 @@
  * from `buildContents` reserving the folio column whether or not it has a
  * number to put in it; the guard here is a check on it, not a hope.
  *
+ * ## When the numbers are in the prose
+ *
+ * An analytical contents of the older kind carries page references inside its
+ * descriptions — *The Mahatma Letters* closes every group of topics on one,
+ * `; 52-3.` — and those are set to this edition's pages too
+ * (`./contents-pages`). They cannot be reserved the way the folio column is:
+ * `52-3` may become `61` or `178-80`, so the descriptions, and with them the
+ * contents, change length between the passes. What saves the scheme is that
+ * the body's folios restart at 1 after roman-numbered front matter, so the
+ * contents' length cannot move a page the body prints; what it *can* move is
+ * the roman folio of a division the editor wrote into the front matter after
+ * it, and those are in the contents too.
+ *
+ * So the invariant checked is the real one, and not the page count that stood
+ * in for it: **every number the contents prints equals the number its own
+ * layout gives when asked again.** Pass one is laid out with no numbers and
+ * the references taken out; each later pass prints what the pass before it
+ * measured, and is accepted only when re-measuring it gives back exactly what
+ * it printed. One more pass is allowed when it does not — a front-matter folio
+ * moved by the contents' new length settles there — and if that still
+ * disagrees, the numberless pass is printed and a warning says so.
+ *
  * Pure: `layout()` is a pure function of its inputs, which is what makes
  * "run it again" a legitimate way to solve this at all.
  */
 import type { StyleProfile } from '@core/model'
 import type { BookDocument } from '@core/assemble'
+import type { ContentsReference } from '@core/pages'
 import { ENDNOTES_TITLE, layout, type LayoutOptions, type TocLine } from './paginate'
 import { headingsWithoutMarks, prepareFootnotes } from './footnotes'
+import { contentsPages, synopsisWithPages } from './contents-pages'
 import type { TextMeasurer } from './measure'
 import type { LaidOutBook } from './types'
+
+/** What a contents prints that a layout has to supply: per entry, its folio and its references. */
+interface ContentsNumbers {
+  folios: (string | null)[]
+  references: (string | null)[][]
+}
 
 /**
  * Lay the book out with a contents page whose numbers are real.
@@ -36,16 +66,22 @@ import type { LaidOutBook } from './types'
  * only wants a sample: a contents page built from four pages of a four-hundred
  * page book would be worse than none, and the design preview is the only caller
  * that asks for a sample.
+ *
+ * `engine` is the layout run each pass, and is only ever not `layout` in a
+ * test: a guard whose fallback cannot be made to fire is a guard nobody knows
+ * reports, and an engine that disagrees with itself on demand is the one way
+ * to make it fire.
  */
 export function layoutWithToc(
   doc: BookDocument,
   profile: StyleProfile,
   measurer: TextMeasurer,
-  options: LayoutOptions
+  options: LayoutOptions,
+  engine: typeof layout = layout
 ): LaidOutBook {
-  if (options.maxBodyPages !== undefined) return layout(doc, profile, measurer, options)
+  if (options.maxBodyPages !== undefined) return engine(doc, profile, measurer, options)
   if (doc.chapters.length === 0 && doc.sections.length === 0 && options.orphanNotes !== 'collect') {
-    return layout(doc, profile, measurer, options)
+    return engine(doc, profile, measurer, options)
   }
 
   // Entries come from the document, not from the first pass's `chapterPages`,
@@ -122,49 +158,129 @@ export function layoutWithToc(
 
   // Nothing to list after all: a book with no chapters whose notes all found
   // their references. One pass, and no contents page.
-  if (entries.length === 0) return layout(doc, profile, measurer, options)
+  if (entries.length === 0) return engine(doc, profile, measurer, options)
 
-  const first = layout(doc, profile, measurer, { ...options, toc: entries })
-
-  const placed = new Map(first.chapterPages.map((c) => [c.id, c.pageIndex]))
-  const numbered: TocLine[] = entries.map((entry) => {
-    const pageIndex = placed.get(entry.id)
-    const folio = pageIndex === undefined ? null : (first.pages[pageIndex]?.folio ?? null)
-    return { ...entry, folio }
+  // The page references in each entry's description, in the entry's order.
+  // Kept apart from the text, which carries them as the original printed them.
+  const references: ContentsReference[][] = entries.map((entry) => {
+    const chapter = doc.chapters.find((c) => c.id === entry.id)
+    return entry.synopsis !== undefined ? (chapter?.synopsisSource?.references ?? []) : []
   })
 
-  const second = layout(doc, profile, measurer, { ...options, toc: numbered })
+  // The entries as one pass prints them: with the numbers a pass measured, or
+  // with none and every reference taken out.
+  const lines = (numbers: ContentsNumbers | null): TocLine[] =>
+    entries.map((entry, i) => ({
+      ...entry,
+      folio: numbers ? numbers.folios[i]! : null,
+      ...(entry.synopsis !== undefined
+        ? {
+            synopsis: synopsisWithPages(
+              entry.synopsis,
+              references[i]!,
+              numbers ? numbers.references[i]! : null
+            )
+          }
+        : {})
+    }))
 
-  // If filling the numbers in changed the pagination, the contents is now
-  // describing a book that no longer exists. It cannot happen while the folio
-  // column is fixed — but a silently wrong contents page is exactly the kind of
-  // error a reader would trust, so the invariant is checked rather than assumed.
-  //
-  // And it *did* happen: a descriptive contents printed its folio line only
-  // once the number was known, so pass two ran a line per entry longer, and the
-  // combined volume's contents spilled onto another leaf. The guard caught it
-  // and did the safe thing — and the safe thing is pass one, which has no page
-  // numbers in it at all. The cause is fixed (the line is reserved in both
-  // passes now), but the fallback still has to say so: a contents page with no
-  // numbers is worse than a wrong one, because nothing about it looks wrong.
-  // Reported on the `warnings` channel, which otherwise carries overfull lines
-  // — a stretch of that meaning, and better than the alternative of shipping
-  // this in silence.
-  if (second.pages.length !== first.pages.length) {
-    const contentsPage = first.pages.findIndex((p) => p.kind === 'contents')
+  // What a layout says the contents should print. A chapter's folio is matched
+  // back by identity; a reference is asked of the pages this layout set.
+  const measured = (book: LaidOutBook): ContentsNumbers => {
+    const placed = new Map(book.chapterPages.map((c) => [c.id, c.pageIndex]))
+    const pages = contentsPages(doc, book)
     return {
-      ...first,
-      warnings: [
-        ...first.warnings,
-        {
-          pageIndex: contentsPage < 0 ? 0 : contentsPage,
-          text:
-            'The contents page is printing without page numbers: filling them in ' +
-            'changed the length of the book, so the numbered pass had to be discarded.'
-        }
-      ]
+      folios: entries.map((entry) => {
+        const pageIndex = placed.get(entry.id)
+        return pageIndex === undefined ? null : (book.pages[pageIndex]?.folio ?? null)
+      }),
+      references: entries.map((entry, i) =>
+        references[i]!.map((ref) => pages.printed(ref, entry.synopsis ?? ''))
+      )
     }
   }
+  const same = (a: ContentsNumbers, b: ContentsNumbers): boolean =>
+    JSON.stringify(a) === JSON.stringify(b)
 
-  return second
+  const first = engine(doc, profile, measurer, { ...options, toc: lines(null) })
+
+  // Each pass prints what the one before it measured, and stands only if
+  // measuring it again gives back what it printed. One more pass is allowed:
+  // the numbers going in can change the contents' length, which moves the
+  // roman folio of anything the editor wrote after it, and the pass after that
+  // prints the moved number. The body's own folios cannot move — they restart
+  // at 1 after the front matter — which is why one more is enough.
+  let printed = measured(first)
+  for (let pass = 0; pass < 2; pass++) {
+    const book = engine(doc, profile, measurer, { ...options, toc: lines(printed) })
+    const again = measured(book)
+    if (same(printed, again)) return withUnplaced(book, printed, entries, references)
+    printed = again
+  }
+
+  // The numbers never agreed with the layout that printed them, so the
+  // contents is describing a book that does not exist. Printing it anyway is
+  // the error a reader would trust; printing none is what is left, and it has
+  // to say so.
+  //
+  // This fired once for a different reason: a descriptive contents printed
+  // its folio line only once the number was known, so pass two ran a line per
+  // entry longer, and the combined volume's contents spilled onto another leaf.
+  // The cause is fixed (the line is reserved in both passes now), but the
+  // fallback still has to report: a contents page with no numbers is worse
+  // than a wrong one, because nothing about it looks wrong. Reported on the
+  // `warnings` channel, which otherwise carries overfull lines — a stretch of
+  // that meaning, and better than the alternative of shipping this in silence.
+  const contentsPage = first.pages.findIndex((p) => p.kind === 'contents')
+  return {
+    ...first,
+    warnings: [
+      ...first.warnings,
+      {
+        pageIndex: contentsPage < 0 ? 0 : contentsPage,
+        text:
+          'The contents page is printing without page numbers: the numbers it would ' +
+          'print did not agree with the layout that printed them after another pass, ' +
+          'so the numbered passes were discarded.'
+      }
+    ]
+  }
+}
+
+/**
+ * A layout whose contents is right, with one warning more where a reference
+ * in the original's contents names a page this edition could not place — a
+ * folio the original never prints, or a page past the end of the text. Such a
+ * reference is printed without a number, and the reader is not told where it
+ * went unless this says so.
+ */
+function withUnplaced(
+  book: LaidOutBook,
+  numbers: ContentsNumbers,
+  entries: readonly TocLine[],
+  references: readonly ContentsReference[][]
+): LaidOutBook {
+  const missing: string[] = []
+  references.forEach((refs, i) =>
+    refs.forEach((ref, k) => {
+      if (numbers.references[i]![k] !== null) return
+      const original = entries[i]!.synopsis?.slice(ref.start, ref.end) ?? String(ref.from)
+      missing.push(`${entries[i]!.label ?? entries[i]!.title} (${original})`)
+    })
+  )
+  if (missing.length === 0) return book
+  const contentsPage = book.pages.findIndex((p) => p.kind === 'contents')
+  return {
+    ...book,
+    warnings: [
+      ...book.warnings,
+      {
+        pageIndex: contentsPage < 0 ? 0 : contentsPage,
+        text:
+          `${missing.length} page reference${missing.length === 1 ? '' : 's'} in the ` +
+          'original contents name a page this edition cannot place, and print without a ' +
+          `number: ${missing.join(', ')}`
+      }
+    ]
+  }
 }

@@ -1035,6 +1035,7 @@ function chaptersOf(
     return {
       ...chapter,
       ...(from.synopsis !== undefined ? { synopsis: from.synopsis } : {}),
+      ...(from.synopsisSource !== undefined ? { synopsisSource: from.synopsisSource } : {}),
       ...(from.contentsTitle !== undefined ? { contentsTitle: from.contentsTitle } : {})
     }
   })

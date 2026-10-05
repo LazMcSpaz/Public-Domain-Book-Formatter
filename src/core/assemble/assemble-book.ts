@@ -22,7 +22,8 @@ import {
   synopsisKey,
   synopsisLooksSound,
   type PageRole,
-  type SynopsisEntry
+  type SynopsisEntry,
+  type SynopsisSource
 } from '@core/pages'
 import { folioRuns, type FolioRun } from './folios'
 import type { Seam } from './seams'
@@ -167,6 +168,11 @@ export interface ChapterEntry {
    * contents, or when the parse was not sound enough to trust.
    */
   synopsis?: string
+  /**
+   * Where `synopsis` was read from and the page references in it, for a
+   * synopsis read off contents leaves that said which they were.
+   */
+  synopsisSource?: SynopsisSource
   /**
    * The chapter's name as the original contents gives it, where the body
    * prints only a number.
@@ -383,7 +389,12 @@ export interface BookDocument {
    * only plainer, so nothing looks broken and the prose was read and thrown
    * away. Reported, never dropped.
    */
-  synopsesUnmatched: { title: string; label: string; synopsis: string }[]
+  synopsesUnmatched: {
+    title: string
+    label: string
+    synopsis: string
+    source?: SynopsisSource
+  }[]
   /**
    * Which leaf carries which page of the original, read off the folios the
    * leaves print — see `./folios`. What a page reference in the original's
@@ -784,14 +795,31 @@ export function assembleBook(
   }
   const synopses = contentsRuns.flatMap((run) => {
     const parsed = readSynopsis(
-      run.flatMap((page) => page.blocks.map((b) => ({ kind: b.kind, text: b.text })))
+      run.flatMap((page) =>
+        page.blocks.map((b, i) => ({
+          kind: b.kind,
+          text: b.text,
+          id: `p${page.pageIndex}b${i}`,
+          page: page.pageIndex
+        }))
+      )
     )
     return synopsisLooksSound(parsed) ? parsed : []
   })
+  // Where each synopsis came from, so a correction can name it and the
+  // contents can set the page references in it (`SynopsisSource`).
+  const sourceOf = (e: SynopsisEntry): SynopsisSource | undefined =>
+    e.id !== undefined
+      ? { id: e.id, pages: e.pages ?? [], ...(e.references ? { references: e.references } : {}) }
+      : undefined
   const synopsesUnmatched: BookDocument['synopsesUnmatched'] = []
   if (synopses.length > 0) {
     const described = synopses.filter((e) => e.synopsis.length > 0)
-    const byTitle = new Map(described.map((e) => [synopsisKey(e.title), e]))
+    // An entry with no title — a letter the contents names by its number
+    // alone — is found by its label below, never by an empty title.
+    const byTitle = new Map(
+      described.filter((e) => synopsisKey(e.title)).map((e) => [synopsisKey(e.title), e])
+    )
     // The chapter *number*, as a second way in. A book can call a chapter two
     // things — *The Human Aura* lists "The Aura Kaleidoscope" in its contents
     // and heads the chapter "THE AURIC KALEIDOSCOPE" — and three of its ten
@@ -823,20 +851,47 @@ export function assembleBook(
       // label, the number being all there is: the number is then its title,
       // and the only name the two pages share.
       const numberOnly = !chapter.label && isNumberLine(chapter.title)
-      const number = chapter.label ?? (numberOnly ? chapter.title : '')
+      // And a heading that is its own number in a form `isNumberLine` does not
+      // know — `LETTER No. XVI`, the whole of each letter's heading in *The
+      // Mahatma Letters* — is matched to the contents entry that names the
+      // letter by that label (`Letter No. XVI,—The Devachan Letter…`).
+      const number = chapter.label ?? chapter.title
       const labelled = number ? (byLabel.get(synopsisKey(number)) ?? []) : []
       const found = byTitle.get(synopsisKey(chapter.title)) ?? labelled.find((e) => !claimed.has(e))
       if (!found || claimed.has(found)) continue
       chapter.synopsis = found.synopsis
+      const source = sourceOf(found)
+      if (source) chapter.synopsisSource = source
       if (numberOnly && found.title) chapter.contentsTitle = found.title
       claimed.add(found)
     }
+    // A letter the contents describes once and the body prints in parts:
+    // `Letter No. III.` in the contents over `LETTER No. IIIa.`, `IIIb.` and
+    // `IIIc.` in the body. The description is of the whole letter and goes
+    // under its first part. Exact rather than fuzzy — the label and an `a`,
+    // which no roman numeral contains — and only for an entry nothing claimed.
+    for (const entry of described) {
+      if (claimed.has(entry) || !entry.label) continue
+      const first = chapters.find(
+        (c) =>
+          c.synopsis === undefined &&
+          !c.label &&
+          synopsisKey(c.title) === `${synopsisKey(entry.label)}a`
+      )
+      if (!first) continue
+      first.synopsis = entry.synopsis
+      const source = sourceOf(entry)
+      if (source) first.synopsisSource = source
+      claimed.add(entry)
+    }
     for (const entry of described) {
       if (claimed.has(entry)) continue
+      const source = sourceOf(entry)
       synopsesUnmatched.push({
         title: entry.title,
         label: entry.label,
-        synopsis: entry.synopsis
+        synopsis: entry.synopsis,
+        ...(source ? { source } : {})
       })
     }
   }

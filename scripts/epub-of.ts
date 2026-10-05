@@ -26,6 +26,7 @@ import { join } from 'node:path'
 import { assembleBook } from '@core/assemble'
 import { applyEdits } from '@core/edits'
 import { headingsWithoutMarks, prepareFootnotes } from '@core/layout/footnotes'
+import { synopsisWithPages } from '@core/layout/contents-pages'
 import { parseInlineMarkup, type InlinePart } from '@core/transcribe/markup'
 
 const [dir, out] = process.argv.slice(-2)
@@ -144,7 +145,12 @@ doc.blocks.forEach((block, i) => {
       // A chapter the body only numbers is named as the original contents
       // named it, as the printed contents does.
       title: head?.contentsTitle ? `${name} ${head.contentsTitle}` : name,
-      synopsis: head?.synopsis ?? null,
+      // Without the original's page references: an EPUB has no pages for
+      // them to name, and the 1923 numbers would name the wrong ones.
+      synopsis:
+        head?.synopsis === undefined
+          ? null
+          : synopsisWithPages(head.synopsis, head.synopsisSource?.references ?? [], null),
       level: head?.level ?? 1,
       body: [],
       notes: []
