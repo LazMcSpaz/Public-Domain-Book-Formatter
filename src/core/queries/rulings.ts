@@ -268,6 +268,20 @@ export function unapplied(rulings: readonly Ruling[], book: BookDocument): Rulin
       const printed = ruling.pageIndex === null ? views : onLeaf(ruling.pageIndex)
       return !has(printed, NOTATIONS.length - 1, written)
     }
+    // A note the page printed with no mark for it, hung on a mark the edition
+    // supplies: the quote is the note and stands as printed, and the
+    // correction is the place the mark goes — `LETTER No. XCVIII¹` on leaf 477
+    // of The Mahatma Letters. Asked whether the quote has gone, such a ruling
+    // is outstanding for ever. What can be asked is whether the leaf now
+    // carries the correction, mark and all.
+    if (
+      ruling.pageIndex !== null &&
+      REFERENCE_MARK.test(rawWanted) &&
+      !REFERENCE_MARK.test(rawQuote.replace(LEADING_MARK, '')) &&
+      isNoteOn(book, ruling.pageIndex, rawQuote)
+    ) {
+      return !has(onLeaf(ruling.pageIndex), NOTATIONS.length - 1, written)
+    }
     // A footnote is quoted from the leaf with its reference mark at its head,
     // and the book holds the note without it: assembly takes the mark off to
     // set it as a raised figure. `† Ibid, Vol. II.` on leaf 199 of *The Key to
@@ -323,6 +337,19 @@ function landed(
   // second. Asking then reports every such ruling as unapplied forever.
   if (NOTATIONS[level](wanted).includes(NOTATIONS[level](quote))) return true
   return !has(printed, level, quote)
+}
+
+/** A reference mark, as a note's head or a word's tail carries one. */
+const REFERENCE_MARK = /[*†‡§¶‖¹²³⁰-⁹]/u
+const LEADING_MARK = /^[*†‡§¶‖¹²³⁰-⁹]+\s*/u
+
+/** Is `quote` the text of a note printed at the foot of `page`? */
+function isNoteOn(doc: BookDocument, page: number, quote: string): boolean {
+  const loose = NOTATIONS[NOTATIONS.length - 1]!
+  const wanted = loose(quote.replace(LEADING_MARK, '').trim().toLowerCase())
+  return doc.footnotes.some(
+    (n) => n.pageIndex === page && loose(n.text.toLowerCase()).includes(wanted)
+  )
 }
 
 /** A correction that says the printed words go, rather than what replaces them. */
