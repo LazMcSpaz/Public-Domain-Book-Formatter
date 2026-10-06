@@ -74,7 +74,7 @@ export const FIGURE_NOTE: Readonly<Record<GroundFigure, string>> = {
   'all-seeing-eye':
     'Traced from the cover of Hall’s own magazine, March 1924: a fan of fine rays, seven seven-pointed stars, an open eye. Its own emblem, so it prints stronger than a ground — at a few per cent the rays merge into a grey wash, which is what the paper does on the wrappers and what the trace exists to avoid.',
   'all-seeing-eye-radiant':
-    'The same engraving with every one of its 133 rays carried on past the fan to the edges of the board, so the whole cover is the radiance and the eye sits in the middle of it rather than in a half-disc at the foot. The rays leave at the angles and in the spacing the press set them; what changes going outward is only that they stop widening, because a ray carried out at its own angular width inks half the board at every radius and prints as a wash rather than as light.'
+    'Hall\u2019s eye and his seven stars, with the engraving\u2019s own 133 rays carried out to the edges of the board, so the whole cover is the radiance rather than a half-disc at the foot. The rays leave at the angles, widths and spacing the press set them, cut into the same dashes and wandering as far off true. The fan\u2019s own hatching is not printed: it is an ellipse, reaching twice as far at the sides as at the foot, and under the carried rays that is a flat lozenge round the eye \u2014 the shape a reader sees and the one thing this is for.'
 }
 
 /**

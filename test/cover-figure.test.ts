@@ -199,6 +199,29 @@ describe('the figure library', () => {
     expect(w! / h!).toBeGreaterThan(widest)
   })
 
+  it('prints the radiance\u2019s eye and nothing else of the engraving', () => {
+    // The fault this pins is the one the editor saw twice: the fan's own
+    // hatching, printed under the carried rays, is an ellipse reaching twice as
+    // far at the sides as at the foot, so the ink it adds makes a flat lozenge
+    // round the eye. Fading the join does not touch it, because the join is not
+    // what shows.
+    //
+    // Measuring evenness photometrically was tried and will not do it — the
+    // seven stars are holes and the eye is a mass, so they are legitimately
+    // angular and no assay separates them from a lozenge. What is checkable is
+    // the structure: the trace enters the artwork once, through a clip, and
+    // that clip is a fraction of the figure. Everything else drawn is rays.
+    const file = readFileSync(join('public', FIGURE_SRC['all-seeing-eye-radiant']), 'utf8')
+    const [, , , boxH] = /viewBox="([-\d.\s]+)"/.exec(file)![1]!.trim().split(/\s+/).map(Number)
+    const clipped = file.match(/<g clip-path="url\(#eye\)">/g) ?? []
+    expect(clipped).toHaveLength(1)
+    const clip = /<clipPath id="eye"><path d="([^"]+)"/.exec(file)
+    expect(clip, 'the engraving must be clipped, not drawn whole').not.toBeNull()
+    const ys = [...clip![1]!.matchAll(/[\d.]+ ([\d.]+)/g)].map((m) => Number(m[1]))
+    const span = Math.max(...ys) - Math.min(...ys)
+    expect(span / boxH!).toBeLessThan(0.12)
+  })
+
   it('leaves every figure enough room for the anchor it asks for', () => {
     // Against the artwork on disk rather than a number kept beside the anchor,
     // because the thing that decides how much room there is *is* the file's

@@ -141,17 +141,45 @@ the corners. **A run far wider than the rest is rays the trace lost**, where the
 slits closed up under the bottom star and in three other places, so the carried
 width is capped at the runs' ninth decile and 13 of the 133 are held back.
 
-**The fan's own outline had to go, and could not be cut away.** Read as it was
-traced, the engraving is an ellipse — its ink reaches 953 px at the sides and
-464 at the foot — so rays that begin to thin where each one leaves the fan begin
-thinning at a different radius in every direction, and a wide flat lozenge of
-heavy ink stands round the eye with clean rays beyond it. Lifting the eye and
-the seven stars out and dropping the hatching was tried first and is not
-possible: labelled in the pixels, the eye's ink is one component with the whole
-fan and the bottom star's white is one with the background, because on the paper
-both touch the hatching. So the fan is **extended** instead. Every ray holds the
-fan's own angular width out to the fan's longest reach and only tapers past it,
-which makes the heavy zone a circle rather than a lens.
+**The fan's own hatching is not printed, and that is the whole of it.** The
+engraving is an ellipse — its ink reaches 953 px at the sides and 464 at the
+foot — so under the carried rays it adds ink where it is deep and none where it
+is shallow, and what a reader sees is a wide flat lozenge round the eye. Two
+repairs were made and shipped before the right one. Holding every ray at the
+fan's own width out to the fan's *longest* reach makes the heavy zone a circle,
+and the lozenge survived it. Giving the join a fade does not touch it either,
+because the join is not what shows. The hatching has to go.
+
+What is kept of the trace is what is a **figure** rather than a texture: the eye,
+and the seven stars. Neither can be lifted out by contour, and neither by
+labelling: the eye's ink is one connected component with the whole fan and the
+seventh star's white is one with the background, because on the paper both touch
+the hatching. Both come out by **walking outward from a seed at every angle**
+instead — a star and an eye are star-shaped about their own centres, so the
+first ink (or the last) traces the true outline off the original pixels, contacts
+and all. Six stars give their own seeds; growing the ink by 11 px seals the
+seventh's contacts and gives one, and it is then accepted on the same two
+measurements the six make — an area inside their range (20,371 against
+18,135–25,877) and a point-to-valley ratio inside theirs. Exactly one candidate
+in the picture passes both.
+
+**The stars are holes, so the field they are punched from has to be dense.** The
+engraving sets seventeen strokes just outside the eye and ninety-four at the
+rim — the rays multiply outward — and reproducing that was tried and gives up
+more than it gains, because a star-shaped hole in an open field is not a star,
+it is nothing. The star ring sits where the engraving is densest (52 to 62 per
+cent of the circle inked), so every ray runs from the eye. The count is measured
+and reported rather than used, so that this reads as a choice and not an
+oversight.
+
+**Measuring the evenness photometrically does not work**, and the attempt is
+worth recording. A twelve-sector spread reads the rays themselves, which are a
+hundred-and-thirty-third harmonic; the second harmonic, which is what an ellipse
+is, moves only from 16 to 10 per cent; and a half-peak edge per direction is
+pinned by the eye and the stars, which are legitimately angular. No assay
+separates a star from a lozenge. What is checkable is the structure, and a test
+pins it: the trace enters the artwork once, through a clip, and that clip is
+under a eighth of the figure's height. Everything else drawn is rays.
 
 **The texture is the engraving's, measured along its own rays.** A carried ray
 was a clean polygon, which reads as a different material from a cut one and puts
@@ -175,6 +203,16 @@ being the full height of the cover sheet. 2.6 is set by the **wrap**: across a
 whole 7×10 cover the eye stands on the front panel and the far corner of the
 back is 13.5 in away, which the artwork's own half-width has to reach. A test
 measures that against the file rather than against a number kept beside it.
+
+**Two things about the eye, both of which printed wrong first.** Its clip is a
+**disc of the mass's own reach**, not an outline: thinning the ink is what
+breaks the hatching away from the lid, and thinning eats the lid's two tips, so
+any outline taken from the thinned mass cuts them off and the eye prints chewed
+— an ellipse fitted to it did the same. A disc cannot, and being generous costs
+nothing, because what lies just outside the eye is rays either way. And the rays
+come in to the eye's own reach rather than to that disc: started on one circle
+they leave a bare ring round it, which is a hard halo, and any shape a reader can
+name is the fault this file exists to remove.
 
 **It prints over the type and the type has to move.** The pupil is set under the
 title rule, which on a `label` cover is where the author's name goes, so the
