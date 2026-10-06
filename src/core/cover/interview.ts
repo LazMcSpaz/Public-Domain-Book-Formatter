@@ -25,7 +25,8 @@ import {
   ARRANGEMENT_LABEL,
   defaultCover,
   normalizeLook,
-  type CoverDocument
+  type CoverDocument,
+  type FrameStyle
 } from './document'
 import {
   coverGeometry,
@@ -311,6 +312,32 @@ export function lookQuestions(state: CoverInterviewState): Question[] {
         { value: 'double', label: 'A double frame' }
       ],
       defaultValue: look.frontFrame
+    },
+    {
+      id: 'cover-blurb-size',
+      type: 'choice',
+      group: 'look',
+      prompt: 'How big is the copy on the back cover?',
+      help: 'The back cover is read at arm\u2019s length off a shelf or at thumbnail size in a listing, where a page size is small. What a larger one costs is words: the block has a bottom it has to stay above, and anything past it is reported rather than set.',
+      options: [
+        { value: '', label: 'Book size \u2014 reads like a page of the book' },
+        { value: '12', label: 'Larger' },
+        { value: '13.5', label: 'Largest \u2014 a short, bold blurb' }
+      ],
+      defaultValue: look.blurbSizePt === null ? '' : String(look.blurbSizePt)
+    },
+    {
+      id: 'cover-blurb-frame',
+      type: 'choice',
+      group: 'ornament',
+      prompt: 'A frame round the copy on the back cover?',
+      help: 'Struck round the copy itself rather than round the panel, in the accent colour \u2014 a border on the back board would run under the rectangle the barcode prints over, which is why the front frame is front only.',
+      options: [
+        { value: 'none', label: 'No frame' },
+        { value: 'plain', label: 'A plain frame' },
+        { value: 'double', label: 'A double frame' }
+      ],
+      defaultValue: look.blurbBorder
     },
     {
       id: 'cover-ornament',
@@ -657,6 +684,16 @@ export function coverFromAnswers(
       return asked.trim() !== '' && Number.isFinite(n) && n > 0 ? n : null
     })(),
     frontFrame: text(answers, 'cover-frame', doc.look.frontFrame),
+    blurbSizePt: (() => {
+      const asked = text(
+        answers,
+        'cover-blurb-size',
+        doc.look.blurbSizePt === null ? '' : String(doc.look.blurbSizePt)
+      )
+      const n = Number(asked)
+      return asked.trim() !== '' && Number.isFinite(n) && n > 0 ? n : null
+    })(),
+    blurbBorder: text(answers, 'cover-blurb-frame', doc.look.blurbBorder) as FrameStyle,
     authorAtFoot: flag(answers, 'cover-author-foot', doc.look.authorAtFoot),
     groundFigure:
       (text(answers, 'cover-figure', doc.look.groundFigure ?? '') as GroundFigure | '') || null,

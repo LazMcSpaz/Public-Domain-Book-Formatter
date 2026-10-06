@@ -161,6 +161,25 @@ export interface CoverLook {
   rule: RuleStyle
   /** A frame round the front cover's border, struck in the accent colour. */
   frontFrame: FrameStyle
+  /**
+   * The size the back-cover copy sets at, or null for the default.
+   *
+   * In points rather than a share of anything, because unlike the subtitle
+   * there is nothing on the back cover for it to be a share *of*: the measure
+   * is fixed by `blurbFrame` and the panel is otherwise empty. What it trades
+   * is plain — a larger size is read at arm's length in a shop and costs
+   * words, since the block has a bottom it must stay above.
+   */
+  blurbSizePt: number | null
+  /**
+   * A frame round the back-cover copy, struck in the accent colour.
+   *
+   * Round the *copy*, not round the panel: a border on the back cover would
+   * run under the rectangle KDP prints the barcode over, which is why
+   * `frontFrame` is front-only. A box drawn to the type it encloses has no
+   * such problem, and it is what a paper label does on the back board.
+   */
+  blurbBorder: FrameStyle
   /** Ornament id from the shipped library, or null. */
   ornamentId: string | null
   /**
@@ -370,6 +389,8 @@ export function defaultLook(): CoverLook {
     subtitleRatio: null,
     rule: 'single',
     frontFrame: 'none',
+    blurbSizePt: null,
+    blurbBorder: 'none',
     ornamentId: null,
     authorAtFoot: false,
     spineText: true,
@@ -471,6 +492,7 @@ export function normalizeLook(raw: unknown): CoverLook {
   const rawPalette = isRecord(raw['palette']) ? raw['palette'] : {}
   const size = raw['titleSizePt']
   const subtitleRatio = raw['subtitleRatio']
+  const blurbSize = raw['blurbSizePt']
   const positive = (v: unknown): number | null =>
     typeof v === 'number' && Number.isFinite(v) && v > 0 ? v : null
   return {
@@ -493,6 +515,8 @@ export function normalizeLook(raw: unknown): CoverLook {
     subtitleRatio: positive(subtitleRatio),
     rule: oneOf(raw['rule'], ['none', 'single', 'double', 'ornamented'] as const, d.rule),
     frontFrame: oneOf(raw['frontFrame'], FRAME_STYLES, d.frontFrame),
+    blurbSizePt: positive(blurbSize),
+    blurbBorder: oneOf(raw['blurbBorder'], FRAME_STYLES, d.blurbBorder),
     ornamentId: typeof raw['ornamentId'] === 'string' ? raw['ornamentId'] : null,
     authorAtFoot: bool(raw['authorAtFoot'], d.authorAtFoot),
     spineText: bool(raw['spineText'], d.spineText),

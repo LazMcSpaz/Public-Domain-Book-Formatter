@@ -176,6 +176,19 @@ describe('answers fold back into the cover', () => {
     expect(coverFromAnswers(onto, answers).look.groundFigureWrap).toBe(true)
   })
 
+  it('carries the back cover\u2019s size and frame across looks', () => {
+    const from = state()
+    from.doc.look.blurbSizePt = 13.5
+    from.doc.look.blurbBorder = 'double'
+    const answers = defaultAnswers(coverQuestions(from))
+    const onto = defaultCover('6x9', 284)
+    expect(onto.look.blurbSizePt).toBe(null)
+    expect(onto.look.blurbBorder).toBe('none')
+    const applied = coverFromAnswers(onto, answers).look
+    expect(applied.blurbSizePt).toBe(13.5)
+    expect(applied.blurbBorder).toBe('double')
+  })
+
   it('does not ask where the author goes when the arrangement has already decided', () => {
     const typographic = state()
     typographic.doc.look.arrangement = 'typographic'

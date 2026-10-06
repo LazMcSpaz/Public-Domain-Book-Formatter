@@ -25,6 +25,7 @@ import {
   itemBounds,
   overlaps,
   wrapText,
+  BLURB_PT,
   type CoverDocument,
   type CoverTextItem
 } from '@core/cover'
@@ -795,6 +796,131 @@ describe("the blurb is the editor's own prose, and is set as such", () => {
       hasBold: () => true
     })
     expect(bolder.find((t) => t.text.trim() === 'never')!.font.style).toBe('bold')
+  })
+})
+
+describe('the back cover sets its copy at the size the look asks for', () => {
+  function blurbText(patch: (doc: CoverDocument) => void): CoverTextItem[] {
+    const doc = bookCover((d) => {
+      d.content.blurb = 'A paragraph of back-cover copy, long enough to break over two lines.'
+      d.content.imprint = ''
+      patch(d)
+    })
+    const { items, geometry } = composeCover(doc, { measurer })
+    const frame = blurbFrame(geometry)
+    return texts(items).filter(
+      (t) => t.xPt / 72 >= frame.x - 0.5 && t.xPt / 72 <= frame.x + frame.width + 0.5
+    )
+  }
+
+  it('uses the default when the look names none', () => {
+    for (const t of blurbText(() => {})) expect(t.sizePt).toBe(BLURB_PT)
+  })
+
+  it('sets every run at the asked size, and leads from it', () => {
+    const drawn = blurbText((d) => {
+      d.look.blurbSizePt = 13.5
+    })
+    for (const t of drawn) expect(t.sizePt).toBe(13.5)
+    const ys = [...new Set(drawn.map((t) => t.yPt))].sort((a, b) => a - b)
+    expect(ys.length).toBeGreaterThan(1)
+    // The leading is a share of the size, not of the default: a larger size
+    // set on the old grid would print its lines through each other.
+    expect(ys[1]! - ys[0]!).toBeCloseTo(13.5 * 1.4, 6)
+  })
+
+  it('reports copy it had to cut rather than cutting it in silence', () => {
+    const doc = bookCover((d) => {
+      d.content.blurb = 'Sentence after sentence of back-cover copy. '.repeat(60)
+      d.look.blurbSizePt = 13.5
+    })
+    const { warnings } = composeCover(doc, { measurer })
+    expect(warnings.some((w) => /back-cover copy is longer/.test(w))).toBe(true)
+    // And a blurb that fits says nothing about its length.
+    expect(
+      composeCover(bookCover(), { measurer }).warnings.some((w) =>
+        /back-cover copy is longer/.test(w)
+      )
+    ).toBe(false)
+  })
+})
+
+describe('a frame can be struck round the back-cover copy', () => {
+  /** The fills of the blurb's box, by their bounds. */
+  function boxAndCopy(style: 'none' | 'plain' | 'double') {
+    const doc = bookCover((d) => {
+      d.content.blurb = 'A paragraph of back-cover copy, long enough to break over two lines.'
+      d.content.imprint = ''
+      d.look.blurbBorder = style
+      d.look.blurbSizePt = 12
+    })
+    const { items, geometry } = composeCover(doc, { measurer })
+    const frame = blurbFrame(geometry)
+    const copy = texts(items).filter(
+      (t) => t.xPt / 72 >= frame.x - 0.5 && t.xPt / 72 <= frame.x + frame.width + 0.5
+    )
+    const rules = items
+      .filter((i): i is Extract<typeof i, { kind: 'fill' }> => i.kind === 'fill')
+      .filter(
+        (f) => f.xPt / 72 > geometry.back.x && f.xPt / 72 < geometry.back.x + geometry.back.width
+      )
+    return { items, geometry, frame, copy, rules }
+  }
+
+  it('draws nothing when none is asked for', () => {
+    expect(boxAndCopy('none').rules).toEqual([])
+  })
+
+  it('encloses the copy with white around it, and nothing else', () => {
+    const { copy, rules, geometry } = boxAndCopy('plain')
+    expect(rules.length).toBe(4)
+    const left = Math.min(...rules.map((r) => r.xPt))
+    const right = Math.max(...rules.map((r) => r.xPt + r.widthPt))
+    const top = Math.min(...rules.map((r) => r.yPt))
+    const bottom = Math.max(...rules.map((r) => r.yPt + r.heightPt))
+
+    const copyLeft = Math.min(...copy.map((t) => t.xPt))
+    const copyRight = Math.max(...copy.map((t) => t.xPt + t.widthPt))
+    const copyTop = Math.min(...copy.map((t) => t.yPt - t.ascentPt))
+    const copyBottom = Math.max(...copy.map((t) => t.yPt + t.descentPt))
+    expect(left).toBeLessThan(copyLeft)
+    expect(right).toBeGreaterThan(copyRight)
+    expect(top).toBeLessThan(copyTop)
+    expect(bottom).toBeGreaterThan(copyBottom)
+
+    // Round the copy, not round the frame it was set in: that frame runs down
+    // to the barcode, so a box on it would stand on empty board.
+    expect(bottom / 72).toBeLessThan(geometry.barcode.y)
+    expect((bottom - top) / 72).toBeLessThan(geometry.backSafe.height / 2)
+    // And inside the safe area, which is what the padding has to respect.
+    expect(
+      contains(geometry.backSafe, {
+        x: left / 72,
+        y: top / 72,
+        width: (right - left) / 72,
+        height: (bottom - top) / 72
+      })
+    ).toBe(true)
+  })
+
+  it('draws two rules a side for a double frame', () => {
+    expect(boxAndCopy('double').rules.length).toBe(8)
+  })
+
+  it('grows with the copy rather than standing at a fixed height', () => {
+    const short = boxAndCopy('plain')
+    const doc = bookCover((d) => {
+      d.content.blurb =
+        'A paragraph of back-cover copy, long enough to break over two lines.\n\n'.repeat(3)
+      d.content.imprint = ''
+      d.look.blurbBorder = 'plain'
+      d.look.blurbSizePt = 12
+    })
+    const { items } = composeCover(doc, { measurer })
+    const rules = items.filter((i) => i.kind === 'fill' && i.heightPt < 2)
+    const tall = Math.max(...rules.map((r) => ('yPt' in r ? r.yPt : 0)))
+    const shortBottom = Math.max(...short.rules.map((r) => r.yPt))
+    expect(tall).toBeGreaterThan(shortBottom)
   })
 })
 

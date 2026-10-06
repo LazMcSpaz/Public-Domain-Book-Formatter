@@ -797,6 +797,21 @@ marks in a line of Garamond. Applied to the blurb unconditionally and without a
 switch, because a cover is new matter entirely — nothing on it is being
 reproduced from a page, so there is no faithfulness argument to weigh.
 
+**A blurb is read standing up, and the size that suits a page does not suit a
+board.** The back-cover copy set at the body size of a book held at reading
+distance, which is the wrong distance: a back cover is read at arm's length off
+a shelf, and at thumbnail size in a listing it is not read at all. So
+`blurbSizePt` and `blurbBorder` on the look, both banked, because a collection
+wants one treatment and not a decision remade per volume. Three things the pass
+turned up. The **leading has to come off the chosen size**, not off the default,
+or a larger face prints its lines through each other, and the fixture that pins
+it measures the step between two baselines rather than counting items. The
+overflow guard **returned in silence** — a blurb longer than the space it has
+was simply cut, which is this file's own rule about a guard's fallback, so it
+warns and names the size. And the box is struck round **the copy that was set**,
+not round `blurbFrame`: that frame runs down to the barcode, so a box on it
+stands three inches of empty board below the last line.
+
 **And the check that should have been looking was looking at the ground.** The
 same render warned that an element sat where KDP prints the barcode, and the
 element was the ground figure — bled off the sheet at twelve per cent, under

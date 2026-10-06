@@ -59,6 +59,8 @@ export const BANKED_COVER_KEYS: readonly (keyof CoverLook)[] = [
   'subtitleRatio',
   'rule',
   'frontFrame',
+  'blurbSizePt',
+  'blurbBorder',
   'ornamentId',
   'authorAtFoot',
   'groundFigureWrap',

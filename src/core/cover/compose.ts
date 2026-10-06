@@ -263,7 +263,18 @@ const TITLE_MIN_PT = 14
 const SUBTITLE_RATIO = 0.42
 const AUTHOR_RATIO = 0.38
 
-const BLURB_PT = 10.5
+/** What the back-cover copy sets at when the look names no size. */
+export const BLURB_PT = 10.5
+
+/**
+ * The white between the copy and the box drawn round it.
+ *
+ * Generous on purpose: a rule struck close to type reads as a table cell, and
+ * the thing this imitates is a paper label, where the ink stands well in from
+ * the border. There is room for it because the copy's measure is already far
+ * narrower than the panel.
+ */
+const BLURB_FRAME_PAD_IN = 0.28
 
 /**
  * How far the back-cover copy sits in from each trimmed edge.
@@ -644,19 +655,23 @@ function strokeRect(
  * Drawn after the picture so it sits on top of a bled one, and before the
  * type, which it must never touch — `frontTypeArea` is what keeps them apart.
  */
-function drawFrontFrame(
+/**
+ * A frame of the given style, in points, round a box given in points.
+ *
+ * One implementation for both frames this cover can carry. The double rule's
+ * arithmetic is the whole of it, and a second copy of that arithmetic is a
+ * second frame that comes to look slightly unlike the first.
+ */
+function drawFrame(
   items: CoverItem[],
-  geometry: CoverGeometry,
   style: FrameStyle,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
   color: Hex
 ): void {
   if (style === 'none') return
-  const panel = geometry.front
-  const x = pt(panel.x + FRAME_INSET_IN)
-  const y = pt(panel.y + FRAME_INSET_IN)
-  const width = pt(panel.width - FRAME_INSET_IN * 2)
-  const height = pt(panel.height - FRAME_INSET_IN * 2)
-
   if (style === 'plain') {
     strokeRect(items, x, y, width, height, FRAME_PLAIN_PT, color)
     return
@@ -670,6 +685,24 @@ function drawFrontFrame(
     width - step * 2,
     height - step * 2,
     FRAME_DOUBLE_INNER_PT,
+    color
+  )
+}
+
+function drawFrontFrame(
+  items: CoverItem[],
+  geometry: CoverGeometry,
+  style: FrameStyle,
+  color: Hex
+): void {
+  const panel = geometry.front
+  drawFrame(
+    items,
+    style,
+    pt(panel.x + FRAME_INSET_IN),
+    pt(panel.y + FRAME_INSET_IN),
+    pt(panel.width - FRAME_INSET_IN * 2),
+    pt(panel.height - FRAME_INSET_IN * 2),
     color
   )
 }
@@ -895,7 +928,7 @@ export function composeCover(doc: CoverDocument, options: ComposeOptions): Compo
     hasArt ? { id: art.id as string, widthPx: sized.width, heightPx: sized.height } : null
   )
 
-  layBackCover(items, geometry, doc, ornament, measurer)
+  layBackCover(items, warnings, geometry, doc, ornament, measurer)
   laySpine(items, warnings, geometry, doc, measurer)
 
   return { geometry, items, placedArt, warnings }
@@ -1304,6 +1337,7 @@ function layFrontCover(
 
 function layBackCover(
   items: CoverItem[],
+  warnings: string[],
   geometry: CoverGeometry,
   doc: CoverDocument,
   ornament: OrnamentArt | null,
@@ -1340,22 +1374,29 @@ function layBackCover(
   const hasBold = measurer.hasBold(look.bodyFont)
   const blurbFont = (style: 'regular' | 'italic' | 'bold'): FontRef =>
     face(look.bodyFont, style === 'bold' && !hasBold ? 'italic' : style)
+  const sizePt = look.blurbSizePt ?? BLURB_PT
   // One set of metrics for every line, taken from the body face: an italic
   // phrase must not shift the line it sits in off the others.
-  const metrics = measurer.metrics(bodyFont, BLURB_PT)
+  const metrics = measurer.metrics(bodyFont, sizePt)
   const bottom = pt(frame.y + frame.height)
+  const copyTop = y
+  let copyBottom = y
+  let overflowed = false
   for (const paragraph of paragraphs) {
-    const lines = wrapMarkup(paragraph.trim(), pt(frame.width), blurbFont, BLURB_PT, measurer)
+    const lines = wrapMarkup(paragraph.trim(), pt(frame.width), blurbFont, sizePt, measurer)
     for (const runs of lines) {
-      if (y + metrics.ascent > bottom) return
+      if (y + metrics.ascent > bottom) {
+        overflowed = true
+        break
+      }
       let x = pt(frame.x)
       for (const run of runs) {
-        const width = measurer.widthOf(run.text, run.font, BLURB_PT)
+        const width = measurer.widthOf(run.text, run.font, sizePt)
         items.push({
           kind: 'text',
           text: run.text,
           font: run.font,
-          sizePt: BLURB_PT,
+          sizePt,
           xPt: x,
           yPt: y + metrics.ascent,
           color: palette.ink,
@@ -1365,9 +1406,33 @@ function layBackCover(
         })
         x += width
       }
-      y += BLURB_PT * 1.4
+      y += sizePt * 1.4
+      copyBottom = y - sizePt * (1.4 - 1)
     }
-    y += BLURB_PT * 0.7
+    if (overflowed) break
+    y += sizePt * 0.7
+  }
+  if (overflowed) {
+    warnings.push(
+      `The back-cover copy is longer than the space it has at ${sizePt} pt and was cut. Shorten it, or set it smaller.`
+    )
+  }
+
+  // The box is drawn round the copy that was *set*, not round the frame it was
+  // set in: that frame runs down to the barcode, so a box on it would stand
+  // three inches of empty board below the last line. Pushed after the type
+  // because it is struck round it and never over it.
+  if (look.blurbBorder !== 'none' && copyBottom > copyTop) {
+    const pad = pt(BLURB_FRAME_PAD_IN)
+    drawFrame(
+      items,
+      look.blurbBorder,
+      pt(frame.x) - pad,
+      copyTop - pad,
+      pt(frame.width) + pad * 2,
+      copyBottom - copyTop + pad * 2,
+      palette.accent
+    )
   }
 
   if (content.imprint.trim()) {
