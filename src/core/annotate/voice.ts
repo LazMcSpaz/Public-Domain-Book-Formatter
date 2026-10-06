@@ -373,3 +373,41 @@ export function normalizeVoice(raw: unknown): EditorVoice {
     exemplars
   }
 }
+
+/**
+ * Why sending `outgoing` over the voice `onShelf` would throw work away, or
+ * null when it would not.
+ *
+ * Every save of a book also sends the device's voice, so a device holding an
+ * empty or stale card writes it over the one the editor built. That happened:
+ * on 28 September 2026 a save from a device whose voice was a pen name and
+ * nothing else replaced the shelf's card, with its stance, its twenty-nine
+ * refusals and its model passage, by a card that said nothing at all, and the
+ * commit message said "banked". Nothing reported it for a week.
+ *
+ * Only a loss is refused, never an edit: a field the shelf has filled that the
+ * outgoing card has emptied, or a card with less than half the prose of the
+ * one it would replace. Rewording a line or deleting one refusal goes through.
+ * Refusing costs a re-read of the shelf; writing costs a voice nobody notices
+ * is gone until it writes the next book in somebody else's register.
+ */
+export function voiceLosesWork(onShelf: EditorVoice, outgoing: EditorVoice): string | null {
+  const emptied = (
+    [
+      ['about', onShelf.about.trim(), outgoing.about.trim()],
+      ['guidance', onShelf.guidance.trim(), outgoing.guidance.trim()],
+      ['avoid', onShelf.avoid.length, outgoing.avoid.length],
+      ['proseSamples', onShelf.proseSamples.length, outgoing.proseSamples.length],
+      ['exemplars', onShelf.exemplars.length, outgoing.exemplars.length]
+    ] as const
+  )
+    .filter(([, had, has]) => Boolean(had) && !has)
+    .map(([field]) => field)
+  if (emptied.length > 0) return `it would empty ${emptied.join(', ')}`
+  const prose = (v: EditorVoice): number =>
+    v.about.length + v.guidance.length + v.avoid.join('').length + v.proseSamples.join('').length
+  if (prose(outgoing) * 2 < prose(onShelf)) {
+    return `it carries ${prose(outgoing)} characters of the ${prose(onShelf)} on the shelf`
+  }
+  return null
+}

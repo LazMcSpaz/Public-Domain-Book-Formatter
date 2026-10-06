@@ -229,8 +229,18 @@ export async function pushBookToShelf(
   let voiceNote = ''
   try {
     await pushVoice(config, input.voice, `banked with ${summary.fileName}`)
-  } catch {
-    voiceNote = ' The editor’s voice could not be sent; the next save will try again.'
+  } catch (err) {
+    // A refused loss says why; anything else is a network failure the next
+    // save retries.
+    // A refused loss means this device's voice is behind the shelf's, so the
+    // shelf's comes down to it: nothing else ever pulls the voice, which is how
+    // a stale device came to write over the card in the first place.
+    if (err instanceof Error && err.message.startsWith("The editor's voice")) {
+      const pulled = await pullVoice(config, input.voice.penName).catch(() => null)
+      voiceNote = ` ${err.message}${pulled ? ' This device now has the shelf’s voice.' : ''}`
+    } else {
+      voiceNote = ' The editor’s voice could not be sent; the next save will try again.'
+    }
   }
 
   return {

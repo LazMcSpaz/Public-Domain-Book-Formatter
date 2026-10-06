@@ -19,6 +19,7 @@ export {
   defaultVoice,
   normalizeVoice,
   voiceBlock,
+  voiceLosesWork,
   withExemplar,
   type AnnotationKind,
   type EditorVoice,

@@ -3813,9 +3813,23 @@ function buildContents(
   const heading: FontRef = { family: profile.headingFont, style: 'regular' }
   const sizePt = profile.bodyFontSize
 
-  // Wide enough for four digits and a little air — more than any interior KDP
-  // will print, so the column never has to grow.
-  const folioColumn = ctx.measurer.widthOf('8888', body, sizePt) + sizePt * 0.5
+  // The lane a title must stop short of: the widest number this contents could
+  // print, measured *as it is printed* — through `folioLabel`, the one place the
+  // wording lives — plus a little air. Four digits is more than any interior
+  // KDP will print and a long roman covers front matter, so the lane is the
+  // same in both passes and never has to grow.
+  //
+  // It was measured on a bare '8888' after the label had grown its "Page ",
+  // so a title that ran to the end of its lane ran into the word: three
+  // entries of the Hall collection printed through their own numbers. Sizing
+  // the lane from a different string than the one drawn is what let the two
+  // drift, and `test/contents-folio-lane.test.ts` holds them together.
+  const folioColumn =
+    Math.max(
+      ctx.measurer.widthOf(folioLabel('8888'), body, sizePt),
+      ctx.measurer.widthOf(folioLabel('xxxviii'), body, sizePt)
+    ) +
+    sizePt * 0.5
 
   if (pages.length % 2 === 1) {
     const blank = newPage('front')

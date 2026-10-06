@@ -1076,6 +1076,32 @@ lines of someone else's tests with no warning. Caught only because `git
 status` said `M` where a new file says `??`. **Before writing a new file, list
 the path.**
 
+**A contents title ran into its own page number, and the lane was sized from
+the wrong string.** The number prints as "Page 143", right-aligned on the
+title's last line, and the title is broken to the measure less a lane kept
+for it. The lane was measured on a bare `'8888'`, written before the label
+grew its "Page ", so any title that ran to the end of its lane printed
+through the word: three entries of the Hall collection did, and it had been
+happening on other books "once in a while" whenever a title happened to end
+near the edge. The lane is now measured through `folioLabel`, the one place
+the wording lives. The rule: **a space reserved for a thing is measured on
+that thing as it is drawn**, never on a stand-in that agreed with it once.
+`test/contents-folio-lane.test.ts` sweeps title lengths so a last line lands
+at every distance from the lane; its first fixture passed against the fault,
+because no title happened to end within half an em of the edge.
+
+**Every book save sent the device's voice over the shelf's, and one device
+had none.** `pushVoice` rode every save, unconditionally, and nothing ever
+pulled the voice down (`pullVoice` existed and was called by nothing), so a
+device's card was whatever it had been when that browser was set up. On 28
+September a save from a device holding a pen name and nothing else replaced
+the editor's card — the stance, twenty-nine refusals, the model passage —
+under the commit message "banked with …", and nothing said so for a week.
+`voiceLosesWork` now refuses a card that empties a field the shelf has filled
+or carries less than half its prose, and the refused save pulls the shelf's
+voice down to the device, which is the half that was missing. An edit, a
+reworded line, one refusal fewer, still goes through.
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what

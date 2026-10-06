@@ -103,7 +103,7 @@ import {
   type ShelfAbout,
   type ShelfConfig
 } from '@core/sync'
-import { normalizeVoice, type EditorVoice } from '@core/annotate'
+import { normalizeVoice, voiceLosesWork, type EditorVoice } from '@core/annotate'
 import { toBase64 } from '@core/project'
 
 const API = 'https://api.github.com'
@@ -510,6 +510,14 @@ export async function pushVoice(
   what = 'voice updated'
 ): Promise<string> {
   const path = voicePath(voice.penName)
+  // Every book save sends the voice, so a device holding an empty or stale
+  // card would write it over the one on the shelf. Read first, and refuse a
+  // loss: see `voiceLosesWork`.
+  const onShelf = await fetchVoice(config, voice.penName)
+  const loss = onShelf ? voiceLosesWork(onShelf, voice) : null
+  if (loss) {
+    throw new Error(`The editor's voice on this device was not sent: ${loss} on the shelf.`)
+  }
   const json = JSON.stringify(voice, null, 2)
   await putFile(
     config,
