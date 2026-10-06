@@ -44,6 +44,7 @@ import {
   type BrokenLine,
   type TextSpan
 } from './break-lines'
+import { contentsSplit } from './contents-split'
 import {
   headingsWithoutMarks,
   prepareFootnotes,
@@ -3955,20 +3956,45 @@ function buildContents(
           })
         : []
 
-    const broken = descriptive
+    const listText = entry.label ? `${entry.label} ${entry.title}` : entry.title
+    const listLine = (text: string, width: number) =>
+      breakParagraph(text, {
+        font: body,
+        sizePt,
+        measurer: ctx.measurer,
+        lineWidths: Math.max(1, width),
+        alignment: 'left'
+      })
+    let broken = descriptive
       ? balancedLines(entry.title, {
           font: entryTitleFont,
           sizePt: entryTitleSize,
           measurer: ctx.measurer,
           maxWidth: measure
         })
-      : breakParagraph(entry.label ? `${entry.label} ${entry.title}` : entry.title, {
+      : breakParagraph(listText, {
           font: body,
           sizePt,
           measurer: ctx.measurer,
           lineWidths: [measure, Math.max(1, measure - hang)],
           alignment: 'left'
         })
+    // An entry that wraps is cut where its words allow, not wherever the
+    // measure ran out: between label and title, or after punctuation, and
+    // never leaving one word alone on the second line (`contentsSplit`).
+    if (!descriptive && broken.length > 1) {
+      const split = contentsSplit(listText, {
+        width: (text) => ctx.measurer.widthOf(text, body, sizePt),
+        firstWidth: measure,
+        secondWidth: Math.max(1, measure - hang),
+        labelWords: entry.label ? entry.label.split(/\s+/).filter(Boolean).length : 0
+      })
+      if (split) {
+        const first = listLine(split[0], measure)
+        const second = listLine(split[1], measure - hang)
+        if (first.length === 1 && second.length === 1) broken = [first[0]!, second[0]!]
+      }
+    }
     if (broken.length === 0) return
 
     // The description, set smaller and indented under the entry — the shape an

@@ -1176,6 +1176,12 @@ proportions: propose from sense, accept from pixels.
   start on one line anyway. So `(1)`, the first of K.H.'s numbered answers in
   _The Mahatma Letters_, sat alone at the foot of page 165. `firstTakeOf` is
   what the next item can open with, and the room is counted after the notes.
+- **A contents entry that wraps is cut where its words allow.** Left to the
+  paragraph breaker it broke where the measure ran out, leaving "Part / I" and
+  "False and / True". `contentsSplit` cuts between label and title first, then
+  after punctuation, never leaves one word alone or ends a line on "of" or
+  "the", and gives the entry back to the breaker only when two lines cannot
+  hold it.
 - **A guard's fallback has to report.** That contents shipped with no numbers
   and `warnings: 0` beside it. Silence is the failure mode, not the error.
 
