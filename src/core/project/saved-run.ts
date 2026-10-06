@@ -335,6 +335,10 @@ function parsePlacement(raw: unknown): IllustrationPlacement | undefined {
   switch (value['kind']) {
     case 'inline':
       return { kind: 'inline', widthIn }
+    case 'plate':
+      return { kind: 'plate', widthIn }
+    case 'frontispiece':
+      return { kind: 'frontispiece', widthIn }
     case 'within':
       return typeof at === 'number' && at >= 0 ? { kind: 'within', widthIn, at } : undefined
     case 'beside': {

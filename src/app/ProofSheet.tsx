@@ -115,9 +115,10 @@ const KINDS: { value: BlockKind; label: string }[] = [
  * Where a picture sits against the text, as the editor says rather than as the
  * engine guesses — see `IllustrationPlacement`.
  *
- * Four answers: the engine's own rule (after the block, to the measure), at
- * its printed size between blocks, inside the paragraph at a point in it, or
- * beside the text with the lines run past it. The size is in inches because
+ * Six answers: the engine's own rule (after the block, to the measure), at
+ * its printed size between blocks, inside the paragraph at a point in it,
+ * beside the text with the lines run past it, as a plate on a leaf of its own,
+ * or as the frontispiece facing the title page. The size is in inches because
  * that is what a ruler on the original leaf gives, and `at` is a character
  * offset into the block — set from the cursor in the passage above where
  * there is one, or typed.
@@ -134,7 +135,7 @@ function PlacementControl({
 }): JSX.Element {
   const kind = value?.kind ?? 'measure'
   const widthIn = value?.widthIn ?? 2
-  const at = value && value.kind !== 'inline' ? value.at : 0
+  const at = value?.kind === 'within' || value?.kind === 'beside' ? value.at : 0
   const side = value?.kind === 'beside' ? value.side : 'right'
   const build = (
     next: Partial<{ kind: string; widthIn: number; at: number; side: 'left' | 'right' }>
@@ -146,6 +147,8 @@ function PlacementControl({
     if (k === 'measure') return undefined
     if (k === 'inline') return { kind: 'inline', widthIn: w }
     if (k === 'within') return { kind: 'within', widthIn: w, at: a }
+    if (k === 'plate') return { kind: 'plate', widthIn: w }
+    if (k === 'frontispiece') return { kind: 'frontispiece', widthIn: w }
     return { kind: 'beside', widthIn: w, at: a, side: sd }
   }
   return (
@@ -161,6 +164,8 @@ function PlacementControl({
           <option value="inline">after the passage, at its printed size</option>
           <option value="within">inside the passage, at a point in it</option>
           <option value="beside">beside the passage, the text run past it</option>
+          <option value="plate">on a leaf of its own after the passage, as a plate</option>
+          <option value="frontispiece">facing the title page, as the frontispiece</option>
         </select>
       </label>
       {kind !== 'measure' ? (

@@ -109,6 +109,8 @@ function describePlacement(picture: Illustration): string {
   const size = `${p.widthIn.toFixed(2)} in wide`
   if (p.kind === 'inline') return `set after this passage, ${size}`
   if (p.kind === 'within') return `set inside this passage at character ${p.at}, ${size}`
+  if (p.kind === 'plate') return `a plate on a leaf of its own after this passage, ${size}`
+  if (p.kind === 'frontispiece') return `the frontispiece, facing the title page, ${size}`
   return `set ${p.side} of the text from character ${p.at}, ${size}`
 }
 

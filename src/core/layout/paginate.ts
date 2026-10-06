@@ -979,7 +979,13 @@ function buildIllustrationFlowable(
 
   // Decided from the natural height, before any clamping: whether this is a
   // plate must not depend on the ceiling that is about to be derived from it.
-  const isPlate = heightPt > slotsPerPage * ctx.leading * PLATE_HEIGHT_RATIO
+  // Or said outright: a picture the original printed as a plate is one on any
+  // trim, where the height rule alone would let a larger page take it inline.
+  const kind = illustration.placement?.kind
+  const isPlate =
+    kind === 'plate' ||
+    kind === 'frontispiece' ||
+    heightPt > slotsPerPage * ctx.leading * PLATE_HEIGHT_RATIO
 
   // The ceiling is counted in *slots*, not points, because slots are what the
   // page actually has. Sizing against the frame's height in points and then
@@ -1777,7 +1783,9 @@ function hostable(
   slotsPerPage: number
 ): { ok: true } | { ok: false; why: string } {
   const placement = illustration.placement
-  if (!placement || placement.kind === 'inline') return { ok: false, why: '' }
+  if (!placement || (placement.kind !== 'within' && placement.kind !== 'beside')) {
+    return { ok: false, why: '' }
+  }
   const ratio =
     illustration.sourceWidth > 0 && illustration.sourceHeight > 0
       ? illustration.sourceHeight / illustration.sourceWidth
@@ -1848,7 +1856,7 @@ function buildFigureFlowable(
   p: FigureParams
 ): Flowable {
   const placement = figure.placement
-  if (!placement || placement.kind === 'inline') {
+  if (!placement || (placement.kind !== 'within' && placement.kind !== 'beside')) {
     throw new Error('buildFigureFlowable needs a within or beside placement')
   }
   const { ctx, font, sizePt, indentLeft, measure } = p
@@ -2727,7 +2735,21 @@ export function layout(
 
   // --- front matter -------------------------------------------------------
 
-  buildFrontMatter(pages, newPage, profile, options.edition, ctx, slotsPerPage)
+  // The frontispiece faces the title page, so it is set with the front matter
+  // and held out of the body. The first one the book names: a second is set as
+  // a plate where it was anchored, and says so.
+  const named = doc.illustrations.find((i) => i.placement?.kind === 'frontispiece') ?? null
+  const frontispiece = buildFrontMatter(
+    pages,
+    newPage,
+    profile,
+    options.edition,
+    ctx,
+    slotsPerPage,
+    named
+  )
+    ? named
+    : null
 
   // Asides — dedication, epigraph, colophon — sit after the copyright page and
   // before the body, each on its own page, as they are in a printed book.
@@ -2865,7 +2887,7 @@ export function layout(
   )
   const anchored = anchorIllustrations(
     doc.blocks,
-    doc.illustrations.filter((i) => !inSections.includes(i))
+    doc.illustrations.filter((i) => !inSections.includes(i) && i !== frontispiece)
   )
 
   const flowables: Flowable[] = []
@@ -2890,7 +2912,17 @@ export function layout(
     ).map((illustration) => ({ illustration }))
   ): void => {
     for (const { illustration, warning } of list) {
-      flowables.push(buildIllustrationFlowable(illustration, ctx, slotsPerPage, warning))
+      // A frontispiece that reached the body is one the front matter could not
+      // take. It is set as a plate where it was anchored, and the reason said.
+      const stray =
+        illustration.placement?.kind !== 'frontispiece'
+          ? undefined
+          : frontispiece
+            ? `picture ${illustration.id} was named a frontispiece, but ${frontispiece.id} ` +
+              'already faces the title page: it was set as a plate where it was anchored'
+            : `picture ${illustration.id} was named a frontispiece, but this design prints ` +
+              'no title page for it to face: it was set as a plate where it was anchored'
+      flowables.push(buildIllustrationFlowable(illustration, ctx, slotsPerPage, warning ?? stray))
     }
   }
 
@@ -3136,17 +3168,82 @@ export function layout(
    */
   let spacedAfter = 0
 
+  /**
+   * Plates waiting for the page being filled to end.
+   *
+   * A plate reached mid-page used to break it there, so the text before it
+   * stopped short and left the foot of the page empty: on _The Lost Keys of
+   * Masonry_ four of Knapp's six plates fell mid-chapter and each cost half a
+   * page of white. A printed book does what LaTeX's `[p]` float does: the text
+   * runs on to the foot of the page, and the plate takes the next leaf. It
+   * moves a page at most, and stays beside the passage it was anchored to.
+   */
+  const floating: Flowable[] = []
+
+  /**
+   * One plate on a leaf of its own, centred, the leaf then closed so what
+   * follows starts on the next. False when a sample has run out of pages; the
+   * picture is then reported with the rest that fell past the last page.
+   */
+  function setPlate(flow: Flowable): boolean {
+    if (bodyPageCount() >= maxBodyPages) return false
+    const was = flowSection
+    flowSection = flow.pageSection ?? 'body'
+    openBodyPage(false)
+    flowSection = was
+    const leaf = current()
+    leaf.kind = 'plate'
+    leaf.suppressRunningHead = true
+    // Centred as a plate placed in the flow is, below.
+    const content = flow.contentHeightPt ?? flow.lines.length * leading
+    const sink = Math.round((rectoFrame.heightPt - content) / 2 / leading)
+    const start = Math.max(0, Math.min(sink, slotsPerPage - flow.lines.length))
+    if (flow.warning) warnings.push({ pageIndex: leaf.index, text: flow.warning })
+    flow.lines.forEach((line, k) => leaf.lines.push({ slot: start + k, line }))
+    slot = slotsPerPage
+    spacedAfter = 0
+    return true
+  }
+
+  /**
+   * Set every waiting plate, before the page about to be opened.
+   *
+   * `facingRecto` is a chapter about to open on a right-hand page: the last
+   * plate goes on the verso facing it, with a blank recto in front of it when
+   * that is what it takes, as a plate tipped in to face a page is bound. The
+   * alternative costs the same two leaves and backs the picture with a blank
+   * instead — which is how _Lost Keys_' Emerald Tablet came out, with "illustrated
+   * on the opposite page" on a page facing nothing.
+   */
+  function flushFloating(facingRecto: boolean): boolean {
+    while (floating.length > 0) {
+      if (facingRecto && floating.length === 1 && pages.length % 2 === 0) {
+        if (bodyPageCount() >= maxBodyPages) return false
+        openBodyPage(false)
+        current().suppressRunningHead = true
+      }
+      if (!setPlate(floating[0]!)) return false
+      floating.shift()
+    }
+    return true
+  }
+
   for (let i = 0; i < flowables.length; i++) {
     const flow = flowables[i]!
     flowSection = flow.pageSection ?? 'body'
 
-    // A plate takes a leaf of its own, so it only needs a fresh page when the
-    // current one has been written on. Asking for one unconditionally would
-    // leave a blank page in front of every plate that happened to fall at a
-    // page break already.
-    const needsOwnPage = flow.ownPage === true && page !== null && current().lines.length > 0
+    // A plate takes a leaf of its own. On a page already written on it waits
+    // for that page to end (`floating`); so does one behind another waiting,
+    // to keep them in order. Only a plate reached at the head of an empty
+    // page is set where it stands.
+    if (flow.ownPage && (floating.length > 0 || (page !== null && current().lines.length > 0))) {
+      floating.push(flow)
+      continue
+    }
 
-    if (flow.startsChapter || needsOwnPage || page === null) {
+    if (flow.startsChapter && !flushFloating(ctx.profile.chaptersOpenRecto)) break
+
+    if (flow.startsChapter || page === null) {
       if (bodyPageCount() >= maxBodyPages) break
       // A chapter opens on a right-hand page only if the style asks for it.
       // Traditional, and it costs paper — a book of short chapters can gain
@@ -3198,6 +3295,7 @@ export function layout(
       let available = bodySlots - slot
       if (available <= 0) {
         if (bodyPageCount() >= maxBodyPages) break
+        if (!flushFloating(false)) break
         openBodyPage(false)
         bodySlots = slotsPerPage
         available = slotsPerPage
@@ -3293,6 +3391,7 @@ export function layout(
           take = noteLimited ? 1 : Math.min(available, remaining)
         } else {
           if (bodyPageCount() >= maxBodyPages) break
+          if (!flushFloating(false)) break
           openBodyPage(false)
           continue
         }
@@ -3378,9 +3477,21 @@ export function layout(
     }
 
     if (placed < flow.lines.length) break
+    // A plate's leaf is its own on both sides: what follows starts on the next
+    // page, however much white a centred picture left below it. A picture tall
+    // enough to be a plate by its height leaves no room for a line anyway, so
+    // this mattered only once a short one could be named a plate outright.
+    if (flow.ownPage) {
+      slot = slotsPerPage
+      spacedAfter = 0
+      continue
+    }
     slot += flow.spaceAfter
     spacedAfter = flow.spaceAfter
   }
+  // A plate still waiting when the book ends follows its last page. In a sample
+  // that ran out of pages it is reported as falling past the last one.
+  flushFloating(false)
 
   // --- page furniture and finishing --------------------------------------
 
@@ -4167,11 +4278,43 @@ function buildFrontMatter(
   profile: StyleProfile,
   edition: LayoutEdition,
   ctx: BuildContext,
-  slotsPerPage: number
-): void {
+  slotsPerPage: number,
+  frontispiece: Illustration | null = null
+): boolean {
   const body: FontRef = { family: profile.bodyFont, style: 'regular' }
   const heading: FontRef = { family: profile.headingFont, style: 'regular' }
   const trim = trimToPoints(profile.trimSize)
+
+  /**
+   * The frontispiece, on the verso facing the title page.
+   *
+   * Sized and captioned exactly as a plate in the body is — the same flowable,
+   * so the KDP check reads its resolution off the same box — and centred on
+   * the leaf as one is. It takes the half-title's blank verso, which is the
+   * leaf a frontispiece stands on in a printed book; with no half-title a
+   * blank recto goes in front of it, so it still faces the title. A design
+   * with no title page has nothing for it to face: it is not set here, and
+   * the caller sets it as a plate where it was anchored and says so.
+   */
+  let frontispieceSet = false
+  const setFrontispiece = (): void => {
+    if (!frontispiece || frontispieceSet) return
+    if (pages.length % 2 === 0) {
+      const blank = newPage('front')
+      blank.suppressFolio = true
+      blank.suppressRunningHead = true
+    }
+    const page = newPage('front')
+    page.kind = 'plate'
+    page.suppressFolio = true
+    page.suppressRunningHead = true
+    const flow = buildIllustrationFlowable(frontispiece, ctx, slotsPerPage)
+    const content = flow.contentHeightPt ?? flow.lines.length * ctx.leading
+    const sink = Math.round((page.frame.heightPt - content) / 2 / ctx.leading)
+    const start = Math.max(0, Math.min(sink, slotsPerPage - flow.lines.length))
+    flow.lines.forEach((line, k) => page.lines.push({ slot: start + k, line }))
+    frontispieceSet = true
+  }
 
   /**
    * How far to move a frame-centred line to centre it on the *leaf* instead.
@@ -4281,13 +4424,18 @@ function buildFrontMatter(
     centred(page, Math.floor(slotsPerPage / 3), [
       { text: edition.title, sizePt: profile.bodyFontSize * 1.3, font: heading }
     ])
-    // The half-title's verso is blank, as in every printed book.
-    const blank = newPage('front')
-    blank.suppressFolio = true
-    blank.suppressRunningHead = true
+    // The half-title's verso is blank, as in every printed book — unless the
+    // book has a frontispiece, which is the leaf it stands on.
+    if (frontispiece && profile.frontMatter.titlePage) setFrontispiece()
+    else {
+      const blank = newPage('front')
+      blank.suppressFolio = true
+      blank.suppressRunningHead = true
+    }
   }
 
   if (profile.frontMatter.titlePage) {
+    setFrontispiece()
     if (pages.length % 2 === 1) {
       const blank = newPage('front')
       blank.suppressFolio = true
@@ -4608,6 +4756,8 @@ function buildFrontMatter(
       slot += 1
     }
   }
+
+  return frontispieceSet
 }
 
 /** Every distinct face the finished book draws with — what an embedder subsets. */
