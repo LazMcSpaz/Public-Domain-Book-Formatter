@@ -329,6 +329,17 @@ export function lookQuestions(state: CoverInterviewState): Question[] {
   // Never ask what is not relevant yet: a typographic cover puts the author at
   // the foot whatever the answer, the empty middle of the panel being its whole
   // design, so there is nothing to decide.
+  if (look.groundFigure) {
+    out.push({
+      id: 'cover-figure-wrap',
+      type: 'confirm',
+      group: 'ornament',
+      prompt: 'Run the figure across the whole cover?',
+      help: 'A figure normally stops at the fold, because a scene split into two boxes either side of a fold that creeps by an eighth of an inch is two halves that do not meet. One picture printed across the whole sheet has no seam to misregister — what it costs is that the subject sits up to an eighth of an inch off the front panel\u2019s centre line, which a radiance hides and a face would not.',
+      defaultValue: look.groundFigureWrap
+    })
+  }
+
   if (look.arrangement !== 'typographic') {
     out.push({
       id: 'cover-author-foot',
@@ -653,6 +664,7 @@ export function coverFromAnswers(
       text(answers, 'cover-figure-opacity', String(doc.look.groundFigureOpacity))
     ),
     groundFigureBack: flag(answers, 'cover-figure-back', doc.look.groundFigureBack),
+    groundFigureWrap: flag(answers, 'cover-figure-wrap', doc.look.groundFigureWrap),
     markOnFront: flag(answers, 'cover-mark-front', doc.look.markOnFront),
     ornamentId: text(answers, 'cover-ornament', doc.look.ornamentId ?? '') || null,
     groundPattern:

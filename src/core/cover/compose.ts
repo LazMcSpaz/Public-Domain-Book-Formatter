@@ -36,6 +36,7 @@ import { GROUND_IMAGE_ID, groundPattern, isImageGround, PATTERN_OPACITY } from '
 import {
   backFigureFramePt,
   figureFramePt,
+  wrapFigureFramePt,
   figureOpacity,
   GROUND_FIGURE_BACK_ID,
   GROUND_FIGURE_ID
@@ -739,7 +740,7 @@ export function composeCover(doc: CoverDocument, options: ComposeOptions): Compo
   // something has drawn it, which is the same bargain the picture-backed
   // pattern strikes two blocks up.
   if (look.groundFigure) {
-    const frame = figureFramePt(geometry)
+    const frame = look.groundFigureWrap ? wrapFigureFramePt(geometry) : figureFramePt(geometry)
     items.push({
       kind: 'image',
       id: GROUND_FIGURE_ID,
@@ -758,7 +759,9 @@ export function composeCover(doc: CoverDocument, options: ComposeOptions): Compo
     // out before the fold. Placed in its own item rather than as one picture
     // across the wrap: two boxes that never touch cannot misregister, and one
     // that spans the fold always can.
-    if (look.groundFigureBack) {
+    // No companion when the picture already runs the width of the sheet:
+    // there is nothing left on the back for it to sit on.
+    if (look.groundFigureBack && !look.groundFigureWrap) {
       const back = backFigureFramePt(geometry)
       items.push({
         kind: 'image',

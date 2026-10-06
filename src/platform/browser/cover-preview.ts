@@ -29,6 +29,7 @@ import {
   FIGURE_SRC,
   FIGURE_ZOOM,
   figureFade,
+  wrapAnchorTarget,
   FRONT_MARK_ID,
   frontIconPlan,
   GROUND_FIGURE_BACK_ID,
@@ -163,9 +164,13 @@ async function buildCover(
       // reads as a tint of the type rather than as a picture behind it.
       color: doc.look.palette.figure,
       anchorX: FIGURE_ANCHOR_X[doc.look.groundFigure],
+      // On a wrap the box is the whole sheet, so the subject has to be aimed at
+      // the front panel's centre line rather than the sheet's, and there is no
+      // fold edge to hold the tint back from — every edge is a trim edge.
+      targetX: doc.look.groundFigureWrap ? wrapAnchorTarget(composed.geometry) : 0.5,
       zoom: FIGURE_ZOOM[doc.look.groundFigure],
       // Every edge, not only the fold: see `figureFade`.
-      fade: figureFade(composed.geometry, 'left')
+      fade: figureFade(composed.geometry, doc.look.groundFigureWrap ? null : 'left')
     })
     images.set(GROUND_FIGURE_ID, figure.bytes)
     figureItem.srcWidth = figure.widthPx

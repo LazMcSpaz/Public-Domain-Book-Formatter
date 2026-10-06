@@ -141,18 +141,58 @@ the corners. **A run far wider than the rest is rays the trace lost**, where the
 slits closed up under the bottom star and in three other places, so the carried
 width is capped at the runs' ninth decile and 13 of the 133 are held back.
 
-**Its box is wider than any front panel on purpose** — 0.80 against 0.767 for an
-8.5×11 out to the bleed. A picture wider than its box is scaled to the box's
-*height* and cropped at the sides, so the eye's height on the board is the
-fraction written into the file, exactly, on every trim; only the far ends of the
-rays are lost. A box the shape of one panel would be exact on that book and
-wrong on the next, and a test pins the property rather than the number.
+**The fan's own outline had to go, and could not be cut away.** Read as it was
+traced, the engraving is an ellipse — its ink reaches 953 px at the sides and
+464 at the foot — so rays that begin to thin where each one leaves the fan begin
+thinning at a different radius in every direction, and a wide flat lozenge of
+heavy ink stands round the eye with clean rays beyond it. Lifting the eye and
+the seven stars out and dropping the hatching was tried first and is not
+possible: labelled in the pixels, the eye's ink is one component with the whole
+fan and the bottom star's white is one with the background, because on the paper
+both touch the hatching. So the fan is **extended** instead. Every ray holds the
+fan's own angular width out to the fan's longest reach and only tapers past it,
+which makes the heavy zone a circle rather than a lens.
+
+**The texture is the engraving's, measured along its own rays.** A carried ray
+was a clean polygon, which reads as a different material from a cut one and puts
+a visible join between them. Followed outward run by run, a ray of this fan
+wanders sideways about half its own width over the fan's depth, and along its
+length it is a chain of dashes — 16 px of ink to a 12 px gap at the median. Three
+things had to be got right and each was printed wrong first: every length along
+a ray is held in the **logarithm** of the radius, because a carried ray is ten
+times a cut one's depth and a fixed wavelength gives twenty-seven waves of hair
+or sixty beads on a string; the **gap does not scale**, a break being where the
+burin left the plate; and a dash is a **lens, not a bar**, because a square cut
+across a stroke a twentieth of an inch wide reads as a dash however narrow the
+gap is made.
+
+**Its box is wider than any box it can be asked to fill** — 2.6 wide to tall. A
+picture wider than its box is scaled to the box's *height* and cropped at the
+sides, so two things hold exactly on every trim and in both placements: the
+eye's height on the board is the fraction written into the file, and the emblem
+prints at the width it was written for, the only box height either placement has
+being the full height of the cover sheet. 2.6 is set by the **wrap**: across a
+whole 7×10 cover the eye stands on the front panel and the far corner of the
+back is 13.5 in away, which the artwork's own half-width has to reach. A test
+measures that against the file rather than against a number kept beside it.
 
 **It prints over the type and the type has to move.** The pupil is set under the
 title rule, which on a `label` cover is where the author's name goes, so the
 look carries `authorAtFoot` and the name goes to the foot of the board. Moving
 the type is the repair rather than moving the eye: where the eye goes is the
 design and where a line of 13pt roman goes is not.
+
+**And it is the one figure that may cross the fold.** `groundFigureWrap` prints
+it as a single picture over the whole sheet, so the rays run left through the
+spine and across the back. The rule at the head of `figures.ts` has not moved:
+what it forbids is a scene printed as *two boxes* either side of a fold that
+creeps by an eighth of an inch, which is two halves that do not meet. One
+picture on one sheet has no seam to misregister — a fold that lands out moves
+the crease, not the artwork. The cost is said rather than hidden: the figure is
+positioned against the sheet, so a creeping fold carries the front panel with it
+and the subject sits up to an eighth of an inch off the panel's centre line.
+Invisible on a radiance whose rays cross the fold as straight lines; it would
+not be on a figure with a face in it, which is why it is a choice a look makes.
 
 **It is a device and prints like one.** At a ground's three to five per cent the
 rays merge into exactly the grey wash the trace exists to avoid, so this one

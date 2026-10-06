@@ -177,6 +177,14 @@ export interface CoverLook {
    * goes is not.
    */
   authorAtFoot: boolean
+  /**
+   * Whether the ground figure runs across the whole sheet, through the spine
+   * and over the back, instead of stopping at the fold.
+   *
+   * `wrapFigureFrame` carries the argument. It supersedes `groundFigureBack`,
+   * there being no companion to place when the picture is already continuous.
+   */
+  groundFigureWrap: boolean
   /** Whether the spine carries the title and author (thickness permitting). */
   spineText: boolean
   /** Whether the imprint prints at the foot of the front cover. */
@@ -372,7 +380,8 @@ export function defaultLook(): CoverLook {
     groundPattern: null,
     groundFigure: null,
     groundFigureOpacity: DEFAULT_FIGURE_OPACITY,
-    groundFigureBack: false
+    groundFigureBack: false,
+    groundFigureWrap: false
   }
 }
 
@@ -502,7 +511,8 @@ export function normalizeLook(raw: unknown): CoverLook {
         ? raw['groundFigureOpacity']
         : d.groundFigureOpacity
     ),
-    groundFigureBack: bool(raw['groundFigureBack'], d.groundFigureBack)
+    groundFigureBack: bool(raw['groundFigureBack'], d.groundFigureBack),
+    groundFigureWrap: bool(raw['groundFigureWrap'], d.groundFigureWrap)
   }
 }
 

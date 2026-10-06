@@ -44,9 +44,85 @@ import { resolve } from 'node:path'
 const BINS = 4320 // a twelfth of a degree
 const DUTY_AT = 0.85 // where round the fan the ink pattern is read
 const INK = 0.45 // coverage that counts as ink
-const BOX_ASPECT = 0.8
-const TAPER = 0.3 // how much of a ray's widening it keeps going out
+/**
+ * The artwork's box, wide to tall. Wider than any box it can be asked to fill.
+ *
+ * A picture wider than its box is scaled to the box's HEIGHT and cropped at the
+ * sides, so two things hold exactly on every trim and in both placements: the
+ * eye's height on the board is the fraction written into this file, and the
+ * emblem prints at the width it was written for, because the only box height
+ * either placement has is the full height of the cover sheet.
+ *
+ * 2.6 is set by the wrap. Across a whole 7x10 cover the eye sits on the front
+ * panel and the far corner of the back is 13.5 in away, so the artwork's own
+ * half-width has to reach it; at 2.6 it reaches 13.3 in across and 14.0 in to
+ * its own corner. A front panel alone needs a twentieth of that and loses the
+ * rest off the sides, which costs nothing but file.
+ */
+const BOX_ASPECT = 2.6
+const TAPER = 0.3 // how much of a ray's widening it keeps once past the core
 const FRAME_HEIGHT_IN = 10.25 // a 7x10 cover out to the bleed; sets the pixel scale only
+
+/**
+ * How far out the rays hold the fan's own weight, before they begin to thin.
+ *
+ * The engraving is an ellipse — its ink reaches 953 px at the sides and 464 at
+ * the foot — so rays that begin thinning where each one leaves the fan begin
+ * thinning at a different radius in every direction, and what a reader sees is
+ * a wide flat lozenge of heavy ink round the eye with clean rays beyond it. The
+ * lozenge is the fan's own outline, and it is the thing to be rid of.
+ *
+ * So every ray stays a wedge — the fan's angular width, held — out to the fan's
+ * LONGEST reach, and only past that does any of them taper. The heavy zone is
+ * then a circle rather than a lens, which reads as a radiance instead of as a
+ * shape somebody cropped. Taken off the trace rather than set, so a re-traced
+ * emblem moves it.
+ */
+const CORE_AT_MAX_REACH = true
+
+// --- the texture, all of it measured off the trace -----------------------
+//
+// A carried ray was a clean polygon and an engraved one is not, so the two read
+// as different materials and the join between them shows. Followed outward run
+// by run, a ray of this fan wanders sideways about half its own width over the
+// fan's depth (1.26 px per 10 px out, against a width of 8.7 px at that
+// radius), and along its length it is a chain of dashes.
+//
+// The dash figures need one judgement and it is worth stating. Packed hatching
+// gives dashes of 16 px and gaps of 12 px at the median — 57 per cent ink along
+// the ray — but the pattern read round a circle is already that dashing, so
+// breaking a carried ray at 57 per cent would halve a density the circle
+// reading had got right. The breaks are therefore taken from the long end of
+// the engraving's own dash distribution (its ninth decile, 67 px) with the
+// median gap: a ray of the same material, cut less often.
+//
+// A ray is walked in the LOGARITHM of its radius, and that is not tidiness.
+// Measured on the fan, a ray is 150 px deep; carried, it is ten times that. A
+// wobble of a fixed wavelength then gives twenty-seven waves down its length
+// and the board grows hair, and a dash of a fixed 67 px gives sixty beads on a
+// string — both were printed and looked at. What the engraving actually holds
+// constant is the stroke as a PROPORTION of where it is on the figure, which
+// is a constant step in log r, so that is what a step here is. (A constant
+// step in r / coreRadius is not the same thing and does not work: it is a
+// fixed number of pixels under another name, which is the version that printed
+// the foot of the board as bamboo.)
+//
+// The gap is the one length that does not scale, because a break is where the
+// burin left the plate and that is the same size wherever on the figure it
+// happens.
+const WOBBLE = 0.7 // sideways wander, as a share of the ray's own half-width
+const WOBBLE_LN = 0.8 // one wave per 2.2x of radius
+const WIDTH_VAR = 0.3 // how much a ray's width breathes along its length
+const WIDTH_LN = 0.35
+const DASH_LN = 0.17 // a dash spans about a sixth of the radius it is at
+// A burin enters and leaves the plate, so a stroke is a lens and not a bar.
+// Cut square, a break across a ray a twentieth of an inch wide reads as a dash
+// in a dashed line however narrow the gap is made — which is what the first
+// textured emission printed, and no amount of shortening the gap fixed it.
+// This is the shape of the taper: 1 is a pure lens, 0 a bar.
+const NIB = 0.45
+const GAP_PX = 12 // the fan's own median gap, in the trace's own pixels
+const STEP_LN = 0.02 // how finely a ray's edges are built
 
 const args = process.argv.slice(2)
 const flag = (name, fallback) => {
@@ -56,8 +132,8 @@ const flag = (name, fallback) => {
 const [src, out] = args.filter(
   (a) => !a.startsWith('--') && args[args.indexOf(a) - 1]?.slice(0, 2) !== '--'
 )
-const emblemWidthIn = Number(flag('width', 3.8))
-const eyeAt = Number(flag('at', 0.362))
+const emblemWidthIn = Number(flag('width', 3))
+const eyeAt = Number(flag('at', 0.352))
 const givenCentre = flag('centre', null)
 
 if (!src || !out) {
@@ -224,12 +300,32 @@ const VW = Math.round(VH * BOX_ASPECT)
 const EX = VW / 2
 const EY = VH * eyeAt
 const rOuter = Math.hypot(Math.max(EX, VW - EX), Math.max(EY, VH - EY)) * 1.06
+const coreTo = CORE_AT_MAX_REACH ? Math.max(...env) : 0
 
 const angleOf = (b) => ((b + 0.5) / BINS) * 2 * Math.PI
 const point = (x, y) => `${x.toFixed(1)} ${y.toFixed(1)}`
 
+/**
+ * Smooth noise in one dimension, from a seed, so every run writes the same file.
+ *
+ * A hash at each integer, cosine-interpolated between them, which is all the
+ * wander needs — it is a wobble with a length, not a spectrum.
+ */
+function noise(seed, t) {
+  const hash = (n) => {
+    let h = Math.imul(n ^ seed, 2246822519)
+    h = Math.imul(h ^ (h >>> 13), 3266489917)
+    return ((h ^ (h >>> 16)) >>> 0) / 4294967295 - 0.5
+  }
+  const i = Math.floor(t)
+  const f = t - i
+  const w = (1 - Math.cos(f * Math.PI)) / 2
+  return hash(i) * (1 - w) + hash(i + 1) * w
+}
+
 const wedges = []
-for (const [start, len] of rays) {
+let dashes = 0
+rays.forEach(([start, len], index) => {
   const mid = angleOf((start + (len - 1) / 2) % BINS)
   let rIn = 0
   for (let k = 0; k < len; k++) rIn += env[(start + k) % BINS] * DUTY_AT
@@ -239,24 +335,48 @@ for (const [start, len] of rays) {
   const uy = Math.sin(mid)
   const nx = -uy
   const ny = ux
-  // The inner end follows the fan's own rim, so the join is buried in its ink.
-  const steps = Math.max(2, Math.ceil(len / 24))
-  const inner = []
-  for (let k = 0; k <= steps; k++) {
-    const b = (start + Math.round((k / steps) * (len - 1))) % BINS
-    const a = angleOf(b)
-    const r = env[b] * DUTY_AT
-    inner.push(point(EX + r * Math.cos(a), EY + r * Math.sin(a)))
+  const seed = Math.imul(index + 1, 2654435761)
+  const holdTo = Math.max(coreTo, rIn)
+
+  /** Half-width at a radius: the fan's own wedge to the core, thinning past it. */
+  const halfAt = (r) =>
+    r <= holdTo ? half * (r / rIn) : half * (holdTo / rIn) * Math.pow(r / holdTo, TAPER)
+
+  /**
+   * A point on the ray's wandering centre line, and its half-width there.
+   *
+   * `at` is how far along its own dash the point is, 0 to 1, which is what
+   * draws the stroke's ends to a point.
+   */
+  const spine = (u, at) => {
+    const r = Math.exp(u)
+    const nib = Math.pow(Math.sin(Math.PI * Math.min(1, Math.max(0, at))), NIB)
+    const w = halfAt(r) * (1 + WIDTH_VAR * 2 * noise(seed + 1, u / WIDTH_LN)) * nib
+    const off = WOBBLE * halfAt(r) * 2 * noise(seed, u / WOBBLE_LN)
+    return { x: EX + r * ux + off * nx, y: EY + r * uy + off * ny, w: Math.max(0.15, w) }
   }
-  const halfOut = half * Math.pow(rOuter / rIn, TAPER)
-  const tipX = EX + rOuter * ux
-  const tipY = EY + rOuter * uy
-  wedges.push(
-    `M${inner.join('L')}` +
-      `L${point(tipX + halfOut * nx, tipY + halfOut * ny)}` +
-      `L${point(tipX - halfOut * nx, tipY - halfOut * ny)}Z`
-  )
-}
+
+  // Cut into dashes, so a carried ray is the same material as the fan's own.
+  // The first starts under the fan's ink, where the reading was taken, so the
+  // join is buried exactly as it was before the texture existed.
+  const uEnd = Math.log(rOuter)
+  let u = Math.log(rIn)
+  while (u < uEnd) {
+    const end = Math.min(uEnd, u + DASH_LN * (0.6 + 1.3 * (noise(seed + 2, u / DASH_LN) + 0.5)))
+    const left = []
+    const right = []
+    for (let t = u; ; t = Math.min(end, t + STEP_LN)) {
+      const p = spine(t, (t - u) / (end - u))
+      left.push(point(p.x + p.w * nx, p.y + p.w * ny))
+      right.push(point(p.x - p.w * nx, p.y - p.w * ny))
+      if (t >= end) break
+    }
+    wedges.push(`M${left.join('L')}L${right.reverse().join('L')}Z`)
+    dashes++
+    const gap = Math.log1p(GAP_PX / Math.exp(end))
+    u = end + gap * (0.5 + 1.4 * (noise(seed + 3, u / Math.max(gap, 1e-6)) + 0.5))
+  }
+})
 
 const body = /\sd="([^"]+)"/.exec(svg)[1]
 await writeFile(
@@ -274,7 +394,7 @@ console.log(
   `  = ${(centre[0] / W).toFixed(4)}, ${(centre[1] / H).toFixed(4)} of its box, at a radial share of ${share.toFixed(4)}`
 )
 console.log(
-  `${rays.length} rays carried out; widths ${((widths[0] / BINS) * 360).toFixed(2)}deg to ${((widths.at(-1) / BINS) * 360).toFixed(2)}deg,`
+  `${rays.length} rays carried out in ${dashes} dashes, the fan's weight held to ${coreTo.toFixed(0)}px; widths ${((widths[0] / BINS) * 360).toFixed(2)}deg to ${((widths.at(-1) / BINS) * 360).toFixed(2)}deg,`
 )
 console.log(
   `  capped at ${((cap / BINS) * 360).toFixed(2)}deg, which holds back ${rays.filter(([, l]) => l > cap).length}`

@@ -2834,12 +2834,58 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   lost** where the slits closed up, so the carried width is capped at the runs'
   ninth decile, which holds back 13 of 133.
 
+  **The fan's own outline is a lozenge, and it cannot be cut off.** Carried as
+  above, the engraving still stood round the eye as a wide flat mass with clean
+  rays beyond it, because the fan is an ellipse — 953 px of ink at the sides
+  against 464 at the foot — so a ray that begins thinning where it leaves the
+  fan begins thinning at a different radius in every direction. The obvious
+  repair is to keep the eye and the seven stars and drop the hatching, and it is
+  not available: labelled in the pixels, the eye's ink is one component with the
+  whole fan and the bottom star's white is one with the background, because on
+  the paper both touch the hatching. Three contour-level attempts failed for the
+  same reason before the labelling settled it. So the fan is **extended** —
+  every ray holds its own angular width out to the fan's longest reach and only
+  tapers past that — which makes the heavy zone a circle instead of a lens.
+
+  **A carried ray has to be the same material as a cut one**, or the join shows
+  wherever the two meet. Measured along the trace's own rays: a ray wanders
+  sideways about half its own width over the fan's depth, and it is a chain of
+  dashes 16 px long with 12 px gaps. Three things about reproducing that were
+  printed wrong first and each is a general lesson. Every length along a ray is
+  held in the **logarithm of the radius**, because a carried ray is ten times a
+  cut one's depth and a wavelength fixed in pixels gives twenty-seven waves of
+  hair down the board, or sixty beads on a string — and a length fixed as a
+  fraction of the core radius is the same mistake under another name, which is
+  the version that printed the foot of the cover as bamboo. The **gap is the one
+  length that does not scale**, a break being where the burin left the plate. And
+  a dash is a **lens, not a bar**: a square cut across a stroke a twentieth of an
+  inch wide reads as a dash in a dashed line however narrow the gap is made, and
+  no amount of shortening it helped.
+
+  **A figure may cross the fold when it is one picture rather than two.** The
+  rule this module opens with — a figure stops dead at the fold — forbids a
+  _scene printed as two boxes_ either side of a fold that creeps by an eighth of
+  an inch, because those are two halves that will not meet on the printed copy.
+  A single picture over the whole sheet has no seam to misregister: a fold that
+  lands out moves the crease, not the artwork. So `groundFigureWrap` runs the
+  figure across the back, the spine and the front as one image, aimed by
+  `wrapAnchorTarget` at the front panel's centre line rather than the sheet's
+  (whose middle is the spine), with no companion behind it and no fold edge to
+  hold the fade back from. What it costs is stated rather than hidden: the
+  figure is positioned against the sheet, so a creeping fold carries the panel
+  with it and the subject sits up to an eighth of an inch off the panel's centre
+  line — invisible on a radiance, not on a face.
+
   Two things it settled about placing a figure. **The artwork's box is wider
-  than any front panel on purpose** (0.80 against 0.767 for an 8.5×11 out to
-  the bleed), because a picture wider than its box is scaled to the box's
-  _height_ and cropped at the sides — so the fraction written into the file is
-  the eye's height on the board, exactly, on every trim. A box the shape of one
-  panel would be exact on that book and wrong on the next. And **the type moves,
+  than any box it can be asked to fill** (2.6 wide to tall), because a picture
+  wider than its box is scaled to the box's _height_ and cropped at the sides —
+  so the fraction written into the file is the eye's height on the board,
+  exactly, on every trim, and the emblem prints at the width it was written for,
+  the only box height either placement has being the full height of the sheet. A
+  box the shape of one panel would be exact on that book and wrong on the next.
+  The number is set by the wrap rather than by the panel: across a whole 7×10
+  cover the far corner of the back is 13.5 in from the eye, and the artwork's own
+  half-width has to reach it. And **the type moves,
   not the figure**: the pupil is set under the title rule, which on a `label`
   cover is where the author's name goes, so `CoverLook.authorAtFoot` sends the
   name to the foot. Where the eye goes is the design and where a line of 13pt

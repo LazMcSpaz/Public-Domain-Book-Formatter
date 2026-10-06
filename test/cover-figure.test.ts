@@ -41,6 +41,8 @@ import {
   figureFrame,
   figureOpacity,
   GROUND_FIGURE_ID,
+  wrapAnchorTarget,
+  wrapFigureFrame,
   MAX_FIGURE_OPACITY,
   MIN_FIGURE_OPACITY,
   PT_PER_INCH,
@@ -562,5 +564,87 @@ describe('the subtitle’s size', () => {
     expect(next.look.subtitleRatio).toBe(0.7)
     // And the empty option means the default, not a share of nothing.
     expect(coverFromAnswers(next, { 'cover-subtitle-size': '' }).look.subtitleRatio).toBeNull()
+  })
+})
+
+describe('a figure the editor asks to run across the whole cover', () => {
+  const wrap = coverGeometry({ trimSize: '7x10', pageCount: 520, paper: 'bw-white' })
+
+  function wrapped(patch: (doc: CoverDocument) => void = () => {}): CoverDocument {
+    const doc = defaultCover('7x10', 520)
+    doc.content.title = 'The Collected Manuscripts'
+    doc.look.groundFigure = 'all-seeing-eye-radiant'
+    doc.look.groundFigureWrap = true
+    patch(doc)
+    return doc
+  }
+
+  it('is placed against the sheet, not the front panel', () => {
+    const frame = wrapFigureFrame(wrap)
+    expect(frame.x).toBe(0)
+    expect(frame.y).toBe(0)
+    expect(frame.width).toBeCloseTo(wrap.fullWidthIn, 9)
+    expect(frame.height).toBeCloseTo(wrap.fullHeightIn, 9)
+  })
+
+  it('aims the subject at the front panel’s centre line, not the sheet’s', () => {
+    // The sheet's own middle is the spine. Centring there would put the eye on
+    // the fold, which is the one place on a cover nothing may sit.
+    const target = wrapAnchorTarget(wrap) * wrap.fullWidthIn
+    expect(target).toBeCloseTo(wrap.front.x + wrap.front.width / 2, 9)
+    expect(target).toBeGreaterThan(wrap.spine.x + wrap.spine.width)
+  })
+
+  it('fades at every edge, there being no fold to stop at', () => {
+    const fade = figureFade(wrap, null)
+    expect(fade.leftIn).toBeCloseTo(wrap.bleedIn, 9)
+    expect(fade.rightIn).toBeCloseTo(wrap.bleedIn, 9)
+    // Against the figure that does stop at a fold, where the fold edge is flush.
+    expect(figureFade(wrap, 'left').leftIn).toBe(0)
+  })
+
+  it('reaches the far edge of the sheet from where the subject stands', () => {
+    // The invariant the artwork's proportions exist for, and the reason it is
+    // 2.6 wide to tall. A wrapping picture is scaled to the sheet's height, so
+    // its own half-width has to carry the rays from the front panel's centre
+    // line all the way across the spine and the back. Measured against the file
+    // rather than against a number kept beside it.
+    const file = readFileSync(join('public', FIGURE_SRC['all-seeing-eye-radiant']), 'utf8')
+    const [, , w, h] = /viewBox="([-\d.\s]+)"/.exec(file)![1]!.trim().split(/\s+/).map(Number)
+    const frame = wrapFigureFrame(wrap)
+    const inchesPerPx = frame.height / h!
+    const halfWidthIn = (w! / 2) * inchesPerPx
+    const toFarEdgeIn = wrapAnchorTarget(wrap) * frame.width
+    expect(halfWidthIn).toBeGreaterThan(toFarEdgeIn)
+  })
+
+  it('places one picture over the sheet and no companion behind it', () => {
+    // A companion exists to give a plain back something; a picture already over
+    // the back has nothing left to give it, and two of them at one tint would
+    // print the fan twice.
+    const { items, geometry } = composeCover(
+      wrapped((d) => (d.look.groundFigureBack = true)),
+      { measurer: fixedWidthMeasurer() }
+    )
+    const figure = items.find((i) => i.kind === 'image' && i.id === GROUND_FIGURE_ID)
+    expect(figure?.kind).toBe('image')
+    expect((figure as CoverImageItem).widthPt).toBeCloseTo(geometry.fullWidthIn * PT_PER_INCH, 6)
+    expect(items.some((i) => i.kind === 'image' && i.id === GROUND_FIGURE_BACK_ID)).toBe(false)
+  })
+
+  it('still stops at the fold when the look has not asked', () => {
+    const { items, geometry } = composeCover(
+      wrapped((d) => {
+        d.look.groundFigureWrap = false
+        d.look.groundFigureBack = true
+      }),
+      { measurer: fixedWidthMeasurer() }
+    )
+    const figure = items.find((i) => i.kind === 'image' && i.id === GROUND_FIGURE_ID)
+    expect((figure as CoverImageItem).widthPt).toBeCloseTo(
+      figureFrame(geometry).width * PT_PER_INCH,
+      6
+    )
+    expect(items.some((i) => i.kind === 'image' && i.id === GROUND_FIGURE_BACK_ID)).toBe(true)
   })
 })

@@ -372,7 +372,7 @@ export interface FigureFade {
  * `left` for the front's, whose box starts at the fold; `right` for the back's
  * companion, whose box ends at it.
  */
-export function figureFade(geometry: CoverGeometry, foldEdge: 'left' | 'right'): FigureFade {
+export function figureFade(geometry: CoverGeometry, foldEdge: 'left' | 'right' | null): FigureFade {
   const bleed = geometry.bleedIn
   return {
     leftIn: foldEdge === 'left' ? 0 : bleed,
@@ -381,6 +381,61 @@ export function figureFade(geometry: CoverGeometry, foldEdge: 'left' | 'right'):
     bottomIn: bleed,
     widthIn: FIGURE_FADE_IN
   }
+}
+
+/**
+ * The whole cover sheet, for a figure the editor has asked to run across it.
+ *
+ * This is the one case the rule at the head of this module lets through, and
+ * it is worth being exact about why, because the rule itself has not moved. A
+ * figure stops at the fold because a scene printed as two boxes either side of
+ * a fold that creeps by an eighth of an inch is two halves that do not meet on
+ * the printed copy. A figure printed as ONE box across the whole sheet has no
+ * seam to misregister: it is a single picture on a single sheet, and a fold
+ * that lands an eighth of an inch out moves the crease, not the artwork.
+ *
+ * What it does cost is said rather than hidden: the figure is positioned
+ * against the sheet, so a fold that creeps carries the front panel with it and
+ * the subject sits up to an eighth of an inch off the panel's centre line. On
+ * a radiance, whose rays cross the fold as straight lines, that is invisible.
+ * On a figure with a face in it, it would not be, which is why this is a
+ * choice a look makes rather than the default.
+ */
+export function wrapFigureFrame(geometry: CoverGeometry): Rect {
+  return {
+    x: 0,
+    y: 0,
+    width: geometry.fullWidthIn,
+    height: geometry.fullHeightIn
+  }
+}
+
+/** The same rectangle in points, which is what the composer places in. */
+export function wrapFigureFramePt(geometry: CoverGeometry): {
+  xPt: number
+  yPt: number
+  widthPt: number
+  heightPt: number
+} {
+  const frame = wrapFigureFrame(geometry)
+  return {
+    xPt: pt(frame.x),
+    yPt: pt(frame.y),
+    widthPt: pt(frame.width),
+    heightPt: pt(frame.height)
+  }
+}
+
+/**
+ * Where the anchor should land in a wrapping figure's box, as a fraction of it.
+ *
+ * The FRONT panel's centre line, not the sheet's, which would put the eye on
+ * the spine. The same argument `backAnchorTarget` makes for the companion.
+ */
+export function wrapAnchorTarget(geometry: CoverGeometry): number {
+  const width = geometry.fullWidthIn
+  if (width <= 0) return 0.5
+  return (geometry.front.x + geometry.front.width / 2) / width
 }
 
 /**

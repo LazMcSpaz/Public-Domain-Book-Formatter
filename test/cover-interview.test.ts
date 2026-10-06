@@ -162,6 +162,20 @@ describe('answers fold back into the cover', () => {
     expect(coverFromAnswers(onto, answers).look.authorAtFoot).toBe(true)
   })
 
+  it('carries the wrap answer across looks, and asks it only when there is a figure', () => {
+    const bare = state()
+    expect(lookQuestions(bare).some((q) => q.id === 'cover-figure-wrap')).toBe(false)
+    const withFigure = state()
+    withFigure.doc.look.groundFigure = 'all-seeing-eye-radiant'
+    withFigure.doc.look.groundFigureWrap = true
+    expect(lookQuestions(withFigure).some((q) => q.id === 'cover-figure-wrap')).toBe(true)
+
+    const answers = defaultAnswers(coverQuestions(withFigure))
+    const onto = defaultCover('6x9', 284)
+    expect(onto.look.groundFigureWrap).toBe(false)
+    expect(coverFromAnswers(onto, answers).look.groundFigureWrap).toBe(true)
+  })
+
   it('does not ask where the author goes when the arrangement has already decided', () => {
     const typographic = state()
     typographic.doc.look.arrangement = 'typographic'
