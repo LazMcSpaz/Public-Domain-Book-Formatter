@@ -29,6 +29,8 @@
  * which in the browser is the same fontkit call pdf-lib makes to encode text.
  */
 import type { FontRef, TextMeasurer } from '@core/layout'
+import { typographicQuotes } from '@core/layout'
+import { parseInlineMarkup } from '@core/transcribe'
 import type { OrnamentArt } from '@core/ornament'
 import { sizeAfterOps } from '@core/image'
 import { worksLabel, type CoverDocument, type FrameStyle, type Hex } from './document'
@@ -288,7 +290,11 @@ const BLURB_MAX_MEASURE_IN = 4.6
 const IMPRINT_PT = 9
 const LEADING = 1.25
 
-function face(family: string, style: 'regular' | 'italic' = 'regular', smallCaps = false): FontRef {
+function face(
+  family: string,
+  style: 'regular' | 'italic' | 'bold' = 'regular',
+  smallCaps = false
+): FontRef {
   return smallCaps ? { family, style, smallCaps: true } : { family, style }
 }
 
@@ -322,6 +328,88 @@ export function wrapText(
     }
   }
   if (line) lines.push(line)
+  return lines
+}
+
+/** One stretch of a blurb line set in one face. */
+export interface StyledRun {
+  text: string
+  font: FontRef
+}
+
+const sameFont = (a: FontRef, b: FontRef): boolean =>
+  a.family === b.family && a.style === b.style && !!a.smallCaps === !!b.smallCaps
+
+/** `line` with one more word on the end, as a new array — the caller may discard it. */
+function appended(line: readonly StyledRun[], word: string, font: FontRef): StyledRun[] {
+  const runs = line.map((r) => ({ ...r }))
+  const last = runs[runs.length - 1]
+  if (!last) return [{ text: word, font }]
+  if (sameFont(last.font, font)) {
+    last.text += ` ${word}`
+    return runs
+  }
+  // The space between two differently-set words is drawn in the face of the
+  // word *before* it, so a line's runs abut and the writer advances by widths it
+  // measured rather than re-deriving a word space of its own.
+  last.text += ' '
+  runs.push({ text: word, font })
+  return runs
+}
+
+/**
+ * A paragraph of the editor's own prose, broken to a measure, keeping its
+ * emphasis.
+ *
+ * The blurb is the one thing on a cover that is *written* rather than read off
+ * a title page, and the editor's prose names books. Set as one string in one
+ * face, `<i>The Secret Teachings of All Ages</i>` prints the angle brackets —
+ * which is this repository's most-repeated fault, recorded three times over: a
+ * table's cells kept their tags, a written section could not italicise a word,
+ * and a glossary naming forty books printed every title in roman. Each was the
+ * same shape as this one, a run of text emitted with a single font.
+ *
+ * The reader is `parseInlineMarkup` rather than a second one, and it fits
+ * without translation: emphasis comes back as indices of whitespace-separated
+ * words, which is already the coordinate `wrapText` walks in.
+ *
+ * Strong is offered to `fontFor` and resolved there, so a face with no bold
+ * makes the same honest substitution the layout engine makes rather than a
+ * smeared outline.
+ */
+export function wrapMarkup(
+  raw: string,
+  maxWidthPt: number,
+  fontFor: (style: 'regular' | 'italic' | 'bold') => FontRef,
+  sizePt: number,
+  measurer: TextMeasurer
+): StyledRun[][] {
+  const { text, emphasis, strong } = parseInlineMarkup(raw)
+  const italic = new Set(emphasis)
+  const bold = new Set(strong)
+  const words = text.split(/\s+/).filter((w) => w.length > 0)
+  if (words.length === 0) return []
+
+  // Strong first, as `spansFor` does: there is no bold italic here either, and
+  // first match wins, so a marked word inside an italic phrase sets bold roman.
+  const styleOf = (i: number): 'regular' | 'italic' | 'bold' =>
+    bold.has(i) ? 'bold' : italic.has(i) ? 'italic' : 'regular'
+  const widthOf = (runs: readonly StyledRun[]): number =>
+    runs.reduce((w, r) => w + measurer.widthOf(r.text, r.font, sizePt), 0)
+
+  const lines: StyledRun[][] = []
+  let line: StyledRun[] = []
+  for (let i = 0; i < words.length; i++) {
+    const font = fontFor(styleOf(i))
+    const candidate = appended(line, words[i]!, font)
+    if (line.length > 0 && widthOf(candidate) > maxWidthPt) {
+      lines.push(line)
+      line = [{ text: words[i]!, font }]
+    } else {
+      line = candidate
+    }
+  }
+  if (line.length > 0) lines.push(line)
   return lines
 }
 
@@ -1242,25 +1330,41 @@ function layBackCover(
     y += ornament.height * scale + 14
   }
 
-  const paragraphs = content.blurb.split(/\n{2,}/).filter((p) => p.trim().length > 0)
+  // A cover is new matter entirely — nothing on it is being reproduced from a
+  // page — so there is no faithfulness argument for keeping a typewriter mark,
+  // and no switch. The function is the interior's own, so the quotes on the
+  // board and the quotes inside the book cannot come out differently.
+  const paragraphs = typographicQuotes(content.blurb)
+    .split(/\n{2,}/)
+    .filter((p) => p.trim().length > 0)
+  const hasBold = measurer.hasBold(look.bodyFont)
+  const blurbFont = (style: 'regular' | 'italic' | 'bold'): FontRef =>
+    face(look.bodyFont, style === 'bold' && !hasBold ? 'italic' : style)
+  // One set of metrics for every line, taken from the body face: an italic
+  // phrase must not shift the line it sits in off the others.
   const metrics = measurer.metrics(bodyFont, BLURB_PT)
   const bottom = pt(frame.y + frame.height)
   for (const paragraph of paragraphs) {
-    const lines = wrapText(paragraph.trim(), pt(frame.width), bodyFont, BLURB_PT, measurer)
-    for (const line of lines) {
+    const lines = wrapMarkup(paragraph.trim(), pt(frame.width), blurbFont, BLURB_PT, measurer)
+    for (const runs of lines) {
       if (y + metrics.ascent > bottom) return
-      items.push({
-        kind: 'text',
-        text: line,
-        font: bodyFont,
-        sizePt: BLURB_PT,
-        xPt: pt(frame.x),
-        yPt: y + metrics.ascent,
-        color: palette.ink,
-        widthPt: measurer.widthOf(line, bodyFont, BLURB_PT),
-        ascentPt: metrics.ascent,
-        descentPt: metrics.descent
-      })
+      let x = pt(frame.x)
+      for (const run of runs) {
+        const width = measurer.widthOf(run.text, run.font, BLURB_PT)
+        items.push({
+          kind: 'text',
+          text: run.text,
+          font: run.font,
+          sizePt: BLURB_PT,
+          xPt: x,
+          yPt: y + metrics.ascent,
+          color: palette.ink,
+          widthPt: width,
+          ascentPt: metrics.ascent,
+          descentPt: metrics.descent
+        })
+        x += width
+      }
       y += BLURB_PT * 1.4
     }
     y += BLURB_PT * 0.7

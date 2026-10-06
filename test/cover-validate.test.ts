@@ -208,4 +208,18 @@ describe('the ground is not an intruder', () => {
       expect(check(report(doc), 'barcode').level).toBe('ok')
     }
   })
+
+  it('does not trip it for a ground figure either, wrapped or not', () => {
+    // The figure was added after the pattern and missed here. It is the same
+    // thing by the same argument: one picture at a few per cent, bled off the
+    // sheet, lying under the barcode on every cover that carries one.
+    for (const wrap of [false, true]) {
+      const doc = cover((d) => {
+        d.look.groundFigure = 'all-seeing-eye-radiant'
+        d.look.groundFigureBack = true
+        d.look.groundFigureWrap = wrap
+      })
+      expect(check(report(doc), 'barcode').level).toBe('ok')
+    }
+  })
 })

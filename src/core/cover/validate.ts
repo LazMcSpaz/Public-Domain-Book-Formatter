@@ -16,6 +16,7 @@ import { effectiveDpi } from '@core/image'
 import type { ComposedCover, CoverItem } from './compose'
 import { itemBounds, PRESS_MARK_ID } from './compose'
 import { GROUND_IMAGE_ID } from './patterns'
+import { GROUND_FIGURE_BACK_ID, GROUND_FIGURE_ID } from './figures'
 import {
   contains,
   overlaps,
@@ -74,9 +75,20 @@ interface InkedBound {
  * picture-backed one is an image under a well-known id. Neither is a thing
  * someone put in the barcode's way.
  */
+/**
+ * Something printed *under* the cover rather than on it.
+ *
+ * The ground figure belongs here for the reason the pattern does, and was
+ * missed when it was added: it is one picture at a few per cent bled off the
+ * sheet, so it lies under the barcode on every cover that has one, and a check
+ * that fires every time is a check its reader learns to skip.
+ */
 function isGround(item: CoverItem): boolean {
   if (item.kind === 'ornament') return item.opacity !== undefined
-  return item.kind === 'image' && item.id === GROUND_IMAGE_ID
+  if (item.kind !== 'image') return false
+  return (
+    item.id === GROUND_IMAGE_ID || item.id === GROUND_FIGURE_ID || item.id === GROUND_FIGURE_BACK_ID
+  )
 }
 
 function inkedBounds(composed: ComposedCover): InkedBound[] {

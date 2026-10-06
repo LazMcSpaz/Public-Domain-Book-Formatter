@@ -693,6 +693,111 @@ describe('the back cover is set to a readable measure', () => {
   })
 })
 
+describe("the blurb is the editor's own prose, and is set as such", () => {
+  /** Every text item inside the blurb's frame, in the order it is drawn. */
+  function blurbItems(blurb: string, m = measurer): CoverTextItem[] {
+    const doc = bookCover((d) => {
+      d.content.blurb = blurb
+      d.content.imprint = ''
+    })
+    const { items, geometry } = composeCover(doc, { measurer: m })
+    const frame = blurbFrame(geometry)
+    // Bounded in both axes: the front panel's own type sits at some of the
+    // same heights, and a y-only filter quietly mixes it in.
+    return texts(items).filter(
+      (t) =>
+        t.yPt / 72 >= frame.y - 0.1 &&
+        t.yPt / 72 <= frame.y + frame.height + 0.1 &&
+        t.xPt / 72 >= frame.x - 0.1 &&
+        t.xPt / 72 <= frame.x + frame.width + 0.1
+    )
+  }
+
+  it('sets a named book in italic rather than printing its tags', () => {
+    const drawn = blurbItems('Five years before <i>The Secret Teachings</i> was published.')
+    // No tag survives into anything that gets drawn. The fault this replaces
+    // printed the angle brackets, so the whole line came out in one roman run.
+    expect(drawn.map((t) => t.text).join('')).not.toMatch(/[<>]/)
+    const italic = drawn.filter((t) => t.font.style === 'italic')
+    expect(italic.length).toBeGreaterThan(0)
+    expect(italic.map((t) => t.text.trim()).join(' ')).toBe('The Secret Teachings')
+    // And the words either side of it stay roman.
+    const roman = drawn.filter((t) => t.font.style === 'regular')
+    expect(roman.map((t) => t.text).join('')).toContain('Five years before')
+    expect(roman.map((t) => t.text).join('')).toContain('was published')
+  })
+
+  it('draws the runs of a line end to end', () => {
+    const drawn = blurbItems('Before <i>Isis Unveiled</i> there was nothing.')
+    const line = drawn.filter((t) => Math.abs(t.yPt - drawn[0]!.yPt) < 0.01)
+    expect(line.length).toBeGreaterThan(1)
+    for (let i = 1; i < line.length; i++) {
+      // Each run begins exactly where the last ended, so the writer advances
+      // by widths this pass measured and never re-derives a word space.
+      expect(line[i]!.xPt).toBeCloseTo(line[i - 1]!.xPt + line[i - 1]!.widthPt, 6)
+    }
+  })
+
+  it('breaks on the whole line, the emphasis included', () => {
+    const bare =
+      'A paragraph long enough to break, naming The Secret Teachings of All Ages ' +
+      'somewhere in the middle of it, and running on afterwards for a while yet.'
+    const marked = bare.replace(
+      'The Secret Teachings of All Ages',
+      '<i>The Secret Teachings of All Ages</i>'
+    )
+    const drawn = blurbItems(marked)
+    const g = coverGeometry({ trimSize: '6x9', pageCount: 284, paper: 'bw-cream' })
+    const frame = blurbFrame(g)
+
+    // A line is several items now, so its width is their sum — and a breaker
+    // that measured only the run it started in would set past the measure
+    // without any single item doing so.
+    const byLine = new Map<number, CoverTextItem[]>()
+    for (const t of drawn) byLine.set(t.yPt, [...(byLine.get(t.yPt) ?? []), t])
+    expect(byLine.size).toBeGreaterThan(2)
+    for (const line of byLine.values()) {
+      const width = line.reduce((w, t) => w + t.widthPt, 0)
+      expect(width).toBeLessThanOrEqual(frame.width * 72 + 1e-6)
+    }
+
+    // Measured against the same text with no tags in it: the fake measurer
+    // gives both faces the same advances, so the words must fall identically.
+    const lines = [...byLine.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([, runs]) =>
+        runs
+          .map((t) => t.text)
+          .join('')
+          .trim()
+      )
+    expect(lines).toEqual(
+      wrapText(bare, frame.width * 72, { family: 'x', style: 'regular' }, 10.5, measurer)
+    )
+  })
+
+  it("turns the editor's typewriter quotes into printer's quotes", () => {
+    const drawn = blurbItems('No. 1 calls it "Black Magic pure and simple", and it isn\'t gentle.')
+    const set = drawn.map((t) => t.text).join('')
+    expect(set).not.toMatch(/["']/)
+    expect(set).toContain('\u201cBlack')
+    expect(set).toContain('simple\u201d')
+    expect(set).toContain('isn\u2019t')
+  })
+
+  it('sets a strong run in italic in a face with no bold, and bold in one with', () => {
+    // The same refusal the layout engine makes: never a synthesised bold.
+    const plain = blurbItems('The rule is <b>never</b> broken.')
+    expect(plain.find((t) => t.text.trim() === 'never')!.font.style).toBe('italic')
+
+    const bolder = blurbItems('The rule is <b>never</b> broken.', {
+      ...measurer,
+      hasBold: () => true
+    })
+    expect(bolder.find((t) => t.text.trim() === 'never')!.font.style).toBe('bold')
+  })
+})
+
 describe('the author can be set at the foot', () => {
   /** Where "Amos Root" is drawn, in points down the cover. */
   function authorY(patch: (doc: CoverDocument) => void): number {

@@ -781,6 +781,32 @@ worth knowing: it omits every blank verso, so the folio offset climbs at each
 chapter, and the text was checked continuous across every step before a leaf
 was read.
 
+**And the back cover printed them too, in the one place the editor writes.**
+The blurb is the only prose on a cover that is written rather than read off a
+title page, and it names books: the Hall blurb opens its second paragraph with
+`<i>The Secret Teachings of All Ages</i>`, which set as angle brackets on the
+board. Same shape as the three above it — a run of text emitted as one string
+with one font — and found the same way, by rendering the thing rather than
+reading the diff. `wrapMarkup` breaks a paragraph into runs, through
+`parseInlineMarkup` rather than a second reader, since its word indices are
+already the coordinate `wrapText` walks in; a face with no bold makes the
+engine's own substitution. The quotes went with it: the interior turns
+typewriter marks round at layout time (`typographicQuotes`) and the cover did
+not, so the blurb would have set `"Black Magic pure and simple"` in typewriter
+marks in a line of Garamond. Applied to the blurb unconditionally and without a
+switch, because a cover is new matter entirely — nothing on it is being
+reproduced from a page, so there is no faithfulness argument to weigh.
+
+**And the check that should have been looking was looking at the ground.** The
+same render warned that an element sat where KDP prints the barcode, and the
+element was the ground figure — bled off the sheet at twelve per cent, under
+everything, by construction. `isGround` knew about the ground _pattern_ and was
+not extended when the figure was added, so the warning fired on every cover
+carrying one. The code's own comment says why that is worse than silence: a
+check that fires every time is a check its reader learns to skip, and it was
+the one check that could have told me whether the blurb I had just moved
+intruded.
+
 **A table's cells kept their tags, and the page printed both.** The readers
 set the transcript's analysis column as `presupposition: <i>this time</i>`,
 because a cell has no other way to say the page prints those words in
