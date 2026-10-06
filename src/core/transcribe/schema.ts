@@ -8,7 +8,7 @@
  *
  * Pure: types, the JSON schema, and a strict parser. No I/O, no client.
  */
-import type { PageRole } from '@core/pages'
+import { ALL_PAGE_ROLES, type PageRole } from '@core/pages'
 import {
   parseInlineMarkup,
   readParts,
@@ -229,31 +229,13 @@ export interface PageTranscription {
   metadata?: ExtractedMetadata
 }
 
-const PAGE_ROLES: readonly PageRole[] = [
-  'half-title',
-  'title-page',
-  'copyright',
-  'dedication',
-  'epigraph',
-  'preface',
-  'table-of-contents',
-  'list-of-illustrations',
-  'chapter-opening',
-  'body',
-  'part-divider',
-  'plate',
-  'index',
-  'appendix',
-  'glossary',
-  'colophon',
-  'blank',
-  // A role the type has had since the scanning library's own leaf was given
-  // one, and this list had not: a reading that named it was refused as an
-  // "unknown page role", so Isis Unveiled's HathiTrust leaves could not be
-  // landed as what they are.
-  'digitization-notice',
-  'unknown'
-]
+/**
+ * The roles a reading may name: the one list `@core/pages` keeps, never a
+ * copy of it. A copy kept here drifted twice — `digitization-notice` and then
+ * `advertisement` were roles the type had and this list refused, and a batch
+ * naming either failed whole.
+ */
+const PAGE_ROLES: readonly PageRole[] = ALL_PAGE_ROLES
 
 /**
  * Every block kind, as data.

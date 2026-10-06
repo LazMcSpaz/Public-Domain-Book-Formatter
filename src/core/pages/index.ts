@@ -2,6 +2,7 @@
  * Page roles and front-matter handling (SPEC §7).
  */
 export {
+  ALL_PAGE_ROLES,
   dispositionFor,
   isFrontMatter,
   roleLabel,

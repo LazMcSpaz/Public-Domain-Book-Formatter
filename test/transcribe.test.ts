@@ -15,6 +15,7 @@ import {
   type OcrWordLike
 } from '@core/transcribe'
 import type { LexiconEntry } from '@core/lexicon'
+import { ALL_PAGE_ROLES, dispositionFor } from '@core/pages'
 
 function lex(term: string): LexiconEntry {
   return {
@@ -397,5 +398,43 @@ describe('transcriptionText', () => {
       ]
     })
     expect(transcriptionText(p)).toBe('Chapter IV\n\nBody text.')
+  })
+})
+
+/**
+ * The parser keeps no list of its own: a list written out a second time
+ * drifts from the type it is meant to mirror.
+ *
+ * `digitization-notice` was added to `PageRole` for exactly the leaf every
+ * archive.org scan carries, and the parser's copy had to be mended to take it.
+ * `advertisement` is the same gap from the other end: a publisher's list of
+ * its own titles bound into the book is neither blank, nor stale pagination,
+ * nor the scanner's, and until there was a role for it the only way to keep
+ * such a leaf out of a reprint was to call it something it is not.
+ */
+describe('every role the type allows, the parser takes', () => {
+  it('accepts each of them, and still refuses one that is not a role', () => {
+    for (const role of ALL_PAGE_ROLES) {
+      const parsed = parsePageTranscription({ role, blocks: [], uncertain: [], furniture: {} }, 0)
+      expect(parsed.role, `should accept ${role}`).toBe(role)
+    }
+    expect(() =>
+      parsePageTranscription({ role: 'advertisment', blocks: [], uncertain: [], furniture: {} }, 0)
+    ).toThrow(/unknown page role/)
+  })
+
+  it('reads an advertisement and keeps it out of the book', () => {
+    expect(ALL_PAGE_ROLES).toContain('advertisement')
+    const parsed = parsePageTranscription(
+      {
+        role: 'advertisement',
+        blocks: [{ kind: 'paragraph', text: 'OTHER BOOKS BY MANLY P. HALL' }],
+        uncertain: [],
+        furniture: {}
+      },
+      0
+    )
+    expect(parsed.role).toBe('advertisement')
+    expect(dispositionFor(parsed.role)).toBe('discard')
   })
 })
