@@ -14,10 +14,14 @@ export {
   type PageClassification
 } from './page-roles'
 export {
+  abbreviatedRange,
   isNumberLine,
+  readReferences,
   readSynopsis,
   synopsisKey,
   synopsisLooksSound,
+  type ContentsReference,
   type SynopsisBlock,
-  type SynopsisEntry
+  type SynopsisEntry,
+  type SynopsisSource
 } from './synopsis'

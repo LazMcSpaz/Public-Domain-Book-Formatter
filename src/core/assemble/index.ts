@@ -15,6 +15,9 @@ export {
   stripLeadingMarker,
   printedMarker,
   plainMarker,
+  isFootnoteRunover,
+  continueFootnote,
+  startFootnote,
   type BookDocument,
   type BookBlock,
   type Footnote,
@@ -25,4 +28,13 @@ export {
   type BareMark,
   type IllustrationSource
 } from './assemble-book'
-export { bookText } from './book-text'
+export { bookText, synopsesPrinted } from './book-text'
+export { folioRuns, leafOfFolio, type FolioRun } from './folios'
+export {
+  leafStart,
+  seamsAfterMerge,
+  seamsAfterRetyping,
+  seamsAfterSplit,
+  type Seam,
+  type SplitHalf
+} from './seams'

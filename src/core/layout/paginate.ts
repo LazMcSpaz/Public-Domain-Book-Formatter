@@ -26,8 +26,15 @@ import { headingRunEnd } from '@core/assemble'
 import type { BookBlock, BookDocument, BookSection, Illustration } from '@core/assemble'
 import { effectiveDpi } from '@core/image'
 // The flattened view's coordinates, from the one place they are defined.
-import { cellEmphasis } from '@core/transcribe/schema'
-import { shiftEmphasis } from '@core/transcribe/markup'
+import { CELL_SEPARATOR, cellEmphasis } from '@core/transcribe/schema'
+import {
+  moveParts,
+  parseInlineMarkup,
+  partsByWord,
+  shiftEmphasis,
+  shiftParts,
+  type InlinePart
+} from '@core/transcribe/markup'
 import {
   breakParagraph,
   fontForWord,
@@ -259,6 +266,8 @@ const TABLE_GUTTER_EMS = 1.4
  * and only as far as it needs.
  */
 const TABLE_MIN_GUTTER_EMS = 0.6
+/** The most words a cell of a grid holds: more, and the table is prose in columns. */
+const TABLE_GRID_WORDS = 4
 /** The narrowest a column may be squeezed, in ems, before it is left to overflow. */
 const TABLE_MIN_COLUMN_EMS = 2.5
 const TABLE_RULE_THICKNESS = 0.5
@@ -424,6 +433,14 @@ interface FlowLine {
    * page that has not been chosen yet.
    */
   rule?: { xPt: number; yPt: number; widthPt: number; thicknessPt: number }
+  /**
+   * The first word of the block that begins on this line, in the block's own
+   * word count — a word broken over from the line above began there, not
+   * here. Absent on a line where no word begins. What lets the layout say on
+   * which page a word *inside* a paragraph fell (`BlockPage.turns`), and not
+   * only where the paragraph opened.
+   */
+  firstWord?: number
 }
 
 /** A footnote broken to the measure, ready to be set at the foot of a page. */
@@ -616,13 +633,30 @@ function toFlowLines(
       return {
         // Italic or bold where a span claims it. A hyphenated fragment keeps
         // its host word's index, so both halves of a split italic word stay
-        // italic.
+        // italic. A stretch of a word set in several faces — the `un` of
+        // `<i>un</i>spiritual` — carries its own face, measured in it by the
+        // breaker, and is drawn in exactly that.
         text: w.text,
-        font: fontForWord(w.sourceIndex, spans, font),
-        sizePt: w.sizePt ?? sizeForWord(w.sourceIndex, spans, sizePt),
+        font: w.font ?? fontForWord(w.sourceIndex, spans, font),
+        sizePt:
+          w.sizePt ??
+          (w.font ? sizePt * (w.scale ?? 1) : sizeForWord(w.sourceIndex, spans, sizePt)),
         xPt: w.xPt + offset,
         ...(w.risePt ? { risePt: w.risePt } : {})
       }
+    })
+    // Stretches of one word move as one under optical margins, or a share of
+    // the hang would open a gap inside the word.
+    const joined = line.words.map((w, k) => {
+      const before = line.words[k - 1]
+      return (
+        before !== undefined &&
+        w.font !== undefined &&
+        before.font !== undefined &&
+        w.sizePt === undefined &&
+        before.sizePt === undefined &&
+        w.sourceIndex === before.sourceIndex
+      )
     })
 
     // Whether this line reaches the right margin, which decides if there is an
@@ -633,14 +667,42 @@ function toFlowLines(
     const reach = last ? last.xPt - offset + widthOfRun(last, optical, font) : 0
     const flushRight = last !== undefined && reach >= line.widthPt - FLUSH_TOLERANCE_PT
 
-    const runs = optical ? [...hangPunctuation(placed, optical, font, { flushRight })] : placed
+    const runs = optical
+      ? [
+          ...hangPunctuation(placed, optical, font, {
+            flushRight,
+            ...(joined.some(Boolean) ? { joined } : {})
+          })
+        ]
+      : placed
+
+    // The first word that begins here: a stretch carrying the same word as
+    // the line above's last is that word broken over, and began up there.
+    const above = broken[i - 1]?.words.filter((w) => w.sizePt === undefined) ?? []
+    const carried = above[above.length - 1]?.sourceIndex
+    const begins = line.words.find((w) => w.sizePt === undefined && w.sourceIndex !== carried)
 
     return {
       runs,
       ...(line.overfull ? { overfull: true } : {}),
-      ...(noteIds.length > 0 ? { noteIds } : {})
+      ...(noteIds.length > 0 ? { noteIds } : {}),
+      ...(begins ? { firstWord: begins.sourceIndex } : {})
     }
   })
+}
+
+/**
+ * Lines whose `firstWord` counts from somewhere other than the block's first
+ * word — the words after a figure set into a paragraph, a drop capital's
+ * paragraph that lost its first word to the initial, a verse line — moved
+ * into the block's own count.
+ */
+function fromWord(lines: FlowLine[], offset: number): FlowLine[] {
+  if (offset === 0) return lines
+  for (const line of lines) {
+    if (line.firstWord !== undefined) line.firstWord = Math.max(0, line.firstWord + offset)
+  }
+  return lines
 }
 
 /**
@@ -878,8 +940,10 @@ function buildIllustrationFlowable(
   const sizePt = ctx.profile.bodyFontSize * CAPTION_SIZE_RATIO
 
   const captionText = illustration.caption?.trim() ?? ''
-  const captionLines =
-    captionText.length > 0
+  const key = captionKey(captionText)
+  const captionLines = key
+    ? keyLines(key, ctx)
+    : captionText.length > 0
       ? toFlowLines(
           breakParagraph(captionText, {
             font,
@@ -955,6 +1019,94 @@ function buildIllustrationFlowable(
   }
 }
 
+/** A reference mark opening a paragraph of a figure's key: `*`, `†`, `‡`… */
+const KEY_MARK = /^([*†‡§‖¶⁂]+)\s+/u
+
+/**
+ * A caption that is a figure's **key** rather than its title, as paragraphs.
+ *
+ * Some figures carry reference marks drawn into the engraving and print the
+ * notes they refer to directly beneath the picture: _The Secret Doctrine_
+ * Vol. I sets its diagram of the planes that way on leaf 245. Set as page
+ * footnotes the notes were numbered against a line of type that repeated the
+ * figure's own labels, and the page could break between the notes and the
+ * picture. As a caption they travel with it. A caption of more than one
+ * paragraph is taken as a key; one paragraph is a title, set as before.
+ */
+function captionKey(caption: string): string[] | null {
+  const paragraphs = caption
+    .split(/\n+/u)
+    .map((p) => p.trim())
+    .filter(Boolean)
+  return paragraphs.length > 1 ? paragraphs : null
+}
+
+/**
+ * A key set as the book's footnotes are set: roman, at the notes' size, each
+ * paragraph's printed mark hung in the margin so the marks line up down the
+ * key as they do down a page of notes. `<i>` and `<b>` read as everywhere.
+ */
+function keyLines(paragraphs: readonly string[], ctx: BuildContext): FlowLine[] {
+  const font: FontRef = { family: ctx.profile.bodyFont, style: 'regular' }
+  const sizePt = ctx.profile.bodyFontSize * NOTE_SIZE_RATIO
+  const markSize = sizePt * MARK_SIZE_RATIO
+  const read = paragraphs.map((raw) => {
+    const parsed = parseInlineMarkup(raw)
+    const mark = KEY_MARK.exec(parsed.text)
+    if (!mark) return { ...parsed, mark: '' }
+    // The mark was the paragraph's first word; every index after it moves down.
+    const shift = (runs: readonly number[]): number[] => runs.filter((i) => i > 0).map((i) => i - 1)
+    const parts = shiftParts(
+      (parsed.parts ?? []).filter((part) => part.word > 0),
+      -1
+    )
+    return {
+      text: parsed.text.slice(mark[0].length),
+      emphasis: shift(parsed.emphasis),
+      strong: shift(parsed.strong),
+      smallCaps: shift(parsed.smallCaps),
+      ...(parts.length > 0 ? { parts } : {}),
+      mark: mark[1]!
+    }
+  })
+  const hang = Math.max(
+    0,
+    ...read
+      .filter((p) => p.mark)
+      .map((p) => ctx.measurer.widthOf(p.mark, font, markSize) + sizePt * NOTE_HANG_GAP_RATIO)
+  )
+  const lines: FlowLine[] = []
+  for (const p of read) {
+    const spans = spansFor(
+      ctx,
+      ctx.profile.bodyFont,
+      'regular',
+      p.emphasis,
+      p.strong,
+      p.smallCaps,
+      p.parts
+    )
+    const broken = breakParagraph(p.text, {
+      font,
+      sizePt,
+      measurer: ctx.measurer,
+      lineWidths: Math.max(1, ctx.measureWidth - hang),
+      alignment: 'left',
+      ...(ctx.hyphenate ? { hyphenate: ctx.hyphenate } : {}),
+      ...(spans.length > 0 ? { spans } : {})
+    })
+    const set = toFlowLines(broken, font, sizePt, [hang], undefined, undefined, spans)
+    const first = set[0]
+    if (first && p.mark) {
+      first.decorations = [
+        { text: p.mark, font, sizePt: markSize, xPt: 0, risePt: sizePt * MARK_RISE_RATIO }
+      ]
+    }
+    lines.push(...set)
+  }
+  return lines
+}
+
 /**
  * Break one footnote to the measure.
  *
@@ -969,15 +1121,26 @@ function breakNote(note: PreparedNote, ctx: BuildContext): NoteBlock {
   const markSize = sizePt * MARK_SIZE_RATIO
   const hang = ctx.measurer.widthOf(note.mark, font, markSize) + sizePt * NOTE_HANG_GAP_RATIO
 
+  // Small capitals with no face to draw them come out as capitals first, so a
+  // part is placed against the letters that will actually be set.
+  const cased = smallCapsAsCapitals(
+    ctx,
+    ctx.profile.bodyFont,
+    note.text,
+    note.smallCaps,
+    false,
+    note.parts
+  )
   const spans = spansFor(
     ctx,
     ctx.profile.bodyFont,
     'regular',
     note.emphasis,
     note.strong,
-    note.smallCaps
+    note.smallCaps,
+    cased.parts
   )
-  const noteText = smallCapsAsCapitals(ctx, ctx.profile.bodyFont, note.text, note.smallCaps)
+  const noteText = cased.text
 
   const broken = breakParagraph(noteText, {
     font,
@@ -1081,18 +1244,64 @@ function smallCapsAsCapitals(
   family: string,
   text: string,
   smallCaps: readonly number[] | undefined,
-  noSpans = false
-): string {
-  if (!smallCaps?.length || (!noSpans && smallCapsFace(ctx, family))) return text
-  const marked = new Set(smallCaps)
+  noSpans = false,
+  parts?: readonly InlinePart[]
+): { text: string; parts?: InlinePart[] } {
+  const capsParts = (parts ?? []).filter((p) => p.style === 'smallCaps')
+  const kept = parts?.length ? { parts: [...parts] } : {}
+  if ((!smallCaps?.length && capsParts.length === 0) || (!noSpans && smallCapsFace(ctx, family))) {
+    return { text, ...kept }
+  }
+  if (!parts?.length) {
+    const marked = new Set(smallCaps)
+    let index = 0
+    return {
+      text: text
+        .split(/(\s+)/u)
+        .map((part) => {
+          if (part.length === 0 || /^\s+$/u.test(part)) return part
+          return marked.has(index++) ? part.toLocaleUpperCase() : part
+        })
+        .join('')
+    }
+  }
+  // A part of a word in small capitals is set in capitals over just its
+  // letters, and the other parts are carried across, since a capital is not
+  // always one character long.
+  const whole = new Set(smallCaps ?? [])
+  const upper = new Set<number>()
   let index = 0
-  return text
-    .split(/(\s+)/u)
-    .map((part) => {
-      if (part.length === 0 || /^\s+$/u.test(part)) return part
-      return marked.has(index++) ? part.toLocaleUpperCase() : part
-    })
-    .join('')
+  for (const match of text.matchAll(/\S+/gu)) {
+    for (let k = 0; k < match[0].length; k++) {
+      if (whole.has(index) || capsParts.some((p) => p.word === index && k >= p.from && k < p.to)) {
+        upper.add(match.index + k)
+      }
+    }
+    index += 1
+  }
+  return capitalised(text, parts, (at) => upper.has(at))
+}
+
+/**
+ * `text` with the characters `upper` names set in capitals, and `parts`
+ * carried across — a capital is not always one character (`ß` is `SS`), and a
+ * part after one would otherwise fall a letter early.
+ */
+function capitalised(
+  text: string,
+  parts: readonly InlinePart[],
+  upper: (at: number) => boolean
+): { text: string; parts: InlinePart[] } {
+  const to: number[] = []
+  let out = ''
+  let at = 0
+  for (const ch of text) {
+    for (let k = 0; k < ch.length; k++) to[at + k] = out.length
+    out += upper(at) ? ch.toLocaleUpperCase() : ch
+    at += ch.length
+  }
+  to[text.length] = out.length
+  return { text: out, parts: moveParts(text, parts, out, (o) => to[o] ?? out.length) }
 }
 
 function spansFor(
@@ -1101,25 +1310,36 @@ function spansFor(
   base: FontStyle,
   emphasis: readonly number[] | undefined,
   strong: readonly number[] | undefined,
-  smallCaps?: readonly number[]
+  smallCaps?: readonly number[],
+  parts?: readonly InlinePart[]
 ): TextSpan[] {
   const spans: TextSpan[] = []
+  /** A style's parts as a span carries them, or nothing where there are none. */
+  const partsOf = (style: InlinePart['style']): Pick<TextSpan, 'parts'> => {
+    const byWord = partsByWord(parts, style)
+    return byWord.size > 0 ? { parts: byWord } : {}
+  }
+  const capsParts = partsOf('smallCaps')
+  const strongParts = partsOf('strong')
+  const italicParts = partsOf('italic')
   // First, because first match wins: a small-capital word is that before it
-  // is anything else, there being no italic or bold small capitals here.
-  const caps = smallCaps?.length ? smallCapsFace(ctx, family) : null
+  // is anything else, there being no italic or bold small capitals here. The
+  // same order decides a character that two parts claim.
+  const caps = smallCaps?.length || capsParts.parts ? smallCapsFace(ctx, family) : null
   if (caps) {
     spans.push({
       words: new Set(smallCaps),
       font: { family: caps.family, style: 'regular', smallCaps: true },
-      ...(caps.scale !== 1 ? { scale: caps.scale } : {})
+      ...(caps.scale !== 1 ? { scale: caps.scale } : {}),
+      ...capsParts
     })
   }
-  if (strong?.length) {
+  if (strong?.length || strongParts.parts) {
     const style: FontStyle = ctx.measurer.hasBold(family) ? 'bold' : 'italic'
-    spans.push({ words: new Set(strong), font: { family, style } })
+    spans.push({ words: new Set(strong), font: { family, style }, ...strongParts })
   }
-  if (emphasis?.length) {
-    spans.push({ words: new Set(emphasis), font: { family, style: 'italic' } })
+  if (emphasis?.length || italicParts.parts) {
+    spans.push({ words: new Set(emphasis), font: { family, style: 'italic' }, ...italicParts })
   }
   return base === 'regular' ? spans : []
 }
@@ -1223,6 +1443,7 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
   const source = listMarker ? `${listMarker} ${opts.text ?? block.text}` : (opts.text ?? block.text)
   const capsWords =
     markerWords && block.smallCaps ? shiftEmphasis(block.smallCaps, markerWords) : block.smallCaps
+  const partsHere = markerWords && block.parts ? shiftParts(block.parts, markerWords) : block.parts
   // Small-capital words with no span to draw them — no face has small
   // capitals, or the block is italic and takes no spans — print as capitals.
   const cased = smallCapsAsCapitals(
@@ -1230,9 +1451,16 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
     family,
     source,
     capsWords,
-    blockStyle(block, ctx.profile).style !== 'regular'
+    blockStyle(block, ctx.profile).style !== 'regular',
+    partsHere
   )
-  const text = wantsSmallCaps && !realSmallCaps ? cased.toLocaleUpperCase() : cased
+  const upperAll = wantsSmallCaps && !realSmallCaps
+  // A part is carried through the capitals, which may not be one character
+  // each; where there are none the text is cased as it always was.
+  const capped =
+    upperAll && cased.parts?.length ? capitalised(cased.text, cased.parts, () => true) : null
+  const text = capped ? capped.text : upperAll ? cased.text.toLocaleUpperCase() : cased.text
+  const textParts = capped ? capped.parts : cased.parts
 
   // Reference marks ride on the end of the word they follow, set smaller and
   // lifted. They are given to the breaker rather than concatenated into the
@@ -1266,7 +1494,8 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
             ? shiftEmphasis(block.emphasis, markerWords)
             : block.emphasis,
           markerWords && block.strong ? shiftEmphasis(block.strong, markerWords) : block.strong,
-          capsWords
+          capsWords,
+          textParts
         )
       : []
 
@@ -1335,14 +1564,18 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
     // heading's own lines so the two can never be separated by a page break.
     const flourish = isChapter ? findOrnament(ctx.profile.ornaments.chapterOpener) : null
     const lines = spacedForSize(
-      toFlowLines(
-        broken,
-        font,
-        sizePt,
-        hang > 0 ? [indentLeft - hang, indentLeft] : [indentLeft],
-        markToNote,
-        ctx.profile.opticalMargins ? ctx.measurer : undefined,
-        spans
+      // Counted in the block's words: a list's number set before them is not one.
+      fromWord(
+        toFlowLines(
+          broken,
+          font,
+          sizePt,
+          hang > 0 ? [indentLeft - hang, indentLeft] : [indentLeft],
+          markToNote,
+          ctx.profile.opticalMargins ? ctx.measurer : undefined,
+          spans
+        ),
+        -markerWords
       ),
       sizePt,
       ctx
@@ -1446,11 +1679,15 @@ function verseLines(
     const turn = VERSE_TURNOVER_EMS * o.sizePt
     const local = (w: number): boolean => w >= first && w < first + words
     const spans = o.spans
-      .map((s) => ({
-        font: s.font,
-        words: new Set([...s.words].filter(local).map((w) => w - first))
-      }))
-      .filter((s) => s.words.size > 0)
+      .map((s) => {
+        const parts = localParts(s.parts, local, first)
+        return {
+          font: s.font,
+          words: new Set([...s.words].filter(local).map((w) => w - first)),
+          ...(parts ? { parts } : {})
+        }
+      })
+      .filter((s) => s.words.size > 0 || s.parts !== undefined)
     const attachments = o.attachments
       .filter((a) => local(a.wordIndex))
       .map((a) => ({ ...a, wordIndex: a.wordIndex - first }))
@@ -1466,19 +1703,37 @@ function verseLines(
       ...(spans.length > 0 ? { spans } : {})
     })
     out.push(
-      ...toFlowLines(
-        broken,
-        o.font,
-        o.sizePt,
-        [o.indentLeft + inset, o.indentLeft + inset + turn],
-        o.markToNote,
-        undefined,
-        spans
+      ...fromWord(
+        toFlowLines(
+          broken,
+          o.font,
+          o.sizePt,
+          [o.indentLeft + inset, o.indentLeft + inset + turn],
+          o.markToNote,
+          undefined,
+          spans
+        ),
+        first
       )
     )
     first += words
   }
   return out
+}
+
+/**
+ * A span's parts on the words `keep` names, renumbered from `first` — the
+ * share of them one line of verse, or one side of a figure, takes.
+ */
+function localParts(
+  parts: TextSpan['parts'],
+  keep: (word: number) => boolean,
+  first: number
+): TextSpan['parts'] {
+  if (!parts) return undefined
+  const out = new Map<number, ReadonlyArray<readonly [number, number]>>()
+  for (const [word, ranges] of parts) if (keep(word)) out.set(word - first, ranges)
+  return out.size > 0 ? out : undefined
 }
 
 /** Whitespace-separated words, the breaker's own unit of indexing. */
@@ -1632,14 +1887,24 @@ function buildFigureFlowable(
     const words = text.split(/\s+/u).filter((w) => w.length > 0)
     const before = words.slice(0, wordAt).join(' ')
     const after = words.slice(wordAt).join(' ')
-    const spansBefore = p.spans.map((s) => ({
-      ...s,
-      words: new Set([...s.words].filter((i) => i < wordAt))
-    }))
-    const spansAfter = p.spans.map((s) => ({
-      ...s,
-      words: new Set([...s.words].filter((i) => i >= wordAt).map((i) => i - wordAt))
-    }))
+    const spansBefore = p.spans.map((s) => {
+      const { parts: _parts, ...rest } = s
+      const parts = localParts(s.parts, (i) => i < wordAt, 0)
+      return {
+        ...rest,
+        words: new Set([...s.words].filter((i) => i < wordAt)),
+        ...(parts ? { parts } : {})
+      }
+    })
+    const spansAfter = p.spans.map((s) => {
+      const { parts: _parts, ...rest } = s
+      const parts = localParts(s.parts, (i) => i >= wordAt, wordAt)
+      return {
+        ...rest,
+        words: new Set([...s.words].filter((i) => i >= wordAt).map((i) => i - wordAt)),
+        ...(parts ? { parts } : {})
+      }
+    })
     const attBefore = p.attachments.filter((a) => a.wordIndex < wordAt)
     const attAfter = p.attachments
       .filter((a) => a.wordIndex >= wordAt)
@@ -1664,7 +1929,7 @@ function buildFigureFlowable(
 
     const linesBefore = set(before, p.firstIndent, spansBefore, attBefore)
     // Resumes flush: it is the same sentence, not a new paragraph.
-    const linesAfter = set(after, 0, spansAfter, attAfter)
+    const linesAfter = fromWord(set(after, 0, spansAfter, attAfter), wordAt)
     const held: FlowLine[] = [
       ...Array.from({ length: IMAGE_SPACE_SLOTS }, () => ({ runs: [], holdWithNext: true })),
       ...Array.from({ length: slots }, (_, i): FlowLine => ({
@@ -1808,6 +2073,78 @@ function fitColumns(natural: readonly number[], available: number, minWidth: num
 }
 
 /**
+ * A table's cells with their reference marks taken out, and the references
+ * the footnote pass found in it, sorted onto the cells they fall in.
+ *
+ * `prepareFootnotes` reads a table as its flattened view, so it claims the
+ * notes a table's marks refer to and strips the marks from that view. The
+ * engine sets the *cells*, which still carried the printed marks, and no line
+ * of the table named a note: every note the table claimed was numbered and
+ * then had no page to go to. On _The Secret Doctrine_ Vol. I one table of the
+ * principles carries five marks, and from that table to the end of the volume
+ * every note printed under the reference before its own. So the cells are
+ * read back out of the prepared view, which is `tableToText` with the marks
+ * gone, and each reference is given the cell its word sits in.
+ *
+ * A prepared view that does not split back into the table's own shape is left
+ * alone: the cells are set as they were, and the notes go unreferenced as
+ * they did before, which the export reports as notes with no page.
+ */
+function tableNotes(
+  block: BookBlock,
+  prep: { text: string; references: readonly NoteReference[] } | undefined
+): {
+  cells: string[][]
+  byCell: Map<number, NoteReference[]>
+  markToNote: Map<string, string>
+} {
+  const original = (block.cells ?? []).map((row) => [...row])
+  const byCell = new Map<number, NoteReference[]>()
+  const markToNote = new Map<string, string>()
+  if (!prep || prep.references.length === 0) return { cells: original, byCell, markToNote }
+  const lines = prep.text.split('\n')
+  const cells = lines.map((line) => line.split(CELL_SEPARATOR))
+  const sameShape =
+    cells.length === original.length &&
+    cells.every((row, r) => row.length === Math.max(1, original[r]!.length))
+  if (!sameShape) return { cells: original, byCell, markToNote }
+  // Rows with no cells flatten to an empty line; give them back their shape.
+  const shaped = cells.map((row, r) => (original[r]!.length === 0 ? [] : row))
+  // The cells in the order the engine indexes them: empty rows dropped.
+  const kept = shaped.filter((row) => row.length > 0)
+  const words = (text: string): number => text.split(/\s+/u).filter(Boolean).length
+  /** Where each cell's word 0 sits in the flattened view, as `flattenCellEmphasis` counts. */
+  const starts: { at: number; length: number; afterSeparator: boolean }[] = []
+  let at = 0
+  for (const row of kept) {
+    row.forEach((text, c) => {
+      if (c > 0) at++ // the separator is a word in the flattened view
+      const length = words(text)
+      starts.push({ at, length, afterSeparator: c > 0 })
+      at += length
+    })
+  }
+  for (const ref of prep.references) {
+    // The last cell whose words begin at or before the reference's word. A
+    // mark that opens a cell counts the separator before it as its word, and
+    // so lands on that cell's first word, which is where it is printed.
+    let cell = -1
+    for (let k = 0; k < starts.length; k++) {
+      const s = starts[k]!
+      if (s.at <= ref.wordIndex || (s.afterSeparator && s.at === ref.wordIndex + 1)) cell = k
+    }
+    if (cell < 0) cell = 0
+    const start = starts[cell]!
+    const wordIndex = Math.max(0, Math.min(start.length - 1, ref.wordIndex - start.at))
+    const list = byCell.get(cell) ?? []
+    list.push({ ...ref, wordIndex })
+    byCell.set(cell, list)
+    markToNote.set(ref.mark, ref.noteId)
+  }
+  return { cells: shaped, byCell, markToNote }
+}
+
+/**
  * A table, as one flowable per row.
  *
  * A row at a time rather than a table at a time, and every row unbreakable, is
@@ -1823,8 +2160,13 @@ function fitColumns(natural: readonly number[], available: number, minWidth: num
  * heads only need repeating once the break is known, and the break depends on
  * how many rows fit. It belongs with the two-pass contents, not here.
  */
-function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
-  const rows = (block.cells ?? []).filter((row) => row.length > 0)
+function buildTableFlowables(
+  block: BookBlock,
+  ctx: BuildContext,
+  prep?: { text: string; references: readonly NoteReference[] }
+): Flowable[] {
+  const notes = tableNotes(block, prep)
+  const rows = notes.cells.filter((row) => row.length > 0)
   if (rows.length === 0) return []
 
   /**
@@ -1890,9 +2232,10 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
   // It is kept unless it overflows: unless some column is narrower than a word
   // in it, which no wrapping can mend. Only then does the gap close up, and then
   // the type step down to TABLE_MIN_SIZE_RATIO of the body, and only as far as
-  // lets every cell stand unbroken. So every table that set cleanly before,
-  // wrapped or not, is set exactly as it was; Hall's diagrams of one-word
-  // columns, which overflowed, are the tables this reaches.
+  // lets every cell stand unbroken. So every table that set cleanly before is
+  // set exactly as it was, wrapped or not, but for a grid of short entries
+  // (below); Hall's diagrams of one-word columns, which overflowed, are the
+  // tables this reaches.
   const longestWords = widestOf(baseSizePt, singleWords)
   const baseSpan = baseWidths.reduce((a, b) => a + b, 0) + baseGap * Math.max(0, columns - 1)
   const overflows =
@@ -1902,14 +2245,29 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
   const tightAtBase = baseTotal + baseSizePt * TABLE_MIN_GUTTER_EMS * Math.max(0, columns - 1)
   const fittingSize = tightAtBase > 0 ? (baseSizePt * ctx.measureWidth) / tightAtBase : baseSizePt
   const minSize = ctx.profile.bodyFontSize - TABLE_MAX_DROP_PT
+  // A grid of short entries that wraps one of them is mended the same way. On
+  // Hellenbach's table of the elements (SD II, leaf 640) "Fe 56. Co 58·6" broke
+  // down the eighth column, and a table read across its rows is misread with a
+  // line broken in one cell. The editor's ruling there: close the gap, then
+  // step the type down within the same four points, until every cell stands
+  // whole. Only where every cell is a few words: a transcript's columns of
+  // sentences wrap as they always have, and finished books keep their pages.
+  const grid = rows.every((row) =>
+    row.every((cell) => singleWords(cell).length <= TABLE_GRID_WORDS)
+  )
+  const wraps =
+    grid && !overflows && columns > 1 && baseWidths.some((w, c) => w + 0.01 < (baseNatural[c] ?? 0))
+  const mend = overflows || wraps
   const sizePt =
-    overflows && tightAtBase > ctx.measureWidth && fittingSize >= minSize ? fittingSize : baseSizePt
+    mend && tightAtBase > ctx.measureWidth && fittingSize >= minSize ? fittingSize : baseSizePt
   const natural = sizePt === baseSizePt ? baseNatural : widestOf(sizePt, wholeCells)
   const naturalTotal = natural.reduce((a, b) => a + b, 0)
   const roomy = sizePt * TABLE_GUTTER_EMS
   const neededGap = columns < 2 ? roomy : (ctx.measureWidth - naturalTotal) / (columns - 1)
   const gutter =
-    overflows && neededGap < roomy && neededGap >= sizePt * TABLE_MIN_GUTTER_EMS ? neededGap : roomy
+    mend && neededGap < roomy && neededGap >= sizePt * TABLE_MIN_GUTTER_EMS * 0.999
+      ? neededGap
+      : roomy
   const widths =
     sizePt === baseSizePt && gutter === baseGap
       ? baseWidths
@@ -1963,12 +2321,20 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
         const marked = hasHead && r === 0 ? [] : (perCell[cellIndex(r, c)] ?? [])
         const spans: TextSpan[] =
           marked.length > 0 ? [{ words: new Set(marked), font: { family, style: 'italic' } }] : []
+        const refs = notes.byCell.get(cellIndex(r, c)) ?? []
+        const attachments: Attachment[] = refs.map((ref) => ({
+          wordIndex: ref.wordIndex,
+          text: ref.mark,
+          sizePt: sizePt * MARK_SIZE_RATIO,
+          risePt: sizePt * MARK_RISE_RATIO
+        }))
         const broken = breakParagraph(cellAt(row, c), {
           font,
           sizePt,
           measurer: ctx.measurer,
           lineWidths: width,
           alignment: 'left',
+          ...(attachments.length > 0 ? { attachments } : {}),
           // The breaker, not only the renderer: italic advances differ from
           // roman, and a cell measured in roman then drawn partly in italic
           // wraps its column in the wrong places.
@@ -1984,7 +2350,7 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
           font,
           sizePt,
           offsets.length > 0 ? offsets : [columnX[c] ?? 0],
-          undefined,
+          refs.length > 0 ? notes.markToNote : undefined,
           undefined,
           spans.length > 0 ? spans : undefined
         )
@@ -1994,7 +2360,14 @@ function buildTableFlowables(block: BookBlock, ctx: BuildContext): Flowable[] {
       const lines: FlowLine[] = Array.from({ length: height }, (_, i) => {
         const runs = perColumn.flatMap((col) => col[i]?.runs ?? [])
         const overfull = perColumn.some((col) => col[i]?.overfull === true)
-        return { runs, ...(overfull ? { overfull: true } : {}) }
+        // The notes the row's cells refer to on this line, left to right, so
+        // the page they print on reserves them as it would a paragraph's.
+        const noteIds = perColumn.flatMap((col) => col[i]?.noteIds ?? [])
+        return {
+          runs,
+          ...(overfull ? { overfull: true } : {}),
+          ...(noteIds.length > 0 ? { noteIds } : {})
+        }
       })
 
       // Head rule and foot rule, hung off the last line of the row they close.
@@ -2129,7 +2502,7 @@ function buildDropCapFlowable(
     })
     const offsets = [...Array.from({ length: depth }, () => indentLeft + capWidth), indentLeft]
     return {
-      lines: toFlowLines(broken, font, sizePt, offsets, notes.markToNote),
+      lines: fromWord(toFlowLines(broken, font, sizePt, offsets, notes.markToNote), shift),
       capSize,
       capWidth
     }
@@ -2197,6 +2570,23 @@ function heldBoundary(flow: Flowable, placed: number, take: number, remaining: n
 }
 
 /**
+ * The fewest lines an item can open a page's last stretch with — what a
+ * heading above it needs room for if it is not to stand alone.
+ *
+ * Two for a paragraph under orphan control, since its first line will not sit
+ * alone at the foot; the whole of anything that does not break, and of a
+ * heading under a heading, which is short and travels whole. An item that
+ * opens a page of its own cannot share this one, and asks for the one line it
+ * always did.
+ */
+function firstTakeOf(next: Flowable): number {
+  if (next.startsChapter || next.ownPage) return 1
+  if (next.unbreakable || next.keepWithNext) return Math.max(1, next.lines.length)
+  if (next.orphanControl && next.lines.length >= 2) return 2
+  return 1
+}
+
+/**
  * How many level-less headings it takes before the book's shape is doubted.
  * A pamphlet with three chapters and no levels is fine; a volume with dozens
  * is a reading that never measured the type.
@@ -2238,6 +2628,8 @@ export function layout(
   const chapterPages: LaidOutBook['chapterPages'] = []
   /** First page each block opens on — recorded as its first line is placed. */
   const blockPagesMap = new Map<string, number>()
+  /** Each further page a block runs on to, with the first word that begins there. */
+  const blockTurns = new Map<string, { word: number; pageIndex: number }[]>()
   const warnings: LayoutWarning[] = []
 
   // A heading with no level is a level-1 heading to everything below, and a
@@ -2430,17 +2822,14 @@ export function layout(
   // Reference marks are located and renumbered before anything is broken,
   // because a mark occupies width and so is a line-breaking input.
   //
-  // A table's text is hidden from the search. Its cells are set column by
-  // column, so a mark found inside one has no word to ride on and no line to
-  // land on — and a note claimed by a block that never prints its mark would be
-  // reported as "the page was not laid out", which is a lie about a note the
-  // reader will find missing. Hidden, it stays an orphan: reported truthfully,
-  // and collected as an endnote when the structure gate asked for that.
-  const prepared = prepareFootnotes(
-    doc.blocks.map((b) => (b.kind === 'table' ? { id: b.id, text: '' } : b)),
-    doc.footnotes,
-    doc.bareMarks
-  )
+  // A table's marks are searched like any other block's. They used to be
+  // hidden, on the ground that a cell had no word for a mark to ride on, and
+  // hiding them did worse than orphan the table's notes: a note left waiting
+  // takes the next mark of its kind *anywhere* in the book. On _The Secret
+  // Doctrine_ Vol. I a table of the principles carries five marks, and from
+  // it to the end of the volume every note printed under the reference
+  // before its own. `tableNotes` gives each reference its cell now.
+  const prepared = prepareFootnotes(doc.blocks, doc.footnotes, doc.bareMarks)
 
   // A reference mark on a chapter title is part of that heading's text, and the
   // contents and the running head both take their title from `doc.chapters` —
@@ -2552,7 +2941,36 @@ export function layout(
       return
     }
     if (block.kind === 'table') {
-      flowables.push(...buildTableFlowables(block, ctx).map((f) => ({ ...f, blockId: block.id })))
+      const set = buildTableFlowables(block, ctx, prep).map((f) => ({ ...f, blockId: block.id }))
+      // A caption standing directly over a table is its title, and goes where
+      // the table goes. The table is one unbreakable item and moves whole to
+      // the next page when it must, which left the caption alone at the foot
+      // of the page before: the editor's table of modern symbols on leaf 640
+      // of The Secret Doctrine Vol. II was introduced on one page and set on
+      // the next. `keepWithNext` cannot hold it, since it only asks for one
+      // line of what follows and an unbreakable table has no first line to
+      // spare. So the two become one item. A table too long for a page breaks
+      // between rows, and its caption then rides on the first.
+      const title = flowables[flowables.length - 1]
+      const first = set[0]
+      if (
+        first &&
+        previous?.kind === 'caption' &&
+        title?.blockId === previous.id &&
+        !title.startsChapter
+      ) {
+        flowables.pop()
+        set[0] = {
+          ...first,
+          lines: [
+            ...title.lines,
+            ...Array.from({ length: title.spaceAfter }, () => ({ runs: [] })),
+            ...first.lines
+          ],
+          spaceBefore: title.spaceBefore
+        }
+      }
+      flowables.push(...set)
       pushIllustrationsAfter(i)
       return
     }
@@ -2645,6 +3063,11 @@ export function layout(
                   smallCaps: note.originalMarker.trim()
                     ? note.smallCaps.map((i) => i + 1)
                     : note.smallCaps
+                }
+              : {}),
+            ...(note.parts?.length
+              ? {
+                  parts: note.originalMarker.trim() ? shiftParts(note.parts, 1) : note.parts
                 }
               : {}),
             sourcePages: []
@@ -2790,8 +3213,32 @@ export function layout(
       }
 
       // A heading with nothing under it is stranded; move it with its text.
-      if (flow.keepWithNext && take === remaining && bodySlots - slot - take < 1) {
-        take = 0
+      //
+      // "Something under it" is what the next item can actually start a page
+      // with, and the room it is measured in is what is left once the notes
+      // have taken theirs. Asking for one line against `bodySlots` stranded
+      // `(1)` at the foot of page 165 of The Mahatma Letters, twice over: the
+      // answer under it is a paragraph under orphan control, which will not
+      // start on one line, and the heading carries a note whose lines were
+      // not yet reserved when the room was counted.
+      if (flow.keepWithNext && take === remaining) {
+        const next = flowables[i + 1]
+        const needed = next ? firstTakeOf(next) : 1
+        const gap = next ? Math.max(flow.spaceAfter, next.spaceBefore) : 0
+        const claimed = new Set(current().noteIds)
+        let noteLines = pageNoteLines
+        const claim = (ids: readonly string[] | undefined): void => {
+          for (const id of ids ?? []) {
+            if (claimed.has(id) || !noteBlocks.has(id)) continue
+            claimed.add(id)
+            noteLines += noteLinesOf(id)
+          }
+        }
+        for (let k = 0; k < take; k++) claim(flow.lines[placed + k]!.noteIds)
+        for (let k = 0; k < Math.min(needed, next?.lines.length ?? 0); k++) {
+          claim(next!.lines[k]!.noteIds)
+        }
+        if (bodySlotsFor(noteLines) - slot - take - gap < needed) take = 0
       }
 
       // An illustration is not a paragraph: half of one on each side of a page
@@ -2895,6 +3342,20 @@ export function layout(
         !blockPagesMap.has(flow.blockId)
       ) {
         blockPagesMap.set(flow.blockId, current().index)
+      }
+      // And where it runs on to another page, the first word that begins
+      // there — so a word inside a long paragraph has a page, not only the
+      // paragraph's opening (`BlockPage.turns`).
+      if (take > 0 && placed > 0 && flow.blockId !== undefined) {
+        const opened = blockPagesMap.get(flow.blockId)
+        const turns = blockTurns.get(flow.blockId) ?? []
+        const last = turns[turns.length - 1]?.pageIndex ?? opened
+        const word = flow.lines
+          .slice(placed, placed + take)
+          .find((line) => line.firstWord !== undefined)?.firstWord
+        if (opened !== undefined && last !== current().index && word !== undefined) {
+          blockTurns.set(flow.blockId, [...turns, { word, pageIndex: current().index }])
+        }
       }
 
       if (flow.chapter && !headingRecorded) {
@@ -3042,11 +3503,22 @@ export function layout(
     widthPt: trim.widthPt,
     heightPt: trim.heightPt,
     chapterPages,
-    blockPages: [...blockPagesMap].map(([blockId, pageIndex]) => ({
-      blockId,
-      pageIndex,
-      folio: folioFor(pages[pageIndex]!, frontMatterPageCount)
-    })),
+    blockPages: [...blockPagesMap].map(([blockId, pageIndex]) => {
+      const turns = blockTurns.get(blockId)
+      return {
+        blockId,
+        pageIndex,
+        folio: folioFor(pages[pageIndex]!, frontMatterPageCount),
+        ...(turns
+          ? {
+              turns: turns.map((t) => ({
+                ...t,
+                folio: folioFor(pages[t.pageIndex]!, frontMatterPageCount)
+              }))
+            }
+          : {})
+      }
+    }),
     fontsUsed: collectFonts(laidOut),
     warnings,
     notesPlaced: placedIds.size,

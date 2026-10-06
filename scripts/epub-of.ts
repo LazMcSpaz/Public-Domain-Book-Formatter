@@ -26,6 +26,8 @@ import { join } from 'node:path'
 import { assembleBook } from '@core/assemble'
 import { applyEdits } from '@core/edits'
 import { headingsWithoutMarks, prepareFootnotes } from '@core/layout/footnotes'
+import { synopsisWithPages } from '@core/layout/contents-pages'
+import { parseInlineMarkup, type InlinePart } from '@core/transcribe/markup'
 
 const [dir, out] = process.argv.slice(-2)
 if (!dir || !out || dir === out) throw new Error('epub-of.ts <book-dir> <out-dir>')
@@ -45,7 +47,8 @@ function inline(
   text: string,
   emphasis: readonly number[] = [],
   strong: readonly number[] = [],
-  refs: ReadonlyMap<number, string[]> = new Map()
+  refs: ReadonlyMap<number, string[]> = new Map(),
+  wordParts: readonly InlinePart[] = []
 ): string {
   const it = new Set(emphasis)
   const bold = new Set(strong)
@@ -66,19 +69,33 @@ function inline(
       continue
     }
     word += 1
-    const want = (it.has(word) ? 'i' : '') + (bold.has(word) ? 'b' : '')
-    const face = want === 'ib' ? 'bi' : want
-    if (face !== open) {
-      // A space already written belongs outside the run being closed.
-      const trailing = html.endsWith(' ')
-      if (trailing) html = html.slice(0, -1)
-      close()
-      if (trailing) html += ' '
-      if (face === 'bi') html += '<i><b>'
-      else if (face) html += `<${face}>`
-      open = face
+    // A word set partly in a face is written a stretch at a time, cut where
+    // its parts begin and end; any other word is one stretch.
+    const mine = wordParts.filter((p) => p.word === word)
+    const cuts = [...new Set([0, part.length, ...mine.flatMap((p) => [p.from, p.to])])]
+      .filter((c) => c >= 0 && c <= part.length)
+      .sort((a, b) => a - b)
+    for (let k = 1; k < cuts.length; k++) {
+      const from = cuts[k - 1]!
+      const to = cuts[k]!
+      const covers = (style: InlinePart['style']): boolean =>
+        mine.some((p) => p.style === style && p.from <= from && p.to >= to)
+      const want =
+        (it.has(word) || covers('italic') ? 'i' : '') +
+        (bold.has(word) || covers('strong') ? 'b' : '')
+      const face = want === 'ib' ? 'bi' : want
+      if (face !== open) {
+        // A space already written belongs outside the run being closed.
+        const trailing = html.endsWith(' ')
+        if (trailing) html = html.slice(0, -1)
+        close()
+        if (trailing) html += ' '
+        if (face === 'bi') html += '<i><b>'
+        else if (face) html += `<${face}>`
+        open = face
+      }
+      html += esc(part.slice(from, to))
     }
-    html += esc(part)
     for (const ref of refs.get(word) ?? []) html += ref
   }
   close()
@@ -128,7 +145,12 @@ doc.blocks.forEach((block, i) => {
       // A chapter the body only numbers is named as the original contents
       // named it, as the printed contents does.
       title: head?.contentsTitle ? `${name} ${head.contentsTitle}` : name,
-      synopsis: head?.synopsis ?? null,
+      // Without the original's page references: an EPUB has no pages for
+      // them to name, and the 1923 numbers would name the wrong ones.
+      synopsis:
+        head?.synopsis === undefined
+          ? null
+          : synopsisWithPages(head.synopsis, head.synopsisSource?.references ?? [], null),
       level: head?.level ?? 1,
       body: [],
       notes: []
@@ -145,10 +167,10 @@ doc.blocks.forEach((block, i) => {
     const link = `<a epub:type="noteref" href="#n${num}" id="r${num}" class="ref">${num}</a>`
     refs.set(ref.wordIndex, [...(refs.get(ref.wordIndex) ?? []), link])
     chapter.notes.push(
-      `<aside epub:type="footnote" id="n${num}" class="note"><p><a href="#r${num}">${num}.</a> ${inline(note.text, note.emphasis, note.strong)}</p></aside>`
+      `<aside epub:type="footnote" id="n${num}" class="note"><p><a href="#r${num}">${num}.</a> ${inline(note.text, note.emphasis, note.strong, new Map(), note.parts)}</p></aside>`
     )
   }
-  const html = inline(prep.text, block.emphasis, block.strong, refs)
+  const html = inline(prep.text, block.emphasis, block.strong, refs, block.parts)
   switch (block.kind) {
     case 'heading': {
       const level = Math.min(6, Math.max(2, (block.level ?? 1) + 1))
@@ -189,10 +211,24 @@ doc.blocks.forEach((block, i) => {
   for (const fig of figuresAfter.get(block.id) ?? []) {
     const src = imagePath.get(fig.id)!
     figuresUsed.push(src)
-    const cap = fig.caption ? `<figcaption>${esc(fig.caption)}</figcaption>` : ''
-    chapter.body.push(
-      `<figure><img src="../${src}" alt="${esc(fig.caption ?? 'Figure')}"/>${cap}</figure>`
-    )
+    // A caption of several paragraphs is the figure's key, set as notes are;
+    // the engine reads it the same way (`captionKey`).
+    const paras = (fig.caption ?? '')
+      .split(/\n+/u)
+      .map((p) => p.trim())
+      .filter(Boolean)
+    const cap = paras.length
+      ? `<figcaption${paras.length > 1 ? ' class="key"' : ''}>${paras
+          .map((p) => {
+            const m = parseInlineMarkup(p)
+            return paras.length > 1
+              ? `<p>${inline(m.text, m.emphasis, m.strong, new Map(), m.parts)}</p>`
+              : inline(m.text, m.emphasis, m.strong, new Map(), m.parts)
+          })
+          .join('')}</figcaption>`
+      : ''
+    const alt = parseInlineMarkup(paras[0] ?? 'Figure').text
+    chapter.body.push(`<figure><img src="../${src}" alt="${esc(alt)}"/>${cap}</figure>`)
   }
 })
 
@@ -228,6 +264,8 @@ blockquote { margin: 0.7em 1.5em; font-size: 0.95em; }
 blockquote p { text-indent: 0; }
 p.verse, p.item { text-indent: 0; margin-left: 1.5em; }
 p.caption, figcaption { text-align: center; font-size: 0.9em; text-indent: 0; }
+figcaption.key { text-align: left; font-size: 0.85em; }
+figcaption.key p { text-indent: 0; margin: 0.2em 0; }
 figure { margin: 1em 0; text-align: center; } figure img { max-width: 100%; }
 a.ref { font-size: 0.7em; vertical-align: super; line-height: 0; text-decoration: none; }
 section.notes { margin-top: 2em; border-top: 1px solid #999; font-size: 0.85em; }
@@ -276,7 +314,10 @@ if (described) {
       'Contents',
       '<h1>Contents</h1>' +
         chapters
-          .filter((c) => c.level === 1)
+          // A chapter below the top level is listed when its contents
+          // described it: The Mahatma Letters describes every letter, and a
+          // letter is a level-2 chapter under its section.
+          .filter((c) => c.level === 1 || c.synopsis)
           .map(
             (c) =>
               `<p class="entry"><a href="${c.file}">${esc(c.title)}</a></p>` +

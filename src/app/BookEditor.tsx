@@ -38,6 +38,7 @@ import {
   memosOf,
   clearMemo,
   sweepText,
+  synopsesOf,
   withEdit,
   type BookEdit,
   type MemoEdit
@@ -172,7 +173,7 @@ function NoteChip({
    */
   onBare?: () => void
 }): JSX.Element {
-  const current = withMarkup(note.text, note.emphasis, note.strong, note.smallCaps)
+  const current = withMarkup(note.text, note.emphasis, note.strong, note.smallCaps, note.parts)
   return (
     <div className="proof-annotation galley-note galley-fn">
       <span className="proof-annotation-bar">
@@ -454,13 +455,21 @@ export function BookEditor({
       for (const { note } of list) anchorOf.set(note.id, blockId)
     }
     for (const note of doc.footnotes) {
-      const text = withMarkup(note.text, note.emphasis, note.strong, note.smallCaps)
+      const text = withMarkup(note.text, note.emphasis, note.strong, note.smallCaps, note.parts)
       for (const m of findMatches(text, find.query, find.matchCase)) {
         out.push({
           passageId:
             anchorOf.get(note.id) ?? (note.anchor ? note.anchor.blockId : 'notes-unplaced'),
           context: m.context
         })
+      }
+    }
+    // And the original contents' descriptions, which print in the contents
+    // and are corrected through their own record. One jumps to the chapter it
+    // describes; one nothing claimed has nowhere in the column to go.
+    for (const synopsis of synopsesOf(doc)) {
+      for (const m of findMatches(synopsis.text, find.query, find.matchCase)) {
+        out.push({ passageId: synopsis.chapterId ?? 'contents-unmatched', context: m.context })
       }
     }
     return out
@@ -511,7 +520,7 @@ export function BookEditor({
     // note, the `note` edit itself for an authored one.
     for (const note of doc.footnotes) {
       if (!note.originalMarker) continue
-      const text = withMarkup(note.text, note.emphasis, note.strong, note.smallCaps)
+      const text = withMarkup(note.text, note.emphasis, note.strong, note.smallCaps, note.parts)
       const swept = sweepText(text, find.query, find.replace, find.matchCase)
       if (swept.count === 0) continue
       next = withEdit(next, { kind: 'note-text', noteId: note.id, text: swept.text })
@@ -522,6 +531,13 @@ export function BookEditor({
       const swept = sweepText(edit.text, find.query, find.replace, find.matchCase)
       if (swept.count === 0) continue
       next = withEdit(next, { ...edit, text: swept.text })
+      total += swept.count
+    }
+    // The original contents' descriptions, through the `synopsis-text` record.
+    for (const synopsis of synopsesOf(doc)) {
+      const swept = sweepText(synopsis.text, find.query, find.replace, find.matchCase)
+      if (swept.count === 0) continue
+      next = withEdit(next, { kind: 'synopsis-text', synopsisId: synopsis.id, text: swept.text })
       total += swept.count
     }
     if (next !== edits) onChange(next)

@@ -40,8 +40,8 @@
  * Pure: no DOM, no I/O.
  */
 import { standingFor, type HeldQuery } from './standing'
-import { bookText, type BookDocument } from '@core/assemble'
-import { withMarkup, type EditorialQueryKind } from '@core/transcribe'
+import { bookText, synopsesPrinted, type BookDocument } from '@core/assemble'
+import { withMarkup, type EditorialQueryKind, type InlinePart } from '@core/transcribe'
 import type { RaisedQuery } from './index'
 
 /** What the editor decided to do about it. */
@@ -259,6 +259,29 @@ export function unapplied(rulings: readonly Ruling[], book: BookDocument): Rulin
       const inBook = (t: string): boolean => cased.some((v, i) => v.includes(NOTATIONS[i + 1](t)))
       return !inBook(rawWanted) || inBook(rawQuote)
     }
+    // A correction that is its quote word for word files a reading the book
+    // already has: a broken sort transcribed whole and ruled set right, as on
+    // leaf 376 of The Mahatma Letters. Read as a change it can never land,
+    // since the "printed" form is the corrected one; all there is to ask is
+    // whether the book still reads it.
+    if (rawWanted === rawQuote) {
+      const printed = ruling.pageIndex === null ? views : onLeaf(ruling.pageIndex)
+      return !has(printed, NOTATIONS.length - 1, written)
+    }
+    // A note the page printed with no mark for it, hung on a mark the edition
+    // supplies: the quote is the note and stands as printed, and the
+    // correction is the place the mark goes — `LETTER No. XCVIII¹` on leaf 477
+    // of The Mahatma Letters. Asked whether the quote has gone, such a ruling
+    // is outstanding for ever. What can be asked is whether the leaf now
+    // carries the correction, mark and all.
+    if (
+      ruling.pageIndex !== null &&
+      REFERENCE_MARK.test(rawWanted) &&
+      !REFERENCE_MARK.test(rawQuote.replace(LEADING_MARK, '')) &&
+      isNoteOn(book, ruling.pageIndex, rawQuote)
+    ) {
+      return !has(onLeaf(ruling.pageIndex), NOTATIONS.length - 1, written)
+    }
     // A footnote is quoted from the leaf with its reference mark at its head,
     // and the book holds the note without it: assembly takes the mark off to
     // set it as a raised figure. `† Ibid, Vol. II.` on leaf 199 of *The Key to
@@ -316,6 +339,19 @@ function landed(
   return !has(printed, level, quote)
 }
 
+/** A reference mark, as a note's head or a word's tail carries one. */
+const REFERENCE_MARK = /[*†‡§¶‖¹²³⁰-⁹]/u
+const LEADING_MARK = /^[*†‡§¶‖¹²³⁰-⁹]+\s*/u
+
+/** Is `quote` the text of a note printed at the foot of `page`? */
+function isNoteOn(doc: BookDocument, page: number, quote: string): boolean {
+  const loose = NOTATIONS[NOTATIONS.length - 1]!
+  const wanted = loose(quote.replace(LEADING_MARK, '').trim().toLowerCase())
+  return doc.footnotes.some(
+    (n) => n.pageIndex === page && loose(n.text.toLowerCase()).includes(wanted)
+  )
+}
+
 /** A correction that says the printed words go, rather than what replaces them. */
 const DELETION = /^\([^()]*\b(?:dropped|removed|deleted|omitted|struck out)\b[^()]*\)$/u
 
@@ -331,10 +367,15 @@ function leafText(doc: BookDocument, page: number): string {
     emphasis?: number[]
     strong?: number[]
     smallCaps?: number[]
-  }): string => withMarkup(b.text, b.emphasis, b.strong, b.smallCaps)
+    parts?: InlinePart[]
+  }): string => withMarkup(b.text, b.emphasis, b.strong, b.smallCaps, b.parts)
   return [
     ...[...doc.blocks, ...doc.asides].filter((b) => b.sourcePages.includes(page)).map(marked),
-    ...doc.footnotes.filter((n) => n.pageIndex === page).map(marked)
+    ...doc.footnotes.filter((n) => n.pageIndex === page).map(marked),
+    // A leaf of the original contents prints the descriptions read off it.
+    ...synopsesPrinted(doc)
+      .filter((s) => s.pages.includes(page))
+      .map((s) => s.text)
   ].join('\n')
 }
 

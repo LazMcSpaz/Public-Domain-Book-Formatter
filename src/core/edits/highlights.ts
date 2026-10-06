@@ -174,7 +174,7 @@ export function highlightSheet(doc: BookDocument, edits: readonly BookEdit[]): H
         anchor,
         at: span,
         blockText: block
-          ? withMarkup(block.text, block.emphasis, block.strong, block.smallCaps)
+          ? withMarkup(block.text, block.emphasis, block.strong, block.smallCaps, block.parts)
           : null,
         sourcePages: block ? [...block.sourcePages] : [],
         passage: block && span ? passageAround(block.text, span.from, span.to) : `«${h.quote}»`

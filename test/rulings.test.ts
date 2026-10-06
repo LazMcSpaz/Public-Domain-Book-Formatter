@@ -387,6 +387,50 @@ describe('a ruling written as the part that changes', () => {
     )
   })
 
+  it('reads a correction that is the whole quote as the reading it confirms', () => {
+    // The Mahatma Letters, leaf 376: an italic `sorcery` whose o printed open,
+    // transcribed whole and ruled set right with the quote as its wording. The
+    // book has nothing to change, and the check said so on every run.
+    const sort = ruling({
+      pageIndex: 376,
+      quote: 'full and well defined charges of sorcery, etc.?',
+      correction: 'full and well defined charges of sorcery, etc.?'
+    })
+    const book376 = book({
+      blocks: [
+        para('therein contained full and well defined charges of sorcery, etc.?', {
+          id: 'p376b2',
+          sourcePages: [376],
+          emphasis: [7]
+        })
+      ]
+    })
+    expect(unapplied([sort], book376)).toEqual([])
+    expect(
+      unapplied([sort], prose('full and well defined charges of sercery, etc.?'))
+    ).toHaveLength(1)
+  })
+
+  it('reads a mark supplied for an unmarked note on the leaf, not in the note', () => {
+    // The Mahatma Letters, leaf 477: the page prints a note with no mark for
+    // it, and the editor hung it on the letter's heading. The note stands as
+    // printed, so asking whether the quote has gone reported the ruling
+    // outstanding for ever; what has landed is the mark on the heading.
+    const NOTE =
+      'The asterisk and numbers refer to Letter XCIX from A. O. Hume on which K.H. Comments in this letter.'
+    const hung = ruling({ pageIndex: 477, quote: NOTE, correction: 'LETTER No. XCVIII¹' })
+    const leaf477 = (heading: string): BookDocument =>
+      book({
+        blocks: [
+          para(heading, { id: 'p477b2', kind: 'heading', level: 2, sourcePages: [477] }),
+          para('* I realized it perfectly.', { id: 'p477b3', sourcePages: [477] })
+        ],
+        footnotes: [{ id: 'fn1', originalMarker: '¹', text: NOTE, pageIndex: 477, orphaned: false }]
+      })
+    expect(unapplied([hung], leaf477('LETTER No. XCVIII¹'))).toEqual([])
+    expect(unapplied([hung], leaf477('LETTER No. XCVIII'))).toHaveLength(1)
+  })
+
   it('keeps the pointing the correction does not give', () => {
     const moon = ruling({ quote: 'the Moon, called also Sekhet', correction: 'Moon' })
     expect(

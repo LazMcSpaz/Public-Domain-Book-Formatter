@@ -22,14 +22,23 @@ import {
   synopsisKey,
   synopsisLooksSound,
   type PageRole,
-  type SynopsisEntry
+  type SynopsisEntry,
+  type SynopsisSource
 } from '@core/pages'
+import { folioRuns, type FolioRun } from './folios'
+import type { Seam } from './seams'
 import {
+  joinStyling,
+  moveParts,
   normalizeTable,
+  partsAfterDeleting,
+  settleParts,
   shiftEmphasis,
   wordCount,
   type BlockKind,
+  type InlinePart,
   type PageTranscription,
+  type SettledStyling,
   type TranscribedBlock
 } from '@core/transcribe'
 
@@ -51,6 +60,11 @@ export interface BookBlock extends TranscribedBlock {
   id: string
   /** Pages this block's text came from (more than one when a seam was joined). */
   sourcePages: number[]
+  /**
+   * Where each later page's text begins, for a block joined across a seam —
+   * see `./seams`. Absent on a block read from one leaf.
+   */
+  seams?: Seam[]
   /**
    * A number line set small above this heading: "BOOK ONE" over "THE HUMAN
    * AURA".
@@ -93,6 +107,8 @@ export interface Footnote {
   strong?: number[]
   /** Word indices the note sets in small capitals. See `TranscribedBlock.smallCaps`. */
   smallCaps?: number[]
+  /** Styles over part of a word. See `TranscribedBlock.parts`. */
+  parts?: InlinePart[]
   /** Page the note was printed on. */
   pageIndex: number
   /** True when no body text referenced this marker. */
@@ -152,6 +168,11 @@ export interface ChapterEntry {
    * contents, or when the parse was not sound enough to trust.
    */
   synopsis?: string
+  /**
+   * Where `synopsis` was read from and the page references in it, for a
+   * synopsis read off contents leaves that said which they were.
+   */
+  synopsisSource?: SynopsisSource
   /**
    * The chapter's name as the original contents gives it, where the body
    * prints only a number.
@@ -368,7 +389,18 @@ export interface BookDocument {
    * only plainer, so nothing looks broken and the prose was read and thrown
    * away. Reported, never dropped.
    */
-  synopsesUnmatched: { title: string; label: string; synopsis: string }[]
+  synopsesUnmatched: {
+    title: string
+    label: string
+    synopsis: string
+    source?: SynopsisSource
+  }[]
+  /**
+   * Which leaf carries which page of the original, read off the folios the
+   * leaves print — see `./folios`. What a page reference in the original's
+   * contents is resolved through. Absent on a document nobody assembled.
+   */
+  folios?: FolioRun[]
 }
 
 /** A hyphen at the end of a block that continues — a word split by the page break. */
@@ -382,6 +414,67 @@ const TRAILING_HYPHEN = /(\p{L})[-\u00AD]\s*$/u
  */
 export function stripSoftHyphens(text: string): string {
   return text.replace(/\u00AD/gu, '')
+}
+
+/** One soft hyphen, as `partsAfterDeleting` asks for the characters it deletes. */
+const SOFT_HYPHEN = /\u00AD/u
+
+/** The styling a block or note stores. */
+interface Styled {
+  text: string
+  emphasis?: number[]
+  strong?: number[]
+  smallCaps?: number[]
+  parts?: InlinePart[]
+}
+
+/** A settled styling as the fields a block stores: each only where it has something. */
+function stylingOf(settled: SettledStyling): Omit<Styled, 'text'> {
+  return {
+    ...(settled.emphasis.length > 0 ? { emphasis: settled.emphasis } : {}),
+    ...(settled.strong.length > 0 ? { strong: settled.strong } : {}),
+    ...(settled.smallCaps.length > 0 ? { smallCaps: settled.smallCaps } : {}),
+    ...(settled.parts.length > 0 ? { parts: settled.parts } : {})
+  }
+}
+
+/**
+ * Carry `next`'s styling onto `into` for a join whose text is `joined`, before
+ * `into.text` is replaced with it.
+ *
+ * The whole-word indices move along by the words `into` contributes, measured
+ * on the joined text so a healed hyphen is counted once — the rule both joins
+ * in this file have always followed, unchanged where neither side has a part.
+ * Where either has one, `joinStyling` does the same for the indices and keeps
+ * each part on its own characters, the healed word included.
+ */
+function carryStyling(into: Styled, next: TranscribedBlock, joined: string): void {
+  if (!into.parts?.length && !next.parts?.length) {
+    const shift = wordCount(joined) - wordCount(next.text)
+    if (next.emphasis?.length) {
+      into.emphasis = [...(into.emphasis ?? []), ...shiftEmphasis(next.emphasis, shift)]
+    }
+    if (next.strong?.length) {
+      into.strong = [...(into.strong ?? []), ...shiftEmphasis(next.strong, shift)]
+    }
+    if (next.smallCaps?.length) {
+      into.smallCaps = [...(into.smallCaps ?? []), ...shiftEmphasis(next.smallCaps, shift)]
+    }
+    return
+  }
+  const settled = joinStyling(
+    into.text,
+    into,
+    stripSoftHyphens(next.text),
+    { ...next, parts: partsAfterDeleting(next.text, next.parts, SOFT_HYPHEN) },
+    joined
+  )
+  const fields = stylingOf(settled)
+  delete into.emphasis
+  delete into.strong
+  delete into.smallCaps
+  delete into.parts
+  Object.assign(into, fields)
 }
 
 /**
@@ -607,68 +700,11 @@ export function assembleBook(
         // a marker by mistake is caught by the check rather than by the silence
         // this rule would otherwise create.
         const previousNote = footnotes[footnotes.length - 1]
-        if (previousNote !== undefined && !block.marker && printedMarker(block.text) === null) {
-          const joined = stripSoftHyphens(joinText(previousNote.text, block.text))
-          // Word indices again, and the same trap the marker strip has: the
-          // continuation's emphasis is counted from its own first word, so it
-          // has to be shifted past everything already in the note.
-          //
-          // Measured against the *joined* text rather than the note's old word
-          // count, because `joinText` heals a hyphen across the seam — which
-          // merges two words into one and moves every index after it by one.
-          const shift = wordCount(joined) - wordCount(block.text)
-          if (block.emphasis?.length) {
-            previousNote.emphasis = [
-              ...(previousNote.emphasis ?? []),
-              ...block.emphasis.map((i) => i + shift)
-            ]
-          }
-          if (block.strong?.length) {
-            previousNote.strong = [
-              ...(previousNote.strong ?? []),
-              ...block.strong.map((i) => i + shift)
-            ]
-          }
-          if (block.smallCaps?.length) {
-            previousNote.smallCaps = [
-              ...(previousNote.smallCaps ?? []),
-              ...block.smallCaps.map((i) => i + shift)
-            ]
-          }
-          previousNote.text = joined
+        if (previousNote !== undefined && isFootnoteRunover(block)) {
+          continueFootnote(previousNote, block)
           continue
         }
-        // The declared marker, or the one the note's own text opens with, or
-        // `*` — in that order. The bare `*` fallback used to come second and
-        // mislabelled every note whose transcriber left the mark in the text
-        // and omitted the field: the page's `†` stayed in the text, the note
-        // was filed as `*`, and `markOrphanFootnotes` then looked for a mark
-        // the body does not carry. Where the field disagrees with the text,
-        // the field still wins here and `verifyPage` reports the disagreement
-        // — assembly must stay total, and a contradiction inside one leaf is
-        // something for a person rather than something to resolve silently.
-        const marker = block.marker ?? printedMarker(block.text) ?? '*'
-        const raw = stripSoftHyphens(block.text.trim())
-        const text = stripLeadingMarker(raw, marker)
-        // Emphasis is word indices, and stripping the marker removes leading
-        // words — so the indices shift back by however many were removed, or
-        // the italics the reading recovered land on the wrong words. They
-        // used to be dropped here entirely, which printed every footnote's
-        // book titles in roman and said nothing.
-        const shift = wordCount(raw) - wordCount(text)
-        const emphasis = block.emphasis?.map((i) => i - shift).filter((i) => i >= 0)
-        const strong = block.strong?.map((i) => i - shift).filter((i) => i >= 0)
-        const smallCaps = block.smallCaps?.map((i) => i - shift).filter((i) => i >= 0)
-        footnotes.push({
-          id: `fn${footnotes.length + 1}`,
-          originalMarker: marker,
-          text,
-          ...(emphasis?.length ? { emphasis } : {}),
-          ...(strong?.length ? { strong } : {}),
-          ...(smallCaps?.length ? { smallCaps } : {}),
-          pageIndex: page.pageIndex,
-          orphaned: false
-        })
+        footnotes.push(startFootnote(block, `fn${footnotes.length + 1}`, page.pageIndex))
         continue
       }
 
@@ -690,25 +726,14 @@ export function assembleBook(
         // word late — the Glossary's `<i>mâyâvic</i> principle` printed
         // "mâyâvic <i>principle</i>".
         const joined = stripSoftHyphens(joinText(previous.text, block.text))
-        const shift = wordCount(joined) - wordCount(block.text)
-        if (block.emphasis?.length) {
-          previous.emphasis = [
-            ...(previous.emphasis ?? []),
-            ...shiftEmphasis(block.emphasis, shift)
-          ]
-        }
-        if (block.strong?.length) {
-          previous.strong = [...(previous.strong ?? []), ...shiftEmphasis(block.strong, shift)]
-        }
-        if (block.smallCaps?.length) {
-          previous.smallCaps = [
-            ...(previous.smallCaps ?? []),
-            ...shiftEmphasis(block.smallCaps, shift)
-          ]
-        }
+        carryStyling(previous, block, joined)
         previous.text = joined
         if (!previous.sourcePages.includes(page.pageIndex)) {
           previous.sourcePages.push(page.pageIndex)
+          // Where this leaf's text begins in the joined block, counted on the
+          // joined text so a healed hyphen is the word it makes (`./seams`).
+          const word = wordCount(joined) - wordCount(block.text)
+          previous.seams = [...(previous.seams ?? []), { page: page.pageIndex, word }]
         }
         previous.continuesNext = block.continuesNext
         continue
@@ -719,6 +744,11 @@ export function assembleBook(
           ...block,
           id: `p${page.pageIndex}b${blockIndex}`,
           text: stripSoftHyphens(block.text),
+          // Taking a soft hyphen out of a word moves the letters after it, and
+          // a part is measured in letters.
+          ...(block.parts?.length
+            ? { parts: partsAfterDeleting(block.text, block.parts, SOFT_HYPHEN) }
+            : {}),
           sourcePages: [page.pageIndex]
         })
       )
@@ -765,14 +795,31 @@ export function assembleBook(
   }
   const synopses = contentsRuns.flatMap((run) => {
     const parsed = readSynopsis(
-      run.flatMap((page) => page.blocks.map((b) => ({ kind: b.kind, text: b.text })))
+      run.flatMap((page) =>
+        page.blocks.map((b, i) => ({
+          kind: b.kind,
+          text: b.text,
+          id: `p${page.pageIndex}b${i}`,
+          page: page.pageIndex
+        }))
+      )
     )
     return synopsisLooksSound(parsed) ? parsed : []
   })
+  // Where each synopsis came from, so a correction can name it and the
+  // contents can set the page references in it (`SynopsisSource`).
+  const sourceOf = (e: SynopsisEntry): SynopsisSource | undefined =>
+    e.id !== undefined
+      ? { id: e.id, pages: e.pages ?? [], ...(e.references ? { references: e.references } : {}) }
+      : undefined
   const synopsesUnmatched: BookDocument['synopsesUnmatched'] = []
   if (synopses.length > 0) {
     const described = synopses.filter((e) => e.synopsis.length > 0)
-    const byTitle = new Map(described.map((e) => [synopsisKey(e.title), e]))
+    // An entry with no title — a letter the contents names by its number
+    // alone — is found by its label below, never by an empty title.
+    const byTitle = new Map(
+      described.filter((e) => synopsisKey(e.title)).map((e) => [synopsisKey(e.title), e])
+    )
     // The chapter *number*, as a second way in. A book can call a chapter two
     // things — *The Human Aura* lists "The Aura Kaleidoscope" in its contents
     // and heads the chapter "THE AURIC KALEIDOSCOPE" — and three of its ten
@@ -804,20 +851,47 @@ export function assembleBook(
       // label, the number being all there is: the number is then its title,
       // and the only name the two pages share.
       const numberOnly = !chapter.label && isNumberLine(chapter.title)
-      const number = chapter.label ?? (numberOnly ? chapter.title : '')
+      // And a heading that is its own number in a form `isNumberLine` does not
+      // know — `LETTER No. XVI`, the whole of each letter's heading in *The
+      // Mahatma Letters* — is matched to the contents entry that names the
+      // letter by that label (`Letter No. XVI,—The Devachan Letter…`).
+      const number = chapter.label ?? chapter.title
       const labelled = number ? (byLabel.get(synopsisKey(number)) ?? []) : []
       const found = byTitle.get(synopsisKey(chapter.title)) ?? labelled.find((e) => !claimed.has(e))
       if (!found || claimed.has(found)) continue
       chapter.synopsis = found.synopsis
+      const source = sourceOf(found)
+      if (source) chapter.synopsisSource = source
       if (numberOnly && found.title) chapter.contentsTitle = found.title
       claimed.add(found)
     }
+    // A letter the contents describes once and the body prints in parts:
+    // `Letter No. III.` in the contents over `LETTER No. IIIa.`, `IIIb.` and
+    // `IIIc.` in the body. The description is of the whole letter and goes
+    // under its first part. Exact rather than fuzzy — the label and an `a`,
+    // which no roman numeral contains — and only for an entry nothing claimed.
+    for (const entry of described) {
+      if (claimed.has(entry) || !entry.label) continue
+      const first = chapters.find(
+        (c) =>
+          c.synopsis === undefined &&
+          !c.label &&
+          synopsisKey(c.title) === `${synopsisKey(entry.label)}a`
+      )
+      if (!first) continue
+      first.synopsis = entry.synopsis
+      const source = sourceOf(entry)
+      if (source) first.synopsisSource = source
+      claimed.add(entry)
+    }
     for (const entry of described) {
       if (claimed.has(entry)) continue
+      const source = sourceOf(entry)
       synopsesUnmatched.push({
         title: entry.title,
         label: entry.label,
-        synopsis: entry.synopsis
+        synopsis: entry.synopsis,
+        ...(source ? { source } : {})
       })
     }
   }
@@ -836,7 +910,8 @@ export function assembleBook(
     illustrations,
     sections: [],
     skipped,
-    synopsesUnmatched
+    synopsesUnmatched,
+    folios: folioRuns(ordered)
   }
 }
 
@@ -948,6 +1023,90 @@ function escapeRegExp(s: string): string {
  * The marker must be followed by punctuation or whitespace, so "1662 was the
  * year" is never mistaken for a marker plus text.
  */
+/**
+ * A note paragraph with no mark of its own: the runover of the note above it.
+ * One rule for assembly and for a block an edit has refiled as a note, so the
+ * two cannot disagree about what continues what.
+ */
+export function isFootnoteRunover(block: TranscribedBlock): boolean {
+  return !block.marker && printedMarker(block.text) === null
+}
+
+/** Join a runover paragraph onto the note it continues, styling and all. */
+export function continueFootnote(previousNote: Footnote, block: TranscribedBlock): void {
+  const joined = stripSoftHyphens(joinText(previousNote.text, block.text))
+  // Word indices again, and the same trap the marker strip has: the
+  // continuation's emphasis is counted from its own first word, so it
+  // has to be shifted past everything already in the note.
+  //
+  // Measured against the *joined* text rather than the note's old word
+  // count, because `joinText` heals a hyphen across the seam — which
+  // merges two words into one and moves every index after it by one.
+  carryStyling(previousNote, block, joined)
+  previousNote.text = joined
+}
+
+/**
+ * A note from a block that prints its own mark: the mark taken off the text
+ * and the word indices shifted to match. `id` is the caller's — assembly
+ * numbers notes in reading order, and an edit that refiles a body block as a
+ * note names it after that block, so every number already in use stays put.
+ */
+export function startFootnote(block: TranscribedBlock, id: string, pageIndex: number): Footnote {
+  // The declared marker, or the one the note's own text opens with, or
+  // `*` — in that order. The bare `*` fallback used to come second and
+  // mislabelled every note whose transcriber left the mark in the text
+  // and omitted the field: the page's `†` stayed in the text, the note
+  // was filed as `*`, and `markOrphanFootnotes` then looked for a mark
+  // the body does not carry. Where the field disagrees with the text,
+  // the field still wins here and `verifyPage` reports the disagreement
+  // — assembly must stay total, and a contradiction inside one leaf is
+  // something for a person rather than something to resolve silently.
+  const marker = block.marker ?? printedMarker(block.text) ?? '*'
+  const raw = stripSoftHyphens(block.text.trim())
+  const text = stripLeadingMarker(raw, marker)
+  // Emphasis is word indices, and stripping the marker removes leading
+  // words — so the indices shift back by however many were removed, or
+  // the italics the reading recovered land on the wrong words. They
+  // used to be dropped here entirely, which printed every footnote's
+  // book titles in roman and said nothing.
+  const shift = wordCount(raw) - wordCount(text)
+  const emphasis = block.emphasis?.map((i) => i - shift).filter((i) => i >= 0)
+  const strong = block.strong?.map((i) => i - shift).filter((i) => i >= 0)
+  const smallCaps = block.smallCaps?.map((i) => i - shift).filter((i) => i >= 0)
+  // A part keeps to its characters rather than to a word count: the mark
+  // may have been printed hard against the note's first word, and taking
+  // it off then moves that word's letters rather than the word.
+  const settled = block.parts?.length
+    ? settleParts(text, {
+        ...(emphasis ? { emphasis } : {}),
+        ...(strong ? { strong } : {}),
+        ...(smallCaps ? { smallCaps } : {}),
+        parts: moveParts(
+          raw,
+          partsAfterDeleting(block.text.trim(), block.parts, SOFT_HYPHEN),
+          text,
+          (offset) =>
+            offset - (raw.length - raw.trimStart().length) - (raw.trim().length - text.length)
+        )
+      })
+    : null
+  return {
+    id,
+    originalMarker: marker,
+    text,
+    ...(settled
+      ? stylingOf(settled)
+      : {
+          ...(emphasis?.length ? { emphasis } : {}),
+          ...(strong?.length ? { strong } : {}),
+          ...(smallCaps?.length ? { smallCaps } : {})
+        }),
+    pageIndex,
+    orphaned: false
+  }
+}
+
 /**
  * The reference mark a note's own text opens with, or null.
  *

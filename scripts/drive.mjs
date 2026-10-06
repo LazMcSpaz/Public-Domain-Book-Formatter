@@ -335,7 +335,7 @@ async function serve() {
             // here is a face the next correction silently deletes. That is not
             // hypothetical: it is what cost this volume 188 emphasis runs when
             // corrections were typed from the bare text.
-            text: markup.withMarkup(b.text, b.emphasis, b.strong, b.smallCaps)
+            text: markup.withMarkup(b.text, b.emphasis, b.strong, b.smallCaps, b.parts)
           }))
         // The book's own footnotes, both faces, carrying the leaf that printed
         // each: a note's id (`fn12`) does not say, and the corrections sheet
@@ -346,12 +346,29 @@ async function serve() {
             .map((n) => ({
               id: n.id,
               leaf: n.pageIndex,
-              text: markup.withMarkup(n.text, n.emphasis, n.strong, n.smallCaps)
+              text: markup.withMarkup(n.text, n.emphasis, n.strong, n.smallCaps, n.parts)
             }))
         return {
           edited: say(applied.blocks),
           pristine: say(bare.blocks),
           notes: { edited: sayNotes(applied.footnotes), pristine: sayNotes(bare.footnotes) },
+          // The original contents' descriptions, whole, keyed by the contents
+          // block each opened with: the strings a `synopsis-text` edit is
+          // written against, page references as the original prints them.
+          synopses: {
+            edited: edits.synopsesOf(applied).map((s) => ({
+              id: s.id,
+              entry: s.name,
+              pages: s.pages,
+              text: s.text
+            })),
+            pristine: edits.synopsesOf(bare).map((s) => ({
+              id: s.id,
+              entry: s.name,
+              pages: s.pages,
+              text: s.text
+            }))
+          },
           // What the contents and the running heads will be built from. A
           // chapter opened by a number over a name is one entry here and two
           // heading blocks above, which is worth being able to see rather
@@ -365,13 +382,15 @@ async function serve() {
             // chapter. Reported because a synopsis that failed to match is
             // silent otherwise: the contents still prints, just plainer, and
             // nothing says the prose was read and then dropped.
-            synopsis: c.synopsis ? `${c.synopsis.slice(0, 60)}…` : null
+            synopsis: c.synopsis ? `${c.synopsis.slice(0, 60)}…` : null,
+            synopsisId: c.synopsisSource?.id ?? null
           })),
           // A description read off the original contents that no chapter
           // claimed. Silent otherwise: the contents still prints, only
           // plainer, so nothing looks broken and the prose was read and
           // thrown away.
-          synopsesUnmatched: applied.synopsesUnmatched.map((x) => x.title),
+          // A letter the contents names by its number has no title.
+          synopsesUnmatched: applied.synopsesUnmatched.map((x) => x.title || x.label),
           sections: applied.sections.map((s) => ({
             id: s.id,
             placement: s.placement,
@@ -569,7 +588,14 @@ async function serve() {
                   const waiting = queriesMod.outstanding(raised, run.rulings ?? [])
                   return {
                     queriesWaiting: waiting.length,
-                    queriesHeld: queriesMod.held(raised, run.rulings ?? []).length
+                    queriesHeld: queriesMod.held(raised, run.rulings ?? []).length,
+                    // Owed a proposal each, by the editor's standing
+                    // instruction; `queries` names them.
+                    queriesWithoutProposal: waiting.filter(
+                      (q) =>
+                        queriesMod.usableProposals(queriesMod.proposalsFor(q, run.proposals ?? []))
+                          .length === 0
+                    ).length
                   }
                 })()
               : {}),
@@ -1990,7 +2016,9 @@ async function serve() {
             orphaned: n.orphaned,
             words: n.text.split(/\s+/u).filter(Boolean).length,
             opening: n.text.slice(0, 60),
-            ...(full ? { text: markup.withMarkup(n.text, n.emphasis, n.strong, n.smallCaps) } : {})
+            ...(full
+              ? { text: markup.withMarkup(n.text, n.emphasis, n.strong, n.smallCaps, n.parts) }
+              : {})
           }))
         },
         [REPO, full]
@@ -2828,11 +2856,12 @@ async function serve() {
       const built = await page.evaluate(
         async ([repo, existing, title, doc]) => {
           const edits = await import(`/@fs${repo}/src/core/edits/index.ts`)
-          // The body and the book's own footnotes: a sheet built from the body alone
-          // listed no note correction at all.
+          // The body, the book's own footnotes and the original contents'
+          // descriptions: a sheet built from the body alone listed no note
+          // correction at all, and none of the contents' either.
           const rows = edits.correctionRows(
-            [...doc.pristine, ...(doc.notes?.pristine ?? [])],
-            [...doc.edited, ...(doc.notes?.edited ?? [])]
+            [...doc.pristine, ...(doc.notes?.pristine ?? []), ...(doc.synopses?.pristine ?? [])],
+            [...doc.edited, ...(doc.notes?.edited ?? []), ...(doc.synopses?.edited ?? [])]
           )
           return {
             text: edits.correctionsMarkdown(edits.correctionsHeader(existing, title), rows),
@@ -3414,6 +3443,69 @@ async function serve() {
         (a, i) => !a.startsWith('--') && !argv[i - 1]?.startsWith('--')
       )
       const action = positional[0]
+
+      // `figure set <imageId> [--caption-file <file>] [--after <blockId>]`:
+      // change what a supplied picture says under it, or the block it follows,
+      // without cutting it again. A caption of several lines is the figure's
+      // key, set as notes are (`captionKey` in the engine).
+      if (action === 'set') {
+        const imageId = positional[1]
+        if (!imageId)
+          throw new Error('figure set <imageId> [--caption-file <file>] [--after <blockId>]')
+        const captionFile = flag('caption-file')
+        const after = flag('after')
+        const { readFile } = await import('node:fs/promises')
+        const caption =
+          captionFile === null ? null : (await readFile(resolve(REPO, captionFile), 'utf8')).trim()
+        return page.evaluate(
+          async ([repo, imageId, caption, after]) => {
+            const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+            const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+            const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+            const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+            const newest = await window.__pdbfPickBook(runStore)
+            if (!newest) throw new Error('No book on this device.')
+            const run = await runStore.loadRun(newest.key)
+            if (!run) throw new Error('That book has no reading stored here.')
+            const had = (run.edits ?? []).find((e) => e.kind === 'image' && e.imageId === imageId)
+            if (!had) throw new Error(`No supplied picture \`${imageId}\` on this book.`)
+            if (after !== null) {
+              const doc = editsMod.applyEdits(
+                assemble.assembleBook(run.transcriptions),
+                run.edits ?? []
+              )
+              if (!doc.blocks.some((b) => b.id === after)) {
+                throw new Error(`No block \`${after}\` in the book as it stands.`)
+              }
+            }
+            const edits = (run.edits ?? []).map((e) =>
+              e === had
+                ? {
+                    ...e,
+                    ...(after !== null ? { afterBlockId: after } : {}),
+                    ...(caption !== null ? { caption } : {})
+                  }
+                : e
+            )
+            const next = project.createSavedRun({
+              ...run,
+              images: new Map(run.images.map((i) => [i.id, i.bytes])),
+              savedAt: new Date().toISOString(),
+              edits
+            })
+            const stored = await runStore.saveRun(next)
+            const doc = editsMod.applyEdits(assemble.assembleBook(run.transcriptions), edits)
+            const fig = doc.illustrations.find((i) => i.id === imageId)
+            return {
+              set: imageId,
+              stored: stored === true,
+              after: fig?.anchorAfterBlockId ?? null,
+              caption: fig?.caption ?? null
+            }
+          },
+          [REPO, imageId, caption, after]
+        )
+      }
 
       if (action === 'list' || action === 'drop') {
         const imageId = positional[1] ?? null
@@ -4230,57 +4322,52 @@ async function serve() {
       const { readFile, writeFile } = await import('node:fs/promises')
       const where = resolve(REPO, dir)
       const json = await readFile(resolve(where, 'book.json'), 'utf8')
+      // The sheets are headed with the book's name, as `queries` heads them:
+      // the export title where the book has reached that gate, else whatever
+      // a person already wrote at the head of the sheet. The run in this
+      // browser carries the scan's on-disk name, `<sha256>.pdf`, which is
+      // what three sheets on Patterns Vol. I were retitled to by this verb.
+      const onSheet = (() => {
+        try {
+          const head = readFileSync(resolve(where, 'queries.md'), 'utf8').split('\n')[0] ?? ''
+          const named = / — (.+)$/u.exec(head)?.[1] ?? null
+          return named && !/\.(pdf|epub)$/iu.test(named) ? named : null
+        } catch {
+          return null
+        }
+      })()
+      const sheetTitle = JSON.parse(json).answers?.export?.title
+        ? `*${await bookTitle(where)}*`
+        : onSheet
       const built = await page.evaluate(
-        async ([repo, json]) => {
-          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+        async ([repo, json, sheetTitle]) => {
           const shelfSave = await import(`/@fs${repo}/src/platform/browser/shelf-save.ts`)
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
           const parsed = project.parseBookFile(json)
           const key = parsed.run.key
-          // The run under the file's own key, or — because a scan rebuilt on
-          // this machine carries a fresh date and `load` re-keys the run to
-          // match it — the book this browser has open. `__pdbfBook` is the
-          // one designated way every verb here knows which book is meant
-          // (see its own doc comment above), and `load`/`use` set it, so it
-          // is asked first rather than guessed at. Comparing *file names*
-          // here used to be the check, and it is not a safe one on this
-          // shelf: `load`'s run always carries the scan's *on-disk* name —
-          // `scans/<sha256>.pdf`, the shelf's own convention — while the
-          // book file records the original upload's name, so the two agree
-          // only when a session happened to load the book from a
-          // readable-named copy earlier. Measured on this shelf: three of
-          // ten books loaded straight from their shelf scan failed the old
-          // check and fell back to writing no sheets, silently, for a
-          // reason that had nothing to do with whether it was the same
-          // book. The leaf count is kept as the sanity guard — a book file
-          // is checked against the run its own directory's scan produced,
-          // not against whichever run happens to be current.
-          let run = await runStore.loadRun(key)
-          if (!run) {
-            const currentKey = window.__pdbfBook
-            const candidate = currentKey
-              ? await runStore.loadRun(currentKey)
-              : await (async () => {
-                  const open = await window.__pdbfPickBook(runStore)
-                  return open ? await runStore.loadRun(open.key) : null
-                })()
-            const same =
-              candidate && candidate.transcriptions.length === parsed.run.transcriptions.length
-            if (same) run = candidate
-          }
-          // No run: the card alone still needs none, since `catalogueCard`
-          // reads only the parsed file — so a book like Vol. I of *Isis
-          // Unveiled*, whose scan is too large for any shelf and so has no
-          // leaf this browser could ever hold, still gets an about.json.
-          // The sheets are a different promise (they read `run.rulings`)
-          // and are left untouched rather than guessed at.
+          // Everything both the card and the sheets read is in the book file
+          // — its transcriptions, its rulings, its proposals — so both are
+          // built from the file **on disk** and from nothing in this
+          // browser. The sheets used to come from the run cached here under
+          // the file's key, and a cache is whatever some earlier session
+          // left in it: on Patterns Vol. II that run predated four rulings
+          // the book file already held, and `card` rewrote rulings.md
+          // without them, with nothing to say so. It also meant a book
+          // whose scan no shelf can hold, and so has no run here at all
+          // (Vol. I of *Isis Unveiled*), got a card and no sheets.
           return {
             card: shelfSave.catalogueCard(key, json, parsed.scan?.path ?? null),
-            sheets: run ? shelfSave.editorialSheets(run) : null,
-            cardOnly: !run
+            sheets: shelfSave.editorialSheets({
+              ...parsed.run,
+              identityAnswers: {
+                ...(parsed.run.identityAnswers ?? {}),
+                ...(sheetTitle ? { title: sheetTitle } : {})
+              }
+            }),
+            cardOnly: false
           }
         },
-        [REPO, json]
+        [REPO, json, sheetTitle]
       )
       const wrote = []
       // Written exactly as the app writes it (`pushBook`: two spaces, no final
@@ -5118,6 +5205,89 @@ async function serve() {
       )
     },
 
+    /**
+     * Write this device's reading of the current book as the shelf's hand-off
+     * file, the other direction from `reconimport`.
+     *
+     * The app puts a finished reading beside its book through
+     * `pushReconToShelf`, but only from a browser holding a shelf token, and
+     * the driver's never does. So a book recon'd here lived in
+     * `.drive-profile` alone: a container reset cost an hour of Tesseract on
+     * _The Mahatma Letters_ (540 leaves). This builds the same file through the
+     * same `reconHandoff` and writes it to disk for the session to commit,
+     * so a checkpoint is refused here on the same terms as there.
+     */
+    reconexport: async ([out] = []) => {
+      if (!out || !/\.json\.gz$/u.test(out)) {
+        throw new Error('reconexport <books/<dir>/recon.json.gz>')
+      }
+      const built = await page.evaluate(
+        async ([repo]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
+          const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const cleanup = await import(`/@fs${repo}/src/core/image/cleanup.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book open on this device.')
+          const wanted = {
+            dpi: recon.RECON_DPI,
+            maxPages: null,
+            cleanup: cleanup.DEFAULT_CLEANUP
+          }
+          const result = await cacheMod.loadReconCache(newest.key, wanted)
+          if (!result) {
+            throw new Error(
+              'No finished reading of this book here. A checkpoint is not one; let recon finish.'
+            )
+          }
+          // The cache mints object URLs for its crops and thumbnails, and
+          // none of them is wanted here.
+          for (const m of [result.crops, result.contextCrops, result.thumbnails]) {
+            for (const url of m?.values() ?? []) URL.revokeObjectURL(url)
+          }
+          const handoff = project.reconHandoff({
+            key: newest.key,
+            fileName: newest.key.split('\u0000')[0],
+            dpi: wanted.dpi,
+            cleanup: wanted.cleanup,
+            pageCount: result.pageCount,
+            source: result.source,
+            ...(result.shape ? { shape: result.shape } : {}),
+            words: result.words,
+            lexicon: result.lexicon,
+            pageText: result.pageText
+          })
+          const json = JSON.stringify(handoff)
+          // Read back through the parser `reconimport` uses, so a file this
+          // writes is one that verb takes.
+          project.parseReconHandoff(JSON.parse(json))
+          const stream = new Blob([json]).stream().pipeThrough(new CompressionStream('gzip'))
+          const bytes = new Uint8Array(await new Response(stream).arrayBuffer())
+          return {
+            base64: project.toBase64(bytes),
+            key: newest.key.split('\u0000')[0],
+            leaves: result.pageCount,
+            words: result.words.length,
+            source: result.source
+          }
+        },
+        [REPO]
+      )
+      const path = resolve(out)
+      await mkdir(dirname(path), { recursive: true })
+      const bytes = Buffer.from(built.base64, 'base64')
+      await writeFile(path, bytes)
+      return {
+        wrote: path,
+        bytes: bytes.length,
+        key: built.key,
+        leaves: built.leaves,
+        words: built.words,
+        source: built.source
+      }
+    },
+
     cachestat: async ([sub, scan] = []) => {
       // `cachestat recount <scan.pdf>` puts a checkpoint's true length back.
       // Before the fix in `ReconPartial.pageCount` every checkpoint was written
@@ -5440,8 +5610,35 @@ async function serve() {
      * Nothing here proposes a fix. That is the point of the channel.
      */
     queries: async ([out = 'queries.md']) => {
+      // Written beside a shelf book, the sheets take the edition's title from
+      // its book file. The run in the browser knows only the scan's file name,
+      // which on a shelf is a SHA, and every regeneration put it at the head
+      // of all three sheets in place of the title somebody had typed there.
+      // Where the book file names no title, a title already on the sheet is
+      // kept, unless it is itself a file name.
+      const { existsSync, readFileSync } = await import('node:fs')
+      const besideBook = resolve(REPO, out, '..')
+      const exportTitle = (() => {
+        try {
+          return JSON.parse(readFileSync(resolve(besideBook, 'book.json'), 'utf8')).answers?.export
+            ?.title
+            ? 'book'
+            : null
+        } catch {
+          return null
+        }
+      })()
+      const onSheet = existsSync(resolve(REPO, out))
+        ? (/ — (.+)$/u.exec(readFileSync(resolve(REPO, out), 'utf8').split('\n')[0] ?? '')?.[1] ??
+          null)
+        : null
+      const shelfTitle = exportTitle
+        ? `*${await bookTitle(besideBook)}*`
+        : onSheet && !/\.(pdf|epub)$/iu.test(onSheet)
+          ? onSheet
+          : null
       const rendered = await page.evaluate(
-        async ([repo]) => {
+        async ([repo, shelfTitle]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
           const shelf = await import(`/@fs${repo}/src/core/sync/index.ts`)
@@ -5464,10 +5661,21 @@ async function serve() {
           const notYet = queriesMod.unapplied(rulings, doc)
           const waiting = queriesMod.outstanding(raised, rulings)
           const holding = queriesMod.held(raised, rulings)
+          // The editor's standing instruction (5 October 2026): every query
+          // reaches the gate with the reader's answer offered beside it, so
+          // taking it costs a tap. Counted through the same functions that
+          // build the gate's options, and named, because a list is something
+          // to act on.
+          const unanswered = waiting.filter(
+            (q) =>
+              queriesMod.usableProposals(queriesMod.proposalsFor(q, run.proposals ?? [])).length ===
+              0
+          )
           const title =
-            typeof run.identityAnswers?.title === 'string' && run.identityAnswers.title
+            shelfTitle ??
+            (typeof run.identityAnswers?.title === 'string' && run.identityAnswers.title
               ? run.identityAnswers.title
-              : run.fileName
+              : run.fileName)
           const book = { title, fileName: run.fileName }
           return {
             markdown: queriesMod.queriesMarkdown(book, raised, rulings),
@@ -5489,13 +5697,16 @@ async function serve() {
             // decided it should. Named rather than counted: a count here is
             // something to nod at and a list is something to act on.
             decidedButNotPrinted: notYet.map((r) => ({ leaf: r.pageIndex, quote: r.quote })),
+            // Waiting queries the gate would show with no proposal: owed one
+            // each, `drive.mjs propose` (docs/PROCESS-reading.md, Stage 9).
+            withoutProposal: unanswered.map((q) => ({ leaf: q.pageIndex, quote: q.quote })),
             leaves: [...new Set(waiting.map((q) => q.pageIndex))],
             shelfPath: shelf.queriesPath(newest.key),
             rulingsShelfPath: shelf.rulingsPath(newest.key),
             reviewShelfPath: shelf.rulingsPath(newest.key).replace(/rulings\.md$/u, 'review.md')
           }
         },
-        [REPO]
+        [REPO, shelfTitle]
       )
       const { writeFile } = await import('node:fs/promises')
       await writeFile(resolve(REPO, out), rendered.markdown, 'utf8')
@@ -5931,6 +6142,88 @@ async function serve() {
      * note, so running it again replaces rather than adding a second mark;
      * `drop` takes one out.
      */
+    // `insert <afterBlockId> <kind> <file> [--id <id>] [--header]`: a block
+    // the editor wrote, standing in the body after the named block. A table's
+    // file is rows on lines and cells divided by `|`; `--header` makes the
+    // first row its column heads. `insert drop <id>` takes one out.
+    insert: async (argv) => {
+      const flag = (name) => {
+        const i = argv.indexOf(`--${name}`)
+        return i === -1 ? null : argv[i + 1]
+      }
+      const positional = argv.filter((a, i) => !a.startsWith('--') && !(argv[i - 1] === '--id'))
+      const dropping = positional[0] === 'drop'
+      const insertId = dropping ? positional[1] : (flag('id') ?? `ins-${Date.now().toString(36)}`)
+      const [afterBlockId, blockKind, from] = dropping ? [] : positional
+      if (dropping ? !insertId : !afterBlockId || !blockKind || !from) {
+        throw new Error(
+          'insert <afterBlockId> <kind> <file> [--id <id>] [--header] | insert drop <id>'
+        )
+      }
+      let text = null
+      if (from) {
+        const { readFile } = await import('node:fs/promises')
+        text = (await readFile(resolve(REPO, from), 'utf8')).trim()
+        if (!text) throw new Error(`${from} is empty.`)
+      }
+      const headerRow = argv.includes('--header')
+      return page.evaluate(
+        async ([repo, insertId, afterBlockId, blockKind, text, headerRow, dropping]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
+          const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+          const prior = run.edits ?? []
+          const others = prior.filter((e) => !(e.kind === 'insert' && e.insertId === insertId))
+          if (dropping && others.length === prior.length) {
+            throw new Error(`No inserted block \`${insertId}\` in this book.`)
+          }
+          const edits = dropping
+            ? others
+            : [
+                ...others,
+                {
+                  kind: 'insert',
+                  insertId,
+                  afterBlockId,
+                  blockKind,
+                  text,
+                  ...(headerRow ? { headerRow: true } : {})
+                }
+              ]
+          const doc = editsMod.applyEdits(assemble.assembleBook(run.transcriptions), edits)
+          // A footnote leaves the body for the notes, so that is where to look.
+          const block =
+            blockKind === 'footnote'
+              ? doc.footnotes.find((n) => n.id === `fn-ins/${insertId}`)
+              : doc.blocks.find((b) => b.id === `ins/${insertId}`)
+          if (!dropping && !block) {
+            throw new Error(`No block \`${afterBlockId}\` to follow in the book as it stands.`)
+          }
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            edits
+          })
+          const stored = await runStore.saveRun(next)
+          return {
+            insertId,
+            dropped: dropping,
+            stored: stored === true,
+            kind: block?.kind ?? null,
+            rows: block?.cells?.length ?? null,
+            edits: edits.length
+          }
+        },
+        [REPO, insertId, afterBlockId ?? null, blockKind ?? null, text, headerRow, dropping]
+      )
+    },
+
     annotate: async (argv) => {
       const flag = (name) => {
         const i = argv.indexOf(`--${name}`)
@@ -6053,7 +6346,13 @@ async function serve() {
                 refused.push(`${id}: no such ${isNote ? 'note' : 'block'}`)
                 continue
               }
-              const before = markup.withMarkup(block.text, block.emphasis, block.strong)
+              const before = markup.withMarkup(
+                block.text,
+                block.emphasis,
+                block.strong,
+                undefined,
+                markup.partsIn(block.parts, ['italic', 'strong'])
+              )
               if (text === before) continue
               if (tags(before) > 0 && tags(text) === 0) {
                 refused.push(`${id}: would drop every tag`)
@@ -6153,7 +6452,8 @@ async function serve() {
             block.text,
             block.emphasis,
             block.strong,
-            block.smallCaps
+            block.smallCaps,
+            block.parts
           )
 
           let text = replacement
@@ -6342,6 +6642,48 @@ async function serve() {
     },
 
     /**
+     * The edits that name a block, and a way to take one back.
+     *
+     * `block`, `correct` and `split` all check their block against the book as
+     * it stands, which is right for a new edit and wrong for undoing one: a
+     * block retyped to `footnote` has left the body, so nothing could name it
+     * again to put it back. `edits <blockId>` lists every edit keyed to the
+     * block; `edits <blockId> drop <kind>` withdraws that block's edits of that
+     * kind, so the book reads as if they had never been made.
+     */
+    edits: async ([blockId, action, kind]) => {
+      if (!blockId) throw new Error('edits <blockId> [drop <kind>]')
+      if (action && (action !== 'drop' || !kind)) throw new Error('edits <blockId> drop <kind>')
+      return page.evaluate(
+        async ([repo, blockId, kind]) => {
+          const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+          const newest = await window.__pdbfPickBook(runStore)
+          if (!newest) throw new Error('No book on this device.')
+          const run = await runStore.loadRun(newest.key)
+          if (!run) throw new Error('That book has no reading stored here.')
+          const all = run.edits ?? []
+          const names = (e) =>
+            e.blockId === blockId || e.noteId === blockId || e.insertId === blockId
+          const mine = all.filter(names)
+          if (!kind) return { blockId, edits: mine }
+          const dropped = mine.filter((e) => e.kind === kind)
+          if (dropped.length === 0) throw new Error(`No \`${kind}\` edit names \`${blockId}\`.`)
+          const edits = all.filter((e) => !(names(e) && e.kind === kind))
+          const next = project.createSavedRun({
+            ...run,
+            images: new Map(run.images.map((i) => [i.id, i.bytes])),
+            savedAt: new Date().toISOString(),
+            edits
+          })
+          const stored = await runStore.saveRun(next)
+          return { blockId, dropped, stored: stored === true, edits: edits.length }
+        },
+        [REPO, blockId, kind ?? null]
+      )
+    },
+
+    /**
      * Put back a hard line break the conversion dropped.
      *
      * A born-digital PDF's text layer has no line structure, so matter the
@@ -6477,7 +6819,9 @@ async function serve() {
      * block at a time. Without `--now` this is a dry run and only reports the
      * matches, each with context; with it, every match is replaced — body
      * blocks as ordinary `text` edits, written divisions by rewriting their
-     * own record — and the count per block is reported so nothing changes in
+     * own record, the book's notes and the original contents' descriptions
+     * through `note-text` and `synopsis-text` — and the count per block is
+     * reported so nothing changes in
      * silence. The search reads through the notation the way a person reads
      * the page, and the replacement keeps the emphasis around it
      * (`@core/edits/sweep`).
@@ -6525,7 +6869,8 @@ async function serve() {
               block.text,
               block.emphasis,
               block.strong,
-              block.smallCaps
+              block.smallCaps,
+              block.parts
             )
             const matches = editsMod.findMatches(text, was, matchCase)
             if (matches.length === 0) continue
@@ -6566,7 +6911,13 @@ async function serve() {
           // `note-text` record that exists for exactly this reach.
           for (const note of doc.footnotes) {
             if (!note.originalMarker) continue
-            const text = markup.withMarkup(note.text, note.emphasis, note.strong, note.smallCaps)
+            const text = markup.withMarkup(
+              note.text,
+              note.emphasis,
+              note.strong,
+              note.smallCaps,
+              note.parts
+            )
             const matches = editsMod.findMatches(text, was, matchCase)
             if (matches.length === 0) continue
             found.push({
@@ -6594,6 +6945,31 @@ async function serve() {
             if (now !== null) {
               const swept = editsMod.sweepText(edit.text, was, now, matchCase)
               edits = editsMod.withEdit(edits, { ...edit, text: swept.text })
+              replaced += swept.count
+            }
+          }
+
+          // The original contents' descriptions — read off the contents leaves
+          // and carried on their chapters, never blocks — swept through the
+          // `synopsis-text` record that exists for exactly this reach. The text
+          // is the description as printed, page references and all, so a ruling
+          // quoted from the contents is found here as written.
+          for (const synopsis of editsMod.synopsesOf(doc)) {
+            const matches = editsMod.findMatches(synopsis.text, was, matchCase)
+            if (matches.length === 0) continue
+            found.push({
+              synopsis: synopsis.id,
+              entry: synopsis.name,
+              pages: synopsis.pages,
+              matches: matches.map((m) => m.context)
+            })
+            if (now !== null) {
+              const swept = editsMod.sweepText(synopsis.text, was, now, matchCase)
+              edits = editsMod.withEdit(edits, {
+                kind: 'synopsis-text',
+                synopsisId: synopsis.id,
+                text: swept.text
+              })
               replaced += swept.count
             }
           }

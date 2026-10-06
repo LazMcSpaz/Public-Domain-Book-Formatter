@@ -186,6 +186,20 @@ describe('a word split where one half is an ordinary word', () => {
     const words = ['It was apart from us.', 'We stood apart.', 'A part of it.']
     expect(of(build([...words, 'He was a part of the whole.']), 'split-word')).toEqual([])
   })
+
+  it('leaves the tail of a possessive after an initial alone', () => {
+    // A word starts at a letter, so the `’s` of `K.H.’s` comes back as a
+    // lone `s`, and `s own` reads as `sown`: nine findings on The Mahatma
+    // Letters, every one a possessive after a stop.
+    const words = ['The seed was sown.', 'Sown again.', 'They had sown it.']
+    for (const line of ['in the Master K.H.’s own words', 'Madam B.’s he said', "Mr. S.'s way"]) {
+      expect(of(build([...words, 'They went their way.', line]), 'split-word')).toEqual([])
+    }
+    // An apostrophe after a space opens a quotation, and a split inside one
+    // is still a split.
+    const quoted = of(build([...words, "He said 'sow n seed' at the time."]), 'split-word')
+    expect(quoted.map((f) => f.found)).toEqual(['sow n'])
+  })
 })
 
 /** A full stop no compositor sets. */
@@ -768,5 +782,110 @@ describe('a book with almost no italic', () => {
       d
     )
     expect(kept).toEqual([])
+  })
+})
+
+/**
+ * A line-end hyphen the conversion left standing with its space.
+ *
+ * Measured on the NLP shelf: `sincer- ity`, `tenu- ously`, `Meta Publica-
+ * tions`, none of them seen by `split-word`, whose tokens keep the hyphen and
+ * so try `sincer-` against `ity`.
+ */
+describe('a line-end hyphen left with its space', () => {
+  it('reports it attested when the book sets the word whole', () => {
+    const found = of(
+      build([
+        'Meta Publications printed the first edition.',
+        'Later printings came from Meta Publications too.',
+        'Cupertino, Calif.: Meta Publica- tions, 1975.'
+      ]),
+      'hyphen-break'
+    )
+    expect(found).toHaveLength(1)
+    expect(found[0]).toMatchObject({
+      found: 'Publica- tions',
+      expected: 'Publications',
+      confidence: 'attested'
+    })
+  })
+
+  it('takes the hyphenated compound where that is what the book sets', () => {
+    const found = of(
+      build([
+        'He stood knock-kneed at the door.',
+        'Still knock-kneed, he sat down.',
+        'Walk in an exaggerated, knock- kneed fashion.'
+      ]),
+      'hyphen-break'
+    )
+    expect(found).toHaveLength(1)
+    expect(found[0]).toMatchObject({ expected: 'knock-kneed', confidence: 'attested' })
+  })
+
+  it('reports it as a place to look when the book has not set the word', () => {
+    const found = of(build(['The perception of your sincer- ity comes from you.']), 'hyphen-break')
+    expect(found).toHaveLength(1)
+    expect(found[0]).toMatchObject({ expected: 'sincerity', confidence: 'shape' })
+  })
+
+  it('keeps the hyphen when the left half is a compound already', () => {
+    const found = of(
+      build(['Being overwhelmed and being out-of- control can scare people.']),
+      'hyphen-break'
+    )
+    expect(found).toMatchObject([{ expected: 'out-of-control', confidence: 'shape' }])
+  })
+
+  it('leaves a suspended hyphen alone', () => {
+    expect(of(build(['Both pre- and post-hypnotic suggestion work.']), 'hyphen-break')).toEqual([])
+  })
+
+  it('leaves a compound that kept its hyphen alone', () => {
+    expect(of(build(['A dishing-up supper strategy.']), 'hyphen-break')).toEqual([])
+  })
+})
+
+describe('the book’s own notes', () => {
+  const note = (text: string, marker = '¹') => ({
+    id: 'fn22',
+    originalMarker: marker,
+    text,
+    pageIndex: 114,
+    orphaned: false
+  })
+  const body = [
+    'Ambiguity is the subject of this chapter.',
+    'Each ambiguity is set out with its examples.',
+    'A third ambiguity follows.'
+  ]
+
+  it('get the word checks, settled by the body’s vocabulary', () => {
+    nextId = 0
+    const d = doc(
+      body.map((t) => block(t)),
+      { footnotes: [note('The name, with its marvelous phonological amb iguity, refers to it.')] }
+    )
+    const found = of(d, 'split-word')
+    expect(found).toHaveLength(1)
+    expect(found[0]).toMatchObject({ blockId: 'fn22', found: 'amb iguity', pages: [114] })
+  })
+
+  it('are listed after the body, in note order', () => {
+    nextId = 0
+    const d = doc(
+      [...body, 'A late descrip- tion and a description and a description.'].map((t) => block(t)),
+      { footnotes: [note('A footnote descrip- tion too.')] }
+    )
+    expect(of(d, 'hyphen-break').map((f) => f.blockId)).toEqual(['p0b3', 'fn22'])
+  })
+
+  it('leave the editor’s own notes out, which are this edition’s prose', () => {
+    nextId = 0
+    const d = doc(
+      body.map((t) => block(t)),
+      { footnotes: [note('An editor’s amb iguity.', '')] }
+    )
+    expect(of(d, 'split-word')).toEqual([])
   })
 })

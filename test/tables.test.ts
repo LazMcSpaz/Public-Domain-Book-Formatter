@@ -362,6 +362,29 @@ describe('a table on the page', () => {
     expect(second.xPt).toBeCloseTo(page.frame.xPt + left * size * 0.5 + 1.4 * size, 1)
   })
 
+  it('closes up a grid of short entries rather than wrap one of them', () => {
+    // Hellenbach's table of the elements (SD II, leaf 640): nine columns of a
+    // symbol and a weight, and "Fe 56. Co 58·6" broke down the eighth column at
+    // the usual gap. Read across its row, a wrapped cell reads as two entries.
+    const probe = run(doc([tableBlock([['a', 'b']])]))
+    const frame = probe.pages.find((p) => lines(p).length > 0)!.frame
+    const size = defaultStyleProfile().bodyFontSize * 0.92
+    const perMeasure = frame.widthPt / (size * 0.5)
+    const wide = 'Fe 56. Co 58·6'
+    // Too wide for the usual gaps of 1.4 ems, narrow enough for 0.6 ems.
+    const k = Math.floor((perMeasure - 15 - wide.length) / 8)
+    const short = 'Zz ' + 'q'.repeat(Math.max(1, k - 3))
+    const row = [...Array.from({ length: 8 }, () => short), wide]
+    const book = run(doc([tableBlock([row, row.map((c) => c.replace('Fe', 'Ni'))])]))
+    expect(book.warnings).toEqual([])
+    const onLines = (word: string) =>
+      book.pages.flatMap((p) =>
+        lines(p).filter((l) => l.runs.some((r) => r.text.split(/\s+/u).includes(word)))
+      )
+    expect(onLines('Fe').length).toBe(1)
+    expect(onLines('Fe')[0]).toBe(onLines('58·6')[0])
+  })
+
   it('centres a table narrower than the measure rather than stretching it', () => {
     const book = run(doc([tableBlock([['i', 'ii']])]))
     const page = book.pages.find((p) => lines(p).some((l) => l.runs.some((r) => r.text === 'i')))!
@@ -544,5 +567,55 @@ describe('a table kept on one page', () => {
     for (const size of sizesOf(book)) {
       expect(size).toBeGreaterThanOrEqual(defaultStyleProfile().bodyFontSize - 4)
     }
+  })
+})
+
+/**
+ * A caption over a table is its title. The editor's table of modern symbols
+ * on leaf 640 of The Secret Doctrine Vol. II was introduced at the foot of one
+ * page and set on the next, because the table moves whole and the caption
+ * before it had no reason to follow.
+ */
+describe('a caption over a table stays with it', () => {
+  it('moves to the next page with the table rather than staying behind', () => {
+    const rows = Array.from({ length: 12 }, (_, r) => [`Row ${r}`, `Cell ${r}`])
+    // Enough prose to leave room for the caption, not the table.
+    for (let n = 1; n < 80; n++) {
+      const doc: BookDocument = {
+        blocks: [
+          {
+            id: 'p0b0',
+            kind: 'paragraph',
+            text: 'Prose fills the page. '.repeat(n),
+            sourcePages: [0]
+          },
+          {
+            id: 'p0b1',
+            kind: 'caption',
+            text: 'The editor’s table of the same.',
+            sourcePages: [0]
+          },
+          { ...tableBlock(rows), id: 'p0b2' }
+        ],
+        footnotes: [],
+        chapters: [],
+        asides: [],
+        illustrations: [],
+        sections: [],
+        skipped: [],
+        synopsesUnmatched: []
+      }
+      const book = run(doc)
+      const pageOf = (text: string) =>
+        book.pages.findIndex((p) => lines(p).some((l) => l.runs.some((r) => r.text.includes(text))))
+      const caption = pageOf('editor’s')
+      const table = pageOf('Row')
+      // Only a layout that actually pushes the table on is a test of this.
+      if (table > pageOf('fills')) {
+        expect(caption).toBe(table)
+        return
+      }
+    }
+    throw new Error('no prose length pushed the table onto the next page')
   })
 })

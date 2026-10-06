@@ -1174,6 +1174,30 @@ describe('applyEdits — a block the editor wrote, inside the body', () => {
     expect(doc.blocks.map((b) => b.text)).not.toContain('BOOK TWO')
   })
 
+  it('keeps a table the editor wrote as rows and cells', () => {
+    // The Secret Doctrine Vol. II, leaf 640: Hellenbach's table printed as
+    // the paper sets it, and the editor's table of modern symbols after it.
+    // Collapsed to one line, as prose is, the rows ran together into one.
+    const doc = applyEdits(book(), [
+      {
+        kind: 'insert',
+        insertId: 'modern',
+        afterBlockId: 'p0b2',
+        blockKind: 'table',
+        text: 'Row | Group I\n1 | Li lithium\n2 | Na sodium',
+        headerRow: true
+      }
+    ])
+    const table = doc.blocks.find((b) => b.id === 'ins/modern')!
+    expect(table.kind).toBe('table')
+    expect(table.headerRow).toBe(true)
+    expect(table.cells).toEqual([
+      ['Row', 'Group I'],
+      ['1', 'Li lithium'],
+      ['2', 'Na sodium']
+    ])
+  })
+
   it('is left out when it is empty', () => {
     const doc = applyEdits(book(), [
       {
@@ -1350,5 +1374,88 @@ describe('a mark declared bare', () => {
     // reference it was printed under.
     expect(claimed(before)).toEqual([['De Mirville, p. 33.', 'Ibid., p. 313.'], []])
     expect(claimed(after)).toEqual([['De Mirville, p. 33.'], ['Ibid., p. 313.']])
+  })
+})
+
+describe('a footnote read as a paragraph, refiled by a retype', () => {
+  // The Key to Theosophy, page 2: the reading set the page's `*` note in the
+  // body, in two paragraphs, so the `*` on page 2 claimed the next leaf's
+  // note and every `*` after it printed one note early.
+  const misread = () =>
+    assembleBook([
+      page(0, [
+        { kind: 'paragraph', text: 'Ammonius Saccas and his disciples,* who started it.' },
+        { kind: 'paragraph', text: '* Also called Analogeticists.', emphasis: [3] },
+        { kind: 'paragraph', text: 'Though attributed to the third century.' }
+      ]),
+      page(1, [
+        { kind: 'paragraph', text: 'Mosheim says so.* And more.' },
+        { kind: 'footnote', text: '* Says Mosheim of Ammonius.' }
+      ])
+    ])
+  const lifted = () =>
+    applyEdits(misread(), [
+      { kind: 'retype', blockId: 'p0b1', blockKind: 'footnote' },
+      { kind: 'retype', blockId: 'p0b2', blockKind: 'footnote' }
+    ])
+  const claims = (doc: BookDocument) => {
+    const prepared = prepareFootnotes(doc.blocks, doc.footnotes)
+    return prepared.blocks.flatMap((b) =>
+      b.references.map((r) => [b.text.split(' ')[0], prepared.notes.get(r.noteId)!.text])
+    )
+  }
+
+  it('takes the note out of the body', () => {
+    expect(texts(lifted())).toEqual([
+      'Ammonius Saccas and his disciples,* who started it.',
+      'Mosheim says so.* And more.'
+    ])
+  })
+
+  it('puts each mark back over its own note', () => {
+    // Misread, the first mark takes the next leaf's note.
+    expect(claims(misread())[0]).toEqual(['Ammonius', 'Says Mosheim of Ammonius.'])
+    expect(claims(lifted())).toEqual([
+      ['Ammonius', 'Also called Analogeticists. Though attributed to the third century.'],
+      ['Mosheim', 'Says Mosheim of Ammonius.']
+    ])
+  })
+
+  it('keeps the italic the note was read with, and strips only the mark', () => {
+    const note = lifted().footnotes[0]!
+    expect(note.originalMarker).toBe('*')
+    expect(note.text.startsWith('Also called')).toBe(true)
+    expect(note.emphasis).toEqual([2])
+  })
+
+  it('leaves every assembled note its number, so a note-text edit keeps its note', () => {
+    const doc = applyEdits(misread(), [
+      { kind: 'retype', blockId: 'p0b1', blockKind: 'footnote' },
+      { kind: 'note-text', noteId: 'fn1', text: 'Says Mosheim, of Ammonius.' }
+    ])
+    expect(doc.footnotes.map((n) => [n.id, n.text])).toEqual([
+      ['fn-p0b1', 'Also called Analogeticists.'],
+      ['fn1', 'Says Mosheim, of Ammonius.']
+    ])
+  })
+
+  it('files a note the editor inserts on the page of the block it follows', () => {
+    // A note the reading folded into the one above it (leaf 113 of The Key)
+    // is cut out with a note-text edit and put back as a block of its own.
+    const doc = applyEdits(misread(), [
+      { kind: 'retype', blockId: 'p0b1', blockKind: 'footnote' },
+      {
+        kind: 'insert',
+        insertId: 'dagger',
+        afterBlockId: 'p1b0',
+        blockKind: 'footnote',
+        text: '† The second note on page 1.'
+      }
+    ])
+    expect(doc.footnotes.map((n) => [n.originalMarker, n.text, n.pageIndex])).toEqual([
+      ['*', 'Also called Analogeticists.', 0],
+      ['*', 'Says Mosheim of Ammonius.', 1],
+      ['†', 'The second note on page 1.', 1]
+    ])
   })
 })

@@ -28,7 +28,20 @@
  * Pure: no DOM, no I/O.
  */
 import type { BookDocument } from '@core/assemble'
-import { withMarkup } from '@core/transcribe/markup'
+import { partsIn, withMarkup, type InlinePart } from '@core/transcribe/markup'
+
+/**
+ * A block or note in the notation, with its italic and its bold — the faces
+ * the witness can see — including where either covers only part of a word.
+ */
+function italicMarkup(b: {
+  text: string
+  emphasis?: readonly number[]
+  strong?: readonly number[]
+  parts?: readonly InlinePart[]
+}): string {
+  return withMarkup(b.text, b.emphasis, b.strong, undefined, partsIn(b.parts, ['italic', 'strong']))
+}
 
 /** One run of text a witness read as italic, on the leaf it read it from. */
 export interface EmphasisWitness {
@@ -137,6 +150,23 @@ function wordsAround(plain: string, start: number, end: number): { start: number
   return { start, end }
 }
 
+/** Levenshtein distance between two strings of letters. */
+function distance(a: string, b: string): number {
+  let row = Array.from({ length: b.length + 1 }, (_, j) => j)
+  for (let i = 1; i <= a.length; i++) {
+    const next = [i]
+    for (let j = 1; j <= b.length; j++) {
+      next[j] = Math.min(
+        row[j]! + 1,
+        next[j - 1]! + 1,
+        row[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1)
+      )
+    }
+    row = next
+  }
+  return row[b.length]!
+}
+
 /**
  * Every place `pattern` occurs in `text` with the fewest slips, if that is
  * within `limit`: Sellers' approximate substring search, keeping where each
@@ -207,10 +237,8 @@ export function checkEmphasis(
   const units: Unit[] = [
     ...[...doc.blocks, ...doc.sections.flatMap((s) => s.blocks)]
       .filter((b) => b.kind !== 'table')
-      .map((b) => unitOf(b.id, [...b.sourcePages], withMarkup(b.text, b.emphasis, b.strong))),
-    ...doc.footnotes.map((n) =>
-      unitOf(n.id, [n.pageIndex], withMarkup(n.text, n.emphasis, n.strong))
-    )
+      .map((b) => unitOf(b.id, [...b.sourcePages], italicMarkup(b))),
+    ...doc.footnotes.map((n) => unitOf(n.id, [n.pageIndex], italicMarkup(n)))
   ]
   const byPage = new Map<number, Unit[]>()
   for (const u of units) {
@@ -266,11 +294,20 @@ export function checkEmphasis(
       report.unplaced++
       continue
     }
+    // **The whole words a run lands on must spell it**, within the same slips
+    // a match is allowed. A match is a substring of a leaf's letters and is
+    // then widened to whole words, so without this `PART` — a running head
+    // of _The Structure of Magic_ Vol. II, which the book does not print —
+    // was placed on `particular`, and through its context on `Say the` and
+    // `Anatomical`, and a tag would have gone round each.
+    const limit = Math.floor(pattern.length * SLIP_RATE)
+    const spells = (h: { unit: Unit; start: number; end: number }): boolean =>
+      distance(pattern, lettersOf(h.unit.plain.slice(h.start, h.end))) <= limit
     let hits = pattern.length >= MIN_LETTERS ? locate(pattern, run.page, 0, 0) : []
     // Too short to place alone, or placed in more than one spot: the words
     // the witness read either side of it say which. The context is matched
-    // loosely, so a short run must then be found letter for letter inside
-    // what it placed, or `The` lands on whatever word sits where it would.
+    // loosely, so the run must then spell what it placed (below), or `The`
+    // lands on whatever word sits where it would.
     if (
       hits.length !== 1 &&
       pattern.length >= MIN_WITH_CONTEXT &&
@@ -278,13 +315,10 @@ export function checkEmphasis(
     ) {
       const lead = lettersOf(run.before ?? '').slice(-CONTEXT_LETTERS)
       const tail = lettersOf(run.after ?? '').slice(0, CONTEXT_LETTERS)
-      const wider = locate(lead + pattern + tail, run.page, lead.length, tail.length).filter(
-        (h) =>
-          pattern.length >= MIN_LETTERS ||
-          lettersOf(h.unit.plain.slice(h.start, h.end)).includes(pattern)
-      )
+      const wider = locate(lead + pattern + tail, run.page, lead.length, tail.length).filter(spells)
       if (wider.length === 1 || hits.length === 0) hits = wider
     }
+    hits = hits.filter(spells)
     if (hits.length === 0) {
       report.unplaced++
       continue

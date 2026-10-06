@@ -27,14 +27,20 @@
  *
  * Pure: no DOM, no I/O.
  */
-import { withMarkup } from '@core/transcribe'
+import { withMarkup, type InlinePart } from '@core/transcribe'
 import type { BookDocument } from './assemble-book'
 
 /**
- * The book's whole text: front and back divisions the editor wrote, the body,
- * matter set apart, every caption, and every footnote — including the ones no
- * marker in the body reaches, which print as collected endnotes and are text a
- * reader will see.
+ * The book's whole text: front and back divisions the editor wrote, the
+ * original contents' descriptions, the body, matter set apart, every caption,
+ * and every footnote — including the ones no marker in the body reaches, which
+ * print as collected endnotes and are text a reader will see.
+ *
+ * The descriptions are in because they are prose of the original's that this
+ * edition prints, and the editor rules on them like any other: ten rulings on
+ * the contents of *The Mahatma Letters* were reported outstanding for ever
+ * while the check looked only at blocks. Matched to a chapter or not, since a
+ * correction to one has landed whether or not the style prints it.
  */
 export function bookText(doc: BookDocument): string {
   const parts: string[] = []
@@ -43,11 +49,13 @@ export function bookText(doc: BookDocument): string {
     emphasis?: number[]
     strong?: number[]
     smallCaps?: number[]
-  }): string => withMarkup(b.text, b.emphasis, b.strong, b.smallCaps)
+    parts?: InlinePart[]
+  }): string => withMarkup(b.text, b.emphasis, b.strong, b.smallCaps, b.parts)
 
   for (const section of doc.sections.filter((s) => s.placement === 'front')) {
     parts.push(section.label ?? '', section.title, ...section.blocks.map(marked))
   }
+  parts.push(...synopsesPrinted(doc).map((s) => s.text))
   parts.push(...doc.blocks.map(marked))
   parts.push(...doc.asides.map(marked))
   for (const illustration of doc.illustrations) {
@@ -59,4 +67,19 @@ export function bookText(doc: BookDocument): string {
   }
 
   return parts.filter((p) => p !== '').join('\n')
+}
+
+/**
+ * Every description read off the original contents, with the leaves it was
+ * read from — what one leaf of the contents prints, for a question about it.
+ */
+export function synopsesPrinted(
+  doc: Pick<BookDocument, 'chapters' | 'synopsesUnmatched'>
+): { text: string; pages: number[] }[] {
+  return [
+    ...doc.chapters.flatMap((c) =>
+      c.synopsis !== undefined ? [{ text: c.synopsis, pages: c.synopsisSource?.pages ?? [] }] : []
+    ),
+    ...doc.synopsesUnmatched.map((u) => ({ text: u.synopsis, pages: u.source?.pages ?? [] }))
+  ]
 }

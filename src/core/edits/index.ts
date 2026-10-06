@@ -47,6 +47,7 @@ export {
   type TextSpan
 } from './rich-text'
 export { findMatches, sweepText, type SweepMatch } from './sweep'
+export { synopsesOf, withSynopsisTexts, type CarriedSynopsis } from './synopsis-text'
 export {
   claimedCounts,
   correctionRows,
@@ -70,3 +71,8 @@ export {
   type ProofSheetInput,
   type Attention
 } from './proof-sheet'
+export {
+  gatheredNotesToFootnotes,
+  type GatheredNotesOptions,
+  type GatheredNotesResult
+} from './gathered-notes'

@@ -31,12 +31,26 @@
 import type { ImageEditOp } from '@core/model'
 import { sizeAfterOps } from '@core/image'
 import {
+  moveParts,
   normalizeMarkup,
   normalizeTable,
+  settleParts,
   type BlockKind,
+  type InlinePart,
   type TranscribedBlock
 } from '@core/transcribe'
-import { deriveChapters, footnoteMarkerPattern } from '@core/assemble'
+import {
+  continueFootnote,
+  deriveChapters,
+  footnoteMarkerPattern,
+  isFootnoteRunover,
+  seamsAfterMerge,
+  seamsAfterRetyping,
+  seamsAfterSplit,
+  startFootnote,
+  type Footnote
+} from '@core/assemble'
+import { withSynopsisTexts } from './synopsis-text'
 import type {
   BareMark,
   BookBlock,
@@ -110,6 +124,12 @@ export type BookEdit =
        * book's own openings use.
        */
       label?: string
+      /**
+       * For a table: its first row is column heads. A table's `text` is the
+       * flattened view, rows on lines and cells divided by `|`, the shape
+       * `tableToText` writes and `parseTableText` reads.
+       */
+      headerRow?: boolean
     }
   /**
    * Two paragraphs were run together. Splits at `at`, a character offset into
@@ -196,6 +216,13 @@ export type BookEdit =
    * means "this is not part of the book", and it is undoable like any edit.
    */
   | { kind: 'note-text'; noteId: string; text: string }
+  /**
+   * A synopsis from the original contents, corrected — see `./synopsis-text`.
+   * `synopsisId` is the contents block the entry opened with (`p22b0`); the
+   * text is the whole synopsis as it should print, page references as the
+   * original gives them. An empty text removes the synopsis.
+   */
+  | { kind: 'synopsis-text'; synopsisId: string; text: string }
   /**
    * A note the editor leaves *for the assistant* — "this page breaks badly",
    * "check this word against the scan" — anchored the way an authored note is,
@@ -335,6 +362,11 @@ export type BookEdit =
    */
   | { kind: 'bare-mark'; blockId: string; marker: string; nth: number; bare: boolean }
 
+/** A list as a block stores it: absent rather than empty. */
+function orNothing<T>(list: T[]): T[] | undefined {
+  return list.length > 0 ? list : undefined
+}
+
 /** How a split block's halves are named, so the ids stay deterministic. */
 const splitId = (id: string, half: number): string => `${id}/${half}`
 
@@ -361,6 +393,8 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   const authored = new Map<string, BookEdit & { kind: 'note' }>()
   /** Corrections to the book's own footnotes, keyed so re-editing replaces. */
   const noteTexts = new Map<string, string>()
+  /** Corrections to the original contents' synopses, the same way. */
+  const synopsisTexts = new Map<string, string>()
   /** Pictures the editor added, keyed so re-captioning one replaces it. */
   const supplied = new Map<string, BookEdit & { kind: 'image' }>()
   /** Divisions the editor wrote, keyed so editing one replaces it. */
@@ -429,6 +463,11 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
       continue
     }
 
+    if (edit.kind === 'synopsis-text') {
+      synopsisTexts.set(edit.synopsisId, edit.text)
+      continue
+    }
+
     if (edit.kind === 'image') {
       supplied.set(edit.imageId, edit)
       continue
@@ -491,9 +530,16 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
             ...(block.cells ? { cells: undefined } : {}),
             ...(block.emphasis ? { emphasis: undefined } : {}),
             ...(block.strong ? { strong: undefined } : {}),
-            ...(block.smallCaps ? { smallCaps: undefined } : {})
+            ...(block.smallCaps ? { smallCaps: undefined } : {}),
+            ...(block.parts ? { parts: undefined } : {})
           })
         )
+        // Where each later leaf begins, moved with the words (`@core/assemble`).
+        if (block.seams) {
+          const { seams: _old, ...retyped } = blocks[index]!
+          const seams = seamsAfterRetyping(block.seams, block.text, retyped.text)
+          blocks[index] = seams ? { ...retyped, seams } : retyped
+        }
         break
 
       case 'retype': {
@@ -527,31 +573,88 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
         // reported by nothing, because a block with the wrong words marked
         // looks exactly like a block with the right ones marked.
         const wordsInFirst = first.split(/\s+/u).filter(Boolean).length
+        // A split inside a word leaves its two ends on either side, so the
+        // second half's word 0 is the *same* word as the first half's last.
+        // Counting the second half from `wordsInFirst` regardless put every run
+        // after a mid-word split one word early; a run on the word itself goes
+        // to both ends of it, as its letters do.
+        const midWord =
+          at > 0 && /\S/u.test(block.text[at - 1] ?? '') && /\S/u.test(block.text[at] ?? '')
+        const secondFrom = midWord ? wordsInFirst - 1 : wordsInFirst
         const runsFor = (runs: readonly number[] | undefined, half: 1 | 2) => {
           if (!runs || runs.length === 0) return undefined
           const kept =
             half === 1
               ? runs.filter((w) => w < wordsInFirst)
-              : runs.filter((w) => w >= wordsInFirst).map((w) => w - wordsInFirst)
+              : runs.filter((w) => w >= secondFrom).map((w) => w - secondFrom)
           return kept.length > 0 ? kept : undefined
         }
-        const halfOf = (half: 1 | 2, text: string) => ({
-          ...block,
-          text,
-          emphasis: runsFor(block.emphasis, half),
-          strong: runsFor(block.strong, half),
-          smallCaps: runsFor(block.smallCaps, half),
-          ...(block.cells ? { cells: undefined } : {})
-        })
+        // Parts keep to their characters, cut with the text: a part on the
+        // word the split runs through is shared between its two ends, and an
+        // end it now covers entirely becomes that word, whole.
+        const before = block.text.slice(0, at)
+        const after = block.text.slice(at)
+        const partsFor = (half: 1 | 2, text: string): InlinePart[] =>
+          half === 1
+            ? moveParts(
+                block.text,
+                block.parts,
+                text,
+                (o) => o - (before.length - before.trimStart().length)
+              )
+            : moveParts(
+                block.text,
+                block.parts,
+                text,
+                (o) => o - at - (after.length - after.trimStart().length)
+              )
+        const halfOf = (half: 1 | 2, text: string) => {
+          const emphasis = runsFor(block.emphasis, half)
+          const strong = runsFor(block.strong, half)
+          const smallCaps = runsFor(block.smallCaps, half)
+          if (!block.parts?.length) {
+            return {
+              ...block,
+              text,
+              emphasis,
+              strong,
+              smallCaps,
+              ...(block.cells ? { cells: undefined } : {})
+            }
+          }
+          const settled = settleParts(text, {
+            ...(emphasis ? { emphasis } : {}),
+            ...(strong ? { strong } : {}),
+            ...(smallCaps ? { smallCaps } : {}),
+            parts: partsFor(half, text)
+          })
+          return {
+            ...block,
+            text,
+            emphasis: orNothing(settled.emphasis),
+            strong: orNothing(settled.strong),
+            smallCaps: orNothing(settled.smallCaps),
+            parts: orNothing(settled.parts),
+            ...(block.cells ? { cells: undefined } : {})
+          }
+        }
+        // Each half covers the leaves its own words came from, and carries the
+        // seams that fall in it — where the block was joined across leaves.
+        const leaves = seamsAfterSplit(block, wordsInFirst, secondFrom)
+        const cut = (half: 1 | 2, made: BookBlock): BookBlock => {
+          if (!leaves) return made
+          const { seams: _seams, ...rest } = made
+          return { ...rest, ...leaves[half - 1] }
+        }
         blocks.splice(index, 1, {
-          ...normalizeTable(halfOf(1, first)),
+          ...cut(1, normalizeTable(halfOf(1, first))),
           id: splitId(block.id, 1),
           // The first half no longer runs on: the second half is what follows
           // it, and it is right here.
           continuesNext: false
         })
         blocks.splice(index + 1, 0, {
-          ...normalizeTable(halfOf(2, second)),
+          ...cut(2, normalizeTable(halfOf(2, second))),
           id: splitId(block.id, 2),
           continuesPrevious: false
         })
@@ -577,18 +680,61 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
           const out = [...(a ?? []), ...(b ?? []).map((w) => w + shift)]
           return out.length > 0 ? out : undefined
         }
+        const head = `${block.text.trim()}${joiner}`
+        const whole = `${head}${next.text.trim()}`
+        const text = whole.trim()
+        // Parts keep to their characters: the first block's move back by any
+        // space it opened with, the second's along by everything before it.
+        const merged =
+          block.parts?.length || next.parts?.length
+            ? settleParts(text, {
+                emphasis: joined(block.emphasis, next.emphasis) ?? [],
+                strong: joined(block.strong, next.strong) ?? [],
+                smallCaps: joined(block.smallCaps, next.smallCaps) ?? [],
+                parts: [
+                  ...moveParts(
+                    block.text,
+                    block.parts,
+                    text,
+                    (o) => o - (block.text.length - block.text.trimStart().length)
+                  ),
+                  ...moveParts(
+                    next.text,
+                    next.parts,
+                    text,
+                    (o) =>
+                      o -
+                      (next.text.length - next.text.trimStart().length) +
+                      head.length -
+                      (whole.length - whole.trimStart().length)
+                  )
+                ]
+              })
+            : null
+        const seams = seamsAfterMerge(block, next, shift)
         blocks.splice(index, 2, {
           ...normalizeTable({
             ...block,
-            text: `${block.text.trim()}${joiner}${next.text.trim()}`.trim(),
-            emphasis: joined(block.emphasis, next.emphasis),
-            strong: joined(block.strong, next.strong),
-            smallCaps: joined(block.smallCaps, next.smallCaps),
+            text,
+            ...(merged
+              ? {
+                  emphasis: orNothing(merged.emphasis),
+                  strong: orNothing(merged.strong),
+                  smallCaps: orNothing(merged.smallCaps),
+                  parts: orNothing(merged.parts)
+                }
+              : {
+                  emphasis: joined(block.emphasis, next.emphasis),
+                  strong: joined(block.strong, next.strong),
+                  smallCaps: joined(block.smallCaps, next.smallCaps)
+                }),
             ...(block.cells ? { cells: undefined } : {})
           }),
           sourcePages: [...new Set([...block.sourcePages, ...next.sourcePages])].sort(
             (a, b) => a - b
           ),
+          // The second block's leaves begin where it now stands in the first.
+          ...(seams ? { seams } : {}),
           ...(next.continuesNext === undefined ? {} : { continuesNext: next.continuesNext })
         })
         // The block that was absorbed no longer exists, but "after it" is still
@@ -612,15 +758,21 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
   // leaf.
   for (const edit of inserted.values()) {
     if (edit.text.trim().length === 0) continue
-    const block = normalizeMarkup({
-      id: `ins/${edit.insertId}`,
-      kind: edit.blockKind,
-      text: edit.text.replace(/\s+/gu, ' ').trim(),
-      // Written, not read: there is no leaf behind it to point at.
-      sourcePages: [],
-      ...(edit.blockKind === 'heading' ? { level: edit.level ?? 1 } : {}),
-      ...(edit.blockKind === 'heading' && edit.label?.trim() ? { label: edit.label.trim() } : {})
-    })
+    // A table keeps its line breaks: they are its rows. Anything else is
+    // prose, where a line break typed into the editor's words means nothing.
+    const isTable = edit.blockKind === 'table'
+    const block = normalizeMarkup(
+      normalizeTable({
+        id: `ins/${edit.insertId}`,
+        kind: edit.blockKind,
+        text: isTable ? edit.text.trim() : edit.text.replace(/\s+/gu, ' ').trim(),
+        // Written, not read: there is no leaf behind it to point at.
+        sourcePages: [],
+        ...(edit.blockKind === 'heading' ? { level: edit.level ?? 1 } : {}),
+        ...(edit.blockKind === 'heading' && edit.label?.trim() ? { label: edit.label.trim() } : {}),
+        ...(isTable && edit.headerRow ? { headerRow: true } : {})
+      })
+    )
     if (edit.afterBlockId === null) {
       blocks.unshift(block)
       continue
@@ -649,13 +801,20 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
         kind: 'paragraph',
         text: corrected.replace(/\s+/gu, ' ').trim()
       })
-      const { emphasis: _emphasis, strong: _strong, smallCaps: _smallCaps, ...rest } = note
+      const {
+        emphasis: _emphasis,
+        strong: _strong,
+        smallCaps: _smallCaps,
+        parts: _parts,
+        ...rest
+      } = note
       return {
         ...rest,
         text: marked.text,
         ...(marked.emphasis?.length ? { emphasis: marked.emphasis } : {}),
         ...(marked.strong?.length ? { strong: marked.strong } : {}),
-        ...(marked.smallCaps?.length ? { smallCaps: marked.smallCaps } : {})
+        ...(marked.smallCaps?.length ? { smallCaps: marked.smallCaps } : {}),
+        ...(marked.parts?.length ? { parts: marked.parts } : {})
       }
     })
     .filter((note) => note.text.trim().length > 0)
@@ -677,6 +836,7 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
       ...(marked.emphasis?.length ? { emphasis: marked.emphasis } : {}),
       ...(marked.strong?.length ? { strong: marked.strong } : {}),
       ...(marked.smallCaps?.length ? { smallCaps: marked.smallCaps } : {}),
+      ...(marked.parts?.length ? { parts: marked.parts } : {}),
       pageIndex: block.sourcePages[0] ?? 0,
       orphaned: false,
       anchor: { blockId: note.blockId, at: note.at }
@@ -732,21 +892,65 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
     .map((illustration) => withRetouching(illustration, retouched.get(illustration.id)))
     .map((illustration) => withPlacement(illustration, placements))
 
+  // **A note read as a paragraph goes back under the page.** A reading that
+  // set a footnote in the body leaves its mark claiming whatever note comes
+  // next — on The Key to Theosophy the two notes on page 2 were read that way,
+  // and every note after them printed one reference early. Assembly has
+  // already pulled the book's notes out of the flow, so a block retyped to
+  // `footnote` is lifted out here, by the same two rules assembly applies: a
+  // block that prints its own mark starts a note, one that does not continues
+  // the note above it. It is filed in reading order, after the notes of its
+  // own page and every page before, and named after its block rather than
+  // numbered, so every `fnN` a `note-text` edit is keyed to keeps its note.
+  // A block the editor inserted has no leaf of its own; it is on the page of
+  // the block it was put after, which is where its note was printed.
+  const notes: Footnote[] = [...footnotes]
+  let lastPage = 0
+  const pageOf = new Map<string, number>()
+  for (const block of blocks) {
+    lastPage = block.sourcePages[0] ?? lastPage
+    pageOf.set(block.id, lastPage)
+  }
+  for (const block of blocks.filter((b) => b.kind === 'footnote')) {
+    const page = pageOf.get(block.id) ?? 0
+    let at = notes.length
+    while (at > 0 && notes[at - 1]!.pageIndex > page) at--
+    const above = notes[at - 1]
+    if (above && isFootnoteRunover(block)) {
+      // A copy: the note above may be the assembled document's own object.
+      const joined: Footnote = { ...above }
+      continueFootnote(joined, block)
+      notes[at - 1] = joined
+      continue
+    }
+    notes.splice(at, 0, startFootnote(block, `fn-${block.id}`, page))
+  }
+  const body = blocks.filter((b) => b.kind !== 'footnote')
+
   const stillBare: BareMark[] = [...bared.values()]
     .filter((m) => m.bare)
     .map(({ bare: _bare, ...m }) => m)
 
+  const contents = withSynopsisTexts(
+    chaptersOf(body, doc.chapters),
+    doc.synopsesUnmatched,
+    synopsisTexts,
+    doc.skipped
+  )
+
   return {
     ...doc,
-    blocks,
+    blocks: body,
     sections: builtSections,
-    footnotes,
+    footnotes: notes,
     illustrations: [...illustrations, ...suppliedIllustrations],
     // Chapters are derived from the blocks, so retyping a paragraph into a
     // heading has to be able to add one — and dropping a heading has to be able
     // to remove one. Recomputed rather than patched, for the same reason the
-    // engine re-runs instead of mutating.
-    chapters: chaptersOf(blocks, doc.chapters),
+    // engine re-runs instead of mutating. The contents' synopses ride on them,
+    // with any correction to one applied (`./synopsis-text`).
+    chapters: contents.chapters,
+    synopsesUnmatched: contents.unmatched,
     // Only the marks still declared bare. A `bare: false` is the editor taking
     // the declaration back, and what it has to produce is a document with no
     // trace of it — not one carrying a flag the engine has to remember to read
@@ -855,6 +1059,7 @@ function chaptersOf(
     return {
       ...chapter,
       ...(from.synopsis !== undefined ? { synopsis: from.synopsis } : {}),
+      ...(from.synopsisSource !== undefined ? { synopsisSource: from.synopsisSource } : {}),
       ...(from.contentsTitle !== undefined ? { contentsTitle: from.contentsTitle } : {})
     }
   })
@@ -874,6 +1079,7 @@ export function blockOf(edit: BookEdit): string | null {
     edit.kind === 'section' ||
     edit.kind === 'insert' ||
     edit.kind === 'note-text' ||
+    edit.kind === 'synopsis-text' ||
     edit.kind === 'retouch' ||
     edit.kind === 'place'
   ) {
@@ -913,6 +1119,7 @@ export function countEdited(edits: readonly BookEdit[]): number {
     if (!correctsTheBook(edit)) continue
     if (edit.kind === 'anchor') touched.add(edit.illustrationId)
     else if (edit.kind === 'note-text') touched.add(edit.noteId)
+    else if (edit.kind === 'synopsis-text') touched.add(edit.synopsisId)
     else if (edit.kind === 'note') touched.add(edit.noteId)
     else if (edit.kind === 'image') touched.add(edit.imageId)
     else if (edit.kind === 'section') touched.add(edit.sectionId)
@@ -984,6 +1191,7 @@ export function withEdit(edits: readonly BookEdit[], edit: BookEdit): BookEdit[]
     edit.kind === 'memo' ||
     edit.kind === 'highlight' ||
     edit.kind === 'note-text' ||
+    edit.kind === 'synopsis-text' ||
     edit.kind === 'retouch' ||
     edit.kind === 'place' ||
     edit.kind === 'bare-mark'
@@ -1005,6 +1213,7 @@ export function editTarget(edit: BookEdit): string {
   if (edit.kind === 'anchor') return edit.illustrationId
   if (edit.kind === 'note') return edit.noteId
   if (edit.kind === 'note-text') return edit.noteId
+  if (edit.kind === 'synopsis-text') return edit.synopsisId
   if (edit.kind === 'image') return edit.imageId
   if (edit.kind === 'section') return edit.sectionId
   if (edit.kind === 'insert') return edit.insertId

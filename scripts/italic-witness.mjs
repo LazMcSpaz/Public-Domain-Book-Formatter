@@ -26,6 +26,10 @@
  * random from those the book set in roman, each cropped at its own line, were
  * all italic on the paper.
  *
+ * A face the file names (`Times-Italic`, `Helvetica-Oblique`) is taken at its
+ * word and not measured: that is what an Acrobat or Ghostscript layer carries,
+ * and it makes the same witness for books that are not ClearScan.
+ *
  * Output: `[{ page, text, before, after, how, bbox }]`, one per run of
  * consecutive italic lines, with what the page reads either side so a short
  * run can be placed. Needs `mupdf`, which renders here and nowhere in the
@@ -75,6 +79,20 @@ function slant(px, w, h, bb) {
     }
   }
   return best
+}
+
+/**
+ * Whether a font's own name or flags say it is italic: true or false when
+ * they do, null when the face is anonymous and has to be measured. A
+ * standard family name (`Times-Roman`, `PDQDMJ+Helvetica`) says roman as
+ * plainly as `Times-Italic` says italic.
+ */
+const FAMILIES =
+  /Times|Helvetica|Arial|Courier|Garamond|Palatino|Bookman|Century|Georgia|Minion|Baskerville|Caslon|Janson|Optima|Futura|Univers/i
+function namedFace(font) {
+  if (font.style === 'italic' || /Italic|Oblique|-It\b/i.test(font.name)) return true
+  if (FAMILIES.test(font.name)) return false
+  return null
 }
 
 function linesOf(page) {
@@ -156,6 +174,12 @@ for (let p = 0; p < doc.countPages(); p++) {
   page.destroy()
   if (lines.length === 0) continue
   const spans = lines.map((l) => {
+    // A face the file names says what it is, and is believed before any
+    // measurement: Persuasion Engineering's layer sets Times-Italic and
+    // Uncommon Therapy's source Helvetica-Oblique. Only an anonymous face
+    // (ClearScan's `Fd274040`) has its strokes measured.
+    const named = namedFace(l.font)
+    if (named !== null) return { text: l.text, italic: named, how: 'face', bbox: l.bbox }
     const own = lettered(l.text) ? slant(px, w, h, l.bbox) : null
     const font = fontSlant[l.font.name]
     let italic = null
@@ -177,7 +201,11 @@ for (let p = 0; p < doc.countPages(); p++) {
         text: join(run).trim(),
         before: join(spans.slice(Math.max(0, from - 4), from)).slice(-40),
         after: join(spans.slice(k, k + 4)).slice(0, 40),
-        how: run.every((x) => x.how === 'line') ? 'line' : 'font',
+        how: run.every((x) => x.how === 'line')
+          ? 'line'
+          : run.every((x) => x.how === 'face')
+            ? 'face'
+            : 'font',
         bbox: run[0].bbox
       })
       from = -1

@@ -3672,7 +3672,7 @@ export function App(): JSX.Element {
     const pristine = new Map(
       (state.document?.blocks ?? []).map((b) => [
         b.id,
-        withMarkup(b.text, b.emphasis, b.strong, b.smallCaps)
+        withMarkup(b.text, b.emphasis, b.strong, b.smallCaps, b.parts)
       ])
     )
     let nextEdits = edits
@@ -3731,10 +3731,10 @@ export function App(): JSX.Element {
           const host = blocks.find(
             (b) =>
               b.sourcePages.includes(pageIndex) &&
-              spliceRunInto(b.text, b.emphasis, run, b.strong, b.smallCaps)
+              spliceRunInto(b.text, b.emphasis, run, b.strong, b.smallCaps, b.parts)
           )
           const fixed = host
-            ? spliceRunInto(host.text, host.emphasis, run, host.strong, host.smallCaps)
+            ? spliceRunInto(host.text, host.emphasis, run, host.strong, host.smallCaps, host.parts)
             : null
           if (host && fixed) {
             nextEdits = withEdit(nextEdits, {
@@ -3742,7 +3742,13 @@ export function App(): JSX.Element {
               blockId: host.id,
               // Written back with the tags on, because that is how a `text`
               // edit carries emphasis — `applyEdits` reads them straight back.
-              text: withMarkup(fixed.text, fixed.emphasis, fixed.strong, fixed.smallCaps)
+              text: withMarkup(
+                fixed.text,
+                fixed.emphasis,
+                fixed.strong,
+                fixed.smallCaps,
+                fixed.parts
+              )
             })
           } else {
             // Nowhere to put it: the anchor phrase is in no block off this leaf.

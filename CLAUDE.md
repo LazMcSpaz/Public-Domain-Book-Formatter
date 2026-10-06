@@ -515,6 +515,21 @@ this volume carries its journal citation on its title, so the contents read
 `prepareFootnotes`' own output, because the numbered pass has to name a chapter
 exactly as the layout does or the folios stop matching.
 
+**A table's marks were hidden from the footnote search, and the notes they
+named took marks further on.** The layout blanked every table's text before
+`prepareFootnotes` ran, on the reasoning that a cell had no word for a mark to
+ride on, so the note would be reported as an orphan. It was not: a note left
+waiting takes the next mark of its kind **anywhere in the book**. On _The
+Secret Doctrine_ Vol. I a table of the principles (p202b3) carries five marks,
+and from it to the end of the volume every note printed under the reference
+before its own, with `notesDropped` empty beside it. `drive.mjs pairs` was
+right the whole time, because it does not blank tables, which is how the two
+were found to disagree: the printed note sequence, read out of the PDF, parted
+from `pairs` at the table. Cells now carry their marks (`tableNotes`). **Two
+passes that ask the same question with different inputs are a fault waiting
+for a book to show it**; compare the printed notes with `pairs` after any
+export of a book with notes.
+
 **One block can carry the same marker twice, and the engine could only see
 one.** `prepareFootnotes` asked each note for its _first_ match in a block —
 and assembly joins a paragraph across a page seam, so a paragraph running from
@@ -718,8 +733,10 @@ reported **24** faults. Eight of them did not exist. Block ids are _derived at
 assembly_, and assembly joins paragraphs across page seams, so the id a
 correction is keyed to names a different block in any reconstruction that does
 not join them: the edits landed on the wrong paragraphs, leaving faults
-standing that had been fixed and manufacturing two (`amb iguity`,
-`exp erience`) that were never in the book at all. It also produced a confident
+standing that had been fixed and putting two (`amb iguity`, `exp erience`)
+in paragraphs that never held them. Both turned out to be real all the same:
+they sit in note 22, where nothing looked until the word checks were handed
+the notes (**The checks read the book against itself**, below). It also produced a confident
 false claim — that `here arc effective` survived to export — which the
 assembled body refutes.
 
@@ -922,11 +939,136 @@ unclaimed and one sat under the wrong reference, and `orphaned` said 0 for a
 while because something claimed each one. `correct` now refuses a change to a
 block carrying a declaration when the count of that marker moves.
 
+**A scan can lose the head of every leaf, and nothing reports it.** The Google
+scan _The Key to Theosophy_ was read from had cut the running head and the
+first line or two off 288 of its leaves. Each seam read straight across the
+gap (`The name Theosophy dates from sophical system.`), every leaf drafted
+and landed cleanly, and the reference marks in the lost lines went with
+them, so every note after the first missing mark printed under the wrong
+reference. A second copy of the same printing (Cornell's, on archive.org)
+supplied every line; the measure that found them is word 4-grams of the
+second copy's OCR that the book lacks. Strip only our own tags from our own
+text when doing it — a `<[^>]+>` run over OCR text eats everything between a
+stray `<` and `>`, which hid a third of the losses on the first pass.
+
+**A footnote read as a paragraph is refiled by a retype.** `block <id>
+retype footnote` lifts the block out of the body in `applyEdits`, by
+assembly's own two rules (a printed mark starts a note, no mark continues
+the note above), in reading order and named after its block so no `fnN`
+moves; `insert <after> footnote <file>` puts back a note the reading folded
+into another. A lifted block has left the body, so `edits <id>` and `edits
+<id> drop <kind>` are how it is reached again.
+
 **A no-break space binds nothing.** The engine and the markup both split words
 on `\s`, which includes U+00A0, and italic is stored by word index, so the
 engine cannot treat it differently without moving italic onto the wrong words.
 A table cell that must not break is a short cell: a cell the paper sets over
 two lines is two rows.
+
+**The checks read the book against itself, and the faults were where it could
+not see.** A pass over the nine NLP and hypnosis books, after every one of
+them reported finished, turned up five classes no check could reach, and each
+is now one:
+
+- **The notes were never read.** `split-word`, `stray-point` and
+  `stray-apostrophe` walked body blocks only, so `amb iguity` and
+  `exp erience` sat in a footnote of _Patterns_ Vol. I through an export. The
+  book's own notes now go through the same walks, in one vocabulary with the
+  body; the editor's notes do not, being this edition's prose.
+- **A line-end hyphen kept its space.** `sincer- ity`, `tenu- ously`, `Meta
+Publica- tions`: `split-word`'s tokens keep a trailing hyphen, so it tried
+  `sincer-` against `ity` and saw nothing. `hyphen-break` is its own kind,
+  `attested` where the book sets the word or the compound twice elsewhere,
+  and blind to a suspended `pre- and post-`.
+- **The apparatus was never asked what the reader asks of it**
+  (`checkApparatus`, `@core/coherence/apparatus.ts`). _The Structure of
+  Magic_ Vol. I prints 48 superscript marks and no notes, its notes having
+  been read as paragraphs under "FOOTNOTES FOR CHAPTER 1"; Vol. II prints 20
+  and **one**, the note a reader typed as a footnote while its section went
+  in as paragraphs, so the section began with a continuation. Vol. II's
+  Part II marks run ⁴ ⁵ ⁶ ⁵ ⁷. And _Patterns_ Vol. I was exported saying
+  "(see page 103)" four times, naming pages of the 1975 typescript. Four
+  kinds: `notes-as-text`, `unclaimed-mark`, `mark-sequence`,
+  `page-reference`. Notation is not a mark — `d⁻¹`, `c¹`, `NP¹`, `(1/6)⁶`,
+  `mc²`, a linguist's `*the boy are` — and a bare `(p. 278)` is a citation of
+  another work: measured, every one of the hundred-odd in the Blavatsky
+  volumes closes a quotation from somebody else.
+- **Nothing compared the book with a second reading of its own paper**
+  (`checkCoverage`, `@core/witness/coverage.ts`). A reader who drops a line,
+  or sets a leaf's first line at the end of the previous leaf's paragraph,
+  leaves text that is sound by every internal measure. A scan with an OCR
+  layer carries a second reading for nothing, and walked a printed line at a
+  time it found _Persuasion Engineering_'s leaf-15 and leaf-113 lines set a
+  paragraph early, two runs of lines swapped on leaf 123 of _The Structure of
+  Magic_ Vol. I and the line opening its note 8 lost on leaf 72, two dropped
+  lines in _NLP For Dummies_ (leaves 203 and 218), and a heading and two
+  paragraphs gone from leaf 86 of _Coaching with NLP_. Most dropped lines
+  show up as **order**, not absence: the missing test needs a whole line's
+  shingles gone, and a lost line's words are usually scattered through its
+  neighbours, but the line after it then lands behind the line before it. The
+  first version aligned whole leaves word by word and reported hundreds of
+  "missing" runs that were the layer's own junk; a line is judged only where
+  the book knows its words, running heads (folio stripped) and left-out
+  leaves are skipped, and rows of cells and boxed matter are never "moved",
+  because the paper interleaves the one and floats the other.
+
+All four run without a browser: `scripts/checks-of.ts` over any number of
+shelf books, `scripts/coverage-of.ts` over one. A shelf-wide question is now a
+minute, not a load per book. And `italic-witness.mjs` now believes a face the
+file **names** (`Times-Italic`, `Helvetica-Oblique`) instead of measuring it,
+which made it the witness for two study books whose italic had been left
+alone: 110 runs restored on _Persuasion Engineering_, 168 on _Uncommon
+Therapy_.
+
+**Four books had nothing that could name their italic, so the pixels do.**
+_NLP For Dummies_, _Coaching with NLP_, _The Structure of Magic_ Vol. II and
+_Instant Rapport_ carried almost no italic, and neither witness above could
+help: an OCR layer drawn in one invisible face names no face, and Vol. II
+has no layer at all. `strokeLean` (`@core/image/slant`) cuts each word from
+a 300-DPI render and finds the shear that stacks its stems sharpest;
+`italicWords` judges it against its own page's median, so a page shot a
+degree off reads the same. `scripts/slant-witness.ts` feeds it the layer's
+boxes, or Tesseract's (`--words`), maps scan pages onto an EPUB's chapters
+(`--book`), and writes what `emphasis-of.ts` takes. 1,125 blocks were
+retagged across the four, every sample cropped and italic on the paper.
+
+Every rule in it was a wrong answer first, found by cropping the findings:
+
+- **A box set between two lines leans however its fragments do.** `was`,
+  `want`, `I've` on _Persuasion Engineering_. It is told by the blank band
+  across its ink — and measured on the ink, not the box, because a test of
+  the box's own proportions held for a text layer's line-high boxes and
+  threw out sixty real italic words on Tesseract's tight ones.
+- **A word with no upright stem has no lean to find.** `were`, `owe`,
+  `know`: every shear scores alike and one wins by a hair. On _Uncommon
+  Therapy_ that was 158 roman `were`s. A lean must beat upright by 3%.
+- **Running heads are italic as often as not.** `Representational Systems`
+  spelled the body's own words and was placed on them; a run recurring in a
+  page's head or foot band is dropped.
+- **A match inside a longer word is not a match.** `checkEmphasis` placed
+  the head `PART` on `particular`; the words a run lands on must now spell
+  it.
+- **A witness is a floor on what the book printed.** The named-face witness
+  restored 110 runs on _Persuasion Engineering_ and missed 25 more the
+  pixels found (`where do they place the picture`), because a face the
+  regex did not know was a face it said nothing about.
+
+**Notes gathered at the back of a chapter can be footnotes, and notation is
+what stands in the way.** _The Structure of Magic_ prints `S¹`, `NP²`,
+`Noun Phrase¹` in the same digits as its marks, and the claiming walk runs
+the length of the book, so an index took the next chapter's note. Vol. I
+needed 56 indices declared bare (a superscript straight after one or two
+capitals or a grammatical category) and one repeated mark; then all 54
+notes sat in their own chapters. Two rules from doing it: a correction to a
+note paragraph stays a correction (`note-text`), or `corrections.md` loses
+its record when the paragraph becomes a note; and a note the paper prints
+no mark for — Vol. II's Part III note 1 — is the editor's, so it stays where
+the book prints it, with a query. `body-of.ts` now says which block claims
+each note, and `text.md` sets the note under it. The conversion is
+`gatheredNotesToFootnotes` (`@core/edits/gathered-notes`), run by
+`scripts/notes-to-footnotes.ts`: it reproduces both volumes' conversions
+exactly, and a note with no mark in its own chapter stops it by name rather
+than letting the next chapter's mark take it.
 
 **A file was written over without being read.** A new test file was given the
 name of an existing one, `test/emphasis.test.ts`, and the write replaced 302
@@ -1002,6 +1144,12 @@ proportions: propose from sense, accept from pixels.
   its cells less and so takes fewer lines (every line takes one body-leading
   slot whatever its size). Only a table longer than a page at every allowed
   size breaks between rows, and the export names it.
+- **A heading needs what follows it to fit, notes included.** The stranding
+  guard asked for one line under a heading, measured before the heading's own
+  note had reserved its lines, and a paragraph under orphan control will not
+  start on one line anyway. So `(1)`, the first of K.H.'s numbered answers in
+  _The Mahatma Letters_, sat alone at the foot of page 165. `firstTakeOf` is
+  what the next item can open with, and the room is counted after the notes.
 - **A guard's fallback has to report.** That contents shipped with no numbers
   and `warnings: 0` beside it. Silence is the failure mode, not the error.
 
@@ -1179,6 +1327,25 @@ npx vite-node --config vitest.config.ts scripts/emphasis-of.ts <book.json> w.jso
                                      #   italic the witness saw and the book sets in
                                      #   roman (`checkEmphasis`); `--restore` writes
                                      #   the batch that puts it back, text unchanged
+npx vite-node --config vitest.config.ts scripts/slant-witness.ts <scan.pdf> w.json [--words t.json] [--book book.json]
+                                     #   italic read off the pixels, for a scan whose
+                                     #   layer names no face or that has none; take it
+                                     #   to emphasis-of.ts with --no-headings, and crop
+                                     #   a sample before landing
+npx vite-node --config vitest.config.ts scripts/notes-to-footnotes.ts <book.json> <out.json> [--keep <head-leaf>:<note>]
+                                     #   notes gathered under "FOOTNOTES FOR …" set as
+                                     #   footnotes, notation declared bare; exits
+                                     #   non-zero naming a note its chapter has no
+                                     #   mark for. Check with `pairs` before landing
+npx vite-node --config vitest.config.ts scripts/checks-of.ts books/*/book.json --out d/
+                                     #   every deterministic check — damage, apparatus,
+                                     #   consistency, rulings not yet in the text —
+                                     #   over shelf books with no browser; `--check`
+                                     #   exits non-zero on anything left after rulings
+npx vite-node --config vitest.config.ts scripts/coverage-of.ts <book.json> [--second s.json]
+                                     #   lines the paper prints that the book lacks or
+                                     #   sets elsewhere, against the scan's own OCR
+                                     #   layer (or a `second` reading)
 node scripts/drive.mjs answers a.json  # the open book's design and edition answers,
                                      #   merged in; `save` writes them to book.json
 node scripts/drive.mjs correct --batch b.json   # many whole-block replacements,
@@ -1197,6 +1364,12 @@ node scripts/drive.mjs reconimport <books/<dir>/recon.json.gz>   # a reading the
                                      #   queue): loaded into the driver's recon
                                      #   cache under the book's key, so recon is
                                      #   not run again here. `load` the book too
+node scripts/drive.mjs reconexport <books/<dir>/recon.json.gz>   # the other
+                                     #   way: the driver's own finished reading,
+                                     #   written as that file for the session to
+                                     #   commit. The driver has no shelf token, so
+                                     #   without this a recon done here lives only
+                                     #   in `.drive-profile`
 node scripts/drive.mjs epub <book.epub> e.json 1 2 3   # spine documents read by the
                                      #   app's own importer, as a batch for
                                      #   `transcribe` — how a shelf EPUB that
@@ -1213,6 +1386,21 @@ node scripts/drive.mjs figure cut 193 0.527,0.532,0.389,0.175 --beside p193b1 --
                                      #   text run past it; `figure list`, `figure drop <id>`;
                                      #   `--from <pdf>` cuts from another copy of the
                                      #   same printing (a book read from an EPUB)
+node scripts/drive.mjs figure set <id> --caption-file c.txt --after p244b4
+                                     #   a supplied figure's caption or anchor,
+                                     #   changed without cutting it again. A
+                                     #   caption of several lines is the figure's
+                                     #   key, set as notes are, each line's
+                                     #   printed mark hung (SD I, leaf 245)
+node scripts/drive.mjs insert p640b3 table t.txt --id modern --header
+                                     #   a block the editor wrote, after the
+                                     #   named block: a table (rows on lines,
+                                     #   cells by `|`), a caption, a heading;
+                                     #   `insert drop <id>` takes it out
+node scripts/drive.mjs edits p13b5                  # every edit that names a block;
+                                     #   `edits p13b5 drop retype` withdraws one,
+                                     #   which is how a block lifted into the notes
+                                     #   is reached again
 node scripts/contact-sheets.mjs <renders> <out>  # the whole book, small, many to
                                      #   a sheet: the only thing that answers
                                      #   "is there a picture we have missed?"
@@ -1296,6 +1484,15 @@ every other question in this app is asked. They live apart from the query
 written by `drive.mjs propose` rather than by a reading. What must never happen
 is the thing `defaultValue` and `held` would both do: an option that arrives
 chosen files on the next press of Next with nobody having looked.
+
+**And every query goes up with one.** The editor's standing instruction (5
+October 2026): a query reaches the gate with the reader's answer offered beside
+it, the decision and the exact wording and the evidence, so taking it is a tap
+rather than a paragraph of dictation. Write them from evidence (the crop, a
+second printing checked on its pixels, the book's own usage), and before the
+queries are pushed. `drive.mjs queries` names any waiting query without one
+(`withoutProposal`) and `drive.mjs book` counts them; see PROCESS-reading.md,
+_Editorial queries_.
 
 **Before committing: typecheck + test + format:check + lint.**
 
@@ -2767,6 +2964,84 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   a review link go through one door (`landFromShelf`), so a tap and a link
   cannot land differently. Cards on the shelf gain the counts at their next
   save or `drive.mjs card`.
+- **Also done**: **italic, bold and small capitals over part of a word**
+  (`InlinePart`, `@core/transcribe/markup`; SavedRun v21). The editor's ruling
+  on leaf 13 of Barker's Introduction to _The Mahatma Letters_, which sets
+  `<i>un</i>spiritual`: the engine prints what the page prints, and a book of
+  letters whose printer set every underline in italic will ask again. Emphasis
+  had been word indices only, so the reader marked the whole word. A tag
+  boundary that falls **among a word's letters** is now a **part** — the word,
+  offsets within its token, the style — and nothing wider: a tag covering every
+  letter of a word, or none (`<i>(</i>word`), still marks the whole word, a
+  superscript mark is not a letter (`“<i>Presence.</i>”¹` stays one italic
+  word), and every block marked before reads exactly as it did. `withMarkup`
+  and `htmlOfMarkup` (one walk now, `renderMarkup`) write a part back as the
+  mid-word tags it came from, so `drive.mjs body`, the galley and a correction
+  typed against them keep it. Assembly, `applyEdits`, `spliceRunInto`, the
+  gathered-notes converter and a sweep carry parts by **characters**, through
+  `settleParts`, the reader's rule re-applied after a change of text. In the
+  engine a word with a part is cut into stretches, each measured in and drawn
+  from its own face, intersected with the hyphenator's pieces and placed hard
+  against each other — boxes with nothing between them, so a line still breaks
+  only where the hyphenator says. The PDF draws the two from two font
+  resources and still copies out as one word. Every new test was
+  fault-injected against the link it covers (37 faults, each caught).
+  Deliberately left at word granularity: **tables** (a part in a cell folds
+  into its word at `normalizeTable`, which is what it printed before) and
+  **drop-cap paragraphs**, which take no spans at all, whole words included;
+  and the born-digital italic witness, which reads a face per word. Two
+  things came with it: a `split` inside a word put every whole-word run after
+  it one word early, and a sweep read `<sc>` as letters. **What it changed on
+  the shelf** was measured before anything was printed: some 380 places,
+  nearly all an italic run ending at an em dash with no space after it
+  (`<i>refusing</i>—as`), which printed the word after the dash in italic and
+  now does not — and SD Vol. II's p594b2, whose italic, restored from the
+  witness, sat three letters left of its words and now printed visibly
+  mid-word. Its pristine has no markup to repair from, so the fifteen runs
+  were put back on the words the italic witness reads off the chunk, and
+  the shelf's PDFs of the six books this reaches are stale until
+  re-exported.
+- **Also done**: **an analytical contents whose page references point at
+  this edition** (`src/core/pages/synopsis.ts`, `src/core/layout/contents-pages.ts`,
+  `src/core/assemble/{seams,folios}.ts`; the `synopsis-text` edit, SavedRun
+  v22). _The Mahatma Letters_ (1923) has twenty leaves of contents, each
+  letter run into one paragraph — `Letter No. XXa.—From A. O. Hume…; 123.
+Death by drink—…; 124.` — and none of it reached the page: the parser knew
+  only the heading shape and refused the parse outright. It now reads the
+  run-in shape beside the old one (every other book on the shelf parses to
+  exactly what it did, measured), and all 148 letters find their chapters,
+  `Letter No. III.` under `LETTER No. IIIa.` included. The 457 references
+  after the groups of topics are kept as structure beside the prose and set
+  at layout to **the page of this edition on which the first word of that
+  1923 page falls** — exact, not ±1, which took three measured facts: which
+  leaf prints that folio (`folioRuns`, off `furniture.folio`, never the
+  `+43` this scan happens to have), where that leaf's text begins inside a
+  paragraph assembly joined across it (`seams`, kept sound through `text`,
+  `split` and `merge`), and on which page that word was set (`blockPages`
+  `turns`). A count shaped like a reference — leaf 30's `lacking in
+intuition; 4. Europeans on probation` — is told from a page by the
+  sequence: the references are the longest run of the whole contents that
+  never goes backwards, and a 4 between 328 and 329 is not in it — read
+  across entries, because a count at the head of a letter has nothing before
+  it in its own entry to contradict it. A volume binding two works paged from
+  1 answers a folio from the work after the contents that cites it. The
+  two-pass guard compared page counts,
+  which is the wrong invariant once numbers inside the descriptions change
+  their length; it now requires every number the contents prints to equal
+  what its own layout gives when asked again, allows one more pass for a
+  front-matter folio the contents' new length moved, and falls back with a
+  warning that says so. A reference no leaf answers prints without a number
+  and is reported, never guessed. Ten editorial rulings sat inside the
+  contents with nothing able to apply them; a `synopsis-text` edit corrects a
+  description over the pristine reading as `note-text` does a note, `sweep`
+  reaches it, `bookText` carries it so `unapplied` stops reporting a landed
+  ruling, and `corrections.md` lists it. Measured on the shelf copy, read and
+  not written: all ten land through sweeps, and all 457 references resolve;
+  the sweeps themselves are still to be run on the book. One fault came out of
+  running the real book rather than the fixture: a 1923 page that opens on
+  `SECTION II` begins on a block the layout sets as the line over its title
+  and records no page for, so six references had no answer until such a
+  block was given the page of the opening it belongs to.
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a
   book mid-run, then the reading surface, then _The Human Aura_ — read with

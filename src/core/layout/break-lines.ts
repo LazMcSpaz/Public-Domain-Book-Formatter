@@ -59,6 +59,17 @@ export interface PlacedWord {
    * that is a bare digit is exactly the case guesswork gets wrong.
    */
   sourceIndex: number
+  /**
+   * Set only on a stretch of a word set in more than one face — the `un` of
+   * `<i>un</i>spiritual` — and then on every stretch of that word: the face
+   * these characters are measured and drawn in. A word in one face leaves it
+   * unset and takes its face from the spans by `sourceIndex`, as it always
+   * has. Consecutive stretches with the same `sourceIndex` and a `font` abut:
+   * there is no space between them, only a change of face.
+   */
+  font?: FontRef
+  /** With `font`: the stretch's size relative to the paragraph's, where not 1. */
+  scale?: number
 }
 
 /**
@@ -143,6 +154,75 @@ export interface TextSpan {
    * stand as tall as the text's lower case. Absent is 1.
    */
   scale?: number
+  /**
+   * Stretches of words set in `font`, by word index: offset pairs within the
+   * word's whitespace-separated token, half-open — `<i>un</i>spiritual` is
+   * `[[0, 2]]` on that word. A word here is set a stretch at a time, each
+   * stretch in the face of the first span that claims its characters, either
+   * by `words` or by a stretch here.
+   */
+  parts?: ReadonlyMap<number, ReadonlyArray<readonly [number, number]>>
+}
+
+/** One stretch of a word set in a face of its own. */
+export interface FaceRun {
+  /** Offsets within the word, half-open. */
+  from: number
+  to: number
+  font: FontRef
+  /** Relative to the paragraph's size; 1 where the face is the text's own size. */
+  scale: number
+}
+
+/**
+ * A word cut into the stretches each face sets, or null when no span has a
+ * part on it — every word marked whole or not at all, which takes the path
+ * every word took before parts existed.
+ *
+ * Each character goes to the first span that claims it, by `words` or by a
+ * part — the same first-match-wins `fontForWord` applies to a whole word — and
+ * to the paragraph's own face where none does. Adjacent characters in one face
+ * are one stretch.
+ */
+export function faceRuns(
+  word: string,
+  index: number,
+  spans: readonly TextSpan[] | undefined,
+  fallback: FontRef
+): FaceRun[] | null {
+  if (!spans?.some((span) => span.parts?.has(index))) return null
+  const claimant = (at: number): TextSpan | null => {
+    for (const span of spans) {
+      if (span.words.has(index)) return span
+      if (span.parts?.get(index)?.some(([from, to]) => at >= from && at < to)) return span
+    }
+    return null
+  }
+  const runs: (FaceRun & { span: TextSpan | null })[] = []
+  let at = 0
+  // By code point, so a stretch never ends between the halves of a surrogate
+  // pair however a stored offset was written.
+  for (const ch of word) {
+    const span = claimant(at)
+    const last = runs[runs.length - 1]
+    if (last && last.span === span) {
+      last.to = at + ch.length
+    } else {
+      runs.push({
+        from: at,
+        to: at + ch.length,
+        font: span?.font ?? fallback,
+        scale: span?.scale ?? 1,
+        span
+      })
+    }
+    at += ch.length
+  }
+  // One stretch is still answered as one, not as null: a part that has come
+  // to cover the whole of what is left of its word — a reference mark lifted
+  // off the end of `<i>Presence.</i>1` — names a face `fontForWord`, which
+  // reads whole words only, would not find.
+  return runs.map(({ span: _span, ...run }) => run)
 }
 
 /** The size a word is set at: the paragraph's, scaled where a span says so. */
@@ -289,6 +369,15 @@ interface TextBox extends Box {
   /** Present on an attachment box, which never merges with its neighbours. */
   sizePt?: number
   risePt?: number
+  /** Present on a stretch of a word set in more than one face — see `PlacedWord.font`. */
+  font?: FontRef
+  scale?: number
+}
+
+/** Whether two faces are the same face, as the writer would embed them. */
+function sameFont(a: FontRef | undefined, b: FontRef | undefined): boolean {
+  if (a === undefined || b === undefined) return a === b
+  return a.family === b.family && a.style === b.style && !a.smallCaps === !b.smallCaps
 }
 
 function isTextBox(item: InputItem): item is TextBox {
@@ -404,7 +493,40 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
     const pieces = segmentsOf(word).flatMap((segment) =>
       hyphenate ? markEndsPiece(hyphenate(segment)) : [segment]
     )
-    if (pieces.length <= 1) {
+    const runs = faceRuns(word, i, options.spans, font)
+    if (runs) {
+      // A word set in more than one face. Each box is a stretch of one piece
+      // in one face, measured in that face — a piece the face changes inside
+      // is two boxes with nothing between them, so the breaker may still break
+      // only where the hyphenator said, and the second stretch is placed
+      // exactly where the first one ends. Pieces that do not put the word back
+      // together are not trusted with its offsets: the word is then cut by
+      // face alone, unbreakable, which is how it was set before it had parts.
+      const whole = pieces.join('') === word ? pieces : [word]
+      let at = 0
+      whole.forEach((piece, p) => {
+        if (p > 0) {
+          const already = ENDS_HYPHENATED.test(whole[p - 1] ?? '')
+          const widthAtBreak = already ? 0 : hyphenWidth
+          if (ragged) items.push(...raggedBreak(HYPHEN_PENALTY, widthAtBreak, true))
+          else items.push(penalty(widthAtBreak, HYPHEN_PENALTY, true))
+        }
+        const end = at + piece.length
+        for (const run of runs) {
+          const from = Math.max(at, run.from)
+          const to = Math.min(end, run.to)
+          if (to <= from) continue
+          const text = word.slice(from, to)
+          const stretch: TextBox = {
+            ...box(text, measurer.widthOf(text, run.font, sizePt * run.scale), i),
+            font: run.font,
+            ...(run.scale !== 1 ? { scale: run.scale } : {})
+          }
+          items.push(stretch)
+        }
+        at = end
+      })
+    } else if (pieces.length <= 1) {
       items.push(box(word, width(word, i), i))
     } else {
       pieces.forEach((piece, p) => {
@@ -522,7 +644,15 @@ export function breakParagraph(text: string, options: BreakParagraphOptions): Br
         const last = words[words.length - 1]
         if (item.text.length === 0) {
           // A paragraph indent: width but nothing to draw.
-        } else if (mergeable && last && !isAttachment && last.sizePt === undefined) {
+        } else if (
+          mergeable &&
+          last &&
+          !isAttachment &&
+          last.sizePt === undefined &&
+          // Pieces of one word are one run again only in one face: the `un`
+          // and the `spiritual` of `<i>un</i>spiritual` abut and stay two.
+          sameFont(last.font, item.font)
+        ) {
           last.text += item.text
         } else if (isAttachment) {
           words.push({
@@ -533,7 +663,13 @@ export function breakParagraph(text: string, options: BreakParagraphOptions): Br
             risePt: item.risePt ?? 0
           })
         } else {
-          words.push({ text: item.text, xPt: round(x), sourceIndex: item.source })
+          words.push({
+            text: item.text,
+            xPt: round(x),
+            sourceIndex: item.source,
+            ...(item.font ? { font: item.font } : {}),
+            ...(item.scale !== undefined ? { scale: item.scale } : {})
+          })
         }
         x += item.width
         mergeable = !isAttachment
@@ -560,7 +696,18 @@ export function breakParagraph(text: string, options: BreakParagraphOptions): Br
     if (hyphenated) {
       const last = words[words.length - 1]
       if (mergeable && last && last.sizePt === undefined) last.text += '-'
-      else words.push({ text: '-', xPt: round(x), sourceIndex: last?.sourceIndex ?? -1 })
+      else {
+        words.push({
+          text: '-',
+          xPt: round(x),
+          sourceIndex: last?.sourceIndex ?? -1,
+          // In the face of the stretch it ends, where the word is in several.
+          ...(last?.font && last.sizePt === undefined ? { font: last.font } : {}),
+          ...(last?.font && last.sizePt === undefined && last.scale !== undefined
+            ? { scale: last.scale }
+            : {})
+        })
+      }
       x += breakItem.width
     }
 

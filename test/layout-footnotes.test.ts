@@ -1234,3 +1234,112 @@ describe('the contents goes as deep as the style says', () => {
     expect(text).not.toContain('Eidetic images:')
   })
 })
+
+/**
+ * _The Secret Doctrine_ Vol. I sets the seven principles as a table whose
+ * cells carry five reference marks. `prepareFootnotes` claimed the five notes
+ * off the table's flattened view, and the engine set the cells, which still
+ * carried the printed marks and named no note: the five notes were numbered
+ * and had no page, and from that table to the end of the volume every note
+ * printed under the reference before its own.
+ */
+describe('layout — reference marks in a table', () => {
+  const doc = build([
+    page(0, [
+      { kind: 'paragraph', text: `${PROSE.repeat(2)}` },
+      {
+        kind: 'table',
+        text: 'Gross body.* | Sthulopadhi.† \n Vital force.‡ | Prana',
+        cells: [
+          ['Gross body.*', 'Sthulopadhi.†'],
+          ['Vital force.‡', 'Prana']
+        ]
+      },
+      { kind: 'footnote', text: 'Annamaya kosa.', marker: '*' },
+      { kind: 'footnote', text: 'Sthula upadhi.', marker: '†' },
+      { kind: 'footnote', text: 'Pranamaya kosa.', marker: '‡' }
+    ]),
+    page(1, [
+      { kind: 'paragraph', text: `${PROSE.repeat(5)}After the table.* ${PROSE.repeat(2)}` },
+      { kind: 'footnote', text: 'The note after the table.', marker: '*' }
+    ])
+  ])
+  const pageWith = (book: LaidOutBook, needle: string): LaidOutPage =>
+    book.pages.find((p) => textOf(p).includes(needle))!
+
+  it('sets each cell’s note on the table’s page, and the next note under its own mark', () => {
+    const book = run(doc)
+    expect(book.notesDropped).toEqual([])
+    expect(book.notesPlaced).toBe(4)
+    const table = pageWith(book, 'Sthulopadhi.').index
+    for (const note of ['Annamaya', 'upadhi.', 'Pranamaya']) {
+      expect(pageWith(book, note).index).toBe(table)
+    }
+    expect(pageWith(book, 'The note after').index).toBe(pageWith(book, 'After the table.').index)
+  })
+
+  it('takes the printed marks out of the cells and raises the new ones on their words', () => {
+    const book = run(doc)
+    const all = book.pages.flatMap((p) => lines(p)).flatMap((l) => l.runs)
+    expect(all.some((r) => /[*†‡]/u.test(r.text))).toBe(false)
+    // The mark rides on its cell's line, beside the word it follows.
+    const raisedOn = (word: string): string[] =>
+      book.pages
+        .flatMap((p) => lines(p))
+        .filter((l) => l.runs.some((r) => r.text.includes(word)))
+        .flatMap((l) => l.runs.filter((r) => (r.risePt ?? 0) > 0).map((r) => r.text))
+    expect(raisedOn('body.')).toEqual(['1', '2'])
+    expect(raisedOn('force.')).toEqual(['3'])
+  })
+})
+
+describe('a heading at the foot of a page', () => {
+  // The letters of The Mahatma Letters number their answers with headings,
+  // `(1)` over the answer, and the first carries a note. At 7x10 one came to
+  // rest on the last line of page 165 with its answer on 166: the stranding
+  // guard asked for one line under the heading, against a body area measured
+  // before the heading's own note had taken its lines, and a paragraph under
+  // orphan control will not start on one line anyway. So the heading is slid
+  // down the page a word at a time, and on every page it lands on, the answer
+  // has to start there too.
+  const FOLLOWER =
+    'Thereupon the company dispersed into the gardens and the conversation turned to other matters entirely. '.repeat(
+      3
+    )
+  const NOTE =
+    'A note long enough to take several lines at the foot of the page it is set on, ' +
+    'because the room a note takes is room the text below the heading cannot have. '.repeat(3)
+
+  const book = (filler: number, noted: boolean): LaidOutBook =>
+    run(
+      build([
+        page(0, [
+          { kind: 'heading', text: 'Of the Air', level: 1 },
+          {
+            kind: 'paragraph',
+            text: Array.from({ length: filler }, (_, i) =>
+              i % 7 === 0 ? 'chirurgeon' : 'air'
+            ).join(' ')
+          },
+          { kind: 'heading', text: noted ? '(1)*' : '(1)', level: 3 },
+          { kind: 'paragraph', text: FOLLOWER },
+          ...(noted ? [{ kind: 'footnote' as const, text: NOTE, marker: '*' }] : [])
+        ])
+      ])
+    )
+
+  for (const noted of [false, true]) {
+    it(`never leaves it without its text${noted ? ', when it carries a note' : ''}`, () => {
+      const stranded: number[] = []
+      for (let filler = 300; filler <= 900; filler += 3) {
+        const laid = book(filler, noted)
+        const at = laid.pages.find((p) =>
+          lines(p).some((l) => l.runs.some((r) => r.text === '(1)'))
+        )
+        expect(at, `filler ${filler}`).toBeDefined()
+        if (!textOf(at!).includes('Thereupon')) stranded.push(filler)
+      }
+      expect(stranded).toEqual([])
+    })
+  }
+})

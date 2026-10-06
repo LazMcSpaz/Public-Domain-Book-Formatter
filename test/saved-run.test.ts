@@ -185,6 +185,25 @@ describe('migrateSavedRun — the corrections that came with v6', () => {
     expect(migrateSavedRun(JSON.parse(JSON.stringify(original))).edits).toEqual(original.edits)
   })
 
+  it('keeps the column heads of a table the editor inserted', () => {
+    // The Secret Doctrine Vol. II, leaf 640: the editor's table of modern
+    // symbols came back from the store without `headerRow`, so its heads
+    // printed as a row of body cells with no rule under them.
+    const original = run({
+      edits: [
+        {
+          kind: 'insert',
+          insertId: 'modern',
+          afterBlockId: 'p0b1',
+          blockKind: 'table',
+          text: 'Row | Group I\n1 | Li',
+          headerRow: true
+        }
+      ]
+    })
+    expect(migrateSavedRun(JSON.parse(JSON.stringify(original))).edits).toEqual(original.edits)
+  })
+
   it('drops a malformed insert rather than setting it as whatever the engine falls back to', () => {
     const raw = JSON.parse(JSON.stringify(run())) as Record<string, unknown>
     raw['edits'] = [

@@ -62,6 +62,8 @@ import { greekModel, greekWordsIn, hasGreek } from './greek'
 export type DamageKind =
   /** A word the conversion broke in half: `descrip tion`, `amb iguity`. */
   | 'split-word'
+  /** A line-end hyphen left standing with the space after it: `sincer- ity`. */
+  | 'hyphen-break'
   /** A full stop no compositor set: doubled, or mid-clause before a lowercase word. */
   | 'stray-point'
   /** An apostrophe standing where a comma belongs: `examination' I tell`. */
@@ -336,8 +338,17 @@ const CANNOT_OPEN_A_SENTENCE = new Set([
   'during'
 ])
 
+/**
+ * What the word checks read: a body block, or one of the book's own notes
+ * standing in as one. Notes are where a reprint keeps its citations and its
+ * asides, and a note is converted by the same program as the page above it;
+ * `amb iguity` sat in a note of _Patterns_ Vol. I through an export because
+ * these walks were only ever handed blocks.
+ */
+type Passage = Pick<BookBlock, 'id' | 'text' | 'sourcePages'>
+
 /** A block's text with markup out of the way. */
-function plain(block: BookBlock): string {
+function plain(block: Pick<BookBlock, 'text'>): string {
   return block.text.replace(/<[^>]*>/gu, '')
 }
 
@@ -351,7 +362,7 @@ function around(text: string, at: number, length: number): string {
 const WORD = /[\p{L}][\p{L}\p{M}'’-]*/gu
 
 /** Every word the book sets, and how often — the witness the pixels are not. */
-function vocabulary(blocks: readonly BookBlock[]): Map<string, number> {
+function vocabulary(blocks: readonly Passage[]): Map<string, number> {
   const seen = new Map<string, number>()
   for (const block of blocks) {
     for (const match of plain(block).matchAll(WORD)) {
@@ -389,7 +400,7 @@ function vocabulary(blocks: readonly BookBlock[]): Map<string, number> {
  * place to look rather than a verdict, because a common word beside a rare
  * one is sometimes just two words: `came in sight` is not `insight`.
  */
-function splitWords(blocks: readonly BookBlock[]): DamageFinding[] {
+function splitWords(blocks: readonly Passage[]): DamageFinding[] {
   const seen = vocabulary(blocks)
   const count = (word: string): number => seen.get(word) ?? 0
   const findings: DamageFinding[] = []
@@ -407,6 +418,17 @@ function splitWords(blocks: readonly BookBlock[]): DamageFinding[] {
       // digit on either side is part of something longer.
       if (/\d/u.test(text[left.index - 1] ?? '')) continue
       if (/\d/u.test(text[right.index + right[0].length] ?? '')) continue
+      // Nor can a word start at an apostrophe, so the `’s` of `K.H.’s own`
+      // comes back as a lone `s` and `s own` reads as `sown`: nine of them on
+      // The Mahatma Letters, every one a possessive after an initial's stop.
+      // Only an apostrophe closing onto a letter or a stop: one after a space
+      // opens a quotation, and `'induc tion'` is still a split.
+      if (
+        /['’]/u.test(text[left.index - 1] ?? '') &&
+        /[\p{L}.]/u.test(text[left.index - 2] ?? '')
+      ) {
+        continue
+      }
 
       const a = left[0].toLocaleLowerCase()
       const b = right[0].toLocaleLowerCase()
@@ -454,6 +476,68 @@ function splitWords(blocks: readonly BookBlock[]): DamageFinding[] {
   return findings
 }
 
+/** A word after the space that makes a hyphen suspended, not broken: `pre- and post-war`. */
+const SUSPENDS = new Set(['and', 'or', 'nor', 'to', 'but', 'as', 'versus', 'vs'])
+
+/**
+ * A line-end hyphen the conversion left standing, with the space after it.
+ *
+ * `split-word` finds a word broken by a space alone. A word broken at the end
+ * of a printed line comes back from many converters as the hyphen *and* a
+ * space — `sincer- ity`, `tenu- ously`, `Meta Publica- tions` — and that walk
+ * cannot see it: its tokens keep a trailing hyphen as part of the word, so the
+ * pair it tries is `sincer-` and `ity`, which the book never sets joined.
+ * Measured on the NLP shelf before this was added: two dozen across four
+ * books, every one a line end on the paper, and none found by any check.
+ *
+ * No compositor sets a hyphen with a space after it inside a sentence except
+ * to suspend a compound, and a suspended hyphen is followed by `and`, `or` or
+ * `to`, so those are left alone. `attested` where the book sets the joined
+ * word (`schizophrenic`) or the hyphenated compound (`knock-kneed`) at least
+ * twice elsewhere; `shape` otherwise, carrying the joined word as the
+ * hypothesis, because the book has not said which of the two it is.
+ */
+function hyphenBreaks(passages: readonly Passage[]): DamageFinding[] {
+  const seen = vocabulary(passages)
+  const count = (word: string): number => seen.get(word.toLocaleLowerCase()) ?? 0
+  const findings: DamageFinding[] = []
+  const BROKEN =
+    /(?<![\p{L}\p{M}'’-])([\p{L}][\p{L}\p{M}'’-]*[\p{L}\p{M}])- (\p{Ll}[\p{L}\p{M}'’]*)/gu
+  for (const passage of passages) {
+    const text = plain(passage)
+    for (const match of text.matchAll(BROKEN)) {
+      const left = match[1]!
+      const right = match[2]!
+      if (SUSPENDS.has(right.toLocaleLowerCase())) continue
+      // A digit glued on either side is a range or a figure: `1960- s`.
+      if (/\d/u.test(text[match.index + match[0].length] ?? '')) continue
+      const joined = left + right
+      const compound = `${left}-${right}`
+      const asOne = count(joined)
+      const asCompound = count(compound)
+      // A left half that is itself a compound (`out-of-`, `dishing-up-`) was
+      // broken at one of its own hyphens: the book's count decides, and with
+      // none to go on the compound is the likelier word.
+      const expected = asCompound > asOne || (asOne === 0 && left.includes('-')) ? compound : joined
+      const attested = Math.max(asOne, asCompound) >= JOINED_FLOOR
+      findings.push({
+        kind: 'hyphen-break',
+        blockId: passage.id,
+        pages: [...passage.sourcePages],
+        found: match[0],
+        against:
+          asOne + asCompound > 0
+            ? `the book sets ${joined} ${asOne} times and ${compound} ${asCompound}`
+            : 'a hyphen with a space after it, which a compositor sets only to suspend a compound',
+        context: around(text, match.index, match[0].length),
+        confidence: attested ? 'attested' : 'shape',
+        expected
+      })
+    }
+  }
+  return findings
+}
+
 /**
  * A full stop the printing trade does not set.
  *
@@ -474,7 +558,7 @@ function splitWords(blocks: readonly BookBlock[]): DamageFinding[] {
 /** A lower-case roman numeral of two letters or more, and only a valid one. */
 const ROMAN = /^(?=[ivxlc]{2})c{0,3}(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})$/u
 
-function strayPoints(blocks: readonly BookBlock[]): DamageFinding[] {
+function strayPoints(blocks: readonly Passage[]): DamageFinding[] {
   const findings: DamageFinding[] = []
   for (const block of blocks) {
     const text = plain(block)
@@ -551,7 +635,7 @@ function strayPoints(blocks: readonly BookBlock[]): DamageFinding[] {
  * possessive it would otherwise catch — `the authors' intention` is correct and
  * `the childrens' book` is not, and neither is distinguishable from here.
  */
-function strayApostrophes(blocks: readonly BookBlock[]): DamageFinding[] {
+function strayApostrophes(blocks: readonly Passage[]): DamageFinding[] {
   const findings: DamageFinding[] = []
   // `’` and `'` can each be a possessive, a contraction, a closing quote or
   // a comma the conversion mis-read. `‘` can only open a quotation, so it is
@@ -626,14 +710,27 @@ function strayApostrophes(blocks: readonly BookBlock[]): DamageFinding[] {
 export function checkDamage(doc: BookDocument): DamageFinding[] {
   const blocks = [...doc.blocks, ...doc.sections.flatMap((s) => s.blocks)]
   const order = new Map(blocks.map((b, i) => [b.id, i]))
+  // The book's own notes go through the word checks with the blocks, and into
+  // one vocabulary with them: a note's `amb iguity` is settled by the body's
+  // `ambiguity`. The editor's notes are prose of this edition, not conversion.
+  const ownNotes: Passage[] = doc.footnotes
+    .filter((n) => n.originalMarker !== '')
+    .map((n) => ({ id: n.id, text: n.text, sourcePages: [n.pageIndex] }))
+  const passages: Passage[] = [...blocks, ...ownNotes]
+  const isNote = new Set(ownNotes.map((n) => n.id))
+  const worded = [
+    ...splitWords(passages),
+    ...hyphenBreaks(passages),
+    ...strayPoints(passages),
+    ...strayApostrophes(passages)
+  ]
   const inBody = [
-    ...splitWords(blocks),
-    ...strayPoints(blocks),
-    ...strayApostrophes(blocks),
+    ...worded.filter((f) => !isNote.has(f.blockId)),
     ...seamSplits(doc.blocks),
     ...garbled(blocks),
     ...tablesAsProse(blocks)
   ].sort((a, b) => (order.get(a.blockId) ?? 0) - (order.get(b.blockId) ?? 0))
+  const inNotes = worded.filter((f) => isNote.has(f.blockId))
   const units = [
     ...blocks
       .filter((b) => b.kind !== 'table')
@@ -654,7 +751,10 @@ export function checkDamage(doc: BookDocument): DamageFinding[] {
   return [
     ...italicsAbsent(doc),
     ...withGreek(inBody, bodyIds),
-    ...withGreek([...markedNotes(doc.footnotes), ...garbledNotes(doc.footnotes)], noteIds)
+    ...withGreek(
+      [...markedNotes(doc.footnotes), ...inNotes, ...garbledNotes(doc.footnotes)],
+      noteIds
+    )
   ]
 }
 
@@ -1055,10 +1155,17 @@ export interface DamageRuling {
   decision: string
 }
 
-export interface HonouredFinding {
-  finding: DamageFinding
+export interface HonouredFinding<F extends RulableFinding = DamageFinding> {
+  finding: F
   ruling: DamageRuling
 }
+
+/**
+ * What a ruling is matched against: the place and the words. Every finding
+ * this module and `apparatus.ts` produce has these, so one honouring rule
+ * serves both and an as-printed ruling means the same thing to each.
+ */
+export type RulableFinding = Pick<DamageFinding, 'blockId' | 'pages' | 'found' | 'context'>
 
 /**
  * The findings, less those the editor has already ruled are the book's own.
@@ -1079,17 +1186,17 @@ export interface HonouredFinding {
  * finding still. Nothing is dropped silently: the honoured list comes back
  * beside the kept one, and the sheet prints it.
  */
-export function honourRulings(
-  findings: readonly DamageFinding[],
+export function honourRulings<F extends RulableFinding = DamageFinding>(
+  findings: readonly F[],
   rulings: readonly DamageRuling[],
   doc: BookDocument
-): { kept: DamageFinding[]; honoured: HonouredFinding[] } {
+): { kept: F[]; honoured: HonouredFinding<F>[] } {
   const blocks = new Map(
     [...doc.blocks, ...doc.sections.flatMap((s) => s.blocks)].map((b) => [b.id, b])
   )
   const asPrinted = rulings.filter((r) => r.decision === 'as-printed' && r.pageIndex !== null)
-  const kept: DamageFinding[] = []
-  const honoured: HonouredFinding[] = []
+  const kept: F[] = []
+  const honoured: HonouredFinding<F>[] = []
   for (const finding of findings) {
     const block = blocks.get(finding.blockId)
     const text = block ? loose(plain(block)) : loose(finding.context)

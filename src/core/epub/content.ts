@@ -23,7 +23,7 @@
  *
  * Pure: a tree in, blocks out. No DOM.
  */
-import { parseInlineMarkup, type BlockKind, type TranscribedBlock } from '@core/transcribe'
+import { parseInlineMarkup, partsIn, type BlockKind, type TranscribedBlock } from '@core/transcribe'
 import { collapse, textOf, type EpubElement, type EpubNode } from './tree'
 
 /** Elements whose content is set apart rather than run into the paragraph flow. */
@@ -143,11 +143,16 @@ export function blocksFromDocument(root: EpubNode, startIndex = 0): EpubContent 
   const push = (kind: BlockKind, raw: string, extra: Partial<TranscribedBlock> = {}): void => {
     const markup = parseInlineMarkup(raw)
     if (kind !== 'table' && markup.text.trim().length === 0) return
+    const faced = partsIn(markup.parts, ['italic', 'strong'])
     blocks.push({
       kind,
       text: markup.text,
       ...(markup.emphasis.length > 0 ? { emphasis: markup.emphasis } : {}),
       ...(markup.strong.length > 0 ? { strong: markup.strong } : {}),
+      // A tag inside a word — `<i>un</i>spiritual` in an ebook that italicised
+      // a prefix — is a part, kept as the scan path keeps it, in the faces
+      // this reader takes whole words in.
+      ...(faced ? { parts: faced } : {}),
       ...extra
     })
   }
