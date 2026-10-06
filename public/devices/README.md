@@ -83,3 +83,49 @@ They are big for SVGs — a quarter of a megabyte each, where a device is twenty
 kilobytes — because a scene has two orders of magnitude more contours than an
 emblem. That costs nothing as a ground, which is rasterised at the size it
 prints, and would matter if one ever travelled inside a book file.
+
+## The radiant eye
+
+`eye-radiant.svg` and `eye-radiant-triangle.svg` (the ground figures, padded),
+`eye-radiant-mark.svg` (the square cut, for a device on the fold or the board).
+
+**Drawn, not traced — the only artwork here that is.** Everything above is a
+trace of a photograph, which is what you do when the thing already exists as a
+picture. Nothing existed here, and that turns out to be the better position
+rather than the worse one: the iconography is ancient and unowned, while the
+Isis above carries one sculptor's drape and wing curve, and the arcade one
+photographer's light. A construction from geometry is encumbered by nobody, on
+a book that is for sale.
+
+It is generated rather than hand-written, which is how the proportions were
+arrived at — the lid is one cubic reflected, the glory is computed from the
+lid's own radial reach, and every constant was moved and re-rendered rather
+than guessed at once.
+
+**The glory's tips lie on a circle, and the first version's did not.** Rays
+built as "start at the lid, run N units outward" come out as a lozenge: the
+lid's radial reach at the corners is twice what it is above the pupil, so a
+fixed length throws the horizontal rays half as far again as the vertical ones.
+Rendered, it reads as a set of spears rather than as a glory. The start still
+follows the lid — the rays should hug the eye — and only the tips are held to a
+circle.
+
+**A drawn figure needs no anchor fitting and no zoom slack.** `FIGURE_ANCHOR_X`
+exists because a traced photograph's subject is not at its bounding box's
+centre, and three separate measurements of the arcade's doorway were wrong
+before one was right. This is symmetric about x = 0 by construction and padded
+vertically only, so its subject *is* the box's centre: the anchor is exactly
+0.5, `FIGURE_ZOOM` is 1, and there is nothing for a clamp to cut short.
+
+**Two boxes for two jobs**, as with the Isis. The ground figures are padded to
+a 0.66 aspect so the whole glory survives covering a portrait panel — covering
+is the minimum scale that fills the box, so the square cut on a 7×10 front is
+drawn to fill the height and loses a third of its width off each side. That is
+a fine effect and a different one. `eye-radiant-mark.svg` is that square cut,
+unpadded, for use as a press mark, where the surrounding white is the
+composer's to give.
+
+The triangle is a separate file for the same reason the svastika is: it is
+squarely the emblem a reader expects on a book that names it, and squarely the
+wrong one on a book that does not. That is the editor's call and not this
+repository's, and the decision is one file name.

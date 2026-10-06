@@ -23,13 +23,21 @@
  */
 import { pt, type CoverGeometry, type Rect } from './geometry'
 
-export type GroundFigure = 'isis-winged' | 'isis-winged-plain' | 'arcade' | 'arcade-detailed'
+export type GroundFigure =
+  | 'isis-winged'
+  | 'isis-winged-plain'
+  | 'arcade'
+  | 'arcade-detailed'
+  | 'eye-radiant'
+  | 'eye-radiant-triangle'
 
 export const GROUND_FIGURES: readonly GroundFigure[] = [
   'isis-winged',
   'isis-winged-plain',
   'arcade',
-  'arcade-detailed'
+  'arcade-detailed',
+  'eye-radiant',
+  'eye-radiant-triangle'
 ]
 
 /** The id a ground figure is placed under, for the renderer to find. */
@@ -40,14 +48,18 @@ export const FIGURE_SRC: Readonly<Record<GroundFigure, string>> = {
   'isis-winged': '/devices/isis-winged-solid.svg',
   'isis-winged-plain': '/devices/isis-winged.svg',
   arcade: '/devices/arcade.svg',
-  'arcade-detailed': '/devices/arcade-detailed.svg'
+  'arcade-detailed': '/devices/arcade-detailed.svg',
+  'eye-radiant': '/devices/eye-radiant.svg',
+  'eye-radiant-triangle': '/devices/eye-radiant-triangle.svg'
 }
 
 export const FIGURE_LABEL: Readonly<Record<GroundFigure, string>> = {
   'isis-winged': 'Isis, winged — the massed silhouette',
   'isis-winged-plain': 'Isis, winged — the engraved trace',
   arcade: 'An arcade of horseshoe arches',
-  'arcade-detailed': 'An arcade of horseshoe arches — the fuller cut'
+  'arcade-detailed': 'An arcade of horseshoe arches — the fuller cut',
+  'eye-radiant': 'The radiant eye, in its glory',
+  'eye-radiant-triangle': 'The radiant eye, in a triangle'
 }
 
 export const FIGURE_NOTE: Readonly<Record<GroundFigure, string>> = {
@@ -58,7 +70,11 @@ export const FIGURE_NOTE: Readonly<Record<GroundFigure, string>> = {
   arcade:
     'A receding colonnade rather than a figure: it fills the board edge to edge and draws the eye down the middle, where a figure holds one shape in the centre. Its proportions are almost the front panel’s own, so it prints nearly whole.',
   'arcade-detailed':
-    'The same arcade with the fainter stonework kept. More ink, which reads better at the lowest tints; it goes muddy sooner where the figure prints stronger.'
+    'The same arcade with the fainter stonework kept. More ink, which reads better at the lowest tints; it goes muddy sooner where the figure prints stronger.',
+  'eye-radiant':
+    'Drawn from geometry rather than traced, so it is symmetric about its own centre line and nobody’s engraving is inside it. Tapered rays rather than hairlines, which is what lets a glory survive a ground’s tint.',
+  'eye-radiant-triangle':
+    'The same eye with the delta drawn round it. Squarely the emblem a reader expects where a book names it, and squarely the wrong one where the book does not — the plain glory is the quieter of the two.'
 }
 
 /**
@@ -142,6 +158,11 @@ export function figureFramePt(geometry: CoverGeometry): {
  * centre rather than sitting to one side of it.
  */
 export const FIGURE_ANCHOR_X: Readonly<Record<GroundFigure, number>> = {
+  // Drawn art needs no fitting: the eye is constructed symmetric about x = 0
+  // and its box is padded vertically only, so its subject *is* the box's centre.
+  // The three wrong measurements below are what a traced photograph costs.
+  'eye-radiant': 0.5,
+  'eye-radiant-triangle': 0.5,
   'isis-winged': 0.514,
   'isis-winged-plain': 0.514,
   // The doorway the colonnade recedes into: the centre line splits its
@@ -188,6 +209,10 @@ export const FIGURE_ANCHOR_X: Readonly<Record<GroundFigure, number>> = {
  * what would say so.
  */
 export const FIGURE_ZOOM: Readonly<Record<GroundFigure, number>> = {
+  // No slack needed where the anchor is the box's own centre: nothing has to
+  // move, so there is nothing for a clamp to cut short.
+  'eye-radiant': 1,
+  'eye-radiant-triangle': 1,
   // Half again as wide as the panel already: all the slack anyone could want.
   'isis-winged': 1,
   'isis-winged-plain': 1,
