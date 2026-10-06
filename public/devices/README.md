@@ -84,48 +84,46 @@ kilobytes — because a scene has two orders of magnitude more contours than an
 emblem. That costs nothing as a ground, which is rasterised at the size it
 prints, and would matter if one ever travelled inside a book file.
 
-## The radiant eye
+## The all-seeing eye
 
-`eye-radiant.svg` and `eye-radiant-triangle.svg` (the ground figures, padded),
-`eye-radiant-mark.svg` (the square cut, for a device on the fold or the board).
+`all-seeing-eye.svg` (the trace as it came), `all-seeing-eye-ground.svg` (the
+same paths in a box a portrait cover can cover whole).
 
-**Drawn, not traced — the only artwork here that is.** Everything above is a
-trace of a photograph, which is what you do when the thing already exists as a
-picture. Nothing existed here, and that turns out to be the better position
-rather than the worse one: the iconography is ancient and unowned, while the
-Isis above carries one sculptor's drape and wing curve, and the arcade one
-photographer's light. A construction from geometry is encumbered by nobody, on
-a book that is for sale.
+Manly P. Hall's own device — the one he put on the manuscript-lecture wrappers
+and on the masthead of his magazine. A fan of fine rays, seven seven-pointed
+stars, an open eye.
 
-It is generated rather than hand-written, which is how the proportions were
-arrived at — the lid is one cubic reflected, the glory is computed from the
-lid's own radial reach, and every constant was moved and re-rendered rather
-than guessed at once.
+**It was not traced here.** It was traced on the shelf, where it belongs, from
+*The All-Seeing Eye* Vol. 2 No. 5 (Los Angeles, March 1924), and the source of
+record is `books/ManlyPalmerHall-CollectedManuscriptLectures-7qk2m4/art/` in the
+storage repository, whose README carries the provenance, the four candidate
+sources with the emblem measured in pixels on each, and why this one is the only
+usable one — not because it has the most pixels, but because it is a letterpress
+impression on a flat page rather than a photograph of a curled wrapper, so each
+ray is a separate black line instead of a grey wash. These two files are copies,
+for the app to serve. **Re-trace on the shelf, not here.**
 
-**The glory's tips lie on a circle, and the first version's did not.** Rays
-built as "start at the lid, run N units outward" come out as a lozenge: the
-lid's radial reach at the corners is twice what it is above the pupil, so a
-fixed length throws the horizontal rays half as far again as the vertical ones.
-Rendered, it reads as a set of spears rather than as a glory. The start still
-follows the lid — the rays should hug the eye — and only the tips are held to a
-circle.
+**The padding carries two numbers so the library does not have to.**
+Horizontally the box is extended until the emblem's measured axis of symmetry is
+its centre, which makes `FIGURE_ANCHOR_X` exactly 0.5 and `FIGURE_ZOOM` 1 —
+the one anchor value that cannot drift away from its file. Vertically it is
+extended to a portrait proportion, because covering is the minimum scale that
+fills the box and a 1.63-wide emblem on a 0.70 panel would otherwise be drawn to
+fill the height and lose two thirds of its width off the sides; the extra room
+also sets the emblem below the middle, under the type.
 
-**A drawn figure needs no anchor fitting and no zoom slack.** `FIGURE_ANCHOR_X`
-exists because a traced photograph's subject is not at its bounding box's
-centre, and three separate measurements of the arcade's doorway were wrong
-before one was right. This is symmetric about x = 0 by construction and padded
-vertically only, so its subject *is* the box's centre: the anchor is exactly
-0.5, `FIGURE_ZOOM` is 1, and there is nothing for a clamp to cut short.
+**The axis was measured twice and the first answer was wrong.** Folding the ink
+profile onto itself and scoring the agreement *over the overlap alone* answers
+0.642, because the overlap shrinks as the axis moves outward and the sparse ray
+tips near an edge agree with almost nothing. Scored over the whole profile, with
+anything past the end counted as no ink, it answers **0.5369** — against 0.531
+from the midpoint of the two flanking stars and 0.535 from the star below the
+eye, both measured independently on the shelf. Three methods within six
+thousandths of the width.
 
-**Two boxes for two jobs**, as with the Isis. The ground figures are padded to
-a 0.66 aspect so the whole glory survives covering a portrait panel — covering
-is the minimum scale that fills the box, so the square cut on a 7×10 front is
-drawn to fill the height and loses a third of its width off each side. That is
-a fine effect and a different one. `eye-radiant-mark.svg` is that square cut,
-unpadded, for use as a press mark, where the surrounding white is the
-composer's to give.
-
-The triangle is a separate file for the same reason the svastika is: it is
-squarely the emblem a reader expects on a book that names it, and squarely the
-wrong one on a book that does not. That is the editor's call and not this
-repository's, and the decision is one file name.
+**It is a device and prints like one.** At a ground's three to five per cent the
+rays merge into exactly the grey wash the trace exists to avoid, so this one
+wants ten per cent and up. The reverse of the Isis, where the massed silhouette
+is what survives a faint tint: this emblem is nothing but fine lines, and they
+have to be dark enough to stay lines. It is also too detailed to work as a press
+mark — at the inch a device prints on a board, the whole fan closes up.

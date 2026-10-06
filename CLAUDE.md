@@ -2804,28 +2804,23 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   the two cannot disagree — which is what the earlier ones could do, one of
   them confidently, by a quarter of an inch, in the wrong direction.
 
-  **A drawn figure costs nothing that a traced one costs** (`eye-radiant`).
-  Every figure in the library was a trace of a photograph, which is what you do
-  when the thing already exists as a picture — and when a book wanted an eye,
-  nothing did. Constructing it from geometry turned out to be the better
-  position rather than the fallback. The iconography is ancient and unowned,
-  where the Isis carries one sculptor's drape and the arcade one photographer's
-  light, which the README has always flagged as worth knowing on a book for
-  sale. And it is **symmetric about its own centre by construction**, so the
-  anchor is exactly 0.5 and `FIGURE_ZOOM` is 1: the whole apparatus of fitting
-  an anchor to a photograph, which cost four measurements and three wrong
-  answers on the arcade, has nothing to do. Generate the file from a script
-  rather than writing path data by hand — that is what makes a proportion
-  something you moved and re-rendered rather than guessed once.
+  **A book's own art may already be traced, and on the shelf.** Asked for a
+  cover with "a trace of an eye" for the Hall manuscripts, this session drew one
+  from geometry, on the reasoning that nothing had been supplied and the
+  iconography is unowned. It was a good argument for the wrong act. The book's
+  directory on the shelf carries an `art/` folder holding **Hall's own device**,
+  already traced to 253 contours from the cover of his own magazine, beside a
+  README naming four candidate sources with the emblem measured in pixels on
+  each and saying which one is usable and why. None of that was looked at.
 
-  The one thing it got wrong is a shape worth knowing. **A glory's rays must
-  end on a circle, not at a fixed length from where they start.** Built the
-  obvious way — start at the lid, run outward N units — the rays come out as a
-  lozenge, because the lid's radial reach at the eye's corners is twice what it
-  is above the pupil, so the horizontal rays are thrown half as far again as the
-  vertical ones. On the render it reads as a set of spears. The starts still
-  follow the lid, since the rays should hug the eye; only the tips are held to a
-  circle.
+  The general rule is the one the shelf exists for: **the book's directory is
+  the first place to look, not the last.** Before making anything for a book —
+  art, a colour, a strapline — read what is already in its directory. A book
+  well along carries `art/`, `covers/`, `illustrations.md`, `rulings.md` and a
+  dozen other files, every one of them a decision somebody already made with the
+  paper in front of them. The formatter repository cannot see any of it until
+  the shelf is attached, which is one tool call, and the cost of not making it
+  is work that duplicates better work and has to be thrown away.
 
   **A scene traces differently from an object**, which the arcade added to the
   library shows: one thing on white paper has a silhouette to find, and a

@@ -24,20 +24,14 @@
 import { pt, type CoverGeometry, type Rect } from './geometry'
 
 export type GroundFigure =
-  | 'isis-winged'
-  | 'isis-winged-plain'
-  | 'arcade'
-  | 'arcade-detailed'
-  | 'eye-radiant'
-  | 'eye-radiant-triangle'
+  'isis-winged' | 'isis-winged-plain' | 'arcade' | 'arcade-detailed' | 'all-seeing-eye'
 
 export const GROUND_FIGURES: readonly GroundFigure[] = [
   'isis-winged',
   'isis-winged-plain',
   'arcade',
   'arcade-detailed',
-  'eye-radiant',
-  'eye-radiant-triangle'
+  'all-seeing-eye'
 ]
 
 /** The id a ground figure is placed under, for the renderer to find. */
@@ -49,8 +43,7 @@ export const FIGURE_SRC: Readonly<Record<GroundFigure, string>> = {
   'isis-winged-plain': '/devices/isis-winged.svg',
   arcade: '/devices/arcade.svg',
   'arcade-detailed': '/devices/arcade-detailed.svg',
-  'eye-radiant': '/devices/eye-radiant.svg',
-  'eye-radiant-triangle': '/devices/eye-radiant-triangle.svg'
+  'all-seeing-eye': '/devices/all-seeing-eye-ground.svg'
 }
 
 export const FIGURE_LABEL: Readonly<Record<GroundFigure, string>> = {
@@ -58,8 +51,7 @@ export const FIGURE_LABEL: Readonly<Record<GroundFigure, string>> = {
   'isis-winged-plain': 'Isis, winged — the engraved trace',
   arcade: 'An arcade of horseshoe arches',
   'arcade-detailed': 'An arcade of horseshoe arches — the fuller cut',
-  'eye-radiant': 'The radiant eye, in its glory',
-  'eye-radiant-triangle': 'The radiant eye, in a triangle'
+  'all-seeing-eye': 'The all-seeing eye — Manly P. Hall’s own device'
 }
 
 export const FIGURE_NOTE: Readonly<Record<GroundFigure, string>> = {
@@ -71,10 +63,8 @@ export const FIGURE_NOTE: Readonly<Record<GroundFigure, string>> = {
     'A receding colonnade rather than a figure: it fills the board edge to edge and draws the eye down the middle, where a figure holds one shape in the centre. Its proportions are almost the front panel’s own, so it prints nearly whole.',
   'arcade-detailed':
     'The same arcade with the fainter stonework kept. More ink, which reads better at the lowest tints; it goes muddy sooner where the figure prints stronger.',
-  'eye-radiant':
-    'Drawn from geometry rather than traced, so it is symmetric about its own centre line and nobody’s engraving is inside it. Tapered rays rather than hairlines, which is what lets a glory survive a ground’s tint.',
-  'eye-radiant-triangle':
-    'The same eye with the delta drawn round it. Squarely the emblem a reader expects where a book names it, and squarely the wrong one where the book does not — the plain glory is the quieter of the two.'
+  'all-seeing-eye':
+    'Traced from the cover of Hall’s own magazine, March 1924: a fan of fine rays, seven seven-pointed stars, an open eye. Its own emblem, so it prints stronger than a ground — at a few per cent the rays merge into a grey wash, which is what the paper does on the wrappers and what the trace exists to avoid.'
 }
 
 /**
@@ -158,11 +148,10 @@ export function figureFramePt(geometry: CoverGeometry): {
  * centre rather than sitting to one side of it.
  */
 export const FIGURE_ANCHOR_X: Readonly<Record<GroundFigure, number>> = {
-  // Drawn art needs no fitting: the eye is constructed symmetric about x = 0
-  // and its box is padded vertically only, so its subject *is* the box's centre.
-  // The three wrong measurements below are what a traced photograph costs.
-  'eye-radiant': 0.5,
-  'eye-radiant-triangle': 0.5,
+  // Exactly the centre, and not by luck: the artwork's box is padded until the
+  // measured axis is its centre, so the number the library carries is the one
+  // value that cannot drift from the file. See `public/devices/README.md`.
+  'all-seeing-eye': 0.5,
   'isis-winged': 0.514,
   'isis-winged-plain': 0.514,
   // The doorway the colonnade recedes into: the centre line splits its
@@ -209,10 +198,8 @@ export const FIGURE_ANCHOR_X: Readonly<Record<GroundFigure, number>> = {
  * what would say so.
  */
 export const FIGURE_ZOOM: Readonly<Record<GroundFigure, number>> = {
-  // No slack needed where the anchor is the box's own centre: nothing has to
-  // move, so there is nothing for a clamp to cut short.
-  'eye-radiant': 1,
-  'eye-radiant-triangle': 1,
+  // Nothing to move: the anchor is the box's own centre.
+  'all-seeing-eye': 1,
   // Half again as wide as the panel already: all the slack anyone could want.
   'isis-winged': 1,
   'isis-winged-plain': 1,
