@@ -141,45 +141,62 @@ the corners. **A run far wider than the rest is rays the trace lost**, where the
 slits closed up under the bottom star and in three other places, so the carried
 width is capped at the runs' ninth decile and 13 of the 133 are held back.
 
-**The fan's own hatching is not printed, and that is the whole of it.** The
-engraving is an ellipse — its ink reaches 953 px at the sides and 464 at the
-foot — so under the carried rays it adds ink where it is deep and none where it
-is shallow, and what a reader sees is a wide flat lozenge round the eye. Two
-repairs were made and shipped before the right one. Holding every ray at the
-fan's own width out to the fan's *longest* reach makes the heavy zone a circle,
-and the lozenge survived it. Giving the join a fade does not touch it either,
-because the join is not what shows. The hatching has to go.
+**The shape to remove is the fan's rim, not its mass.** The engraving is an
+ellipse — its ink reaches 953 px at the sides and 464 at the foot — and the
+first guess was that the lozenge was that ellipse of ink. It is not. What a
+reader sees is where the engraving's rays **stop**: a hundred and thirty-three
+blunt ends and the gaps between them, standing in an arc. Three repairs went in
+before that was understood. Holding every ray at the fan's own width out to its
+longest reach makes the heavy zone a circle, and the arc survived it. Fading the
+*join* does nothing, because the join is not what shows. And not printing the
+hatching at all removes the arc and takes the emblem with it — the hatching
+round the eye and the seven stars is what the device is.
 
-What is kept of the trace is what is a **figure** rather than a texture: the eye,
-and the seven stars. Neither can be lifted out by contour, and neither by
-labelling: the eye's ink is one connected component with the whole fan and the
-seventh star's white is one with the background, because on the paper both touch
-the hatching. Both come out by **walking outward from a seed at every angle**
-instead — a star and an eye are star-shaped about their own centres, so the
-first ink (or the last) traces the true outline off the original pixels, contacts
-and all. Six stars give their own seeds; growing the ink by 11 px seals the
-seventh's contacts and gives one, and it is then accepted on the same two
+So the ink is **faded to nothing across its own rim**, per angle, against the
+measured `env` rather than a circle, and the carried rays run on through the
+band and out. What the eye meets at the rim is a ray getting on with it rather
+than a row of stops. The band is 0.84 to 0.98 of the rim; its inner bound is set
+by the stars and not by taste, the top row sitting at 0.84 of the rim in its own
+direction, so an earlier start takes the ink out from behind them and they stop
+reading as holes. Three bands were rendered and measured: 0.80 is a shade better
+at the rim and visibly thinner behind the top stars, which is the wrong trade.
+The fade is a greyscale raster rather than a radial gradient, because the rim is
+not an ellipse — it is whatever the press cut, and `env` is the measurement of
+it.
+
+**The seven stars are traced so the carried rays do not cross them.** On the
+paper a star is white, a shape the ink encloses, so a ray running through one
+would fill it. Neither the stars nor the eye can be lifted out by contour, and
+neither by labelling: the eye's ink is one connected component with the whole
+fan and the seventh star's white is one with the background, because on the
+paper both touch the hatching. They come out by **walking outward from a seed at
+every angle** instead — a star and an eye are star-shaped about their own
+centres, so the first ink traces the true outline off the original pixels,
+contacts and all. Six stars give their own seeds; growing the ink by 11 px seals
+the seventh's contacts and gives one, and it is then accepted on the same two
 measurements the six make — an area inside their range (20,371 against
 18,135–25,877) and a point-to-valley ratio inside theirs. Exactly one candidate
 in the picture passes both.
 
-**The stars are holes, so the field they are punched from has to be dense.** The
-engraving sets seventeen strokes just outside the eye and ninety-four at the
-rim — the rays multiply outward — and reproducing that was tried and gives up
-more than it gains, because a star-shaped hole in an open field is not a star,
-it is nothing. The star ring sits where the engraving is densest (52 to 62 per
-cent of the circle inked), so every ray runs from the eye. The count is measured
-and reported rather than used, so that this reads as a choice and not an
-oversight.
+**The carried rays begin where the engraving's own do.** This fan sets seventeen
+strokes just outside the eye and ninety-four at the rim: the rays multiply
+outward, which is why it is open round the eye and dense at its edge. `counts`
+measures that at two dozen radii and each carried ray is given a radius to begin
+at from the curve, so the two agree instead of printing a collar of ink the
+engraving does not have.
 
-**Measuring the evenness photometrically does not work**, and the attempt is
-worth recording. A twelve-sector spread reads the rays themselves, which are a
+**Measuring the evenness photometrically does not work, and measuring the rim
+does.** A twelve-sector spread reads the rays themselves, which are a
 hundred-and-thirty-third harmonic; the second harmonic, which is what an ellipse
-is, moves only from 16 to 10 per cent; and a half-peak edge per direction is
-pinned by the eye and the stars, which are legitimately angular. No assay
-separates a star from a lozenge. What is checkable is the structure, and a test
-pins it: the trace enters the artwork once, through a clip, and that clip is
-under a eighth of the figure's height. Everything else drawn is rays.
+is, moves only from 16 to 10 per cent; a half-peak edge per direction is pinned
+by the eye and the stars. No assay separates a star from a shape. But an *edge*
+is a step in the ink, and that is measurable: smoothed down each of 144
+directions and differentiated, the steepest fall within a quarter inch of the
+rim goes from 10.06 to 7.01 per inch at the ninth decile — the directions where
+the edge showed most. The smoothing has to be narrower than the fade band or it
+blurs away the step it is for; at an eighth of an inch either way the two
+readings came back 1.80 and 1.75, which says nothing. A test pins the structure
+beside it: the engraving enters the artwork exactly once, under the rim mask.
 
 **The texture is the engraving's, measured along its own rays.** A carried ray
 was a clean polygon, which reads as a different material from a cut one and puts
@@ -203,16 +220,6 @@ being the full height of the cover sheet. 2.6 is set by the **wrap**: across a
 whole 7×10 cover the eye stands on the front panel and the far corner of the
 back is 13.5 in away, which the artwork's own half-width has to reach. A test
 measures that against the file rather than against a number kept beside it.
-
-**Two things about the eye, both of which printed wrong first.** Its clip is a
-**disc of the mass's own reach**, not an outline: thinning the ink is what
-breaks the hatching away from the lid, and thinning eats the lid's two tips, so
-any outline taken from the thinned mass cuts them off and the eye prints chewed
-— an ellipse fitted to it did the same. A disc cannot, and being generous costs
-nothing, because what lies just outside the eye is rays either way. And the rays
-come in to the eye's own reach rather than to that disc: started on one circle
-they leave a bare ring round it, which is a hard halo, and any shape a reader can
-name is the fault this file exists to remove.
 
 **It prints over the type and the type has to move.** The pupil is set under the
 title rule, which on a `label` cover is where the author's name goes, so the

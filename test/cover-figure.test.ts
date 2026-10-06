@@ -199,7 +199,30 @@ describe('the figure library', () => {
     expect(w! / h!).toBeGreaterThan(widest)
   })
 
-  it('prints the radiance\u2019s eye and nothing else of the engraving', () => {
+  it('fades the engraving out across its own rim rather than ending on it', () => {
+    // The shape the editor could see twice is the fan's EDGE: a hundred and
+    // thirty-three blunt ray-ends and the gaps between them, standing in an
+    // arc. Dropping the hatching removes it and takes the emblem with it — the
+    // hatching round the eye and the stars is what the device is — so the ink
+    // is faded to nothing across its own rim instead, per angle, and the
+    // carried rays run on through.
+    //
+    // What is checkable is the structure. The engraving enters the artwork
+    // exactly once, and that once is under the rim mask; a regression that
+    // draws it whole is the state that printed the edge. Measuring the
+    // evenness photometrically was tried and will not do it — the stars are
+    // holes and the eye is a mass, both legitimately angular, and no assay
+    // separates them from a rim.
+    const file = readFileSync(join('public', FIGURE_SRC['all-seeing-eye-radiant']), 'utf8')
+    const traces = file.match(/fill-rule="evenodd"/g) ?? []
+    expect(traces, 'the engraving is drawn once').toHaveLength(1)
+    expect(/<mask id="rim"[^>]*>\s*<image /.test(file), 'the rim fade is a raster mask').toBe(true)
+    const underMask =
+      /<g mask="url\(#rim\)">\s*<g transform="[^"]*">\s*<path[^>]*fill-rule="evenodd"/
+    expect(underMask.test(file), 'and it is drawn under that mask').toBe(true)
+  })
+
+  it('keeps the seven stars as holes in the ray field', () => {
     // The fault this pins is the one the editor saw twice: the fan's own
     // hatching, printed under the carried rays, is an ellipse reaching twice as
     // far at the sides as at the foot, so the ink it adds makes a flat lozenge
@@ -211,15 +234,16 @@ describe('the figure library', () => {
     // angular and no assay separates them from a lozenge. What is checkable is
     // the structure: the trace enters the artwork once, through a clip, and
     // that clip is a fraction of the figure. Everything else drawn is rays.
+    // On the paper a star is white: a shape the ink encloses, not ink. So the
+    // carried rays are masked out behind all seven, or a ray would cross one.
+    // A mask rather than an even-odd subpath, because two overlapping dashes
+    // under one star would invert the rule back to ink.
     const file = readFileSync(join('public', FIGURE_SRC['all-seeing-eye-radiant']), 'utf8')
-    const [, , , boxH] = /viewBox="([-\d.\s]+)"/.exec(file)![1]!.trim().split(/\s+/).map(Number)
-    const clipped = file.match(/<g clip-path="url\(#eye\)">/g) ?? []
-    expect(clipped).toHaveLength(1)
-    const clip = /<clipPath id="eye"><path d="([^"]+)"/.exec(file)
-    expect(clip, 'the engraving must be clipped, not drawn whole').not.toBeNull()
-    const ys = [...clip![1]!.matchAll(/[\d.]+ ([\d.]+)/g)].map((m) => Number(m[1]))
-    const span = Math.max(...ys) - Math.min(...ys)
-    expect(span / boxH!).toBeLessThan(0.12)
+    expect(/<mask id="stars"[^>]*>/.test(file)).toBe(true)
+    expect(/<path fill="#141414" mask="url\(#stars\)"/.test(file)).toBe(true)
+    const starPath = /<path fill="#000" d="([^"]+)"/.exec(file)
+    expect(starPath, 'the stars must be traced into the mask').not.toBeNull()
+    expect((starPath![1]!.match(/M/g) ?? []).length, 'all seven of them').toBe(7)
   })
 
   it('leaves every figure enough room for the anchor it asks for', () => {

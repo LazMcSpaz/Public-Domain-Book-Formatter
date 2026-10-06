@@ -119,6 +119,31 @@ const STEP_LN = 0.02 // how finely a ray's edges are built
 const EYE_THIN = 8
 const EYE_MARGIN = 11 // the thinning, plus air
 
+/**
+ * Where the engraving's own ink fades out, as a share of the fan's rim.
+ *
+ * This is the shape the editor could see, and it is narrower than it looked
+ * from the inside: not the fan's mass but its EDGE — a hundred and thirty-three
+ * blunt ray-ends and the gaps between them, standing in an arc. Removing the
+ * hatching removes it and takes the engraving with it, which is the wrong
+ * trade: the hatching round the eye and the stars is the emblem.
+ *
+ * So the ink is faded to nothing across its own rim instead, per angle, against
+ * the measured `env` rather than a circle — the fan reaches 953 px at the sides
+ * and 464 at the foot, so one radius would cut the sides off and leave the foot
+ * standing. The carried rays run on through the band and out, so what the eye
+ * meets at the rim is a ray getting on with it rather than a row of stops.
+ *
+ * The inner bound is set by the stars, not by taste: the top row sits at 0.84
+ * of the rim in its own direction, so a fade that began earlier takes the ink
+ * out from behind them and they stop reading as holes. Three bands were
+ * rendered and measured; 0.80 is a shade better at the rim and visibly thinner
+ * behind the top stars, which is the wrong trade.
+ */
+const FADE_FROM = 0.84
+const FADE_TO = 0.98
+const FADE_PX = 1024 // the fade is a raster mask; this is its long side
+
 const args = process.argv.slice(2)
 const flag = (name, fallback) => {
   const i = args.indexOf(`--${name}`)
@@ -144,7 +169,7 @@ const browser = await chromium.launch({ executablePath: EXECUTABLE, args: ['--no
 const page = await browser.newPage({ viewport: { width: 400, height: 300 } })
 
 const measured = await page.evaluate(
-  async ({ svg, BINS, DUTY_AT, INK, EYE_MARGIN, EYE_THIN }) => {
+  async ({ svg, BINS, DUTY_AT, INK, EYE_MARGIN, EYE_THIN, FADE_FROM, FADE_TO, FADE_PX }) => {
     const img = new Image()
     await new Promise((res, rej) => {
       img.onload = res
@@ -471,10 +496,40 @@ const measured = await page.evaluate(
       counts.push([r, runs])
     }
 
+    // The fade, as a greyscale raster the size of the trace's own box: white
+    // where the engraving prints in full, black past its rim. A raster rather
+    // than a radial gradient because the rim is not an ellipse — it is whatever
+    // the press cut, and `env` is the measurement of it.
+    const fade = document.createElement('canvas')
+    fade.width = Math.round(FADE_PX)
+    fade.height = Math.round((FADE_PX * H) / W)
+    const fx = fade.getContext('2d')
+    const fimg = fx.createImageData(fade.width, fade.height)
+    for (let y = 0; y < fade.height; y++)
+      for (let x = 0; x < fade.width; x++) {
+        const px = (x + 0.5) * (W / fade.width)
+        const py = (y + 0.5) * (H / fade.height)
+        const dx = px - cx
+        const dy = py - cy
+        const r = Math.hypot(dx, dy)
+        const b = Math.round(((Math.atan2(dy, dx) + 2 * Math.PI) / (2 * Math.PI)) * BINS) % BINS
+        const rim = env[b] || 1
+        const t = (r - rim * FADE_FROM) / (rim * (FADE_TO - FADE_FROM))
+        const u = Math.min(1, Math.max(0, t))
+        const v = Math.round(255 * (1 - u * u * (3 - 2 * u)))
+        const i = (y * fade.width + x) * 4
+        fimg.data[i] = v
+        fimg.data[i + 1] = v
+        fimg.data[i + 2] = v
+        fimg.data[i + 3] = 255
+      }
+    fx.putImageData(fimg, 0, 0)
+
     return {
       W,
       H,
       centre,
+      fadeUrl: fade.toDataURL('image/png'),
       env: [...env],
       duty,
       stars,
@@ -484,11 +539,11 @@ const measured = await page.evaluate(
       share: radialShare(cx, cy)
     }
   },
-  { svg, BINS, DUTY_AT, INK, EYE_MARGIN, EYE_THIN }
+  { svg, BINS, DUTY_AT, INK, EYE_MARGIN, EYE_THIN, FADE_FROM, FADE_TO, FADE_PX }
 )
 await browser.close()
 
-const { W, H, centre, env, duty, stars, eye, eyeInk, counts, share } = measured
+const { W, H, centre, fadeUrl, env, duty, stars, eye, eyeInk, counts, share } = measured
 
 /** Runs of consecutive true bins, wrapping round the circle. */
 function runsOf(flags) {
@@ -552,19 +607,30 @@ const eyeEdge = (angle) => {
 }
 
 /**
- * Every ray runs from the eye, and the engraving's own opening is not kept.
+ * The radius each ray begins at, so the count follows the engraving's own.
  *
  * This fan sets seventeen strokes just outside the eye and ninety-four at the
- * rim: the rays multiply outward, so the engraving is open round the eye and
- * dense at the edge. Reproducing that was tried and gives up more than it
- * gains, because the SEVEN STARS are not ink — they are white shapes the
- * hatching encloses, and a star-shaped hole in an open field is not a star, it
- * is nothing. The star ring sits where the engraving is at its densest (52 to
- * 62 per cent of the circle inked, measured), so the field it is punched out of
- * has to be that dense, which means every ray alive by the time it reaches the
- * ring. `counts` is measured and reported rather than used, because it is the
- * reason this is a choice and not an oversight.
+ * rim — the rays multiply outward, which is why the engraving is open round the
+ * eye and dense at its edge. Carried rays all starting together would print a
+ * collar of ink round the eye that the engraving does not have, and the
+ * engraving is still there to be doubled: `counts` is runs of ink round a
+ * circle, measured at two dozen radii, and each ray is given a radius to begin
+ * at from that curve. The order is fixed by a seed, so the file is the same on
+ * every run.
  */
+const order = rays.map((_, i) => i)
+for (let i = order.length - 1; i > 0; i--) {
+  const h = Math.imul(i + 1, 2246822519) >>> 0
+  const j = h % (i + 1)
+  ;[order[i], order[j]] = [order[j], order[i]]
+}
+const birth = new Array(rays.length)
+const finalCount = counts.at(-1)[1] || rays.length
+order.forEach((rayIndex, rank) => {
+  const wanted = ((rank + 1) / rays.length) * finalCount
+  const row = counts.find(([, n]) => n >= wanted)
+  birth[rayIndex] = row ? row[0] : counts.at(-1)[0]
+})
 
 /**
  * Smooth noise in one dimension, from a seed, so every run writes the same file.
@@ -594,7 +660,7 @@ rays.forEach(([start, len], index) => {
   const nx = -uy
   const ny = ux
   const seed = Math.imul(index + 1, 2654435761)
-  const from = eyeEdge(mid) + 8
+  const from = Math.max(birth[index], eyeEdge(mid) + 8)
 
   /** Half-width at a radius: the fan's own wedge to the core, thinning past it. */
   const halfAt = (r) =>
@@ -633,17 +699,20 @@ rays.forEach(([start, len], index) => {
   }
 })
 
-// The stars are holes, as they are on the paper: white shapes the hatching
-// encloses, not ink. A mask rather than an even-odd subpath, because two
-// overlapping dashes under one star would invert the rule back to ink.
+// The stars are holes in the RAY field, as they are holes in the engraving's
+// own hatching: white shapes the ink encloses, not ink. A mask rather than an
+// even-odd subpath, because two overlapping dashes under one star would invert
+// the rule back to ink.
 //
-// The eye's clip and the eye's own transform go on SEPARATE groups. A
-// `clip-path` is resolved in the user space of the element that carries it, so
-// an element carrying both has its clip moved by its own transform as well —
-// which put the eye's outline a second emblem's width away and drew nothing.
+// A mask and a transform go on SEPARATE groups, for both of these. A mask —
+// like a clip-path — is resolved in the user space of the element that carries
+// it, so an element carrying both has its mask moved by its own transform as
+// well, which once put the eye's outline a second emblem's width away and drew
+// nothing at all.
 const starPath = stars.map(outlinePath).join('')
-const eyePath = outlinePath(eye)
 const body = /\sd="([^"]+)"/.exec(svg)[1]
+const traceX = EX - centre[0]
+const traceY = EY - centre[1]
 
 await writeFile(
   resolve(out),
@@ -652,10 +721,12 @@ await writeFile(
 <mask id="stars" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}">
 <rect width="${VW}" height="${VH}" fill="#fff"/><path fill="#000" d="${starPath}"/>
 </mask>
-<clipPath id="eye"><path d="${eyePath}"/></clipPath>
+<mask id="rim" maskUnits="userSpaceOnUse" x="0" y="0" width="${VW}" height="${VH}">
+<image x="${traceX.toFixed(1)}" y="${traceY.toFixed(1)}" width="${W}" height="${H}" href="${fadeUrl}"/>
+</mask>
 </defs>
 <path fill="#141414" mask="url(#stars)" d="${wedges.join('')}"/>
-<g clip-path="url(#eye)"><g transform="translate(${(EX - centre[0]).toFixed(1)} ${(EY - centre[1]).toFixed(1)})"><path fill="#141414" fill-rule="evenodd" d="${body}"/></g></g>
+<g mask="url(#rim)"><g transform="translate(${traceX.toFixed(1)} ${traceY.toFixed(1)})"><path fill="#141414" fill-rule="evenodd" d="${body}"/></g></g>
 </svg>\n`
 )
 

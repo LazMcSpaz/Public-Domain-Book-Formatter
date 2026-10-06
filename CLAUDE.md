@@ -2834,53 +2834,63 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   lost** where the slits closed up, so the carried width is capped at the runs'
   ninth decile, which holds back 13 of 133.
 
-  **The fan's own outline is a lozenge, and only not printing it removes it.**
-  Carried as above, the engraving still stood round the eye as a wide flat mass,
-  because it is an ellipse — 953 px of ink at the sides against 464 at the foot
-  — so under the rays it adds ink where it is deep and none where it is shallow.
-  Two repairs were shipped before the right one. Holding every ray at the fan's
-  own width out to the fan's **longest** reach makes the heavy zone a circle,
-  and the lozenge survived it; a fade on the join does not touch it either,
-  because the join is not what shows. The hatching has to go.
+  **The shape to remove was the fan's rim, not its mass — and it took three
+  tries to hear that.** The engraving is an ellipse (953 px of ink at the sides
+  against 464 at the foot), so the first reading was that the lozenge _is_ that
+  ellipse of ink. It is not. What a reader sees is where the engraving's rays
+  **stop**: a hundred and thirty-three blunt ends and the gaps between them,
+  standing in an arc. Holding every ray at the fan's own width out to its
+  longest reach makes the heavy zone a circle and the arc survived it. Fading
+  the join does nothing, the join not being what shows. And not printing the
+  hatching at all removes the arc and takes the emblem with it — the hatching
+  round the eye and the seven stars is what the device is, and the editor asked
+  for it back in those words.
 
-  **A figure can be lifted out of a trace that has no contour for it.** What is
-  kept is the eye and the seven stars, and neither comes out by contour or by
-  labelling: the eye's ink is one connected component with the whole fan, and
-  the seventh star's white is one with the background, because on the paper both
-  touch the hatching. What works is that a star and an eye are **star-shaped
-  about their own centres**, so walking outward from a seed at every angle
-  traces the true outline off the original pixels, contacts and all. Six stars
-  give their own seeds; growing the ink by 11 px seals the seventh's contacts
-  and gives one, and it is accepted on the same two measurements the six make —
-  an area inside their range and a point-to-valley ratio inside theirs — so that
-  it is admitted by measurement rather than by position. Exactly one candidate
-  in the picture passes both.
+  What works is **fading the ink to nothing across its own rim**, per angle,
+  against the measured rim rather than a circle, with the carried rays running
+  on through the band. The band's inner bound is set by the stars and not by
+  taste: the top row sits at 0.84 of the rim in its own direction, so an earlier
+  start takes the ink out from behind them and they stop reading as holes.
 
-  **A hole needs a field.** The engraving sets seventeen strokes just outside
-  the eye and ninety-four at the rim, and reproducing that opening was built and
-  then thrown away: the stars are not ink, they are white shapes the hatching
-  encloses, and a star-shaped hole in an open field is not a star, it is
-  nothing. The star ring sits where the engraving is densest, so every ray runs
-  from the eye. The measured count stays in the output, reported and unused, so
-  that it reads as a decision rather than as an oversight.
+  **An edge is measurable where a mass is not.** Three photometric assays of
+  evenness all failed — a twelve-sector spread reads the rays themselves, which
+  are a hundred-and-thirty-third harmonic; the second harmonic, which is what an
+  ellipse is, moved only 16 to 10 per cent; a half-peak edge per direction is
+  pinned by the eye and the stars, both legitimately angular. But a rim is a
+  _step_, so smooth the ink down each of 144 directions, differentiate, and take
+  the steepest fall within a quarter inch of the rim: 10.06 to 7.01 per inch at
+  the ninth decile, which is the directions where the edge showed most. **The
+  smoothing has to be narrower than the thing being measured** — at an eighth of
+  an inch either way the faded and unfaded artwork read 1.75 and 1.80, a
+  difference of nothing, because the window blurred the step away. That is the
+  general lesson: a smoothing window wide enough to quiet the texture is wide
+  enough to erase the feature.
 
-  **Evenness is not measurable photometrically here, and three assays said so.**
-  A twelve-sector spread reads the rays themselves, which are a
-  hundred-and-thirty-third harmonic. The second harmonic, which is what an
-  ellipse is, moves only from 16 to 10 per cent. A half-peak edge per direction
-  is pinned by the eye and the stars. Nothing separates a star from a lozenge,
-  because both are legitimately angular — so what the test pins is the
-  structure: the trace enters the artwork once, through a clip under an eighth
-  of the figure's height, and everything else drawn is rays.
+  **A figure can be lifted out of a trace that has no contour for it.** The
+  seven stars are traced so that a carried ray does not run through one — on the
+  paper a star is white, a shape the ink encloses. Neither they nor the eye come
+  out by contour or by labelling: the eye's ink is one connected component with
+  the whole fan, and the seventh star's white is one with the background,
+  because on the paper both touch the hatching. What works is that a star and an
+  eye are **star-shaped about their own centres**, so walking outward from a
+  seed at every angle traces the true outline off the original pixels, contacts
+  and all. Six stars give their own seeds; growing the ink by 11 px seals the
+  seventh's contacts and gives one, and it is accepted on the same two
+  measurements the six make — an area inside their range and a point-to-valley
+  ratio inside theirs — so that it is admitted by measurement rather than by
+  position. Exactly one candidate in the picture passes both.
 
-  Two smaller things, both printed wrong first. The eye's clip is a **disc of
-  its own reach** rather than an outline, because the thinning that breaks the
-  hatching away from the lid also eats the lid's two tips, so an outline taken
-  from the thinned mass prints the eye chewed — a fitted ellipse did it too. And
-  **a clip-path and a transform must not sit on one element**: a clip is
-  resolved in the user space of the element carrying it, so that element's own
-  transform moves the clip as well, which put the eye's outline an emblem's
-  width away and drew nothing.
+  **The carried rays begin where the engraving's own do.** This fan sets
+  seventeen strokes just outside the eye and ninety-four at the rim: the rays
+  multiply outward, which is why it is open round the eye and dense at its edge.
+  The count is measured at two dozen radii and each carried ray is given a
+  radius to begin at from that curve, so the two agree rather than printing a
+  collar of ink the engraving does not have.
+
+  And **a mask or a clip-path must not share an element with a transform**: both
+  are resolved in the user space of the element carrying them, so that element's
+  own transform moves them too — which put the eye's outline an emblem's width
+  away and drew nothing at all.
 
   **A carried ray has to be the same material as a cut one**, or the join shows
   wherever the two meet. Measured along the trace's own rays: a ray wanders
