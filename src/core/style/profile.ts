@@ -146,6 +146,7 @@ export function normalizeStyleProfile(raw: unknown): StyleProfile {
     pageNumber: oneOf(raw['pageNumber'], PAGE_NUMBER_POSITIONS, d.pageNumber),
     contentsSynopsis: bool(raw['contentsSynopsis'], d.contentsSynopsis),
     contentsDepth: depth(raw['contentsDepth'], d.contentsDepth),
+    contentsLabelLine: bool(raw['contentsLabelLine'], d.contentsLabelLine),
     sideHeadsFrom: sideLevel(raw['sideHeadsFrom'], d.sideHeadsFrom),
     quoteIndentEms: inset(raw['quoteIndentEms'], d.quoteIndentEms),
     smallCapsFont:
@@ -185,6 +186,7 @@ export function mergeStyle(base: StyleProfile, patch: Partial<StyleProfile>): St
   if (patch.pageNumber !== undefined) next.pageNumber = patch.pageNumber
   if (patch.dropCap !== undefined) next.dropCap = patch.dropCap
   if (patch.contentsDepth !== undefined) next.contentsDepth = patch.contentsDepth
+  if (patch.contentsLabelLine !== undefined) next.contentsLabelLine = patch.contentsLabelLine
   if (patch.sideHeadsFrom !== undefined) next.sideHeadsFrom = patch.sideHeadsFrom
   if (patch.quoteIndentEms !== undefined) next.quoteIndentEms = patch.quoteIndentEms
   if (patch.smallCapsFont !== undefined) next.smallCapsFont = patch.smallCapsFont
