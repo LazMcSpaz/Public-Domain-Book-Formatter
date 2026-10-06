@@ -352,6 +352,13 @@ export interface StyleProfile {
    */
   contentsDepth: number
   /**
+   * A labelled contents entry sets its label on a line of its own, the title
+   * under it: "MANUSCRIPT LECTURE No. 13" over "The Secret Doctrine". Off, the
+   * two run on and are cut between them only when the entry wraps, so a list
+   * of a hundred labelled entries reads half as one line and half as two.
+   */
+  contentsLabelLine: boolean
+  /**
    * The heading level from which heads are *side heads*: set flush left at
    * the body size, with no small capitals, over the paragraph they head.
    *

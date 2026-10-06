@@ -84,3 +84,52 @@ describe('the contents as set', () => {
     }
   })
 })
+
+describe('the label on a line of its own', () => {
+  // Short titles: label and title together fit one line, so only the option
+  // can put them on two. The Hall collection's No. 6, "Reincarnation".
+  const titles = ['Reincarnation', 'Karma', 'The Mysteries']
+  const leaves: PageTranscription[] = titles.map((title, i) => ({
+    pageIndex: i,
+    role: 'body',
+    uncertain: [],
+    furniture: {},
+    blocks: [
+      { kind: 'heading', level: 1, text: `LECTURE No. ${i + 6}` },
+      { kind: 'heading', level: 1, text: title },
+      { kind: 'paragraph', text: 'Body text. '.repeat(30) }
+    ]
+  }))
+  const contentsLines = (labelLine: boolean) => {
+    const profile = { ...defaultStyleProfile(), contentsLabelLine: labelLine }
+    const laid = layoutWithToc(assembleBook(leaves), profile, fixedWidthMeasurer(0.5), {
+      edition: { title: 'T', author: 'A' }
+    })
+    return laid.pages
+      .filter((p) => p.kind === 'contents')
+      .flatMap((p) => p.items.filter((i): i is PositionedLine => i.kind === 'line'))
+  }
+  const textOf = (l: PositionedLine) =>
+    l.runs
+      .filter((r) => !r.text.startsWith('Page '))
+      .map((r) => r.text)
+      .join(' ')
+
+  it('sets every label over its title, short titles included', () => {
+    const lines = contentsLines(true)
+    const text = lines.map(textOf)
+    titles.forEach((title, i) => {
+      const at = text.indexOf(`LECTURE No. ${i + 6}`)
+      expect(at).toBeGreaterThanOrEqual(0)
+      expect(text[at + 1]).toBe(title)
+      // The page number rides the title's line, not the label's.
+      expect(lines[at]!.runs.some((r) => r.text.startsWith('Page '))).toBe(false)
+      expect(lines[at + 1]!.runs.some((r) => r.text.startsWith('Page '))).toBe(true)
+    })
+  })
+
+  it('runs them on when the option is off', () => {
+    const text = contentsLines(false).map(textOf)
+    expect(text).toContain('LECTURE No. 6 Reincarnation')
+  })
+})

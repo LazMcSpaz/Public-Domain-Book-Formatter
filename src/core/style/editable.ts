@@ -305,6 +305,16 @@ export function styleQuestions(
       ]
     },
     {
+      id: 'contentsLabelLine',
+      type: 'confirm',
+      prompt: 'Set a contents entry’s number on its own line, with the title under it?',
+      help:
+        'Where every chapter carries a label — “Lecture No. 13”, “Part II” — the list ' +
+        'reads evenly with the label on one line and the title on the next. Run on, a ' +
+        'long title wraps and a short one does not, and the column alternates.',
+      defaultValue: profile.contentsLabelLine
+    },
+    {
       id: 'sideHeadsFrom',
       type: 'choice',
       prompt: 'Are the smaller headings set against the left margin?',
@@ -524,6 +534,7 @@ export function applyStyleAnswers(profile: StyleProfile, answers: Answers): Styl
     pageNumber: pick(answers, 'pageNumber', profile.pageNumber) as PageNumberPosition,
     contentsSynopsis: pickBool(answers, 'contentsSynopsis', profile.contentsSynopsis),
     contentsDepth: pickNumber(answers, 'contentsDepth', profile.contentsDepth),
+    contentsLabelLine: pickBool(answers, 'contentsLabelLine', profile.contentsLabelLine),
     sideHeadsFrom: pickNumber(answers, 'sideHeadsFrom', profile.sideHeadsFrom),
     quoteIndentEms: pickNumber(answers, 'quoteIndentEms', profile.quoteIndentEms),
     smallCapsFont: ((v) => (v === SAME_FACE ? '' : v))(

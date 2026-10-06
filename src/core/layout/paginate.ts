@@ -4093,7 +4093,27 @@ function buildContents(
     // An entry that wraps is cut where its words allow, not wherever the
     // measure ran out: between label and title, or after punctuation, and
     // never leaving one word alone on the second line (`contentsSplit`).
-    if (!descriptive && broken.length > 1) {
+    if (!descriptive && entry.label && profile.contentsLabelLine) {
+      // The label on a line of its own and the title under it, hung, for every
+      // entry rather than only the ones that happen to wrap. A title too long
+      // for one line is cut where its own words allow.
+      const titleWidth = Math.max(1, measure - hang)
+      let titleLines = listLine(entry.title, titleWidth)
+      if (titleLines.length > 1) {
+        const split = contentsSplit(entry.title, {
+          width: (text) => ctx.measurer.widthOf(text, body, sizePt),
+          firstWidth: titleWidth,
+          secondWidth: titleWidth,
+          labelWords: 0
+        })
+        if (split) {
+          const first = listLine(split[0], titleWidth)
+          const second = listLine(split[1], titleWidth)
+          if (first.length === 1 && second.length === 1) titleLines = [first[0]!, second[0]!]
+        }
+      }
+      broken = [...listLine(entry.label, measure), ...titleLines]
+    } else if (!descriptive && broken.length > 1) {
       const split = contentsSplit(listText, {
         width: (text) => ctx.measurer.widthOf(text, body, sizePt),
         firstWidth: measure,
