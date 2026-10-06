@@ -360,6 +360,33 @@ describe('migrateSavedRun — a picture’s placement, which came with v17', () 
     expect(migrateSavedRun(JSON.parse(JSON.stringify(original))).edits).toEqual(original.edits)
   })
 
+  it('keeps a plate and a frontispiece, which carry a width and nothing else', () => {
+    // Both are leaves of their own, so neither has a point in a paragraph; a
+    // parse that wanted `at` from every placement but `inline` would drop them
+    // and the picture would come back set to the measure in the text.
+    const original = run({
+      edits: [
+        {
+          kind: 'image',
+          imageId: 'front',
+          afterBlockId: 'p0b1',
+          sourceWidth: 1080,
+          sourceHeight: 1450,
+          placement: { kind: 'frontispiece', widthIn: 3.6 }
+        },
+        {
+          kind: 'image',
+          imageId: 'plate2',
+          afterBlockId: 'p0b1',
+          sourceWidth: 1080,
+          sourceHeight: 1450,
+          placement: { kind: 'plate', widthIn: 3.6 }
+        }
+      ]
+    })
+    expect(migrateSavedRun(JSON.parse(JSON.stringify(original))).edits).toEqual(original.edits)
+  })
+
   it('drops a placement it cannot size, and the picture keeps its place in the book', () => {
     // `widthIn` is what the engine sizes by; a placement without one would set
     // the figure at NaN inches, which lays out as nothing and reports no fault.

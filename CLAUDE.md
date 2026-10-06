@@ -1182,6 +1182,16 @@ proportions: propose from sense, accept from pixels.
   after punctuation, never leaves one word alone or ends a line on "of" or
   "the", and gives the entry back to the breaker only when two lines cannot
   hold it.
+- **A plate waits for the page to end.** A plate reached mid-page used to
+  break the page there, so the text before it stopped short: on _The Lost
+  Keys of Masonry_ four of six plates cost half a page of white each. Now the
+  text runs on to the foot and the plate takes the next leaf (`floating`), and
+  a plate before a chapter that opens recto goes on the verso facing it, with
+  a blank recto in front when that is what it takes, as a tipped-in plate is
+  bound. The other choice cost the same two leaves and backed the Emerald
+  Tablet, "illustrated on the opposite page", with a blank. A picture can be
+  named a `plate` outright, whatever the trim, and a `frontispiece` takes the
+  half-title's blank verso, facing the title page.
 - **A guard's fallback has to report.** That contents shipped with no numbers
   and `warnings: 0` beside it. Silence is the failure mode, not the error.
 
@@ -1418,6 +1428,12 @@ node scripts/drive.mjs figure cut 193 0.527,0.532,0.389,0.175 --beside p193b1 --
                                      #   text run past it; `figure list`, `figure drop <id>`;
                                      #   `--from <pdf>` cuts from another copy of the
                                      #   same printing (a book read from an EPUB)
+node scripts/drive.mjs figure add plates/3.jpg --plate p32b4 --caption "The Emerald Tablet"
+                                     #   a picture file the scan left out, copied
+                                     #   pixel for pixel: `--plate <block>` a leaf
+                                     #   of its own after the block whatever the
+                                     #   trim, `--frontispiece` on the verso facing
+                                     #   the title page (Lost Keys, 1924)
 node scripts/drive.mjs figure set <id> --caption-file c.txt --after p244b4
                                      #   a supplied figure's caption or anchor,
                                      #   changed without cutting it again. A

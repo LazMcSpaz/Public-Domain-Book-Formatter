@@ -686,3 +686,261 @@ describe('layout — a figure placed where the original set it', () => {
     })
   })
 })
+
+describe('layout — a plate and a frontispiece, said outright', () => {
+  type Illustration = import('@core/assemble').Illustration
+  type Placement = NonNullable<Illustration['placement']>
+
+  /** A supplied picture, the way `applyEdits` hands one to the engine. */
+  const supplied = (
+    id: string,
+    placement: Placement,
+    over: Partial<{ sourceWidth: number; sourceHeight: number; caption: string }> = {}
+  ): Illustration => ({
+    id,
+    pageIndex: -1,
+    sourceWidth: over.sourceWidth ?? 1080,
+    sourceHeight: over.sourceHeight ?? 1450,
+    caption: over.caption ?? null,
+    anchorAfterBlockId: 'p0b1',
+    origin: 'supplied',
+    placement
+  })
+
+  const book = (...pictures: Illustration[]): BookDocument => {
+    const doc = assembleBook([
+      page(0, [
+        { kind: 'heading', text: 'Of the Air', level: 1 },
+        { kind: 'paragraph', text: PROSE.repeat(2) }
+      ]),
+      page(1, [{ kind: 'paragraph', text: PROSE.repeat(6) }])
+    ])
+    return { ...doc, illustrations: pictures }
+  }
+
+  const imagePages = (b: LaidOutBook): LaidOutPage[] => b.pages.filter((p) => images(p).length > 0)
+
+  describe('plate', () => {
+    // Short enough to share a page with text: 1.5 in wide by 1 in high. The
+    // height rule alone would set it in the flow, which is the control below.
+    const small = { sourceWidth: 450, sourceHeight: 300 }
+
+    it('gives a picture a leaf of its own when the original printed it as one', () => {
+      const laid = run(book(supplied('pl', { kind: 'plate', widthIn: 1.5 }, small)))
+      const [p] = imagePages(laid)
+      expect(p!.kind).toBe('plate')
+      expect(textOf(p!)).not.toContain('chirurgeon')
+      // The control: the same picture placed inline shares its page with text,
+      // so it is the placement and not the size that made the leaf.
+      const inline = run(book(supplied('pl', { kind: 'inline', widthIn: 1.5 }, small)))
+      expect(textOf(imagePages(inline)[0]!)).toContain('chirurgeon')
+    })
+
+    it('sets it at the width the original printed it', () => {
+      const laid = run(book(supplied('pl', { kind: 'plate', widthIn: 1.5 }, small)))
+      expect(allImages(laid)[0]!.widthPt).toBeCloseTo(1.5 * 72, 6)
+    })
+
+    it('keeps its caption on its leaf', () => {
+      const laid = run(
+        book(
+          supplied('pl', { kind: 'plate', widthIn: 1.5 }, { ...small, caption: 'The Master Mason' })
+        )
+      )
+      expect(textOf(imagePages(laid)[0]!)).toContain('The Master Mason')
+    })
+  })
+
+  describe('a plate waits for the page to end', () => {
+    // A chapter whose first block the plate follows, then plenty of text: the
+    // page the plate is reached on has room for a good deal more.
+    const chapters = (firstLength: number, plates: Illustration[]): BookDocument => {
+      const doc = assembleBook([
+        page(0, [
+          { kind: 'heading', text: 'Of the Air', level: 1 },
+          { kind: 'paragraph', text: PROSE },
+          { kind: 'paragraph', text: PROSE.repeat(firstLength) }
+        ]),
+        page(1, [
+          { kind: 'heading', text: 'Of the Water', level: 1 },
+          { kind: 'paragraph', text: PROSE.repeat(4) }
+        ])
+      ])
+      return { ...doc, illustrations: plates }
+    }
+    const plateAt = (id: string, after: string): Illustration => ({
+      ...supplied(id, { kind: 'plate', widthIn: 1.5 }, { sourceWidth: 450, sourceHeight: 300 }),
+      anchorAfterBlockId: after
+    })
+
+    it('lets the text run on to the foot of the page, then takes the next leaf', () => {
+      const laid = run(chapters(6, [plateAt('pl', 'p0b1')]))
+      const plate = laid.pages.findIndex((p) => images(p).length > 0)
+      const before = laid.pages[plate - 1]!
+      // The paragraph after the anchor is on the page before the plate: the
+      // text ran on rather than stopping where the plate was reached.
+      expect(textOf(before)).toContain('chirurgeon')
+      expect(before.index).toBe(laid.pages.findIndex((p) => textOf(p).includes('chirurgeon')))
+      const last = lines(before)
+        .filter((l) => l.runs.length > 0)
+        .at(-1)!
+      const leading = leadingFor(defaultStyleProfile().bodyFontSize)
+      expect(before.frame.yPt + before.frame.heightPt - last.baselinePt).toBeLessThan(3 * leading)
+      // And the text goes on after it.
+      expect(textOf(laid.pages[plate + 1]!)).toContain('chirurgeon')
+    })
+
+    it('takes the next leaf when a page of short paragraphs fills exactly', () => {
+      // One-line paragraphs: no widow or orphan rule moves a line, so the page
+      // fills to its last slot and the next paragraph finds no room at all.
+      const doc = assembleBook([
+        page(
+          0,
+          Array.from({ length: 80 }, (_, k) => ({
+            kind: 'paragraph' as const,
+            text: `Line ${k} of the register.`
+          }))
+        )
+      ])
+      const laid = run({ ...doc, illustrations: [plateAt('pl', 'p0b0')] })
+      const plate = laid.pages.findIndex((p) => images(p).length > 0)
+      const first = laid.pages.findIndex((p) => textOf(p).includes('Line 0 '))
+      expect(plate).toBe(first + 1)
+      expect(textOf(laid.pages[plate + 1]!)).toMatch(/Line \d+ of the register/)
+    })
+
+    it('takes the next leaf when a paragraph will not start in the room left', () => {
+      // A long paragraph after a run of one-line ones, its start walked down the
+      // page: at some count it meets the foot with one line of room, which the
+      // orphan rule refuses, and the page ends there instead of where it filled.
+      for (let n = 20; n <= 44; n++) {
+        const doc = assembleBook([
+          page(0, [
+            ...Array.from({ length: n }, (_, k) => ({
+              kind: 'paragraph' as const,
+              text: `Line ${k} of the register.`
+            })),
+            { kind: 'paragraph', text: PROSE.repeat(8) }
+          ])
+        ])
+        const laid = run({ ...doc, illustrations: [plateAt('pl', 'p0b0')] })
+        const plate = laid.pages.findIndex((p) => images(p).length > 0)
+        expect(plate).toBe(laid.pages.findIndex((p) => textOf(p).includes('Line 0 ')) + 1)
+      }
+    })
+
+    it('keeps several plates in the order they were anchored', () => {
+      // Long enough that the page fills before the chapter ends, so both are
+      // set at that break rather than before the next opening.
+      const laid = run(chapters(20, [plateAt('a', 'p0b1'), plateAt('b', 'p0b1')]))
+      expect(laid.imagesPlaced.map((i) => i.id)).toEqual(['a', 'b'])
+      expect(laid.imagesPlaced[1]!.pageIndex).toBe(laid.imagesPlaced[0]!.pageIndex + 1)
+    })
+
+    it('faces a chapter opening on a recto from the verso before it, whichever side the chapter before ended on', () => {
+      const ended = new Set<string>()
+      for (let n = 1; n <= 30; n += 2) {
+        const laid = run(chapters(n, [plateAt('pl', 'p0b2')]))
+        const plate = laid.pages.findIndex((p) => images(p).length > 0)
+        const opener = laid.pages.findIndex((p) => /of the water/i.test(textOf(p)))
+        expect(laid.pages[plate]!.side).toBe('verso')
+        expect(opener).toBe(plate + 1)
+        // The side the first chapter's text ended on.
+        ended.add(
+          laid.pages
+            .slice(0, plate)
+            .reverse()
+            .find((p) => lines(p).length > 0)!.side
+        )
+      }
+      // Both shapes were exercised: a chapter ending on a recto, where the plate
+      // takes the verso after it, and on a verso, where a blank recto goes in.
+      expect(ended).toEqual(new Set(['recto', 'verso']))
+    })
+
+    it('sets a plate still waiting when the book ends after its last page', () => {
+      const laid = run(chapters(2, [plateAt('pl', 'p1b1')]))
+      expect(laid.imagesDropped).toEqual([])
+      const plate = laid.pages.findIndex((p) => images(p).length > 0)
+      expect(plate).toBeGreaterThan(laid.pages.findIndex((p) => /of the water/i.test(textOf(p))))
+    })
+
+    it('with chapters free to open either side, the chapter follows the plate directly', () => {
+      for (let n = 1; n <= 4; n++) {
+        const laid = run(chapters(n, [plateAt('pl', 'p0b2')]), { chaptersOpenRecto: false })
+        const plate = laid.pages.findIndex((p) => images(p).length > 0)
+        expect(textOf(laid.pages[plate + 1]!)).toMatch(/of the water/i)
+        expect(lines(laid.pages[plate - 1]!).length).toBeGreaterThan(0)
+      }
+    })
+  })
+
+  describe('frontispiece', () => {
+    const front = (caption?: string): Illustration =>
+      supplied('fr', { kind: 'frontispiece', widthIn: 3.6 }, caption ? { caption } : {})
+
+    it('faces the title page, on the verso before it', () => {
+      const laid = run(book(front()))
+      const title = laid.pages.findIndex((p) => p.kind === 'title')
+      const [p] = imagePages(laid)
+      expect(p!.index).toBe(title - 1)
+      expect(p!.side).toBe('verso')
+      expect(laid.pages[title]!.side).toBe('recto')
+      expect(p!.section).toBe('front')
+      expect(p!.folio).toBeNull()
+    })
+
+    it('stands on the half-title’s blank verso, so the book is no longer for it', () => {
+      expect(run(book(front())).pages).toHaveLength(run(book()).pages.length)
+      expect(run(book(front())).pages[0]!.kind).toBe('half-title')
+    })
+
+    it('with no half-title, puts a blank in front of it so it still faces the title', () => {
+      const laid = run(book(front()), {
+        frontMatter: { ...defaultStyleProfile().frontMatter, halfTitle: false }
+      })
+      expect(laid.pages[0]!.items).toHaveLength(0)
+      expect(images(laid.pages[1]!)).toHaveLength(1)
+      expect(laid.pages[2]!.kind).toBe('title')
+    })
+
+    it('is set once, and not again in the body', () => {
+      const laid = run(book(front()))
+      expect(allImages(laid)).toHaveLength(1)
+      expect(laid.imagesPlaced.map((i) => i.id)).toEqual(['fr'])
+      expect(laid.imagesDropped).toEqual([])
+      expect(laid.warnings).toEqual([])
+    })
+
+    it('is sized as a plate and centred on its leaf, with its caption', () => {
+      const laid = run(book(front('O. G. M. H. A. B.')))
+      const p = imagePages(laid)[0]!
+      const item = images(p)[0]!
+      expect(item.widthPt).toBeLessThanOrEqual(3.6 * 72 + 0.001)
+      expect(item.yPt + item.heightPt).toBeLessThanOrEqual(p.frame.yPt + p.frame.heightPt + 0.001)
+      expect(item.yPt - p.frame.yPt).toBeGreaterThan(0)
+      expect(textOf(p)).toContain('O. G. M. H. A. B.')
+    })
+
+    it('sets a second one as a plate where it was anchored, and says so', () => {
+      const laid = run(book(front(), supplied('fr2', { kind: 'frontispiece', widthIn: 3.6 })))
+      const pages = imagePages(laid)
+      expect(pages.map((p) => p.section)).toEqual(['front', 'body'])
+      expect(pages[1]!.kind).toBe('plate')
+      expect(laid.warnings.some((w) => /fr2 was named a frontispiece, but fr/.test(w.text))).toBe(
+        true
+      )
+    })
+
+    it('with no title page to face, is set as a plate where it was anchored, and says so', () => {
+      const laid = run(book(front()), {
+        frontMatter: { ...defaultStyleProfile().frontMatter, titlePage: false }
+      })
+      const pages = imagePages(laid)
+      expect(pages).toHaveLength(1)
+      expect(pages[0]!.section).toBe('body')
+      expect(pages[0]!.kind).toBe('plate')
+      expect(laid.warnings.some((w) => /no title page for it to face/.test(w.text))).toBe(true)
+    })
+  })
+})

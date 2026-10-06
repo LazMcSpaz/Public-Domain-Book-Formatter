@@ -3417,6 +3417,8 @@ async function serve() {
      * figure cut 564 0.391,0.122,0.289,0.117 --after p564b0                 # between blocks, at its printed width
      * figure cut 520 0.426,0.153,0.226,0.152 --in p520b0 --at "which embraces"   # mid-sentence; text resumes below
      * figure cut 193 0.527,0.532,0.389,0.175 --beside p193b1 --at "various kinds" --side right
+     * figure add plates/3.jpg --plate p32b4 --caption "The Emerald Tablet"   # a leaf of its own after the block
+     * figure add plates/1.jpg --frontispiece --caption "O. G. M. H. A. B."   # facing the title page
      * figure list
      * figure drop <imageId>
      * ```
@@ -3431,6 +3433,13 @@ async function serve() {
      * picture; a caption the leaf already carries as a block is left where
      * it is, which prints the same.
      *
+     * `figure add <image>` takes the pixels from a picture file instead of a
+     * leaf — a plate the scan left out and another printing supplied — copied
+     * pixel for pixel, never resampled; its printed width defaults to its own
+     * width at `--dpi` (300). `--plate <block>` gives it a leaf of its own
+     * after the block, as a plate is, whatever size the page; `--frontispiece`
+     * sets it on the verso facing the title page, and needs no block.
+     *
      * Nothing leaves this device: `save` writes the book and its pictures to
      * a shelf directory, `shelf push` sends them up.
      */
@@ -3439,8 +3448,10 @@ async function serve() {
         const i = argv.indexOf(`--${name}`)
         return i === -1 ? null : argv[i + 1]
       }
+      // A flag that takes no value: the word after it is not its argument.
+      const BARE = new Set(['--frontispiece'])
       const positional = argv.filter(
-        (a, i) => !a.startsWith('--') && !argv[i - 1]?.startsWith('--')
+        (a, i) => !a.startsWith('--') && !(argv[i - 1]?.startsWith('--') && !BARE.has(argv[i - 1]))
       )
       const action = positional[0]
 
@@ -3561,26 +3572,44 @@ async function serve() {
         )
       }
 
-      if (action !== 'cut') {
+      const where =
+        '(--after <block> | --in <block> --at "<phrase>" | --beside <block> --at "<phrase>" ' +
+        '--side left|right | --plate <block> | --frontispiece) [--width <in>] [--caption "…"]'
+      if (action !== 'cut' && action !== 'add') {
         throw new Error(
-          'figure cut <leaf> <x,y,w,h> (--after <block> | --in <block> --at "<phrase>" | ' +
-            '--beside <block> --at "<phrase>" --side left|right) [--width <in>] [--caption "…"] [--from <pdf>]'
+          `figure cut <leaf> <x,y,w,h> ${where} [--from <pdf>]\nfigure add <image> ${where} [--dpi <n>]`
         )
       }
-      const leaf = Number(positional[1])
-      const box = (positional[2] ?? '')
-        .split(',')
-        .map(Number)
-        .filter((v) => Number.isFinite(v))
-      if (!Number.isFinite(leaf) || box.length !== 4) {
-        throw new Error('figure cut <leaf> <x,y,w,h> — four fractions of the leaf')
+      // `add` takes a picture file; `cut` a box off a leaf.
+      let leaf = null
+      let box = null
+      let imageUrl = null
+      if (action === 'add') {
+        const { existsSync } = await import('node:fs')
+        const full = resolve(REPO, positional[1] ?? '')
+        if (!positional[1] || !existsSync(full))
+          throw new Error(`figure add <image> — no file at ${full}.`)
+        imageUrl = `http://127.0.0.1:${PORT}/file?path=${encodeURIComponent(full)}`
+      } else {
+        leaf = Number(positional[1])
+        box = (positional[2] ?? '')
+          .split(',')
+          .map(Number)
+          .filter((v) => Number.isFinite(v))
+        if (!Number.isFinite(leaf) || box.length !== 4) {
+          throw new Error('figure cut <leaf> <x,y,w,h> — four fractions of the leaf')
+        }
       }
       const after = flag('after')
       const within = flag('in')
       const beside = flag('beside')
-      const chosen = [after, within, beside].filter(Boolean)
+      const plate = flag('plate')
+      const frontispiece = argv.includes('--frontispiece')
+      const chosen = [after, within, beside, plate, frontispiece].filter(Boolean)
       if (chosen.length !== 1) {
-        throw new Error('Say exactly one of --after <block>, --in <block>, --beside <block>.')
+        throw new Error(
+          'Say exactly one of --after <block>, --in <block>, --beside <block>, --plate <block>, --frontispiece.'
+        )
       }
       const phrase = flag('at')
       const side = flag('side')
@@ -3607,7 +3636,20 @@ async function serve() {
       }
 
       return page.evaluate(
-        async ([repo, leaf, box, blockId, mode, phrase, side, widthIn, caption, dpi, fromUrl]) => {
+        async ([
+          repo,
+          leaf,
+          box,
+          blockId,
+          mode,
+          phrase,
+          side,
+          widthIn,
+          caption,
+          dpi,
+          fromUrl,
+          imageUrl
+        ]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const pdf = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
@@ -3617,13 +3659,15 @@ async function serve() {
           if (!newest) throw new Error('No book on this device.')
           const run = await runStore.loadRun(newest.key)
           if (!run) throw new Error('That book has no reading stored here.')
-          const file = fromUrl
-            ? await fetch(fromUrl).then(async (r) => {
-                if (!r.ok) throw new Error(`fetching the other copy: ${r.status}`)
-                return new File([await r.arrayBuffer()], 'from.pdf', { type: 'application/pdf' })
-              })
-            : await runStore.loadSourceFile(newest.key)
-          if (!file) throw new Error('The scan is not stored on this device.')
+          const file = imageUrl
+            ? null
+            : fromUrl
+              ? await fetch(fromUrl).then(async (r) => {
+                  if (!r.ok) throw new Error(`fetching the other copy: ${r.status}`)
+                  return new File([await r.arrayBuffer()], 'from.pdf', { type: 'application/pdf' })
+                })
+              : await runStore.loadSourceFile(newest.key)
+          if (!file && !imageUrl) throw new Error('The scan is not stored on this device.')
 
           // The host block, against the book as it stands — the same text
           // `body` hands back, so an offset found here is the offset the
@@ -3632,11 +3676,16 @@ async function serve() {
             assemble.assembleBook(run.transcriptions),
             run.edits ?? []
           )
-          const block = doc.blocks.find((b) => b.id === blockId)
+          // A frontispiece faces the title page and reads no block; it is
+          // anchored to the first so the edit has somewhere to stand.
+          const block =
+            mode === 'frontispiece' && !blockId
+              ? doc.blocks[0]
+              : doc.blocks.find((b) => b.id === blockId)
           if (!block) throw new Error(`No block \`${blockId}\` in this book.`)
 
           let at = null
-          if (mode !== 'inline') {
+          if (mode === 'within' || mode === 'beside') {
             const first = block.text.indexOf(phrase)
             if (first < 0) {
               throw new Error(`\`${phrase}\` is not in block ${blockId}. Nothing was cut.`)
@@ -3653,46 +3702,68 @@ async function serve() {
             while (at > 0 && !/\s/u.test(block.text[at - 1])) at--
           }
 
-          // Cut at the render's own resolution, as the structure gate does.
-          const opened = await pdf.openPdf(file)
           let png
           let width
           let height
-          try {
-            const rendered = await pdf.renderPage(opened, leaf, dpi)
-            const [fx, fy, fw, fh] = box
+          if (imageUrl) {
+            // A picture file, copied pixel for pixel: drawn once at its own
+            // size, so nothing is resampled on the way to the PNG.
+            const blob = await fetch(imageUrl).then(async (r) => {
+              if (!r.ok) throw new Error(`fetching the picture: ${r.status}`)
+              return r.blob()
+            })
+            const bitmap = await createImageBitmap(blob)
             const cut = document.createElement('canvas')
-            cut.width = Math.max(1, Math.round(rendered.canvas.width * fw))
-            cut.height = Math.max(1, Math.round(rendered.canvas.height * fh))
-            cut
-              .getContext('2d')
-              .drawImage(
-                rendered.canvas,
-                Math.round(rendered.canvas.width * fx),
-                Math.round(rendered.canvas.height * fy),
-                cut.width,
-                cut.height,
-                0,
-                0,
-                cut.width,
-                cut.height
-              )
-            rendered.canvas.width = 0
-            rendered.canvas.height = 0
+            cut.width = bitmap.width
+            cut.height = bitmap.height
+            cut.getContext('2d').drawImage(bitmap, 0, 0)
+            bitmap.close()
             width = cut.width
             height = cut.height
-            const blob = await new Promise((r) => cut.toBlob(r, 'image/png'))
-            png = new Uint8Array(await blob.arrayBuffer())
+            const out = await new Promise((r) => cut.toBlob(r, 'image/png'))
+            png = new Uint8Array(await out.arrayBuffer())
             cut.width = 0
             cut.height = 0
-          } finally {
-            await opened.destroy()
+          }
+          // Cut at the render's own resolution, as the structure gate does.
+          if (!imageUrl) {
+            const opened = await pdf.openPdf(file)
+            try {
+              const rendered = await pdf.renderPage(opened, leaf, dpi)
+              const [fx, fy, fw, fh] = box
+              const cut = document.createElement('canvas')
+              cut.width = Math.max(1, Math.round(rendered.canvas.width * fw))
+              cut.height = Math.max(1, Math.round(rendered.canvas.height * fh))
+              cut
+                .getContext('2d')
+                .drawImage(
+                  rendered.canvas,
+                  Math.round(rendered.canvas.width * fx),
+                  Math.round(rendered.canvas.height * fy),
+                  cut.width,
+                  cut.height,
+                  0,
+                  0,
+                  cut.width,
+                  cut.height
+                )
+              rendered.canvas.width = 0
+              rendered.canvas.height = 0
+              width = cut.width
+              height = cut.height
+              const blob = await new Promise((r) => cut.toBlob(r, 'image/png'))
+              png = new Uint8Array(await blob.arrayBuffer())
+              cut.width = 0
+              cut.height = 0
+            } finally {
+              await opened.destroy()
+            }
           }
 
           const printedIn = widthIn ?? width / dpi
           const placement =
-            mode === 'inline'
-              ? { kind: 'inline', widthIn: printedIn }
+            mode === 'inline' || mode === 'plate' || mode === 'frontispiece'
+              ? { kind: mode, widthIn: printedIn }
               : mode === 'within'
                 ? { kind: 'within', widthIn: printedIn, at }
                 : { kind: 'beside', widthIn: printedIn, at, side }
@@ -3700,7 +3771,7 @@ async function serve() {
           const edit = {
             kind: 'image',
             imageId,
-            afterBlockId: blockId,
+            afterBlockId: block.id,
             sourceWidth: width,
             sourceHeight: height,
             ...(caption ? { caption } : {}),
@@ -3719,7 +3790,7 @@ async function serve() {
           return {
             imageId,
             leaf,
-            block: blockId,
+            block: block.id,
             placement,
             ...(at !== null ? { beginsAt: block.text.slice(at, at + 40) } : {}),
             px: `${width}x${height}`,
@@ -3735,14 +3806,23 @@ async function serve() {
           REPO,
           leaf,
           box,
-          after ?? within ?? beside,
-          after ? 'inline' : within ? 'within' : 'beside',
+          after ?? within ?? beside ?? plate,
+          after
+            ? 'inline'
+            : within
+              ? 'within'
+              : beside
+                ? 'beside'
+                : plate
+                  ? 'plate'
+                  : 'frontispiece',
           phrase,
           side,
           widthIn,
           caption,
           dpi,
-          fromUrl
+          fromUrl,
+          imageUrl
         ]
       )
     },

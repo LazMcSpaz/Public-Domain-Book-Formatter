@@ -247,6 +247,26 @@ export type IllustrationPlacement =
   | { kind: 'within'; widthIn: number; at: number }
   /** Beside the paragraph's text, which runs down the other side of it. */
   | { kind: 'beside'; widthIn: number; at: number; side: 'left' | 'right' }
+  /**
+   * A leaf of its own after the block it follows, as a plate is.
+   *
+   * The engine already gives a picture its own page when it is tall enough
+   * that the text round it would be a stub — but that is decided against the
+   * page the design settles on, so a plate the original printed on a leaf of
+   * its own could come back inline on a larger trim. This says it is a plate
+   * whatever the page: *The Lost Keys of Masonry* (1924) faces six of its
+   * pages with Knapp's plates, each a leaf to itself.
+   */
+  | { kind: 'plate'; widthIn: number }
+  /**
+   * Facing the title page, on the verso before it, as a frontispiece is.
+   *
+   * Not in the body at all: the edition's own front matter is generated, and
+   * the half-title's blank verso is the leaf a frontispiece stands on. The
+   * block it was anchored to does not matter and is not read. One per book;
+   * a second is set as a plate where it was anchored, and the layout says so.
+   */
+  | { kind: 'frontispiece'; widthIn: number }
 
 /**
  * A reference mark the page prints that refers to no note.
