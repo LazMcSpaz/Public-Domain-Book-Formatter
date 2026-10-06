@@ -66,6 +66,20 @@ describe('every entry the book uses should carry a mark', () => {
     expect(report.unmarked).toHaveLength(0)
   })
 
+  it('counts a circle in a list item, a quotation or a caption', () => {
+    const report = checkGlossaryMarks(
+      ['Devachan.', 'Kundalini.', 'Scottish Rite.'],
+      [
+        para('p1b0', 'Devachan is the heaven world, and Kundalini wakes, at the Scottish Rite.'),
+        { id: 'p2b0', kind: 'list-item', text: 'Kama Loka and Devachan°' },
+        { id: 'p3b0', kind: 'blockquote', text: 'awakening the Goddess Kundalini°' },
+        { id: 'p4b0', kind: 'caption', text: 'given in the Scottish Rite° Auditorium' }
+      ]
+    )
+    expect(report.unmarked).toHaveLength(0)
+    expect(report.marked).toHaveLength(3)
+  })
+
   it('reads a headword’s alternatives, and the book’s own spelling', () => {
     expect(headwordTerms('Nimbus, halo.')).toEqual(['Nimbus', 'halo'])
     expect(headwordTerms('Aura, the human aura.')).toEqual(['Aura', 'human aura'])

@@ -93,16 +93,19 @@ function pattern(term: string): RegExp {
 /**
  * Every entry, against the body the reader will hold.
  *
- * Only paragraphs are searched. A mark on a chapter heading would travel into
+ * Headings are not searched. A mark on a chapter heading would travel into
  * the running head and the contents, which is not a place for a footnote-sized
  * circle, so a term the book uses only in a heading counts as absent and the
- * report says so.
+ * report says so. Every other block is prose a reader meets: a list item, a
+ * quotation and a caption carry circles too, and reading paragraphs alone
+ * reported 17 of the Hall collection's marked entries as unmarked, the
+ * circle sitting in a numbered answer or a quoted stanza.
  */
 export function checkGlossaryMarks(
   headwords: readonly string[],
   blocks: readonly MarkableBlock[]
 ): MarkReport {
-  const prose = blocks.filter((block) => block.kind === 'paragraph')
+  const prose = blocks.filter((block) => block.kind !== 'heading')
   const report: MarkReport = { marked: [], unmarked: [], absent: [] }
 
   for (const entry of headwords) {
