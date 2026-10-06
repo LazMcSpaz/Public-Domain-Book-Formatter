@@ -43,6 +43,10 @@ Vary sentence length hard. One long accumulating sentence, then a short one that
 
 Prefer a full relative clause over a compressed participial or adjectival tag when the modifier carries real information. "which was by then thin and quarrelsome", not "by then thin and quarrelsome". We are not pressed for word count. Two extra words that save the reader a second pass are always worth it. Nothing should require rereading to parse.
 
+Say the point. Never leave the reader to infer it from a knowing close, an understatement, an irony or an aphorism whose literal meaning is not its meaning. "A man who announces himself as one has told you what he is" makes the reader work it out; "a man who announces himself as an adept has shown, by announcing it, that he is not one" says it. Plain is not flat: keep the life, lose the riddle. (The editor's ruling, 2026-10-06, on the Hall glossary.)
+
+Name a person in full the first time a piece mentions them, and do not open on a pronoun for someone the reader may be meeting for the first time.
+
 Check what a modifier actually attaches to. In a chain of appositives it is easy to hang a clause on the wrong noun.
 
 Concrete over abstract. Addresses, dates, objects, incidents. The Chicago office building. The man kicked off the platform. Prefer these to characterisations.
