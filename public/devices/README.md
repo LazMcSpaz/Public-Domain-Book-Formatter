@@ -121,6 +121,39 @@ from the midpoint of the two flanking stars and 0.535 from the star below the
 eye, both measured independently on the shelf. Three methods within six
 thousandths of the width.
 
+`all-seeing-eye-radiant.svg` — the same engraving with every one of its rays
+carried on to the edges of the board, so the whole cover is the radiance and the
+eye sits in the middle of it rather than in a half-disc at the foot. Written by
+`scripts/radiance.mjs` from `all-seeing-eye.svg`, which is the file to re-run if
+the trace is ever redone.
+
+Three things about it are measurements and not choices, and each replaced a
+wrong answer. **The point it radiates from** is the pupil, found by minimising
+the share of gradient energy lying along the radius — every stroke of a sunburst
+points at the centre, so at the centre the gradient is square to it. Two contour
+measurements answered first and neither could be believed: the trace is one
+snaking contour, the engraving being a single mass of ink with the slits cut out
+of it, so there is no such thing as a ray to measure. **A ray goes out as a
+line**, not as the wedge a radial stretch would give: carried out at its own
+angular width every ray keeps half the board inked at every radius, which is a
+wash, and the first emission covered a 7×10 in alternating black and ground to
+the corners. **A run far wider than the rest is rays the trace lost**, where the
+slits closed up under the bottom star and in three other places, so the carried
+width is capped at the runs' ninth decile and 13 of the 133 are held back.
+
+**Its box is wider than any front panel on purpose** — 0.80 against 0.767 for an
+8.5×11 out to the bleed. A picture wider than its box is scaled to the box's
+*height* and cropped at the sides, so the eye's height on the board is the
+fraction written into the file, exactly, on every trim; only the far ends of the
+rays are lost. A box the shape of one panel would be exact on that book and
+wrong on the next, and a test pins the property rather than the number.
+
+**It prints over the type and the type has to move.** The pupil is set under the
+title rule, which on a `label` cover is where the author's name goes, so the
+look carries `authorAtFoot` and the name goes to the foot of the board. Moving
+the type is the repair rather than moving the eye: where the eye goes is the
+design and where a line of 13pt roman goes is not.
+
 **It is a device and prints like one.** At a ground's three to five per cent the
 rays merge into exactly the grey wash the trace exists to avoid, so this one
 wants ten per cent and up. The reverse of the Isis, where the massed silhouette

@@ -692,3 +692,53 @@ describe('the back cover is set to a readable measure', () => {
     expect(imprint.xPt / 72).toBeCloseTo(frame.x, 6)
   })
 })
+
+describe('the author can be set at the foot', () => {
+  /** Where "Amos Root" is drawn, in points down the cover. */
+  function authorY(patch: (doc: CoverDocument) => void): number {
+    const doc = bookCover((d) => {
+      d.look.arrangement = 'label'
+      patch(d)
+    })
+    const { items } = composeCover(doc, { measurer })
+    const line = texts(items).find((t) => t.text.includes('Amos Root'))
+    if (!line) throw new Error('the author was not set at all')
+    return line.yPt
+  }
+
+  it('leaves it in the block under the title by default', () => {
+    const { geometry } = composeCover(
+      bookCover((d) => (d.look.arrangement = 'label')),
+      {
+        measurer
+      }
+    )
+    // A label stacks everything near the head, so the author is above the
+    // middle of the board — which is the thing the flag moves it out of.
+    expect(authorY(() => {})).toBeLessThan((geometry.fullHeightIn * 72) / 2)
+  })
+
+  it('sets it exactly where a typographic cover sets it', () => {
+    // The invariant rather than a proxy for it: there is one low position on
+    // this board and both doors reach it, so a change to that position cannot
+    // move the author on one kind of cover and leave it on the other. To
+    // within a point, because the two arrangements fit the title to different
+    // sizes and the author's size follows the title's, so the baselines sit a
+    // fraction apart under a block top that is the same.
+    const typographic = texts(composeCover(bookCover(), { measurer }).items).find((t) =>
+      t.text.includes('Amos Root')
+    )!
+    expect(authorY((d) => (d.look.authorAtFoot = true))).toBeCloseTo(typographic.yPt, 0)
+  })
+
+  it('changes nothing on a typographic cover, which already sets it low', () => {
+    const low = (flag: boolean): number => {
+      const doc = bookCover((d) => (d.look.authorAtFoot = flag))
+      const line = texts(composeCover(doc, { measurer }).items).find((t) =>
+        t.text.includes('Amos Root')
+      )!
+      return line.yPt
+    }
+    expect(low(true)).toBeCloseTo(low(false), 9)
+  })
+})

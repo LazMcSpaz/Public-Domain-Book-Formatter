@@ -326,6 +326,20 @@ export function lookQuestions(state: CoverInterviewState): Question[] {
     }
   )
 
+  // Never ask what is not relevant yet: a typographic cover puts the author at
+  // the foot whatever the answer, the empty middle of the panel being its whole
+  // design, so there is nothing to decide.
+  if (look.arrangement !== 'typographic') {
+    out.push({
+      id: 'cover-author-foot',
+      type: 'confirm',
+      group: 'ornament',
+      prompt: 'Set the author at the foot of the board?',
+      help: 'The author normally sits in the block under the title. Move it down where something else wants that place \u2014 a ground whose subject is set under the rule prints behind the name otherwise.',
+      defaultValue: look.authorAtFoot
+    })
+  }
+
   // How faint the figure prints, and what colour it prints in, are questions
   // about a figure — so they wait until there is one, the way the device's own
   // follow-up does below.
@@ -632,6 +646,7 @@ export function coverFromAnswers(
       return asked.trim() !== '' && Number.isFinite(n) && n > 0 ? n : null
     })(),
     frontFrame: text(answers, 'cover-frame', doc.look.frontFrame),
+    authorAtFoot: flag(answers, 'cover-author-foot', doc.look.authorAtFoot),
     groundFigure:
       (text(answers, 'cover-figure', doc.look.groundFigure ?? '') as GroundFigure | '') || null,
     groundFigureOpacity: Number(

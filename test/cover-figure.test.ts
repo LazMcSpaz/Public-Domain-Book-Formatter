@@ -179,6 +179,24 @@ describe('the figure library', () => {
     }
   })
 
+  it('keeps the radiance wider than any panel it can be asked to cover', () => {
+    // The radiant eye is the one figure whose vertical placement is the design:
+    // its pupil is set under the title rule, and the fraction that puts it
+    // there is written into the artwork's own box. That only holds while the
+    // picture is WIDER than the panel — covering then scales it to the panel's
+    // height and crops the sides, so nothing moves vertically. Let it become
+    // narrower than some trim and that trim scales it to the width instead,
+    // crops the top and the foot, and the eye slides toward the middle of the
+    // board with nothing to say so.
+    //
+    // 8.5×11 is the widest trim the studio offers; out to the bleed its front
+    // panel is 8.625 by 11.25.
+    const widest = 8.625 / 11.25
+    const file = readFileSync(join('public', FIGURE_SRC['all-seeing-eye-radiant']), 'utf8')
+    const [, , w, h] = /viewBox="([-\d.\s]+)"/.exec(file)![1]!.trim().split(/\s+/).map(Number)
+    expect(w! / h!).toBeGreaterThan(widest)
+  })
+
   it('leaves every figure enough room for the anchor it asks for', () => {
     // Against the artwork on disk rather than a number kept beside the anchor,
     // because the thing that decides how much room there is *is* the file's

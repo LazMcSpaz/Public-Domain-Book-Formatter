@@ -149,6 +149,26 @@ describe('answers fold back into the cover', () => {
     )
   })
 
+  it('carries an answer from one look to another, not merely back to its own', () => {
+    // Transfer, not a round trip: answering a question with its own default and
+    // applying it to the look it came from passes whether or not the answer is
+    // read, because the fallback IS the value being described. `frontTitleBorder`
+    // shipped that way once and drew no border on any book.
+    const from = state()
+    from.doc.look.authorAtFoot = true
+    const answers = defaultAnswers(coverQuestions(from))
+    const onto = defaultCover('6x9', 284)
+    expect(onto.look.authorAtFoot).toBe(false)
+    expect(coverFromAnswers(onto, answers).look.authorAtFoot).toBe(true)
+  })
+
+  it('does not ask where the author goes when the arrangement has already decided', () => {
+    const typographic = state()
+    typographic.doc.look.arrangement = 'typographic'
+    expect(lookQuestions(typographic).some((q) => q.id === 'cover-author-foot')).toBe(false)
+    expect(lookQuestions(state()).some((q) => q.id === 'cover-author-foot')).toBe(true)
+  })
+
   it('round-trips its own defaults unchanged', () => {
     const s = state()
     const answered = coverFromAnswers(s.doc, defaultAnswers(coverQuestions(s)))

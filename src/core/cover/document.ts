@@ -163,6 +163,20 @@ export interface CoverLook {
   frontFrame: FrameStyle
   /** Ornament id from the shipped library, or null. */
   ornamentId: string | null
+  /**
+   * Whether the author's name sits at the foot of the board rather than under
+   * the title.
+   *
+   * A `typographic` cover always does this — the empty middle of the panel is
+   * what a picture would otherwise be doing — and for every other arrangement
+   * the author belongs in the block, under the rule. The exception is a ground
+   * whose subject stands exactly there: the radiant eye is built about its
+   * pupil and the pupil is set under the rule, so an author in the block prints
+   * across it. Moving the type is the repair rather than moving the eye,
+   * because where the eye goes is the design and where a line of 13pt roman
+   * goes is not.
+   */
+  authorAtFoot: boolean
   /** Whether the spine carries the title and author (thickness permitting). */
   spineText: boolean
   /** Whether the imprint prints at the foot of the front cover. */
@@ -349,6 +363,7 @@ export function defaultLook(): CoverLook {
     rule: 'single',
     frontFrame: 'none',
     ornamentId: null,
+    authorAtFoot: false,
     spineText: true,
     imprintOnFront: false,
     announceWorks: false,
@@ -470,6 +485,7 @@ export function normalizeLook(raw: unknown): CoverLook {
     rule: oneOf(raw['rule'], ['none', 'single', 'double', 'ornamented'] as const, d.rule),
     frontFrame: oneOf(raw['frontFrame'], FRAME_STYLES, d.frontFrame),
     ornamentId: typeof raw['ornamentId'] === 'string' ? raw['ornamentId'] : null,
+    authorAtFoot: bool(raw['authorAtFoot'], d.authorAtFoot),
     spineText: bool(raw['spineText'], d.spineText),
     imprintOnFront: bool(raw['imprintOnFront'], d.imprintOnFront),
     announceWorks: bool(raw['announceWorks'], d.announceWorks),

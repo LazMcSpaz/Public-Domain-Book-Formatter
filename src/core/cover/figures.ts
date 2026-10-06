@@ -24,14 +24,20 @@
 import { pt, type CoverGeometry, type Rect } from './geometry'
 
 export type GroundFigure =
-  'isis-winged' | 'isis-winged-plain' | 'arcade' | 'arcade-detailed' | 'all-seeing-eye'
+  | 'isis-winged'
+  | 'isis-winged-plain'
+  | 'arcade'
+  | 'arcade-detailed'
+  | 'all-seeing-eye'
+  | 'all-seeing-eye-radiant'
 
 export const GROUND_FIGURES: readonly GroundFigure[] = [
   'isis-winged',
   'isis-winged-plain',
   'arcade',
   'arcade-detailed',
-  'all-seeing-eye'
+  'all-seeing-eye',
+  'all-seeing-eye-radiant'
 ]
 
 /** The id a ground figure is placed under, for the renderer to find. */
@@ -43,7 +49,8 @@ export const FIGURE_SRC: Readonly<Record<GroundFigure, string>> = {
   'isis-winged-plain': '/devices/isis-winged.svg',
   arcade: '/devices/arcade.svg',
   'arcade-detailed': '/devices/arcade-detailed.svg',
-  'all-seeing-eye': '/devices/all-seeing-eye-ground.svg'
+  'all-seeing-eye': '/devices/all-seeing-eye-ground.svg',
+  'all-seeing-eye-radiant': '/devices/all-seeing-eye-radiant.svg'
 }
 
 export const FIGURE_LABEL: Readonly<Record<GroundFigure, string>> = {
@@ -51,7 +58,8 @@ export const FIGURE_LABEL: Readonly<Record<GroundFigure, string>> = {
   'isis-winged-plain': 'Isis, winged — the engraved trace',
   arcade: 'An arcade of horseshoe arches',
   'arcade-detailed': 'An arcade of horseshoe arches — the fuller cut',
-  'all-seeing-eye': 'The all-seeing eye — Manly P. Hall’s own device'
+  'all-seeing-eye': 'The all-seeing eye — Manly P. Hall’s own device',
+  'all-seeing-eye-radiant': 'The all-seeing eye, its rays carried to the edges'
 }
 
 export const FIGURE_NOTE: Readonly<Record<GroundFigure, string>> = {
@@ -64,7 +72,9 @@ export const FIGURE_NOTE: Readonly<Record<GroundFigure, string>> = {
   'arcade-detailed':
     'The same arcade with the fainter stonework kept. More ink, which reads better at the lowest tints; it goes muddy sooner where the figure prints stronger.',
   'all-seeing-eye':
-    'Traced from the cover of Hall’s own magazine, March 1924: a fan of fine rays, seven seven-pointed stars, an open eye. Its own emblem, so it prints stronger than a ground — at a few per cent the rays merge into a grey wash, which is what the paper does on the wrappers and what the trace exists to avoid.'
+    'Traced from the cover of Hall’s own magazine, March 1924: a fan of fine rays, seven seven-pointed stars, an open eye. Its own emblem, so it prints stronger than a ground — at a few per cent the rays merge into a grey wash, which is what the paper does on the wrappers and what the trace exists to avoid.',
+  'all-seeing-eye-radiant':
+    'The same engraving with every one of its 133 rays carried on past the fan to the edges of the board, so the whole cover is the radiance and the eye sits in the middle of it rather than in a half-disc at the foot. The rays leave at the angles and in the spacing the press set them; what changes going outward is only that they stop widening, because a ray carried out at its own angular width inks half the board at every radius and prints as a wash rather than as light.'
 }
 
 /**
@@ -152,6 +162,9 @@ export const FIGURE_ANCHOR_X: Readonly<Record<GroundFigure, number>> = {
   // measured axis is its centre, so the number the library carries is the one
   // value that cannot drift from the file. See `public/devices/README.md`.
   'all-seeing-eye': 0.5,
+  // The radiance is built about the pupil and its box struck symmetrically
+  // round it, so the same holds and for the same reason.
+  'all-seeing-eye-radiant': 0.5,
   'isis-winged': 0.514,
   'isis-winged-plain': 0.514,
   // The doorway the colonnade recedes into: the centre line splits its
@@ -200,6 +213,7 @@ export const FIGURE_ANCHOR_X: Readonly<Record<GroundFigure, number>> = {
 export const FIGURE_ZOOM: Readonly<Record<GroundFigure, number>> = {
   // Nothing to move: the anchor is the box's own centre.
   'all-seeing-eye': 1,
+  'all-seeing-eye-radiant': 1,
   // Half again as wide as the panel already: all the slack anyone could want.
   'isis-winged': 1,
   'isis-winged-plain': 1,

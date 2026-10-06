@@ -1024,8 +1024,12 @@ function layFrontCover(
     const size = Math.max(11, titleSizePt * AUTHOR_RATIO)
     const lines = wrapText(content.author, typeBox.widthPt, authorFont, size, measurer)
     // On a typographic cover the author sits low, with the empty middle of the
-    // panel doing the work a picture would otherwise do.
-    const authorTop = arrangement === 'typographic' ? pt(safe.y + safe.height * 0.74) : relativeTo
+    // panel doing the work a picture would otherwise do — and any cover may ask
+    // for the same, which is what a ground with a subject under the rule needs.
+    const authorTop =
+      arrangement === 'typographic' || look.authorAtFoot
+        ? pt(safe.y + safe.height * 0.74)
+        : relativeTo
     centeredLines(items, lines, geometry.front, authorTop, authorFont, size, inkColor, measurer)
   }
 

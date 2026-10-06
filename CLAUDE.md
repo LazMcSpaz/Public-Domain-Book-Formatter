@@ -2813,6 +2813,38 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   README naming four candidate sources with the emblem measured in pixels on
   each and saying which one is usable and why. None of that was looked at.
 
+  **A radiance is not a stretched fan, and the trace has nothing in it to
+  stretch.** Asked to carry the eye's rays out in every direction so the whole
+  board is the pattern, the obvious move is a radial stretch of the ray
+  contours — and there are none: the engraving is one connected mass of ink
+  with the slits between its rays cut out of it, so the file is a single
+  snaking contour and two hundred-odd specks, and no classification of them
+  finds a ray. What there is, is the pattern the rays make where they reach the
+  rim, which is read off the ink and carried outward, each run of ink becoming
+  one ray on its own angle (`scripts/radiance.mjs`). Three measurements shaped
+  it and each replaced a wrong one. The radiant point is found by minimising
+  the share of gradient energy lying **along** the radius — every stroke points
+  at the centre, so at the centre the gradient is square to it — after a
+  least-squares pencil of contour axes and an angular-contrast search had both
+  answered from contours that are not rays, the second drifting to the top edge
+  of the picture. A ray is carried out as a **line**, not as the wedge a radial
+  stretch gives: at its own angular width it keeps half the board inked at
+  every radius, and the first emission covered a 7×10 in alternating black and
+  ground to the corners. And a run far wider than the rest is **rays the trace
+  lost** where the slits closed up, so the carried width is capped at the runs'
+  ninth decile, which holds back 13 of 133.
+
+  Two things it settled about placing a figure. **The artwork's box is wider
+  than any front panel on purpose** (0.80 against 0.767 for an 8.5×11 out to
+  the bleed), because a picture wider than its box is scaled to the box's
+  _height_ and cropped at the sides — so the fraction written into the file is
+  the eye's height on the board, exactly, on every trim. A box the shape of one
+  panel would be exact on that book and wrong on the next. And **the type moves,
+  not the figure**: the pupil is set under the title rule, which on a `label`
+  cover is where the author's name goes, so `CoverLook.authorAtFoot` sends the
+  name to the foot. Where the eye goes is the design and where a line of 13pt
+  roman goes is not.
+
   The general rule is the one the shelf exists for: **the book's directory is
   the first place to look, not the last.** Before making anything for a book —
   art, a colour, a strapline — read what is already in its directory. A book
