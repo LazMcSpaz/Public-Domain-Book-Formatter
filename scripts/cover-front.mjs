@@ -23,7 +23,10 @@
  * `normalizeLook`, so an old or hand-written spec cannot half-apply. Two fields
  * are the script's own: `device`, a file name under `public/devices`, which is
  * read here and handed over as the look's press mark; and `widthPx`, how wide
- * the picture should come out.
+ * the picture should come out. A third, `pageCountMeasured`, says the page
+ * count was taken off a typeset interior rather than guessed, which is the one
+ * thing the spine check cannot find out for itself: set it only when the
+ * number came from the exported book.
  */
 import { chromium } from 'playwright'
 import { readFile, writeFile } from 'node:fs/promises'
@@ -96,7 +99,11 @@ const result = await page.evaluate(
     const front = sheet
       ? await (async () => {
           const preview = await platform.renderCoverPreview(doc, {
-            scale: (spec.widthPx ?? 1000) / (72 * 12)
+            scale: (spec.widthPx ?? 1000) / (72 * 12),
+            // Only when the spec says the count came off a typeset interior.
+            // Left out, the spine check reports `pending` on every cover this
+            // script draws, which is a check nobody can learn anything from.
+            pageCountMeasured: spec.pageCountMeasured === true
           })
           const blob = await (await fetch(preview.url)).blob()
           const bytes = new Uint8Array(await blob.arrayBuffer())
