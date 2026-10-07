@@ -264,22 +264,27 @@ const SUBTITLE_RATIO = 0.42
 /**
  * The author's size, as a share of the title's.
  *
- * Raised from 0.38 on the editor's standing note that the name was coming out
- * small on every cover this arm has made. At 0.38 a 30 pt title set its author
- * at 11.4 pt, which is a caption, and the author of a book is not a caption:
- * a reader scanning a shelf is often looking for the name rather than the
- * title. Just over half the title is what a trade cover actually sets.
+ * Raised from 0.38, then again, on the editor's standing note that the name
+ * was coming out small on every cover this arm has made. At 0.38 a 30 pt title
+ * set its author at 11.4 pt, which is a caption, and the author of a book is
+ * not a caption: a reader scanning a shelf is often looking for the name
+ * rather than the title.
+ *
+ * 0.62 was chosen against the test a cover actually faces first — rendered at
+ * a 160 px search thumbnail, where the name has to resolve at all. At 0.52 it
+ * was legible only just; at 0.62 it reads, and it still does not compete with
+ * the title.
  */
-const AUTHOR_RATIO = 0.52
+const AUTHOR_RATIO = 0.62
 
 /**
  * And never smaller than this, whatever the title does.
  *
  * A share alone fails at the small end — a short title fitted to a narrow trim
  * can come out at 20 pt, and a fifth of that is unreadable from the distance a
- * cover is first seen at.
+ * cover is first seen at. 16 pt is the floor the thumbnail test settles on.
  */
-const AUTHOR_MIN_PT = 14
+const AUTHOR_MIN_PT = 16
 
 /**
  * The largest the spine may set, however thick the book is.

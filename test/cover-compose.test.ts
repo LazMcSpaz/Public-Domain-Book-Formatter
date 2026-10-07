@@ -820,15 +820,15 @@ describe('the author and the spine are set to be read, not to be found', () => {
     })
     // The editor's standing note: the name was coming out a caption on every
     // cover. A reader along a shelf is often looking for it rather than the
-    // title.
-    expect(author!.sizePt).toBeGreaterThan(30 * 0.5)
+    // title, and the size was settled against a rendered search thumbnail.
+    expect(author!.sizePt).toBeGreaterThan(30 * 0.6)
   })
 
   it('never sets it smaller than the floor, whatever the title does', () => {
     const { author } = sizes((d) => {
       d.look.titleSizePt = 16
     })
-    expect(author!.sizePt).toBeGreaterThanOrEqual(14)
+    expect(author!.sizePt).toBeGreaterThanOrEqual(16)
   })
 
   it('still scales with the title rather than standing at the floor', () => {

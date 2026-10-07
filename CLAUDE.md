@@ -820,12 +820,22 @@ editor's note, on seeing the third of them: the author of a book is pretty
 important, and this is a trend. `AUTHOR_RATIO` was 0.38, so a 30 pt title set
 its author at 11.4 pt — smaller than the back-cover copy beside it, and a
 reader along a shelf is often looking for the name rather than the title. It is
-0.52 now, just over half the title, with `AUTHOR_MIN_PT` at 14 because a share
-alone fails at the small end: a short title fitted to a narrow trim comes out
-at 20 pt and a fifth of that is unreadable at the distance a cover is first
-seen. `SPINE_MAX_PT` went 14 to 16 for the same reason, and the ceiling is safe
-to raise because the **thickness** bound is what actually protects a thin
-spine — the test that pins it asks a slim book, not a fat one.
+0.62 now, with `AUTHOR_MIN_PT` at 16 because a share alone fails at the small
+end: a short title fitted to a narrow trim comes out at 20 pt and a fifth of
+that is unreadable at the distance a cover is first seen. `SPINE_MAX_PT` went
+14 to 16 for the same reason, and the ceiling is safe to raise because the
+**thickness** bound is what actually protects a thin spine — the test that
+pins it asks a slim book, not a fat one.
+
+**What settled the number is the thumbnail, and it is the test to reach for.**
+Twice the raise was not enough and twice it was argued at reading size, which
+is not where a cover is first met. Rendering the front at a true 160 px — what
+a search result shows — answers it in one picture: at 15.6 pt the name is a
+smudge, at 21.8 it is legible only just, at 26 it reads. The same picture said
+the real fault was not the ratio at all. **The author was small because the
+title was**: this spec pinned `titleSizePt` at 30 on a 7×10 board, chosen when
+the title was one line, and unpinned the engine fits it at 42 with the author
+following to 26. Check what a size is a share _of_ before changing the share.
 
 **And the ground figure had to move with it.** The eye is positioned by the
 artwork rather than by the composer — a wrap figure is scaled to the sheet's
