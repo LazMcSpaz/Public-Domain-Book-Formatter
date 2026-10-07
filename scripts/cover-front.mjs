@@ -110,7 +110,10 @@ const result = await page.evaluate(
           platform.releaseCoverPreview(preview)
           return { ...preview, bytes, dpi: preview.widthPx / 12 }
         })()
-      : await platform.renderFrontCover(doc, { widthPx: spec.widthPx ?? 1000 })
+      : await platform.renderFrontCover(doc, {
+          widthPx: spec.widthPx ?? 1000,
+          pageCountMeasured: spec.pageCountMeasured === true
+        })
     let binary = ''
     for (const byte of front.bytes) binary += String.fromCharCode(byte)
     return {
