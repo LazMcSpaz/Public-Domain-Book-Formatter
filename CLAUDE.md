@@ -807,9 +807,25 @@ too long for the measure still breaks rather than running off the cover, and
 `fitText` goes through it too or the size is chosen against a line count the
 page will not have. Safe for a banked look by construction, the break living in
 `content.title`, which is the half that never travels. What it did break is the
-**spine**: that line is `title · author` along a fold, and the newline went
-to the writer as a character to draw. `flattened` is the one rule for anywhere
-a break cannot be set.
+**spine**: that line is `title · author` along a fold, and the newline reached
+the writer intact. Reproduced rather than reasoned about — the fault was put
+back and the sheet rendered — it does not drop a glyph, it **breaks the line**:
+the rotated run set as three stacked lines across the spine's width and ran off
+the fold onto the front panel. `flattened` is the one rule for anywhere a break
+cannot be set, and the editor saw the broken version because the sheet he was
+sent had been rendered before the fix went in.
+
+**The author's name was a caption on every cover this arm had made.** The
+editor's note, on seeing the third of them: the author of a book is pretty
+important, and this is a trend. `AUTHOR_RATIO` was 0.38, so a 30 pt title set
+its author at 11.4 pt — smaller than the back-cover copy beside it, and a
+reader along a shelf is often looking for the name rather than the title. It is
+0.52 now, just over half the title, with `AUTHOR_MIN_PT` at 14 because a share
+alone fails at the small end: a short title fitted to a narrow trim comes out
+at 20 pt and a fifth of that is unreadable at the distance a cover is first
+seen. `SPINE_MAX_PT` went 14 to 16 for the same reason, and the ceiling is safe
+to raise because the **thickness** bound is what actually protects a thin
+spine — the test that pins it asks a slim book, not a fat one.
 
 **And the ground figure had to move with it.** The eye is positioned by the
 artwork rather than by the composer — a wrap figure is scaled to the sheet's

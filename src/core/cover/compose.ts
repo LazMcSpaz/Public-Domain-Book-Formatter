@@ -261,7 +261,36 @@ const FRONT_MARK_MAX_IN = 1.4
 const TITLE_MAX_PT = 64
 const TITLE_MIN_PT = 14
 const SUBTITLE_RATIO = 0.42
-const AUTHOR_RATIO = 0.38
+/**
+ * The author's size, as a share of the title's.
+ *
+ * Raised from 0.38 on the editor's standing note that the name was coming out
+ * small on every cover this arm has made. At 0.38 a 30 pt title set its author
+ * at 11.4 pt, which is a caption, and the author of a book is not a caption:
+ * a reader scanning a shelf is often looking for the name rather than the
+ * title. Just over half the title is what a trade cover actually sets.
+ */
+const AUTHOR_RATIO = 0.52
+
+/**
+ * And never smaller than this, whatever the title does.
+ *
+ * A share alone fails at the small end — a short title fitted to a narrow trim
+ * can come out at 20 pt, and a fifth of that is unreadable from the distance a
+ * cover is first seen at.
+ */
+const AUTHOR_MIN_PT = 14
+
+/**
+ * The largest the spine may set, however thick the book is.
+ *
+ * Raised from 14 with the author's size and for the same reason: a spine is
+ * read edge-on from a shelf, at a distance and usually at an angle, and 14 pt
+ * was the quietest line on the whole cover. The thickness bound below is what
+ * actually protects a thin spine, so this ceiling only ever binds on a book
+ * fat enough to carry the type.
+ */
+const SPINE_MAX_PT = 16
 
 /** What the back-cover copy sets at when the look names no size. */
 export const BLURB_PT = 10.5
@@ -1181,7 +1210,7 @@ function layFrontCover(
   /** The author, set below whatever came before it. */
   const setAuthor = (relativeTo: number, titleSizePt: number): void => {
     if (!content.author.trim()) return
-    const size = Math.max(11, titleSizePt * AUTHOR_RATIO)
+    const size = Math.max(AUTHOR_MIN_PT, titleSizePt * AUTHOR_RATIO)
     const lines = wrapText(content.author, typeBox.widthPt, authorFont, size, measurer)
     // On a typographic cover the author sits low, with the empty middle of the
     // panel doing the work a picture would otherwise do — and any cover may ask
@@ -1572,7 +1601,7 @@ function laySpine(
   const runBottom = markTopIn === null ? safe.y + safe.height : markTopIn - 0.12
   const runLength = Math.max(0, runBottom - runTop)
 
-  let size = Math.min(14, maxByThickness)
+  let size = Math.min(SPINE_MAX_PT, maxByThickness)
   const maxLengthPt = pt(runLength)
   while (size > 6 && measurer.widthOf(line, font, size) > maxLengthPt) size -= 0.5
   if (measurer.widthOf(line, font, size) > maxLengthPt) {

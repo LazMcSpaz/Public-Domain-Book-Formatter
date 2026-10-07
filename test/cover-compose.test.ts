@@ -800,6 +800,66 @@ describe("the blurb is the editor's own prose, and is set as such", () => {
   })
 })
 
+describe('the author and the spine are set to be read, not to be found', () => {
+  /** The author line on the front, and the line along the fold. */
+  function sizes(patch: (doc: CoverDocument) => void = () => {}) {
+    const doc = bookCover((d) => {
+      d.look.arrangement = 'label'
+      d.content.author = 'Amos Root'
+      patch(d)
+    })
+    const { items, geometry } = composeCover(doc, { measurer })
+    const author = texts(items).find((t) => t.text === 'Amos Root' && t.rotate !== -90)
+    const spine = texts(items).find((t) => t.rotate === -90)
+    return { author, spine, geometry }
+  }
+
+  it('sets the author at over half the title', () => {
+    const { author } = sizes((d) => {
+      d.look.titleSizePt = 30
+    })
+    // The editor's standing note: the name was coming out a caption on every
+    // cover. A reader along a shelf is often looking for it rather than the
+    // title.
+    expect(author!.sizePt).toBeGreaterThan(30 * 0.5)
+  })
+
+  it('never sets it smaller than the floor, whatever the title does', () => {
+    const { author } = sizes((d) => {
+      d.look.titleSizePt = 16
+    })
+    expect(author!.sizePt).toBeGreaterThanOrEqual(14)
+  })
+
+  it('still scales with the title rather than standing at the floor', () => {
+    const small = sizes((d) => {
+      d.look.titleSizePt = 30
+    })
+    const large = sizes((d) => {
+      d.look.titleSizePt = 48
+    })
+    expect(large.author!.sizePt).toBeGreaterThan(small.author!.sizePt)
+  })
+
+  it('sets the spine at the ceiling when the book is thick enough to carry it', () => {
+    const { spine } = sizes((d) => {
+      d.pageCount = 477
+    })
+    expect(spine!.sizePt).toBe(16)
+  })
+
+  it('is still bounded by the thickness on a slimmer book', () => {
+    // The ceiling is not what protects a thin spine — the fold's own width is,
+    // and raising the one must not reach past the other.
+    const { spine, geometry } = sizes((d) => {
+      d.pageCount = 120
+    })
+    const room = (geometry.spineSafe?.width ?? 0) * 72 * 0.62
+    expect(spine).toBeDefined()
+    expect(spine!.sizePt).toBeLessThanOrEqual(room + 1e-6)
+  })
+})
+
 describe('a title can be stacked where the editor stacks it', () => {
   const font = { family: 'x', style: 'regular' as const }
 
@@ -838,7 +898,11 @@ describe('a title can be stacked where the editor stacks it', () => {
       d.content.subtitle = ''
     })
     const { items } = composeCover(doc, { measurer })
-    const title = texts(items).filter((t) => t.sizePt >= 20)
+    // The title is whatever is set largest — a size threshold would also catch
+    // the author, which is no longer a small line.
+    const all = texts(items)
+    const biggest = Math.max(...all.map((t) => t.sizePt))
+    const title = all.filter((t) => t.sizePt === biggest)
     expect(title.map((t) => t.text)).toEqual(['THE', 'MANUSCRIPT', 'LECTURES'])
   })
 
