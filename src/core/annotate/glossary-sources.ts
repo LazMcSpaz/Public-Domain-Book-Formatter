@@ -81,6 +81,9 @@ const MARKS = /\p{M}/gu
 
 /** One character as it is compared: no diacritic, lower case. */
 function foldChar(c: string): string {
+  // A curly apostrophe is the book's, a straight one the glossary's: `Dante’s
+  // Inferno` on the page was not found under `Dante's Inferno`.
+  if (c === '\u2019' || c === '\u2018') return "'"
   return c.normalize('NFD').replace(MARKS, '').toLowerCase()
 }
 
@@ -126,6 +129,9 @@ function termPattern(term: string): RegExp | null {
     .text.split(/[\s-]+/)
     .filter(Boolean)
     .map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+    // The glossary is written in this editor's spelling and the book in its
+    // own: `Astral colours` is the book's "astral colors".
+    .map((w) => w.replace(/colou?r/g, 'colou?r'))
   if (words.length === 0) return null
   const last = words.length - 1
   // A singular term finds its plural, and a plural term its singular.

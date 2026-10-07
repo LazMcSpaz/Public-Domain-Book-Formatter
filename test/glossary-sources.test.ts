@@ -145,6 +145,15 @@ describe('passages where the word stands', () => {
     expect(one!.text).toContain('Devachan is the dwelling')
   })
 
+  it('reads a curly apostrophe and the American spelling of colour', () => {
+    const book = [
+      b('p1', 'Dante’s Inferno has its counterparts.'),
+      b('p2', 'The astral colors of the aura.')
+    ]
+    expect(passagesOf(["Dante's Inferno"], book, 5, 40).map((p) => p.id)).toEqual(['p1'])
+    expect(passagesOf(['Astral colours'], book, 5, 40).map((p) => p.id)).toEqual(['p2'])
+  })
+
   it('reads through the notation and keeps one passage per block', () => {
     const tagged = b('p4', 'The <i>Devachan</i> state; Devachan again.')
     const got = passagesOf(['Devachan'], [tagged], 5, 200)
