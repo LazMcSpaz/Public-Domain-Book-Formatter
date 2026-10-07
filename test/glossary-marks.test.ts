@@ -82,8 +82,12 @@ describe('every entry the book uses should carry a mark', () => {
   })
 
   it('reads a headword’s alternatives, and the book’s own spelling', () => {
-    expect(headwordTerms('Nimbus, halo.')).toEqual(['Nimbus', 'halo'])
-    expect(headwordTerms('Aura, the human aura.')).toEqual(['Aura', 'human aura'])
+    expect(headwordTerms('Nimbus, halo.')).toEqual(['Nimbus, halo', 'Nimbus', 'halo'])
+    expect(headwordTerms('Aura, the human aura.')).toEqual([
+      'Aura, the human aura',
+      'Aura',
+      'human aura'
+    ])
 
     // The glossary is in this editor's spelling and the book in its own.
     const report = checkGlossaryMarks(
@@ -211,6 +215,7 @@ describe('a person, and a circle after a quote', () => {
   it('reads Surname, Given (dates) as one person, looked for by surname', () => {
     expect(headwordTerms('Balfour, Arthur James (1848-1930).')).toEqual(['Balfour'])
     expect(headwordTerms('Gnome, sylph, undine, salamander.')).toEqual([
+      'Gnome, sylph, undine, salamander',
       'Gnome',
       'sylph',
       'undine',
@@ -250,5 +255,36 @@ describe('a person, and a circle after a quote', () => {
 
   it('places a new circle on the word, not after its closing quote', () => {
     expect(withGlossaryMark('his "hex" powers', 'hex')).toBe('his "hex°" powers')
+  })
+})
+
+describe('a saying as a headword', () => {
+  it('finds a quoted saying with a comma in it as one phrase', () => {
+    const report = checkGlossaryMarks(
+      ['"When the pupil is ready, the Master appears."'],
+      [
+        para(
+          'p1',
+          'on the earth plane, that “when the pupil is ready, the Master appears°.” The Astral'
+        )
+      ]
+    )
+    expect(report.marked.map((v) => v.entry)).toEqual([
+      '"When the pupil is ready, the Master appears."'
+    ])
+  })
+
+  it('still reads a list of alternatives part by part', () => {
+    expect(headwordTerms('Medium, psychic circle, seance.')).toEqual([
+      'Medium, psychic circle, seance',
+      'Medium',
+      'psychic circle',
+      'seance'
+    ])
+    const report = checkGlossaryMarks(
+      ['Medium, psychic circle, seance.'],
+      [para('p1', 'at a seance° in the dark')]
+    )
+    expect(report.marked).toHaveLength(1)
   })
 })

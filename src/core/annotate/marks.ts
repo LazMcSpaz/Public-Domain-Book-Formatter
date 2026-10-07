@@ -72,13 +72,20 @@ export function isPersonHeadword(headword: string): boolean {
 export function headwordTerms(headword: string): string[] {
   const person = PERSON.exec(headword)
   if (person) return [person[1]!.trim()]
-  return headword
-    .trim()
-    .replace(/\.$/, '')
+  const unquote = (t: string) => t.replace(/^[\s"'\u201C\u2018]+|[\s"'\u201D\u2019.]+$/g, '')
+  const whole = unquote(headword.trim().replace(/\.$/, ''))
+  const parts = whole
     .split(',')
     .map((part) => part.replace(/\s*\(.*?\)\s*/g, '').trim())
     .map((part) => part.replace(/^(the|a|an)\s+/i, '').trim())
+    .map(unquote)
     .filter((part) => part.length >= 3)
+  // A saying or a phrase with a comma in it is one entry, not a list of
+  // alternatives: `"When the pupil is ready, the Master appears."` was looked
+  // for as two halves with the quote marks on, and its circle never found.
+  // The whole is asked first; a true list never matches whole and falls
+  // through to its parts.
+  return whole.includes(',') ? [whole, ...parts] : parts
 }
 
 /**
