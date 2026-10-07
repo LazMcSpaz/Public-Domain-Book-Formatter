@@ -95,6 +95,7 @@ export {
   glossaryPacket,
   passagesOf,
   plainOf,
+  quotesNotInPacket,
   type GlossaryPacket,
   type PacketOptions,
   type Passage,

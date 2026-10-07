@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { definitionsOf, entryHeads, glossaryPacket, passagesOf } from '@core/annotate'
+import {
+  definitionsOf,
+  entryHeads,
+  glossaryPacket,
+  passagesOf,
+  quotesNotInPacket
+} from '@core/annotate'
 
 /**
  * The packet a glossary entry is written from: Blavatsky's own definition,
@@ -210,5 +216,31 @@ describe('the packet for one entry', () => {
       { aliases: { Aryan: ['Ârya'] } }
     )
     expect(packet.definitions['TG']).toEqual(['Ârya (Sk.). Lit., “the holy”.'])
+  })
+})
+
+describe('quotations the packet does not carry', () => {
+  const packet = glossaryPacket(
+    'Adept.',
+    undefined,
+    [{ title: 'TG', blocks: TG, dictionary: true }],
+    [b('h1', 'Only an adept° can know another, and he must be trained in the same work.')]
+  )
+
+  it('passes a quotation the packet carries, whatever its quote marks and spacing', () => {
+    const entry = '<b>Adept.</b> In Occultism “one who has reached the stage of Initiation”.'
+    expect(quotesNotInPacket(entry, packet)).toEqual([])
+    expect(quotesNotInPacket('He says "Only an adept can know another".', packet)).toEqual([])
+  })
+
+  it('returns a quotation written from memory', () => {
+    const entry = 'Blavatsky calls him “one who has mastered the hidden laws of nature”.'
+    expect(quotesNotInPacket(entry, packet)).toEqual([
+      'one who has mastered the hidden laws of nature'
+    ])
+  })
+
+  it('leaves a short gloss alone', () => {
+    expect(quotesNotInPacket('Latin, “he who has attained”, and “great soul”.', packet)).toEqual([])
   })
 })

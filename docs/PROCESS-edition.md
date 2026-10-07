@@ -32,17 +32,17 @@ the half of the process where things get remembered wrong.
 
 Each is meant to be falsifiable by running something. Attack them.
 
-| #   | Invariant                                                                | How to attack it                                                                                                      |
-| --- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------- |
-| E1  | The readable files agree with `book.json`.                               | `node scripts/book-files.mjs <book-dir> --check` — non-zero exit means they do not.                                   |
-| E2  | The PDF on the shelf was exported from the `book.json` beside it.        | Check `git log -1 -- book.json` and `git log -1 -- *.pdf` name the same commit.                                       |
-| E3  | Nothing the engine could not place is lost in silence.                   | Confirm `notesDropped`, `imagesDropped` and `missingImages` are all empty in the `proof` report, and `warnings` is 0. |
-| E4  | Every note is anchored to words that exist in the block it hangs on.     | `node scripts/voice.mjs check <proposals.json> <body.json>` — any `ANCHOR NOT FOUND` is a note pointing at nothing.   |
-| E5  | Every fact a note asserts that the book does not state has been checked. | Same command: the `check:` list is the list. An unexamined entry there is an unverified claim in print.               |
-| E6  | The prose does not lean, and does not tell the reader what to read.      | `node scripts/voice.mjs audit <book.json>` exits non-zero when it wants a person.                                     |
-| E7  | A glossary entry for a word the book uses has a mark on that word.       | **Currently unmet — see Gaps.**                                                                                       |
-| E8  | The text of the finished PDF is extractable.                             | Pull page text with pdf.js and read it. A scanned-looking page here means the fonts or the widths are wrong.          |
-| E9  | The local checkout is not behind the remote.                             | `git rev-list --count HEAD..origin/main` in **both** repos. See Stage 10.                                             |
+| #   | Invariant                                                                | How to attack it                                                                                                             |
+| --- | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| E1  | The readable files agree with `book.json`.                               | `node scripts/book-files.mjs <book-dir> --check` — non-zero exit means they do not.                                          |
+| E2  | The PDF on the shelf was exported from the `book.json` beside it.        | Check `git log -1 -- book.json` and `git log -1 -- *.pdf` name the same commit.                                              |
+| E3  | Nothing the engine could not place is lost in silence.                   | Confirm `notesDropped`, `imagesDropped` and `missingImages` are all empty in the `proof` report, and `warnings` is 0.        |
+| E4  | Every note is anchored to words that exist in the block it hangs on.     | `node scripts/voice.mjs check <proposals.json> <body.json>` — any `ANCHOR NOT FOUND` is a note pointing at nothing.          |
+| E5  | Every fact a note asserts that the book does not state has been checked. | Same command: the `check:` list is the list. An unexamined entry there is an unverified claim in print.                      |
+| E6  | The prose does not lean, and does not tell the reader what to read.      | `node scripts/voice.mjs audit <book.json>` exits non-zero when it wants a person.                                            |
+| E7  | A glossary entry for a word the book uses has a mark on that word.       | `node scripts/drive.mjs finish <book-dir>` names each as `glossary mark missing`; `scripts/glossary-circles.ts` places them. |
+| E8  | The text of the finished PDF is extractable.                             | Pull page text with pdf.js and read it. A scanned-looking page here means the fonts or the widths are wrong.                 |
+| E9  | The local checkout is not behind the remote.                             | `git rev-list --count HEAD..origin/main` in **both** repos. See Stage 10.                                                    |
 
 ---
 
@@ -151,7 +151,9 @@ before it, exactly as a plate does.
 
 The part that makes a reprint worth publishing, and the part that skips.
 
-- **The glossary**, written against the book's own vocabulary.
+- **The glossary**, written against the book's own vocabulary, on Blavatsky's
+  own definitions where she gives one. The method, the cut list, the briefs
+  and the tools are [`PROCESS-glossary.md`](./PROCESS-glossary.md).
 - **The marks.** Every entry whose word the book actually uses takes a small
   circle at that word's first occurrence in the running text. An entry for a
   word the book never uses is legitimate and takes no mark; say which and why
@@ -162,9 +164,9 @@ The part that makes a reprint worth publishing, and the part that skips.
 
 **A step done for one book is not done for the next.** One volume here carried
 85 marks and 23 notes; the next carried a 74-entry glossary, no marks at all
-and no notes, and every report was perfectly happy about it. Until E7 is
-checked by something, ask it out loud: _has this book got the apparatus the
-last one got?_
+and no notes, and every report was perfectly happy about it. E7 is checked
+now, by `finish`; the notes are not, so ask it out loud: _has this book got
+the apparatus the last one got?_
 
 ## Stage 14 — The checks that are not opinions
 

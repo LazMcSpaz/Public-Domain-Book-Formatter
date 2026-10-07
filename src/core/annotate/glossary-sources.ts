@@ -349,3 +349,37 @@ export function glossaryPacket(
   )
   return { head, terms, ...(current ? { current } : {}), definitions, elsewhere, authorUses }
 }
+
+/** A quotation shorter than this is a gloss ("he who has attained"), not a citation. */
+const QUOTE_WORDS = 5
+
+/**
+ * The quotations in an entry that its packet does not carry.
+ *
+ * The brief says quote Blavatsky or the author exactly or not at all, and a
+ * writer working from memory produces a quotation that reads right and is
+ * not in either book. Every passage of five words or more inside quotation
+ * marks is looked for in the packet (the entry as it stood, her definitions,
+ * the passages, the author's uses), letters only, so a curly quote or a
+ * spacing difference is not a miss. What comes back is a list to read: a
+ * quotation from a book the packet did not reach is possible, and that is
+ * exactly the one to check by hand.
+ */
+export function quotesNotInPacket(text: string, packet: GlossaryPacket): string[] {
+  const letters = (s: string) =>
+    folded(plainOf(s))
+      .text.replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim()
+  const haystack = letters(
+    [
+      packet.current ?? '',
+      ...Object.values(packet.definitions).flat(),
+      ...Object.values(packet.elsewhere).flat(),
+      ...packet.authorUses.map((u) => u.text)
+    ].join(' \u0000 ')
+  )
+  const quotes = [...plainOf(text).matchAll(/[“"]([^”"]+)[”"]/gu)].map((m) => m[1]!.trim())
+  return quotes.filter(
+    (q) => q.split(/\s+/).length >= QUOTE_WORDS && !haystack.includes(letters(q))
+  )
+}

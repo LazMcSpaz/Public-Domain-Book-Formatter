@@ -1102,6 +1102,22 @@ or carries less than half its prose, and the refused save pulls the shelf's
 voice down to the device, which is the half that was missing. An edit, a
 reworded line, one refusal fewer, still goes through.
 
+**The glossary's tools lived in a scratchpad, and the circle rules had three
+faults nobody had run into.** The Hall glossary was cut, rewritten on
+Blavatsky's own definitions and circled with three scripts that existed only
+in one session's scratchpad, so the next glossary would have started from
+nothing. They are core and scripts now (docs/PROCESS-glossary.md), and the
+first run of the circle placer on another book found what the old one never
+met: a headword `Balfour, Arthur James (1848-1930)` was read as two
+alternatives and its surname matched "Balfour Stewart", another man;
+`Butler, W. E.` matched "Pharaoh's butler"; and a circle after a closing quote
+(`"hex"°`) was not seen, so a second went inside it. A person is now matched
+as a name (`isPersonHeadword`), and the galley's one-click circle uses the
+same rule. What was **not** built is as worth knowing: a word list for oblique
+lines would only have memorised the 24 Hall found, and a pronoun-before-name
+rule flagged three approved paragraphs of the introduction, so that pass stays
+a reader's, with a brief (docs/briefs/glossary-oblique.md).
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what
@@ -1449,6 +1465,18 @@ node scripts/drive.mjs edits p13b5                  # every edit that names a bl
                                      #   `edits p13b5 drop retype` withdraws one,
                                      #   which is how a block lifted into the notes
                                      #   is reached again
+npx vite-node --config vitest.config.ts scripts/glossary-packets.ts <book.json> --shelf <shelf> --out <dir>
+                                     #   per glossary entry: Blavatsky's own Glossary
+                                     #   entry, her other books, the author's uses.
+                                     #   The evidence a glossary is written from;
+                                     #   docs/PROCESS-glossary.md is the method
+npx vite-node --config vitest.config.ts scripts/glossary-merge.ts <book.json> --out <txt> --packets <dir> out-*.json
+                                     #   rewritten entries folded back in order, cuts
+                                     #   by --drop, and every quotation no packet
+                                     #   carries named; lands with `section glossary`
+npx vite-node --config vitest.config.ts scripts/glossary-circles.ts <book.json> <batch.json>
+                                     #   a circle for every entry nothing points at,
+                                     #   as a `correct --batch`; read each line first
 node scripts/contact-sheets.mjs <renders> <out>  # the whole book, small, many to
                                      #   a sheet: the only thing that answers
                                      #   "is there a picture we have missed?"
