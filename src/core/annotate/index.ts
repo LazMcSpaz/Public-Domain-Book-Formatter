@@ -79,9 +79,25 @@ export {
   GLOSSARY_MARK,
   checkGlossaryMarks,
   headwordTerms,
+  isPersonHeadword,
   type MarkableBlock,
   type MarkReport,
   type MarkVerdict,
   glossaryHeadwords,
-  withGlossaryMark
+  placeMissingMarks,
+  withGlossaryMark,
+  type MarkPlacement,
+  type PlacedMark
 } from './marks'
+export {
+  definitionsOf,
+  entryHeads,
+  glossaryPacket,
+  passagesOf,
+  plainOf,
+  type GlossaryPacket,
+  type PacketOptions,
+  type Passage,
+  type SourceBlock,
+  type SourceBook
+} from './glossary-sources'

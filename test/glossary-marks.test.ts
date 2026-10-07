@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   checkGlossaryMarks,
+  placeMissingMarks,
   glossaryHeadwords,
   headwordTerms,
   withGlossaryMark,
@@ -165,5 +166,89 @@ describe('withGlossaryMark — placing the circle where the editor pointed', () 
   it('returns null when the term has no unmarked use here', () => {
     expect(withGlossaryMark('nothing of the kind', 'aura')).toBeNull()
     expect(withGlossaryMark('the aura° alone', 'aura')).toBeNull()
+  })
+})
+
+describe('placeMissingMarks — a circle for every entry nothing points at', () => {
+  const blocks: MarkableBlock[] = [
+    { id: 'h0', kind: 'heading', text: 'Devachan and Kama Loka' },
+    para('p1', 'After death the soul passes through Kama Loka to <i>Devachan</i>.'),
+    para('p2', 'The Adept° knows this; Devachan is a state.'),
+    para('p3', 'calcination°, putrefaction, inhibition, fermentation')
+  ]
+
+  it('marks each unmarked entry once, on its first use in prose, crowded or not', () => {
+    const got = placeMissingMarks(
+      ['Adept.', 'Devachan.', 'Kama Loka.', 'Putrefaction.', 'Inhibition.', 'Lemuria.'],
+      blocks
+    )
+    expect(got.placed.map((p) => [p.entry, p.blockId])).toEqual([
+      ['Devachan.', 'p1'],
+      ['Kama Loka.', 'p1'],
+      ['Putrefaction.', 'p3'],
+      ['Inhibition.', 'p3']
+    ])
+    // Two circles in one block land on the one text, inside the italic run.
+    expect(got.blocks).toEqual([
+      {
+        id: 'p1',
+        text: 'After death the soul passes through Kama Loka° to <i>Devachan°</i>.'
+      },
+      { id: 'p3', text: 'calcination°, putrefaction°, inhibition°, fermentation' }
+    ])
+    expect(got.absent.map((v) => v.entry)).toEqual(['Lemuria.'])
+  })
+
+  it('reads a circle typed after a closing tag as already there', () => {
+    const got = placeMissingMarks(['Devachan.'], [para('p1', 'The <i>Devachan</i>° state.')])
+    expect(got.placed).toEqual([])
+    expect(got.unplaced).toEqual([])
+    expect(got.blocks).toEqual([])
+  })
+})
+
+describe('a person, and a circle after a quote', () => {
+  it('reads Surname, Given (dates) as one person, looked for by surname', () => {
+    expect(headwordTerms('Balfour, Arthur James (1848-1930).')).toEqual(['Balfour'])
+    expect(headwordTerms('Gnome, sylph, undine, salamander.')).toEqual([
+      'Gnome',
+      'sylph',
+      'undine',
+      'salamander'
+    ])
+  })
+
+  it('does not take a surname for a common noun or for another man’s first name', () => {
+    const got = placeMissingMarks(
+      ['Butler, W. E. (1898-1978).', 'Balfour, Arthur James (1848-1930).'],
+      [
+        para('p1', 'Then like Pharaoh’s butler, the owner remembered his sins.'),
+        para('p2', 'Prof. Balfour Stewart, a Fellow of the Royal Society.'),
+        para('p3', 'Rt. Hon. Arthur J. Balfour, and W. E. Butler.')
+      ]
+    )
+    expect(got.blocks).toEqual([
+      { id: 'p3', text: 'Rt. Hon. Arthur J. Balfour°, and W. E. Butler°.' }
+    ])
+  })
+
+  it('places the circle on the name where a common noun comes first in the block', () => {
+    const got = placeMissingMarks(
+      ['Butler, W. E. (1898-1978).'],
+      [para('p4', 'The butler showed in W. E. Butler.')]
+    )
+    expect(got.blocks).toEqual([{ id: 'p4', text: 'The butler showed in W. E. Butler°.' }])
+  })
+
+  it('counts a circle after a closing quote as the word’s circle', () => {
+    const report = checkGlossaryMarks(
+      ['Hex.'],
+      [para('p1', 'threats of employing his "hex"° (witchcraft) powers')]
+    )
+    expect(report.marked.map((v) => v.entry)).toEqual(['Hex.'])
+  })
+
+  it('places a new circle on the word, not after its closing quote', () => {
+    expect(withGlossaryMark('his "hex" powers', 'hex')).toBe('his "hex°" powers')
   })
 })

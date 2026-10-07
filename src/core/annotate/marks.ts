@@ -51,13 +51,27 @@ export interface MarkReport {
 export const GLOSSARY_MARK = '°'
 
 /**
+ * A headword that names a person, `Surname, Given Names (dates)`: the comma
+ * there inverts a name, it does not list alternatives. Read as alternatives,
+ * `Balfour, Arthur James (1848-1930)` looked for "Arthur James" on its own.
+ */
+const PERSON = /^\s*([^,()]+?),\s*[^()]+?\s*\([^)]*\d[^)]*\)\s*\.?\s*$/
+
+export function isPersonHeadword(headword: string): boolean {
+  return PERSON.test(headword)
+}
+
+/**
  * The alternatives a headword offers.
  *
  * `Nimbus, halo` and `Gnome, sylph, undine, salamander` are one entry covering
  * several words, and the book may use any of them. A leading article is
- * dropped because `Aura, the human aura` is an entry about *aura*.
+ * dropped because `Aura, the human aura` is an entry about *aura*. A person
+ * is looked for by surname (`isPersonHeadword`).
  */
 export function headwordTerms(headword: string): string[] {
+  const person = PERSON.exec(headword)
+  if (person) return [person[1]!.trim()]
   return headword
     .trim()
     .replace(/\.$/, '')
@@ -73,9 +87,15 @@ export function headwordTerms(headword: string): string[] {
  * Hyphen and space are interchangeable, because a compositor's `sub-plane` and
  * a writer's `sub plane` are the same word; a trailing plural is allowed; and
  * `colour` matches `color`, since the glossary is written in this editor's
- * spelling and the book in its own.
+ * spelling and the book in its own. A circle may stand after a closing quote
+ * (`"hex"°`), and is the word's circle all the same: missed, it was given a
+ * second one inside the quote on _Clairvoyance_.
+ *
+ * A person's surname is matched as a name: capitalised, so Butler is not
+ * Pharaoh's butler, and not followed by another capitalised word, so Balfour
+ * is not the first name of Balfour Stewart.
  */
-function pattern(term: string): RegExp {
+function pattern(term: string, person = false): RegExp {
   const parts = term.split(/[\s-]+/).map((token) => {
     const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
     return (
@@ -84,10 +104,12 @@ function pattern(term: string): RegExp {
         // The glossary is typed with a straight apostrophe and the book is set
         // with a curly one. `Dante's Inferno` is on the page and was reported
         // as a word the book never uses.
-        .replace(/['\u2019]/g, "['\u2019]") + '(?:s|es)?'
+        .replace(/['\u2019]/g, "['\u2019]") + (person ? '' : '(?:s|es)?')
     )
   })
-  return new RegExp(`\\b${parts.join('[\\s-]+')}\\b${GLOSSARY_MARK}?`, 'giu')
+  const notAName = person ? '(?![\\s-]+\\p{Lu})' : ''
+  const mark = `(?:[\u201D\u2019"']?${GLOSSARY_MARK})?`
+  return new RegExp(`\\b${parts.join('[\\s-]+')}\\b${notAName}${mark}`, person ? 'gu' : 'giu')
 }
 
 /**
@@ -117,8 +139,9 @@ export function checkGlossaryMarks(
     // first: the books introduce a term in a run-in heading set in capitals,
     // and a circle belongs on the words rather than on the heading. Reporting
     // the first occurrence unmarked would flag every one of those.
+    const person = isPersonHeadword(entry)
     for (const term of headwordTerms(entry)) {
-      const re = pattern(term)
+      const re = pattern(term, person)
       for (const block of prose) {
         for (const hit of block.text.matchAll(re)) {
           const marked = hit[0].endsWith(GLOSSARY_MARK)
@@ -165,9 +188,9 @@ export function glossaryHeadwords(sectionText: string): string[] {
  * which occurrence deserves the mark stays the editor's call; this only
  * carries it out where they pointed.
  */
-export function withGlossaryMark(markupText: string, term: string): string | null {
+export function withGlossaryMark(markupText: string, term: string, person = false): string | null {
   const { plain, toMarkup } = mapPlainText(markupText)
-  const re = pattern(term)
+  const re = pattern(term, person)
   for (const hit of plain.matchAll(re)) {
     if (hit[0].endsWith(GLOSSARY_MARK)) continue
     const end = (hit.index ?? 0) + hit[0].length
@@ -175,4 +198,69 @@ export function withGlossaryMark(markupText: string, term: string): string | nul
     return markupText.slice(0, spliceAt) + GLOSSARY_MARK + markupText.slice(spliceAt)
   }
   return null
+}
+
+export interface PlacedMark {
+  entry: string
+  term: string
+  blockId: string
+}
+
+export interface MarkPlacement {
+  placed: PlacedMark[]
+  /** Unmarked entries whose use could not take a circle. Reported, never dropped. */
+  unplaced: MarkVerdict[]
+  /** Entries for words the book never uses: candidates for the cut list. */
+  absent: MarkVerdict[]
+  /** Each block a circle went into, as its whole new marked text. */
+  blocks: { id: string; text: string }[]
+}
+
+/**
+ * A circle for every entry the book uses and nothing points at, on its first
+ * use in prose (`checkGlossaryMarks` says which use, `withGlossaryMark` puts
+ * it there). The circle-placing script of the Hall glossary lived in one
+ * session's scratchpad and went with it; this is its job as a pure function.
+ *
+ * No spacing rule. That script refused a circle within half a line of
+ * another, which left six entries with no circle anywhere, and the editor
+ * ruled (Hall, 2026-10-06) that a crowded circle is better than an entry
+ * nothing points at.
+ *
+ * The check reads the plain text, because a circle typed after a closing tag
+ * (`<i>Devachan</i>°`) is still on the word; the placement reads through the
+ * notation, so the circle lands inside whatever run the word is in. Several
+ * circles in one block accumulate on the one text.
+ */
+export function placeMissingMarks(
+  headwords: readonly string[],
+  blocks: readonly MarkableBlock[]
+): MarkPlacement {
+  const plain = blocks.map((b) => ({ ...b, text: b.text.replace(/<\/?[a-z]+>/gi, '') }))
+  const report = checkGlossaryMarks(headwords, plain)
+  const texts = new Map(blocks.map((b) => [b.id, b.text]))
+  const changed = new Set<string>()
+  const placed: PlacedMark[] = []
+  const unplaced: MarkVerdict[] = []
+  for (const verdict of report.unmarked) {
+    const id = verdict.blockId
+    const before = id === null ? undefined : texts.get(id)
+    const after =
+      before === undefined
+        ? null
+        : withGlossaryMark(before, verdict.term, isPersonHeadword(verdict.entry))
+    if (id === null || after === null) {
+      unplaced.push(verdict)
+      continue
+    }
+    texts.set(id, after)
+    changed.add(id)
+    placed.push({ entry: verdict.entry, term: verdict.term, blockId: id })
+  }
+  return {
+    placed,
+    unplaced,
+    absent: report.absent,
+    blocks: [...changed].map((id) => ({ id, text: texts.get(id)! }))
+  }
 }
