@@ -10,10 +10,12 @@ Two kinds of job use it, and the stages are the same for both:
 
 - **A new glossary.** Start from a list of terms, one per line.
 - **A pass over an existing glossary.** Start from the glossary in
-  `book.json`. As of this writing four shelf books have one that predates the
-  method: _Clairvoyance and Occult Powers_ (126 entries), _The Astral World_
-  (62), _The Human Aura and The Astral World_ (73) and _Thought Vibration_
-  (41).
+  `book.json`. As of this writing three released books have one that
+  predates the method: _Clairvoyance and Occult Powers_ (126 entries), _The
+  Human Aura and The Astral World_ (73) and _Thought Vibration_ (41). _The
+  Human Aura_ and _The Astral World_ are released only as that combined
+  volume (the editor, 7 October 2026), so their separate directories on the
+  shelf are not books to work on, glossaries included.
 
 Where the rules come from: the voice card (`voice/etsu-t-dhent.json` on the
 shelf, sections PLAIN READING and GLOSSARIES) and `.claude/agents/etsu.md`,
