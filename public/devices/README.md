@@ -127,6 +127,15 @@ eye sits in the middle of it rather than in a half-disc at the foot. Written by
 `scripts/radiance.mjs` from `all-seeing-eye.svg`, which is the file to re-run if
 the trace is ever redone.
 
+Shipped at `--width 3.6 --at 0.4217`. `--at` is the pupil's height as a
+fraction of the cover sheet, and it is how the emblem is aimed vertically: a
+wrap figure is scaled to the sheet's height, so the composer has no slack to
+shift it in and the artwork has to carry the position itself. 0.4217 sets the
+pupil 1.435 in below the title rule of a three-line title on a 7x10, which is
+the gap the one-line title had at 0.32. Re-run it if the title's line count
+changes, taking the rule's y off `composeCover`'s own items rather than off a
+render.
+
 Three things about it are measurements and not choices, and each replaced a
 wrong answer. **The point it radiates from** is the pupil, found by minimising
 the share of gradient energy lying along the radius — every stroke of a sunburst

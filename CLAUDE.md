@@ -797,6 +797,30 @@ marks in a line of Garamond. Applied to the blurb unconditionally and without a
 switch, because a cover is new matter entirely — nothing on it is being
 reproduced from a page, so there is no faithfulness argument to weigh.
 
+**A newline in a title is a hard break, and it is the one place here a hand
+break is right.** The body forbids them because it reflows to whatever measure
+the design gate settles on, so a break typed against one measure rots against
+the next. A display title does not reflow: it is three or four words set as a
+shape, and `THE / MANUSCRIPT / LECTURES` is not what a breaker would choose and
+is what the board wants. `stackedLines` wraps each segment, so a stacked line
+too long for the measure still breaks rather than running off the cover, and
+`fitText` goes through it too or the size is chosen against a line count the
+page will not have. Safe for a banked look by construction, the break living in
+`content.title`, which is the half that never travels. What it did break is the
+**spine**: that line is `title · author` along a fold, and the newline went
+to the writer as a character to draw. `flattened` is the one rule for anywhere
+a break cannot be set.
+
+**And the ground figure had to move with it.** The eye is positioned by the
+artwork rather than by the composer — a wrap figure is scaled to the sheet's
+height, so there is no vertical slack to shift it in, and `radiance.mjs --at`
+is the pupil's height as a fraction of the sheet. Two lines of title put the
+rule 1.042 in further down, so the artwork was regenerated at `--at 0.4217`
+against 0.32, which holds the rule-to-pupil gap at 1.435 in exactly. Both
+numbers came off `composeCover`'s own items rather than off a render: the title
+rule is a `rule` item and not a thin `fill`, which is what the first
+measurement looked for and did not find.
+
 **A blurb is read standing up, and the size that suits a page does not suit a
 board.** The back-cover copy set at the body size of a book held at reading
 distance, which is the wrong distance: a back cover is read at arm's length off

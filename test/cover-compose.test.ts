@@ -25,6 +25,7 @@ import {
   itemBounds,
   overlaps,
   wrapText,
+  stackedLines,
   BLURB_PT,
   type CoverDocument,
   type CoverTextItem
@@ -796,6 +797,67 @@ describe("the blurb is the editor's own prose, and is set as such", () => {
       hasBold: () => true
     })
     expect(bolder.find((t) => t.text.trim() === 'never')!.font.style).toBe('bold')
+  })
+})
+
+describe('a title can be stacked where the editor stacks it', () => {
+  const font = { family: 'x', style: 'regular' as const }
+
+  it('breaks where the newlines are, and sets no newline', () => {
+    const lines = stackedLines('The\nManuscript\nLectures', 400, font, 10, measurer)
+    expect(lines).toEqual(['The', 'Manuscript', 'Lectures'])
+    for (const l of lines) expect(l).not.toMatch(/\n/)
+  })
+
+  it('still breaks a stacked line too long for the measure', () => {
+    // Fixed-width: 10pt glyphs are 5pt each, so 50pt holds ten characters.
+    expect(stackedLines('aaaa bbbb\ncc', 50, font, 10, measurer)).toEqual(['aaaa bbbb', 'cc'])
+  })
+
+  it('leaves an unstacked title to the breaker', () => {
+    expect(stackedLines('aaaa bbbb cccc', 50, font, 10, measurer)).toEqual(
+      wrapText('aaaa bbbb cccc', 50, font, 10, measurer)
+    )
+  })
+
+  it('fits the size against the stacked lines, not the words', () => {
+    // Three short words that would set on one line at a large size. Stacked,
+    // they are three lines and the size has to come down to fit the height.
+    const box = { widthPt: 400, heightPt: 90 }
+    const flat = fitText('The Manuscript Lectures', box, 3, font, measurer)
+    const stacked = fitText('The\nManuscript\nLectures', box, 3, font, measurer)
+    expect(stacked.lines).toHaveLength(3)
+    expect(flat.lines.length).toBeLessThan(3)
+    expect(stacked.sizePt).toBeLessThan(flat.sizePt)
+  })
+
+  it('sets the title as three lines on the board', () => {
+    const doc = bookCover((d) => {
+      d.look.arrangement = 'label'
+      d.content.title = 'The\nManuscript\nLectures'
+      d.content.subtitle = ''
+    })
+    const { items } = composeCover(doc, { measurer })
+    const title = texts(items).filter((t) => t.sizePt >= 20)
+    expect(title.map((t) => t.text)).toEqual(['THE', 'MANUSCRIPT', 'LECTURES'])
+  })
+
+  it('flattens it on the spine, where there is no second line to go to', () => {
+    const doc = bookCover((d) => {
+      d.look.arrangement = 'label'
+      d.look.spineText = true
+      d.content.title = 'The\nManuscript\nLectures'
+      d.content.author = 'Manly P. Hall'
+    })
+    const { items, geometry } = composeCover(doc, { measurer })
+    const spine = texts(items).filter(
+      (t) =>
+        t.xPt / 72 >= geometry.spine.x - 0.1 &&
+        t.xPt / 72 <= geometry.spine.x + geometry.spine.width + 0.1
+    )
+    expect(spine.length).toBeGreaterThan(0)
+    for (const t of spine) expect(t.text).not.toMatch(/\n/)
+    expect(spine.map((t) => t.text).join('')).toContain('The Manuscript Lectures')
   })
 })
 

@@ -431,6 +431,42 @@ export function wrapMarkup(
  * every time this cover is composed — a title that resized by a point between
  * the preview and the export would make the gate meaningless.
  */
+/**
+ * A title's lines, honouring a stack the editor typed.
+ *
+ * A newline in a title is a **hard break**, and it is the one place in this
+ * codebase where a hand break is right. The book's body forbids them because
+ * it reflows to whatever measure the design gate settles on, so a break typed
+ * against one measure rots against the next. A display title does not reflow:
+ * it is three or four words set as a shape, and where those words divide is a
+ * design decision no rule about measures will reproduce. `THE / MANUSCRIPT /
+ * LECTURES` is not what a breaker would choose and is what the cover wants.
+ *
+ * Safe for a banked look by construction: the break lives in `content.title`,
+ * and `CoverContent` is the half that never travels, so volume two cannot
+ * inherit volume one's stacking.
+ *
+ * Each segment is still wrapped, so a stacked line too long for the measure
+ * breaks rather than running off the board.
+ */
+/** A stacked title as one line, for anywhere a break cannot be set. */
+export function flattened(text: string): string {
+  return text.replace(/\s*\n\s*/gu, ' ').trim()
+}
+
+export function stackedLines(
+  text: string,
+  maxWidthPt: number,
+  font: FontRef,
+  sizePt: number,
+  measurer: TextMeasurer
+): string[] {
+  if (!text.includes('\n')) return wrapText(text, maxWidthPt, font, sizePt, measurer)
+  return text
+    .split('\n')
+    .flatMap((segment) => wrapText(segment, maxWidthPt, font, sizePt, measurer))
+}
+
 export function fitText(
   text: string,
   box: { widthPt: number; heightPt: number },
@@ -441,7 +477,7 @@ export function fitText(
   minPt = TITLE_MIN_PT
 ): { sizePt: number; lines: string[] } {
   for (let size = maxPt; size >= minPt; size -= 0.5) {
-    const lines = wrapText(text, box.widthPt, font, size, measurer)
+    const lines = stackedLines(text, box.widthPt, font, size, measurer)
     if (lines.length === 0) return { sizePt: size, lines: [] }
     if (lines.length > maxLines) continue
     const tallest = Math.max(...lines.map((l) => measurer.widthOf(l, font, size)))
@@ -451,7 +487,7 @@ export function fitText(
   }
   // Nothing fit. Set it at the floor and let the validator say so — silently
   // dropping words off a title is the one outcome worse than a tight cover.
-  return { sizePt: minPt, lines: wrapText(text, box.widthPt, font, minPt, measurer) }
+  return { sizePt: minPt, lines: stackedLines(text, box.widthPt, font, minPt, measurer) }
 }
 
 /**
@@ -487,7 +523,7 @@ export function fitTitlesTogether(
   }
   return {
     sizePt,
-    lines: titles.map((t) => wrapText(t, box.widthPt, font, sizePt, measurer))
+    lines: titles.map((t) => stackedLines(t, box.widthPt, font, sizePt, measurer))
   }
 }
 
@@ -1249,7 +1285,7 @@ function layFrontCover(
       look.titleSizePt !== null
         ? {
             sizePt: look.titleSizePt,
-            lines: wrapText(titleText, typeBox.widthPt, titleFont, look.titleSizePt, measurer)
+            lines: stackedLines(titleText, typeBox.widthPt, titleFont, look.titleSizePt, measurer)
           }
         : fitText(
             titleText,
@@ -1524,7 +1560,10 @@ function laySpine(
   const font = face(look.titleFont, 'regular', measurer.hasSmallCaps(look.titleFont))
   // The spine's *width* is the type's height, so the size is bounded by it.
   const maxByThickness = pt(safe.width) * 0.62
-  const line = [content.title, content.author].filter((s) => s.trim()).join(' · ')
+  // The spine is one line of type along a fold, so a title the editor stacked
+  // for the board is flattened here. Left in, the newline reaches the writer as
+  // a character to draw, which is a spine that prints wrong and says nothing.
+  const line = [flattened(content.title), content.author].filter((s) => s.trim()).join(' · ')
   if (!line.trim()) return
 
   // The run of fold the text may occupy: down to the mark, if there is one,
