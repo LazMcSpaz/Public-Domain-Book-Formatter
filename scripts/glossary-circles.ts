@@ -87,7 +87,9 @@ for (const p of result.placed) {
 }
 for (const v of result.unplaced) console.log(`  UNPLACED ${v.entry}  (${v.term} in ${v.blockId})`)
 for (const v of result.absent) {
-  console.log(`  absent   ${v.entry}  (not in the body: named only in front matter, or one to cut)`)
+  console.log(
+    `  absent   ${v.entry}  (its words are not in the body: no circle; keep for browsing, or cut)`
+  )
 }
 console.log(
   `${result.placed.length} placed, ${strays.removed.length} stray removed, in ${final.size} block(s), ` +

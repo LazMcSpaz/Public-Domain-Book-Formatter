@@ -46,8 +46,12 @@ first, because it lists the entries for words the body never uses:
 npx vite-node --config vitest.config.ts scripts/glossary-circles.ts <book.json> /tmp/batch.json
 ```
 
-Its `absent` lines are either words named only in the front matter (an
-introduction's Besant or Leadbeater) or entries to cut.
+Its `absent` lines are entries whose own words the body never prints. They
+are not automatically cuts: the editor keeps such an entry for readers who
+browse the glossary (Auric egg and Colour healing on _The Human Aura and The
+Astral World_), and it simply carries no circle. What it must never get is a
+circle on some **other** word ("egg-shaped" for Auric egg), because a reader
+who follows that circle to the back does not find the word they left.
 
 Then sort the rest into the categories the editor ruled on for Hall, and put
 the list to him with counts. **Never cut silently**: the list is his decision,
@@ -182,7 +186,12 @@ Every entry the book uses gets one circle, on its first use in prose
 (`placeMissingMarks`). **Crowded is allowed**: the editor ruled that a circle
 beside another is better than an entry nothing points at. A circle is never
 put on a heading, because it would travel into the running head and the
-contents.
+contents, and never on a word that is not the headword's own (see Stage G1).
+
+**A cut leaves circles behind.** The same run takes out every circle in prose
+no entry claims (`withoutStrayMarks`) and lists each as `REMOVED`; on _The
+Human Aura and The Astral World_ it found `red-light°` still standing after
+Red-light district had been cut. Run it after every cut.
 
 **Read every `placed` line before the batch lands.** A word with two senses
 takes the circle on whichever comes first: on _Clairvoyance_ the spiritualist

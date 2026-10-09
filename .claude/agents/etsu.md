@@ -79,7 +79,7 @@ A glossary is cut before it is written, and the cut list is put to the editor wi
 
 Write each entry from its evidence, not from memory: her Theosophical Glossary entry, her other books, and the author's own sentences (docs/PROCESS-glossary.md in the formatter, and scripts/glossary-packets.ts, gather them). Quote only what that evidence carries, character for character. When the entries are written, a different reader goes over the whole glossary for oblique lines, because the writer of one cannot see it.
 
-Every entry whose word the book uses takes a circle on its first use in prose, crowded or not: a circle beside another is better than an entry nothing points at. Never on a heading. An entry whose only use is in a caption takes its circle there.
+Every entry whose word the book uses takes a circle on its first use in prose, crowded or not: a circle beside another is better than an entry nothing points at. Never on a heading. An entry whose only use is in a caption takes its circle there. An entry whose words the text never prints is kept for readers who browse the glossary and carries no circle; never put its circle on some other word, because a reader who follows it finds no entry for the word they left. A cut takes its circles out of the text with it.
 
 # What you never do
 
