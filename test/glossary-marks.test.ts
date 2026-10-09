@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   checkGlossaryMarks,
   placeMissingMarks,
+  withoutStrayMarks,
   glossaryHeadwords,
   headwordTerms,
   withGlossaryMark,
@@ -286,5 +287,35 @@ describe('a saying as a headword', () => {
       [para('p1', 'at a seance° in the dark')]
     )
     expect(report.marked).toHaveLength(1)
+  })
+})
+
+describe('withoutStrayMarks — circles left behind by a cut', () => {
+  it('takes out a circle no entry claims and keeps the rest', () => {
+    const got = withoutStrayMarks(
+      ['Astral plane.', 'Hex.'],
+      [
+        para('p1', 'the magnetic ore, or lodestone°, on the Astral Plane°.'),
+        para('p2', 'his "hex"° powers, at 33° of the Rite'),
+        { id: 'h1', kind: 'heading', text: 'LODESTONE°' }
+      ]
+    )
+    expect(got.blocks).toEqual([
+      { id: 'p1', text: 'the magnetic ore, or lodestone, on the Astral Plane°.' }
+    ])
+    expect(got.removed.map((r) => r.blockId)).toEqual(['p1'])
+  })
+
+  it('keeps a circle on the opening words of a longer headword', () => {
+    const got = withoutStrayMarks(
+      ['Magic-lantern slide.'],
+      [para('p1', 'about the size of a magic-lantern° picture')]
+    )
+    expect(got.blocks).toEqual([])
+  })
+
+  it('removes the circle from inside a run without touching the tags', () => {
+    const got = withoutStrayMarks(['Aura.'], [para('p1', 'a <i>Sanscrit°</i> word and the aura°')])
+    expect(got.blocks).toEqual([{ id: 'p1', text: 'a <i>Sanscrit</i> word and the aura°' }])
   })
 })

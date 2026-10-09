@@ -12,7 +12,9 @@
  * Prints what it placed and where, so a person can read each circle in its
  * sentence before the batch lands; the entries it could not place; and the
  * entries for words the book never uses, which belong on the cut list rather
- * than in a glossary. Run it after every change to the entry list: a step
+ * than in a glossary. It also takes out circles no entry claims
+ * (`withoutStrayMarks`), which is what a cut leaves behind, and lists each
+ * one; both go in the one batch. Run it after every change to the entry list: a step
  * done for one glossary is not done for the next (CLAUDE.md, _The apparatus,
  * book by book_), and an entry nothing points at is one no reader opens.
  */
@@ -20,7 +22,7 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import { assembleBook } from '@core/assemble'
 import { applyEdits } from '@core/edits'
 import { partsIn, withMarkup, type InlinePart } from '@core/transcribe/markup'
-import { glossaryHeadwords, placeMissingMarks } from '@core/annotate'
+import { glossaryHeadwords, placeMissingMarks, withoutStrayMarks } from '@core/annotate'
 
 const [bookPath, out] = process.argv.slice(-2)
 if (!bookPath?.endsWith('.json') || !out?.endsWith('.json') || bookPath === out) {
@@ -40,13 +42,28 @@ const faces = (b: Faced): string =>
   withMarkup(b.text, b.emphasis, b.strong, undefined, partsIn(b.parts, ['italic', 'strong']))
 const blocks = doc.blocks.map((b) => ({ id: b.id, kind: b.kind, text: faces(b) }))
 
-const result = placeMissingMarks(glossaryHeadwords(section.text), blocks)
-writeFileSync(out, JSON.stringify(result.blocks, null, 1) + '\n')
+// Strays first, so a circle is placed on text already cleared of the ones a
+// cut left; the batch carries each block's final text once.
+const heads = glossaryHeadwords(section.text)
+const strays = withoutStrayMarks(heads, blocks)
+const cleaned = new Map(strays.blocks.map((b) => [b.id, b.text]))
+const base = blocks.map((b) => ({ ...b, text: cleaned.get(b.id) ?? b.text }))
+const result = placeMissingMarks(heads, base)
+const final = new Map([...cleaned, ...result.blocks.map((b) => [b.id, b.text] as const)])
+writeFileSync(
+  out,
+  JSON.stringify(
+    [...final].map(([id, text]) => ({ id, text })),
+    null,
+    1
+  ) + '\n'
+)
+for (const r of strays.removed) console.log(`  REMOVED  stray circle in ${r.blockId}  …${r.after}°`)
 
 // Each circle shown in its sentence: the circles a block gained are found by
 // walking it against what it was, and each is paired with the entry whose
 // word stands in front of it.
-const before = new Map(blocks.map((b) => [b.id, b.text]))
+const before = new Map(base.map((b) => [b.id, b.text]))
 const strip = (t: string) => t.replace(/<\/?[a-z]+>/gi, '')
 const escape = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 for (const p of result.placed) {
@@ -73,10 +90,10 @@ for (const v of result.absent) {
   console.log(`  absent   ${v.entry}  (not in the body: named only in front matter, or one to cut)`)
 }
 console.log(
-  `${result.placed.length} placed in ${result.blocks.length} block(s), ` +
+  `${result.placed.length} placed, ${strays.removed.length} stray removed, in ${final.size} block(s), ` +
     `${result.unplaced.length} unplaced, ${result.absent.length} absent → ${out}`
 )
-if (result.blocks.length > 0) {
+if (final.size > 0) {
   console.log(
     'Read every placed line before landing: a word with two senses takes the circle on ' +
       'whichever comes first ("a fair medium° sample" for the spiritualist Medium). ' +

@@ -86,6 +86,8 @@ export {
   glossaryHeadwords,
   placeMissingMarks,
   withGlossaryMark,
+  withoutStrayMarks,
+  type StrayMark,
   type MarkPlacement,
   type PlacedMark
 } from './marks'

@@ -271,3 +271,61 @@ export function placeMissingMarks(
     blocks: [...changed].map((id) => ({ id, text: texts.get(id)! }))
   }
 }
+
+export interface StrayMark {
+  blockId: string
+  /** The words the circle stands after, for reading. */
+  after: string
+}
+
+/**
+ * Circles in the text that no entry claims, taken out.
+ *
+ * Cutting an entry leaves its circles behind: on the Hall collection and on
+ * _The Human Aura and The Astral World_ a cut list removed entries whose
+ * words still carried a circle, which sends a reader to the back for a word
+ * that is not there. Every circle in prose is kept only if the words before
+ * it match an entry (the same `pattern` the check uses), or if it follows a
+ * digit, where it is a degree (`33°`). The rest are returned with the text
+ * they leave, for a person to read before the batch lands.
+ */
+export function withoutStrayMarks(
+  headwords: readonly string[],
+  blocks: readonly MarkableBlock[]
+): { blocks: { id: string; text: string }[]; removed: StrayMark[] } {
+  // A circle on the opening words of a longer headword is the entry's too:
+  // `magic-lantern°` is where Clairvoyance points at "Magic-lantern slide".
+  const patterns = headwords.flatMap((entry) =>
+    headwordTerms(entry).flatMap((term) => {
+      const words = term.split(/[\s-]+/)
+      const openings = words.slice(1).map((_, k) => words.slice(0, k + 1).join(' '))
+      return [term, ...openings].map((t) => pattern(t, isPersonHeadword(entry)))
+    })
+  )
+  const out: { id: string; text: string }[] = []
+  const removed: StrayMark[] = []
+  for (const block of blocks) {
+    if (block.kind === 'heading' || !block.text.includes(GLOSSARY_MARK)) continue
+    const { plain, toMarkup } = mapPlainText(block.text)
+    const claimed = new Set<number>()
+    for (const re of patterns) {
+      for (const hit of plain.matchAll(re)) {
+        if (hit[0].endsWith(GLOSSARY_MARK)) claimed.add((hit.index ?? 0) + hit[0].length - 1)
+      }
+    }
+    const stray: number[] = []
+    for (let i = plain.indexOf(GLOSSARY_MARK); i !== -1; i = plain.indexOf(GLOSSARY_MARK, i + 1)) {
+      if (claimed.has(i) || /\d/.test(plain[i - 1] ?? '')) continue
+      stray.push(i)
+      removed.push({ blockId: block.id, after: plain.slice(Math.max(0, i - 40), i) })
+    }
+    if (stray.length === 0) continue
+    let text = block.text
+    for (const i of stray.reverse()) {
+      const at = toMarkup[i]!
+      text = text.slice(0, at) + text.slice(at + 1)
+    }
+    out.push({ id: block.id, text })
+  }
+  return { blocks: out, removed }
+}
