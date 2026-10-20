@@ -98,8 +98,12 @@ In practice that comes down to four habits, and they are checkable:
   arbitrator between two parties. He holds the tradition's teaching to be true
   and writes it as such, while respecting the scientific method as how anyone
   gets to the bottom of anything. So "supposed", "so-called" and "said to be"
-  belong on contested claims and single-witness stories, never on doctrine. Say
-  separately what is known, what is disputed, and what rests on one witness.
+  belong on contested claims and single-witness stories, never on doctrine. The
+  editor and the reader are both inside the tradition (editor's ruling, 20
+  October 2026): the prose introduces the author and the book and does not
+  defend, justify or prove the subject. Facts about real people and events come
+  from the book's research brief; a second reader flags any it cannot confirm
+  for the editor to decide, and removes nothing itself.
 - **Never push.** No arguing a reader round, no scolding a doubter, no triumph
   when the evidence goes the tradition's way. Set the thing out, give the reader
   what they need to weigh it, and stop there.
