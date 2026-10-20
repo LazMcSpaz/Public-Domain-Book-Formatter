@@ -59,7 +59,7 @@ Write for a reader, not for a reviewer. Show what the reader needs and keep the 
 
 Say the point. Never leave the reader to infer it from a knowing close, an understatement, an irony or an aphorism whose literal meaning is not its meaning. "A man who announces himself as one has told you what he is" makes the reader work it out; "a man who announces himself as an adept has shown, by announcing it, that he is not one" says it. Plain is not flat: keep the life, lose the riddle.
 
-Name a person in full the first time a piece mentions them, with a few words on who they are, and never refer to anyone by a pronoun before the reader has met them by name.
+Name a person in full once, the first time the book's own apparatus mentions them (introduction, notes and glossary read as one, in reading order), with a few words on who they are. After that, use the surname, a short form, or simply the title of the book being quoted (*The Secret Doctrine* says...). Repeating a full name in note after note reads as stiff. Never refer to anyone by a pronoun before the reader has met them by name.
 
 Do not tell the reader what they "should know", and do not stage the honesty ("I would rather you saw the seam", "you will feel it"). State the thing and move on.
 
@@ -85,7 +85,7 @@ Biographical facts resting on one source are carried lightly ("by one account");
 
 GLOSSARIES
 
-Each entry says what the word means, then what it means in this author. Most entries 40 to 120 words; a major doctrinal term up to about 150. For Theosophical and occult terms, Blavatsky is the tradition's voice: build the entry on her own definition (The Theosophical Glossary first, then The Key to Theosophy, The Secret Doctrine and Isis Unveiled, all on the shelf), state it plainly as the teaching, and where the author departs from her say so in one sentence, as a difference and not an error. Quote her or the author exactly or not at all. Where scholars and Blavatsky disagree on a date, say the date is disputed rather than choosing. The preamble names her in full, with a few words on who she is ("Helena Petrovna Blavatsky, a founder of the Theosophical Society, whose books lie behind much of what Hall teaches"), then says "Blavatsky" and "Blavatsky's", never "her" or "hers"; it says what the circle means and how many entries there are.
+Each entry says what the word means, then what it means in this author. Most entries 40 to 120 words; a major doctrinal term up to about 150. For Theosophical and occult terms, Blavatsky is the tradition's voice: build the entry on her own definition (The Theosophical Glossary first, then The Key to Theosophy, The Secret Doctrine and Isis Unveiled, all on the shelf), state it plainly as the teaching, and where the author departs from her say so in one sentence, as a difference and not an error. Quote her or the author exactly or not at all. Where scholars and Blavatsky disagree on a date, say the date is disputed rather than choosing. The preamble names her in full, with a few words on who she is ("Helena Petrovna Blavatsky, a founder of the Theosophical Society, whose books lie behind much of what Hall teaches"), then says "Blavatsky", "Blavatsky's" or the book title, never "her" or "hers"; it says what the circle means and how many entries there are.
 
 A glossary is cut before it is written, and the cut list is put to the editor with counts, never applied silently. Cut: everyday words and period slang that reads clearly in its sentence; famous stories, figures and mainstream religious terms the author uses only as passing comparisons; the steps of a list the author himself does not explain. Keep: old medicine and science a modern reader may not follow; any word the author gives a sense of his own, and then say that sense and only that.
 
@@ -132,7 +132,7 @@ An introduction ends on one short, warm paragraph that leaves the reader encoura
 - Insist that something is real when nobody would doubt it. Save it for what a reader would actually question.
 - Argue the editorial decision in a footnote. A note is read by somebody who has just opened the book.
 - A knowing close, understatement or irony that leaves the reader to infer the point. Say it plainly.
-- Refer to a person by a pronoun, or by surname alone, before the reader has met them by full name.
+- Refer to a person by a pronoun, or by surname alone, before the reader has met them by full name once in the book; and, once they have, repeating the full name in every note.
 - Lines that tell the reader what they should know, or that perform candour ("I would rather you saw the seam", "you will feel it").
 - Academic apparatus in front matter: source comparisons, spelling debates, scholars' dates, inventories of numbers, arithmetic on dates.
 - A glossary entry for a word a general reader already knows, unless the author gives it a sense of his own.
