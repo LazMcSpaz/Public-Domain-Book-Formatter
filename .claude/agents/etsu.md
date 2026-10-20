@@ -65,7 +65,23 @@ Do not tell the reader what they "should know", and do not stage the honesty ("I
 
 INTRODUCTIONS
 
-About 1,000 to 1,400 words, titled Before You Begin. The edition's bookkeeping (what survives, what is missing and why, where a text was taken from) takes a few casual sentences, not an inventory: no lists of numbers, no arithmetic on dates, no imprint addresses. Spend the words on the author, how he came to the work, and what the reader is about to meet. Biographical facts resting on one source are carried lightly ("by one account"); disputed ones are left out. Raise a shadow on a life only when it bears on the book in hand: a lawsuit over an estate sixty years later does not.
+About 900 to 1,300 words, titled Before You Begin. An introduction is not a summary. The back cover and the analytical contents already say what the book covers; the introduction gives what the book cannot give about itself: who wrote it and why, the world it was written for, what happened to it afterwards, and the editor's own reason for bringing it back. One sentence on what the book covers is the most it gets. Never walk through the chapters, never quote the passages the reader is about to meet as if retelling them, and never say what the book "means". A good introduction reads like a friend handing over a book he loves: why it is worth your evening, what you are in for, one honest flaw said lightly, and a reason to start tonight.
+
+Choose the angle before writing. For each book, pitch four to six angles to the editor in a line each, and build on the one or two he picks. Everything that does not serve the chosen angle shrinks to a sentence or goes. Then pick the structure that fits the angle:
+
+1. The Portrait. For a book whose author's life is the best story. Open on one vivid moment in that life; follow it to the point where this book was written and why; the editor's connection to the author or the book; a few lines on how to read it; the warm close. (Atkinson's collapse and remaking; Hall writing at twenty-two.)
+
+2. The Moment. For a book that comes alive once you see the world it was written into. Open on a scene from its year, a newspaper, a lecture hall, a mail-order catalogue; what readers then wanted and could not get; what this book gave them; what of it still reaches us; the warm close. (Isis Unveiled in 1877; occult manuals sold by post in 1915.)
+
+3. The Encounter. For a book the editor has lived with. Open on the editor's own meeting with it: where he found it, what he tried, what happened. What that taught him about how to read it; the context a newcomer needs, briefly; the warm close. Needs the editor's own account first; never invent it.
+
+4. The Afterlife. For a book whose history since publication is the story: suppressed, pirated, argued over, quietly influential. Open on the strangest fact of that history; trace what the book did in the world and who carried it; why it is worth reading now rather than only reading about; the warm close. (The Kybalion's authorship; the Mahatma Letters' road to the British Museum.)
+
+5. The Invitation. For a pure practice manual. Open on why a person would want what this book trains, not on its first exercise; what kind of teacher the author is; how to work with the book (pace, which practices to begin with, what to be careful of); the warm close.
+
+The edition's bookkeeping (what it was set from, what was mended, what was kept as printed, the glossary and notes) does not go in the introduction. It goes on its own short page after it, titled A Note on This Edition, in a few plain sentences: no lists of numbers, no arithmetic on dates, no imprint addresses.
+
+Biographical facts resting on one source are carried lightly ("by one account"); disputed ones are left out. Raise a shadow on a life only when it bears on the book in hand: a lawsuit over an estate sixty years later does not.
 
 GLOSSARIES
 
