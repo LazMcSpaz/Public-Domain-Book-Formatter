@@ -1219,13 +1219,20 @@ function layFrontCover(
    */
   const setEdition = (from: number): number => {
     if (!content.edition.trim()) return from
+    const editionFont = face(look.bodyFont, 'regular', measurer.hasSmallCaps(look.bodyFont))
     const size = Math.max(9, Math.min(16, typeBox.widthPt * 0.035))
+    // A newline stacks it, the way one in a title does. A statement naming a
+    // series and the volumes in it is two thoughts, and set on one line under
+    // a rule it reads as a caption; stacked, it reads as a label. The break is
+    // the editor's where they type it, and `stackedLines` still wraps each
+    // segment, so a stacked line too long for the measure breaks rather than
+    // running off the board.
     const next = centeredLines(
       items,
-      [content.edition.toUpperCase()],
+      stackedLines(content.edition.toUpperCase(), typeBox.widthPt, editionFont, size, measurer),
       geometry.front,
       from,
-      face(look.bodyFont, 'regular', measurer.hasSmallCaps(look.bodyFont)),
+      editionFont,
       size,
       overArt ? palette.overArt : palette.accent,
       measurer
@@ -1283,15 +1290,31 @@ function layFrontCover(
     const ruleWidth = safe.width * 0.62
     y += labelSize * 0.5
 
-    const fitted = fitTitlesTogether(
-      works.map((w) =>
-        smallCaps ? w : applyCase(w, look.titleCase === 'small-caps' ? 'upper' : look.titleCase)
-      ),
-      { widthPt: typeBox.widthPt, heightPt: typeBox.heightPt * 0.56 },
-      2,
-      titleFont,
-      measurer
+    const cased = works.map((w) =>
+      smallCaps ? w : applyCase(w, look.titleCase === 'small-caps' ? 'upper' : look.titleCase)
     )
+    // An omnibus honours a pinned size exactly as a single title does. It did
+    // not, and said nothing: `titleSizePt` is documented as setting the title's
+    // size, so a collection that pinned one got a fitted size on the volume
+    // that happened to hold two works and no report that the field had been
+    // ignored. Pinning is also the only way to give display type more air
+    // inside a frame without moving `FRAME_CLEARANCE_IN`, which is shared and
+    // would re-size every cover already approved.
+    const fitted =
+      look.titleSizePt !== null
+        ? {
+            sizePt: look.titleSizePt,
+            lines: cased.map((w) =>
+              stackedLines(w, typeBox.widthPt, titleFont, look.titleSizePt!, measurer)
+            )
+          }
+        : fitTitlesTogether(
+            cased,
+            { widthPt: typeBox.widthPt, heightPt: typeBox.heightPt * 0.56 },
+            2,
+            titleFont,
+            measurer
+          )
 
     const conjunctionFont = face(look.bodyFont, 'italic')
     const conjunctionSize = Math.max(10, fitted.sizePt * 0.4)

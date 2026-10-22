@@ -108,10 +108,10 @@ export const PATTERN_OPACITY: Readonly<Record<GroundPattern, number>> = {
   // hairline floor above; setting it smaller to fit more of the book in is the
   // way to break rule 2.
   lexicon: 0.1,
-  // A line map is mostly ground. Measured over a 6×9 wrap by summing the
-  // stroked length against the sheet's area, its ink covers 4.6% of it where
-  // the laid paper's lines cover 15.2%, so at this tint it still prints
-  // lighter overall than `laid` does at 0.07.
+  // A line map is almost all ground. Measured over a 6×9 wrap by summing the
+  // stroked length against the sheet's area, its ink covers 1.6% of it where
+  // the laid paper's lines cover 15.2% — a tenth as much — so it carries the
+  // highest tint here and still prints far lighter than `laid` at 0.07.
   contour: 0.14
 }
 
@@ -249,26 +249,43 @@ function gcd(a: number, b: number): number {
 /**
  * A landscape that is not anywhere, as a height at a point.
  *
- * Three sine ridges crossed with three cosines, at wavelengths chosen to be
- * mutually incommensurate so the field never repeats inside a sheet. That is
- * the whole trick: a periodic field would tile, and a tiling contour map reads
- * as wallpaper the moment a reader notices the seam.
+ * **One hill, and its summit is off the board.** An earlier field summed four
+ * sinusoids of comparable weight, which is a plain of small bumps: every one
+ * of them closes its own ring, and a sheet of little rings reads as a pattern
+ * of concentric circles rather than as a map. So the dominant term is a single
+ * broad dome whose centre sits outside the sheet, and what crosses the board
+ * is the *flank* of it — long arcs that sweep from edge to edge.
+ *
+ * The waves on top are what make them contours rather than arcs, and they are
+ * deliberately slow: at a wavelength of a few inches a line gathers two or
+ * three bends crossing the board. Faster waves put a bend every half inch,
+ * which is where the small closed rings come back.
  *
  * Lengths are in inches so the look is the same on a 6×9 and an 8.25×11 — a
  * field defined in points would draw a coarser map on a bigger board.
  *
  * Exported for the one test that can tell a contour map from a plausible
  * tangle of lines: every segment of one path has to stand at the same height,
- * which is what being an isoline *means* and what a mis-assigned cell edge or
- * a mishandled saddle breaks.
+ * which is what being an isoline *means*.
  */
 export function contourLandscape(xIn: number, yIn: number): number {
-  return (
-    Math.sin(xIn * 1.9 + 0.7) * Math.cos(yIn * 1.3) +
-    0.7 * Math.sin(xIn * 0.8 - 1.1) * Math.cos(yIn * 2.1 + 0.4) +
-    0.5 * Math.sin((xIn + yIn) * 1.17) +
-    0.35 * Math.cos((xIn - yIn * 1.4) * 2.3)
-  )
+  // The summit, in inches from the sheet's top-left corner. Off the left edge
+  // and a little above the middle, so no ring closes inside the board and the
+  // arcs open towards the right of the sheet.
+  const peakX = -3.2
+  const peakY = 3.1
+  const dx = xIn - peakX
+  const dy = yIn - peakY
+  const dome = -(dx * dx + dy * dy) * 0.021
+
+  // Slow swells, at wavelengths of roughly four and eight inches, so a line
+  // bends two or three times across a board rather than a dozen.
+  const swell =
+    1.15 * Math.sin(xIn * 0.47 + 0.6) +
+    0.85 * Math.sin(yIn * 0.39 - 0.9) +
+    0.45 * Math.sin(xIn * 0.26 + yIn * 0.31 + 1.9)
+
+  return dome + swell
 }
 
 /** Where a contour crosses the segment between two sampled corners. */
@@ -310,9 +327,11 @@ function contourMap(widthPt: number, heightPt: number): OrnamentShape[] {
   }
 
   const levels: number[] = []
-  // The field runs to about ±2.5; these are spaced closely enough to read as
-  // a map and widely enough that the paper shows between the lines.
-  for (let v = -2.25; v <= 2.25; v += 0.28) levels.push(v)
+  // The dome drags the field a long way negative towards the far corner, so
+  // the levels run much wider than a field of pure swells would need. The
+  // step is what sets how close the lines lie: a fifth of the swell's own
+  // amplitude puts a few lines on each bend without closing the gaps.
+  for (let v = -14; v <= 2.5; v += 0.3) levels.push(v)
 
   const shapes: OrnamentShape[] = []
   const at = (c: number, r: number): number => field[r * cols + c]!

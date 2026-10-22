@@ -754,6 +754,74 @@ describe('the book’s own text as a ground', () => {
   })
 })
 
+describe('a pinned title size reaches both arrangements', () => {
+  it('pins a single title, as it always did', () => {
+    const doc = bookCover((d) => {
+      d.look.arrangement = 'label'
+      d.look.titleSizePt = 27
+    })
+    const { items } = composeCover(doc, { measurer })
+    expect(Math.max(...texts(items).map((t) => t.sizePt))).toBe(27)
+  })
+
+  it('pins an omnibus too, which it silently did not', () => {
+    // `titleSizePt` is documented as setting the title's size. On a volume
+    // holding two works it was read by nothing and no warning said so, so a
+    // banked look that pinned a size got a fitted one on exactly the book
+    // whose title is hardest to fit.
+    const doc = bookCover((d) => {
+      d.look.arrangement = 'label'
+      d.look.titleSizePt = 27
+      d.content.works = ['The Human Aura', 'The Astral World']
+    })
+    const { items } = composeCover(doc, { measurer })
+    const set = texts(items).filter((t) => t.text.includes('ASTRAL') || t.text.includes('AURA'))
+    expect(set.length).toBeGreaterThan(0)
+    for (const line of set) expect(line.sizePt).toBe(27)
+  })
+
+  it('still fits an omnibus when nothing is pinned', () => {
+    const doc = bookCover((d) => {
+      d.look.arrangement = 'label'
+      d.content.works = ['The Human Aura', 'The Astral World']
+    })
+    const { items } = composeCover(doc, { measurer })
+    const big = Math.max(...texts(items).map((t) => t.sizePt))
+    expect(big).toBeGreaterThan(0)
+    expect(Number.isFinite(big)).toBe(true)
+  })
+})
+
+describe('an edition statement stacks where the editor breaks it', () => {
+  function stacked(edition: string) {
+    const doc = bookCover((d) => {
+      d.look.arrangement = 'label'
+      d.content.edition = edition
+    })
+    return texts(composeCover(doc, { measurer }).items)
+  }
+
+  it('sets a newline as two lines, not as a space', () => {
+    const two = stacked('Occult Manuals\nVolumes I and II')
+    expect(two.some((t) => t.text === 'OCCULT MANUALS')).toBe(true)
+    expect(two.some((t) => t.text === 'VOLUMES I AND II')).toBe(true)
+    expect(two.some((t) => t.text.includes('MANUALS VOLUMES'))).toBe(false)
+  })
+
+  it('stacks downward, and the second line takes its own slot', () => {
+    const two = stacked('Occult Manuals\nVolumes I and II')
+    const first = two.find((t) => t.text === 'OCCULT MANUALS')!
+    const second = two.find((t) => t.text === 'VOLUMES I AND II')!
+    expect(second.yPt).toBeGreaterThan(first.yPt)
+    expect(second.yPt - first.yPt).toBeGreaterThanOrEqual(first.sizePt)
+  })
+
+  it('leaves a single line alone', () => {
+    const one = stacked('Illustrated')
+    expect(one.filter((t) => t.text === 'ILLUSTRATED').length).toBe(1)
+  })
+})
+
 describe('the contour ground', () => {
   const shapes = () => groundPattern('contour', 12.644 * 72, 9.25 * 72, null)[0]!.art.shapes
 
