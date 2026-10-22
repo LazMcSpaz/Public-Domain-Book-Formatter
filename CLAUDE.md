@@ -115,6 +115,16 @@ In practice that comes down to four habits, and they are checkable:
   something. An entry so flat that nobody who read it would want to try anything
   has failed, and it has not been made more truthful by being made duller.
 
+**Sources for anything historical (editor's ruling, 22 October 2026).** A fact
+about a real person or event rests on more than one site, and Wikipedia is a
+place to find leads, never the sole support: the editor finds its bias real
+and not always visible. The Theosophical sources are always consulted beside
+the others (theosophy.wiki, blavatskyarchives.com, theosophical.org,
+ts-adyar.org, theosociety.org/pasadena, the ULT sites, theosophy.world), and
+where their account differs from another the brief gives both, graded
+Contested, each with its best source. This applies to research briefs,
+glossary evidence and every fact-check.
+
 ### The bias pass, which runs after the writing
 
 Getting it right while writing is not enough, and must not be the only place it
