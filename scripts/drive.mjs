@@ -857,17 +857,27 @@ async function serve() {
       const missing = []
       for (const image of Array.isArray(book.images) ? book.images : []) {
         if (!image?.path || !image?.id) continue
-        let bytes = null
+        // Named by URL, not base64'd into the call: the scan's own rule, for
+        // the same reason. Thirty plates on the Theosophical Glossary are
+        // 84 MB of PNG, 112 MB of base64, and the tab died on `load` with
+        // `Target page, context or browser has been closed` every time.
+        let found = null
         for (const root of roots) {
           try {
-            bytes = await readFile(resolve(root, image.path))
+            const full = resolve(root, image.path)
+            await stat(full)
+            found = full
             break
           } catch {
             /* try the next root */
           }
         }
-        if (bytes) pictures.push({ id: image.id, base64: bytes.toString('base64') })
-        else missing.push(image.path)
+        if (found) {
+          pictures.push({
+            id: image.id,
+            url: `http://127.0.0.1:${PORT}/file?path=${encodeURIComponent(found)}`
+          })
+        } else missing.push(image.path)
       }
 
       // The scan itself, when the browser has not already got it. Everything
@@ -893,10 +903,12 @@ async function serve() {
           const book = project.parseBookFile(text)
           const key = project.fileKey(file)
           const held = await runStore.loadRun(key)
-          const fetched = pictures.map((p) => ({
-            id: p.id,
-            bytes: Uint8Array.from(atob(p.base64), (c) => c.charCodeAt(0))
-          }))
+          const fetched = []
+          for (const p of pictures) {
+            const res = await fetch(p.url)
+            if (!res.ok) throw new Error(`fetching picture ${p.id}: ${res.status}`)
+            fetched.push({ id: p.id, bytes: new Uint8Array(await res.arrayBuffer()) })
+          }
           const run = {
             ...book.run,
             key,
