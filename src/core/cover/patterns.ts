@@ -31,7 +31,8 @@
  */
 import type { OrnamentArt, OrnamentShape } from '@core/ornament'
 
-export type GroundPattern = 'laid' | 'fleuron' | 'aura' | 'guilloche' | 'marbled' | 'lexicon'
+export type GroundPattern =
+  'laid' | 'fleuron' | 'aura' | 'guilloche' | 'marbled' | 'lexicon' | 'contour'
 
 export const GROUND_PATTERNS: readonly GroundPattern[] = [
   'laid',
@@ -39,7 +40,8 @@ export const GROUND_PATTERNS: readonly GroundPattern[] = [
   'aura',
   'guilloche',
   'marbled',
-  'lexicon'
+  'lexicon',
+  'contour'
 ]
 
 /**
@@ -71,7 +73,8 @@ export const PATTERN_LABEL: Readonly<Record<GroundPattern, string>> = {
   aura: 'Auric ovoids — the diagram from The Human Aura, as a field',
   guilloche: 'Guilloche — the engine-turned rosette of a share certificate',
   marbled: 'Marbled paper — the swirled endpaper of a bound book',
-  lexicon: 'The book’s own text, set as a field and turned'
+  lexicon: 'The book’s own text, set as a field and turned',
+  contour: 'Contour lines — the nested rings of a map, over a landscape that is not anywhere'
 }
 
 export const PATTERN_NOTE: Readonly<Record<GroundPattern, string>> = {
@@ -84,7 +87,9 @@ export const PATTERN_NOTE: Readonly<Record<GroundPattern, string>> = {
   marbled:
     'The house pattern. Supplied as artwork rather than drawn here, so it prints as a picture at the resolution the sheet needs rather than as paths.',
   lexicon:
-    'The volume’s own words, run together into one field and set at an angle — headwords bold and language tags italic, as the book sets them. Generated per book by `scripts/textground.mjs`, which is why it is artwork rather than paths.'
+    'The volume’s own words, run together into one field and set at an angle — headwords bold and language tags italic, as the book sets them. Generated per book by `scripts/textground.mjs`, which is why it is artwork rather than paths.',
+  contour:
+    'Isolines through a made-up landscape: closed rings where it rises, long runs where it falls away. Drawn rather than supplied, so it prints as vector at any size, and allover by construction — there is no summit in the middle for a reader to find.'
 }
 
 /** How strongly a ground prints, as a fraction of the ink. */
@@ -102,7 +107,12 @@ export const PATTERN_OPACITY: Readonly<Record<GroundPattern, number>> = {
   // do. The type is 10pt, whose stems are about 0.8pt, well clear of the
   // hairline floor above; setting it smaller to fit more of the book in is the
   // way to break rule 2.
-  lexicon: 0.1
+  lexicon: 0.1,
+  // A line map is mostly ground. Measured over a 6×9 wrap by summing the
+  // stroked length against the sheet's area, its ink covers 4.6% of it where
+  // the laid paper's lines cover 15.2%, so at this tint it still prints
+  // lighter overall than `laid` does at 0.07.
+  contour: 0.14
 }
 
 /**
@@ -236,6 +246,153 @@ function gcd(a: number, b: number): number {
   return b === 0 ? a : gcd(b, a % b)
 }
 
+/**
+ * A landscape that is not anywhere, as a height at a point.
+ *
+ * Three sine ridges crossed with three cosines, at wavelengths chosen to be
+ * mutually incommensurate so the field never repeats inside a sheet. That is
+ * the whole trick: a periodic field would tile, and a tiling contour map reads
+ * as wallpaper the moment a reader notices the seam.
+ *
+ * Lengths are in inches so the look is the same on a 6×9 and an 8.25×11 — a
+ * field defined in points would draw a coarser map on a bigger board.
+ *
+ * Exported for the one test that can tell a contour map from a plausible
+ * tangle of lines: every segment of one path has to stand at the same height,
+ * which is what being an isoline *means* and what a mis-assigned cell edge or
+ * a mishandled saddle breaks.
+ */
+export function contourLandscape(xIn: number, yIn: number): number {
+  return (
+    Math.sin(xIn * 1.9 + 0.7) * Math.cos(yIn * 1.3) +
+    0.7 * Math.sin(xIn * 0.8 - 1.1) * Math.cos(yIn * 2.1 + 0.4) +
+    0.5 * Math.sin((xIn + yIn) * 1.17) +
+    0.35 * Math.cos((xIn - yIn * 1.4) * 2.3)
+  )
+}
+
+/** Where a contour crosses the segment between two sampled corners. */
+function crossing(a: number, b: number, level: number): number {
+  const span = b - a
+  // Parallel to the level: the caller only asks when the two straddle it, and
+  // a zero span there would be a division by nothing.
+  return Math.abs(span) < 1e-9 ? 0.5 : (level - a) / span
+}
+
+/**
+ * The isolines of that landscape, by marching squares.
+ *
+ * The grid is sampled a sixth of an inch apart, which is fine enough that a
+ * ring looks drawn rather than facetted and coarse enough that a sheet is tens
+ * of thousands of cells rather than millions. Each cell contributes at most
+ * two segments, and the segments are emitted as they are found rather than
+ * stitched into polylines: a cover prints them identically either way, and the
+ * stitching is a quantity of code that would have to be right about floating
+ * point to buy nothing but a smaller file.
+ *
+ * The saddle case — two high corners diagonally opposite — is resolved by the
+ * cell's own mean, which is the standard disambiguation and the only one that
+ * cannot produce a line that stops in mid air.
+ */
+function contourMap(widthPt: number, heightPt: number): OrnamentShape[] {
+  const stepIn = 1 / 6
+  const stepPt = stepIn * 72
+  const cols = Math.ceil(widthPt / stepPt) + 1
+  const rows = Math.ceil(heightPt / stepPt) + 1
+
+  // Sampled once and reused by every level: the field is the expensive part
+  // and it does not depend on which line is being drawn.
+  const field: number[] = new Array(cols * rows)
+  for (let r = 0; r < rows; r += 1) {
+    for (let c = 0; c < cols; c += 1) {
+      field[r * cols + c] = contourLandscape((c * stepPt) / 72, (r * stepPt) / 72)
+    }
+  }
+
+  const levels: number[] = []
+  // The field runs to about ±2.5; these are spaced closely enough to read as
+  // a map and widely enough that the paper shows between the lines.
+  for (let v = -2.25; v <= 2.25; v += 0.28) levels.push(v)
+
+  const shapes: OrnamentShape[] = []
+  const at = (c: number, r: number): number => field[r * cols + c]!
+
+  for (const level of levels) {
+    const parts: string[] = []
+    for (let r = 0; r < rows - 1; r += 1) {
+      for (let c = 0; c < cols - 1; c += 1) {
+        const tl = at(c, r)
+        const tr = at(c + 1, r)
+        const br = at(c + 1, r + 1)
+        const bl = at(c, r + 1)
+        let code = 0
+        if (tl > level) code |= 8
+        if (tr > level) code |= 4
+        if (br > level) code |= 2
+        if (bl > level) code |= 1
+        if (code === 0 || code === 15) continue
+
+        const x0 = c * stepPt
+        const y0 = r * stepPt
+        // The four edge crossings, named for the side they sit on.
+        const top = { x: x0 + crossing(tl, tr, level) * stepPt, y: y0 }
+        const right = { x: x0 + stepPt, y: y0 + crossing(tr, br, level) * stepPt }
+        const bottom = { x: x0 + crossing(bl, br, level) * stepPt, y: y0 + stepPt }
+        const left = { x: x0, y: y0 + crossing(tl, bl, level) * stepPt }
+
+        const draw = (a: { x: number; y: number }, b: { x: number; y: number }): void => {
+          parts.push(`M ${a.x.toFixed(1)} ${a.y.toFixed(1)} L ${b.x.toFixed(1)} ${b.y.toFixed(1)}`)
+        }
+
+        switch (code) {
+          case 1:
+          case 14:
+            draw(left, bottom)
+            break
+          case 2:
+          case 13:
+            draw(bottom, right)
+            break
+          case 3:
+          case 12:
+            draw(left, right)
+            break
+          case 4:
+          case 11:
+            draw(top, right)
+            break
+          case 6:
+          case 9:
+            draw(top, bottom)
+            break
+          case 7:
+          case 8:
+            draw(left, top)
+            break
+          case 5:
+          case 10: {
+            // The ambiguous pair. Joining the wrong two corners leaves a line
+            // that ends nowhere, so the cell's mean decides which way the
+            // ridge actually runs.
+            const centre = (tl + tr + br + bl) / 4
+            const high = centre > level
+            if ((code === 5) === high) {
+              draw(left, top)
+              draw(bottom, right)
+            } else {
+              draw(left, bottom)
+              draw(top, right)
+            }
+            break
+          }
+        }
+      }
+    }
+    if (parts.length > 0) shapes.push({ d: parts.join(' '), stroke: 0.6 })
+  }
+  return shapes
+}
+
 /** One piece of the ground, ready to be placed. */
 export interface PatternPlacement {
   art: OrnamentArt
@@ -293,7 +450,9 @@ export function groundPattern(
       ? laidPaper(widthPt, heightPt)
       : pattern === 'aura'
         ? auricField(widthPt, heightPt)
-        : guilloche(widthPt, heightPt)
+        : pattern === 'contour'
+          ? contourMap(widthPt, heightPt)
+          : guilloche(widthPt, heightPt)
 
   return [
     {
