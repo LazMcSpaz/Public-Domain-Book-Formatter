@@ -340,3 +340,47 @@ describe('the voice as the editor writes it', () => {
     ).not.toHaveLength(0)
   })
 })
+
+/**
+ * A full stop after an initial is not a sentence.
+ *
+ * Found on the back-cover copy for *The Lost Keys of Masonry*, where the one
+ * initial in "J. Augustus Knapp" split a seven-sentence blurb into eight. The
+ * count is not the damage; what follows it is. The phantom "Seven plates by
+ * J." is three words long, so it joins the two genuinely short sentences
+ * around it and the rhythm check reports a flat stretch in prose that has
+ * none — and the reading grade, computed from words over sentences, moved a
+ * whole grade on a name. This shelf names people by initial constantly, so
+ * the check fired on good prose as a matter of course, which is how a reader
+ * learns to skip it.
+ */
+describe('a stop that is not a sentence end', () => {
+  const PLATES = 'Seven plates by J. Augustus Knapp are reproduced. Set from the second edition.'
+
+  it('does not break a sentence at a person’s initial', () => {
+    // Two sentences, not three. The grade and the words-per-sentence are
+    // computed from this count, so getting it wrong moves both.
+    expect(auditProse(PLATES).sentences.total).toBe(2)
+  })
+
+  it('reports no flat stretch where the initial invented one', () => {
+    // Against the old splitter this is three short sentences running, which is
+    // exactly what the rhythm check is looking for, and all three are an
+    // artefact of the name.
+    expect(auditProse(PLATES).flatStretches).toHaveLength(0)
+  })
+
+  it('counts a run of initials as the one name it is', () => {
+    expect(
+      auditProse('H. P. Blavatsky set it down. W. E. Butler read it after her.').sentences.total
+    ).toBe(2)
+  })
+
+  it('leaves a courtesy title joined to the name after it', () => {
+    expect(auditProse('It was shown to Dr. Hartmann in Vienna.').sentences.total).toBe(1)
+  })
+
+  it('still breaks where a sentence really ends', () => {
+    expect(auditProse('The aura has colour. The colour can be read.').sentences.total).toBe(2)
+  })
+})

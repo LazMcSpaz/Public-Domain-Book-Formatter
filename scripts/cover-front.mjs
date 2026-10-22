@@ -18,6 +18,12 @@
  * bytes, uncropped — for the one question a front cannot answer: whether the
  * back and the fold are right.
  *
+ * `--pdf <out.pdf>` writes the cover file itself beside the picture, which is
+ * what a printer is handed. It needs `--sheet`, since a cover file is the whole
+ * flat sheet and never the cropped front panel. The two come out of one run on
+ * purpose: the PNG is a raster of that exact PDF, so nothing can drift between
+ * what was approved and what is uploaded.
+ *
  * The spec is a partial cover document — `trimSize`, `pageCount`, `paper`,
  * `binding` (`paperback` or `hardcover`), `device` (the emblem on the board)
  * and `mark` (the printer's own, at the foot of the spine),
@@ -39,9 +45,27 @@ const REPO = process.cwd()
 
 const args = process.argv.slice(2)
 const sheet = args.includes('--sheet')
-const [specPath, outPath] = args.filter((a) => a !== '--sheet')
+// The PDF is what a printer is given; the PNG is what a person looks at. The
+// bytes are the same composition either way — `renderCoverPreview` rasterises
+// the file it has just written — so writing both out of one run is the only
+// way they cannot come to disagree.
+const pdfAt = args.indexOf('--pdf')
+const pdfPath = pdfAt >= 0 ? args[pdfAt + 1] : null
+if (pdfAt >= 0 && !pdfPath) {
+  console.error('--pdf wants a path to write the cover file to')
+  process.exit(2)
+}
+const positional = args.filter((a, i) => a !== '--sheet' && a !== '--pdf' && i !== pdfAt + 1)
+const [specPath, outPath] = positional
 if (!specPath || !outPath) {
-  console.error('usage: node scripts/cover-front.mjs <spec.json> <out.png> [--sheet]')
+  console.error(
+    'usage: node scripts/cover-front.mjs <spec.json> <out.png> [--sheet] [--pdf <out.pdf>]'
+  )
+  process.exit(2)
+}
+// A cover file carries the whole flat sheet, never the cropped front panel.
+if (pdfPath && !sheet) {
+  console.error('--pdf is the whole flat cover, so it needs --sheet')
   process.exit(2)
 }
 
@@ -91,7 +115,7 @@ page.on('console', (m) => {
 await page.goto(`${URL_BASE}/#cover`, { waitUntil: 'networkidle' })
 
 const result = await page.evaluate(
-  async ({ spec, mark, frontMark, repo, sheet }) => {
+  async ({ spec, mark, frontMark, repo, sheet, wantPdf }) => {
     const core = await import(`/@fs${repo}/src/core/cover/index.ts`)
     const platform = await import(`/@fs${repo}/src/platform/browser/cover-preview.ts`)
 
@@ -131,8 +155,15 @@ const result = await page.evaluate(
         })
     let binary = ''
     for (const byte of front.bytes) binary += String.fromCharCode(byte)
+    let pdfBinary = ''
+    if (wantPdf && front.pdf) {
+      for (const byte of front.pdf.bytes) pdfBinary += String.fromCharCode(byte)
+    }
     return {
       png: btoa(binary),
+      pdf: wantPdf && front.pdf ? btoa(pdfBinary) : null,
+      pdfPt: front.pdf ? [front.pdf.widthPt, front.pdf.heightPt] : null,
+      missingImages: front.pdf?.missingImages ?? [],
       widthPx: front.widthPx,
       heightPx: front.heightPx,
       dpi: front.dpi,
@@ -143,10 +174,17 @@ const result = await page.evaluate(
         .map((c) => `${c.level}: ${c.label} — ${c.detail}`)
     }
   },
-  { spec, mark, frontMark, repo: REPO, sheet }
+  { spec, mark, frontMark, repo: REPO, sheet, wantPdf: pdfPath !== null }
 )
 
 await writeFile(resolve(outPath), Buffer.from(result.png, 'base64'))
+if (pdfPath) {
+  if (!result.pdf) {
+    console.error('the composer returned no PDF for this cover')
+    process.exit(1)
+  }
+  await writeFile(resolve(pdfPath), Buffer.from(result.pdf, 'base64'))
+}
 await browser.close()
 
 console.log(

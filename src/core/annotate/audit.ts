@@ -424,12 +424,53 @@ function flatRuns(paragraph: string): string[] {
 /** Does one man speak in this? The voice is first person singular throughout. */
 const FIRST_PERSON = /\b(I|I'm|I'd|I've|I'll|me|my|mine|myself)\b/u
 
+/**
+ * Abbreviations whose full stop is not the end of a sentence.
+ *
+ * Only the ones that are routinely followed by a capital, since that is what
+ * the split asks for next: `No. 1` and `p. 32` never split, their next
+ * character being a digit. `St.` is here for a saint rather than a street,
+ * which is the sense this shelf uses it in.
+ */
+const ABBREVIATIONS = ['Mr', 'Mrs', 'Ms', 'Dr', 'Prof', 'St', 'Rev', 'Hon', 'Sr', 'Jr']
+
+/**
+ * The text into sentences.
+ *
+ * The full stop after a person's initial is not a sentence end, and this shelf
+ * is full of them: H. P. Blavatsky, J. Augustus Knapp, W. E. Butler, Reynold
+ * E. Blight. Measured on the back-cover copy for *The Lost Keys of Masonry*,
+ * the one initial in "J. Augustus Knapp" made the splitter count eight
+ * sentences in seven, moved the reported reading grade a whole grade (8.0
+ * against 9.0), and invented a flat stretch out of the phantom short sentence
+ * it had just created — which is the failure this file's own standard names:
+ * a check that fires on good prose is a check its reader learns to skip.
+ *
+ * So a stop is not a sentence end when what stands in front of it is a lone
+ * capital or one of the abbreviations above. The safe error is the other way
+ * round: a sentence that genuinely ends on a single capital letter is run into
+ * the next one, which costs a count, where splitting costs a false finding.
+ */
 function sentencesOf(text: string): string[] {
-  return text
-    .replace(/[ \t]+/gu, ' ')
-    .split(/(?<=[.!?])\s+(?=[A-Z"“(])/u)
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0)
+  const abbr = ABBREVIATIONS.join('|')
+  const notAnEnd = new RegExp(`(?:^|[\\s("“])(?:\\p{Lu}|${abbr})\\.$`, 'u')
+  // The separator is captured, so `split` hands back [text, gap, text, gap, …]
+  // and each gap is a candidate boundary with the text before it in hand.
+  const pieces = text.replace(/[ \t]+/gu, ' ').split(/(?<=[.!?])(\s+)(?=[A-Z"“(])/u)
+  const out: string[] = []
+  let current = ''
+  for (let i = 0; i < pieces.length; i += 2) {
+    current += pieces[i] ?? ''
+    const gap = pieces[i + 1]
+    if (gap === undefined) break
+    if (notAnEnd.test(current)) {
+      current += gap
+      continue
+    }
+    out.push(current)
+    current = ''
+  }
+  return [...out, current].map((x) => x.trim()).filter((x) => x.length > 0)
 }
 
 /**
