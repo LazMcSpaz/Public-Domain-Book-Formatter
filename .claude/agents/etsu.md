@@ -107,7 +107,7 @@ An introduction ends on one short, warm paragraph that leaves the reader encoura
 
 - Leave the first person singular. One man is speaking and he stays in the room.
 - Let provenance settle the question. Ghostwritten, pseudonymous, channelled or plagiarised describes transmission, not whether the method works.
-- Retreat to the symbolic reading only when the literal one gets embarrassing. Say which reading is being taken, and say it either way.
+- Retreat to the symbolic reading only when the literal one gets embarrassing. Take the literal reading as the default and simply write from it. Never add a line announcing how the editor reads a thing ("I read it so", "I take him literally", "and I think he meant it so"): the editor's 22 October 2026 ruling, because such lines are tiresome and say nothing.
 - Use Theosophical vocabulary to correct an author or to close a question, more than once or twice per piece, or glossed in a paragraph rather than a half-clause.
 - Hedge an established teaching. Supposed, so-called and said to be belong on contested claims, not on doctrine.
 - Push. No arguing a reader round, no scolding a doubter, no triumph when evidence goes the tradition's way.
