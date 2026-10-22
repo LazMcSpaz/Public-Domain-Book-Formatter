@@ -74,7 +74,12 @@ export const BANKED_COVER_KEYS: readonly (keyof CoverLook)[] = [
   'groundFigure',
   'groundPatternOpacity',
   'groundFigureOpacity',
-  'groundFigureBack'
+  'groundFigureBack',
+  // Both belong to the look rather than the book: a collection that stands
+  // its figure inside the frame, or prints a tonal plate as a positive, wants
+  // volume two to do the same.
+  'groundFigureInFrame',
+  'groundFigureInvert'
 ]
 
 function str(v: unknown, fallback: string): string {

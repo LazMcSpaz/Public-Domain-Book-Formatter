@@ -37,6 +37,7 @@ import {
   FIGURE_ZOOM,
   coverScale,
   GROUND_FIGURES,
+  isRasterFigure,
   defaultCover,
   figureFrame,
   figureOpacity,
@@ -173,7 +174,14 @@ describe('the figure library', () => {
     // choice the interview offers and the renderer cannot draw — which is a
     // blank front cover rather than an error.
     for (const figure of GROUND_FIGURES) {
-      expect(FIGURE_SRC[figure], figure).toMatch(/^\/devices\/.+\.svg$/)
+      // A trace lives in `devices/` as vector. A raster figure is allowed,
+      // but only by being on `RASTER_FIGURES` — so admitting one stays a
+      // decision somebody wrote down rather than a file name nobody checked.
+      if (isRasterFigure(figure)) {
+        expect(FIGURE_SRC[figure], figure).toMatch(/^\/figures\/.+\.(jpg|png)$/)
+      } else {
+        expect(FIGURE_SRC[figure], figure).toMatch(/^\/devices\/.+\.svg$/)
+      }
       expect(FIGURE_LABEL[figure]?.length, figure).toBeGreaterThan(0)
       expect(FIGURE_NOTE[figure]?.length, figure).toBeGreaterThan(0)
       expect(FIGURE_ANCHOR_X[figure], figure).toBeGreaterThan(0)
@@ -258,6 +266,12 @@ describe('the figure library', () => {
     // and raises nothing.
     const box = { width: 6.125, height: 9.25 } // a 6×9 front panel, out to the bleed
     for (const figure of GROUND_FIGURES) {
+      // A photograph has no viewBox to measure, and its anchor is its own
+      // centre by the rule above, so there is nothing here to check.
+      if (isRasterFigure(figure)) {
+        expect(FIGURE_ANCHOR_X[figure], figure).toBe(0.5)
+        continue
+      }
       const file = readFileSync(join('public', FIGURE_SRC[figure]), 'utf8')
       const viewBox = /viewBox="([-\d.\s]+)"/.exec(file)
       expect(viewBox, figure).not.toBeNull()

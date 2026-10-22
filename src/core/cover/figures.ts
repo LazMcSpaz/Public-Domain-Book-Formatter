@@ -30,6 +30,7 @@ export type GroundFigure =
   | 'arcade-detailed'
   | 'all-seeing-eye'
   | 'all-seeing-eye-radiant'
+  | 'candidate-at-the-gates'
 
 export const GROUND_FIGURES: readonly GroundFigure[] = [
   'isis-winged',
@@ -37,7 +38,8 @@ export const GROUND_FIGURES: readonly GroundFigure[] = [
   'arcade',
   'arcade-detailed',
   'all-seeing-eye',
-  'all-seeing-eye-radiant'
+  'all-seeing-eye-radiant',
+  'candidate-at-the-gates'
 ]
 
 /** The id a ground figure is placed under, for the renderer to find. */
@@ -50,10 +52,33 @@ export const FIGURE_SRC: Readonly<Record<GroundFigure, string>> = {
   arcade: '/devices/arcade.svg',
   'arcade-detailed': '/devices/arcade-detailed.svg',
   'all-seeing-eye': '/devices/all-seeing-eye-ground.svg',
-  'all-seeing-eye-radiant': '/devices/all-seeing-eye-radiant.svg'
+  'all-seeing-eye-radiant': '/devices/all-seeing-eye-radiant.svg',
+  'candidate-at-the-gates': '/figures/candidate-at-the-gates.jpg'
+}
+
+/**
+ * The figures that are a photograph rather than a trace.
+ *
+ * Every other figure here is black line on white, vectorised, and prints
+ * sharp at any size. Knapp's plate is a halftone from a reprint: about
+ * 1080 × 1450 px, so placed down a 6×9 board it resolves near 180 DPI
+ * against KDP's 300, and it carries a printing screen that a trace does not.
+ *
+ * It is listed rather than inferred from the file name, so that admitting one
+ * is a decision somebody wrote down. Two things follow for anything on this
+ * list: it wants a lower tint than a trace does, because tone covers where
+ * line does not; and `FIGURE_ANCHOR_X` cannot be checked against a viewBox,
+ * so the anchor has to be the picture's own centre.
+ */
+export const RASTER_FIGURES: readonly GroundFigure[] = ['candidate-at-the-gates']
+
+/** Whether a figure's artwork is a photograph rather than vector line. */
+export function isRasterFigure(figure: GroundFigure): boolean {
+  return RASTER_FIGURES.includes(figure)
 }
 
 export const FIGURE_LABEL: Readonly<Record<GroundFigure, string>> = {
+  'candidate-at-the-gates': 'The Candidate at the Gates — Knapp, for this book',
   'isis-winged': 'Isis, winged — the massed silhouette',
   'isis-winged-plain': 'Isis, winged — the engraved trace',
   arcade: 'An arcade of horseshoe arches',
@@ -63,6 +88,8 @@ export const FIGURE_LABEL: Readonly<Record<GroundFigure, string>> = {
 }
 
 export const FIGURE_NOTE: Readonly<Record<GroundFigure, string>> = {
+  'candidate-at-the-gates':
+    'J. Augustus Knapp\u2019s plate for the 1924 edition: two pillars, a chequered pavement running back in perspective, and a radiant eye over the stair. A halftone rather than a trace, so it carries tone where every other figure here carries line \u2014 which is why it wants a lower tint than they do.',
   'isis-winged':
     'Solid shapes, which is what a ground at five per cent needs: a mass holds its tint where a mesh of fine lines breaks up into dots.',
   'isis-winged-plain':
@@ -115,6 +142,28 @@ export function figureFrame(geometry: CoverGeometry): Rect {
   }
 }
 
+/**
+ * Where a figure goes when it is held inside the frame rather than bled.
+ *
+ * The frame's own inner edge, less the clearance it keeps from type, so the
+ * picture stands in the same box a centred line of type would. A figure that
+ * met the rule exactly would read as having been pushed under it.
+ */
+export function framedFigureFrame(
+  geometry: CoverGeometry,
+  frameInsetIn: number,
+  clearanceIn: number
+): Rect {
+  const front = geometry.front
+  const inset = frameInsetIn + clearanceIn
+  return {
+    x: front.x + inset,
+    y: front.y + inset,
+    width: Math.max(0, front.width - inset * 2),
+    height: Math.max(0, front.height - inset * 2)
+  }
+}
+
 /** The same rectangle in points, which is what the composer places in. */
 export function figureFramePt(geometry: CoverGeometry): {
   xPt: number
@@ -158,6 +207,8 @@ export function figureFramePt(geometry: CoverGeometry): {
  * centre rather than sitting to one side of it.
  */
 export const FIGURE_ANCHOR_X: Readonly<Record<GroundFigure, number>> = {
+  // The doorway, which the plate already centres: Knapp drew it square on.
+  'candidate-at-the-gates': 0.5,
   // Exactly the centre, and not by luck: the artwork's box is padded until the
   // measured axis is its centre, so the number the library carries is the one
   // value that cannot drift from the file. See `public/devices/README.md`.
@@ -211,6 +262,8 @@ export const FIGURE_ANCHOR_X: Readonly<Record<GroundFigure, number>> = {
  * what would say so.
  */
 export const FIGURE_ZOOM: Readonly<Record<GroundFigure, number>> = {
+  // Nothing to move: the anchor is the picture's own centre.
+  'candidate-at-the-gates': 1,
   // Nothing to move: the anchor is the box's own centre.
   'all-seeing-eye': 1,
   'all-seeing-eye-radiant': 1,

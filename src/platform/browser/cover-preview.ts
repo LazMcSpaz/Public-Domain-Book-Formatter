@@ -173,8 +173,14 @@ async function buildCover(
       // fold edge to hold the tint back from — every edge is a trim edge.
       targetX: doc.look.groundFigureWrap ? wrapAnchorTarget(composed.geometry) : 0.5,
       zoom: FIGURE_ZOOM[doc.look.groundFigure],
-      // Every edge, not only the fold: see `figureFade`.
-      fade: figureFade(composed.geometry, doc.look.groundFigureWrap ? null : 'left')
+      invert: doc.look.groundFigureInvert,
+      // Every edge, not only the fold: see `figureFade`. A framed figure is
+      // the exception and takes none: its edges are inside the border with
+      // board showing all round, so there is no cut and no fold for a fade to
+      // rescue, and softening them would turn a plate into a vignette.
+      ...(doc.look.groundFigureInFrame && doc.look.frontFrame !== 'none'
+        ? {}
+        : { fade: figureFade(composed.geometry, doc.look.groundFigureWrap ? null : 'left') })
     })
     images.set(GROUND_FIGURE_ID, figure.bytes)
     figureItem.srcWidth = figure.widthPx

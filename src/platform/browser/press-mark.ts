@@ -180,6 +180,14 @@ export async function renderGroundImage(input: {
   /** Draw the artwork flipped, so the two panels are a pair about the spine. */
   mirrorX?: boolean
   /**
+   * Take the ink from the source's *lightness* rather than its darkness.
+   *
+   * For a line trace, never: the ink belongs where the line is. For a tonal
+   * plate standing on a dark board, this is what keeps the picture a positive
+   * rather than a negative of itself.
+   */
+  invert?: boolean
+  /**
    * Where the tint reaches nothing at each edge, and how wide the ramp is.
    *
    * Baked into the picture's own alpha rather than asked of the PDF, because
@@ -229,7 +237,17 @@ export async function renderGroundImage(input: {
   for (let i = 0; i < data.length; i += 4) {
     const alpha = data[i + 3]!
     const luminance = (data[i]! * 0.299 + data[i + 1]! * 0.587 + data[i + 2]! * 0.114) / 255
-    const coverage = alpha === 0 ? 0 : (alpha / 255) * (1 - luminance)
+    // Darkness is coverage, which is right for every traced figure here: they
+    // are black line on white paper, so the ink goes where the line is.
+    //
+    // A *tonal* picture on a dark board is the other case and needs the other
+    // polarity. Knapp's plate is a halftone whose subject is a lit doorway in
+    // a dark temple: printed by darkness in a pale ink on a dark ground, the
+    // architecture comes out light and the light comes out dark, which is a
+    // negative of the picture and loses the one thing it is on the cover for,
+    // the radiant eye over the stair.
+    const ink = input.invert === true ? luminance : 1 - luminance
+    const coverage = alpha === 0 ? 0 : (alpha / 255) * ink
     data[i] = r
     data[i + 1] = g
     data[i + 2] = b

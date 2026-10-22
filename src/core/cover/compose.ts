@@ -38,6 +38,7 @@ import { GROUND_IMAGE_ID, groundPattern, isImageGround, patternOpacity } from '.
 import {
   backFigureFramePt,
   figureFramePt,
+  framedFigureFrame,
   wrapFigureFramePt,
   figureOpacity,
   GROUND_FIGURE_BACK_ID,
@@ -939,7 +940,21 @@ export function composeCover(doc: CoverDocument, options: ComposeOptions): Compo
   // something has drawn it, which is the same bargain the picture-backed
   // pattern strikes two blocks up.
   if (look.groundFigure) {
-    const frame = look.groundFigureWrap ? wrapFigureFramePt(geometry) : figureFramePt(geometry)
+    // Three placements, and they are different objects rather than three
+    // sizes of one. A wrap runs the whole sheet; a bled figure runs the front
+    // panel off three edges; a framed one is a plate standing inside the
+    // border, which is what a picture with its own architecture wants.
+    const framed = framedFigureFrame(geometry, FRAME_INSET_IN, FRAME_CLEARANCE_IN)
+    const frame = look.groundFigureWrap
+      ? wrapFigureFramePt(geometry)
+      : look.groundFigureInFrame && look.frontFrame !== 'none'
+        ? {
+            xPt: pt(framed.x),
+            yPt: pt(framed.y),
+            widthPt: pt(framed.width),
+            heightPt: pt(framed.height)
+          }
+        : figureFramePt(geometry)
     items.push({
       kind: 'image',
       id: GROUND_FIGURE_ID,

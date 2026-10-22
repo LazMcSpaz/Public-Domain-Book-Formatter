@@ -302,6 +302,24 @@ export interface CoverLook {
    * which is what lets a figure reach the back at all. See `figures.ts`.
    */
   groundFigureBack: boolean
+  /**
+   * Whether the figure is held inside the front frame instead of bleeding.
+   *
+   * A ground figure normally runs off three edges, which is right for a
+   * device or a texture: there is no edge to notice. A *picture* is different.
+   * Knapp's plate is an architecture with its own border, and bled off the
+   * trim it reads as a photograph someone cropped badly. Held inside the
+   * frame it reads as a plate set on the board, which is what it is.
+   *
+   * False by default, so every figure placed before this is unmoved.
+   */
+  groundFigureInFrame: boolean
+  /**
+   * Take the figure's ink from the source's lightness rather than its
+   * darkness. False for every traced figure, which is line on white; true for
+   * a tonal plate on a dark board, which would otherwise print as a negative.
+   */
+  groundFigureInvert: boolean
 }
 
 /** A supplied device, as bytes and the proportions to place it by. */
@@ -457,7 +475,9 @@ export function defaultLook(): CoverLook {
     groundFigure: null,
     groundFigureOpacity: DEFAULT_FIGURE_OPACITY,
     groundFigureBack: false,
-    groundFigureWrap: false
+    groundFigureWrap: false,
+    groundFigureInFrame: false,
+    groundFigureInvert: false
   }
 }
 
@@ -602,6 +622,8 @@ export function normalizeLook(raw: unknown): CoverLook {
         : d.groundFigureOpacity
     ),
     groundFigureBack: bool(raw['groundFigureBack'], d.groundFigureBack),
+    groundFigureInFrame: bool(raw['groundFigureInFrame'], d.groundFigureInFrame),
+    groundFigureInvert: bool(raw['groundFigureInvert'], d.groundFigureInvert),
     groundFigureWrap: bool(raw['groundFigureWrap'], d.groundFigureWrap)
   }
 }
