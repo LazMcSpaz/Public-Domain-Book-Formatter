@@ -115,13 +115,22 @@ export const PATTERN_OPACITY: Readonly<Record<GroundPattern, number>> = {
 /**
  * What a ground may be turned down or up to, when a book asks.
  *
- * The same bounds the ground figure runs under and for the same two reasons:
- * below three per cent a print-on-demand press stops holding a tint reliably,
- * and past a fifth a ground stops being a ground. The *default* for each
- * pattern stays `PATTERN_OPACITY` — this is the band a book may move inside,
- * not a replacement for the measured values above.
+ * The ceiling is the design's: past a fifth a ground stops being a ground.
+ *
+ * The floor was three per cent, matching the ground figure's, and is two
+ * because the editor asked for it with the risk stated — the same bargain
+ * `MIN_FIGURE_OPACITY` records. Two points about the risk, since a number
+ * this low is the one thing here only a printed proof can settle. The warning
+ * it relaxes was written about the *line* patterns, where the ink is half-
+ * point strokes and a tint that faint breaks into dots; a filled ground like
+ * `wave` puts the same tint over half-inch ribbons, which a press holds far
+ * more reliably. And what fails at this end is mottling rather than
+ * vanishing, which is the worse of the two.
+ *
+ * The *default* for each pattern stays `PATTERN_OPACITY` — this is the band a
+ * book may move inside, not a replacement for the measured values above.
  */
-export const MIN_PATTERN_OPACITY = 0.03
+export const MIN_PATTERN_OPACITY = 0.02
 export const MAX_PATTERN_OPACITY = 0.2
 
 /**

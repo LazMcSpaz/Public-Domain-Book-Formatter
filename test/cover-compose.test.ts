@@ -25,6 +25,7 @@ import {
   defaultLook,
   FRONT_MARK_ID,
   PRESS_MARK_ID,
+  SPINE_TEXT_CLEARANCE_IN,
   composeCover,
   coverGeometry,
   defaultCover,
@@ -822,6 +823,65 @@ describe('an edition statement stacks where the editor breaks it', () => {
   it('leaves a single line alone', () => {
     const one = stacked('Illustrated')
     expect(one.filter((t) => t.text === 'ILLUSTRATED').length).toBe(1)
+  })
+})
+
+describe('the press mark on a narrow spine', () => {
+  const inkball = {
+    dataUrl: 'data:image/svg+xml;base64,aaa',
+    widthPx: 100,
+    heightPx: 100,
+    fileName: 'inkball.svg'
+  }
+
+  function markOn(pages: number) {
+    const doc = defaultCover('6x9', pages)
+    // The stock the real books print on. `defaultCover` is cream, which folds
+    // thicker per page, and a fixture on cream gave the slim case a 0.44 in
+    // spine instead of 0.39 — wide enough that both the old share and the new
+    // one cleared the threshold below, so the test passed against the fault.
+    doc.paper = 'bw-white'
+    doc.content.title = 'A Book'
+    doc.content.author = 'A Name'
+    doc.look.pressMark = inkball
+    const { items, geometry } = composeCover(doc, { measurer })
+    const mark = items.find((i) => i.kind === 'image' && i.id === PRESS_MARK_ID)
+    // Null where the fold is too narrow to print it legibly: that case is
+    // reported as a warning and leaving the mark off is the right answer, so
+    // it is a result here rather than a failure.
+    if (!mark || mark.kind !== 'image') return { widthIn: null, spineIn: geometry.spineIn }
+    return { widthIn: mark.widthPt / 72, spineIn: geometry.spineIn }
+  }
+
+  it('fills what a slim fold allows rather than a fixed share of it', () => {
+    // A 175-page book folds at about 0.39 in. The mark was taking 0.78 of
+    // that, which printed it half the size of the same mark on a 470-page
+    // book standing beside it on a shelf.
+    const slim = markOn(175)
+    expect(slim.spineIn).toBeLessThan(0.45)
+    expect(slim.widthIn).not.toBeNull()
+    // 0.95 of a 0.269 in fold is 0.256; the old 0.78 gave 0.210.
+    expect(slim.widthIn!).toBeGreaterThan(0.25)
+  })
+
+  it('leaves a thick spine exactly where it was, because the ceiling binds', () => {
+    // The share only governs a narrow fold. Raising it must not grow the mark
+    // on the books already approved.
+    const fat = markOn(474)
+    expect(fat.widthIn).not.toBeNull()
+    expect(fat.widthIn!).toBeCloseTo(0.42, 3)
+  })
+
+  it('never lets the mark reach the fold', () => {
+    let placed = 0
+    for (const pages of [120, 175, 300, 474, 800]) {
+      const { widthIn, spineIn } = markOn(pages)
+      if (widthIn === null) continue
+      placed += 1
+      expect(widthIn).toBeLessThanOrEqual(spineIn - SPINE_TEXT_CLEARANCE_IN * 2 + 1e-9)
+    }
+    // And the loop has to have had something to check.
+    expect(placed).toBeGreaterThanOrEqual(4)
   })
 })
 

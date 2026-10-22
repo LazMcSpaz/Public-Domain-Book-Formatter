@@ -1624,7 +1624,16 @@ function laySpine(
     )
   }
   if (mark && usableWidth >= MIN_MARK_WIDTH_IN) {
-    const width = Math.min(usableWidth * 0.78, 0.42)
+    // As much of the fold as it safely can, up to the ceiling. The share only
+    // governs a *narrow* spine: on anything over about three-quarters of an
+    // inch the 0.42 ceiling binds first, so raising it enlarges the mark on a
+    // slim book and moves nothing on a fat one. It was 0.78, which printed a
+    // 0.21 in mark on a 0.394 in spine — half the size of the same mark on
+    // the thick books beside it, and the editor read that as the mark being
+    // wrong rather than the fold being narrow. The clearance either side is
+    // already taken off `usableWidth`, so what is left here is a hair of
+    // margin against the fold wandering.
+    const width = Math.min(usableWidth * 0.95, 0.42)
     const height = width * (mark.heightPx / mark.widthPx)
     // Never more than a fraction of the fold's length: a device that grows
     // with the book would dominate the spine of a thin one.
