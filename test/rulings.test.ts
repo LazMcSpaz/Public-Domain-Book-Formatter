@@ -499,6 +499,19 @@ describe('a ruling written as the part that changes', () => {
     )
   })
 
+  it('reads through a glossary circle placed after the corrected word', () => {
+    const norns = ruling({
+      quote: 'known in mythology as the Norms or Fates',
+      correction: 'known in mythology as the Norns or Fates'
+    })
+    expect(
+      unapplied([norns], prose('They are known in mythology as the Norns\u00b0 or Fates.'))
+    ).toEqual([])
+    expect(
+      unapplied([norns], prose('They are known in mythology as the Norms\u00b0 or Fates.'))
+    ).toHaveLength(1)
+  })
+
   it('reads a note quoted with its reference mark against the note the book holds', () => {
     const ibid = ruling({
       pageIndex: 199,

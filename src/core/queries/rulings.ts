@@ -401,6 +401,9 @@ function has(views: readonly string[], level: number, needle: string): boolean {
  *   marks and before `;` — the Glossary does, by ruling, `“ God ”` — reads to
  *   a person as `“God”`, which is how a ruling gets written. Every space
  *   beside a quotation mark and before closing pointing goes.
+ *   A glossary circle after a word (`Norns°`) goes too: it is this edition's
+ *   mark, never printed in the book a ruling quotes, and Lost Keys' Norns
+ *   ruling read as unapplied for as long as the circle stood beside it.
  * - **Accents folded.** A later ruling on a name's accent (`Pandavas` to
  *   `Pândavas`) must not make an earlier ruling on the same sentence read as
  *   undone.
@@ -414,6 +417,7 @@ const NOTATIONS: readonly ((text: string) => string)[] = [
 
 function foldSpacing(text: string): string {
   return text
+    .replace(/(?<=\p{L})\u00b0/gu, '')
     .replace(/\s*([\u201c\u201d\u2018\u2019"])\s*/gu, '$1')
     .replace(/\s+([,;:.!?)\]])/gu, '$1')
     .replace(/([([])\s+/gu, '$1')
