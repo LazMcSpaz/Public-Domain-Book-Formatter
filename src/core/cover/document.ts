@@ -366,6 +366,20 @@ export interface CoverContent {
   author: string
   /** Series or collection name, printed above the title when set. */
   series: string
+  /**
+   * An edition statement, printed under the title rule when set.
+   *
+   * "Illustrated", "Second Edition", "Complete and Unabridged" — the line a
+   * period title page sets under the rule to say what *this* printing is. It
+   * is deliberately not the `series`, which names something the book belongs
+   * to and therefore sits above the title, and deliberately not the
+   * `subtitle`, which is part of the book's name, sets in italic at a share of
+   * the title, and would subordinate a volume name to a printing note.
+   *
+   * Per book rather than banked, because the second volume of a collection may
+   * be illustrated where the first was not.
+   */
+  edition: string
   /** Back-cover copy. */
   blurb: string
   /** The imprint line, which *is* banked — carried here as resolved text. */
@@ -429,6 +443,7 @@ export function emptyContent(): CoverContent {
     subtitle: '',
     author: '',
     series: '',
+    edition: '',
     blurb: '',
     imprint: '',
     art: emptyArt()

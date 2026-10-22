@@ -1212,6 +1212,26 @@ function layFrontCover(
     y += size * 0.9
   }
 
+  /**
+   * The edition statement, set under the rule. Returns where the next thing
+   * goes, so a cover without one is laid out exactly as it was before.
+   */
+  const setEdition = (from: number): number => {
+    if (!content.edition.trim()) return from
+    const size = Math.max(9, Math.min(16, typeBox.widthPt * 0.035))
+    const next = centeredLines(
+      items,
+      [content.edition.toUpperCase()],
+      geometry.front,
+      from,
+      face(look.bodyFont, 'regular', measurer.hasSmallCaps(look.bodyFont)),
+      size,
+      overArt ? palette.overArt : palette.accent,
+      measurer
+    )
+    return next + size * 0.9
+  }
+
   /** The author, set below whatever came before it. */
   const setAuthor = (relativeTo: number, titleSizePt: number): void => {
     if (!content.author.trim()) return
@@ -1312,6 +1332,7 @@ function layFrontCover(
       null
     )
     y += fitted.sizePt * 0.5
+    y = setEdition(y)
     setAuthor(y, fitted.sizePt)
   } else if (titleText.trim()) {
     const reserved = typeBox.heightPt * (content.subtitle.trim() ? 0.55 : 0.72)
@@ -1354,6 +1375,15 @@ function layFrontCover(
       ornament
     )
     y += fitted.sizePt * 0.35
+
+    // --- edition statement, under the rule ---------------------------------
+    //
+    // Under the rule rather than above the title, which is where the series
+    // line goes: a series names something the book belongs to and an edition
+    // statement names this printing, so they are read in different places and
+    // must not share a slot. Small capitals in the accent, the same treatment
+    // the series line gets, because the two are the same kind of line.
+    y = setEdition(y)
 
     if (content.subtitle.trim()) {
       // The editor's size where one is set: on a reprinted multi-volume work

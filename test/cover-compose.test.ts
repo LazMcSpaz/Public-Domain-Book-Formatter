@@ -32,6 +32,7 @@ import {
   stackedLines,
   BLURB_PT,
   type CoverDocument,
+  type CoverItem,
   type CoverTextItem
 } from '@core/cover'
 
@@ -529,6 +530,71 @@ describe("the press's mark", () => {
   })
 })
 
+describe('an edition statement goes under the rule', () => {
+  /** The y of the title rule: a `rule` item, which is not a thin `fill`. */
+  function ruleY(items: readonly CoverItem[]): number {
+    const rule = items.find((i) => i.kind === 'rule')
+    if (!rule || rule.kind !== 'rule') throw new Error('no rule on this cover')
+    return rule.yPt
+  }
+
+  function labelled(edition: string): CoverDocument {
+    return bookCover((d) => {
+      d.look.arrangement = 'label'
+      d.content.edition = edition
+    })
+  }
+
+  it('sets under the rule, not above the title where the series goes', () => {
+    const { items } = composeCover(labelled('Illustrated'), { measurer })
+    const line = texts(items).find((t) => t.text === 'ILLUSTRATED')
+    expect(line).toBeDefined()
+    // The whole of the editor's instruction, as an assertion: below the rule.
+    expect(line!.yPt).toBeGreaterThan(ruleY(items))
+  })
+
+  it('leaves the series above the title, so the two are read apart', () => {
+    const doc = labelled('Illustrated')
+    doc.content.series = 'Libri Vetus'
+    const { items } = composeCover(doc, { measurer })
+    const series = texts(items).find((t) => t.text === 'LIBRI VETUS')!
+    const edition = texts(items).find((t) => t.text === 'ILLUSTRATED')!
+    expect(series.yPt).toBeLessThan(ruleY(items))
+    expect(edition.yPt).toBeGreaterThan(ruleY(items))
+  })
+
+  it('is set in small capitals in the accent, as the series line is', () => {
+    const doc = labelled('Illustrated')
+    const { items } = composeCover(doc, { measurer })
+    const line = texts(items).find((t) => t.text === 'ILLUSTRATED')!
+    expect(line.color).toBe(doc.look.palette.accent)
+    // Smaller than the title, which is the point of a statement under a rule.
+    const titleSize = Math.max(...texts(items).map((t) => t.sizePt))
+    expect(line.sizePt).toBeLessThan(titleSize)
+  })
+
+  it('takes space rather than printing over what follows it', () => {
+    const without = composeCover(labelled(''), { measurer })
+    const withOne = composeCover(labelled('Illustrated'), { measurer })
+    const before = texts(without.items).find((t) => t.text === 'Amos Root')!
+    const after = texts(withOne.items).find((t) => t.text === 'Amos Root')!
+    // The author is pushed down, which is what tells a laid-out line from one
+    // drawn on top of its neighbour.
+    expect(after.yPt).toBeGreaterThan(before.yPt)
+  })
+
+  it('does not count whitespace as a statement', () => {
+    // The guard is `.trim()`, and without it a cover whose field was cleared to
+    // a space sets an empty line and moves every line under it down.
+    const blank = composeCover(labelled('   '), { measurer })
+    const none = composeCover(labelled(''), { measurer })
+    expect(texts(blank.items).map((t) => t.text)).toEqual(texts(none.items).map((t) => t.text))
+    const a = texts(blank.items).find((t) => t.text === 'Amos Root')!
+    const b = texts(none.items).find((t) => t.text === 'Amos Root')!
+    expect(a.yPt).toBeCloseTo(b.yPt, 6)
+  })
+})
+
 describe('the ground pattern', () => {
   function grounded(pattern: 'laid' | 'aura' | 'guilloche' | 'fleuron'): CoverDocument {
     const doc = bookCover((d) => {
@@ -634,6 +700,7 @@ describe('how faint a ground prints is the pattern’s, until a book says otherw
       { measurer, ornaments: BUILTIN_ORNAMENTS }
     )
     const paths = drawn.items.find((i) => i.kind === 'ornament' && i.opacity !== undefined)!
+    if (paths.kind !== 'ornament') throw new Error('unreachable')
     expect(paths.opacity).toBe(0.13)
 
     const pictured = composeCover(
@@ -644,6 +711,7 @@ describe('how faint a ground prints is the pattern’s, until a book says otherw
       { measurer }
     )
     const picture = pictured.items.find((i) => i.kind === 'image' && i.id === GROUND_IMAGE_ID)!
+    if (picture.kind !== 'image') throw new Error('unreachable')
     expect(picture.opacity).toBe(0.13)
   })
 })
@@ -678,6 +746,7 @@ describe('the book’s own text as a ground', () => {
   it('prints faint enough to be a surface', () => {
     const { items } = composeCover(lexicon(), { measurer })
     const ground = items.find((i) => i.kind === 'image' && i.id === GROUND_IMAGE_ID)!
+    if (ground.kind !== 'image') throw new Error('unreachable')
     expect(ground.opacity).toBe(PATTERN_OPACITY.lexicon)
     expect(ground.opacity!).toBeLessThanOrEqual(MAX_PATTERN_OPACITY)
     expect(ground.opacity!).toBeGreaterThanOrEqual(MIN_PATTERN_OPACITY)

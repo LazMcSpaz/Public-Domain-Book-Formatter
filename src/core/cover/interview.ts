@@ -529,6 +529,14 @@ export function contentQuestions(state: CoverInterviewState): Question[] {
       defaultValue: c.series
     },
     {
+      id: 'cover-edition',
+      type: 'text',
+      group: 'words',
+      prompt: 'What kind of printing is this, if it is worth saying?',
+      help: 'Printed under the rule, in small capitals: "Illustrated", "Second Edition", "Complete and Unabridged". It goes under the title rather than above it because it describes this printing, where a collection name describes something the book belongs to.',
+      defaultValue: c.edition
+    },
+    {
       id: 'cover-blurb',
       type: 'text',
       group: 'back',
@@ -763,6 +771,7 @@ export function coverFromAnswers(
     subtitle: text(answers, 'cover-subtitle', doc.content.subtitle),
     author: text(answers, 'cover-author', doc.content.author),
     series: text(answers, 'cover-series', doc.content.series),
+    edition: text(answers, 'cover-edition', doc.content.edition),
     blurb: text(answers, 'cover-blurb', doc.content.blurb),
     imprint: text(answers, 'cover-imprint', doc.content.imprint)
   }

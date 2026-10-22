@@ -217,6 +217,15 @@ describe('answers fold back into the cover', () => {
     expect(patternOpacity('laid', applied.groundPatternOpacity)).toBe(PATTERN_OPACITY.laid)
   })
 
+  it('carries an edition statement from one cover to another', () => {
+    const from = state()
+    from.doc.content.edition = 'Illustrated'
+    const answers = defaultAnswers(coverQuestions(from))
+    const onto = defaultCover('6x9', 284)
+    expect(onto.content.edition).toBe('')
+    expect(coverFromAnswers(onto, answers).content.edition).toBe('Illustrated')
+  })
+
   it('does not ask where the author goes when the arrangement has already decided', () => {
     const typographic = state()
     typographic.doc.look.arrangement = 'typographic'
