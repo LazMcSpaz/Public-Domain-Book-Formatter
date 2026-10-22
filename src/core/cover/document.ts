@@ -242,7 +242,22 @@ export interface CoverLook {
    */
   pressMark: PressMark | null
   /**
-   * Whether that mark also prints on the front, above the type.
+   * The emblem on the front, when it is not the printer's own mark.
+   *
+   * These are two different things wearing one name. `pressMark` belongs to
+   * the **publisher** — the same device on everything they print, which is why
+   * it goes at the foot of every spine. What a reprint from one tradition
+   * wants on its *board* is usually the book's own emblem: a Theosophical seal
+   * on Blavatsky, an all-seeing eye on Hall. Before this they shared a slot,
+   * so putting the printer's mark on the spine took the book's emblem off the
+   * front.
+   *
+   * Null keeps the old behaviour exactly — the front shows the press mark —
+   * so every look banked before this is unchanged.
+   */
+  frontMark: PressMark | null
+  /**
+   * Whether a mark also prints on the front, above the type.
    *
    * A second decision rather than a consequence of having a mark, because the
    * two placements say different things: on the spine a device is a
@@ -435,6 +450,7 @@ export function defaultLook(): CoverLook {
     imprintOnFront: false,
     announceWorks: false,
     pressMark: null,
+    frontMark: null,
     markOnFront: false,
     groundPattern: null,
     groundPatternOpacity: null,
@@ -564,6 +580,7 @@ export function normalizeLook(raw: unknown): CoverLook {
     imprintOnFront: bool(raw['imprintOnFront'], d.imprintOnFront),
     announceWorks: bool(raw['announceWorks'], d.announceWorks),
     pressMark: normalizeMark(raw['pressMark']),
+    frontMark: normalizeMark(raw['frontMark']),
     markOnFront: bool(raw['markOnFront'], d.markOnFront),
     groundPattern: (GROUND_PATTERNS as readonly string[]).includes(raw['groundPattern'] as string)
       ? (raw['groundPattern'] as GroundPattern)

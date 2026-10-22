@@ -22,6 +22,8 @@ import {
   MIN_PATTERN_OPACITY,
   PATTERN_OPACITY,
   patternOpacity,
+  defaultLook,
+  FRONT_MARK_ID,
   PRESS_MARK_ID,
   composeCover,
   coverGeometry,
@@ -820,6 +822,72 @@ describe('an edition statement stacks where the editor breaks it', () => {
   it('leaves a single line alone', () => {
     const one = stacked('Illustrated')
     expect(one.filter((t) => t.text === 'ILLUSTRATED').length).toBe(1)
+  })
+})
+
+describe('the printer\u2019s mark and the book\u2019s emblem are two things', () => {
+  // Deliberately different proportions. The composer records a placed size
+  // rather than which file fills it, so a square mark and a tall one are what
+  // let this tell them apart at all: asserting that both items merely *exist*
+  // passes with the front drawing the press mark, which was the first version
+  // of this test and caught nothing.
+  const inkball = {
+    dataUrl: 'data:image/svg+xml;base64,aaa',
+    widthPx: 100,
+    heightPx: 100,
+    fileName: 'inkball.svg'
+  }
+  const seal = {
+    dataUrl: 'data:image/svg+xml;base64,bbb',
+    widthPx: 100,
+    heightPx: 250,
+    fileName: 'seal.svg'
+  }
+
+  it('puts the press mark on the spine and the front mark on the board', () => {
+    // They shared a slot, so giving a book the printer's mark on its spine
+    // took its own emblem off the front. A publisher prints one device on
+    // everything; what belongs on the board is usually the book's.
+    const doc = bookCover((d) => {
+      d.look.arrangement = 'label'
+      d.look.frontFrame = 'double'
+      d.look.pressMark = inkball
+      d.look.frontMark = seal
+      d.look.markOnFront = true
+    })
+    const { items } = composeCover(doc, { measurer })
+    const spine = items.find((i) => i.kind === 'image' && i.id === PRESS_MARK_ID)
+    const front = items.find((i) => i.kind === 'image' && i.id === FRONT_MARK_ID)
+    expect(spine).toBeDefined()
+    expect(front).toBeDefined()
+    if (front?.kind !== 'image') throw new Error('unreachable')
+    // The seal is two and a half times as tall as it is wide; the inkball is
+    // square. The front item's own proportions say which one was placed.
+    expect(front.heightPt / front.widthPt).toBeCloseTo(2.5, 2)
+  })
+
+  it('falls back to the press mark when no emblem is given', () => {
+    // Every look banked before this has no front mark, and must be unchanged.
+    const doc = bookCover((d) => {
+      d.look.arrangement = 'label'
+      d.look.pressMark = inkball
+      d.look.markOnFront = true
+    })
+    const { items } = composeCover(doc, { measurer })
+    const front = items.find((i) => i.kind === 'image' && i.id === FRONT_MARK_ID)
+    if (front?.kind !== 'image') throw new Error('unreachable')
+    expect(front.heightPt / front.widthPt).toBeCloseTo(1, 2)
+    expect(defaultLook().frontMark).toBeNull()
+  })
+
+  it('still carries the spine mark when nothing is on the front', () => {
+    const doc = bookCover((d) => {
+      d.look.pressMark = inkball
+      d.look.markOnFront = false
+    })
+    const { items } = composeCover(doc, { measurer })
+    expect(items.some((i) => i.kind === 'image' && i.id === PRESS_MARK_ID)).toBe(true)
+    expect(items.some((i) => i.kind === 'image' && i.id === FRONT_MARK_ID)).toBe(false)
   })
 })
 

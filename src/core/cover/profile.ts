@@ -68,6 +68,7 @@ export const BANKED_COVER_KEYS: readonly (keyof CoverLook)[] = [
   'imprintOnFront',
   'announceWorks',
   'pressMark',
+  'frontMark',
   'markOnFront',
   'groundPattern',
   'groundFigure',

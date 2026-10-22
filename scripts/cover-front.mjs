@@ -19,7 +19,8 @@
  * back and the fold are right.
  *
  * The spec is a partial cover document — `trimSize`, `pageCount`, `paper`,
- * `binding` (`paperback` or `hardcover`),
+ * `binding` (`paperback` or `hardcover`), `device` (the emblem on the board)
+ * and `mark` (the printer's own, at the foot of the spine),
  * `look`, `content` — merged over the shipped defaults and normalised by
  * `normalizeLook`, so an old or hand-written spec cannot half-apply. Two fields
  * are the script's own: `device`, a file name under `public/devices`, which is
@@ -55,20 +56,29 @@ const spec = JSON.parse(await readFile(resolve(specPath), 'utf8'))
  * The proportions come from the SVG's own viewBox rather than being assumed:
  * the composer sizes the mark from them, so a wrong ratio is a squashed seal.
  */
-let mark = null
-if (spec.device) {
-  const file = resolve('public/devices', basename(spec.device))
+async function loadMark(name) {
+  if (!name) return null
+  // A bare name still means a device, which is what every spec written before
+  // the printer's mark existed says. A name with a folder in it is taken as
+  // given, so `marks/inkball.svg` reaches the press marks.
+  const rel = name.includes('/') ? name : `devices/${basename(name)}`
+  const file = resolve('public', rel)
   const svg = await readFile(file, 'utf8')
   const box = /viewBox="([\d.\s-]+)"/.exec(svg)
   if (!box) throw new Error(`${file} has no viewBox, so its proportions are unknown.`)
   const [, , w, h] = box[1].trim().split(/\s+/).map(Number)
-  mark = {
+  return {
     dataUrl: `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`,
     widthPx: w,
     heightPx: h,
     fileName: basename(file)
   }
 }
+
+// `device` is the emblem on the board; `mark` is the printer's own, at the
+// foot of the spine. A spec naming only `device` behaves as it always did.
+const frontMark = await loadMark(spec.device)
+const mark = (await loadMark(spec.mark)) ?? frontMark
 
 const browser = await chromium.launch({ executablePath: EXECUTABLE, args: ['--no-sandbox'] })
 const page = await browser.newPage({ viewport: { width: 900, height: 700 } })
@@ -81,7 +91,7 @@ page.on('console', (m) => {
 await page.goto(`${URL_BASE}/#cover`, { waitUntil: 'networkidle' })
 
 const result = await page.evaluate(
-  async ({ spec, mark, repo, sheet }) => {
+  async ({ spec, mark, frontMark, repo, sheet }) => {
     const core = await import(`/@fs${repo}/src/core/cover/index.ts`)
     const platform = await import(`/@fs${repo}/src/platform/browser/cover-preview.ts`)
 
@@ -93,7 +103,8 @@ const result = await page.evaluate(
     doc.look = core.normalizeLook({
       ...doc.look,
       ...(spec.look ?? {}),
-      ...(mark ? { pressMark: mark } : {})
+      ...(mark ? { pressMark: mark } : {}),
+      ...(spec.mark && frontMark ? { frontMark } : {})
     })
     doc.content = { ...doc.content, ...(spec.content ?? {}) }
 
@@ -132,7 +143,7 @@ const result = await page.evaluate(
         .map((c) => `${c.level}: ${c.label} — ${c.detail}`)
     }
   },
-  { spec, mark, repo: REPO, sheet }
+  { spec, mark, frontMark, repo: REPO, sheet }
 )
 
 await writeFile(resolve(outPath), Buffer.from(result.png, 'base64'))

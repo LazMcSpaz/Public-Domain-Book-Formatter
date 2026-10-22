@@ -116,10 +116,14 @@ async function buildCover(
   // up, pixels thrown away coming down.
   const images = new Map(options.images ?? [])
   for (const id of [PRESS_MARK_ID, FRONT_MARK_ID]) {
+    // Each from its own artwork: the spine carries the printer's mark and the
+    // board the book's emblem, and they are no longer the same picture.
+    const source =
+      id === FRONT_MARK_ID ? (doc.look.frontMark ?? doc.look.pressMark) : doc.look.pressMark
     const markItem = composed.items.find((i) => i.kind === 'image' && i.id === id)
-    if (!markItem || markItem.kind !== 'image' || !doc.look.pressMark) continue
+    if (!markItem || markItem.kind !== 'image' || !source) continue
     const mark = await renderPressMark({
-      dataUrl: doc.look.pressMark.dataUrl,
+      dataUrl: source.dataUrl,
       widthIn: markItem.widthPt / 72,
       heightIn: markItem.heightPt / 72,
       color: doc.look.palette.accent

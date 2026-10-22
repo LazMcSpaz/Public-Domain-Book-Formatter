@@ -1183,8 +1183,11 @@ function layFrontCover(
   // Placed before anything else and charged against the type's own height
   // budget, so the title is fitted to the space that is actually left rather
   // than to the space there would have been without it.
-  if (look.markOnFront && look.pressMark) {
-    const mark = look.pressMark
+  // The book's own emblem where it has one, and the printer's mark otherwise:
+  // a publisher with one device still gets it on the board by setting nothing.
+  const frontDevice = look.frontMark ?? look.pressMark
+  if (look.markOnFront && frontDevice) {
+    const mark = frontDevice
     const widthIn = Math.min(safe.width * FRONT_MARK_FRACTION, FRONT_MARK_MAX_IN)
     const heightIn = widthIn * (mark.heightPx / mark.widthPx)
     items.push({
