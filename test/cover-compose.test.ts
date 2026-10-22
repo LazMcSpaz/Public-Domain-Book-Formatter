@@ -14,9 +14,10 @@ import {
   contains,
   GROUND_IMAGE_ID,
   GROUND_PATTERNS,
-  contourLandscape,
   groundPattern,
   isImageGround,
+  WAVE_SPACING_IN,
+  waveOffset,
   MAX_PATTERN_OPACITY,
   MIN_PATTERN_OPACITY,
   PATTERN_OPACITY,
@@ -822,12 +823,19 @@ describe('an edition statement stacks where the editor breaks it', () => {
   })
 })
 
-describe('the contour ground', () => {
-  const shapes = () => groundPattern('contour', 12.644 * 72, 9.25 * 72, null)[0]!.art.shapes
+describe('the flowing-band ground', () => {
+  const shapes = () => groundPattern('wave', 12.644 * 72, 9.25 * 72, null)[0]!.art.shapes
 
-  it('draws as vector paths rather than a supplied picture', () => {
-    expect(isImageGround('contour')).toBe(false)
-    expect(shapes().length).toBeGreaterThan(5)
+  it('draws as vector paths, one polyline per band', () => {
+    expect(isImageGround('wave')).toBe(false)
+    const all = shapes()
+    expect(all.length).toBeGreaterThan(20)
+    for (const shape of all) {
+      // One move, then a run of lines: a band is a single open curve and
+      // never closes, which is the whole difference from a contour.
+      expect((shape.d.match(/M /g) ?? []).length).toBe(1)
+      expect((shape.d.match(/ L /g) ?? []).length).toBeGreaterThan(50)
+    }
   })
 
   it('never draws a stroke too fine to survive the press', () => {
@@ -837,92 +845,53 @@ describe('the contour ground', () => {
     }
   })
 
-  it('puts every segment of one path at the same height', () => {
-    // This is what makes it a contour map rather than a tangle of plausible
-    // lines: each shape is one level, so the field sampled at the midpoint of
-    // each of its segments must come back flat. It catches a cell case wired
-    // to the wrong edge, which is the mistake marching squares invites.
-    //
-    // It does **not** catch a mishandled saddle, and that was checked rather
-    // than assumed: resolving every ambiguous cell the same way leaves this
-    // green, because both pairings are isolines at the same height and differ
-    // only in which ends they join. Nothing local separates them, so the mean
-    // rule in the module stands on its own reasoning.
-    for (const shape of shapes()) {
-      const heights: number[] = []
-      for (const m of shape.d.matchAll(/M ([\d.-]+) ([\d.-]+) L ([\d.-]+) ([\d.-]+)/g)) {
-        const x = (Number(m[1]) + Number(m[3])) / 2
-        const y = (Number(m[2]) + Number(m[4])) / 2
-        heights.push(contourLandscape(x / 72, y / 72))
+  it('keeps neighbouring bands apart, however hard they pinch', () => {
+    // The pinch is the effect, and it is produced by advancing each band's
+    // phase a little further than the last. Advance it too far and the
+    // displacement between neighbours exceeds the gap between them: the bands
+    // cross, and a flowing pattern becomes a tangle. The shipped constants sit
+    // close enough to that line to be worth pinning, so this walks the whole
+    // family and asserts the order never breaks.
+    // The module's own spacing, not a copy of it: a constant repeated here
+    // is a test that can come to disagree with the thing it pins.
+    const spacing = WAVE_SPACING_IN
+    let worst = Infinity
+    for (let base = -2; base <= 11; base += spacing) {
+      for (let x = -0.3; x <= 13; x += 0.1) {
+        const here = base + waveOffset(x, base)
+        const next = base + spacing + waveOffset(x, base + spacing)
+        worst = Math.min(worst, next - here)
       }
-      expect(heights.length).toBeGreaterThan(0)
-      const lo = Math.min(...heights)
-      const hi = Math.max(...heights)
-      // Linear interpolation across a sixth of an inch of a smooth field, so
-      // the spread is interpolation error and nothing else.
-      expect(hi - lo).toBeLessThan(0.1)
     }
+    expect(worst).toBeGreaterThan(0)
   })
 
-  it('closes every line it starts', () => {
-    // Marching squares emits two segments for an ambiguous cell and one for
-    // every other, and a segment that ended nowhere would print as a contour
-    // stopping in open ground. Each path is a run of complete `M x y L x y`
-    // pairs, so an odd or partial command means the saddle case went wrong.
-    for (const shape of shapes()) {
-      const moves = (shape.d.match(/M /g) ?? []).length
-      const lines = (shape.d.match(/ L /g) ?? []).length
-      expect(moves).toBe(lines)
-      expect(moves).toBeGreaterThan(0)
-    }
-  })
-
-  it('covers the sheet rather than massing in the middle', () => {
-    // The pattern family's own rule: allover, with no centre for a fold to
-    // move. A field with one summit in it would be a figure wearing a
-    // pattern's name.
-    const W = 12.644 * 72
+  it('leaves no gap along any edge, at any point across it', () => {
+    // A band is displaced by up to its own amplitude, so a family that stopped
+    // at the trim would wander inside it and leave white along part of the
+    // cut. The first version of this asked whether *any* point strayed past
+    // the sheet, which stays true when the bands stop at the trim, because
+    // their own waves carry a few points over. What has to hold is that at
+    // every x there is ink above the top edge and below the bottom one.
     const H = 9.25 * 72
-    const quadrants = [0, 0, 0, 0]
+    const byX = new Map<string, { min: number; max: number }>()
     for (const shape of shapes()) {
-      for (const m of shape.d.matchAll(/M ([\d.-]+) ([\d.-]+)/g)) {
-        const q = (Number(m[1]) > W / 2 ? 1 : 0) + (Number(m[2]) > H / 2 ? 2 : 0)
-        quadrants[q] += 1
-      }
-    }
-    const total = quadrants.reduce((a, b) => a + b, 0)
-    expect(total).toBeGreaterThan(500)
-    // No quarter of the sheet is bare, and none carries half the ink.
-    for (const q of quadrants) {
-      expect(q / total).toBeGreaterThan(0.12)
-      expect(q / total).toBeLessThan(0.4)
-    }
-  })
-
-  it('does not repeat inside a sheet', () => {
-    // An exactly periodic field would tile, and a tiling contour map reads as
-    // wallpaper the moment a reader finds the seam. Measured on the field
-    // rather than on the paths: slide it against itself and the difference
-    // must never fall back near zero, which is what a period looks like.
-    //
-    // The first version of this compared path start points across the sheet's
-    // two halves and passed against a deliberately periodic field, because
-    // rounding the coordinates to whole points made a real repeat miss by
-    // under three points. Pinning the field is what actually bites.
-    const sample = (x: number, y: number) => contourLandscape(x, y)
-    let flat = 0
-    for (let shift = 0.5; shift <= 7; shift += 0.25) {
-      let diff = 0
-      let n = 0
-      for (let x = 0; x < 6; x += 0.3) {
-        for (let y = 0; y < 9; y += 0.3) {
-          diff += Math.abs(sample(x + shift, y) - sample(x, y))
-          n += 1
+      for (const m of shape.d.matchAll(/(-?[\d.]+) (-?[\d.]+)/g)) {
+        const key = Number(m[1]).toFixed(0)
+        const y = Number(m[2])
+        const seen = byX.get(key)
+        if (!seen) byX.set(key, { min: y, max: y })
+        else {
+          seen.min = Math.min(seen.min, y)
+          seen.max = Math.max(seen.max, y)
         }
       }
-      if (diff / n < 0.15) flat += 1
     }
-    expect(flat).toBe(0)
+    expect(byX.size).toBeGreaterThan(100)
+    for (const [x, { min, max }] of byX) {
+      expect(min, `top edge bare at x=${x}`).toBeLessThan(0)
+      expect(max, `foot bare at x=${x}`).toBeGreaterThan(H)
+    }
   })
 })
 

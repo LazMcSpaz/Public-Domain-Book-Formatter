@@ -32,7 +32,7 @@
 import type { OrnamentArt, OrnamentShape } from '@core/ornament'
 
 export type GroundPattern =
-  'laid' | 'fleuron' | 'aura' | 'guilloche' | 'marbled' | 'lexicon' | 'contour'
+  'laid' | 'fleuron' | 'aura' | 'guilloche' | 'marbled' | 'lexicon' | 'wave'
 
 export const GROUND_PATTERNS: readonly GroundPattern[] = [
   'laid',
@@ -41,7 +41,7 @@ export const GROUND_PATTERNS: readonly GroundPattern[] = [
   'guilloche',
   'marbled',
   'lexicon',
-  'contour'
+  'wave'
 ]
 
 /**
@@ -74,7 +74,7 @@ export const PATTERN_LABEL: Readonly<Record<GroundPattern, string>> = {
   guilloche: 'Guilloche — the engine-turned rosette of a share certificate',
   marbled: 'Marbled paper — the swirled endpaper of a bound book',
   lexicon: 'The book’s own text, set as a field and turned',
-  contour: 'Contour lines — the nested rings of a map, over a landscape that is not anywhere'
+  wave: 'Flowing bands — the undulating lines of a 1970s poster'
 }
 
 export const PATTERN_NOTE: Readonly<Record<GroundPattern, string>> = {
@@ -88,8 +88,7 @@ export const PATTERN_NOTE: Readonly<Record<GroundPattern, string>> = {
     'The house pattern. Supplied as artwork rather than drawn here, so it prints as a picture at the resolution the sheet needs rather than as paths.',
   lexicon:
     'The volume’s own words, run together into one field and set at an angle — headwords bold and language tags italic, as the book sets them. Generated per book by `scripts/textground.mjs`, which is why it is artwork rather than paths.',
-  contour:
-    'Isolines through a made-up landscape: closed rings where it rises, long runs where it falls away. Drawn rather than supplied, so it prints as vector at any size, and allover by construction — there is no summit in the middle for a reader to find.'
+  wave: 'Parallel lines that undulate in step and drift out of it, so along the sheet they crowd together and open out again. Drawn rather than supplied, so it prints as vector at any size, and allover by construction.'
 }
 
 /** How strongly a ground prints, as a fraction of the ink. */
@@ -108,11 +107,9 @@ export const PATTERN_OPACITY: Readonly<Record<GroundPattern, number>> = {
   // hairline floor above; setting it smaller to fit more of the book in is the
   // way to break rule 2.
   lexicon: 0.1,
-  // A line map is almost all ground. Measured over a 6×9 wrap by summing the
-  // stroked length against the sheet's area, its ink covers 1.6% of it where
-  // the laid paper's lines cover 15.2% — a tenth as much — so it carries the
-  // highest tint here and still prints far lighter than `laid` at 0.07.
-  contour: 0.14
+  // Measured by summing stroked length against the sheet's area on a 6×9
+  // wrap: see the note beside `lexicon`. Set after looking at the board.
+  wave: 0.14
 }
 
 /**
@@ -247,167 +244,63 @@ function gcd(a: number, b: number): number {
 }
 
 /**
- * A landscape that is not anywhere, as a height at a point.
+ * Flowing bands, in the manner of a 1970s poster.
  *
- * **One hill, and its summit is off the board.** An earlier field summed four
- * sinusoids of comparable weight, which is a plain of small bumps: every one
- * of them closes its own ring, and a sheet of little rings reads as a pattern
- * of concentric circles rather than as a map. So the dominant term is a single
- * broad dome whose centre sits outside the sheet, and what crosses the board
- * is the *flank* of it — long arcs that sweep from edge to edge.
+ * Parallel lines that undulate in step and then drift out of it, which is the
+ * whole effect: each band carries the same waves as the one above, with the
+ * phase advanced a little, so along the sheet they crowd together and open out
+ * again. The pinch is what reads as movement. Lines of a fixed phase would be
+ * corduroy.
  *
- * The waves on top are what make them contours rather than arcs, and they are
- * deliberately slow: at a wavelength of a few inches a line gathers two or
- * three bends crossing the board. Faster waves put a bend every half inch,
- * which is where the small closed rings come back.
+ * This replaced a contour map, and the difference is worth stating because
+ * both are "wavy lines". A contour map is *isolines of a field*: it closes
+ * rings round every summit, and a field with any texture in it closes a lot of
+ * small ones, which reads as concentric circles rather than as flow. These
+ * lines are not level sets of anything. They are a family of curves, each a
+ * function of x, so none of them ever closes and none of them crosses another.
  *
- * Lengths are in inches so the look is the same on a 6×9 and an 8.25×11 — a
- * field defined in points would draw a coarser map on a bigger board.
+ * Lengths are in inches, so a 6×9 and an 8.25×11 get the same wave rather than
+ * the same number of them.
  *
- * Exported for the one test that can tell a contour map from a plausible
- * tangle of lines: every segment of one path has to stand at the same height,
- * which is what being an isoline *means*.
+ * ## The one constraint on the numbers
+ *
+ * The pinch comes from advancing each band's phase further than the last, and
+ * there is a limit past which neighbouring bands **cross**. Differentiating a
+ * band's position by its baseline, the family stays ordered only while the sum
+ * of each term's amplitude times its base-phase rate stays under 1. The first
+ * set tried here summed to 1.214: the bands crossed by a thirty-fifth of an
+ * inch and printed as dark tangles that looked, at a glance, like the pinch
+ * working. These sum to 0.907.
  */
-export function contourLandscape(xIn: number, yIn: number): number {
-  // The summit, in inches from the sheet's top-left corner. Off the left edge
-  // and a little above the middle, so no ring closes inside the board and the
-  // arcs open towards the right of the sheet.
-  const peakX = -3.2
-  const peakY = 3.1
-  const dx = xIn - peakX
-  const dy = yIn - peakY
-  const dome = -(dx * dx + dy * dy) * 0.021
+export const WAVE_SPACING_IN = 0.17
+const WAVE_STEP_IN = 0.07
 
-  // Slow swells, at wavelengths of roughly four and eight inches, so a line
-  // bends two or three times across a board rather than a dozen.
-  const swell =
-    1.15 * Math.sin(xIn * 0.47 + 0.6) +
-    0.85 * Math.sin(yIn * 0.39 - 0.9) +
-    0.45 * Math.sin(xIn * 0.26 + yIn * 0.31 + 1.9)
-
-  return dome + swell
-}
-
-/** Where a contour crosses the segment between two sampled corners. */
-function crossing(a: number, b: number, level: number): number {
-  const span = b - a
-  // Parallel to the level: the caller only asks when the two straddle it, and
-  // a zero span there would be a division by nothing.
-  return Math.abs(span) < 1e-9 ? 0.5 : (level - a) / span
+/** A band's vertical offset at a point along it, in inches. */
+export function waveOffset(xIn: number, baseIn: number): number {
+  return (
+    0.62 * Math.sin(xIn * 1.05 + baseIn * 1.1) + 0.3 * Math.sin(xIn * 1.75 - baseIn * 0.75 + 2.1)
+  )
 }
 
 /**
- * The isolines of that landscape, by marching squares.
+ * The bands across a sheet, as polylines.
  *
- * The grid is sampled a sixth of an inch apart, which is fine enough that a
- * ring looks drawn rather than facetted and coarse enough that a sheet is tens
- * of thousands of cells rather than millions. Each cell contributes at most
- * two segments, and the segments are emitted as they are found rather than
- * stitched into polylines: a cover prints them identically either way, and the
- * stitching is a quantity of code that would have to be right about floating
- * point to buy nothing but a smaller file.
- *
- * The saddle case — two high corners diagonally opposite — is resolved by the
- * cell's own mean, which is the standard disambiguation and the only one that
- * cannot produce a line that stops in mid air.
+ * Drawn well past every edge: a band is displaced by up to its own amplitude,
+ * so one whose baseline sits on the trim would wander off the sheet and leave
+ * a gap along the cut. Starting them two inches out costs a few paths nobody
+ * sees and removes the one way this pattern can fail at the trim.
  */
-function contourMap(widthPt: number, heightPt: number): OrnamentShape[] {
-  const stepIn = 1 / 6
-  const stepPt = stepIn * 72
-  const cols = Math.ceil(widthPt / stepPt) + 1
-  const rows = Math.ceil(heightPt / stepPt) + 1
-
-  // Sampled once and reused by every level: the field is the expensive part
-  // and it does not depend on which line is being drawn.
-  const field: number[] = new Array(cols * rows)
-  for (let r = 0; r < rows; r += 1) {
-    for (let c = 0; c < cols; c += 1) {
-      field[r * cols + c] = contourLandscape((c * stepPt) / 72, (r * stepPt) / 72)
-    }
-  }
-
-  const levels: number[] = []
-  // The dome drags the field a long way negative towards the far corner, so
-  // the levels run much wider than a field of pure swells would need. The
-  // step is what sets how close the lines lie: a fifth of the swell's own
-  // amplitude puts a few lines on each bend without closing the gaps.
-  for (let v = -14; v <= 2.5; v += 0.3) levels.push(v)
-
+function flowingBands(widthPt: number, heightPt: number): OrnamentShape[] {
+  const widthIn = widthPt / 72
+  const heightIn = heightPt / 72
   const shapes: OrnamentShape[] = []
-  const at = (c: number, r: number): number => field[r * cols + c]!
-
-  for (const level of levels) {
-    const parts: string[] = []
-    for (let r = 0; r < rows - 1; r += 1) {
-      for (let c = 0; c < cols - 1; c += 1) {
-        const tl = at(c, r)
-        const tr = at(c + 1, r)
-        const br = at(c + 1, r + 1)
-        const bl = at(c, r + 1)
-        let code = 0
-        if (tl > level) code |= 8
-        if (tr > level) code |= 4
-        if (br > level) code |= 2
-        if (bl > level) code |= 1
-        if (code === 0 || code === 15) continue
-
-        const x0 = c * stepPt
-        const y0 = r * stepPt
-        // The four edge crossings, named for the side they sit on.
-        const top = { x: x0 + crossing(tl, tr, level) * stepPt, y: y0 }
-        const right = { x: x0 + stepPt, y: y0 + crossing(tr, br, level) * stepPt }
-        const bottom = { x: x0 + crossing(bl, br, level) * stepPt, y: y0 + stepPt }
-        const left = { x: x0, y: y0 + crossing(tl, bl, level) * stepPt }
-
-        const draw = (a: { x: number; y: number }, b: { x: number; y: number }): void => {
-          parts.push(`M ${a.x.toFixed(1)} ${a.y.toFixed(1)} L ${b.x.toFixed(1)} ${b.y.toFixed(1)}`)
-        }
-
-        switch (code) {
-          case 1:
-          case 14:
-            draw(left, bottom)
-            break
-          case 2:
-          case 13:
-            draw(bottom, right)
-            break
-          case 3:
-          case 12:
-            draw(left, right)
-            break
-          case 4:
-          case 11:
-            draw(top, right)
-            break
-          case 6:
-          case 9:
-            draw(top, bottom)
-            break
-          case 7:
-          case 8:
-            draw(left, top)
-            break
-          case 5:
-          case 10: {
-            // The ambiguous pair. Joining the wrong two corners leaves a line
-            // that ends nowhere, so the cell's mean decides which way the
-            // ridge actually runs.
-            const centre = (tl + tr + br + bl) / 4
-            const high = centre > level
-            if ((code === 5) === high) {
-              draw(left, top)
-              draw(bottom, right)
-            } else {
-              draw(left, bottom)
-              draw(top, right)
-            }
-            break
-          }
-        }
-      }
+  for (let base = -2; base <= heightIn + 2; base += WAVE_SPACING_IN) {
+    const points: string[] = []
+    for (let x = -0.3; x <= widthIn + 0.3; x += WAVE_STEP_IN) {
+      const y = base + waveOffset(x, base)
+      points.push(`${(x * 72).toFixed(1)} ${(y * 72).toFixed(1)}`)
     }
-    if (parts.length > 0) shapes.push({ d: parts.join(' '), stroke: 0.6 })
+    shapes.push({ d: `M ${points.join(' L ')}`, stroke: 0.6 })
   }
   return shapes
 }
@@ -469,8 +362,8 @@ export function groundPattern(
       ? laidPaper(widthPt, heightPt)
       : pattern === 'aura'
         ? auricField(widthPt, heightPt)
-        : pattern === 'contour'
-          ? contourMap(widthPt, heightPt)
+        : pattern === 'wave'
+          ? flowingBands(widthPt, heightPt)
           : guilloche(widthPt, heightPt)
 
   return [

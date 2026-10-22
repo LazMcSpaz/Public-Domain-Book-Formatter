@@ -238,6 +238,13 @@ export const FRONT_MARK_ID = '__front-mark__'
 export const FRAME_INSET_IN = 0.375
 
 /**
+ * How far the edition statement sits below the title's rule, as a share of its
+ * own size. A hair, by request: enough to read as a separate line and not
+ * enough to float free of the title it belongs to.
+ */
+export const EDITION_DROP = 0.45
+
+/**
  * How much clear space the frame keeps between itself and the type.
  *
  * Without it the type box is still the safe area, which is *outside* the
@@ -1217,10 +1224,15 @@ function layFrontCover(
    * The edition statement, set under the rule. Returns where the next thing
    * goes, so a cover without one is laid out exactly as it was before.
    */
-  const setEdition = (from: number): number => {
-    if (!content.edition.trim()) return from
+  const setEdition = (after: number): number => {
+    if (!content.edition.trim()) return after
     const editionFont = face(look.bodyFont, 'regular', measurer.hasSmallCaps(look.bodyFont))
     const size = Math.max(9, Math.min(16, typeBox.widthPt * 0.035))
+    // Dropped a little below the rule rather than set directly under it. The
+    // rule belongs to the title, so a line tight beneath it reads as part of
+    // the title's own block; a few points of air makes it a second thing the
+    // board says.
+    const from = after + size * EDITION_DROP
     // A newline stacks it, the way one in a title does. A statement naming a
     // series and the volumes in it is two thoughts, and set on one line under
     // a rule it reads as a caption; stacked, it reads as a label. The break is
