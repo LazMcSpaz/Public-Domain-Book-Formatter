@@ -32,6 +32,7 @@ import {
   coverGeometry,
   describeGeometry,
   MIN_PAGES_FOR_SPINE_TEXT,
+  HARDCOVER_PAGE_LIMITS,
   PAGE_LIMITS,
   PAPER_LABEL,
   type PaperStock
@@ -133,6 +134,26 @@ export function sheetQuestions(state: CoverInterviewState): Question[] {
       defaultValue: TRIMS.includes(doc.trimSize) ? doc.trimSize : '6x9',
       required: true,
       evidence: [{ kind: 'text', text: describeGeometry(geometry), label: 'The flat sheet' }]
+    },
+    {
+      id: 'cover-binding',
+      type: 'choice',
+      group: 'sheet',
+      prompt: 'Is this the paperback or the hardcover?',
+      help: 'They are different objects, not two sizes of one. A hardcover is printed on a sheet that wraps around boards and glues inside, so it is larger than the book, its panels stand proud of the pages, and a 10 mm hinge either side of the spine must be kept clear. One book published in both needs a cover file for each.',
+      options: [
+        {
+          value: 'paperback',
+          label: 'Paperback',
+          description: 'Trimmed, with an eighth of an inch of bleed'
+        },
+        {
+          value: 'hardcover',
+          label: 'Hardcover',
+          description: `Case laminate: ${HARDCOVER_PAGE_LIMITS.min}–${HARDCOVER_PAGE_LIMITS.max} pages, and only some trims`
+        }
+      ],
+      defaultValue: doc.binding
     },
     {
       id: 'cover-paper',
@@ -700,6 +721,8 @@ export function coverFromAnswers(
   }
 
   doc.trimSize = text(answers, 'cover-trim', doc.trimSize)
+  const binding = text(answers, 'cover-binding', doc.binding)
+  if (binding === 'paperback' || binding === 'hardcover') doc.binding = binding
   const paper = text(answers, 'cover-paper', doc.paper)
   if ((PAPERS as readonly string[]).includes(paper)) doc.paper = paper as PaperStock
   const pages = Number(text(answers, 'cover-pages', String(doc.pageCount)))

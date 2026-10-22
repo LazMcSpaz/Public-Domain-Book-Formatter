@@ -1,5 +1,5 @@
 /**
- * KDP cover geometry — the flat sheet a paperback cover is printed on.
+ * KDP cover geometry — the flat sheet a cover is printed on.
  *
  * A cover is not a page. It is one sheet carrying three panels — back, spine,
  * front, left to right — plus a bleed the printer trims off. Every number here
@@ -34,6 +34,25 @@
  *
  * Pure: arithmetic and named constants, no I/O.
  */
+
+/**
+ * The two bindings KDP prints, which are different objects and not two sizes
+ * of one.
+ *
+ * A **paperback** is one sheet trimmed to the book: three panels at the trim
+ * size, an eighth of an inch of bleed cut off every outer edge.
+ *
+ * A **hardcover** is a case. The printed sheet is glued around boards and its
+ * outer margin folds to the inside, so the allowance is a *wrap* of 15 mm
+ * rather than a bleed of 3 mm; the boards stand proud of the pages, so each
+ * panel is **larger than the trim**; the spine carries two 2 mm boards on top
+ * of the paper block; and a 10 mm **hinge** either side of the spine is where
+ * the case flexes, which nothing may print in.
+ *
+ * Getting this wrong is not a warning, it is a box of books with the title
+ * folded onto the inside of the board.
+ */
+export type Binding = 'paperback' | 'hardcover'
 
 /** Points per inch — PDF's unit. Same value `@core/layout` uses. */
 export const PT_PER_INCH = 72
@@ -81,6 +100,52 @@ export const PAGE_LIMITS: Readonly<Record<PaperStock, { min: number; max: number
 export const BLEED_IN = 0.125
 
 /**
+ * The hardcover wrap: how far the sheet runs past the case on every outer edge.
+ *
+ * 15 mm, and unlike a bleed it is not thrown away — it folds over the board and
+ * is glued down inside. Artwork must still reach into it, for the same reason a
+ * bleed exists: the fold wanders, and a picture stopping at the board's edge
+ * leaves a white line along the turn.
+ */
+export const WRAP_IN = 15 / 25.4
+
+/**
+ * The hinge: the band either side of the spine where the case bends.
+ *
+ * 10 mm, inside the panel rather than between the panels — it is part of the
+ * front and back boards, and it is the one region of a hardcover that moves
+ * every time the book is opened. Nothing is set in it, so the safe area starts
+ * on its far side.
+ */
+export const HINGE_IN = 10 / 25.4
+
+/**
+ * How far the case board stands proud of the pages, per panel.
+ *
+ * Measured off KDP's own calculator across every hardcover trim they offer:
+ * 5 mm of width and 6 mm of height, the same on 5.5×8.5 as on 8.25×11. It is
+ * why a hardcover panel is not the trim size, and why a cover composed at the
+ * trim would sit a fifth of an inch small inside its own boards.
+ *
+ * Written as millimetres over 25.4, like every hardcover constant here,
+ * because that is the unit KDP specifies the case in — their table *displays*
+ * 0.197 in, and building from the display puts the 7×10 sheet 0.0014 in wide,
+ * which the template fixtures catch.
+ */
+export const CASE_OVERHANG_W_IN = 5 / 25.4
+export const CASE_OVERHANG_H_IN = 6 / 25.4
+
+/**
+ * What the case adds to the spine, over and above the paper block.
+ *
+ * 4.8 mm: two 2 mm boards and the material that turns around them. Fitted
+ * against KDP's calculator at five page counts on two stocks, and the
+ * residual is zero to a thousandth of an inch at every point — the caliper
+ * table is the paperback's, and this is a constant added to it.
+ */
+export const CASE_BOARD_IN = 4.8 / 25.4
+
+/**
  * How far in from a trimmed edge anything that must survive the cut has to sit.
  *
  * Trimming is mechanical and wanders by up to an eighth of an inch, so this is
@@ -95,6 +160,14 @@ export const BARCODE_W_IN = 2
 export const BARCODE_H_IN = 1.2
 /** How far that area sits in from the back cover's trimmed edges. */
 export const BARCODE_INSET_IN = 0.25
+/**
+ * The same, up from the foot of a hardcover's back board.
+ *
+ * KDP's calculator gives a hardcover a taller barcode margin than a paperback
+ * — 0.375 in against 0.25 — which is the one number of the four on that table
+ * that is not shared between the bindings.
+ */
+export const BARCODE_INSET_BOTTOM_HARDCOVER_IN = 0.375
 
 /**
  * Below this page count KDP will not print spine text.
@@ -121,24 +194,60 @@ export interface TrimSize {
   heightIn: number
 }
 
+/** What KDP will print a hardcover at: their own limits, not ours. */
+export const HARDCOVER_PAGE_LIMITS = { min: 76, max: 550 }
+
+/** The trims KDP offers in hardcover, as their cover calculator lists them. */
+export const HARDCOVER_TRIMS: readonly string[] = ['5.5x8.5', '6x9', '6.14x9.21', '7x10', '8.25x11']
+
+/**
+ * What this binding will take on this stock: the tighter of the two.
+ *
+ * A hardcover is 76–550 whatever the paper, and cream paperbacks stop at 776,
+ * so neither limit alone is the answer and reporting the paper's range on a
+ * case-bound book is a true sentence about the wrong object.
+ */
+export function pageLimitsFor(
+  paper: PaperStock,
+  binding: Binding = 'paperback'
+): { min: number; max: number } {
+  const stock = PAGE_LIMITS[paper]
+  if (binding !== 'hardcover') return stock
+  return {
+    min: Math.max(stock.min, HARDCOVER_PAGE_LIMITS.min),
+    max: Math.min(stock.max, HARDCOVER_PAGE_LIMITS.max)
+  }
+}
+
 export interface CoverGeometryInput {
   /** Trim token, e.g. `6x9` — the same notation `StyleProfile.trimSize` uses. */
   trimSize: string
   /** The interior's *measured* page count. Not an estimate: this sets the spine. */
   pageCount: number
   paper: PaperStock
+  /** Paperback when omitted, which is what every cover was before this existed. */
+  binding?: Binding
 }
 
 export interface CoverGeometry {
   trim: TrimSize
   pageCount: number
   paper: PaperStock
+  binding: Binding
   /** Spine width in inches — pages × caliper. */
   spineIn: number
-  /** The whole sheet, bleed included. */
+  /** The whole sheet, bleed or wrap included. */
   fullWidthIn: number
   fullHeightIn: number
+  /** The outer allowance: a paperback's bleed, or a hardcover's wrap. */
   bleedIn: number
+  /**
+   * A panel's size. The trim on a paperback; the trim plus the board's
+   * overhang on a hardcover, which is what `back` and `front` are.
+   */
+  panel: TrimSize
+  /** The flexing band either side of the spine. Null on a paperback. */
+  hinge: { back: Rect; front: Rect } | null
   /** The three trimmed panels, left to right on the flat sheet. */
   back: Rect
   spine: Rect
@@ -182,8 +291,16 @@ export function parseTrim(token: string): TrimSize | null {
  * error, which is the one place on a cover where a hundredth of an inch shows —
  * the fold lands inside the front cover's artwork.
  */
-export function spineWidth(pageCount: number, paper: PaperStock): number {
-  return Math.max(0, pageCount) * PAPER_CALIPER_IN[paper]
+export function spineWidth(
+  pageCount: number,
+  paper: PaperStock,
+  binding: Binding = 'paperback'
+): number {
+  const block = Math.max(0, pageCount) * PAPER_CALIPER_IN[paper]
+  // The case is the block plus its boards, so a hardcover spine is never the
+  // paperback's — on this book the two differ by three sixteenths of an inch,
+  // which is most of a line of type.
+  return binding === 'hardcover' ? block + CASE_BOARD_IN : block
 }
 
 function inset(rect: Rect, by: number): Rect {
@@ -193,6 +310,17 @@ function inset(rect: Rect, by: number): Rect {
     width: Math.max(0, rect.width - by * 2),
     height: Math.max(0, rect.height - by * 2)
   }
+}
+
+/** Take a safe area off the hinge, which is inside the panel it belongs to. */
+function clearHinge(safe: Rect, hinge: Rect | null, side: 'left' | 'right'): Rect {
+  if (!hinge) return safe
+  if (side === 'left') {
+    const x = Math.max(safe.x, hinge.x + hinge.width)
+    return { x, y: safe.y, width: Math.max(0, safe.x + safe.width - x), height: safe.height }
+  }
+  const right = Math.min(safe.x + safe.width, hinge.x)
+  return { x: safe.x, y: safe.y, width: Math.max(0, right - safe.x), height: safe.height }
 }
 
 /**
@@ -209,24 +337,49 @@ export function coverGeometry(input: CoverGeometryInput): CoverGeometry {
   }
 
   const pageCount = Math.max(0, Math.round(input.pageCount))
-  const spineIn = spineWidth(pageCount, input.paper)
+  const binding: Binding = input.binding ?? 'paperback'
+  const hardcover = binding === 'hardcover'
+  const spineIn = spineWidth(pageCount, input.paper, binding)
 
-  const fullWidthIn = BLEED_IN * 2 + trim.widthIn * 2 + spineIn
-  const fullHeightIn = BLEED_IN * 2 + trim.heightIn
+  // The allowance outside the panels: thrown away on a paperback, folded in
+  // and glued on a hardcover, and the same arithmetic either way.
+  const edgeIn = hardcover ? WRAP_IN : BLEED_IN
+  const panel: TrimSize = {
+    widthIn: trim.widthIn + (hardcover ? CASE_OVERHANG_W_IN : 0),
+    heightIn: trim.heightIn + (hardcover ? CASE_OVERHANG_H_IN : 0)
+  }
 
-  const back: Rect = { x: BLEED_IN, y: BLEED_IN, width: trim.widthIn, height: trim.heightIn }
+  const fullWidthIn = edgeIn * 2 + panel.widthIn * 2 + spineIn
+  const fullHeightIn = edgeIn * 2 + panel.heightIn
+
+  const back: Rect = { x: edgeIn, y: edgeIn, width: panel.widthIn, height: panel.heightIn }
   const spine: Rect = {
-    x: BLEED_IN + trim.widthIn,
-    y: BLEED_IN,
+    x: edgeIn + panel.widthIn,
+    y: edgeIn,
     width: spineIn,
-    height: trim.heightIn
+    height: panel.heightIn
   }
   const front: Rect = {
-    x: BLEED_IN + trim.widthIn + spineIn,
-    y: BLEED_IN,
-    width: trim.widthIn,
-    height: trim.heightIn
+    x: edgeIn + panel.widthIn + spineIn,
+    y: edgeIn,
+    width: panel.widthIn,
+    height: panel.heightIn
   }
+
+  // The hinge sits inside each panel, against the spine: the back's is at its
+  // right edge and the front's at its left, because the sheet reads
+  // back | spine | front and the folds are the spine's two sides.
+  const hinge = hardcover
+    ? {
+        back: {
+          x: back.x + back.width - HINGE_IN,
+          y: back.y,
+          width: HINGE_IN,
+          height: back.height
+        },
+        front: { x: front.x, y: front.y, width: HINGE_IN, height: front.height }
+      }
+    : null
 
   const spineTextAllowed = pageCount >= MIN_PAGES_FOR_SPINE_TEXT
   const spineUsableWidth = spineIn - SPINE_TEXT_CLEARANCE_IN * 2
@@ -244,9 +397,10 @@ export function coverGeometry(input: CoverGeometryInput): CoverGeometry {
   // against the spine: laid out back|spine|front, the back panel's right edge
   // is the fold. (Turn a book over and the spine is on your right; the flat
   // sheet is not mirrored.)
+  const barcodeBottomIn = hardcover ? BARCODE_INSET_BOTTOM_HARDCOVER_IN : BARCODE_INSET_IN
   const barcode: Rect = {
     x: back.x + back.width - BARCODE_INSET_IN - BARCODE_W_IN,
-    y: back.y + back.height - BARCODE_INSET_IN - BARCODE_H_IN,
+    y: back.y + back.height - barcodeBottomIn - BARCODE_H_IN,
     width: BARCODE_W_IN,
     height: BARCODE_H_IN
   }
@@ -255,15 +409,21 @@ export function coverGeometry(input: CoverGeometryInput): CoverGeometry {
     trim,
     pageCount,
     paper: input.paper,
+    binding,
     spineIn,
     fullWidthIn,
     fullHeightIn,
-    bleedIn: BLEED_IN,
+    bleedIn: edgeIn,
     back,
     spine,
     front,
-    backSafe: inset(back, SAFE_MARGIN_IN),
-    frontSafe: inset(front, SAFE_MARGIN_IN),
+    panel,
+    hinge,
+    // Inset from the cut as always, and on a hardcover pushed off the hinge
+    // too: a line centred in a panel that still contains its hinge is a line
+    // centred on the wrong box, and it creeps towards the fold.
+    backSafe: clearHinge(inset(back, SAFE_MARGIN_IN), hinge?.back ?? null, 'right'),
+    frontSafe: clearHinge(inset(front, SAFE_MARGIN_IN), hinge?.front ?? null, 'left'),
     spineSafe,
     barcode,
     spineTextAllowed

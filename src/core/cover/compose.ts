@@ -850,7 +850,8 @@ export function composeCover(doc: CoverDocument, options: ComposeOptions): Compo
   const geometry = coverGeometry({
     trimSize: doc.trimSize,
     pageCount: doc.pageCount,
-    paper: doc.paper
+    paper: doc.paper,
+    binding: doc.binding
   })
   const items: CoverItem[] = []
   const warnings: string[] = []

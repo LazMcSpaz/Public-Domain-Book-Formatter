@@ -22,6 +22,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   BARCODE_H_IN,
+  CASE_BOARD_IN,
+  HARDCOVER_PAGE_LIMITS,
+  HARDCOVER_TRIMS,
+  HINGE_IN,
+  pageLimitsFor,
+  WRAP_IN,
   BARCODE_W_IN,
   BLEED_IN,
   coverGeometry,
@@ -38,6 +44,7 @@ interface TemplateFixture {
   trim: string
   pages: number
   paper: PaperStock
+  binding?: 'paperback' | 'hardcover'
   /** Flat sheet, bleed included, as the template file measures. */
   fullWidthIn: number
   fullHeightIn: number
@@ -55,16 +62,78 @@ const KDP_TEMPLATE_FIXTURES: TemplateFixture[] = [
     fullWidthIn: 12.75,
     fullHeightIn: 9.25,
     source: "KDP's published worked example for cream paper"
+  },
+  // Read out of KDP's own cover calculator, which is the thing that computes
+  // what their printer uses: POST to `cover-calculator/measurements-table`
+  // with a binding, trim, paper and page count and it answers with this table.
+  // These are the rows for the book this binding was built for, plus the two
+  // ends of the hardcover page range and both stocks, because a constant
+  // fitted on one page count is not fitted.
+  {
+    trim: '7x10',
+    pages: 474,
+    paper: 'bw-white',
+    spineIn: 1.067,
+    fullWidthIn: 15.317,
+    fullHeightIn: 10.25,
+    source: 'KDP cover calculator, paperback 7x10, 474pp white'
+  },
+  {
+    trim: '7x10',
+    pages: 474,
+    paper: 'bw-white',
+    binding: 'hardcover',
+    spineIn: 1.256,
+    fullWidthIn: 16.831,
+    fullHeightIn: 11.417,
+    source: 'KDP cover calculator, hardcover 7x10, 474pp white'
+  },
+  {
+    trim: '6x9',
+    pages: 76,
+    paper: 'bw-white',
+    binding: 'hardcover',
+    spineIn: 0.36,
+    fullWidthIn: 13.935,
+    fullHeightIn: 10.417,
+    source: 'KDP cover calculator, hardcover 6x9, 76pp white (their minimum)'
+  },
+  {
+    trim: '6x9',
+    pages: 550,
+    paper: 'bw-cream',
+    binding: 'hardcover',
+    spineIn: 1.564,
+    fullWidthIn: 15.139,
+    fullHeightIn: 10.417,
+    source: 'KDP cover calculator, hardcover 6x9, 550pp cream (their maximum)'
+  },
+  {
+    trim: '8.25x11',
+    pages: 474,
+    paper: 'bw-white',
+    binding: 'hardcover',
+    spineIn: 1.256,
+    fullWidthIn: 19.331,
+    fullHeightIn: 12.417,
+    source: 'KDP cover calculator, hardcover 8.25x11, 474pp white'
   }
 ]
 
 describe('KDP cover templates', () => {
   for (const f of KDP_TEMPLATE_FIXTURES) {
     it(`matches ${f.source} (${f.trim}, ${f.pages}pp, ${f.paper})`, () => {
-      const g = coverGeometry({ trimSize: f.trim, pageCount: f.pages, paper: f.paper })
-      expect(g.spineIn).toBeCloseTo(f.spineIn, 4)
-      expect(g.fullWidthIn).toBeCloseTo(f.fullWidthIn, 4)
-      expect(g.fullHeightIn).toBeCloseTo(f.fullHeightIn, 4)
+      const g = coverGeometry({
+        trimSize: f.trim,
+        pageCount: f.pages,
+        paper: f.paper,
+        ...(f.binding ? { binding: f.binding } : {})
+      })
+      // Three decimals: KDP's table prints three, so a fourth would be
+      // asserting against a number nobody published.
+      expect(g.spineIn).toBeCloseTo(f.spineIn, 3)
+      expect(g.fullWidthIn).toBeCloseTo(f.fullWidthIn, 3)
+      expect(g.fullHeightIn).toBeCloseTo(f.fullHeightIn, 3)
     })
   }
 })
@@ -168,5 +237,66 @@ describe('spine text eligibility', () => {
     expect(g.spineSafe).not.toBeNull()
     expect(g.spineSafe!.width).toBeLessThan(g.spine.width)
     expect(contains(g.spine, g.spineSafe!)).toBe(true)
+  })
+})
+
+describe('a hardcover is a case, not a bigger paperback', () => {
+  const hc = (pages = 474, trim = '7x10') =>
+    coverGeometry({ trimSize: trim, pageCount: pages, paper: 'bw-white', binding: 'hardcover' })
+  const pb = (pages = 474, trim = '7x10') =>
+    coverGeometry({ trimSize: trim, pageCount: pages, paper: 'bw-white' })
+
+  it('defaults to a paperback, so every cover made before this is unchanged', () => {
+    const g = coverGeometry({ trimSize: '7x10', pageCount: 474, paper: 'bw-white' })
+    expect(g.binding).toBe('paperback')
+    expect(g.hinge).toBeNull()
+    expect(g.panel).toEqual(g.trim)
+    expect(g.bleedIn).toBeCloseTo(0.125, 6)
+  })
+
+  it('stands the boards proud of the pages, so a panel is not the trim', () => {
+    const g = hc()
+    expect(g.panel.widthIn).toBeGreaterThan(g.trim.widthIn)
+    expect(g.panel.heightIn).toBeGreaterThan(g.trim.heightIn)
+    // Composing at the trim would leave the design a fifth of an inch small
+    // inside its own case.
+    expect(g.front.width).toBeCloseTo(g.panel.widthIn, 6)
+  })
+
+  it('wraps rather than bleeds, and the wrap is much the larger', () => {
+    expect(hc().bleedIn).toBeCloseTo(WRAP_IN, 6)
+    expect(hc().bleedIn).toBeGreaterThan(pb().bleedIn * 4)
+  })
+
+  it('carries its boards on the spine as well', () => {
+    expect(hc().spineIn - pb().spineIn).toBeCloseTo(CASE_BOARD_IN, 6)
+  })
+
+  it('keeps the safe areas off the hinge, on the spine side of each board', () => {
+    const g = hc()
+    expect(g.hinge).not.toBeNull()
+    const { back, front } = g.hinge!
+    // Each hinge is inside its own panel, against the spine.
+    expect(back.x + back.width).toBeCloseTo(g.spine.x, 6)
+    expect(front.x).toBeCloseTo(g.spine.x + g.spine.width, 6)
+    expect(front.width).toBeCloseTo(HINGE_IN, 6)
+    // And the safe areas start beyond them.
+    expect(g.backSafe.x + g.backSafe.width).toBeLessThanOrEqual(back.x + 1e-9)
+    expect(g.frontSafe.x).toBeGreaterThanOrEqual(front.x + front.width - 1e-9)
+  })
+
+  it('reports the binding\u2019s page range, not the paper\u2019s', () => {
+    // 828 is what white paper takes as a paperback; a case-bound book stops at
+    // 550 whatever it is printed on, and saying otherwise is a true sentence
+    // about the wrong object.
+    expect(pageLimitsFor('bw-white')).toEqual({ min: 24, max: 828 })
+    expect(pageLimitsFor('bw-white', 'hardcover')).toEqual(HARDCOVER_PAGE_LIMITS)
+    // Cream stops at 776 as a paperback, so the hardcover maximum still binds.
+    expect(pageLimitsFor('bw-cream', 'hardcover').max).toBe(550)
+  })
+
+  it('offers the trims KDP case-binds, and 7x10 is one of them', () => {
+    expect(HARDCOVER_TRIMS).toContain('7x10')
+    expect(HARDCOVER_TRIMS).not.toContain('5x8')
   })
 })

@@ -20,7 +20,8 @@ import { GROUND_FIGURE_BACK_ID, GROUND_FIGURE_ID } from './figures'
 import {
   contains,
   overlaps,
-  PAGE_LIMITS,
+  HARDCOVER_TRIMS,
+  pageLimitsFor,
   PAPER_LABEL,
   type CoverGeometry,
   type Rect
@@ -136,7 +137,7 @@ export function validateCover(input: ValidateCoverInput): CoverValidationReport 
 
   // 2. Page count against what the chosen stock can be printed on.
   {
-    const limits = PAGE_LIMITS[geometry.paper]
+    const limits = pageLimitsFor(geometry.paper, geometry.binding)
     const unanswered = geometry.pageCount <= 0
     const inRange = geometry.pageCount >= limits.min && geometry.pageCount <= limits.max
     checks.push({
@@ -148,11 +149,30 @@ export function validateCover(input: ValidateCoverInput): CoverValidationReport 
       // colour, which is the one thing these checks cannot afford.
       level: unanswered ? 'pending' : inRange ? 'ok' : 'fail',
       detail: unanswered
-        ? `KDP prints ${limits.min}–${limits.max} pages on ${PAPER_LABEL[geometry.paper].toLowerCase()}. Say how long the interior is and the spine follows from it.`
+        ? `KDP prints ${limits.min}–${limits.max} pages for a ${geometry.binding} on ${PAPER_LABEL[geometry.paper].toLowerCase()}. Say how long the interior is and the spine follows from it.`
         : inRange
-          ? `${geometry.pageCount} pages is within the ${limits.min}–${limits.max} KDP prints on ${PAPER_LABEL[geometry.paper].toLowerCase()}.`
-          : `${geometry.pageCount} pages is outside the ${limits.min}–${limits.max} KDP prints on ${PAPER_LABEL[geometry.paper].toLowerCase()}; pick another paper or change the interior.`
+          ? `${geometry.pageCount} pages is within the ${limits.min}–${limits.max} KDP prints a ${geometry.binding} on ${PAPER_LABEL[geometry.paper].toLowerCase()}.`
+          : `${geometry.pageCount} pages is outside the ${limits.min}–${limits.max} KDP prints a ${geometry.binding} on ${PAPER_LABEL[geometry.paper].toLowerCase()}; pick another paper or change the interior.`
     })
+  }
+
+  // 2b. A hardcover is only offered at some trims.
+  {
+    if (geometry.binding === 'hardcover') {
+      const token = `${geometry.trim.widthIn}x${geometry.trim.heightIn}`
+      const offered = HARDCOVER_TRIMS.includes(token)
+      checks.push({
+        id: 'hardcover-trim',
+        label: 'Trim size for a hardcover',
+        // A fail rather than a warning: there is no cover file that rescues a
+        // trim KDP will not case-bind, and the upload is refused after the
+        // work is done rather than before it.
+        level: offered ? 'ok' : 'fail',
+        detail: offered
+          ? `KDP case-binds ${token} in.`
+          : `KDP does not offer ${token} in in hardcover. They case-bind ${HARDCOVER_TRIMS.join(', ')} in.`
+      })
+    }
   }
 
   // 3. Bleed — is the ground actually painted out to the sheet's edge?
@@ -213,6 +233,34 @@ export function validateCover(input: ValidateCoverInput): CoverValidationReport 
           ? `${intruding.length} element(s) fall in the 2 × 1.2 in area at the foot of the back cover where KDP prints the barcode. Whatever is there will be covered.`
           : 'The barcode area at the foot of the back cover is clear.'
     })
+  }
+
+  // 5b. The hinge, which only a hardcover has.
+  {
+    // The band either side of the spine where the case bends. It is inside the
+    // boards rather than between them, so nothing about a paperback layout
+    // keeps type out of it — a title centred on a hardcover's front panel sits
+    // a quarter inch nearer the fold than it looks, and a rule struck across
+    // the panel runs straight through the crease.
+    //
+    // The ground is exempt for the same reason it is exempt from the barcode:
+    // it runs under everything by design, and a check that fires on every
+    // cover is one its reader learns to skip.
+    if (geometry.hinge) {
+      const bands = [geometry.hinge.back, geometry.hinge.front]
+      const intruding = inkedBounds(composed)
+        .filter(({ item }) => !isGround(item))
+        .filter(({ rect }) => bands.some((band) => overlaps(rect, band)))
+      checks.push({
+        id: 'hinge',
+        label: 'Spine hinge',
+        level: intruding.length > 0 ? 'warn' : 'ok',
+        detail:
+          intruding.length > 0
+            ? `${intruding.length} element(s) fall in the 10 mm hinge either side of the spine, where the case folds. Type set there creases when the book is opened.`
+            : 'Both hinges are clear of type.'
+      })
+    }
   }
 
   // 6. Art resolution at the size it actually prints.

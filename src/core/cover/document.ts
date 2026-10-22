@@ -22,7 +22,7 @@ import {
   type GroundPattern
 } from './patterns'
 import { DEFAULT_FIGURE_OPACITY, figureOpacity, GROUND_FIGURES, type GroundFigure } from './figures'
-import type { PaperStock } from './geometry'
+import type { Binding, PaperStock } from './geometry'
 
 /**
  * How the front cover is arranged.
@@ -392,6 +392,15 @@ export interface CoverDocument {
   /** The interior's measured page count. Sets the spine; never an estimate. */
   pageCount: number
   paper: PaperStock
+  /**
+   * Paperback or hardcover.
+   *
+   * On the document rather than the look, because one book is published in
+   * both and they are the same design on two different objects — banking it
+   * would make a collection's look carry a binding, which is a fact about a
+   * printing and not about how the series is drawn.
+   */
+  binding: Binding
   look: CoverLook
   content: CoverContent
 }
@@ -455,6 +464,7 @@ export function defaultCover(trimSize = '6x9', pageCount = 0): CoverDocument {
     trimSize,
     pageCount,
     paper: 'bw-cream',
+    binding: 'paperback',
     look: defaultLook(),
     content: emptyContent()
   }

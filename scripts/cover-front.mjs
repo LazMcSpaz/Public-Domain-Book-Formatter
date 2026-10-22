@@ -19,6 +19,7 @@
  * back and the fold are right.
  *
  * The spec is a partial cover document — `trimSize`, `pageCount`, `paper`,
+ * `binding` (`paperback` or `hardcover`),
  * `look`, `content` — merged over the shipped defaults and normalised by
  * `normalizeLook`, so an old or hand-written spec cannot half-apply. Two fields
  * are the script's own: `device`, a file name under `public/devices`, which is
@@ -86,6 +87,9 @@ const result = await page.evaluate(
 
     const doc = core.defaultCover(spec.trimSize ?? '6x9', spec.pageCount ?? 0)
     if (spec.paper) doc.paper = spec.paper
+    // Paperback or hardcover. The same design on two different objects, so a
+    // book published in both is two runs of this script over two specs.
+    if (spec.binding) doc.binding = spec.binding
     doc.look = core.normalizeLook({
       ...doc.look,
       ...(spec.look ?? {}),
