@@ -1078,6 +1078,11 @@ node scripts/screenshot-cover.mjs    # the cover studio at #cover, front and fla
 node scripts/cover-front.mjs s.json out.png   # a cover whose design is settled,
                                      #   as a picture: spec in, PNG out, no clicking
                                      #   (`--sheet` for the whole flat cover)
+node scripts/textground.mjs book.json out.svg --from 5   # the book's own text as
+                                     #   a cover ground: one dense field of its
+                                     #   words, turned, bold and italic kept,
+                                     #   the glyphs as paths so no font is
+                                     #   needed where it is rasterised
 ```
 
 Working _on a book_ (see **How the work is actually done**, above):
@@ -3045,6 +3050,42 @@ propose`, `npm run check:proposals`). The editor's instruction, in his words:
   Such a trace is a quarter of a megabyte against a device's twenty kilobytes,
   which costs nothing as a ground — it is rasterised at the size it prints —
   and would matter inside a book file.
+
+- **Also done**: **the book's own text as a ground** (`scripts/textground.mjs`,
+  the `lexicon` pattern). Asked for a cover for _The Theosophical Glossary_, the
+  editor wanted the volume's own words laid densely behind the type, across the
+  whole wrap, at a low tint and turned a little off square. It belongs to the
+  **pattern** family and not the figure family, and that is the whole of why it
+  may cross the fold: a field of text is allover, so there is no centre and no
+  pair of wing tips for a fold creeping an eighth of an inch to move. The
+  figure's single-picture exception is not needed and is not used.
+
+  Three things it turned out to need. The glyphs come out as **paths**, from the
+  same font files pdf-lib embeds, because the artwork is rasterised from an
+  `<img>` and an SVG loaded that way does not inherit the page's fonts — a
+  `<text>` element would set in whatever the renderer felt like. Each distinct
+  glyph is defined once and placed with `<use>`, which is a 965 KB file against
+  a six-megabyte one; the `<g>` holding each definition carries its own
+  `scale(k, -k)`, so positions stay in points, outlines stay in font units and
+  the flip from y-up font space is written once per glyph rather than once per
+  occurrence. And the book's **paragraphing is thrown away while its emphasis is
+  kept** — the entries run together into one river, because a column of separated
+  entries reads as a page that failed to print, while the bold headwords and
+  italic language tags are what make the field recognisably a glossary rather
+  than grey noise. They arrive as word indices from the reading, so no second
+  reader decides what is marked.
+
+  The tint was **measured, not chosen**: the field's ink coverage is 12.75%, the
+  same order as the laid paper's lines, so it sits in the band those patterns do
+  rather than at the figure's. The type is 10pt — setting it smaller to fit more
+  of the book in is how to break this module's own rule 2, since Cardo's stems
+  at 10pt are about 0.8pt and the floor is 0.5. What is new beside it is
+  `groundPatternOpacity`, a book's answer overruling the pattern's own, mirroring
+  `groundFigureOpacity` down to the clamp. It is `null` rather than a number
+  where it has not been asked, because each pattern's default was measured
+  against what that pattern is made of and a look banked before the question
+  existed must keep deferring to it — and because `Number('')` is 0, which is a
+  ground that prints nothing and warns about nothing.
 
 - **Next**: [`docs/PLAN-next.md`](./docs/PLAN-next.md) — the tool is safe to
   run and no second book has been read. Two driver faults that would corrupt a

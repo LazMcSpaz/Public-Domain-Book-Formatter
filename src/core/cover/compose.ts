@@ -34,7 +34,7 @@ import { parseInlineMarkup } from '@core/transcribe'
 import type { OrnamentArt } from '@core/ornament'
 import { sizeAfterOps } from '@core/image'
 import { worksLabel, type CoverDocument, type FrameStyle, type Hex } from './document'
-import { GROUND_IMAGE_ID, groundPattern, isImageGround, PATTERN_OPACITY } from './patterns'
+import { GROUND_IMAGE_ID, groundPattern, isImageGround, patternOpacity } from './patterns'
 import {
   backFigureFramePt,
   figureFramePt,
@@ -897,7 +897,7 @@ export function composeCover(doc: CoverDocument, options: ComposeOptions): Compo
       // cannot know a vector source's pixel count because it does not have one.
       srcWidth: 0,
       srcHeight: 0,
-      opacity: PATTERN_OPACITY[look.groundPattern]
+      opacity: patternOpacity(look.groundPattern, look.groundPatternOpacity)
     })
   } else if (look.groundPattern) {
     const placements = groundPattern(
@@ -917,7 +917,7 @@ export function composeCover(doc: CoverDocument, options: ComposeOptions): Compo
         scale: place.scale,
         art: place.art,
         color: palette.ink,
-        opacity: PATTERN_OPACITY[look.groundPattern]
+        opacity: patternOpacity(look.groundPattern, look.groundPatternOpacity)
       })
     }
   }

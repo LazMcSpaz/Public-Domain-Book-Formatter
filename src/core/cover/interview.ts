@@ -37,7 +37,13 @@ import {
   type PaperStock
 } from './geometry'
 import { ART_BRIEFS, BRIEF_LABEL, BRIEF_NOTE, SUGGESTED_ART_MODELS } from './art'
-import { GROUND_PATTERNS, PATTERN_LABEL, PATTERN_NOTE, type GroundPattern } from './patterns'
+import {
+  GROUND_PATTERNS,
+  PATTERN_LABEL,
+  PATTERN_NOTE,
+  PATTERN_OPACITY,
+  type GroundPattern
+} from './patterns'
 import { FIGURE_LABEL, FIGURE_NOTE, GROUND_FIGURES, type GroundFigure } from './figures'
 import { describeSavedCoverLook, type SavedCoverLook } from './profile'
 
@@ -381,6 +387,29 @@ export function lookQuestions(state: CoverInterviewState): Question[] {
   // How faint the figure prints, and what colour it prints in, are questions
   // about a figure — so they wait until there is one, the way the device's own
   // follow-up does below.
+  // How faint the ground prints is a question about a ground, so it waits
+  // until one is chosen — the same sequencing the figure's own follow-up uses.
+  if (look.groundPattern) {
+    out.push({
+      id: 'cover-pattern-opacity',
+      type: 'choice',
+      group: 'ornament',
+      prompt: 'How faint is the texture?',
+      help: `Each pattern carries a value measured against what it is made of, and this overrules it. Three per cent is where a press stops being relied on to hold a tint; past a fifth the ground competes with the type.`,
+      options: [
+        {
+          value: '',
+          label: `This pattern’s own — ${Math.round(PATTERN_OPACITY[look.groundPattern] * 100)}%`
+        },
+        { value: '0.05', label: '5% — barely there' },
+        { value: '0.08', label: '8% — a visible surface' },
+        { value: '0.12', label: '12% — plainly a pattern' },
+        { value: '0.2', label: '20% — a pattern the type sits on' }
+      ],
+      defaultValue: look.groundPatternOpacity === null ? '' : String(look.groundPatternOpacity)
+    })
+  }
+
   if (look.groundFigure) {
     out.push(
       {
@@ -697,6 +726,12 @@ export function coverFromAnswers(
     authorAtFoot: flag(answers, 'cover-author-foot', doc.look.authorAtFoot),
     groundFigure:
       (text(answers, 'cover-figure', doc.look.groundFigure ?? '') as GroundFigure | '') || null,
+    groundPatternOpacity: (() => {
+      const said = text(answers, 'cover-pattern-opacity', '')
+      // '' is "defer to the pattern", which is not the same as 0 — and
+      // `Number('')` is 0, which would print nothing and warn about nothing.
+      return said === '' ? null : Number(said)
+    })(),
     groundFigureOpacity: Number(
       text(answers, 'cover-figure-opacity', String(doc.look.groundFigureOpacity))
     ),

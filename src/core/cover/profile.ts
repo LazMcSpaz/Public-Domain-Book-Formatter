@@ -71,6 +71,7 @@ export const BANKED_COVER_KEYS: readonly (keyof CoverLook)[] = [
   'markOnFront',
   'groundPattern',
   'groundFigure',
+  'groundPatternOpacity',
   'groundFigureOpacity',
   'groundFigureBack'
 ]

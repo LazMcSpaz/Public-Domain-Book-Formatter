@@ -31,14 +31,15 @@
  */
 import type { OrnamentArt, OrnamentShape } from '@core/ornament'
 
-export type GroundPattern = 'laid' | 'fleuron' | 'aura' | 'guilloche' | 'marbled'
+export type GroundPattern = 'laid' | 'fleuron' | 'aura' | 'guilloche' | 'marbled' | 'lexicon'
 
 export const GROUND_PATTERNS: readonly GroundPattern[] = [
   'laid',
   'fleuron',
   'aura',
   'guilloche',
-  'marbled'
+  'marbled',
+  'lexicon'
 ]
 
 /**
@@ -55,7 +56,8 @@ export const GROUND_IMAGE_ID = '__ground__'
 
 /** Where a picture-backed ground's file lives, relative to the app. */
 export const GROUND_IMAGE_SRC: Readonly<Partial<Record<GroundPattern, string>>> = {
-  marbled: '/patterns/marbled.svg'
+  marbled: '/patterns/marbled.svg',
+  lexicon: '/patterns/lexicon.svg'
 }
 
 /** Whether this ground is a picture rather than drawn paths. */
@@ -68,7 +70,8 @@ export const PATTERN_LABEL: Readonly<Record<GroundPattern, string>> = {
   fleuron: 'A diaper of fleurons — the printer’s own flowers, in a lattice',
   aura: 'Auric ovoids — the diagram from The Human Aura, as a field',
   guilloche: 'Guilloche — the engine-turned rosette of a share certificate',
-  marbled: 'Marbled paper — the swirled endpaper of a bound book'
+  marbled: 'Marbled paper — the swirled endpaper of a bound book',
+  lexicon: 'The book’s own text, set as a field and turned'
 }
 
 export const PATTERN_NOTE: Readonly<Record<GroundPattern, string>> = {
@@ -79,7 +82,9 @@ export const PATTERN_NOTE: Readonly<Record<GroundPattern, string>> = {
   guilloche:
     'The engraved lathe-work of 1910s commercial printing — banknotes, share certificates, diplomas. Expensive-looking and entirely of the period.',
   marbled:
-    'The house pattern. Supplied as artwork rather than drawn here, so it prints as a picture at the resolution the sheet needs rather than as paths.'
+    'The house pattern. Supplied as artwork rather than drawn here, so it prints as a picture at the resolution the sheet needs rather than as paths.',
+  lexicon:
+    'The volume’s own words, run together into one field and set at an angle — headwords bold and language tags italic, as the book sets them. Generated per book by `scripts/textground.mjs`, which is why it is artwork rather than paths.'
 }
 
 /** How strongly a ground prints, as a fraction of the ink. */
@@ -91,7 +96,37 @@ export const PATTERN_OPACITY: Readonly<Record<GroundPattern, number>> = {
   // Set at the floor by request. Everything above still applies: this is the
   // lightest a print-on-demand press can be relied on to hold, not a safe
   // middle, and it is the one number here that a proof copy should settle.
-  marbled: 0.05
+  marbled: 0.05,
+  // Measured rather than chosen: the field's ink coverage is 12.75%, which is
+  // the same order as the laid paper's lines, so it sits in the same band they
+  // do. The type is 10pt, whose stems are about 0.8pt, well clear of the
+  // hairline floor above; setting it smaller to fit more of the book in is the
+  // way to break rule 2.
+  lexicon: 0.1
+}
+
+/**
+ * What a ground may be turned down or up to, when a book asks.
+ *
+ * The same bounds the ground figure runs under and for the same two reasons:
+ * below three per cent a print-on-demand press stops holding a tint reliably,
+ * and past a fifth a ground stops being a ground. The *default* for each
+ * pattern stays `PATTERN_OPACITY` — this is the band a book may move inside,
+ * not a replacement for the measured values above.
+ */
+export const MIN_PATTERN_OPACITY = 0.03
+export const MAX_PATTERN_OPACITY = 0.2
+
+/**
+ * How faint this ground prints: the book's own answer, or the pattern's.
+ *
+ * `null` is "whatever this pattern was set at", which is what a look banked
+ * before the question existed carries — so an old profile keeps exactly the
+ * appearance it was banked with rather than silently acquiring a default.
+ */
+export function patternOpacity(pattern: GroundPattern, requested: number | null): number {
+  if (requested === null || !Number.isFinite(requested)) return PATTERN_OPACITY[pattern]
+  return Math.min(MAX_PATTERN_OPACITY, Math.max(MIN_PATTERN_OPACITY, requested))
 }
 
 const TWO_PI = Math.PI * 2

@@ -15,7 +15,12 @@
  * as `ImageItem` does in the layout engine, and for the same reasons.
  */
 import type { ImageEditOp } from '@core/model'
-import { GROUND_PATTERNS, type GroundPattern } from './patterns'
+import {
+  GROUND_PATTERNS,
+  MAX_PATTERN_OPACITY,
+  MIN_PATTERN_OPACITY,
+  type GroundPattern
+} from './patterns'
 import { DEFAULT_FIGURE_OPACITY, figureOpacity, GROUND_FIGURES, type GroundFigure } from './figures'
 import type { PaperStock } from './geometry'
 
@@ -256,6 +261,16 @@ export interface CoverLook {
    */
   groundPattern: GroundPattern | null
   /**
+   * How strongly that ground prints, or `null` for the pattern's own value.
+   *
+   * `null` rather than a number, because each pattern's default was measured
+   * against what it is made of — a field of 10pt type and a field of laid lines
+   * do not want the same tint — so a look that has never been asked the
+   * question must keep deferring to it. A number is a book overruling the
+   * measurement, clamped to what a press will hold.
+   */
+  groundPatternOpacity: number | null
+  /**
    * One large picture behind the front cover's type, or none.
    *
    * Not a second texture: a figure has a centre and a pair of edges, so it
@@ -399,6 +414,7 @@ export function defaultLook(): CoverLook {
     pressMark: null,
     markOnFront: false,
     groundPattern: null,
+    groundPatternOpacity: null,
     groundFigure: null,
     groundFigureOpacity: DEFAULT_FIGURE_OPACITY,
     groundFigureBack: false,
@@ -527,6 +543,14 @@ export function normalizeLook(raw: unknown): CoverLook {
     groundPattern: (GROUND_PATTERNS as readonly string[]).includes(raw['groundPattern'] as string)
       ? (raw['groundPattern'] as GroundPattern)
       : null,
+    // Clamped here as well as where it is read, so a stored look holds a
+    // number a press can print rather than one that is corrected on the way
+    // out — `normalizeLook` of a normalized look has to be itself.
+    groundPatternOpacity:
+      typeof raw['groundPatternOpacity'] === 'number' &&
+      Number.isFinite(raw['groundPatternOpacity'])
+        ? Math.min(MAX_PATTERN_OPACITY, Math.max(MIN_PATTERN_OPACITY, raw['groundPatternOpacity']))
+        : d.groundPatternOpacity,
     groundFigure: (GROUND_FIGURES as readonly string[]).includes(raw['groundFigure'] as string)
       ? (raw['groundFigure'] as GroundFigure)
       : null,

@@ -18,6 +18,8 @@ import {
   newSavedCoverLook,
   defaultLook,
   MIN_PAGES_FOR_SPINE_TEXT,
+  PATTERN_OPACITY,
+  patternOpacity,
   type CoverInterviewState
 } from '@core/cover'
 
@@ -176,7 +178,7 @@ describe('answers fold back into the cover', () => {
     expect(coverFromAnswers(onto, answers).look.groundFigureWrap).toBe(true)
   })
 
-  it('carries the back cover\u2019s size and frame across looks', () => {
+  it('carries the back cover’s size and frame across looks', () => {
     const from = state()
     from.doc.look.blurbSizePt = 13.5
     from.doc.look.blurbBorder = 'double'
@@ -187,6 +189,32 @@ describe('answers fold back into the cover', () => {
     const applied = coverFromAnswers(onto, answers).look
     expect(applied.blurbSizePt).toBe(13.5)
     expect(applied.blurbBorder).toBe('double')
+  })
+
+  it('carries how faint a ground prints across looks, and asks only when there is one', () => {
+    const bare = state()
+    expect(lookQuestions(bare).some((q) => q.id === 'cover-pattern-opacity')).toBe(false)
+
+    const from = state()
+    from.doc.look.groundPattern = 'lexicon'
+    from.doc.look.groundPatternOpacity = 0.14
+    expect(lookQuestions(from).some((q) => q.id === 'cover-pattern-opacity')).toBe(true)
+
+    const answers = defaultAnswers(coverQuestions(from))
+    const onto = defaultCover('6x9', 284)
+    expect(onto.look.groundPatternOpacity).toBe(null)
+    expect(coverFromAnswers(onto, answers).look.groundPatternOpacity).toBe(0.14)
+  })
+
+  it('reads an unanswered ground strength as the pattern’s own, not as nothing', () => {
+    // `Number('')` is 0, which is a ground that prints nothing and warns about
+    // nothing. The empty answer has to come back as `null` so the pattern's own
+    // measured value still governs.
+    const from = state()
+    from.doc.look.groundPattern = 'laid'
+    const applied = coverFromAnswers(from.doc, { 'cover-pattern-opacity': '' }).look
+    expect(applied.groundPatternOpacity).toBe(null)
+    expect(patternOpacity('laid', applied.groundPatternOpacity)).toBe(PATTERN_OPACITY.laid)
   })
 
   it('does not ask where the author goes when the arrangement has already decided', () => {

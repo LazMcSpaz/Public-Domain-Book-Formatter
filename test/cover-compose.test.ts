@@ -13,9 +13,13 @@ import {
   blurbFrame,
   contains,
   GROUND_IMAGE_ID,
+  GROUND_PATTERNS,
   groundPattern,
   isImageGround,
+  MAX_PATTERN_OPACITY,
+  MIN_PATTERN_OPACITY,
   PATTERN_OPACITY,
+  patternOpacity,
   PRESS_MARK_ID,
   composeCover,
   coverGeometry,
@@ -603,6 +607,83 @@ describe('the ground pattern', () => {
   })
 })
 
+describe('how faint a ground prints is the pattern’s, until a book says otherwise', () => {
+  it('defers to the pattern when the book has not been asked', () => {
+    // `null` is the answer a look banked before the question existed carries,
+    // and it has to mean "whatever this pattern was measured at" — not a
+    // default, which would change the appearance of every such look.
+    for (const pattern of GROUND_PATTERNS) {
+      expect(patternOpacity(pattern, null)).toBe(PATTERN_OPACITY[pattern])
+    }
+  })
+
+  it('takes the book’s number when there is one, clamped to what a press holds', () => {
+    expect(patternOpacity('laid', 0.12)).toBe(0.12)
+    expect(patternOpacity('laid', 0.9)).toBe(MAX_PATTERN_OPACITY)
+    expect(patternOpacity('laid', 0.001)).toBe(MIN_PATTERN_OPACITY)
+    // Not a number at all is the same as not having been asked.
+    expect(patternOpacity('laid', Number.NaN)).toBe(PATTERN_OPACITY.laid)
+  })
+
+  it('reaches a drawn ground and a picture-backed one alike', () => {
+    const drawn = composeCover(
+      bookCover((d) => {
+        d.look.groundPattern = 'laid'
+        d.look.groundPatternOpacity = 0.13
+      }),
+      { measurer, ornaments: BUILTIN_ORNAMENTS }
+    )
+    const paths = drawn.items.find((i) => i.kind === 'ornament' && i.opacity !== undefined)!
+    expect(paths.opacity).toBe(0.13)
+
+    const pictured = composeCover(
+      bookCover((d) => {
+        d.look.groundPattern = 'marbled'
+        d.look.groundPatternOpacity = 0.13
+      }),
+      { measurer }
+    )
+    const picture = pictured.items.find((i) => i.kind === 'image' && i.id === GROUND_IMAGE_ID)!
+    expect(picture.opacity).toBe(0.13)
+  })
+})
+
+describe('the book’s own text as a ground', () => {
+  function lexicon(patch: (d: CoverDocument) => void = () => {}): CoverDocument {
+    return bookCover((d) => {
+      d.look.groundPattern = 'lexicon'
+      patch(d)
+    })
+  }
+
+  it('is a picture rather than paths, like the marble and for the same reason', () => {
+    // Glyph outlines by the thousand, which `drawSvgPath` would write as one
+    // flat fill per path; it is rasterised by the browser instead.
+    expect(isImageGround('lexicon')).toBe(true)
+    expect(groundPattern('lexicon', 100, 100, BUILTIN_ORNAMENTS[0]!)).toEqual([])
+  })
+
+  it('runs across the back, the spine and the front as one field', () => {
+    // The whole argument for a text ground crossing the fold: it is allover,
+    // so there is no subject for a fold that creeps to move. A figure gets its
+    // own panel; this does not need one.
+    const { items, geometry } = composeCover(lexicon(), { measurer })
+    const ground = items.find((i) => i.kind === 'image' && i.id === GROUND_IMAGE_ID)!
+    if (ground.kind !== 'image') throw new Error('unreachable')
+    expect(ground.xPt).toBe(0)
+    expect(ground.widthPt).toBeCloseTo(geometry.fullWidthIn * 72, 4)
+    expect(ground.widthPt).toBeGreaterThan(geometry.front.width * 72)
+  })
+
+  it('prints faint enough to be a surface', () => {
+    const { items } = composeCover(lexicon(), { measurer })
+    const ground = items.find((i) => i.kind === 'image' && i.id === GROUND_IMAGE_ID)!
+    expect(ground.opacity).toBe(PATTERN_OPACITY.lexicon)
+    expect(ground.opacity!).toBeLessThanOrEqual(MAX_PATTERN_OPACITY)
+    expect(ground.opacity!).toBeGreaterThanOrEqual(MIN_PATTERN_OPACITY)
+  })
+})
+
 describe('a picture-backed ground', () => {
   function marbled(): CoverDocument {
     return bookCover((d) => {
@@ -784,7 +865,7 @@ describe("the blurb is the editor's own prose, and is set as such", () => {
     expect(set).not.toMatch(/["']/)
     expect(set).toContain('\u201cBlack')
     expect(set).toContain('simple\u201d')
-    expect(set).toContain('isn\u2019t')
+    expect(set).toContain('isn’t')
   })
 
   it('sets a strong run in italic in a face with no bold, and bold in one with', () => {
