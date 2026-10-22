@@ -16,7 +16,7 @@ import {
   GROUND_PATTERNS,
   groundPattern,
   isImageGround,
-  WAVE_SPACING_IN,
+  WAVE_PERIOD_IN,
   waveOffset,
   MAX_PATTERN_OPACITY,
   MIN_PATTERN_OPACITY,
@@ -823,57 +823,62 @@ describe('an edition statement stacks where the editor breaks it', () => {
   })
 })
 
-describe('the flowing-band ground', () => {
-  const shapes = () => groundPattern('wave', 12.644 * 72, 9.25 * 72, null)[0]!.art.shapes
+describe('the flowing-ribbon ground', () => {
+  const W = 12.644 * 72
+  const H = 9.25 * 72
+  const shapes = () => groundPattern('wave', W, H, null)[0]!.art.shapes
 
-  it('draws as vector paths, one polyline per band', () => {
+  it('fills its bands rather than stroking them', () => {
     expect(isImageGround('wave')).toBe(false)
     const all = shapes()
-    expect(all.length).toBeGreaterThan(20)
+    expect(all.length).toBeGreaterThan(10)
     for (const shape of all) {
-      // One move, then a run of lines: a band is a single open curve and
-      // never closes, which is the whole difference from a contour.
-      expect((shape.d.match(/M /g) ?? []).length).toBe(1)
-      expect((shape.d.match(/ L /g) ?? []).length).toBeGreaterThan(50)
+      // A filled ornament shape carries no stroke; a stroked one would print
+      // each ribbon's two edges as lines through the fill.
+      expect(shape.stroke).toBeUndefined()
+      expect(shape.d.endsWith('Z')).toBe(true)
     }
   })
 
-  it('never draws a stroke too fine to survive the press', () => {
-    for (const shape of shapes()) {
-      expect(shape.stroke).toBeDefined()
-      expect(shape.stroke!).toBeGreaterThanOrEqual(0.5)
-    }
-  })
-
-  it('keeps neighbouring bands apart, however hard they pinch', () => {
-    // The pinch is the effect, and it is produced by advancing each band's
-    // phase a little further than the last. Advance it too far and the
-    // displacement between neighbours exceeds the gap between them: the bands
-    // cross, and a flowing pattern becomes a tangle. The shipped constants sit
-    // close enough to that line to be worth pinning, so this walks the whole
-    // family and asserts the order never breaks.
-    // The module's own spacing, not a copy of it: a constant repeated here
-    // is a test that can come to disagree with the thing it pins.
-    const spacing = WAVE_SPACING_IN
+  it('keeps the warp rising, so no ribbon laps over its neighbour', () => {
+    // The whole construction rests on `u = y + W` rising with y: where it
+    // does not, a band doubles back, its outline crosses itself, and it
+    // prints as a blot lapping the band beside it. Differentiated, that holds
+    // while the sum of each term's amplitude times its y-rate is under 1, and
+    // the shipped numbers are close enough to the line to be worth walking.
     let worst = Infinity
-    for (let base = -2; base <= 11; base += spacing) {
-      for (let x = -0.3; x <= 13; x += 0.1) {
-        const here = base + waveOffset(x, base)
-        const next = base + spacing + waveOffset(x, base + spacing)
-        worst = Math.min(worst, next - here)
+    const d = 0.004
+    for (let x = -0.3; x <= 13; x += 0.08) {
+      for (let y = -1.5; y <= 11; y += 0.05) {
+        const rise = (y + d + waveOffset(x, y + d) - (y + waveOffset(x, y))) / d
+        worst = Math.min(worst, rise)
       }
     }
     expect(worst).toBeGreaterThan(0)
   })
 
+  it('swells and pinches rather than running at one width', () => {
+    // The pinch is the look. A band's thickness in y is the period over the
+    // warp's rise, so a flat warp would print even stripes and no amount of
+    // waviness would rescue it.
+    const widths: number[] = []
+    for (const shape of shapes().slice(4, 12)) {
+      const pts = [...shape.d.matchAll(/(-?[\d.]+) (-?[\d.]+)/g)].map((m) => [+m[1]!, +m[2]!])
+      const half = pts.length / 2
+      for (let i = 0; i < half; i += 7) {
+        const top = pts[i]!
+        const bottom = pts[pts.length - 1 - i]!
+        if (Math.abs(top[0]! - bottom[0]!) < 1) widths.push(Math.abs(bottom[1]! - top[1]!))
+      }
+    }
+    expect(widths.length).toBeGreaterThan(20)
+    expect(Math.max(...widths) / Math.min(...widths)).toBeGreaterThan(3)
+  })
+
   it('leaves no gap along any edge, at any point across it', () => {
-    // A band is displaced by up to its own amplitude, so a family that stopped
-    // at the trim would wander inside it and leave white along part of the
-    // cut. The first version of this asked whether *any* point strayed past
-    // the sheet, which stays true when the bands stop at the trim, because
-    // their own waves carry a few points over. What has to hold is that at
-    // every x there is ink above the top edge and below the bottom one.
-    const H = 9.25 * 72
+    // A ribbon family that stopped at the trim would leave the board bare
+    // along part of the cut. Every x has to have ink above the top edge and
+    // below the foot.
     const byX = new Map<string, { min: number; max: number }>()
     for (const shape of shapes()) {
       for (const m of shape.d.matchAll(/(-?[\d.]+) (-?[\d.]+)/g)) {
@@ -892,6 +897,11 @@ describe('the flowing-band ground', () => {
       expect(min, `top edge bare at x=${x}`).toBeLessThan(0)
       expect(max, `foot bare at x=${x}`).toBeGreaterThan(H)
     }
+  })
+
+  it('spaces its bands by the period it declares', () => {
+    expect(WAVE_PERIOD_IN).toBeGreaterThan(0.2)
+    expect(WAVE_PERIOD_IN).toBeLessThan(1)
   })
 })
 

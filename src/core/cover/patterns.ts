@@ -244,63 +244,82 @@ function gcd(a: number, b: number): number {
 }
 
 /**
- * Flowing bands, in the manner of a 1970s poster.
+ * Flowing ribbons, in the manner of a 1970s poster.
  *
- * Parallel lines that undulate in step and then drift out of it, which is the
- * whole effect: each band carries the same waves as the one above, with the
- * phase advanced a little, so along the sheet they crowd together and open out
- * again. The pinch is what reads as movement. Lines of a fixed phase would be
- * corduroy.
+ * Filled bands rather than drawn lines, because that is what the look is made
+ * of: a stack of stripes put through a warp, so they sweep across the sheet
+ * swelling and pinching, and the ground between them is as much of the
+ * pattern as the ink.
  *
- * This replaced a contour map, and the difference is worth stating because
- * both are "wavy lines". A contour map is *isolines of a field*: it closes
- * rings round every summit, and a field with any texture in it closes a lot of
- * small ones, which reads as concentric circles rather than as flow. These
- * lines are not level sets of anything. They are a family of curves, each a
- * function of x, so none of them ever closes and none of them crosses another.
+ * ## How the swell comes out for nothing
  *
- * Lengths are in inches, so a 6×9 and an 8.25×11 get the same wave rather than
- * the same number of them.
+ * Take a warped coordinate `u = y + W(x, y)` and fill the stripes of `u`. A
+ * band's thickness **in y** is the period divided by `∂u/∂y`, so wherever the
+ * warp flattens, the band fattens, and where the warp steepens it draws to a
+ * point. None of that is drawn: it falls out of the warp, which is why the
+ * pinches land where the sweep is steepest, as they do on a printed poster.
  *
  * ## The one constraint on the numbers
  *
- * The pinch comes from advancing each band's phase further than the last, and
- * there is a limit past which neighbouring bands **cross**. Differentiating a
- * band's position by its baseline, the family stays ordered only while the sum
- * of each term's amplitude times its base-phase rate stays under 1. The first
- * set tried here summed to 1.214: the bands crossed by a thirty-fifth of an
- * inch and printed as dark tangles that looked, at a glance, like the pinch
- * working. These sum to 0.907.
+ * `u` has to rise with y everywhere, or a band doubles back and its outline
+ * crosses itself — a filled polygon that laps over its neighbour and prints as
+ * a blot. Differentiating, that holds exactly while the sum of each term's
+ * amplitude times its y-rate stays under 1. At 0.73 a band runs about six and
+ * a half times thicker at its widest than at its narrowest, which is the swell
+ * the look wants; nearer 1 the thin end vanishes to nothing and the fat end
+ * swallows a quarter of the board.
+ *
+ * Lengths are in inches, so a 6×9 and an 8.25×11 get the same ribbons rather
+ * than the same number of them.
  */
-export const WAVE_SPACING_IN = 0.17
-const WAVE_STEP_IN = 0.07
+/** Distance between one band's leading edge and the next, in warped space. */
+export const WAVE_PERIOD_IN = 0.46
+/** How much of each period is inked. The rest is the board showing through. */
+const WAVE_DUTY = 0.5
+const WAVE_STEP_IN = 0.06
 
-/** A band's vertical offset at a point along it, in inches. */
-export function waveOffset(xIn: number, baseIn: number): number {
-  return (
-    0.62 * Math.sin(xIn * 1.05 + baseIn * 1.1) + 0.3 * Math.sin(xIn * 1.75 - baseIn * 0.75 + 2.1)
-  )
+/** The warp: how far the stripes are pushed at a point, in inches. */
+export function waveOffset(xIn: number, yIn: number): number {
+  return 0.55 * Math.sin(xIn * 1.85 + yIn * 1.0) + 0.26 * Math.sin(xIn * 2.9 - yIn * 0.7 + 2.1)
 }
 
 /**
- * The bands across a sheet, as polylines.
+ * The y at which the warped coordinate reaches a given level, for one x.
  *
- * Drawn well past every edge: a band is displaced by up to its own amplitude,
- * so one whose baseline sits on the trim would wander off the sheet and leave
- * a gap along the cut. Starting them two inches out costs a few paths nobody
- * sees and removes the one way this pattern can fail at the trim.
+ * `u = y + W(x, y)` rearranges to `y = u - W(x, y)`, and the warp's own slope
+ * in y is under 1 by the constraint above, so iterating that is a contraction
+ * and settles in a few passes. A bisection would do as well and costs more.
  */
-function flowingBands(widthPt: number, heightPt: number): OrnamentShape[] {
+function heightAt(xIn: number, level: number): number {
+  let y = level
+  for (let i = 0; i < 24; i += 1) y = level - waveOffset(xIn, y)
+  return y
+}
+
+function ribbons(widthPt: number, heightPt: number): OrnamentShape[] {
   const widthIn = widthPt / 72
   const heightIn = heightPt / 72
+  // The warp displaces `u` by at most the sum of the amplitudes, so the bands
+  // that can touch the sheet are those whose level falls in this range. Run
+  // past it at both ends or the top and bottom edges go bare.
+  const reach = 1.2
+  const first = Math.floor(-reach / WAVE_PERIOD_IN)
+  const last = Math.ceil((heightIn + reach) / WAVE_PERIOD_IN)
+
   const shapes: OrnamentShape[] = []
-  for (let base = -2; base <= heightIn + 2; base += WAVE_SPACING_IN) {
-    const points: string[] = []
+  for (let k = first; k <= last; k += 1) {
+    const top = k * WAVE_PERIOD_IN
+    const bottom = top + WAVE_PERIOD_IN * WAVE_DUTY
+    const forward: string[] = []
+    const back: string[] = []
     for (let x = -0.3; x <= widthIn + 0.3; x += WAVE_STEP_IN) {
-      const y = base + waveOffset(x, base)
-      points.push(`${(x * 72).toFixed(1)} ${(y * 72).toFixed(1)}`)
+      forward.push(`${(x * 72).toFixed(1)} ${(heightAt(x, top) * 72).toFixed(1)}`)
+      back.push(`${(x * 72).toFixed(1)} ${(heightAt(x, bottom) * 72).toFixed(1)}`)
     }
-    shapes.push({ d: `M ${points.join(' L ')}`, stroke: 0.6 })
+    back.reverse()
+    // No stroke: an `OrnamentShape` with none is filled, which is what a
+    // ribbon is. A stroked outline would print the band's edges twice.
+    shapes.push({ d: `M ${forward.join(' L ')} L ${back.join(' L ')} Z` })
   }
   return shapes
 }
@@ -363,7 +382,7 @@ export function groundPattern(
       : pattern === 'aura'
         ? auricField(widthPt, heightPt)
         : pattern === 'wave'
-          ? flowingBands(widthPt, heightPt)
+          ? ribbons(widthPt, heightPt)
           : guilloche(widthPt, heightPt)
 
   return [
