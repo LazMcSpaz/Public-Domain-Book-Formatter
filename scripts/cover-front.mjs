@@ -55,7 +55,12 @@ if (pdfAt >= 0 && !pdfPath) {
   console.error('--pdf wants a path to write the cover file to')
   process.exit(2)
 }
-const positional = args.filter((a, i) => a !== '--sheet' && a !== '--pdf' && i !== pdfAt + 1)
+// `pdfAt` is -1 when `--pdf` was not given, and `-1 + 1` is 0 — which dropped
+// the spec path and left the usage message as the only output, on the plain
+// `spec out.png` call that is the common one. Guarded rather than clamped,
+// because the index only means anything when the flag is there at all.
+const pdfValueAt = pdfAt >= 0 ? pdfAt + 1 : -1
+const positional = args.filter((a, i) => a !== '--sheet' && a !== '--pdf' && i !== pdfValueAt)
 const [specPath, outPath] = positional
 if (!specPath || !outPath) {
   console.error(

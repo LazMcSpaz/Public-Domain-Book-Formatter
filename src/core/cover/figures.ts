@@ -31,6 +31,8 @@ export type GroundFigure =
   | 'all-seeing-eye'
   | 'all-seeing-eye-radiant'
   | 'candidate-at-the-gates'
+  | 'sinnett'
+  | 'theosophical-seal'
 
 export const GROUND_FIGURES: readonly GroundFigure[] = [
   'isis-winged',
@@ -39,7 +41,9 @@ export const GROUND_FIGURES: readonly GroundFigure[] = [
   'arcade-detailed',
   'all-seeing-eye',
   'all-seeing-eye-radiant',
-  'candidate-at-the-gates'
+  'candidate-at-the-gates',
+  'sinnett',
+  'theosophical-seal'
 ]
 
 /** The id a ground figure is placed under, for the renderer to find. */
@@ -53,7 +57,9 @@ export const FIGURE_SRC: Readonly<Record<GroundFigure, string>> = {
   'arcade-detailed': '/devices/arcade-detailed.svg',
   'all-seeing-eye': '/devices/all-seeing-eye-ground.svg',
   'all-seeing-eye-radiant': '/devices/all-seeing-eye-radiant.svg',
-  'candidate-at-the-gates': '/figures/candidate-at-the-gates.jpg'
+  'candidate-at-the-gates': '/figures/candidate-at-the-gates.jpg',
+  sinnett: '/figures/sinnett.jpg',
+  'theosophical-seal': '/devices/theosophical-seal-no-svastika.svg'
 }
 
 /**
@@ -70,7 +76,7 @@ export const FIGURE_SRC: Readonly<Record<GroundFigure, string>> = {
  * line does not; and `FIGURE_ANCHOR_X` cannot be checked against a viewBox,
  * so the anchor has to be the picture's own centre.
  */
-export const RASTER_FIGURES: readonly GroundFigure[] = ['candidate-at-the-gates']
+export const RASTER_FIGURES: readonly GroundFigure[] = ['candidate-at-the-gates', 'sinnett']
 
 /** Whether a figure's artwork is a photograph rather than vector line. */
 export function isRasterFigure(figure: GroundFigure): boolean {
@@ -79,6 +85,8 @@ export function isRasterFigure(figure: GroundFigure): boolean {
 
 export const FIGURE_LABEL: Readonly<Record<GroundFigure, string>> = {
   'candidate-at-the-gates': 'The Candidate at the Gates — Knapp, for this book',
+  sinnett: 'A. P. Sinnett — the photograph, for this book',
+  'theosophical-seal': 'The Theosophical Society’s seal, without the svastika',
   'isis-winged': 'Isis, winged — the massed silhouette',
   'isis-winged-plain': 'Isis, winged — the engraved trace',
   arcade: 'An arcade of horseshoe arches',
@@ -90,6 +98,10 @@ export const FIGURE_LABEL: Readonly<Record<GroundFigure, string>> = {
 export const FIGURE_NOTE: Readonly<Record<GroundFigure, string>> = {
   'candidate-at-the-gates':
     'J. Augustus Knapp\u2019s plate for the 1924 edition: two pillars, a chequered pavement running back in perspective, and a radiant eye over the stair. A halftone rather than a trace, so it carries tone where every other figure here carries line \u2014 which is why it wants a lower tint than they do.',
+  'theosophical-seal':
+    'The Society’s own seal, in the separable form that leaves out the svastika — which the Society has used since the 1880s and which a great many buyers today read as something else. Which form a book carries is the editor’s decision and `public/devices/README.md` says so; this entry is the cautious one.',
+  sinnett:
+    'The 1909 photograph of the man every letter in that book was written to. A portrait has one subject and a reader knows its proportions, so it is placed inside the frame rather than bled, and it wants a low tint: a face at full strength behind a title reads as a second thing to look at.',
   'isis-winged':
     'Solid shapes, which is what a ground at five per cent needs: a mass holds its tint where a mesh of fine lines breaks up into dots.',
   'isis-winged-plain':
@@ -209,6 +221,10 @@ export function figureFramePt(geometry: CoverGeometry): {
 export const FIGURE_ANCHOR_X: Readonly<Record<GroundFigure, number>> = {
   // The doorway, which the plate already centres: Knapp drew it square on.
   'candidate-at-the-gates': 0.5,
+  // The sitter's own centre: the photograph is composed square on.
+  sinnett: 0.5,
+  // A seal is a disc, drawn concentric in its own box.
+  'theosophical-seal': 0.5,
   // Exactly the centre, and not by luck: the artwork's box is padded until the
   // measured axis is its centre, so the number the library carries is the one
   // value that cannot drift from the file. See `public/devices/README.md`.
@@ -264,6 +280,8 @@ export const FIGURE_ANCHOR_X: Readonly<Record<GroundFigure, number>> = {
 export const FIGURE_ZOOM: Readonly<Record<GroundFigure, number>> = {
   // Nothing to move: the anchor is the picture's own centre.
   'candidate-at-the-gates': 1,
+  sinnett: 1,
+  'theosophical-seal': 1,
   // Nothing to move: the anchor is the box's own centre.
   'all-seeing-eye': 1,
   'all-seeing-eye-radiant': 1,
