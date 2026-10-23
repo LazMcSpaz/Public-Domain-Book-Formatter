@@ -369,6 +369,20 @@ export function lookQuestions(state: CoverInterviewState): Question[] {
       defaultValue: look.authorSizePt === null ? '' : String(look.authorSizePt)
     },
     {
+      id: 'cover-spine-size',
+      type: 'choice',
+      group: 'look',
+      prompt: 'How big is the type on the spine?',
+      help: 'The spine is the part of a book a shelf shows, and left to itself the engine takes the largest size each fold allows \u2014 which differs book by book with how long the title is. Pinning it gives a collection one size along all of them. A fold too thin for it sets smaller and says so.',
+      options: [
+        { value: '', label: 'As large as each fold allows' },
+        { value: '20', label: '20 pt on every volume' },
+        { value: '27', label: '27 pt on every volume' },
+        { value: '32', label: '32 pt \u2014 read across a room' }
+      ],
+      defaultValue: look.spineSizePt === null ? '' : String(look.spineSizePt)
+    },
+    {
       id: 'cover-blurb-size',
       type: 'choice',
       group: 'look',
@@ -786,6 +800,15 @@ export function coverFromAnswers(
         answers,
         'cover-author-size',
         doc.look.authorSizePt === null ? '' : String(doc.look.authorSizePt)
+      )
+      const n = Number(asked)
+      return asked.trim() !== '' && Number.isFinite(n) && n > 0 ? n : null
+    })(),
+    spineSizePt: (() => {
+      const asked = text(
+        answers,
+        'cover-spine-size',
+        doc.look.spineSizePt === null ? '' : String(doc.look.spineSizePt)
       )
       const n = Number(asked)
       return asked.trim() !== '' && Number.isFinite(n) && n > 0 ? n : null

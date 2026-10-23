@@ -62,6 +62,8 @@ export const BANKED_COVER_KEYS: readonly (keyof CoverLook)[] = [
   // volume one, which on a shelf reads as two presses.
   'subtitleSizePt',
   'authorSizePt',
+  // The spine above all: it is the part of the book a shelf shows.
+  'spineSizePt',
   'rule',
   'frontFrame',
   'blurbSizePt',

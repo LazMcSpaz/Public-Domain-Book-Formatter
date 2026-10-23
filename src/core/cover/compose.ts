@@ -325,7 +325,18 @@ const AUTHOR_MIN_PT = 16
  * actually protects a thin spine, so this ceiling only ever binds on a book
  * fat enough to carry the type.
  */
-const SPINE_MAX_PT = 16
+/**
+ * The default ceiling on spine type, where a collection has banked none.
+ *
+ * It is a backstop and not the usual bound: `maxByThickness` already holds
+ * the type to 0.62 of the fold, which is what actually keeps a spine from
+ * looking wrong. At 16 the backstop was doing the binding instead — measured
+ * across this shelf, three spines of about 1.1 in could each carry 27 to 33
+ * pt and all three set at 16, leaving two thirds of the fold empty on the one
+ * part of a book a shelf shows. Raised to a size no ordinary fold reaches, so
+ * that what decides a spine is the fold and the length of the line on it.
+ */
+const SPINE_MAX_PT = 36
 
 /** What the back-cover copy sets at when the look names no size. */
 export const BLURB_PT = 10.5
@@ -1807,12 +1818,28 @@ function laySpine(
   const runBottom = markTopIn === null ? safe.y + safe.height : markTopIn - 0.12
   const runLength = Math.max(0, runBottom - runTop)
 
-  let size = Math.min(SPINE_MAX_PT, maxByThickness)
+  // The collection's own size where it has banked one, the shipped ceiling
+  // otherwise. Either is still bounded by the fold's width and then cut down
+  // to the run of fold available, because neither of those is a preference.
+  const asked = look.spineSizePt ?? SPINE_MAX_PT
+  let size = Math.min(asked, maxByThickness)
   const maxLengthPt = pt(runLength)
   while (size > 6 && measurer.widthOf(line, font, size) > maxLengthPt) size -= 0.5
   if (measurer.widthOf(line, font, size) > maxLengthPt) {
     warnings.push('The spine text is longer than the spine; it was left off.')
     return
+  }
+  // Said rather than left to be noticed on a shelf. A book too thin to carry
+  // the collection's spine size is an ordinary fact about that book, and the
+  // editor should learn it here and not from the printed copy.
+  if (look.spineSizePt !== null && size < look.spineSizePt) {
+    warnings.push(
+      `The spine sets at ${size.toFixed(1)} pt rather than the collection's ` +
+        `${look.spineSizePt.toFixed(1)} pt: ` +
+        (size === Math.min(asked, maxByThickness)
+          ? `a ${geometry.spineIn.toFixed(3)} in fold holds no more.`
+          : 'the title and author are too long for the fold at that size.')
+    )
   }
 
   const metrics = measurer.metrics(font, size)

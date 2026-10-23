@@ -1271,11 +1271,41 @@ describe('the author and the spine are set to be read, not to be found', () => {
     expect(large.author!.sizePt).toBeGreaterThan(small.author!.sizePt)
   })
 
-  it('sets the spine at the ceiling when the book is thick enough to carry it', () => {
-    const { spine } = sizes((d) => {
+  it('lets a thick spine use the fold rather than stopping at a fixed size', () => {
+    // This asserted 16 pt, which was the backstop doing the binding. Measured
+    // across the shelf, three spines of about 1.1 in could each carry 27 to 33
+    // pt and every one of them set at 16, leaving two thirds of the fold empty
+    // on the part of a book a shelf actually shows. What should decide a spine
+    // is the fold and the length of the line, so the backstop is now a size no
+    // ordinary fold reaches and the test asks for the property, not the number.
+    const { spine, geometry } = sizes((d) => {
       d.pageCount = 477
     })
-    expect(spine!.sizePt).toBe(16)
+    const room = (geometry.spineSafe?.width ?? 0) * 72 * 0.62
+    expect(spine!.sizePt).toBeGreaterThan(16)
+    expect(spine!.sizePt).toBeLessThanOrEqual(room + 1e-6)
+  })
+
+  it('sets the collection\u2019s banked spine size where the fold can hold it', () => {
+    const { spine } = sizes((d) => {
+      d.pageCount = 477
+      d.look.spineSizePt = 27
+    })
+    expect(spine!.sizePt).toBe(27)
+  })
+
+  it('cuts a banked spine size down to a thin fold, and says so', () => {
+    const doc = bookCover((d) => {
+      d.look.arrangement = 'label'
+      d.content.author = 'Amos Root'
+      d.pageCount = 150
+      d.look.spineSizePt = 27
+    })
+    const composed = composeCover(doc, { measurer })
+    const spine = composed.items.find((i) => i.kind === 'text' && i.rotate === -90)
+    expect(spine?.kind).toBe('text')
+    expect(spine!.kind === 'text' && spine!.sizePt).toBeLessThan(27)
+    expect(composed.warnings.join(' ')).toMatch(/rather than the collection/)
   })
 
   it('is still bounded by the thickness on a slimmer book', () => {

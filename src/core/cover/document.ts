@@ -188,6 +188,21 @@ export interface CoverLook {
    * is the fault this whole area was last changed to fix.
    */
   authorSizePt: number | null
+  /**
+   * The spine's type size in points, or null for the shipped ceiling.
+   *
+   * The spine is the part of a book a shelf actually shows, so a collection
+   * wants one size along all of them. Left to itself the engine takes the
+   * largest size the fold and the run of fold allow, which differs per book:
+   * measured across this collection at 7 x 10, three spines of almost the
+   * same thickness could carry 31, 33.5 and 27.5 pt, the differences coming
+   * from how long each title is rather than from anything anyone chose.
+   *
+   * Pinned, it is still reduced where the fold is too narrow or the line too
+   * long, and the reduction is reported. A thin book cannot hold the
+   * collection's size and should not pretend to.
+   */
+  spineSizePt: number | null
   rule: RuleStyle
   /** A frame round the front cover's border, struck in the accent colour. */
   frontFrame: FrameStyle
@@ -484,6 +499,7 @@ export function defaultLook(): CoverLook {
     titleSizePt: null,
     subtitleSizePt: null,
     authorSizePt: null,
+    spineSizePt: null,
     subtitleRatio: null,
     rule: 'single',
     frontFrame: 'none',
@@ -597,6 +613,7 @@ export function normalizeLook(raw: unknown): CoverLook {
   const size = raw['titleSizePt']
   const subtitleSize = raw['subtitleSizePt']
   const authorSize = raw['authorSizePt']
+  const spineSize = raw['spineSizePt']
   const subtitleRatio = raw['subtitleRatio']
   const blurbSize = raw['blurbSizePt']
   const positive = (v: unknown): number | null =>
@@ -620,6 +637,7 @@ export function normalizeLook(raw: unknown): CoverLook {
     titleSizePt: positive(size),
     subtitleSizePt: positive(subtitleSize),
     authorSizePt: positive(authorSize),
+    spineSizePt: positive(spineSize),
     subtitleRatio: positive(subtitleRatio),
     rule: oneOf(raw['rule'], ['none', 'single', 'double', 'ornamented'] as const, d.rule),
     frontFrame: oneOf(raw['frontFrame'], FRAME_STYLES, d.frontFrame),
