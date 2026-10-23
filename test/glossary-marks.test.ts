@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   checkGlossaryMarks,
+  marksByPosition,
   placeMissingMarks,
   withoutStrayMarks,
   glossaryHeadwords,
@@ -317,5 +318,29 @@ describe('withoutStrayMarks — circles left behind by a cut', () => {
   it('removes the circle from inside a run without touching the tags', () => {
     const got = withoutStrayMarks(['Aura.'], [para('p1', 'a <i>Sanscrit°</i> word and the aura°')])
     expect(got.blocks).toEqual([{ id: 'p1', text: 'a <i>Sanscrit</i> word and the aura°' }])
+  })
+})
+
+describe('a circle read back as a link to its entry', () => {
+  it('names the entry behind each circle by where the circle stands', () => {
+    const text = 'The aura° is read in Devachan°, and the astral body° too; a stray° one.'
+    const got = marksByPosition(['Aura.', 'Devachan.', 'Astral Body.'], text)
+    expect(got.get(text.indexOf('aura°') + 4)).toBe('Aura.')
+    expect(got.get(text.indexOf('Devachan°') + 8)).toBe('Devachan.')
+    expect(got.get(text.indexOf('body°') + 4)).toBe('Astral Body.')
+    // A circle no entry claims is not guessed at.
+    expect(got.size).toBe(3)
+  })
+
+  it('gives a circle two entries could claim to the longer term', () => {
+    const text = 'the astral body° of man'
+    const got = marksByPosition(['Body.', 'Astral Body.'], text)
+    expect([...got.values()]).toEqual(['Astral Body.'])
+  })
+
+  it('reads a circle placed after a closing quotation mark', () => {
+    const text = 'he called it “vril”° and moved on'
+    const got = marksByPosition(['Vril.'], text)
+    expect(got.get(text.indexOf('°'))).toBe('Vril.')
   })
 })

@@ -207,6 +207,37 @@ export function withGlossaryMark(markupText: string, term: string, person = fals
   return null
 }
 
+/**
+ * Which entry each circle in a passage points at, by the circle's position in
+ * the plain text. This is the glossary mark read the other way round: a
+ * printed page sends the reader to the back of the book, and a reflowing
+ * edition can make the circle itself the link. A circle no entry claims is
+ * left out of the answer, never guessed at — it stays a plain circle on the
+ * page, as it is in print.
+ *
+ * Where two entries would claim one circle (`Astral Body` and `Astral Body,
+ * Astral Double`, say), the longer term wins: it is the one the editor
+ * matched when the circle was placed.
+ */
+export function marksByPosition(
+  headwords: readonly string[],
+  plainText: string
+): Map<number, string> {
+  const claimed = new Map<number, { entry: string; length: number }>()
+  for (const entry of headwords) {
+    const person = isPersonHeadword(entry)
+    for (const term of headwordTerms(entry)) {
+      for (const hit of plainText.matchAll(pattern(term, person))) {
+        if (!hit[0].endsWith(GLOSSARY_MARK)) continue
+        const at = (hit.index ?? 0) + hit[0].length - 1
+        const have = claimed.get(at)
+        if (!have || hit[0].length > have.length) claimed.set(at, { entry, length: hit[0].length })
+      }
+    }
+  }
+  return new Map([...claimed].map(([at, c]) => [at, c.entry]))
+}
+
 export interface PlacedMark {
   entry: string
   term: string

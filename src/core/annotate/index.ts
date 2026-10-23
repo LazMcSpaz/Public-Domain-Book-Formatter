@@ -84,6 +84,7 @@ export {
   type MarkReport,
   type MarkVerdict,
   glossaryHeadwords,
+  marksByPosition,
   placeMissingMarks,
   withGlossaryMark,
   withoutStrayMarks,
