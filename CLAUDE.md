@@ -1132,6 +1132,36 @@ lines would only have memorised the 24 Hall found, and a pronoun-before-name
 rule flagged three approved paragraphs of the introduction, so that pass stays
 a reader's, with a brief (docs/briefs/glossary-oblique.md).
 
+**A reader's instruction to itself was printed, nine times.** The glossary
+pass on the Hall lectures marked nine entries `(delete)` in the section's
+text, meaning for a later step to drop them, and the later step landed the
+text as it stood: the finished book, exported, checked by `--finish` and
+marked complete, carried `(delete)` in nine definitions, and the editor
+found the first one on KDP's preview. Nothing here reads the editor's own
+prose for anything but hedges. Working notes do not belong in a block's
+text at all — a `memo` is the channel for a message to a later session —
+and after any pass that writes section prose, `grep` the sheets and the
+sections for bracketed single words before the export.
+
+**Amazon's review found what no check here could, because none of them
+had a dictionary.** KDP's spell-check of the same interior named
+twenty-four words, and twelve were real: `sthough`, `miving`, `Whenthe`,
+`aleep`, `magnificance`, `icoloclastic`, `brethern`. The omission was
+deliberate and the reason was sound as far as it went — a book of Sanskrit,
+Tibetan and 1888 transliterations gives an English dictionary a thousand
+false alarms — but the false alarms have a shape: a real term is used again,
+here or elsewhere on the shelf, and a conversion fault is used once.
+`checkSpelling` (`@core/coherence/spelling.ts`) lists the unknown words that
+stand **alone** — once in the book, under three times across the rest of
+the shelf and the reference texts — and `scripts/spelling-of.ts` writes the
+sheet. On this book that is 203 words out of 10,310, read in ten minutes,
+holding every word Amazon flagged and eleven more. Two things to know from
+running it. A sweep lowercases what it matches case-insensitively, so
+`Brethern` → `brethren` took the capital off Hall's *Brethren* six times and
+had to be put back by hand; check the case of every hit before `--now`. And
+the sheet is a list for the editor, never a gate: `septre`, `thoughters`
+and `gumptional` are on it and are Hall's.
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what
@@ -1414,6 +1444,11 @@ npx vite-node --config vitest.config.ts scripts/checks-of.ts books/*/book.json -
                                      #   consistency, rulings not yet in the text —
                                      #   over shelf books with no browser; `--check`
                                      #   exits non-zero on anything left after rulings
+npx vite-node --config vitest.config.ts scripts/spelling-of.ts <book.json> --shelf books/ [--out s.md]
+                                     #   words no dictionary knows that stand alone
+                                     #   (once here, under three times on the rest of
+                                     #   the shelf): the check KDP runs on an interior.
+                                     #   A sheet to read before an upload, never a gate
 npx vite-node --config vitest.config.ts scripts/coverage-of.ts <book.json> [--second s.json]
                                      #   lines the paper prints that the book lacks or
                                      #   sets elsewhere, against the scan's own OCR

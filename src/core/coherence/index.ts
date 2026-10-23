@@ -75,3 +75,10 @@ export {
   type ContinuationFinding,
   type PairingFinding
 } from './footnote-pairing'
+export {
+  checkSpelling,
+  spellingTokens,
+  type SpellingOptions,
+  type SpellingReport,
+  type SpellingSuspect
+} from './spelling'
