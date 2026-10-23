@@ -265,10 +265,32 @@ const FRONT_MARK_FRACTION = 0.2
 /** And never wider than this, however wide the trim is. */
 const FRONT_MARK_MAX_IN = 1.4
 
+/**
+ * The deepest a front device may be, as a share of the safe area's height.
+ *
+ * A quarter leaves the title and what follows it three quarters of the board,
+ * which is the proportion the `label` arrangement is built around. Without it
+ * only the width was bounded, so a device six times as tall as it is wide
+ * drew past the trim and took the type with it.
+ */
+const FRONT_MARK_MAX_HEIGHT_SHARE = 0.25
+
 /** Title sizes are searched in this range, largest first. */
 const TITLE_MAX_PT = 64
 const TITLE_MIN_PT = 14
 const SUBTITLE_RATIO = 0.42
+
+/**
+ * The most of the title a *pinned* subtitle size may take.
+ *
+ * A share may ask for more, and that is the case the share exists for: on a
+ * reprinted multi-volume work the subtitle names the volume and is read as
+ * hard as the title. A pinned size is a collection's one number applied to
+ * every board, so on a book whose title came out small it can arrive level
+ * with the title and print as two titles. Three quarters keeps it plainly
+ * subordinate without making the pinned number useless.
+ */
+const SUBTITLE_MAX_SHARE = 0.75
 /**
  * The author's size, as a share of the title's.
  *
@@ -1203,8 +1225,24 @@ function layFrontCover(
   const frontDevice = look.frontMark ?? look.pressMark
   if (look.markOnFront && frontDevice) {
     const mark = frontDevice
-    const widthIn = Math.min(safe.width * FRONT_MARK_FRACTION, FRONT_MARK_MAX_IN)
-    const heightIn = widthIn * (mark.heightPx / mark.widthPx)
+    const wantedWidthIn = Math.min(safe.width * FRONT_MARK_FRACTION, FRONT_MARK_MAX_IN)
+    // The width was capped and the height never was, so a tall device scaled
+    // off the board: at six to one on a 6 x 9 the artwork alone is 6.6 in on a
+    // 7.5 in safe area, and everything under it sets past the trim. The cap is
+    // on the device's *height* as a share of the safe area, with the width
+    // taken back in proportion so the artwork is never squashed to fit.
+    const wantedHeightIn = wantedWidthIn * (mark.heightPx / mark.widthPx)
+    const maxHeightIn = safe.height * FRONT_MARK_MAX_HEIGHT_SHARE
+    const scale = wantedHeightIn > maxHeightIn ? maxHeightIn / wantedHeightIn : 1
+    if (scale < 1) {
+      warnings.push(
+        `The device on the front is ${wantedHeightIn.toFixed(2)} in deep for its width, ` +
+          `which is more board than a device may have, so it was set at ` +
+          `${(wantedWidthIn * scale).toFixed(2)} in wide.`
+      )
+    }
+    const widthIn = wantedWidthIn * scale
+    const heightIn = wantedHeightIn * scale
     items.push({
       kind: 'image',
       id: FRONT_MARK_ID,
@@ -1219,7 +1257,31 @@ function layFrontCover(
     })
     const consumed = pt(heightIn) + pt(widthIn) * 0.32
     y += consumed
-    typeBox = { widthPt: typeBox.widthPt, heightPt: Math.max(0, typeBox.heightPt - consumed) }
+    // The device moves the type down; it does not eat the title.
+    //
+    // It used to be charged against the height budget, on the reasoning that a
+    // title should be fitted to the space actually left. The consequence was
+    // not what anybody chose: the `label` box is a third of the panel, a
+    // device is an inch and a third of it, and *The Theosophical Glossary*
+    // came out with an 18 pt title where the same cover without a device
+    // fits 42. Measured beside its neighbours the effect was plain — the
+    // author, pinned at 26, printed half again as large as the title above it.
+    //
+    // That is this file's own lesson about the author's size, in the other
+    // direction: check what a size is a share *of*. The box was sized without
+    // a device in mind, so charging one against it takes the title's space
+    // rather than the slack there never was. The budget is kept and the block
+    // starts lower, clamped so it still ends inside the safe area — and the
+    // clamp reports, because a title quietly refitted is the failure mode.
+    const roomBelow = pt(safe.y + safe.height) - y
+    const kept = Math.min(typeBox.heightPt, Math.max(0, roomBelow))
+    if (kept < typeBox.heightPt) {
+      warnings.push(
+        'The device over the title leaves less room than the arrangement asks for, ' +
+          'so the title was fitted to what is left.'
+      )
+    }
+    typeBox = { widthPt: typeBox.widthPt, heightPt: kept }
   }
 
   // --- series line -------------------------------------------------------
@@ -1283,7 +1345,20 @@ function layFrontCover(
     // A banked size wins over the share, so a collection's names agree along
     // a shelf instead of each tracking its own fitted title. The floor still
     // applies either way: it is what stops a name being a caption.
-    const size = Math.max(AUTHOR_MIN_PT, look.authorSizePt ?? titleSizePt * AUTHOR_RATIO)
+    // Bounded above by the title, which a share could never break and a
+    // pinned size can. Measured on this shelf: with the author pinned at 26
+    // for the collection, the two covers whose titles were crushed by a
+    // device printed an 18 pt title under a 26 pt name. Nobody reads that as
+    // a design. The floor wins where the two meet, because a name nobody can
+    // read is the worse fault and the real answer there is a larger title.
+    const asked = Math.max(AUTHOR_MIN_PT, look.authorSizePt ?? titleSizePt * AUTHOR_RATIO)
+    const size = Math.max(AUTHOR_MIN_PT, Math.min(asked, titleSizePt))
+    if (size < asked) {
+      warnings.push(
+        `The author's name was set at ${size.toFixed(1)} pt rather than the ` +
+          `${asked.toFixed(1)} pt asked for, so it does not print larger than the title.`
+      )
+    }
     const lines = wrapText(content.author, typeBox.widthPt, authorFont, size, measurer)
     // On a typographic cover the author sits low, with the empty middle of the
     // panel doing the work a picture would otherwise do — and any cover may ask
@@ -1455,10 +1530,21 @@ function layFrontCover(
       // A banked size in points wins over the share, for the reason
       // `CoverLook.subtitleSizePt` gives: a share of a fitted title makes two
       // books in one collection disagree about how big a subtitle is.
-      const size = Math.max(
-        10,
-        look.subtitleSizePt ?? fitted.sizePt * (look.subtitleRatio ?? SUBTITLE_RATIO)
-      )
+      // Bounded by the title for the same reason the author is, and lower: a
+      // subtitle is a subordinate line, and set level with the title it reads
+      // as two titles. The ceiling binds only a *pinned* size. A share that
+      // asks for more is the editor saying the subtitle names the volume,
+      // which is the case the share was built for.
+      const wanted = look.subtitleSizePt ?? fitted.sizePt * (look.subtitleRatio ?? SUBTITLE_RATIO)
+      const ceiling =
+        look.subtitleSizePt === null ? Number.POSITIVE_INFINITY : fitted.sizePt * SUBTITLE_MAX_SHARE
+      const size = Math.max(10, Math.min(wanted, ceiling))
+      if (size < wanted) {
+        warnings.push(
+          `The subtitle was set at ${size.toFixed(1)} pt rather than the ` +
+            `${wanted.toFixed(1)} pt asked for, so it stays under the title.`
+        )
+      }
       // A newline stacks it, exactly as one in the title or the edition
       // statement does. A subtitle naming two things — the legend and what
       // this edition adds to it — is two thoughts, and run together on one

@@ -161,10 +161,16 @@ describe('the device on the front', () => {
     expect(centre).toBeCloseTo((geometry.front.x + geometry.front.width / 2) * PT_PER_INCH, 4)
   })
 
-  it('pushes the type down and is charged against its height', () => {
-    // A tall device on a label cover, which is where the height budget binds:
-    // with a wide one the title's size is settled by the measure and a missing
-    // charge would not show. (It did not, in the first version of this test.)
+  it('pushes the type down without taking the title’s size', () => {
+    // This test used to pin the opposite, and the reasoning was good on its
+    // face: a title should be fitted to the space actually left. What it did
+    // on a real book was not. The `label` box is a third of the panel and a
+    // device is an inch and a third of it, so *The Theosophical Glossary*
+    // printed an 18 pt title where the same cover without a device fits 42 —
+    // and with the author pinned at 26 for the collection, the name came out
+    // half again as large as the title above it. The box was sized without a
+    // device in mind, so charging one against it takes the title's own space
+    // rather than slack that was never there.
     const tall = { ...MARK, widthPx: 400, heightPx: 600 }
     const block = (d: CoverDocument): void => {
       d.look.arrangement = 'label'
@@ -182,9 +188,6 @@ describe('the device on the front', () => {
         .filter((i): i is CoverTextItem => i.kind === 'text')
         .filter((i) => i.xPt >= geometry.front.x * PT_PER_INCH)
         .sort((a, b) => a.yPt - b.yPt)[0]!
-    expect(firstLine(with_).yPt).toBeGreaterThan(firstLine(without).yPt)
-    // Charged, not merely offset: the title that has to share the block with a
-    // device is set no larger than the one that does not.
     const title = (c: typeof without): number =>
       Math.max(
         ...c.items
@@ -192,7 +195,48 @@ describe('the device on the front', () => {
           .filter((i) => i.xPt >= geometry.front.x * PT_PER_INCH)
           .map((i) => i.sizePt)
       )
-    expect(title(with_)).toBeLessThan(title(without))
+    expect(firstLine(with_).yPt).toBeGreaterThan(firstLine(without).yPt)
+    expect(title(with_)).toBe(title(without))
+  })
+
+  it('bounds a tall device by the board, and says it did', () => {
+    // Only the width was capped. At six to one on a 6 x 9 the artwork alone
+    // came to 6.6 in of a 7.5 in safe area, so the device drew past the trim
+    // and carried the type off with it. Reachable only once the device stopped
+    // being charged against the title's budget, which is how it turned up.
+    const deep = { ...MARK, widthPx: 400, heightPx: 2400 }
+    const composed = compose(
+      cover((d) => {
+        d.look.arrangement = 'label'
+        d.look.pressMark = deep
+        d.look.markOnFront = true
+      })
+    )
+    const bottomOf = (i: (typeof composed.items)[number]): number =>
+      i.kind === 'text' ? i.yPt + i.sizePt : i.kind === 'image' ? i.yPt + i.heightPt : i.yPt
+    const heights = composed.items
+      .filter((i) => i.xPt >= geometry.front.x * PT_PER_INCH)
+      .map(bottomOf)
+      .filter((n) => Number.isFinite(n))
+    expect(heights.length).toBeGreaterThan(0)
+    expect(Math.max(...heights)).toBeLessThanOrEqual(
+      (geometry.front.y + geometry.front.height) * PT_PER_INCH
+    )
+    // Reported rather than silently shrunk, which is the rule everywhere here.
+    expect(composed.warnings.join(' ')).toMatch(/more board than a device may have/)
+  })
+
+  it('leaves a device of ordinary proportions exactly as it was', () => {
+    // The cap must not be a tax on every cover: a square or wide device is
+    // nowhere near the ceiling and must come out at the width it asked for.
+    const composed = compose(
+      cover((d) => {
+        d.look.arrangement = 'label'
+        d.look.pressMark = MARK
+        d.look.markOnFront = true
+      })
+    )
+    expect(composed.warnings.join(' ')).not.toMatch(/more board than a device may have/)
   })
 
   it('draws nothing when the look has no mark to draw', () => {
