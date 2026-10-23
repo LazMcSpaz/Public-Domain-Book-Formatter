@@ -341,6 +341,34 @@ export function lookQuestions(state: CoverInterviewState): Question[] {
       defaultValue: look.frontFrame
     },
     {
+      id: 'cover-subtitle-points',
+      type: 'choice',
+      group: 'look',
+      prompt: 'How big is the subtitle, in points?',
+      help: 'By default it is a share of the title, which suits one book: a long title sets smaller and takes its subtitle down with it. A collection wants the opposite \u2014 the same size on every board, whatever the title above it does \u2014 so pinning the points is what makes six volumes look like one press along a shelf.',
+      options: [
+        { value: '', label: 'A share of the title \u2014 right for a single book' },
+        { value: '13', label: '13 pt on every volume' },
+        { value: '15', label: '15 pt on every volume' },
+        { value: '18', label: '18 pt \u2014 a subtitle that names the volume' }
+      ],
+      defaultValue: look.subtitleSizePt === null ? '' : String(look.subtitleSizePt)
+    },
+    {
+      id: 'cover-author-size',
+      type: 'choice',
+      group: 'look',
+      prompt: 'How big is the author\u2019s name?',
+      help: 'The same question as the subtitle, and the same answer: by default it is a share of the fitted title, so two books in one collection print the name at two sizes. A reader along a shelf is often looking for the name rather than the title, so it is never set below sixteen points whatever is asked for here.',
+      options: [
+        { value: '', label: 'A share of the title \u2014 right for a single book' },
+        { value: '20', label: '20 pt on every volume' },
+        { value: '24', label: '24 pt on every volume' },
+        { value: '28', label: '28 pt \u2014 the name read first' }
+      ],
+      defaultValue: look.authorSizePt === null ? '' : String(look.authorSizePt)
+    },
+    {
       id: 'cover-blurb-size',
       type: 'choice',
       group: 'look',
@@ -744,6 +772,24 @@ export function coverFromAnswers(
       return asked.trim() !== '' && Number.isFinite(n) && n > 0 ? n : null
     })(),
     frontFrame: text(answers, 'cover-frame', doc.look.frontFrame),
+    subtitleSizePt: (() => {
+      const asked = text(
+        answers,
+        'cover-subtitle-points',
+        doc.look.subtitleSizePt === null ? '' : String(doc.look.subtitleSizePt)
+      )
+      const n = Number(asked)
+      return asked.trim() !== '' && Number.isFinite(n) && n > 0 ? n : null
+    })(),
+    authorSizePt: (() => {
+      const asked = text(
+        answers,
+        'cover-author-size',
+        doc.look.authorSizePt === null ? '' : String(doc.look.authorSizePt)
+      )
+      const n = Number(asked)
+      return asked.trim() !== '' && Number.isFinite(n) && n > 0 ? n : null
+    })(),
     blurbSizePt: (() => {
       const asked = text(
         answers,

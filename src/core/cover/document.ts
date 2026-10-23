@@ -163,6 +163,31 @@ export interface CoverLook {
    * subtitle pinned in points would stay put while the title shrank past it.
    */
   subtitleRatio: number | null
+  /**
+   * The subtitle's size in points, which overrides `subtitleRatio` when set.
+   *
+   * The share above is right for one book and wrong for a shelf of them. It
+   * is a share of the *fitted* title, and a fitted title is a function of how
+   * many letters the title has: measured across this collection at 7 x 10,
+   * one share of 0.34 printed the subtitle at 10.9 pt on a three-line title
+   * and 16.3 pt on a two-line one. A reader looking along a shelf reads those
+   * as two different presses.
+   *
+   * So a collection that wants its subtitles to agree pins the points, and
+   * `BANKED_COVER_KEYS` carries it to volume two. Null keeps the share, which
+   * is what a single book should use.
+   */
+  subtitleSizePt: number | null
+  /**
+   * The author's size in points, which overrides the share of the title.
+   *
+   * Same argument as the subtitle, and the measurement that prompted it is
+   * the same run: 16 pt on one board and 29.8 pt on the next, from one share
+   * of 0.62, because the titles above them fitted differently. The floor
+   * `AUTHOR_MIN_PT` still applies, since a name nobody can read along a shelf
+   * is the fault this whole area was last changed to fix.
+   */
+  authorSizePt: number | null
   rule: RuleStyle
   /** A frame round the front cover's border, struck in the accent colour. */
   frontFrame: FrameStyle
@@ -457,6 +482,8 @@ export function defaultLook(): CoverLook {
     bodyFont: 'EB Garamond',
     titleCase: 'small-caps',
     titleSizePt: null,
+    subtitleSizePt: null,
+    authorSizePt: null,
     subtitleRatio: null,
     rule: 'single',
     frontFrame: 'none',
@@ -568,6 +595,8 @@ export function normalizeLook(raw: unknown): CoverLook {
   if (!isRecord(raw)) return d
   const rawPalette = isRecord(raw['palette']) ? raw['palette'] : {}
   const size = raw['titleSizePt']
+  const subtitleSize = raw['subtitleSizePt']
+  const authorSize = raw['authorSizePt']
   const subtitleRatio = raw['subtitleRatio']
   const blurbSize = raw['blurbSizePt']
   const positive = (v: unknown): number | null =>
@@ -589,6 +618,8 @@ export function normalizeLook(raw: unknown): CoverLook {
     bodyFont: str(raw['bodyFont'], d.bodyFont),
     titleCase: oneOf(raw['titleCase'], ['as-typed', 'upper', 'small-caps'] as const, d.titleCase),
     titleSizePt: positive(size),
+    subtitleSizePt: positive(subtitleSize),
+    authorSizePt: positive(authorSize),
     subtitleRatio: positive(subtitleRatio),
     rule: oneOf(raw['rule'], ['none', 'single', 'double', 'ornamented'] as const, d.rule),
     frontFrame: oneOf(raw['frontFrame'], FRAME_STYLES, d.frontFrame),

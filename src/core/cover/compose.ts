@@ -1245,7 +1245,14 @@ function layFrontCover(
   const setEdition = (after: number): number => {
     if (!content.edition.trim()) return after
     const editionFont = face(look.bodyFont, 'regular', measurer.hasSmallCaps(look.bodyFont))
-    const size = Math.max(9, Math.min(16, typeBox.widthPt * 0.035))
+    // The banked subtitle size governs this line too, because on a cover that
+    // has no subtitle this *is* the subtitle slot: *The Human Aura* names its
+    // volumes here and *The Theosophical Glossary* says "Illustrated" here,
+    // and a collection whose subtitles agree at 16 pt while these two set at
+    // 15 has a difference a reader can see and nobody chose. Without one it
+    // keeps the share of the measure it had, which is what a single book that
+    // has banked nothing should get.
+    const size = look.subtitleSizePt ?? Math.max(9, Math.min(16, typeBox.widthPt * 0.035))
     // Dropped a little below the rule rather than set directly under it. The
     // rule belongs to the title, so a line tight beneath it reads as part of
     // the title's own block; a few points of air makes it a second thing the
@@ -1273,7 +1280,10 @@ function layFrontCover(
   /** The author, set below whatever came before it. */
   const setAuthor = (relativeTo: number, titleSizePt: number): void => {
     if (!content.author.trim()) return
-    const size = Math.max(AUTHOR_MIN_PT, titleSizePt * AUTHOR_RATIO)
+    // A banked size wins over the share, so a collection's names agree along
+    // a shelf instead of each tracking its own fitted title. The floor still
+    // applies either way: it is what stops a name being a caption.
+    const size = Math.max(AUTHOR_MIN_PT, look.authorSizePt ?? titleSizePt * AUTHOR_RATIO)
     const lines = wrapText(content.author, typeBox.widthPt, authorFont, size, measurer)
     // On a typographic cover the author sits low, with the empty middle of the
     // panel doing the work a picture would otherwise do — and any cover may ask
@@ -1442,8 +1452,20 @@ function layFrontCover(
     if (content.subtitle.trim()) {
       // The editor's size where one is set: on a reprinted multi-volume work
       // the subtitle names the volume and is read as hard as the title is.
-      const size = Math.max(10, fitted.sizePt * (look.subtitleRatio ?? SUBTITLE_RATIO))
-      const lines = wrapText(
+      // A banked size in points wins over the share, for the reason
+      // `CoverLook.subtitleSizePt` gives: a share of a fitted title makes two
+      // books in one collection disagree about how big a subtitle is.
+      const size = Math.max(
+        10,
+        look.subtitleSizePt ?? fitted.sizePt * (look.subtitleRatio ?? SUBTITLE_RATIO)
+      )
+      // A newline stacks it, exactly as one in the title or the edition
+      // statement does. A subtitle naming two things — the legend and what
+      // this edition adds to it — is two thoughts, and run together on one
+      // line it reads as a caption. `stackedLines` still wraps each segment,
+      // so a stacked line too long for the measure breaks rather than running
+      // off the board.
+      const lines = stackedLines(
         content.subtitle,
         typeBox.widthPt,
         face(look.bodyFont, 'italic'),

@@ -57,6 +57,11 @@ export const BANKED_COVER_KEYS: readonly (keyof CoverLook)[] = [
   'titleCase',
   'titleSizePt',
   'subtitleRatio',
+  // Both are the collection's, and the reason is the whole point of banking:
+  // a share of a fitted title gives volume two a different subtitle size from
+  // volume one, which on a shelf reads as two presses.
+  'subtitleSizePt',
+  'authorSizePt',
   'rule',
   'frontFrame',
   'blurbSizePt',
