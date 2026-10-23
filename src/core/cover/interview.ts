@@ -101,6 +101,7 @@ export interface CoverInterviewState {
 export const PAPERS: readonly PaperStock[] = [
   'bw-cream',
   'bw-white',
+  'bw-groundwood',
   'standard-color',
   'premium-color'
 ]

@@ -117,6 +117,44 @@ const KDP_TEMPLATE_FIXTURES: TemplateFixture[] = [
     fullWidthIn: 19.331,
     fullHeightIn: 12.417,
     source: 'KDP cover calculator, hardcover 8.25x11, 474pp white'
+  },
+  // Groundwood, which was missing altogether. The 489 row is the one KDP
+  // refused on upload: "expected 15.399, submitted 15.350", because the cover
+  // had been cut for white. The ends of the range are here because a caliper
+  // fitted on one page count is not fitted.
+  ...[
+    { pages: 24, fullWidthIn: 14.306 },
+    { pages: 158, fullWidthIn: 14.621 },
+    { pages: 474, fullWidthIn: 15.364 },
+    { pages: 489, fullWidthIn: 15.399 },
+    { pages: 800, fullWidthIn: 16.13 }
+  ].map((row): TemplateFixture => ({
+    trim: '7x10',
+    pages: row.pages,
+    paper: 'bw-groundwood',
+    spineIn: row.fullWidthIn - 14.25,
+    fullWidthIn: row.fullWidthIn,
+    fullHeightIn: 10.25,
+    source: `KDP cover calculator, paperback 7x10, ${row.pages}pp groundwood`
+  })),
+  {
+    trim: '7x10',
+    pages: 489,
+    paper: 'bw-groundwood',
+    binding: 'hardcover',
+    spineIn: 1.338,
+    fullWidthIn: 16.913,
+    fullHeightIn: 11.417,
+    source: 'KDP cover calculator, hardcover 7x10, 489pp groundwood'
+  },
+  {
+    trim: '6x9',
+    pages: 489,
+    paper: 'bw-groundwood',
+    spineIn: 13.399 - 12.25,
+    fullWidthIn: 13.399,
+    fullHeightIn: 9.25,
+    source: 'KDP cover calculator, paperback 6x9, 489pp groundwood'
   }
 ]
 

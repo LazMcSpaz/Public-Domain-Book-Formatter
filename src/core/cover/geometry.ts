@@ -66,11 +66,20 @@ export const PT_PER_INCH = 72
  * drifted by a thousandth of an inch would produce a cover that misses the
  * spine on a long book and nothing here would notice.
  */
-export type PaperStock = 'bw-white' | 'bw-cream' | 'standard-color' | 'premium-color'
+export type PaperStock =
+  'bw-white' | 'bw-cream' | 'bw-groundwood' | 'standard-color' | 'premium-color'
 
 export const PAPER_CALIPER_IN: Readonly<Record<PaperStock, number>> = {
   'bw-white': 0.002252,
   'bw-cream': 0.0025,
+  // Groundwood was missing, and its absence printed a cover 0.049 in narrow.
+  // KDP offers it beside white and cream for black-and-white interiors, and
+  // the editor's listings were set to it; every cover here assumed white, so
+  // *The Manuscript Lectures* came back "expected 15.399, submitted 15.350".
+  // Not published as a multiplier, so read off KDP's own calculator: 0.00235
+  // reproduces its full-cover width to the thousandth at 24, 100, 158, 474,
+  // 486, 489 and 830 pages, and for a case binding too.
+  'bw-groundwood': 0.00235,
   'standard-color': 0.002252,
   'premium-color': 0.002347
 }
@@ -78,6 +87,7 @@ export const PAPER_CALIPER_IN: Readonly<Record<PaperStock, number>> = {
 export const PAPER_LABEL: Readonly<Record<PaperStock, string>> = {
   'bw-white': 'Black & white, white paper',
   'bw-cream': 'Black & white, cream paper',
+  'bw-groundwood': 'Black & white, groundwood paper',
   'standard-color': 'Standard colour, white paper',
   'premium-color': 'Premium colour, white paper'
 }
@@ -92,6 +102,8 @@ export const PAPER_LABEL: Readonly<Record<PaperStock, string>> = {
 export const PAGE_LIMITS: Readonly<Record<PaperStock, { min: number; max: number }>> = {
   'bw-white': { min: 24, max: 828 },
   'bw-cream': { min: 24, max: 776 },
+  // KDP's calculator accepts the full paperback range on groundwood.
+  'bw-groundwood': { min: 24, max: 830 },
   'standard-color': { min: 72, max: 600 },
   'premium-color': { min: 24, max: 828 }
 }
