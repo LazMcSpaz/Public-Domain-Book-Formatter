@@ -27,6 +27,7 @@ import {
   PRESS_MARK_ID,
   SPINE_TEXT_CLEARANCE_IN,
   composeCover,
+  validateCover,
   coverGeometry,
   defaultCover,
   fitArt,
@@ -1260,8 +1261,8 @@ function foldRoom(
   font: Parameters<typeof measurer.metrics>[0]
 ): number {
   const at = m.metrics(font, 100)
-  const boxPerEm = (at.ascent - at.descent) / 100
-  return ((geometry.spineSafe?.width ?? 0) * 72 * 0.82) / boxPerEm
+  const boxPerEm = (at.ascent + at.descent) / 100
+  return ((geometry.spineSafe?.width ?? 0) * 72 * 0.95) / boxPerEm
 }
 
 describe('the author and the spine are set to be read, not to be found', () => {
@@ -1341,11 +1342,11 @@ describe('the author and the spine are set to be read, not to be found', () => {
     })
     const font = { family: 'EB Garamond', style: 'regular' as const }
     const at = measurer.metrics(font, 100)
-    const boxPerEm = (at.ascent - at.descent) / 100
+    const boxPerEm = (at.ascent + at.descent) / 100
     const boxPt = spine!.sizePt * boxPerEm
     const foldPt = (geometry.spineSafe?.width ?? 0) * 72
-    expect(boxPt / foldPt).toBeGreaterThan(0.7)
-    expect(boxPt / foldPt).toBeLessThanOrEqual(0.82)
+    expect(boxPt / foldPt).toBeGreaterThan(0.8)
+    expect(boxPt / foldPt).toBeLessThanOrEqual(0.95)
   })
 
   it('cuts a banked spine size down to a thin fold, and says so', () => {
@@ -1613,5 +1614,39 @@ describe('the author can be set at the foot', () => {
       return line.yPt
     }
     expect(low(true)).toBeCloseTo(low(false), 9)
+  })
+})
+
+/**
+ * The engine and the safe-area check must measure a spine the same way.
+ *
+ * They did not: the size was computed from `ascent - descent`, which is twice
+ * the offset from the fold's centre line to the baseline and not a height,
+ * while `itemBounds` gives a rotated run `ascent + descent` — 0.709 em
+ * against 1.305 for EB Garamond. Four of the ten covers on this shelf were
+ * built, measured against their own pixels, committed and pushed, and only
+ * caught when the validator was run before handing the files over. A number
+ * taken from one definition and tested against another is not measured.
+ */
+describe('a spine the validator will accept', () => {
+  it('keeps every thin-spined cover inside its own safe area', () => {
+    for (const pageCount of [80, 120, 158, 200, 300]) {
+      const doc = bookCover((d) => {
+        d.look.arrangement = 'label'
+        d.content.author = 'Amos Root'
+        d.pageCount = pageCount
+        d.look.spineSizePt = 27
+      })
+      const composed = composeCover(doc, { measurer })
+      const report = validateCover({
+        doc,
+        composed,
+        fileBytes: 1000,
+        fontsEmbedded: true,
+        pageCountMeasured: true
+      })
+      const safe = report.checks.find((c) => c.id === 'safe-margin')
+      expect(safe?.level, `${pageCount} pages: ${safe?.detail ?? ''}`).toBe('ok')
+    }
   })
 })

@@ -354,17 +354,12 @@ const AUTHOR_MIN_PT = 16
  * `spineSafe` is already inset by KDP's sixteenth of an inch on each edge, so
  * part of this is white and part of it is slack against the metrics.
  *
- * Set by measuring the rendered sheets rather than chosen. At 0.9 the ink on
- * *The Human Aura*'s 0.288 in spine came within 0.05 in of one fold edge,
- * inside KDP's own minimum — because the box the size is computed from is the
- * face's declared ascent and descent, and what a particular line of type
- * actually inks is not exactly that: a line with both tall ascenders and
- * descenders runs a little deeper than the declared box, and the centring
- * uses the declared one. At 0.82 the same spine measures 0.07 in clear on
- * both sides, and the two thin spines still set at roughly twice what the
- * old constant gave them.
+ * A hair under 1.0 rather than a design choice: the box is now the same one
+ * `itemBounds` reports and `withinSafe` tests, so at exactly 1.0 a line would
+ * sit on the boundary and `contains` would turn on a rounding error. Five per
+ * cent is enough to keep it inside and costs well under a point.
  */
-const SPINE_FOLD_MARGIN = 0.82
+const SPINE_FOLD_MARGIN = 0.95
 
 const SPINE_MAX_PT = 36
 
@@ -1860,7 +1855,21 @@ function laySpine(
   // has white either side of the type rather than KDP's bare minimum.
   const boxPerEm = (() => {
     const at = measurer.metrics(font, 100)
-    return (at.ascent - at.descent) / 100
+    // Ascent *plus* descent, which is the box `itemBounds` gives a rotated run
+    // and therefore the box the safe-area check measures. The first version of
+    // this used `ascent - descent`, which is twice the offset from the fold's
+    // centre line to the baseline and not a height at all — 0.709 em against
+    // the true 1.305 for this face. It sized the two thin spines at nearly
+    // twice what the fold allows and both covers failed their own check.
+    //
+    // The pixels said otherwise and were not wrong: the *ink* of this line is
+    // about 0.71 em, because EB Garamond declares an ascent of 1.007 em to
+    // leave room for accented capitals this line does not contain. But the
+    // gate measures the declared box, and a gate is not something to argue out
+    // of its warning to win a few points of type. Sizing by the ink would need
+    // the measurer to report a per-string extent, which it does not; until it
+    // does, the engine and the check agree.
+    return (at.ascent + at.descent) / 100
   })()
   const maxByThickness =
     boxPerEm > 0 ? (pt(safe.width) * SPINE_FOLD_MARGIN) / boxPerEm : pt(safe.width) * 0.62
