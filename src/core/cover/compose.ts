@@ -336,6 +336,24 @@ const AUTHOR_MIN_PT = 16
  * part of a book a shelf shows. Raised to a size no ordinary fold reaches, so
  * that what decides a spine is the fold and the length of the line on it.
  */
+/**
+ * How much of the safe fold the spine's type may fill.
+ *
+ * `spineSafe` is already inset by KDP's sixteenth of an inch on each edge, so
+ * part of this is white and part of it is slack against the metrics.
+ *
+ * Set by measuring the rendered sheets rather than chosen. At 0.9 the ink on
+ * *The Human Aura*'s 0.288 in spine came within 0.05 in of one fold edge,
+ * inside KDP's own minimum — because the box the size is computed from is the
+ * face's declared ascent and descent, and what a particular line of type
+ * actually inks is not exactly that: a line with both tall ascenders and
+ * descenders runs a little deeper than the declared box, and the centring
+ * uses the declared one. At 0.82 the same spine measures 0.07 in clear on
+ * both sides, and the two thin spines still set at roughly twice what the
+ * old constant gave them.
+ */
+const SPINE_FOLD_MARGIN = 0.82
+
 const SPINE_MAX_PT = 36
 
 /** What the back-cover copy sets at when the look names no size. */
@@ -1805,7 +1823,26 @@ function laySpine(
 
   const font = face(look.titleFont, 'regular', measurer.hasSmallCaps(look.titleFont))
   // The spine's *width* is the type's height, so the size is bounded by it.
-  const maxByThickness = pt(safe.width) * 0.62
+  // The fold's own bound, taken from the face rather than from a constant.
+  //
+  // It was `pt(safe.width) * 0.62`, and measured off a rendered sheet that is
+  // two and a third times too careful: on the 0.356 in spine of *The Lost
+  // Keys of Masonry* the ink came to 0.10 in across a fold with 0.231 in to
+  // give, leaving 0.12 and 0.14 in of bare board either side of a line set at
+  // 10.3 pt. `spineSafe` has already taken KDP's sixteenth of an inch off
+  // each edge, so what is left is the type's to use.
+  //
+  // What bounds it is the height of the line's own box, which is what the
+  // same metrics centre it by, so the two cannot disagree: at 10.3 pt the
+  // box is 0.709 em = 0.101 in and the measured ink was 0.10 in. A share of
+  // the fold is kept back (`SPINE_FOLD_MARGIN`) so a fold that wanders still
+  // has white either side of the type rather than KDP's bare minimum.
+  const boxPerEm = (() => {
+    const at = measurer.metrics(font, 100)
+    return (at.ascent - at.descent) / 100
+  })()
+  const maxByThickness =
+    boxPerEm > 0 ? (pt(safe.width) * SPINE_FOLD_MARGIN) / boxPerEm : pt(safe.width) * 0.62
   // The spine is one line of type along a fold, so a title the editor stacked
   // for the board is flattened here. Left in, the newline reaches the writer as
   // a character to draw, which is a spine that prints wrong and says nothing.

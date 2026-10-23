@@ -500,10 +500,20 @@ describe("the press's mark", () => {
     const runOf = (doc: CoverDocument) => {
       const { items } = composeCover(doc, { measurer })
       const spine = texts(items).find((t) => t.rotate === -90)!
-      return { start: spine.yPt, length: spine.widthPt }
+      const device = composeCover(doc, { measurer }).items.find(
+        (i) => i.kind === 'image' && i.id === PRESS_MARK_ID
+      )
+      return { start: spine.yPt, end: spine.yPt + spine.widthPt, device }
     }
-    // The text is centred in what is left, so it starts higher up the fold.
-    expect(runOf(withMark).start).toBeLessThan(runOf(without).start)
+    // The property, stated directly: the line ends above the device rather
+    // than running into it. It used to compare the two runs' start positions,
+    // which only held while both were set at the same size — once the fold
+    // rather than a fixed ceiling decided that size, the comparison stopped
+    // being about the device at all.
+    const marked = runOf(withMark)
+    expect(marked.device).toBeDefined()
+    expect(marked.end).toBeLessThanOrEqual(marked.device!.yPt)
+    expect(marked.end).toBeLessThan(runOf(without).end)
   })
 
   it('is left off a spine too narrow to show it, and says so', () => {
@@ -765,7 +775,11 @@ describe('a pinned title size reaches both arrangements', () => {
       d.look.titleSizePt = 27
     })
     const { items } = composeCover(doc, { measurer })
-    expect(Math.max(...texts(items).map((t) => t.sizePt))).toBe(27)
+    // The title, not the largest thing on the sheet: the spine's line is set
+    // along the fold and may now be larger than a pinned title, so a max over
+    // everything stopped naming the thing this test is about.
+    const onFront = texts(items).filter((t) => t.rotate !== -90)
+    expect(Math.max(...onFront.map((t) => t.sizePt))).toBe(27)
   })
 
   it('pins an omnibus too, which it silently did not', () => {
@@ -1230,6 +1244,26 @@ describe("the blurb is the editor's own prose, and is set as such", () => {
   })
 })
 
+/**
+ * The fold's own bound on spine type, from the face rather than a constant.
+ *
+ * It was `0.62` of the safe fold, and measured off a rendered sheet that is
+ * two and a third times too careful: the 0.356 in spine of *The Lost Keys of
+ * Masonry* used 0.10 in of ink across a fold with 0.231 in to give. The bound
+ * is the height of the line's own box now, which is what the same metrics
+ * centre it by — at 10.3 pt that box is 0.101 in and the measured ink was
+ * 0.10 in, so the two agree to a thousandth.
+ */
+function foldRoom(
+  geometry: { spineSafe?: { width: number } | null },
+  m: typeof measurer,
+  font: Parameters<typeof measurer.metrics>[0]
+): number {
+  const at = m.metrics(font, 100)
+  const boxPerEm = (at.ascent - at.descent) / 100
+  return ((geometry.spineSafe?.width ?? 0) * 72 * 0.82) / boxPerEm
+}
+
 describe('the author and the spine are set to be read, not to be found', () => {
   /** The author line on the front, and the line along the fold. */
   function sizes(patch: (doc: CoverDocument) => void = () => {}) {
@@ -1281,7 +1315,7 @@ describe('the author and the spine are set to be read, not to be found', () => {
     const { spine, geometry } = sizes((d) => {
       d.pageCount = 477
     })
-    const room = (geometry.spineSafe?.width ?? 0) * 72 * 0.62
+    const room = foldRoom(geometry, measurer, { family: 'EB Garamond', style: 'regular' })
     expect(spine!.sizePt).toBeGreaterThan(16)
     expect(spine!.sizePt).toBeLessThanOrEqual(room + 1e-6)
   })
@@ -1294,11 +1328,33 @@ describe('the author and the spine are set to be read, not to be found', () => {
     expect(spine!.sizePt).toBe(27)
   })
 
+  it('uses the fold it has, rather than a fraction of it', () => {
+    // The bound above is one-sided: a size smaller than the room is still
+    // under the room, so asserting only that passes against the constant it
+    // replaced. (It did.) What separates them is how much of the fold the
+    // type's own box actually occupies — 0.62 of it under the old constant,
+    // and `SPINE_FOLD_MARGIN` of it now. Measured off a rendered sheet, the
+    // old one left 0.12 and 0.14 in of bare board either side of a line on a
+    // 0.356 in spine.
+    const { spine, geometry } = sizes((d) => {
+      d.pageCount = 158
+    })
+    const font = { family: 'EB Garamond', style: 'regular' as const }
+    const at = measurer.metrics(font, 100)
+    const boxPerEm = (at.ascent - at.descent) / 100
+    const boxPt = spine!.sizePt * boxPerEm
+    const foldPt = (geometry.spineSafe?.width ?? 0) * 72
+    expect(boxPt / foldPt).toBeGreaterThan(0.7)
+    expect(boxPt / foldPt).toBeLessThanOrEqual(0.82)
+  })
+
   it('cuts a banked spine size down to a thin fold, and says so', () => {
+    // Thin enough that the fold itself binds: at 80 pages on white stock the
+    // safe fold is a tenth of an inch and no face fits 27 pt across it.
     const doc = bookCover((d) => {
       d.look.arrangement = 'label'
       d.content.author = 'Amos Root'
-      d.pageCount = 150
+      d.pageCount = 80
       d.look.spineSizePt = 27
     })
     const composed = composeCover(doc, { measurer })
@@ -1314,7 +1370,7 @@ describe('the author and the spine are set to be read, not to be found', () => {
     const { spine, geometry } = sizes((d) => {
       d.pageCount = 120
     })
-    const room = (geometry.spineSafe?.width ?? 0) * 72 * 0.62
+    const room = foldRoom(geometry, measurer, { family: 'EB Garamond', style: 'regular' })
     expect(spine).toBeDefined()
     expect(spine!.sizePt).toBeLessThanOrEqual(room + 1e-6)
   })
