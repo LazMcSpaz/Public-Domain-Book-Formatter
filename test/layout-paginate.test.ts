@@ -127,6 +127,16 @@ describe('layout — front matter', () => {
     expect(textOf(book.pages[3]!)).toContain('public domain')
   })
 
+  it('prints one ISBN line per binding when the answer holds two', () => {
+    const book = layout(doc([block('paragraph', PROSE)]), defaultStyleProfile(), measurer, {
+      edition: { ...EDITION, isbn: '9798164602758 (paperback)\n9798164630898 (hardcover)' }
+    })
+    const copyright = book.pages.find((p) => p.kind === 'copyright')!
+    const printed = lines(copyright).map((l) => l.runs.map((r) => r.text).join(' '))
+    expect(printed).toContain('ISBN 9798164602758 (paperback)')
+    expect(printed).toContain('ISBN 9798164630898 (hardcover)')
+  })
+
   it('leaves display pages unnumbered', () => {
     const book = run(doc([block('paragraph', PROSE)]))
     for (const page of book.pages.slice(0, 4)) expect(page.folio).toBeNull()

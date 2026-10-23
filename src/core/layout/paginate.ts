@@ -1206,6 +1206,22 @@ interface BuildContext {
  * the writer draws come from one answer.
  */
 /**
+ * The ISBN lines a copyright page prints. One book is often sold in two
+ * bindings, each with its own ISBN, and one interior serves both, so the
+ * answer may hold several, one to a line, each with its format in brackets
+ * ("9798164602758 (paperback)"). Each becomes its own "ISBN …" line: run
+ * together they read as one long number.
+ */
+export function isbnLines(isbn: string | null | undefined): string[] {
+  if (!isbn) return []
+  return isbn
+    .split(/\r?\n/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .map((s) => `ISBN ${s}`)
+}
+
+/**
  * The number a list item prints before its words, when it is stored apart from
  * them and the words do not already open with it.
  */
@@ -4752,7 +4768,7 @@ function buildFrontMatter(
       lines.push(`© ${edition.copyrightHolder}`)
     }
     if (edition.editionStatement) lines.push(edition.editionStatement)
-    if (edition.isbn) lines.push(`ISBN ${edition.isbn}`)
+    lines.push(...isbnLines(edition.isbn))
     for (const notice of edition.notices ?? []) lines.push(notice)
     if (edition.imprint) lines.push(edition.imprint)
 
