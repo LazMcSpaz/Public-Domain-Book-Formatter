@@ -243,6 +243,18 @@ export const FRAME_INSET_IN = 0.375
  * own size. A hair, by request: enough to read as a separate line and not
  * enough to float free of the title it belongs to.
  */
+/**
+ * How much of the subtitle's size the edition line takes when both are set.
+ *
+ * On a cover with no subtitle the edition line is the subtitle slot and takes
+ * its full size. With one, it is the line underneath that says what *this*
+ * printing is — "Annotated", "Illustrated", a volume number — and at the same
+ * size the two read as two subtitles. Two thirds is plainly subordinate and
+ * still sets at 10 to 11 pt against this collection's 16, which is readable
+ * on a board at arm's length.
+ */
+const EDITION_LABEL_SHARE = 0.66
+
 export const EDITION_DROP = 0.45
 
 /**
@@ -1343,7 +1355,16 @@ function layFrontCover(
     // 15 has a difference a reader can see and nobody chose. Without one it
     // keeps the share of the measure it had, which is what a single book that
     // has banked nothing should get.
-    const size = look.subtitleSizePt ?? Math.max(9, Math.min(16, typeBox.widthPt * 0.035))
+    //
+    // Where a subtitle *is* set, this line is a third-rank label rather than
+    // the subtitle, and must not set level with it: "ANNOTATED AND
+    // ILLUSTRATED" over "The Legend of Hiram Abiff" at one size reads as two
+    // subtitles arguing. `EDITION_LABEL_SHARE` of the subtitle keeps it a
+    // label — small enough not to intrude on a title, large enough that KDP
+    // can find the words it requires an edition of a public-domain text to
+    // carry.
+    const banked = look.subtitleSizePt ?? Math.max(9, Math.min(16, typeBox.widthPt * 0.035))
+    const size = content.subtitle.trim() ? Math.max(8, banked * EDITION_LABEL_SHARE) : banked
     // Dropped a little below the rule rather than set directly under it. The
     // rule belongs to the title, so a line tight beneath it reads as part of
     // the title's own block; a few points of air makes it a second thing the

@@ -979,3 +979,58 @@ describe('the title is the largest thing on the board', () => {
     expect(s.warnings).not.toMatch(/stays under the title/)
   })
 })
+
+/**
+ * The edition line is the subtitle slot, or a label under one.
+ *
+ * On a cover with no subtitle it *is* the subtitle — the Glossary says
+ * "Illustrated" there, the Aura names its volumes — so it takes the banked
+ * subtitle size. With a real subtitle beside it, it is the line that says
+ * what this printing is, and set at the same size the two read as two
+ * subtitles arguing: the editor's words were that a parenthetical would
+ * "ruin the whole look of the title".
+ */
+describe('the edition line knows which job it has', () => {
+  const sizeOfEdition = (subtitle: string): number => {
+    const doc = cover((d) => {
+      d.content.title = 'Keys'
+      d.content.subtitle = subtitle
+      d.content.edition = 'Annotated'
+      d.look.titleCase = 'upper'
+      d.look.titleSizePt = 32
+      d.look.subtitleSizePt = 16
+    })
+    const item = composeCover(doc, { measurer }).items.find(
+      (i) => i.kind === 'text' && i.text === 'ANNOTATED'
+    )
+    expect(item?.kind).toBe('text')
+    return item?.kind === 'text' ? item.sizePt : 0
+  }
+
+  it('takes the subtitle’s own size when it is the subtitle', () => {
+    expect(sizeOfEdition('')).toBe(16)
+  })
+
+  it('drops to a label where a subtitle is set beside it', () => {
+    const label = sizeOfEdition('The Legend of Hiram Abiff')
+    expect(label).toBeLessThan(16)
+    expect(label).toBeGreaterThanOrEqual(8)
+  })
+
+  it('never sets it so small it stops being readable on a board', () => {
+    // The floor matters because KDP requires an edition of a public-domain
+    // text to say on its cover how it differs from the free copies, and a
+    // line nobody can read does not say it.
+    const doc = cover((d) => {
+      d.content.title = 'Keys'
+      d.content.subtitle = 'A Subtitle'
+      d.content.edition = 'Annotated'
+      d.look.titleCase = 'upper'
+      d.look.subtitleSizePt = 10
+    })
+    const item = composeCover(doc, { measurer }).items.find(
+      (i) => i.kind === 'text' && i.text === 'ANNOTATED'
+    )
+    expect(item?.kind === 'text' && item.sizePt).toBeGreaterThanOrEqual(8)
+  })
+})
