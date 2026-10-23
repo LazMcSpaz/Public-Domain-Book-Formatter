@@ -12,6 +12,7 @@
  * the PDF" — and none of its recovery pipeline.
  */
 export * from './geometry'
+export * from './barcode'
 export * from './patterns'
 export * from './figures'
 export * from './document'

@@ -457,6 +457,23 @@ export interface CoverContent {
   blurb: string
   /** The imprint line, which *is* banked — carried here as resolved text. */
   imprint: string
+  /**
+   * The ISBN-13 this printing is registered under, or empty for none.
+   *
+   * Per *printing*, never banked: a paperback and a hardcover of one book have
+   * different numbers, which is the whole reason this is content and not look.
+   * Empty leaves KDP's own barcode area clear, and KDP prints its own there —
+   * a black rectangle on white, which is what carrying one avoids.
+   */
+  isbn: string
+  /**
+   * The five-digit add-on, if the barcode carries one.
+   *
+   * `90000` is the convention on a US book and means "no price encoded",
+   * which is what KDP's own barcode prints. Empty omits the add-on entirely,
+   * which is equally legal and a little narrower.
+   */
+  isbnAddOn: string
   art: CoverArt
 }
 
@@ -534,6 +551,8 @@ export function emptyContent(): CoverContent {
     edition: '',
     blurb: '',
     imprint: '',
+    isbn: '',
+    isbnAddOn: '90000',
     art: emptyArt()
   }
 }

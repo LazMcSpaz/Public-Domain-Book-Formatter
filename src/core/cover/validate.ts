@@ -14,7 +14,7 @@
 import type { ValidationCheck, ValidationLevel } from '@core/model'
 import { effectiveDpi } from '@core/image'
 import type { ComposedCover, CoverItem } from './compose'
-import { itemBounds, PRESS_MARK_ID } from './compose'
+import { BARCODE_ID, itemBounds, PRESS_MARK_ID } from './compose'
 import { GROUND_IMAGE_ID } from './patterns'
 import { GROUND_FIGURE_BACK_ID, GROUND_FIGURE_ID } from './figures'
 import {
@@ -221,8 +221,13 @@ export function validateCover(input: ValidateCoverInput): CoverValidationReport 
     // included — KDP pastes a white rectangle over it and a seven per cent tint
     // loses nothing. Flagging it would fire on every cover that has one and
     // teach the reader to skip this check, which is the only way it can fail.
+    // A cover carrying its own barcode is the one thing that *belongs* here,
+    // and without this it would be the only cover the check fires on — the
+    // `isGround` lesson again, in the rectangle that lesson is about.
+    const ownBarcode = composed.items.some((i) => 'id' in i && i.id === BARCODE_ID)
     const intruding = inkedBounds(composed)
       .filter(({ item }) => !isGround(item))
+      .filter(({ item }) => !('id' in item && item.id === BARCODE_ID))
       .filter(({ rect }) => overlaps(rect, geometry.barcode))
     checks.push({
       id: 'barcode',
@@ -231,7 +236,9 @@ export function validateCover(input: ValidateCoverInput): CoverValidationReport 
       detail:
         intruding.length > 0
           ? `${intruding.length} element(s) fall in the 2 × 1.2 in area at the foot of the back cover where KDP prints the barcode. Whatever is there will be covered.`
-          : 'The barcode area at the foot of the back cover is clear.'
+          : ownBarcode
+            ? 'The cover carries its own barcode in the area at the foot of the back cover, so KDP prints none over it.'
+            : 'The barcode area at the foot of the back cover is clear, and KDP will print its own there.'
     })
   }
 
