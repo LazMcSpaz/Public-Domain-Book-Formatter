@@ -1157,10 +1157,26 @@ the shelf and the reference texts — and `scripts/spelling-of.ts` writes the
 sheet. On this book that is 203 words out of 10,310, read in ten minutes,
 holding every word Amazon flagged and eleven more. Two things to know from
 running it. A sweep lowercases what it matches case-insensitively, so
-`Brethern` → `brethren` took the capital off Hall's *Brethren* six times and
+`Brethern` → `brethren` took the capital off Hall's _Brethren_ six times and
 had to be put back by hand; check the case of every hit before `--now`. And
 the sheet is a list for the editor, never a gate: `septre`, `thoughters`
 and `gumptional` are on it and are Hall's.
+
+**On Windows the driver could not import a module, and the spell check
+could not find its dictionary.** Both built a path the way a Linux box
+forgives. Every verb hands `REPO` to the page, which imports
+`/@fs${repo}/src/…`; with `REPO` as `C:\Users\…` that is `/@fsC:\Users\…`,
+which Vite does not serve, so `load` failed on its first import. And
+`spelling-of.ts` took its directory from `new URL(import.meta.url).pathname`,
+which on Windows is `/C:/…` with the spaces still escaped. The page is now
+given the URL form of the repository in one place (`PAGE_REPO`, beside the
+`page` it wraps), and the script uses `fileURLToPath`. Two more things a
+Windows session meets first: Playwright's Chromium has to be installed
+(`node node_modules/playwright/cli.js install chromium`), and a checkout
+taken before `.gitattributes` arrived keeps CRLF in every file the pull did
+not touch. That makes `format:check` fail on three hundred files and the
+`docs/FLOW.md` route-table test fail on a `\r`, neither of them about the
+change being checked, so check the files you changed and say so.
 
 ### A test that passes before and after the fix is not a test
 

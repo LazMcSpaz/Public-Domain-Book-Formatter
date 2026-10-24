@@ -19,6 +19,7 @@
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { assembleBook } from '@core/assemble'
 import { applyEdits } from '@core/edits'
 import { checkSpelling, spellingTokens, type SpellingSuspect } from '@core/coherence'
@@ -33,8 +34,10 @@ if (!bookPath) throw new Error('spelling-of.ts <book.json> [--shelf <books-dir>]
 const shelfDir = flag('--shelf')
 const outPath = flag('--out')
 
+// `fileURLToPath`, not `.pathname`: on Windows the pathname is `/C:/…` with
+// its spaces still escaped, and names no file.
 const wordsFile = join(
-  dirname(new URL(import.meta.url).pathname),
+  dirname(fileURLToPath(import.meta.url)),
   '..',
   'node_modules',
   'word-list',

@@ -155,6 +155,23 @@ async function serve() {
   const browser = context
   const page = context.pages()[0] ?? (await context.newPage())
 
+  // Every verb hands `REPO` to the page, which imports `/@fs${repo}/src/…`.
+  // On Windows `REPO` is `C:\Users\…`, which makes `/@fsC:\Users\…` — a URL
+  // Vite does not serve, so every verb failed to import its first module. The
+  // page is given the URL form (`/C:/Users/…`) instead, in this one place,
+  // so the node side keeps the native path for its own file reads.
+  const PAGE_REPO = process.platform === 'win32' ? '/' + REPO.replace(/\\/g, '/') : REPO
+  const evaluateIn = page.evaluate.bind(page)
+  page.evaluate = (fn, arg) =>
+    evaluateIn(
+      fn,
+      arg === REPO
+        ? PAGE_REPO
+        : Array.isArray(arg)
+          ? arg.map((a) => (a === REPO ? PAGE_REPO : a))
+          : arg
+    )
+
   // The profile keeps IndexedDB, and it kept the HTTP cache with it.
   //
   // That is a trap with a long fuse. Edit a module in `src/core`, restart Vite,
