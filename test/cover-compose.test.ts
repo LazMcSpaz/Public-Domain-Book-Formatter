@@ -530,6 +530,41 @@ describe("the press's mark", () => {
     expect(warnings.join(' ')).toMatch(/too narrow to print the press's mark/)
   })
 
+  it('prints on a 128-page book on cream, the thinnest spine on the shelf', () => {
+    // The Human Aura and The Astral World: a 0.320 in fold leaves 0.195 in
+    // once KDP's clearance is taken off both edges. The floor was 0.2 and the
+    // device was left off by five thousandths of an inch, the one spine of
+    // the collection without it.
+    const doc = bookCover((d) => {
+      d.pageCount = 128
+      d.paper = 'bw-cream'
+      d.look.pressMark = mark
+    })
+    const { items, warnings } = composeCover(doc, { measurer })
+    const device = items.find((i) => i.kind === 'image' && i.id === PRESS_MARK_ID)
+    if (!device || device.kind !== 'image') throw new Error('no press mark on the spine')
+    expect(device.widthPt / 72).toBeGreaterThanOrEqual(0.18)
+    expect(warnings.join(' ')).not.toMatch(/press's mark/)
+  })
+
+  it("names the page count the mark needs on the book's own paper", () => {
+    const pagesNamed = (paper: CoverDocument['paper']) => {
+      const { warnings } = composeCover(
+        bookCover((d) => {
+          d.pageCount = 40
+          d.paper = paper
+          d.look.pressMark = mark
+        }),
+        { measurer }
+      )
+      const m = /about (\d+) pages/.exec(warnings.join(' '))
+      return m ? Number(m[1]) : null
+    }
+    // 0.305 in of fold: 122 sheets of cream at 0.0025, 136 of white at 0.002252.
+    expect(pagesNamed('bw-cream')).toBe(122)
+    expect(pagesNamed('bw-white')).toBe(136)
+  })
+
   it('prints once the fold is wide enough', () => {
     const doc = bookCover((d) => {
       d.pageCount = 140

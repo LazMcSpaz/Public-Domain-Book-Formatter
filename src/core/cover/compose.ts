@@ -60,9 +60,11 @@ import {
   coverGeometry,
   MIN_PAGES_FOR_SPINE_TEXT,
   overlaps,
+  PAPER_CALIPER_IN,
   pt,
   SAFE_MARGIN_IN,
   SPINE_TEXT_CLEARANCE_IN,
+  spineWidth,
   type CoverGeometry,
   type Rect
 } from './geometry'
@@ -229,13 +231,21 @@ export const PRESS_MARK_ID = '__press-mark__'
  * The narrowest a press mark may print and still be a device.
  *
  * Worth knowing what this implies, because it is not obvious: a fold wide
- * enough for a mark is always wide enough for text too. This needs roughly a
- * hundred-page book, and KDP's own floor for spine text is seventy-nine — so
- * "a mark on a spine too thin for type" is a case that cannot arise, and the
- * two are still decided separately because that is a fact about today's
- * numbers rather than a rule.
+ * enough for a mark is always wide enough for text too. With KDP's clearance
+ * either side this needs a 0.305 in fold — 122 pages on cream, 136 on white —
+ * and KDP's own floor for spine text is seventy-nine, so "a mark on a spine
+ * too thin for type" is a case that cannot arise, and the two are still
+ * decided separately because that is a fact about today's numbers rather
+ * than a rule.
+ *
+ * It was 0.2, a judgement rather than a measurement, and it left the mark off
+ * the 128-page *Human Aura and Astral World* by five thousandths of an inch:
+ * the one spine of the collection without the device, on a book whose
+ * hardcover carries it. The inkball is one silhouette with no counters, and at
+ * 0.185 in — 55 pixels across at 300 DPI — it reads as the same mark the
+ * thicker spines beside it print.
  */
-export const MIN_MARK_WIDTH_IN = 0.2
+export const MIN_MARK_WIDTH_IN = 0.18
 
 /**
  * The id the front cover's device is placed under.
@@ -1969,10 +1979,16 @@ function laySpine(
     // Reported rather than dropped, which is the rule everywhere else here.
     // Below about a fifth of an inch a device is a smudge with a shape it can
     // no longer show, and shrinking it to fit would print exactly that.
+    // The page count it would take is worked from this book's own paper and
+    // binding, by the same arithmetic the spine is: a fixed figure in the
+    // sentence was right for one stock and wrong for the others.
+    const neededIn = MIN_MARK_WIDTH_IN + SPINE_TEXT_CLEARANCE_IN * 2
+    const empty = spineWidth(0, geometry.paper, geometry.binding)
+    const pages = Math.ceil((neededIn - empty) / PAPER_CALIPER_IN[geometry.paper])
+    const atPages = pages > 0 ? ` — about ${pages} pages on this paper` : ''
     warnings.push(
       `The spine is ${geometry.spineIn.toFixed(3)} in, too narrow to print the press's mark ` +
-        `legibly, so it was left off. It needs about ${(MIN_MARK_WIDTH_IN + SPINE_TEXT_CLEARANCE_IN * 2).toFixed(2)} in of fold — ` +
-        'a little over a hundred pages.'
+        `legibly, so it was left off. It needs ${neededIn.toFixed(3)} in of fold${atPages}.`
     )
   }
   if (mark && usableWidth >= MIN_MARK_WIDTH_IN) {
