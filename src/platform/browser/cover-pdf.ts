@@ -16,22 +16,28 @@
  * - **Colour.** An interior is black on white and the writer never needed a
  *   colour. A cover is nothing but colour, so hex values arrive from the look
  *   and are converted here, once.
- * - **The picture is cropped before it is embedded.** `drawImage` cannot clip,
- *   and clipping is the wrong answer anyway: cutting the pixels means the
- *   effective DPI is computed from the pixels actually printed, which is the
- *   number the KDP check needs.
+ * - **Nothing translucent reaches the file.** KDP: "Flatten all
+ *   transparencies." The grounds, the figures and the marks are composited
+ *   with what lies under them into one opaque background at 300 DPI, and the
+ *   type, rules and barcode are drawn over it as vectors. See `flattenPlan`.
  *
- * Browser-only: pdf-lib, fontkit, and a canvas for the crop.
+ * Browser-only: pdf-lib, fontkit, and a canvas to flatten into.
  */
-import { PDFDocument, degrees, rgb, type PDFFont, type PDFImage } from 'pdf-lib'
+import { PDFDocument, degrees, rgb, type PDFFont } from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit'
-import type { ComposedCover, CoverImageItem, Hex } from '@core/cover'
+import { FLATTEN_DPI, flattenPlan, type ComposedCover, type CoverItem, type Hex } from '@core/cover'
 import type { FontRef } from '@core/layout'
 import { LAYOUT_FEATURES, type FontTable } from './fonts'
 import { verifyWidths, widenWidths } from './font-widths'
 
 export interface CoverPdfResult {
   bytes: Uint8Array
+  /**
+   * How many items were composited into the opaque background, so a caller
+   * can say the cover was flattened rather than assume it. Zero where nothing
+   * on the cover was translucent.
+   */
+  flattenedItems: number
   widthPt: number
   heightPt: number
   embeddedFamilies: string[]
@@ -52,17 +58,6 @@ export interface CoverPdfOptions {
    * the gap the user was told about.
    */
   images?: ReadonlyMap<string, Uint8Array>
-  /**
-   * Crop a PNG to a source rectangle, returning PNG bytes.
-   *
-   * Injected so this module can be exercised without a canvas, and so the one
-   * place pixels are cut is a function the caller can point at its own
-   * implementation of. Defaults to a canvas crop.
-   */
-  cropPng?: (
-    bytes: Uint8Array,
-    rect: { x: number; y: number; width: number; height: number }
-  ) => Promise<Uint8Array>
 }
 
 function keyOf(font: FontRef): string {
@@ -78,60 +73,86 @@ export function hexToRgb(hex: Hex) {
 }
 
 /**
- * Cut a rectangle out of a PNG with a canvas.
+ * Composite the raster half of a `flattenPlan` into one opaque JPEG.
  *
- * Nearest to the metal this app gets with pixels, and it is doing exactly one
- * thing: no resampling, no scaling, no smoothing — the destination is the same
- * size as the source rectangle, so every pixel drawn is a pixel that was there.
- * Enlarging here would invent resolution, which is the rule this codebase is
- * built on.
+ * Painted with the canvas in the composer's own coordinates — top-left origin,
+ * points — scaled to `FLATTEN_DPI`, so every translucent item lands on exactly
+ * what it lay over and the alpha is spent here rather than in the PDF. JPEG
+ * because a full-bleed sheet at 300 DPI is fourteen megapixels and the
+ * picture under it is a photograph or a faint ground, where a PNG would be
+ * five times the size for nothing a press can print.
  */
-export async function cropPngWithCanvas(
-  bytes: Uint8Array,
-  rect: { x: number; y: number; width: number; height: number }
+async function flattenBackground(
+  items: readonly CoverItem[],
+  indices: readonly number[],
+  widthPt: number,
+  heightPt: number,
+  pictures: ReadonlyMap<string, ImageBitmap>
 ): Promise<Uint8Array> {
-  const width = Math.max(1, Math.round(rect.width))
-  const height = Math.max(1, Math.round(rect.height))
-  const blob = new Blob([bytes.slice().buffer as ArrayBuffer], { type: 'image/png' })
-  const bitmap = await createImageBitmap(blob)
-  try {
-    // Already the whole picture: hand the bytes straight back rather than
-    // re-encoding them, which costs time and can only lose.
-    if (
-      Math.round(rect.x) === 0 &&
-      Math.round(rect.y) === 0 &&
-      width >= bitmap.width &&
-      height >= bitmap.height
-    ) {
-      return bytes
+  const scale = FLATTEN_DPI / 72
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(widthPt * scale)
+  canvas.height = Math.round(heightPt * scale)
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('no 2d context to flatten the cover into')
+  ctx.scale(scale, scale)
+  // Opaque white first: the sheet is paper, and a JPEG has no alpha to fall
+  // back on, so anything the ground failed to cover must read as paper.
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, widthPt, heightPt)
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+
+  for (const i of indices) {
+    const item = items[i]!
+    ctx.save()
+    if ('opacity' in item && item.opacity !== undefined) ctx.globalAlpha = item.opacity
+    if (item.kind === 'fill') {
+      ctx.fillStyle = item.color
+      ctx.fillRect(item.xPt, item.yPt, item.widthPt, item.heightPt)
+    } else if (item.kind === 'image') {
+      const bitmap = pictures.get(item.id)
+      if (bitmap) {
+        ctx.drawImage(
+          bitmap,
+          item.srcX,
+          item.srcY,
+          item.srcWidth,
+          item.srcHeight,
+          item.xPt,
+          item.yPt,
+          item.widthPt,
+          item.heightPt
+        )
+      }
+    } else if (item.kind === 'ornament') {
+      // The same transform pdf-lib's drawSvgPath applies, in the composer's
+      // own y-down space: the path's origin at (x, y), its units scaled.
+      ctx.translate(item.xPt, item.yPt)
+      ctx.scale(item.scale, item.scale)
+      for (const shape of item.art.shapes) {
+        const path = new Path2D(shape.d)
+        if (shape.stroke === undefined) {
+          ctx.fillStyle = item.color
+          ctx.fill(path)
+        } else {
+          ctx.strokeStyle = item.color
+          ctx.lineWidth = shape.stroke
+          ctx.stroke(path)
+        }
+      }
     }
-    const canvas = document.createElement('canvas')
-    canvas.width = width
-    canvas.height = height
-    const ctx = canvas.getContext('2d')
-    if (!ctx) throw new Error('no 2d context')
-    ctx.imageSmoothingEnabled = false
-    ctx.drawImage(
-      bitmap,
-      Math.round(rect.x),
-      Math.round(rect.y),
-      width,
-      height,
-      0,
-      0,
-      width,
-      height
-    )
-    const out: Blob = await new Promise((resolve, reject) => {
-      canvas.toBlob(
-        (b) => (b ? resolve(b) : reject(new Error('canvas produced no blob'))),
-        'image/png'
-      )
-    })
-    return new Uint8Array(await out.arrayBuffer())
-  } finally {
-    bitmap.close()
+    ctx.restore()
   }
+
+  const blob: Blob = await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error('canvas produced no blob'))),
+      'image/jpeg',
+      0.92
+    )
+  })
+  return new Uint8Array(await blob.arrayBuffer())
 }
 
 export async function renderCoverPdf(
@@ -169,29 +190,54 @@ export async function renderCoverPdf(
   }
   const fallback = embedded.values().next().value ?? (await doc.embedFont('Times-Roman'))
 
-  // Then the picture, cropped to what the composer said would print.
-  const crop = options.cropPng ?? cropPngWithCanvas
-  const images = new Map<string, PDFImage>()
+  // Then flatten. KDP: "Flatten all transparencies." Everything translucent,
+  // and everything it lies over, goes into one opaque background; the rest is
+  // drawn on top below with no opacity anywhere, so the file carries no soft
+  // mask, no alpha channel and no transparency state at all.
+  const plan = flattenPlan(composed.items)
   const missingImages: string[] = []
-  for (const item of composed.items) {
-    if (item.kind !== 'image' || images.has(item.id)) continue
+  const pictures = new Map<string, ImageBitmap>()
+  for (const i of plan.raster) {
+    const item = composed.items[i]!
+    if (item.kind !== 'image' || pictures.has(item.id)) continue
     const bytes = options.images?.get(item.id)
     if (!bytes) {
       if (!missingImages.includes(item.id)) missingImages.push(item.id)
       continue
     }
-    const cropped = await crop(bytes, {
-      x: item.srcX,
-      y: item.srcY,
-      width: item.srcWidth,
-      height: item.srcHeight
-    })
-    images.set(item.id, await doc.embedPng(cropped.slice()))
+    const blob = new Blob([bytes.slice().buffer as ArrayBuffer], { type: 'image/png' })
+    pictures.set(item.id, await createImageBitmap(blob))
+  }
+  try {
+    if (plan.raster.length > 0) {
+      const background = await flattenBackground(
+        composed.items,
+        plan.raster,
+        widthPt,
+        heightPt,
+        pictures
+      )
+      const image = await doc.embedJpg(background)
+      page.drawImage(image, { x: 0, y: 0, width: widthPt, height: heightPt })
+    }
+  } finally {
+    for (const bitmap of pictures.values()) bitmap.close()
   }
 
+  // An image left on the vector side would carry its alpha into the file, so
+  // the plan never puts one there; this is the writer refusing to be the place
+  // that assumption breaks.
+  for (const i of plan.vector) {
+    if (composed.items[i]!.kind === 'image') {
+      throw new Error(
+        'An image was left out of the flattened background; the cover was not written.'
+      )
+    }
+  }
   const drawn = new Map<PDFFont, string[]>()
 
-  for (const item of composed.items) {
+  for (const i of plan.vector) {
+    const item = composed.items[i]!
     switch (item.kind) {
       case 'fill':
         page.drawRectangle({
@@ -199,23 +245,12 @@ export async function renderCoverPdf(
           y: heightPt - item.yPt - item.heightPt,
           width: item.widthPt,
           height: item.heightPt,
-          color: hexToRgb(item.color),
-          ...(item.opacity === undefined ? {} : { opacity: item.opacity })
+          color: hexToRgb(item.color)
         })
         break
 
-      case 'image': {
-        const image = images.get((item as CoverImageItem).id)
-        if (!image) break
-        page.drawImage(image, {
-          x: item.xPt,
-          y: heightPt - item.yPt - item.heightPt,
-          width: item.widthPt,
-          height: item.heightPt,
-          ...(item.opacity === undefined ? {} : { opacity: item.opacity })
-        })
+      case 'image':
         break
-      }
 
       case 'rule':
         page.drawRectangle({
@@ -235,14 +270,10 @@ export async function renderCoverPdf(
             y,
             scale: item.scale,
             ...(shape.stroke === undefined
-              ? {
-                  color: hexToRgb(item.color),
-                  ...(item.opacity === undefined ? {} : { opacity: item.opacity })
-                }
+              ? { color: hexToRgb(item.color) }
               : {
                   borderColor: hexToRgb(item.color),
-                  borderWidth: shape.stroke * item.scale,
-                  ...(item.opacity === undefined ? {} : { borderOpacity: item.opacity })
+                  borderWidth: shape.stroke * item.scale
                 })
           })
         }
@@ -293,6 +324,7 @@ export async function renderCoverPdf(
   const bytes = await doc.save()
   return {
     bytes,
+    flattenedItems: plan.raster.length,
     widthPt,
     heightPt,
     embeddedFamilies: [...embeddedFamilies],
