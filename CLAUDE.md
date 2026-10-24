@@ -1178,6 +1178,23 @@ not touch. That makes `format:check` fail on three hundred files and the
 `docs/FLOW.md` route-table test fail on a `\r`, neither of them about the
 change being checked, so check the files you changed and say so.
 
+**A merge keyed on a field that is not unique hands one edit's fields to
+its neighbours.** The Mahatma Letters' three handwriting facsimiles printed
+Richard Hodgson's caption under M.'s and K.H.'s hands, in the PDF and the
+EPUB both, from the 23 October export on. The book file got them in the
+commit that added one footnote: the session merged the browser's run into
+the shelf file with a scratch script, and image edits matched on something
+three of them shared, so the last portrait's caption landed on every
+picture that had none. Nothing reported it, because a caption is a caption.
+The same shape was written again the next morning, for the Lectures, keyed
+on `(kind, blockId, id)` — which is `(insert, null, null)` for every
+insert — and caught only because the changed-list came back forty entries
+long. When merging edits by hand, match text edits on `blockId` and every
+other kind **by exact equality**, and assert that the non-text edits of
+the two files agree as a multiset before writing anything. Found by
+diffing `pdftotext` of the old and new exports after a spelling pass and
+asking why a footnote text appeared four times.
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what
