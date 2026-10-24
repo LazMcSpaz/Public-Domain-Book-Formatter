@@ -93,9 +93,20 @@ const L_CODE: readonly string[] = [
   '0001011'
 ]
 
-/** G is L reversed and complemented; R is L complemented. Derived, not typed. */
-const G_CODE = L_CODE.map((bits) => [...bits].reverse().join(''))
+/**
+ * R is L complemented; G is R reversed — L complemented *and* reversed.
+ * Derived, not typed.
+ *
+ * This line once said that and did only the reversing, so every G digit began
+ * with a bar where the standard puts a space. The symbol printed, looked like
+ * a barcode, carried the right digits under it, and no scanner on earth could
+ * read it: KDP rejected *The Lost Keys of Masonry* with "unable to detect a
+ * valid barcode", and ZXing found nothing either. The test decoder had derived
+ * its G table the same wrong way, so it read the fault back as the right
+ * ISBN — which is why it now carries the standard's table typed out instead.
+ */
 const R_CODE = L_CODE.map((bits) => [...bits].map((b) => (b === '0' ? '1' : '0')).join(''))
+const G_CODE = R_CODE.map((bits) => [...bits].reverse().join(''))
 
 /** The add-on's two digits-worth of parity, chosen by the checksum of the five. */
 const ADDON_PARITY: readonly string[] = [

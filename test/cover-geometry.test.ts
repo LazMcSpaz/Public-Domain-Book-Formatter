@@ -323,6 +323,19 @@ describe('a hardcover is a case, not a bigger paperback', () => {
     expect(g.frontSafe.x).toBeGreaterThanOrEqual(front.x + front.width - 1e-9)
   })
 
+  it('keeps the barcode a quarter inch clear of the hinge, not of the board edge', () => {
+    // KDP's barcode margin is 0.25 in on both bindings; on a case it is taken
+    // from the hinge, which lies inside the back board. Taken from the board's
+    // edge it put the symbol 0.14 in into the crease on The Lost Keys of
+    // Masonry, and KDP's previewer drew the hinge line through the bars.
+    for (const pages of [76, 158, 474]) {
+      const g = hc(pages)
+      expect(overlaps(g.barcode, g.hinge!.back), `${pages}pp`).toBe(false)
+      expect(g.barcode.x + g.barcode.width).toBeCloseTo(g.hinge!.back.x - 0.25, 6)
+      expect(g.barcode.y + g.barcode.height).toBeCloseTo(g.back.y + g.back.height - 0.375, 6)
+    }
+  })
+
   it('reports the binding\u2019s page range, not the paper\u2019s', () => {
     // 828 is what white paper takes as a paperback; a case-bound book stops at
     // 550 whatever it is printed on, and saying otherwise is a true sentence

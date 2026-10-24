@@ -338,8 +338,34 @@ describe('decoding the symbol back to the ISBN', () => {
     '0110111',
     '0001011'
   ]
-  const G = L.map((b) => [...b].reverse().join(''))
-  const R = L.map((b) => [...b].map((c) => (c === '0' ? '1' : '0')).join(''))
+  // G and R typed out from the standard's own tables too. G was derived here
+  // once — by the same mistake the encoder made, reversing L without
+  // complementing it — so this decoder read an unscannable symbol back as the
+  // right ISBN and KDP was the first thing to notice.
+  const G = [
+    '0100111',
+    '0110011',
+    '0011011',
+    '0100001',
+    '0011101',
+    '0111001',
+    '0000101',
+    '0010001',
+    '0001001',
+    '0010111'
+  ]
+  const R = [
+    '1110010',
+    '1100110',
+    '1101100',
+    '1000010',
+    '1011100',
+    '1001110',
+    '1010000',
+    '1000100',
+    '1001000',
+    '1110100'
+  ]
   const PARITY = [
     'LLLLLL',
     'LLGLGG',
@@ -382,6 +408,20 @@ describe('decoding the symbol back to the ISBN', () => {
     }
     return `${lead}${left.join('')}${right.join('')}`
   }
+
+  it('starts every digit with a space and ends it with a bar on the left, the reverse on the right', () => {
+    // The structural rule a scanner leans on to find the digits at all, and
+    // the one an inverted table breaks whatever its decoder says.
+    for (const isbn of [LECTURES_PB, LOST_KEYS_PB, '9780306406157']) {
+      const bits = bitsOf(encodeEan13(isbn)!)
+      for (let i = 0; i < 6; i += 1) {
+        const left = bits.slice(3 + i * 7, 10 + i * 7)
+        const right = bits.slice(50 + i * 7, 57 + i * 7)
+        expect(left[0] + left[6], `${isbn} left digit ${i + 1}`).toBe('01')
+        expect(right[0] + right[6], `${isbn} right digit ${i + 1}`).toBe('10')
+      }
+    }
+  })
 
   it('reads every ISBN on this shelf back out of its own bars', () => {
     for (const isbn of [LECTURES_PB, LECTURES_HC, LOST_KEYS_PB, '9798170124800']) {

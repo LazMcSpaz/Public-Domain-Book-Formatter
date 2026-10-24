@@ -409,9 +409,17 @@ export function coverGeometry(input: CoverGeometryInput): CoverGeometry {
   // against the spine: laid out back|spine|front, the back panel's right edge
   // is the fold. (Turn a book over and the spine is on your right; the flat
   // sheet is not mirrored.)
+  //
+  // On a hardcover the side margin is taken from the *hinge*, not the panel's
+  // edge: the hinge lies inside the back board, against the spine, and KDP's
+  // quarter inch measured from the board's edge put the right of the symbol
+  // 0.14 in into the crease. KDP's previewer drew its hinge line straight
+  // through the bars of *The Lost Keys of Masonry*, and a symbol folded every
+  // time the book is opened is one that stops scanning.
   const barcodeBottomIn = hardcover ? BARCODE_INSET_BOTTOM_HARDCOVER_IN : BARCODE_INSET_IN
+  const barcodeRightEdge = hinge ? hinge.back.x : back.x + back.width
   const barcode: Rect = {
-    x: back.x + back.width - BARCODE_INSET_IN - BARCODE_W_IN,
+    x: barcodeRightEdge - BARCODE_INSET_IN - BARCODE_W_IN,
     y: back.y + back.height - barcodeBottomIn - BARCODE_H_IN,
     width: BARCODE_W_IN,
     height: BARCODE_H_IN
