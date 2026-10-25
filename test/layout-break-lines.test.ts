@@ -324,3 +324,59 @@ describe('a ragged line may hold a single word', () => {
     expect(lines[0]!.words.map((w) => w.text)).toEqual(['an', 'extraordinary', 'thing'])
   })
 })
+
+/**
+ * The Glossary and the Mahatma Letters print their pointing spaced, as the
+ * 1892 and 1923 compositors set it: `“ God ”`, `Elementals ;`. Each mark is
+ * then a token of its own, and the space before a closing mark (or after an
+ * opening one) was an ordinary break: 297 lines of the Glossary and 192 of
+ * the Letters began with `”`, `;` or `.`, or ended on a lone `“`.
+ */
+describe('a spaced quotation mark or point stays with its word', () => {
+  const lineStarts = (lines: string[]): string[] => lines.slice(1).map((l) => l.split(' ')[0]!)
+  const lineEnds = (lines: string[]): string[] => lines.map((l) => l.split(' ').at(-1)!)
+  const setAt = (text: string, widthPt: number, alignment: 'justify' | 'left'): string[] =>
+    breakParagraph(text, options({ lineWidths: widthPt, alignment })).map(textOf)
+
+  it('does not begin a line with a closing mark', () => {
+    const lines = setAt('aaaa bbbb ” cccc dd', 9, 'left')
+    expect(lines).toEqual(['aaaa', 'bbbb ”', 'cccc dd'])
+  })
+
+  it('does not end a line on an opening mark', () => {
+    const lines = setAt('aaaa bbbb “ cccc dd', 11, 'left')
+    expect(lines).toEqual(['aaaa bbbb', '“ cccc dd'])
+  })
+
+  const text =
+    'This deity-name is commonly translated “ God ” , meaning “ Mighty ” ; ' +
+    'a class of Pitris , the ancestors of man ; a river . . . in Plaksha . ' +
+    'He is “ the appointed Shepherd ” ( so called ) of the people .'
+  for (const alignment of ['justify', 'left'] as const) {
+    it(`holds at every measure, ${alignment}`, () => {
+      for (let width = 12; width <= 40; width++) {
+        const lines = setAt(text, width, alignment)
+        for (const first of lineStarts(lines))
+          expect(first, `width ${width}`).not.toMatch(/^[”’;:,.!?)]+$/u)
+        for (const last of lineEnds(lines)) expect(last, `width ${width}`).not.toMatch(/^[“‘(]+$/u)
+      }
+    })
+  }
+
+  it('still breaks after the mark, at the next word', () => {
+    const lines = setAt('aa “ bb ” cc dd ee', 9, 'left')
+    expect(lines.join('|')).toBe('aa “ bb ”|cc dd ee')
+  })
+
+  it('binds a closing mark that runs on into a dash', () => {
+    // `interpretation ”—a` on the Glossary's p. 59, `planes ”—or` on p. 185.
+    const lines = setAt('aaaa bbbb ”—cc dd', 9, 'left')
+    expect(lineStarts(lines).some((w) => w.startsWith('”'))).toBe(false)
+  })
+
+  it('leaves an elision and a bare dash free to begin a line', () => {
+    const items = (text: string) => itemsFromText(text, options()).map((i) => i.type)
+    expect(items('aa ’mongst')).toEqual(items('aa bb'))
+    expect(items('aa —bb')).toEqual(items('aa bb'))
+  })
+})

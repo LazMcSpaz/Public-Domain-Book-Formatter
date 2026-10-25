@@ -358,6 +358,20 @@ const GLUE_SHRINK = 0.333
  */
 const HYPHEN_PENALTY = 50
 
+/**
+ * A token that opens with closing marks, and one that is nothing but opening
+ * marks. Some books print their pointing spaced, as their compositors set it
+ * — `“ God ”`, `Elementals ;`, `. . .` — so the mark is a word of its own and
+ * the space beside it was an ordinary break: 297 lines of _The Theosophical
+ * Glossary_ and 192 of _The Mahatma Letters_ began with `”`, `;` or `.`, or
+ * ended on a lone `“`. The space before a closing token and after an opening
+ * one binds instead. A closing token may run on into a dash and past it
+ * (`”—or`, `:—sometimes`), which still binds; a dash alone does not, since a
+ * line may begin with one, and an elision like `’mongst` is a word.
+ */
+const BINDS_PREVIOUS = /^[”’»)\]}.,;:!?…]+(?:[—–].*)?$/u
+const BINDS_NEXT = /^[“‘«([{]+$/u
+
 /** `\parfillskip`: the last line may end anywhere, so its slack is free. */
 const PARAGRAPH_FILL_STRETCH = 1e6
 
@@ -486,8 +500,18 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
 
   words.forEach((word, i) => {
     if (i > 0) {
-      if (ragged) items.push(glue(0, fill, 0), penalty(0, 0, false), glue(spaceWidth, -fill, 0))
-      else items.push(glue(spaceWidth, stretch, shrink))
+      if (BINDS_NEXT.test(words[i - 1]!) || BINDS_PREVIOUS.test(word)) {
+        // TeX's `\nobreak`: glue is a legal break only straight after a box,
+        // and the penalty before it is one the breaker may never take.
+        items.push(
+          penalty(0, MAX_COST, false),
+          glue(spaceWidth, ragged ? 0 : stretch, ragged ? 0 : shrink)
+        )
+      } else if (ragged) {
+        items.push(glue(0, fill, 0), penalty(0, 0, false), glue(spaceWidth, -fill, 0))
+      } else {
+        items.push(glue(spaceWidth, stretch, shrink))
+      }
     }
 
     const pieces = segmentsOf(word).flatMap((segment) =>

@@ -1207,6 +1207,22 @@ the two files agree as a multiset before writing anything. Found by
 diffing `pdftotext` of the old and new exports after a spelling pass and
 asking why a footnote text appeared four times.
 
+**Spaced pointing broke the line beside the mark.** The Glossary and the
+Mahatma Letters print their pointing as their compositors set it —
+`“ God ”`, `Elementals ;`, `. . .` — so every mark is a word of its own,
+and the space beside it was an ordinary break. 297 lines of the Glossary
+and 192 of the Letters began with `”`, `;` or `.`, or ended on a lone `“`,
+through every export since they were first set; the 11pt re-set only
+moved them. Nothing reported it, because each of those lines is a
+perfectly good line to the breaker. `itemsFromText` now sets the space
+before a closing token, and after an opening one, as TeX's `\nobreak`: an
+infinite penalty, then rigid glue. A closing token that runs on into a
+dash (`”—or`, `:—sometimes`) binds too; a bare dash and an elision like
+`’mongst` do not. It was found only by reading line starts out of the
+exported PDF, which is the check to run after any change to how a book
+breaks: count the lines that open on a closing mark or close on an
+opening one.
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what
