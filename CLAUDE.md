@@ -1162,6 +1162,18 @@ had to be put back by hand; check the case of every hit before `--now`. And
 the sheet is a list for the editor, never a gate: `septre`, `thoughters`
 and `gumptional` are on it and are Hall's.
 
+**`card` rewrites the editorial sheets, exactly as `queries` does.** It
+writes `queries.md`, `rulings.md` and `proposals.md` beside the card from
+the book file, and on a book whose sheets are the editor's prose (the Hall
+lectures' 937-line `rulings.md`) or carry a pass's own dated section (the
+Glossary's spelling pass) that is a deletion with a green report. It did it
+to three files in one afternoon, after `queries` had done it the day
+before; both were put back from git. Before either verb, `git log -1 --
+<dir>/rulings.md` and read the head of the file: a sheet that opens with
+prose rather than "Editorial rulings — _Title_" is hand-written, and on such
+a book the sheets are checked back in from git after `card` has written
+the card.
+
 **On Windows the driver could not import a module, and the spell check
 could not find its dictionary.** Both built a path the way a Linux box
 forgives. Every verb hands `REPO` to the page, which imports
