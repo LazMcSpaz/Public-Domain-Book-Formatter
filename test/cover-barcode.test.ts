@@ -4,7 +4,7 @@
  * An ISBN-13 is an EAN-13 and EAN-13 is a fixed encoding, so every assertion
  * here is against the standard rather than against taste. The two that matter
  * most are the ones a wrong answer would hide: a symbol that scans to the
- * wrong book, and a pair of colours that will not scan at all.
+ * wrong book, and inks KDP's check will not accept.
  */
 import { describe, expect, it } from 'vitest'
 import { fixedWidthMeasurer } from '@core/layout'
@@ -14,16 +14,15 @@ import {
   composeCover,
   defaultCover,
   validateCover,
+  BARCODE_BARS,
+  BARCODE_SPACE,
   BAR_HEIGHT_IN,
-  MIN_REFLECTANCE_DIFFERENCE,
   MODULE_IN,
   SYMBOL_MODULES,
-  barcodeInk,
   digitsOf,
   ean13CheckDigit,
   encodeEan13,
-  printedGroups,
-  redReflectance
+  printedGroups
 } from '@core/cover'
 
 /** The two Hall volumes, as KDP assigned them. */
@@ -120,75 +119,6 @@ describe('the symbol', () => {
   })
 })
 
-describe('the colours a scanner can actually read', () => {
-  /** This shelf's olive board and its cream. */
-  const OLIVE = '#4f5738'
-  const CREAM = '#f1efe2'
-
-  it('takes the light colour for the spaces and the dark for the bars', () => {
-    const ink = barcodeInk([OLIVE, CREAM, '#d8d2b2'])
-    expect(ink.background).toBe(CREAM)
-    expect(redReflectance(ink.bars)).toBeLessThan(redReflectance(ink.background))
-  })
-
-  it('never hands back a pair under the standard’s limit', () => {
-    // Asserted against the standard, while  aims above it: a
-    // symbol computed exactly to the limit has nothing left for ink spread,
-    // and a render of the olive board measured 0.702 when it aimed at 0.70.
-    // The whole point of the module. A cover that prints a symbol nobody can
-    // scan has the fault KDP's own barcode exists to prevent, and has it
-    // invisibly: it looks right in every render.
-    for (const palette of [
-      [OLIVE, CREAM],
-      ['#1d2a44', '#ece4d2'],
-      ['#5a2027', '#f2e9d8'],
-      // A pair with almost no difference at all, which must still come back legal.
-      ['#888888', '#8a8a8a']
-    ]) {
-      const ink = barcodeInk(palette)
-      expect(ink.reflectanceDifference, palette.join('/')).toBeGreaterThanOrEqual(
-        MIN_REFLECTANCE_DIFFERENCE
-      )
-    }
-  })
-
-  it('darkens the palette’s own colour rather than reaching for black', () => {
-    const ink = barcodeInk([OLIVE, CREAM])
-    expect(ink.darkened).toBe(true)
-    // Still recognisably the board's colour: green above red, as olive is.
-    const g = parseInt(ink.bars.slice(3, 5), 16)
-    const r = parseInt(ink.bars.slice(1, 3), 16)
-    expect(g).toBeGreaterThan(r)
-    expect(ink.bars).not.toBe('#000000')
-  })
-
-  it('leaves a pair that already clears the limit alone', () => {
-    const ink = barcodeInk(['#000000', '#ffffff'])
-    expect(ink.darkened).toBe(false)
-    expect(ink.bars).toBe('#000000')
-    expect(ink.reflectanceDifference).toBeCloseTo(1, 6)
-  })
-})
-
-describe('a palette with no light colour in it', () => {
-  it('lightens the spaces rather than shipping a symbol nobody can scan', () => {
-    // Found by the test above rather than by reasoning: darkening the bars
-    // cannot reach the limit when the difference is bounded by the lightest
-    // colour on the board. A cover of mid-greys has no legal pair in it.
-    const ink = barcodeInk(['#888888', '#8a8a8a'])
-    expect(ink.reflectanceDifference).toBeGreaterThanOrEqual(MIN_REFLECTANCE_DIFFERENCE)
-    expect(ink.lightened).toBe(true)
-  })
-
-  it('leaves the spaces alone where the palette has a light colour', () => {
-    // The ordinary case, and the one the module is for: the book's own cream
-    // carries the spaces untouched.
-    const ink = barcodeInk(['#4f5738', '#f1efe2'])
-    expect(ink.lightened).toBe(false)
-    expect(ink.background).toBe('#f1efe2')
-  })
-})
-
 describe('the barcode on a composed cover', () => {
   const measurer = fixedWidthMeasurer(0.5)
   const withIsbn = (isbn: string, addOn = '90000'): CoverDocument => {
@@ -261,13 +191,29 @@ describe('the barcode on a composed cover', () => {
     }
   })
 
-  it('prints the bars darker than the background it sits on', () => {
-    const items = barcodeItems(withIsbn(LECTURES_PB)).filter((i) => i.kind === 'fill')
-    const colours = new Set(items.map((i) => (i.kind === 'fill' ? i.color : '')))
-    expect(colours.size).toBe(2)
-    const [a, b] = [...colours]
-    const diff = Math.abs(redReflectance(a!) - redReflectance(b!))
-    expect(diff).toBeGreaterThanOrEqual(MIN_REFLECTANCE_DIFFERENCE)
+  it('prints black on white whatever the board, because KDP accepts nothing else', () => {
+    // KDP: "100% black (not RGB/CMYK color or registration black)" on a
+    // "solid white background". The symbol was drawn in the board's own olive
+    // on its cream, decoded cleanly, and was refused on every cover that
+    // carried it. Asserted across boards, because the fault was a colour
+    // taken from the palette and one palette cannot show that.
+    for (const [ground, ink] of [
+      ['#4f5738', '#f1efe2'],
+      ['#5a2027', '#f2e9d8'],
+      ['#f1efe2', '#1d2a44']
+    ]) {
+      const d = withIsbn(LECTURES_PB)
+      d.look = { ...d.look, palette: { ...d.look.palette, ground: ground!, ink: ink! } }
+      const items = barcodeItems(d)
+      const patch = items.find((i) => i.kind === 'fill' && i.widthPt > 20)
+      expect(patch && patch.kind === 'fill' ? patch.color : null, ground).toBe(BARCODE_SPACE)
+      for (const item of items) {
+        if (item === patch) continue
+        expect('color' in item ? item.color : null, `${ground}: ${item.kind}`).toBe(BARCODE_BARS)
+      }
+    }
+    expect(BARCODE_BARS).toBe('#000000')
+    expect(BARCODE_SPACE).toBe('#ffffff')
   })
 
   it('does not make the barcode check complain about itself', () => {

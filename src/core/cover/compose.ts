@@ -42,7 +42,8 @@ import {
   QUIET_LEFT_MODULES,
   QUIET_RIGHT_MODULES,
   SYMBOL_MODULES,
-  barcodeInk,
+  BARCODE_BARS,
+  BARCODE_SPACE,
   encodeEan13,
   printedGroups
 } from './barcode'
@@ -962,10 +963,9 @@ export function blurbFrame(geometry: CoverGeometry): Rect {
  * Two things are not design decisions and are treated as such. The symbol's
  * proportions are GS1's, so it is scaled to fit the area rather than fitted to
  * it: a barcode stretched to fill a box is a barcode that scans as a different
- * number or not at all. And the colours come from `barcodeInk`, which will
- * darken the palette's own dark until a scanner can read it — see that
- * module for why light bars on a dark board are not an option however much
- * better they would look.
+ * number or not at all. And the colours are KDP's, not the palette's: black
+ * on a white patch, which is the one thing KDP's barcode check accepts —
+ * see `barcode.ts` for the covers that learnt it.
  */
 function layBarcode(
   items: CoverItem[],
@@ -985,14 +985,6 @@ function layBarcode(
         'so no barcode was drawn and KDP will print its own.'
     )
     return
-  }
-
-  const ink = barcodeInk([look.palette.ground, look.palette.ink, look.palette.accent])
-  if (ink.lightened) {
-    warnings.push(
-      'This palette has no colour light enough to carry the barcode\u2019s spaces, so they ' +
-        'were lightened past it. The symbol will scan; it will not look like the rest of the board.'
-    )
   }
 
   const area = geometry.barcode
@@ -1037,7 +1029,7 @@ function layBarcode(
     yPt: pt(originY),
     widthPt: pt(totalWidth),
     heightPt: pt(totalHeight),
-    color: ink.background
+    color: BARCODE_SPACE
   })
 
   const barsLeft = originX + QUIET_LEFT_MODULES * moduleIn
@@ -1053,7 +1045,7 @@ function layBarcode(
       // An add-on's bars end level with the main symbol's; only the guards of
       // the main symbol run on past the digits.
       heightPt: pt(isAddOn ? barHeightIn : barHeightIn + (bar.guard ? guardDropIn : 0)),
-      color: ink.bars
+      color: BARCODE_BARS
     })
   }
 
@@ -1072,7 +1064,7 @@ function layBarcode(
       sizePt: digitSize,
       xPt: pt(centreIn) - width / 2,
       yPt: pt(baseline),
-      color: ink.bars,
+      color: BARCODE_BARS,
       widthPt: width,
       ascentPt: metrics.ascent,
       descentPt: metrics.descent
@@ -1096,7 +1088,7 @@ function layBarcode(
       xPt: pt(addOnCentre) - width / 2,
       // Above its own bars and inside the patch, where EAN-13 prints it.
       yPt: pt(originY + topIn - 0.03 * scale),
-      color: ink.bars,
+      color: BARCODE_BARS,
       widthPt: width,
       ascentPt: metrics.ascent,
       descentPt: metrics.descent

@@ -7,46 +7,26 @@
  * ISBN-13 *is* an EAN-13, and EAN-13 is a fixed encoding of thirteen digits
  * into ninety-five modules. Nothing here is a judgement call.
  *
- * ## The one thing a designer may not choose
+ * ## Black on white, because KDP says so
  *
- * A barcode is read by shining light at it and measuring what comes back, so
- * **the bars must be darker than the spaces** and by a wide margin. GS1 asks
- * for a Minimum Reflectance Difference of 0.70 at 670 nm, which is a red
- * laser, so what matters is the *red* channel and not how dark a colour looks
- * to the eye. Three consequences, and each has cost somebody a print run:
+ * This module once drew the symbol in the cover's own colours — the board's
+ * dark darkened until GS1's reflectance limit cleared, on the board's cream —
+ * so the back of a designed book would not carry a sticker. Every symbol it
+ * drew in colour was refused. KDP's Barcodes page
+ * (kdp.amazon.com/en_US/help/topic/G5HDYGP4BXLX4RUW) is not a recommendation
+ * on this: a barcode the cover supplies must be "100% black (not RGB/CMYK
+ * color or registration black)" on a "solid white background". The
+ * *Manuscript Lectures* and *Lost Keys* covers decoded cleanly in ZXing and
+ * were still turned away with "unable to detect a valid barcode", because the
+ * check is of the inks and not only of whether the symbol reads.
  *
- * - **Light bars on a dark ground do not scan.** Measured on this shelf's
- *   olive board, cream bars give an MRD of **-0.64**: to a scanner that is a
- *   blank label. Some image-based readers invert; the laser at a till does
- *   not, and a book that will not scan is a book a shop cannot sell.
- * - **Red bars do not scan**, for the same reason read the other way: red ink
- *   reflects red light, so a red bar and a white space look alike.
- * - A dark **green**, **blue** or **brown** is fine, which is what lets a
- *   cover keep its own colours instead of borrowing black and white.
- *
- * So `barcodeInk` takes the palette and returns the pair to print: the
- * lightest colour it has for the spaces, and the darkest **darkened until the
- * measured MRD clears the limit** for the bars. It reports the number it
- * reached, because a barcode that fails quietly fails at the till.
+ * So the colours are constants rather than a function of the palette, and the
+ * writer prints them as process black alone — `BARCODE_BARS` maps to C0 M0 Y0
+ * K100, never to an RGB black that a press would separate into four inks.
  *
  * Pure: no I/O, no DOM, no randomness. The module stream is what the composer
  * turns into rectangles.
  */
-
-/** GS1's minimum reflectance difference, measured in the red channel. */
-export const MIN_REFLECTANCE_DIFFERENCE = 0.7
-
-/**
- * What `barcodeInk` aims at, which is above the minimum on purpose.
- *
- * The limit is a limit, and a symbol that computes to 0.702 on the screen has
- * nothing left for the press: ink spreads into the spaces, uncoated stock is
- * not the white the file says, and a scanner at a till is not a colorimeter in
- * a lab. Measured off a render of the olive board, aiming at the limit gave
- * exactly 0.702. Five points of headroom costs a slightly darker green that
- * nobody will identify as different, and buys the margin back.
- */
-export const TARGET_REFLECTANCE_DIFFERENCE = 0.75
 
 /**
  * Nominal EAN-13 dimensions at 100% magnification, in inches.
@@ -252,108 +232,7 @@ export function printedGroups(digits: string): {
   return { lead: digits.slice(0, 1), left: digits.slice(1, 7), right: digits.slice(7) }
 }
 
-function channel(hex: string, index: number): number {
-  const clean = hex.replace('#', '')
-  const full =
-    clean.length === 3 ? [...clean].map((c) => c + c).join('') : clean.padEnd(6, '0').slice(0, 6)
-  return parseInt(full.slice(index * 2, index * 2 + 2), 16) / 255
-}
-
-/** Reflectance at 670 nm, which for printed ink is the red channel. */
-export function redReflectance(hex: string): number {
-  return channel(hex, 0)
-}
-
-function lighten(hex: string, by: number): string {
-  const clean = hex.replace('#', '')
-  const full = clean.length === 3 ? [...clean].map((c) => c + c).join('') : clean
-  const parts = [0, 1, 2].map((i) => {
-    const v = parseInt(full.slice(i * 2, i * 2 + 2), 16)
-    return Math.min(255, Math.round(v + (255 - v) * by))
-  })
-  return `#${parts.map((v) => v.toString(16).padStart(2, '0')).join('')}`
-}
-
-function darken(hex: string, by: number): string {
-  const clean = hex.replace('#', '')
-  const full = clean.length === 3 ? [...clean].map((c) => c + c).join('') : clean
-  const parts = [0, 1, 2].map((i) => {
-    const v = parseInt(full.slice(i * 2, i * 2 + 2), 16)
-    return Math.max(0, Math.round(v * (1 - by)))
-  })
-  return `#${parts.map((v) => v.toString(16).padStart(2, '0')).join('')}`
-}
-
-export interface BarcodeInk {
-  /** The bars, dark. */
-  bars: string
-  /** The spaces and the quiet zone, light. */
-  background: string
-  /** What the pair measures, in the red channel. */
-  reflectanceDifference: number
-  /** Whether the bars had to be darkened past the palette's own colour. */
-  darkened: boolean
-  /**
-   * Whether the spaces had to be lightened too.
-   *
-   * Only where the palette has no light colour at all: a board of mid-greys
-   * cannot reach the limit however black the bars are, since the difference is
-   * bounded by the lightest thing on it. The symbol then stops being made of
-   * the book's own colours, which is the thing this module exists to do — so
-   * it is reported rather than done quietly, and the honest answer for such a
-   * cover is to give the barcode a patch of its own.
-   */
-  lightened: boolean
-}
-
-/**
- * The two colours to print the symbol in, taken from the cover's own palette.
- *
- * The point is to avoid the black-on-white sticker, and the constraint is that
- * the bars must still be much darker than the spaces in red light. So: the
- * palette's lightest colour carries the spaces, its darkest carries the bars,
- * and if that pair does not clear `MIN_REFLECTANCE_DIFFERENCE` the bars are
- * darkened until it does. On this shelf's olive board the ground measures 0.31
- * against a cream 0.95, which is 0.64 and a shade under; darkened it clears,
- * and the symbol still reads as the book's own colour rather than as ink
- * borrowed from somewhere else.
- */
-export function barcodeInk(candidates: readonly string[]): BarcodeInk {
-  const sorted = [...candidates].sort((a, b) => redReflectance(b) - redReflectance(a))
-  const lightest = sorted[0] ?? '#ffffff'
-  const darkest = sorted[sorted.length - 1] ?? '#000000'
-  const clears = (bg: string, bars: string): boolean =>
-    redReflectance(bg) - redReflectance(bars) >= TARGET_REFLECTANCE_DIFFERENCE
-
-  // Darken the bars first, which is the step that keeps both colours the
-  // book's own: a board's dark is usually nearly dark enough already.
-  // Walked rather than solved, because the step is in the colour's own
-  // channels and a closed form would have to assume they move together.
-  let bars = darkest
-  let darkened = false
-  for (let by = 0; by <= 1.0001; by += 0.02) {
-    bars = darken(darkest, by)
-    darkened = by > 0
-    if (clears(lightest, bars)) break
-  }
-
-  // Only if that could not reach it: a palette with no light colour bounds
-  // the difference by its own lightest, however black the bars become.
-  let background = lightest
-  let lightened = false
-  if (!clears(background, bars)) {
-    for (let by = 0; by <= 1.0001; by += 0.02) {
-      background = lighten(lightest, by)
-      lightened = by > 0
-      if (clears(background, bars)) break
-    }
-  }
-
-  return {
-    bars,
-    background,
-    reflectanceDifference: redReflectance(background) - redReflectance(bars),
-    darkened,
-    lightened
-  }
-}
+/** The bars and the digits: printed as 100% K, see the module comment. */
+export const BARCODE_BARS = '#000000'
+/** The patch the symbol sits on, quiet zones included: solid white. */
+export const BARCODE_SPACE = '#ffffff'

@@ -23,9 +23,17 @@
  *
  * Browser-only: pdf-lib, fontkit, and a canvas to flatten into.
  */
-import { PDFDocument, degrees, rgb, type PDFFont } from 'pdf-lib'
+import { PDFDocument, cmyk, degrees, rgb, type Color, type PDFFont } from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit'
-import { FLATTEN_DPI, flattenPlan, type ComposedCover, type CoverItem, type Hex } from '@core/cover'
+import {
+  BARCODE_BARS,
+  BARCODE_ID,
+  FLATTEN_DPI,
+  flattenPlan,
+  type ComposedCover,
+  type CoverItem,
+  type Hex
+} from '@core/cover'
 import type { FontRef } from '@core/layout'
 import { LAYOUT_FEATURES, type FontTable } from './fonts'
 import { verifyWidths, widenWidths } from './font-widths'
@@ -70,6 +78,22 @@ export function hexToRgb(hex: Hex) {
   if (!m) return rgb(0, 0, 0)
   const n = parseInt(m[1]!, 16)
   return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255)
+}
+
+/**
+ * The colour an item prints in.
+ *
+ * Everything is RGB except the barcode, which KDP requires in "100% black
+ * (not RGB/CMYK color or registration black)" on solid white: an RGB black is
+ * separated by the press into four inks, and four plates out of register are
+ * bars with soft edges. So the symbol is written in DeviceCMYK, its bars and
+ * digits as K alone and its patch as no ink at all.
+ */
+function inkFor(item: CoverItem & { color: Hex }): Color {
+  if ('id' in item && item.id === BARCODE_ID) {
+    return item.color === BARCODE_BARS ? cmyk(0, 0, 0, 1) : cmyk(0, 0, 0, 0)
+  }
+  return hexToRgb(item.color)
 }
 
 /**
@@ -245,7 +269,7 @@ export async function renderCoverPdf(
           y: heightPt - item.yPt - item.heightPt,
           width: item.widthPt,
           height: item.heightPt,
-          color: hexToRgb(item.color)
+          color: inkFor(item)
         })
         break
 
@@ -294,7 +318,7 @@ export async function renderCoverPdf(
           y: heightPt - item.yPt,
           size: item.sizePt,
           font,
-          color: hexToRgb(item.color),
+          color: inkFor(item),
           ...(item.rotate ? { rotate: degrees(item.rotate) } : {})
         })
         break
