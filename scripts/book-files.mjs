@@ -28,6 +28,7 @@
 import { register } from 'node:module'
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join, basename } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 // Core modules import each other, and Node resolves neither the `@core`
 // alias nor an extensionless path; this hook does. See `resolve-ts.mjs`.
@@ -378,7 +379,9 @@ if (flags.includes('--body') && corrArg && !corrArg.startsWith('--')) {
  */
 if (existsSync(join(dir, 'reading', 'marks.json'))) {
   const { execFileSync } = await import('node:child_process')
-  const script = new URL('reading-sheet.mjs', import.meta.url).pathname
+  // `fileURLToPath`, not `.pathname`: on Windows that is `/C:/…` with its
+  // spaces escaped, and Node is handed a file that does not exist.
+  const script = fileURLToPath(new URL('reading-sheet.mjs', import.meta.url))
   try {
     const args = [script, dir, ...(check ? ['--check'] : [])]
     process.stdout.write(execFileSync(process.execPath, args, { encoding: 'utf8' }))
