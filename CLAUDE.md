@@ -1239,6 +1239,13 @@ proportions: propose from sense, accept from pixels.
 - **The slot grid is one _body_ leading.** Anything set larger occupies
   several slots, so a subtitle at 1.1× the body silently doubled its own line
   spacing. Sizes just above the body size are the dangerous ones.
+- **The running head sits two body sizes above the text block**
+  (`RUNNING_HEAD_RISE`, `frames.ts`). It was 1.2, about two lines over the
+  first line of text, and the editor found it crowded on every book; at 2.0
+  the head's letters still clear KDP's 0.25in band by a tenth of an inch on
+  a 7×10 at 11pt. Raise the head rather than lowering the text, which costs
+  a line a page. Any book exported before 25 October 2026 has the old head
+  until it is re-exported.
 - **A rule hung on the grid falls a whole line from the type it underlines.**
   Hang it from the baseline instead, at a fraction of the _type's_ size. And
   hang it from the title's **last** line: on a title that wrapped, the first

@@ -89,9 +89,19 @@ export function linesPerFrame(frame: PageFrame, leadingPt: number, ascentPt: num
   return Math.max(0, Math.floor((frame.heightPt - ascentPt) / leadingPt) + 1)
 }
 
+/**
+ * How far above the text block the running head's baseline sits, in body
+ * sizes. 1.2 put the head about two lines over the first line of text, and
+ * the editor found it crowded on every book (25 October 2026); 2.0 gives
+ * nearly three lines of air and, on a 7×10 at 11pt with a 0.75in top margin,
+ * leaves the head's letters 0.37in from the trim — inside KDP's 0.25in rule
+ * with room for the printer's variance.
+ */
+export const RUNNING_HEAD_RISE = 2.0
+
 /** Where the running head's baseline sits — above the text block, in the margin. */
 export function runningHeadBaseline(profile: StyleProfile): number {
-  return Math.max(12, profile.margins.top * PT_PER_INCH - profile.bodyFontSize * 1.2)
+  return Math.max(12, profile.margins.top * PT_PER_INCH - profile.bodyFontSize * RUNNING_HEAD_RISE)
 }
 
 /** Where a bottom folio's baseline sits — below the text block, in the margin. */
