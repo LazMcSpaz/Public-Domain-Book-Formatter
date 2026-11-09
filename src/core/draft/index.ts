@@ -368,6 +368,11 @@ const centreOf = (word: DraftWord): number => (word.bbox.y0 + word.bbox.y1) / 2
 
 const heightOf = (word: DraftWord): number => Math.max(1, word.bbox.y1 - word.bbox.y0)
 
+/** The body height of a leaf's words, measured as the draft measures it. */
+export function bodyHeightOf(words: readonly DraftWord[]): number {
+  return median(words.map(heightOf))
+}
+
 /** Letters and digits only — what a line has to have some of to be furniture. */
 function alnum(text: string): string {
   return text.replace(/[^\p{L}\p{N}]/gu, '')
@@ -686,7 +691,7 @@ function pairRows(
 /** `M: A lake.`, `E: Tell me more about it.`: a line opening a speaker's turn. */
 const SPEAKER_TURN = /^[A-Z]{1,2}:\s/u
 
-interface Measure {
+export interface Measure {
   left: number
   right: number
   width: number
@@ -849,7 +854,7 @@ function percentile(values: readonly number[], p: number): number {
  */
 const FRAME_EDGE = 0.2
 
-function measureOf(lines: readonly DraftLine[]): Measure {
+export function measureOf(lines: readonly DraftLine[]): Measure {
   const left = percentile(
     lines.map((l) => l.left),
     FRAME_EDGE
@@ -864,7 +869,7 @@ function measureOf(lines: readonly DraftLine[]): Measure {
   return { left, right, width: Math.max(1, right - left) }
 }
 
-function isCentred(line: DraftLine, measure: Measure): boolean {
+export function isCentred(line: DraftLine, measure: Measure): boolean {
   const before = line.left - measure.left
   const after = measure.right - line.right
   if (before < measure.width * CENTRED_INSET) return false
@@ -880,7 +885,7 @@ function isRightAligned(line: DraftLine, measure: Measure): boolean {
   return before > measure.width * 0.4 && after < measure.width * CENTRED_INSET
 }
 
-function isIndented(line: DraftLine, measure: Measure): boolean {
+export function isIndented(line: DraftLine, measure: Measure): boolean {
   return line.left - measure.left > measure.width * INDENT
 }
 

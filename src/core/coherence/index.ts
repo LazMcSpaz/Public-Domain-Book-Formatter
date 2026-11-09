@@ -33,6 +33,16 @@ export {
   type EmphasisReport
 } from './emphasis'
 export { checkApparatus, type ApparatusFinding, type ApparatusKind } from './apparatus'
+export {
+  checkPageTurns,
+  paperOpening,
+  endsWithoutStop,
+  opensLowerCase,
+  type PageTurnBlock,
+  type PageTurnFinding,
+  type PageTurnSignal,
+  type PaperOpening
+} from './page-turns'
 export { checkConsistency, type ConsistencyFinding, type ConsistencyKind } from './consistency'
 export {
   parseSenseFinding,

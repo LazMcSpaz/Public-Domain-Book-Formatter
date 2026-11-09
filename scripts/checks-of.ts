@@ -12,6 +12,11 @@
  * finding left after its rulings — `greek` excepted, as `drive.mjs damage
  * --check` excepts it, because it is a reading list and never a gate.
  *
+ * The page turns (`checkPageTurns`) are counted from the text alone, which is
+ * the half that needs no recon reading; `page-turns-of.ts` adds the paper.
+ * They are reported and never fail `--check`: a turn the leaf shows to be a
+ * real new paragraph would fail it for ever.
+ *
  * The same assembly and edit list `drive.mjs` runs in the page (`body-of.ts`
  * makes the same argument), so a session can sweep the whole shelf for a
  * class of fault without loading a book: that is how the apparatus checks
@@ -21,7 +26,13 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { assembleBook } from '@core/assemble'
 import { applyEdits } from '@core/edits'
-import { checkApparatus, checkConsistency, checkDamage, honourRulings } from '@core/coherence'
+import {
+  checkApparatus,
+  checkConsistency,
+  checkDamage,
+  checkPageTurns,
+  honourRulings
+} from '@core/coherence'
 import { unapplied } from '@core/queries'
 
 const args = process.argv.slice(2).filter((a) => !a.includes('checks-of'))
@@ -54,6 +65,7 @@ for (const path of books) {
   const apparatus = honourRulings(checkApparatus(doc), rulings, doc)
   const consistency = checkConsistency(doc)
   const notYet = unapplied(rulings, doc)
+  const turns = checkPageTurns(doc.blocks)
   const name = basename(dirname(path))
   const counted = [...damage.kept, ...apparatus.kept].filter((f) => f.kind !== 'greek').length
   if (counted > 0) failing++
@@ -61,6 +73,7 @@ for (const path of books) {
   console.log(`  damage      ${line(tally(damage.kept))}`)
   console.log(`  apparatus   ${line(tally(apparatus.kept))}`)
   console.log(`  consistency ${line(tally(consistency))}`)
+  console.log(`  page turns  ${turns.length ? `${turns.length} split mid-sentence` : 'none'}`)
   console.log(
     `  rulings     ${damage.honoured.length + apparatus.honoured.length} findings honoured, ` +
       `${notYet.length} corrected rulings not found in the text`
@@ -74,6 +87,7 @@ for (const path of books) {
           apparatus: apparatus.kept,
           honoured: [...damage.honoured, ...apparatus.honoured],
           consistency,
+          pageTurns: turns,
           unapplied: notYet
         },
         null,

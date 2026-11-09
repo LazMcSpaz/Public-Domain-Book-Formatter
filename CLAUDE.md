@@ -1223,6 +1223,27 @@ exported PDF, which is the check to run after any change to how a book
 breaks: count the lines that open on a closing mark or close on an
 opening one.
 
+**A paragraph broken at a page turn looks exactly like a paragraph.**
+Assembly joins a paragraph across a seam when the next leaf opens in lower
+case, so a leaf that went on mid-sentence with a capital (`…interests of The
+Theosophical` / `Society demanded…`, `…for` / `I maintain…`) opened a
+paragraph of its own, and the edition printed a break inside a sentence.
+_The Mahatma Letters_ was called ready to upload with **fifty-four** of
+them, and every check was happy, because each reads within a block.
+`checkPageTurns` (`@core/coherence/page-turns`) reads the text at every
+turn (no stop, a lower-case opening) and, from the book's recon reading, the
+paper: whether the leaf's first line is set flush with the lines under it,
+measured against those lines and not the page's margin, since a skewed scan
+drifts by most of an indent. `scripts/page-turns-of.ts` runs it, and
+`checks-of.ts` counts the text half. Scored before it was trusted: a turn
+the paper alone flags ran on 20 times in 22 when a reader cropped the scan,
+so **crop before joining**. The running head is what fooled the geometry
+first: "28 THE MAHATMA LETTERS" sits a line above the text with its folio
+flush left, and read as a flush opening on every verso. And the opposite
+check, two paragraphs joined across a turn, was built and dropped: OCR boxes
+start right of the ink often enough to read as an indent, and five of five
+it raised were wrong.
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what
@@ -1517,6 +1538,11 @@ npx vite-node --config vitest.config.ts scripts/spelling-of.ts <book.json> --she
                                      #   (once here, under three times on the rest of
                                      #   the shelf): the check KDP runs on an interior.
                                      #   A sheet to read before an upload, never a gate
+npx vite-node --config vitest.config.ts scripts/page-turns-of.ts <book.json> [--check]
+                                     #   paragraphs broken at a page turn where the
+                                     #   paper runs on: the text, and each leaf's
+                                     #   first-line indent off the recon reading.
+                                     #   Crop each before merging
 npx vite-node --config vitest.config.ts scripts/coverage-of.ts <book.json> [--second s.json]
                                      #   lines the paper prints that the book lacks or
                                      #   sets elsewhere, against the scan's own OCR
