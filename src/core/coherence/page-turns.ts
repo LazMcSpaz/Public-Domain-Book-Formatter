@@ -36,7 +36,11 @@
  * gave no reason to doubt and the paper read as flush, readers cropping the
  * scan found 20 of 22 running on. The two that did not were a short closing
  * line and a bold "You say :", where the lines under the first were too short
- * to give a margin. So a paper-only finding is a place to crop, never a join.
+ * to give a margin. Scored again on _The Human Aura and The Astral World_ and
+ * _The Lost Keys of Masonry_, both called ready: the paper raised eleven turns
+ * between them and ten ran on (one the text had flagged too); the eleventh is
+ * a paragraph whose opening line the pixels read indented. So a paper-only finding is a place to crop, never a
+ * join.
  *
  * Pure: blocks in, findings out, and the leaf's words handed in by whoever has
  * them. A finding is a place to look; the leaf decides.

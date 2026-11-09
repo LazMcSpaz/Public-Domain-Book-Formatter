@@ -1237,7 +1237,8 @@ measured against those lines and not the page's margin, since a skewed scan
 drifts by most of an indent. `scripts/page-turns-of.ts` runs it, and
 `checks-of.ts` counts the text half. Scored before it was trusted: a turn
 the paper alone flags ran on 20 times in 22 when a reader cropped the scan,
-so **crop before joining**. The running head is what fooled the geometry
+and 9 in 10 more on _The Human Aura_ and _The Lost Keys_, which had gone to
+"ready" with ten such paragraphs between them; so **crop before joining**. The running head is what fooled the geometry
 first: "28 THE MAHATMA LETTERS" sits a line above the text with its folio
 flush left, and read as a flush opening on every verso. And the opposite
 check, two paragraphs joined across a turn, was built and dropped: OCR boxes

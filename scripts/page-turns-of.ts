@@ -11,7 +11,8 @@
  *
  * A finding is a place to look, and the leaf decides: crop the turn before
  * joining anything. Measured on _The Mahatma Letters_, a finding the paper
- * alone makes was right 20 times in 22. `--check` exits non-zero on any
+ * alone makes was right 20 times in 22, and 9 in 10 on _The Human Aura_ and
+ * _The Lost Keys of Masonry_. `--check` exits non-zero on any
  * finding the paper did not contradict.
  */
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
