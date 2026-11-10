@@ -249,6 +249,19 @@ export interface CoverLook {
    * there being no companion to place when the picture is already continuous.
    */
   groundFigureWrap: boolean
+  /**
+   * Whether the ground figure runs at full tint to the trim instead of fading
+   * out before it.
+   *
+   * A figure normally fades to nothing at the trim on its cut edges, which is
+   * right for a picture that stops: an edge that reaches nothing on all four
+   * sides reads the same on all four in a reader's hands. A line diagram that
+   * is meant to run off the cover reads as cut short by the fade instead. The
+   * fold edge of a figure that does not wrap keeps its fade whatever this says,
+   * because a picture split at a fold that creeps must not meet itself there.
+   * Off by default, so every cover placed before this prints as it did.
+   */
+  groundFigureToEdge: boolean
   /** Whether the spine carries the title and author (thickness permitting). */
   spineText: boolean
   /** Whether the imprint prints at the foot of the front cover. */
@@ -536,6 +549,7 @@ export function defaultLook(): CoverLook {
     groundFigureOpacity: DEFAULT_FIGURE_OPACITY,
     groundFigureBack: false,
     groundFigureWrap: false,
+    groundFigureToEdge: false,
     groundFigureInFrame: false,
     groundFigureInvert: false
   }
@@ -692,7 +706,8 @@ export function normalizeLook(raw: unknown): CoverLook {
     groundFigureBack: bool(raw['groundFigureBack'], d.groundFigureBack),
     groundFigureInFrame: bool(raw['groundFigureInFrame'], d.groundFigureInFrame),
     groundFigureInvert: bool(raw['groundFigureInvert'], d.groundFigureInvert),
-    groundFigureWrap: bool(raw['groundFigureWrap'], d.groundFigureWrap)
+    groundFigureWrap: bool(raw['groundFigureWrap'], d.groundFigureWrap),
+    groundFigureToEdge: bool(raw['groundFigureToEdge'], d.groundFigureToEdge)
   }
 }
 

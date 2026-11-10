@@ -476,13 +476,20 @@ export interface FigureFade {
  * `left` for the front's, whose box starts at the fold; `right` for the back's
  * companion, whose box ends at it.
  */
-export function figureFade(geometry: CoverGeometry, foldEdge: 'left' | 'right' | null): FigureFade {
-  const bleed = geometry.bleedIn
+export function figureFade(
+  geometry: CoverGeometry,
+  foldEdge: 'left' | 'right' | null,
+  toEdge = false
+): FigureFade {
+  // Run to the trim: the cut edges' ramp is set a whole ramp-width outside the
+  // box, so the tint is full at the edge and the fade never shows. The fold
+  // edge keeps its own whatever is asked (see `groundFigureToEdge`).
+  const trim = toEdge ? -FIGURE_FADE_IN : geometry.bleedIn
   return {
-    leftIn: foldEdge === 'left' ? 0 : bleed,
-    rightIn: foldEdge === 'right' ? 0 : bleed,
-    topIn: bleed,
-    bottomIn: bleed,
+    leftIn: foldEdge === 'left' ? 0 : trim,
+    rightIn: foldEdge === 'right' ? 0 : trim,
+    topIn: trim,
+    bottomIn: trim,
     widthIn: FIGURE_FADE_IN
   }
 }

@@ -435,6 +435,14 @@ export function lookQuestions(state: CoverInterviewState): Question[] {
       help: 'A figure normally stops at the fold, because a scene split into two boxes either side of a fold that creeps by an eighth of an inch is two halves that do not meet. One picture printed across the whole sheet has no seam to misregister — what it costs is that the subject sits up to an eighth of an inch off the front panel\u2019s centre line, which a radiance hides and a face would not.',
       defaultValue: look.groundFigureWrap
     })
+    out.push({
+      id: 'cover-figure-edge',
+      type: 'confirm',
+      group: 'ornament',
+      prompt: 'Run the figure to the edges, without fading it?',
+      help: 'A figure normally fades to nothing just inside the trim, which suits a picture that stops. A line drawing meant to run off the cover reads as cut short by the fade. A figure that stops at the fold keeps its fade there either way, so the two sides never have to meet.',
+      defaultValue: look.groundFigureToEdge
+    })
   }
 
   if (look.arrangement !== 'typographic') {
@@ -838,6 +846,7 @@ export function coverFromAnswers(
     ),
     groundFigureBack: flag(answers, 'cover-figure-back', doc.look.groundFigureBack),
     groundFigureWrap: flag(answers, 'cover-figure-wrap', doc.look.groundFigureWrap),
+    groundFigureToEdge: flag(answers, 'cover-figure-edge', doc.look.groundFigureToEdge),
     markOnFront: flag(answers, 'cover-mark-front', doc.look.markOnFront),
     ornamentId: text(answers, 'cover-ornament', doc.look.ornamentId ?? '') || null,
     groundPattern:

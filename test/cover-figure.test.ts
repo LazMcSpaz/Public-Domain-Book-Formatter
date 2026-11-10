@@ -664,6 +664,24 @@ describe('a figure the editor asks to run across the whole cover', () => {
     expect(figureFade(wrap, 'left').leftIn).toBe(0)
   })
 
+  it('runs to the trim at full tint when asked, and keeps a fold fade regardless', () => {
+    // The Mahatma Letters' globes diagram is a line drawing meant to run off
+    // the cover, and the fade made it read as cut short. Set a whole ramp
+    // outside the box, the fade never shows: full tint at the very edge.
+    const edge = figureFade(wrap, null, true)
+    for (const inset of [edge.leftIn, edge.rightIn, edge.topIn, edge.bottomIn]) {
+      expect(inset).toBeCloseTo(-edge.widthIn, 9)
+    }
+    // A figure that stops at the fold keeps that edge's fade: the picture must
+    // not be cut hard at a fold that creeps.
+    const front = figureFade(wrap, 'left', true)
+    expect(front.leftIn).toBe(0)
+    expect(front.rightIn).toBeCloseTo(-front.widthIn, 9)
+    expect(figureFade(wrap, 'right', true).rightIn).toBe(0)
+    // And unasked, nothing has moved.
+    expect(figureFade(wrap, null).topIn).toBeCloseTo(wrap.bleedIn, 9)
+  })
+
   it('reaches the far edge of the sheet from where the subject stands', () => {
     // The invariant the artwork's proportions exist for, and the reason it is
     // 2.6 wide to tall. A wrapping picture is scaled to the sheet's height, so

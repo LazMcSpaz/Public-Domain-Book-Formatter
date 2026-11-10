@@ -180,7 +180,13 @@ async function buildCover(
       // rescue, and softening them would turn a plate into a vignette.
       ...(doc.look.groundFigureInFrame && doc.look.frontFrame !== 'none'
         ? {}
-        : { fade: figureFade(composed.geometry, doc.look.groundFigureWrap ? null : 'left') })
+        : {
+            fade: figureFade(
+              composed.geometry,
+              doc.look.groundFigureWrap ? null : 'left',
+              doc.look.groundFigureToEdge
+            )
+          })
     })
     images.set(GROUND_FIGURE_ID, figure.bytes)
     figureItem.srcWidth = figure.widthPx
@@ -202,7 +208,7 @@ async function buildCover(
       targetX: backAnchorTarget(geometry),
       zoom: FIGURE_ZOOM[doc.look.groundFigure],
       mirrorX: true,
-      fade: figureFade(geometry, 'right')
+      fade: figureFade(geometry, 'right', doc.look.groundFigureToEdge)
     })
     images.set(GROUND_FIGURE_BACK_ID, back.bytes)
     backItem.srcWidth = back.widthPx

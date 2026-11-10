@@ -164,6 +164,20 @@ describe('answers fold back into the cover', () => {
     expect(coverFromAnswers(onto, answers).look.authorAtFoot).toBe(true)
   })
 
+  it('carries the to-the-edges answer across looks, and asks it only when there is a figure', () => {
+    const bare = state()
+    expect(lookQuestions(bare).some((q) => q.id === 'cover-figure-edge')).toBe(false)
+    const withFigure = state()
+    withFigure.doc.look.groundFigure = 'chain-of-globes-wide'
+    withFigure.doc.look.groundFigureToEdge = true
+    expect(lookQuestions(withFigure).some((q) => q.id === 'cover-figure-edge')).toBe(true)
+
+    const answers = defaultAnswers(coverQuestions(withFigure))
+    const onto = defaultCover('6x9', 284)
+    expect(onto.look.groundFigureToEdge).toBe(false)
+    expect(coverFromAnswers(onto, answers).look.groundFigureToEdge).toBe(true)
+  })
+
   it('carries the wrap answer across looks, and asks it only when there is a figure', () => {
     const bare = state()
     expect(lookQuestions(bare).some((q) => q.id === 'cover-figure-wrap')).toBe(false)
