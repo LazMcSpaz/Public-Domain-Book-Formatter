@@ -160,8 +160,8 @@ async function reopen(bytes: Uint8Array) {
 /**
  * Every dictionary in the file, as text.
  *
- * pdf-lib packs objects into compressed object streams, so the structural
- * entries are not visible in the raw bytes — they have to be inflated first.
+ * pdf-lib can pack objects into compressed object streams, where the structural
+ * entries are not visible in the raw bytes — so they are inflated first.
  * Reading the file this way, rather than through pdf-lib's own object graph,
  * keeps the assertion independent of the library that wrote it.
  */
@@ -199,6 +199,34 @@ async function textOfPage(
     .replace(/\s+/gu, ' ')
     .trim()
 }
+
+/**
+ * The file KDP is given. The Manuscript Lectures, written with pdf-lib's
+ * defaults, failed at KDP with "Error processing your interior"; the same
+ * pages re-saved with every object on its own behind a classic cross-reference
+ * table, and no empty /Annots arrays, processed at once. Read off the bytes,
+ * not through pdf-lib, which would answer for its own output.
+ */
+describe('renderPdf — written plainly, for KDP', () => {
+  it('packs no object streams and ends on a classic cross-reference table', async () => {
+    const { pdf } = await build()
+    const raw = Buffer.from(pdf.bytes).toString('latin1')
+    expect(raw).not.toMatch(/\/Type\s*\/ObjStm/u)
+    expect(raw).not.toMatch(/\/Type\s*\/XRef/u)
+    expect(raw).toMatch(/\nxref\r?\n/u)
+  })
+
+  it('leaves no page an empty /Annots array', async () => {
+    const { pdf } = await build()
+    expect(pdfDictionaries(pdf.bytes)).not.toMatch(/\/Annots\s*\[\s*\]/u)
+  })
+
+  it('still opens in a reader that is not the one that wrote it', async () => {
+    const { book, pdf } = await build()
+    const reopened = await reopen(pdf.bytes)
+    expect(reopened.numPages).toBe(book.pages.length)
+  })
+})
 
 /**
  * The end of the emphasis chain, which begins with a tag the model emitted.

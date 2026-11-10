@@ -13,7 +13,15 @@
  *
  * Browser-only: pdf-lib and fontkit.
  */
-import { PDFDocument, rgb, type PDFFont, type PDFImage, type PDFPage } from 'pdf-lib'
+import {
+  PDFArray,
+  PDFDocument,
+  PDFName,
+  rgb,
+  type PDFFont,
+  type PDFImage,
+  type PDFPage
+} from 'pdf-lib'
 import fontkit from '@pdf-lib/fontkit'
 import type { FontRef, LaidOutBook, LaidOutPage } from '@core/layout'
 import { LAYOUT_FEATURES, type FontTable } from './fonts'
@@ -185,9 +193,21 @@ export async function renderPdf(
   // mystery. The one failure this app has had in the wild surfaced as "Trying
   // to access beyond buffer length" and nothing else — no font, no glyph, no
   // page — on a screen whose only other option was to start over.
+  // Written plainly, for KDP. pdf-lib packs objects into compressed object
+  // streams behind a cross-reference stream by default, and gives every page
+  // it draws on an empty /Annots array. The Manuscript Lectures, written that
+  // way, failed at KDP with "Error processing your interior" and nothing more;
+  // the same pages re-saved with a classic cross-reference table, every object
+  // on its own and the empty arrays gone, processed at once (10 November
+  // 2026). Which of the two KDP minded is not known, so both go: neither
+  // changes a line, a page or a glyph, and the cost is a larger file.
+  for (const p of doc.getPages()) {
+    const annots = p.node.lookupMaybe(PDFName.of('Annots'), PDFArray)
+    if (annots && annots.size() === 0) p.node.delete(PDFName.of('Annots'))
+  }
   let bytes: Uint8Array
   try {
-    bytes = await doc.save()
+    bytes = await doc.save({ useObjectStreams: false })
   } catch (cause) {
     const families = [...embeddedFamilies].join(', ') || 'none'
     throw new Error(
