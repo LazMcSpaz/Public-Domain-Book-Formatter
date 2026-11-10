@@ -43,30 +43,66 @@ import type { BookDocument } from './assemble-book'
  * correction to one has landed whether or not the style prints it.
  */
 export function bookText(doc: BookDocument): string {
-  const parts: string[] = []
-  const marked = (b: {
+  return printedTexts(doc)
+    .map((p) => p.text)
+    .join('\n')
+}
+
+/** One stretch of what the book prints, with where it comes from. */
+export interface PrintedText {
+  /** A block's id, `fn<n>` for a note, or the kind of matter and its place. */
+  id: string
+  text: string
+}
+
+/**
+ * The same text as `bookText`, in the same order, a stretch at a time and
+ * named — for a check that has to say *where* a word is.
+ *
+ * It exists because the spelling check kept its own list of what the book is,
+ * the body, the notes and the editor's sections, and that list left out the
+ * original contents' descriptions. KDP's spell-check of *The Mahatma Letters*
+ * (10 November 2026) found `deaih-bed`, `crueily` and `physcists` in Barker's
+ * analytical contents, which this edition prints and nothing here had ever
+ * read. One rule for "what the book prints", here, is the repair, so a check
+ * cannot read less of the book than the reader does. `markup: false` gives
+ * the plain words, for checks that read words rather than notation.
+ */
+export function printedTexts(doc: BookDocument, options: { markup?: boolean } = {}): PrintedText[] {
+  const markup = options.markup ?? true
+  const parts: PrintedText[] = []
+  const of = (b: {
     text: string
     emphasis?: number[]
     strong?: number[]
     smallCaps?: number[]
     parts?: InlinePart[]
-  }): string => withMarkup(b.text, b.emphasis, b.strong, b.smallCaps, b.parts)
-
-  for (const section of doc.sections.filter((s) => s.placement === 'front')) {
-    parts.push(section.label ?? '', section.title, ...section.blocks.map(marked))
+  }): string => (markup ? withMarkup(b.text, b.emphasis, b.strong, b.smallCaps, b.parts) : b.text)
+  const push = (id: string, text: string): void => {
+    if (text !== '') parts.push({ id, text })
   }
-  parts.push(...synopsesPrinted(doc).map((s) => s.text))
-  parts.push(...doc.blocks.map(marked))
-  parts.push(...doc.asides.map(marked))
-  for (const illustration of doc.illustrations) {
-    if (illustration.caption) parts.push(illustration.caption)
-  }
-  parts.push(...doc.footnotes.map(marked))
-  for (const section of doc.sections.filter((s) => s.placement === 'back')) {
-    parts.push(section.label ?? '', section.title, ...section.blocks.map(marked))
+  const section = (s: BookDocument['sections'][number], k: number): void => {
+    push(`section${k}:label`, s.label ?? '')
+    push(`section${k}:title`, s.title)
+    for (const b of s.blocks) push(b.id, of(b))
   }
 
-  return parts.filter((p) => p !== '').join('\n')
+  doc.sections.forEach((s, k) => {
+    if (s.placement === 'front') section(s, k)
+  })
+  synopsesPrinted(doc).forEach((s, k) =>
+    push(`synopsis${k}${s.pages.length ? `@p${s.pages[0]}` : ''}`, s.text)
+  )
+  for (const b of doc.blocks) push(b.id, of(b))
+  doc.asides.forEach((b, k) => push(b.id ?? `aside${k}`, of(b)))
+  doc.illustrations.forEach((illustration, k) => {
+    if (illustration.caption) push(`caption${k}`, illustration.caption)
+  })
+  doc.footnotes.forEach((n, k) => push(`fn${k + 1}`, of(n)))
+  doc.sections.forEach((s, k) => {
+    if (s.placement === 'back') section(s, k)
+  })
+  return parts
 }
 
 /**

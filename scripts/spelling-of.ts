@@ -14,13 +14,19 @@
  * listed apart (every use capitalised), because they are the bulk of what an
  * English dictionary does not know and the least likely to be wrong.
  *
+ * `--text <file>` reads an exported file's text instead of the book file —
+ * `pdftotext` of the interior PDF, or the EPUB's text — with the book file
+ * still named so its own directory is kept out of the shelf. That is the
+ * check that cannot miss a part of the book: whatever prints is in it, front
+ * matter, contents and running heads included.
+ *
  * The dictionary is `word-list`, 274,000 English words, a development
  * dependency: this runs under Node over `books/*` and never in the page.
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { assembleBook } from '@core/assemble'
+import { assembleBook, printedTexts } from '@core/assemble'
 import { applyEdits } from '@core/edits'
 import { checkSpelling, spellingTokens, type SpellingSuspect } from '@core/coherence'
 
@@ -33,6 +39,7 @@ const bookPath = args.find((a) => a.endsWith('book.json'))
 if (!bookPath) throw new Error('spelling-of.ts <book.json> [--shelf <books-dir>] [--out <file.md>]')
 const shelfDir = flag('--shelf')
 const outPath = flag('--out')
+const exportText = flag('--text')
 
 // `fileURLToPath`, not `.pathname`: on Windows the pathname is `/C:/…` with
 // its spaces still escaped, and names no file.
@@ -45,15 +52,36 @@ const wordsFile = join(
 )
 const dictionary = new Set(readFileSync(wordsFile, 'utf8').split('\n'))
 
-/** The words of a book file's whole text, body, notes and the editor's sections. */
+/**
+ * Everything a book file prints, through the core's one rule for it
+ * (`printedTexts`): the editor's sections, the original contents'
+ * descriptions, the body, matter set apart, captions and notes.
+ *
+ * This had its own list, and the list left out the contents' descriptions:
+ * KDP's spell-check of *The Mahatma Letters* found `deaih-bed`, `crueily` and
+ * `physcists` in Barker's analytical contents after this sheet had been read
+ * and every suspect on it cropped, because the sheet had never been handed
+ * those pages.
+ */
 function textsOf(path: string): { id: string; text: string }[] {
   const file = JSON.parse(readFileSync(path, 'utf8'))
   const doc = applyEdits(assembleBook(file.run.transcriptions), file.run.edits ?? [])
-  return [
-    ...doc.blocks.map((b) => ({ id: b.id, text: b.text })),
-    ...doc.footnotes.map((n, i) => ({ id: `fn${i + 1}`, text: n.text })),
-    ...(doc.sections ?? []).flatMap((s) => s.blocks.map((b) => ({ id: b.id, text: b.text })))
-  ]
+  return printedTexts(doc, { markup: false })
+}
+
+/**
+ * The words of an exported file's text, page by page — `pdftotext` of the
+ * interior, or the EPUB's text — so the check reads what KDP reads and not
+ * what this repository believes the book to be. A word broken at a line end
+ * is joined again, since the export hyphenates and the check reads words.
+ */
+function textsOfExport(path: string): { id: string; text: string }[] {
+  return readFileSync(path, 'utf8')
+    .split('\f')
+    .map((page, i) => ({
+      id: `page${i + 1}`,
+      text: page.replace(/(\p{L})-\n\s*(\p{Ll})/gu, '$1$2').replace(/\s+/gu, ' ')
+    }))
 }
 
 // The rest of the shelf, as a word count: every other book's text, and the
@@ -87,7 +115,11 @@ if (shelfDir) {
   }
 }
 
-const report = checkSpelling(textsOf(bookPath), dictionary, shelf)
+const report = checkSpelling(
+  exportText ? textsOfExport(exportText) : textsOf(bookPath),
+  dictionary,
+  shelf
+)
 const name = basename(dirname(bookPath))
 const names = report.alone.filter((s) => s.capitalised)
 const words = report.alone.filter((s) => !s.capitalised)

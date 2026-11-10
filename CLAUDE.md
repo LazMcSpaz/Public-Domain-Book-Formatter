@@ -1256,6 +1256,24 @@ on the composer's soft mask, so what is uploaded is the `-flat` copy from
 `scripts/flatten-cover.py`, which lived in a scratchpad until a session had
 to rebuild it from a README's description.
 
+**KDP's spell-check found three faults in a part of the book no check
+read.** _The Mahatma Letters_' spelling sheet had been read and every
+suspect on it cropped, and KDP still flagged `deaih-bed`, `crueily` and
+`physcists`, all in Barker's analytical contents. The sheet built its own
+list of what the book is (body, notes, editor's sections) and the contents'
+descriptions were not on it, while the edition printed them. That is **two
+passes asking one question with different inputs** again: `bookText` already
+knew what the book prints. `printedTexts` (`@core/assemble`) is now the one
+list, a stretch at a time and named, `bookText` is built from it, and
+`spelling-of.ts` reads it; run over the interior KDP had, the sheet flags
+all three. And because the next omission will be somewhere nobody thought
+of, `spelling-of.ts --text <file>` reads an export's own text (`pdftotext`
+of the interior), which holds whatever prints, front matter and contents
+included. **Run it on the exported file before an upload.** KDP's other
+thirty words were the letter-writers' own, checked against the scan's text
+layer at every place they occur; a word the second reading agrees with is
+printed so, and one it disagrees with (`death`, `cruelly`) is ours to crop.
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what
@@ -1545,7 +1563,7 @@ npx vite-node --config vitest.config.ts scripts/checks-of.ts books/*/book.json -
                                      #   consistency, rulings not yet in the text —
                                      #   over shelf books with no browser; `--check`
                                      #   exits non-zero on anything left after rulings
-npx vite-node --config vitest.config.ts scripts/spelling-of.ts <book.json> --shelf books/ [--out s.md]
+npx vite-node --config vitest.config.ts scripts/spelling-of.ts <book.json> --shelf books/ [--out s.md] [--text export.txt]
                                      #   words no dictionary knows that stand alone
                                      #   (once here, under three times on the rest of
                                      #   the shelf): the check KDP runs on an interior.
