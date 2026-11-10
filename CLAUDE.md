@@ -1245,6 +1245,17 @@ check, two paragraphs joined across a turn, was built and dropped: OCR boxes
 start right of the ink often enough to read as an indent, and five of five
 it raised were wrong.
 
+**KDP said "Error processing your interior" and nothing else.** The
+Manuscript Lectures interior passed every check here and was refused on
+upload, with no code and nowhere to find one. The same pages re-saved with
+every object on its own behind a classic cross-reference table, and without
+the empty `/Annots` array pdf-lib gives every page it draws on, processed at
+once. `renderPdf` now writes that way (`useObjectStreams: false`); which of
+the two KDP minded is not known. The covers have the same history: KDP stalled
+on the composer's soft mask, so what is uploaded is the `-flat` copy from
+`scripts/flatten-cover.py`, which lived in a scratchpad until a session had
+to rebuild it from a README's description.
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what
