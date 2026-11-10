@@ -28,3 +28,7 @@ public/*.pdf
 public/*.epub
 !public/test-*.pdf
 !public/test-*.epub
+
+# Python bytecode, written when a script under scripts/ is run or compiled.
+__pycache__/
+*.pyc
