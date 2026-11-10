@@ -41,6 +41,7 @@ import { glossaryHeadwords, marksByPosition } from '@core/annotate'
 import { headingsWithoutMarks, prepareFootnotes } from '@core/layout/footnotes'
 import { synopsisWithPages } from '@core/layout/contents-pages'
 import { parseInlineMarkup, type InlinePart } from '@core/transcribe/markup'
+import { CELL_SEPARATOR, cellEmphasis } from '@core/transcribe/schema'
 
 const argv = process.argv.slice(2)
 const coverAt = argv.indexOf('--cover')
@@ -172,8 +173,51 @@ function circlesIn(plainText: string): Map<number, string> {
 
 type Block = (typeof doc.blocks)[number]
 
+/**
+ * A table's cells with their words set, marks linked and italics kept.
+ *
+ * The cells are cut from the block's *prepared* text, the flattened view with
+ * the reference marks already taken out, so the word indices the footnote
+ * walk and the emphasis carry land on them exactly; `cellEmphasis` splits the
+ * flattened indices back onto each cell, and the references go the same way.
+ * Before this a cell was its raw text: on The Mahatma Letters the ² in the
+ * table of Dhyan Chohans (leaf 150) printed as a bare character, note 32
+ * pointed back at a reference that did not exist, and the cell's italic was
+ * gone.
+ */
+function tableCellsHtml(
+  prepared: string,
+  block: Block,
+  refs: ReadonlyMap<number, string[]>
+): string[][] {
+  const cells = prepared.split('\n').map((row) => row.split(CELL_SEPARATOR).map((c) => c.trim()))
+  const italic = cellEmphasis(cells, block.emphasis)
+  const bold = cellEmphasis(cells, block.strong)
+  const out: string[][] = []
+  let at = 0
+  let k = 0
+  for (const row of cells) {
+    out.push(
+      row.map((text, c) => {
+        if (c > 0) at++ // the ` | ` between this cell and the last
+        const n = text.split(/\s+/u).filter(Boolean).length
+        const mine = new Map<number, string[]>()
+        for (let i = 0; i < n; i++) {
+          const links = refs.get(at + i)
+          if (links) mine.set(i, links)
+        }
+        const html = inline(text, italic[k], bold[k], mine)
+        at += n
+        k++
+        return html
+      })
+    )
+  }
+  return out
+}
+
 /** One block as the element it is, its words already set. */
-function blockHtml(block: Block, html: string, id?: string): string {
+function blockHtml(block: Block, html: string, id?: string, cellsHtml?: string[][]): string {
   const idAttr = id ? ` id="${id}"` : ''
   switch (block.kind) {
     case 'heading': {
@@ -193,13 +237,16 @@ function blockHtml(block: Block, html: string, id?: string): string {
     case 'list-item':
       return `<p class="item"${idAttr}>${html}</p>`
     case 'table': {
-      const rows = (block.cells ?? []).map(
+      const rows = (
+        cellsHtml ??
+        (block.cells ?? []).map((row) => row.map((cell) => esc(cell.replace(/<\/?[ib]>/g, ''))))
+      ).map(
         (row, r) =>
           '<tr>' +
           row
             .map((cell) => {
               const tag = r === 0 && block.headerRow ? 'th' : 'td'
-              return `<${tag}>${esc(cell.replace(/<\/?[ib]>/g, ''))}</${tag}>`
+              return `<${tag}>${cell}</${tag}>`
             })
             .join('') +
           '</tr>'
@@ -287,7 +334,11 @@ doc.blocks.forEach((block, i) => {
     block.parts,
     circlesIn(prep.text)
   )
-  chapter.body.push(blockHtml(block, html))
+  const cellsHtml =
+    block.kind === 'table' && (block.cells?.length ?? 0) > 0
+      ? tableCellsHtml(prep.text, block, refs)
+      : undefined
+  chapter.body.push(blockHtml(block, html, undefined, cellsHtml))
   for (const fig of figuresAfter.get(block.id) ?? []) {
     const src = imagePath.get(fig.id)!
     figuresUsed.push(src)
