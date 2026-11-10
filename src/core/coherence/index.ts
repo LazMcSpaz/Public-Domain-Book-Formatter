@@ -92,3 +92,4 @@ export {
   type SpellingReport,
   type SpellingSuspect
 } from './spelling'
+export { exportPages, type ExportVocabulary } from './export-text'

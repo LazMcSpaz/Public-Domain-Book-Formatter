@@ -1267,9 +1267,13 @@ knew what the book prints. `printedTexts` (`@core/assemble`) is now the one
 list, a stretch at a time and named, `bookText` is built from it, and
 `spelling-of.ts` reads it; run over the interior KDP had, the sheet flags
 all three. And because the next omission will be somewhere nobody thought
-of, `spelling-of.ts --text <file>` reads an export's own text (`pdftotext`
-of the interior), which holds whatever prints, front matter and contents
-included. **Run it on the exported file before an upload.** KDP's other
+of, `spelling-of.ts --text <interior.pdf>` reads the export itself, which
+holds whatever prints, front matter and contents included. **Run it on the
+exported file before an upload.** It reads through `pdftotext -layout` and
+mends the line breaks itself (`exportPages`, `@core/coherence`), because the
+plain mode mends them wrongly: it welds a compound broken at its own hyphen
+(`selfsacrifice`) and glues a word broken at a page's foot to the folio
+(`commu52`), and the first run of the sheet was a page of those. KDP's other
 thirty words were the letter-writers' own, checked against the scan's text
 layer at every place they occur; a word the second reading agrees with is
 printed so, and one it disagrees with (`death`, `cruelly`) is ours to crop.
@@ -1563,7 +1567,7 @@ npx vite-node --config vitest.config.ts scripts/checks-of.ts books/*/book.json -
                                      #   consistency, rulings not yet in the text —
                                      #   over shelf books with no browser; `--check`
                                      #   exits non-zero on anything left after rulings
-npx vite-node --config vitest.config.ts scripts/spelling-of.ts <book.json> --shelf books/ [--out s.md] [--text export.txt]
+npx vite-node --config vitest.config.ts scripts/spelling-of.ts <book.json> --shelf books/ [--out s.md] [--text interior.pdf]
                                      #   words no dictionary knows that stand alone
                                      #   (once here, under three times on the rest of
                                      #   the shelf): the check KDP runs on an interior.

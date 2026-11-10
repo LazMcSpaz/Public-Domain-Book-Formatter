@@ -14,21 +14,24 @@
  * listed apart (every use capitalised), because they are the bulk of what an
  * English dictionary does not know and the least likely to be wrong.
  *
- * `--text <file>` reads an exported file's text instead of the book file —
- * `pdftotext` of the interior PDF, or the EPUB's text — with the book file
- * still named so its own directory is kept out of the shelf. That is the
- * check that cannot miss a part of the book: whatever prints is in it, front
- * matter, contents and running heads included.
+ * `--text <file>` reads an export instead of the book file: the interior PDF
+ * (through `pdftotext -layout`, which must be installed) or an EPUB's text,
+ * with the book file still named so its own directory is kept out of the
+ * shelf and its words can mend the export's line breaks. That is the check
+ * that cannot miss a part of the book: whatever prints is in it, front
+ * matter, contents and running heads included. Run it on the file that is
+ * about to be uploaded.
  *
  * The dictionary is `word-list`, 274,000 English words, a development
  * dependency: this runs under Node over `books/*` and never in the page.
  */
+import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { assembleBook, printedTexts } from '@core/assemble'
 import { applyEdits } from '@core/edits'
-import { checkSpelling, spellingTokens, type SpellingSuspect } from '@core/coherence'
+import { checkSpelling, exportPages, spellingTokens, type SpellingSuspect } from '@core/coherence'
 
 const args = process.argv.slice(2).filter((a) => !a.includes('spelling-of'))
 const flag = (name: string): string | null => {
@@ -70,18 +73,42 @@ function textsOf(path: string): { id: string; text: string }[] {
 }
 
 /**
- * The words of an exported file's text, page by page — `pdftotext` of the
- * interior, or the EPUB's text — so the check reads what KDP reads and not
- * what this repository believes the book to be. A word broken at a line end
- * is joined again, since the export hyphenates and the check reads words.
+ * The pages of an export: a `.pdf` through `pdftotext -layout`, anything else
+ * (an EPUB's text) as it stands, with the words its lines broke mended from
+ * the book's own vocabulary (`exportPages`, which says why `-layout`).
  */
-function textsOfExport(path: string): { id: string; text: string }[] {
-  return readFileSync(path, 'utf8')
-    .split('\f')
-    .map((page, i) => ({
-      id: `page${i + 1}`,
-      text: page.replace(/(\p{L})-\n\s*(\p{Ll})/gu, '$1$2').replace(/\s+/gu, ' ')
-    }))
+function textsOfExport(
+  path: string,
+  book: { words: Set<string>; hyphenated: Set<string> }
+): { id: string; text: string }[] {
+  const raw = path.toLowerCase().endsWith('.pdf')
+    ? execFileSync('pdftotext', ['-layout', path, '-'], {
+        encoding: 'utf8',
+        maxBuffer: 1 << 30
+      })
+    : readFileSync(path, 'utf8')
+  return exportPages(raw, {
+    known: (w) => dictionary.has(w.toLowerCase()) || book.words.has(w.toLowerCase()),
+    hyphenated: book.hyphenated
+  })
+}
+
+/**
+ * What the book itself sets: every word, and every word it prints with a
+ * hyphen, for mending an export's line-end breaks the way the book would
+ * (see `textsOfExport`).
+ */
+function bookWords(path: string): { words: Set<string>; hyphenated: Set<string> } {
+  const words = new Set<string>()
+  const hyphenated = new Set<string>()
+  for (const t of textsOf(path)) {
+    for (const w of spellingTokens(t.text)) words.add(w.toLowerCase())
+    for (const w of t.text.split(/[\s—–]+/u)) {
+      const bare = w.replace(/^[^\p{L}]+|[^\p{L}]+$/gu, '')
+      if (bare.includes('-')) hyphenated.add(bare.toLowerCase())
+    }
+  }
+  return { words, hyphenated }
 }
 
 // The rest of the shelf, as a word count: every other book's text, and the
@@ -116,7 +143,7 @@ if (shelfDir) {
 }
 
 const report = checkSpelling(
-  exportText ? textsOfExport(exportText) : textsOf(bookPath),
+  exportText ? textsOfExport(exportText, bookWords(bookPath)) : textsOf(bookPath),
   dictionary,
   shelf
 )
