@@ -33,6 +33,7 @@ export type GroundFigure =
   | 'candidate-at-the-gates'
   | 'sinnett'
   | 'mahatma-hands'
+  | 'chain-of-globes'
   | 'theosophical-seal'
 
 export const GROUND_FIGURES: readonly GroundFigure[] = [
@@ -45,6 +46,7 @@ export const GROUND_FIGURES: readonly GroundFigure[] = [
   'candidate-at-the-gates',
   'sinnett',
   'mahatma-hands',
+  'chain-of-globes',
   'theosophical-seal'
 ]
 
@@ -62,6 +64,7 @@ export const FIGURE_SRC: Readonly<Record<GroundFigure, string>> = {
   'candidate-at-the-gates': '/figures/candidate-at-the-gates.jpg',
   sinnett: '/figures/sinnett.jpg',
   'mahatma-hands': '/figures/mahatma-hands.png',
+  'chain-of-globes': '/devices/chain-of-globes.svg',
   'theosophical-seal': '/devices/theosophical-seal-no-svastika.svg'
 }
 
@@ -94,6 +97,7 @@ export const FIGURE_LABEL: Readonly<Record<GroundFigure, string>> = {
   'candidate-at-the-gates': 'The Candidate at the Gates — Knapp, for this book',
   sinnett: 'A. P. Sinnett — the photograph, for this book',
   'mahatma-hands': 'The Masters’ own handwriting — M. and K.H., from Barker’s facsimiles',
+  'chain-of-globes': 'The chain of globes — the diagram from The Mahatma Letters',
   'theosophical-seal': 'The Theosophical Society’s seal, without the svastika',
   'isis-winged': 'Isis, winged — the massed silhouette',
   'isis-winged-plain': 'Isis, winged — the engraved trace',
@@ -108,6 +112,8 @@ export const FIGURE_NOTE: Readonly<Record<GroundFigure, string>> = {
     'J. Augustus Knapp\u2019s plate for the 1924 edition: two pillars, a chequered pavement running back in perspective, and a radiant eye over the stair. A halftone rather than a trace, so it carries tone where every other figure here carries line \u2014 which is why it wants a lower tint than they do.',
   'theosophical-seal':
     'The Society’s own seal, in the separable form that leaves out the svastika — which the Society has used since the 1880s and which a great many buyers today read as something else. Which form a book carries is the editor’s decision and `public/devices/README.md` says so; this entry is the cautious one.',
+  'chain-of-globes':
+    'The diagram of the planetary chain that Barker printed in facsimile in 1923: a circle cut into its globes, Globe A to Globe Z with Earth at the foot, the seven rounds numbered at the centre, the descending arc down one side and the ascending arc up the other, and the meridian struck through it all. Traced from the facsimile by `scripts/trace-device.py`, since the scan holds under five inches of drawing and a cover wants more; its box is padded so the circle\u2019s measured centre is the box\u2019s centre, and sized so the circle is about six inches across a seven-inch front. Line, not mass, so it wants a tint toward the stronger end.',
   'mahatma-hands':
     'The hands of M. and K.H. as Barker printed them in facsimile in 1923, cleaned to ink on white and laid out as a field the size of a whole cover sheet: each Master\u2019s page at its printed size, a half-step row to row and tilted a few degrees so the repeats do not line up. A picture rather than a trace, because a pen stroke\u2019s swelling is the point of it, and at 300 DPI across the sheet it prints sharp. Made by `scripts/make-handwriting-ground.py` from the facsimiles on the shelf; Damodar\u2019s covering note on the K.H. page is cut away, so the field is the Masters\u2019 writing alone. Meant to wrap the sheet at a low tint.',
   sinnett:
@@ -235,6 +241,9 @@ export const FIGURE_ANCHOR_X: Readonly<Record<GroundFigure, number>> = {
   sinnett: 0.5,
   // A field, not a figure: any part of it is as good a centre as another.
   'mahatma-hands': 0.5,
+  // The circle's centre, measured by a least-squares fit to its ink and made
+  // the box's centre by padding the viewBox, as the eye's pupil is.
+  'chain-of-globes': 0.5,
   // A seal is a disc, drawn concentric in its own box.
   'theosophical-seal': 0.5,
   // Exactly the centre, and not by luck: the artwork's box is padded until the
@@ -294,6 +303,7 @@ export const FIGURE_ZOOM: Readonly<Record<GroundFigure, number>> = {
   'candidate-at-the-gates': 1,
   sinnett: 1,
   'mahatma-hands': 1,
+  'chain-of-globes': 1,
   'theosophical-seal': 1,
   // Nothing to move: the anchor is the box's own centre.
   'all-seeing-eye': 1,
