@@ -268,11 +268,14 @@ for (const id of prepared.notes.keys()) noteNumber.set(id, ++n)
 const imagePath = new Map<string, string>(
   (file.images ?? []).map((i: { id: string; path: string }) => [i.id, i.path])
 )
-const figuresAfter = new Map<string, { id: string; caption: string | null }[]>()
+const figuresAfter = new Map<string, { id: string; caption: string | null; alt?: string }[]>()
 for (const ill of doc.illustrations) {
   const at = ill.anchorAfterBlockId
   if (!at || !imagePath.has(ill.id)) continue
-  figuresAfter.set(at, [...(figuresAfter.get(at) ?? []), { id: ill.id, caption: ill.caption }])
+  figuresAfter.set(at, [
+    ...(figuresAfter.get(at) ?? []),
+    { id: ill.id, caption: ill.caption, ...(ill.alt ? { alt: ill.alt } : {}) }
+  ])
 }
 
 // One file per chapter, cut where a chapter begins.
@@ -290,6 +293,9 @@ const chapters: Chapter[] = []
 const heads = new Map(doc.chapters.map((c) => [c.id, c]))
 let current: Chapter | null = null
 const figuresUsed: string[] = []
+// Pictures with nothing to say to a reader who cannot see them: no `alt` and
+// no caption. Reported at the end rather than passed off as "Figure".
+const undescribed: string[] = []
 
 doc.blocks.forEach((block, i) => {
   if (block.kind === 'footnote') return
@@ -358,8 +364,12 @@ doc.blocks.forEach((block, i) => {
           })
           .join('')}</figcaption>`
       : ''
-    const alt = parseInlineMarkup(paras[0] ?? 'Figure').text
-    chapter.body.push(`<figure><img src="${src}" alt="${esc(alt)}"/>${cap}</figure>`)
+    // What the picture shows, for a reader who cannot see it: the description
+    // written for it, else its caption. A caption set as a block of its own
+    // under the picture is not on the figure, so such a picture needs one.
+    const alt = fig.alt ?? (paras[0] ? parseInlineMarkup(paras[0]).text : null)
+    if (alt === null) undescribed.push(fig.id)
+    chapter.body.push(`<figure><img src="${src}" alt="${esc(alt ?? 'Figure')}"/>${cap}</figure>`)
   }
 })
 
@@ -587,9 +597,17 @@ console.log(
       notes: prepared.notes.size,
       orphans: prepared.orphans.length,
       pictures: pictures.length,
-      picturesInBook: doc.illustrations.length
+      picturesInBook: doc.illustrations.length,
+      undescribed: undescribed.length
     },
     null,
     2
   )
 )
+if (undescribed.length) {
+  console.error(
+    `${undescribed.length} picture(s) have no description and no caption, so a reader ` +
+      `who cannot see them hears only "Figure": ${undescribed.join(', ')}. ` +
+      'Give each one with `drive.mjs figure set <id> --alt "…"`.'
+  )
+}

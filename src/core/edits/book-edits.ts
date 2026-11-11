@@ -172,6 +172,15 @@ export type BookEdit =
       sourceHeight: number
       caption?: string
       /**
+       * What the picture shows, for a reader who cannot see it: the EPUB's
+       * `alt` text. Never printed. Absent, the EPUB falls back to the caption,
+       * and a picture with neither is reported, because "Figure" read aloud
+       * tells nobody anything. A caption printed as a block of its own under
+       * the picture (the Mahatma Letters' facsimiles) is not this picture's
+       * caption, so such a picture needs one written here.
+       */
+      alt?: string
+      /**
        * Where it sits and how large — see `IllustrationPlacement`. Absent,
        * the engine sets it to the measure after `afterBlockId`. For `within`
        * and `beside`, `afterBlockId` is the paragraph that hosts it.
@@ -874,6 +883,7 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
       sourceWidth: image.sourceWidth,
       sourceHeight: image.sourceHeight,
       caption: image.caption?.trim() ? image.caption.trim() : null,
+      ...(image.alt?.trim() ? { alt: image.alt.trim() } : {}),
       anchorAfterBlockId: image.afterBlockId,
       origin: 'supplied' as const,
       ...(image.placement ? { placement: image.placement } : {})

@@ -69,12 +69,16 @@ import { parseShape, type BookShape } from '@core/provenance'
  * where every earlier version could only mark whole words. v21 → v22 the
  * `synopsis-text` edit: a correction to a synopsis read off the original
  * contents, which is not a block and which no edit could reach before.
+ * v22 → v23 a supplied picture's `alt`: what it shows, for a reader who cannot
+ * see it. Bumped although the field is optional, so an app that predates it
+ * refuses the file rather than reading it, dropping the descriptions, and
+ * writing it back without them on the next ruling from the tablet.
  * None of them damages an older run — each is a complete transcription that simply
  * has none of the newer thing on it yet — so all upgrade in place rather than
  * being refused. That distinction is the whole reason a migration exists
  * instead of a version check.
  */
-export const CURRENT_SCHEMA_VERSION = 22
+export const CURRENT_SCHEMA_VERSION = 23
 
 /** A page the model could not read at all. Mirrors the runner's `PageFailure`. */
 export interface SavedFailure {
@@ -746,6 +750,7 @@ function parseEdits(raw: unknown): BookEdit[] {
           typeof value['sourceHeight'] === 'number'
         ) {
           const caption = value['caption']
+          const alt = value['alt']
           const placement = parsePlacement(value['placement'])
           out.push({
             kind: 'image',
@@ -754,6 +759,7 @@ function parseEdits(raw: unknown): BookEdit[] {
             sourceWidth: value['sourceWidth'],
             sourceHeight: value['sourceHeight'],
             ...(typeof caption === 'string' ? { caption } : {}),
+            ...(typeof alt === 'string' ? { alt } : {}),
             ...(placement ? { placement } : {})
           })
         }

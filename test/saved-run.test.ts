@@ -387,6 +387,25 @@ describe('migrateSavedRun — a picture’s placement, which came with v17', () 
     expect(migrateSavedRun(JSON.parse(JSON.stringify(original))).edits).toEqual(original.edits)
   })
 
+  it('keeps what a picture shows, which came with v23', () => {
+    // Dropped here, a description written on the shelf would be lost on the
+    // first save from any device, the way the pictures themselves once were.
+    const original = run({
+      edits: [
+        {
+          kind: 'image',
+          imageId: 'fig1',
+          afterBlockId: 'p0b1',
+          sourceWidth: 10,
+          sourceHeight: 10,
+          caption: 'MAN ON A PLANET',
+          alt: 'A circle divided into seven globes.'
+        }
+      ]
+    })
+    expect(migrateSavedRun(JSON.parse(JSON.stringify(original))).edits).toEqual(original.edits)
+  })
+
   it('drops a placement it cannot size, and the picture keeps its place in the book', () => {
     // `widthIn` is what the engine sizes by; a placement without one would set
     // the figure at NaN inches, which lays out as nothing and reports no fault.

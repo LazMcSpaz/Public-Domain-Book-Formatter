@@ -313,6 +313,11 @@ export interface Illustration extends IllustrationSource {
    */
   caption: string | null
   /**
+   * What the picture shows, for a reader who cannot see it (an EPUB's `alt`).
+   * Never printed; absent, the caption stands in. See the `image` edit.
+   */
+  alt?: string
+  /**
    * The block this picture should follow, when the user has said where it goes.
    *
    * Absent means "wherever the engine decides", which is after the last text

@@ -699,6 +699,27 @@ describe('applyEdits — pictures the editor supplied', () => {
     expect(withPicture().illustrations[0]!.caption).toBeNull()
   })
 
+  it('carries what the picture shows, for a reader who cannot see it, and nothing for a blank', () => {
+    // The EPUB's alt text. A facsimile whose caption is printed as a block of
+    // its own has nothing else to say to a screen reader but "Figure".
+    const described = (alt: string) =>
+      applyEdits(book(), [
+        {
+          kind: 'image',
+          imageId: 'img1',
+          afterBlockId: 'p0b1',
+          sourceWidth: 10,
+          sourceHeight: 10,
+          alt
+        }
+      ]).illustrations[0]!
+    expect(described(' A specimen of M.’s handwriting. ').alt).toBe(
+      'A specimen of M.’s handwriting.'
+    )
+    expect(described('   ')).not.toHaveProperty('alt')
+    expect(withPicture()).not.toHaveProperty('illustrations.0.alt')
+  })
+
   it('leaves the book’s own pictures alone', () => {
     const doc = assembleBook([page(0, [{ kind: 'paragraph', text: 'Text.' }])], {
       illustrations: [{ id: 'cut1', pageIndex: 0, sourceWidth: 100, sourceHeight: 100 }]

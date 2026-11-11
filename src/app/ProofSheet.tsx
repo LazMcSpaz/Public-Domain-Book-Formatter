@@ -684,6 +684,13 @@ export function ProofSheet({
                         aria-label="Caption for your picture"
                         onChange={(e) => push({ ...image, caption: e.target.value })}
                       />
+                      <input
+                        type="text"
+                        value={image.alt ?? ''}
+                        placeholder="What it shows, for a reader who cannot see it (the ebook's alt text; never printed)"
+                        aria-label="Description of your picture for readers who cannot see it"
+                        onChange={(e) => push({ ...image, alt: e.target.value })}
+                      />
                       <PlacementControl
                         value={image.placement}
                         atFromCursor={() => caretOf(document.activeElement) || 0}

@@ -1632,7 +1632,12 @@ node scripts/drive.mjs figure set <id> --caption-file c.txt --after p244b4
                                      #   changed without cutting it again. A
                                      #   caption of several lines is the figure's
                                      #   key, set as notes are, each line's
-                                     #   printed mark hung (SD I, leaf 245)
+                                     #   printed mark hung (SD I, leaf 245).
+                                     #   `--alt "…"` (or `--alt-file`) is what
+                                     #   it shows to a reader who cannot see
+                                     #   it: the EPUB's alt text, never printed.
+                                     #   `epub-of.ts` names every picture with
+                                     #   neither a description nor a caption
 node scripts/drive.mjs insert p640b3 table t.txt --id modern --header
                                      #   a block the editor wrote, after the
                                      #   named block: a table (rows on lines,

@@ -3484,21 +3484,30 @@ async function serve() {
       )
       const action = positional[0]
 
-      // `figure set <imageId> [--caption-file <file>] [--after <blockId>]`:
-      // change what a supplied picture says under it, or the block it follows,
-      // without cutting it again. A caption of several lines is the figure's
-      // key, set as notes are (`captionKey` in the engine).
+      // `figure set <imageId> [--caption-file <file>] [--after <blockId>]
+      // [--alt "<text>" | --alt-file <file>]`: change what a supplied picture
+      // says under it, the block it follows, or what it shows to a reader who
+      // cannot see it (the EPUB's alt text, never printed), without cutting it
+      // again. A caption of several lines is the figure's key, set as notes
+      // are (`captionKey` in the engine).
       if (action === 'set') {
         const imageId = positional[1]
         if (!imageId)
-          throw new Error('figure set <imageId> [--caption-file <file>] [--after <blockId>]')
+          throw new Error(
+            'figure set <imageId> [--caption-file <file>] [--after <blockId>] [--alt "<text>" | --alt-file <file>]'
+          )
         const captionFile = flag('caption-file')
         const after = flag('after')
+        const altFile = flag('alt-file')
         const { readFile } = await import('node:fs/promises')
         const caption =
           captionFile === null ? null : (await readFile(resolve(REPO, captionFile), 'utf8')).trim()
+        const alt =
+          altFile !== null
+            ? (await readFile(resolve(REPO, altFile), 'utf8')).replace(/\s+/g, ' ').trim()
+            : flag('alt')
         return page.evaluate(
-          async ([repo, imageId, caption, after]) => {
+          async ([repo, imageId, caption, after, alt]) => {
             const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
             const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
             const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
@@ -3523,7 +3532,8 @@ async function serve() {
                 ? {
                     ...e,
                     ...(after !== null ? { afterBlockId: after } : {}),
-                    ...(caption !== null ? { caption } : {})
+                    ...(caption !== null ? { caption } : {}),
+                    ...(alt !== null ? { alt } : {})
                   }
                 : e
             )
@@ -3540,10 +3550,11 @@ async function serve() {
               set: imageId,
               stored: stored === true,
               after: fig?.anchorAfterBlockId ?? null,
-              caption: fig?.caption ?? null
+              caption: fig?.caption ?? null,
+              alt: fig?.alt ?? null
             }
           },
-          [REPO, imageId, caption, after]
+          [REPO, imageId, caption, after, alt]
         )
       }
 

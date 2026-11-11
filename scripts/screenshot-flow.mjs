@@ -1405,6 +1405,11 @@ await page.locator('.proof-add-image input[type=file]').first().setInputFiles({
 })
 await page.waitForTimeout(600)
 await page.locator('.proof-picture input[type=text]').first().fill('The author, from life.')
+// What it shows, for a reader who cannot see it: the EPUB's alt text.
+await page
+  .locator('.proof-picture input[aria-label^="Description"]')
+  .first()
+  .fill('A grey test square.')
 await page.waitForTimeout(300)
 const suppliedPictures = await page.locator('.proof-picture').count()
 const suppliedPreview = await page.locator('.proof-picture img').count()
