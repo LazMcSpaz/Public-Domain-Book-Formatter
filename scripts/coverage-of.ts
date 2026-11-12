@@ -23,7 +23,7 @@ import { assembleBook } from '@core/assemble'
 import { applyEdits } from '@core/edits'
 import { checkCoverage, type LayerLeaf } from '@core/witness'
 
-const args = process.argv.slice(2).filter((a) => !a.includes('coverage-of'))
+const args = process.argv.slice(2).filter((a) => !/(?:^|[\\/])coverage-of\.ts$/.test(a))
 const flag = (name: string): string | null => {
   const at = args.indexOf(`--${name}`)
   return at === -1 ? null : (args[at + 1] ?? null)

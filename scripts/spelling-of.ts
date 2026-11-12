@@ -33,7 +33,7 @@ import { assembleBook, printedTexts } from '@core/assemble'
 import { applyEdits } from '@core/edits'
 import { checkSpelling, exportPages, spellingTokens, type SpellingSuspect } from '@core/coherence'
 
-const args = process.argv.slice(2).filter((a) => !a.includes('spelling-of'))
+const args = process.argv.slice(2).filter((a) => !/(?:^|[\\/])spelling-of\.ts$/.test(a))
 const flag = (name: string): string | null => {
   const i = args.indexOf(name)
   return i === -1 ? null : (args[i + 1] ?? null)

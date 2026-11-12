@@ -41,7 +41,7 @@ const HEAD_BAND = 0.09
 const FOOT_BAND = 0.06
 /** Pages a run must recur on in those bands to be taken for furniture. */
 const FURNITURE_PAGES = 3
-const argv = process.argv.slice(2).filter((a) => !a.includes('slant-witness'))
+const argv = process.argv.slice(2).filter((a) => !/(?:^|[\\/])slant-witness\.ts$/.test(a))
 const flag = (name: string): string | null => {
   const at = argv.indexOf(name)
   return at === -1 ? null : (argv[at + 1] ?? null)

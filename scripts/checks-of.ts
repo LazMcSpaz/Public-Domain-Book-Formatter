@@ -35,7 +35,7 @@ import {
 } from '@core/coherence'
 import { unapplied } from '@core/queries'
 
-const args = process.argv.slice(2).filter((a) => !a.includes('checks-of'))
+const args = process.argv.slice(2).filter((a) => !/(?:^|[\\/])checks-of\.ts$/.test(a))
 const at = args.indexOf('--out')
 const outDir = at === -1 ? null : args[at + 1]
 const check = args.includes('--check')

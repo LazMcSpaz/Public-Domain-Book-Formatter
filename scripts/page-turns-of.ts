@@ -23,7 +23,7 @@ import { applyEdits } from '@core/edits'
 import { checkPageTurns } from '@core/coherence'
 import type { DraftWord } from '@core/draft'
 
-const args = process.argv.slice(2).filter((a) => !a.includes('page-turns-of'))
+const args = process.argv.slice(2).filter((a) => !/(?:^|[\\/])page-turns-of\.ts$/.test(a))
 const flag = (name: string): string | null => {
   const i = args.indexOf(`--${name}`)
   return i === -1 ? null : (args[i + 1] ?? null)

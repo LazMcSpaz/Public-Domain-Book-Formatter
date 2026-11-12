@@ -24,7 +24,7 @@ import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { glossaryHeadwords, quotesNotInPacket, type GlossaryPacket } from '@core/annotate'
 
-const args = process.argv.slice(2).filter((a) => !a.includes('glossary-merge'))
+const args = process.argv.slice(2).filter((a) => !/(?:^|[\\/])glossary-merge\.ts$/.test(a))
 const flag = (name: string): string | undefined => {
   const at = args.indexOf(name)
   return at === -1 ? undefined : args[at + 1]

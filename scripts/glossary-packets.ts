@@ -55,7 +55,7 @@ const DEFAULT_ALIASES: Record<string, string[]> = {
   Daemon: ['Daimon']
 }
 
-const args = process.argv.slice(2).filter((a) => !a.includes('glossary-packets'))
+const args = process.argv.slice(2).filter((a) => !/(?:^|[\\/])glossary-packets\.ts$/.test(a))
 const flag = (name: string): string | undefined => {
   const at = args.indexOf(name)
   return at === -1 ? undefined : args[at + 1]
