@@ -95,6 +95,16 @@ Each packet carries, for one entry (`glossaryPacket`, `@core/annotate`):
 does not. **The second list is the one to read hardest**: those entries rest
 on the author and general knowledge alone.
 
+Two headword shapes are read as one name, not as alternatives
+(`headwordTerms`): an inverted article (`Absolute, the` is *the Absolute*;
+until November 2026 "the" was searched for as a term of its own and matched
+her "Ancients, The"), and a person, `Surname, Given (dates)` or, with no dates,
+a given part carrying an initial or a title (`Berry, Franklin L.`,
+`Panchadasi, Swami`). A dateless person with neither (`Gray, Elisha`) still
+reads as two alternatives, and its packet matches the bare given name: the
+house style gives a person dates, and until it does, tell the writer that
+Blavatsky's books are not a source for that entry.
+
 A spelling no rule can fold (the author learnt the word from a different book
 than hers) takes `--alias <Term>=<Spelling>`. Cabbalist→Kabalist,
 Aryan→Ârya and Daemon→Daimon are built in.

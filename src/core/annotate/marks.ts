@@ -57,8 +57,31 @@ export const GLOSSARY_MARK = '°'
  */
 const PERSON = /^\s*([^,()]+?),\s*[^()]+?\s*\([^)]*\d[^)]*\)\s*\.?\s*$/
 
+/**
+ * A person with no dates in the headword: `Berry, Franklin L.`,
+ * `Panchadasi, Swami`, `Gordon, Mrs Alice`. Told by what the given part
+ * carries, an initial or a title, because the shape alone cannot tell a
+ * person from two alternatives: measured over every glossary on the shelf,
+ * `Freemasonry, Masonry`, `Yoga, Yogi` and `Theosophy, Theosophical Society`
+ * are "Capitalised, Capitalised" too, and not one of them carries either.
+ * A dateless person with neither (`Gray, Elisha`) reads as alternatives, as
+ * it did before; the house style gives a person dates.
+ */
+const UNDATED_PERSON =
+  /^\s*(\p{Lu}[\p{L}'\u2019-]+),\s*((?:\p{Lu}[\p{L}'\u2019-]*\.?\s*){1,5})\.?\s*$/u
+const INITIAL_OR_TITLE =
+  /(?:^|\s)(?:\p{Lu}\.|Mrs\.?|Mr\.?|Miss|Madame|Mme\.?|Dr\.?|Sir|Lord|Lady|Colonel|Col\.|Captain|Capt\.|General|Professor|Prof\.|Rev\.?|Swami|Count|Countess|Baron)(?=\.?(?:\s|$))/u
+
+function personSurname(headword: string): string | null {
+  const dated = PERSON.exec(headword)
+  if (dated) return dated[1]!.trim()
+  const undated = UNDATED_PERSON.exec(headword)
+  if (undated && INITIAL_OR_TITLE.test(` ${undated[2]!.trim()}`)) return undated[1]!.trim()
+  return null
+}
+
 export function isPersonHeadword(headword: string): boolean {
-  return PERSON.test(headword)
+  return personSurname(headword) !== null
 }
 
 /**
@@ -70,10 +93,14 @@ export function isPersonHeadword(headword: string): boolean {
  * is looked for by surname (`isPersonHeadword`).
  */
 export function headwordTerms(headword: string): string[] {
-  const person = PERSON.exec(headword)
-  if (person) return [person[1]!.trim()]
+  const surname = personSurname(headword)
+  if (surname) return [surname]
   const unquote = (t: string) => t.replace(/^[\s"'\u201C\u2018]+|[\s"'\u201D\u2019.]+$/g, '')
-  const whole = unquote(headword.trim().replace(/\.$/, ''))
+  // `Absolute, the` is *the Absolute*: the article is inverted, not an
+  // alternative. Offered as one, "the" was a term like any other, and the
+  // packet builder handed *Thought Vibration*'s Absolute, I AM and Whole
+  // Thing the dictionary's entry for "Ancients, The".
+  const whole = unquote(headword.trim().replace(/\.$/, '')).replace(/,\s*(?:the|a|an)$/i, '')
   const parts = whole
     .split(',')
     .map((part) => part.replace(/\s*\(.*?\)\s*/g, '').trim())
@@ -114,9 +141,16 @@ function pattern(term: string, person = false): RegExp {
         .replace(/['\u2019]/g, "['\u2019]") + (person ? '' : '(?:s|es)?')
     )
   })
+  // A name set in capitals is the same name: a preface is signed
+  // "FRANKLIN L. BERRY", and a person is otherwise matched as written.
+  const named = person
+    ? parts.map((token) =>
+        token === token.toUpperCase() ? token : `(?:${token}|${token.toUpperCase()})`
+      )
+    : parts
   const notAName = person ? '(?![\\s-]+\\p{Lu})' : ''
   const mark = `(?:[\u201D\u2019"']?${GLOSSARY_MARK})?`
-  return new RegExp(`\\b${parts.join('[\\s-]+')}\\b${notAName}${mark}`, person ? 'gu' : 'giu')
+  return new RegExp(`\\b${named.join('[\\s-]+')}\\b${notAName}${mark}`, person ? 'gu' : 'giu')
 }
 
 /**

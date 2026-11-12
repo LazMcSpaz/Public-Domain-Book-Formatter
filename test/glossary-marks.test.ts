@@ -6,6 +6,7 @@ import {
   withoutStrayMarks,
   glossaryHeadwords,
   headwordTerms,
+  isPersonHeadword,
   withGlossaryMark,
   type MarkableBlock
 } from '@core/annotate'
@@ -223,6 +224,35 @@ describe('a person, and a circle after a quote', () => {
       'undine',
       'salamander'
     ])
+  })
+
+  it('reads a person with no dates by an initial or a title, and nothing by shape alone', () => {
+    expect(headwordTerms('Berry, Franklin L.')).toEqual(['Berry'])
+    expect(headwordTerms('Panchadasi, Swami.')).toEqual(['Panchadasi'])
+    expect(headwordTerms('Gordon, Mrs Alice.')).toEqual(['Gordon'])
+    expect(isPersonHeadword('Mitchell, Donald G.')).toBe(true)
+    // "Capitalised, Capitalised" is as often two alternatives as a name.
+    expect(headwordTerms('Freemasonry, Masonry.')).toEqual([
+      'Freemasonry, Masonry',
+      'Freemasonry',
+      'Masonry'
+    ])
+    expect(isPersonHeadword('Theosophy, Theosophical Society.')).toBe(false)
+    expect(isPersonHeadword('Yoga, Yogi.')).toBe(false)
+  })
+
+  it('finds a person’s name set in capitals, as a preface is signed', () => {
+    const got = checkGlossaryMarks(
+      ['Berry, Franklin L.'],
+      [para('p1', 'Yours in the work, FRANKLIN L. BERRY°')]
+    )
+    expect(got.marked.map((v) => v.entry)).toEqual(['Berry, Franklin L.'])
+  })
+
+  it('takes an inverted article as part of the word, never as a term of its own', () => {
+    expect(headwordTerms('Absolute, the.')).toEqual(['Absolute'])
+    expect(headwordTerms('I AM, the.')).toEqual(['I AM'])
+    expect(headwordTerms('Whole Thing, the.')).toEqual(['Whole Thing'])
   })
 
   it('does not take a surname for a common noun or for another man’s first name', () => {
