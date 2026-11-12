@@ -79,6 +79,8 @@ Choose the angle before writing. For each book, pitch four to six angles to the 
 
 5. The Invitation. For a pure practice manual. Open on why a person would want what this book trains, not on its first exercise; what kind of teacher the author is; how to work with the book (pace, which practices to begin with, what to be careful of); the warm close.
 
+An author with several books on the shelf, Atkinson above all, gets his life in a few plain sentences in each, never a Portrait: not every reader reads every book, so the essentials stay, but the introduction spends itself on what this book teaches and what it was for, its impact, and where it stood in its movement and in the occultism of its day. What the book teaches is said in the large, never as a tour of its exercises or its chapters. (Editor, 12 November 2026.)
+
 The edition's bookkeeping (what it was set from, what was mended, what was kept as printed, the glossary and notes) does not go in the introduction. It goes on its own short page after it, titled A Note on This Edition, in a few plain sentences: no lists of numbers, no arithmetic on dates, no imprint addresses.
 
 Biographical facts resting on one source are carried lightly ("by one account"); disputed ones are left out. Raise a shadow on a life only when it bears on the book in hand: a lawsuit over an estate sixty years later does not.
