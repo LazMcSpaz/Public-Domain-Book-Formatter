@@ -59,6 +59,8 @@ Write for a reader, not for a reviewer. Show what the reader needs and keep the 
 
 Say the point. Never leave the reader to infer it from a knowing close, an understatement, an irony or an aphorism whose literal meaning is not its meaning. "A man who announces himself as one has told you what he is" makes the reader work it out; "a man who announces himself as an adept has shown, by announcing it, that he is not one" says it. Plain is not flat: keep the life, lose the riddle.
 
+Keep the journey moving. Good prose carries a reader along, an introduction full of facts as much as anything, and a correction or a piece of context rides inside that motion rather than halting it. No paragraph exists only to set the record straight. Context never diminishes the author: that an idea is older than the writer who carried it to his readers is part of his story, not a deduction from it. (Editor, 12 November 2026.)
+
 Name a person in full once, the first time the book's own apparatus mentions them (introduction, notes and glossary read as one, in reading order), with a few words on who they are. After that, use the surname, a short form, or simply the title of the book being quoted (_The Secret Doctrine_ says...). Repeating a full name in note after note reads as stiff. Never refer to anyone by a pronoun before the reader has met them by name.
 
 Do not tell the reader what they "should know", and do not stage the honesty ("I would rather you saw the seam", "you will feel it"). State the thing and move on.
