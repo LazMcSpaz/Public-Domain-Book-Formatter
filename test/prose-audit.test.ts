@@ -296,6 +296,18 @@ describe('the voice as the editor writes it', () => {
     expect(audit.clean).toBe(true)
   })
 
+  it('ends a sentence inside its closing quotation, and not at an initial', () => {
+    // From the Thought Vibration introduction: each of these is a sentence,
+    // and the old splitter read the first two as one (a stop before `"`, not
+    // before a space) and broke the third after "Charles W.".
+    const audit = auditProse(
+      'He said it must now be reckoned with as "a genuine religious power." ' +
+        'Its principles were "beginning so to pervade the air." ' +
+        'Annie Besant and Charles W. Leadbeater described it in a book of their own.'
+    )
+    expect(audit.sentences.total).toBe(3)
+  })
+
   it('hears three sentences running in the same length band', () => {
     // Three short ones in a row. The rule is a rhythm rule, so the check is
     // about the run and not about any one sentence in it.

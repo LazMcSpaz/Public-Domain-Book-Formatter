@@ -424,12 +424,36 @@ function flatRuns(paragraph: string): string[] {
 /** Does one man speak in this? The voice is first person singular throughout. */
 const FIRST_PERSON = /\b(I|I'm|I'd|I've|I'll|me|my|mine|myself)\b/u
 
+/**
+ * A word whose full stop does not end a sentence: an initial (`Charles W.`)
+ * or a title set before a name (`Mrs.`, `Dr.`).
+ */
+const ABBREVIATION = /(?:^|[\s(“"])(?:[A-Z]|Mr|Mrs|Ms|Dr|St|Mt|Prof|Rev|Sr|Jr)\.$/u
+
+/**
+ * The sentences of a stretch of prose.
+ *
+ * A sentence may close inside its quotation (`"…a genuine religious power."`)
+ * or its brackets, so the closing marks are allowed between the stop and the
+ * space; reading only a stop followed by a space ran every such sentence into
+ * the next, and on the Thought Vibration introduction made a paragraph of six
+ * sentences, 8 to 40 words long, look like three long ones. An initial or a
+ * title is not an ending, which is what had `Charles W.` closing a sentence.
+ */
 function sentencesOf(text: string): string[] {
-  return text
+  const pieces = text
     .replace(/[ \t]+/gu, ' ')
-    .split(/(?<=[.!?])\s+(?=[A-Z"“(])/u)
+    .split(/(?<=[.!?]["”’)\]]*)\s+(?=[A-Z"“‘(])/u)
     .map((s) => s.trim())
     .filter((s) => s.length > 0)
+  const sentences: string[] = []
+  for (const piece of pieces) {
+    const last = sentences[sentences.length - 1]
+    if (last !== undefined && ABBREVIATION.test(last))
+      sentences[sentences.length - 1] = `${last} ${piece}`
+    else sentences.push(piece)
+  }
+  return sentences
 }
 
 /**
