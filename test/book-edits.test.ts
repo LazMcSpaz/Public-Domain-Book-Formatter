@@ -235,6 +235,40 @@ describe('applyEdits — splitting and joining', () => {
     const fixed = applyEdits(book(), [{ kind: 'merge', blockId: 'p1b0' }])
     expect(texts(fixed)).toEqual(texts(book()))
   })
+
+  it('carries the editor’s note on the absorbed half to the block that took it', () => {
+    // A page-turn join on Thought Vibration absorbed the block that carried
+    // the editor's Marconi note, and the note was left out without a word.
+    // "on the next leaf" ends at offset 25 of 'A third, on the next leaf.'.
+    const note = { kind: 'note' as const, noteId: 'ed1', blockId: 'p1b0', at: 25, text: 'A note.' }
+    for (const edits of [
+      [{ kind: 'merge' as const, blockId: 'p0b2' }, note],
+      [note, { kind: 'merge' as const, blockId: 'p0b2' }]
+    ]) {
+      const fixed = applyEdits(book(), edits)
+      const placed = fixed.footnotes.find((n) => n.id === 'ed1')
+      expect(placed?.anchor?.blockId).toBe('p0b2')
+      const host = fixed.blocks.find((b) => b.id === 'p0b2')!.text
+      expect(host.slice(0, placed!.anchor!.at)).toBe(
+        'A second paragraph. A third, on the next leaf'
+      )
+    }
+  })
+
+  it('follows a note through two joins in a row', () => {
+    const note = { kind: 'note' as const, noteId: 'ed1', blockId: 'p1b0', at: 8, text: 'A note.' }
+    const fixed = applyEdits(book(), [
+      { kind: 'merge', blockId: 'p0b2' },
+      { kind: 'merge', blockId: 'p0b1' },
+      note
+    ])
+    const placed = fixed.footnotes.find((n) => n.id === 'ed1')
+    expect(placed?.anchor?.blockId).toBe('p0b1')
+    const host = fixed.blocks.find((b) => b.id === 'p0b1')!.text
+    expect(host.slice(0, placed!.anchor!.at)).toBe(
+      'The chirnrgeon examined the specimen. A second paragraph. A third,'
+    )
+  })
 })
 
 describe('applyEdits — moving a picture', () => {

@@ -441,6 +441,16 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
    * that block" is still a meaningful place — just a differently-named one.
    * Without this, ordinary editing would silently unpin pictures.
    */
+  /**
+   * Where each block a `merge` absorbed went, and how far along: an authored
+   * note on the absorbed block is placed on the block that took it, its
+   * offset moved past everything that now stands before it. Followed when
+   * the notes are placed rather than at the merge, because a note can come
+   * before or after the merge in the list. Without it a page-turn join
+   * silently dropped the editor's note on the second half (Thought
+   * Vibration's Marconi note, leaf 42).
+   */
+  const mergedInto = new Map<string, { into: string; by: number }>()
   const rename = (from: string, to: string): void => {
     for (const [id, after] of anchors) if (after === from) anchors.set(id, to)
     for (const [id, image] of supplied) {
@@ -749,6 +759,10 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
         // The block that was absorbed no longer exists, but "after it" is still
         // a place — it is after the block that absorbed it.
         rename(next.id, block.id)
+        mergedInto.set(next.id, {
+          into: block.id,
+          by: head.length - (next.text.length - next.text.trimStart().length)
+        })
         break
       }
     }
@@ -827,7 +841,12 @@ export function applyEdits(doc: BookDocument, edits: readonly BookEdit[]): BookD
       }
     })
     .filter((note) => note.text.trim().length > 0)
-  for (const note of authored.values()) {
+  for (const written of authored.values()) {
+    let note = written
+    for (let hop = mergedInto.get(note.blockId); hop && !blockById.has(note.blockId);) {
+      note = { ...note, blockId: hop.into, at: note.at + hop.by }
+      hop = mergedInto.get(note.blockId)
+    }
     const block = blockById.get(note.blockId)
     if (!block || note.text.trim().length === 0) continue
     // `<i>` read the same way it is read in a correction and in a written
