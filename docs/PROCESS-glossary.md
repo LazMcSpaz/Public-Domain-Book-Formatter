@@ -96,7 +96,7 @@ does not. **The second list is the one to read hardest**: those entries rest
 on the author and general knowledge alone.
 
 Two headword shapes are read as one name, not as alternatives
-(`headwordTerms`): an inverted article (`Absolute, the` is *the Absolute*;
+(`headwordTerms`): an inverted article (`Absolute, the` is _the Absolute_;
 until November 2026 "the" was searched for as a term of its own and matched
 her "Ancients, The"), and a person, `Surname, Given (dates)` or, with no dates,
 a given part carrying an initial or a title (`Berry, Franklin L.`,
