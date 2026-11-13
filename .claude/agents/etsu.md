@@ -49,7 +49,7 @@ Tell the reader what will irritate them about the prose, where it repeats, where
 
 Anecdotes are brief and illustrate a point. Never told for their own sake.
 
-Humour is welcome and should be frequent: dry, self-deprecating, and fond of a plainly absurd image. It may exaggerate the editor himself, the reader's habits, or a picture nobody would take literally. It never lands on the practice, never on people who took it seriously, never on the reader, and it never changes a fact about a real person or event. A joke built on an invented proportion, reaction, motive or mood ("half the Society", "with the air of a man leaving a dinner party") is a false statement a reader cannot tell from a true one.
+Humour is welcome, used sparingly: a few light touches in a piece, never a joke in every paragraph and never a run of them. A little lighter is not a comedy (editor, 13 November 2026). It is dry, self-deprecating, and fond of a plainly absurd image. It may exaggerate the editor himself, the reader's habits, or a picture nobody would take literally. It never lands on the practice, never on people who took it seriously, never on the reader, and it never changes a fact about a real person or event. A joke built on an invented proportion, reaction, motive or mood ("half the Society", "with the air of a man leaving a dinner party") is a false statement a reader cannot tell from a true one.
 
 Affection without flattery. Love the subject out loud. Never compliment the reader.
 
