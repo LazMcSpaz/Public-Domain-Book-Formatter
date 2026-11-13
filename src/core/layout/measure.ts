@@ -60,7 +60,26 @@ export interface TextMeasurer {
    * 1 where it is absent or either height is unknown.
    */
   smallCapScale?(textFamily: string, capsFamily: string): number
+  /**
+   * Whether `font` can draw this character at all.
+   *
+   * A face with no glyph for a letter draws its `.notdef` box, which has a
+   * width like any glyph, so nothing downstream notices: _The Theosophical
+   * Glossary_, set in Libre Caslon Text, printed every Greek word it quotes
+   * (`μάντεις`, `βαπτίζω`) and the Hebrew of its table of the Ineffable Name
+   * as rows of empty boxes, through every check and every export. Optional;
+   * a measurer that cannot say is taken to have every glyph.
+   */
+  hasGlyph?(font: FontRef, codePoint: number): boolean
 }
+
+/**
+ * The face a character is set in when the book's own face has no glyph for
+ * it. Cardo was drawn for classicists and biblical scholars: it carries
+ * polytonic Greek and Hebrew in all three styles, which is what these books
+ * quote, and it is already one of the faces offered.
+ */
+export const GLYPH_FALLBACK_FAMILY = 'Cardo'
 
 /**
  * A measurer whose every glyph is `emRatio` of the point size wide.
@@ -124,6 +143,12 @@ export function cachedMeasurer(inner: TextMeasurer): TextMeasurer {
     hasBold: (family) => inner.hasBold(family),
     ...(inner.smallCapScale
       ? { smallCapScale: (text: string, caps: string) => inner.smallCapScale!(text, caps) }
+      : {}),
+    // Passed through, or the glyph fallback never runs: every export goes
+    // through this wrapper, and a wrapper that drops an optional method makes
+    // the engine believe the face can draw everything.
+    ...(inner.hasGlyph
+      ? { hasGlyph: (font: FontRef, codePoint: number) => inner.hasGlyph!(font, codePoint) }
       : {})
   }
 }

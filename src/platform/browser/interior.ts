@@ -51,6 +51,8 @@ export interface Interior {
   imagesPlaced: PlacedImage[]
   /** Illustrations that never reached the page, and why. Same rule as notes. */
   imagesDropped: { id: string; reason: string }[]
+  /** Characters that print as an empty box: no face the app has can draw them. */
+  unprintable: string[]
   /** Families asked for but unavailable, mapped to what was used instead. */
   substitutions: [string, string][]
 }
@@ -139,6 +141,7 @@ export async function renderInterior(
         reason: 'its pixels could not be cut out of the scan'
       }))
     ],
+    unprintable: pdf.unprintable,
     substitutions: [...fonts.substitutions.entries()]
   }
 }

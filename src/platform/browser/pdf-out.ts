@@ -25,7 +25,7 @@ import {
 import fontkit from '@pdf-lib/fontkit'
 import type { FontRef, LaidOutBook, LaidOutPage } from '@core/layout'
 import { LAYOUT_FEATURES, type FontTable } from './fonts'
-import { verifyWidths, widenWidths } from './font-widths'
+import { unprintableIn, verifyWidths, widenWidths } from './font-widths'
 
 export interface PdfResult {
   bytes: Uint8Array
@@ -50,6 +50,11 @@ export interface PdfResult {
    * were ever a glyph the book needed, `renderPdf` raises instead.
    */
   unwritableGlyphs: string[]
+  /**
+   * Characters a face drew as its empty `.notdef` box, each with the face that
+   * drew it: what no face the app carries can print (see `unprintableIn`).
+   */
+  unprintable: string[]
 }
 
 export interface RenderPdfOptions {
@@ -177,6 +182,15 @@ export async function renderPdf(
     for (const glyph of dropped) unwritableGlyphs.push(glyph.name ?? String(glyph.id))
   }
 
+  // And name every character drawn as an empty box. Reported rather than
+  // refused: a symbol no face carries (The Secret Doctrine's △ and ✡) is the
+  // editor's to settle, by a picture or otherwise, and the book is still worth
+  // building while it waits.
+  const unprintable: string[] = []
+  for (const [font, texts] of drawn) {
+    for (const ch of unprintableIn(font, texts)) unprintable.push(`${ch} in ${font.name}`)
+  }
+
   // Then prove it, because the failure this prevents is silent on every check
   // except the printed page.
   for (const [font, texts] of drawn) {
@@ -220,6 +234,7 @@ export async function renderPdf(
     bytes,
     ligatureGlyphs: [...new Set(ligatureGlyphs)].sort(),
     unwritableGlyphs: [...new Set(unwritableGlyphs)].sort(),
+    unprintable: [...new Set(unprintable)].sort(),
     pageCount: book.pages.length,
     embeddedFamilies: [...embeddedFamilies],
     missingImages

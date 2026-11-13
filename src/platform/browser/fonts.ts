@@ -15,6 +15,7 @@
  */
 import fontkit from '@pdf-lib/fontkit'
 import type { Font as FontkitFont, TypeFeatures } from '@pdf-lib/fontkit'
+import { GLYPH_FALLBACK_FAMILY } from '@core/layout'
 import type { FontMetrics, FontRef, FontStyle, TextMeasurer } from '@core/layout'
 
 import ebGaramondRegular from '@expo-google-fonts/eb-garamond/400Regular/EBGaramond_400Regular.ttf?url'
@@ -219,7 +220,9 @@ export function fontTableFor(families: readonly string[]): Promise<FontTable> {
  * function, which is the one thing the `TextMeasurer` seam exists to prevent.
  */
 export async function loadFonts(families: readonly string[]): Promise<FontTable> {
-  const wanted = [...new Set([...families, FALLBACK_FAMILY])]
+  // The glyph fallback rides with every book, so a Greek word in a Caslon book
+  // can be drawn at all (`GLYPH_FALLBACK_FAMILY`).
+  const wanted = [...new Set([...families, FALLBACK_FAMILY, GLYPH_FALLBACK_FAMILY])]
   const substitutions = new Map<string, string>()
   const faces = new Map<string, LoadedFace>()
 
@@ -233,7 +236,11 @@ export async function loadFonts(families: readonly string[]): Promise<FontTable>
   )
 
   for (const family of wanted) {
-    if (!faces.has(`${family}|regular`) && family !== FALLBACK_FAMILY) {
+    if (
+      !faces.has(`${family}|regular`) &&
+      family !== FALLBACK_FAMILY &&
+      family !== GLYPH_FALLBACK_FAMILY
+    ) {
       substitutions.set(family, FALLBACK_FAMILY)
     }
   }
@@ -248,6 +255,8 @@ export async function loadFonts(families: readonly string[]): Promise<FontTable>
    * engine decides that question up front so the measured width and the drawn
    * glyphs come from the same answer.
    */
+  const glyphKnown = new Map<string, boolean>()
+
   const featuresFor = (ref: FontRef): TypeFeatures =>
     ref.smallCaps ? { ...LAYOUT_FEATURES, smcp: true } : LAYOUT_FEATURES
 
@@ -307,6 +316,21 @@ export async function loadFonts(families: readonly string[]): Promise<FontTable>
       const glyph = caps.font.layout('x', { ...LAYOUT_FEATURES, smcp: true }).glyphs[0]
       const scHeight = glyph ? glyph.bbox.maxY / caps.font.unitsPerEm : 0
       return xHeight > 0 && scHeight > 0 ? xHeight / scHeight : 1
+    },
+
+    hasGlyph(ref, codePoint) {
+      const face = faceFor(ref)
+      // A face that did not load is answered as having the glyph, so the engine
+      // keeps the run where it was rather than moving it into another face on
+      // the strength of nothing.
+      if (!face) return true
+      const key = `${resolve(ref.family)}|${ref.style}|${codePoint}`
+      let known = glyphKnown.get(key)
+      if (known === undefined) {
+        known = face.font.hasGlyphForCodePoint(codePoint)
+        glyphKnown.set(key, known)
+      }
+      return known
     },
 
     hasBold(family) {

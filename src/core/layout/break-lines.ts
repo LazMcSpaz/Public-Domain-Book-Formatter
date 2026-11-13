@@ -36,7 +36,7 @@ import {
   type Penalty
 } from 'tex-linebreak'
 import patterns from 'hyphenation.en-us'
-import type { TextMeasurer } from './measure'
+import { GLYPH_FALLBACK_FAMILY, type TextMeasurer } from './measure'
 import type { FontRef } from './types'
 
 /** How a paragraph's lines are set within the measure. */
@@ -174,49 +174,114 @@ export interface FaceRun {
   scale: number
 }
 
+/** The script a cluster is written in, for the scripts these books quote. */
+function scriptOf(cluster: string): string | null {
+  if (/\p{Script=Greek}/u.test(cluster)) return 'Greek'
+  if (/\p{Script=Hebrew}/u.test(cluster)) return 'Hebrew'
+  if (/\p{Script=Coptic}/u.test(cluster)) return 'Coptic'
+  return null
+}
+
+const RIGHT_TO_LEFT = /[\p{Script=Hebrew}\p{Script=Arabic}\p{Script=Syriac}]/u
+
 /**
- * A word cut into the stretches each face sets, or null when no span has a
- * part on it — every word marked whole or not at all, which takes the path
- * every word took before parts existed.
+ * A word written right to left, put in the order its letters are drawn.
+ *
+ * The engine sets every word left to right, and a transcription stores Hebrew
+ * as it is read, first letter first: so the Glossary's table of the Ineffable
+ * Name printed `יהוה` with its yod at the far left, where the 1892 page sets it
+ * at the right. A word whose letters are all of a right-to-left script is
+ * drawn with its letters reversed, the pointing round it left where it stands;
+ * a word mixing scripts is left alone. Words, not phrases: a Hebrew phrase of
+ * several words would also want its word order turned, and none of these
+ * books prints one.
+ */
+export function visualOrder(word: string): string {
+  const parts = /^(\P{L}*)(.*?)(\P{L}*)$/su.exec(word)
+  const core = parts?.[2] ?? ''
+  if (!core || !RIGHT_TO_LEFT.test(core)) return word
+  for (const ch of core) if (/\p{L}/u.test(ch) && !RIGHT_TO_LEFT.test(ch)) return word
+  const clusters = core.match(/\P{M}\p{M}*|\p{M}+/gu) ?? []
+  return `${parts![1]}${clusters.reverse().join('')}${parts![3]}`
+}
+
+/**
+ * A word cut into the stretches each face sets, or null when every character
+ * is set in the word's own face — every word marked whole or not at all, with
+ * every letter drawable, takes the path every word took before parts existed.
  *
  * Each character goes to the first span that claims it, by `words` or by a
  * part — the same first-match-wins `fontForWord` applies to a whole word — and
  * to the paragraph's own face where none does. Adjacent characters in one face
  * are one stretch.
+ *
+ * A character that face cannot draw (`hasGlyph`) is set in
+ * `GLYPH_FALLBACK_FAMILY`, in the same style, when that face can; a letter's
+ * combining marks travel with it, so `F̄` is drawn from one face and its bar
+ * sits on its letter. A character no face can draw stays where it was, and the
+ * writer reports it.
  */
 export function faceRuns(
   word: string,
   index: number,
   spans: readonly TextSpan[] | undefined,
-  fallback: FontRef
+  fallback: FontRef,
+  hasGlyph?: (font: FontRef, codePoint: number) => boolean
 ): FaceRun[] | null {
-  if (!spans?.some((span) => span.parts?.has(index))) return null
+  const hasParts = spans?.some((span) => span.parts?.has(index)) ?? false
+  const drawable = (font: FontRef, cluster: string): boolean => {
+    if (!hasGlyph) return true
+    for (const ch of cluster) {
+      if (/\s/u.test(ch)) continue
+      if (!hasGlyph(font, ch.codePointAt(0)!)) return false
+    }
+    return true
+  }
+  if (!hasParts && drawable(fontForWord(index, spans, fallback), word)) return null
   const claimant = (at: number): TextSpan | null => {
-    for (const span of spans) {
+    for (const span of spans ?? []) {
       if (span.words.has(index)) return span
       if (span.parts?.get(index)?.some(([from, to]) => at >= from && at < to)) return span
     }
     return null
   }
-  const runs: (FaceRun & { span: TextSpan | null })[] = []
+  // By cluster: a letter and the combining marks after it, read by code point
+  // so a stretch never ends between the halves of a surrogate pair however a
+  // stored offset was written.
+  const cells: { text: string; at: number; span: TextSpan | null; font: FontRef }[] = []
+  const moved = new Set<string>()
   let at = 0
-  // By code point, so a stretch never ends between the halves of a surrogate
-  // pair however a stored offset was written.
-  for (const ch of word) {
+  for (const cluster of word.match(/\P{M}\p{M}*|\p{M}+/gu) ?? []) {
     const span = claimant(at)
-    const last = runs[runs.length - 1]
-    if (last && last.span === span) {
-      last.to = at + ch.length
-    } else {
-      runs.push({
-        from: at,
-        to: at + ch.length,
-        font: span?.font ?? fallback,
-        scale: span?.scale ?? 1,
-        span
-      })
+    let font = span?.font ?? fallback
+    if (!drawable(font, cluster)) {
+      const instead: FontRef = { family: GLYPH_FALLBACK_FAMILY, style: font.style }
+      if (drawable(instead, cluster)) {
+        font = instead
+        const script = scriptOf(cluster)
+        if (script) moved.add(script)
+      }
     }
-    at += ch.length
+    cells.push({ text: cluster, at, span, font })
+    at += cluster.length
+  }
+  // A letter of another script that the book's face happens to carry goes
+  // with the rest of its word: Libre Caslon has a Greek mu and nothing else of
+  // the alphabet, and `δαιμονια` printed one letter of six in the wrong face.
+  for (const cell of cells) {
+    const script = scriptOf(cell.text)
+    if (!script || !moved.has(script) || cell.font.family === GLYPH_FALLBACK_FAMILY) continue
+    const instead: FontRef = { family: GLYPH_FALLBACK_FAMILY, style: cell.font.style }
+    if (drawable(instead, cell.text)) cell.font = instead
+  }
+  const runs: (FaceRun & { span: TextSpan | null })[] = []
+  for (const { text, at: from, span, font } of cells) {
+    const last = runs[runs.length - 1]
+    if (last && last.span === span && sameFont(last.font, font)) {
+      last.to = from + text.length
+    } else {
+      runs.push({ from, to: from + text.length, font, scale: span?.scale ?? 1, span })
+    }
   }
   // One stretch is still answered as one, not as null: a part that has come
   // to cover the whole of what is left of its word — a reference mark lifted
@@ -501,7 +566,9 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
     else attachments.set(attachment.wordIndex, [attachment])
   }
 
-  words.forEach((word, i) => {
+  words.forEach((read, i) => {
+    // Drawn in the order its letters print: see `visualOrder`.
+    const word = visualOrder(read)
     if (i > 0) {
       if (BINDS_NEXT.test(words[i - 1]!) || BINDS_PREVIOUS.test(word)) {
         // TeX's `\nobreak`: glue is a legal break only straight after a box,
@@ -520,7 +587,13 @@ export function itemsFromText(text: string, options: BreakParagraphOptions): Inp
     const pieces = segmentsOf(word).flatMap((segment) =>
       hyphenate ? markEndsPiece(hyphenate(segment)) : [segment]
     )
-    const runs = faceRuns(word, i, options.spans, font)
+    const runs = faceRuns(
+      word,
+      i,
+      options.spans,
+      font,
+      measurer.hasGlyph ? (f, cp) => measurer.hasGlyph!(f, cp) : undefined
+    )
     if (runs) {
       // A word set in more than one face. Each box is a stretch of one piece
       // in one face, measured in that face — a piece the face changes inside

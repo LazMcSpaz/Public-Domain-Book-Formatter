@@ -3491,10 +3491,15 @@ export function App(): JSX.Element {
           ...input,
           typeset: {
             pageCount: interior.pageCount,
-            warnings: interior.warnings.map(
-              (w) =>
-                `Page ${w.pageIndex + 1}: a line runs past the margin — “${w.text.slice(0, 60)}”`
-            ),
+            warnings: [
+              ...interior.warnings.map(
+                (w) =>
+                  `Page ${w.pageIndex + 1}: a line runs past the margin — “${w.text.slice(0, 60)}”`
+              ),
+              ...interior.unprintable.map(
+                (c) => `A character no typeface here can draw prints as an empty box: ${c}`
+              )
+            ],
             notesPlaced: interior.notesPlaced,
             notesCollected: interior.notesCollected,
             notesDropped: interior.notesDropped,

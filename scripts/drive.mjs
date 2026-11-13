@@ -1640,6 +1640,9 @@ async function serve() {
             warningsFirst: built.warnings
               .slice(0, 8)
               .map((w) => ({ page: w.pageIndex + 1, text: w.text })),
+            // Characters drawn as an empty box, which every count above is
+            // blind to: the Glossary printed its Greek this way for a month.
+            unprintable: built.unprintable,
             substitutions: built.substitutions,
             bytes: built.bytes.length,
             // Never silent about this. A book proofed with the defaults looks

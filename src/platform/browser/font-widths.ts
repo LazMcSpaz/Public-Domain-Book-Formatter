@@ -187,3 +187,28 @@ export function verifyWidths(font: PDFFont, texts: Iterable<string>): string[] {
   }
   return [...missing]
 }
+
+/**
+ * Every character `font` was asked to draw and has no glyph for.
+ *
+ * Such a character is not missing from the page: it is drawn as the face's
+ * `.notdef`, an empty box with a width, so `verifyWidths` is satisfied and the
+ * book prints holes that look like nothing at all to every count. The engine
+ * sets these in `GLYPH_FALLBACK_FAMILY` where that face has them; what is left
+ * here is drawable by no face the app has, and is reported, each once, as the
+ * character and its code point.
+ */
+export function unprintableIn(font: PDFFont, texts: Iterable<string>): string[] {
+  const embedder = embedderOf(font)
+  if (!embedder) return []
+  const missing = new Set<string>()
+  for (const text of texts) {
+    for (const ch of text) {
+      if (/\s/u.test(ch)) continue
+      const cp = ch.codePointAt(0)!
+      if (cp < 0x20 || embedder.font.hasGlyphForCodePoint(cp)) continue
+      missing.add(`${ch} U+${cp.toString(16).toUpperCase().padStart(4, '0')}`)
+    }
+  }
+  return [...missing]
+}

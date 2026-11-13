@@ -1293,6 +1293,36 @@ thirty words were the letter-writers' own, checked against the scan's text
 layer at every place they occur; a word the second reading agrees with is
 printed so, and one it disagrees with (`death`, `cruelly`) is ours to crop.
 
+**Every Greek word in the Glossary printed as a row of empty boxes, and
+nothing counted it.** _The Theosophical Glossary_ is set in Libre Caslon
+Text, which has no Greek and no Hebrew. A face with no glyph for a letter
+draws its `.notdef` box, and that box has a width like any glyph, so
+`verifyWidths` was satisfied, the export reported no warnings, the spell
+check read the words from the book file and found them sound, and 111
+characters printed as holes: `μάντεις`, `βαπτίζω`, `εν τουτῳ νικα`, the
+Hebrew of the table of the Ineffable Name, the bar over `F̄`, the `ṇ` of
+the bold headword `Chandramaṇam`. Found by reading the export through
+`spelling-of.ts --text`, where the boxes copy out as alefs. Two halves now.
+The measurer answers `hasGlyph`, and `faceRuns` sets a letter (with its
+combining marks, so a bar stays on its letter) in `GLYPH_FALLBACK_FAMILY`,
+Cardo, in the same style, wherever the book's face lacks it; Cardo carries
+polytonic Greek and Hebrew in all three styles and is loaded with every book.
+And the writer names every character still drawn as a box
+(`unprintableIn`), in the driver's `proof` report and among the export
+screen's warnings, because a symbol no face here carries — _The Secret
+Doctrine_'s `△ ✡ 卐 ☥`, the Mahatma Letters' one `△` — is the editor's to
+settle. `cachedMeasurer` wraps every real layout and had to be taught to
+pass the question on: a wrapper that drops an optional method makes the
+engine believe every face can draw everything, and the test that goes
+through it is the one that caught that. Two things came with it from looking
+at the pages: a letter of another script the book's face happens to carry
+(Libre Caslon's lone mu) goes to Cardo with the rest of its word, or
+`δαιμονια` prints in two faces; and a word wholly in Hebrew is drawn right to
+left (`visualOrder`), since the engine sets every word left to right and the
+table of the Ineffable Name printed `יהוה` with its yod at the far left, where
+the 1892 page sets it at the right. **After exporting a book that quotes
+another script, read the `unprintable` line, and look at the page.**
+
 ### A test that passes before and after the fix is not a test
 
 This is the one that cost the most, because a green suite is exactly what
