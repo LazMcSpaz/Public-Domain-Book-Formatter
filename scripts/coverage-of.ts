@@ -66,11 +66,25 @@ if (secondPath) {
   }
 }
 
+// A leaf with no words in its reading is not a leaf compared. A Google scan
+// carries no OCR layer, and this script read *Thought Vibration*'s 161 empty
+// leaves and reported "0 runs missing, 0 lines moved": a clean bill from a
+// check that had nothing to check against. Too few read leaves stops it, and
+// the count it prints is of the leaves that had words.
+const read = layer.filter((l) => l.lines.join('').replace(/\s+/gu, '').length >= 100)
+const leaves = (book.run.transcriptions ?? []).length
+if (read.length === 0 || read.length < leaves / 5) {
+  console.error(
+    `Only ${read.length} of ${layer.length} leaves carry a reading, so there is nothing to compare ` +
+      'the book against. Give a second reading with --second (`drive.mjs second` writes one).'
+  )
+  process.exit(1)
+}
 const found = checkCoverage(doc, layer)
 const missing = found.filter((f) => f.kind === 'missing')
 const moved = found.filter((f) => f.kind === 'moved')
 console.log(
-  `${layer.length} leaves compared: ${missing.length} runs missing, ${moved.length} lines moved`
+  `${read.length} leaves compared: ${missing.length} runs missing, ${moved.length} lines moved`
 )
 for (const f of found) {
   console.log(
