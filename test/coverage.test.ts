@@ -67,6 +67,42 @@ describe('a line the paper prints and the book does not', () => {
     expect(found[0]!.lines.join(' ')).toContain('repeated with each customer')
   })
 
+  it('is reported as one full line of a narrow page, none of it found', () => {
+    // Thought Vibration's 1906 page holds seven to ten words a line, under the
+    // twelve-word floor a single line needed, so a dropped line was invisible.
+    const [a, b, c, d] = PARAGRAPHS as [string, string, string, string]
+    const dropped = b.split(' ').slice(9, 18).join(' ')
+    const found = checkCoverage(book([a, b.replace(dropped, '').replace(/\s+/gu, ' '), c, d]), [
+      paper(5, PARAGRAPHS)
+    ]).filter((f) => f.kind === 'missing')
+    expect(found).toHaveLength(1)
+    expect(found[0]!.lines).toEqual([dropped])
+  })
+
+  it('is not reported as the first line of a leaf, where a running head sits', () => {
+    // Lost Keys leaf 123: a section too short to repeat its head on three
+    // leaves. Book words in an order the book never sets, so nothing matches.
+    const head = 'people closing salesman ritual belief clerks computers buyer machine'
+    const found = checkCoverage(book(PARAGRAPHS), [
+      { page: 5, lines: [head, ...PARAGRAPHS.flatMap(lines)] }
+    ]).filter((f) => f.kind === 'missing')
+    expect(found).toEqual([])
+  })
+
+  it('is not reported as a full line of single letters, the layer spacing out a word', () => {
+    // Lakoff's linguistics sets single letters as variables, so they are words
+    // the book knows and only the plain-words guard stands in the way.
+    const spaced = 'p e o p l e c l o s'
+    const withVariables = book(PARAGRAPHS)
+    withVariables.blocks.push(block('p91b0', 'variables p and e and o and l and c and s', [91]))
+    const paperLines = PARAGRAPHS.flatMap(lines)
+    paperLines.splice(5, 0, spaced)
+    const found = checkCoverage(withVariables, [{ page: 5, lines: paperLines }]).filter(
+      (f) => f.kind === 'missing'
+    )
+    expect(found).toEqual([])
+  })
+
   it('is not reported where the book has every line', () => {
     expect(checkCoverage(book(PARAGRAPHS), [paper(5, PARAGRAPHS)])).toEqual([])
   })

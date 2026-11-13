@@ -1026,6 +1026,21 @@ Publica- tions`: `split-word`'s tokens keep a trailing hyphen, so it tried
   leaves are skipped, and rows of cells and boxed matter are never "moved",
   because the paper interleaves the one and floats the other.
 
+  **It passed a scan with nothing to compare against, and it could not see
+  one line on a narrow page.** A Google scan carries no OCR layer, and
+  `coverage-of.ts` read _Thought Vibration_'s 161 empty leaves and reported
+  "0 runs missing, 0 lines moved". It now refuses when too few leaves carry
+  words, and points at `drive.mjs second`. Against PaddleOCR's reading the
+  book was still clean, so a line was deleted on purpose to prove it, and
+  the check missed it: a lone line needed twelve words, and that 1906 page
+  sets seven to ten. A full line of its own leaf, every word plain and not
+  one shingle found, now counts, except a leaf's first and last lines, where
+  a running head sits. Fault-injected, 6 of 11 deletions caught where none
+  had been; measured over the shelf, it added the boxed sidebars two
+  unproofed study books had garbled and some back-page advertisements, and
+  nothing else. **A clean result from a check is worth exactly as much as
+  the last fault it was seen to catch.**
+
 All four run without a browser: `scripts/checks-of.ts` over any number of
 shelf books, `scripts/coverage-of.ts` over one. A shelf-wide question is now a
 minute, not a load per book. And `italic-witness.mjs` now believes a face the

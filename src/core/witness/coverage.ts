@@ -86,6 +86,14 @@ const FOUND_BELOW = 0.25
 const MIN_WORDS = 5
 /** A single missing line is reported only at this length. */
 const LONE_LINE_WORDS = 12
+/**
+ * Or when it is a full line of its own leaf, at least this share of the
+ * leaf's median line, and not one of its shingles is found. The floor of
+ * twelve words was set on wide pages; on *Thought Vibration*'s 1906 page a
+ * line holds seven to ten words, so a dropped line there could never be
+ * reported, and a deliberate deletion of one went straight through.
+ */
+const FULL_LINE_SHARE = 0.8
 /** A line found this many words behind the one before it was set elsewhere. */
 const MOVED_BACK = 80
 /**
@@ -197,10 +205,34 @@ export function checkCoverage(doc: BookDocument, layer: readonly LayerLeaf[]): C
     const cellWords = new Set(rows.flatMap((b) => words(b.text)))
     const rowish = new Set(rows.map((b) => b.id))
 
+    const lineLengths = joinHyphens(leaf.lines)
+      .map((l) => words(l).length)
+      .filter((n) => n >= MIN_WORDS)
+      .sort((a, b) => a - b)
+    const fullLine = Math.max(
+      MIN_WORDS,
+      Math.ceil((lineLengths[lineLengths.length >> 1] ?? LONE_LINE_WORDS) * FULL_LINE_SHARE)
+    )
+    // The full-line rule's two guards, each a false alarm measured on the
+    // shelf: the first and last lines of a leaf are where a running head sits
+    // (a section too short to repeat it on three leaves, Lost Keys leaf 123),
+    // and a line of single letters or figures is the layer's junk (Lakoff's
+    // `t h a t a l e s s`, a formula in Polya).
+    const judged = joinHyphens(leaf.lines)
+      .map((l) => l.trim())
+      .filter(
+        (l) =>
+          words(l).length >= MIN_WORDS &&
+          (onLeaves.get(furnitureKey(l))?.size ?? 0) < FURNITURE_LEAVES
+      )
+    const edges = new Set([judged[0], judged[judged.length - 1]])
     let run: string[] = []
     let runWords = 0
+    let runBlank = true
+    let runPlain = true
     const flush = (): void => {
-      if (run.length >= 2 || (run.length === 1 && runWords >= LONE_LINE_WORDS)) {
+      const lone = runWords >= LONE_LINE_WORDS || (runBlank && runPlain && runWords >= fullLine)
+      if (run.length >= 2 || (run.length === 1 && lone)) {
         findings.push({
           kind: 'missing',
           page: leaf.page,
@@ -210,6 +242,8 @@ export function checkCoverage(doc: BookDocument, layer: readonly LayerLeaf[]): C
       }
       run = []
       runWords = 0
+      runBlank = true
+      runPlain = true
     }
     let last: number | null = null
     let lastOwner: string | null = null
@@ -243,6 +277,9 @@ export function checkCoverage(doc: BookDocument, layer: readonly LayerLeaf[]): C
       ) {
         run.push(line)
         runWords += w.length
+        if (found > 0 || lettersFound > 0) runBlank = false
+        const plain = w.filter((x) => /^[a-z]{2,}$/u.test(x) || x === 'a' || x === 'i').length
+        if (edges.has(line) || plain / w.length < 0.9) runPlain = false
         continue
       }
       flush()
