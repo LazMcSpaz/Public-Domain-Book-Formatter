@@ -374,6 +374,17 @@ describe('a spaced quotation mark or point stays with its word', () => {
     expect(lineStarts(lines).some((w) => w.startsWith('”'))).toBe(false)
   })
 
+  it('does not end a line on an opening mark run on after a dash', () => {
+    // `etc., for—“ Sun of Righteousness`: the Glossary's p. 33 and two more.
+    for (let width = 8; width <= 20; width++) {
+      const lines = setAt('aaaa bbbb for—“ cccc dd ee', width, 'left')
+      expect(
+        lineEnds(lines).some((w) => /[—–][“‘]$/u.test(w)),
+        `width ${width}`
+      ).toBe(false)
+    }
+  })
+
   it('leaves an elision and a bare dash free to begin a line', () => {
     const items = (text: string) => itemsFromText(text, options()).map((i) => i.type)
     expect(items('aa ’mongst')).toEqual(items('aa bb'))

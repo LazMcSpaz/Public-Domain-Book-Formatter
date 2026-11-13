@@ -367,10 +367,13 @@ const HYPHEN_PENALTY = 50
  * ended on a lone `“`. The space before a closing token and after an opening
  * one binds instead. A closing token may run on into a dash and past it
  * (`”—or`, `:—sometimes`), which still binds; a dash alone does not, since a
- * line may begin with one, and an elision like `’mongst` is a word.
+ * line may begin with one, and an elision like `’mongst` is a word. An
+ * opening mark run on after a dash (`for—“`) binds forward as a lone one does.
  */
 const BINDS_PREVIOUS = /^[”’»)\]}.,;:!?…]+(?:[—–].*)?$/u
-const BINDS_NEXT = /^[“‘«([{]+$/u
+// An opening mark may also follow a dash with no space (`for—“ Sun`), which a
+// lone-mark rule never saw: three lines of the Glossary ended on `—“`.
+const BINDS_NEXT = /(?:^|[—–])[“‘«([{]+$/u
 
 /** `\parfillskip`: the last line may end anywhere, so its slack is free. */
 const PARAGRAPH_FILL_STRETCH = 1e6
