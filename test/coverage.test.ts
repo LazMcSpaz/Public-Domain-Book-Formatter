@@ -103,6 +103,28 @@ describe('a line the paper prints and the book does not', () => {
     expect(found).toEqual([])
   })
 
+  it('is not reported where the two readings mark a word with different accents', () => {
+    // The Theosophical Glossary, leaf 359, both readings as they stand: the
+    // book marks `Mîmânsâ`, the second reading `Mimânsá`. With accented
+    // letters dropped as non-letters, the entry's first line read as lost.
+    const entry =
+      'Uttara Mîmânsâ (Sk.). The second of the two Mîmansas—the first being Pûrva (first) ' +
+      'Mîmânsâ, which form respectively the fifth and sixth of the Darshanas or schools of philosophy.'
+    const second = [
+      'Uttara Mimânsá (Sk.). l he second of the two Mimansas—the',
+      'first being Parva (frst) Mimânsà, which form respectively the fifth and',
+      'sixth of the Durshanas or schools of philosophy.'
+    ]
+    const doc0 = book([...PARAGRAPHS, entry])
+    // The second reading's spellings are words the rest of the book sets, as
+    // they are in the Glossary, so the line is judged rather than skipped.
+    doc0.blocks.push(block('p91b0', 'he l mim mimansas parva frst durshanas', [91]))
+    const found = checkCoverage(doc0, [
+      { page: 5, lines: [...PARAGRAPHS.flatMap(lines), ...second] }
+    ]).filter((f) => f.kind === 'missing')
+    expect(found).toEqual([])
+  })
+
   it('is not reported where the book has every line', () => {
     expect(checkCoverage(book(PARAGRAPHS), [paper(5, PARAGRAPHS)])).toEqual([])
   })

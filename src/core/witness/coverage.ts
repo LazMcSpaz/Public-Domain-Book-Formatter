@@ -105,9 +105,15 @@ const MOVED_ACROSS = 8
 /** A line set on this many leaves is furniture. */
 const FURNITURE_LEAVES = 3
 
+// Accents are folded before anything is compared. Two readings of a Sanskrit
+// word seldom agree on its marks (`Mîmânsâ` against `Mimânsá`), and with the
+// marked letters thrown away as non-letters the Theosophical Glossary's
+// `Uttara Mîmânsâ` entry, present in the book, read as a missing line.
 const words = (text: string): string[] =>
   text
     .replace(/<[^>]*>/gu, ' ')
+    .normalize('NFD')
+    .replace(/\p{M}/gu, '')
     .toLowerCase()
     .replace(/[^a-z0-9\s]/gu, ' ')
     .split(/\s+/u)
