@@ -2788,7 +2788,14 @@ async function serve() {
       }
       if (damage !== null) owed.push(damage)
 
-      const finished = owed.length === 0 && stale.length === 0 && code === 0
+      // The script exits non-zero when it owes anything, the ask above
+      // included, so its exit code alone would fail every book with a
+      // glossary for a question this verb has already answered. A failure
+      // counts when the script owed something else, or died before saying.
+      const askedOnly =
+        lines.some((l) => /^ {2}· .*run with --marks/u.test(l)) &&
+        !lines.some((l) => /^ {2}· /u.test(l) && !/run with --marks/u.test(l))
+      const finished = owed.length === 0 && stale.length === 0 && (code === 0 || askedOnly)
       if (finished) {
         return {
           finished: true,
