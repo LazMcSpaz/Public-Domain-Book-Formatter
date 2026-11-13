@@ -318,6 +318,22 @@ describe('a stray apostrophe', () => {
     ).toEqual([])
   })
 
+  it('leaves a dropped g in quoted dialect alone, and not in plain prose', () => {
+    // Thought Vibration, leaf 129: the compositor set the elisions.
+    expect(
+      of(
+        build([
+          'this future successful financier was \u201csawin\u2019 wood and sayin\u2019 nuthin\u2019.\u201d'
+        ]),
+        'stray-apostrophe'
+      )
+    ).toEqual([])
+    // Outside reported speech the same shape is still a comma mis-read.
+    expect(
+      of(build(['He was quite certain\u2019 that it would come.']), 'stray-apostrophe')
+    ).toHaveLength(1)
+  })
+
   it('leaves a contraction alone', () => {
     expect(of(build(["I'll see you at ten, and we'll begin then."]), 'stray-apostrophe')).toEqual(
       []

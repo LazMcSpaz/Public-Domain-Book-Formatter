@@ -650,8 +650,14 @@ function strayApostrophes(blocks: readonly Passage[]): DamageFinding[] {
   for (const block of blocks) {
     const text = plain(block)
     let quotationOpen = false
+    // Inside double marks: reported speech, which is where a book sets its
+    // dialect (see the dropped g below).
+    let speech = false
 
     for (let i = 0; i < text.length; i++) {
+      if (text[i] === '\u201c') speech = true
+      else if (text[i] === '\u201d') speech = false
+      else if (text[i] === '"') speech = !speech
       if (opensQuotation(text[i]!)) {
         quotationOpen = true
         continue
@@ -680,6 +686,11 @@ function strayApostrophes(blocks: readonly Passage[]): DamageFinding[] {
       // possessive in these books, not only one ending in `s`: `the German
       // annalist Archenholz’ work` (the Theosophical Glossary, leaf 121).
       if (/[sxz]$/u.test(word[1]!.toLocaleLowerCase())) continue
+      // A dropped g in quoted dialect is an elision the compositor set:
+      // `“sawin’ wood and sayin’ nuthin’.”` (*Thought Vibration*, leaf 129).
+      // Only inside double marks, so a mis-read comma after `certain` or
+      // `again` in the author's own prose is still found.
+      if (speech && /in$/u.test(word[1]!)) continue
 
       const at = i - word[1]!.length
       const end = i + 1 + next[0].length
