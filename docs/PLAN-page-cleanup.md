@@ -1,3 +1,5 @@
+> **Historical. Not instructions.** Superseded by [decisions/](decisions/README.md) (page cleanup is off by default). Kept at this path only because code comments cite it; cleanup task 13 moves it to `docs/archive/`.
+
 # Plan: clean the page before Tesseract reads it
 
 Status: **done, and measured — `off` stays.** The machinery is built and the

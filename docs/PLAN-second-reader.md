@@ -1,8 +1,10 @@
+> **Historical. Not instructions.** Superseded by [process/checking.md](process/checking.md). Kept at this path only because code comments cite it; cleanup task 13 moves it to `docs/archive/`.
+
 # Plan: a second OCR engine, so every book has a witness
 
 Status: **built and measured — kept, tiny tier, as the witness for a book
 with no usable layer.** `drive.mjs second` writes the file `witness` takes;
-the ledger is [`LEDGER-second-reader.md`](./LEDGER-second-reader.md): over
+the ledger is [`LEDGER-second-reader.md`](./archive/LEDGER-second-reader.md): over
 42 leaves its disagreements were real three times in five and it caught two
 in five of Tesseract's errors, with the best of it exactly where nothing else
 reads the leaf. Scope B of two; the other is

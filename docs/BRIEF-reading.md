@@ -83,8 +83,11 @@ abstain rather than guess, and neither needs your attention except where named:
 - **Do not correct the book.** A compositor's error, a place the book
   contradicts itself, a passage where "faithful to the original" and "correct"
   pull apart: transcribe it **as printed** and attach a `query` to that leaf.
-  There is deliberately no field for a proposed fix — a suggestion beside a
-  question is an answer in all but name, and the answer is the editor's.
+  The query itself carries no proposed fix: the answer is the editor's. But
+  every query goes up with your suggested answers offered beside it, as a
+  separate list with none chosen, so taking one costs the editor a tap (the
+  editor's instruction of 5 October 2026; see docs/process/reading.md and
+  `drive.mjs propose` in docs/reference/commands.md).
 - **Do not claim evidence you do not have.** You have one flat 150-DPI PNG per
   leaf. Do not write "confirmed at 8×" or "checked at 600 DPI" — three of six
   readers on one chapter did exactly that, and while their readings held up, the

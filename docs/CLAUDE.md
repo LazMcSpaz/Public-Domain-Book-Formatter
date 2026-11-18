@@ -1,6 +1,6 @@
 # docs/
 
-The project's written knowledge, in layers: what the product is, how each book job is done, why things are the way they are, and lookups. Older files (`PLAN-*`, `LEDGER-*`, `HANDOFF*`, `briefs/`, `research/`) are being sorted into these layers by the cleanup plan.
+The project's written knowledge, in layers: what the product is, how each book job is done, why things are the way they are, and lookups. Superseded documents are in `archive/` (history, never instructions). A few older `PLAN-*` and `LEDGER-*` files stay at the top of `docs/` only because code comments cite their paths; each opens with a line saying so, and cleanup task 13 moves them. `BRIEF-reading.md` and `briefs/` are live: the reading scripts hand them to readers.
 
 ## May use
 

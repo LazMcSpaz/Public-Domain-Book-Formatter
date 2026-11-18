@@ -1,3 +1,5 @@
+> **Historical. Not instructions.** Superseded by [architecture.md](architecture.md). Kept at this path only because code comments cite it; cleanup task 13 moves it to `docs/archive/`.
+
 # Plan: real page layout, live preview, and a PDF that isn't a `.tex`
 
 Status: **closed — every step built and verified.** Written for a fresh session

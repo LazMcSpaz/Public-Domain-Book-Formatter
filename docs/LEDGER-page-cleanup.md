@@ -1,3 +1,5 @@
+> **Historical. Not instructions.** Superseded by [decisions/](decisions/README.md) (page cleanup is off by default). Kept at this path only because code comments cite it; cleanup task 13 moves it to `docs/archive/`.
+
 # Ledger: cleaning the page before Tesseract reads it
 
 The measurement `docs/PLAN-page-cleanup.md` asked for, and the decision it

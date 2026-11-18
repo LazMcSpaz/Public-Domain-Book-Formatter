@@ -1,3 +1,5 @@
+> **Historical. Not instructions.** Superseded by [process/glossary.md](process/glossary.md). Kept at this path only because code comments cite it; cleanup task 13 moves it to `docs/archive/`.
+
 # PROCESS — a glossary, made or revised
 
 How a glossary for a book on this shelf is written, cut, checked and circled.

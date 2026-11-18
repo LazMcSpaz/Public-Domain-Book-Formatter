@@ -1,6 +1,6 @@
 # test/
 
-The automated tests (vitest), one flat folder of `*.test.ts` files plus `fixtures/`. `npm test` runs them in Node with no browser, network or API key; it is the main gate for a code change. The wider guide is [docs/TESTING.md](../docs/TESTING.md).
+The automated tests (vitest), one flat folder of `*.test.ts` files plus `fixtures/`. `npm test` runs them in Node with no browser, network or API key; it is the main gate for a code change. The wider guide is [docs/reference/testing.md](../docs/reference/testing.md).
 
 ## May use
 

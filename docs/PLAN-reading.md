@@ -1,3 +1,5 @@
+> **Historical. Not instructions.** Superseded by [process/reading.md](process/reading.md). Kept at this path only because code comments cite it; cleanup task 13 moves it to `docs/archive/`.
+
 # Plan: the reading pass
 
 The editor reads the book before annotating it. That pass is where the

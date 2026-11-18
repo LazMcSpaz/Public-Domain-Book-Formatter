@@ -1,3 +1,5 @@
+> **Historical. Not instructions.** Superseded by [cleanup-plan.md](cleanup-plan.md); its status claims are out of date. Kept at this path only because code comments cite it; cleanup task 13 moves it to `docs/archive/`.
+
 # Plan: what is left
 
 Status: **the tool is safe to run; no second book has been read.** Written after
@@ -64,7 +66,7 @@ leaves, edits, images — before overwriting it.
 
 ## Phase 1 — the editorial query channel
 
-Invariant I10 in [`TRACE-draft-to-store.md`](./TRACE-draft-to-store.md), and the
+Invariant I10 in [`TRACE-draft-to-store.md`](./archive/TRACE-draft-to-store.md), and the
 only one still unmet.
 
 The 1916 leaf prints `belleves`. Not OCR noise: at 600 DPI both strokes are

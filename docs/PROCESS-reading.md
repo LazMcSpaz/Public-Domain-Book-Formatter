@@ -1,3 +1,5 @@
+> **Historical. Not instructions.** Superseded by [process/reading.md](process/reading.md) and [process/checking.md](process/checking.md). Kept at this path only because code comments cite it; cleanup task 13 moves it to `docs/archive/`.
+
 # Reading a book: what should happen, how, and what comes out
 
 The process a book goes through from a scan to a transcription that can be
@@ -6,7 +8,7 @@ someone who did not build it**.
 
 For the **code-level** version of one of these stages — the same flow traced
 hop by hop with a numbered, falsifiable claim at each one — see
-[`TRACE-draft-to-store.md`](./TRACE-draft-to-store.md). That is the document to
+[`TRACE-draft-to-store.md`](./archive/TRACE-draft-to-store.md). That is the document to
 review code against; this one is the process a person follows.
 
 There is no API. Every reading step happens either in a browser the driver
