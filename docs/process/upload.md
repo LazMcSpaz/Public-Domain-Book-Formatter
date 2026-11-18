@@ -105,6 +105,27 @@ The flattened covers beside their specs in the book's `covers/` folder; the
 listing in `KDP-listings.md` on the shelf; the dated readiness report and the
 record of what was uploaded in `ledger.md`.
 
+## After the upload: retire the working files
+
+The last step of every upload, by [decision 0052](../decisions/0052-what-a-finished-book-keeps.md):
+
+1. **Write the receipt:** the exact files uploaded (fingerprints and sizes), the date, the ISBNs, where they are in storage, and the readiness report.
+2. **Move to storage** ([decision 0051](../decisions/0051-big-files-live-in-cloudflare-r2.md)), checking each file's fingerprint after it lands:
+   - the uploaded files;
+   - the scan and any second copy;
+   - reference copies;
+   - picture originals;
+   - the OCR readings.
+3. **Delete what can be made again:**
+   - exports never uploaded;
+   - cover previews and unuploaded cover files;
+   - query crops once every query is ruled;
+   - contact sheets and scratch files;
+   - check sheets older than the latest readiness report.
+4. **Tell the owner** what was moved and what was deleted.
+
+Never delete a scan, a reference copy, an uploaded file, the book file or a hand-written record. Until the storage bucket exists ([cleanup task 3](../cleanup-plan.md)), skip step 2 and leave large files on the computer they were made on.
+
 ## Never
 
 - Never call a book ready to upload unless every readiness check ran on the

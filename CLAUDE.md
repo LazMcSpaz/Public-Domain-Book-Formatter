@@ -32,7 +32,7 @@ The books live in a separate private repository, the shelf (`Public-Domain-Books
 
 - **Never tell the owner a book is checked or ready to upload** without the check results in front of him. Run every check for that stage on the exact files that go to KDP, and name anything that did not run as NOT CHECKED. `run.complete` means only that every leaf is read. The checks and the three words (read, checked, ready to upload) are in [docs/process/README.md](docs/process/README.md).
 - **The shelf is the source of truth.** Browser storage is only a cache. Load a book from the shelf before touching it, never save a book you did not load this session, and push what you change before you stop.
-- **At every stopping point, push, and fast-forward `main` in both repositories.** The deployed app and the shelf loader read `main` only. This rule is replaced by the merge-on-green workflow once cleanup task 7 lands.
+- **At every stopping point, push, and fast-forward `main` in both repositories.** The deployed app and the shelf loader read `main` only. This rule is replaced by the merge-on-green workflow once cleanup task 8 lands.
 - **This repository is public.** Book text, study-book details, KDP and ISBN details and the owner's personal details go in the shelf, never here.
 - **Only use packages listed in `harness/rules.json`.** Adding one needs a decision record in [docs/decisions/](docs/decisions/README.md).
 - **Respect the module boundaries** in docs/architecture.md; the check script enforces them.

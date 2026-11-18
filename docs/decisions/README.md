@@ -66,3 +66,5 @@ One short record per technical or method decision. A decision is changed only by
 - [0048](0048-playwright-drives-a-headless-browser.md) Playwright drives a headless browser for the agent and the checks.
 - [0049](0049-tex-linebreak-and-hyphenation.md) Lines are broken by tex-linebreak with TeX's hyphenation patterns.
 - [0050](0050-small-development-tools.md) Small development tools: TypeScript, ESLint, Prettier and friends, with two unused packages to clean up.
+- [0051](0051-big-files-live-in-cloudflare-r2.md) Big files live in Cloudflare R2, named by fingerprint; the shelf keeps text, decisions and records.
+- [0052](0052-what-a-finished-book-keeps.md) What a finished book keeps, moves to storage, and deletes, as the last step of an upload.

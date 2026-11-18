@@ -2,7 +2,7 @@
 
 Numbered tasks, in order: the one the owner most needs first, then the safest and most useful, the riskiest last. Each fits in one session and leaves everything working. When asked to "clean up", take the top unfinished task, follow "How to build a feature" in the root CLAUDE.md, and mark the task done here with the date and commit.
 
-The design behind tasks 5 to 15 is the rebuild plan the owner approved on 18 November 2026 (`REBUILD-PLAN.md` on the shelf). Still-works steps are numbered as in [still-works.md](still-works.md).
+The design behind tasks 3 and 6 to 15 is the rebuild plan the owner approved on 18 November 2026 (`REBUILD-PLAN.md` on the shelf). Still-works steps are numbered as in [still-works.md](still-works.md).
 
 ## 1. One readiness check, run on the exact files that go to KDP
 
@@ -65,7 +65,40 @@ Both finish commands defer to it.
 
 **Verify:** `harness/check.py` and the tests.
 
-## 3. One command before every commit, and the harness check in CI
+## 3. Big files into Cloudflare R2, and finished books cut down to what they need
+
+**Why (plain English).** The shelf repository is about 5.5 GB with its history, almost all of it scans and exported PDFs, and every session downloads it. The books themselves are about 2 MB each. The owner also wants a finished book to carry no files nobody needs. Decisions [0051](decisions/0051-big-files-live-in-cloudflare-r2.md) and [0052](decisions/0052-what-a-finished-book-keeps.md) say what goes where.
+
+**The fix.**
+
+- **The owner** enables R2 in the Cloudflare dashboard (the Cloudflare connection reported it is not enabled).
+- **A private bucket:** files named by fingerprint, laid out as:
+  - `scans/`;
+  - `sources/`;
+  - `pictures/`;
+  - `editions/<book>/<edition>/` for the exact files uploaded to KDP.
+- **An access key** stored as a credential for sessions, never in a file.
+- **One small storage command** for sessions: put, get, list, each checking the fingerprint. Its first use moves:
+  - the ritual magic scans (the `ritual-magic-sources` branch, which is then deleted, unmerged);
+  - `sources/`;
+  - the large scans the shelf cannot hold.
+- **The "retire the working files" step** of decision 0052, run as the last step of an upload, and once over the books already live.
+- **The weekly backup to the owner's E: drive** copies the bucket too.
+
+**Risk:** medium (files move; nothing is deleted until its copy in R2 is checked by fingerprint).
+
+**Touches:** `scripts/`, `docs/process/upload.md`, the shelf.
+
+**Done when:**
+
+- the bucket exists;
+- every moved file is in R2 with a matching fingerprint and recorded on the shelf;
+- the shelf's current files are under about 0.8 GB;
+- the four live books keep only what decision 0052 lists.
+
+**Verify:** fingerprints match for every moved file; `harness/check.py` in both repositories; still-works steps 1–2.
+
+## 4. One command before every commit, and the harness check in CI
 
 **Why (plain English).** "Typecheck, test, format check, lint" is a habit written down, and habits skip.
 
@@ -79,7 +112,7 @@ Both finish commands defer to it.
 
 **Verify:** `npm run verify`.
 
-## 4. Enforce "core stays pure" and fix the one boundary crossing
+## 5. Enforce "core stays pure" and fix the one boundary crossing
 
 **Why (plain English).** The rule is only written down. A text search cannot enforce it, because the core has a variable named `document`. `src/platform/browser/control.ts` imports from the app.
 
@@ -96,7 +129,7 @@ Both finish commands defer to it.
 
 **Verify:** `harness/check.py`, the tests, and still-works steps 1–2.
 
-## 5. The tools learn the new shelf layout, and pictures are found
+## 6. The tools learn the new shelf layout, and pictures are found
 
 **Why (plain English).** Today the app looks for a book's pictures at the top of the shelf while 151 of the 152 sit in the book's folder, so plates go missing. The rebuild moves files, so every tool must ask one map where things are.
 
@@ -114,7 +147,7 @@ Both finish commands defer to it.
 
 **Verify:** `harness/check.py`, the tests, and still-works steps 1, 2 and 7.
 
-## 6. Catalogue records and the rights check
+## 7. Catalogue records and the rights check
 
 **Why (plain English).** Nothing records a book's rights, so the Hall territories were missed.
 
@@ -132,7 +165,7 @@ Both finish commands defer to it.
 
 **Verify:** `harness/check.py`, the tests, and still-works step 6.
 
-## 7. Changes reach `main` through the checks, and the shelf gets its own checks
+## 8. Changes reach `main` through the checks, and the shelf gets its own checks
 
 **Why (plain English).** Work was stranded on branches the app never sees, and rules on the shelf were kept by memory.
 
@@ -148,20 +181,6 @@ Both finish commands defer to it.
 **Done when:** a session's push with passing checks lands on `main` without a manual merge, and one with failing checks does not.
 
 **Verify:** both repositories' checks.
-
-## 8. Choose where big files live
-
-**Why (plain English).** The shelf is about 2 GB of files plus about 3.4 GB of history; GitHub asks for under 1 GB.
-
-**The fix.** Test GitHub's large-file storage and Cloudflare R2 on one book's files, including whether the app can read them in a browser, and record the choice as a decision.
-
-**Risk:** low.
-
-**Touches:** a decision record; no books yet.
-
-**Done when:** the decision record names the storage and the measured results.
-
-**Verify:** the test results in the record.
 
 ## 9. Move one pilot book to the new layout
 
@@ -187,23 +206,23 @@ Both finish commands defer to it.
 
 **Verify:** still-works steps 1–5.
 
-## 11. Releases for what went to KDP, and big files out of git
+## 11. Records of what went to KDP
 
-**Why (plain English).** "What is live, and from which files?" had no answer.
+**Why (plain English).** "What is live, and from which files?" had no answer; the files the owner uploaded are on his computer.
 
 **The fix.**
 
-- A release per edition uploaded to KDP, made from the owner's Downloads files.
-- A "latest" release per book for exports not yet uploaded.
-- `sources/` and the ritual magic scans go to the storage chosen in task 8.
+- The owner's uploaded files (in his Downloads folder) go into R2 under `editions/<book>/<edition>/`.
+- Each upload gets a receipt on the shelf naming the exact files by fingerprint.
+- Exports never uploaded are deleted by decision 0052.
 
-**Risk:** medium.
+**Risk:** low.
 
-**Touches:** the shelf.
+**Touches:** the shelf, R2.
 
-**Done when:** each live edition has a release, and the shelf's files are under about 820 MB.
+**Done when:** each live edition has a receipt, and its files are in R2.
 
-**Verify:** still-works steps 1–2.
+**Verify:** fingerprints match.
 
 ## 12. Clean folder names, archived books and the ritual magic works as books
 
