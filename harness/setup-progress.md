@@ -45,3 +45,8 @@ Temporary. Deleted at handoff. A session resuming this work reads this file firs
   - `claude/aura-astral-plane-notes-8mjio9`: 2 commits, 17 Sep.
   - Do not merge `ritual-magic-sources` as it stands: its scans belong in file storage (plan 3.1), and each work should become a book with a card.
 - **"Load failed" when saving from the phone** is a browser-level failure: no answer at all, not a GitHub refusal. A bad token normally shows GitHub's "Bad credentials". The owner was using Brave on a phone. Proposed urgent fix: the app names exactly which request failed and why, plus a connection test in Settings.
+- **Workflow change (owner, 18 Nov):**
+  - Most work now happens through chat sessions; the shelf app's tablet features need not be robust.
+  - The tablet save failure, the missing ritual-magic cards and the small crops are logged, not fixed urgently.
+  - The owner's ruling and marks from the first run don't matter.
+  - The still-works checklist is rewritten around asking a session.

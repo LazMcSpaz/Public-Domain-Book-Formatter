@@ -8,11 +8,11 @@ New editions of public-domain occult and esoteric books, sold on Amazon KDP unde
 
 ## Who it's for
 
-- **Uses it:** the owner (editor and publisher), working with Claude sessions; possibly other people later.
+- **Uses it:** the owner (editor and publisher), mainly through Claude chat sessions, which drive the app and the scripts. Possibly other people later.
 - **Buys the result:** readers on Amazon.
 - **Runs on:**
-  - the browser app on the owner's iPad and desktop, installed from the web, working offline;
-  - Claude Code sessions in the cloud and on the owner's Windows computer.
+  - Claude Code sessions in the cloud and on the owner's Windows computer; this is where most of the work happens (owner's decision, 18 November 2026);
+  - the browser app, installed from the web, which is the engine the sessions drive and a viewer on the owner's devices. Its tablet features (ruling and marking from the shelf) are secondary and need not be robust.
 
 ## The core loop
 
