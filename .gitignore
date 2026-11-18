@@ -45,3 +45,7 @@ __pycache__/
 /parallels.md
 /*.rulings.md
 /*.review.md
+
+# Isolated git worktrees that subagents build in. Each is a whole checkout;
+# its work reaches the repository as a pushed branch, never as these files.
+/.claude/worktrees/
