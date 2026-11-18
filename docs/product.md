@@ -1,6 +1,6 @@
 # Libri Vetus editions, and the formatter that makes them
 
-_Draft for the owner. Items marked [guess] are inferred from the repositories and wait for the owner to confirm or correct._
+_Approved by the owner on 18 November 2026._
 
 ## What it is
 
@@ -45,11 +45,6 @@ The third point is the owner's biggest frustration so far: books declared done t
 - **Never publish a study book,** and never put book text or the owner's personal details in this public repository.
 - **Never add a second way of drawing pages.** The preview is the PDF.
 
-## Inspirations
-
-- [guess] **Standard Ebooks:** every book proofed and set to one house standard, with an open record of what was changed.
-- [guess] **Dover reprints:** affordable, faithful editions of older books, with their original plates.
-
 ## Works with
 
 - **Amazon KDP:** paperback, hardcover and Kindle uploads.
@@ -58,7 +53,7 @@ The third point is the owner's biggest frustration so far: books declared done t
 - **Research sources:** the Theosophical sources named in the editorial rules.
 - **Claude Code sessions:** cloud and desktop.
 - **The owner's E: drive:** weekly backups.
-- [guess] **File storage for large files:** GitHub or Cloudflare, chosen by test.
+- **File storage for large files:** chosen by test; see the decision records.
 
 ## Future directions
 

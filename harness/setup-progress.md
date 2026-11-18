@@ -10,16 +10,16 @@ Temporary. Deleted at handoff. A session resuming this work reads this file firs
 
 ## Status
 
-| Phase (existing-project harness)              | Plan section      | Status                                                                                                                                                            |
-| --------------------------------------------- | ----------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 0. Safety net                                 | 6.1               | **Done.** Bookmarks, branches, audit and plan saved on the shelf.                                                                                                 |
-| 1. Investigate                                | audit             | **Done.** Audit report, survey of both repositories, helper reports (all in the audit).                                                                           |
-| 2. Confirm with the owner (checkpoint A)      | 6.2 items 1–2     | **In progress.** `docs/product.md` and `docs/still-works.md` drafted, waiting for the owner. The owner runs still-works once and reports anything already broken. |
-| 3. Sort the notes                             | 6.2 item 3        | Not started                                                                                                                                                       |
-| 4. Target map and cleanup plan (checkpoint B) | 6.2 items 4, 5, 8 | Not started                                                                                                                                                       |
-| 5. Install the harness                        | 6.2 items 6, 7    | Not started                                                                                                                                                       |
-| 6. Dry run                                    | 6.2 item 9        | Not started                                                                                                                                                       |
-| 7. Handoff (checkpoint C)                     | —                 | Not started                                                                                                                                                       |
+| Phase (existing-project harness)              | Plan section      | Status                                                                                                                                                                                            |
+| --------------------------------------------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0. Safety net                                 | 6.1               | **Done.** Bookmarks, branches, audit and plan saved on the shelf.                                                                                                                                 |
+| 1. Investigate                                | audit             | **Done.** Audit report, survey of both repositories, helper reports (all in the audit).                                                                                                           |
+| 2. Confirm with the owner (checkpoint A)      | 6.2 items 1–2     | **In progress.** `docs/product.md` approved 18 Nov (description as drafted; no inspirations section). `docs/still-works.md` waiting for the owner to run once and report anything already broken. |
+| 3. Sort the notes                             | 6.2 item 3        | Not started                                                                                                                                                                                       |
+| 4. Target map and cleanup plan (checkpoint B) | 6.2 items 4, 5, 8 | Not started                                                                                                                                                                                       |
+| 5. Install the harness                        | 6.2 items 6, 7    | Not started                                                                                                                                                                                       |
+| 6. Dry run                                    | 6.2 item 9        | Not started                                                                                                                                                                                       |
+| 7. Handoff (checkpoint C)                     | —                 | Not started                                                                                                                                                                                       |
 
 ## Decisions and findings so far
 
