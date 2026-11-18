@@ -11,16 +11,11 @@
   ],
   "source_extensions": [".ts", ".tsx", ".mjs", ".js", ".py"],
   "max_source_lines": 400,
-  "doc_line_limits": { "root": 120, "folder": 60 },
-  "ignore_dirs": [
-    "public",
-    "screenshots",
-    ".drive-profile",
-    "books",
-    "voice",
-    "ledger-data",
-    "sorting"
-  ],
+  "doc_line_limits": {
+    "root": 120,
+    "folder": 60
+  },
+  "ignore_dirs": ["public", "screenshots", ".drive-profile", "books", "voice", "ledger-data"],
   "allowed_dependencies": [
     "@eslint/js",
     "@expo-google-fonts/cardo",

@@ -1,3 +1,5 @@
+> **Historical design specification.** The code comments cite its sections (§4, §6, §7 and others), so it stays here. Where it and the code disagree, the code is right; current design is in [docs/architecture.md](docs/architecture.md) and [docs/decisions/](docs/decisions/README.md).
+
 # Public-Domain Book Reprint Tool — Project Spec
 
 > ## Read this first: parts of this document are superseded
@@ -17,7 +19,7 @@
 > | Cleanup heuristics over OCR text (§3)            | A vision model reads the page against the scan and returns typed structure. OCR stays as the independent witness and the source of bounding boxes. |
 > | Review as a side-by-side reading instrument (§4) | An interview: the app runs unattended and stops at gates, with the evidence attached. The side-by-side instrument was not built.                   |
 >
-> **Current, accurate documents:** [`docs/ARCHITECTURE.md`](./docs/ARCHITECTURE.md)
+> **Current, accurate documents:** [`docs/ARCHITECTURE.md`](./docs/architecture.md)
 > for the flow and module map, [`README.md`](./README.md) for what works today
 > and what does not, [`CLAUDE.md`](./CLAUDE.md) for the conventions.
 >
