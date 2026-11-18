@@ -6,9 +6,12 @@ Large files leave the shelf repository and go into the private Cloudflare bucket
 
 First moves, each checked before anything is removed from the shelf:
 
-1. **The ritual magic scans** from the unmerged branch; the branch is then deleted.
-2. **The reference copies** in `sources/` (about 850 MB).
-3. **The exported PDFs, EPUBs and cover files.** They are kept in the bucket, not deleted, because it is not yet known which of them are the files that went to KDP (the owner's uploaded copies are on his computer; cleanup task 11 settles that).
+1. **The reference copies** in `sources/` (about 850 MB).
+2. **The exported PDFs, EPUBs and cover files.** They are kept in the bucket, not deleted, because it is not yet known which of them are the files that went to KDP (the owner's uploaded copies are on his computer; cleanup task 11 settles that).
+
+**The ritual magic work is not moved from here.** About 5.3 GB of it sits on the owner's Windows computer, not yet pushed, built on the `ritual-magic-sources` branch. The session doing that work uploads its own scans and figure originals from that computer with the same command, pushes only the small files, and the old branch is deleted after. Page renders are not stored anywhere: they are made again from the scan.
+
+**The command works in both places:** in a cloud session the key is injected by the network; on the owner's computer it reads the key from an environment variable set there.
 
 The scans in `scans/` stay where they are for now: the app and the driver read them from the shelf, and teaching them to fetch from the bucket is part of cleanup task 6.
 
@@ -16,7 +19,7 @@ The scans in `scans/` stay where they are for now: the app and the driver read t
 
 - Every moved file is in the bucket with a matching fingerprint and listed on the shelf.
 - The shelf's current files drop from about 2 GB to under about 1 GB.
-- The `ritual-magic-sources` branch is gone.
+- The command runs on the owner's Windows computer as well as in a cloud session.
 - The owner can ask a session "fetch the 1889 Key of Solomon scan" and get the exact file back.
 
 ## Modules touched

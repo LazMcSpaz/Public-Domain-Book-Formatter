@@ -58,7 +58,7 @@ One process document per job, each naming the role that runs it: [docs/process/R
 
 ## Cleanup, checks and known issues
 
-- **Cleanup plan:** [docs/cleanup-plan.md](docs/cleanup-plan.md). When asked to "clean up", take the top unfinished task, and mark tasks done in that file.
+- **Cleanup plan:** [docs/cleanup-plan.md](docs/cleanup-plan.md). When asked to "clean up", take the first unfinished task in its "Order of work" list, and mark tasks done in that file.
 - **Still-works checklist:** [docs/still-works.md](docs/still-works.md). The owner runs it after any change that touches behaviour. Its Known issues section lists what was already broken.
 - **Depended on by:** the shelf repository (the app reads and writes it) and the deployed app (built from `main` by `.github/workflows/deploy.yml`). Changes must not break either.
 

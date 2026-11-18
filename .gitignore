@@ -32,3 +32,16 @@ public/*.epub
 # Python bytecode, written when a script under scripts/ is run or compiled.
 __pycache__/
 *.pyc
+
+# The editorial sheets the driver writes (queries, rulings, review, proposals,
+# damage) quote a book's text, and this repository is public. They belong
+# beside the book on the shelf; until every verb writes them there (cleanup
+# task 0), a copy left at the root of this checkout must never be committed.
+/queries.md
+/rulings.md
+/review.md
+/proposals.md
+/damage.md
+/parallels.md
+/*.rulings.md
+/*.review.md
