@@ -1,0 +1,37 @@
+# scripts/
+
+The commands sessions run: the driver `drive.mjs` (drives the app in a headless browser), the checks, exports, shelf maintenance, glossary tools and the browser checks behind `npm run check:*`. Every command is listed in [docs/reference/commands.md](../docs/reference/commands.md).
+
+Heading: the giant `drive.mjs` (about 7,800 lines) is to be split by responsibility; book-specific one-off scripts are to move to `scripts/one-off/<book>/`.
+
+## May use
+
+- Node built-ins, `playwright`, `pdf-lib`, `pdfjs-dist`, `mupdf`.
+- `src/core/` through vite-node (`npx vite-node --config vitest.config.ts …`), or from plain Node by registering `resolve-ts.mjs` and importing core with `await import(…)`.
+- The app and `src/platform/browser/`, only inside the driver's browser (`page.evaluate` importing `/@fs…`).
+
+## Must not
+
+- Reimplement core logic in a script; import it, so a script and the app cannot disagree.
+- Leave a tool a later session will need in a scratchpad: the glossary tools, `flatten-cover.py` and the corrections-sheet writer were each lost that way once.
+
+## Key files
+
+- `drive.mjs`: `serve` holds a browser on the app and takes commands on port 7788; every other verb is a command to it.
+- `book-files.mjs`: readable files against `book.json` (`--check`) and the "done" list (`--finish`).
+- `checks-of.ts`, `coverage-of.ts`, `page-turns-of.ts`, `spelling-of.ts`: checks that need no browser.
+- `shape.mjs`: what a book is made of, recorded as `run.shape`; `--flow` regenerates `docs/FLOW.md`.
+- `voice.mjs`: the editor's voice card and the prose audit.
+- `resolve-ts.mjs`: lets plain Node load `src/core` (aliases, extensionless imports).
+- `lib/`: plain-Node helpers shared by scripts and tests (`ink.mjs` measures ink off a PNG).
+- `screenshot-flow.mjs`, `check-*.mjs`: the browser checks.
+
+## Folder-specific rules and lessons
+
+- Anything a session needs from the browser becomes a `drive.mjs` verb, never a one-off `page.evaluate` in a shell command.
+- A verb that writes a run finds it with `findRunForFile`, never by name, size and date (that lands in a run nothing opens).
+- Never send a scan through the debug protocol as base64 (kills the tab, looks like flake); fetch it through the driver's `GET /file`.
+- Over OCR text, strip only our own tags (`<i>`, `<b>`, `<sc>`); a `<[^>]+>` regex eats everything between a stray `<` and `>`.
+- Trust a new check only after it catches a deliberately injected fault; a check with nothing to compare against must refuse, not pass.
+- Windows: hand the page `PAGE_REPO` (drive.mjs:163), not `REPO`; get a script's folder with `fileURLToPath`, not `URL.pathname` (`shape.mjs:49` still does).
+- Browser checks: their own page and stub; install `page.route` before the first `goto`; a `goto` differing only in its hash does not reload.
