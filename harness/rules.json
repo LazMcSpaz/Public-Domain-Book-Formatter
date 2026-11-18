@@ -1,0 +1,72 @@
+{
+  "modules": [
+    "src/core",
+    "src/core/layout",
+    "src/platform/browser",
+    "src/app",
+    "scripts",
+    "scripts/reading-kit",
+    "test",
+    "docs"
+  ],
+  "source_extensions": [".ts", ".tsx", ".mjs", ".js", ".py"],
+  "max_source_lines": 400,
+  "doc_line_limits": { "root": 120, "folder": 60 },
+  "ignore_dirs": [
+    "public",
+    "screenshots",
+    ".drive-profile",
+    "books",
+    "voice",
+    "ledger-data",
+    "sorting"
+  ],
+  "allowed_dependencies": [
+    "@eslint/js",
+    "@expo-google-fonts/cardo",
+    "@expo-google-fonts/crimson-pro",
+    "@expo-google-fonts/eb-garamond",
+    "@expo-google-fonts/im-fell-english",
+    "@expo-google-fonts/libre-baskerville",
+    "@expo-google-fonts/libre-caslon-text",
+    "@pdf-lib/fontkit",
+    "@tesseract.js-data/eng",
+    "@types/node",
+    "@types/react",
+    "@types/react-dom",
+    "@vitejs/plugin-react",
+    "eslint",
+    "eslint-config-prettier",
+    "eslint-plugin-react-hooks",
+    "globals",
+    "hyphenation.en-us",
+    "mupdf",
+    "onnxruntime-web",
+    "pdf-lib",
+    "pdfjs-dist",
+    "playwright",
+    "ppu-paddle-ocr",
+    "prettier",
+    "react",
+    "react-dom",
+    "tesseract.js",
+    "tex-linebreak",
+    "typescript",
+    "typescript-eslint",
+    "vite",
+    "vitest",
+    "word-list"
+  ],
+  "boundaries": [
+    {
+      "from": "src/core",
+      "forbid_regex": "from\\s+['\"](@platform|@app|node:)|from\\s+['\"](\\.\\./)+(platform|app)/|require\\(['\"]node:",
+      "why": "src/core stays pure: no browser platform code, no app code, no Node"
+    },
+    {
+      "from": "src/platform",
+      "forbid_regex": "from\\s+['\"](@app|(\\.\\./)+app/)",
+      "why": "platform code must not reach into the app"
+    }
+  ]
+}
