@@ -8,7 +8,7 @@
  * to tell those from the flags that are real.
  *
  * A second OCR engine can, and the margin is not small. Measured over the 42
- * proofed leaves of `docs/ledger-data/second-reader`, taking every word of
+ * proofed leaves of `archive/ledger-data/second-reader` (on the shelf), taking every word of
  * the first reader's reading:
  *
  *   | the two engines | words | right on it |

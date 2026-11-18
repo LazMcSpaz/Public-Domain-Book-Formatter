@@ -43,8 +43,8 @@ the number that decides. **Joined** is the same letters differently broken
 
 Measured 2026-09-21 in the driver's Chromium, Tesseract.js 300 DPI, one render
 per leaf and one read per preset through `recognizeLeaf` — the call recon
-makes. The rows are in `docs/ledger-data/page-cleanup/`, one file per book,
-and the tables are `node scripts/cleanup-ledger.mjs docs/ledger-data/page-cleanup/trial-*.json --regimes docs/ledger-data/page-cleanup/regimes.json`.
+makes. The rows are in the shelf repository at `archive/ledger-data/page-cleanup/` (moved there because they hold study-book text), one file per book,
+and the tables are `node scripts/cleanup-ledger.mjs <shelf>/archive/ledger-data/page-cleanup/trial-*.json --regimes <shelf>/archive/ledger-data/page-cleanup/regimes.json`.
 
 ### Clairvoyance and Occult Powers — tight-clairvoyance (1916 letterpress, LuraDocument scan)
 

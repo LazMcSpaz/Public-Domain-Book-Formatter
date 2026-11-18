@@ -10,7 +10,7 @@
  * with a measure of word shape is asking a check for the one thing it says it
  * cannot see.
  *
- * Over the 42 proofed leaves of `docs/ledger-data/second-reader`, 214 real
+ * Over the 42 proofed leaves of `archive/ledger-data/second-reader` (on the shelf), 214 real
  * errors, against a coin averaged over 500 shuffles
  * (`scripts/select-ledger.mjs`):
  *

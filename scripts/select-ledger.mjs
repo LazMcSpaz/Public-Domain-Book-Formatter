@@ -32,7 +32,14 @@ register('./resolve-ts.mjs', import.meta.url)
 const { compareWitnesses } = await import('../src/core/witness/index.ts')
 const { assessText } = await import('../src/core/textquality/assess.ts')
 
-const DIR = process.argv[2] ?? 'docs/ledger-data/second-reader'
+// The trial readings hold text of a study book still in copyright, so they
+// live in the private shelf repository (archive/ledger-data/second-reader),
+// not in this public one. Name the folder explicitly.
+const DIR = process.argv[2]
+if (!DIR) {
+  console.error("usage: select-ledger.mjs <dir> (the shelf's archive/ledger-data/second-reader)")
+  process.exit(2)
+}
 const books = JSON.parse(readFileSync(join(DIR, 'regimes.json'), 'utf8'))
 
 const rows = []

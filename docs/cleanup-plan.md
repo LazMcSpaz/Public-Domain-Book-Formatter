@@ -46,7 +46,9 @@ Both finish commands defer to it.
 
 **Verify:** `harness/check.py`, the tests, and still-works step 3.
 
-## 2. Take the study-book text out of the public repository
+## 2. Take the study-book text out of the public repository (done 18 November 2026)
+
+**Done.** The trial readings moved to the shelf's `archive/ledger-data/`; `scripts/select-ledger.mjs` now takes the folder as an argument. By the owner's decision the repository's history was left as it is, so the text remains in past commits.
 
 **Why (plain English).** `docs/ledger-data/` holds about 1.7 MB of OCR and proofed text from _Patterns_ Vol. II (1977), a copyrighted study book, in this public repository.
 
