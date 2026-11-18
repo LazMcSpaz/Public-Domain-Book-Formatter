@@ -20,7 +20,7 @@ The scans in `scans/` stay where they are for now: the app and the driver read t
 - Every moved file is in the bucket with a matching fingerprint and listed on the shelf.
 - The shelf's current files drop from about 2 GB to under about 1 GB.
 - The command runs on the owner's Windows computer as well as in a cloud session.
-- The owner can ask a session "fetch the 1889 Key of Solomon scan" and get the exact file back.
+- The owner can ask a session to fetch any moved file (for example a reference copy from `sources/`) and get the exact file back.
 
 ## Modules touched
 

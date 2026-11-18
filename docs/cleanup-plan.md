@@ -2,7 +2,7 @@
 
 Numbered tasks. **The numbers are names, not the order:** work them in the order below, so a new task can go anywhere without renumbering. Each fits in one session and leaves everything working. When asked to "clean up", take the first unfinished task in this list, follow "How to build a feature" in the root CLAUDE.md, and mark the task done here with the date and commit.
 
-**Order of work:** 0, 1, 3, 17, 18, 19, 20, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16. Task 2 is done.
+**Order of work:** 0, 3, 1, 17, 18, 19, 20, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16. Task 2 is done. Storage comes before the readiness check by the owner's decision of 18 November 2026, because a book whose scan is over GitHub's limit cannot reach the app until it exists.
 
 The design behind tasks 3 and 6 to 15 is the rebuild plan the owner approved on 18 November 2026 (`REBUILD-PLAN.md` on the shelf). Still-works steps are numbered as in [still-works.md](still-works.md).
 
