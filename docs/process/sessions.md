@@ -18,17 +18,13 @@ Every session, whatever its role.
 - **The shelf** (`~/Public-Domain-Books-Storage`, private): the books. **It is
   the source of truth.** The browser's storage is only a cache of it.
 
-On the shelf, today:
-
-| Path | What it is |
-| --- | --- |
-| `books/<dir>/book.json` | The book and every decision: transcription, edits, rulings, answers |
-| `books/<dir>/about.json` | Its card, which the app's shelf list reads |
-| `books/<dir>/*.md` | Readable sheets: ledger, corrections, queries, rulings, glossary, introduction |
-| `books/<dir>/*.pdf` | The **exported** edition. Not the scan |
-| `scans/<sha256>.pdf` | The **scan**. `book.json` names it in `scan.path` |
-| `voice/etsu-t-dhent.json` | The editor's voice card |
-| `RULINGS.md` | Standing rulings every book inherits |
+On the shelf, today: `books/<dir>/book.json` is the book and every decision;
+`about.json` beside it is its card; the `*.md` beside it are readable sheets
+(ledger, corrections, queries, rulings, glossary, introduction); the `*.pdf`
+beside it is the **exported** edition, not the scan. The scan is
+`scans/<sha256>.pdf`, named in `book.json` under `scan.path`. The voice card
+is `voice/etsu-t-dhent.json`; `RULINGS.md` holds the standing rulings every
+book inherits.
 
 ## Before you start
 
@@ -37,7 +33,8 @@ On the shelf, today:
    the formatter, `access: push`), clone it where the tool says, then call
    `register_repo_root` so its own instructions load.
 2. **Sync check.** The cloud container can revert both checkouts without
-   warning, even after a push. Run, for the branch you work on:
+   warning, even after a push. Run this (with your branch in place of `main`
+   if you work on one):
 
    ```bash
    for r in ~/Public-Domain-Book-Formatter ~/Public-Domain-Books-Storage; do
@@ -50,6 +47,7 @@ On the shelf, today:
    (`git fetch origin main && git reset --hard FETCH_HEAD`), nothing is lost.
    Ahead: work exists only here; push it now. Check which side is stale before
    assuming anything was lost.
+
 3. **Read**, in this order: the root `CLAUDE.md`, [product.md](../product.md),
    [README.md](./README.md), and the document for your job.
 4. **Read the book's own record** on the shelf: `ledger.md`, `rulings.md`,
@@ -59,20 +57,17 @@ On the shelf, today:
    book, its shape and route, open comments from the editor, and queries
    without a proposal. [FLOW.md](../FLOW.md) says which stages that route gets.
 6. **Answer the editor's comments first.** `node scripts/drive.mjs memos`
-   lists them with the text each sits in; `memos resolve <id> "<what was
-   done>"` records the outcome. A comment asking for prose gets a proposal in
-   its resolution, never a landed edit. Only the editor clears a memo.
+   lists them with the text each sits in, and
+   `memos resolve <id> "<what was done>"` records the outcome. A comment
+   asking for prose gets a proposal in its resolution, never a landed edit.
+   Only the editor clears a memo.
 
 ## Starting a new book
 
-Ask the owner for these first; guessing any one wastes the run:
-
-1. the scan, and which printing it is;
-2. whether the book stands alone or joins others in a volume;
-3. the imprint details, if not already banked in a saved look;
-4. anything already ruled on that edition.
-
-Then put it on the shelf with
+Ask the owner first, because guessing any of these wastes the run: the scan
+and which printing it is; whether the book stands alone or joins others in a
+volume; the imprint details, if not banked in a saved look; anything already
+ruled on that edition. Then put it on the shelf with
 `npx vite-node --config vitest.config.ts scripts/shelf-new-book.ts <shelf> <scan> <Author-TitleCamel> <leaves> <voice-from/book.json> <leaf0.json>`,
 and before reading a leaf record its shape:
 `node scripts/shape.mjs <book-dir> --write`, or
@@ -172,22 +167,15 @@ and `npm run dev -- --port 5183`.
 
 ## Setting up a machine
 
-Windows: use WSL2 (`wsl --install` in an administrator PowerShell, one reboot)
-and keep the repositories inside WSL, not under `/mnt/`. Then
-`bash scripts/setup-worker.sh` installs Node 22 through nvm, both
-repositories, the packages and Playwright's Chromium, and runs the tests. If
-`which npm` answers from `/mnt/c/`, the Windows Node is in the way: install
-Node inside WSL (`nvm install` reads `.nvmrc`). The shelf is large: clone it
-blobless and sparse (`git clone --filter=blob:none --no-checkout`, then
-`git sparse-checkout set --no-cone` with the paths you need). On native
-Windows, install Chromium with `node node_modules/playwright/cli.js install chromium`;
-an old checkout with CRLF line endings fails `format:check` on hundreds of
-untouched files, so check the files you changed and say so.
-
-## What it produces
-
-Commits on both repositories, pushed and level with `main`; the book's
-`ledger.md` updated with what was done and every check result.
+Windows: WSL2 (`wsl --install`, one reboot), repositories inside WSL, not
+under `/mnt/`; then `bash scripts/setup-worker.sh` (Node 22 through nvm, both
+repositories, packages, Chromium, the tests). If `which npm` answers from
+`/mnt/c/`, install Node inside WSL (`nvm install` reads `.nvmrc`). Clone the
+shelf blobless and sparse (`git clone --filter=blob:none --no-checkout`, then
+`git sparse-checkout set --no-cone <paths>`). On native Windows, install
+Chromium with `node node_modules/playwright/cli.js install chromium`; an old
+CRLF checkout fails `format:check` everywhere, so check the files you changed
+and say so.
 
 ## Before you stop
 
@@ -196,6 +184,17 @@ Commits on both repositories, pushed and level with `main`; the book's
 3. The ledger says what was done, by which role, and what is NOT CHECKED.
 4. Tell the owner the book's state in the three words of [README.md](./README.md),
    with the check results.
+
+## What it produces and where it goes
+
+Commits on both repositories, pushed and level with `main`, and the book's
+`ledger.md` saying what was done and every check result.
+
+## Checks that must pass
+
+`git rev-list --count origin/<branch>..HEAD` prints 0 in both repositories;
+`node scripts/drive.mjs book` names the book you meant; `drive.mjs runs` shows
+no stray run.
 
 ## Never
 

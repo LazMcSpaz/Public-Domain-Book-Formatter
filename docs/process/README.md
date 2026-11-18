@@ -19,17 +19,17 @@ Three other places this folder leans on rather than repeats:
 
 ## The jobs
 
-| Job                                                      | Document                           | Role that runs it                                   |
-| -------------------------------------------------------- | ---------------------------------- | --------------------------------------------------- |
-| Start a session, load and save books, push               | [sessions.md](./sessions.md)       | every session, whatever its role                    |
-| Get the text right, leaf by leaf, against the page       | [reading.md](./reading.md)         | reader (OCR cleaner)                                |
-| Check the read text against itself, the scan and a second reading | [checking.md](./checking.md) | scan checker                                       |
-| Write the introduction, notes and other signed prose     | [writing.md](./writing.md)         | researcher, writer, fact-checker, plain-language reader |
-| Make or revise a glossary                                | [glossary.md](./glossary.md)       | writer, plain-language reader                       |
-| Cut, place, source, trace and check pictures             | [pictures.md](./pictures.md)       | image tracer, image checker                         |
-| Lay the book out and write the PDF and EPUB              | [export.md](./export.md)           | format checker                                      |
-| Prove the exact files and prepare the KDP listing        | [upload.md](./upload.md)           | publisher                                           |
-| Build one volume out of several separately read works    | [compilation.md](./compilation.md) | compiler                                            |
+| Job                                                               | Document                           | Role that runs it                                       |
+| ----------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------- |
+| Start a session, load and save books, push                        | [sessions.md](./sessions.md)       | every session, whatever its role                        |
+| Get the text right, leaf by leaf, against the page                | [reading.md](./reading.md)         | reader (OCR cleaner)                                    |
+| Check the read text against itself, the scan and a second reading | [checking.md](./checking.md)       | scan checker                                            |
+| Write the introduction, notes and other signed prose              | [writing.md](./writing.md)         | researcher, writer, fact-checker, plain-language reader |
+| Make or revise a glossary                                         | [glossary.md](./glossary.md)       | writer, plain-language reader                           |
+| Cut, place, source, trace and check pictures                      | [pictures.md](./pictures.md)       | image tracer, image checker                             |
+| Lay the book out and write the PDF and EPUB                       | [export.md](./export.md)           | format checker                                          |
+| Prove the exact files and prepare the KDP listing                 | [upload.md](./upload.md)           | publisher                                               |
+| Build one volume out of several separately read works             | [compilation.md](./compilation.md) | compiler                                                |
 
 The roles are not yet separate agents, except the writer, which is the `etsu`
 agent ([.claude/agents/etsu.md](../../.claude/agents/etsu.md)). Making each
@@ -84,11 +84,11 @@ CHECKED, out loud. A book with any NOT CHECKED item is not called checked or
 ready to upload unless the owner, told exactly what was not checked, says to
 go ahead.
 
-A report looks like this:
+A report looks like this (an invented example):
 
 ```
-The Lost Keys of Masonry: readiness, 2026-11-20
-Interior: books/<dir>/The-Lost-Keys-of-Masonry.pdf (commit abc1234)
+<Title>: readiness, 2026-11-20
+Interior: books/<dir>/<Title>.pdf (commit abc1234)
   C1  damage --check ................. passed
   C3  page turns ..................... passed (2 findings cropped, both as printed)
   C4  coverage ....................... NOT CHECKED: no second reading on the shelf
@@ -100,3 +100,8 @@ Not ready to upload: R7 failed, C4 not checked.
 Record the same lines in the book's `ledger.md` under a dated heading. (A
 dated check sheet per role, `review/checks/<date>-<role>.md`, is planned once
 the shelf is reorganised.)
+
+The stories behind these rules, the faults that cost real time on real books,
+are kept in `docs/archive/CLAUDE-pre-harness.md`. They are history, not
+instructions: where they and these documents differ, these documents and the
+code win.

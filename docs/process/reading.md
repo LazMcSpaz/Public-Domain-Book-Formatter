@@ -152,14 +152,14 @@ EPUB's chapters come in through
 
 ## Checks that must pass before the book is called read
 
-| Check | Command |
-| --- | --- |
-| Each batch well formed | `node scripts/batch.mjs --check <done.json> <draft.json>` |
-| Every leaf landed, compared with OCR | `transcribe` report: `stillMissing` 0, `complete` true, `ocr` names the leaves compared |
-| Notes all claimed | `node scripts/drive.mjs notes n.json --full` (none orphaned) and `node scripts/drive.mjs pairs` |
-| Garbled script and tables read | `node scripts/drive.mjs damage`, its `garbled`, `greek` and `table-as-prose` lines read |
-| Every query has a proposal | `node scripts/drive.mjs queries q.md` lists none without |
-| Markup kept through corrections | (proposed check) tag counts per block, `pristine` against `edited` from `drive.mjs body`; by hand today |
+| Check                                | Command                                                                                                 |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------- |
+| Each batch well formed               | `node scripts/batch.mjs --check <done.json> <draft.json>`                                               |
+| Every leaf landed, compared with OCR | `transcribe` report: `stillMissing` 0, `complete` true, `ocr` names the leaves compared                 |
+| Notes all claimed                    | `node scripts/drive.mjs notes n.json --full` (none orphaned) and `node scripts/drive.mjs pairs`         |
+| Garbled script and tables read       | `node scripts/drive.mjs damage`, its `garbled`, `greek` and `table-as-prose` lines read                 |
+| Every query has a proposal           | `node scripts/drive.mjs queries q.md` lists none without                                                |
+| Markup kept through corrections      | (proposed check) tag counts per block, `pristine` against `edited` from `drive.mjs body`; by hand today |
 
 ## What it produces and where it goes
 
