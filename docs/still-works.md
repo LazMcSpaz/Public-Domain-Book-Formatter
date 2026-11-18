@@ -26,7 +26,7 @@ Most work now happens through chat sessions (owner's decision, 18 November 2026)
 
 Found before the rebuild started, so they are not blamed on it. First run by the owner on 18 November 2026, on a phone in the Brave browser, with the earlier tablet-only checklist. The owner has said the tablet path need not be robust, so these are logged, not urgent.
 
-- **Step 2 fails.** _The Lost Keys of Masonry_ opens to read, but its plates do not show. Cause found: the app looks for pictures at the top of the shelf, while 151 of the 152 sit inside their book's folder.
+- **Tablet step 7 fails (step 2 of the first run).** _The Lost Keys of Masonry_ opens to read, but its plates do not show. Cause found: the app looks for pictures at the top of the shelf, while 151 of the 152 sit inside their book's folder.
 - **The query crop is small (step 3 of the first run).** The first query of _A Modern Panarion_ shows only a small crop of the text, too little to judge from comfortably.
 - **Tablet step 8 fails for rulings (step 4 of the first run).** A ruling stays on the device: "1 ruling saved on this device. Could not reach the shelf (Load failed)."
 - **Tablet step 8 fails for marks (step 5 of the first run).** A marked passage shows "1 change on this device only" with the same "Load failed". After a refresh the mark is gone from the page, and it never reached the shelf.

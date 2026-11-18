@@ -85,10 +85,9 @@ did not raise the findings.
 
 ## Checks that must pass: the full list for "checked" and "ready to upload"
 
-This list is the same in [checking.md](./checking.md), [export.md](./export.md)
-and [upload.md](./upload.md); change all three together until the readiness
-command (task 1 of the [cleanup plan](../cleanup-plan.md)) replaces it with
-one report. "(proposed check)" means nothing automates it yet: it counts as
+This is the only copy of the list: [export.md](./export.md) and
+[upload.md](./upload.md) point here, and the readiness command (task 1 of the
+[cleanup plan](../cleanup-plan.md)) is built from it. "(proposed check)" means nothing automates it yet: it counts as
 NOT CHECKED unless done by hand and recorded.
 
 **For "checked"**, on the book as it stands on the shelf:

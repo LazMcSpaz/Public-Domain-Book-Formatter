@@ -163,7 +163,8 @@ and `npm run dev -- --port 5183`.
 - **Measure, do not reason, about a fault.** Every fault reasoned about in one
   review was diagnosed wrongly; every one measured was right first time.
 - **Before committing code**: `npm run typecheck`, `npm test`,
-  `npm run format:check` and `npm run lint`, all four.
+  `npm run format:check`, `npm run lint` and `python3 harness/check.py`, all
+  five.
 
 ## Setting up a machine
 

@@ -14,26 +14,29 @@ The design behind tasks 5 to 15 is the rebuild plan the owner approved on 18 Nov
 - writes a dated report to the book's folder on the shelf;
 - marks each check passed, failed or NOT CHECKED.
 
-It runs or owes:
+It runs or owes **every item of the full list** in [process/checking.md](process/checking.md#checks-that-must-pass-the-full-list-for-checked-and-ready-to-upload) (C1 to C12, R1 to R11), not a selection. Among them:
 
-- the spelling sheet on the exported file (`spelling-of.ts --text`), read and signed off;
-- page turns (`page-turns-of.ts --check`);
-- damage, apparatus and consistency (`checks-of.ts --check`);
-- coverage against a second reading (`coverage-of.ts`);
-- footnote pairing (`drive.mjs pairs`);
+- the spelling sheet on the exported file (`spelling-of.ts --text`), with a recorded line saying it was read and each word settled;
+- page turns, damage, apparatus, consistency and coverage, using `--second` where the scan has no text layer;
+- footnote pairing;
 - characters printed as empty boxes (`unprintableIn`, given a test);
 - working notes left in the text, such as "(delete)";
 - markup or stale text in the PDF, and the PDF older than its book file;
 - the cover page count against the interior;
-- the bias audit on the editor's prose (`voice.mjs audit`);
+- the bias audit on the editor's prose;
 - glossary marks;
 - the readable files in step.
+
+**Two gaps it must handle:**
+
+- A book whose only recon reading is of another copy has leaves shifted against its own, as with _Thought Vibration_'s `recon-1906.json.gz`, offset by 4. It must report the page-turn paper check as NOT CHECKED, not run it against the wrong copy.
+- The export report is not saved, so the export-side checks need the export run again or its report kept.
 
 Both finish commands defer to it.
 
 **Risk:** medium (new checks; no book data changes).
 
-**Touches:** `scripts/`, `src/core/coherence/`, `test/`, `docs/process/`.
+**Touches:** `scripts/`, `src/core/coherence/`, `src/platform/browser/font-widths.ts` (`unprintableIn`), `test/`, `docs/process/`, `docs/reference/commands.md`.
 
 **Done when:**
 
@@ -221,7 +224,7 @@ Both finish commands defer to it.
 
 **The fix.**
 
-- Merge or close the unmerged branches: eight here and three on the shelf. The cover maker and the compilation builder are merged.
+- Merge or close the unmerged branches: eight here and three on the shelf. Merge the cover maker (`claude/cover-front-icons`) and the compilation builder (`claude/manly-hall-manuscripts-86bvc0`); today neither script is on `main`.
 - Remove `books/` and the four stray images.
 - Delete the 11 abandoned scripts.
 - Group the paused audiobook work in `audiobook/`.

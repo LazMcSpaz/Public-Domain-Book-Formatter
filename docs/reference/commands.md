@@ -6,32 +6,9 @@ Every script named here was checked on disk on 18 November 2026 (`ls scripts/`,
 the npm scripts in `package.json`, and each `drive.mjs` verb in its handler
 table).
 
-## Before calling a book done or ready to upload
+## Before calling a book checked or ready to upload
 
-Run all of these and report each result. A book is not ready because one of
-them passed.
-
-1. `node scripts/drive.mjs damage --check`: conversion damage left in the text.
-2. `npx vite-node --config vitest.config.ts scripts/checks-of.ts <book.json> --check`:
-   damage, apparatus (marks with no notes, page references), consistency, and
-   rulings the text does not yet carry.
-3. `npx vite-node --config vitest.config.ts scripts/page-turns-of.ts <book.json> --check`:
-   paragraphs broken at a page turn. Crop each one before joining anything.
-4. `npx vite-node --config vitest.config.ts scripts/coverage-of.ts <book.json>`:
-   lines the paper prints that the book lost or set in the wrong place.
-5. `node scripts/book-files.mjs <book-dir> --check`: the readable files still
-   match `book.json`.
-6. `node scripts/drive.mjs finish <book-dir>`: the "done" list.
-7. After the export: `npx vite-node --config vitest.config.ts scripts/spelling-of.ts <book.json> --shelf <shelf>/books/ --text <interior.pdf>`.
-   Read the sheet. This is the check Amazon runs on the interior.
-
-**What `finish` does not cover (checked in the code):** `drive.mjs finish` runs
-`book-files.mjs --finish` (reading marked complete, ledger, shape recorded,
-`corrections.md`, every query ruled, a crop for every waiting query, readable
-files in step), plus glossary marks, rulings not yet applied, and
-`damage --check`. It does **not** run page turns, coverage, the apparatus
-checks in `checks-of.ts`, or spelling on the exported PDF. A green `finish`
-says nothing about those four.
+The full list of checks, C1 to C12 for _checked_ and R1 to R11 for _ready to upload_, with each command, lives in one place: [process/checking.md](../process/checking.md#checks-that-must-pass-the-full-list-for-checked-and-ready-to-upload). Run every item for the stage on the exact files that go to KDP and report each result; anything not run is NOT CHECKED. A book is not ready because one check passed, and `drive.mjs finish` covers only part of the list. The commands below marked [before upload] are the ones that list uses.
 
 ## Things to know before using the driver
 
@@ -46,7 +23,7 @@ says nothing about those four.
 
 ## Setup and checks for the code
 
-Before committing code: run typecheck, test, format:check and lint, all four.
+Before committing code: run typecheck, test, format:check and lint, all four, and `python3 harness/check.py`.
 
 - `npm install`: installs the project's packages. Once, in a fresh checkout.
 - `npm run dev`: starts the app on `http://localhost:5173`.
@@ -181,7 +158,9 @@ book or many (`books/*/book.json`).
   words no dictionary knows that stand alone (once here, under three times on
   the rest of the shelf). With `--text`, it reads the exported PDF itself,
   which catches every part that prints. Run it on the file about to be
-  uploaded. Needs `pdftotext`. A sheet to read, never a gate. **[before upload]**
+  uploaded. Needs `pdftotext`. A sheet to read, not an automatic pass or fail:
+  readiness requires that it was made from the exact upload file and read, each
+  word corrected or kept as printed on purpose, and that reading recorded. **[before upload]**
 - `node scripts/drive.mjs parallels`: passages the book prints twice, and
   where the two copies disagree on a word. The second witness for a book with
   no scan.
