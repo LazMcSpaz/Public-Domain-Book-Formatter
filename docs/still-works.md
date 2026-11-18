@@ -24,3 +24,6 @@ Found before the rebuild started, so they are not blamed on it. First run by the
   - The app's last saves from a tablet reached the shelf on 7 October 2026, and the app's saving code has not changed since.
   - "Load failed" is the browser's message for a request that got no answer at all (blocked, or the connection dropped), not a refusal from GitHub.
   - Reading from the shelf still works; the query crop loaded.
+- **The ritual magic works never appear on the shelf.**
+  - About 16 works (_Key of Solomon_, _Abramelin_, Agrippa, Barrett's _Magus_ and others) were saved on 9 November to a shelf branch, `ritual-magic-sources`, that was never merged into `main`, the only copy the app reads.
+  - They were also saved as source material (scans, archive OCR, comparison transcriptions), not as book folders with cards. So even merged, the app would show no card for them.

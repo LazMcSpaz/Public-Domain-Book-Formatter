@@ -39,3 +39,9 @@ Temporary. Deleted at handoff. A session resuming this work reads this file firs
 - **Tracing pilot:** the Book of Solomon. It is not on either repository yet.
 - **Windows trap to avoid:** `docs/ARCHITECTURE.md` exists. The new `docs/architecture.md` must replace it in the same commit (old one to `docs/archive/`), never sit beside it. Windows treats the two names as one file.
 - **Public and private:** this repository is public. Book text, study-book details, KDP and ISBN details, and the owner's personal details go in the shelf, never here.
+- **Audit correction: the shelf has unmerged branches too.** The audit counted only the tools repository's.
+  - `ritual-magic-sources`: 2 commits, 9 Nov; 15 scans (229 MB) and OCR text for about 16 ritual magic works.
+  - `claude/blavatsky-uploads-check-zjpq32`: 39 commits, 19 Sep; includes a second _Isis_ Vol. II folder, `isis-vol2-syhtl3`.
+  - `claude/aura-astral-plane-notes-8mjio9`: 2 commits, 17 Sep.
+  - Do not merge `ritual-magic-sources` as it stands: its scans belong in file storage (plan 3.1), and each work should become a book with a card.
+- **"Load failed" when saving from the phone** is a browser-level failure: no answer at all, not a GitHub refusal. A bad token normally shows GitHub's "Bad credentials". The owner was using Brave on a phone. Proposed urgent fix: the app names exactly which request failed and why, plus a connection test in Settings.
