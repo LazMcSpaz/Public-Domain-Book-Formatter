@@ -23,6 +23,7 @@ Heading: the giant `drive.mjs` (about 7,800 lines) is to be split by responsibil
 - `shape.mjs`: what a book is made of, recorded as `run.shape`; `--flow` regenerates `docs/FLOW.md`.
 - `voice.mjs`: the editor's voice card and the prose audit.
 - `resolve-ts.mjs`: lets plain Node load `src/core` (aliases, extensionless imports).
+- `storage.mjs`: big files into and out of the R2 bucket, checked by fingerprint; `lib/r2.mjs` makes the requests.
 - `lib/`: plain-Node helpers shared by scripts and tests (`ink.mjs` measures ink off a PNG).
 - `screenshot-flow.mjs`, `check-*.mjs`: the browser checks.
 
@@ -33,5 +34,6 @@ Heading: the giant `drive.mjs` (about 7,800 lines) is to be split by responsibil
 - Never send a scan through the debug protocol as base64 (kills the tab, looks like flake); fetch it through the driver's `GET /file`.
 - Over OCR text, strip only our own tags (`<i>`, `<b>`, `<sc>`); a `<[^>]+>` regex eats everything between a stray `<` and `>`.
 - Trust a new check only after it catches a deliberately injected fault; a check with nothing to compare against must refuse, not pass.
+- Node 22's `fetch` ignores `HTTPS_PROXY` unless started with `NODE_USE_ENV_PROXY=1`; a script calling an outside API from a cloud session must restart itself with it, as `storage.mjs` does.
 - Windows: hand the page `PAGE_REPO` (drive.mjs:163), not `REPO`; get a script's folder with `fileURLToPath`, not `URL.pathname` (`shape.mjs:49` still does).
 - Browser checks: their own page and stub; install `page.route` before the first `goto`; a `goto` differing only in its hash does not reload.

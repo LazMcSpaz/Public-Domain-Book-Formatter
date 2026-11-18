@@ -66,3 +66,20 @@ export {
   type ReconQueueFailure,
   type ReconQueueState
 } from './recon-queue'
+export {
+  MAX_OBJECT_BYTES,
+  STORAGE_BUCKET,
+  STORAGE_COLUMNS,
+  STORAGE_LIST,
+  TEST_KIND,
+  addStorageRow,
+  extensionOf,
+  fingerprintOf,
+  isTestKey,
+  parseStorageList,
+  serializeStorageList,
+  storageKey,
+  stripBom,
+  type AddResult,
+  type StorageRow
+} from './storage'
