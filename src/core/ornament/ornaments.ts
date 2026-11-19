@@ -23,6 +23,12 @@ export interface OrnamentShape {
    * which is the common case — most of these are solid shapes.
    */
   stroke?: number
+  /**
+   * Round the ends of a stroked path, as a pen leaves them. Omitted means the
+   * PDF's default square end, which every ornament drawn before this field
+   * existed was printed with, so a published book re-exported looks the same.
+   */
+  cap?: 'round'
 }
 
 /** Where an ornament is allowed to appear. */
@@ -58,6 +64,23 @@ function circle(cx: number, cy: number, r: number): string {
     `C ${cx - k} ${cy + r} ${cx - r} ${cy + k} ${cx - r} ${cy}`,
     'Z'
   ].join(' ')
+}
+
+/**
+ * Path data mirrored left to right across a 240-wide viewBox (x becomes 240 - x).
+ *
+ * Absolute commands only (M, L, C, Z), whose numbers come in x, y pairs, which
+ * is all the hand-drawn ornaments here use. One half is drawn and the other is
+ * made from it, so the two sides cannot drift apart.
+ */
+function mirrorX(d: string): string {
+  let i = 0
+  return d.replace(/-?\d+(?:\.\d+)?/g, (n) => (i++ % 2 === 0 ? String(+(240 - +n).toFixed(3)) : n))
+}
+
+/** A half-ornament's shapes, followed by their mirror images. */
+function bothSides(shapes: OrnamentShape[]): OrnamentShape[] {
+  return shapes.flatMap((shape) => [shape, { ...shape, d: mirrorX(shape.d) }])
 }
 
 /** A rectangle as a closed path. */
@@ -146,6 +169,56 @@ export const BUILTIN_ORNAMENTS: readonly OrnamentArt[] = [
       { d: 'M126 15 C140 9 156 11 166 15 C156 21 140 22 126 15 Z' },
       { d: 'M74 15 C64 15 56 14 46 15 C56 16 64 15 74 15 Z' },
       { d: 'M166 15 C176 15 184 14 194 15 C184 16 176 15 166 15 Z' }
+    ]
+  },
+  {
+    id: 'chapter-vine',
+    name: 'Vine and Bud',
+    kind: 'chapter',
+    width: 240,
+    height: 30,
+    shapes: [
+      // Chosen by the editor on 19 November 2026 for the house look: finer
+      // line work than the Aldus Leaf. A vine runs out from a centre bud,
+      // dipping under one leaf and rising over another, and ends in a small
+      // three-petal bud with a curl beneath. The vine tapers, heaviest at the
+      // centre: three strokes meet where the curve runs level, so the steps
+      // do not show. Every stroke stays at least 0.5 pt wide when drawn at
+      // the narrowest house measure (6×9), the least a press holds.
+      { d: 'M120 9.5 C123.2 12.6 123.2 17.4 120 20.5 C116.8 17.4 116.8 12.6 120 9.5 Z' },
+      ...bothSides([
+        { d: 'M124.5 15 C136 15 142 20.5 152 20.5', stroke: 1.3, cap: 'round' },
+        { d: 'M152 20.5 C162 20.5 166 14.5 176 14.5', stroke: 1.15, cap: 'round' },
+        { d: 'M176 14.5 C188 14.5 195 18.5 203 18.5', stroke: 1.02, cap: 'round' },
+        { d: 'M147 20.6 C149.2 24.5 153.8 25.9 156.8 25.4 C155.6 22.6 151.6 20.6 147 20.6 Z' },
+        { d: 'M172 14.4 C174.2 10.6 178.8 9.2 181.8 9.7 C180.6 12.5 176.6 14.4 172 14.4 Z' },
+        { d: 'M203 18.5 C208.5 18.5 211.5 17.4 213.6 16.2', stroke: 0.98, cap: 'round' },
+        { d: 'M214.4 15.8 C216.6 14.6 219.4 14.6 221.4 15.8 C219.4 17 216.6 17 214.4 15.8 Z' },
+        { d: 'M214.4 15.8 C214.8 13.4 216.6 11.4 219 10.6 C218.6 13 216.8 15 214.4 15.8 Z' },
+        { d: 'M214.4 15.8 C216.8 16.4 218.8 18.2 219.6 20.6 C217.2 20 215.2 18.2 214.4 15.8 Z' },
+        {
+          d: 'M209.5 18 C211.2 20.8 210.6 23.6 208.4 24.4 C206.6 25 205.2 23.4 206.2 22',
+          stroke: 0.95,
+          cap: 'round'
+        }
+      ])
+    ]
+  },
+  {
+    id: 'chapter-double-hairline',
+    name: 'Lozenge and Double Hairline',
+    kind: 'chapter',
+    width: 240,
+    height: 30,
+    shapes: [
+      // Drawn alongside the vine and kept on file (19 November 2026): an open
+      // diamond with a dot, between pairs of hairlines that narrow to points.
+      { d: 'M120 8.2 L126.8 15 L120 21.8 L113.2 15 Z', stroke: 1.1 },
+      { d: circle(120, 15, 1.35) },
+      ...bothSides([
+        { d: 'M131 12.85 L214 13.45 L131 13.95 Z' },
+        { d: 'M131 16.05 L214 16.55 L131 17.15 Z' }
+      ])
     ]
   },
   {

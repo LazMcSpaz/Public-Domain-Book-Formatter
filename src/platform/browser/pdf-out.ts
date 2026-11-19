@@ -14,6 +14,7 @@
  * Browser-only: pdf-lib and fontkit.
  */
 import {
+  LineCapStyle,
   PDFArray,
   PDFDocument,
   PDFName,
@@ -283,7 +284,11 @@ function drawPage(
           scale: item.scale,
           ...(shape.stroke === undefined
             ? { color: rgb(0, 0, 0) }
-            : { borderColor: rgb(0, 0, 0), borderWidth: shape.stroke * item.scale })
+            : {
+                borderColor: rgb(0, 0, 0),
+                borderWidth: shape.stroke * item.scale,
+                ...(shape.cap === 'round' ? { borderLineCap: LineCapStyle.Round } : {})
+              })
         })
       }
       continue
