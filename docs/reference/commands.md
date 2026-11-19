@@ -101,7 +101,9 @@ builds its own copy.
 - `npm run check:saves`: checks that when the (faked) shelf will not take a
   write, the note names the request, its size, the wait and the browser's
   words; that a ruling and a mark stay on the device, the mark still drawn
-  after a refresh; and that "Send to the shelf" sends them.
+  after a refresh; and that "Send to the shelf" sends them. Also that the
+  door that brings the scan stores a waiting mark with the book, and that a
+  ruling changed during a slow write stays queued in the device's store.
 - `npm run check:crop`: checks the query screen shows the crop cut in advance
   for a book whose scan is too large for the shelf, and that on a phone it is
   shown at reading size, scrolled to the marked passage.
