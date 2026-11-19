@@ -183,16 +183,21 @@ Both finish commands defer to it.
 
 **Verify:** `harness/check.py`, the tests, and still-works steps 1–2.
 
-## 6. The tools learn the new shelf layout, and pictures are found (the app's part done 19 November 2026)
+## 6. The tools learn the new shelf layout, and pictures are found (pictures done 19 November 2026)
 
-**The app's part done 19 November 2026** (merged in 14882ad; spec [specs/pictures-beside-the-book.md](specs/pictures-beside-the-book.md)). One rule in the core (`pictureCandidates`, reached through `src/core/sync/shelf.ts`) says where a picture a book names is looked for: beside the book, then at the top of the shelf. It refuses names that would leave the shelf or that a web address misreads. Both ways the app opens a book use it, so _The Lost Keys of Masonry_'s seven plates come down; a save keeps each picture where the shelf already has it instead of copying it to the top. Three review rounds; every must-fix finding fixed. The owner's run of still-works step 7 is still to come.
+**Pictures done 19 November 2026.** One rule in the core (`pictureCandidates`, reached through `src/core/sync/shelf.ts`) says where a picture a book names is looked for: beside the book, then at the top of the shelf. It refuses names that would leave the shelf or that a web address misreads.
 
-Still to do in this task: the driver and the scripts ask the same rule (the driver's `load` already looks in both places, by its own code), and the readable sheets and other paths follow the one map. Follow-ups from the review:
+- **The app** (merged in 14882ad; spec [specs/pictures-beside-the-book.md](specs/pictures-beside-the-book.md)): both ways it opens a book use the rule, so _The Lost Keys of Masonry_'s seven plates come down, and a save keeps each picture where the shelf already has it. Three review rounds.
+- **The tools** (spec [specs/one-shelf-map.md](specs/one-shelf-map.md)): the driver's `load` and `save` and the EPUB builder find pictures through one helper, `scripts/lib/book-pictures.mjs`; the driver hands it its page's copy of the rule, so it needs no newer Node. Every shelf read and write encodes each path segment (`readUrl`, `putFile`). CI and the deploy now run Node 22, and `package.json` says Node 22.18 or newer, which the readiness check, storage and the shelf helpers already needed. Reviewed; the one must-fix (CI red on Node 20) fixed. The driver loaded a scratch copy of a seven-plate book with one plate at the shelf's top and found all seven.
+- **The owner's run** of still-works step 7 is still to come.
 
-- Encode each path segment in `readUrl` (`src/platform/browser/shelf.ts`), so scan paths, crop paths and folder names read from book files are as safe as picture names.
+Still to do in this task: the readable sheets, scans and cards follow the one map; `shelf push` reports paths from the run key. Follow-ups from the reviews:
+
+- A scan or crop path with a literal `..` segment is still read inside the shelf's address; it needs its own refusal, like picture names.
 - On the read route, a picture that could not be fetched is noted in code but the reading screen does not show the note.
-- A test that the book's folder is looked up once per save; a save asks the top of the shelf twice for a new picture (efficiency only).
-- `scripts/screenshot-flow.mjs` is out of date (a removed wording at step 5g0, the shelf's old card selector), and the browser checks' default Chromium path does not exist in cloud sessions.
+- When `load` reports a missing picture, the stored run lacks it, so a later `save` over the same file drops it from `images`. `epub-of.ts` writes each picture to `OEBPS/<path>` as named.
+- A test that the book's folder is looked up once per save; a save asks the top of the shelf twice for a new picture (efficiency only); the helper matches the `books` folder name case-sensitively.
+- `scripts/screenshot-flow.mjs` is out of date (a removed wording at step 5g0, the shelf's old card selector); `check:outbox` counts the card's write as a second book write and fails on `main` too; the browser checks' default Chromium path does not exist in cloud sessions (`check:cache` passes with full Chromium, not the headless shell).
 
 **Why (plain English).** Today the app looks for a book's pictures at the top of the shelf while 151 of the 152 sit in the book's folder, so plates go missing. The rebuild moves files, so every tool must ask one map where things are.
 
