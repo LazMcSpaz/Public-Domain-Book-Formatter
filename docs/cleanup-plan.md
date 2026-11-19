@@ -141,7 +141,9 @@ Both finish commands defer to it.
 
 **Verify:** fingerprints match for every moved file; `harness/check.py` in both repositories; still-works steps 1–2.
 
-## 4. One command before every commit, and the harness check in CI
+## 4. One command before every commit, and the harness check in CI (done 19 November 2026)
+
+**Done 19 November 2026.** `npm run verify` runs typecheck, the core purity check, lint, format check, the harness check and the tests, stopping at the first failure; CI runs it, then the build. Follow-up: `python3` is `py` on some Windows machines, so `verify` may stop at the harness check there.
 
 **Why (plain English).** "Typecheck, test, format check, lint" is a habit written down, and habits skip.
 
@@ -155,7 +157,9 @@ Both finish commands defer to it.
 
 **Verify:** `npm run verify`.
 
-## 5. Enforce "core stays pure" and fix the one boundary crossing
+## 5. Enforce "core stays pure" and fix the one boundary crossing (done 19 November 2026)
+
+**Done 19 November 2026.** `tsconfig.core.json` type-checks `src/core` with no browser or Node available (`npm run typecheck:core`); it found one real leak (the model client fell back to the browser's `fetch`), now passed in from the app. `control.ts` no longer imports from the app; the harness baseline fell from 71 to 70.
 
 **Why (plain English).** The rule is only written down. A text search cannot enforce it, because the core has a variable named `document`. `src/platform/browser/control.ts` imports from the app.
 
@@ -381,7 +385,9 @@ After a few days of normal use following task 12.
 
 **Verify:** the unprintable report on a synthetic page; the owner looks at a proof.
 
-## 20. Small fixes from the first full book run
+## 20. Small fixes from the first full book run (done 19 November 2026)
+
+**Done 19 November 2026,** all nine. Follow-ups from review: `consistency`, `crops`, `notes` and `proof` still write into the checkout by default (`notes n.json`, which checking.md's C5 runs, is not ignored); `workInput` reads a same-named file from the shared temp folder first, which could pick up another book's file.
 
 One session; each is small:
 

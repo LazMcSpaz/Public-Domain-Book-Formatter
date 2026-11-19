@@ -13,6 +13,7 @@ TypeScript, React and Vite, all in the browser; Node scripts drive it headlessly
 - **Run:** `npm run dev`
 - **Test:** `npm test`, plus `npm run typecheck`, `npm run lint` and `npm run format:check`
 - **Check:** `python3 harness/check.py`
+- **Before every commit:** `npm run verify` runs all of the above, plus the core purity check, and stops at the first failure; CI runs it on every push.
 
 ## Map
 
@@ -47,7 +48,7 @@ The books live in a separate private repository, the shelf (`Public-Domain-Books
 1. **Spec first:** copy [docs/specs/\_template.md](docs/specs/_template.md), fill it in, and confirm the plain-English summary with the owner.
 2. **Direction check:** if the feature pushes towards something in product.md's Future directions, or something new, raise it with the owner first.
 3. **Build in one pass,** following the spec and the folder rules.
-4. **Check:** run `python3 harness/check.py` and the tests; fix until both pass. A test that passes with the fault put back is not a test: reintroduce the fault and watch it fail.
+4. **Check:** run `npm run verify`; fix until it passes. A test that passes with the fault put back is not a test: reintroduce the fault and watch it fail.
 5. **Review:** a separate subagent that did not write the code reviews it against the spec and the rules.
 6. **Owner tries it:** say exactly how, in plain English.
 7. **Lessons:** turn anything learned into a check in `harness/rules.json` or a test if possible; otherwise add one line to the CLAUDE.md of the folder it applies to. Never add a general lessons or notes file. Delete rules that are no longer true.
