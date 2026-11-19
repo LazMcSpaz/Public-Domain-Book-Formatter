@@ -14,8 +14,20 @@
  * `mergeOutbox` decides what may be folded in without asking and what has to be
  * reported instead, and `foldIntoBookText` writes the shelf's own file back
  * with only those two lists changed, so a field the app cannot read is never
- * dropped by a ruling from the tablet. This module does the fetching, the
- * writing and the forgetting, and nothing else.
+ * dropped by a ruling from the tablet; a fold that cannot keep everything
+ * writes nothing, and says so. This module does the fetching, the writing and
+ * the forgetting, and nothing else.
+ *
+ * **What is written over is what was read.** The book is read as bytes, and
+ * the blob name of those bytes is checked against the version the shelf names
+ * just before the write: a session's push in between used to be written over
+ * in silence. When they differ, or GitHub refuses the write because the book
+ * moved (409), the flush reads the book again and folds again, a few times at
+ * most, and never writes over what it has not read.
+ *
+ * **What is forgotten is what was sent.** A queued change is keyed by what it
+ * is about, so one changed during a slow write replaces it under the same key;
+ * the store forgets an entry only while it is still the one that was sent.
  *
  * **A failure says which request failed** (`attempt`, in `shelf-attempt.ts`):
  * what it was doing, how much it sent, how long the browser waited and the
@@ -23,7 +35,8 @@
  * whether the shelf now holds what was sent (the write landed and only the
  * answer was lost, which counts as sent), and whether reading still works,
  * which tells a dropped connection from a write that was refused or cut off.
- * Nothing leaves the queue until the shelf has it.
+ * Nothing leaves the queue until the shelf has it. The sentences are in
+ * `outbox-notes.ts`.
  *
  * Browser-only.
  */
@@ -31,7 +44,6 @@ import {
   aboutPath,
   bookPath,
   foldIntoBookText,
-  isRuling,
   landedRulings,
   rulingsMissingFrom,
   summarize,
@@ -42,11 +54,23 @@ import {
   type ShelfConfig
 } from '@core/sync'
 import { toBase64, type BookFile } from '@core/project'
-import { getText, putFile, putWithSha, shaOf, shelfDirFor } from './shelf'
+import { getBytes, putFile, putWithSha, shaOf, shelfDirFor } from './shelf'
 import { clearQueued, outboxFor } from './run-store'
 import { landedFor, rememberLanded } from './landed'
 import { catalogueCard } from './shelf-save'
 import { attempt, blobSha, ShelfStepError, type ShelfFailure } from './shelf-attempt'
+import {
+  SAVED_ELSEWHERE,
+  commitMessageFor,
+  conflictNote,
+  missingNote,
+  movedNote,
+  notKeptNote,
+  notOnShelfNote,
+  sentNote,
+  stillHere,
+  unreadableNote
+} from './outbox-notes'
 
 /** What a flush did, in the words the interface has to be able to say. */
 export interface FlushResult {
@@ -108,20 +132,19 @@ export async function withQueuedChanges(
   return { file: folded, waiting }
 }
 
-/** "1 ruling", "3 marks", "4 changes". */
-function heldInWords(entries: readonly OutboxEntry[]): string {
-  const n = entries.length
-  const held = summarize(entries)
-  const noun = held.rulings === n ? 'ruling' : held.marks === n ? 'mark' : 'change'
-  return `${n} ${noun}${n === 1 ? '' : 's'}`
-}
+/** How many times one flush reads the book: once, and again each time it moved underneath. */
+const READS = 3
 
-function stillHere(entries: readonly OutboxEntry[]): string {
-  const one = entries.length === 1
-  return (
-    `Your ${heldInWords(entries)} ${one ? 'is' : 'are'} still on this device and ` +
-    `will go up on the next try: press “Send to the shelf”, or open the book again.`
-  )
+/** A flush that changed nothing on the shelf: every entry stays queued. */
+function held(queued: readonly OutboxEntry[], note: string, failure?: ShelfFailure): FlushResult {
+  return {
+    idle: false,
+    sent: 0,
+    conflicts: [],
+    waiting: queued.length,
+    note,
+    ...(failure ? { failure } : {})
+  }
 }
 
 /**
@@ -140,28 +163,15 @@ async function sendQueue(config: ShelfConfig, bookKey: string): Promise<FlushRes
   // Offline is the ordinary case here rather than an error: the queue exists
   // for it. Said plainly, and every entry stays exactly where it is.
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    const held = summarize(queued)
-    return {
-      idle: false,
-      sent: 0,
-      conflicts: [],
-      waiting: held.waiting,
-      note: `${held.waiting} changes are on this device only: there is no connection yet.`
-    }
+    const waiting = summarize(queued).waiting
+    return held(queued, `${waiting} changes are on this device only: there is no connection yet.`)
   }
 
   try {
     return await sendTo(config, bookKey, queued)
   } catch (err) {
     if (!(err instanceof ShelfStepError)) throw err
-    return {
-      idle: false,
-      sent: 0,
-      conflicts: [],
-      waiting: queued.length,
-      failure: err.failure,
-      note: `${err.message} ${stillHere(queued)}`
-    }
+    return held(queued, `${err.message} ${stillHere(queued)}`, err.failure)
   }
 }
 
@@ -174,38 +184,65 @@ async function sendTo(
     shelfDirFor(config, bookKey)
   )
   const path = bookPath(bookKey, dir)
-  const text = await attempt('reading the book from the shelf', null, () => getText(config, path))
-  if (text === null) {
-    return {
-      idle: false,
-      sent: 0,
-      conflicts: [],
-      waiting: queued.length,
-      // Not an error to swallow, and not a reason to drop anything: this queue
-      // belongs to a book the shelf has never been given, and sending the whole
-      // book is a different action with a different cost.
-      note:
-        `This book is not on ${config.repo} yet, so ${queued.length} changes cannot go up. ` +
-        'Save the whole book to the shelf first.'
-    }
-  }
+  for (let round = 1; round <= READS; round++) {
+    // Bytes, not text: the blob name of exactly these bytes is what the
+    // shelf's version is checked against below.
+    const bytes = await attempt('reading the book from the shelf', null, () =>
+      getBytes(config, path)
+    )
+    // Not an error to swallow, and not a reason to drop anything: this queue
+    // belongs to a book the shelf has never been given, and sending the whole
+    // book is a different action with a different cost.
+    if (bytes === null) return held(queued, notOnShelfNote(config.repo, queued.length))
 
+    const folded = foldOrSay(config, bookKey, bytes, queued)
+    if (!('merged' in folded)) return folded
+    const { merged } = folded
+    if (merged.applied.length === 0) {
+      return {
+        ...held(queued, conflictNote(merged.conflicts, config.repo)),
+        conflicts: merged.conflicts
+      }
+    }
+    // Every change already on the shelf: a flush whose answer was lost, sent
+    // again. Nothing to write; the entries can go.
+    if (folded.json === null) return finish(config, bookKey, folded, false)
+
+    // The version the write replaces must be the one just read. A session's
+    // push between the read and here would otherwise be written over, whole.
+    const sha = await attempt('asking the shelf for the book’s version', null, () =>
+      shaOf(config, path)
+    )
+    if (sha !== (await blobSha(bytes))) continue
+    const sent = await write(config, path, folded, sha, round === READS)
+    if (sent === 'moved') continue
+    await writeCard(config, bookKey, dir, folded)
+    return finish(config, bookKey, folded, sent === 'landed')
+  }
+  return held(queued, movedNote(config.repo, queued))
+}
+
+/**
+ * The queue folded into the bytes read, or what to tell the editor instead.
+ *
+ * Every refusal here leaves the queue as it is. The bytes are decoded strictly:
+ * a lenient decoder turns bytes that are not UTF-8 into replacement marks, and
+ * the fold would write those marks back over them.
+ */
+function foldOrSay(
+  config: ShelfConfig,
+  bookKey: string,
+  bytes: Uint8Array,
+  queued: OutboxEntry[]
+): FoldedBookText | FlushResult {
   let folded: FoldedBookText
   try {
+    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
     folded = foldIntoBookText(text, queued, new Date().toISOString())
   } catch (err) {
-    return {
-      idle: false,
-      sent: 0,
-      conflicts: [],
-      waiting: queued.length,
-      note:
-        `The book file on ${config.repo} could not be read ` +
-        `(${err instanceof Error ? err.message : String(err)}), so nothing was written. ` +
-        stillHere(queued)
-    }
+    return held(queued, unreadableNote(config.repo, err, queued))
   }
-  const { merged, file } = folded
+  const { file } = folded
 
   // The read has to be *current*, not merely successful.
   //
@@ -223,89 +260,93 @@ async function sendTo(
     edits: file.run.edits,
     rulings: file.run.rulings
   })
-  if (missing.length > 0) {
-    const one = missing.length === 1
-    return {
-      idle: false,
-      sent: 0,
-      conflicts: [],
-      waiting: queued.length,
-      note:
-        `${config.repo} answered with a copy of this book that is missing ` +
-        `${missing.length} ruling${one ? '' : 's'} it already had, so nothing was ` +
-        `written: sending would have deleted ${one ? 'it' : 'them'}. ` +
-        stillHere(queued)
-    }
-  }
+  if (missing.length > 0) return held(queued, missingNote(config.repo, missing.length, queued))
 
-  if (merged.applied.length === 0) {
-    return {
-      idle: false,
-      sent: 0,
-      conflicts: merged.conflicts,
-      waiting: queued.length,
-      note: conflictNote(merged.conflicts, config.repo)
-    }
-  }
+  // A fold that would have lost a field the tools wrote writes nothing.
+  if (!folded.keptEverything) return held(queued, notKeptNote(config.repo, queued))
+  return folded
+}
 
-  let landedAnyway = false
-  if (folded.json !== null) {
-    const bytes = new TextEncoder().encode(folded.json)
-    const marks = merged.applied.filter((entry) => entry.edit?.kind === 'highlight').length
-    const rulings = merged.applied.filter(isRuling).length
-    const message =
-      rulings > 0 && rulings === merged.applied.length
-        ? `${rulings} ${rulings === 1 ? 'query' : 'queries'} ruled on`
-        : marks > 0
-          ? `${marks} passages marked while reading`
-          : `${merged.applied.length} changes from a reading session`
-    const sha = await attempt('asking the shelf for the book’s version', null, () =>
-      shaOf(config, path)
+/**
+ * Write the folded file over the version read. `moved` when GitHub refused it
+ * because the book changed meanwhile (409) and another read is allowed;
+ * `landed` when the write got no answer but the shelf holds it after all.
+ */
+async function write(
+  config: ShelfConfig,
+  path: string,
+  folded: FoldedBookText,
+  sha: string | null,
+  last: boolean
+): Promise<'written' | 'landed' | 'moved'> {
+  const bytes = new TextEncoder().encode(folded.json ?? '')
+  const message = commitMessageFor(folded.merged.applied)
+  try {
+    await attempt('writing the book file', bytes.length, () =>
+      putWithSha(config, path, toBase64(bytes), message, sha)
     )
-    try {
-      await attempt('writing the book file', bytes.length, () =>
-        putWithSha(config, path, toBase64(bytes), message, sha)
-      )
-    } catch (err) {
-      landedAnyway = await landedAfterAll(config, path, bytes, err)
+    return 'written'
+  } catch (err) {
+    if (err instanceof ShelfStepError && err.failure.status === 409) {
+      if (!last) return 'moved'
+      throw new ShelfStepError({ ...err.failure, said: SAVED_ELSEWHERE })
     }
-    // The catalogue card, rewritten from the file just written. The shelf lists
-    // a book by its card, and its query counts are what say how far the book has
-    // got: a flush that filed rulings and left the card alone left *Isis* Vol.
-    // II listed as "96 waiting" for two days with every one of them ruled. Never
-    // fatal, for the reason `pushBook` gives its sheets: the rulings are up, and
-    // the next flush or save writes the card again.
-    try {
-      const card = catalogueCard(bookKey, folded.json, file.scan?.path ?? null)
-      await putFile(
-        config,
-        aboutPath(bookKey, dir),
-        toBase64(new TextEncoder().encode(JSON.stringify(card, null, 2))),
-        message
-      )
-    } catch {
-      /* the card can wait for the next write */
-    }
+    return (await landedAfterAll(config, path, bytes, err)) ? 'landed' : 'written'
   }
+}
+
+/**
+ * The catalogue card, rewritten from the file just written. The shelf lists a
+ * book by its card, and its query counts are what say how far the book has
+ * got: a flush that filed rulings and left the card alone left *Isis* Vol. II
+ * listed as "96 waiting" for two days with every one of them ruled. Never
+ * fatal, for the reason `pushBook` gives its sheets: the rulings are up, and
+ * the next flush or save writes the card again.
+ */
+async function writeCard(
+  config: ShelfConfig,
+  bookKey: string,
+  dir: string,
+  folded: FoldedBookText
+): Promise<void> {
+  if (folded.json === null) return
+  try {
+    const card = catalogueCard(bookKey, folded.json, folded.file.scan?.path ?? null)
+    await putFile(
+      config,
+      aboutPath(bookKey, dir),
+      toBase64(new TextEncoder().encode(JSON.stringify(card, null, 2))),
+      commitMessageFor(folded.merged.applied)
+    )
+  } catch {
+    /* the card can wait for the next write */
+  }
+}
+
+/** After the shelf has the changes: remember what landed and forget what was sent. */
+async function finish(
+  config: ShelfConfig,
+  bookKey: string,
+  folded: FoldedBookText,
+  landedAnyway: boolean
+): Promise<FlushResult> {
+  const { merged } = folded
   // What the shelf demonstrably holds now, for the next read to be checked
   // against. Before the queue is cleared: if the record will not save, the
   // entries staying queued is the safer of the two ways to be wrong.
   rememberLanded(bookKey, landedRulings(merged.rulings))
-  // Only after the shelf has answered, and only what it took. A conflicted
-  // entry stays queued: it is a change the editor made that nobody has
-  // accepted, and clearing it to tidy the queue is the one thing that would
-  // make this channel worse than not having one.
-  await clearQueued(merged.applied.map((entry) => entry.id))
-
+  // Only after the shelf has answered, only what it took, and only while each
+  // entry is still the one that was sent. A conflicted entry stays queued: it
+  // is a change the editor made that nobody has accepted, and clearing it to
+  // tidy the queue is the one thing that would make this channel worse than
+  // not having one.
+  const changedSince = (await clearQueued(merged.applied)).length
   return {
     idle: false,
     sent: merged.applied.length,
     conflicts: merged.conflicts,
-    waiting: merged.conflicts.length,
-    note:
-      `${merged.applied.length} changes saved to ${config.repo}.` +
-      (landedAnyway ? ' The shelf took them, although its answer was lost on the way back.' : '') +
-      (merged.conflicts.length > 0 ? ` ${conflictNote(merged.conflicts, config.repo)}` : '')
+    waiting: merged.conflicts.length + changedSince,
+    note: sentNote(config.repo, merged.applied.length, landedAnyway, changedSince, merged.conflicts)
   }
 }
 
@@ -332,14 +373,4 @@ async function landedAfterAll(
   }
   if (now !== undefined && now === (await blobSha(bytes))) return true
   throw new ShelfStepError({ ...err.failure, readsWork: now !== undefined })
-}
-
-function conflictNote(conflicts: readonly OutboxConflict[], repo: string): string {
-  if (conflicts.length === 0) return ''
-  const one = conflicts.length === 1
-  return (
-    `${conflicts.length} ${one ? 'change is' : 'changes are'} still on this device: the same ` +
-    `passage was changed on ${repo} after ${one ? 'it was' : 'they were'} corrected here. ` +
-    'Nothing has been overwritten either way.'
-  )
 }

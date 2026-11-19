@@ -23,7 +23,7 @@ Everything the engine needs a browser for: PDF rendering (pdf.js), OCR (Tesserac
 - `interior.ts`, `preview.ts`: the finished interior and the design-gate preview, both from the engine's own PDF.
 - `house-look.ts`: the shelf's house look read, and a book laid out in the look it gets (`renderInLook`).
 - `shelf.ts`, `shelf-save.ts`, `shelf-outbox.ts`, `landed.ts`: reading and writing the shelf repository.
-- `shelf-attempt.ts`: `attempt`, which names, sizes and times a failed shelf request; `blobSha`.
+- `shelf-attempt.ts`: `attempt`, which names, sizes and times a failed shelf request; `blobSha`. `shelf-fetch.ts`: `reach`, the one `fetch` every shelf request makes. `outbox-notes.ts`: every sentence a flush shows.
 - `query-crop.ts`: `cutQueryCrop`, a query's crop cut from the original render with its passage marked.
 - `shelf-pictures.ts`: `fetchBookPictures` (a book's named pictures) and `keptPicture` (a held picture the shelf already has), both looking where core's `pictureCandidates` says.
 - `transport.ts`: `browserTransport`, the `fetch` every model call is handed (the core never reaches the network).
@@ -36,6 +36,7 @@ Everything the engine needs a browser for: PDF rendering (pdf.js), OCR (Tesserac
 - A picture a book names is relative to the book: fetch it only with `fetchBookPictures`, never `getBytes` on the bare name.
 - Outbox flushes are chained per book (`shelf-outbox.ts`): one at a time, the next waiting rather than joining.
 - A flush writes the shelf's own file back with only its two lists changed (core `foldIntoBookText`), never the app's reading of it, and every request it makes goes through `attempt` so a failure names itself (`test/shelf-fold.test.ts`, `test/outbox-flush.test.ts`).
+- A flush writes only over the version it read (the blob sha of the bytes read, checked before the write), and the store clears a queued entry only while it is still the one sent (`clearQueued`, `npm run check:saves`).
 - A query's mark is multiplied over the paper, never drawn over the ink (`check:crop` measures it).
 - Recon renders, uses and releases one page at a time; never hold page canvases (a 300-DPI page is about 19 MB).
 - Every reader of the recon cache, app or driver, asks with `BOOK_RECON`: `loadReconCache` deletes a record it cannot use (`test/recon-wired.test.ts`).

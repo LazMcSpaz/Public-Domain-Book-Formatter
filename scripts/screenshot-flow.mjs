@@ -58,7 +58,8 @@ function grayscalePng(width, height) {
 }
 
 const OUT = process.argv[2] ?? 'screenshots'
-const URL_BASE = process.env.APP_URL ?? 'http://localhost:5173'
+// `PDBF_URL`, as every other check reads it; `APP_URL` is still taken, as `drive.mjs` reads it.
+const URL_BASE = process.env.PDBF_URL ?? process.env.APP_URL ?? 'http://localhost:5173'
 // The sandbox pins an older Chromium than the installed playwright expects.
 const EXECUTABLE = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
 

@@ -14,6 +14,14 @@
  *     the shelf". With writes working again, that button files it.
  *  2. A mark in the reading view: counted as waiting, still drawn after a
  *     refresh and a fresh open from the shelf, and sent by the button.
+ *  3. The other door from the shelf (`openFromShelf`, which brings the scan):
+ *     a mark still waiting is folded into the book it stores on the device.
+ *  4. A slow tablet: a ruling changed while the first one is being written
+ *     stays queued in the real device store, and only the one sent is cleared.
+ *
+ * The faked shelf answers each file's real blob sha and refuses a write
+ * against a stale one (409), as GitHub does: a flush checks the sha against
+ * the bytes it read.
  *
  * Its own page and its own stub, for the reason `check-query-crop.mjs` gives.
  * Nothing leaves this machine; the token is a made-up string.
@@ -22,6 +30,8 @@
  */
 import { chromium } from 'playwright'
 import { resolve } from 'node:path'
+import { readFileSync } from 'node:fs'
+import { blobSha } from './lib/blob-sha.mjs'
 
 const REPO = resolve(import.meta.dirname, '..')
 const URL_BASE = process.env.PDBF_URL ?? 'http://localhost:5173'
@@ -45,10 +55,13 @@ await page.addInitScript(() => {
 // The faked shelf. While `failWrites` is set, a write of the book file gets no
 // answer: the request is dropped, and `fetch` rejects as it does on the phone.
 const files = new Map()
+const scans = new Map()
 const puts = []
-let slug = null
+const slugs = []
 let failWrites = true
 let refusedWrites = 0
+/** Step 4: the write of this path is held until `holdWrite.release()` is called. */
+const holdWrite = { path: null, release: null }
 await page.route('https://api.github.com/**', async (route) => {
   const request = route.request()
   const url = new URL(request.url())
@@ -60,12 +73,14 @@ await page.route('https://api.github.com/**', async (route) => {
   if (!url.pathname.includes('/contents/')) return json(200, {})
   const path = decodeURIComponent(url.pathname.split('/contents/')[1] ?? '')
   if (request.method() === 'GET') {
-    if (path === 'books') return json(200, slug ? [{ name: slug, type: 'dir' }] : [])
+    const listing = slugs.map((name) => ({ name, type: 'dir' }))
+    if (path === 'books') return json(200, listing)
+    if (scans.has(path)) return route.fulfill({ status: 200, body: scans.get(path) })
     if (!files.has(path)) return json(404, { message: 'Not Found' })
     if ((request.headers()['accept'] ?? '').includes('raw')) {
       return route.fulfill({ status: 200, contentType: 'text/plain', body: files.get(path) })
     }
-    return json(200, { type: 'file', sha: `sha-${files.get(path).length}`, path })
+    return json(200, { type: 'file', sha: blobSha(files.get(path)), path })
   }
   if (request.method() === 'PUT') {
     if (failWrites && path.endsWith('/book.json')) {
@@ -73,6 +88,10 @@ await page.route('https://api.github.com/**', async (route) => {
       return route.abort('failed')
     }
     const body = JSON.parse(request.postData() ?? '{}')
+    if (files.has(path) && body.sha !== blobSha(files.get(path))) {
+      return json(409, { message: `${path} does not match ${body.sha}` })
+    }
+    if (path === holdWrite.path) await new Promise((go) => (holdWrite.release = go))
     files.set(path, Buffer.from(body.content, 'base64').toString('utf8'))
     puts.push({ path, message: body.message })
     return json(200, { content: { sha: 'new' } })
@@ -81,58 +100,55 @@ await page.route('https://api.github.com/**', async (route) => {
 })
 
 await page.goto(URL_BASE, { waitUntil: 'networkidle' })
-const built = await page.evaluate(async (repo) => {
-  const project = await import(`/@fs${repo}/src/core/project/index.ts`)
-  const sync = await import(`/@fs${repo}/src/core/sync/index.ts`)
-  const key = project.fileKey({ name: 'saves.pdf', size: 5151, lastModified: 3 })
-  const block = (text) => ({ kind: 'paragraph', text })
-  const leaf = (pageIndex, text, quote) => ({
-    pageIndex,
-    role: 'body',
-    blocks: [block(text)],
-    uncertain: [],
-    furniture: {},
-    queries: [{ kind: 'unclear', quote, why: 'A made-up question.' }]
-  })
-  const run = project.createSavedRun({
-    key,
-    pageCount: 2,
-    fileName: 'saves.pdf',
-    transcriptions: [
-      leaf(0, 'The lamp was lit at dusk and burned till dawn.', 'lit at dusk'),
-      leaf(1, 'A second leaf of made-up words for a second query.', 'second query')
-    ],
-    failures: [],
-    usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0 },
-    modelId: 'none',
-    identityAnswers: {},
-    complete: true
-  })
-  return {
-    key,
-    json: project.serializeBookFile({ run, answers: {}, voice: null }),
-    slug: sync.shelfSlug(key),
-    bookPath: sync.bookPath(key),
-    aboutPath: sync.aboutPath(key)
-  }
-}, REPO)
-files.set(built.bookPath, built.json)
-files.set(
-  built.aboutPath,
-  JSON.stringify({
-    key: built.key,
-    fileName: 'saves.pdf',
-    savedAt: new Date().toISOString(),
-    pageCount: 2,
-    notes: 0,
-    corrections: 0,
-    marked: 0,
-    facts: 0,
-    complete: true,
-    scanPath: null
-  })
-)
-slug = built.slug
+/** A made-up book on the faked shelf, with its card; `scan` names a scan beside it. */
+const shelve = async (name, scan = null) => {
+  const book = await page.evaluate(
+    async ([repo, name, scan]) => {
+      const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+      const sync = await import(`/@fs${repo}/src/core/sync/index.ts`)
+      const key = project.fileKey({ name, size: 5151, lastModified: 3 })
+      const block = (text) => ({ kind: 'paragraph', text })
+      const leaf = (pageIndex, text, quote) => ({
+        pageIndex,
+        role: 'body',
+        blocks: [block(text)],
+        uncertain: [],
+        furniture: {},
+        queries: [{ kind: 'unclear', quote, why: 'A made-up question.' }]
+      })
+      const run = project.createSavedRun({
+        key,
+        pageCount: 2,
+        fileName: name,
+        transcriptions: [
+          leaf(0, 'The lamp was lit at dusk and burned till dawn.', 'lit at dusk'),
+          leaf(1, 'A second leaf of made-up words for a second query.', 'second query')
+        ],
+        failures: [],
+        usage: { inputTokens: 1, outputTokens: 1, cacheReadTokens: 0 },
+        modelId: 'none',
+        identityAnswers: {},
+        complete: true
+      })
+      const pointer = scan ? { path: scan, key, fileName: name, bytes: 1 } : null
+      return {
+        key,
+        json: project.serializeBookFile({ run, answers: {}, voice: null, scan: pointer }),
+        slug: sync.shelfSlug(key),
+        bookPath: sync.bookPath(key),
+        aboutPath: sync.aboutPath(key)
+      }
+    },
+    [REPO, name, scan]
+  )
+  files.set(book.bookPath, book.json)
+  const card = { key: book.key, fileName: name, savedAt: new Date().toISOString(), pageCount: 2 }
+  files.set(book.aboutPath, JSON.stringify({ ...card, complete: true, scanPath: scan }))
+  slugs.push(book.slug)
+  return book
+}
+const built = await shelve('saves.pdf')
+const slug = built.slug
 const onShelf = () => JSON.parse(files.get(built.bookPath))
 
 // --- 1. a ruling the shelf would not take -----------------------------------
@@ -268,6 +284,90 @@ const markWrites = puts.filter(
   (p) => p.path === built.bookPath && /marked while reading/.test(p.message)
 )
 if (markWrites.length !== 1) problems.push(`${markWrites.length} writes for one mark`)
+
+// --- 3. the other door: a book opened with its scan ---------------------------
+// A mark still waiting on this device (queued in the real store, as a mark
+// made before a refresh is), and the book opened from the shelf by the door
+// that brings the scan. What that door stores on the device must have the mark.
+failWrites = true
+const SCAN = 'scans/0123456789abcdef-scanned.pdf'
+scans.set(SCAN, readFileSync(resolve(REPO, 'public/test-book.pdf')))
+const scanned = await shelve('scanned.pdf', SCAN)
+/** One change put in the device's real queue, as the app puts one there. */
+const enqueue = (entry) =>
+  page.evaluate(
+    async ([repo, entry]) => {
+      const store = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+      await store.queueForShelf(entry)
+    },
+    [REPO, entry]
+  )
+const AT = '2026-11-19T10:00:00.000Z'
+const doorMark = { kind: 'highlight', highlightId: 'hl-door', blockId: 'p0b0', quote: 'lamp' }
+const edit = { ...doorMark, from: 4, to: 8, tag: 'note', madeAt: AT }
+await enqueue({ id: 'highlight:hl-door', bookKey: scanned.key, madeAt: AT, edit, saw: null })
+await page.goto(`${URL_BASE}/#book=${scanned.slug}`, { waitUntil: 'networkidle' })
+await page.reload({ waitUntil: 'networkidle' })
+const storedMarks = await page.evaluate(
+  async ([repo, key]) => {
+    const store = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+    for (let i = 0; i < 60; i++) {
+      const run = await store.loadRun(key)
+      if (run) return run.edits.filter((e) => e.kind === 'highlight').map((e) => e.highlightId)
+      await new Promise((go) => setTimeout(go, 250))
+    }
+    return null
+  },
+  [REPO, scanned.key]
+)
+console.log(`scan door : stored marks ${JSON.stringify(storedMarks)}`)
+if (storedMarks === null) problems.push('the door that brings the scan stored no book')
+else if (!storedMarks.includes('hl-door')) {
+  problems.push('the door that brings the scan stored the book without the waiting mark')
+}
+
+// --- 4. a slow tablet: a ruling changed while the first is being written ------
+failWrites = false
+const slow = await shelve('slow.pdf')
+holdWrite.path = slow.bookPath
+const config = { repo: 'LazMcSpaz/Test-Shelf', branch: 'main', token: 'github_pat_harness' }
+/** One ruling on the slow book's first query, queued in the real store. */
+const queueRuling = (decision, madeAt, more = {}) => {
+  const ruling = { pageIndex: 0, quote: 'lit at dusk', kind: 'unclear', decision, ...more }
+  const entry = { id: 'ruling:0:lit at dusk', bookKey: slow.key, madeAt }
+  return enqueue({ ...entry, ruling: { ...ruling, decidedOn: '2026-11-19' } })
+}
+await queueRuling('as-printed', AT)
+await page.evaluate(
+  async ([repo, config, key]) => {
+    const outbox = await import(`/@fs${repo}/src/platform/browser/shelf-outbox.ts`)
+    window.slowFlush = outbox.flushOutbox(config, key)
+  },
+  [REPO, config, slow.key]
+)
+for (let i = 0; i < 100 && !holdWrite.release; i++) await page.waitForTimeout(100)
+if (!holdWrite.release) problems.push('the slow write never reached the shelf')
+// The editor changes the ruling while the first write is still on its way.
+await queueRuling('corrected', '2026-11-19T10:00:05.000Z', { correction: 'lit at dawn' })
+holdWrite.release?.()
+const slowResult = await page.evaluate(
+  async ([repo, key]) => {
+    const store = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+    const result = await window.slowFlush
+    const left = await store.outboxFor(key)
+    return { waiting: result.waiting, note: result.note, left: left.map((e) => e.ruling.decision) }
+  },
+  [REPO, slow.key]
+)
+console.log(`slow write: ${slowResult.note} | still queued ${JSON.stringify(slowResult.left)}`)
+if (JSON.stringify(slowResult.left) !== '["corrected"]') {
+  problems.push(
+    `the ruling changed during a slow write was not kept queued (${JSON.stringify(slowResult.left)})`
+  )
+}
+if (JSON.parse(files.get(slow.bookPath)).run.rulings[0]?.decision !== 'as-printed') {
+  problems.push('the slow write did not file the ruling it sent')
+}
 
 await browser.close()
 if (problems.length > 0) {

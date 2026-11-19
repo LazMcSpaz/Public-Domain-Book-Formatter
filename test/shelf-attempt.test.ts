@@ -1,13 +1,20 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, afterEach } from 'vitest'
 import {
   attempt,
   blobSha,
   describeFailure,
   secondsInWords,
   sizeInWords,
-  ShelfStepError
+  ShelfStepError,
+  type ShelfFailure
 } from '@platform/browser/shelf-attempt'
 import { ShelfError } from '@platform/browser/shelf'
+import { reach } from '@platform/browser/shelf-fetch'
+
+const real = globalThis.fetch
+afterEach(() => {
+  globalThis.fetch = real
+})
 
 /**
  * A failed shelf request named, sized and timed (see `shelf-attempt.ts`).
@@ -22,17 +29,20 @@ describe('a shelf request that fails', () => {
       'Failed to fetch',
       'NetworkError when attempting to fetch resource.'
     ]) {
+      // `fetch` itself rejects, as it does in every browser for a request that
+      // got nothing back.
+      globalThis.fetch = (async () => {
+        now += 400
+        throw new TypeError(said)
+      }) as typeof fetch
       const failing = attempt(
         'writing the book file',
         3_031_000,
-        async () => {
-          now += 400
-          throw new TypeError(said)
-        },
+        () => reach('https://api.github.com/x'),
         clock
       )
       await expect(failing).rejects.toBeInstanceOf(ShelfStepError)
-      const failure = await failing.catch((e: ShelfStepError) => e.failure)
+      const failure = (await failing.catch((e: ShelfStepError) => e.failure)) as ShelfFailure
       expect(failure).toMatchObject({ kind: 'no-answer', ms: 400, status: null, said })
       expect(describeFailure(failure)).toBe(
         `Writing the book file (3.0 MB) got no answer: the browser gave up after 0.4 seconds and said “${said}”.`
@@ -48,6 +58,16 @@ describe('a shelf request that fails', () => {
     expect(describeFailure(failure)).toBe(
       'Asking the shelf for the book’s version was refused. That token was rejected by GitHub.'
     )
+  })
+
+  it('is never “no answer” for a slip in our own code, though that is a TypeError too', async () => {
+    const failure = (await attempt('reading the book from the shelf', null, async () => {
+      const answer = (await Promise.resolve(undefined)) as unknown as { text: () => string }
+      return answer.text()
+    }).catch((e: ShelfStepError) => e.failure)) as ShelfFailure
+    expect(failure).toMatchObject({ kind: 'failed', status: null })
+    expect(describeFailure(failure)).toMatch(/^Reading the book from the shelf failed after/)
+    expect(describeFailure(failure)).not.toContain('got no answer')
   })
 
   it('passes a success straight through', async () => {

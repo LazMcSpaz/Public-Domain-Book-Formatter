@@ -20,6 +20,7 @@
  * `crypto.subtle`.
  */
 import { ShelfError } from './shelf'
+import { NoAnswer } from './shelf-fetch'
 
 /** One shelf request that did not succeed, in the words the note needs. */
 export interface ShelfFailure {
@@ -31,8 +32,9 @@ export interface ShelfFailure {
   ms: number
   /**
    * `refused`: GitHub answered and said no (its status is in `status`).
-   * `no-answer`: the browser got nothing back at all (`fetch` rejected).
-   * `failed`: anything else, such as an answer that could not be read.
+   * `no-answer`: the browser got nothing back at all (`fetch` itself rejected).
+   * `failed`: anything else, such as an answer that could not be read, or a
+   * fault in the app's own code.
    */
   kind: 'refused' | 'no-answer' | 'failed'
   status: number | null
@@ -58,10 +60,10 @@ export class ShelfStepError extends Error {
 /**
  * Run one shelf request, and fail with its name, its size and its time.
  *
- * `fetch` rejects with a `TypeError` for every network failure in every
- * browser ("Load failed" in Safari and on every iPhone browser, "Failed to
- * fetch" in Chrome, "NetworkError when attempting to fetch resource" in
- * Firefox), and with nothing else, so that is what "no answer" means here.
+ * "No answer" is `NoAnswer` only: the error `reach` (`shelf-fetch.ts`) makes
+ * of a rejected `fetch`, which is how every browser reports a request that got
+ * nothing back. Any other `TypeError` is a fault in our own code, and blaming
+ * the connection for it would send the editor to the wrong place.
  */
 export async function attempt<T>(
   what: string,
@@ -79,7 +81,7 @@ export async function attempt<T>(
     if (err instanceof ShelfError) {
       throw new ShelfStepError({ what, bytes, ms, kind: 'refused', status: err.status, said })
     }
-    const kind = err instanceof TypeError ? 'no-answer' : 'failed'
+    const kind = err instanceof NoAnswer ? 'no-answer' : 'failed'
     throw new ShelfStepError({ what, bytes, ms, kind, status: null, said })
   }
 }

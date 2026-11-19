@@ -42,7 +42,7 @@ All the book logic as pure code: reading shapes, assembly, edits, the checks, th
 - **project/**: bump `RECON_CACHE_VERSION` when a recon record gains a field, so an older reading is refused, not served as empty.
 - **provenance/**: a text layer is `converted` (needs reading) unless a typesetting producer is named; never default to `typeset`.
 - **queries/**: a proposal is an option, never a `defaultValue` or `held` value; the three plain decisions are always appended.
-- **sync/**: the outbox queues edits, never the book: a flush re-reads the shelf file, folds the queue in and writes once (`mergeOutbox`), patching the shelf's own JSON so no field the app cannot read is lost (`foldIntoBookText`).
+- **sync/**: the outbox queues edits, never the book: a flush re-reads the shelf file, folds the queue in and writes once (`mergeOutbox`), patching the shelf's own JSON in its own layout so no field the app cannot read is lost (`foldIntoBookText`); a fold that cannot keep everything writes nothing. Compare records with `same.ts` (as the app reads them, key order ignored), never `JSON.stringify`: the reading view and the parser order one comment's keys differently (`test/fold-shapes.test.ts`).
 - **transcribe/**:
   - Words split on `\s`, U+00A0 included, everywhere; emphasis is by word index, so never treat a no-break space specially in one place.
   - A table's text is a derived view of its cells; reconcile the two only through `normalizeTable`, wherever a table enters.

@@ -22,10 +22,12 @@
 import { chromium } from 'playwright'
 import { resolve } from 'node:path'
 import { stat } from 'node:fs/promises'
+import { blobSha } from './lib/blob-sha.mjs'
 
 const REPO = resolve(import.meta.dirname, '..')
 const EXECUTABLE = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
-const URL_BASE = process.env.APP_URL ?? 'http://localhost:5173'
+// `PDBF_URL`, as every other check reads it; `APP_URL` is still taken, as `drive.mjs` reads it.
+const URL_BASE = process.env.PDBF_URL ?? process.env.APP_URL ?? 'http://localhost:5173'
 const REPO_NAME = 'editor/shelf'
 
 const fail = (why) => {
@@ -62,11 +64,12 @@ await context.route('https://api.github.com/**', async (route) => {
   const path = url.pathname.split('/contents/')[1] ?? ''
   if (request.method() === 'GET') {
     if (!shelf.files.has(path)) return json(404, { message: 'Not Found' })
-    // `getText` asks for the raw media type; `shaOf` asks for the envelope.
+    // The flush reads the raw media type; `shaOf` asks for the envelope, and
+    // gets the real blob sha, which the flush checks against what it read.
     if ((request.headers()['accept'] ?? '').includes('raw')) {
       return route.fulfill({ status: 200, contentType: 'text/plain', body: shelf.files.get(path) })
     }
-    return json(200, { sha: 'stub-sha' })
+    return json(200, { sha: blobSha(shelf.files.get(path)) })
   }
   if (request.method() === 'PUT') {
     const body = JSON.parse(request.postData() ?? '{}')

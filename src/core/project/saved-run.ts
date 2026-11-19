@@ -510,7 +510,7 @@ export function migrateSavedRun(raw: unknown): SavedRun {
  * settling a query in a way no code could act on, which is worse than an
  * unanswered query because it stops anyone looking.
  */
-function parseRulings(raw: unknown): Ruling[] {
+export function parseRulings(raw: unknown): Ruling[] {
   if (!Array.isArray(raw)) return []
   const out: Ruling[] = []
   for (const item of raw) {
@@ -671,7 +671,7 @@ function parseImages(raw: unknown): { id: string; bytes: Uint8Array }[] {
  * correction, where refusing the whole run would cost them the thing they paid
  * for over a typo in a field they cannot see.
  */
-function parseEdits(raw: unknown): BookEdit[] {
+export function parseEdits(raw: unknown): BookEdit[] {
   if (!Array.isArray(raw)) return []
   const out: BookEdit[] = []
   for (const value of raw) {

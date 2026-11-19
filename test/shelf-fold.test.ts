@@ -1,6 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import { createSavedRun, parseBookFile, serializeBookFile, type SavedRun } from '@core/project'
-import { foldIntoBookText, holds, withQueued, type OutboxEntry } from '@core/sync'
+import {
+  canonicalJson,
+  equalEdit,
+  foldIntoBookText,
+  withQueued,
+  type OutboxEntry
+} from '@core/sync'
 import { defaultVoice } from '@core/annotate'
 import type { BookEdit } from '@core/edits'
 import type { Ruling } from '@core/queries'
@@ -181,12 +187,23 @@ describe('a ruling folded into the shelf’s book file', () => {
   })
 })
 
-describe('the shelf’s copy of an item', () => {
-  it('holds everything the app read off it, at every depth, and may hold more', () => {
-    expect(holds({ a: 1, b: { c: [1, 2], d: 'x' } }, { a: 1, b: { c: [1, 2] } })).toBe(true)
-    expect(holds({ a: 1 }, { a: 1, b: 2 })).toBe(false)
-    expect(holds({ a: [1, 2, 3] }, { a: [1, 2] })).toBe(false)
-    expect(holds({ a: 1 }, { a: 1, skipped: undefined })).toBe(true)
+describe('one record, whatever order its keys were written in', () => {
+  it('is one text with the keys sorted, at every depth, in arrays too', () => {
+    expect(canonicalJson({ b: 1, a: { d: [{ y: 1, x: 2 }], c: 'x' } })).toBe(
+      canonicalJson({ a: { c: 'x', d: [{ x: 2, y: 1 }] }, b: 1 })
+    )
+    expect(canonicalJson([1, 2])).not.toBe(canonicalJson([2, 1]))
+    expect(canonicalJson({ a: 1, skipped: undefined })).toBe(canonicalJson({ a: 1 }))
+  })
+
+  it('is one edit as the app reads it, the parser’s tidying included', () => {
+    const memo = { kind: 'memo', memoId: 'm1', blockId: 'p0b0', at: 4, text: 'x' } as BookEdit
+    const reordered = { text: 'x', at: 4, blockId: 'p0b0', memoId: 'm1', kind: 'memo' } as BookEdit
+    expect(equalEdit(memo, reordered)).toBe(true)
+    // An empty quote is dropped by the parser, so it is the same as none.
+    expect(equalEdit(memo, { ...memo, quote: '' } as BookEdit)).toBe(true)
+    expect(equalEdit(memo, { ...memo, text: 'y' } as BookEdit)).toBe(false)
+    expect(equalEdit(memo, null)).toBe(false)
   })
 })
 

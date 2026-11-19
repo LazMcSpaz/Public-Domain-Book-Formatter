@@ -10,14 +10,21 @@
  * another book. Nothing said so; the commit message would have read "1 query
  * ruled on".
  *
- * So the file is now patched rather than rewritten. The shelf's own JSON is
- * kept as it was, and only the two lists change. In those, every item the
- * merge left alone is written back as the shelf held it, extra fields and all;
- * an item the queue added or replaced is the queue's. What the app knows is
- * still decided by the app (`mergeOutbox`), so the patch can never mean
- * something different from the merge: the result is read back and compared,
- * and an item that cannot be lined up with the shelf's copy falls back to the
- * app's own list for that one list, which is what every flush did before.
+ * So the file is patched rather than rewritten. The shelf's own JSON is kept as
+ * it was, laid out as it was (its indent, its line endings, its last newline),
+ * and only the two lists change. In those, every item the merge left alone is
+ * written back as the shelf held it, extra fields and all; an item the queue
+ * added or replaced is the queue's. What the app knows is still decided by the
+ * app (`mergeOutbox`), so the patch can never mean something different from the
+ * merge: the result is read back and held to it.
+ *
+ * **A fold that cannot keep everything writes nothing.** It used to fall back
+ * to the app's own copy of the list and write that, which is the loss this file
+ * exists to prevent, with nothing said. Now it says so (`keptEverything` false,
+ * no text to write), and the flush keeps the changes queued and tells the
+ * editor. Records are compared as the app reads them, whatever order their keys
+ * were written in (`same.ts`): comparing texts is what made a comment from the
+ * reading view look like a change nobody made, on every book on the shelf.
  *
  * Pure: text in, text out.
  */
@@ -28,51 +35,62 @@ import {
   type BookFile
 } from '@core/project'
 import { mergeOutbox, type MergeResult, type OutboxEntry } from './outbox'
+import { canonicalJson, readEdit, readRuling } from './same'
 
 /** What folding the queue into a book file came to. */
 export interface FoldedBookText {
   /**
-   * The book file to write, or null when the queue changes nothing in it.
+   * The book file to write, or null when nothing may be written.
    *
-   * Null with entries applied is a queue whose every change is already on
-   * the shelf (a flush whose answer was lost, sent again): the entries can be
-   * cleared and nothing needs writing, so no commit that says nothing is made.
+   * Null with `keptEverything` true is a queue whose every change is already
+   * on the shelf (a flush whose answer was lost, sent again): the entries can
+   * be cleared and no commit that says nothing is made. Null with
+   * `keptEverything` false is a fold that would have lost something: nothing
+   * is written and nothing is cleared.
    */
   json: string | null
   merged: MergeResult
   /** The book as the app reads it, from the text that was read. */
   file: BookFile
   /**
-   * Whether every field the app does not know was kept. False only when an
-   * item could not be lined up with the shelf's copy, and then only for the
-   * list it is in.
+   * Whether the file to write keeps every field the app does not read. When
+   * false there is no file to write: see `json`.
    */
   keptEverything: boolean
 }
 
 type Json = null | boolean | number | string | Json[] | { [key: string]: Json }
 
+/** How a JSON file is laid out, so a rewrite of it changes only what changed. */
+export interface JsonLayout {
+  /** What each level is indented by; empty for a file on one line. */
+  indent: string
+  /** `\r\n` for a file written with Windows line endings, otherwise `\n`. */
+  eol: string
+  /** Whether the file ends with a line ending. */
+  finalEol: boolean
+}
+
 /**
- * Whether the shelf's copy of an item holds everything the app read off it.
+ * The layout of a JSON file, read off its text.
  *
- * Every field the app kept must be there with the same value, at every depth;
- * fields the app did not keep may be there too. That is the relation between
- * a stored item and the app's reading of it, so it is the test for "this is
- * the shelf's copy of that item".
+ * The tools write most books with two spaces and one with a single space, all
+ * with no newline at the end. Writing one space as two rewrites every line of
+ * the file in git: a single ruling on _Collected Manuscript Lectures_ showed as
+ * some twenty thousand changed lines.
  */
-export function holds(stored: unknown, read: unknown): boolean {
-  if (read === undefined) return true
-  if (read === null || typeof read !== 'object') return stored === read
-  if (Array.isArray(read)) {
-    return (
-      Array.isArray(stored) &&
-      stored.length === read.length &&
-      read.every((item, i) => holds(stored[i], item))
-    )
-  }
-  if (stored === null || typeof stored !== 'object' || Array.isArray(stored)) return false
-  const s = stored as Record<string, unknown>
-  return Object.entries(read as Record<string, unknown>).every(([k, v]) => holds(s[k], v))
+export function layoutOf(text: string): JsonLayout {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n'
+  const first = /^[{[][ \t]*\r?\n([ \t]+)/.exec(text)
+  const indent = first?.[1] ?? (text.includes('\n') ? '  ' : '')
+  return { indent, eol, finalEol: text.endsWith('\n') }
+}
+
+/** A value written out in a given layout. */
+export function writeInLayout(value: unknown, layout: JsonLayout): string {
+  let json = JSON.stringify(value, null, layout.indent)
+  if (layout.eol !== '\n') json = json.replace(/\n/g, layout.eol)
+  return layout.finalEol ? json + layout.eol : json
 }
 
 /**
@@ -80,48 +98,56 @@ export function holds(stored: unknown, read: unknown): boolean {
  *
  * `parsed` is the app's reading of `stored`, and `merged` is what the merge
  * made of `parsed`: an item it left alone is the same object, which is how an
- * untouched item is told from one the queue added or replaced. Items the app
- * could not read at all stay where they were.
+ * untouched item is told from one the queue added or replaced. Each stored item
+ * is paired with the app's reading of it, in order (the parser reads every item
+ * on its own, so the readable ones are `parsed`, one for one). Items the app
+ * cannot read at all stay where they were, after the item they followed.
  *
- * Null when an item the app read cannot be found in the shelf's list.
+ * Null when the two cannot be paired, which a sound parse never produces: the
+ * caller then writes nothing.
  */
-function keepStored<T>(stored: unknown, parsed: readonly T[], merged: readonly T[]): Json[] | null {
+function keepStored<T>(
+  stored: unknown,
+  parsed: readonly T[],
+  merged: readonly T[],
+  read: (raw: unknown) => T | null
+): Json[] | null {
   const list: unknown[] = Array.isArray(stored) ? stored : []
-  const claimed = new Set<number>()
   const storedOf = new Map<T, unknown>()
+  const readable = new Set<number>()
   let next = 0
-  for (const item of parsed) {
-    // In order first, which is how the app reads a list; a search only when
-    // the app dropped something malformed and the two have drifted apart.
-    let at = -1
-    for (let i = next; i < list.length && at < 0; i++) {
-      if (!claimed.has(i) && holds(list[i], item)) at = i
-    }
-    for (let i = 0; i < next && at < 0; i++) {
-      if (!claimed.has(i) && holds(list[i], item)) at = i
-    }
-    if (at < 0) return null
-    claimed.add(at)
-    storedOf.set(item, list[at])
-    next = at + 1
+  for (let i = 0; i < list.length; i++) {
+    const reading = read(list[i])
+    if (reading === null) continue
+    const item = parsed[next]
+    if (item === undefined || canonicalJson(reading) !== canonicalJson(item)) return null
+    storedOf.set(item, list[i])
+    readable.add(i)
+    next += 1
   }
+  if (next !== parsed.length) return null
 
   const out: unknown[] = merged.map((item) => (storedOf.has(item) ? storedOf.get(item) : item))
-  // What the app could not read, put back after the item it followed.
-  let cursor = -1
+  // What the app could not read, put back after the item it followed (or the
+  // nearest one before it that the merge kept).
+  const present = new Set(out)
+  const head: unknown[] = []
+  const after = new Map<unknown, unknown[]>()
+  let anchor: { item: unknown } | null = null
   list.forEach((item, i) => {
-    if (claimed.has(i)) {
-      const at = out.indexOf(item)
-      if (at >= 0) cursor = at
+    if (readable.has(i)) {
+      if (present.has(item)) anchor = { item }
       return
     }
-    out.splice(cursor + 1, 0, item)
-    cursor += 1
+    if (anchor === null) head.push(item)
+    else after.set(anchor.item, [...(after.get(anchor.item) ?? []), item])
   })
-  return out as Json[]
+  return [...head, ...out.flatMap((item) => [item, ...(after.get(item) ?? [])])] as Json[]
 }
 
-const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b)
+/** What a list reads as to the app, item by item; null for an item it would not read. */
+const readingOf = <T>(list: readonly T[], read: (raw: unknown) => T | null): string =>
+  canonicalJson(list.map((item) => read(item)))
 
 /**
  * Fold the queue into a book file as the shelf holds it.
@@ -137,17 +163,20 @@ export function foldIntoBookText(
   const file = parseBookFile(text)
   const merged = mergeOutbox({ edits: file.run.edits, rulings: file.run.rulings }, queue)
   const changes =
-    !sameJson(merged.edits, file.run.edits) || !sameJson(merged.rulings, file.run.rulings)
+    readingOf(merged.edits, readEdit) !== readingOf(file.run.edits, readEdit) ||
+    readingOf(merged.rulings, readRuling) !== readingOf(file.run.rulings, readRuling)
   if (merged.applied.length === 0 || !changes) {
     return { json: null, merged, file, keptEverything: true }
   }
+  const refused: FoldedBookText = { json: null, merged, file, keptEverything: false }
 
   const raw = JSON.parse(text) as { [key: string]: Json }
   const run = raw['run'] as { [key: string]: Json }
-  const edits = keepStored(run['edits'], file.run.edits, merged.edits)
-  const rulings = keepStored(run['rulings'], file.run.rulings, merged.rulings)
-  run['edits'] = edits ?? (merged.edits as unknown as Json[])
-  run['rulings'] = rulings ?? (merged.rulings as unknown as Json[])
+  const edits = keepStored(run['edits'], file.run.edits, merged.edits, readEdit)
+  const rulings = keepStored(run['rulings'], file.run.rulings, merged.rulings, readRuling)
+  if (edits === null || rulings === null) return refused
+  run['edits'] = edits
+  run['rulings'] = rulings
   // What the app writes is read as the current shape. Every step between the
   // versions only adds (see `migrateSavedRun`), so an older file saying so is
   // true of it; and an app that predates the newest one refuses the file
@@ -156,19 +185,19 @@ export function foldIntoBookText(
   raw['runSchema'] = CURRENT_SCHEMA_VERSION
   raw['version'] = BOOK_FILE_VERSION
   raw['savedAt'] = savedAt
+  const json = writeInLayout(raw, layoutOf(text))
 
-  let json = JSON.stringify(raw, null, 2) + (text.endsWith('\n') ? '\n' : '')
-  let keptEverything = edits !== null && rulings !== null
-  // Read back as the app reads it, and held to the merge. A patch that read
-  // differently from what the merge decided would be a change nobody made.
+  // Read back as the app reads it, and held to the merge: the patched file must
+  // read exactly as the app's own write of the merge would have. A patch that
+  // read differently would be a change nobody made.
   const back = parseBookFile(json)
-  if (!sameJson(back.run.edits, merged.edits) || !sameJson(back.run.rulings, merged.rulings)) {
-    run['edits'] = merged.edits as unknown as Json[]
-    run['rulings'] = merged.rulings as unknown as Json[]
-    json = JSON.stringify(raw, null, 2) + (text.endsWith('\n') ? '\n' : '')
-    keptEverything = false
+  if (
+    canonicalJson(back.run.edits) !== readingOf(merged.edits, readEdit) ||
+    canonicalJson(back.run.rulings) !== readingOf(merged.rulings, readRuling)
+  ) {
+    return refused
   }
-  return { json, merged, file, keptEverything }
+  return { json, merged, file, keptEverything: true }
 }
 
 /**
