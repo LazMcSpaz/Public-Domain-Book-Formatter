@@ -27,6 +27,7 @@ import {
   runRecon,
   releaseRecon,
   RECON_DPI,
+  BOOK_RECON,
   type ReconProgress,
   type ReconResult
 } from '../platform/browser/recon'
@@ -39,7 +40,6 @@ import {
 import { canKeepAwake, keepAwake, type ReleaseWakeLock } from '../platform/browser/wake-lock'
 import { looksLikeEpub, openEpub } from '../platform/browser/epub'
 import { assessText, describeAssessment } from '@core/textquality'
-import { DEFAULT_CLEANUP } from '@core/image/cleanup'
 import { QuestionView } from './QuestionView'
 import { QuestionList } from './QuestionList'
 import { useAgentSurface } from './agent-surface'
@@ -1508,7 +1508,7 @@ export function App(): JSX.Element {
       // The default preset is the ledger's choice (`DEFAULT_CLEANUP`); a
       // cached reading taken through another preset is refused, as another
       // DPI is, because its words came off different pixels.
-      const wanted = { dpi: RECON_DPI, maxPages: null, cleanup: DEFAULT_CLEANUP }
+      const wanted = BOOK_RECON
       // Flagged rather than silent: fetching a book's worth of thumbnails and
       // word boxes out of IndexedDB is quick but not instant, and a screen that
       // shows nothing during it looks like a file that failed to open.
@@ -1964,7 +1964,7 @@ export function App(): JSX.Element {
     setQueueRunning(true)
     // The screen, and so the tab, stays up for the whole queue.
     const release = keepAwake()
-    const wanted = { dpi: RECON_DPI, maxPages: null, cleanup: DEFAULT_CLEANUP }
+    const wanted = BOOK_RECON
     try {
       for (;;) {
         const state = reconQueueRef.current

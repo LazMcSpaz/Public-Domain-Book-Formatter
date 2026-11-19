@@ -86,9 +86,13 @@ as well as `save`, or the shelf list cannot see it.
    renders the finished edition every time you ask for a leaf. Confirm with
    `drive.mjs book`; `drive.mjs runs` lists stored runs and `runs drop <n>`
    removes a stray one.
-3. **Do not redo a reading the shelf already holds.** If `recon.json.gz` sits
-   beside the book, `node scripts/drive.mjs reconimport <shelf>/books/<dir>/recon.json.gz`.
-   After a recon of your own, `reconexport` to the same path and commit it.
+3. **Take the free reading**: `node scripts/drive.mjs recon`. `load` says
+   whether one is here already. `recon` loads `recon.json.gz` from beside the
+   book when it is a reading of this scan, so a reading the shelf holds is
+   never redone; otherwise it reads the scan (most of an hour on a long book:
+   run it in the background). After a reading of your own,
+   `node scripts/drive.mjs reconexport <shelf>/books/<dir>/recon.json.gz` and
+   commit it. Without a reading, `transcribe` refuses to land leaves.
 4. **Work in units, and commit each one**: a batch landed, a pass, a fix.
    Forty tool calls with nothing committed is forty tool calls the container
    can take away.

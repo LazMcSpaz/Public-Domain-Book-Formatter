@@ -76,6 +76,22 @@ export {
   type ReconWanted
 } from './recon-cache'
 export {
+  WITHOUT_OCR_CHECK,
+  ocrGateRefusal,
+  ocrReport,
+  planRecon,
+  reconDoesNotApply,
+  reconStatus,
+  shelfReadingFor,
+  textFrom,
+  type CheckpointSummary,
+  type OcrGateFacts,
+  type ReadingSummary,
+  type ReconFacts,
+  type ReconPlan,
+  type ShelfReading
+} from './recon-plan'
+export {
   RECON_HANDOFF_FILE,
   RECON_HANDOFF_FORMAT,
   RECON_HANDOFF_VERSION,

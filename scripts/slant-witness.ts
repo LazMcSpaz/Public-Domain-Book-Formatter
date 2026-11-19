@@ -20,8 +20,12 @@
  * - **the scan's own text layer**, by default: its characters carry the
  *   boxes the OCR drew, which is all the measure needs;
  * - **`--words`**, for a scan with no layer: `[{ page, words: [{ text, x0,
- *   y0, x1, y1 }] }]`, boxes in pixels of the 300-DPI render — Tesseract's
- *   reading, say.
+ *   y0, x1, y1 }] }]`, boxes in pixels of the 300-DPI render, pages counted
+ *   from 0 — recon's reading, written by `drive.mjs words --out` (`witnessPages`
+ *   in `@core/image/witness.ts` says why its boxes are this render's).
+ *
+ * A run that measured no word exits with an error and writes nothing
+ * (`noWordsMeasured`): an empty list would read as "no italic here".
  *
  * `--book` is for a book read from another file than this scan — an EPUB,
  * whose leaves are chapters and not pages. `checkEmphasis` places a run only
@@ -34,9 +38,16 @@ import { readFileSync, writeFileSync } from 'node:fs'
 import * as mupdf from 'mupdf'
 import { assembleBook } from '@core/assemble'
 import { applyEdits } from '@core/edits'
-import { italicWords, pageRoman, strokeLean, type GrayImage } from '@core/image'
+import {
+  WITNESS_DPI,
+  italicWords,
+  noWordsMeasured,
+  pageRoman,
+  strokeLean,
+  type GrayImage
+} from '@core/image'
 
-const DPI = 300
+const DPI = WITNESS_DPI
 /** The share of a page's height its running head, and its foot, sit in. */
 const HEAD_BAND = 0.09
 const FOOT_BAND = 0.06
@@ -177,10 +188,14 @@ const placed: { band: boolean; scanPage: number }[] = []
 let pagesRead = 0
 let wordsMeasured = 0
 let unplacedPages = 0
+let pagesWithWords = 0
+/** Words whose box lies off the render: boxes in some other space than this one. */
+let boxesOffPage = 0
 const unrendered: number[] = []
 for (let p = first!; p <= last!; p++) {
   const page = doc.loadPage(p)
   const words = given ? (given.get(p) ?? []) : layerWords(page)
+  if (words.length > 0) pagesWithWords++
   const leaf = words.length === 0 ? null : leafOf ? leafOf(words) : p
   if (leaf === null) {
     if (words.length > 0) unplacedPages++
@@ -215,6 +230,7 @@ for (let p = first!; p <= last!; p++) {
   pixmap.destroy()
   page.destroy()
   const image: GrayImage = { data, width, height }
+  boxesOffPage += words.filter((w) => w.x1 > width + 2 || w.y1 > height + 2).length
   const slanted = words.map((w) => {
     const lean = strokeLean(image, w)
     return { letters: letters(w.text), slant: lean?.degrees ?? null, sharpness: lean?.sharpness }
@@ -271,12 +287,29 @@ runs.forEach((r, i) => {
 const kept = runs.filter(
   (r, i) => !placed[i]!.band || (bandPages.get(letterKey(r.text))?.size ?? 0) < FURNITURE_PAGES
 )
-writeFileSync(outPath, JSON.stringify(kept, null, 1))
-console.log({
+const counted = {
   pagesRead,
   wordsMeasured,
   runs: kept.length,
   furnitureLeftOut: runs.length - kept.length,
   ...(leafOf ? { pagesMatchingNoLeaf: unplacedPages } : {}),
+  ...(boxesOffPage > 0 ? { boxesOffThePage: boxesOffPage } : {}),
   ...(unrendered.length > 0 ? { pagesThatWouldNotRender: unrendered } : {})
+}
+// Before anything is written: a list of no runs from no words would read as
+// "this scan prints no italic", and the check it feeds would pass on nothing.
+const refusal = noWordsMeasured({
+  from: given ? 'words' : 'layer',
+  first: first!,
+  last: last!,
+  pagesWithWords,
+  pagesUnplaced: unplacedPages,
+  wordsMeasured
 })
+if (refusal) {
+  console.error(refusal)
+  console.error(counted)
+  process.exit(1)
+}
+writeFileSync(outPath, JSON.stringify(kept, null, 1))
+console.log(counted)

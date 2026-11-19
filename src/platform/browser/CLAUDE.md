@@ -14,7 +14,8 @@ Everything the engine needs a browser for: PDF rendering (pdf.js), OCR (Tesserac
 
 ## Key files
 
-- `recon.ts`: render, OCR and harvest, one leaf at a time; `releaseRecon`.
+- `recon.ts`: render, OCR and harvest, one leaf at a time; `releaseRecon`; `BOOK_RECON`, the conditions a whole book is read under.
+- `recon-run.ts`: the driver's `recon` and `load` line, carrying out `planRecon` (core) with the app's own recon functions.
 - `cleanup.ts`: `recognizeLeaf`, the one read path recon and `drive.mjs ocr … fresh` share.
 - `second-reader.ts`: the PaddleOCR second reading.
 - `pdf-out.ts`: `renderPdf`; read its comment before changing how fonts are embedded (whole, ligatures off).
@@ -30,5 +31,6 @@ Everything the engine needs a browser for: PDF rendering (pdf.js), OCR (Tesserac
 - One door writes a book to the shelf (`pushBookToShelf`); pictures go to `images/<digest>.png` once, never re-inlined on each save.
 - Outbox flushes are chained per book (`shelf-outbox.ts`): one at a time, the next waiting rather than joining.
 - Recon renders, uses and releases one page at a time; never hold page canvases (a 300-DPI page is about 19 MB).
+- Every reader of the recon cache, app or driver, asks with `BOOK_RECON`: `loadReconCache` deletes a record it cannot use (`test/recon-wired.test.ts`).
 - Revoke every object URL you mint for crops and thumbnails; `releaseRecon` frees recon's.
 - Cleaned pixels feed only the OCR engine (`recognizeLeaf`); every crop and the second reader use the original render.
