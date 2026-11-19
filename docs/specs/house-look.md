@@ -12,6 +12,7 @@ What a new book gets:
 - **How that came about.** The first version of this look balanced the two: the number sat exactly as far up from the bottom edge as the head's capitals sat down from the top, both 24.8 pt. When the head came down, the number was meant to stay where it was rather than follow it, so the look now sets the number's distance from the foot on its own (24.8 pt) instead of mirroring the head. Mirroring is still there for any look that asks for it.
 - **No scrap at the end of a paragraph.** A paragraph no longer ends with "pris-" on one line and "on." alone on the next. The line before the last is not broken with a hyphen, and the last line holds at least about six letters (three ems). Only a paragraph that ended that way is set again; every other paragraph keeps its lines. If both cannot be had without spacing a line out too far, the last line's length comes first and the hyphen may stay; if even that cannot be had, the paragraph is set as before.
 - **Short books are 6×9.** A book that would print under 100 pages at 7×10 is set 6×9 instead, with everything else the same. The 6×9 side margins work out the same as the 7×10 ones (1.125 in and 0.75 in), because the engine's standard margins are the same on both pages.
+- **Topic heads for a book divided by subheadings** (your decision of 19 November 2026; [its spec](topic-heads.md)). When at least half of a book's chapters are divided by subheadings in the text, the left page carries the chapter title and the right page the topic in force on it. Any other book keeps the author and the chapter. A book whose chapters only open with a list of topics keeps the author and the chapter, and `proof` puts the question to you.
 
 What does not change:
 
@@ -20,7 +21,7 @@ What does not change:
 
 Where it shows:
 
-- In a chat session, `proof` on a book with no design of its own says `designFrom: the house look from the shelf (imprint/house-look.json): 7x10, 180 pages`, or `6x9, a short book (84 pages on 7x10, under 100)`. If the house look file cannot be read, it says so and why, and falls back to the defaults out loud.
+- In a chat session, `proof` on a book with no design of its own says `designFrom: the house look from the shelf (imprint/house-look.json): 7x10, 180 pages`, or `6x9, a short book (84 pages on 7x10, under 100)`, followed by the heads it gave the book and why: `chapter and topic running heads (9 of 12 chapters divided by subheadings)`. If the house look file cannot be read, it says so and why, and falls back to the defaults out loud.
 - In the app, the design questions open already answered with the house look, with a line saying so.
 
 Hebrew and Greek: the house face has neither, so those letters are drawn from Cardo, which has both. Checked on a made-up page of pointed Hebrew and polytonic Greek set in the house look: nothing prints as a box.
@@ -70,7 +71,7 @@ Hebrew and Greek: the house face has neither, so those letters are drawn from Ca
 }
 ```
 
-`shortBook` may be left out (then: under 100 pages, 6×9) or set to `null` (every book on the house trim). A file that names a setting no question has, or is of a newer version, is refused with the reason.
+`shortBook` may be left out (then: under 100 pages, 6×9) or set to `null` (every book on the house trim). Likewise `topicHeads` ([topic-heads.md](topic-heads.md)): left out, a book with at least half its chapters divided by subheadings gets the chapter title on the left and the topic on the right; `null` keeps every book on the look's own heads. A file that names a setting no question has, or is of a newer version, is refused with the reason.
 
 ## Modules touched
 

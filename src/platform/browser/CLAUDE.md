@@ -21,7 +21,7 @@ Everything the engine needs a browser for: PDF rendering (pdf.js), OCR (Tesserac
 - `pdf-out.ts`: `renderPdf`; read its comment before changing how fonts are embedded (whole, ligatures off).
 - `font-widths.ts`: gives every glyph the book prints a width, and names the ones drawn as boxes.
 - `interior.ts`, `preview.ts`: the finished interior and the design-gate preview, both from the engine's own PDF.
-- `house-look.ts`: the shelf's house look read, and a book laid out in the look it gets (`renderInLook`).
+- `house-look.ts`: the shelf's house look read, and a book laid out in the look it gets (`renderInLook`), with the running heads its structure gets (`houseHeadsForBook`).
 - `shelf.ts`, `shelf-save.ts`, `shelf-outbox.ts`, `landed.ts`: reading and writing the shelf repository.
 - `shelf-pictures.ts`: `fetchBookPictures` (a book's named pictures) and `keptPicture` (a held picture the shelf already has), both looking where core's `pictureCandidates` says.
 - `transport.ts`: `browserTransport`, the `fetch` every model call is handed (the core never reaches the network).

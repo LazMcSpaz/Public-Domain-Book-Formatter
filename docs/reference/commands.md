@@ -458,7 +458,11 @@ own yet. All exist: `drive.mjs save` (writes the open run to `book.json`), `pair
 (lays out the book; `proof pdf=<out.pdf>` writes the PDF export and names
 its SHA-256 as `pdfSha256`; reports unprintable characters; a book with no
 design answers of its own is laid out in the shelf's house look,
-`imprint/house-look.json`, and `designFrom` and `inherited` say so), `querycrops`, `crops`, `card`, `shelf`, `section`,
+`imprint/house-look.json`, and `designFrom` and `inherited` say so, with
+chapter and topic running heads when at least half its chapters are divided
+by subheadings; `askOwner` names a book whose chapters only open with lists
+of topics, and `headsShortened` every topic-heads book's running head too long
+for the page), `querycrops`, `crops`, `card`, `shelf`, `section`,
 `bare`, `query`, `truth` (the proofed text, leaf by leaf, as `truth.json` in
 the scratch folder); `scripts/flatten-cover.py <cover.pdf>
 <cover-flat.pdf>` (the cover copy KDP accepts);

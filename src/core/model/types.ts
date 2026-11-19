@@ -202,8 +202,17 @@ export interface Margins {
   outer: number
 }
 
-/** What a running head shows on a given page side (SPEC §8). */
-export type RunningHeadMode = 'none' | 'bookTitle' | 'author' | 'chapterTitle' | 'pageNumber'
+/**
+ * What a running head shows on a given page side (SPEC §8).
+ *
+ * `topic` is the subheading in force on the page, for a book whose chapters
+ * are divided by subheadings in the text: the first topic that starts on the
+ * page, else the one carried from an earlier page, else (before the chapter's
+ * first topic) the chapter title. The rule is `topicHead` in
+ * `@core/layout/topic-heads`; which headings are topics, `chapterDivisions`.
+ */
+export type RunningHeadMode =
+  'none' | 'bookTitle' | 'author' | 'chapterTitle' | 'pageNumber' | 'topic'
 
 /**
  * How a running head is *set* — as against what it says.

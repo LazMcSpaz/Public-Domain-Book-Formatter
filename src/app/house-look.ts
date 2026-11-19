@@ -14,7 +14,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { BookDocument } from '@core/assemble'
 import type { LayoutEdition } from '@core/layout'
-import { hasOwnDesign, houseDesignFor, houseLookLine } from '@core/style'
+import { hasOwnDesign, houseDesignFor, houseHeadsForBook, houseLookLine } from '@core/style'
 import { HOUSE_LOOK_PATH } from '@core/sync'
 import { appliedLook, type WizardState } from '@core/wizard'
 import type { Answers } from '@core/wizard/questions'
@@ -108,12 +108,18 @@ export function useHouseLook(input: {
           return
         }
         const { design, short } = houseDesignFor(house.look, pages)
+        // The heads the house look gives a book of this structure (core's rule).
+        const heads = houseHeadsForBook(house.look, document.blocks)
         seeded.current = fileKey
-        now.setAnswers(asBookDesign(design))
-        setNote(
-          'This book had no design of its own, so it starts from ' +
-            `${houseLookLine({ look: house.look, path: house.path, pagesOnHouseTrim: pages, short })}.`
-        )
+        now.setAnswers(asBookDesign({ ...design, ...heads.design }))
+        const line = houseLookLine({
+          look: house.look,
+          path: house.path,
+          pagesOnHouseTrim: pages,
+          short,
+          ...(heads.line ? { heads: heads.line } : {})
+        })
+        setNote(`This book had no design of its own, so it starts from ${line}.`)
       })
       .catch(() => {
         seeded.current = fileKey

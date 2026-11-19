@@ -32,6 +32,24 @@ field, and looks at the pages.
   book (`answers` with them as `"design"`, then `save`): the export needs
   `designFrom: "the book file"`, and a book keeps its look when the house look
   changes.
+- **The running heads follow the book's structure** (the owner's decision of
+  19 November 2026; [the spec](../specs/topic-heads.md)). A book inheriting
+  the house look whose chapters are, at least half of them, divided by
+  subheadings in the text gets the chapter title on the left page and the
+  topic in force on the right; any other book keeps the author and the
+  chapter. `designFrom` says which, and why.
+- **Chapters that only open with a list of topics are the owner's question.**
+  When `proof` reports `askOwner`, the chapters print a list of topics under
+  the title and no subheadings in the text, and no tool can know which pages
+  each topic covers. Put it to the owner as a question about this book's
+  design, with a chapter opening rendered in front of him
+  (`proof <page> "answers=<book.json>"`): keep the author and chapter heads,
+  or say where each listed topic begins so it can be set as a subheading,
+  after which the book is divided and gets topic heads. Never set topic
+  heads on such a book without his answer. Record the question and his
+  answer in the book's `ledger.md`, and write the heads he chose into the
+  book's design answers (`runningHeadVerso`, `runningHeadRecto`) with
+  `answers` and `save`.
 
 ## Steps
 
@@ -54,6 +72,11 @@ field, and looks at the pages.
      place is lost in silence;
    - `notesPlaced` and `imagesPlaced` match what the book holds;
    - `designFrom: "the book file"`, not `DEFAULTS`;
+   - `headsShortened`, in a book with topic heads: each running head too long
+     for the page, what was set instead and on which pages. Each one wants a
+     short form from the owner; it is also counted in the warnings;
+   - `askOwner`: see "Before you start"; the book's heads are not settled
+     until the owner answers;
    - `unprintable`: characters drawn as an empty box because no face carries
      them. Each one is the editor's decision; look at the page;
    - `chapters`: each opening on the side the design asks for.

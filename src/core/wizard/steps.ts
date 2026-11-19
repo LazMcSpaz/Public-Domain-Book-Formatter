@@ -1851,6 +1851,13 @@ const design: Step = {
             label: 'Title and chapter',
             description: 'Title on the left, current chapter on the right.'
           },
+          {
+            value: 'chapter-topic',
+            label: 'Chapter and topic',
+            description:
+              'Chapter title on the left, the subheading in force on the right. ' +
+              'For a book whose chapters are divided by subheadings.'
+          },
           { value: 'none', label: 'Nothing', description: 'Page numbers only.' }
         ]
       },

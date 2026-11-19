@@ -84,8 +84,19 @@ describe('proof and the design gate inherit through one door', () => {
 
   it('inherited answers are kept with a fresh look, so a banked look cannot creep under them', () => {
     expect(platform).toMatch(/return \{ \.\.\.design, profile: FRESH_LOOK \}/u)
-    expect((platform.match(/design: asBookDesign\(/gu) ?? []).length).toBe(3)
-    expect(hook).toMatch(/now\.setAnswers\(asBookDesign\(design\)\)/u)
+    // Both inherited sets (the trim asked for, and the trim length chose) are
+    // kept fresh, with the running heads the book's structure gets laid in.
+    expect((platform.match(/asBookDesign\(headed\(/gu) ?? []).length).toBe(2)
+    expect(platform).not.toMatch(/design: chosen\.design, from: 'house'/u)
+    expect(hook).toMatch(
+      /now\.setAnswers\(asBookDesign\(\{ \.\.\.design, \.\.\.heads\.design \}\)\)/u
+    )
+  })
+
+  it('proof hands on the owner’s question about the heads, and every head it shortened', () => {
+    const proof = verb('proof')
+    expect(proof).toMatch(/headsQuestion \? \{ askOwner: headsQuestion \}/u)
+    expect(proof).toMatch(/built\.headsShortened/u)
   })
 
   it('the app measures the length as proof does, from the shipped defaults', () => {
@@ -95,6 +106,8 @@ describe('proof and the design gate inherit through one door', () => {
   it('the app asks the hook, and the hook asks core', () => {
     expect(app).toMatch(/useHouseLook\(\{/u)
     expect(hook).toMatch(/houseDesignFor\(house\.look, pages\)/u)
+    expect(hook).toMatch(/houseHeadsForBook\(house\.look, document\.blocks\)/u)
+    expect(platform).toMatch(/houseHeadsForBook\(house\.look, doc\.blocks\)/u)
     expect(hook).toMatch(/hasOwnDesign\(own\)/u)
     expect(hook).toMatch(/fetchHouseLook\(config\)/u)
   })

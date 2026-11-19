@@ -21,7 +21,12 @@
  *   the house trim is set on the short-book trim instead (`trimForLength`).
  * - **A house look that cannot be read is said to be unreadable,** with the
  *   reason, never quietly replaced by the defaults.
+ * - **Heads by the book's structure.** A book whose chapters are divided by
+ *   subheadings gets the chapter on the left page and the topic on the right
+ *   (`topicHeads`, decided in `house-heads.ts`); any other keeps the house
+ *   look's author and chapter.
  */
+import { DESCRIPTIVE_SHARE } from '@core/assemble'
 import type { AnswerValue, Answers } from '@core/wizard/questions'
 import { defaultStyleProfile } from './defaults'
 import { styleQuestions } from './editable'
@@ -44,12 +49,22 @@ export interface ShortBookRule {
   design: Answers
 }
 
+/** How a descriptive book's running heads differ from the house look's. */
+export interface TopicHeadsRule {
+  /** The share of chapters that must be divided by subheadings in the text. */
+  atLeast: number
+  /** Design answers laid over the house look's for a descriptive book. */
+  design: Answers
+}
+
 export interface HouseLook {
   name: string
   /** Design answers, exactly as a book file keeps them. */
   design: Answers
   /** Null when the house look sets every book alike, whatever its length. */
   shortBook: ShortBookRule | null
+  /** Null when every book keeps the house look's own running heads. */
+  topicHeads: TopicHeadsRule | null
 }
 
 /** Where a book's look came from. */
@@ -59,6 +74,16 @@ export type LookSource = 'book' | 'house' | 'defaults'
 export const DEFAULT_SHORT_BOOK: ShortBookRule = {
   underPages: SHORT_BOOK_PAGES,
   design: { trimSize: SHORT_BOOK_TRIM }
+}
+
+/**
+ * The owner's rule when a house look names none (19 November 2026): a book
+ * with at least half its chapters divided by subheadings carries the chapter
+ * title on the left page and the topic in force on the right.
+ */
+export const DEFAULT_TOPIC_HEADS: TopicHeadsRule = {
+  atLeast: DESCRIPTIVE_SHARE,
+  design: { runningHeadVerso: 'chapterTitle', runningHeadRecto: 'topic' }
 }
 
 /** The design interview's own ids (`wizard/steps.ts`), which style cannot import. */
@@ -138,12 +163,37 @@ export function parseHouseLook(text: string): { look: HouseLook } | { error: str
     // laid out on the trim the report names, never on the engine's default.
     shortBook = { underPages: under, design: { trimSize: SHORT_BOOK_TRIM, ...short } }
   }
+  const topicHeads = readTopicHeads(raw['topicHeads'])
+  if (typeof topicHeads === 'string') return { error: topicHeads }
   const name = typeof raw['name'] === 'string' && raw['name'].trim() ? raw['name'].trim() : ''
   // Likewise the house trim: a file that names none is still laid out, measured
   // and reported on 7x10, never on the engine's own default (6x9).
   return {
-    look: { name: name || 'The house look', design: { trimSize: HOUSE_TRIM, ...design }, shortBook }
+    look: {
+      name: name || 'The house look',
+      design: { trimSize: HOUSE_TRIM, ...design },
+      shortBook,
+      topicHeads
+    }
   }
+}
+
+/**
+ * The topic-heads rule from a file: the owner's when it names none, none when
+ * it says `null`, else its own (a share above 0 and at most 1, and answers),
+ * or the reason it cannot be used.
+ */
+function readTopicHeads(raw: unknown): TopicHeadsRule | null | string {
+  if (raw === undefined) return DEFAULT_TOPIC_HEADS
+  if (raw === null) return null
+  if (!isRecord(raw)) return '`topicHeads` is not a rule'
+  const share = raw['atLeast'] ?? DEFAULT_TOPIC_HEADS.atLeast
+  if (typeof share !== 'number' || !(share > 0 && share <= 1)) {
+    return '`topicHeads.atLeast` is not a share of the chapters (above 0, at most 1)'
+  }
+  const design = readDesign(raw['design'] ?? DEFAULT_TOPIC_HEADS.design, '`topicHeads.design`')
+  if (typeof design === 'string') return design
+  return { atLeast: share, design }
 }
 
 /**
@@ -216,13 +266,16 @@ export function houseLookLine(input: {
   path: string
   pagesOnHouseTrim: number
   short: boolean
+  /** Which running heads the book got, and why (`houseHeadsFor`), said after the trim. */
+  heads?: string
 }): string {
   const { look, path, pagesOnHouseTrim, short } = input
+  const heads = input.heads ? `; ${input.heads}` : ''
   const long = String(look.design['trimSize'] ?? HOUSE_TRIM)
   const where = `the house look from the shelf (${path})`
-  if (!look.shortBook) return `${where}: ${long}, ${pagesOnHouseTrim} pages`
+  if (!look.shortBook) return `${where}: ${long}, ${pagesOnHouseTrim} pages${heads}`
   const trim = short ? String(look.shortBook.design['trimSize'] ?? long) : long
   return short
-    ? `${where}: ${trim}, a short book (${pagesOnHouseTrim} pages on ${long}, under ${look.shortBook.underPages})`
-    : `${where}: ${trim}, ${pagesOnHouseTrim} pages`
+    ? `${where}: ${trim}, a short book (${pagesOnHouseTrim} pages on ${long}, under ${look.shortBook.underPages})${heads}`
+    : `${where}: ${trim}, ${pagesOnHouseTrim} pages${heads}`
 }

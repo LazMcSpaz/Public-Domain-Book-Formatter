@@ -24,7 +24,8 @@ const RUNNING_HEAD_MODES: RunningHeadMode[] = [
   'bookTitle',
   'author',
   'chapterTitle',
-  'pageNumber'
+  'pageNumber',
+  'topic'
 ]
 
 const RUNNING_HEAD_STYLES: RunningHeadStyle[] = ['plain', 'smallCaps', 'italic']

@@ -273,6 +273,23 @@ export interface LaidOutBook {
    * tell that happened, so it is said here.
    */
   bareMarksMissed: { blockId: string; marker: string; nth: number }[]
+  /**
+   * Running heads set shorter than their text to keep out of the margin, once
+   * each with the pages they fall on, so a short form can be given. Present
+   * only in a book whose heads show the topic (`topic-heads.ts`): every other
+   * book's layout is what it was before topic heads existed.
+   */
+  headsShortened?: ShortenedHead[]
+}
+
+/** A running head that had to be shortened to fit the page. */
+export interface ShortenedHead {
+  /** The head as the book has it. */
+  text: string
+  /** What was set; empty when nothing fitted. */
+  setAs: string
+  /** The pages it was set on, by index. */
+  pageIndexes: number[]
 }
 
 /**

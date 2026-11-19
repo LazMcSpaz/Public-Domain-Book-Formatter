@@ -22,6 +22,7 @@ export {
 export { familyStack, readingStyle, type ReadingStyle } from './reading'
 export {
   DEFAULT_SHORT_BOOK,
+  DEFAULT_TOPIC_HEADS,
   HOUSE_LOOK_VERSION,
   HOUSE_TRIM,
   SHORT_BOOK_PAGES,
@@ -35,5 +36,7 @@ export {
   trimForLength,
   type HouseLook,
   type LookSource,
-  type ShortBookRule
+  type ShortBookRule,
+  type TopicHeadsRule
 } from './house-look'
+export { houseHeadsFor, houseHeadsForBook, type HouseHeads } from './house-heads'

@@ -38,3 +38,15 @@ export {
   type Seam,
   type SplitHalf
 } from './seams'
+export {
+  DESCRIPTIVE_SHARE,
+  TOPIC_LIST_MIN,
+  chapterDivisions,
+  divisionCounts,
+  isDescriptive,
+  looksLikeTopicList,
+  opensWithTopicLists,
+  topicHeadingIds,
+  type ChapterDivision,
+  type DivisionCounts
+} from './divisions'

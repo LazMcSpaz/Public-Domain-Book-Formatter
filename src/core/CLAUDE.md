@@ -18,6 +18,7 @@ All the book logic as pure code: reading shapes, assembly, edits, the checks, th
 - `edits/book-edits.ts`: `applyEdits`, the edit list applied over the pristine reading.
 - `assemble/assemble-book.ts`: leaves joined into one book; `deriveChapters`.
 - `assemble/book-text.ts`: `printedTexts`, the one list of everything the book prints.
+- `assemble/divisions.ts`: what divides each chapter (its topics), the half-the-chapters rule for topic heads, and chapters that open with a list of topics.
 - `annotate/schema.ts`: `findQuote`, `findAnchor`, `checkProposals`.
 - `project/saved-run.ts`, `project/book-file.ts`: the saved run (`CURRENT_SCHEMA_VERSION`, `migrateSavedRun`) and the shelf's `book.json`.
 - `wizard/steps.ts`, `wizard/questions.ts`: the guided flow; questions are data.

@@ -68,12 +68,19 @@ const RUNNING_HEAD_MODES: RunningHeadMode[] = [
   'pageNumber'
 ]
 
+/**
+ * The topic is offered for the right page only: the owner's convention is the
+ * chapter on the left and the topic on the right (19 November 2026).
+ */
+const RECTO_HEAD_MODES: RunningHeadMode[] = [...RUNNING_HEAD_MODES, 'topic']
+
 const RUNNING_HEAD_LABELS: Record<RunningHeadMode, string> = {
   none: 'Nothing',
   bookTitle: 'Book title',
   author: 'Author',
   chapterTitle: 'Current chapter',
-  pageNumber: 'Page number'
+  pageNumber: 'Page number',
+  topic: 'Current topic (the subheading in force on the page)'
 }
 
 const PAGE_NUMBER_POSITIONS: PageNumberPosition[] = [
@@ -246,8 +253,11 @@ export function styleQuestions(
       id: 'runningHeadRecto',
       type: 'choice',
       prompt: 'Running head, right page',
+      help:
+        'The current topic suits a book whose chapters are divided by subheadings: ' +
+        'the right page names the subheading in force there, the chapter title until the first.',
       defaultValue: profile.runningHeads.recto,
-      options: RUNNING_HEAD_MODES.map((m) => ({ value: m, label: RUNNING_HEAD_LABELS[m] }))
+      options: RECTO_HEAD_MODES.map((m) => ({ value: m, label: RUNNING_HEAD_LABELS[m] }))
     },
     {
       id: 'runningHeadStyle',
