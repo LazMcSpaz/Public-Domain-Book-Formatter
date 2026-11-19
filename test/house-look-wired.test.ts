@@ -15,6 +15,7 @@ const read = (path: string): string => readFileSync(new URL(`../${path}`, import
 const driver = read('scripts/drive.mjs')
 const app = read('src/app/App.tsx')
 const hook = read('src/app/house-look.ts')
+const platform = read('src/platform/browser/house-look.ts')
 
 function verb(name: string): string {
   const start = driver.indexOf(`\n    ${name}: async (`)
@@ -73,6 +74,16 @@ describe('proof and the design gate inherit through one door', () => {
     // Never silent: the line names the house look, or the defaults and why.
     expect(proof).toMatch(/from === 'house'\s*\?\s*houseLine/u)
     expect(proof).toMatch(/DEFAULTS/u)
+  })
+
+  it('inherited answers are kept with a fresh look, so a banked look cannot creep under them', () => {
+    expect(platform).toMatch(/return \{ \.\.\.design, profile: FRESH_LOOK \}/u)
+    expect((platform.match(/design: asBookDesign\(/gu) ?? []).length).toBe(3)
+    expect(hook).toMatch(/now\.setAnswers\(asBookDesign\(design\)\)/u)
+  })
+
+  it('the app measures the length as proof does, from the shipped defaults', () => {
+    expect(hook).toMatch(/defaultLook: null, styleProfiles: \[\]/u)
   })
 
   it('the app asks the hook, and the hook asks core', () => {

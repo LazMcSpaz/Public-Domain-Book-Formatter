@@ -93,6 +93,7 @@ describe('the house look file', () => {
     expect(error('{')).toMatch(/not JSON/u)
     expect(error(JSON.stringify({ design: HOUSE }))).toMatch(/version/u)
     expect(error(file({ version: 2 }))).toMatch(/newer/u)
+    expect(error(file({ version: '1' }))).toMatch(/version`? is "1", not 1/u)
     expect(error(file({ design: { ...HOUSE, marginInnr: '1.125' } }))).toMatch(/marginInnr/u)
     // A look banked in one browser cannot be named from the shelf.
     expect(error(file({ design: { ...HOUSE, profile: 'sp-1' } }))).toMatch(/profile/u)
@@ -111,9 +112,13 @@ describe('a book’s own answers always win', () => {
   it('a book with none inherits the house look', () => {
     expect(inheritDesign(undefined, look())).toEqual({ from: 'house', design: HOUSE })
     expect(inheritDesign({}, look())).toEqual({ from: 'house', design: HOUSE })
-    // An empty "save as" is not a design.
+    // An empty "save as", or the choice of a fresh look, is not a design.
     expect(hasOwnDesign({ saveAs: '' })).toBe(false)
+    expect(hasOwnDesign({ profile: 'fresh', saveAs: 'Mine' })).toBe(false)
     expect(inheritDesign({ saveAs: '' }, look()).from).toBe('house')
+    expect(inheritDesign({ profile: 'fresh' }, look()).from).toBe('house')
+    // Inherited answers written into the book are its own from then on.
+    expect(hasOwnDesign({ ...HOUSE, profile: 'fresh' })).toBe(true)
   })
 
   it('with no house look, the defaults, said as such', () => {

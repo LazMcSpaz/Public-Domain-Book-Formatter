@@ -54,7 +54,13 @@ import {
 import { anchorIllustrations } from './illustrations'
 import { typographicQuotes, withTypographicQuotes } from './quotes'
 import { frameFor, leadingFor, linesPerFrame, runningHeadBaseline, trimToPoints } from './frames'
-import { FURNITURE_SIZE_RATIO, folioBaseline, furnitureFont } from './furniture'
+import {
+  FOLIO_NOT_MIRRORED,
+  FURNITURE_SIZE_RATIO,
+  folioBaseline,
+  folioPlace,
+  furnitureFont
+} from './furniture'
 import { proseBreaks, runtRule, type RuntRule } from './runts'
 import type { TextMeasurer } from './measure'
 import { hangPunctuation } from './optical'
@@ -2671,6 +2677,10 @@ export function layout(
         `${headingBlocks.length} headings and none carries a level, so every one opens a page ` +
         'as a chapter; run-in sub-heads want level 2'
     })
+  }
+  // A fallback said out loud: the mirrored page number would print into the text.
+  if (profile.folioMirrorsHead && !folioPlace(profile, measurer).mirrored) {
+    warnings.push({ pageIndex: 0, text: FOLIO_NOT_MIRRORED })
   }
 
   // --- footnote geometry ---------------------------------------------------

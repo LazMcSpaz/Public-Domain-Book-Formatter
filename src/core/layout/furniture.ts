@@ -50,16 +50,35 @@ export function headCapTop(profile: StyleProfile, measurer: TextMeasurer): numbe
 }
 
 /**
- * Where a page number at the foot of the page has its baseline, from the top.
+ * Where a page number at the foot of the page has its baseline, from the top,
+ * and whether that is the mirrored place.
  *
  * Mirrored, it is never nearer the bottom edge than KDP's 0.25 in plus the
  * face's descent, so even a figure that hangs below the line stays printable.
+ * Nor is it ever higher than the old place: a book with a deep top margin
+ * and a shallow bottom one would otherwise print its page number into the
+ * last line of text. Then the old place is kept, and `mirrored` says so.
  */
-export function folioBaseline(profile: StyleProfile, measurer: TextMeasurer): number {
-  if (!profile.folioMirrorsHead) return bottomFolioBaseline(profile)
+export function folioPlace(
+  profile: StyleProfile,
+  measurer: TextMeasurer
+): { baseline: number; mirrored: boolean } {
+  const old = bottomFolioBaseline(profile)
+  if (!profile.folioMirrorsHead) return { baseline: old, mirrored: false }
   const trim = trimToPoints(profile.trimSize)
   const font = furnitureFont(profile, measurer, false)
   const descent = measurer.metrics(font, profile.bodyFontSize * FURNITURE_SIZE_RATIO).descent
   const fromFoot = Math.max(KDP_TRIM_SAFE_PT + descent, headCapTop(profile, measurer))
-  return trim.heightPt - fromFoot
+  const baseline = trim.heightPt - fromFoot
+  return baseline < old ? { baseline: old, mirrored: false } : { baseline, mirrored: true }
+}
+
+/** The warning a book gets when its page number cannot be mirrored. */
+export const FOLIO_NOT_MIRRORED =
+  'the page number cannot sit as far from the foot as the running head sits from the top ' +
+  'without printing into the text, so it keeps its old place; deepen the bottom margin'
+
+/** Where a page number at the foot of the page has its baseline, from the top. */
+export function folioBaseline(profile: StyleProfile, measurer: TextMeasurer): number {
+  return folioPlace(profile, measurer).baseline
 }

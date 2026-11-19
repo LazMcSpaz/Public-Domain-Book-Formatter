@@ -1696,6 +1696,9 @@ async function serve() {
       // kept at the top of the shelf its book file sits on.
       const lookFrom = answersFrom ? resolve(REPO, answersFrom) : (await currentBookFile()).file
       const house = lookFrom ? houseLookBeside(lookFrom, await askShelfMap('houseLookPath')) : null
+      const noHouse = lookFrom
+        ? 'no house look on the book file’s shelf'
+        : 'no book file is known for it, so no shelf was looked in'
       const tweaks = Object.fromEntries(
         wanted
           .filter((a) => a.includes('=') && !a.startsWith('pdf=') && !a.startsWith('answers='))
@@ -1706,7 +1709,7 @@ async function serve() {
           })
       )
       const result = await page.evaluate(
-        async ([repo, pageNumbers, tweaks, wantPdf, fromFile, house]) => {
+        async ([repo, pageNumbers, tweaks, wantPdf, fromFile, house, noHouse]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
           const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
@@ -1821,7 +1824,7 @@ async function serve() {
                   : 'this browser'
                 : from === 'house'
                   ? houseLine
-                  : `DEFAULTS — no design answers, and ${houseLine ?? 'no house look on the book file’s shelf'}`,
+                  : `DEFAULTS — no design answers, and ${houseLine ?? noHouse}`,
             // Inherited, not yet the book's own: `answers` with these as
             // `design`, then `save`, keeps them in the book file.
             ...(from === 'house' ? { inherited: design } : {}),
@@ -1836,7 +1839,7 @@ async function serve() {
             shots
           }
         },
-        [REPO, shots, tweaks, pdfOut !== null, fromFile, house]
+        [REPO, shots, tweaks, pdfOut !== null, fromFile, house, noHouse]
       )
       const { writeFile } = await import('node:fs/promises')
       const wrote = []

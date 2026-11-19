@@ -114,7 +114,9 @@ export function parseHouseLook(text: string): { look: HouseLook } | { error: str
       error:
         typeof version === 'number' && version > HOUSE_LOOK_VERSION
           ? `it is version ${version}, newer than these tools read (${HOUSE_LOOK_VERSION})`
-          : `it has no \`version\`: ${HOUSE_LOOK_VERSION}`
+          : version === undefined
+            ? `it has no \`version\`: ${HOUSE_LOOK_VERSION}`
+            : `its \`version\` is ${JSON.stringify(version)}, not ${HOUSE_LOOK_VERSION}`
     }
   }
   const design = readDesign(raw['design'], '`design`')
@@ -138,10 +140,16 @@ export function parseHouseLook(text: string): { look: HouseLook } | { error: str
   return { look: { name: name || 'The house look', design, shortBook } }
 }
 
-/** Whether a book's design answers hold anything of its own. */
+/**
+ * Whether a book's design answers hold anything of its own. Which banked look
+ * was picked (`profile`) and the name to bank one under (`saveAs`) are not a
+ * design: a book holding only those still inherits the house look.
+ */
 export function hasOwnDesign(design: Answers | null | undefined): boolean {
   if (!design) return false
-  return Object.values(design).some((v) => v !== undefined && v !== null && v !== '')
+  return Object.entries(design).some(
+    ([id, v]) => id !== 'profile' && id !== 'saveAs' && v !== undefined && v !== null && v !== ''
+  )
 }
 
 /**

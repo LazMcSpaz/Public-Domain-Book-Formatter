@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
+  FOLIO_NOT_MIRRORED,
   FURNITURE_SIZE_RATIO,
   KDP_TRIM_SAFE_PT,
   bottomFolioBaseline,
   fixedWidthMeasurer,
   folioBaseline,
+  folioPlace,
   headCapTop,
   layout,
   runningHeadBaseline,
@@ -116,6 +118,21 @@ describe('the page number mirrors the running head', () => {
     expect(runningHeadBaseline(profile)).toBe(12)
     const descent = 0.25 * 11 * FURNITURE_SIZE_RATIO
     expect(720 - folioBaseline(profile, measurer)).toBeCloseTo(KDP_TRIM_SAFE_PT + descent, 6)
+  })
+
+  it('never rises into the text: a deep top and a shallow bottom keep the old place, said', () => {
+    // Mirrored, the number would be 42.8pt from the foot, and the text block
+    // runs down to 36pt from it: the number would print into the last line.
+    const profile = house({ margins: { top: 1, bottom: 0.5, inner: 1.125, outer: 0.75 } })
+    const { book, page, folio } = furniture(profile)
+    expect(folioPlace(profile, measurer).mirrored).toBe(false)
+    expect(folio.baselinePt).toBeCloseTo(bottomFolioBaseline(profile), 6)
+    expect(folio.baselinePt).toBeGreaterThan(page.frame.yPt + page.frame.heightPt)
+    expect(book.warnings.map((w) => w.text)).toContain(FOLIO_NOT_MIRRORED)
+    // The house look's own margins mirror, with nothing to warn about.
+    expect(folioPlace(house(), measurer).mirrored).toBe(true)
+    expect(furniture(house()).book.warnings).toEqual([])
+    expect(furniture(house({ ...profile, folioMirrorsHead: false })).book.warnings).toEqual([])
   })
 
   it('reads the face’s cap height, and its ascent where the measurer has none', () => {

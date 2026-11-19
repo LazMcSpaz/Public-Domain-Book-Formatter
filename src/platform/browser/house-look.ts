@@ -22,6 +22,7 @@ import {
   type LookSource
 } from '@core/style'
 import { HOUSE_LOOK_PATH, type ShelfConfig } from '@core/sync'
+import { FRESH_LOOK } from '@core/wizard'
 import type { Answers } from '@core/wizard/questions'
 import { renderInterior, type Interior, type InteriorOptions } from './interior'
 import { getText } from './shelf'
@@ -48,10 +49,22 @@ export function houseLookRefusal(read: HouseLookRead | null): string | null {
     : null
 }
 
+/**
+ * The house look's answers as a book keeps them: with `profile` set to a
+ * fresh look, so a browser holding a banked look of its own builds exactly
+ * these and not these laid over that.
+ */
+export function asBookDesign(design: Answers): Answers {
+  return { ...design, profile: FRESH_LOOK }
+}
+
 export interface InLook {
   built: Interior
   profile: StyleProfile
-  /** The design answers it was laid out from, before any tweak. */
+  /**
+   * The design answers it was laid out from, before any tweak; inherited ones
+   * as a book keeps them (`asBookDesign`).
+   */
   design: Answers
   from: LookSource
   /** How the house look was used, or why it could not be. Null when it played no part. */
@@ -86,7 +99,7 @@ export async function renderInLook(
   // A trim asked for by name is the trim: length decides nothing then.
   if (tweaks['trimSize'] !== undefined) {
     const houseLine = `the house look from the shelf (${house.path}), on the trim asked for`
-    return { built, profile, design: chosen.design, from: 'house', houseLine }
+    return { built, profile, design: asBookDesign(chosen.design), from: 'house', houseLine }
   }
   const pages = built.pageCount
   const { design, short } = houseDesignFor(house.look, pages)
@@ -96,12 +109,12 @@ export async function renderInLook(
     pagesOnHouseTrim: pages,
     short
   })
-  if (!short) return { built, profile, design, from: 'house', houseLine }
+  if (!short) return { built, profile, design: asBookDesign(design), from: 'house', houseLine }
   const shortProfile = input.profileOf({ ...design, ...tweaks })
   return {
     built: await renderInterior(doc, shortProfile, input.options),
     profile: shortProfile,
-    design,
+    design: asBookDesign(design),
     from: 'house',
     houseLine
   }

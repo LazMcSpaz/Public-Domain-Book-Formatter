@@ -15,9 +15,11 @@ import { useEffect, useRef, useState } from 'react'
 import type { BookDocument } from '@core/assemble'
 import type { LayoutEdition } from '@core/layout'
 import { hasOwnDesign, houseDesignFor, houseLookLine } from '@core/style'
-import { FRESH_LOOK, appliedLook, type WizardState } from '@core/wizard'
+import { HOUSE_LOOK_PATH } from '@core/sync'
+import { appliedLook, type WizardState } from '@core/wizard'
 import type { Answers } from '@core/wizard/questions'
 import {
+  asBookDesign,
   fetchHouseLook,
   houseLookRefusal,
   type HouseLookRead
@@ -45,7 +47,8 @@ export function useHouseLook(input: {
   const latest = useRef(input)
   latest.current = input
   const seeded = useRef<string | null>(null)
-  const measuring = useRef(false)
+  // The book being measured: a measure for another book never holds this one up.
+  const measuring = useRef<string | null>(null)
 
   useEffect(() => {
     const config = loadShelf()
@@ -55,8 +58,10 @@ export function useHouseLook(input: {
       .then((read) => {
         if (live) setHouse(read)
       })
-      .catch(() => {
-        // A shelf that cannot be reached leaves the gate as it always was.
+      .catch((err: unknown) => {
+        // Said, never swallowed: the gate then says the defaults, and why.
+        const why = err instanceof Error ? err.message : String(err)
+        if (live) setHouse({ path: HOUSE_LOOK_PATH, error: `the shelf would not give it (${why})` })
       })
     return () => {
       live = false
@@ -72,7 +77,7 @@ export function useHouseLook(input: {
 
   useEffect(() => {
     if (stepId !== 'design' || !fileKey || !house || !document) return
-    if (seeded.current === fileKey || measuring.current) return
+    if (seeded.current === fileKey || measuring.current === fileKey) return
     if (Object.keys(answers).length > 0) return
     const own = loadReviewProgress(fileKey)['design'] as Answers | undefined
     if (hasOwnDesign(own)) return
@@ -82,9 +87,11 @@ export function useHouseLook(input: {
       setNote(`This book starts from the defaults: ${refused ?? 'no house look'}.`)
       return
     }
-    const fresh = (design: Answers): Answers => ({ ...design, profile: FRESH_LOOK })
-    const profile = appliedLook(latest.current.state, fresh(house.look.design)).style
-    measuring.current = true
+    // Measured as `proof` measures it: from the shipped defaults, not from a
+    // default look edited in this browser's Settings, so both choose one trim.
+    const plain = { ...latest.current.state, defaultLook: null, styleProfiles: [] }
+    const profile = appliedLook(plain, asBookDesign(house.look.design)).style
+    measuring.current = fileKey
     void interiorPageCount(document, profile, {
       edition: latest.current.edition,
       orphanNotes: 'collect'
@@ -95,7 +102,7 @@ export function useHouseLook(input: {
         if (now.fileKey !== fileKey || Object.keys(now.answers).length > 0) return
         const { design, short } = houseDesignFor(house.look, pages)
         seeded.current = fileKey
-        now.setAnswers(fresh(design))
+        now.setAnswers(asBookDesign(design))
         setNote(
           'This book had no design of its own, so it starts from ' +
             `${houseLookLine({ look: house.look, path: house.path, pagesOnHouseTrim: pages, short })}.`
@@ -108,7 +115,7 @@ export function useHouseLook(input: {
         )
       })
       .finally(() => {
-        measuring.current = false
+        if (measuring.current === fileKey) measuring.current = null
       })
   }, [stepId, fileKey, house, answers, document])
 
