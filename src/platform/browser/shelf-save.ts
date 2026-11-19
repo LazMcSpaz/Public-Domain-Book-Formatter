@@ -20,7 +20,7 @@
  *
  * Browser-only.
  */
-import { scanRefusal, type ShelfAbout, type ShelfConfig } from '@core/sync'
+import { bookPath, scanRefusal, type ShelfAbout, type ShelfConfig } from '@core/sync'
 import {
   keptFromShelf,
   parseBookFile,
@@ -38,7 +38,16 @@ import {
   usableProposals
 } from '@core/queries'
 import type { EditorVoice } from '@core/annotate'
-import { fetchBook, fetchVoice, pushBook, pushImage, pushScan, pushVoice } from './shelf'
+import {
+  fetchBook,
+  fetchVoice,
+  pushBook,
+  pushImage,
+  pushScan,
+  pushVoice,
+  shelfDirFor
+} from './shelf'
+import { keptPicture } from './shelf-pictures'
 import { loadAnnotationCheckpoint, loadRun, loadSourceFile } from './run-store'
 import { loadReviewProgress, loadVoice, saveVoice } from './settings'
 
@@ -182,11 +191,22 @@ export async function pushBookToShelf(
   // A picture that will not upload falls back to being carried inline rather
   // than being left out. The failure costs repository tidiness; leaving it out
   // would cost the picture, and nothing is ever drawn in place of one.
+  //
+  // A held picture the shelf already has, beside the book or at the top, keeps
+  // its place (`keptPicture`). The book's folder is found once for all of them;
+  // if it cannot be, only the top is asked, as `pushImage` always asked.
   const imagePaths: Record<string, string> = { ...kept.imagePaths }
+  let bookFile: string | null = null
+  try {
+    bookFile = bookPath(input.key, await shelfDirFor(config, input.key))
+  } catch {
+    /* only the top of the shelf is asked */
+  }
   for (const image of input.run.images) {
     try {
-      const { path } = await pushImage(config, image.bytes, input.run.fileName)
-      imagePaths[image.id] = path
+      const already = bookFile ? await keptPicture(config, bookFile, image.bytes) : null
+      imagePaths[image.id] =
+        already ?? (await pushImage(config, image.bytes, input.run.fileName)).path
     } catch {
       /* carried inline instead */
     }

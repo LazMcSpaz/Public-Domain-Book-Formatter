@@ -22,6 +22,7 @@ export {
   workFileRefusal,
   bookPath,
   imagePath,
+  pictureCandidates,
   commitMessage,
   parseAbout,
   scanPath,
