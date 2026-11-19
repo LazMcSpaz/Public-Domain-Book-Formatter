@@ -32,7 +32,8 @@
  * shelf's PNGs into JPEGs after this has written: Kindle charges delivery by
  * the megabyte, and twenty-five PNG plates are fifteen of them.
  */
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { readJsonSync } from './lib/json-file.mjs'
+import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { assembleBook } from '@core/assemble'
 import { applyEdits } from '@core/edits'
@@ -50,7 +51,7 @@ const positional = argv.filter((a, i) => !a.startsWith('--') && argv[i - 1] !== 
 const [dir, out] = positional
 if (!dir || !out || dir === out) throw new Error('epub-of.ts <book-dir> <out-dir> [--cover <jpg>]')
 
-const file = JSON.parse(readFileSync(join(dir, 'book.json'), 'utf8'))
+const file = readJsonSync(join(dir, 'book.json'))
 const doc = applyEdits(assembleBook(file.run.transcriptions), file.run.edits ?? [])
 const answers = (file.answers?.export ?? {}) as Record<string, string>
 const design = (file.answers?.design ?? {}) as Record<string, string>

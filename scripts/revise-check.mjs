@@ -23,7 +23,7 @@
  * Both files are arrays of `{ noteId, text }`; the after file may also carry
  * `changed`. Exits non-zero when a person needs to look.
  */
-import { readFile } from 'node:fs/promises'
+import { readJson } from './lib/json-file.mjs'
 
 const MAX_WORDS = 45
 
@@ -194,8 +194,8 @@ if (!beforePath || !afterPath) {
   console.error('usage: node scripts/revise-check.mjs <before.json> <after.json>')
   process.exit(2)
 }
-const before = JSON.parse(await readFile(beforePath, 'utf8'))
-const after = JSON.parse(await readFile(afterPath, 'utf8'))
+const before = await readJson(beforePath)
+const after = await readJson(afterPath)
 const was = new Map(before.map((n) => [n.noteId, n.text]))
 
 let faults = 0

@@ -176,7 +176,9 @@ shelf blobless and sparse (`git clone --filter=blob:none --no-checkout`, then
 `git sparse-checkout set --no-cone <paths>`). On native Windows, install
 Chromium with `node node_modules/playwright/cli.js install chromium`; an old
 CRLF checkout fails `format:check` everywhere, so check the files you changed
-and say so.
+and say so. On native Windows, run `npm run dev`, `npm` scripts and
+`npx vite-node …` from PowerShell, not Git Bash: under Git Bash they stop
+with `'"node"' is not recognized`.
 
 ## Storage key on your own computer
 

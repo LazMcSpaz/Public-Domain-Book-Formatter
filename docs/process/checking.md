@@ -54,8 +54,8 @@ did not raise the findings.
    `damage`'s `greek` list against the scan: Greek garbled into Latin letters
    (`Xpbvos` for Χρόνος) passes every shape test.
 6. **Read for sense**, a chapter at a time:
-   `node scripts/drive.mjs chunks out.json`. Give every reader the book's own
-   vocabulary. A reader returns **findings, never text**: a block id, an exact
+   `node scripts/drive.mjs chunks` (its result names the file). Give every
+   reader the book's own vocabulary. A reader returns **findings, never text**: a block id, an exact
    quote, a kind, why, and what it expects, marked as a guess.
 7. **Adjudicate every finding against the page, blind.**
    `node scripts/drive.mjs crops findings.json` cuts a crop per finding and
@@ -122,7 +122,7 @@ NOT CHECKED unless done by hand and recorded.
   `jq -r '.run.edits[] | select(.kind=="section" or .kind=="note") | .text' <book.json> | grep -noE '\([a-z]+\)'`
   and `grep -noE '\([a-z]+\)' <book-dir>/*.md`, every hit read. (proposed check); by hand today.
 - **C12 Italic and bold survived every sweep.** Per block, count `<i>`, `<b>`
-  and `<sc>` in `pristine` and `edited` from `node scripts/drive.mjs body out.json`.
+  and `<sc>` in `pristine` and `edited` from `node scripts/drive.mjs body`.
   (proposed check); by hand today.
 
 **For "ready to upload"**, on the exact files going to KDP:

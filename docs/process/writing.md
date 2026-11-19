@@ -105,8 +105,9 @@ every fact-check.
    creates a section yet, so add it in the app's galley (Edit the book), then
    replace its text with `node scripts/drive.mjs section <id> --from intro.txt`
    (`section` alone lists the sections; `--was … --now …` amends one phrase).
-4. **Check the notes mechanically.** `node scripts/drive.mjs body body.json`,
-   then `node scripts/voice.mjs check <notes.json> body.json`, where
+4. **Check the notes mechanically.** `node scripts/drive.mjs body` (its
+   result names the `body.json` it wrote), then
+   `node scripts/voice.mjs check <notes.json> <body.json>`, where
    `notes.json` lists each note as `{ "blockId", "anchorText", "text" }`. Any
    `ANCHOR NOT FOUND` is a note pointing at nothing; every `check:` item is a
    date, figure or name the book itself never states, and must be in the brief.

@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest'
+import { ALL_PAGE_ROLES } from '@core/pages'
 // @ts-expect-error — a plain Node module with no types, deliberately: the rule
 // lives beside the script that uses it so a change to one is a change to both.
-import { driftVerdict, DRIFT_BLOCKS_AT } from '../scripts/lib/drift.mjs'
+import * as drift from '../scripts/lib/drift.mjs'
+
+const { driftVerdict, emptyByRole, DRIFT_BLOCKS_AT, PICTURE_ONLY_ROLES } = drift
 
 /**
  * How far a checked leaf moved against the draft it was checking.
@@ -69,5 +72,36 @@ describe('word drift against the draft', () => {
   it('measures a leaf that grew as well as one that shrank', () => {
     expect(driftVerdict(400, 460).blocking).toBe(true)
     expect(driftVerdict(0, 40).reported).toBe(false)
+  })
+
+  /**
+   * OCR reads lettering off a plate and show-through off a blank, so the draft
+   * has words where the leaf prints none. A reader who rightly returns no
+   * blocks scores -100%, and that is the leaf read correctly, not a passage
+   * lost: it is reported, never a reason to refuse the batch.
+   */
+  it('expects a plate or blank leaf to come back with no blocks', () => {
+    for (const role of ['plate', 'blank']) {
+      const page = { role, blocks: [] }
+      expect(emptyByRole(page), role).toBe(true)
+      const v = driftVerdict(40, 0, { expectedEmpty: emptyByRole(page) })
+      expect(v.reported, role).toBe(true)
+      expect(v.expected, role).toBe(true)
+      expect(v.blocking, role).toBe(false)
+    }
+  })
+
+  it('still blocks a text leaf that lost every word', () => {
+    const page = { role: 'body', blocks: [] }
+    expect(emptyByRole(page)).toBe(false)
+    expect(driftVerdict(40, 0, { expectedEmpty: emptyByRole(page) }).blocking).toBe(true)
+    // A plate that came back with a caption is measured like any leaf.
+    const captioned = { role: 'plate', blocks: [{ kind: 'caption', text: 'Fig. 1' }] }
+    expect(emptyByRole(captioned)).toBe(false)
+    expect(driftVerdict(40, 2, { expectedEmpty: emptyByRole(captioned) }).blocking).toBe(true)
+  })
+
+  it('names only roles the parser accepts', () => {
+    for (const role of PICTURE_ONLY_ROLES) expect(ALL_PAGE_ROLES).toContain(role)
   })
 })

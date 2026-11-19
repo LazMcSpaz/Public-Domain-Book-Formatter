@@ -19,6 +19,7 @@ export {
   sheetNeedsBook,
   sheetPath,
   sheetRefusal,
+  workFileRefusal,
   bookPath,
   imagePath,
   commitMessage,

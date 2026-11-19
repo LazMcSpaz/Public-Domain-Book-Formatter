@@ -37,14 +37,36 @@ export const DRIFT_REPORTED = 0.05
 /** Words at which that movement is worth stopping the batch for. */
 export const DRIFT_BLOCKS_AT = 12
 
-export function driftVerdict(was, now) {
+/**
+ * Roles whose leaf carries a picture or nothing, so no text is expected back.
+ *
+ * OCR reads something off a plate (lettering in the picture, a speck) or off a
+ * blank (show-through from the next leaf), so the draft has words, and a reader
+ * who rightly returns no blocks scores -100%. That is the leaf read correctly,
+ * not a passage lost. The same pair `isBodyPage` in
+ * `src/core/transcribe/verify-book.ts` treats as carrying no text.
+ */
+export const PICTURE_ONLY_ROLES = ['plate', 'blank']
+
+/** A leaf that came back with no blocks under a role that expects none. */
+export function emptyByRole(page) {
+  return (page.blocks ?? []).length === 0 && PICTURE_ONLY_ROLES.includes(page.role)
+}
+
+/**
+ * `expectedEmpty` is `emptyByRole` of the leaf that came back. Its drift is
+ * still measured and reported, but it never blocks, and `expected` says why.
+ */
+export function driftVerdict(was, now, { expectedEmpty = false } = {}) {
   const drift = was === 0 ? 0 : (now - was) / was
   const moved = now - was
   const reported = Math.abs(drift) > DRIFT_REPORTED
+  const expected = expectedEmpty && now === 0
   return {
     drift,
     moved,
     reported,
-    blocking: reported && Math.abs(moved) >= DRIFT_BLOCKS_AT
+    expected,
+    blocking: reported && !expected && Math.abs(moved) >= DRIFT_BLOCKS_AT
   }
 }

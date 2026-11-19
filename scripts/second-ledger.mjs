@@ -19,8 +19,9 @@
  * aggregate, and precision not under a third on any single book. Numbers a
  * person can argue with, written where they can.
  */
+import { readJsonSync } from './lib/json-file.mjs'
 import { register } from 'node:module'
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync } from 'node:fs'
 import { basename, join } from 'node:path'
 
 register('./resolve-ts.mjs', import.meta.url)
@@ -28,7 +29,7 @@ const { scoreWitness, scoreWitnesses } = await import('../src/core/witness/score
 
 const args = process.argv.slice(2)
 const regimesAt = args.indexOf('--regimes')
-const regimes = regimesAt === -1 ? {} : JSON.parse(readFileSync(args[regimesAt + 1], 'utf8'))
+const regimes = regimesAt === -1 ? {} : readJsonSync(args[regimesAt + 1])
 const dirs = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--regimes')
 if (dirs.length === 0) {
   console.error('usage: node scripts/second-ledger.mjs <trial-dir>... [--regimes regimes.json]')
@@ -41,20 +42,17 @@ const BOOK_PRECISION_FLOOR = 1 / 3
 
 const rows = []
 for (const dir of dirs) {
-  const truth = JSON.parse(readFileSync(join(dir, 'truth.json'), 'utf8'))
-  const ours = JSON.parse(readFileSync(join(dir, 'ours.json'), 'utf8'))
+  const truth = readJsonSync(join(dir, 'truth.json'))
+  const ours = readJsonSync(join(dir, 'ours.json'))
   const witnesses = {}
   for (const [name, file] of [
     ['paddle', 'second.json'],
     ['layer', 'layer.json']
   ]) {
-    if (existsSync(join(dir, file)))
-      witnesses[name] = JSON.parse(readFileSync(join(dir, file), 'utf8'))
+    if (existsSync(join(dir, file))) witnesses[name] = readJsonSync(join(dir, file))
   }
   const byLeaf = new Map(truth.leaves.map((l) => [String(l.pageIndex), l]))
-  const timing = existsSync(join(dir, 'timing.json'))
-    ? JSON.parse(readFileSync(join(dir, 'timing.json'), 'utf8'))
-    : {}
+  const timing = existsSync(join(dir, 'timing.json')) ? readJsonSync(join(dir, 'timing.json')) : {}
   for (const leaf of Object.keys(ours.text ?? ours)) {
     const l = byLeaf.get(leaf)
     if (!l) continue

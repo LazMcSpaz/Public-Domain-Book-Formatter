@@ -25,6 +25,7 @@
  * `--check` exits non-zero when anything is out of date, so it belongs in the
  * same list as the tests rather than in somebody's memory.
  */
+import { readJsonSync } from './lib/json-file.mjs'
 import { register } from 'node:module'
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { join, basename } from 'node:path'
@@ -75,7 +76,7 @@ if (dir === '--shelf') {
       rows.push({ name, missing: 'no book.json' })
       continue
     }
-    const n = ledgerNumbers(JSON.parse(readFileSync(bookPath, 'utf8')))
+    const n = ledgerNumbers(readJsonSync(bookPath))
     const has = (f) => (existsSync(join(root, name, f)) ? '·' : ' ')
     rows.push({
       name,
@@ -128,7 +129,7 @@ if (dir === '--shelf') {
 const finish = flags.includes('--finish')
 const check = flags.includes('--check') || finish
 
-const book = JSON.parse(readFileSync(join(dir, 'book.json'), 'utf8'))
+const book = readJsonSync(join(dir, 'book.json'))
 const edits = book.run?.edits ?? []
 const sections = edits.filter((e) => e.kind === 'section')
 const notes = edits.filter((e) => e.kind === 'note')
@@ -306,7 +307,7 @@ for (const [file, re, actual, what] of claimed) {
 const bodyArg = flags[flags.indexOf('--marks') + 1]
 if (flags.includes('--marks') && bodyArg && !bodyArg.startsWith('--')) {
   const { checkGlossaryMarks, glossaryHeadwords } = await import('../src/core/annotate/marks.ts')
-  const body = JSON.parse(readFileSync(bodyArg, 'utf8'))
+  const body = readJsonSync(bodyArg)
   // Through the same extractor the galley's coverage panel uses — one rule,
   // or the shelf report and the editor would drift into disagreeing.
   const heads = glossaryHeadwords(glossary?.text ?? '')
@@ -334,7 +335,7 @@ const corrArg = flags[flags.indexOf('--body') + 1]
 if (flags.includes('--body') && corrArg && !corrArg.startsWith('--')) {
   const { correctionRows, correctionsHeader, correctionsMarkdown, cutShortBlocks } =
     await import('../src/core/edits/corrections-sheet.ts')
-  const body = JSON.parse(readFileSync(corrArg, 'utf8'))
+  const body = readJsonSync(corrArg)
   const path = join(dir, 'corrections.md')
   const had = existsSync(path) ? readFileSync(path, 'utf8') : null
   const exp = book.answers?.export ?? {}

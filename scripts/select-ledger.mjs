@@ -24,8 +24,8 @@
  * So the orderings here are named by what they actually sort on, tie-break
  * included, and the module implements one of these exactly.
  */
+import { readJsonSync } from './lib/json-file.mjs'
 import { register } from 'node:module'
-import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 register('./resolve-ts.mjs', import.meta.url)
@@ -40,12 +40,12 @@ if (!DIR) {
   console.error("usage: select-ledger.mjs <dir> (the shelf's archive/ledger-data/second-reader)")
   process.exit(2)
 }
-const books = JSON.parse(readFileSync(join(DIR, 'regimes.json'), 'utf8'))
+const books = readJsonSync(join(DIR, 'regimes.json'))
 
 const rows = []
 for (const slug of Object.keys(books)) {
-  const ours = JSON.parse(readFileSync(join(DIR, slug, 'ours.json'), 'utf8'))
-  const truth = JSON.parse(readFileSync(join(DIR, slug, 'truth.json'), 'utf8'))
+  const ours = readJsonSync(join(DIR, slug, 'ours.json'))
+  const truth = readJsonSync(join(DIR, slug, 'truth.json'))
   for (const leaf of truth.leaves ?? []) {
     const mine = ours.text?.[String(leaf.pageIndex)] ?? ''
     const gold = (leaf.words ?? []).join(' ')

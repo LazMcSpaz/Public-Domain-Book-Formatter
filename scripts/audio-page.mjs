@@ -10,7 +10,8 @@
  *
  *   node scripts/audio-page.mjs public/audio mp3
  */
-import { readdir, readFile, writeFile } from 'node:fs/promises'
+import { readJson } from './lib/json-file.mjs'
+import { readdir, writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 const dir = resolve(process.argv[2] ?? 'public/audio')
@@ -26,7 +27,7 @@ const escape = (s) =>
 const names = (await readdir(dir)).filter((n) => n.endsWith('.json'))
 const chapters = []
 for (const name of names) {
-  const record = JSON.parse(await readFile(resolve(dir, name), 'utf8'))
+  const record = await readJson(resolve(dir, name))
   chapters.push({ ...record, file: `${name.replace(/\.json$/u, '')}.${extension}` })
 }
 chapters.sort((a, b) => a.chapter - b.chapter)

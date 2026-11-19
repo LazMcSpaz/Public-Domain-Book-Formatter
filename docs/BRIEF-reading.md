@@ -63,9 +63,9 @@ abstain rather than guess, and neither needs your attention except where named:
 
 2. **`uncertain`** spans — runs of words OCR itself scored low. Check each
    against the render.
-3. **Italics.** The draft carries none. The book italicises heavily — book
-   titles, Latin, Greek transliterations, emphasis. Mark them with `<i>…</i>`
-   in the block text.
+3. **Italics.** The draft carries none. Mark every word the render sets in
+   italic with `<i>…</i>` in the block text, whatever the reason the book
+   italicises it.
 4. **Block kinds.** A quotation set as an indented block is `blockquote`;
    verse is `verse`; a note at the foot is `footnote`; matter in columns is
    `table`.
@@ -131,9 +131,26 @@ not know is refused and the whole batch is rejected):
 ]
 ```
 
-`role` is one of `body`, `chapter-opening`, `table-of-contents`, `blank`.
+`role` is one of these, and no other:
+
+- the book's text: `body`, `chapter-opening`, `part-divider`, `preface`,
+  `appendix`, `glossary`;
+- front matter: `half-title`, `title-page`, `copyright`, `dedication`,
+  `epigraph`, `table-of-contents`, `list-of-illustrations`;
+- back matter: `index`, `colophon`;
+- a leaf that is a picture: `plate`;
+- a leaf with nothing printed on it: `blank`;
+- a leaf that is not the book's own: `digitization-notice` (the scanning
+  library's leaf), `advertisement` (the publisher's list of its other books);
+- `unknown`, when none of these fits.
+
+In a book with plates, a full-page picture is `plate` (a caption it prints is
+a block of kind `caption`), the back of a plate or its tissue guard that
+prints nothing is `blank`, and the title page is `title-page`. A `plate` or
+`blank` leaf may come back with no blocks at all.
+
 `kind` on a block is one of `paragraph`, `heading`, `blockquote`, `verse`,
-`footnote`, `caption`, `table`. `kind` on a query is one of
+`epigraph`, `footnote`, `caption`, `list-item`, `table`. `kind` on a query is one of
 `printers-error`, `inconsistent`, `unclear`. Omit `uncertain` and `queries`
 when there are none. Drop `structural` and `hyphens` — they are input, not
 output.
