@@ -28,7 +28,7 @@ Everything the engine needs a browser for: PDF rendering (pdf.js), OCR (Tesserac
 
 ## Folder-specific rules and lessons
 
-- Every shelf read goes through `readUrl` (`shelf.ts`): a unique parameter plus a counter, and `no-store`. Never fetch a shelf path another way.
+- Every shelf read goes through `readUrl` (`shelf.ts`): a unique parameter plus a counter, `no-store`, and each path segment encoded (`test/shelf-read-url.test.ts`). Never fetch a shelf path another way.
 - One door writes a book to the shelf (`pushBookToShelf`); pictures go to `images/<digest>.png` once, never re-inlined on each save.
 - A picture a book names is relative to the book: fetch it only with `fetchBookPictures`, never `getBytes` on the bare name.
 - Outbox flushes are chained per book (`shelf-outbox.ts`): one at a time, the next waiting rather than joining.

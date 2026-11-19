@@ -181,9 +181,21 @@ const NO_CACHE = 'no-store' as const
  */
 function readUrl(config: ShelfConfig, path: string): string {
   return (
-    `${API}/repos/${config.repo}/contents/${path}` +
+    contentsUrl(config, path) +
     `?ref=${encodeURIComponent(config.branch)}&unshared=${Date.now()}-${++reads}`
   )
+}
+
+/**
+ * A shelf path on the contents endpoint, each segment encoded: a path read from
+ * a book file (a scan, a crop, a folder) is then read as the name it is, never
+ * as a query (`?`), a fragment (`#`) or an escape (`%`). A backslash still
+ * separates, as the URL parser made it do before, for a name typed on Windows.
+ * Reads and writes share it, so the two always name the same file.
+ */
+function contentsUrl(config: ShelfConfig, path: string): string {
+  const encoded = path.split(/[\\/]/u).map(encodeURIComponent).join('/')
+  return `${API}/repos/${config.repo}/contents/${encoded}`
 }
 
 /**
@@ -342,7 +354,7 @@ export async function putFile(
   message: string
 ): Promise<void> {
   const sha = await shaOf(config, path)
-  const response = await fetch(`${API}/repos/${config.repo}/contents/${path}`, {
+  const response = await fetch(contentsUrl(config, path), {
     method: 'PUT',
     headers: { ...headers(config), 'Content-Type': 'application/json' },
     body: JSON.stringify({
