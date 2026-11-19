@@ -115,6 +115,7 @@ import {
   shelfDirFor,
   shelfHas
 } from '../platform/browser/shelf'
+import { fetchBookPictures } from '../platform/browser/shelf-pictures'
 import {
   pushReconToShelf,
   readScanFromShelf,
@@ -1796,18 +1797,11 @@ export function App(): JSX.Element {
         const file = parseBookFile(json)
 
         // Pictures the file names rather than carries, fetched before the run
-        // is stored so what lands on this device is the whole book. A picture
-        // that cannot be fetched is *reported*, never quietly missing: the
-        // engine already refuses to draw anything in its place, and a plate
-        // that vanished between two devices is exactly the kind of silence
-        // that is only noticed once the book is printed.
-        const named = Object.entries(file.imagePaths)
-        const lost: string[] = []
-        for (const [id, path] of named) {
-          const bytes = await getBytes(config, path)
-          if (bytes) file.run.images.push({ id, bytes: new Uint8Array(bytes) })
-          else lost.push(path)
-        }
+        // is stored so what lands on this device is the whole book: beside the
+        // book first, then at the top of the shelf. One found nowhere is
+        // *reported*, never quietly missing (`fetchBookPictures`).
+        const { found, lost } = await fetchBookPictures(config, about.key, file.imagePaths)
+        file.run.images.push(...found)
 
         const stored = await saveRun(file.run)
         if (!stored) {
@@ -2419,12 +2413,8 @@ export function App(): JSX.Element {
         // anchors. Small, and named rather than carried, so this is a handful
         // of kilobytes — unlike the scan, which is the whole point of not
         // fetching it here.
-        const lost: string[] = []
-        for (const [id, path] of Object.entries(file.imagePaths)) {
-          const bytes = await getBytes(config, path)
-          if (bytes) file.run.images.push({ id, bytes: new Uint8Array(bytes) })
-          else lost.push(path)
-        }
+        const { found, lost } = await fetchBookPictures(config, about.key, file.imagePaths)
+        file.run.images.push(...found)
 
         if (!(await saveRun(file.run))) {
           setShelfNote(

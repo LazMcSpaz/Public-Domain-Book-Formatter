@@ -225,6 +225,9 @@ export {
   workFileRefusal
 } from './sheets'
 
+/** A picture a book names is looked for beside the book, then at the top: `./pictures`. */
+export { pictureCandidates } from './pictures'
+
 /** What the catalogue card says. */
 export interface ShelfAbout {
   /** The file key the run is filed under, so opening it lands in the right place. */
