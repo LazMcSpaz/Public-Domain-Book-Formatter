@@ -66,6 +66,9 @@ let slug = null
 // takes the light route, and fetching the scan is minutes of download and
 // Tesseract for a recovery half this book finished long ago.
 let scanAsked = false
+// Declared before the stub, which answers the app's first requests on the very
+// first load: read any later and that load fails on it.
+const SCAN_PATH = 'scans/deadbeef.pdf'
 await page.route('https://api.github.com/**', async (route) => {
   const url = route.request().url()
   if (process.env.PDBF_TRACE) console.log('  stub:', route.request().method(), url)
@@ -165,8 +168,6 @@ const built = await page.evaluate(async (repo) => {
     aboutPath: sync.aboutPath(key)
   }
 }, REPO)
-
-const SCAN_PATH = 'scans/deadbeef.pdf'
 
 const card = {
   key: built.key,

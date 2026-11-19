@@ -63,6 +63,15 @@ export {
   type ShelfState
 } from './outbox'
 export {
+  foldIntoBookText,
+  layoutOf,
+  withQueued,
+  writeInLayout,
+  type FoldedBookText,
+  type JsonLayout
+} from './fold'
+export { canonicalJson, equalEdit, equalEntry, equalRuling, readEdit, readRuling } from './same'
+export {
   booksNeedingRecon,
   hasReadableScan,
   newReconQueue,

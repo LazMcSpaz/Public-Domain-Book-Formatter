@@ -17,6 +17,8 @@ export {
   parseFileKey,
   keyMatchesFile,
   migrateSavedRun,
+  parseEdits,
+  parseRulings,
   summarize,
   type SavedFailure,
   type SavedRun,

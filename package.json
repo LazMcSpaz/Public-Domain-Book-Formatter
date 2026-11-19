@@ -22,6 +22,7 @@
     "verify": "npm run typecheck && npm run typecheck:core && npm run lint && npm run format:check && python3 harness/check.py && npm test",
     "check:install": "PUBLIC_BASE=/Public-Domain-Book-Formatter/ vite build && node scripts/check-install.mjs",
     "check:outbox": "node scripts/check-outbox.mjs",
+    "check:saves": "node scripts/check-save-failure.mjs",
     "check:crop": "node scripts/check-query-crop.mjs",
     "check:proposals": "node scripts/check-proposals.mjs",
     "check:held": "node scripts/check-held.mjs",

@@ -176,6 +176,55 @@ files.set(built.cropPath, ONE_PIXEL_JPEG)
 slug = built.slug
 cropPath = built.cropPath
 
+/**
+ * A crop cut the way `drive.mjs querycrops` cuts one: a drawn leaf of made-up
+ * words at 300 DPI, planned in lines by `planQueryCrop` and cut and marked by
+ * `cutQueryCrop`, with the passage near the right-hand end of its line so a
+ * phone has to scroll to it. `noted: false` drops the note, as an older crop
+ * has none.
+ */
+const cutCrop = (noted) =>
+  page.evaluate(
+    async ([repo, noted]) => {
+      const queries = await import(`/@fs${repo}/src/core/queries/index.ts`)
+      const cutter = await import(`/@fs${repo}/src/platform/browser/query-crop.ts`)
+      const leaf = document.createElement('canvas')
+      leaf.width = 2100
+      leaf.height = 1400
+      const ctx = leaf.getContext('2d')
+      ctx.fillStyle = '#fff'
+      ctx.fillRect(0, 0, leaf.width, leaf.height)
+      ctx.fillStyle = '#000'
+      ctx.font = '44px serif'
+      const words = []
+      for (let l = 0; l < 14; l++) {
+        for (let w = 0; w < 8; w++) {
+          const x0 = 200 + w * 215
+          const y0 = 150 + l * 74
+          ctx.fillText('mmmmm', x0, y0 + 36)
+          words.push({ id: `${l}.${w}`, bbox: { x0, y0, x1: x0 + 180, y1: y0 + 44 } })
+        }
+      }
+      const passage = words.filter((w) => w.id === '6.6' || w.id === '6.7')
+      const plan = queries.planQueryCrop(words, passage, leaf, {})
+      let bytes = await cutter.cutQueryCrop(leaf, plan, 300)
+      if (!noted) {
+        // The same pixels with no note: re-encoded through a canvas.
+        const img = await createImageBitmap(new Blob([bytes], { type: 'image/jpeg' }))
+        const c = document.createElement('canvas')
+        c.width = img.width
+        c.height = img.height
+        c.getContext('2d').drawImage(img, 0, 0)
+        const blob = await new Promise((r) => c.toBlob(r, 'image/jpeg', 0.9))
+        bytes = new Uint8Array(await blob.arrayBuffer())
+      }
+      let text = ''
+      for (const b of bytes) text += String.fromCharCode(b)
+      return { base64: btoa(text), plan }
+    },
+    [REPO, noted]
+  )
+
 // Opened the way a link opens it: the book file and nothing else, landing on
 // the gate.
 // `goto` to a URL that differs only in its hash does not reload the document,
@@ -214,6 +263,99 @@ console.log(`landed at : ${where}`)
 console.log(`crop asked: ${cropRequested}`)
 console.log(`img src   : ${String(src).slice(0, 24)}${String(src).length > 24 ? '…' : ''}`)
 console.log('→ screenshots/13-query-crop-from-shelf.png')
+
+// --- the crop on a phone -------------------------------------------------------
+// Book type at reading size (120 screen pixels to an inch of 300 DPI paper, so
+// 0.4 of the crop's own width), never squeezed to the screen; a crop with a
+// note opens scrolled to its passage, which is marked without touching the ink.
+const measure = () =>
+  page.evaluate(() => {
+    const frame = document.querySelector('.crop-frame')
+    const img = frame?.querySelector('img')
+    if (!frame || !img || !img.naturalWidth) return null
+    return {
+      shown: img.clientWidth,
+      natural: img.naturalWidth,
+      frame: frame.clientWidth,
+      scrollLeft: frame.scrollLeft,
+      marked: frame.getAttribute('data-passage-marked'),
+      hint: document.querySelector('.crop-view-bar small')?.textContent ?? ''
+    }
+  })
+const openOnPhone = async (crop) => {
+  files.set(built.cropPath, crop.base64)
+  await page.setViewportSize({ width: 390, height: 844 })
+  await page.goto(`${URL_BASE}/#book=${built.slug}&at=review`, { waitUntil: 'networkidle' })
+  await page.reload({ waitUntil: 'networkidle' })
+  await page.waitForTimeout(6000)
+  return measure()
+}
+
+const older = await openOnPhone(await cutCrop(false))
+console.log(`older crop on a phone : ${JSON.stringify(older)}`)
+if (!older) problems.push('an older crop (no note) was not drawn on a phone')
+else {
+  if (Math.abs(older.shown - older.natural * 0.4) > 2) {
+    problems.push(
+      `an older crop is ${older.shown}px wide on a phone, not reading size (${older.natural * 0.4})`
+    )
+  }
+  if (older.scrollLeft !== 0) problems.push('an older crop with no note did not open at the left')
+  if (!/Swipe sideways/.test(older.hint))
+    problems.push('a crop wider than the phone does not say to swipe')
+}
+
+const marked = await cutCrop(true)
+const now = await openOnPhone(marked)
+await page.screenshot({ path: 'screenshots/13c-query-crop-phone-marked.png', fullPage: true })
+console.log(`marked crop on a phone: ${JSON.stringify(now)}`)
+if (!now) problems.push('a marked crop was not drawn on a phone')
+else {
+  const scale = now.shown / now.natural
+  const p = marked.plan.passage
+  const middle = ((Math.min(...p.map((b) => b.x0)) + Math.max(...p.map((b) => b.x1))) / 2) * scale
+  if (Math.abs(now.shown - now.natural * 0.4) > 2) {
+    problems.push(`a marked crop is ${now.shown}px wide on a phone, not reading size`)
+  }
+  if (now.marked !== 'yes') problems.push('the crop’s note of its passage was not read')
+  if (!(middle - now.scrollLeft > 0 && middle - now.scrollLeft < now.frame)) {
+    problems.push(
+      `the passage (at ${Math.round(middle)}px) is not in view (scrolled ${now.scrollLeft}px)`
+    )
+  }
+  if (marked.plan.lines !== 7) problems.push(`the crop holds ${marked.plan.lines} lines, not 7`)
+}
+// And the same crop on a wide screen, for a look.
+await page.setViewportSize({ width: 1100, height: 1400 })
+await page.waitForTimeout(600)
+await page.screenshot({ path: 'screenshots/13d-query-crop-desktop-marked.png' })
+// The mark: paper in the passage turns yellow, and its ink stays black.
+const ink = await page.evaluate(async (box) => {
+  const img = document.querySelector('.crop-frame img')
+  if (!img) return null
+  const c = document.createElement('canvas')
+  c.width = img.naturalWidth
+  c.height = img.naturalHeight
+  const ctx = c.getContext('2d')
+  ctx.drawImage(img, 0, 0)
+  const { data } = ctx.getImageData(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0)
+  let darkest = 765
+  let paper = null
+  for (let i = 0; i < data.length; i += 4) {
+    const sum = data[i] + data[i + 1] + data[i + 2]
+    if (sum < darkest) darkest = sum
+    if (!paper && sum > 560) paper = [data[i], data[i + 1], data[i + 2]]
+  }
+  return { darkest, paper }
+}, marked.plan.passage[0])
+console.log(`the mark              : ${JSON.stringify(ink)}`)
+if (!ink) problems.push('no crop frame to measure the mark in')
+else {
+  if (!(ink.darkest < 150)) problems.push('the ink under the mark is no longer black')
+  if (!ink.paper || !(ink.paper[2] < 200 && ink.paper[0] > 220)) {
+    problems.push('the paper under the passage is not marked')
+  }
+}
 
 await browser.close()
 

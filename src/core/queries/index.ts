@@ -35,6 +35,8 @@ export * from './gate'
 export * from './locate'
 export * from './proposals'
 export * from './key'
+export * from './crop-plan'
+export * from './crop-note'
 
 /** A query with the leaf it was raised on. */
 export interface RaisedQuery extends EditorialQuery {

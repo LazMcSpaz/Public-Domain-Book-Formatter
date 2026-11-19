@@ -3428,6 +3428,12 @@ async function serve() {
      * on the named leaves. Given in batches because each leaf is a render plus
      * an OCR pass and a book's worth is minutes, not seconds.
      *
+     * Each crop is the passage's lines and three whole lines either side
+     * (`--lines <n>` for more or fewer, `--pad <px>` for the paper beside
+     * them), with the passage marked and its place written into the JPEG, so
+     * the query screen opens it scrolled to the passage. Crops cut before that
+     * still work; cutting them again gives the marked, taller ones.
+     *
      * **`--from <scan.pdf>` cuts from another copy of the same edition**, which
      * is the only route for a book that was never read off pixels. *Instant
      * Rapport* was read from an EPUB and a photographed copy of the 1989 Warner
@@ -3462,16 +3468,18 @@ async function serve() {
       )
       const outDir = positional[0] ?? 'querycrops'
       const wanted = positional.slice(1).map(Number).filter(Number.isFinite)
-      // `--pad <px>`: how much of the setting comes with the passage.
-      //
-      // 120 is a line of *Isis*'s type at `RECON_DPI` and it is a default
-      // rather than a law — the books here are not set to one size, and a
-      // query is not always about a word. The notice that closes *Instant
-      // Rapport* is an eight-line panel the editor has to keep or drop whole,
-      // and 120 gave him the first three lines of it: enough to see it is
-      // boxed, not enough to answer the question he was asked.
-      const padPx = flag('pad') === null ? 120 : Number(flag('pad'))
-      if (!(padPx >= 0)) throw new Error('--pad is pixels, zero or more.')
+      // `--lines <n>`: whole printed lines kept above and below the passage
+      // (three unless asked, `CROP_LINES_AROUND`), and `--pad <px>`: paper kept
+      // beside them. The crop is planned in lines by core's `planQueryCrop`,
+      // because a fixed 120 pixels was one line either side, sliced through
+      // the middle of the lines at both edges, and on a phone too little to
+      // judge from. A query about more than a passage asks for more: a boxed
+      // notice of eight lines that the editor has to keep or drop whole wants
+      // `--lines 8`.
+      const linesAround = flag('lines') === null ? null : Number(flag('lines'))
+      if (linesAround !== null && !(linesAround >= 0)) throw new Error('--lines is zero or more.')
+      const padPx = flag('pad') === null ? null : Number(flag('pad'))
+      if (padPx !== null && !(padPx >= 0)) throw new Error('--pad is pixels, zero or more.')
       // The pixels ride the /file route, as `load` and `figure cut --from`
       // fetch a scan — never base64 through the debug protocol, which is how a
       // large file kills the tab with an error that reads like a navigation.
@@ -3484,13 +3492,13 @@ async function serve() {
         fromUrl = `http://127.0.0.1:${PORT}/file?path=${encodeURIComponent(full)}`
       }
       const result = await page.evaluate(
-        async ([repo, leaves, fromUrl, pad]) => {
+        async ([repo, leaves, fromUrl, around, pad]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
           const ocrMod = await import(`/@fs${repo}/src/platform/browser/ocr.ts`)
           const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
-          const cropMod = await import(`/@fs${repo}/src/platform/browser/word-crops.ts`)
           const reconMod = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+          const cutMod = await import(`/@fs${repo}/src/platform/browser/query-crop.ts`)
 
           const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
@@ -3594,92 +3602,45 @@ async function serve() {
               // navigation and is actually memory. One render, one document,
               // and the canvas released before the next leaf.
               //
-              // Padded by about a line of *Isis*'s type, measured rather than
-              // guessed: the editor is reading a passage in its setting, so the
-              // lines either side are what make a compositor's slip legible as
-              // one. At 44 px the box clipped the first letter of the first
-              // matched word — an OCR box is drawn to the ink, and an `S` that
-              // opens a note sits a hair outside it. `--pad` moves it, because
-              // another book is set to another size and another query asks
-              // about more than a word.
-              const PAD = pad
+              // Planned in whole printed lines (`planQueryCrop`), cut from the
+              // original render and marked without touching the ink
+              // (`cutQueryCrop`). Wide as the *lines*, not as the phrase: the
+              // first crops of the Glossary read `The Demiurgos, who, like`,
+              // which is a passage nobody can rule on.
+              const leafSize = { width: rendered.canvas.width, height: rendered.canvas.height }
+              const options = {
+                ...(around === null ? {} : { around }),
+                ...(pad === null ? {} : { pad })
+              }
               for (const query of queries) {
                 const key = queriesMod.queryKey(query)
                 const found = queriesMod.locateQuote(query.quote, words)
-                const box = found
-                  ? cropMod.unionBox(found.words.map((w) => ({ id: w.id, bbox: w.bbox })))
+                const plan = found
+                  ? queriesMod.planQueryCrop(words, found.words, leafSize, options)
                   : null
-                // A passage OCR could not place still gets its pixels — the
+                // A passage OCR could not place still gets its pixels: the
                 // whole leaf, rather than a crop of lines that might be the
                 // wrong ones. The five this happened to on Vol. I are all
                 // Latin and ligatures (`Hæc murus æneus`, `Phædras`), which is
                 // exactly where OCR reads worst and where the editor most
                 // wants to look at the paper. Reported either way: the sheet
                 // says which crops point at the passage and which are a leaf.
-                if (!box) whole.push({ key, leaf: pageIndex, quote: query.quote })
-                const y0 = box ? Math.max(0, Math.floor(box.y0 - PAD)) : 0
-                const y1 = box
-                  ? Math.min(rendered.canvas.height, Math.ceil(box.y1 + PAD))
-                  : rendered.canvas.height
-                // Wide as the *lines*, not as the phrase.
-                //
-                // The union of the matched words is a few words across, and
-                // 120 px either side of it on a leaf 2,500 px wide cuts the
-                // sentence off mid-word: the first crops of the Glossary read
-                // `The Demiurgos, who, like` and `and those of Chin`, which is
-                // a passage nobody can rule on. The editor is reading it in
-                // its setting, and a setting is lines.
-                //
-                // Measured off the leaf's own ink rather than guessed at: every
-                // word whose box falls in the band being cut, which is the
-                // measure those lines are actually set to and needs no
-                // assumption about margins. A spread photographed as one leaf
-                // gives both printed pages this way, which is wider than
-                // wanted and never narrower — the failure that matters is the
-                // one that hides the words.
-                const inBand = box ? words.filter((w) => w.bbox.y1 > y0 && w.bbox.y0 < y1) : []
-                const lines =
-                  inBand.length > 0
-                    ? cropMod.unionBox(inBand.map((w) => ({ id: w.id, bbox: w.bbox })))
-                    : box
-                const x0 = lines ? Math.max(0, Math.floor(lines.x0 - PAD)) : 0
-                const x1 = lines
-                  ? Math.min(rendered.canvas.width, Math.ceil(lines.x1 + PAD))
-                  : rendered.canvas.width
-                const cutCanvas = document.createElement('canvas')
-                cutCanvas.width = x1 - x0
-                cutCanvas.height = y1 - y0
-                cutCanvas
-                  .getContext('2d')
-                  .drawImage(
-                    rendered.canvas,
-                    x0,
-                    y0,
-                    cutCanvas.width,
-                    cutCanvas.height,
-                    0,
-                    0,
-                    cutCanvas.width,
-                    cutCanvas.height
-                  )
-                // JPEG, not PNG, and measured rather than assumed: these
-                // crops are a photograph of paper, the scan inside the PDF is
-                // already JPEG 2000, and a lossless format for lossy pixels
-                // bought nothing. Measured on three leaves of this book:
-                // 825 KB of PNG against 244 KB of JPEG for the same three
-                // crops — 275 KB a crop against 81 — which over seventy-nine
-                // is 21 MB against 6.4, on a shelf that keeps every version of
-                // everything for ever. Quality 0.9 rather than lower
-                // because the thing being read is 1877 type at 300 DPI and the
-                // question is often which of two letters the compositor set.
-                const blob = await new Promise((r) => cutCanvas.toBlob(r, 'image/jpeg', 0.9))
-                cutCanvas.width = 0
-                cutCanvas.height = 0
+                if (!plan) whole.push({ key, leaf: pageIndex, quote: query.quote })
+                const bytes = await cutMod.cutQueryCrop(
+                  rendered.canvas,
+                  plan ?? {
+                    crop: { x0: 0, y0: 0, x1: leafSize.width, y1: leafSize.height },
+                    passage: [],
+                    lines: 0
+                  },
+                  reconMod.RECON_DPI
+                )
                 cut.push({
                   key,
                   leaf: pageIndex,
                   score: found ? Number(found.score.toFixed(2)) : 0,
-                  bytes: [...new Uint8Array(await blob.arrayBuffer())]
+                  lines: plan ? plan.lines : null,
+                  bytes: [...bytes]
                 })
               }
               // A 300 DPI leaf is ~19 MB of pixels. Released before the next is
@@ -3701,7 +3662,7 @@ async function serve() {
             foundOn
           }
         },
-        [REPO, wanted, fromUrl, padPx]
+        [REPO, wanted, fromUrl, linesAround, padPx]
       )
 
       const { writeFile, mkdir } = await import('node:fs/promises')

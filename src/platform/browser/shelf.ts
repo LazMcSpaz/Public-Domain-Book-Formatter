@@ -105,6 +105,7 @@ import {
 } from '@core/sync'
 import { normalizeVoice, voiceLosesWork, type EditorVoice } from '@core/annotate'
 import { toBase64 } from '@core/project'
+import { reach } from './shelf-fetch'
 
 const API = 'https://api.github.com'
 
@@ -283,7 +284,7 @@ export interface ShelfInfo {
  * book is saved. The app says so rather than assuming the choice was deliberate.
  */
 export async function checkShelf(config: ShelfConfig): Promise<ShelfInfo> {
-  const response = await fetch(`${API}/repos/${config.repo}`, {
+  const response = await reach(`${API}/repos/${config.repo}`, {
     headers: headers(config),
     cache: NO_CACHE
   })
@@ -309,8 +310,8 @@ export async function checkShelf(config: ShelfConfig): Promise<ShelfInfo> {
  * is refused by GitHub in the one wording that sends the reader looking at
  * their own request.
  */
-async function shaOf(config: ShelfConfig, path: string): Promise<string | null> {
-  const response = await fetch(readUrl(config, path), {
+export async function shaOf(config: ShelfConfig, path: string): Promise<string | null> {
+  const response = await reach(readUrl(config, path), {
     headers: headers(config),
     cache: NO_CACHE
   })
@@ -353,8 +354,21 @@ export async function putFile(
   contentBase64: string,
   message: string
 ): Promise<void> {
-  const sha = await shaOf(config, path)
-  const response = await fetch(contentsUrl(config, path), {
+  await putWithSha(config, path, contentBase64, message, await shaOf(config, path))
+}
+
+/**
+ * The write alone, against a sha already asked for (`shaOf`): `putFile` in two
+ * halves, so a flush can say which of the two requests failed.
+ */
+export async function putWithSha(
+  config: ShelfConfig,
+  path: string,
+  contentBase64: string,
+  message: string,
+  sha: string | null
+): Promise<void> {
+  const response = await reach(contentsUrl(config, path), {
     method: 'PUT',
     headers: { ...headers(config), 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -375,7 +389,7 @@ export async function putFile(
  * one.
  */
 export async function getText(config: ShelfConfig, path: string): Promise<string | null> {
-  const response = await fetch(readUrl(config, path), {
+  const response = await reach(readUrl(config, path), {
     headers: headers(config, 'application/vnd.github.raw'),
     cache: NO_CACHE
   })
@@ -386,7 +400,7 @@ export async function getText(config: ShelfConfig, path: string): Promise<string
 
 /** Read a file as bytes — the scan. */
 export async function getBytes(config: ShelfConfig, path: string): Promise<Uint8Array | null> {
-  const response = await fetch(readUrl(config, path), {
+  const response = await reach(readUrl(config, path), {
     headers: headers(config, 'application/vnd.github.raw'),
     cache: NO_CACHE
   })
@@ -397,7 +411,7 @@ export async function getBytes(config: ShelfConfig, path: string): Promise<Uint8
 
 /** Every book on the shelf. Empty for a repository nobody has saved to yet. */
 export async function listShelf(config: ShelfConfig): Promise<{ slug: string; path: string }[]> {
-  const response = await fetch(readUrl(config, 'books'), {
+  const response = await reach(readUrl(config, 'books'), {
     headers: headers(config),
     cache: NO_CACHE
   })

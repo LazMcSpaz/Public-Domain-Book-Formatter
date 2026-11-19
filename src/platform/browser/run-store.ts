@@ -35,7 +35,7 @@ import {
   type SavedRunSummary
 } from '@core/project'
 import { migrateSavedProfile, type SavedStyleProfile } from '@core/style'
-import type { OutboxEntry } from '@core/sync'
+import { equalEntry, type OutboxEntry } from '@core/sync'
 
 const DB_NAME = 'pdbf'
 /**
@@ -683,21 +683,32 @@ export async function outboxAll(): Promise<OutboxEntry[]> {
 }
 
 /**
- * Forget the entries a flush actually landed.
+ * Forget the entries a flush actually landed, and report the ids it kept.
  *
  * Only ever called with what `mergeOutbox` reported as `applied`, and only
  * after the shelf has answered. A conflicted entry stays queued: it is a change
  * the editor made that nobody has taken, and dropping it to tidy the queue is
  * the one thing that would make this channel worse than no channel.
+ *
+ * An entry is forgotten only while it is still the one that was sent
+ * (`equalEntry`), checked and deleted in one transaction: an entry is keyed by
+ * what it is about, so a ruling changed during a slow write replaced it under
+ * the same key, and deleting by key deleted the new ruling unsent.
  */
-export async function clearQueued(ids: readonly string[]): Promise<void> {
-  if (ids.length === 0) return
+export async function clearQueued(sent: readonly OutboxEntry[]): Promise<string[]> {
+  if (sent.length === 0) return []
+  const kept: string[] = []
   await withStore(
     'readwrite',
     async (store) => {
-      for (const id of ids) await promisify(store.delete(id))
+      for (const entry of sent) {
+        const now = (await promisify(store.get(entry.id))) as OutboxEntry | undefined
+        if (equalEntry(now, entry)) await promisify(store.delete(entry.id))
+        else if (now !== undefined) kept.push(entry.id)
+      }
       return true
     },
     OUTBOX_STORE
   )
+  return kept
 }

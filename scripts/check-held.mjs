@@ -19,6 +19,7 @@
  *   node scripts/check-held.mjs      (needs the dev server on :5173)
  */
 import { chromium } from 'playwright'
+import { blobSha } from './lib/blob-sha.mjs'
 import { resolve } from 'node:path'
 
 const REPO = resolve(import.meta.dirname, '..')
@@ -60,7 +61,8 @@ await page.route('https://api.github.com/**', async (route) => {
     if ((request.headers()['accept'] ?? '').includes('raw')) {
       return route.fulfill({ status: 200, contentType: 'text/plain', body: files.get(path) })
     }
-    return json(200, { type: 'file', sha: 'stub-sha', path })
+    // The real blob sha: a flush checks it against the bytes it read.
+    return json(200, { type: 'file', sha: blobSha(files.get(path)), path })
   }
   if (request.method() === 'PUT') {
     const body = JSON.parse(request.postData() ?? '{}')

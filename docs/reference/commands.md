@@ -96,9 +96,17 @@ builds its own copy.
 - `npm run check:install`: builds the app as GitHub Pages serves it and checks
   the installed app still opens with the network off.
 - `npm run check:outbox`: checks a mark made offline reaches the shelf when
-  the connection returns (the shelf is faked in the page).
+  the connection returns, with one write of the book file per flush that has
+  something new (the shelf is faked in the page).
+- `npm run check:saves`: checks that when the (faked) shelf will not take a
+  write, the note names the request, its size, the wait and the browser's
+  words; that a ruling and a mark stay on the device, the mark still drawn
+  after a refresh; and that "Send to the shelf" sends them. Also that the
+  door that brings the scan stores a waiting mark with the book, and that a
+  ruling changed during a slow write stays queued in the device's store.
 - `npm run check:crop`: checks the query screen shows the crop cut in advance
-  for a book whose scan is too large for the shelf.
+  for a book whose scan is too large for the shelf, and that on a phone it is
+  shown at reading size, scrolled to the marked passage.
 - `npm run check:proposals`: checks the query screen offers the reader's
   suggested answers with none of them selected.
 - `npm run check:held`: checks "Approve all" on the query screen files what it
@@ -517,7 +525,7 @@ by subheadings, and tidy heads when the look sets `runningHeadTidy`;
 `chapters` gives every heading with its level and page; `askOwner` names a
 book whose chapters only open with lists of topics, and `headsShortened` every
 topic-heads book's running head too long for the page, which is not a warning
-and goes to a person under readiness R2), `querycrops`, `crops`, `card`, `shelf`, `section`,
+and goes to a person under readiness R2), `querycrops` (each crop is the passage's lines and three whole lines either side, the passage marked; `--lines <n>` for more or fewer), `crops`, `card`, `shelf`, `section`,
 `bare`, `query`, `truth` (the proofed text, leaf by leaf, as `truth.json` in
 the scratch folder); `scripts/flatten-cover.py <cover.pdf>
 <cover-flat.pdf>` (the cover copy KDP accepts);

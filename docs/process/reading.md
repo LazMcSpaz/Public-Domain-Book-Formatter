@@ -144,8 +144,11 @@ invention appears. Every arrangement below exists to keep that true.
     own usage). Nothing is pre-selected; only the editor's choice files a
     ruling. `node scripts/drive.mjs queries` names any waiting query
     without a proposal; the list is empty when queries are pushed. Cut crops in
-    advance with `node scripts/drive.mjs querycrops`, and withdraw a query the
-    pixels refute with `drive.mjs unquery <leaf> <quote> "<reason>"`.
+    advance with `node scripts/drive.mjs querycrops` (the passage's lines and
+    three whole lines either side, the passage marked; crops cut before 19
+    November 2026 are shorter and unmarked, so cut them again when the scan is
+    to hand), and withdraw a query the pixels refute with
+    `drive.mjs unquery <leaf> <quote> "<reason>"`.
 12. **Standing rulings hold; they never settle.** `node scripts/drive.mjs held`
     lists waiting queries a standing ruling covers. `held approve --yes` files
     them only on the editor's word, never implied. After a spelling ruling,

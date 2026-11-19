@@ -1839,6 +1839,70 @@ mark.claim {
   }
 }
 
+/* --- a query's crop at reading size (CropView) ------------------------------
+   Drawn at about 120 screen pixels to an inch of paper, in a frame that
+   scrolls sideways (and down, for a whole leaf), never squeezed to the width
+   of a phone: that drew book type eight points tall. The rules above cap
+   evidence images by width and height, so these must outrank them. */
+.crop-view {
+  min-width: 0;
+  max-width: 100%;
+}
+.crop-frame {
+  max-width: 100%;
+  max-height: 60vh;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+.q-evidence .crop-frame img,
+.q-evidence.readable .crop-frame img {
+  display: block;
+  width: 100%;
+  max-width: none;
+  max-height: none;
+  height: auto;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.crop-view-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+  font-family: var(--ui);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+.crop-view-open {
+  font-size: 0.75rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+@media (max-width: 900px) {
+  .crop-frame {
+    max-height: 50vh;
+  }
+}
+/* A question with a crop beside it: the crop needs the width, so on a wide
+   screen too the evidence goes above the options, as it does on a phone, and
+   the crop takes most of the row beside the words as printed. A browser
+   without :has() keeps the narrow column it had. */
+.q-row:has(.crop-view) {
+  flex-direction: column-reverse;
+  align-items: stretch;
+}
+.q-row:not(.evidence-led):has(.crop-view) .q-evidence.readable {
+  flex: 1 1 auto;
+}
+.q-evidence.readable figure:has(.crop-view) {
+  flex: 3;
+}
+
 /* --- a word crop, with its line on hover ---------------------------------- */
 /*
  * One word is enough to read the letters and not always enough to judge them:
@@ -3021,6 +3085,15 @@ textarea.galley-plain {
   font-size: 0.8rem;
   color: var(--muted);
   flex-basis: 100%;
+}
+/* The same way to try again at the query gate, under the note that says why. */
+.gate-outbox button {
+  display: block;
+  margin-top: 8px;
+  font-family: var(--ui);
+  font-size: 0.8rem;
+  border-radius: 999px;
+  padding: 4px 12px;
 }
 
 /* --- the shelf as the front page ------------------------------------------

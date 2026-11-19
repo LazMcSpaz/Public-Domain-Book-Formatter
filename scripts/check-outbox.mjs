@@ -22,10 +22,12 @@
 import { chromium } from 'playwright'
 import { resolve } from 'node:path'
 import { stat } from 'node:fs/promises'
+import { blobSha } from './lib/blob-sha.mjs'
 
 const REPO = resolve(import.meta.dirname, '..')
 const EXECUTABLE = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
-const URL_BASE = process.env.APP_URL ?? 'http://localhost:5173'
+// `PDBF_URL`, as every other check reads it; `APP_URL` is still taken, as `drive.mjs` reads it.
+const URL_BASE = process.env.PDBF_URL ?? process.env.APP_URL ?? 'http://localhost:5173'
 const REPO_NAME = 'editor/shelf'
 
 const fail = (why) => {
@@ -62,11 +64,12 @@ await context.route('https://api.github.com/**', async (route) => {
   const path = url.pathname.split('/contents/')[1] ?? ''
   if (request.method() === 'GET') {
     if (!shelf.files.has(path)) return json(404, { message: 'Not Found' })
-    // `getText` asks for the raw media type; `shaOf` asks for the envelope.
+    // The flush reads the raw media type; `shaOf` asks for the envelope, and
+    // gets the real blob sha, which the flush checks against what it read.
     if ((request.headers()['accept'] ?? '').includes('raw')) {
       return route.fulfill({ status: 200, contentType: 'text/plain', body: shelf.files.get(path) })
     }
-    return json(200, { sha: 'stub-sha' })
+    return json(200, { sha: blobSha(shelf.files.get(path)) })
   }
   if (request.method() === 'PUT') {
     const body = JSON.parse(request.postData() ?? '{}')
@@ -205,9 +208,20 @@ if (!/1 change on this device only/.test(waitingBeforeBook)) {
 // 2. Put the book on the shelf, then let the queue drain into it.
 await page.getByRole('button', { name: 'Save to the shelf' }).click()
 await page.waitForTimeout(2500)
+// The whole-book save already carried the first mark, so this flush has
+// nothing new: it must clear the queue and write nothing, rather than make a
+// commit that changes nothing on a shelf that keeps every version.
+const bookWrites = () =>
+  shelf.puts.filter(
+    (p) => BOOK.test(`/contents/${p.path}`) && /marked while reading/.test(p.message)
+  ).length
 await page.getByRole('button', { name: 'Send to the shelf' }).click()
 await page.waitForTimeout(2500)
 if (marksOnShelf() !== 1) fail(`the first mark did not reach the shelf (${marksOnShelf()} there)`)
+if (bookWrites() !== 0) fail('a flush with nothing new on it wrote the book file anyway')
+if ((await page.locator('.proof-outbox').count()) !== 0) {
+  fail('a mark already on the shelf was left counted as waiting')
+}
 
 // 3. Offline. A second mark must be held, counted, and not sent.
 const putsBefore = shelf.puts.length
@@ -224,9 +238,14 @@ if (!/on this device only/.test(heldText)) {
 if (shelf.puts.length !== putsBefore) fail('something was written to the shelf while offline')
 if (marksOnShelf() !== 1) fail('the offline mark reached the shelf anyway')
 
-// 4. Back online. The `online` event is what empties the queue.
+// 4. Back online. The `online` event is what empties the queue, and the
+//    editor presses "Send to the shelf" in the same moment: two flushes at once,
+//    which must still write the book file once.
 await context.setOffline(false)
-await page.evaluate(() => window.dispatchEvent(new Event('online')))
+await Promise.all([
+  page.evaluate(() => window.dispatchEvent(new Event('online'))),
+  page.getByRole('button', { name: 'Send to the shelf' }).click()
+])
 await page.waitForTimeout(3500)
 if (marksOnShelf() !== 2) {
   fail(`the offline mark did not go up when the connection came back (${marksOnShelf()} on shelf)`)
@@ -234,14 +253,18 @@ if (marksOnShelf() !== 2) {
 const settled = await page.locator('.proof-outbox').count()
 if (settled !== 0) fail('the queue still reports changes waiting after a successful flush')
 
-// One write per flush, and no more. Overlapping flushes both read a non-empty
-// queue and both write the file: two identical writes are a commit that says
-// nothing, and two different ones are a lost update, since each reads the blob
-// sha before the other has written. This caught exactly that, three writes for
-// two flushes, when the automatic flush and the button overlapped.
-const flushWrites = shelf.puts.filter((p) => /marked while reading/.test(p.message))
-if (flushWrites.length !== 2) {
-  fail(`${flushWrites.length} writes of the book file for two flushes — they are overlapping`)
+// One write per flush that has something to send, and no more. Overlapping
+// flushes both read a non-empty queue and both write the file: two identical
+// writes are a commit that says nothing, and two different ones are a lost
+// update, since each reads the blob sha before the other has written. This
+// caught exactly that, three writes for two flushes, when the automatic flush
+// and the button overlapped; step 4 makes them overlap on purpose.
+//
+// Writes of the *book file* only. Each flush also rewrites the catalogue card
+// beside it under the same commit message, and counting by message alone read
+// that as a second book write: the check failed on correct behaviour.
+if (bookWrites() !== 1) {
+  fail(`${bookWrites()} writes of the book file for one new mark: flushes are overlapping`)
 }
 
 console.log(

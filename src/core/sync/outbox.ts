@@ -32,7 +32,8 @@
  * platform's business.
  */
 import { correctsTheBook, editTarget, sameTarget, withEdit, type BookEdit } from '@core/edits'
-import { rulingTarget, withRuling, type Ruling } from '@core/queries'
+import { rulingTarget, sameRuling, withRuling, type Ruling } from '@core/queries'
+import { equalEdit, equalRuling } from './same'
 
 /** What every queued change carries, whatever kind it is. */
 interface QueuedChange {
@@ -185,8 +186,14 @@ export function landedRulings(rulings: readonly Ruling[]): string[] {
   return [...new Set(rulings.map(rulingTarget))]
 }
 
-const same = (a: BookEdit | null, b: BookEdit | null): boolean =>
-  a === null || b === null ? a === b : JSON.stringify(a) === JSON.stringify(b)
+/**
+ * Whether two edits say the same thing, as the app reads them: the order their
+ * keys were written in does not count, nor a field the parser tidies away
+ * (`equalEdit`). The reading view and the parser build one comment with its
+ * keys in two orders, so comparing texts took a comment already on the shelf
+ * for a new one and moved it to the end of the list: a commit that says nothing.
+ */
+const same = equalEdit
 
 /**
  * Fold what is queued into the edit list the shelf currently holds.
@@ -206,7 +213,12 @@ export function mergeOutbox(shelf: ShelfState, entries: readonly OutboxEntry[]):
     // A ruling answers a query and touches nothing else, so there is no target
     // on the shelf to disagree with it and nothing to report. See `RulingEntry`.
     if (isRuling(entry)) {
-      rulings = withRuling(rulings, entry.ruling)
+      // Already exactly what the shelf holds: the shelf's own copy stays, with
+      // any field the app does not read, rather than being swapped for ours.
+      const onShelf = rulings.find((r) => sameRuling(r, entry.ruling))
+      if (!onShelf || !equalRuling(onShelf, entry.ruling)) {
+        rulings = withRuling(rulings, entry.ruling)
+      }
       applied.push(entry)
       continue
     }
