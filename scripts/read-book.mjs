@@ -29,6 +29,7 @@
  * processor and a hundred megabytes on the shelf, and neither should be spent
  * before somebody has listened to a chapter of it.
  */
+import { readText } from './lib/json-file.mjs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { basename, resolve } from 'node:path'
 import {
@@ -75,7 +76,7 @@ const { project, assemble, edits, speech, close } = await core(
   'speech'
 )
 
-const file = project.parseBookFile(await readFile(resolve(bookPath), 'utf8'))
+const file = project.parseBookFile(await readText(resolve(bookPath)))
 // Exactly what the app opens: the transcription assembled, then every edit
 // re-applied over it. Reading the raw transcription instead would speak a book
 // without its corrections, which is the one difference nobody listening could

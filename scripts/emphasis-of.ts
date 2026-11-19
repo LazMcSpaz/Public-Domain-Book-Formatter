@@ -13,7 +13,8 @@
  * ClearScan PDF, `scripts/italic-witness.mjs`; for a photographed scan,
  * `scripts/slant-witness.ts`. `--no-headings` leaves headings to the design.
  */
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readJsonSync } from './lib/json-file.mjs'
+import { writeFileSync } from 'node:fs'
 import { assembleBook } from '@core/assemble'
 import { applyEdits } from '@core/edits'
 import { checkEmphasis } from '@core/coherence'
@@ -28,9 +29,9 @@ if (!bookPath?.endsWith('.json') || !witnessPath || !out) {
     'emphasis-of.ts <book.json> <witness.json> <out.json> [--restore] [--no-headings]'
   )
 }
-const book = JSON.parse(readFileSync(bookPath, 'utf8'))
+const book = readJsonSync(bookPath)
 const doc = applyEdits(assembleBook(book.run.transcriptions), book.run.edits ?? [])
-const report = checkEmphasis(doc, JSON.parse(readFileSync(witnessPath, 'utf8')))
+const report = checkEmphasis(doc, readJsonSync(witnessPath))
 const { agreed, unplaced, ambiguous } = report
 // `--no-headings` leaves a heading's italic to the design, which is where
 // `headingStyle` decides it: a book that sets every section head in an

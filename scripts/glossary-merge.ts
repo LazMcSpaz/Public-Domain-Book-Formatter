@@ -20,7 +20,8 @@
  * Writes the section text to `--out`; nothing reaches the book until
  * `node scripts/drive.mjs section glossary --from <section.txt>`.
  */
-import { readFileSync, readdirSync, writeFileSync } from 'node:fs'
+import { readJsonSync } from './lib/json-file.mjs'
+import { readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { glossaryHeadwords, quotesNotInPacket, type GlossaryPacket } from '@core/annotate'
 
@@ -57,7 +58,7 @@ const words = (t: string) =>
     .split(/\s+/)
     .filter(Boolean).length
 
-const run = JSON.parse(readFileSync(bookPath, 'utf8')).run
+const run = readJsonSync(bookPath).run
 const section = [...(run.edits ?? [])]
   .reverse()
   .find(
@@ -76,7 +77,7 @@ const packets = new Map<string, GlossaryPacket>()
 const packetDir = flag('--packets')
 if (packetDir) {
   for (const f of readdirSync(packetDir).filter((f) => /^packet-\d+\.json$/.test(f))) {
-    for (const p of JSON.parse(readFileSync(join(packetDir, f), 'utf8')) as GlossaryPacket[]) {
+    for (const p of readJsonSync(join(packetDir, f)) as GlossaryPacket[]) {
       packets.set(bare(p.head), p)
     }
   }
@@ -86,7 +87,7 @@ const errors: string[] = []
 let newPreamble: string[] | null = null
 const changed = new Map<string, string>()
 for (const file of written) {
-  const got = JSON.parse(readFileSync(file, 'utf8')) as Record<string, string>
+  const got = readJsonSync(file) as Record<string, string>
   for (const [key, text] of Object.entries(got)) {
     if (key === '__preamble__') {
       newPreamble = text

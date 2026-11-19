@@ -63,10 +63,11 @@
  * block" and reports nowhere, is invisible from that side. This runs over the
  * raw JSON, where the tags still exist.
  */
+import { readJsonSync } from './lib/json-file.mjs'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { resolve, dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { driftVerdict } from './lib/drift.mjs'
+import { driftVerdict, emptyByRole } from './lib/drift.mjs'
 import { PAGE_FIELDS, BLOCK_FIELDS, BLOCK_KINDS } from './lib/batch-fields.mjs'
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -95,11 +96,9 @@ const flag = (name, fallback = null) => {
  *   `verifyPage` applies, asked early enough to stop the batch.
  */
 function checkBatch(donePath, draftPath) {
-  const done = JSON.parse(readFileSync(resolve(REPO, donePath), 'utf8'))
+  const done = readJsonSync(resolve(REPO, donePath))
   const draft = draftPath
-    ? new Map(
-        JSON.parse(readFileSync(resolve(REPO, draftPath), 'utf8')).map((p) => [p.pageIndex, p])
-      )
+    ? new Map(readJsonSync(resolve(REPO, draftPath)).map((p) => [p.pageIndex, p]))
     : null
 
   // The schema's own lists, not a shorter one written from memory. See
@@ -191,7 +190,9 @@ function checkBatch(donePath, draftPath) {
       // the word count decides what blocks. `scripts/lib/drift.mjs` says why,
       // and it is a separate module so the rule can be tested without running
       // the CLI.
-      const { drift, moved, reported, blocking } = driftVerdict(was, now)
+      const { drift, moved, reported, expected, blocking } = driftVerdict(was, now, {
+        expectedEmpty: emptyByRole(page)
+      })
       const pct = `${(drift * 100).toFixed(1)}%`
       console.log(
         `  leaf ${n}: ${was}w -> ${now}w (${pct}) ` +
@@ -205,7 +206,14 @@ function checkBatch(donePath, draftPath) {
       // is not one.
       const line =
         `leaf ${n}: ${pct} word drift against the draft ` + `(${moved} words, ${was} to ${now})`
-      if (blocking) {
+      if (expected) {
+        // A plate or a blank read as no blocks is the leaf read right: the
+        // draft's words were OCR picking at a picture or at show-through.
+        notes.push(
+          `${line} — a ${page.role} leaf with no blocks, as expected; ` +
+            'check the draft held no real text.'
+        )
+      } else if (blocking) {
         problems.push(
           `${line} — a reader correcting a page does not usually move it that far. ` +
             'Look before landing it.'
@@ -258,7 +266,7 @@ const rendersDir = flag('renders', join(outDir, 'leaves'))
 const prefix = flag('prefix', 'leaf')
 const seamPath = flag('seam')
 
-const draft = JSON.parse(readFileSync(resolve(REPO, draftPath), 'utf8'))
+const draft = readJsonSync(resolve(REPO, draftPath))
 if (!Array.isArray(draft) || draft.length === 0) {
   console.error(`${draftPath} is not a drafted chapter.`)
   process.exit(2)

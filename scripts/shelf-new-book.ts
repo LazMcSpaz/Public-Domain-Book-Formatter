@@ -22,9 +22,10 @@
  * that would not load. Refuses to overwrite a directory that already holds a
  * `book.json`: this is for a book the shelf has never held.
  */
+import { readJsonSync, stripBom } from './lib/json-file.mjs'
 import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { basename, resolve } from 'node:path'
+import { basename, dirname, resolve } from 'node:path'
 import { createSavedRun, parseBookFile, serializeBookFile, summarizeBookFile } from '@core/project'
 import { defaultVoice } from '@core/annotate/voice'
 import { scanPath, shelfSlug } from '@core/sync/shelf'
@@ -48,10 +49,16 @@ const tag = shelfSlug(key).split('-').pop()
 const dir = resolve(shelf, 'books', `${name}-${tag}`)
 if (existsSync(resolve(dir, 'book.json'))) throw new Error(`${dir} already holds a book.json`)
 
+// A sparse checkout of the shelf may hold neither folder yet; the copy below
+// would fail on a missing `scans/`.
 const scanOut = resolve(shelf, scan)
+mkdirSync(dirname(scanOut), { recursive: true })
+mkdirSync(dirname(dir), { recursive: true })
 if (!existsSync(scanOut)) copyFileSync(source, scanOut)
 
-const voice = voiceFrom ? parseBookFile(readFileSync(voiceFrom, 'utf8')).voice : defaultVoice()
+const voice = voiceFrom
+  ? parseBookFile(stripBom(readFileSync(voiceFrom, 'utf8'))).voice
+  : defaultVoice()
 const run = createSavedRun({
   key,
   fileName,
@@ -60,7 +67,7 @@ const run = createSavedRun({
   // A saved run must hold at least one leaf (`migrateSavedRun` refuses an
   // empty one), so the book goes up with its first leaf read — looked at
   // against the render and set down as printed — and the rest left unread.
-  transcriptions: firstLeaf ? [JSON.parse(readFileSync(firstLeaf, 'utf8'))] : [],
+  transcriptions: firstLeaf ? [readJsonSync(firstLeaf)] : [],
   failures: [],
   usage: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 },
   modelId: '',

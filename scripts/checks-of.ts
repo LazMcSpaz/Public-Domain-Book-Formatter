@@ -22,7 +22,8 @@
  * class of fault without loading a book: that is how the apparatus checks
  * were measured before their rules were set.
  */
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { readJsonSync } from './lib/json-file.mjs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { assembleBook } from '@core/assemble'
 import { applyEdits } from '@core/edits'
@@ -57,7 +58,7 @@ const line = (by: Record<string, number>): string =>
 
 let failing = 0
 for (const path of books) {
-  const book = JSON.parse(readFileSync(path, 'utf8'))
+  const book = readJsonSync(path)
   const run = book.run
   const doc = applyEdits(assembleBook(run.transcriptions), run.edits ?? [])
   const rulings = run.rulings ?? []

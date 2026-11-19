@@ -15,6 +15,7 @@
  * password is refused: nothing here guesses one. mupdf writes the same bytes
  * every time, which is what lets a merged volume be rebuilt rather than stored.
  */
+import { readJsonSync } from './lib/json-file.mjs'
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { createHash } from 'node:crypto'
@@ -40,7 +41,7 @@ try {
 }
 
 mkdirSync(out, { recursive: true })
-const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'))
+const manifest = readJsonSync(manifestPath)
 for (const chunk of manifest.chunks) {
   const bytes = readFileSync(join(root, chunk.path))
   const digest = createHash('sha256').update(bytes).digest('hex')

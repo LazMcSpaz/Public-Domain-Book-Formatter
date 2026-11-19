@@ -19,6 +19,7 @@
  * Usage:
  *   node scripts/reading-sheet.mjs <book-dir> [--check]
  */
+import { readJsonSync } from './lib/json-file.mjs'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 
@@ -109,7 +110,7 @@ if (!dir) {
   console.error('node scripts/reading-sheet.mjs <book-dir> [--check]')
   process.exit(2)
 }
-const record = JSON.parse(readFileSync(resolve(dir, 'reading/marks.json'), 'utf8'))
+const record = readJsonSync(resolve(dir, 'reading/marks.json'))
 const built = sheet(record)
 const out = resolve(dir, 'reading-notes.md')
 

@@ -47,11 +47,13 @@ invention appears. Every arrangement below exists to keep that true.
    recon was interrupted, compare the recorded page count with the file's and
    put it right with `node scripts/drive.mjs cachestat recount <scan.pdf>`.
 2. **Get a second reading** where the route allows one:
-   `node scripts/drive.mjs second --out second.json` (PaddleOCR over every
-   leaf; `--layer` takes the scan's own OCR layer instead), then
-   `node scripts/drive.mjs witness second.json`. Keep `second.json` on the
-   shelf beside the book. Reading every leaf is the default: a quarter of the
-   leaves chosen by any measure finds only about half the damage.
+   `node scripts/drive.mjs second --out <shelf>/books/<folder>/second.json`
+   (PaddleOCR over every leaf; `--layer` takes the scan's own OCR layer
+   instead), then `node scripts/drive.mjs witness <that second.json>`. Keep
+   `second.json` on the shelf beside the book; with no `--out` it goes to the
+   scratch folder ([commands.md](../reference/commands.md)). Reading every
+   leaf is the default: a quarter of the leaves chosen by any measure finds
+   only about half the damage.
 3. **Triage by measurement, never by feel.** OCR confidences and `assessText`
    decide which leaves get eyes. Never escalate because a model says it is
    unsure.
@@ -103,9 +105,11 @@ invention appears. Every arrangement below exists to keep that true.
      `npx vite-node --config vitest.config.ts scripts/emphasis-of.ts <book.json> w.json out.json`
      lists italic set in roman; `--restore` writes the batch that puts it
      back. Every witness is a floor: crop a sample before landing.
-9. **Correct against the assembled book, never a leaf.** `node scripts/drive.mjs body out.json`
-   gives each block's id and whole text, with emphasis as `<i>`, `<b>` and
-   `<sc>`, as first read (`pristine`) and as corrected (`edited`). Assembly
+9. **Correct against the assembled book, never a leaf.** `node scripts/drive.mjs body`
+   writes each block's id and whole text, with emphasis as `<i>`, `<b>` and
+   `<sc>`, as first read (`pristine`) and as corrected (`edited`), to the file
+   its result names; the book's own footnotes, with their `fn…` ids, are the
+   separate tree `notes.edited` and `notes.pristine`. Assembly
    joins paragraphs across page seams, so a leaf's raw text truncates them.
    Write corrections against those strings:
    `node scripts/drive.mjs correct --batch b.json`. It refuses a change that
@@ -132,6 +136,11 @@ invention appears. Every arrangement below exists to keep that true.
     lists waiting queries a standing ruling covers. `held approve --yes` files
     them only on the editor's word, never implied. After a spelling ruling,
     sweep with `--case` ([checking.md](./checking.md)).
+13. **A ruling is not a correction.** `node scripts/drive.mjs rule <leaf> "<quote>" corrected "<text>"`
+    files the editor's decision and leaves the text as it was. Apply it as a
+    second step, with `correct` on the block (or `sweep`), then `save`. Until
+    then `queries` lists the ruling under `decidedButNotPrinted`, which is
+    empty when the book reads as ruled.
 
 ## When the book has no page images
 

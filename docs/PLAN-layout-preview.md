@@ -301,6 +301,12 @@ Each step leaves the app working.
 
 ### Small caps: not in v1, and never faked
 
+> **Since built, so this section is out of date:** small capitals render.
+> `<sc>…</sc>` in a block's text, `headingStyle.smallCaps` and a small-capital
+> running head all set the face's real small capitals (`smcp`, through
+> fontkit: [decision 0040](decisions/0040-fontkit-shapes-and-measures.md)). A
+> face with no `smcp` falls back to full capitals, never scaled ones.
+
 Real `smcp` needs glyph-level drawing (`fontkit.layout(text, ['smcp'])` then
 emitting glyph IDs, rather than `drawText`). Ruled out for the first version:
 nice to have, not worth a lower-level drawing path and its spacing risks while
@@ -389,7 +395,8 @@ the line breaker to carry a span set differently from the text around it
 about it would set every line carrying one fractionally too long.
 
 The same mechanism is what small capitals would need, if they are ever done
-properly.
+properly. (They were done another way: the same font embedded a second time
+with `smcp` on, decision 0040.)
 
 ### Two smaller things
 

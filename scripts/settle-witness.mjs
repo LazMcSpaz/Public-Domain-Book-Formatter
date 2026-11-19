@@ -34,6 +34,7 @@
  * Usage:
  *   node scripts/settle-witness.mjs <witness.json> [--show <n>] [--open]
  */
+import { readJsonSync } from './lib/json-file.mjs'
 import { readFileSync, readdirSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -188,7 +189,7 @@ if (import.meta.url === `file://${process.argv[1]}`) {
   const openOnly = args.includes('--open')
 
   const count = corpusCounts()
-  const report = JSON.parse(readFileSync(path, 'utf8'))
+  const report = readJsonSync(path)
   const tally = { first: 0, second: 0, open: 0, skip: 0, joined: 0, misaligned: 0 }
   const open = []
   for (const leaf of report.leaves ?? []) {

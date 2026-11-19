@@ -15,12 +15,13 @@
  *
  *   node scripts/voice-page.mjs <dir with manifest.json and the audio>
  */
-import { readFile, writeFile } from 'node:fs/promises'
+import { readJson } from './lib/json-file.mjs'
+import { writeFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 
 const dir = resolve(process.argv[2] ?? 'public/voice-samples')
 const extension = process.argv[3] ?? 'mp3'
-const rendered = JSON.parse(await readFile(resolve(dir, 'manifest.json'), 'utf8'))
+const rendered = await readJson(resolve(dir, 'manifest.json'))
 
 const escape = (s) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')

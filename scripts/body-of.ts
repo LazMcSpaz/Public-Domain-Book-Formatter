@@ -16,7 +16,8 @@
  * module has a TypeScript parameter property that Node's type stripping
  * cannot read, and assembly imports it.
  */
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readJsonSync } from './lib/json-file.mjs'
+import { writeFileSync } from 'node:fs'
 import { assembleBook } from '@core/assemble'
 import { applyEdits } from '@core/edits'
 import { partsIn, withMarkup, type InlinePart } from '@core/transcribe/markup'
@@ -26,7 +27,7 @@ const [bookPath, out] = process.argv.slice(-2)
 if (!bookPath?.endsWith('.json') || !out?.endsWith('.json')) {
   throw new Error('body-of.ts <book.json> <out.json>')
 }
-const book = JSON.parse(readFileSync(bookPath, 'utf8'))
+const book = readJsonSync(bookPath)
 const bare = assembleBook(book.run.transcriptions)
 const applied = applyEdits(bare, book.run.edits ?? [])
 

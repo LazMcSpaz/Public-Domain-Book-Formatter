@@ -103,6 +103,25 @@ export function sheetRefusal(
 }
 
 /**
+ * Why a working file may not be written at `target`, or null when it may.
+ *
+ * A working file (`body`, `truth`, `chunks`, `concordance`, `witness`,
+ * `second`, `cleantrial`) carries the book's text as a sheet does, but it is
+ * made to be handed on and thrown away, so it has no place beside the book.
+ * With no path named it goes in `workDir`, a scratch folder outside every
+ * repository; a path named inside the tools repository is refused, as a
+ * sheet's is.
+ */
+export function workFileRefusal(target: string, toolsRoot: string, workDir: string): string | null {
+  if (!insideFolder(target, toolsRoot)) return null
+  return (
+    `Refusing to write ${target}: that is inside the tools repository (${toolsRoot}), ` +
+    "which is public, and this file carries the book's text. Run the command with no " +
+    `output path to write it in ${workDir}, or name a path outside the tools repository.`
+  )
+}
+
+/**
  * The refusal for a sheet asked for when no book file is known: the book was
  * opened from a scan, or stored by an earlier session, and never loaded from
  * a `book.json`. `shelfFolder` is the shelf folder holding a book with this

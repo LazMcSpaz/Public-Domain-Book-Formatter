@@ -24,8 +24,9 @@
  * Reports what it measured before and after, because a mastering step that
  * silently did nothing looks exactly like one that worked.
  */
+import { readJson } from './lib/json-file.mjs'
 import { execFile } from 'node:child_process'
-import { mkdir, readdir, readFile } from 'node:fs/promises'
+import { mkdir, readdir } from 'node:fs/promises'
 import { basename, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { expectedTags, tagsFor } from './audio-tags.mjs'
@@ -121,7 +122,7 @@ export function withinBand(loudness, peak) {
 /** The reader's record beside a rendering, or null where there is none. */
 async function recordBeside(wavPath) {
   try {
-    return JSON.parse(await readFile(wavPath.replace(/\.wav$/u, '.json'), 'utf8'))
+    return await readJson(wavPath.replace(/\.wav$/u, '.json'))
   } catch {
     return null
   }

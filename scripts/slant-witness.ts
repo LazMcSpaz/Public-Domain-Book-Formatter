@@ -29,6 +29,7 @@
  * share most of its word triples, and a page that matches no leaf is left
  * out rather than guessed at.
  */
+import { readJsonSync } from './lib/json-file.mjs'
 import { readFileSync, writeFileSync } from 'node:fs'
 import * as mupdf from 'mupdf'
 import { assembleBook } from '@core/assemble'
@@ -73,9 +74,10 @@ const range = flag('--pages')
 const [first, last] = range ? range.split('-').map(Number) : [0, pageCount - 1]
 const given: Map<number, Word[]> | null = flag('--words')
   ? new Map(
-      (JSON.parse(readFileSync(flag('--words')!, 'utf8')) as { page: number; words: Word[] }[]).map(
-        (p) => [p.page, p.words]
-      )
+      (readJsonSync(flag('--words')!) as { page: number; words: Word[] }[]).map((p) => [
+        p.page,
+        p.words
+      ])
     )
   : null
 
@@ -126,7 +128,7 @@ const tokens = (text: string): string[] =>
 /** For `--book`: which leaf of the book each scan page is, by shared word triples. */
 const leafOf: ((words: Word[]) => number | null) | null = flag('--book')
   ? (() => {
-      const book = JSON.parse(readFileSync(flag('--book')!, 'utf8'))
+      const book = readJsonSync(flag('--book')!)
       const assembled = applyEdits(assembleBook(book.run.transcriptions), book.run.edits ?? [])
       const where = new Map<string, Set<number>>()
       for (const unit of [...assembled.blocks, ...assembled.footnotes]) {

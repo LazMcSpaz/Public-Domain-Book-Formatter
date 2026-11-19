@@ -27,6 +27,7 @@
  * for ever, so a 19 MB upload moved into a folder is still 19 MB of history.
  * Only a rewrite removes that, and that is the editor's call.
  */
+import { readJsonSync } from './lib/json-file.mjs'
 import { readFileSync, readdirSync, statSync, writeFileSync, existsSync } from 'node:fs'
 import { resolve, basename } from 'node:path'
 import { createRequire } from 'node:module'
@@ -99,7 +100,7 @@ if (existsSync(booksDir)) {
   for (const slug of readdirSync(booksDir)) {
     let book
     try {
-      book = JSON.parse(readFileSync(`${booksDir}/${slug}/book.json`, 'utf8'))
+      book = readJsonSync(`${booksDir}/${slug}/book.json`)
     } catch {
       continue
     }
