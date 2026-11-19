@@ -12,7 +12,7 @@ New editions of public-domain occult and esoteric books, sold on Amazon KDP unde
 - **Buys the result:** readers on Amazon.
 - **Runs on:**
   - Claude Code sessions in the cloud and on the owner's Windows computer; this is where most of the work happens (owner's decision, 18 November 2026);
-  - the browser app, installed from the web, which is the engine the sessions drive and a viewer on the owner's devices. Its tablet features (ruling and marking from the shelf) are secondary and need not be robust.
+  - the browser app, installed from the web, which is the engine the sessions drive and the owner's main window on the work (owner's decision, 19 November 2026, replacing "secondary and need not be robust"): reading, ruling and marking from the shelf, and the Workroom, where he sees the agents' roles, tasks and progress.
 
 ## The core loop
 
