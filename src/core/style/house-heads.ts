@@ -66,7 +66,8 @@ export function houseHeadsFor(look: HouseLook, counts: DivisionCounts): HouseHea
         `${listed}. Ask the owner, with a chapter opening in front of him, whether this ` +
         'book keeps its author and chapter running heads, or whether he will say where each ' +
         'listed topic begins, so it can be set as a subheading and the book given chapter and ' +
-        'topic heads. The tools never guess which pages a listed topic covers.'
+        'topic heads. The tools never guess which pages a listed topic covers. Record his ' +
+        'answer in the ledger and write the heads he chose into the book (docs/process/export.md).'
     }
   }
   return {
