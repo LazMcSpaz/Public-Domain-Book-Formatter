@@ -18,6 +18,15 @@ The full list of checks, C1 to C12 for _checked_ and R1 to R11 for _ready to upl
   numbers.
 - Editing commands change the copy in the driver's browser only. `save`
   (see "Named elsewhere") writes `book.json`; then commit and push to the shelf.
+- **Sheets go beside the book, never into this repository.** The sheets the
+  driver writes from a book (`queries.md`, `rulings.md`, `review.md`,
+  `proposals.md`, `damage.md`, `parallels.md`, `sense.md`) quote it, and this
+  repository is public. With no output path they are written beside the
+  `book.json` that `load` was given (or, for a book never loaded, the one
+  `save` first wrote). `book` shows which file that is. With no book file
+  known the command refuses and says which shelf folder to load from. An
+  output path you name must be outside this repository: a path inside it is
+  refused, and so is `card` or `corrections` pointed at a folder inside it.
 - After editing `src/core` or `scripts/drive.mjs`, restart both servers. A
   running `serve` keeps the old code in memory.
 
@@ -69,7 +78,8 @@ builds its own copy.
 - `node scripts/drive.mjs serve &`: opens a browser on the app and keeps it
   open for the commands below. Start this first.
 - `node scripts/drive.mjs load <book.json> <scan.pdf>`: loads a book from the
-  shelf into the driver's browser. **Warning:** the scan is
+  shelf into the driver's browser, and remembers the `book.json` so the sheets
+  are written beside it. **Warning:** the scan is
   `scans/<sha256>.pdf`, named in `book.json` under `scan.path`. The PDF next to
   `book.json` is the export; loading it creates a second, wrong book (check
   with `runs`).
@@ -137,7 +147,8 @@ builds its own copy.
 Finding faults. The `.ts` scripts here need no browser and run over one shelf
 book or many (`books/*/book.json`).
 
-- `node scripts/drive.mjs damage`: marks a printer would never set: split
+- `node scripts/drive.mjs damage`: writes `damage.md` beside the book: marks
+  a printer would never set: split
   words, stray full stops and apostrophes, a note printing its own mark,
   paragraphs split wrongly at a page turn, garbled tokens. Greek misread as
   Latin letters is listed to read, not counted. No pixels needed.
@@ -161,8 +172,8 @@ book or many (`books/*/book.json`).
   uploaded. Needs `pdftotext`. A sheet to read, not an automatic pass or fail:
   readiness requires that it was made from the exact upload file and read, each
   word corrected or kept as printed on purpose, and that reading recorded. **[before upload]**
-- `node scripts/drive.mjs parallels`: passages the book prints twice, and
-  where the two copies disagree on a word. The second witness for a book with
+- `node scripts/drive.mjs parallels`: writes `parallels.md` beside the book:
+  passages the book prints twice, and where the two copies disagree on a word. The second witness for a book with
   no scan.
 - `node scripts/drive.mjs concordance f.json`: for a book with no scan, what
   the checking reader gets instead of a crop: the paragraph, its neighbours,
@@ -210,18 +221,20 @@ Fixing faults:
 
 ## Editorial queries and rulings
 
-- `node scripts/drive.mjs queries q.md`: decisions waiting on the editor, as a
-  sheet. It also writes `rulings.md` and `review.md` beside it. **Warning:**
-  pointed at a shelf book's `queries.md`, it overwrites those sheets; read
-  `git log -1 -- <dir>/rulings.md` and the head of the file first, and restore
-  a hand-written sheet from git afterwards. Lists any waiting query without a
-  proposal.
+- `node scripts/drive.mjs queries`: decisions waiting on the editor, as
+  `queries.md` beside the book, with `rulings.md`, `review.md` and (when the
+  reader has offered answers) `proposals.md` beside it. The shelf paths it
+  reports name the book's own folder. **Warning:** it overwrites those
+  sheets; read `git log -1 -- <dir>/rulings.md` and the head of the file
+  first, and restore a hand-written sheet from git afterwards. Lists any
+  waiting query without a proposal.
 - `node scripts/drive.mjs propose p.json --by="the Glossary session"`: the
   reader's suggested answers, offered at the query screen with nothing
   selected. The file is an array of `{ leaf, quote, decision, correction?,
 because }`. Not rulings: only the editor picking one files anything. Write
   `--by=` with the equals sign; with a space the name is ignored.
-  `--replace` clears the book's earlier proposals first. Then `save` and push.
+  `--replace` clears the book's earlier proposals first. Then `save`, run
+  `queries` to write `proposals.md`, and push.
 - `node scripts/drive.mjs held`: waiting queries that a standing ruling holds
   an answer for. `held approve --yes` files them, naming the ruling each came
   from. **The `--yes` is the editor's word, never implied.**

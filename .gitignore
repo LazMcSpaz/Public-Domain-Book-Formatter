@@ -34,14 +34,26 @@ __pycache__/
 *.pyc
 
 # The editorial sheets the driver writes (queries, rulings, review, proposals,
-# damage) quote a book's text, and this repository is public. They belong
-# beside the book on the shelf; until every verb writes them there (cleanup
-# task 0), a copy left at the root of this checkout must never be committed.
+# damage, parallels, sense) quote a book's text, and this repository is public.
+# The driver writes them beside the loaded book and refuses a path in here
+# (cleanup task 0); these lines stay as the net under that.
 /queries.md
 /rulings.md
 /review.md
 /proposals.md
 /damage.md
 /parallels.md
+/sense.md
 /*.rulings.md
 /*.review.md
+
+# Working files some verbs still write to this checkout by default, each of
+# which carries the book's text: inputs for the session's next command, never
+# repository content.
+/body.json
+/truth.json
+/chunks.json
+/concordance.json
+/witness.json
+/second.json
+/cleantrial.json

@@ -124,7 +124,7 @@ invention appears. Every arrangement below exists to keep that true.
     `node scripts/drive.mjs propose p.json --by="<who>"`, written from
     evidence (the crop, a second printing checked on its pixels, the book's
     own usage). Nothing is pre-selected; only the editor's choice files a
-    ruling. `node scripts/drive.mjs queries q.md` names any waiting query
+    ruling. `node scripts/drive.mjs queries` names any waiting query
     without a proposal; the list is empty when queries are pushed. Cut crops in
     advance with `node scripts/drive.mjs querycrops`, and withdraw a query the
     pixels refute with `drive.mjs unquery <leaf> <quote> "<reason>"`.
@@ -158,7 +158,7 @@ EPUB's chapters come in through
 | Every leaf landed, compared with OCR | `transcribe` report: `stillMissing` 0, `complete` true, `ocr` names the leaves compared                 |
 | Notes all claimed                    | `node scripts/drive.mjs notes n.json --full` (none orphaned) and `node scripts/drive.mjs pairs`         |
 | Garbled script and tables read       | `node scripts/drive.mjs damage`, its `garbled`, `greek` and `table-as-prose` lines read                 |
-| Every query has a proposal           | `node scripts/drive.mjs queries q.md` lists none without                                                |
+| Every query has a proposal           | `node scripts/drive.mjs queries` lists none without                                                     |
 | Markup kept through corrections      | (proposed check) tag counts per block, `pristine` against `edited` from `drive.mjs body`; by hand today |
 
 ## What it produces and where it goes

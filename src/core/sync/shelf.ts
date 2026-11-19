@@ -212,6 +212,12 @@ export function rulingsPath(key: string, dir: string = shelfSlug(key)): string {
   return `${SHELF_ROOT}/${dir}/rulings.md`
 }
 
+/**
+ * The sheets a session generates from a book go beside the `book.json` it was
+ * loaded from, and never inside the tools repository: `./sheets` says how.
+ */
+export { bookFolder, insideFolder, sheetNeedsBook, sheetPath, sheetRefusal } from './sheets'
+
 /** What the catalogue card says. */
 export interface ShelfAbout {
   /** The file key the run is filed under, so opening it lands in the right place. */

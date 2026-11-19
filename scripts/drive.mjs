@@ -32,10 +32,11 @@ import {
   existsSync,
   readdirSync,
   readFileSync,
+  realpathSync,
   statSync,
   writeFileSync
 } from 'node:fs'
-import { dirname, isAbsolute, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, resolve } from 'node:path'
 
 const PORT = Number(process.env.DRIVE_PORT ?? 7788)
 const URL_BASE = process.env.APP_URL ?? 'http://localhost:5173'
@@ -436,6 +437,96 @@ async function serve() {
     return where.split('/').pop()
   }
 
+  /**
+   * Ask the shelf map (`src/core/sync/shelf.ts`) a question about paths, in
+   * the page like every other core call, so the driver and the tests run the
+   * same rules. The arguments travel inside an object: `page.evaluate` swaps
+   * a bare `REPO` for its URL form, and these are this machine's own paths.
+   */
+  const askShelfMap = (fn, ...args) =>
+    page.evaluate(
+      async ([repo, call]) => {
+        const shelf = await import(`/@fs${repo}/src/core/sync/shelf.ts`)
+        return shelf[call.fn](...call.args)
+      },
+      [REPO, { fn, args }]
+    )
+  const REPO_REAL = realpathSync(REPO)
+
+  /**
+   * The `book.json` each book was loaded from, kept in the page's storage
+   * under the book's key, beside `pdbf.drive.book`: so it outlives a restart
+   * of this driver and follows `use` from one book to another.
+   *
+   * It is what every sheet is written beside. The sheets used to default to
+   * a bare name resolved against this repository, which is public, and they
+   * quote the book. `load` sets it; `save` sets it only for a book that has
+   * none yet (a new book saved to the shelf for the first time), so a copy
+   * saved elsewhere does not take the sheets with it.
+   */
+  const BOOK_FILE = 'pdbf.drive.file.'
+  const currentBookFile = () =>
+    page.evaluate(
+      async ([repo, prefix]) => {
+        const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+        const picked = await window.__pdbfPickBook(runStore)
+        if (!picked) throw new Error('No book open on this device.')
+        let file = null
+        try {
+          file = localStorage.getItem(prefix + picked.key)
+        } catch {
+          /* no storage: no book file known */
+        }
+        return { key: picked.key, file }
+      },
+      [REPO, BOOK_FILE]
+    )
+  const rememberBookFile = (key, file, onlyIfNone) =>
+    page.evaluate(
+      ([k, f, prefix, soft]) => {
+        try {
+          if (soft && localStorage.getItem(prefix + k)) return
+          localStorage.setItem(prefix + k, f)
+        } catch {
+          /* a driver that cannot remember refuses sheets instead of misplacing them */
+        }
+      },
+      [key, file, BOOK_FILE, onlyIfNone]
+    )
+
+  /**
+   * Refuse a sheet aimed inside this repository. Compared through the real
+   * folders, so a shelf reached by a link is judged by where it really is.
+   */
+  const refuseInsideTools = async (target, bookFile) => {
+    let real = target
+    try {
+      real = resolve(realpathSync(dirname(target)), basename(target))
+    } catch {
+      /* the folder is not there yet; the write will say so */
+    }
+    const refused = await askShelfMap('sheetRefusal', real, REPO_REAL, bookFile)
+    if (refused) throw new Error(refused)
+  }
+
+  /**
+   * Where a sheet made from the current book goes, settled before any work:
+   * at the path the session named, or beside the book file it was loaded
+   * from, and never inside this repository either way. With neither, refused,
+   * naming the shelf folder that holds the book when a checkout says so.
+   * `folder` is the book's real folder, for the shelf paths a verb reports.
+   */
+  const sheetTarget = async (sheet, given) => {
+    const book = await currentBookFile()
+    let target
+    if (given) target = resolve(REPO, given)
+    else if (book.file) target = await askShelfMap('sheetPath', book.file, sheet)
+    else throw new Error(await askShelfMap('sheetNeedsBook', sheet, shelfDirForKey(book.key)))
+    await refuseInsideTools(target, book.file)
+    const folder = book.file ? await askShelfMap('bookFolder', book.file) : shelfDirForKey(book.key)
+    return { target, key: book.key, file: book.file, folder }
+  }
+
   const handlers = {
     /** The gate on screen, as the controller sees it. */
     state: () => run({ op: 'state' }),
@@ -552,7 +643,7 @@ async function serve() {
      */
     book: async ([action]) => {
       return page.evaluate(
-        async ([repo, arg]) => {
+        async ([repo, arg, bookFilePrefix]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const provenance = await import(`/@fs${repo}/src/core/provenance/index.ts`)
           const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
@@ -594,6 +685,8 @@ async function serve() {
               ? (runs.find((r) => r.key === wanted)?.fileName ?? wanted.split('\u0000')[0])
               : null,
             scanStored: wanted ? Boolean(await runStore.loadSourceFile(wanted)) : false,
+            // The `book.json` it was loaded from: where its sheets are written.
+            bookFile: wanted ? localStorage.getItem(bookFilePrefix + wanted) : null,
             commentsOpen: memos.filter((m) => !m.resolved).length,
             commentsAnswered: memos.filter((m) => m.resolved).length,
             marked: marked.length,
@@ -634,7 +727,7 @@ async function serve() {
             stored: runs.map((r) => r.fileName)
           }
         },
-        [REPO, action ?? '']
+        [REPO, action ?? '', BOOK_FILE]
       )
     },
 
@@ -1025,8 +1118,15 @@ async function serve() {
         },
         [loaded.key]
       )
+      // And where it came from, which is where its sheets go.
+      await rememberBookFile(loaded.key, bookFile, false)
 
-      const out = { ...loaded, scanStored: true, current: loaded.key.split('\u0000')[0] }
+      const out = {
+        ...loaded,
+        scanStored: true,
+        current: loaded.key.split('\u0000')[0],
+        bookFile
+      }
       return missing.length > 0 ? { ...out, missingImages: missing } : out
     },
 
@@ -1212,7 +1312,8 @@ async function serve() {
               scan: was.scan ?? null,
               imagePaths
             }),
-            pictures
+            pictures,
+            key: newest.key
           }
         },
         [REPO, original]
@@ -1281,6 +1382,11 @@ async function serve() {
         written.push(picture.path)
       }
       await writeFile(path, json)
+      // A book that was never loaded from a file (one being put on the shelf
+      // for the first time) has its sheets beside where it now is. A book
+      // that was loaded keeps the file it came from: a copy saved somewhere
+      // else does not take its sheets with it.
+      await rememberBookFile(result.key, path, true)
       const parsed = proposed
       const verdicts = parsed.answers?.['gate-uncertainties'] ?? {}
       const fixes = Object.entries(verdicts).filter(
@@ -2264,11 +2370,14 @@ async function serve() {
      * is reported as one; words present in one copy and not the other are
      * listed under it as the author's own revision.
      *
-     *   parallels               write parallels.md
-     *   parallels out.md        somewhere else
+     *   parallels               write parallels.md beside the book file
+     *   parallels out.md        somewhere else, outside this repository
      */
     parallels: async (args) => {
-      const out = args.find((a) => !a.startsWith('--')) ?? 'parallels.md'
+      const { target: out } = await sheetTarget(
+        'parallels.md',
+        args.find((a) => !a.startsWith('--'))
+      )
       const built = await page.evaluate(
         async ([repo]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
@@ -2328,7 +2437,7 @@ async function serve() {
         }
         lines.push('', `> ${p.hereText}`, '', `> ${p.thereText}`, '')
       }
-      await writeFile(resolve(out), lines.join('\n'))
+      await writeFile(out, lines.join('\n'))
       return {
         wrote: out,
         repeated: built.pairs.length,
@@ -2517,12 +2626,12 @@ async function serve() {
      * at the foot is what says whether the pass is earning its keep: a hundred
      * findings of which sixty survive is a good check, and a hundred of which
      * fifteen survive is noise wearing a check's clothes.
+     *
+     * `review [findings.json] [verdicts.json] [out.md]`: the sheet is
+     * `sense.md` beside the book file, or `out.md` outside this repository.
      */
-    review: async ([
-      findingsPath = 'findings.json',
-      verdictsPath = 'verdicts.json',
-      out = 'sense.md'
-    ]) => {
+    review: async ([findingsPath = 'findings.json', verdictsPath = 'verdicts.json', given]) => {
+      const { target: out } = await sheetTarget('sense.md', given)
       const { readFile, writeFile } = await import('node:fs/promises')
       const rawFindings = JSON.parse(await readFile(resolve(REPO, findingsPath), 'utf8'))
       const rawVerdicts = JSON.parse(await readFile(resolve(REPO, verdictsPath), 'utf8'))
@@ -2918,6 +3027,8 @@ async function serve() {
           )
         return { path, upToDate: true, corrections: built.words, marks: built.marks }
       }
+      // A shelf book's sheet, which quotes the book: never into this repository.
+      await refuseInsideTools(path, null)
       if (!same) await writeFile(path, built.text)
       return { wrote: same ? null : path, corrections: built.words, marks: built.marks }
     },
@@ -2936,8 +3047,8 @@ async function serve() {
      * vocabulary that settles a split word is the whole volume's and a word
      * broken across a page seam is only whole after assembly.
      *
-     *   damage                       write damage.md and report the counts
-     *   damage out.md                somewhere else
+     *   damage                       write damage.md beside the book file, with the counts
+     *   damage out.md                somewhere else, outside this repository
      *   damage --book <shelf-dir>    name the sheet after the edition
      *   damage --check               write nothing, exit non-zero if anything is found
      *
@@ -2953,12 +3064,17 @@ async function serve() {
     damage: async (args) => {
       const flags = args.filter((a) => a.startsWith('--'))
       const check = flags.includes('--check')
-      const out = args.find((a) => !a.startsWith('--')) ?? 'damage.md'
+      const at = args.indexOf('--book')
+      // The folder after `--book` is not the output path, though it does not
+      // start with `--` either.
+      const given = args.find((a, i) => !a.startsWith('--') && (at === -1 || i !== at + 1))
+      // Settled before the work, so a refusal costs nothing. `--check` writes
+      // nothing, so it needs no book file and asks for none.
+      const out = check ? null : (await sheetTarget('damage.md', given)).target
       // The edition's own title where a shelf directory is named, and the file
       // the run came from where none is. Never the checkout's directory name,
       // which is what a bare `resolve(REPO, '.')` would put at the head of the
       // sheet — true of nothing and confusing on a shelf of eleven books.
-      const at = args.indexOf('--book')
       const title = at === -1 ? null : await bookTitle(resolve(REPO, args[at + 1] ?? '.'))
       const built = await page.evaluate(
         async ([repo, title]) => {
@@ -3023,7 +3139,7 @@ async function serve() {
             }
           : { clean: true }
       }
-      await writeFile(resolve(out), built.text)
+      await writeFile(out, built.text)
       return { wrote: out, ...built }
     },
 
@@ -4451,6 +4567,8 @@ async function serve() {
       if (!dir) throw new Error('card <shelf-book-directory>')
       const { readFile, writeFile } = await import('node:fs/promises')
       const where = resolve(REPO, dir)
+      // The sheets written here quote the book: never into this repository.
+      await refuseInsideTools(resolve(where, 'queries.md'), null)
       const json = await readFile(resolve(where, 'book.json'), 'utf8')
       // The sheets are headed with the book's name, as `queries` heads them:
       // the export title where the book has reached that gate, else whatever
@@ -5737,9 +5855,15 @@ async function serve() {
      * reason to raise one is that nobody should have to remember it. The shelf
      * wants it at `books/<slug>/queries.md`; `queriesPath` says so.
      *
-     * Nothing here proposes a fix. That is the point of the channel.
+     * Written beside the book file `load` was given, with `rulings.md`,
+     * `review.md` and, when the reader has offered any, `proposals.md` — or at
+     * the path named, never inside this repository. See `sheetTarget`.
+     *
+     * Nothing in `queries.md` proposes a fix. That is the point of the
+     * channel; the reader's answers are their own sheet.
      */
-    queries: async ([out = 'queries.md']) => {
+    queries: async ([given]) => {
+      const { target: out, folder, file } = await sheetTarget('queries.md', given)
       // Written beside a shelf book, the sheets take the edition's title from
       // its book file. The run in the browser knows only the scan's file name,
       // which on a shelf is a SHA, and every regeneration put it at the head
@@ -5747,7 +5871,7 @@ async function serve() {
       // Where the book file names no title, a title already on the sheet is
       // kept, unless it is itself a file name.
       const { existsSync, readFileSync } = await import('node:fs')
-      const besideBook = resolve(REPO, out, '..')
+      const besideBook = dirname(out)
       const exportTitle = (() => {
         try {
           return JSON.parse(readFileSync(resolve(besideBook, 'book.json'), 'utf8')).answers?.export
@@ -5758,9 +5882,8 @@ async function serve() {
           return null
         }
       })()
-      const onSheet = existsSync(resolve(REPO, out))
-        ? (/ — (.+)$/u.exec(readFileSync(resolve(REPO, out), 'utf8').split('\n')[0] ?? '')?.[1] ??
-          null)
+      const onSheet = existsSync(out)
+        ? (/ — (.+)$/u.exec(readFileSync(out, 'utf8').split('\n')[0] ?? '')?.[1] ?? null)
         : null
       const shelfTitle = exportTitle
         ? `*${await bookTitle(besideBook)}*`
@@ -5768,7 +5891,7 @@ async function serve() {
           ? onSheet
           : null
       const rendered = await page.evaluate(
-        async ([repo, shelfTitle]) => {
+        async ([repo, shelfTitle, folder]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
           const shelf = await import(`/@fs${repo}/src/core/sync/index.ts`)
@@ -5811,6 +5934,12 @@ async function serve() {
             markdown: queriesMod.queriesMarkdown(book, raised, rulings),
             rulingsMarkdown: queriesMod.rulingsMarkdown(book, rulings),
             reviewMarkdown: queriesMod.reviewMarkdown(book, raised, rulings),
+            // Only when there is something in it, as `card` writes it: an
+            // empty sheet would overwrite a real one with nothing.
+            proposalsMarkdown:
+              queriesMod.usableProposals(run.proposals ?? []).length > 0
+                ? queriesMod.proposalsMarkdown(book, run.proposals ?? [])
+                : null,
             raised: raised.length,
             // What is actually left, which is the number a session should act
             // on. `raised` counts the ones already settled too, and a report
@@ -5831,32 +5960,58 @@ async function serve() {
             // each, `drive.mjs propose` (docs/PROCESS-reading.md, Stage 9).
             withoutProposal: unanswered.map((q) => ({ leaf: q.pageIndex, quote: q.quote })),
             leaves: [...new Set(waiting.map((q) => q.pageIndex))],
-            shelfPath: shelf.queriesPath(newest.key),
-            rulingsShelfPath: shelf.rulingsPath(newest.key),
-            reviewShelfPath: shelf.rulingsPath(newest.key).replace(/rulings\.md$/u, 'review.md')
+            // From the book's real folder, never from the key alone: a key
+            // carries whatever the scan was called where it was read, and a
+            // folder named from it is a folder the shelf does not have.
+            shelfPath: shelf.queriesPath(newest.key, folder ?? undefined),
+            rulingsShelfPath: shelf.rulingsPath(newest.key, folder ?? undefined),
+            reviewShelfPath: shelf
+              .rulingsPath(newest.key, folder ?? undefined)
+              .replace(/rulings\.md$/u, 'review.md')
           }
         },
-        [REPO, shelfTitle]
+        [REPO, shelfTitle, folder]
       )
       const { writeFile } = await import('node:fs/promises')
-      await writeFile(resolve(REPO, out), rendered.markdown, 'utf8')
-      const rulingsOut = out.replace(/queries\.md$/u, 'rulings.md')
-      const alongside = rulingsOut === out ? `${out}.rulings.md` : rulingsOut
-      await writeFile(resolve(REPO, alongside), rendered.rulingsMarkdown, 'utf8')
+      // The other sheets sit beside this one: `rulings.md` beside
+      // `queries.md`, or `<name>.rulings.md` beside a sheet named otherwise.
+      const besideSheet = (name) => {
+        const named = out.replace(/queries\.md$/u, name)
+        return named === out ? `${out}.${name}` : named
+      }
+      await writeFile(out, rendered.markdown, 'utf8')
+      const alongside = besideSheet('rulings.md')
+      await refuseInsideTools(alongside, file)
+      await writeFile(alongside, rendered.rulingsMarkdown, 'utf8')
       // The third sheet, for somebody checking the edition rather than working
       // through it: every query in book order with what became of it. The other
       // two are complementary halves — `queries.md` empties as it is answered
       // and `rulings.md` only ever grows — so a settled question is on one and
       // off the other, which is right for doing the work and wrong for auditing
       // it.
-      const reviewOut = out.replace(/queries\.md$/u, 'review.md')
-      const review = reviewOut === out ? `${out}.review.md` : reviewOut
-      await writeFile(resolve(REPO, review), rendered.reviewMarkdown, 'utf8')
+      const review = besideSheet('review.md')
+      await refuseInsideTools(review, file)
+      await writeFile(review, rendered.reviewMarkdown, 'utf8')
+      // The reader's answers, on their own sheet and never under the
+      // questions. `propose` stores them; this is what writes them out.
+      let proposals = null
+      if (rendered.proposalsMarkdown) {
+        proposals = besideSheet('proposals.md')
+        await refuseInsideTools(proposals, file)
+        await writeFile(proposals, rendered.proposalsMarkdown, 'utf8')
+      }
       const report = { ...rendered }
       delete report.markdown
       delete report.rulingsMarkdown
       delete report.reviewMarkdown
-      return { wrote: out, wroteRulings: alongside, wroteReview: review, ...report }
+      delete report.proposalsMarkdown
+      return {
+        wrote: out,
+        wroteRulings: alongside,
+        wroteReview: review,
+        wroteProposals: proposals,
+        ...report
+      }
     },
 
     /**
@@ -7542,7 +7697,9 @@ async function serve() {
             queriesWaiting: waiting.length,
             queriesWithAnOption: offered,
             stored: stored === true,
-            next: 'Run `save` to write `proposals.md` and push it.'
+            next:
+              'Run `save` to write them into the book file, then `queries` to write ' +
+              '`proposals.md` beside it, and push.'
           }
         },
         [REPO, proposals, replace]
