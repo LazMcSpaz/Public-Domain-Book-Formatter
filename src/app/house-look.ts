@@ -2,7 +2,7 @@
  * The house look, offered at the design gate.
  *
  * A book with no design answers of its own opens the design gate already
- * answered with the house look from the shelf (`design/house-look.json`): set
+ * answered with the house look from the shelf (`imprint/house-look.json`): set
  * on the house trim, or on the short-book trim when it prints short there. The
  * answers are the book's from then on, saved with it like any other answer,
  * so a later change to the house look never moves a book already set.

@@ -5,7 +5,7 @@
  * `platform/browser/shelf`.
  */
 export {
-  DESIGN_ROOT,
+  IMPRINT_ROOT,
   HOUSE_LOOK_PATH,
   IMAGE_ROOT,
   MAX_SCAN_BYTES,

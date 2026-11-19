@@ -20,7 +20,7 @@ What does not change:
 
 Where it shows:
 
-- In a chat session, `proof` on a book with no design of its own says `designFrom: the house look from the shelf (design/house-look.json): 7x10, 180 pages`, or `6x9, a short book (84 pages on 7x10, under 100)`. If the house look file cannot be read, it says so and why, and falls back to the defaults out loud.
+- In a chat session, `proof` on a book with no design of its own says `designFrom: the house look from the shelf (imprint/house-look.json): 7x10, 180 pages`, or `6x9, a short book (84 pages on 7x10, under 100)`. If the house look file cannot be read, it says so and why, and falls back to the defaults out loud.
 - In the app, the design questions open already answered with the house look, with a line saying so.
 
 Hebrew and Greek: the house face has neither, so those letters are drawn from Cardo, which has both. Checked on a made-up page of pointed Hebrew and polytonic Greek set in the house look: nothing prints as a box.
@@ -35,7 +35,7 @@ Hebrew and Greek: the house face has neither, so those letters are drawn from Ca
 
 ## The file
 
-`design/house-look.json` at the top of the shelf, beside `voice/`. It holds design answers, the same names and values a book file keeps under `answers.design`, so it is built by exactly the code that builds every book's look:
+`imprint/house-look.json` at the top of the shelf, beside `voice/`. It holds design answers, the same names and values a book file keeps under `answers.design`, so it is built by exactly the code that builds every book's look:
 
 ```json
 {

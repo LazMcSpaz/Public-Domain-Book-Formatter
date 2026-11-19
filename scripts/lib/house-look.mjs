@@ -1,7 +1,7 @@
 /**
  * The house look's file on this disk, for a book file on a shelf.
  *
- * The house look sits at the top of the shelf (`design/house-look.json`; the
+ * The house look sits at the top of the shelf (`imprint/house-look.json`; the
  * path is the shelf map's, `houseLookPath` in `src/core/sync/shelf.ts`, and
  * is handed in). The top is found from the book file the way every picture's
  * place is (`shelfPlace`): `<shelf>/books/<Folder>/book.json` has `<shelf>` as

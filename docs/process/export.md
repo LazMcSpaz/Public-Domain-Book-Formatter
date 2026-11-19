@@ -24,7 +24,7 @@ field, and looks at the pages.
   depth (`contentsDepth`) from the original's own contents page, usually
   chapters only; the default lists every heading level, run-in sub-heads
   included.
-- **A new book starts from the house look** (`design/house-look.json` at the
+- **A new book starts from the house look** (`imprint/house-look.json` at the
   top of the shelf; [the spec](../specs/house-look.md)). With no design answers
   of its own, `proof` lays it out in the house look, on 6×9 if it prints under
   100 pages at 7×10, and says so in `designFrom`; the report's `inherited` is

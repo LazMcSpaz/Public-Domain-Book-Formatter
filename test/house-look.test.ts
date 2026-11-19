@@ -98,7 +98,7 @@ const styleOf = (design: Answers): StyleProfile =>
 
 describe('the house look file', () => {
   it('lives at the top of the shelf, in the shelf map', () => {
-    expect(HOUSE_LOOK_PATH).toBe('design/house-look.json')
+    expect(HOUSE_LOOK_PATH).toBe('imprint/house-look.json')
     expect(houseLookPath()).toBe(HOUSE_LOOK_PATH)
   })
 
@@ -221,10 +221,10 @@ describe('trim by length', () => {
         short: pages < 100
       })
     expect(line(180)).toBe(
-      'the house look from the shelf (design/house-look.json): 7x10, 180 pages'
+      'the house look from the shelf (imprint/house-look.json): 7x10, 180 pages'
     )
     expect(line(84)).toBe(
-      'the house look from the shelf (design/house-look.json): 6x9, a short book (84 pages on 7x10, under 100)'
+      'the house look from the shelf (imprint/house-look.json): 6x9, a short book (84 pages on 7x10, under 100)'
     )
   })
 })

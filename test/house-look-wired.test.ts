@@ -28,18 +28,18 @@ describe('the house look file is found at the top of the book’s shelf', () => 
   afterAll(() => rmSync(root, { recursive: true, force: true }))
   const shelf = join(root, 'shelf')
   mkdirSync(join(shelf, 'books', 'A-Book'), { recursive: true })
-  mkdirSync(join(shelf, 'design'), { recursive: true })
+  mkdirSync(join(shelf, 'imprint'), { recursive: true })
   writeFileSync(join(shelf, 'books', 'A-Book', 'book.json'), '{}')
 
-  it('finds design/house-look.json above books/<Folder>/book.json', () => {
-    writeFileSync(join(shelf, 'design', 'house-look.json'), '{"version":1}')
+  it('finds imprint/house-look.json above books/<Folder>/book.json', () => {
+    writeFileSync(join(shelf, 'imprint', 'house-look.json'), '{"version":1}')
     const found = houseLookBeside(
       join(shelf, 'books', 'A-Book', 'book.json'),
-      'design/house-look.json'
+      'imprint/house-look.json'
     )
     expect(found).toEqual({
-      path: 'design/house-look.json',
-      file: join(shelf, 'design', 'house-look.json'),
+      path: 'imprint/house-look.json',
+      file: join(shelf, 'imprint', 'house-look.json'),
       text: '{"version":1}'
     })
   })
@@ -48,15 +48,15 @@ describe('the house look file is found at the top of the book’s shelf', () => 
     const bare = join(root, 'bare')
     mkdirSync(join(bare, 'books', 'B'), { recursive: true })
     expect(
-      houseLookBeside(join(bare, 'books', 'B', 'book.json'), 'design/house-look.json')
+      houseLookBeside(join(bare, 'books', 'B', 'book.json'), 'imprint/house-look.json')
     ).toBeNull()
   })
 
   it('takes a book outside a shelf as a shelf of its own', () => {
     const loose = join(root, 'loose')
-    mkdirSync(join(loose, 'design'), { recursive: true })
-    writeFileSync(join(loose, 'design', 'house-look.json'), 'x')
-    expect(houseLookBeside(join(loose, 'book.json'), 'design/house-look.json')?.text).toBe('x')
+    mkdirSync(join(loose, 'imprint'), { recursive: true })
+    writeFileSync(join(loose, 'imprint', 'house-look.json'), 'x')
+    expect(houseLookBeside(join(loose, 'book.json'), 'imprint/house-look.json')?.text).toBe('x')
   })
 })
 

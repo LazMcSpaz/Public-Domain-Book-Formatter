@@ -3,7 +3,7 @@
  * own in the house look from the shelf, and leave a book with one alone?
  *
  * Three made-up books on a stubbed shelf that holds a made-up house look
- * (`design/house-look.json`). A long one must open at 7x10 with the house
+ * (`imprint/house-look.json`). A long one must open at 7x10 with the house
  * margins and say where its look came from; a short one (under 100 pages at
  * 7x10) at 6x9; one with design answers of its own in its own look, with no
  * word about the house look. The answers it opens with must be the book's
@@ -58,7 +58,7 @@ async function openAtDesign(name, paragraphs, design) {
       JSON.stringify({ repo: 'LazMcSpaz/Test-Shelf', branch: 'main', token: 'github_pat_harness' })
     )
   })
-  const files = new Map([['design/house-look.json', JSON.stringify(HOUSE)]])
+  const files = new Map([['imprint/house-look.json', JSON.stringify(HOUSE)]])
   let slug = null
   await page.route('https://api.github.com/**', async (route) => {
     const request = route.request()
