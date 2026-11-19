@@ -4,6 +4,7 @@ import {
   parseReconHandoff,
   reconHandoff,
   reconHandoffPath,
+  reconMisfit,
   type ReconHandoffInput
 } from '../src/core/project'
 
@@ -88,5 +89,36 @@ describe('recon handoff', () => {
     expect(reconHandoffPath('Blavatsky-IsisUnveiledVolI-vjj34f')).toBe(
       'books/Blavatsky-IsisUnveiledVolI-vjj34f/recon.json.gz'
     )
+  })
+})
+
+/**
+ * A reading's words are filed by leaf number, so a reading of another copy of
+ * the scan (another printing, or the same title with four more leaves in
+ * front) would put every page turn against the wrong leaf. The page-turn check
+ * uses a reading only when it is of the book's own file.
+ */
+describe('whether a reading is of the book’s own copy', () => {
+  const run = { key: 'isis.pdf\u00001000\u00001', fileName: 'isis.pdf', pageCount: 2 }
+
+  it('takes a reading of the same file, whatever its timestamp', () => {
+    expect(reconMisfit(reconHandoff(input()), run)).toBeNull()
+    expect(reconMisfit(reconHandoff(input({ key: 'isis.pdf\u00001000\u000099' })), run)).toBeNull()
+  })
+
+  it('refuses a reading of another file, or of another number of leaves', () => {
+    const other = reconHandoff(
+      input({ key: 'isis-1906.pdf\u00002000\u00001', fileName: 'isis-1906.pdf' })
+    )
+    expect(reconMisfit(other, run)).toMatch(/isis-1906\.pdf/)
+    const resized = reconHandoff(input({ key: 'isis.pdf\u00001200\u00001' }))
+    expect(reconMisfit(resized, run)).toMatch(/1200 bytes/)
+    expect(reconMisfit({ ...reconHandoff(input()), pageCount: 6 }, run)).toMatch(/6 leaves/)
+  })
+
+  it('refuses a reading that does not say which file it read', () => {
+    expect(reconMisfit({ pageCount: 2 }, run)).toMatch(/does not say/)
+    expect(reconMisfit({ fileName: 'isis.pdf', pageCount: 2 }, run)).toBeNull()
+    expect(reconMisfit({ fileName: 'other.pdf', pageCount: 2 }, run)).toMatch(/other\.pdf/)
   })
 })

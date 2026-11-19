@@ -15,7 +15,7 @@
  * Only a NEEDS A PERSON result can be signed off: a failure or a check that
  * did not run cannot be signed away.
  */
-import { readinessCheck, type CheckResult, type SignOff } from './readiness'
+import { combineResults, readinessCheck, type CheckResult, type SignOff } from './readiness'
 
 export const SIGN_OFF_FORM =
   'Signed off: <check> <sha256> [<sha256> …] <YYYY-MM-DD> <who, and what>'
@@ -73,18 +73,36 @@ export function parseSignOffs(ledger: string): SignOffReading {
 }
 
 /**
+ * Each check's parts as one result, in the order the checks first appear. A
+ * check with parts (C6's witness half and its C1 half, say) is judged whole:
+ * signed part by part, a sign-off met the half that PASSED and was refused,
+ * and combining the halves afterwards lost the half it did sign off.
+ */
+function oneResultPerCheck(results: readonly CheckResult[]): CheckResult[] {
+  const ids = [...new Set(results.map((res) => res.id))]
+  return ids.map((id) =>
+    combineResults(
+      id,
+      results.filter((res) => res.id === id)
+    )
+  )
+}
+
+/**
  * The results with their sign-offs applied, and what was said about the
- * sign-off lines that did not count. A NEEDS A PERSON result is signed off
+ * sign-off lines that did not count. Parts of one check are combined first
+ * (one result per check comes back). A NEEDS A PERSON result is signed off
  * when the ledger's lines for its check, dated no later than `today`, between
  * them name every one of its `subjects`.
  */
 export function applySignOffs(
-  results: readonly CheckResult[],
+  given: readonly CheckResult[],
   signOffs: readonly SignOff[],
   today: string
 ): { results: CheckResult[]; notes: string[] } {
   const notes: string[] = []
   const used = new Set<SignOff>()
+  const results = oneResultPerCheck(given)
   const out = results.map((res) => {
     const mine = signOffs.filter((s) => s.id === res.id)
     if (mine.length === 0) return res

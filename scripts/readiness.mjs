@@ -37,6 +37,7 @@ import { driverFor, runner } from './lib/readiness-run.mjs'
 import { pdfFacts, sha256Of, shelfCommit, storageRows, uploadFile } from './lib/readiness-files.mjs'
 import { checkedStage, notRun } from './lib/readiness-checked.mjs'
 import { readyStage } from './lib/readiness-ready.mjs'
+import { readJsonSync, stripBom } from './lib/json-file.mjs'
 
 register('./resolve-ts.mjs', import.meta.url)
 const TOOLS = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -119,7 +120,7 @@ const loud =
   }
 for (const k of ['node', 'viteNode', 'drive']) run[k] = loud(run[k])
 
-const book = JSON.parse(readFileSync(bookJson, 'utf8'))
+const book = readJsonSync(bookJson)
 const rows = storageRows(storage, shelf)
 const files = {}
 for (const [role, arg] of Object.entries(named)) {
@@ -185,7 +186,7 @@ const today = [local.getFullYear(), local.getMonth() + 1, local.getDate()]
   .join('-')
 const ledgerPath = join(bookDir, 'ledger.md')
 const reading = existsSync(ledgerPath)
-  ? core.parseSignOffs(readFileSync(ledgerPath, 'utf8'))
+  ? core.parseSignOffs(stripBom(readFileSync(ledgerPath, 'utf8')))
   : { signOffs: [], problems: [] }
 const signed = core.applySignOffs(results, reading.signOffs, today)
 results = signed.results

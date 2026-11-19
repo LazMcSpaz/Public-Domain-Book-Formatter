@@ -166,6 +166,44 @@ describe('sign-offs in the ledger', () => {
     expect(notes[0]).toMatch(/not the file checked here/)
   })
 
+  /**
+   * C6 comes in two parts: the half inside C1 (PASSED) and the witness half
+   * (NEEDS A PERSON when the scan has none). Signed part by part, the sign-off
+   * met the PASSED half and was refused, and combining the parts afterwards
+   * dropped the half it did sign, so no book without a witness could be
+   * called checked.
+   */
+  it('signs off a check given in parts as one check', () => {
+    const { signOffs } = parseSignOffs(
+      `Signed off: C6 ${A} 2026-11-18 the owner: this scan sets no italic to witness`
+    )
+    const given: CheckResult[] = [
+      ...passedAll().filter((r) => r.id !== 'C6'),
+      { id: 'C6', outcome: 'PASSED', summary: 'no italics-absent among C1 findings' },
+      { id: 'C6', outcome: 'NEEDS A PERSON', summary: 'no italic witness', subjects: [A] }
+    ]
+    const { results, notes } = applySignOffs(given, signOffs, TODAY)
+    expect(notes).toEqual([])
+    const d = decideReadiness(results, 'checked')
+    expect(d.results.find((r) => r.id === 'C6')?.signedOff?.line).toBe(1)
+    expect(d.verdict).toBe('ready to upload')
+  })
+
+  it('still refuses a sign-off on a check one of whose parts failed', () => {
+    const { signOffs } = parseSignOffs(`Signed off: C11 ${A} 2026-11-18 read the brackets`)
+    const { results, notes } = applySignOffs(
+      [
+        { id: 'C11', outcome: 'FAILED', summary: '1 working note left' },
+        { id: 'C11', outcome: 'NEEDS A PERSON', summary: '2 to read', subjects: [A] }
+      ],
+      signOffs,
+      TODAY
+    )
+    expect(results).toHaveLength(1)
+    expect(results[0]!.signedOff).toBeUndefined()
+    expect(notes[0]).toMatch(/C11 is FAILED/)
+  })
+
   it('never signs away a failure or a check that did not run', () => {
     const { signOffs } = parseSignOffs(
       `Signed off: C11 ${A} 2026-11-18 looked fine\nSigned off: C1 ${A} 2026-11-18 trust me`

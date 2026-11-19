@@ -8,6 +8,7 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { readJsonSync } from './json-file.mjs'
 import { tail } from './readiness-run.mjs'
 import { failed, notRun, passed, person } from './readiness-checked.mjs'
 import { inStep, lastCommitted, pdfFacts, uncommitted } from './readiness-files.mjs'
@@ -60,11 +61,35 @@ function r1(ctx, interior) {
   )
 }
 
-/** The export report: the saved one, or the driver's proof of the same text. */
-async function exportReport(ctx, interior) {
+/**
+ * The export report: the saved one, or the driver's proof of the same text.
+ *
+ * A saved report counts for the interior only when it names the interior's
+ * SHA-256 (`pdfSha256`, which `drive.mjs proof pdf=…` records): a page count
+ * is shared by every export of the same length, so an earlier export's report
+ * would pass for this one. A saved report of another PDF is refused; one that
+ * names no fingerprint (written before `proof` recorded it) is `unproven`, and
+ * what it says goes to a person.
+ */
+export async function exportReport(ctx, interior) {
   if (ctx.exportReport) {
-    const report = JSON.parse(readFileSync(ctx.exportReport, 'utf8'))
-    return { report, from: `the saved report ${ctx.run.short(ctx.exportReport)}` }
+    const from = `the saved report ${ctx.run.short(ctx.exportReport)}`
+    let report
+    try {
+      report = readJsonSync(ctx.exportReport)
+    } catch (e) {
+      return { why: `${from} could not be read: ${e.message}` }
+    }
+    if (!report || typeof report !== 'object' || report.error) {
+      return { why: `${from} is not a proof report${report?.error ? `: ${report.error}` : ''}` }
+    }
+    if (typeof report.pdfSha256 !== 'string') return { report, from, unproven: true }
+    if (report.pdfSha256.toLowerCase() !== interior.sha256) {
+      return {
+        why: `${from} is of another PDF (${report.pdfSha256.slice(0, 12)}…), not this interior (${interior.sha256.slice(0, 12)}…); run proof again on this book and keep its report`
+      }
+    }
+    return { report, from: `${from}, written with this interior` }
   }
   if (!ctx.driver.ok) {
     return {
@@ -73,7 +98,9 @@ async function exportReport(ctx, interior) {
   }
   const rebuilt = join(ctx.scratch, 'rebuilt.pdf')
   const res = ctx.run.drive('proof', [`answers=${ctx.bookJson}`, `pdf=${rebuilt}`])
-  if (!res.json || !existsSync(rebuilt)) return { why: `proof stopped: ${tail(res, 2).join(' ')}` }
+  if (res.code !== 0 || !res.json || res.json.error || !existsSync(rebuilt)) {
+    return { why: `proof stopped: ${tail(res, 2).join(' ')}` }
+  }
   const a = pdftotext(rebuilt)
   const b = pdftotext(interior.path)
   if (!a.ok || !b.ok) return { why: a.why ?? b.why }
@@ -88,9 +115,23 @@ async function exportReport(ctx, interior) {
   }
 }
 
-function r2r3(ctx, interior, got) {
+export function r2r3(ctx, interior, got) {
   if (!interior) return [noInterior('R2'), noInterior('R3')]
   if (!got.report) return [notRun('R2', got.why), notRun('R3', got.why)]
+  const results = judgeReport(interior, got)
+  if (!got.unproven) return results
+  // A report that cannot be tied to this PDF proves nothing clean about it: a
+  // pass becomes a person's to confirm. A failure, or a report that does not
+  // fit at all, still stands; export again.
+  const unproven = `${got.from} names no PDF fingerprint, so nothing ties it to this interior (${interior.sha256.slice(0, 12)}…); a person confirms it was written with this file, or runs proof again`
+  return results.map((res) =>
+    res.outcome === 'PASSED' || res.outcome === 'NEEDS A PERSON'
+      ? person(res.id, `${unproven}. It says: ${res.summary}`, res.details ?? [], [interior.sha256])
+      : res
+  )
+}
+
+function judgeReport(interior, got) {
   const rep = got.report
   if (rep.pages !== interior.pages) {
     const why = `${got.from} is for a PDF of ${rep.pages} pages; the interior has ${interior.pages}`
@@ -182,7 +223,7 @@ async function r7(ctx, interior, covers) {
   const specs = ['softcover', 'hardcover'].map((cover) => {
     const path = join(ctx.bookDir, 'covers', `${cover}.json`)
     if (!existsSync(path)) return { cover, missing: true }
-    const n = JSON.parse(readFileSync(path, 'utf8')).pageCount
+    const n = readJsonSync(path).pageCount
     return { cover, pageCount: Number.isInteger(n) ? n : null }
   })
   if (specs.every((s) => s.missing))
@@ -231,7 +272,7 @@ async function r7(ctx, interior, covers) {
   return parts
 }
 
-function r11(ctx, epub) {
+export function r11(ctx, epub) {
   if (!epub) return notRun('R11', 'no EPUB was named (--epub)')
   let pages
   try {
@@ -241,6 +282,9 @@ function r11(ctx, epub) {
     }))
   } catch (e) {
     return notRun('R11', `the EPUB could not be read: ${e.message}`)
+  }
+  if (pages.length === 0) {
+    return failed('R11', 'the EPUB holds no pages (.xhtml) at all, so no picture in it was read')
   }
   const found = ctx.core.undescribedPictures(pages)
   if (found.undescribed.length > 0) {
@@ -267,7 +311,7 @@ export async function readyStage(ctx) {
   const at = interior ? ctx.run.short(interior.path) : '<interior.pdf>'
   const content = (() => {
     const p = join(ctx.bookDir, 'covers', 'softcover.json')
-    const c = existsSync(p) ? (JSON.parse(readFileSync(p, 'utf8')).content ?? {}) : {}
+    const c = existsSync(p) ? (readJsonSync(p).content ?? {}) : {}
     return [
       `cover title: ${String(c.title ?? '?').replace(/\s*\n\s*/gu, ' ')}`,
       `subtitle: ${c.subtitle ?? '?'}`,

@@ -36,7 +36,10 @@ field, and looks at the pages.
 2. **Export**:
    `node scripts/drive.mjs proof "answers=<book-dir>/book.json" "pdf=<book-dir>/<Name>.pdf"`
    (give absolute paths). Without `answers=` the look comes from the browser
-   or the defaults, and the report says so in `designFrom`.
+   or the defaults, and the report says so in `designFrom`. Keep the report
+   (redirect it to a file outside the tools repository): it names the PDF's
+   SHA-256 as `pdfSha256`, and the readiness command takes it with
+   `--export-report` for R2 and R3 only when that matches the interior.
 3. **Read every field of the report**, not the page count:
    - `warnings: 0`; `warningsFirst` names the first few with their pages;
    - `notesDropped: []` and `imagesDropped: []`: nothing the engine could not

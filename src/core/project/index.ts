@@ -82,6 +82,7 @@ export {
   parseReconHandoff,
   reconHandoff,
   reconHandoffPath,
+  reconMisfit,
   type HandoffWord,
   type ReconHandoff,
   type ReconHandoffInput

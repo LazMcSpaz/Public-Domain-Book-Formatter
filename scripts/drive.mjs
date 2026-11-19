@@ -1824,13 +1824,20 @@ async function serve() {
       }
       delete result.shots
       let wrotePdf = null
+      let pdfSha256 = null
       if (pdfOut && result.pdf) {
         const { writeFile } = await import('node:fs/promises')
-        await writeFile(resolve(REPO, pdfOut), Buffer.from(result.pdf, 'base64'))
+        const { createHash } = await import('node:crypto')
+        const bytes = Buffer.from(result.pdf, 'base64')
+        await writeFile(resolve(REPO, pdfOut), bytes)
         wrotePdf = pdfOut
+        // The fingerprint of the exact file written, so a kept report is tied
+        // to that file: `readiness.mjs --export-report` refuses one that names
+        // another PDF, and sends one that names none to a person.
+        pdfSha256 = createHash('sha256').update(bytes).digest('hex')
       }
       delete result.pdf
-      return { ...result, wrote, ...(wrotePdf ? { wrotePdf } : {}) }
+      return { ...result, wrote, ...(wrotePdf ? { wrotePdf, pdfSha256 } : {}) }
     },
 
     /**

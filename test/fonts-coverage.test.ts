@@ -22,7 +22,7 @@ import { readFileSync } from 'node:fs'
 import fontkit from '@pdf-lib/fontkit'
 import { PDFDocument } from 'pdf-lib'
 import { LAYOUT_FEATURES } from '@platform/browser/fonts'
-import { verifyWidths, widenWidths } from '@platform/browser/font-widths'
+import { unprintableIn, verifyWidths, widenWidths } from '@platform/browser/font-widths'
 
 const G = 'node_modules/@expo-google-fonts'
 
@@ -95,6 +95,31 @@ describe('the check can actually fail', () => {
     const added = widenWidths(font, [PROVOCATION]).added.map((g) => g.name)
     expect(added.length).toBeGreaterThan(0)
     expect(added.some((n) => n?.includes('_'))).toBe(true)
+  })
+})
+
+/**
+ * A character the face has no glyph for is drawn as `.notdef`, an empty box
+ * with a width: `verifyWidths` is satisfied and every count is blind to it.
+ * `unprintableIn` is what the export report's `unprintable` list (readiness
+ * check R3) is made of.
+ */
+describe('characters no face can print', () => {
+  // Synthetic text: a CJK character and a Devanagari letter, neither of which
+  // EB Garamond carries, among ones it does.
+  const MIXED = 'Æthelred’s fire, ſtill 中 here; क and 中 again\u00a0\t\n'
+
+  it('names each character the face has no glyph for, once, with its code point', async () => {
+    const { font } = await embed(FACES['EB Garamond|regular']!)
+    const found = unprintableIn(font, [MIXED, 'plain words'])
+    expect(found.sort()).toEqual(['क U+0915', '中 U+4E2D'])
+  })
+
+  it('names nothing in text the face carries, nor any space or control character', async () => {
+    const { font } = await embed(FACES['EB Garamond|regular']!)
+    // U+3000 and U+2028 are spaces EB Garamond has no glyph for: a space is
+    // set as a gap, never drawn, so it is no empty box on the page.
+    expect(unprintableIn(font, [PROVOCATION, 'a\u00a0b\tc\nd\u0001 e\u3000f\u2028g'])).toEqual([])
   })
 })
 

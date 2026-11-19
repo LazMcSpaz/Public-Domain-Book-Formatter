@@ -20,8 +20,9 @@ The full list of checks, C1 to C12 for _checked_ and R1 to R11 for _ready to upl
   or the path it had on the shelf, and a key is fetched into a scratch folder
   outside both repositories (`--scratch <dir>` to choose it). Each file's
   SHA-256 goes in the report. `--export-report <proof.json>` hands R2 and R3
-  the saved output of the `drive.mjs proof` run that wrote the interior;
-  `--witness <w.json>` hands C6 an italic witness; `--out <file>` writes the
+  the saved output of the `drive.mjs proof` run that wrote the interior,
+  which counts only when its `pdfSha256` is the interior's (one naming no
+  fingerprint goes to a person); `--witness <w.json>` hands C6 an italic witness; `--out <file>` writes the
   report elsewhere (never inside this repository, which it refuses). The
   driver's checks (C1, C5, C7, and R2 and R3 without a saved report) run only
   when `drive.mjs serve` is up with this book open. A check a person must do
@@ -199,8 +200,10 @@ book or many (`books/*/book.json`).
   error on anything left after the editor's rulings. **[before upload]**
 - `npx vite-node --config vitest.config.ts scripts/page-turns-of.ts <book.json> [--check]`:
   paragraphs broken at a page turn where the paper runs on, from the text and
-  from each leaf's first-line indent in the saved reading. Crop each finding
-  before merging. **[before upload]**
+  from each leaf's first-line indent in the book's own saved reading
+  (`recon.json.gz`; a reading of another copy of the scan is refused, and the
+  report line then says "text only:" and why). Crop each finding before
+  merging. **[before upload]**
 - `npx vite-node --config vitest.config.ts scripts/coverage-of.ts <book.json> [--second s.json]`:
   lines the paper prints that the book lacks or sets elsewhere, against the
   scan's own OCR layer, or a `second` reading for a scan with none. No browser
@@ -415,8 +418,8 @@ it is read from `CLOUDFLARE_API_TOKEN` (see
 
 These are used or mentioned by the commands above and have no entry of their
 own yet. All exist: `drive.mjs save` (writes the open run to `book.json`), `pairs`, `proof`
-(lays out the book; `proof pdf=<out.pdf>` writes the PDF export; reports
-unprintable characters), `querycrops`, `crops`, `card`, `shelf`, `section`,
+(lays out the book; `proof pdf=<out.pdf>` writes the PDF export and names
+its SHA-256 as `pdfSha256`; reports unprintable characters), `querycrops`, `crops`, `card`, `shelf`, `section`,
 `bare`, `query`, `truth` (the proofed text, leaf by leaf, as `truth.json` in
 the scratch folder); `scripts/flatten-cover.py <cover.pdf>
 <cover-flat.pdf>` (the cover copy KDP accepts);

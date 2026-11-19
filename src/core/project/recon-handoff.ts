@@ -36,6 +36,7 @@ import type { LexiconEntry } from '@core/lexicon'
 import { parseShape, type BookShape } from '@core/provenance'
 import { parseCleanupPreset, type CleanupPreset } from '@core/image/cleanup'
 import { RECON_CACHE_VERSION } from './recon-cache'
+import { parseFileKey } from './saved-run'
 
 export const RECON_HANDOFF_FORMAT = 'pdbf-recon'
 /** Bump when this file's own shape changes. The words' shape is `reconVersion`. */
@@ -231,4 +232,43 @@ export function parseReconHandoff(raw: unknown): ReconHandoff {
     lexicon: r['lexicon'] as LexiconEntry[],
     pageText: pageText as string[]
   }
+}
+
+/**
+ * Why a recon reading is not of this book's own copy of the scan, or null
+ * when it is.
+ *
+ * A reading's words are filed by leaf number, so a reading of another copy
+ * (another printing, or the same title scanned with four more leaves of front
+ * matter) puts every leaf's first line against the wrong leaf, and a check
+ * that reads the paper from it says something about a different book. The
+ * file is matched as `reconimport` matches it: by the name and size in its key
+ * (the timestamp moves when a file is copied), then by its leaf count. A
+ * reading that names no file cannot be matched, so it is not used either.
+ */
+export function reconMisfit(
+  reading: { key?: unknown; fileName?: unknown; pageCount?: unknown },
+  run: { key?: unknown; fileName?: unknown; pageCount?: unknown }
+): string | null {
+  const theirs = typeof reading.key === 'string' ? parseFileKey(reading.key) : null
+  const ours = typeof run.key === 'string' ? parseFileKey(run.key) : null
+  if (theirs && ours) {
+    if (theirs.name !== ours.name || theirs.size !== ours.size) {
+      return `it reads ${theirs.name} (${theirs.size} bytes); the book was read from ${ours.name} (${ours.size} bytes)`
+    }
+  } else if (typeof reading.fileName === 'string' && typeof run.fileName === 'string') {
+    if (reading.fileName !== run.fileName) {
+      return `it reads ${reading.fileName}; the book was read from ${run.fileName}`
+    }
+  } else {
+    return 'it does not say which file it read'
+  }
+  if (
+    typeof reading.pageCount === 'number' &&
+    typeof run.pageCount === 'number' &&
+    reading.pageCount !== run.pageCount
+  ) {
+    return `it has ${reading.pageCount} leaves; the book has ${run.pageCount}`
+  }
+  return null
 }

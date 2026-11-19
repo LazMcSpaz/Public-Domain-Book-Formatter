@@ -103,7 +103,10 @@ both repositories, and each file's SHA-256 goes in the report. It runs every
 command below and reads its exit code and output; the driver's checks run only
 when `drive.mjs serve` is up with the book open, and are NOT CHECKED otherwise.
 `--export-report <proof.json>` gives R2 and R3 the saved output of the
-`proof` run that wrote the interior; `--witness <w.json>` gives C6 its italic
+`proof` run that wrote the interior. It counts only when its `pdfSha256` is
+the interior's SHA-256: a report of another PDF is NOT CHECKED, and one that
+names no fingerprint (from before `proof` recorded it) goes to a person.
+`--witness <w.json>` gives C6 its italic
 witness. It writes `readiness.md` beside the book (never into this
 repository), prints the verdict, and exits 0 only when the stage asked for is
 reached: _checked_ when every C item passed or was signed off, _ready to
@@ -140,7 +143,11 @@ CHECKED item cannot be signed off.
   `npx vite-node --config vitest.config.ts scripts/checks-of.ts <book.json> --check`. Exists; exit code.
 - **C3 Paragraphs broken at a page turn.**
   `npx vite-node --config vitest.config.ts scripts/page-turns-of.ts <book.json> --check`.
-  Exists; exit code; crop each finding. Text half only when there is no `recon.json.gz`.
+  Exists; exit code; crop each finding. The paper half reads the book's own
+  recon reading (`recon.json.gz` beside it). With none, or with a reading of
+  another copy of the scan (another file or leaf count, whose leaves do not
+  line up with the book's), the command runs the text half only and says why,
+  and the readiness command reports the paper half NOT CHECKED.
 - **C4 Lines lost or moved, against a second reading.** Scan routes:
   `npx vite-node --config vitest.config.ts scripts/coverage-of.ts <book.json> [--second <second.json>]`
   (refuses when too few leaves carry words: make one with `drive.mjs second`).
