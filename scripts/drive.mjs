@@ -467,6 +467,9 @@ async function serve() {
       [REPO, { fn, args }]
     )
   const REPO_REAL = realpathSync(REPO)
+  // Core's picture rule, asked in the page like the rest of the shelf map, so
+  // `load` and `save` need no Node that strips TypeScript.
+  const pictureRule = (bookFile, picture) => askShelfMap('pictureCandidates', bookFile, picture)
 
   /**
    * The `book.json` each book was loaded from, kept in the page's storage
@@ -1023,7 +1026,7 @@ async function serve() {
       // Each picture is looked for where the app looks (core's rule, through
       // `lib/book-pictures.mjs`): beside the book, then at the top of the
       // shelf. A book file outside a shelf finds the pictures beside it.
-      const named = await findBookPictures(bookFile, JSON.parse(json).images)
+      const named = await findBookPictures(bookFile, JSON.parse(json).images, pictureRule)
       const missing = named.lost
       // Named by URL, not base64'd into the call: the scan's own rule, for the
       // same reason. Thirty plates on the Theosophical Glossary are 84 MB of
@@ -1428,8 +1431,8 @@ async function serve() {
       // book, the first place the rule looks.
       const written = []
       for (const picture of pictures) {
-        if (await findPicture(path, picture.path)) continue
-        const [target] = await picturePlaces(path, picture.path)
+        if (await findPicture(path, picture.path, pictureRule)) continue
+        const [target] = await picturePlaces(path, picture.path, pictureRule)
         if (!target) throw new Error(`The shelf's rule refuses the picture name ${picture.path}.`)
         await mkdir(dirname(target), { recursive: true })
         await writeFile(target, Buffer.from(picture.base64, 'base64'))

@@ -127,7 +127,8 @@ before the book is called checked.
 
 ## What it produces and where it goes
 
-Picture edits in `book.json`; the pixels in `images/` beside the book; the
+Picture edits in `book.json`; the pixels in `images/` beside the book (a few
+older ones sit in `images/` at the top of the shelf, and are found there); the
 originals and tracings in `art/`; the provenance record and the image check
 sheet; a ledger entry saying what the sweep found and what it could have
 missed.

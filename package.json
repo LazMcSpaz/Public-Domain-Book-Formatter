@@ -6,6 +6,9 @@
     "name": "Public-Domain Book Reprint Tool"
   },
   "license": "MIT",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

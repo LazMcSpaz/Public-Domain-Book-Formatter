@@ -16,9 +16,11 @@
  * taken as a shelf of its own: its folder is the top, its pictures are found
  * beside it, and nothing above that folder is looked in.
  *
- * The rule is imported on first use, not at load: plain Node strips its types
- * itself, and importing it only when a picture is asked for keeps Node's
- * "module type" warning out of every driver command that never asks.
+ * The rule can be handed in. The driver hands in its page's copy (`askShelfMap`,
+ * through Vite), so `load` and `save` need no Node feature beyond what they
+ * always needed. Left out, the rule is imported here on first use, which works
+ * under vite-node (the EPUB builder, the tests) and on a Node that strips
+ * TypeScript itself (22.18 or newer).
  */
 import { statSync } from 'node:fs'
 import { basename, dirname, resolve } from 'node:path'
@@ -26,12 +28,18 @@ import { basename, dirname, resolve } from 'node:path'
 /** The folder a shelf keeps its books in, one folder per book. */
 const BOOKS = 'books'
 
-let rule = null
+let imported = null
 
-/** Core's rule, loaded once. */
+/**
+ * Core's rule, imported once: the default when no rule is handed in.
+ *
+ * @param {string} bookFile the book's shelf path
+ * @param {string} picture the path the book names
+ * @returns {Promise<string[]>}
+ */
 async function pictureCandidates(bookFile, picture) {
-  rule ??= (await import('../../src/core/sync/pictures.ts')).pictureCandidates
-  return rule(bookFile, picture)
+  imported ??= (await import('../../src/core/sync/pictures.ts')).pictureCandidates
+  return imported(bookFile, picture)
 }
 
 function isFile(path) {
@@ -65,11 +73,13 @@ export function shelfPlace(file) {
  *
  * @param {string} file the book file on disk
  * @param {string} picture the path the book names
+ * @param {(bookFile: string, picture: string) => string[] | Promise<string[]>} [rule] core's
+ *   `pictureCandidates`, or a door to it; imported here when left out
  * @returns {Promise<string[]>}
  */
-export async function picturePlaces(file, picture) {
+export async function picturePlaces(file, picture, rule = pictureCandidates) {
   const { root, shelfPath } = shelfPlace(file)
-  const places = await pictureCandidates(shelfPath, picture)
+  const places = await rule(shelfPath, picture)
   return places.map((at) => resolve(root, ...at.split('/')))
 }
 
@@ -79,10 +89,11 @@ export async function picturePlaces(file, picture) {
  *
  * @param {string} file the book file on disk
  * @param {string} picture the path the book names
+ * @param {Parameters<typeof picturePlaces>[2]} [rule] as for `picturePlaces`
  * @returns {Promise<string | null>}
  */
-export async function findPicture(file, picture) {
-  return (await picturePlaces(file, picture)).find(isFile) ?? null
+export async function findPicture(file, picture, rule) {
+  return (await picturePlaces(file, picture, rule)).find(isFile) ?? null
 }
 
 /**
@@ -94,15 +105,16 @@ export async function findPicture(file, picture) {
  *
  * @param {string} file the book file on disk
  * @param {unknown} images the book file's `images`
+ * @param {Parameters<typeof picturePlaces>[2]} [rule] as for `picturePlaces`
  * @returns {Promise<{ found: { id: string, path: string, file: string }[], lost: string[] }>}
  */
-export async function findBookPictures(file, images) {
+export async function findBookPictures(file, images, rule) {
   const found = []
   const lost = []
   for (const image of Array.isArray(images) ? images : []) {
     const { id, path } = image ?? {}
     if (typeof id !== 'string' || !id || typeof path !== 'string' || !path) continue
-    const at = await findPicture(file, path)
+    const at = await findPicture(file, path, rule)
     if (at) found.push({ id, path, file: at })
     else lost.push(path)
   }

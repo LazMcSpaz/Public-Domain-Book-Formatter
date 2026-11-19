@@ -172,6 +172,11 @@ and `npm run dev -- --port 5183`.
 
 ## Setting up a machine
 
+**Node 22.18 or newer.** Several scripts (the readiness check, storage, the
+shelf helpers) load the core's TypeScript straight into Node, which Node does
+by itself from 22.18 on; `package.json` says so under `engines`, and CI runs
+Node 22. Check with `node --version`.
+
 Windows: WSL2 (`wsl --install`, one reboot), repositories inside WSL, not
 under `/mnt/`; then `bash scripts/setup-worker.sh` (Node 22 through nvm, both
 repositories, packages, Chromium, the tests). If `which npm` answers from

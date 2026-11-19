@@ -2,7 +2,6 @@ import { spawnSync } from 'node:child_process'
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { pathToFileURL } from 'node:url'
 import { afterAll, describe, expect, it } from 'vitest'
 // @ts-expect-error: a plain Node module with no types; the driver and the EPUB builder import it.
 import * as helper from '../scripts/lib/book-pictures.mjs'
@@ -117,13 +116,23 @@ describe("every picture a book file's images list names", () => {
 })
 
 describe('the helper in plain Node', () => {
-  it('loads core’s rule with no resolver registered, as drive.mjs runs it', () => {
-    const helper = pathToFileURL(join(process.cwd(), 'scripts', 'lib', 'book-pictures.mjs')).href
+  // As the driver runs it: plain Node, no resolver, and the rule handed in (the
+  // driver hands in its page's copy). So it works on any Node the driver runs
+  // on, not only one that strips TypeScript. The rule here is a stand-in that
+  // names one place; where core looks is tested above, under vitest.
+  it('loads and finds a picture with the rule handed in, importing no TypeScript', () => {
+    const helper = new URL('../scripts/lib/book-pictures.mjs', import.meta.url).href
     const code =
       `const m = await import(${JSON.stringify(helper)});` +
-      `console.log(await m.findPicture(${JSON.stringify(book)}, 'images/bbbb.png'))`
+      `const rule = () => ['images/bbbb.png'];` +
+      `console.log(await m.findPicture(${JSON.stringify(book)}, 'images/bbbb.png', rule))`
     const run = spawnSync(process.execPath, ['--input-type=module', '-e', code], {
-      encoding: 'utf8'
+      encoding: 'utf8',
+      // Type stripping off where this Node has it, so the run is the one a
+      // Node without it would give.
+      env: process.allowedNodeEnvironmentFlags.has('--no-experimental-strip-types')
+        ? { ...process.env, NODE_OPTIONS: '--no-experimental-strip-types' }
+        : process.env
     })
     expect(run.stderr).not.toMatch(/Error/)
     expect(run.stdout.trim()).toBe(atTop)

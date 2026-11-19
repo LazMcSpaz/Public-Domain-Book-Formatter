@@ -35,9 +35,17 @@ describe('the scripts find pictures through one helper', () => {
     )
   })
 
+  it('the driver hands the helper its page’s copy of the rule, so no Node feature is needed', () => {
+    expect(driver).toMatch(
+      /const pictureRule = \(bookFile, picture\) => askShelfMap\('pictureCandidates', bookFile, picture\)/
+    )
+  })
+
   it('load finds every picture the book names with findBookPictures, and reports the lost', () => {
     const load = verb('load')
-    expect(load).toMatch(/await findBookPictures\(bookFile, JSON\.parse\(json\)\.images\)/)
+    expect(load).toMatch(
+      /await findBookPictures\(bookFile, JSON\.parse\(json\)\.images, pictureRule\)/
+    )
     expect(load).toMatch(/const missing = named\.lost/)
     expect(load).toMatch(/missingImages: missing/)
     // The old roots: the shelf root first, then the book's folder.
@@ -47,8 +55,10 @@ describe('the scripts find pictures through one helper', () => {
 
   it('save keeps a picture where the rule finds it and writes a new one where it looks first', () => {
     const save = verb('save')
-    expect(save).toMatch(/if \(await findPicture\(path, picture\.path\)\) continue/)
-    expect(save).toMatch(/const \[target\] = await picturePlaces\(path, picture\.path\)/)
+    expect(save).toMatch(/if \(await findPicture\(path, picture\.path, pictureRule\)\) continue/)
+    expect(save).toMatch(
+      /const \[target\] = await picturePlaces\(path, picture\.path, pictureRule\)/
+    )
     expect(save).not.toMatch(/resolve\(dirname\(path\), picture\.path\)/)
   })
 
