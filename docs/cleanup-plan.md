@@ -447,10 +447,19 @@ One session; each is small:
 
 ## After the cleanup (product work, not cleanup)
 
+**The owner's order of work, 19 November 2026** (it comes before the list below):
+
+1. The tablet's faults: rulings and marks that never reach the shelf ("Load failed"), and the query crop too small to judge from. The app is now the owner's main window on the work, not a secondary viewer.
+2. Status notes: each agent leaves a small record on the shelf when it starts, as it goes and when it hands off, one record per run so parallel agents never collide.
+3. The Workroom: a screen in the app showing what is waiting on the owner, each book's stage, and each role's work in progress, read from those notes. The style is a mix of the two mock-ups shown on 19 November (light, and dark and gilded).
+4. The team of agents ([specs/agent-roles.md](specs/agent-roles.md), approved): seven roles, all on Opus, no agent checking its own work, Etsu's drafts looping with an editor.
+5. The pilot: _Clairvoyance and Occult Powers_ taken to "ready to upload" by the team.
+
+Then the materials tools: the scout searches and downloads from the libraries' own catalogues, with API keys kept in the cloud environment's secure settings (the owner's earlier book-search connector is installed in claude.ai but not connected, and its code has not been found).
+
 - merge the two reading pipelines;
 - the house symbol font;
 - the Book of Solomon as the pilot tracing book;
 - the GitHub Issues board;
 - the weekly backup to the owner's E: drive, set up from a session on his computer;
 - monthly checkups;
-- the tablet's failed saves, logged in still-works and not urgent by the owner's decision.

@@ -1,6 +1,6 @@
 # Spec: the shelf's agents, one role each
 
-_Proposed 19 November 2026, from the owner's answers the same day. Not yet approved._
+_Approved by the owner on 19 November 2026. Every role runs on Opus. Built after the tablet fixes, the status notes and the Workroom (`docs/cleanup-plan.md`)._
 
 ## What it does (plain English, for the owner)
 
