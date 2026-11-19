@@ -31,8 +31,30 @@ export function apiHeaders(apiKey: string): Record<string, string> {
   }
 }
 
-/** Whatever performs the HTTP call. Mocked in tests. */
-export type Transport = (url: string, init: RequestInit) => Promise<Response>
+/**
+ * The request a transport is handed, and the reply it gives back: only the
+ * parts of `fetch`'s request and response this client uses. Spelled out here
+ * so core names no browser type, and the browser's own `fetch` fits as it is.
+ */
+export interface TransportRequest {
+  method: string
+  headers: Record<string, string>
+  body?: string
+}
+
+export interface TransportResponse {
+  ok: boolean
+  status: number
+  json: () => Promise<unknown>
+  text: () => Promise<string>
+}
+
+/**
+ * Whatever performs the HTTP call: the browser's `fetch`, supplied by the
+ * platform (`browserTransport`), or a mock in tests. Core never reaches the
+ * network itself, so there is no default.
+ */
+export type Transport = (url: string, init: TransportRequest) => Promise<TransportResponse>
 
 export interface ClientConfig {
   apiKey: string
@@ -43,7 +65,7 @@ export interface ClientConfig {
    */
   effort?: 'low' | 'medium' | 'high'
   maxTokens?: number
-  transport?: Transport
+  transport: Transport
 }
 
 export interface PageRequest {
@@ -181,7 +203,7 @@ export async function callModel(
   config: ClientConfig,
   body: Record<string, unknown>
 ): Promise<{ json: unknown; usage: ApiUsage }> {
-  const transport = config.transport ?? fetch
+  const transport = config.transport
   const response = await transport(API_URL, {
     method: 'POST',
     headers: apiHeaders(config.apiKey),
@@ -199,7 +221,7 @@ export async function callModel(
  * Shared with the batch endpoints, which fail in exactly the same shapes and
  * need the same retryable/not decision.
  */
-export async function throwIfFailed(response: Response): Promise<void> {
+export async function throwIfFailed(response: TransportResponse): Promise<void> {
   if (response.ok) return
   const status = response.status
   // 429 and 5xx are transient; 4xx are the caller's problem and won't improve on retry.
@@ -222,7 +244,7 @@ export async function transcribePage(config: ClientConfig, req: PageRequest): Pr
 /** Cheap credential check so a bad key fails before a whole-book run starts. */
 export async function validateApiKey(
   apiKey: string,
-  transport: Transport = fetch
+  transport: Transport
 ): Promise<{ ok: boolean; message?: string }> {
   try {
     const response = await transport(API_URL, {

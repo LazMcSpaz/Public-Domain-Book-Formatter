@@ -11,6 +11,8 @@ All the book logic as pure code: reading shapes, assembly, edits, the checks, th
 - Touch the DOM, `window`, `document`, files or the network, or import `node:` modules (tests run it in Node; `harness/check.py` blocks the imports).
 - Import from `src/platform/` or `src/app/`.
 
+`npm run typecheck:core` (`tsconfig.core.json`, part of `npm run verify`) enforces this: it checks this folder alone with no browser or Node types, so any such use fails to compile. The few globals both share (timers, `structuredClone`, `TextDecoder`, `URLSearchParams`, `AbortSignal`) are listed in `shared-globals.d.ts`; never add a DOM, file or network one there. Anything that needs the network takes it injected, as the model client takes a `Transport`.
+
 ## Key files
 
 - `edits/book-edits.ts`: `applyEdits`, the edit list applied over the pristine reading.

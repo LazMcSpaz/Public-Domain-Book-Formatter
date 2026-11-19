@@ -26,3 +26,4 @@ export {
   type ViewQuestion,
   type ViewRow
 } from './protocol'
+export type { AgentSurface, CommandOutcome } from './surface'

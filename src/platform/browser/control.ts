@@ -34,6 +34,7 @@ import {
   inboxPath,
   outboxPath,
   validSession,
+  type AgentSurface,
   type Inbox,
   type Outbox,
   type Reply
@@ -41,7 +42,6 @@ import {
 import type { ShelfConfig } from '@core/sync'
 import { toBase64 } from '@core/project'
 import { getText, putFile } from './shelf'
-import type { AgentSurface } from '../../app/agent-surface'
 
 /** A shelf's credentials plus the session name the files sit under. */
 export interface ControlConfig extends ShelfConfig {

@@ -6,11 +6,17 @@ A plain-English map of this repository: what each folder is for and who may use 
 
 ### The program (`src/`)
 
-| Folder                  | What it does                                                                                                                                            | May use                              | Must not                                                                   |
-| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | -------------------------------------------------------------------------- |
-| `src/core/`             | All the book logic, as pure code: no browser, no Node. Where the tests aim.                                                                             | only `src/core/`                     | touch the screen, files, network or `window`                               |
-| `src/platform/browser/` | Everything that needs a browser: PDF rendering (pdf.js), OCR (Tesseract, PaddleOCR), fonts, writing the PDF (pdf-lib), the shelf connection, the outbox | `src/core/`                          | reach into `src/app/` (one file does today: `control.ts`, a known problem) |
-| `src/app/`              | The web app: the guided flow, the question screens, the book editor and reader, the page browser, Settings                                              | `src/core/`, `src/platform/browser/` | hold book logic of its own                                                 |
+| Folder                  | What it does                                                                                                                                            | May use                              | Must not                                     |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------ | -------------------------------------------- |
+| `src/core/`             | All the book logic, as pure code: no browser, no Node. Where the tests aim.                                                                             | only `src/core/`                     | touch the screen, files, network or `window` |
+| `src/platform/browser/` | Everything that needs a browser: PDF rendering (pdf.js), OCR (Tesseract, PaddleOCR), fonts, writing the PDF (pdf-lib), the shelf connection, the outbox | `src/core/`                          | reach into `src/app/`                        |
+| `src/app/`              | The web app: the guided flow, the question screens, the book editor and reader, the page browser, Settings                                              | `src/core/`, `src/platform/browser/` | hold book logic of its own                   |
+
+**How the boundaries are enforced:**
+
+- **The core stays pure:** `npm run typecheck:core` (`tsconfig.core.json`) type-checks `src/core/` on its own, with no browser and no Node types, so a use of `window`, `document`, `fetch`, `process` or a `node:` import there fails to compile. The few globals browsers and Node share (timers, `structuredClone`, `TextDecoder`, `URLSearchParams`, `AbortSignal`) are allowed by name in `src/core/shared-globals.d.ts`. The model client never reaches the network itself: the platform hands it `browserTransport` (`src/platform/browser/transport.ts`).
+- **Imports across folders:** `harness/check.py` blocks core importing platform, app or `node:` modules, and platform importing the app. No file crosses today; the contract between the app's command surface and the platform's repository bridge lives in `src/core/control/surface.ts`.
+- **One command runs every check:** `npm run verify` (typecheck, the core check, lint, format check, `harness/check.py`, tests), and CI runs it on every push.
 
 **The areas inside `src/core/`, one line each:**
 
@@ -54,14 +60,14 @@ A plain-English map of this repository: what each folder is for and who may use 
 | `public/`                                  | Fonts, OCR data, icons: files the app loads. Vendored, not edited by hand.                                                                                                     |
 | `harness/`                                 | The rules (`rules.json`), the check script (`check.py`) and the list of known old problems (`baseline.json`).                                                                  |
 | `.claude/agents/`                          | The writer persona (`etsu.md`).                                                                                                                                                |
-| `.github/workflows/`                       | Automatic runs: tests on every push, and deploying the app.                                                                                                                    |
+| `.github/workflows/`                       | Automatic runs: every check (`npm run verify`) on every push, and deploying the app.                                                                                           |
 | `books/`, `voice/`, four images at the top | Leftovers: old copies of two books, the audiobook pronunciation list, stray uploads. To be moved or removed by cleanup tasks.                                                  |
 
 ## Target
 
 Where it is heading, reached through the cleanup plan (`docs/cleanup-plan.md`):
 
-- **The same three program folders, with the boundaries enforced:**
+- **The same three program folders, with the boundaries enforced** (reached by cleanup tasks 4 and 5; see "How the boundaries are enforced" above):
   - `src/core/` type-checked on its own, with no browser or Node available;
   - `src/platform/` never using `src/app/`.
 - **One map of the shelf's layout** in `src/core/sync/`, which the app, the driver and every script ask.

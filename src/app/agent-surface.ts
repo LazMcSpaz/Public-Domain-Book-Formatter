@@ -18,12 +18,19 @@
  * `App`'s state rather than to the platform.
  */
 import { useEffect, useRef } from 'react'
-import { parseCommand, parseWordsRef, snapshot, type GateView, type Reply } from '@core/control'
+import {
+  parseCommand,
+  parseWordsRef,
+  snapshot,
+  type AgentSurface,
+  type CommandOutcome
+} from '@core/control'
 import { toBase64 } from '@core/project'
 import type { Answers, AnswerValue, Question, StepId } from '@core/wizard'
 
-/** What a reply says, before the transport stamps it with the command's id. */
-export type CommandOutcome = Omit<Reply, 'id' | 'at'>
+// The contract itself is in `@core/control` (`surface.ts`), so the platform's
+// repository bridge can name it without reaching into the app.
+export type { AgentSurface, CommandOutcome }
 
 export interface AgentSurfaceInput {
   step: StepId
@@ -46,11 +53,6 @@ export interface AgentSurfaceInput {
     pageIndex: number,
     groups: readonly { id: string; tokenIds: readonly string[] }[]
   ) => Promise<Map<string, string>>
-}
-
-export interface AgentSurface {
-  view: () => GateView
-  run: (raw: unknown) => Promise<CommandOutcome>
 }
 
 declare global {

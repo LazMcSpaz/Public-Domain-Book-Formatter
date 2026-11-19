@@ -98,6 +98,8 @@ export {
   TranscribeError,
   type ClientConfig,
   type Transport,
+  type TransportRequest,
+  type TransportResponse,
   type PageRequest,
   type PageResult,
   type ApiUsage
