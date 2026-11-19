@@ -25,12 +25,13 @@
  *   node scripts/drive.mjs quit
  */
 import { readJson, readJsonSync, readText, stripBom } from './lib/json-file.mjs'
+import { findBookPictures, findPicture, picturePlaces } from './lib/book-pictures.mjs'
 import { tickRecon } from './lib/drive-ticker.mjs'
 import { reconReport, statusReport } from './lib/recon-report.mjs'
 import { chromium } from 'playwright'
 import { createServer } from 'node:http'
 import { createHash } from 'node:crypto'
-import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import {
   createReadStream,
   existsSync,
@@ -1019,38 +1020,19 @@ async function serve() {
       const meta = await stat(scan)
       const name = scanPath.split('/').pop()
 
-      // A picture's path is relative to the shelf root, and a book lives two
-      // directories down from it (`books/<slug>/book.json`). Both are tried
-      // rather than one assumed, because a book file read from somewhere other
-      // than a shelf should still find pictures sitting beside it.
-      const book = JSON.parse(json)
-      const roots = [resolve(dirname(bookFile), '..', '..'), dirname(bookFile)]
-      const pictures = []
-      const missing = []
-      for (const image of Array.isArray(book.images) ? book.images : []) {
-        if (!image?.path || !image?.id) continue
-        // Named by URL, not base64'd into the call: the scan's own rule, for
-        // the same reason. Thirty plates on the Theosophical Glossary are
-        // 84 MB of PNG, 112 MB of base64, and the tab died on `load` with
-        // `Target page, context or browser has been closed` every time.
-        let found = null
-        for (const root of roots) {
-          try {
-            const full = resolve(root, image.path)
-            await stat(full)
-            found = full
-            break
-          } catch {
-            /* try the next root */
-          }
-        }
-        if (found) {
-          pictures.push({
-            id: image.id,
-            url: `http://127.0.0.1:${PORT}/file?path=${encodeURIComponent(found)}`
-          })
-        } else missing.push(image.path)
-      }
+      // Each picture is looked for where the app looks (core's rule, through
+      // `lib/book-pictures.mjs`): beside the book, then at the top of the
+      // shelf. A book file outside a shelf finds the pictures beside it.
+      const named = await findBookPictures(bookFile, JSON.parse(json).images)
+      const missing = named.lost
+      // Named by URL, not base64'd into the call: the scan's own rule, for the
+      // same reason. Thirty plates on the Theosophical Glossary are 84 MB of
+      // PNG, 112 MB of base64, and the tab died on `load` with `Target page,
+      // context or browser has been closed` every time.
+      const pictures = named.found.map((p) => ({
+        id: p.id,
+        url: `http://127.0.0.1:${PORT}/file?path=${encodeURIComponent(p.file)}`
+      }))
 
       // The scan itself, when the browser has not already got it. Everything
       // that looks at pixels — `leaf`, `ocr`, `sheet`, every crop a correction
@@ -1440,17 +1422,15 @@ async function serve() {
         }
       }
       // Written once and skipped ever after, the scan's own rule: the bytes are
-      // named by their content, so a picture already on disk under that name is
-      // that picture and rewriting it would only churn the repository.
+      // named by their content, so a picture already where `load` would find
+      // it (beside the book or at the top of the shelf) is that picture, and
+      // writing it again would only store it twice. A new one goes beside the
+      // book, the first place the rule looks.
       const written = []
       for (const picture of pictures) {
-        const target = resolve(dirname(path), picture.path)
-        try {
-          await access(target)
-          continue
-        } catch {
-          /* not there yet */
-        }
+        if (await findPicture(path, picture.path)) continue
+        const [target] = await picturePlaces(path, picture.path)
+        if (!target) throw new Error(`The shelf's rule refuses the picture name ${picture.path}.`)
         await mkdir(dirname(target), { recursive: true })
         await writeFile(target, Buffer.from(picture.base64, 'base64'))
         written.push(picture.path)

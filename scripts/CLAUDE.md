@@ -25,7 +25,7 @@ Heading: the giant `drive.mjs` (about 7,800 lines) is to be split by responsibil
 - `voice.mjs`: the editor's voice card and the prose audit.
 - `resolve-ts.mjs`: lets plain Node load `src/core` (aliases, extensionless imports).
 - `storage.mjs`: big files into and out of the R2 bucket, checked by fingerprint; `lib/r2.mjs` makes the requests.
-- `lib/`: plain-Node helpers shared by scripts and tests (`ink.mjs` measures ink off a PNG).
+- `lib/`: plain-Node helpers shared by scripts and tests (`ink.mjs` measures ink off a PNG; `book-pictures.mjs` finds the pictures a book names).
 - `screenshot-flow.mjs`, `check-*.mjs`: the browser checks.
 
 ## Folder-specific rules and lessons
@@ -33,6 +33,7 @@ Heading: the giant `drive.mjs` (about 7,800 lines) is to be split by responsibil
 - Anything a session needs from the browser becomes a `drive.mjs` verb, never a one-off `page.evaluate` in a shell command.
 - A verb that writes a run finds it with `findRunForFile`, never by name, size and date (that lands in a run nothing opens).
 - Never send a scan through the debug protocol as base64 (kills the tab, looks like flake); fetch it through the driver's `GET /file`.
+- A picture a book names is found only through `lib/book-pictures.mjs` (core's `pictureCandidates`: beside the book, then the shelf's top), never by joining its path to a folder (`test/one-shelf-map-wired.test.ts`).
 - Over OCR text, strip only our own tags (`<i>`, `<b>`, `<sc>`); a `<[^>]+>` regex eats everything between a stray `<` and `>`.
 - Trust a new check only after it catches a deliberately injected fault; a check with nothing to compare against must refuse, not pass.
 - A check in `readiness.mjs` whose command stops before its report is NOT CHECKED, never FAILED or PASSED: confirm the report line ran before reading an exit code. A driver's `{"error": …}` or a missing count is never a zero (`test/readiness-scripts.test.ts`).

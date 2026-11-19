@@ -65,8 +65,9 @@ Three kinds of picture work, each with its own rules:
    each picture's page and its DPI at the placed size; `proof <page>` renders
    it. Cut at 300 and set at its own width, it is 300; a smaller number means it
    was set larger than the original.
-7. **Save and commit**: `save` writes the pictures beside the book
-   (`images/<digest>.png`), then the readable files, then one commit.
+7. **Save and commit**: `save` writes new pictures beside the book
+   (`images/<digest>.png`) and leaves one the shelf already has where it is,
+   then the readable files, then one commit.
 
 ## Steps: pictures added for this edition
 

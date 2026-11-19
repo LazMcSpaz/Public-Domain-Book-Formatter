@@ -33,6 +33,7 @@
  * the megabyte, and twenty-five PNG plates are fifteen of them.
  */
 import { readJsonSync } from './lib/json-file.mjs'
+import { findBookPictures } from './lib/book-pictures.mjs'
 import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { assembleBook } from '@core/assemble'
@@ -51,7 +52,8 @@ const positional = argv.filter((a, i) => !a.startsWith('--') && argv[i - 1] !== 
 const [dir, out] = positional
 if (!dir || !out || dir === out) throw new Error('epub-of.ts <book-dir> <out-dir> [--cover <jpg>]')
 
-const file = readJsonSync(join(dir, 'book.json'))
+const bookFile = join(dir, 'book.json')
+const file = readJsonSync(bookFile)
 const doc = applyEdits(assembleBook(file.run.transcriptions), file.run.edits ?? [])
 const answers = (file.answers?.export ?? {}) as Record<string, string>
 const design = (file.answers?.design ?? {}) as Record<string, string>
@@ -533,8 +535,14 @@ if (described) {
   )
 }
 
+// Each picture from where the app finds it: beside the book, then at the top of
+// the shelf (`lib/book-pictures.mjs`). One found nowhere stops the build, named.
 const pictures = [...new Set(figuresUsed)]
-for (const src of pictures) copyFileSync(join(dir, src), join(out, 'OEBPS', src))
+const used = pictures.map((path) => ({ id: path, path }))
+const named = await findBookPictures(bookFile, used)
+const lost = named.lost.join(', ')
+if (lost) throw new Error(`Pictures found neither beside the book nor at the top: ${lost}`)
+for (const p of named.found) copyFileSync(p.file, join(out, 'OEBPS', p.path))
 
 const id = `urn:libri-vetus:${String(file.run.key ?? title).replace(/[^\w.-]+/g, '-')}`
 const manifest = [

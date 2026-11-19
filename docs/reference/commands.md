@@ -117,7 +117,9 @@ builds its own copy.
   are written beside it, with the SHA-256 of the file as read (`book` shows
   both as `bookFile` and `bookSha`; the readiness command compares the
   fingerprint). Its `reading` line says whether the free reading of this scan
-  is here; loading never starts it (`recon` does). **Warning:** the scan is
+  is here; loading never starts it (`recon` does). The book's pictures are
+  looked for beside it, then at the top of the shelf; any found in neither
+  place are listed as `missingImages`. **Warning:** the scan is
   `scans/<sha256>.pdf`, named in `book.json` under `scan.path`. The PDF next to
   `book.json` is the export; loading it creates a second, wrong book (check
   with `runs`).
@@ -383,7 +385,8 @@ left|right` with the text running past it. `figure list` and
   the book as an EPUB for quick reading: the same text and note pairing as
   the PDF, a chapter per file. Pack with `zip -X0`, `mimetype` first, then
   `META-INF` and `OEBPS`. It also names every picture with neither a
-  description nor a caption.
+  description nor a caption. Pictures are taken from beside the book, then
+  from the top of the shelf; one found in neither place stops it, named.
 - Spelling on the exported PDF: see `spelling-of.ts --text` under "Checking a
   book's text". **[before upload]**
 
