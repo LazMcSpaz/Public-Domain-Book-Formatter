@@ -8,13 +8,17 @@ Now the app looks in the book's folder first, then at the top of the shelf. A pi
 
 This is the same for opening a book to work on and opening it to read.
 
+Saving the book afterwards leaves each picture where it is. A save used to upload every picture the device held unless it found it at the top of the shelf. Once the app held a book's pictures, the first save would have copied every plate to the top as well, storing each one twice for good. Now a save keeps a picture's place when the shelf already has that exact picture where the book names it. (A picture's name is made from its own contents, so the same name means the same picture.)
+
 ## Done when (how we'll know it works; how the owner can try it)
 
 - One rule decides where to look for a picture. It is in the shelf map, `src/core/sync/shelf.ts`, and has its own tests.
-- The rule tries the book's folder, then the top of the shelf. It never looks twice in one place, and it refuses a path that leaves the shelf or starts from the top of a disk.
+- The rule tries the book's folder, then the top of the shelf. It never looks twice in one place, and it refuses a path that leaves the shelf or starts from the top of a disk. It also refuses a name with `%`, `?` or `#` in it, because a web address reads those as something else (`%2e%2e` means "go up"); real picture names never have them.
+- A save keeps a held picture's place when the shelf has it beside the book or at the top, and uploads it only when the shelf has it nowhere or its name is not its contents.
+- Source tests pin the wiring: both ways of opening a book call the shared function, and a save asks before it uploads a picture.
 - The app's two ways of opening a book from the shelf use one shared function that follows the rule.
 - A test serves a picture only beside the book, only at the top of the shelf, and nowhere. The first two are found; the third is reported missing.
-- That test fails when the old fault (looking at the top of the shelf only) is put back.
+- Each test fails when its fault is put back: looking at the top of the shelf only, the app's old loops, a save that never asks, and the rule without its `%?#` refusal.
 - `npm run verify` passes.
 - **The owner tries it:** on the tablet, open _The Lost Keys of Masonry_ to read. Its seven plates show (still-works step 7).
 
@@ -23,6 +27,7 @@ This is the same for opening a book to work on and opening it to read.
 - `src/core/sync/`: the rule, in its own small file, reached through `shelf.ts` as the sheets rule is. `shelf.ts` is close to the size limit.
 - `src/platform/browser/`: one function that fetches a book's pictures through the rule, in a new `shelf-pictures.ts`. `shelf.ts` there is already over the size limit, so it does not grow.
 - `src/app/App.tsx`: the two picture loops are replaced by a call to that function. The file gets shorter.
+- `src/platform/browser/shelf-save.ts`: the save asks `keptPicture` (in `shelf-pictures.ts`) before it uploads a held picture.
 - `test/`: tests for the rule and the function.
 - `docs/still-works.md`: the Known issues entry says the cause is fixed, pending the owner's run.
 
@@ -36,7 +41,7 @@ This is the same for opening a book to work on and opening it to read.
 
 ## Out of scope
 
-- **Where new pictures are written.** The app still writes a new picture to the top of the shelf (`images/<digest>.png`). Where new pictures should go belongs to the layout move (cleanup tasks 9 and 10). Until then, the app finds pictures in both places, so either is safe.
+- **Where new pictures are written.** The app still writes a new picture, or one whose name is not its contents, to the top of the shelf (`images/<digest>.png`). One older picture on the shelf is named by a longer fingerprint, so its first save copies it to the top once, under the app's name, as saves did before. Where new pictures should go belongs to the layout move (cleanup tasks 9 and 10). Until then, the app finds pictures in both places, so either is safe.
 - The driver (`scripts/drive.mjs`). Its `load` already looks in both places. Teaching it the shared rule comes later in task 6.
 - Other scripts, and fetching scans from the Cloudflare bucket.
 - Moving any picture on the shelf.

@@ -14,8 +14,8 @@
  *
  * Every read is `getBytes`, so every read goes through `readUrl`. Browser-only.
  */
-import { bookPath, pictureCandidates, type ShelfConfig } from '@core/sync'
-import { getBytes, shelfDirFor } from './shelf'
+import { bookPath, imagePath, pictureCandidates, type ShelfConfig } from '@core/sync'
+import { digestOf, getBytes, shelfDirFor, shelfHas } from './shelf'
 
 /** What came down: the pictures found, and the names found nowhere. */
 export interface BookPictures {
@@ -51,4 +51,31 @@ export async function fetchBookPictures(
     else out.lost.push(path)
   }
   return out
+}
+
+/**
+ * The name to keep for a picture this device holds, when the shelf already has
+ * it where the book names it; null when it has to be uploaded.
+ *
+ * A save uploads each held picture unless the shelf has it, and `pushImage`
+ * looks only at the top of the shelf. Once a book opened from the shelf held
+ * its pictures, the first save would have copied every one that sits beside
+ * its book to the top as well: each plate twice in git history, for good. A
+ * picture's name is its own digest, so a name that matches the bytes names
+ * this very picture, and if it is found where the rule looks, nothing is sent.
+ */
+export async function keptPicture(
+  config: ShelfConfig,
+  key: string,
+  named: string | undefined,
+  bytes: Uint8Array
+): Promise<string | null> {
+  if (!named) return null
+  const copy = new Uint8Array(bytes)
+  if (named !== imagePath(await digestOf(copy.buffer as ArrayBuffer))) return null
+  const book = bookPath(key, await shelfDirFor(config, key))
+  for (const at of pictureCandidates(book, named)) {
+    if (await shelfHas(config, at)) return named
+  }
+  return null
 }

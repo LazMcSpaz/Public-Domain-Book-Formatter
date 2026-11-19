@@ -1,6 +1,8 @@
 import { describe, it, expect, afterEach } from 'vitest'
-import { pictureCandidates, shelfSlug, type ShelfConfig } from '@core/sync'
-import { fetchBookPictures } from '@platform/browser/shelf-pictures'
+import { readFileSync } from 'node:fs'
+import { imagePath, pictureCandidates, shelfSlug, type ShelfConfig } from '@core/sync'
+import { digestOf } from '@platform/browser/shelf'
+import { fetchBookPictures, keptPicture } from '@platform/browser/shelf-pictures'
 
 /**
  * A book's pictures are found beside the book, then at the top of the shelf.
@@ -67,7 +69,13 @@ describe('where a named picture is looked for', () => {
       '',
       'images/',
       'images/..',
-      '.'
+      '.',
+      // A URL reads these as something other than a name: `%2e%2e` is `..`,
+      // `?` starts a query, `#` drops the rest.
+      'images/%2e%2e/%2e%2e/%2e%2e/user',
+      'images/.%2e/x.png',
+      'images/0a1b.png?ref=other',
+      'images/0a1b.png#top'
     ]) {
       expect(pictureCandidates(BOOK, name), name).toEqual([])
     }
@@ -99,8 +107,11 @@ function stubShelf(files: Record<string, Uint8Array>, folder: string, key: strin
       return Promise.resolve(Response.json({ key, fileName: 'made-up.pdf' }))
     }
     const bytes = files[path]
+    if (!bytes) return Promise.resolve(new Response('{}', { status: 404 }))
+    // `getBytes` asks for the raw file; `shelfHas` asks for its record.
+    const raw = new Headers(init?.headers).get('Accept')?.includes('raw')
     return Promise.resolve(
-      bytes ? new Response(bytes as BlobPart) : new Response('{}', { status: 404 })
+      raw ? new Response(bytes as BlobPart) : Response.json({ sha: 'made-up-sha' })
     )
   }) as typeof fetch
   return asked
@@ -178,5 +189,82 @@ describe('fetching the pictures a book names', () => {
       lost: []
     })
     expect(asked).toEqual([])
+  })
+})
+
+/** A picture's shelf name: its own digest, as `pushImage` names it. */
+async function nameOf(bytes: Uint8Array): Promise<string> {
+  return imagePath(await digestOf(new Uint8Array(bytes).buffer as ArrayBuffer))
+}
+
+describe('saving a book keeps a held picture where the shelf has it', () => {
+  it('keeps the name of a picture found beside the book, and asks nothing of the top', async () => {
+    const key = 'fifth-made-up-scan.pdf\u00001\u00002'
+    const folder = 'Fifth-Book'
+    const bytes = new Uint8Array([10, 20, 30])
+    const name = await nameOf(bytes)
+    const asked = stubShelf({ [`books/${folder}/${name}`]: bytes }, folder, key)
+
+    expect(await keptPicture(config, key, name, bytes)).toBe(name)
+    expect(asked).toContain(`books/${folder}/${name}`)
+    expect(asked).not.toContain(name)
+  })
+
+  it('keeps one found only at the top of the shelf', async () => {
+    const key = 'sixth-made-up-scan.pdf\u00001\u00002'
+    const bytes = new Uint8Array([40, 50])
+    const name = await nameOf(bytes)
+    stubShelf({ [name]: bytes }, 'Sixth-Book', key)
+
+    expect(await keptPicture(config, key, name, bytes)).toBe(name)
+  })
+
+  it('uploads when the name is not this picture, without asking the shelf', async () => {
+    const key = 'seventh-made-up-scan.pdf\u00001\u00002'
+    const asked = stubShelf({}, 'Seventh-Book', key)
+    const bytes = new Uint8Array([60])
+    const other = await nameOf(new Uint8Array([61]))
+
+    expect(await keptPicture(config, key, other, bytes)).toBeNull()
+    expect(await keptPicture(config, key, undefined, bytes)).toBeNull()
+    expect(asked).toEqual([])
+  })
+
+  it('uploads when the shelf has the named picture nowhere', async () => {
+    const key = 'eighth-made-up-scan.pdf\u00001\u00002'
+    const folder = 'Eighth-Book'
+    const bytes = new Uint8Array([70, 80])
+    const name = await nameOf(bytes)
+    const asked = stubShelf({}, folder, key)
+
+    expect(await keptPicture(config, key, name, bytes)).toBeNull()
+    expect(asked).toContain(`books/${folder}/${name}`)
+    expect(asked).toContain(name)
+  })
+})
+
+/**
+ * The wiring, read from the source, as `sheets-guard-wired.test.ts` reads the
+ * driver's: the two doors that bring a book down from the shelf fetch its
+ * pictures through the rule, and the one door that saves a book asks before it
+ * uploads a picture.
+ */
+describe('the doors use the rule', () => {
+  const app = readFileSync('src/app/App.tsx', 'utf8')
+  const save = readFileSync('src/platform/browser/shelf-save.ts', 'utf8')
+
+  it('opening and reading a book both fetch pictures with fetchBookPictures', () => {
+    const calls = app.match(/fetchBookPictures\(config, about\.key, file\.imagePaths\)/g) ?? []
+    expect(calls).toHaveLength(2)
+    // The old loops walked the named pictures and fetched each from the top.
+    expect(app).not.toMatch(/Object\.entries\(file\.imagePaths\)/)
+    expect(app).not.toMatch(/of named\)\s*\{\s*const bytes = await getBytes/)
+  })
+
+  it('a save asks keptPicture before it uploads a held picture', () => {
+    const at = save.indexOf('keptPicture(config, input.key, shelfNames[image.id], image.bytes)')
+    expect(at).toBeGreaterThan(-1)
+    expect(save.indexOf('pushImage(config, image.bytes', at)).toBeGreaterThan(at)
+    expect(save).toMatch(/shelfNames = file\.imagePaths/)
   })
 })

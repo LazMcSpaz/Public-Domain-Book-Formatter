@@ -39,6 +39,7 @@ import {
 } from '@core/queries'
 import type { EditorVoice } from '@core/annotate'
 import { fetchBook, fetchVoice, pushBook, pushImage, pushScan, pushVoice } from './shelf'
+import { keptPicture } from './shelf-pictures'
 import { loadAnnotationCheckpoint, loadRun, loadSourceFile } from './run-store'
 import { loadReviewProgress, loadVoice, saveVoice } from './settings'
 
@@ -147,9 +148,16 @@ export async function pushBookToShelf(
   // not on the shelf yet has nothing to keep; a read that fails is not a
   // reason to refuse the save, only to keep nothing.
   let kept: ReturnType<typeof keptFromShelf> = { scan: null, imagePaths: {} }
+  // Every picture the shelf's copy names, held here or not, so a held picture
+  // already on the shelf keeps its place (`keptPicture`).
+  let shelfNames: Record<string, string> = {}
   try {
     const existing = await fetchBook(config, input.key)
-    if (existing) kept = keptFromShelf(input.run, parseBookFile(existing))
+    if (existing) {
+      const file = parseBookFile(existing)
+      kept = keptFromShelf(input.run, file)
+      shelfNames = file.imagePaths
+    }
   } catch {
     /* nothing on the shelf to keep */
   }
@@ -185,8 +193,9 @@ export async function pushBookToShelf(
   const imagePaths: Record<string, string> = { ...kept.imagePaths }
   for (const image of input.run.images) {
     try {
-      const { path } = await pushImage(config, image.bytes, input.run.fileName)
-      imagePaths[image.id] = path
+      const already = await keptPicture(config, input.key, shelfNames[image.id], image.bytes)
+      imagePaths[image.id] =
+        already ?? (await pushImage(config, image.bytes, input.run.fileName)).path
     } catch {
       /* carried inline instead */
     }
