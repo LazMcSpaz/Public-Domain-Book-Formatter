@@ -121,7 +121,7 @@ import {
   readScanFromShelf,
   type ShelfReadProgress
 } from '../platform/browser/recon-handoff'
-import { flushOutbox } from '../platform/browser/shelf-outbox'
+import { flushOutbox, withQueuedChanges } from '../platform/browser/shelf-outbox'
 import {
   collectQueries,
   queryKey,
@@ -1805,7 +1805,8 @@ export function App(): JSX.Element {
           setShelfNote(`The shelf lists “${about.fileName}” but the book file is not there.`)
           return
         }
-        const file = parseBookFile(json)
+        // With what this device has not sent yet folded in, so it stays shown.
+        const { file } = await withQueuedChanges(parseBookFile(json))
 
         // Pictures the file names rather than carries, fetched before the run
         // is stored so what lands on this device is the whole book: beside the
@@ -2418,7 +2419,10 @@ export function App(): JSX.Element {
           setShelfNote(`The shelf lists “${about.fileName}” but the book file is not there.`)
           return
         }
-        const file = parseBookFile(json)
+        // With what this device has not sent yet folded in: a mark waiting to go
+        // up stays on the page, and the outbox baseline below includes it, so
+        // it is not queued a second time.
+        const { file } = await withQueuedChanges(parseBookFile(json))
 
         // The editor's own pictures, which the galley shows as cards at their
         // anchors. Small, and named rather than carried, so this is a handful
@@ -2751,8 +2755,10 @@ export function App(): JSX.Element {
       // one nobody reads.
       setOutboxNote(result.idle ? null : result.note)
     } catch (err) {
+      // A failed request comes back as a result naming it; this is what is
+      // left, such as this browser's own storage refusing to be read.
       setOutboxNote(
-        `Could not reach the shelf (${err instanceof Error ? err.message : String(err)}). ` +
+        `Could not send to the shelf (${err instanceof Error ? err.message : String(err)}). ` +
           'Your changes are still on this device.'
       )
     }
@@ -2907,24 +2913,25 @@ export function App(): JSX.Element {
   // can be emptied — iOS does not run a closed web app's code and Safari has no
   // background sync, so nothing here happens while the app is shut, and the
   // indicator says so rather than implying otherwise.
+  // At the query gate as well as the workbench: rulings ride the same queue.
   useEffect(() => {
-    if (!isProofing) return
+    if (!wantsShelf) return
     const onOnline = (): void => void emptyOutbox()
     window.addEventListener('online', onOnline)
     return () => window.removeEventListener('online', onOnline)
-  }, [isProofing, emptyOutbox])
+  }, [wantsShelf, emptyOutbox])
 
-  // And on arriving at the workbench, for a session picking up where a locked
-  // phone left off.
+  // And on arriving at the workbench or the query gate, for a session picking
+  // up where a locked phone or a failed send left off.
   useEffect(() => {
-    if (!isProofing) return
+    if (!wantsShelf) return
     const key = fileKeyRef.current
     if (!key) return
     void (async () => {
       setOutbox(summarizeOutbox(await outboxFor(key)))
       await emptyOutbox()
     })()
-  }, [isProofing, emptyOutbox])
+  }, [wantsShelf, emptyOutbox])
 
   /**
    * The fact bank as files, named after the book the export screen is about.
@@ -5466,10 +5473,17 @@ export function App(): JSX.Element {
         {/* What became of the last press of Next. Shown at the query gate only,
             and only once something has been ruled: an indicator that speaks
             before there is anything to say is one nobody reads. */}
-        {rulingNote && step.id === 'gate-queries' ? (
-          <div className="resume-note" role="status">
+        {step.id === 'gate-queries' && (rulingNote || outboxNote || outbox.waiting > 0) ? (
+          <div className="resume-note gate-outbox" role="status">
             {rulingNote}
             {outboxNote ? ` ${outboxNote}` : ''}
+            {/* The way to try again, here as on the workbench: a ruling that did
+                not reach the shelf must not wait for the editor to find it. */}
+            {outbox.waiting > 0 ? (
+              <button type="button" onClick={() => void emptyOutbox()}>
+                Send to the shelf ({outbox.waiting} waiting)
+              </button>
+            ) : null}
           </div>
         ) : null}
 

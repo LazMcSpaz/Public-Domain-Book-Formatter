@@ -309,7 +309,7 @@ export async function checkShelf(config: ShelfConfig): Promise<ShelfInfo> {
  * is refused by GitHub in the one wording that sends the reader looking at
  * their own request.
  */
-async function shaOf(config: ShelfConfig, path: string): Promise<string | null> {
+export async function shaOf(config: ShelfConfig, path: string): Promise<string | null> {
   const response = await fetch(readUrl(config, path), {
     headers: headers(config),
     cache: NO_CACHE
@@ -353,7 +353,20 @@ export async function putFile(
   contentBase64: string,
   message: string
 ): Promise<void> {
-  const sha = await shaOf(config, path)
+  await putWithSha(config, path, contentBase64, message, await shaOf(config, path))
+}
+
+/**
+ * The write alone, against a sha already asked for (`shaOf`): `putFile` in two
+ * halves, so a flush can say which of the two requests failed.
+ */
+export async function putWithSha(
+  config: ShelfConfig,
+  path: string,
+  contentBase64: string,
+  message: string,
+  sha: string | null
+): Promise<void> {
   const response = await fetch(contentsUrl(config, path), {
     method: 'PUT',
     headers: { ...headers(config), 'Content-Type': 'application/json' },

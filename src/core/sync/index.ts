@@ -62,6 +62,7 @@ export {
   type RulingEntry,
   type ShelfState
 } from './outbox'
+export { foldIntoBookText, holds, withQueued, type FoldedBookText } from './fold'
 export {
   booksNeedingRecon,
   hasReadableScan,

@@ -9,6 +9,8 @@ import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Question, AnswerValue, TermVerdict, DiscrepancyVerdict, Evidence } from '@core/wizard'
 import { Lightbox } from './Lightbox'
+import { CropView } from './CropView'
+import { RECON_DPI } from '../platform/browser/recon'
 
 interface Props {
   question: Question
@@ -67,6 +69,23 @@ function EvidenceView({
           const src = resolve?.(e.src) ?? e.src
           if (!src.startsWith('blob:') && !src.startsWith('data:') && !src.startsWith('/')) {
             return null // unresolved placeholder — show nothing rather than a broken image
+          }
+          // A crop cut in advance and kept on the shelf: shown at reading size,
+          // scrolled to its passage (`CropView`). Cut at `RECON_DPI` by
+          // `drive.mjs querycrops`, which is what an older crop with no note of
+          // its own resolution was cut at.
+          if (e.src.startsWith('shelf:')) {
+            return (
+              <figure key={i} style={{ margin: 0 }}>
+                <CropView
+                  src={src}
+                  alt={e.alt}
+                  dpi={RECON_DPI}
+                  onOpen={onOpen ? () => onOpen(e.src, e.alt) : undefined}
+                />
+                <figcaption>{e.alt}</figcaption>
+              </figure>
+            )
           }
           // A button rather than a clickable image: this is the only way to see
           // the scan at a size it can be read at, so it has to be reachable

@@ -80,8 +80,11 @@ page.on('console', (m) => {
   // cannot suppress. (Here it is the sandbox's own TLS proxy that Chromium
   // does not trust; in a browser it would be the CORS refusal itself. Either
   // way the answer is "no" and the app handles it.) Everything else still
-  // counts.
+  // counts. Matched on the words too: where the sandbox trusts its proxy, the
+  // refusal is a CORS message logged from the app's own script, which names
+  // the API's address only in its text.
   if (m.location()?.url?.includes('api.anthropic.com')) return
+  if (/'https:\/\/api\.anthropic\.com\//.test(m.text()) && /CORS policy/.test(m.text())) return
   // A 404 from GitHub is not a failure either: it is how the contents API
   // spells "not there yet", and the shelf asks that question deliberately —
   // before every write, to learn whether it is creating or replacing, and
@@ -1829,13 +1832,24 @@ await page
   .locator('label')
   .filter({ hasText: /^2 em$/ })
   .click()
-await page.waitForTimeout(5000)
-const afterTweak = await leafHash()
+// Waited for, not slept on: the preview is re-laid and re-rendered from the
+// PDF, and a fixed five seconds was sometimes not long enough on this machine,
+// so the undo was hashed half-way through its re-render and reported as not
+// restoring the book. Polled until the pages say what the step claims, for up
+// to thirty seconds; past that the claim is false and the step fails.
+const hashUntil = async (wanted) => {
+  let hash = await leafHash()
+  for (let waited = 0; !wanted(hash) && waited < 30000; waited += 1000) {
+    await page.waitForTimeout(1000)
+    hash = await leafHash()
+  }
+  return hash
+}
+const afterTweak = await hashUntil((h) => h !== beforeTweak)
 await shot('05d3-design-tweaks')
 
 await page.locator('.tweaks button', { hasText: 'Undo my changes' }).click()
-await page.waitForTimeout(5000)
-const undoneTweak = await leafHash()
+const undoneTweak = await hashUntil((h) => h === beforeTweak)
 
 if (tweakCount < 20) throw new Error(`Only ${tweakCount} detailed controls at the design gate`)
 if (beforeTweak === afterTweak) throw new Error('A tweak did not reach the previewed pages')
@@ -1987,7 +2001,10 @@ console.log(
   `  a typeset PDF opens in ${typesetMs} ms with ${typesetTerms} term(s): ` +
     `"${typesetNote.replace(/\s+/g, ' ').slice(0, 90)}"`
 )
-if (!/typeset rather than scanned/i.test(typesetNote)) {
+// The note's own words since 18 September: the older "typeset rather than
+// scanned" was read as "and the text is right", so it now says what is and is
+// not behind the text.
+if (!/carries its own text and no page images/i.test(typesetNote)) {
   throw new Error(`A typeset PDF was not recognised — note said "${typesetNote}"`)
 }
 // The scan of the same length takes seconds of Tesseract per leaf; this must be
@@ -2218,8 +2235,14 @@ await page.waitForTimeout(200)
 const after = await summary()
 
 // Regenerating means laying the book out again and rendering a fresh PDF.
-await page.waitForTimeout(3000)
-const pagesAfter = await previewFingerprint()
+// Waited for rather than slept on, as at 5d3: a fixed three seconds was too
+// short on a busy machine, and the step then reported the preview deaf to the
+// answers. Up to thirty seconds; past that the claim is false.
+let pagesAfter = await previewFingerprint()
+for (let waited = 0; pagesAfter === pagesBefore && waited < 30000; waited += 1000) {
+  await page.waitForTimeout(1000)
+  pagesAfter = await previewFingerprint()
+}
 await shot('07-gate-design-answered')
 
 // Junicode is the one face this repo ships itself, the only one that is CFF
@@ -3128,7 +3151,8 @@ const shelfListed = await page
   .locator('.shelf')
   .innerText()
   .catch(() => '')
-const shelfCards = await page.locator('.shelf .shelf-book').count()
+// A card per book has been a deck card since 26 September; one title each.
+const shelfCards = await page.locator('.shelf .deck-title').count()
 await shot('12b-shelf-intake')
 
 const pulled = await page.evaluate(

@@ -17,6 +17,7 @@ Heading: `App.tsx` (about 5,700 lines) is to be split along clear responsibiliti
 
 - `App.tsx`: the flow shell: steps, saving, shelf routes, the export screen's wiring.
 - `QuestionView.tsx`, `QuestionList.tsx`: render any `Question`; the gate pager.
+- `CropView.tsx`: a query's shelf crop at reading size, scrolled to its passage.
 - `agent-surface.ts`: `useAgentSurface`, the one place a driver or bridge command is carried out.
 - `BookEditor.tsx`, `BookReader.tsx`: the galley ("Edit the book") and the reading view ("Read the book").
 - `passages.ts`, `dom-offsets.ts`: the column both views build, and DOM to text offsets.
@@ -30,4 +31,5 @@ Heading: `App.tsx` (about 5,700 lines) is to be split along clear responsibiliti
 - The gate pager is controlled (no local copy of the place); groups come from `Question.group` via `groupQuestions`, never parsed from ids.
 - The Read view never edits text; DOM and text offsets meet only in `dom-offsets.ts`, and the column is built only by `passages.ts`.
 - A book opened to read (`readFromShelf`) has no scan or recon: saves must not need `fileDataRef`; the outbox baseline is the loaded edits.
+- Both doors from the shelf fold this device's waiting changes into the book before it is stored or drawn (`withQueuedChanges`), so a mark not yet sent stays on the page (`test/outbox-flush.test.ts`, `npm run check:saves`).
 - An empty query gate is walked through in the shell, never by `canEnter`: the proof step needs `gate-queries` completed.
