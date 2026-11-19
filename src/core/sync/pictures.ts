@@ -16,10 +16,11 @@
  * backslash is read as a separator too, because the owner works on Windows and
  * a hand-edited name may carry one. A name that would leave the shelf, by
  * climbing out with `..` or by starting at the top of a disk or a server, is
- * never tried. Nor is a name carrying `%`, `?` or `#`: the platform puts the
- * path into a URL as it stands, where `%2e%2e` is read as `..`, `?` starts a
- * query and `#` drops the rest. Real names are `images/<digest>.png` and never
- * carry one.
+ * never tried. Nor is a name carrying `%`, `?`, `#` or a control character:
+ * the platform puts the path into a URL as it stands, where `%2e%2e` is read
+ * as `..`, `?` starts a query, `#` drops the rest, and a tab or line break is
+ * deleted (so `.<tab>.` becomes `..`). Real names are `images/<digest>.png`
+ * and never carry one.
  *
  * Pure: strings in, strings out. The platform does the fetching; reached
  * through `shelf.ts`, the one map of the shelf.
@@ -30,8 +31,13 @@ const SEPARATOR = /[\\/]+/u
 /** A name that starts at the top of a disk (`/`, `\`, `C:`) or names a server (`https:`). */
 const ABSOLUTE = /^(?:[\\/]|[A-Za-z][\w+.-]*:)/u
 
-/** Characters a URL reads as something other than a name: an escape, a query, a fragment. */
-const URL_SPECIAL = /[%?#]/u
+/**
+ * Characters a URL reads as something other than a name: an escape, a query, a
+ * fragment, and the control characters a URL parser deletes before it reads
+ * the path (tab, line feed and carriage return turn `.\t.` into `..`).
+ */
+// eslint-disable-next-line no-control-regex
+const URL_SPECIAL = /[%?#\u0000-\u001f\u007f]/u
 
 /** Segments with `.` and `..` settled, or null when they climb above the first. */
 function settle(parts: readonly string[]): string[] | null {

@@ -8,17 +8,17 @@ Now the app looks in the book's folder first, then at the top of the shelf. A pi
 
 This is the same for opening a book to work on and opening it to read.
 
-Saving the book afterwards leaves each picture where it is. A save used to upload every picture the device held unless it found it at the top of the shelf. Once the app held a book's pictures, the first save would have copied every plate to the top as well, storing each one twice for good. Now a save keeps a picture's place when the shelf already has that exact picture where the book names it. (A picture's name is made from its own contents, so the same name means the same picture.)
+Saving the book afterwards leaves each picture where it is. A save used to upload every picture the device held unless it found it at the top of the shelf. Once the app held a book's pictures, the first save would have copied every plate to the top as well, storing each one twice for good. Now a save keeps a picture's place when the shelf already has that exact picture, beside the book or at the top. (A picture's name is made from its own contents, so the same name means the same picture.)
 
 ## Done when (how we'll know it works; how the owner can try it)
 
 - One rule decides where to look for a picture. It is in the shelf map, `src/core/sync/shelf.ts`, and has its own tests.
-- The rule tries the book's folder, then the top of the shelf. It never looks twice in one place, and it refuses a path that leaves the shelf or starts from the top of a disk. It also refuses a name with `%`, `?` or `#` in it, because a web address reads those as something else (`%2e%2e` means "go up"); real picture names never have them.
-- A save keeps a held picture's place when the shelf has it beside the book or at the top, and uploads it only when the shelf has it nowhere or its name is not its contents.
+- The rule tries the book's folder, then the top of the shelf. It never looks twice in one place, and it refuses a path that leaves the shelf or starts from the top of a disk. It also refuses a name with `%`, `?`, `#`, a tab or a line break in it, because a web address reads those as something else (`%2e%2e` means "go up", and a tab is deleted, so `.<tab>.` does too); real picture names never have them.
+- A save keeps a held picture's place when the shelf has it beside the book or at the top, and uploads it only when the shelf has it in neither place. It finds the book's folder once per save.
 - Source tests pin the wiring: both ways of opening a book call the shared function, and a save asks before it uploads a picture.
 - The app's two ways of opening a book from the shelf use one shared function that follows the rule.
 - A test serves a picture only beside the book, only at the top of the shelf, and nowhere. The first two are found; the third is reported missing.
-- Each test fails when its fault is put back: looking at the top of the shelf only, the app's old loops, a save that never asks, and the rule without its `%?#` refusal.
+- Each test fails when its fault is put back: looking at the top of the shelf only, the app's old loops, a save that never asks, the rule without its refusals, and a save that asks but ignores the answer.
 - `npm run verify` passes.
 - **The owner tries it:** on the tablet, open _The Lost Keys of Masonry_ to read. Its seven plates show (still-works step 7).
 

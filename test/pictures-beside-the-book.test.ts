@@ -75,7 +75,12 @@ describe('where a named picture is looked for', () => {
       'images/%2e%2e/%2e%2e/%2e%2e/user',
       'images/.%2e/x.png',
       'images/0a1b.png?ref=other',
-      'images/0a1b.png#top'
+      'images/0a1b.png#top',
+      // A URL parser deletes tab, line feed and carriage return: `.\t.` is `..`.
+      'images/.\t./x.png',
+      'images/.\n./x.png',
+      'images/.\r./x.png',
+      'images/\u0000x.png'
     ]) {
       expect(pictureCandidates(BOOK, name), name).toEqual([])
     }
@@ -198,16 +203,15 @@ async function nameOf(bytes: Uint8Array): Promise<string> {
 }
 
 describe('saving a book keeps a held picture where the shelf has it', () => {
-  it('keeps the name of a picture found beside the book, and asks nothing of the top', async () => {
+  it('keeps one found beside the book, and asks nothing of the top', async () => {
     const key = 'fifth-made-up-scan.pdf\u00001\u00002'
     const folder = 'Fifth-Book'
     const bytes = new Uint8Array([10, 20, 30])
     const name = await nameOf(bytes)
     const asked = stubShelf({ [`books/${folder}/${name}`]: bytes }, folder, key)
 
-    expect(await keptPicture(config, key, name, bytes)).toBe(name)
-    expect(asked).toContain(`books/${folder}/${name}`)
-    expect(asked).not.toContain(name)
+    expect(await keptPicture(config, `books/${folder}/book.json`, bytes)).toBe(name)
+    expect(asked).toEqual([`books/${folder}/${name}`])
   })
 
   it('keeps one found only at the top of the shelf', async () => {
@@ -216,30 +220,23 @@ describe('saving a book keeps a held picture where the shelf has it', () => {
     const name = await nameOf(bytes)
     stubShelf({ [name]: bytes }, 'Sixth-Book', key)
 
-    expect(await keptPicture(config, key, name, bytes)).toBe(name)
+    expect(await keptPicture(config, 'books/Sixth-Book/book.json', bytes)).toBe(name)
   })
 
-  it('uploads when the name is not this picture, without asking the shelf', async () => {
+  it('uploads when the shelf has other pictures but not this one', async () => {
     const key = 'seventh-made-up-scan.pdf\u00001\u00002'
-    const asked = stubShelf({}, 'Seventh-Book', key)
+    const folder = 'Seventh-Book'
+    const other = new Uint8Array([61])
+    const asked = stubShelf(
+      { [`books/${folder}/${await nameOf(other)}`]: other, [await nameOf(other)]: other },
+      folder,
+      key
+    )
     const bytes = new Uint8Array([60])
-    const other = await nameOf(new Uint8Array([61]))
-
-    expect(await keptPicture(config, key, other, bytes)).toBeNull()
-    expect(await keptPicture(config, key, undefined, bytes)).toBeNull()
-    expect(asked).toEqual([])
-  })
-
-  it('uploads when the shelf has the named picture nowhere', async () => {
-    const key = 'eighth-made-up-scan.pdf\u00001\u00002'
-    const folder = 'Eighth-Book'
-    const bytes = new Uint8Array([70, 80])
     const name = await nameOf(bytes)
-    const asked = stubShelf({}, folder, key)
 
-    expect(await keptPicture(config, key, name, bytes)).toBeNull()
-    expect(asked).toContain(`books/${folder}/${name}`)
-    expect(asked).toContain(name)
+    expect(await keptPicture(config, `books/${folder}/book.json`, bytes)).toBeNull()
+    expect(asked).toEqual([`books/${folder}/${name}`, name])
   })
 })
 
@@ -261,10 +258,15 @@ describe('the doors use the rule', () => {
     expect(app).not.toMatch(/of named\)\s*\{\s*const bytes = await getBytes/)
   })
 
-  it('a save asks keptPicture before it uploads a held picture', () => {
-    const at = save.indexOf('keptPicture(config, input.key, shelfNames[image.id], image.bytes)')
-    expect(at).toBeGreaterThan(-1)
+  it('a save asks keptPicture before it uploads a held picture, and uses the answer', () => {
+    const folder = save.indexOf(
+      'bookFile = bookPath(input.key, await shelfDirFor(config, input.key))'
+    )
+    const at = save.indexOf('await keptPicture(config, bookFile, image.bytes)')
+    expect(folder).toBeGreaterThan(-1)
+    expect(at).toBeGreaterThan(folder)
     expect(save.indexOf('pushImage(config, image.bytes', at)).toBeGreaterThan(at)
-    expect(save).toMatch(/shelfNames = file\.imagePaths/)
+    // The kept name is the one written, and an upload happens only without it.
+    expect(save).toMatch(/imagePaths\[image\.id\] =\s*already \?\? \(await pushImage\(/)
   })
 })

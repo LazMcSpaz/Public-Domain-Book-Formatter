@@ -12,7 +12,7 @@
  * refuses to draw anything in its place, and a plate that vanished between two
  * devices is the kind of silence noticed only once the book is printed.
  *
- * Every read is `getBytes`, so every read goes through `readUrl`. Browser-only.
+ * Every read is `getBytes` or `shelfHas`, both through `readUrl`. Browser-only.
  */
 import { bookPath, imagePath, pictureCandidates, type ShelfConfig } from '@core/sync'
 import { digestOf, getBytes, shelfDirFor, shelfHas } from './shelf'
@@ -55,27 +55,29 @@ export async function fetchBookPictures(
 
 /**
  * The name to keep for a picture this device holds, when the shelf already has
- * it where the book names it; null when it has to be uploaded.
+ * it; null when it has to be uploaded.
  *
  * A save uploads each held picture unless the shelf has it, and `pushImage`
  * looks only at the top of the shelf. Once a book opened from the shelf held
  * its pictures, the first save would have copied every one that sits beside
  * its book to the top as well: each plate twice in git history, for good. A
- * picture's name is its own digest, so a name that matches the bytes names
- * this very picture, and if it is found where the rule looks, nothing is sent.
+ * picture's name is its own digest (`imagePath`), so it is looked for under
+ * that name where the rule looks, beside the book and then at the top, and if
+ * it is found, nothing is sent. Asked by name rather than by what the shelf's
+ * copy of the book says, so a save whose read of that copy failed does not
+ * start the duplicate either.
+ *
+ * `bookFile` is the book's shelf path, resolved once per save.
  */
 export async function keptPicture(
   config: ShelfConfig,
-  key: string,
-  named: string | undefined,
+  bookFile: string,
   bytes: Uint8Array
 ): Promise<string | null> {
-  if (!named) return null
   const copy = new Uint8Array(bytes)
-  if (named !== imagePath(await digestOf(copy.buffer as ArrayBuffer))) return null
-  const book = bookPath(key, await shelfDirFor(config, key))
-  for (const at of pictureCandidates(book, named)) {
-    if (await shelfHas(config, at)) return named
+  const name = imagePath(await digestOf(copy.buffer as ArrayBuffer))
+  for (const at of pictureCandidates(bookFile, name)) {
+    if (await shelfHas(config, at)) return name
   }
   return null
 }
