@@ -80,15 +80,58 @@ did not raise the findings.
 11. **Keep the ledger.** For the sense pass and every check: raised, confirmed,
     refuted. If few findings survive the pixels, tighten or drop the pass; a
     check nobody scores manufactures confidence.
-12. **Record the results** of the list below in `ledger.md` under a dated
-    heading, each passed, failed or NOT CHECKED with its reason.
+12. **Record the results**: run `node scripts/readiness.mjs <book-dir>` (below).
+    Its report, `readiness.md` beside the book, names every check in the list
+    as passed, failed, needs a person or NOT CHECKED with its reason. Note the
+    verdict and the date under a dated heading in `ledger.md`.
 
 ## Checks that must pass: the full list for "checked" and "ready to upload"
 
 This is the only copy of the list: [export.md](./export.md) and
-[upload.md](./upload.md) point here, and the readiness command (task 1 of the
-[cleanup plan](../cleanup-plan.md)) is built from it. "(proposed check)" means nothing automates it yet: it counts as
-NOT CHECKED unless done by hand and recorded.
+[upload.md](./upload.md) point here, and the readiness command is built from
+it (`src/core/coherence/readiness.ts` holds the same list, item for item).
+
+```bash
+node scripts/readiness.mjs <shelf>/books/<book>                     # "checked": C1 to C12
+node scripts/readiness.mjs <shelf>/books/<book> --interior <file> \
+  --softcover <file> --hardcover <file> --epub <file>               # "ready to upload": and R1 to R11
+```
+
+Each file is a local path, a storage key, or the path it had on the shelf
+(`STORAGE.tsv` gives its key); keys are fetched into a scratch folder outside
+both repositories, and each file's SHA-256 goes in the report. It runs every
+command below and reads its exit code and output; the driver's checks run only
+when `drive.mjs serve` is up with the book open, and are NOT CHECKED otherwise.
+`--export-report <proof.json>` gives R2 and R3 the saved output of the
+`proof` run that wrote the interior; `--witness <w.json>` gives C6 its italic
+witness. It writes `readiness.md` beside the book (never into this
+repository), prints the verdict, and exits 0 only when the stage asked for is
+reached: _checked_ when every C item passed or was signed off, _ready to
+upload_ when every C and R item did. Anything NOT CHECKED or FAILED blocks the
+stage. Read the report out to the owner with the verdict; never say "ready"
+without it.
+
+"(proposed check)" means nothing automates it yet: the readiness command
+reports it as NEEDS A PERSON, and it counts only when done by hand and signed
+off.
+
+**Signing off a check a person does.** An item marked NEEDS A PERSON (the
+spelling sheet, pages looked at, a list of findings to read) counts only once
+`ledger.md` has a line in this form, above "By the numbers" (which
+`book-files.mjs` rebuilds), best under a `## Readiness sign-offs` heading:
+
+```
+Signed off: R1 <sha256 of the file> 2026-11-19 the owner read the spelling sheet; every word kept or corrected
+```
+
+The check, the full SHA-256 the report prints beside the item (the upload
+file for R items, `book.json` for C items; both covers for R7 and R10), the
+day it was done, and who did it and what was decided. The report gives each
+item its line with the fingerprint filled in. A sign-off counts only for that
+exact file: a new export or a new save of the book needs a new line. The
+person who did the reading writes it, or says so and the session writes it;
+a session never signs off a reading it did not see done. A FAILED or NOT
+CHECKED item cannot be signed off.
 
 **For "checked"**, on the book as it stands on the shelf:
 
@@ -112,6 +155,9 @@ NOT CHECKED unless done by hand and recorded.
   Exists; exit code.
 - **C8 Readable files in step.** `node scripts/book-files.mjs <book-dir> --check`
   and `node scripts/drive.mjs corrections <book-dir> --check`. Exists; exit code.
+  The readiness command runs the first with `--body` (the body from
+  `scripts/body-of.ts`), which checks the entries of `corrections.md` by the
+  same derivation, so this item needs no driver.
 - **C9 Same apparatus as the last comparable book.**
   `node scripts/book-files.mjs --shelf <shelf>/books/`. Exists; read the row.
 - **C10 Editor's prose audited** (hedges, dismissals, banned phrasing, reading
@@ -119,11 +165,15 @@ NOT CHECKED unless done by hand and recorded.
   `node scripts/voice.mjs audit <book.json> --name "Etsu T. Dhent" --shelf <shelf>`.
   Exists; exit code; `finish` does not run it.
 - **C11 No working notes in the text**, such as "(delete)".
-  `jq -r '.run.edits[] | select(.kind=="section" or .kind=="note") | .text' <book.json> | grep -noE '\([a-z]+\)'`
-  and `grep -noE '\([a-z]+\)' <book-dir>/*.md`, every hit read. (proposed check); by hand today.
+  Every lower-case `(word)` in section and note text and in the book folder's
+  `.md` sheets (the readiness report's own excepted). Run by the readiness
+  command: a working-note word ("(delete)", "(check)", "(TK)" and the rest of
+  `WORKING_NOTE_WORDS`) fails; list marks such as "(a)" and "(iv)" and "(sic)"
+  are not counted; every other hit goes to a person to read.
 - **C12 Italic and bold survived every sweep.** Per block, count `<i>`, `<b>`
-  and `<sc>` in `pristine` and `edited` from `node scripts/drive.mjs body out.json`.
-  (proposed check); by hand today.
+  and `<sc>` in `pristine` and `edited` of the assembled body (`scripts/body-of.ts`,
+  the same body `drive.mjs body` gives). Run by the readiness command; a block
+  that lost any goes to a person, because a correction can mean it.
 
 **For "ready to upload"**, on the exact files going to KDP:
 
@@ -141,12 +191,17 @@ NOT CHECKED unless done by hand and recorded.
 - **R5 PDF made from this book file, with no markup in it.**
   `git log -1 --format=%h -- <book-dir>/book.json` and the same for the PDF
   name the same commit; `pdftotext <interior.pdf> - | grep -cE '</?(i|b|sc)>'`
-  prints 0. (proposed check); by hand today.
+  prints 0. Run by the readiness command: markup fails; the commit that holds
+  this exact PDF (found through `STORAGE.tsv` and git), or failing that the
+  date the PDF gives, is compared with the last change to `book.json`, and a
+  later change goes to a person, because many changes never print.
 - **R6 Text copies out of the PDF.** `pdftotext -layout <interior.pdf> - | less`
   reads as words. By hand.
 - **R7 Covers made for this interior.** `pdfinfo <interior.pdf> | grep Pages`
   equals `pageCount` in `covers/softcover.json` and `covers/hardcover.json`,
-  and the `-flat` PDFs were made after the last recut. (proposed check); by hand today.
+  and the `-flat` PDFs were made after the last recut. Run by the readiness
+  command: a different count fails, a cover that is not the `-flat` copy
+  fails, and a flat copy older than the last change to its spec fails.
 - **R8 Pages looked at.** `node scripts/drive.mjs proof <n> <n> … "answers=<book.json>"`:
   title page, contents, a chapter opening, a page with a note, a picture page,
   a blank verso. By hand.
@@ -155,7 +210,8 @@ NOT CHECKED unless done by hand and recorded.
 - **R10 Listing matches the cover**: title with its label, subtitle, author
   ([upload.md](./upload.md)). By hand.
 - **R11 Every EPUB picture described.** `scripts/epub-of.ts` names none
-  without a caption or a description. Exists; read.
+  without a caption or a description. The readiness command reads the EPUB
+  being uploaded itself and fails any picture with no description (alt text).
 
 ## What it produces and where it goes
 
@@ -174,3 +230,4 @@ readable files and push in one commit ([sessions.md](./sessions.md)).
 - Never sweep with `--now` before reading every hit.
 - Never tune a check to make a book pass; record what it misses instead.
 - Never call a book checked with an item above unrun; name it NOT CHECKED.
+- Never sign off a check in `ledger.md` that the person did not do.

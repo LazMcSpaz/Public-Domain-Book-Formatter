@@ -100,6 +100,14 @@ else await send(verb, rest)
 // command and wrote its output with nobody waiting. A verb here takes as long
 // as it takes; only a refused connection means the driver is not running.
 async function send(verb, args) {
+  // Said by the client, so it is said even by a `serve` started before this
+  // line existed: a green `finish` was read as "ready" before.
+  if (verb === 'finish') {
+    console.error(
+      'This is not the readiness check: "checked" and "ready to upload" come only from ' +
+        '`node scripts/readiness.mjs <book-dir>`.'
+    )
+  }
   const { request } = await import('node:http')
   const body = JSON.stringify({ verb, args })
   const { status, text } = await new Promise((done, fail) => {

@@ -17,7 +17,7 @@ A plain-English map of this repository: what each folder is for and who may use 
 - `adjudicate/`: a second look at the places the checks flagged.
 - `annotate/`: the editor's own notes and introduction, in the editor's voice, and the prose audit.
 - `assemble/`: pages joined into one book: page seams, hyphens, footnotes linked.
-- `coherence/`: checks that read the whole book against itself (damage, spelling, page turns, apparatus, emphasis).
+- `coherence/`: checks that read the whole book against itself (damage, spelling, page turns, apparatus, emphasis), and the readiness list with its verdict.
 - `control/`: the protocol the driver uses to operate the app from outside.
 - `design/`: the design interview: a few questions produce a full style.
 - `draft/`: the free reading: OCR words shaped into a page's blocks.

@@ -25,11 +25,22 @@ handles keys on his behalf.
 
 ## Steps
 
-1. **Name the exact files**: their paths on the shelf, the commit, and
-   `sha256sum` of each. Every check below runs on these files and no others.
-   A check run on an earlier export proves nothing about this one.
-2. **Run the readiness list** below, items C1 to C12 (if anything changed
-   since the book was checked) and R1 to R11.
+1. **Name the exact files**: the interior PDF, the two `-flat` cover PDFs and
+   the EPUB, each by its path, its storage key, or the path it had on the
+   shelf. Every check below runs on these files and no others. A check run on
+   an earlier export proves nothing about this one.
+2. **Run the readiness command** on them, which runs the whole list, C1 to C12
+   and R1 to R11, and records each file's SHA-256:
+
+   ```bash
+   node scripts/readiness.mjs <shelf>/books/<book> --interior <file> \
+     --softcover <file> --hardcover <file> --epub <file> [--export-report proof.json]
+   ```
+
+   Start the driver with the book loaded first, or its checks come back NOT
+   CHECKED. What it does and how a person's check is signed off:
+   [checking.md](checking.md#checks-that-must-pass-the-full-list-for-checked-and-ready-to-upload).
+
 3. **Read the spelling sheet word by word** (R1). It is the check KDP's own
    spell-check runs on the interior; it reads the exported file itself, so it
    holds every part that prints, contents and front matter included. A word
@@ -72,11 +83,14 @@ handles keys on his behalf.
    Ask the owner about territories and KDP's question on AI-generated content
    until each book's card records them (planned).
 
-6. **Write the readiness report** in the book's `ledger.md`, dated: the files
-   and their hashes, each check passed, failed or NOT CHECKED with its reason,
-   and the verdict. Give the owner the same report.
-7. **Only then say "ready to upload"**, and only if every item passed or the
-   owner, told exactly what was not checked, says to go ahead.
+6. **Run the readiness command again** once the sheets are read and signed
+   off in `ledger.md`. It writes `readiness.md` beside the book: the files and
+   their fingerprints, each check passed, failed, needs a person or NOT
+   CHECKED with its reason, and the verdict. Note the verdict and date in the
+   ledger and give the owner the report.
+7. **Only then say "ready to upload"**, and only if the report's verdict says
+   so. If the owner, told exactly what was not checked, says to go ahead
+   anyway, record his words in the ledger; the report still says what it says.
 8. **After he uploads**, record what went up (date, files, commit, hashes) in
    the ledger and update the book's entry in `KDP-listings.md`. (A permanent
    release per edition, tagged with the book's ID, is planned.)
@@ -102,8 +116,9 @@ The full list lives in one place, so the three documents cannot disagree: [check
 ## What it produces and where it goes
 
 The flattened covers beside their specs in the book's `covers/` folder; the
-listing in `KDP-listings.md` on the shelf; the dated readiness report and the
-record of what was uploaded in `ledger.md`.
+listing in `KDP-listings.md` on the shelf; `readiness.md` and the sheets it
+names (`readiness-*.md`) beside the book; the sign-offs and the record of what
+was uploaded in `ledger.md`.
 
 ## After the upload: retire the working files
 
@@ -128,8 +143,8 @@ Never delete a scan, a reference copy, an uploaded file, the book file or a hand
 
 ## Never
 
-- Never call a book ready to upload unless every readiness check ran on the
-  exact files being uploaded; name anything not checked.
+- Never call a book ready to upload unless `node scripts/readiness.mjs` says
+  so on the exact files being uploaded; name anything not checked.
 - Never upload, pay, or enter credentials on the owner's behalf.
 - Never upload a composed cover; upload the `-flat` copy made after the last
   recut.

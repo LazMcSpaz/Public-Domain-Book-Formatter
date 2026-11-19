@@ -58,9 +58,10 @@ They cover the reading, the ledger, the shape, the queries, the readable files,
 glossary marks and conversion damage. They do not run page turns, coverage,
 the apparatus checks, the spelling check on the exported file, the unprintable
 characters report or any check on the covers. A green `finish` says nothing
-about those. One command that runs the whole list on the exact files and
-writes a dated report is task 1 of the [cleanup plan](../cleanup-plan.md);
-until it exists, the lists are run by hand, command by command.
+about those. The command that runs the whole list on the exact files and
+writes a dated report is `node scripts/readiness.mjs <book-dir>`
+([checking.md](./checking.md#checks-that-must-pass-the-full-list-for-checked-and-ready-to-upload));
+its verdict is the only one to give the owner.
 
 ## The rule about reporting
 
@@ -69,37 +70,28 @@ results.** This is the owner's biggest frustration so far: books called done
 that turned out to have a dictionary check never run, or OCR breaks left at
 page turns.
 
-So every report of a book's state lists each check by name with one of three
-results:
+So every report of a book's state lists each check by name with one of four
+results, as the readiness command writes them:
 
 - **passed**, with the date and the file it ran on;
 - **failed**, with what it found and what is being done;
+- **needs a person**, with the sheet or the instructions, and whether it is
+  signed off;
 - **NOT CHECKED**, with the reason (it does not apply to this shape, the tool
   for it does not exist yet, it was not run).
 
-A check marked "(proposed check)" in these documents is not automated. It
-counts as NOT CHECKED unless someone did it by hand and recorded how; then
-report it as "passed, checked by hand". Anything that did not run is named NOT
-CHECKED, out loud. A book with any NOT CHECKED item is not called checked or
-ready to upload unless the owner, told exactly what was not checked, says to
-go ahead.
+A check marked "(proposed check)" in these documents is not automated. The
+readiness command reports it, with every check a person must do, as NEEDS A
+PERSON; it counts only once the person has done it and it is signed off in
+`ledger.md` by the line [checking.md](./checking.md) gives. Anything that did
+not run is NOT CHECKED, out loud, and blocks the stage. A book with any NOT
+CHECKED or FAILED item is not called checked or ready to upload unless the
+owner, told exactly what was not checked, says to go ahead.
 
-A report looks like this (an invented example):
-
-```
-<Title>: readiness, 2026-11-20
-Interior: books/<dir>/<Title>.pdf (commit abc1234)
-  C1  damage --check ................. passed
-  C3  page turns ..................... passed (2 findings cropped, both as printed)
-  C4  coverage ....................... NOT CHECKED: no second reading on the shelf
-  R1  spelling on the interior ....... passed: sheet read, 4 words fixed
-  R7  cover page count ............... failed: covers made for 212 pages, interior 216
-Not ready to upload: R7 failed, C4 not checked.
-```
-
-Record the same lines in the book's `ledger.md` under a dated heading. (A
-dated check sheet per role, `review/checks/<date>-<role>.md`, is planned once
-the shelf is reorganised.)
+The report is `readiness.md`, written beside the book by the command: the
+files and their fingerprints, one row per check with its result and what it
+found, the details, and the verdict. Note the verdict and the date in the
+book's `ledger.md` under a dated heading.
 
 The stories behind these rules, the faults that cost real time on real books,
 are kept in `docs/archive/CLAUDE-pre-harness.md`. They are history, not

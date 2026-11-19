@@ -8,7 +8,28 @@ table).
 
 ## Before calling a book checked or ready to upload
 
-The full list of checks, C1 to C12 for _checked_ and R1 to R11 for _ready to upload_, with each command, lives in one place: [process/checking.md](../process/checking.md#checks-that-must-pass-the-full-list-for-checked-and-ready-to-upload). Run every item for the stage on the exact files that go to KDP and report each result; anything not run is NOT CHECKED. A book is not ready because one check passed, and `drive.mjs finish` covers only part of the list. The commands below marked [before upload] are the ones that list uses.
+The full list of checks, C1 to C12 for _checked_ and R1 to R11 for _ready to upload_, with each command, lives in one place: [process/checking.md](../process/checking.md#checks-that-must-pass-the-full-list-for-checked-and-ready-to-upload). One command runs it:
+
+- `node scripts/readiness.mjs <book-dir>`: runs every check for _checked_
+  (C1 to C12) and writes `readiness.md` beside the book: each check PASSED,
+  FAILED, NEEDS A PERSON or NOT CHECKED with its reason, and the verdict
+  (_checked_, _ready to upload_ or _not ready_). Exits 0 only when the stage
+  asked for is reached. With `--interior <file> --softcover <file>
+--hardcover <file> --epub <file>` it runs R1 to R11 too, on those exact files
+  (`--stage ready` is then the default); each is a local path, a storage key,
+  or the path it had on the shelf, and a key is fetched into a scratch folder
+  outside both repositories (`--scratch <dir>` to choose it). Each file's
+  SHA-256 goes in the report. `--export-report <proof.json>` hands R2 and R3
+  the saved output of the `drive.mjs proof` run that wrote the interior;
+  `--witness <w.json>` hands C6 an italic witness; `--out <file>` writes the
+  report elsewhere (never inside this repository, which it refuses). The
+  driver's checks (C1, C5, C7, and R2 and R3 without a saved report) run only
+  when `drive.mjs serve` is up with this book open. A check a person must do
+  counts once `ledger.md` signs it off: `Signed off: <check> <sha256> <date>
+<who, and what>` (the report prints each line ready to fill in).
+  **[before upload]**
+
+Never report a book checked or ready to upload without this report's verdict. `drive.mjs finish` and `book-files.mjs --finish` cover only part of the list and say so when run. The commands below marked [before upload] are the ones the list uses.
 
 ## Things to know before using the driver
 
@@ -318,11 +339,12 @@ The PDF export (`drive.mjs proof`) and cover flattening
   of `corrections.md` too. **[before upload]**
 - `node scripts/drive.mjs finish <book-dir>`: the "done" list from the driver:
   `book-files.mjs --finish` plus glossary marks, rulings not yet applied, and
-  conversion damage. Exits with an error naming what is owed. See the top of
-  this file for what it does not cover. **[before upload]**
-- `node scripts/book-files.mjs <book-dir> --finish`: every condition for
-  "done", named, with an error exit. Change this list when the definition of
-  finished changes. **[before upload]**
+  conversion damage. Exits with an error naming what is owed. It is item C7
+  of the readiness list, not the readiness check, and prints a line saying so.
+  **[before upload]**
+- `node scripts/book-files.mjs <book-dir> --finish`: the reading, ledger,
+  shape, queries and readable files named, with an error exit. Not the
+  readiness check either, and it says so. **[before upload]**
 - `node scripts/book-files.mjs --shelf books/`: one row per book: what each
   has and what it is missing. Answers "has this book got what the last one
   got?"

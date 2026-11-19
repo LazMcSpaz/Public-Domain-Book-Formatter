@@ -93,3 +93,44 @@ export {
   type SpellingSuspect
 } from './spelling'
 export { exportPages, type ExportVocabulary } from './export-text'
+export {
+  READINESS_CHECKS,
+  readinessCheck,
+  combineResults,
+  notChecked,
+  everyCheck,
+  isSettled,
+  decideReadiness,
+  type ReadinessCheck,
+  type ReadinessStage,
+  type ReadinessOutcome,
+  type ReadinessVerdict,
+  type ReadinessSubject,
+  type ReadinessRunner,
+  type ReadinessDecision,
+  type CheckResult,
+  type SignOff
+} from './readiness'
+export {
+  parseSignOffs,
+  applySignOffs,
+  signOffLine,
+  SIGN_OFF_FORM,
+  type SignOffReading
+} from './readiness-signoff'
+export { readinessReport, type ReadinessFile, type ReadinessMeta } from './readiness-report'
+export {
+  workingNotes,
+  countMarkup,
+  emphasisSurvival,
+  coverCountsDisagree,
+  undescribedPictures,
+  WORKING_NOTE_WORDS,
+  type PlacedText,
+  type NoteHit,
+  type WorkingNotes,
+  type EmphasisLoss,
+  type EmphasisSurvival,
+  type CoverCount,
+  type PictureReport
+} from './readiness-scans'

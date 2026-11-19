@@ -438,6 +438,11 @@ if (hadLedger === null) {
  * is unambiguous: a check that runs gets followed and a sentence does not.
  */
 if (finish) {
+  // Said every time, because a green "finished" was read as "ready" before.
+  console.log(
+    'This is not the readiness check: "checked" and "ready to upload" come only from ' +
+      '`node scripts/readiness.mjs <book-dir>`.'
+  )
   const owed = []
   if (book.run?.complete !== true) owed.push('the reading is not marked complete')
   if (hadLedger === null) owed.push('there is no ledger.md')
