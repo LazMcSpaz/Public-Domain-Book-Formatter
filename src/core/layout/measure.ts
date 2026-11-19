@@ -22,6 +22,12 @@ export interface FontMetrics {
   descent: number
   /** The font's own recommended extra space between lines. Often zero. */
   lineGap: number
+  /**
+   * Height of the capitals above the baseline, from the font's own table.
+   * Optional: a measurer that cannot say leaves it out, and the engine then
+   * uses `ascent`, the nearest real figure it has, rather than a guess.
+   */
+  capHeight?: number
 }
 
 export interface TextMeasurer {
@@ -95,7 +101,8 @@ export function fixedWidthMeasurer(emRatio = 0.5): TextMeasurer {
     metrics: (_font, sizePt) => ({
       ascent: sizePt * 0.75,
       descent: sizePt * 0.25,
-      lineGap: 0
+      lineGap: 0,
+      capHeight: sizePt * 0.7
     }),
     // The fixed-width measurer stands in for a font it does not have, so it
     // reports the capability the engine's default path assumes: none.

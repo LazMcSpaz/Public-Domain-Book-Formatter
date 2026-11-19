@@ -25,7 +25,7 @@ Heading: the giant `drive.mjs` (about 7,800 lines) is to be split by responsibil
 - `voice.mjs`: the editor's voice card and the prose audit.
 - `resolve-ts.mjs`: lets plain Node load `src/core` (aliases, extensionless imports).
 - `storage.mjs`: big files into and out of the R2 bucket, checked by fingerprint; `lib/r2.mjs` makes the requests.
-- `lib/`: plain-Node helpers shared by scripts and tests (`ink.mjs` measures ink off a PNG; `book-pictures.mjs` finds the pictures a book names).
+- `lib/`: plain-Node helpers shared by scripts and tests (`ink.mjs` measures ink off a PNG; `book-pictures.mjs` finds the pictures a book names; `house-look.mjs` finds the shelf's house look).
 - `screenshot-flow.mjs`, `check-*.mjs`: the browser checks.
 
 ## Folder-specific rules and lessons

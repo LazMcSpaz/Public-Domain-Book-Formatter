@@ -5,6 +5,8 @@
  * `platform/browser/shelf`.
  */
 export {
+  DESIGN_ROOT,
+  HOUSE_LOOK_PATH,
   IMAGE_ROOT,
   MAX_SCAN_BYTES,
   SCAN_ROOT,
@@ -21,6 +23,7 @@ export {
   sheetRefusal,
   workFileRefusal,
   bookPath,
+  houseLookPath,
   imagePath,
   pictureCandidates,
   commitMessage,

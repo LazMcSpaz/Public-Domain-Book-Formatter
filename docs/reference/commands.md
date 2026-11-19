@@ -107,6 +107,9 @@ builds its own copy.
   answer a later lookup. This fault once lost the editor's rulings.
 - `npm run check:queue`: checks one click reads every unread scan on the
   (faked) shelf and that a stopped queue survives a reload.
+- `npm run check:house`: checks the design gate opens a book with no design
+  of its own in the (faked) shelf's house look, on 6×9 when it is short, and
+  leaves a book with a design of its own alone.
 
 ## Opening and reading a book
 
@@ -453,7 +456,9 @@ it is read from `CLOUDFLARE_API_TOKEN` (see
 These are used or mentioned by the commands above and have no entry of their
 own yet. All exist: `drive.mjs save` (writes the open run to `book.json`), `pairs`, `proof`
 (lays out the book; `proof pdf=<out.pdf>` writes the PDF export and names
-its SHA-256 as `pdfSha256`; reports unprintable characters), `querycrops`, `crops`, `card`, `shelf`, `section`,
+its SHA-256 as `pdfSha256`; reports unprintable characters; a book with no
+design answers of its own is laid out in the shelf's house look,
+`design/house-look.json`, and `designFrom` and `inherited` say so), `querycrops`, `crops`, `card`, `shelf`, `section`,
 `bare`, `query`, `truth` (the proofed text, leaf by leaf, as `truth.json` in
 the scratch folder); `scripts/flatten-cover.py <cover.pdf>
 <cover-flat.pdf>` (the cover copy KDP accepts);

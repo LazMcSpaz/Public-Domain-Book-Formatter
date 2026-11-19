@@ -289,10 +289,17 @@ export async function loadFonts(families: readonly string[]): Promise<FontTable>
       const face = faceFor(ref)
       if (!face) return { ascent: sizePt * 0.75, descent: sizePt * 0.25, lineGap: 0 }
       const scale = sizePt / face.font.unitsPerEm
+      // The capitals' height from the face's own table; a face whose table
+      // leaves it at zero is measured off its `H`, never guessed.
+      const capUnits =
+        face.font.capHeight > 0
+          ? face.font.capHeight
+          : (face.font.layout('H').glyphs[0]?.bbox.maxY ?? 0)
       return {
         ascent: face.font.ascent * scale,
         descent: Math.abs(face.font.descent) * scale,
-        lineGap: face.font.lineGap * scale
+        lineGap: face.font.lineGap * scale,
+        ...(capUnits > 0 ? { capHeight: capUnits * scale } : {})
       }
     },
 

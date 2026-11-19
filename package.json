@@ -26,7 +26,8 @@
     "check:proposals": "node scripts/check-proposals.mjs",
     "check:held": "node scripts/check-held.mjs",
     "check:cache": "node scripts/check-shelf-cache.mjs",
-    "check:queue": "node scripts/check-recon-queue.mjs"
+    "check:queue": "node scripts/check-recon-queue.mjs",
+    "check:house": "node scripts/check-house-look.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

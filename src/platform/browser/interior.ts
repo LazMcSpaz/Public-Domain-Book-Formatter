@@ -77,16 +77,38 @@ export interface InteriorOptions {
   images?: ReadonlyMap<string, Uint8Array>
 }
 
+/** Every face a profile sets type in. */
+function facesOf(profile: StyleProfile): string[] {
+  return [
+    profile.bodyFont,
+    profile.headingFont,
+    ...(profile.smallCapsFont ? [profile.smallCapsFont] : [])
+  ]
+}
+
+/**
+ * How many pages the interior runs to in `profile`: the same layout
+ * `renderInterior` makes, with no PDF written. What trim by length is decided on.
+ */
+export async function interiorPageCount(
+  doc: BookDocument,
+  profile: StyleProfile,
+  options: Pick<InteriorOptions, 'edition' | 'orphanNotes'>
+): Promise<number> {
+  const fonts = await fontTableFor(facesOf(profile))
+  return layoutWithToc(doc, profile, fonts, {
+    edition: options.edition,
+    hyphenate: englishHyphenator(),
+    orphanNotes: options.orphanNotes ?? 'omit'
+  }).pages.length
+}
+
 export async function renderInterior(
   doc: BookDocument,
   profile: StyleProfile,
   options: InteriorOptions
 ): Promise<Interior> {
-  const fonts = await fontTableFor([
-    profile.bodyFont,
-    profile.headingFont,
-    ...(profile.smallCapsFont ? [profile.smallCapsFont] : [])
-  ])
+  const fonts = await fontTableFor(facesOf(profile))
 
   // Two passes, so the contents page carries measured page numbers rather than
   // the original edition's — which describe a pagination this book no longer

@@ -24,6 +24,14 @@ field, and looks at the pages.
   depth (`contentsDepth`) from the original's own contents page, usually
   chapters only; the default lists every heading level, run-in sub-heads
   included.
+- **A new book starts from the house look** (`design/house-look.json` at the
+  top of the shelf; [the spec](../specs/house-look.md)). With no design answers
+  of its own, `proof` lays it out in the house look, on 6×9 if it prints under
+  100 pages at 7×10, and says so in `designFrom`; the report's `inherited` is
+  the answers it used. Once the owner approves the look, write them into the
+  book (`answers` with them as `"design"`, then `save`): the export needs
+  `designFrom: "the book file"`, and a book keeps its look when the house look
+  changes.
 
 ## Steps
 
@@ -35,8 +43,8 @@ field, and looks at the pages.
    faults were invisible in every summary and obvious on the page.
 2. **Export**:
    `node scripts/drive.mjs proof "answers=<book-dir>/book.json" "pdf=<book-dir>/<Name>.pdf"`
-   (give absolute paths). Without `answers=` the look comes from the browser
-   or the defaults, and the report says so in `designFrom`. Keep the report
+   (give absolute paths). Without `answers=` the look comes from the browser,
+   the house look or the defaults, and the report says so in `designFrom`. Keep the report
    (redirect it to a file outside the tools repository): it names the PDF's
    SHA-256 as `pdfSha256`, and the readiness command takes it with
    `--export-report` for R2 and R3 only when that matches the interior.

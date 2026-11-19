@@ -221,6 +221,7 @@ import { browserTransport } from '../platform/browser/transport'
 import { cropIllustrations, readSuppliedImage, retouchPng } from '../platform/browser/illustrations'
 import { renderPageToObjectUrl } from '../platform/browser/pdf'
 import { loadDefaultLook } from './Settings'
+import { useHouseLook } from './house-look'
 import { ExportResult } from './ExportResult'
 import { NoteReview } from './NoteReview'
 import { PreviewPane } from './PreviewPane'
@@ -791,6 +792,16 @@ export function App(): JSX.Element {
     () => (state.document ? applyEdits(state.document, edits) : null),
     [state.document, edits]
   )
+  // A book with no design of its own opens the design gate in the house look.
+  const houseNote = useHouseLook({
+    stepId: step.id,
+    fileKey: fileKeyRef.current,
+    state,
+    answers,
+    setAnswers,
+    document: correctedDocument,
+    edition: previewEdition
+  })
 
   // The detailed controls behind "anything you'd change?". They answer into the
   // design step like every other question, so they persist and travel with the
@@ -4695,6 +4706,7 @@ export function App(): JSX.Element {
         <div className="step-head">
           <h2>{step.title}</h2>
           <p>{step.blurb}</p>
+          {houseNote ? <p className="help">{houseNote}</p> : null}
         </div>
 
         {error ? <p className="err">{error}</p> : null}

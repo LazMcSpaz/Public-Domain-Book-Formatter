@@ -26,6 +26,7 @@
  */
 import { readJson, readJsonSync, readText, stripBom } from './lib/json-file.mjs'
 import { findBookPictures, findPicture, picturePlaces } from './lib/book-pictures.mjs'
+import { houseLookBeside } from './lib/house-look.mjs'
 import { tickRecon } from './lib/drive-ticker.mjs'
 import { reconReport, statusReport } from './lib/recon-report.mjs'
 import { chromium } from 'playwright'
@@ -1661,7 +1662,8 @@ async function serve() {
      * going to use — ornaments off, drop capitals off, running heads from a
      * different pair of answers. A proof of a different book. The design gate's
      * answers travel in the book file, so `appliedLook` rebuilds exactly what
-     * the export gate would build from them.
+     * the export gate would build from them. A book with none inherits the
+     * house look from the top of its shelf (`renderInLook`), and says so.
      *
      * An argument with an `=` in it is a **tweak on top**, in the same ids the
      * gate's "anything you'd change?" panel uses: `proof 40 dropCap=true
@@ -1690,6 +1692,10 @@ async function serve() {
       if (answersFrom) {
         fromFile = (await readJson(resolve(REPO, answersFrom))).answers ?? {}
       }
+      // A book with no design answers of its own inherits the house look,
+      // kept at the top of the shelf its book file sits on.
+      const lookFrom = answersFrom ? resolve(REPO, answersFrom) : (await currentBookFile()).file
+      const house = lookFrom ? houseLookBeside(lookFrom, await askShelfMap('houseLookPath')) : null
       const tweaks = Object.fromEntries(
         wanted
           .filter((a) => a.includes('=') && !a.startsWith('pdf=') && !a.startsWith('answers='))
@@ -1700,12 +1706,11 @@ async function serve() {
           })
       )
       const result = await page.evaluate(
-        async ([repo, pageNumbers, tweaks, wantPdf, fromFile]) => {
+        async ([repo, pageNumbers, tweaks, wantPdf, fromFile, house]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
           const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
           const wizard = await import(`/@fs${repo}/src/core/wizard/index.ts`)
-          const interior = await import(`/@fs${repo}/src/platform/browser/interior.ts`)
 
           const newest = await window.__pdbfPickBook(runStore)
           const run = await runStore.loadRun(newest.key)
@@ -1738,16 +1743,15 @@ async function serve() {
           const images = new Map((run.images ?? []).map((i) => [i.id, i.bytes]))
           // The same call the design gate and the export make, off the answers
           // the book carries — so a look that proofs here is the look that
-          // prints.
-          const answers = { ...saved.design, ...tweaks }
-          const profile = wizard.appliedLook(
-            { ...wizard.initialState(), styleProfiles: [] },
-            answers
-          ).style
-          const built = await interior.renderInterior(doc, profile, {
-            edition,
-            orphanNotes: 'collect',
-            images
+          // prints. With none, the house look (`renderInLook`).
+          const looks = await import(`/@fs${repo}/src/platform/browser/house-look.ts`)
+          const { built, profile, from, design, houseLine } = await looks.renderInLook(doc, {
+            own: saved.design,
+            house: house ? looks.readHouseLook(house.path, house.text) : null,
+            tweaks,
+            profileOf: (d) =>
+              wizard.appliedLook({ ...wizard.initialState(), styleProfiles: [] }, d).style,
+            options: { edition, orphanNotes: 'collect', images }
           })
 
           const shots = []
@@ -1810,11 +1814,17 @@ async function serve() {
             bytes: built.bytes.length,
             // Never silent about this. A book proofed with the defaults looks
             // finished and is not the book.
-            designFrom: fromFile
-              ? 'the book file'
-              : stored
-                ? 'this browser'
-                : 'DEFAULTS — this device has no design answers for this book',
+            designFrom:
+              from === 'book'
+                ? fromFile
+                  ? 'the book file'
+                  : 'this browser'
+                : from === 'house'
+                  ? houseLine
+                  : `DEFAULTS — no design answers, and ${houseLine ?? 'no house look on the book file’s shelf'}`,
+            // Inherited, not yet the book's own: `answers` with these as
+            // `design`, then `save`, keeps them in the book file.
+            ...(from === 'house' ? { inherited: design } : {}),
             // Base64 rather than an array of numbers: a three-hundred-page
             // book is megabytes, and a JSON array of bytes is four characters
             // for each of them.
@@ -1826,7 +1836,7 @@ async function serve() {
             shots
           }
         },
-        [REPO, shots, tweaks, pdfOut !== null, fromFile]
+        [REPO, shots, tweaks, pdfOut !== null, fromFile, house]
       )
       const { writeFile } = await import('node:fs/promises')
       const wrote = []

@@ -21,6 +21,7 @@ Heading: `App.tsx` (about 5,700 lines) is to be split along clear responsibiliti
 - `BookEditor.tsx`, `BookReader.tsx`: the galley ("Edit the book") and the reading view ("Read the book").
 - `passages.ts`, `dom-offsets.ts`: the column both views build, and DOM to text offsets.
 - `PageBrowser.tsx`, `PreviewPane.tsx`: pages of the finished PDF, rendered from its bytes.
+- `house-look.ts`: `useHouseLook`, the design gate opened in the shelf's house look for a book with no design.
 - `main.tsx`: the entry; the `#preview` route (`DevPreview.tsx`) is dev-only.
 
 ## Folder-specific rules and lessons

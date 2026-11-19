@@ -20,6 +20,8 @@ Heading: `paginate.ts` (about 4,800 lines) is to be split along clear responsibi
 - `footnotes.ts`: `prepareFootnotes`, finding reference marks and pairing them with notes.
 - `measure.ts`: `TextMeasurer`, `cachedMeasurer`, and `fixedWidthMeasurer` for tests.
 - `frames.ts`: `frameFor`, page geometry and `RUNNING_HEAD_RISE`.
+- `furniture.ts`: the running head's face and the page number's place (`folioMirrorsHead` mirrors the head's cap height).
+- `runts.ts`: no scrap at the end of a paragraph (`avoidShortLastLines`).
 - `toc.ts`, `contents-pages.ts`, `contents-split.ts`: the contents, laid out twice so its numbers are measured.
 - `types.ts`: what a laid-out page is made of (points, origin top left).
 

@@ -151,6 +151,8 @@ export function normalizeStyleProfile(raw: unknown): StyleProfile {
     quoteIndentEms: inset(raw['quoteIndentEms'], d.quoteIndentEms),
     smallCapsFont:
       typeof raw['smallCapsFont'] === 'string' ? (raw['smallCapsFont'] as string) : d.smallCapsFont,
+    folioMirrorsHead: bool(raw['folioMirrorsHead'], d.folioMirrorsHead),
+    avoidShortLastLines: bool(raw['avoidShortLastLines'], d.avoidShortLastLines),
     ornaments: {
       chapterOpener:
         typeof rawOrn['chapterOpener'] === 'string' ? (rawOrn['chapterOpener'] as string) : null,
@@ -190,6 +192,10 @@ export function mergeStyle(base: StyleProfile, patch: Partial<StyleProfile>): St
   if (patch.sideHeadsFrom !== undefined) next.sideHeadsFrom = patch.sideHeadsFrom
   if (patch.quoteIndentEms !== undefined) next.quoteIndentEms = patch.quoteIndentEms
   if (patch.smallCapsFont !== undefined) next.smallCapsFont = patch.smallCapsFont
+  if (patch.folioMirrorsHead !== undefined) next.folioMirrorsHead = patch.folioMirrorsHead
+  if (patch.avoidShortLastLines !== undefined) {
+    next.avoidShortLastLines = patch.avoidShortLastLines
+  }
   if (patch.paragraphIndentEms !== undefined) next.paragraphIndentEms = patch.paragraphIndentEms
   if (patch.paragraphSpacingEms !== undefined) next.paragraphSpacingEms = patch.paragraphSpacingEms
   if (patch.hyphenate !== undefined) next.hyphenate = patch.hyphenate

@@ -20,3 +20,20 @@ export {
   type StyleQuestionOptions
 } from './editable'
 export { familyStack, readingStyle, type ReadingStyle } from './reading'
+export {
+  DEFAULT_SHORT_BOOK,
+  HOUSE_LOOK_VERSION,
+  HOUSE_TRIM,
+  SHORT_BOOK_PAGES,
+  SHORT_BOOK_TRIM,
+  hasOwnDesign,
+  houseDesignFor,
+  houseLookLine,
+  inheritDesign,
+  isShortBook,
+  parseHouseLook,
+  trimForLength,
+  type HouseLook,
+  type LookSource,
+  type ShortBookRule
+} from './house-look'

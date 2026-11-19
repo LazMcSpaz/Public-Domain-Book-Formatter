@@ -389,6 +389,19 @@ export interface StyleProfile {
    * sized to stand as tall as the text's lower case.
    */
   smallCapsFont: string
+  /**
+   * Set a bottom page number as far above the foot of the page as the running
+   * head's capitals sit below its top, so the two frame the page evenly.
+   * Margin furniture only: no line or page moves. Off keeps the old place,
+   * so a book already printed looks the same when it is exported again.
+   */
+  folioMirrorsHead: boolean
+  /**
+   * Never end a paragraph on a scrap: the line before the last is not
+   * hyphenated, and the last line is never shorter than a few letters. It
+   * changes line breaks, so it is off for every book set before it existed.
+   */
+  avoidShortLastLines: boolean
   ornaments: OrnamentChoices
   /** Front-matter visual toggles. */
   frontMatter: {

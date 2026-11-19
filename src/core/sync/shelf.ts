@@ -78,6 +78,18 @@ export const IMAGE_ROOT = 'images'
 export const VOICE_ROOT = 'voice'
 
 /**
+ * The press's own design, belonging to no book, so at the top like the voice:
+ * the house look a new book starts from (`@core/style` `parseHouseLook`).
+ */
+export const DESIGN_ROOT = 'design'
+export const HOUSE_LOOK_PATH = `${DESIGN_ROOT}/house-look.json`
+
+/** The house look's file, as a call the driver can ask the shelf map in the page. */
+export function houseLookPath(): string {
+  return HOUSE_LOOK_PATH
+}
+
+/**
  * The largest scan worth attempting.
  *
  * GitHub refuses a blob over 100 MB and warns past 50. The margin below 50 is

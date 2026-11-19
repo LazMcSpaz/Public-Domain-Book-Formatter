@@ -53,14 +53,9 @@ import {
 } from './footnotes'
 import { anchorIllustrations } from './illustrations'
 import { typographicQuotes, withTypographicQuotes } from './quotes'
-import {
-  bottomFolioBaseline,
-  frameFor,
-  leadingFor,
-  linesPerFrame,
-  runningHeadBaseline,
-  trimToPoints
-} from './frames'
+import { frameFor, leadingFor, linesPerFrame, runningHeadBaseline, trimToPoints } from './frames'
+import { FURNITURE_SIZE_RATIO, folioBaseline, furnitureFont } from './furniture'
+import { proseBreaks, runtRule, type RuntRule } from './runts'
 import type { TextMeasurer } from './measure'
 import { hangPunctuation } from './optical'
 import {
@@ -1099,7 +1094,7 @@ function keyLines(paragraphs: readonly string[], ctx: BuildContext): FlowLine[] 
       measurer: ctx.measurer,
       lineWidths: Math.max(1, ctx.measureWidth - hang),
       alignment: 'left',
-      ...(ctx.hyphenate ? { hyphenate: ctx.hyphenate } : {}),
+      ...proseBreaks(ctx),
       ...(spans.length > 0 ? { spans } : {})
     })
     const set = toFlowLines(broken, font, sizePt, [hang], undefined, undefined, spans)
@@ -1155,7 +1150,7 @@ function breakNote(note: PreparedNote, ctx: BuildContext): NoteBlock {
     measurer: ctx.measurer,
     lineWidths: Math.max(1, ctx.measureWidth - hang),
     alignment: 'left',
-    ...(ctx.hyphenate ? { hyphenate: ctx.hyphenate } : {}),
+    ...proseBreaks(ctx),
     ...(spans.length > 0 ? { spans } : {})
   })
 
@@ -1186,6 +1181,8 @@ interface BuildContext {
   /** Lines a page holds, so a table can be kept to one. */
   pageSlots?: number
   hyphenate?: (word: string) => string[]
+  /** Paragraphs never end on a scrap (`avoidShortLastLines`). */
+  runts?: RuntRule
 }
 
 /**
@@ -1578,9 +1575,7 @@ function buildFlowable(block: BookBlock, ctx: BuildContext, opts: FlowableOption
       alignment: opts.alignment ?? style.alignment,
       firstLineIndentPt: firstIndent,
       ...(attachments.length > 0 ? { attachments } : {}),
-      ...(block.kind === 'paragraph' || block.kind === 'blockquote'
-        ? { hyphenate: ctx.hyphenate }
-        : {}),
+      ...(block.kind === 'paragraph' || block.kind === 'blockquote' ? proseBreaks(ctx) : {}),
       ...(spans.length > 0 ? { spans } : {})
     })
     // A chapter opener may carry a flourish under its title. It belongs to the
@@ -1877,8 +1872,7 @@ function buildFigureFlowable(
   }
   const { ctx, font, sizePt, indentLeft, measure } = p
   const optical = ctx.profile.opticalMargins ? ctx.measurer : undefined
-  const hyphenate =
-    block.kind === 'paragraph' || block.kind === 'blockquote' ? ctx.hyphenate : undefined
+  const breaks = block.kind === 'paragraph' || block.kind === 'blockquote' ? proseBreaks(ctx) : {}
 
   const ratio =
     figure.sourceWidth > 0 && figure.sourceHeight > 0 ? figure.sourceHeight / figure.sourceWidth : 1
@@ -1894,7 +1888,7 @@ function buildFigureFlowable(
     lineWidths,
     alignment: p.style.alignment,
     firstLineIndentPt,
-    ...(hyphenate ? { hyphenate } : {})
+    ...breaks
   })
 
   const flow = (lines: FlowLine[]): Flowable => ({
@@ -2523,7 +2517,7 @@ function buildDropCapFlowable(
       lineWidths: widths,
       alignment: style.alignment,
       ...(attachments.length > 0 ? { attachments } : {}),
-      ...(ctx.hyphenate ? { hyphenate: ctx.hyphenate } : {})
+      ...proseBreaks(ctx)
     })
     const offsets = [...Array.from({ length: depth }, () => indentLeft + capWidth), indentLeft]
     return {
@@ -2638,6 +2632,7 @@ export function layout(
   ).ascent
   const slotsPerPage = Math.max(1, linesPerFrame(rectoFrame, leading, ascent))
 
+  const runts = runtRule(profile)
   const ctx: BuildContext = {
     profile,
     measurer,
@@ -2646,7 +2641,8 @@ export function layout(
     pageSlots: slotsPerPage,
     // The style has the final say: a hyphenator can be supplied and still
     // declined, which is what `hyphenate: false` on the profile means.
-    ...(options.hyphenate && profile.hyphenate ? { hyphenate: options.hyphenate } : {})
+    ...(options.hyphenate && profile.hyphenate ? { hyphenate: options.hyphenate } : {}),
+    ...(runts ? { runts } : {})
   }
 
   const pages: PageBuilder[] = []
@@ -3732,7 +3728,7 @@ function finishPage(
         baseline:
           profile.pageNumber === 'topOuter'
             ? runningHeadBaseline(profile)
-            : bottomFolioBaseline(profile),
+            : folioBaseline(profile, measurer),
         placement: profile.pageNumber === 'bottomCenter' ? 'center' : 'outer',
         frame
       })
@@ -3859,13 +3855,9 @@ function furnitureLine(
   // Real small capitals where the face has them; ordinary capitals where it
   // does not, exactly as a small-capped heading falls back. Never synthesised
   // by scaling capitals down — see `RunningHeadStyle`.
-  const realSmallCaps = style === 'smallCaps' && measurer.hasSmallCaps(profile.bodyFont)
-  const font: FontRef = {
-    family: profile.bodyFont,
-    style: style === 'italic' ? 'italic' : 'regular',
-    ...(realSmallCaps ? { smallCaps: true } : {})
-  }
-  const sizePt = profile.bodyFontSize * 0.85
+  const font = furnitureFont(profile, measurer, opts.head === true)
+  const realSmallCaps = font.smallCaps === true
+  const sizePt = profile.bodyFontSize * FURNITURE_SIZE_RATIO
   // `smcp` maps *lower case* to small capitals, so text bound for the real
   // feature is handed over as written and only the fallback is upper-cased.
   const set = style === 'smallCaps' && !realSmallCaps ? text.toLocaleUpperCase() : text

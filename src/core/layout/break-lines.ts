@@ -37,6 +37,7 @@ import {
 } from 'tex-linebreak'
 import patterns from 'hyphenation.en-us'
 import { GLYPH_FALLBACK_FAMILY, type TextMeasurer } from './measure'
+import { RUNT_TOLERANCE, endsOnRunt, withoutRunts, type RuntRule } from './runts'
 import type { FontRef } from './types'
 
 /** How a paragraph's lines are set within the measure. */
@@ -142,6 +143,11 @@ export interface BreakParagraphOptions {
    * glossary headword. First match wins, so the order is the caller's priority.
    */
   spans?: readonly TextSpan[]
+  /**
+   * Keep the paragraph from ending on a scrap (`./runts`), where that can be
+   * done within `RUNT_TOLERANCE`; otherwise it is set as before.
+   */
+  runts?: RuntRule
 }
 
 /** Word indices to set in `font` instead of the paragraph's own face. */
@@ -689,6 +695,39 @@ function chooseBreakpoints(items: InputItem[], lineWidths: number | number[]): n
 }
 
 /**
+ * The paragraph broken again without its runt (`./runts`), or null when it
+ * has none, none is asked for, or none can be had within `RUNT_TOLERANCE`: a
+ * short last line is better than a loose paragraph, so then it stays as it
+ * was. A paragraph with no runt is never touched, so the rule moves no line it
+ * does not have to.
+ */
+function runtFreeBreaks(
+  plain: InputItem[],
+  plainBreaks: number[],
+  options: BreakParagraphOptions
+): { items: InputItem[]; breakpoints: number[] } | null {
+  if (!options.runts) return null
+  const minPt = options.runts.minLastLineEms * options.sizePt
+  if (!endsOnRunt(plain, plainBreaks, minPt)) return null
+  const widths = options.lineWidths
+  const widest = typeof widths === 'number' ? widths : Math.max(0, ...widths)
+  // Both rules first; then the last line's length alone, so a scrap is still
+  // mended where only a hyphen on the line before cannot be avoided.
+  for (const finalHyphen of [widest, null]) {
+    const items = withoutRunts(plain, minPt, finalHyphen)
+    try {
+      const breakpoints = breakLines(items, padLineWidths(widths, items.length), {
+        maxAdjustmentRatio: RUNT_TOLERANCE
+      })
+      return { items, breakpoints }
+    } catch {
+      // Not to be had within the tolerance: try the gentler rule, then none.
+    }
+  }
+  return null
+}
+
+/**
  * Break a paragraph into positioned lines.
  *
  * Word positions come out of the same adjustment ratios the algorithm used to
@@ -698,9 +737,12 @@ function chooseBreakpoints(items: InputItem[], lineWidths: number | number[]): n
 export function breakParagraph(text: string, options: BreakParagraphOptions): BrokenLine[] {
   if (text.trim().length === 0) return []
 
-  const items = itemsFromText(text, options)
+  const plain = itemsFromText(text, options)
+  const plainBreaks = chooseBreakpoints(plain, padLineWidths(options.lineWidths, plain.length))
+  const ruled = runtFreeBreaks(plain, plainBreaks, options)
+  const items = ruled?.items ?? plain
   const lineWidths = padLineWidths(options.lineWidths, items.length)
-  const breakpoints = chooseBreakpoints(items, lineWidths)
+  const breakpoints = ruled?.breakpoints ?? plainBreaks
   const ratios = adjustmentRatios(items, lineWidths, breakpoints)
 
   const lines: BrokenLine[] = []

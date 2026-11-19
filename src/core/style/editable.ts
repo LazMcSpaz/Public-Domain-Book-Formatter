@@ -54,7 +54,7 @@ const TRIMS = [
 ]
 
 const BODY_SIZES = [9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13]
-const MARGIN_STEPS = [0.4, 0.5, 0.6, 0.75, 0.85, 1, 1.2]
+const MARGIN_STEPS = [0.4, 0.5, 0.6, 0.75, 0.85, 1, 1.125, 1.2]
 const GUTTER_STEPS = [0, 0.06, 0.13, 0.19, 0.25, 0.32]
 const HEADING_SCALES = [1.2, 1.4, 1.6, 1.8, 2]
 
@@ -269,6 +269,14 @@ export function styleQuestions(
       options: PAGE_NUMBER_POSITIONS.map((p) => ({ value: p, label: PAGE_NUMBER_LABELS[p] }))
     },
     {
+      id: 'folioMirrorsHead',
+      type: 'confirm',
+      prompt:
+        'Set a page number at the foot as far from the edge as the running head is at the top?',
+      help: 'The two then frame the page evenly. It moves only the number, never a line of text.',
+      defaultValue: profile.folioMirrorsHead
+    },
+    {
       id: 'dropCap',
       type: 'confirm',
       prompt: 'Open each chapter with a drop capital?',
@@ -390,6 +398,16 @@ export function styleQuestions(
         'On, justified text sets evenly. Off, it is honest about the measure and opens ' +
         'rivers of white space in narrow columns.',
       defaultValue: profile.hyphenate
+    },
+    {
+      id: 'avoidShortLastLines',
+      type: 'confirm',
+      prompt: 'Keep a paragraph from ending on a scrap of a word?',
+      help:
+        'No “pris-” at the end of one line with “on.” alone on the last. The line before ' +
+        'the last is not broken with a hyphen, and the last line holds more than a few ' +
+        'letters. It moves line breaks, so a book already printed keeps it off.',
+      defaultValue: profile.avoidShortLastLines
     },
     {
       id: 'opticalMargins',
@@ -540,6 +558,8 @@ export function applyStyleAnswers(profile: StyleProfile, answers: Answers): Styl
     smallCapsFont: ((v) => (v === SAME_FACE ? '' : v))(
       pick(answers, 'smallCapsFont', profile.smallCapsFont || SAME_FACE)
     ),
+    folioMirrorsHead: pickBool(answers, 'folioMirrorsHead', profile.folioMirrorsHead),
+    avoidShortLastLines: pickBool(answers, 'avoidShortLastLines', profile.avoidShortLastLines),
     ornaments: {
       chapterOpener: pickOrnament(answers, 'ornamentChapter', profile.ornaments.chapterOpener),
       sectionDivider: pickOrnament(answers, 'ornamentDivider', profile.ornaments.sectionDivider),
