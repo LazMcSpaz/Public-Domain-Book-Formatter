@@ -27,7 +27,14 @@ The design behind tasks 3 and 6 to 15 is the rebuild plan the owner approved on 
 
 **Verify:** `git status` in the tools repository is clean after the run; the tests; `harness/check.py`.
 
-## 1. One readiness check, run on the exact files that go to KDP
+## 1. One readiness check, run on the exact files that go to KDP (done 19 November 2026)
+
+**Done 19 November 2026** (commits 98cfc44 to 7e8f3d4). `node scripts/readiness.mjs <book-dir>` runs or owes every item C1 to C12 and R1 to R11 on the named files, writes a dated report beside the book and marks each check PASSED, FAILED, NEEDS A PERSON or NOT CHECKED; a person's check counts only with a `Signed off:` line in the ledger that names the file's fingerprint. Both finish commands say they are not it, and the root CLAUDE.md rule names it. First runs: _Thought Vibration_ is not ready (no covers or EPUB yet); _The Lost Keys of Masonry_ fails R7, because the flat covers on record predate the 25 October recut. Two reviews; every must-fix finding fixed. Follow-ups, none blocking:
+
+- No test pins the fingerprint that `save` records.
+- Driver edits not yet saved pass the comparison; the docs say to save first.
+- R3 passes an export report with no `unprintable` field, and R2 reads a missing `notesDropped` or `imagesDropped` as none.
+- C2 passes on the command's exit code alone.
 
 **Why (plain English).** Books were called done that were not fully checked: the dictionary check had not run, or page-turn breaks were left in. The only "finished" check (`book-files.mjs --finish`) looks at the reading and the queries and runs none of the checks on the file being uploaded, and `drive.mjs finish` runs only some of them.
 
