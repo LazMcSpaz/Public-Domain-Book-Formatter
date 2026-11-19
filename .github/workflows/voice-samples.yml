@@ -14,15 +14,14 @@ name: Voice samples
 # `kokoro-js` is installed here rather than in package.json: it drags
 # onnxruntime-node behind it, and every `npm ci` in CI would pay for it to run a
 # test suite that never speaks.
+#
+# On request only. Audiobooks are paused (owner's decision, 18 November 2026),
+# and this job commits to `main`, so it no longer runs on a push that touches
+# the renderer. It also fails to install today: the CUDA binaries
+# onnxruntime-node fetches return 404. When audiobooks resume, try
+# `--onnxruntime-node-install-cuda=skip` on the kokoro-js install, here and in
+# read-chapter.yml, and put the push trigger back.
 on:
-  # Also on a push that changes the renderer or the passages, because a sample
-  # set that does not follow the thing it is a sample of is worse than none.
-  push:
-    branches: [main]
-    paths:
-      - scripts/say.mjs
-      - scripts/voice-page.mjs
-      - .github/workflows/voice-samples.yml
   workflow_dispatch:
     inputs:
       voices:

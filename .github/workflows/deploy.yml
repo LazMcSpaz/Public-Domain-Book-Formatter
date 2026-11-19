@@ -18,14 +18,19 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: true
-
+# Concurrency is set on the jobs, not here. Set here, it was taken before the
+# `if` below was read, so a render that failed still cancelled the app's own
+# deploy and then published nothing: on 19 November 2026 a push that touched
+# `scripts/say.mjs` left the app undeployed. A skipped job takes no place in a
+# group, so it can no longer cancel anything.
 jobs:
   build:
     # A render that failed has nothing new to publish.
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    # A newer build makes an older one pointless.
+    concurrency:
+      group: pages-build
+      cancel-in-progress: true
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -44,6 +49,10 @@ jobs:
 
   deploy:
     needs: build
+    # Queued, never cancelled: one publish at a time, the newest landing last.
+    concurrency:
+      group: pages-deploy
+      cancel-in-progress: false
     runs-on: ubuntu-latest
     environment:
       name: github-pages
