@@ -355,6 +355,10 @@ export async function runRecon(
     }
   } finally {
     await engine?.dispose()
+    // pdf.js holds its own copy of the scan until the document is destroyed.
+    // Nothing returned refers to it, and a driver page that reads one book
+    // after another would otherwise keep a whole scan per reading.
+    await doc.destroy().catch(() => undefined)
   }
 }
 

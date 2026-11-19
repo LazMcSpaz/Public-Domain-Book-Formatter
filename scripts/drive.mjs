@@ -3327,7 +3327,8 @@ async function serve() {
           ofLeaves: built.leaves,
           ...(built.outside.length > 0 ? { notInTheReading: built.outside } : {}),
           boxes: 'pixels of the 300-DPI render; pages are the scan leaves, counted from 0',
-          next: `npx vite-node --config vitest.config.ts scripts/slant-witness.ts <scan.pdf> w.json --words ${out}`
+          // Beside the boxes, never in this public checkout: the witness quotes the book.
+          next: `npx vite-node --config vitest.config.ts scripts/slant-witness.ts <scan.pdf> ${resolve(dirname(out), 'w.json')} --words ${out}`
         }
       }
       const list = ns.map(Number)

@@ -57,6 +57,9 @@ __pycache__/
 /witness.json
 /second.json
 /cleantrial.json
+# The italic witness and the emphasis batch, named so in the docs' examples.
+/w.json
+/out.json
 
 # Isolated git worktrees that subagents build in. Each is a whole checkout;
 # its work reaches the repository as a pushed branch, never as these files.

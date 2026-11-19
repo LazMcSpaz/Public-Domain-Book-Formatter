@@ -183,7 +183,16 @@ Both finish commands defer to it.
 
 **Verify:** `harness/check.py`, the tests, and still-works steps 1–2.
 
-## 6. The tools learn the new shelf layout, and pictures are found
+## 6. The tools learn the new shelf layout, and pictures are found (the app's part done 19 November 2026)
+
+**The app's part done 19 November 2026** (merged in 14882ad; spec [specs/pictures-beside-the-book.md](specs/pictures-beside-the-book.md)). One rule in the core (`pictureCandidates`, reached through `src/core/sync/shelf.ts`) says where a picture a book names is looked for: beside the book, then at the top of the shelf. It refuses names that would leave the shelf or that a web address misreads. Both ways the app opens a book use it, so _The Lost Keys of Masonry_'s seven plates come down; a save keeps each picture where the shelf already has it instead of copying it to the top. Three review rounds; every must-fix finding fixed. The owner's run of still-works step 7 is still to come.
+
+Still to do in this task: the driver and the scripts ask the same rule (the driver's `load` already looks in both places, by its own code), and the readable sheets and other paths follow the one map. Follow-ups from the review:
+
+- Encode each path segment in `readUrl` (`src/platform/browser/shelf.ts`), so scan paths, crop paths and folder names read from book files are as safe as picture names.
+- On the read route, a picture that could not be fetched is noted in code but the reading screen does not show the note.
+- A test that the book's folder is looked up once per save; a save asks the top of the shelf twice for a new picture (efficiency only).
+- `scripts/screenshot-flow.mjs` is out of date (a removed wording at step 5g0, the shelf's old card selector), and the browser checks' default Chromium path does not exist in cloud sessions.
 
 **Why (plain English).** Today the app looks for a book's pictures at the top of the shelf while 151 of the 152 sit in the book's folder, so plates go missing. The rebuild moves files, so every tool must ask one map where things are.
 
@@ -349,7 +358,13 @@ After a few days of normal use following task 12.
 
 **Verify:** all checks, all tests, and every still-works step, before and after.
 
-## 17. A command that runs the free first reading (recon)
+## 17. A command that runs the free first reading (recon) (done 19 November 2026)
+
+**Done 19 November 2026** (merged in ba0070f; spec [specs/recon-verb.md](specs/recon-verb.md)). `drive.mjs recon` reads and caches the loaded book's free first reading, resuming a checkpoint, or loads a fitting `recon.json.gz` from beside the book; `--status` shows progress. `load` says whether a reading is cached. `transcribe` refuses leaves no finished reading covers unless given `--without-ocr-check`, and a book with no scan is not blocked. Run end to end by the builder and again by the reviewer, including a reading killed part way and resumed with no leaf read twice. Every recon-cache read now names the cleaning, so a future change of the default cannot delete a stored reading. A reading now frees its copy of the scan when it ends. Follow-ups from the review:
+
+- `src/platform/browser/recon-run.ts` (resume, the second-call guard, checkpoint order, `--fresh`) has no automated test; add a browser check like `check-recon-queue.mjs`.
+- `open` starts the app's own reading in the same page, which the guard does not cover; `open` then `recon` could run two readings at once.
+- `words --out` drops an output name that starts with a digit or `-`; a refused batch does not release the cached reading's object URLs; `load` says a `recon.json.gz` from another copy can be loaded (`recon` then rightly refuses it); the cleaning wiring test matches one spelling only.
 
 **Why (plain English).** `docs/process/reading.md` and `commands.md` say loading a book runs recon: the free OCR reading that every later cross-check compares against. On the _Goetia_ nothing started it, so every `transcribe` reported the OCR cross-check NOT CHECKED, and no verb exists to start it.
 
@@ -361,7 +376,9 @@ After a few days of normal use following task 12.
 
 **Verify:** a synthetic test book; the tests; still-works step 1.
 
-## 18. The italic witness works on a scan with no text layer
+## 18. The italic witness works on a scan with no text layer (done 19 November 2026)
+
+**Done 19 November 2026** (merged in ba0070f; spec [specs/italic-witness-boxes.md](specs/italic-witness-boxes.md)). `drive.mjs words --out` writes recon's word boxes in the form `slant-witness.ts --words` reads, checked against a text layer to the pixel. `slant-witness.ts` and `italic-witness.mjs` both exit with an error and write nothing when they measured no words. On a synthetic image-only scan the witness measured every word and found the italic. Its suggested output file now goes beside the boxes, and `w.json` is ignored by git in this checkout, because it quotes the book.
 
 **Why (plain English).** `slant-witness.ts` needs word boxes for a scan with no text layer, nothing in the tools produces them, and without them it reads nothing, writes an empty list and reports success. So italic, which the books rely on, was never checked on the _Goetia_.
 
