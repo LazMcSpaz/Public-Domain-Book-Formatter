@@ -6,7 +6,9 @@ Numbered tasks. **The numbers are names, not the order:** work them in the order
 
 The design behind tasks 3 and 6 to 15 is the rebuild plan the owner approved on 18 November 2026 (`REBUILD-PLAN.md` on the shelf). Still-works steps are numbered as in [still-works.md](still-works.md).
 
-## 0. Generated sheets never land in the tools repository
+## 0. Generated sheets never land in the tools repository (done 19 November 2026)
+
+**Done.** Every verb that writes a book sheet writes it beside the loaded `book.json` or refuses, a test pins the guard's wiring, and the reported shelf paths name the book's real folder. Still to do, under task 20: `body`, `truth`, `chunks`, `concordance`, `witness`, `second` and `cleantrial` write their working files to this checkout by default (they are ignored by git, so they cannot be committed by accident); they should default to a scratch folder or beside the book. `shelf push` still reports paths from the run key (task 6), and a sheet file that is itself a link into this repository is not caught.
 
 **Why (plain English).** On the first book run through the new setup (the 1904 _Goetia_), `drive.mjs queries` wrote `queries.md`, `review.md` and `rulings.md` into the root of this public repository, `damage` wrote `damage.md` there, and `save` after `propose` once left `proposals.md`. Those sheets quote the book, so one `git add -A` would publish private text. The shelf path the command reported was also wrong: a folder name built from the scan's path, not the book's real folder. Found and reported by the session that ran the book.
 
