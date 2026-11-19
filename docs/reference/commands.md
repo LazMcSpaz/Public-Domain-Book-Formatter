@@ -335,6 +335,34 @@ The PDF export (`drive.mjs proof`) and cover flattening
   `corrections.md` from the book as it stands, keeping the prose above them.
   `--check` writes nothing.
 
+## Storage
+
+Big files (scans, reference copies, exports, picture originals) live in the
+private Cloudflare R2 bucket `libri-vetus-files`, each named by its SHA-256
+fingerprint ([decision 0051](../decisions/0051-big-files-live-in-cloudflare-r2.md)).
+In a cloud session the key is added by the network; on the owner's computer
+it is read from `CLOUDFLARE_API_TOKEN` (see
+[sessions.md](../process/sessions.md#storage-key-on-your-own-computer)).
+
+- `node scripts/storage.mjs put <file> --kind <kind> --shelf <shelf>`: puts
+  a file in the bucket as `<kind>/<sha256>.<ext>` (refusing a `--shelf` or an output inside the tools repository) (kinds: `scans`, `sources`, `pictures`, `exports` for old exports not yet matched to an upload, and `editions/<book folder>/<edition>` for the exact files sent to KDP; a book folder keeps its capitals), skips the upload when that key is already
+  there at that size, then always fetches it back and checks the
+  fingerprint. With `--shelf` it adds a row to `STORAGE.tsv` at the shelf's
+  root (key, fingerprint, bytes, where it was on the shelf, date); `--from
+<path>` names where it was when that is not its path under the shelf.
+  Prints one line of JSON. Refuses files over 300 MB. Remove nothing from
+  the shelf until this has printed `"verified":true`.
+- `node scripts/storage.mjs get <key> <out>`: fetches a file back. A key
+  carrying a fingerprint is checked, and a download that does not match is
+  not kept. Refuses to overwrite a different file at `<out>`.
+- `node scripts/storage.mjs list [prefix]`: every key in the bucket with its
+  size, one per line (`list sources/` for one kind).
+- `node scripts/storage.mjs verify <key>`: fetches the file in the bucket and
+  checks it against the fingerprint in its key.
+- `node scripts/storage.mjs selftest`: puts a small made-up file under
+  `_test/`, gets it, checks it, lists it and deletes it. Run it first on a new
+  computer to prove the key works. The command deletes nothing else.
+
 ## Named elsewhere
 
 These are used or mentioned by the commands above and have no entry of their

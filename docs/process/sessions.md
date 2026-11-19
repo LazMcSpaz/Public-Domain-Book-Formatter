@@ -178,6 +178,30 @@ Chromium with `node node_modules/playwright/cli.js install chromium`; an old
 CRLF checkout fails `format:check` everywhere, so check the files you changed
 and say so.
 
+## Storage key on your own computer
+
+The storage command (`scripts/storage.mjs`, in
+[commands.md](../reference/commands.md#storage)) needs a Cloudflare key. In a
+cloud session the network adds it. On the owner's computer it is read from
+the `CLOUDFLARE_API_TOKEN` environment variable; it is never written into a
+file, a prompt or the chat.
+
+- **The key:** a Cloudflare API token with the permission "Workers R2
+  Storage: Edit" on the account (Cloudflare dashboard, My Profile, API
+  Tokens, Create Token, custom token).
+- **For one PowerShell window:** `$env:CLOUDFLARE_API_TOKEN = "<the token>"`.
+- **For good** (every new window after this one):
+  `[Environment]::SetEnvironmentVariable("CLOUDFLARE_API_TOKEN", "<the token>", "User")`,
+  then open a new PowerShell window.
+- **On Windows, run node from PowerShell, not Git Bash.** Git Bash rewrites
+  arguments that look like paths before node sees them, which can change a
+  storage key or a file name.
+- **Prove it works:** `node scripts/storage.mjs selftest` puts a small
+  made-up file in the bucket, fetches it back, checks it and deletes it.
+- If it says the key can see no account, or more than one, also set
+  `CLOUDFLARE_ACCOUNT_ID` the same way (the account id is kept on the shelf,
+  never in this repository).
+
 ## Before you stop
 
 1. Everything committed and pushed; `rev-list` prints 0 in both repositories.
