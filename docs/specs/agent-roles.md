@@ -25,7 +25,7 @@ When the tools themselves need changing, a **builder** and a separate **reviewer
 - **Each role gets only the tools it needs.** A reader cannot publish; the checker cannot edit the text; nobody but the managing editor writes to the KDP listing sheet.
 - **Every hand-off goes through the shelf:** the book's `ledger.md` (who did what, and what the check said), the questions sheet, the readiness report, the drafts. Any agent can pick up where another stopped, and the owner can see it all.
 - **Editorial decisions are the owner's.** Agents raise questions with suggested answers and never decide them (`docs/product.md`, "Never").
-- **Tokens are spent where judgment is needed.** The writing and its checking use the strongest model; reading, typesetting and checking use a faster, cheaper one, revisited after the pilot. Each agent is handed only its brief and the files for its task, never a whole history. Readers work at most four at a time; the writing loop stops at three rounds.
+- **Every role runs on Opus.** The owner found on 19 November 2026 that one Opus run is cheaper and better than three runs of a smaller model. Tokens are saved instead by handing each agent only its brief and the files for its task, never a whole history; readers work at most four at a time; the writing loop stops at three rounds.
 
 ## Done when (how we'll know it works; how the owner can try it)
 
