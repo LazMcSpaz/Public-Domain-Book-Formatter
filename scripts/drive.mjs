@@ -25,6 +25,8 @@
  *   node scripts/drive.mjs quit
  */
 import { readJson, readJsonSync, readText, stripBom } from './lib/json-file.mjs'
+import { tickRecon } from './lib/drive-ticker.mjs'
+import { reconReport, statusReport } from './lib/recon-report.mjs'
 import { chromium } from 'playwright'
 import { createServer } from 'node:http'
 import { createHash } from 'node:crypto'
@@ -111,6 +113,8 @@ async function send(verb, args) {
         '`node scripts/readiness.mjs <book-dir>`.'
     )
   }
+  // A whole-book reading answers only at the end; say how far it has got.
+  if (verb === 'recon' && !args.includes('--status')) tickRecon(PORT)
   const { request } = await import('node:http')
   const body = JSON.stringify({ verb, args })
   const { status, text } = await new Promise((done, fail) => {
@@ -1179,12 +1183,23 @@ async function serve() {
       // And where it came from, which is where its sheets go, with the
       // fingerprint of the bytes read.
       await rememberBookFile(loaded.key, bookFile, false, sha256(bytes))
+      // Whether the free reading every cross-check compares against is here.
+      // Loading never starts it; `recon` does, and this says so.
+      const reading = await page.evaluate(
+        async ([repo, key, beside]) =>
+          (await import(`/@fs${repo}/src/platform/browser/recon-run.ts`)).reconStatusLine(
+            key,
+            beside
+          ),
+        [REPO, loaded.key, existsSync(resolve(dirname(bookFile), 'recon.json.gz'))]
+      )
 
       const out = {
         ...loaded,
         scanStored: true,
         current: loaded.key.split('\u0000')[0],
-        bookFile
+        bookFile,
+        reading
       }
       return missing.length > 0 ? { ...out, missingImages: missing } : out
     },
@@ -1884,10 +1899,19 @@ async function serve() {
      * with the API gone it is the only independent witness left. The findings
      * are reported, not enforced — this is a place to look, not a gate — but a
      * batch that comes back with half its leaves flagged is a batch to re-read.
+     * What *is* enforced is that the check can run: leaves no cached reading
+     * covers are refused, naming `drive.mjs recon`, unless the session passes
+     * `--without-ocr-check` (`ocrGateRefusal`). A book with no scan is never
+     * refused; its report says the check does not apply.
      */
-    transcribe: async ([scanPath, pagesPath, mode = 'merge']) => {
-      if (!scanPath || !pagesPath) {
-        throw new Error('transcribe <scan.pdf> <pages.json> [merge|replace]')
+    transcribe: async (argv) => {
+      // `--without-ocr-check` lands leaves no cached reading covers, said in
+      // as many words; without it they are refused (`ocrGateRefusal`).
+      const flags = argv.filter((a) => a.startsWith('--'))
+      const withoutCheck = flags.includes('--without-ocr-check')
+      const [scanPath, pagesPath, mode = 'merge'] = argv.filter((a) => !a.startsWith('--'))
+      if (!scanPath || !pagesPath || flags.some((f) => f !== '--without-ocr-check')) {
+        throw new Error('transcribe <scan.pdf> <pages.json> [merge|replace] [--without-ocr-check]')
       }
       const { stat } = await import('node:fs/promises')
       // `-` means the book this session is working on, resolved the way every
@@ -1910,7 +1934,7 @@ async function serve() {
       }
 
       return page.evaluate(
-        async ([repo, named, pages, replace]) => {
+        async ([repo, named, pages, replace, withoutCheck]) => {
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const schema = await import(`/@fs${repo}/src/core/transcribe/index.ts`)
@@ -1988,6 +2012,24 @@ async function serve() {
                 } leaf of it with the ${pages.length} here. Nothing was written.`
             )
           }
+          // The independent witness, read before anything is written, so a
+          // batch no reading covers is refused with nothing changed. Cached
+          // OCR only: re-reading the scan here would turn landing a batch into
+          // a ten-minute job. A book with no scan (an EPUB) is never refused:
+          // the check does not apply to it, and the report says why.
+          const leaves = [...new Set(parsed.map((p) => p.pageIndex))]
+          const doesNotApply = project.reconDoesNotApply({
+            fileName: file.name,
+            shape: held?.shape
+          })
+          const cached = doesNotApply ? null : await cacheMod.loadReconCache(key, recon.BOOK_RECON)
+          const refusal = project.ocrGateRefusal({
+            doesNotApply,
+            reading: cached,
+            leaves,
+            withoutCheck
+          })
+          if (refusal) throw new Error(refusal)
           // How long the book is, or 0 when nobody knows — never a floor.
           // A floor stored is a floor read back next time as a known number,
           // which is how `complete: true` came out of a book sixteen leaves
@@ -2058,19 +2100,14 @@ async function serve() {
           const run = project.createSavedRun(merged.init)
           const saved = await runStore.saveRun(run)
 
-          // The independent witness. Cached OCR only: re-reading the scan here
-          // would turn landing a batch into a ten-minute job, and a batch that
-          // cannot be checked should say so rather than appear to pass.
-          const cached = await cacheMod.loadReconCache(key, {
-            dpi: recon.RECON_DPI,
-            maxPages: null
-          })
+          // The independent witness, `cached` above: each landed leaf against
+          // the words OCR read off the same page.
           const checked = []
-          let compared = 0
           // Distinct leaves, not batch entries: `parsed.length` counted an
           // entry twice when a batch named a leaf twice, so `ocr` claimed three
           // leaves checked where one had landed.
-          const seenLeaves = new Set(parsed.map((p) => p.pageIndex)).size
+          const compared = new Set()
+          const wordless = new Set()
           if (cached) {
             for (const p of parsed) {
               const words = cached.words.filter((w) => w.pageIndex === p.pageIndex)
@@ -2078,8 +2115,11 @@ async function serve() {
               // `ocr` cannot report "checked" over leaves nothing was compared
               // against — a check that claims success on work it skipped is
               // worse than no check, because it stops anyone looking again.
-              if (words.length === 0) continue
-              compared++
+              if (words.length === 0) {
+                wordless.add(p.pageIndex)
+                continue
+              }
+              compared.add(p.pageIndex)
               const findings = schema.verifyPage(p, words)
               if (findings.length > 0) {
                 checked.push({
@@ -2088,6 +2128,7 @@ async function serve() {
                 })
               }
             }
+            recon.releaseRecon(cached)
           }
 
           return {
@@ -2114,12 +2155,14 @@ async function serve() {
                     "These leaves arrived with the draft's `structural` list still on them. Was the draft checked against the render?"
                 }
               : {}),
-            ocr: !cached
-              ? 'NOT CHECKED — no cached reading on this device'
-              : compared === seenLeaves
-                ? `checked against the cached reading, all ${compared} leaf(s)`
-                : `NOT CHECKED on ${seenLeaves - compared} of ${seenLeaves} leaf(s) —` +
-                  ' the cached reading has no words for them',
+            ocr: project.ocrReport({
+              doesNotApply,
+              reading: cached !== null,
+              leaves: leaves.length,
+              compared: compared.size,
+              wordless: [...wordless].sort((a, b) => a - b),
+              withoutCheck
+            }),
             flagged: checked,
             // A runover given a marker of its own is a note with no mark in the
             // body, and the pairing is positional: it waits, takes the next
@@ -2157,7 +2200,7 @@ async function serve() {
             })()
           }
         },
-        [REPO, file, pages, mode === 'replace']
+        [REPO, file, pages, mode === 'replace', withoutCheck]
       )
     },
 
@@ -3229,8 +3272,64 @@ async function serve() {
      * from. Every constant in that module is supposed to come off real pages
      * rather than off a guess, and until this verb existed there was no way to
      * read those numbers out of a book without a one-off `page.evaluate`.
+     *
+     * `words --out [<file>] [leaf...]` writes every leaf's boxes instead, in
+     * the form `slant-witness.ts --words` reads (`witnessPages`), so the
+     * italic witness can measure a scan with no text layer. A working file
+     * (the words are the book's), in the scratch folder unless named.
      */
     words: async ([...ns]) => {
+      const at = ns.indexOf('--out')
+      if (at !== -1) {
+        const named = /^[^-\d]/u.test(ns[at + 1] ?? '') ? ns[at + 1] : null
+        const out = await workTarget('boxes.json', named)
+        const leaves = ns
+          .filter((a, i) => i !== at && !(named && i === at + 1))
+          .map(Number)
+          .filter(Number.isInteger)
+        const built = await page.evaluate(
+          async ([repo, leaves]) => {
+            const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+            const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
+            const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
+            const project = await import(`/@fs${repo}/src/core/project/index.ts`)
+            const image = await import(`/@fs${repo}/src/core/image/index.ts`)
+            const newest = await window.__pdbfPickBook(runStore)
+            if (!newest) throw new Error('No book open on this device.')
+            const cached = await cacheMod.loadReconCache(newest.key, recon.BOOK_RECON)
+            if (!cached) {
+              throw new Error(
+                'No finished reading of this book on this device. Run `node scripts/drive.mjs recon` first.'
+              )
+            }
+            recon.releaseRecon(cached)
+            const pages = image.witnessPages(cached.words, recon.BOOK_RECON.dpi, leaves)
+            // Gzipped across the protocol: a whole book's boxes are tens of MB.
+            const stream = new Blob([JSON.stringify(pages)])
+              .stream()
+              .pipeThrough(new CompressionStream('gzip'))
+            return {
+              base64: project.toBase64(new Uint8Array(await new Response(stream).arrayBuffer())),
+              pages: pages.length,
+              words: pages.reduce((n, p) => n + p.words.length, 0),
+              leaves: cached.pageCount,
+              outside: leaves.filter((n) => n < 0 || n >= cached.pageCount)
+            }
+          },
+          [REPO, leaves]
+        )
+        const { gunzipSync } = await import('node:zlib')
+        await writeFile(out, gunzipSync(Buffer.from(built.base64, 'base64')))
+        return {
+          wrote: out,
+          leavesWithWords: built.pages,
+          words: built.words,
+          ofLeaves: built.leaves,
+          ...(built.outside.length > 0 ? { notInTheReading: built.outside } : {}),
+          boxes: 'pixels of the 300-DPI render; pages are the scan leaves, counted from 0',
+          next: `npx vite-node --config vitest.config.ts scripts/slant-witness.ts <scan.pdf> w.json --words ${out}`
+        }
+      }
       const list = ns.map(Number)
       return page.evaluate(
         async ([repo, leaves]) => {
@@ -3239,10 +3338,7 @@ async function serve() {
           const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
           const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
-          const cached = await cacheMod.loadReconCache(newest.key, {
-            dpi: recon.RECON_DPI,
-            maxPages: null
-          })
+          const cached = await cacheMod.loadReconCache(newest.key, recon.BOOK_RECON)
           if (!cached) throw new Error('No cached reading on this device.')
           // Which leaves the cache actually covers, because an empty array
           // means two opposite things: a leaf with no words on it, and a leaf
@@ -4090,10 +4186,7 @@ async function serve() {
           const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
           const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
-          const cached = await cacheMod.loadReconCache(newest.key, {
-            dpi: recon.RECON_DPI,
-            maxPages: null
-          })
+          const cached = await cacheMod.loadReconCache(newest.key, recon.BOOK_RECON)
           if (!cached) throw new Error('No cached reading on this device.')
           // The same distinction `words` and `ocr` draw: a leaf with no picture
           // and a leaf the reading never reached look identical from here, and
@@ -4760,10 +4853,7 @@ async function serve() {
           const witnessMod = await import(`/@fs${repo}/src/core/witness/index.ts`)
           const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book on this device.')
-          const cached = await cacheMod.loadReconCache(newest.key, {
-            dpi: recon.RECON_DPI,
-            maxPages: null
-          })
+          const cached = await cacheMod.loadReconCache(newest.key, recon.BOOK_RECON)
           // Only when this needs *our* reading. A supplied one (`--ours`) is
           // already a reading; the cache would add nothing but the per-word
           // confidences, which a supplied reading has none of anyway. Demanding
@@ -4883,10 +4973,7 @@ async function serve() {
           const pdfMod = await import(`/@fs${repo}/src/platform/browser/pdf.ts`)
           const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
-          const cached = await cacheMod.loadReconCache(newest.key, {
-            dpi: recon.RECON_DPI,
-            maxPages: null
-          })
+          const cached = await cacheMod.loadReconCache(newest.key, recon.BOOK_RECON)
           const covered = new Set((cached?.words ?? []).map((w) => w.pageIndex))
 
           // The cache is a convenience here and never the source. A face is a
@@ -5158,10 +5245,7 @@ async function serve() {
           // still be able to draft a page. Same DPI either way — a draft read
           // at a different one would put every box somewhere other than the
           // crops its corrections are checked against.
-          const cached = await cacheMod.loadReconCache(newest.key, {
-            dpi: recon.RECON_DPI,
-            maxPages: null
-          })
+          const cached = await cacheMod.loadReconCache(newest.key, recon.BOOK_RECON)
           // The book's own vocabulary, which is what settles a line-break
           // hyphen: `ad-`/`vanced` and `thought-`/`transference` are the same
           // two marks on the page and different words in the book. Built here
@@ -5328,13 +5412,10 @@ async function serve() {
 
           const newest = await window.__pdbfPickBook(runStore)
           const file = await runStore.loadSourceFile(newest.key)
-          // `maxPages: null` is "the whole book" — the same shape the app
-          // asks with. A record written for a partial reading is deliberately
+          // `BOOK_RECON` is "the whole book", the conditions the app asks
+          // with. A record written for a partial reading is deliberately
           // refused, so this has to match rather than be left out.
-          const cached = await cacheMod.loadReconCache(newest.key, {
-            dpi: recon.RECON_DPI,
-            maxPages: null
-          })
+          const cached = await cacheMod.loadReconCache(newest.key, recon.BOOK_RECON)
 
           // No stored reading is the ordinary case rather than a failure: it is
           // written only as a convenience and only when the device is keeping
@@ -5446,6 +5527,47 @@ async function serve() {
      * changes nothing.
      */
     /**
+     * The free first reading of the current book, cached for every later
+     * cross-check: `recon [--fresh] [--status]`.
+     *
+     * Nothing else in the driver starts it (`load` stores the book and its
+     * scan and stops), and without it every `transcribe` reported its OCR
+     * cross-check NOT CHECKED. What it does is `planRecon`'s decision in
+     * core, carried out in the page by `reconBook`
+     * (`src/platform/browser/recon-run.ts`) with the app's own recon
+     * functions: nothing when a finished reading is cached; load the book's
+     * `recon.json.gz` when it is a reading of this scan; otherwise read,
+     * carrying on from a checkpoint. A long book takes most of an hour: the
+     * client prints progress while it waits, `--status` answers at once, and
+     * a reading cut off part way resumes from its last checkpoint.
+     */
+    recon: async (args) => {
+      const unknown = args.filter((a) => a !== '--fresh' && a !== '--status')
+      if (unknown.length > 0)
+        throw new Error(`recon [--fresh] [--status], not ${unknown.join(' ')}`)
+      if (args.includes('--status')) {
+        const underWay = await page.evaluate(
+          async ([repo]) =>
+            (await import(`/@fs${repo}/src/platform/browser/recon-run.ts`)).reconUnderWay(),
+          [REPO]
+        )
+        return statusReport(underWay, Date.now())
+      }
+      const book = await currentBookFile()
+      const beside = book.file ? resolve(dirname(book.file), 'recon.json.gz') : null
+      const shelfUrl =
+        beside && existsSync(beside)
+          ? `http://127.0.0.1:${PORT}/file?path=${encodeURIComponent(beside)}`
+          : null
+      const outcome = await page.evaluate(
+        async ([repo, key, opts]) =>
+          (await import(`/@fs${repo}/src/platform/browser/recon-run.ts`)).reconBook(key, opts),
+        [REPO, book.key, { fresh: args.includes('--fresh'), shelfUrl }]
+      )
+      return reconReport(outcome, { beside })
+    },
+
+    /**
      * Load a reading of the scan that a browser put on the shelf.
      *
      * The editor's own browser reads scans while they are away — one book or a
@@ -5461,20 +5583,21 @@ async function serve() {
      */
     reconimport: async ([file] = []) => {
       if (!file) throw new Error('reconimport <books/<dir>/recon.json.gz>')
-      const { gunzipSync } = await import('node:zlib')
+      // Unzipped in the page, so the reading (the book's words) is never
+      // written out as a loose file in this checkout on the way in.
       const path = resolve(file)
-      const json = gunzipSync(readFileSync(path)).toString('utf8')
-      const tmp = resolve(OUT, `recon-import-${Date.now()}.json`)
-      await mkdir(OUT, { recursive: true })
-      await writeFile(tmp, json)
+      statSync(path)
       return page.evaluate(
         async ([repo, url]) => {
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
-          const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
+          const reconRun = await import(`/@fs${repo}/src/platform/browser/recon-run.ts`)
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const res = await fetch(url)
-          if (!res.ok) throw new Error(`reading the file: ${res.status}`)
-          const handoff = project.parseReconHandoff(JSON.parse(await res.text()))
+          if (!res.ok || !res.body) throw new Error(`reading the file: ${res.status}`)
+          const json = await new Response(
+            res.body.pipeThrough(new DecompressionStream('gzip'))
+          ).text()
+          const handoff = project.parseReconHandoff(JSON.parse(json))
           // Filed under the run this device holds for the same file. A key is
           // name, size and modification time, and the time is the one part
           // that moves between devices — the driver's copy of a scan is not
@@ -5484,22 +5607,7 @@ async function serve() {
           const prefix = handoff.key.split('\u0000').slice(0, 2).join('\u0000') + '\u0000'
           const here = runs.filter((r) => r.key === handoff.key || r.key.startsWith(prefix))
           const key = here.length === 1 ? here[0].key : handoff.key
-          const saved = await cacheMod.saveReconCache(
-            key,
-            {
-              pageCount: handoff.pageCount,
-              words: handoff.words,
-              lexicon: handoff.lexicon,
-              pageText: handoff.pageText,
-              source: handoff.source,
-              ...(handoff.shape ? { shape: handoff.shape } : {}),
-              crops: new Map(),
-              contextCrops: new Map(),
-              thumbnails: new Map(),
-              illustrations: []
-            },
-            { dpi: handoff.dpi, maxPages: null, cleanup: handoff.cleanup }
-          )
+          const saved = await reconRun.saveHandoffAsCache(key, handoff)
           return {
             saved,
             key: key.split('\u0000')[0],
@@ -5520,7 +5628,7 @@ async function serve() {
               : {})
           }
         },
-        [REPO, `http://127.0.0.1:${PORT}/file?path=${encodeURIComponent(tmp)}`]
+        [REPO, `http://127.0.0.1:${PORT}/file?path=${encodeURIComponent(path)}`]
       )
     },
 
@@ -5546,14 +5654,9 @@ async function serve() {
           const cacheMod = await import(`/@fs${repo}/src/platform/browser/recon-cache.ts`)
           const recon = await import(`/@fs${repo}/src/platform/browser/recon.ts`)
           const project = await import(`/@fs${repo}/src/core/project/index.ts`)
-          const cleanup = await import(`/@fs${repo}/src/core/image/cleanup.ts`)
           const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book open on this device.')
-          const wanted = {
-            dpi: recon.RECON_DPI,
-            maxPages: null,
-            cleanup: cleanup.DEFAULT_CLEANUP
-          }
+          const wanted = recon.BOOK_RECON
           const result = await cacheMod.loadReconCache(newest.key, wanted)
           if (!result) {
             throw new Error(
@@ -5703,21 +5806,12 @@ async function serve() {
           // than the current one — it exists to say what is on the device.
           const runs = await runStore.listRuns()
           const newest = await window.__pdbfPickBook(runStore)
-          const whole = newest
-            ? await cacheMod.loadReconCache(newest.key, {
-                dpi: recon.RECON_DPI,
-                maxPages: null,
-                cleanup: (await import(`/@fs${repo}/src/core/image/cleanup.ts`)).DEFAULT_CLEANUP
-              })
-            : null
+          const whole = newest ? await cacheMod.loadReconCache(newest.key, recon.BOOK_RECON) : null
           // The same `wanted` the whole-reading load uses. Called without it,
           // this threw on every book — a verb whose only job is to say what is
           // on the device, failing to say anything.
           const part = newest
-            ? await cacheMod.loadReconCheckpoint(newest.key, {
-                dpi: recon.RECON_DPI,
-                maxPages: null
-              })
+            ? await cacheMod.loadReconCheckpoint(newest.key, recon.BOOK_RECON)
             : null
           return {
             runs: runs.map((r) => ({ key: r.key, pages: r.pageCount, savedAt: r.savedAt })),

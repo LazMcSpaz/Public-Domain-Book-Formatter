@@ -33,19 +33,31 @@ invention appears. Every arrangement below exists to keep that true.
   no `<i>` looks exactly like a block that never had any. A born-digital PDF
   names its faces (the draft carries them). A ClearScan or converted PDF keeps
   its glyph shapes: `node scripts/italic-witness.mjs <scan.pdf> w.json`. A scan
-  whose layer names no face, or that has no layer:
+  whose layer names no face:
   `npx vite-node --config vitest.config.ts scripts/slant-witness.ts <scan.pdf> w.json`.
-  With no witness, the reader marks italic while correcting, like a letter.
+  A scan with no layer at all needs the word boxes the free reading found:
+  after step 1, `node scripts/drive.mjs words --out` writes them and names the
+  file; add `--words <that file>` to the slant witness. Either witness that
+  measures nothing stops with an error and writes nothing; it never hands
+  back an empty list as if the book had no italic. With no witness, the
+  reader marks italic while correcting, like a letter.
 - **Check the scan has whole leaves.** One Google scan had lost the running
   head and first lines of 288 leaves; each seam read straight across the gap.
   Lost lines come from a second copy of the same printing, never from memory.
 
 ## Steps
 
-1. **Take the free reading.** Loading the book runs recon: it renders, OCRs
-   and caches every leaf (a born-digital PDF has its own words read out). If
-   recon was interrupted, compare the recorded page count with the file's and
-   put it right with `node scripts/drive.mjs cachestat recount <scan.pdf>`.
+1. **Take the free reading.** Loading the book does not start it; `load`
+   says whether a reading is here. Run `node scripts/drive.mjs recon`. It
+   renders, OCRs and caches every leaf (a born-digital PDF has its own words
+   read out), or loads `recon.json.gz` from beside the book when that is a
+   reading of this scan, or does nothing when the reading is already here
+   (`--fresh` reads again). A long book takes most of an hour: run it in the
+   background; it prints how far it has got, and `recon --status` answers at
+   once. If it is cut off, run it again: it carries on from its last
+   checkpoint (every 20 leaves). Then keep the reading on the shelf with
+   `node scripts/drive.mjs reconexport <shelf>/books/<folder>/recon.json.gz`.
+   An EPUB has no pages to read: recon does not apply, and says so.
 2. **Get a second reading** where the route allows one:
    `node scripts/drive.mjs second --out <shelf>/books/<folder>/second.json`
    (PaddleOCR over every leaf; `--layer` takes the scan's own OCR layer
@@ -85,7 +97,9 @@ invention appears. Every arrangement below exists to keep that true.
    wrong reference.
 7. **Land it**: `node scripts/drive.mjs transcribe <scan.pdf> <done.json>`.
    It merges leaf by leaf (never use `replace` unless replacing is meant) and
-   compares each leaf with the OCR. Read its report: `ocr` says how many
+   compares each leaf with the OCR. It refuses leaves no cached reading
+   covers, naming `recon`; `--without-ocr-check` lands them anyway, and the
+   report still says NOT CHECKED. Read its report: `ocr` says how many
    leaves were really compared, `flagged` lists disagreements, `complete` is
    never true on a guessed leaf count. Then save and push: one batch lost, not
    a book.

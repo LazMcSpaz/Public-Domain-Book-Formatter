@@ -34,6 +34,9 @@
  * consecutive italic lines, with what the page reads either side so a short
  * run can be placed. Needs `mupdf`, which renders here and nowhere in the
  * app: this is a measurement taken once, not a second renderer.
+ *
+ * A run that judged no line at all (a file with no text layer) exits with an
+ * error and writes nothing: an empty list would read as "no italic here".
  */
 import * as mupdf from 'mupdf'
 import fs from 'node:fs'
@@ -161,6 +164,8 @@ for (const [name, s] of Object.entries(samples)) {
 
 // Pass 2: each line, and the runs of italic lines.
 const runs = []
+/** Lines given a style, italic or roman: what the witness actually saw. */
+let judged = 0
 const join = (xs) =>
   xs
     .map((x) => x.text)
@@ -190,6 +195,7 @@ for (let p = 0; p < doc.countPages(); p++) {
     else if (font !== undefined && font <= 0) [italic, how] = [false, 'font']
     return { text: l.text, italic, how, bbox: l.bbox }
   })
+  judged += spans.filter((s) => s.italic !== null).length
   let from = -1
   for (let k = 0; k <= spans.length; k++) {
     const it = k < spans.length && spans[k].italic === true
@@ -211,6 +217,17 @@ for (let p = 0; p < doc.countPages(); p++) {
       from = -1
     }
   }
+}
+// A witness that judged no line saw nothing, and an empty list from it would
+// read as "this scan prints no italic". Said, and nothing written.
+if (judged === 0) {
+  console.error(
+    `The witness judged no line on any of ${doc.countPages()} leaves: the file has no text ` +
+      'layer (or none with letters), so this witness cannot speak for it. For a scan with no ' +
+      'layer use slant-witness.ts with --words (the boxes `node scripts/drive.mjs words --out` writes). ' +
+      'Nothing was written.'
+  )
+  process.exit(1)
 }
 fs.writeFileSync(out, JSON.stringify(runs))
 console.log(`${runs.length} italic runs over ${doc.countPages()} leaves → ${out}`)

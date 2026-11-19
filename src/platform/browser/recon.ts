@@ -22,6 +22,7 @@ import {
 import { detectIllustrations, type RegionCandidate } from './illustrations'
 import { OcrEngine, type OcrWord, type OcrAssetPaths } from './ocr'
 import type { BookShape } from '@core/provenance'
+import type { ReconWanted } from '@core/project'
 import { DEFAULT_CLEANUP, type CleanupPreset } from '@core/image/cleanup'
 import { recognizeLeaf } from './cleanup'
 
@@ -33,6 +34,21 @@ import { recognizeLeaf } from './cleanup'
  * in these pixels — so the cache has to be able to say what it was made with.
  */
 export const RECON_DPI = 300
+
+/**
+ * The conditions a whole book is read under, and so the stamp its cached
+ * reading must carry: every leaf, at `RECON_DPI`, through `DEFAULT_CLEANUP`.
+ *
+ * One value for the app and every driver verb. A reader asking with other
+ * conditions does not merely miss: `loadReconCache` deletes a record it
+ * cannot use, so a verb that left the cleaning out would throw away the
+ * app's reading the day the default preset changed.
+ */
+export const BOOK_RECON: ReconWanted & { maxPages: null; cleanup: CleanupPreset } = Object.freeze({
+  dpi: RECON_DPI,
+  maxPages: null,
+  cleanup: DEFAULT_CLEANUP
+})
 
 export interface ReconProgress {
   page: number

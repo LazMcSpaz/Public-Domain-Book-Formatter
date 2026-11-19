@@ -116,10 +116,20 @@ builds its own copy.
   shelf into the driver's browser, and remembers the `book.json` so the sheets
   are written beside it, with the SHA-256 of the file as read (`book` shows
   both as `bookFile` and `bookSha`; the readiness command compares the
-  fingerprint). **Warning:** the scan is
+  fingerprint). Its `reading` line says whether the free reading of this scan
+  is here; loading never starts it (`recon` does). **Warning:** the scan is
   `scans/<sha256>.pdf`, named in `book.json` under `scan.path`. The PDF next to
   `book.json` is the export; loading it creates a second, wrong book (check
   with `runs`).
+- `node scripts/drive.mjs recon`: takes the free reading of the loaded book
+  and caches it, for every later cross-check. Does nothing when a finished
+  reading is here (`--fresh` reads again). Loads `recon.json.gz` from beside
+  the book when it is a reading of this scan, and says why when it is not.
+  Otherwise reads every leaf, carrying on from a checkpoint (every 20 leaves)
+  when an earlier reading was cut off. A long book takes most of an hour: run
+  it in the background; it prints how far it has got, and `recon --status`
+  answers at once. Reports leaves, words, whether the words came from OCR or
+  the PDF's own text, and the time taken. Does not apply to an EPUB.
 - `node scripts/drive.mjs use <scan.pdf>`: says which book every later command
   means.
 - `node scripts/drive.mjs book`: reports which book that is, its shape and
@@ -151,7 +161,11 @@ builds its own copy.
 - `node scripts/drive.mjs transcribe <scan.pdf> b.json`: lands a checked
   batch of leaves into the book. Merges leaf by leaf by default and
   cross-checks against OCR. `-` in place of the scan means the open book. A
-  `replace` mode exists; do not use it unless replacing is meant.
+  `replace` mode exists; do not use it unless replacing is meant. **Refuses**
+  leaves no cached reading covers, and changes nothing, naming `recon` as the
+  fix. `--without-ocr-check` lands them anyway; its `ocr` line still says NOT
+  CHECKED. For a book with no scan (an EPUB) the line says the check does not
+  apply, and why.
 - `node scripts/drive.mjs epub <book.epub> e.json 1 2 3`: reads those EPUB
   chapters with the app's own importer, as a batch for `transcribe`.
 - `node scripts/drive.mjs leaf 133`: renders a leaf to `screenshots/`.
@@ -175,10 +189,16 @@ builds its own copy.
   one pass's brief; `--json` hands it to a writing agent.
 - `node scripts/drive.mjs reconimport <books/<dir>/recon.json.gz>`: loads a
   reading the editor's browser already took and put on the shelf, so OCR is
-  not run again here. `load` the book too.
+  not run again here. `load` the book too. `recon` does this by itself for
+  the file beside the loaded book.
 - `node scripts/drive.mjs reconexport <books/<dir>/recon.json.gz>`: the other
   way. Writes the driver's own finished reading as that file, for the session
   to commit. Without it, a reading done here lives only in `.drive-profile`.
+- `node scripts/drive.mjs words 12 13`: the cached reading's word boxes for
+  those leaves. `words --out [<file>]` writes every leaf's boxes (or the
+  named leaves') in the form `slant-witness.ts --words` reads, to the scratch
+  folder unless a file is named: pixels of the 300-DPI render, leaves counted
+  from 0.
 - `node scripts/drive.mjs runs`: the readings stored in the driver's browser.
   `runs drop <n>` removes one (for example a book loaded from the wrong PDF).
 - `node scripts/drive.mjs cachestat recount <scan.pdf>`: puts a saved
@@ -231,10 +251,13 @@ book or many (`books/*/book.json`).
   its parallels, and never the guess being tested.
 - `node scripts/italic-witness.mjs <scan.pdf> w.json`: which words a ClearScan
   or named-face PDF prints in italic, measured off the letters' slant. Feeds
-  `emphasis-of.ts`.
+  `emphasis-of.ts`. Stops with an error, writing nothing, when it could judge
+  no line (a file with no text layer).
 - `npx vite-node --config vitest.config.ts scripts/slant-witness.ts <scan.pdf> w.json [--words t.json] [--book book.json]`:
   italic read off the pixels, for a scan whose text layer names no face or
-  that has no layer. Take it to `emphasis-of.ts` with `--no-headings`, and
+  that has no layer. For a scan with no layer, `--words` takes the boxes
+  `drive.mjs words --out` writes. Stops with an error, writing nothing, when
+  it measured no words. Take it to `emphasis-of.ts` with `--no-headings`, and
   crop a sample before landing.
 - `npx vite-node --config vitest.config.ts scripts/emphasis-of.ts <book.json> w.json out.json`:
   italic the witness saw that the book sets in roman. `--restore` writes the
