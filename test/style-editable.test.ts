@@ -119,6 +119,7 @@ describe('answers fold back onto the profile', () => {
       avoidShortLastLines: true,
       runningHeadRise: 1.2,
       folioFromFootPt: 24.8,
+      runningHeadTidy: true,
       headingStyle: { ...base.headingStyle, smallCaps: true, centered: false },
       frontMatter: {
         titlePage: false,

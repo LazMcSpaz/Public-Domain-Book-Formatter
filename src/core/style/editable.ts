@@ -68,12 +68,19 @@ const RUNNING_HEAD_MODES: RunningHeadMode[] = [
   'pageNumber'
 ]
 
+/**
+ * The topic is offered for the right page only: the owner's convention is the
+ * chapter on the left and the topic on the right (19 November 2026).
+ */
+const RECTO_HEAD_MODES: RunningHeadMode[] = [...RUNNING_HEAD_MODES, 'topic']
+
 const RUNNING_HEAD_LABELS: Record<RunningHeadMode, string> = {
   none: 'Nothing',
   bookTitle: 'Book title',
   author: 'Author',
   chapterTitle: 'Current chapter',
-  pageNumber: 'Page number'
+  pageNumber: 'Page number',
+  topic: 'Current topic (the subheading in force on the page)'
 }
 
 const PAGE_NUMBER_POSITIONS: PageNumberPosition[] = [
@@ -246,8 +253,11 @@ export function styleQuestions(
       id: 'runningHeadRecto',
       type: 'choice',
       prompt: 'Running head, right page',
+      help:
+        'The current topic suits a book whose chapters are divided by subheadings: ' +
+        'the right page names the subheading in force there, the chapter title until the first.',
       defaultValue: profile.runningHeads.recto,
-      options: RUNNING_HEAD_MODES.map((m) => ({ value: m, label: RUNNING_HEAD_LABELS[m] }))
+      options: RECTO_HEAD_MODES.map((m) => ({ value: m, label: RUNNING_HEAD_LABELS[m] }))
     },
     {
       id: 'runningHeadStyle',
@@ -262,6 +272,17 @@ export function styleQuestions(
         { value: 'italic', label: 'Italic' },
         { value: 'plain', label: 'Same as the text' }
       ]
+    },
+    {
+      id: 'runningHeadTidy',
+      type: 'confirm',
+      prompt: 'Tidy what the running heads say?',
+      help:
+        'A head drops the full stop at the end of its heading (“What a Keeper Should Be.” ' +
+        'prints without it; a question mark stays), and a topic head drops a part label ' +
+        'in front of its topic (“Part II.” and a dash before “Of the Lamp” leave “Of the Lamp”). It ' +
+        'changes only the heads, never a line of text; a book already printed keeps it off.',
+      defaultValue: profile.runningHeadTidy
     },
     {
       id: 'runningHeadRise',
@@ -597,6 +618,7 @@ export function applyStyleAnswers(profile: StyleProfile, answers: Answers): Styl
     runningHeadRise: pickNumber(answers, 'runningHeadRise', profile.runningHeadRise),
     folioFromFootPt: pickNumber(answers, 'folioFromFootPt', profile.folioFromFootPt),
     avoidShortLastLines: pickBool(answers, 'avoidShortLastLines', profile.avoidShortLastLines),
+    runningHeadTidy: pickBool(answers, 'runningHeadTidy', profile.runningHeadTidy),
     ornaments: {
       chapterOpener: pickOrnament(answers, 'ornamentChapter', profile.ornaments.chapterOpener),
       sectionDivider: pickOrnament(answers, 'ornamentDivider', profile.ornaments.sectionDivider),

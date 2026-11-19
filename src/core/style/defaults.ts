@@ -42,6 +42,7 @@ export const DEFAULT_STYLE_PROFILES: StyleProfile[] = [
     runningHeadRise: 2,
     folioFromFootPt: 0,
     avoidShortLastLines: false,
+    runningHeadTidy: false,
     ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null, blankPage: null },
     frontMatter: { titlePage: true, copyrightPage: true, halfTitle: true, titleBorder: false }
   },
@@ -75,6 +76,7 @@ export const DEFAULT_STYLE_PROFILES: StyleProfile[] = [
     runningHeadRise: 2,
     folioFromFootPt: 0,
     avoidShortLastLines: false,
+    runningHeadTidy: false,
     ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null, blankPage: null },
     frontMatter: { titlePage: true, copyrightPage: true, halfTitle: false, titleBorder: false }
   },
@@ -108,6 +110,7 @@ export const DEFAULT_STYLE_PROFILES: StyleProfile[] = [
     runningHeadRise: 2,
     folioFromFootPt: 0,
     avoidShortLastLines: false,
+    runningHeadTidy: false,
     ornaments: { chapterOpener: null, sectionDivider: null, pageNumber: null, blankPage: null },
     frontMatter: { titlePage: true, copyrightPage: true, halfTitle: true, titleBorder: false }
   }

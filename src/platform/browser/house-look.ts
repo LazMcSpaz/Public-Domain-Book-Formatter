@@ -6,7 +6,8 @@
  * set on the short-book trim. This is where they meet the shelf and the
  * engine: `fetchHouseLook` reads the file through the shelf connection, and
  * `renderInLook` lays a book out in whichever look it gets, laying it out
- * again on the short-book trim when it turns out short.
+ * again on the short-book trim when it turns out short, with the running heads
+ * the house look gives a book of its structure (`houseHeadsForBook`).
  *
  * Browser-only. The driver reads the file off its own disk and hands the text
  * to `readHouseLook`; the app fetches it with `fetchHouseLook`.
@@ -15,6 +16,7 @@ import type { BookDocument } from '@core/assemble'
 import type { StyleProfile } from '@core/model'
 import {
   houseDesignFor,
+  houseHeadsForBook,
   houseLookLine,
   inheritDesign,
   parseHouseLook,
@@ -69,6 +71,11 @@ export interface InLook {
   from: LookSource
   /** How the house look was used, or why it could not be. Null when it played no part. */
   houseLine: string | null
+  /**
+   * The question for the owner about this book's running heads, when it
+   * inherits the house look and its chapters open with lists of topics.
+   */
+  headsQuestion: string | null
 }
 
 /**
@@ -89,17 +96,24 @@ export async function renderInLook(
 ): Promise<InLook> {
   const house = input.house && 'look' in input.house ? input.house : null
   const chosen = inheritDesign(input.own, house?.look ?? null)
+  // The heads the house look gives a book of this structure. Furniture only:
+  // they move no line and no page, so the page count below is the same.
+  const heads = chosen.from === 'house' && house ? houseHeadsForBook(house.look, doc.blocks) : null
+  const headed = (design: Answers): Answers => ({ ...design, ...(heads?.design ?? {}) })
+  const headsQuestion = heads?.question ?? null
   const tweaks = input.tweaks ?? {}
-  const profile = input.profileOf({ ...chosen.design, ...tweaks })
+  const profile = input.profileOf({ ...headed(chosen.design), ...tweaks })
   const built = await renderInterior(doc, profile, input.options)
   if (chosen.from !== 'house' || !house) {
     const houseLine = chosen.from === 'defaults' ? houseLookRefusal(input.house) : null
-    return { built, profile, design: chosen.design, from: chosen.from, houseLine }
+    return { built, profile, design: chosen.design, from: chosen.from, houseLine, headsQuestion }
   }
+  const headsSaid = heads?.line ? `; ${heads.line}` : ''
   // A trim asked for by name is the trim: length decides nothing then.
   if (tweaks['trimSize'] !== undefined) {
-    const houseLine = `the house look from the shelf (${house.path}), on the trim asked for`
-    return { built, profile, design: asBookDesign(chosen.design), from: 'house', houseLine }
+    const houseLine = `the house look from the shelf (${house.path}), on the trim asked for${headsSaid}`
+    const design = asBookDesign(headed(chosen.design))
+    return { built, profile, design, from: 'house', houseLine, headsQuestion }
   }
   const pages = built.pageCount
   const { design, short } = houseDesignFor(house.look, pages)
@@ -107,15 +121,18 @@ export async function renderInLook(
     look: house.look,
     path: house.path,
     pagesOnHouseTrim: pages,
-    short
+    short,
+    ...(heads?.line ? { heads: heads.line } : {})
   })
-  if (!short) return { built, profile, design: asBookDesign(design), from: 'house', houseLine }
-  const shortProfile = input.profileOf({ ...design, ...tweaks })
+  const inherited = asBookDesign(headed(design))
+  if (!short) return { built, profile, design: inherited, from: 'house', houseLine, headsQuestion }
+  const shortProfile = input.profileOf({ ...headed(design), ...tweaks })
   return {
     built: await renderInterior(doc, shortProfile, input.options),
     profile: shortProfile,
-    design: asBookDesign(design),
+    design: inherited,
     from: 'house',
-    houseLine
+    houseLine,
+    headsQuestion
   }
 }

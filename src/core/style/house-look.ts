@@ -21,7 +21,12 @@
  *   the house trim is set on the short-book trim instead (`trimForLength`).
  * - **A house look that cannot be read is said to be unreadable,** with the
  *   reason, never quietly replaced by the defaults.
+ * - **Heads by the book's structure.** A book whose chapters are divided by
+ *   subheadings gets the chapter on the left page and the topic on the right
+ *   (`topicHeads`, decided in `house-heads.ts`); any other keeps the house
+ *   look's author and chapter.
  */
+import { DESCRIPTIVE_SHARE } from '@core/assemble'
 import type { AnswerValue, Answers } from '@core/wizard/questions'
 import { defaultStyleProfile } from './defaults'
 import { styleQuestions } from './editable'
@@ -44,12 +49,22 @@ export interface ShortBookRule {
   design: Answers
 }
 
+/** How a descriptive book's running heads differ from the house look's. */
+export interface TopicHeadsRule {
+  /** The share of chapters that must be divided by subheadings in the text. */
+  atLeast: number
+  /** Design answers laid over the house look's for a descriptive book. */
+  design: Answers
+}
+
 export interface HouseLook {
   name: string
   /** Design answers, exactly as a book file keeps them. */
   design: Answers
   /** Null when the house look sets every book alike, whatever its length. */
   shortBook: ShortBookRule | null
+  /** Null when every book keeps the house look's own running heads. */
+  topicHeads: TopicHeadsRule | null
 }
 
 /** Where a book's look came from. */
@@ -59,6 +74,16 @@ export type LookSource = 'book' | 'house' | 'defaults'
 export const DEFAULT_SHORT_BOOK: ShortBookRule = {
   underPages: SHORT_BOOK_PAGES,
   design: { trimSize: SHORT_BOOK_TRIM }
+}
+
+/**
+ * The owner's rule when a house look names none (19 November 2026): a book
+ * with at least half its chapters divided by subheadings carries the chapter
+ * title on the left page and the topic in force on the right.
+ */
+export const DEFAULT_TOPIC_HEADS: TopicHeadsRule = {
+  atLeast: DESCRIPTIVE_SHARE,
+  design: { runningHeadVerso: 'chapterTitle', runningHeadRecto: 'topic' }
 }
 
 /** The design interview's own ids (`wizard/steps.ts`), which style cannot import. */
@@ -138,12 +163,103 @@ export function parseHouseLook(text: string): { look: HouseLook } | { error: str
     // laid out on the trim the report names, never on the engine's default.
     shortBook = { underPages: under, design: { trimSize: SHORT_BOOK_TRIM, ...short } }
   }
+  const topicHeads = readTopicHeads(raw['topicHeads'])
+  if (typeof topicHeads === 'string') return { error: topicHeads }
   const name = typeof raw['name'] === 'string' && raw['name'].trim() ? raw['name'].trim() : ''
   // Likewise the house trim: a file that names none is still laid out, measured
   // and reported on 7x10, never on the engine's own default (6x9).
   return {
-    look: { name: name || 'The house look', design: { trimSize: HOUSE_TRIM, ...design }, shortBook }
+    look: {
+      name: name || 'The house look',
+      design: { trimSize: HOUSE_TRIM, ...design },
+      shortBook,
+      topicHeads
+    }
   }
+}
+
+/** What a topic-heads rule may say. */
+const TOPIC_RULE_KEYS = ['atLeast', 'design']
+
+/**
+ * The topic-heads rule from a file: the owner's when it names none, none when
+ * it says `null`, else its own (a share above 0 and at most 1, and answers),
+ * or the reason it cannot be used.
+ *
+ * Read strictly, as the rest of the file is: a key the rule does not have, a
+ * rule that says nothing, and an answer no question offers are each refused
+ * with the reason, never passed over, because each would set every new book
+ * in heads nobody chose.
+ */
+function readTopicHeads(raw: unknown): TopicHeadsRule | null | string {
+  if (raw === undefined) return DEFAULT_TOPIC_HEADS
+  if (raw === null) return null
+  if (!isRecord(raw)) return '`topicHeads` is not a rule'
+  const keys = Object.keys(raw)
+  if (keys.length === 0) {
+    return '`topicHeads` says nothing: leave it out for the owner’s rule, or write `null` for none'
+  }
+  const unknown = keys.filter((k) => !TOPIC_RULE_KEYS.includes(k))
+  if (unknown.length > 0) {
+    return `\`topicHeads\` names ${unknown.join(', ')}, which a topic-heads rule does not have (it takes \`atLeast\` and \`design\`)`
+  }
+  const share = raw['atLeast'] ?? DEFAULT_TOPIC_HEADS.atLeast
+  if (typeof share !== 'number' || !(share > 0 && share <= 1)) {
+    return '`topicHeads.atLeast` is not a share of the chapters (above 0, at most 1)'
+  }
+  const design = readDesign(raw['design'] ?? DEFAULT_TOPIC_HEADS.design, '`topicHeads.design`')
+  if (typeof design === 'string') return design
+  if (Object.keys(design).length === 0) {
+    return '`topicHeads.design` sets nothing, so a book divided by subheadings would get no heads of its own'
+  }
+  const offered = unofferedAnswer(design, '`topicHeads.design`')
+  if (offered) return offered
+  return { atLeast: share, design }
+}
+
+/**
+ * The first answer in `design` that its question does not offer, said with
+ * the reason; null when every one is offered. Only the detailed controls'
+ * choices and yes-or-no questions are checked here: the interview's are the
+ * wizard's to read.
+ */
+function unofferedAnswer(design: Answers, where: string): string | null {
+  const questions = styleQuestions(defaultStyleProfile(), { hasSynopses: true })
+  for (const [id, value] of Object.entries(design)) {
+    const question = questions.find((q) => q.id === id)
+    if (question?.type === 'confirm' && typeof value !== 'boolean') {
+      return `${where}: \`${id}\` is answered yes or no (true or false), not ${JSON.stringify(value)}`
+    }
+    if (question?.type !== 'choice') continue
+    const choices = question.options.map((o) => o.value)
+    if (choices.includes(String(value))) continue
+    const rightOnly =
+      value === 'topic' && choices.includes('chapterTitle')
+        ? ': the topic is offered for the right page only (`runningHeadRecto`)'
+        : ''
+    return `${where}: \`${id}\` cannot be ${JSON.stringify(value)}${rightOnly}; it offers ${choices.join(', ')}`
+  }
+  return null
+}
+
+/**
+ * The house look's settings a book would lose if `merged` were written as its
+ * design: empty unless the book has no design of its own (`had`), so it is set
+ * in the house look, and `merged` would give it one. From then on a book's
+ * own answers win, so every setting they leave out comes from the engine's
+ * defaults, while `proof` says the look is "the book file". Two head answers
+ * written over nothing turned a house-look book into a 6x9 book in the
+ * default face. The way to keep the look is `proof`'s `inherited` answers,
+ * which carry every setting and the heads.
+ */
+export function houseSettingsLost(
+  had: Answers | null | undefined,
+  merged: Answers,
+  house: HouseLook | null
+): string[] {
+  if (!house || hasOwnDesign(had) || !hasOwnDesign(merged)) return []
+  const set = (v: unknown): boolean => v !== undefined && v !== null && v !== ''
+  return Object.keys(house.design).filter((id) => !set(merged[id]))
 }
 
 /**
@@ -216,13 +332,16 @@ export function houseLookLine(input: {
   path: string
   pagesOnHouseTrim: number
   short: boolean
+  /** Which running heads the book got, and why (`houseHeadsFor`), said after the trim. */
+  heads?: string
 }): string {
   const { look, path, pagesOnHouseTrim, short } = input
+  const heads = input.heads ? `; ${input.heads}` : ''
   const long = String(look.design['trimSize'] ?? HOUSE_TRIM)
   const where = `the house look from the shelf (${path})`
-  if (!look.shortBook) return `${where}: ${long}, ${pagesOnHouseTrim} pages`
+  if (!look.shortBook) return `${where}: ${long}, ${pagesOnHouseTrim} pages${heads}`
   const trim = short ? String(look.shortBook.design['trimSize'] ?? long) : long
   return short
-    ? `${where}: ${trim}, a short book (${pagesOnHouseTrim} pages on ${long}, under ${look.shortBook.underPages})`
-    : `${where}: ${trim}, ${pagesOnHouseTrim} pages`
+    ? `${where}: ${trim}, a short book (${pagesOnHouseTrim} pages on ${long}, under ${look.shortBook.underPages})${heads}`
+    : `${where}: ${trim}, ${pagesOnHouseTrim} pages${heads}`
 }

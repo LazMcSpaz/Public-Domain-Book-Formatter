@@ -144,14 +144,27 @@ function judgeReport(interior, got) {
       `pictures dropped: ${JSON.stringify(rep.imagesDropped)}`,
     rep.designFrom !== 'the book file' && `design from ${rep.designFrom}`
   ].filter(Boolean)
+  // Present but not a list is not "none": the report cannot be read, so R2
+  // has not run (a missing count is never a zero).
+  if (rep.headsShortened !== undefined && !Array.isArray(rep.headsShortened)) {
+    const why = `${got.from} gives headsShortened as something other than a list`
+    return [notRun('R2', why), notRun('R3', why)]
+  }
+  const shortened = shortenedHeads(rep)
   const r2 =
-    wrong.length === 0
-      ? passed('R2', `clean, from ${got.from}`)
-      : failed(
-          'R2',
-          wrong.join('; '),
-          (rep.warningsFirst ?? []).map((w) => `page ${w.page}: ${w.text}`)
-        )
+    wrong.length > 0
+      ? failed('R2', wrong.join('; '), [
+          ...(rep.warningsFirst ?? []).map((w) => `page ${w.page}: ${w.text}`),
+          ...shortened
+        ])
+      : shortened.length > 0
+        ? person(
+            'R2',
+            `clean, from ${got.from}, but ${shortened.length} running head${shortened.length === 1 ? ' was' : 's were'} too long for the page and printed shorter; the owner reads each and signs them off (nothing can give a head a short form yet)`,
+            shortened,
+            [interior.sha256]
+          )
+        : passed('R2', `clean, from ${got.from}`)
   const boxes = Array.isArray(rep.unprintable)
     ? rep.unprintable
     : Object.keys(rep.unprintable ?? {})
@@ -165,6 +178,22 @@ function judgeReport(interior, got) {
           [interior.sha256]
         )
   return [r2, r3]
+}
+
+/**
+ * The running heads the export had to shorten (`headsShortened`, reported in a
+ * book with topic heads), one line each: the head, what was printed instead,
+ * and the pages. They are not layout warnings, because nothing can give a head
+ * a short form yet and a warning could never be cleared; so they go to a
+ * person here, who settles them with a `Signed off: R2` line.
+ */
+function shortenedHeads(rep) {
+  return (Array.isArray(rep.headsShortened) ? rep.headsShortened : []).map((h) => {
+    const printed = h.setAs ? `printed as “${h.setAs}”` : 'left out, as no word of it fits'
+    const pages = Array.isArray(h.pages) ? h.pages : []
+    const on = pages.length === 1 ? `page ${pages[0]}` : `pages ${pages.join(', ')}`
+    return `running head “${h.text}” ${printed} on ${on}`
+  })
 }
 
 /**

@@ -24,7 +24,8 @@ const RUNNING_HEAD_MODES: RunningHeadMode[] = [
   'bookTitle',
   'author',
   'chapterTitle',
-  'pageNumber'
+  'pageNumber',
+  'topic'
 ]
 
 const RUNNING_HEAD_STYLES: RunningHeadStyle[] = ['plain', 'smallCaps', 'italic']
@@ -163,6 +164,7 @@ export function normalizeStyleProfile(raw: unknown): StyleProfile {
       : d.runningHeadRise,
     folioFromFootPt: distance(raw['folioFromFootPt'], d.folioFromFootPt),
     avoidShortLastLines: bool(raw['avoidShortLastLines'], d.avoidShortLastLines),
+    runningHeadTidy: bool(raw['runningHeadTidy'], d.runningHeadTidy),
     ornaments: {
       chapterOpener:
         typeof rawOrn['chapterOpener'] === 'string' ? (rawOrn['chapterOpener'] as string) : null,
@@ -205,6 +207,7 @@ export function mergeStyle(base: StyleProfile, patch: Partial<StyleProfile>): St
   if (patch.folioMirrorsHead !== undefined) next.folioMirrorsHead = patch.folioMirrorsHead
   if (patch.runningHeadRise !== undefined) next.runningHeadRise = patch.runningHeadRise
   if (patch.folioFromFootPt !== undefined) next.folioFromFootPt = patch.folioFromFootPt
+  if (patch.runningHeadTidy !== undefined) next.runningHeadTidy = patch.runningHeadTidy
   if (patch.avoidShortLastLines !== undefined) {
     next.avoidShortLastLines = patch.avoidShortLastLines
   }

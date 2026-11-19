@@ -15,7 +15,8 @@ import {
   layoutWithToc,
   type LayoutEdition,
   type LayoutWarning,
-  type PlacedImage
+  type PlacedImage,
+  type ShortenedHead
 } from '@core/layout'
 import { fontTableFor } from './fonts'
 import { renderPdf } from './pdf-out'
@@ -37,6 +38,8 @@ export interface Interior {
   embeddedFamilies: string[]
   /** Lines that would not fit their measure. */
   warnings: LayoutWarning[]
+  /** Running heads shortened to fit, in a book with topic heads (`LaidOutBook.headsShortened`). */
+  headsShortened?: ShortenedHead[]
   /** Where each chapter opens, and the folio the contents page printed for it. */
   chapterPages: { title: string; level: number; pageIndex: number }[]
   /** The page each block opens on, with its printed folio — measured, not estimated. */
@@ -148,6 +151,7 @@ export async function renderInterior(
     sectionPages,
     embeddedFamilies: pdf.embeddedFamilies,
     warnings: book.warnings,
+    ...(book.headsShortened ? { headsShortened: book.headsShortened } : {}),
     chapterPages: book.chapterPages,
     blockPages: book.blockPages,
     notesPlaced: book.notesPlaced,

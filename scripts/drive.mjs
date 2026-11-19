@@ -1748,14 +1748,15 @@ async function serve() {
           // the book carries — so a look that proofs here is the look that
           // prints. With none, the house look (`renderInLook`).
           const looks = await import(`/@fs${repo}/src/platform/browser/house-look.ts`)
-          const { built, profile, from, design, houseLine } = await looks.renderInLook(doc, {
-            own: saved.design,
-            house: house ? looks.readHouseLook(house.path, house.text) : null,
-            tweaks,
-            profileOf: (d) =>
-              wizard.appliedLook({ ...wizard.initialState(), styleProfiles: [] }, d).style,
-            options: { edition, orphanNotes: 'collect', images }
-          })
+          const { built, profile, from, design, houseLine, headsQuestion } =
+            await looks.renderInLook(doc, {
+              own: saved.design,
+              house: house ? looks.readHouseLook(house.path, house.text) : null,
+              tweaks,
+              profileOf: (d) =>
+                wizard.appliedLook({ ...wizard.initialState(), styleProfiles: [] }, d).style,
+              options: { edition, orphanNotes: 'collect', images }
+            })
 
           const shots = []
           if (pageNumbers.length > 0) {
@@ -1786,8 +1787,12 @@ async function serve() {
             // that matters when chapters are set to open recto: a right-hand
             // page is an odd one, and one chapter landing verso is the kind of
             // fault nobody sees until the proof copy arrives.
+            // With its level: the heads are chosen by what divides the
+            // level-1 headings, so a reading that makes its parts level 1
+            // is judged by its parts (docs/process/export.md).
             chapters: built.chapterPages.map((c) => ({
               title: c.title,
+              level: c.level,
               page: c.pageIndex + 1,
               side: (c.pageIndex + 1) % 2 === 1 ? 'recto' : 'verso'
             })),
@@ -1828,6 +1833,19 @@ async function serve() {
             // Inherited, not yet the book's own: `answers` with these as
             // `design`, then `save`, keeps them in the book file.
             ...(from === 'house' ? { inherited: design } : {}),
+            // Chapters that open with lists of topics: the owner's question
+            // (docs/process/export.md), never the tools' guess.
+            ...(headsQuestion ? { askOwner: headsQuestion } : {}),
+            // Topic heads shortened to fit, each wanting a short form.
+            ...(built.headsShortened
+              ? {
+                  headsShortened: built.headsShortened.map((h) => ({
+                    text: h.text,
+                    setAs: h.setAs,
+                    pages: h.pageIndexes.map((i) => i + 1)
+                  }))
+                }
+              : {}),
             // Base64 rather than an array of numbers: a three-hundred-page
             // book is megabytes, and a JSON array of bytes is four characters
             // for each of them.
@@ -5853,13 +5871,27 @@ async function serve() {
      * write that record, so a book designed from the conversation had no way
      * to keep its design. Each section given is merged over what the book
      * already holds, key by key; a section not given is left alone.
+     *
+     * A book with no design of its own is set in the house look, so a few
+     * design answers merged over nothing would become its whole design and
+     * drop every other house setting for the engine's defaults, while `proof`
+     * went on saying "the book file". That is refused, naming what would be
+     * lost (core's `houseSettingsLost`): write `proof`'s `inherited` answers
+     * as the design instead. `--partial` writes them anyway, for a design
+     * really meant to start from the defaults.
      */
-    answers: async ([from]) => {
-      if (!from) throw new Error('answers <file.json>  ({ "design": {...}, "export": {...} })')
+    answers: async ([from, ...flags]) => {
+      if (!from) {
+        throw new Error('answers <file.json> [--partial]  ({ "design": {...}, "export": {...} })')
+      }
       const given = await readJson(resolve(REPO, from))
+      const partial = flags.includes('--partial')
+      const bookFile = given.design ? (await currentBookFile()).file : null
+      const house = bookFile ? houseLookBeside(bookFile, await askShelfMap('houseLookPath')) : null
       return page.evaluate(
-        async ([repo, given]) => {
+        async ([repo, given, house, partial]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
+          const style = await import(`/@fs${repo}/src/core/style/index.ts`)
           const newest = await window.__pdbfPickBook(runStore)
           if (!newest) throw new Error('No book on this device.')
           const key = `pdbf.review.${newest.key}`
@@ -5868,15 +5900,31 @@ async function serve() {
           for (const [section, values] of Object.entries(given)) {
             next[section] = { ...(had[section] ?? {}), ...values }
           }
+          const parsed = house ? style.parseHouseLook(house.text) : null
+          const lost =
+            given.design && parsed && 'look' in parsed
+              ? style.houseSettingsLost(had.design, next.design, parsed.look)
+              : []
+          if (lost.length > 0 && !partial) {
+            throw new Error(
+              `This book has no design of its own, so it is set in the house look (${house.path}). ` +
+                'These answers would become its whole design and it would lose the house ' +
+                `look's ${lost.join(', ')}, laid out in the engine's defaults for them. Write the ` +
+                'answers `proof` reports as `inherited` as the design (they carry the running ' +
+                'heads too), with any change laid over them; or add --partial if a design ' +
+                'from the defaults is really meant. Nothing was written.'
+            )
+          }
           localStorage.setItem(key, JSON.stringify(next))
           return {
             book: newest.fileName,
             sections: Object.keys(given),
             answers: next,
+            ...(lost.length > 0 ? { leftTheHouseLook: lost } : {}),
             next: '`save` writes them into the book file.'
           }
         },
-        [REPO, given]
+        [REPO, given, house, partial]
       )
     },
 
@@ -6548,23 +6596,32 @@ async function serve() {
      * note, so running it again replaces rather than adding a second mark;
      * `drop` takes one out.
      */
-    // `insert <afterBlockId> <kind> <file> [--id <id>] [--header]`: a block
-    // the editor wrote, standing in the body after the named block. A table's
-    // file is rows on lines and cells divided by `|`; `--header` makes the
-    // first row its column heads. `insert drop <id>` takes one out.
+    // `insert <afterBlockId> <kind> <file> [--id <id>] [--header] [--level <n>]`:
+    // a block the editor wrote, standing in the body after the named block. A
+    // table's file is rows on lines and cells divided by `|`; `--header` makes
+    // the first row its column heads. A heading is level 1, a chapter, unless
+    // `--level` says otherwise (2 for a subheading inside a chapter).
+    // `insert drop <id>` takes one out.
     insert: async (argv) => {
       const flag = (name) => {
         const i = argv.indexOf(`--${name}`)
         return i === -1 ? null : argv[i + 1]
       }
-      const positional = argv.filter((a, i) => !a.startsWith('--') && !(argv[i - 1] === '--id'))
+      const positional = argv.filter(
+        (a, i) => !a.startsWith('--') && argv[i - 1] !== '--id' && argv[i - 1] !== '--level'
+      )
       const dropping = positional[0] === 'drop'
       const insertId = dropping ? positional[1] : (flag('id') ?? `ins-${Date.now().toString(36)}`)
       const [afterBlockId, blockKind, from] = dropping ? [] : positional
       if (dropping ? !insertId : !afterBlockId || !blockKind || !from) {
         throw new Error(
-          'insert <afterBlockId> <kind> <file> [--id <id>] [--header] | insert drop <id>'
+          'insert <afterBlockId> <kind> <file> [--id <id>] [--header] [--level <n>] | insert drop <id>'
         )
+      }
+      const levelGiven = flag('level')
+      const level = levelGiven === null ? null : Number(levelGiven)
+      if (level !== null && (blockKind !== 'heading' || !Number.isInteger(level) || level < 1)) {
+        throw new Error('--level is for a heading, and is a whole number from 1 (a chapter)')
       }
       let text = null
       if (from) {
@@ -6574,7 +6631,7 @@ async function serve() {
       }
       const headerRow = argv.includes('--header')
       return page.evaluate(
-        async ([repo, insertId, afterBlockId, blockKind, text, headerRow, dropping]) => {
+        async ([repo, insertId, afterBlockId, blockKind, text, headerRow, dropping, level]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const assemble = await import(`/@fs${repo}/src/core/assemble/index.ts`)
           const editsMod = await import(`/@fs${repo}/src/core/edits/index.ts`)
@@ -6598,7 +6655,8 @@ async function serve() {
                   afterBlockId,
                   blockKind,
                   text,
-                  ...(headerRow ? { headerRow: true } : {})
+                  ...(headerRow ? { headerRow: true } : {}),
+                  ...(level !== null ? { level } : {})
                 }
               ]
           const doc = editsMod.applyEdits(assemble.assembleBook(run.transcriptions), edits)
@@ -6626,7 +6684,7 @@ async function serve() {
             edits: edits.length
           }
         },
-        [REPO, insertId, afterBlockId ?? null, blockKind ?? null, text, headerRow, dropping]
+        [REPO, insertId, afterBlockId ?? null, blockKind ?? null, text, headerRow, dropping, level]
       )
     },
 

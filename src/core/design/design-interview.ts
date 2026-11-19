@@ -27,7 +27,7 @@ export interface DesignAnswers {
   kind: BookKind
   period: PeriodFeel
   chapterOpener: ChapterOpenerStyle
-  runningHeads: 'author-title' | 'chapter' | 'none'
+  runningHeads: 'author-title' | 'chapter' | 'chapter-topic' | 'none'
   /** Explicit trim override; otherwise derived from the book kind. */
   trimSize?: string
 }
@@ -200,12 +200,16 @@ export function profileFromAnswers(
 
   // Verso/recto asymmetry is the convention: the left page carries the wider
   // context, the right page the narrower one.
+  // A book divided by subheadings may carry the chapter on the left and the
+  // topic in force on the right (the owner's decision, 19 November 2026).
   const runningHeads: StyleProfile['runningHeads'] =
     answers.runningHeads === 'none'
       ? { verso: 'none', recto: 'none' }
       : answers.runningHeads === 'chapter'
         ? { verso: 'bookTitle', recto: 'chapterTitle' }
-        : { verso: 'author', recto: 'bookTitle' }
+        : answers.runningHeads === 'chapter-topic'
+          ? { verso: 'chapterTitle', recto: 'topic' }
+          : { verso: 'author', recto: 'bookTitle' }
 
   return {
     ...base,

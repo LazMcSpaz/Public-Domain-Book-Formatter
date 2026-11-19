@@ -22,7 +22,7 @@
  */
 import type { StyleProfile } from '@core/model'
 import { findOrnament, type OrnamentArt } from '@core/ornament'
-import { headingRunEnd } from '@core/assemble'
+import { headingRunEnd, topicHeadingIds } from '@core/assemble'
 import type { BookBlock, BookDocument, BookSection, Illustration } from '@core/assemble'
 import { effectiveDpi } from '@core/image'
 // The flattened view's coordinates, from the one place they are defined.
@@ -56,6 +56,15 @@ import { typographicQuotes, withTypographicQuotes } from './quotes'
 import { frameFor, leadingFor, linesPerFrame, runningHeadBaseline, trimToPoints } from './frames'
 import { FURNITURE_SIZE_RATIO, folioBaseline, furnitureFont, furnitureWarnings } from './furniture'
 import { proseBreaks, runtRule, type RuntRule } from './runts'
+import {
+  shortenedHeadLog,
+  topicShown,
+  topicsAfterHeading,
+  topicsOnNewPage,
+  usesTopicHeads,
+  type PageTopics
+} from './topic-heads'
+import { tidyRunningHead } from './head-tidy'
 import type { TextMeasurer } from './measure'
 import { hangPunctuation } from './optical'
 import {
@@ -454,6 +463,8 @@ interface PageBuilder {
   frame: PageFrame
   lines: { slot: number; line: FlowLine }[]
   chapterTitle: string | null
+  /** The topics begun on and carried into this page, for a topic head. */
+  topics: PageTopics
   /** Chapter openers carry no running head, by convention. */
   suppressRunningHead: boolean
   /** Display pages (half-title, title, copyright) carry no folio. */
@@ -2553,20 +2564,31 @@ function buildDropCapFlowable(
   }
 }
 
-/** The running-head text for one side of a page. */
+/**
+ * The running-head text for one side of a page, tidied when the look asks
+ * (`runningHeadTidy`: a final full stop dropped, and a topic's part label).
+ */
 function runningHeadText(
   mode: StyleProfile['runningHeads']['verso'],
   edition: LayoutEdition,
   page: PageBuilder,
-  folio: string | null
+  folio: string | null,
+  tidy: boolean
 ): string {
+  const said = (text: string, topic = false): string =>
+    tidy ? tidyRunningHead(text, { topic }) : text
   switch (mode) {
     case 'bookTitle':
-      return edition.title
+      return said(edition.title)
     case 'author':
-      return edition.author
+      return said(edition.author)
     case 'chapterTitle':
-      return page.chapterTitle ?? edition.title
+      return said(page.chapterTitle ?? edition.title)
+    case 'topic': {
+      // The topic in force, else (before the chapter's first) the chapter title.
+      const topic = topicShown(page.topics)
+      return topic === null ? said(page.chapterTitle ?? edition.title) : said(topic, true)
+    }
     case 'pageNumber':
       return folio ?? ''
     case 'none':
@@ -2652,6 +2674,8 @@ export function layout(
   /** Each further page a block runs on to, with the first word that begins there. */
   const blockTurns = new Map<string, { word: number; pageIndex: number }[]>()
   const warnings: LayoutWarning[] = []
+  /** The headings a topic head follows; none unless a head shows the topic. */
+  const topicIds = usesTopicHeads(profile) ? topicHeadingIds(doc.blocks) : new Set<string>()
 
   // A heading with no level is a level-1 heading to everything below, and a
   // level-1 heading opens a page. A reading that assigns no levels at all —
@@ -2739,6 +2763,7 @@ export function layout(
       frame: frameFrom(side),
       lines: [],
       chapterTitle: previous?.chapterTitle ?? null,
+      topics: topicsOnNewPage(previous?.topics),
       noteIds: [],
       suppressRunningHead: false,
       suppressFolio: false,
@@ -3485,6 +3510,11 @@ export function layout(
         // fall on the page must not replace the chapter's name in it, or the
         // reader loses the one thing the head is there to tell them.
         if (flow.chapter.level === 1) current().chapterTitle = flow.chapter.title
+        // A topic head follows the subheadings that divide the chapter.
+        current().topics = topicsAfterHeading(current().topics, {
+          ...flow.chapter,
+          isTopic: topicIds.has(flow.chapter.id)
+        })
       }
 
       slot += take
@@ -3563,15 +3593,21 @@ export function layout(
    */
   const frontMatterPageCount = pages.filter((p) => p.section === 'front').length
 
+  // A book with topic heads reports every head it had to shorten, in
+  // `headsShortened` and not in the warnings: nothing can give a head a short
+  // form yet, so a warning could never be cleared (`topic-heads.ts`).
+  const shortened = usesTopicHeads(profile) ? shortenedHeadLog() : null
   const laidOut: LaidOutPage[] = pages.map((p) =>
     finishPage(p, profile, options.edition, measurer, {
       leading,
       ascent,
       frontMatterPageCount,
       trim,
-      drawNotes
+      drawNotes,
+      ...(shortened ? { onHead: shortened.note } : {})
     })
   )
+  const headsShortened = shortened?.heads() ?? []
 
   // Every note that found a reference was placed, because a page is only ever
   // closed once the lines referencing its notes have been set. Anything left
@@ -3653,7 +3689,8 @@ export function layout(
     notesDropped,
     bareMarksMissed: prepared.bareMarksMissed,
     imagesPlaced,
-    imagesDropped
+    imagesDropped,
+    ...(shortened ? { headsShortened } : {})
   }
 }
 
@@ -3664,6 +3701,8 @@ interface FinishContext {
   trim: { widthPt: number; heightPt: number }
   /** Draws the footnotes a page claimed. Returns nothing when it has none. */
   drawNotes: (page: PageBuilder, items: PageItem[]) => void
+  /** Told each running head set, with what was drawn of it. */
+  onHead?: (pageIndex: number, text: string, drawn: string) => void
 }
 
 /** Turn a filled page into an immutable laid-out page, adding head and folio. */
@@ -3740,16 +3779,16 @@ function finishPage(
 
   if (!page.suppressRunningHead && page.section === 'body') {
     const mode = page.side === 'verso' ? profile.runningHeads.verso : profile.runningHeads.recto
-    const text = runningHeadText(mode, edition, page, folio)
+    const text = runningHeadText(mode, edition, page, folio, profile.runningHeadTidy)
     if (text.trim().length > 0) {
-      items.push(
-        furnitureLine(text, profile, measurer, page, {
-          baseline: runningHeadBaseline(profile),
-          placement: 'center',
-          frame,
-          head: true
-        })
-      )
+      const line = furnitureLine(text, profile, measurer, page, {
+        baseline: runningHeadBaseline(profile),
+        placement: 'center',
+        frame,
+        head: true
+      })
+      ctx.onHead?.(page.index, text, line.runs.map((r) => r.text).join(''))
+      items.push(line)
     }
   }
 

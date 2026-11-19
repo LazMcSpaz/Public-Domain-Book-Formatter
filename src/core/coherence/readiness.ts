@@ -140,7 +140,7 @@ export const READINESS_CHECKS: readonly ReadinessCheck[] = [
     'R2',
     'Export report clean',
     'driver',
-    'the `drive.mjs proof "answers=<book.json>" "pdf=<interior.pdf>"` report: warnings 0, nothing dropped, design from the book file'
+    'the `drive.mjs proof "answers=<book.json>" "pdf=<interior.pdf>"` report: warnings 0, nothing dropped, design from the book file; any running head shortened to fit read by a person'
   ),
   r(
     'R3',
