@@ -428,6 +428,54 @@ The PDF export (`drive.mjs proof`) and cover flattening
   `corrections.md` from the book as it stands, keeping the prose above them.
   `--check` writes nothing.
 
+## Status notes
+
+Each run of an agent leaves one note on the shelf, at
+`work/runs/<yyyy-mm>/<yyyy-mm-dd>-<book>-<role>-<id>.json`
+([the spec](../specs/status-notes.md); when to write one:
+[sessions.md](../process/sessions.md#status-notes-what-you-are-doing-on-the-shelf)).
+Every verb takes `--shelf <dir>`; without it the shelf is `$SHELF`, then the
+shelf checked out beside the tools, then `~/Public-Domain-Books-Storage`. The
+command writes only into a folder with `books/` in it, refuses any folder
+inside the tools repository, checks every note before writing it, and never
+commits or pushes: commit the notes with the work. Paths given to `--where`
+and `--file` are from the shelf's top (`books/<folder>/queries.md`) or full
+paths inside the shelf.
+
+- `node scripts/work.mjs start --role <role> --book <folder> --stage <stage> --job "<words>"`:
+  starts a run and prints its id. `--from <id>` names the run it takes over
+  from; `--of <n> --unit <word>` (and `--done <n>`) start its progress;
+  `--note` adds a word. With no `--book` and no `--stage` it is tools or
+  shelf work. A book not on the shelf is refused, except for a scout at
+  `sourcing`. Roles: `managing-editor`, `scout`, `reader`, `typesetter`,
+  `etsu`, `etsu-editor`, `checker`, `builder`, `reviewer`. Stages:
+  `sourcing`, `reading`, `checking`, `writing`, `pictures`, `layout`,
+  `upload`, `published`.
+- `node scripts/work.mjs progress <id>`: `--done <n>`, `--of <n>`,
+  `--unit <word>` and `--note "<words>"`, any of them. Brings a run that was
+  waiting on the owner back to working.
+- `node scripts/work.mjs ask <id> --what "<what the owner must do>" --where <path>`:
+  the run waits on the owner. `--where` is repeatable and must name a file on
+  the shelf; `--where "Label=path"` names the link (sheets the owner knows get
+  their own name: Questions sheet, Readiness report, Introduction draft).
+- `node scripts/work.mjs done <id> --result "<one line>"`: the run is done.
+  `--file <path>` (repeatable) names the files it left.
+- `node scripts/work.mjs fail <id> --result "<why>"`: the run could not
+  finish.
+- `node scripts/work.mjs handoff <id> --to <role> --result "<one line>"`: the
+  run hands its work on; `--run <id>` names the next run when it exists,
+  `--note` says what the next role needs to know. The next run names this one
+  with `start --from <id>`.
+- `node scripts/work.mjs list`: what is waiting on the owner (longest first,
+  with the files to open), each book's stage and its stages' latest runs, and
+  each role's runs in progress, finished in the last seven days, and handed to
+  it but not picked up. A run silent for twelve hours while working shows as
+  stale (`--stale-hours <n>` to change it). `--book <folder>` and
+  `--role <role>` narrow it; `--json` prints the views as data. A note that
+  cannot be read is listed with its reasons and makes the command exit 1.
+- `node scripts/work.mjs show <id>`: one run, how it stands, and its
+  timeline; `--json` prints the note itself.
+
 ## Storage
 
 Big files (scans, reference copies, exports, picture originals) live in the

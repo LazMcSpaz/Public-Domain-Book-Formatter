@@ -22,11 +22,12 @@
 import { spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { createReadStream, createWriteStream, existsSync, mkdirSync } from 'node:fs'
-import { readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { register } from 'node:module'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { toolsRefusal } from './lib/tools-guard.mjs'
 
 // Node 22's fetch ignores HTTPS_PROXY unless NODE_USE_ENV_PROXY is set when
 // Node starts, and a cloud session reaches Cloudflare only through its proxy
@@ -47,23 +48,10 @@ const r2 = await import('./lib/r2.mjs')
 const { STORAGE_LIST, MAX_OBJECT_BYTES, TEST_KIND } = core
 const { fail, hashOf } = r2
 
-const TOOLS = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-
-/** Refuse a destination inside this repository, which is public: book files never go in it. */
+/** Refuse a destination inside the tools repository, which is public: book files never go in it. */
 function refuseInsideTools(target, what) {
-  let real = target
-  try {
-    real = join(realpathSync(dirname(target)), basename(target))
-  } catch {
-    /* the folder is not there yet */
-  }
-  const fold = (p) => (process.platform === 'win32' ? p.toLowerCase() : p)
-  const inside = relative(fold(realpathSync(TOOLS)), fold(real))
-  if (inside === '' || (!inside.startsWith('..') && !isAbsolute(inside))) {
-    fail(
-      `Refusing to write ${what} at ${target}: that is inside the tools repository, which is public. Use a folder outside it (the shelf, or a scratch folder).`
-    )
-  }
+  const why = toolsRefusal(target, what)
+  if (why) fail(why)
 }
 
 const mb = (bytes) => (bytes / 1e6).toFixed(1)

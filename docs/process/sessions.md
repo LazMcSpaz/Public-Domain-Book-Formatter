@@ -24,7 +24,8 @@ On the shelf, today: `books/<dir>/book.json` is the book and every decision;
 beside it is the **exported** edition, not the scan. The scan is
 `scans/<sha256>.pdf`, named in `book.json` under `scan.path`. The voice card
 is `voice/etsu-t-dhent.json`; `RULINGS.md` holds the standing rulings every
-book inherits.
+book inherits. `work/runs/` holds the status notes, one file per run of an
+agent ([below](#status-notes-what-you-are-doing-on-the-shelf)).
 
 ## Before you start
 
@@ -133,6 +134,48 @@ as well as `save`, or the shelf list cannot see it.
    which file. (Changes reaching `main` through a pull request that merges
    when the checks pass is planned, task 7 of the [cleanup plan](../cleanup-plan.md).)
 
+## Status notes: what you are doing, on the shelf
+
+Every role leaves a status note on the shelf for each job it does, so the
+owner, and the Workroom screen once it is built, can see what is waiting on
+him, where each book stands and what each role is doing. The note sits beside
+the book's `ledger.md`; it does not replace it. Each run has its own file, so
+agents working at the same time never write the same one
+([the spec](../specs/status-notes.md)).
+
+- **At the start of a job:**
+  `node scripts/work.mjs start --role <role> --book <folder> --stage <stage> --job "<plain words>"`.
+  It prints the run's id; use it for every later step. A run that takes over
+  from another names it with `--from <id>`. Tools work has no `--book` and no
+  `--stage`.
+- **At meaningful points**, not every leaf: a batch landed, a pass finished,
+  a round of the writing loop.
+  `work.mjs progress <id> --done <n> --of <m> --unit <leaves, plates, checks>`,
+  or `--note "<what happened>"`. A run that says nothing for twelve hours
+  while working is shown as stale.
+- **When the owner must act:**
+  `work.mjs ask <id> --what "<what he must do>" --where <the file on the shelf>`
+  (the questions sheet, the readiness report, a draft). Once he has answered,
+  `progress` or `done` moves the run on.
+- **At the end:** `done <id> --result "<one line>"`,
+  `fail <id> --result "<why>"`, or
+  `handoff <id> --to <role> --result "<one line>"`. A finished run is never
+  reopened; the next piece of work is a new run with `--from`.
+- **Commit the notes with your work.** `work.mjs` writes into the shelf
+  checkout and never commits or pushes; a note left uncommitted is as
+  invisible as any other work.
+- **A note never says a book is checked or ready to upload.** Only the
+  readiness report does ([README.md](./README.md)); the checker's note links
+  to it.
+
+Roles: `managing-editor`, `scout`, `reader`, `typesetter`, `etsu` (the
+writer), `etsu-editor` (Etsu's editor), `checker`, and `builder` and
+`reviewer` for tools work. Stages, in order: `sourcing`, `reading`,
+`checking`, `writing`, `pictures`, `layout`, `upload`, `published`.
+`work.mjs list` shows what waits on the owner, each book's stage and each
+role's work; `work.mjs show <id>` shows one run's timeline. Every option is in
+[commands.md](../reference/commands.md#status-notes).
+
 ## Two sessions at once
 
 One book is worked by one session at a time: a correction does not merge with
@@ -218,13 +261,17 @@ file, a prompt or the chat.
 1. Everything committed and pushed; `rev-list` prints 0 in both repositories.
 2. `main` brought level (step 8).
 3. The ledger says what was done, by which role, and what is NOT CHECKED.
-4. Tell the owner the book's state in the three words of [README.md](./README.md),
+4. Your status note says how the run ended (done, failed, handed off, or
+   waiting on the owner with the file to open), and it is committed with the
+   work.
+5. Tell the owner the book's state in the three words of [README.md](./README.md),
    with the check results.
 
 ## What it produces and where it goes
 
-Commits on both repositories, pushed and level with `main`, and the book's
-`ledger.md` saying what was done and every check result.
+Commits on both repositories, pushed and level with `main`, the book's
+`ledger.md` saying what was done and every check result, and a status note
+for each run in `work/runs/` on the shelf.
 
 ## Checks that must pass
 

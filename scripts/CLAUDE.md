@@ -25,7 +25,8 @@ Heading: the giant `drive.mjs` (about 7,800 lines) is to be split by responsibil
 - `voice.mjs`: the editor's voice card and the prose audit.
 - `resolve-ts.mjs`: lets plain Node load `src/core` (aliases, extensionless imports).
 - `storage.mjs`: big files into and out of the R2 bucket, checked by fingerprint; `lib/r2.mjs` makes the requests.
-- `lib/`: plain-Node helpers shared by scripts and tests (`ink.mjs` measures ink off a PNG; `book-pictures.mjs` finds the pictures a book names; `house-look.mjs` finds the shelf's house look).
+- `work.mjs`: the agents' status notes on the shelf (start, progress, ask, done, fail, handoff, list, show); the rules are core's `work/`, the shelf side `lib/work-shelf.mjs`.
+- `lib/`: plain-Node helpers shared by scripts and tests (`ink.mjs` measures ink off a PNG; `book-pictures.mjs` finds the pictures a book names; `house-look.mjs` finds the shelf's house look; `tools-guard.mjs` refuses any write inside a copy of the tools).
 - `screenshot-flow.mjs`, `check-*.mjs`: the browser checks.
 
 ## Folder-specific rules and lessons
@@ -35,6 +36,7 @@ Heading: the giant `drive.mjs` (about 7,800 lines) is to be split by responsibil
 - Never send a scan through the debug protocol as base64 (kills the tab, looks like flake); fetch it through the driver's `GET /file`.
 - A picture a book names is found only through `lib/book-pictures.mjs` (core's `pictureCandidates`: beside the book, then the shelf's top), never by joining its path to a folder (`test/one-shelf-map-wired.test.ts`).
 - Over OCR text, strip only our own tags (`<i>`, `<b>`, `<sc>`); a `<[^>]+>` regex eats everything between a stray `<` and `>`.
+- A script that writes book work refuses the tools repository through `lib/tools-guard.mjs`, never its own copy of the check; a test of that refusal must not be able to write into the repository if the guard breaks (`test/work-script.test.ts`).
 - Trust a new check only after it catches a deliberately injected fault; a check with nothing to compare against must refuse, not pass.
 - A check in `readiness.mjs` whose command stops before its report is NOT CHECKED, never FAILED or PASSED: confirm the report line ran before reading an exit code. A driver's `{"error": …}` or a missing count is never a zero (`test/readiness-scripts.test.ts`).
 - Node 22's `fetch` ignores `HTTPS_PROXY` unless started with `NODE_USE_ENV_PROXY=1`; a script calling an outside API from a cloud session must restart itself with it, as `storage.mjs` does.

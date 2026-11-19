@@ -43,11 +43,12 @@ A plain-English map of this repository: what each folder is for and who may use 
 - `queries/`: the editor's queries, rulings and proposals.
 - `speech/`: text prepared for reading aloud (audiobooks, paused).
 - `style/`: the style system and saved looks.
-- `sync/`: the shelf: paths, cards and saving to GitHub.
+- `sync/`: the shelf: paths, cards and saving to GitHub; where the status notes go (`work-paths.ts`).
 - `textquality/`: how damaged a text is.
 - `transcribe/`: the old vision pass (API) and the shapes a page's reading is stored in.
 - `typeset/`: the KDP checks.
 - `witness/`: two independent readings compared.
+- `work/`: the agents' status notes (one per run) and the Workroom's views of them.
 - `wizard/`: the guided flow's steps and questions.
 
 ### Everything else

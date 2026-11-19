@@ -37,6 +37,19 @@ role an agent definition is planned. Today one session often plays several
 roles. Where a document says a check is done by a reader who did not do the
 work, that is not optional: give it to a fresh subagent.
 
+## Status notes: every role, every job
+
+Whatever the job, the role doing it writes a status note on the shelf with
+`node scripts/work.mjs`: when it starts, at meaningful points as it goes, and
+when it stops (done, failed, handed to another role, or waiting on the owner
+with the file he must open). A session playing several roles writes a note
+for each, under each role's name. The notes are how the owner, and the
+Workroom screen once it is built, see what waits on him, where each book
+stands and what each role is doing; they are committed with the work and
+never replace the ledger. How and when: [sessions.md](./sessions.md#status-notes-what-you-are-doing-on-the-shelf).
+A note never calls a book checked or ready to upload; the readiness report
+below is the only verdict, and the checker's note links to it.
+
 ## Three words for a book's state
 
 Use only these three words when telling the owner where a book stands. Do not

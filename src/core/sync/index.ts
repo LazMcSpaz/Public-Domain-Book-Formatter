@@ -93,3 +93,17 @@ export {
   type AddResult,
   type StorageRow
 } from './storage'
+export {
+  MAX_SHELF_PATH,
+  NO_BOOK,
+  RUNS_ROOT,
+  WORK_ROOT,
+  bookFolderProblem,
+  linkLabel,
+  runIdOfPath,
+  runIdProblem,
+  runsMonthPath,
+  shelfPathProblem,
+  statusNotePath,
+  type NoteName
+} from './work-paths'

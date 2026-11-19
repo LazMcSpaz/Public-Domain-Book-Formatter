@@ -43,6 +43,7 @@ All the book logic as pure code: reading shapes, assembly, edits, the checks, th
 - **project/**: bump `RECON_CACHE_VERSION` when a recon record gains a field, so an older reading is refused, not served as empty.
 - **provenance/**: a text layer is `converted` (needs reading) unless a typesetting producer is named; never default to `typeset`.
 - **queries/**: a proposal is an option, never a `defaultValue` or `held` value; the three plain decisions are always appended.
+- **work/**: a status note changes only through `changes.ts`, which runs the strict parser on the result; a reader of many notes goes through `readNotes`, which checks each file's name against its note.
 - **sync/**: the outbox queues edits, never the book: a flush re-reads the shelf file, folds the queue in and writes once (`mergeOutbox`).
 - **transcribe/**:
   - Words split on `\s`, U+00A0 included, everywhere; emphasis is by word index, so never treat a no-break space specially in one place.
