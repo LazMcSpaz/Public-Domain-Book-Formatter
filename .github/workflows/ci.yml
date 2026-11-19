@@ -18,10 +18,12 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
-      - run: npm run format:check
-      - run: npm run lint
-      - run: npm run typecheck
-      - run: npm test
+      # The one command a session runs before every commit: typecheck, the core
+      # purity check, lint, format check, the harness check (`python3
+      # harness/check.py`; Python 3 is on the runner) and the tests, stopping at
+      # the first failure with that check's own message. Defined once, in
+      # package.json, so CI and a session cannot drift apart.
+      - run: npm run verify
       - run: npm run build
       - uses: actions/upload-artifact@v4
         with:

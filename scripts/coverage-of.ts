@@ -16,6 +16,7 @@
  * mupdf renders nothing here: it is used as `italic-witness.mjs` uses it, to
  * read a text layer once, outside the app.
  */
+import { readJsonSync } from './lib/json-file.mjs'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
 import * as mupdf from 'mupdf'
@@ -30,13 +31,13 @@ const flag = (name: string): string | null => {
 }
 const bookPath = args.find((a) => a.endsWith('book.json'))
 if (!bookPath) throw new Error('coverage-of.ts <book.json> [--second <second.json>] [--out <file>]')
-const book = JSON.parse(readFileSync(bookPath, 'utf8'))
+const book = readJsonSync(bookPath)
 const doc = applyEdits(assembleBook(book.run.transcriptions), book.run.edits ?? [])
 
 let layer: LayerLeaf[]
 const secondPath = flag('second')
 if (secondPath) {
-  const second = JSON.parse(readFileSync(secondPath, 'utf8')) as Record<string, string>
+  const second = readJsonSync(secondPath) as Record<string, string>
   layer = Object.entries(second).map(([page, text]) => ({
     page: Number(page),
     lines: text.split('\n')

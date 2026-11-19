@@ -35,7 +35,6 @@
   "src/core/transcribe/schema.ts is too long (limit 400). Split it along one clear responsibility.",
   "src/core/wizard/questions.ts is too long (limit 400). Split it along one clear responsibility.",
   "src/core/wizard/steps.ts is too long (limit 400). Split it along one clear responsibility.",
-  "src/platform/browser/control.ts breaks a boundary (platform code must not reach into the app). Move the logic or route it through an allowed module.",
   "src/platform/browser/illustrations.ts is too long (limit 400). Split it along one clear responsibility.",
   "src/platform/browser/pdf.ts is too long (limit 400). Split it along one clear responsibility.",
   "src/platform/browser/run-store.ts is too long (limit 400). Split it along one clear responsibility.",

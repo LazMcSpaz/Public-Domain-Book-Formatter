@@ -216,6 +216,7 @@ import {
   type HarvestDepth
 } from '@core/harvest'
 import { renderInterior } from '../platform/browser/interior'
+import { browserTransport } from '../platform/browser/transport'
 import { cropIllustrations, readSuppliedImage, retouchPng } from '../platform/browser/illustrations'
 import { renderPageToObjectUrl } from '../platform/browser/pdf'
 import { loadDefaultLook } from './Settings'
@@ -2980,7 +2981,7 @@ export function App(): JSX.Element {
     // is broken rather than the key being wrong.
     setPendingCost(null)
     setError(null)
-    const credential = await validateApiKey(key)
+    const credential = await validateApiKey(key, browserTransport)
     if (!credential.ok) {
       setError(credential.message ?? 'That API key could not be used.')
       return null
@@ -3072,7 +3073,7 @@ export function App(): JSX.Element {
         const result = await runBrowserAdjudication({
           fileData: file,
           leaves,
-          client: { ...client, effort: 'medium' },
+          client: { ...client, effort: 'medium', transport: browserTransport },
           imageLongEdge: loadPrefs().imageLongEdge,
           onProgress: (p) => setCheckProgress({ leaf: p.leaf, total: p.total, settled: p.settled })
         })
@@ -3122,7 +3123,7 @@ export function App(): JSX.Element {
         fileData: data,
         ocrWordsByPage: wordsByPage,
         pageText: reconRef.current?.pageText ?? [],
-        client: { apiKey: key, modelId, effort: 'medium' },
+        client: { apiKey: key, modelId, effort: 'medium', transport: browserTransport },
         // The vetted list, not the raw harvest. The gate promised that
         // confirming a word fixes it everywhere; before this the verdicts were
         // read by nothing, and a word the user had just rejected was still
@@ -3248,7 +3249,7 @@ export function App(): JSX.Element {
       const result = await submitBookBatch({
         fileData: data,
         pageText: reconRef.current?.pageText ?? [],
-        client: { apiKey: key, modelId, effort: 'medium' },
+        client: { apiKey: key, modelId, effort: 'medium', transport: browserTransport },
         lexicon: vetted.entries,
         orthography: (identity['orthography'] as 'preserve' | 'modernize') ?? 'preserve',
         normalizeLongS: identity['longS'] === true,
@@ -3320,7 +3321,7 @@ export function App(): JSX.Element {
     setBatchWaiting(null)
     try {
       const result = await collectBookBatch({
-        client: { apiKey: key, modelId },
+        client: { apiKey: key, modelId, transport: browserTransport },
         batches: outstanding,
         ocrWordsByPage: wordsByPage,
         termCorrections: ticket.termCorrections,
@@ -3795,7 +3796,8 @@ export function App(): JSX.Element {
           client: {
             apiKey: loadApiKey(),
             modelId: prefs.modelId,
-            effort: 'medium'
+            effort: 'medium',
+            transport: browserTransport
           },
           lexicon: vetLexicon(
             state.lexicon,
@@ -4049,7 +4051,7 @@ export function App(): JSX.Element {
     // scan is not automatically right here — and with no page images in this
     // pass the better model is a fraction of what it costs upstairs.
     const notesModelId = String(answers['notesModel'] ?? loadPrefs().modelId)
-    const client = { apiKey: loadApiKey(), modelId: notesModelId }
+    const client = { apiKey: loadApiKey(), modelId: notesModelId, transport: browserTransport }
 
     const harvestOptions = {
       depth: harvestDepth as HarvestDepth,

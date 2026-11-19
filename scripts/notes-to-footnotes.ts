@@ -14,6 +14,7 @@
  * `drive.mjs pairs` (or the notes `body-of.ts` reports with the block that
  * claims each), and only then put it in place: this rewrites leaves.
  */
+import { stripBom } from './lib/json-file.mjs'
 import { readFileSync, writeFileSync } from 'node:fs'
 import { gatheredNotesToFootnotes } from '@core/edits'
 
@@ -34,7 +35,7 @@ if (!inPath?.endsWith('.json') || !outPath?.endsWith('.json')) {
     'notes-to-footnotes.ts <book.json> <out.json> [--keep <head-leaf>:<note>,...] [--head "…"]'
   )
 }
-const raw = readFileSync(inPath, 'utf8')
+const raw = stripBom(readFileSync(inPath, 'utf8'))
 const book = JSON.parse(raw)
 // Written back exactly as the app writes it, so the diff is the change.
 if (JSON.stringify(book, null, 2) !== raw) {

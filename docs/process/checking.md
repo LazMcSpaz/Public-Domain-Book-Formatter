@@ -54,8 +54,8 @@ did not raise the findings.
    `damage`'s `greek` list against the scan: Greek garbled into Latin letters
    (`Xpbvos` for Χρόνος) passes every shape test.
 6. **Read for sense**, a chapter at a time:
-   `node scripts/drive.mjs chunks out.json`. Give every reader the book's own
-   vocabulary. A reader returns **findings, never text**: a block id, an exact
+   `node scripts/drive.mjs chunks` (its result names the file). Give every
+   reader the book's own vocabulary. A reader returns **findings, never text**: a block id, an exact
    quote, a kind, why, and what it expects, marked as a guess.
 7. **Adjudicate every finding against the page, blind.**
    `node scripts/drive.mjs crops findings.json` cuts a crop per finding and
@@ -172,8 +172,9 @@ CHECKED item cannot be signed off.
   are not counted; every other hit goes to a person to read.
 - **C12 Italic and bold survived every sweep.** Per block, count `<i>`, `<b>`
   and `<sc>` in `pristine` and `edited` of the assembled body (`scripts/body-of.ts`,
-  the same body `drive.mjs body` gives). Run by the readiness command; a block
-  that lost any goes to a person, because a correction can mean it.
+  the same body `node scripts/drive.mjs body` gives; its result names the file).
+  Run by the readiness command; a block that lost any goes to a person, because
+  a correction can mean it.
 
 **For "ready to upload"**, on the exact files going to KDP:
 

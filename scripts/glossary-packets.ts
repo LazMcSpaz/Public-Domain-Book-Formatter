@@ -18,6 +18,7 @@
  * shelf's own readings of her books, assembled with their corrections, so a
  * quotation taken from a packet is what this edition prints.
  */
+import { readJsonSync } from './lib/json-file.mjs'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { assembleBook } from '@core/assemble'
@@ -75,7 +76,7 @@ const perSource = Number(flag('--per') ?? 3)
 const authorUses = Number(flag('--uses') ?? 3)
 
 const docOf = (path: string) => {
-  const run = JSON.parse(readFileSync(path, 'utf8')).run
+  const run = readJsonSync(path).run
   return { run, doc: applyEdits(assembleBook(run.transcriptions), run.edits ?? []) }
 }
 

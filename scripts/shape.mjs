@@ -23,6 +23,7 @@
  * the change — a book file is the shelf's source of truth, and a script that
  * reformats one on its way to setting a field has changed more than it said.
  */
+import { readJsonSync, stripBom } from './lib/json-file.mjs'
 import { register } from 'node:module'
 import { readFileSync, writeFileSync, existsSync, readdirSync, statSync } from 'node:fs'
 import { join, basename, dirname, resolve } from 'node:path'
@@ -138,7 +139,7 @@ function serialization(raw, parsed) {
 
 function record(bookDir, shape) {
   const p = join(bookDir, 'book.json')
-  const raw = readFileSync(p, 'utf8')
+  const raw = stripBom(readFileSync(p, 'utf8'))
   const book = JSON.parse(raw)
   const how = serialization(raw, book)
   if (!how) {
@@ -177,7 +178,7 @@ if (flag('--shelf')) {
       console.log(`${name.padEnd(width)}  (no book.json)`)
       continue
     }
-    const shape = parseShape(JSON.parse(readFileSync(p, 'utf8')).run?.shape)
+    const shape = parseShape(readJsonSync(p).run?.shape)
     if (!shape) {
       missing += 1
       console.log(`${name.padEnd(width)}  not recorded`)
@@ -222,7 +223,7 @@ if (declared) {
     process.exit(2)
   }
 } else if (isDir) {
-  const book = JSON.parse(readFileSync(join(target, 'book.json'), 'utf8'))
+  const book = readJsonSync(join(target, 'book.json'))
   // `--from` names the file when the book file does not: a source too large
   // for the shelf, or one read before the pointer was written. Still a
   // measurement, and the evidence says which file it was taken from.

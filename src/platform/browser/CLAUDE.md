@@ -9,7 +9,7 @@ Everything the engine needs a browser for: PDF rendering (pdf.js), OCR (Tesserac
 
 ## Must not
 
-- Import from `src/app/` (`harness/check.py` enforces it; `control.ts` still imports `agent-surface` and is the known exception to remove).
+- Import from `src/app/` (`harness/check.py` enforces it). A contract both sides need goes in `src/core/`, as the command surface `control.ts` drives is typed in `@core/control` (`surface.ts`).
 - Hold book logic: a decision about the book belongs in `src/core/`, called from here.
 
 ## Key files
@@ -21,6 +21,7 @@ Everything the engine needs a browser for: PDF rendering (pdf.js), OCR (Tesserac
 - `font-widths.ts`: gives every glyph the book prints a width, and names the ones drawn as boxes.
 - `interior.ts`, `preview.ts`: the finished interior and the design-gate preview, both from the engine's own PDF.
 - `shelf.ts`, `shelf-save.ts`, `shelf-outbox.ts`, `landed.ts`: reading and writing the shelf repository.
+- `transport.ts`: `browserTransport`, the `fetch` every model call is handed (the core never reaches the network).
 - `run-store.ts`: the device's IndexedDB store of runs and banked looks.
 
 ## Folder-specific rules and lessons

@@ -15,18 +15,18 @@
  * percent (taken here as 3% of that book's `off` count, or one disagreement,
  * whichever is larger). Mean confidence is reported and never decides.
  */
-import { readFileSync } from 'node:fs'
+import { readJsonSync } from './lib/json-file.mjs'
 
 const args = process.argv.slice(2)
 const regimesAt = args.indexOf('--regimes')
-const regimes = regimesAt === -1 ? {} : JSON.parse(readFileSync(args[regimesAt + 1], 'utf8'))
+const regimes = regimesAt === -1 ? {} : readJsonSync(args[regimesAt + 1])
 const files = args.filter((a, i) => !a.startsWith('--') && args[i - 1] !== '--regimes')
 if (files.length === 0) {
   console.error('usage: node scripts/cleanup-ledger.mjs <trial.json>... [--regimes regimes.json]')
   process.exit(2)
 }
 
-const rows = files.flatMap((f) => JSON.parse(readFileSync(f, 'utf8')))
+const rows = files.flatMap((f) => readJsonSync(f))
 const presets = [...new Set(rows.map((r) => r.preset))]
 const books = [...new Set(rows.map((r) => r.book))]
 

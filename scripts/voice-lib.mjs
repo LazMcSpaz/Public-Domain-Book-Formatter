@@ -10,8 +10,8 @@
  * Node only: this is the half that cannot run in a browser, which is the whole
  * reason the audio is made off the device.
  */
+import { readJson } from './lib/json-file.mjs'
 import { createHash } from 'node:crypto'
-import { readFile } from 'node:fs/promises'
 import { resolve } from 'node:path'
 import { createServer } from 'vite'
 
@@ -43,7 +43,7 @@ export const dialectOf = (voice) => (voice.startsWith('b') ? 'en' : 'en-us')
 /** A list from `voice/`, or nothing if it is not there. */
 export async function listFile(name) {
   try {
-    return JSON.parse(await readFile(resolve(REPO, `voice/${name}.json`), 'utf8'))
+    return await readJson(resolve(REPO, `voice/${name}.json`))
   } catch {
     return []
   }

@@ -365,7 +365,7 @@ export async function createBatch(
 ): Promise<BatchStatus> {
   if (requests.length === 0)
     throw new TranscribeError('A batch needs at least one page', null, false)
-  const transport = config.transport ?? fetch
+  const transport = config.transport
   const response = await transport(BATCHES_URL, {
     method: 'POST',
     headers: apiHeaders(config.apiKey),
@@ -377,7 +377,7 @@ export async function createBatch(
 
 /** Where a batch has got to. */
 export async function retrieveBatch(config: ClientConfig, batchId: string): Promise<BatchStatus> {
-  const transport = config.transport ?? fetch
+  const transport = config.transport
   const response = await transport(`${BATCHES_URL}/${encodeURIComponent(batchId)}`, {
     method: 'GET',
     headers: apiHeaders(config.apiKey)
@@ -397,7 +397,7 @@ export async function fetchBatchResults(
   config: ClientConfig,
   batch: { id: string; resultsUrl?: string | null }
 ): Promise<string> {
-  const transport = config.transport ?? fetch
+  const transport = config.transport
   const url = batch.resultsUrl || `${BATCHES_URL}/${encodeURIComponent(batch.id)}/results`
   const response = await transport(url, { method: 'GET', headers: apiHeaders(config.apiKey) })
   await throwIfFailed(response)
@@ -406,7 +406,7 @@ export async function fetchBatchResults(
 
 /** Stop a batch. Pages already read are still charged and still collectable. */
 export async function cancelBatch(config: ClientConfig, batchId: string): Promise<BatchStatus> {
-  const transport = config.transport ?? fetch
+  const transport = config.transport
   const response = await transport(`${BATCHES_URL}/${encodeURIComponent(batchId)}/cancel`, {
     method: 'POST',
     headers: apiHeaders(config.apiKey)

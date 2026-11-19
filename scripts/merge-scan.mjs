@@ -47,6 +47,7 @@
  * `--decrypted <dir>`, written there by `decrypt-chunks.mjs` under the
  * original's digest; the digest checked is still the original's.
  */
+import { readJsonSync } from './lib/json-file.mjs'
 import { readdirSync, readFileSync, writeFileSync, statSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { createHash } from 'node:crypto'
@@ -61,7 +62,7 @@ const manifestPath = arg('manifest')
 if (manifestPath) await fromManifest(manifestPath)
 
 async function fromManifest(path) {
-  const manifest = JSON.parse(readFileSync(path, 'utf8'))
+  const manifest = readJsonSync(path)
   const root = resolve(arg('root', '.'))
   const out = resolve(arg('out', 'merged.pdf'))
   const holes = (manifest.gaps ?? []).filter((g) => !g.blank)

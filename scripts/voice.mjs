@@ -38,6 +38,7 @@
  * The shelf is $SHELF_DIR, or --shelf <dir>. The editor is --name <pen name>,
  * defaulting to whoever the file already names.
  */
+import { readJson, readText } from './lib/json-file.mjs'
 import { createServer } from 'vite'
 import { readFile, writeFile, mkdir, readdir } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
@@ -106,7 +107,7 @@ async function voiceFile(sync, name) {
 
 async function load(annotate, path) {
   try {
-    return annotate.normalizeVoice(JSON.parse(await readFile(path, 'utf8')))
+    return annotate.normalizeVoice(await readJson(path))
   } catch {
     return annotate.defaultVoice()
   }
@@ -166,7 +167,7 @@ try {
     const next = annotate.withExemplar(voice, { passage, note })
     console.log(`${next.exemplars.length} exemplar(s)\n→ ${await save(path, next)}`)
   } else if (verb === 'learn-file') {
-    const accepted = JSON.parse(await readFile(resolve(opts._[0]), 'utf8'))
+    const accepted = await readJson(resolve(opts._[0]))
     const next = accepted.reduce(
       (v, e) => annotate.withExemplar(v, { passage: e.passage ?? '', note: e.note ?? '' }),
       voice
@@ -177,7 +178,7 @@ try {
     // asked. Takes a book file (auditing every section and note the editor has
     // added to it) or any file of prose.
     const target = resolve(opts._[0] ?? '.')
-    const raw = await readFile(target, 'utf8')
+    const raw = await readText(target)
     let prose = raw
     let what = target
     if (target.endsWith('.json')) {
@@ -285,8 +286,8 @@ try {
     // are held to the same standard as notes bought from the API: every date,
     // figure and name a note asserts that the book itself never states comes
     // back as the list to check. It does not care who wrote the note.
-    const proposals = JSON.parse(await readFile(resolve(opts._[0]), 'utf8'))
-    const body = JSON.parse(await readFile(resolve(opts._[1]), 'utf8'))
+    const proposals = await readJson(resolve(opts._[0]))
+    const body = await readJson(resolve(opts._[1]))
     const blocks = new Map((body.edited ?? body).map((b) => [b.id, b.text]))
     const bookText = [...blocks.values()].join('\n')
     const checked = annotate.checkProposals(proposals, blocks, bookText)

@@ -48,6 +48,13 @@ Never report a book checked or ready to upload without this report's verdict. `d
   known the command refuses and says which shelf folder to load from. An
   output path you name must be outside this repository: a path inside it is
   refused, and so is `card` or `corrections` pointed at a folder inside it.
+- **Working files go to a scratch folder, never into this repository.**
+  `body`, `truth`, `chunks`, `concordance`, `witness`, `second` and
+  `cleantrial` write files that carry the book's text. With no output path
+  they are written to `pdbf-work` in the computer's temporary folder, and the
+  result names the file (`wrote`). An output path you name must be outside
+  this repository, as for a sheet. A later verb given a bare name
+  (`witness second.json`) looks in the scratch folder first.
 - After editing `src/core` or `scripts/drive.mjs`, restart both servers. A
   running `serve` keeps the old code in memory.
 
@@ -111,13 +118,21 @@ builds its own copy.
   `book clear` forgets the choice.
 - `node scripts/drive.mjs state`: the current wizard screen as JSON.
   `answer <id> <value>` and `advance` work through it.
-- `node scripts/drive.mjs body out.json`: the assembled book. Each block's id
-  and its exact text (italic as `<i>`, bold as `<b>`), as first read
-  (`pristine`) and as corrected (`edited`). **Every correction is written
-  against these strings, never against a leaf's raw text.**
+- `node scripts/drive.mjs body`: the assembled book, as `body.json` in the
+  scratch folder (or the path given). **Every correction is written against
+  these strings, never against a leaf's raw text.** The file holds:
+  - `edited` and `pristine`: every block as corrected and as first read, each
+    `{ id, kind, pages, text }`, the text with italic as `<i>`, bold as `<b>`
+    and small capitals as `<sc>`;
+  - `notes.edited` and `notes.pristine`: the book's own footnotes, a separate
+    tree, each `{ id, leaf, text }`. A footnote's `fn…` id (`fn40`, what
+    `correct` takes) is found here, never among the blocks. The editor's own
+    notes are not in it;
+  - `synopses` and `chapters`: the original contents' descriptions, and the
+    chapters the new contents and running heads are built from.
 - `node scripts/drive.mjs notes n.json --full`: the book's own footnotes with
-  their text. `body` gives blocks only, so a count without the notes is not a
-  count.
+  their text and the marks that point at them. The count `body` reports is of
+  blocks only, so a count without the notes is not a count.
 - `node scripts/drive.mjs ocr 12 16 19`: what OCR read off the named leaves,
   as plain text. `ocr 37 fresh` re-reads the pixels instead of the saved
   reading; `fresh --clean=gentle` reads through a cleaning preset.
@@ -135,12 +150,15 @@ builds its own copy.
   (box as fractions of the leaf: x, y, width, height).
 - `node scripts/drive.mjs sheet typos 28:occulist`: one image of suspect words,
   each cut from the leaf it sits on (`leaf:word` pairs), to check many at once.
-- `node scripts/drive.mjs second 12 16 --out second.json`: a second OCR engine
-  (PaddleOCR) over the named leaves (all by default), as the file `witness`
+- `node scripts/drive.mjs second 12 16`: a second OCR engine
+  (PaddleOCR) over the named leaves (all by default), as `second.json` in the
+  scratch folder (`--out <path>` puts it elsewhere), the file `witness`
   reads. `--layer` takes the scan's own OCR layer instead. `--tier small` uses
   the larger model, which is on disk.
-- `node scripts/drive.mjs witness second.json`: the two readings side by side.
-  Mechanical differences settled, real disagreements listed worst first.
+- `node scripts/drive.mjs witness second.json`: the two readings side by side,
+  as `witness.json` in the scratch folder (or the path given after the
+  reading). Mechanical differences settled, real disagreements listed worst
+  first.
 - `node scripts/drive.mjs select p12b3 "a candle flame"`: drags over words in
   the reading view as a finger would. The reading view must be open.
 - `node scripts/drive.mjs reading`: every passage the editor marked while
@@ -157,8 +175,9 @@ builds its own copy.
 - `node scripts/drive.mjs cachestat recount <scan.pdf>`: puts a saved
   reading's true page count back, measured off the file. **After any
   interrupted reading, compare the recorded page count with the file's.**
-- `node scripts/drive.mjs cleantrial t.json --truth truth.json --leaves 13,27`:
-  measures every cleaning preset against the proofed text, leaf by leaf.
+- `node scripts/drive.mjs cleantrial --truth truth.json --leaves 13,27`:
+  measures every cleaning preset against the proofed text, leaf by leaf, as
+  `cleantrial.json` in the scratch folder (or the path given first).
   `truth.json` comes from `drive.mjs truth`.
 - `node scripts/cleanup-ledger.mjs <trial.json>...`: turns `cleantrial` files
   into the cleanup ledger's tables and applies the decision rule.
@@ -248,7 +267,14 @@ Fixing faults:
   reports name the book's own folder. **Warning:** it overwrites those
   sheets; read `git log -1 -- <dir>/rulings.md` and the head of the file
   first, and restore a hand-written sheet from git afterwards. Lists any
-  waiting query without a proposal.
+  waiting query without a proposal, and under `decidedButNotPrinted` every
+  ruling the text does not yet carry.
+- `node scripts/drive.mjs rule 41 "teh word" corrected "the word" "<why>"`:
+  files the editor's ruling on a query (`as-printed`, `corrected` or `noted`;
+  `standing` in place of the leaf for a standing ruling). **It does not change
+  the text.** A `corrected` ruling is applied by a separate step, `correct` on
+  the block (or `sweep`); until then `queries` lists it under
+  `decidedButNotPrinted`. Then `save`.
 - `node scripts/drive.mjs propose p.json --by="the Glossary session"`: the
   reader's suggested answers, offered at the query screen with nothing
   selected. The file is an array of `{ leaf, quote, decision, correction?,
@@ -391,6 +417,7 @@ These are used or mentioned by the commands above and have no entry of their
 own yet. All exist: `drive.mjs save` (writes the open run to `book.json`), `pairs`, `proof`
 (lays out the book; `proof pdf=<out.pdf>` writes the PDF export; reports
 unprintable characters), `querycrops`, `crops`, `card`, `shelf`, `section`,
-`bare`, `query`, `rule`, `truth`; `scripts/flatten-cover.py <cover.pdf>
+`bare`, `query`, `truth` (the proofed text, leaf by leaf, as `truth.json` in
+the scratch folder); `scripts/flatten-cover.py <cover.pdf>
 <cover-flat.pdf>` (the cover copy KDP accepts);
 `scripts/reading-kit/variants.mjs` (prints `SWEEP UNSAFE`).

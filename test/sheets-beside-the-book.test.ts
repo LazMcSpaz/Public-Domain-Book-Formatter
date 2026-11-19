@@ -8,7 +8,8 @@ import {
   sheetNeedsBook,
   sheetPath,
   sheetRefusal,
-  shelfSlug
+  shelfSlug,
+  workFileRefusal
 } from '@core/sync'
 
 /**
@@ -91,6 +92,32 @@ describe('nothing is written inside the tools repository', () => {
       'books/Someone-SomeTitle-x1/'
     )
     expect(sheetNeedsBook('damage.md', null)).toContain('load')
+  })
+})
+
+/**
+ * The working files (`body`, `truth`, `second` and the rest) carry the book's
+ * text too, and used to default to a bare name in the tools checkout.
+ */
+describe('no working file is written inside the tools repository', () => {
+  const WORK = '/tmp/pdbf-work'
+
+  it('refuses the tools repository and anything under it', () => {
+    expect(workFileRefusal('/work/tools/body.json', TOOLS, WORK)).not.toBeNull()
+    expect(workFileRefusal('/work/shelf/../tools/second.json', TOOLS, WORK)).not.toBeNull()
+    expect(workFileRefusal('c:/users/SOMEONE/Tools/truth.json', WIN_TOOLS, WORK)).not.toBeNull()
+  })
+
+  it('allows the scratch folder and any path outside', () => {
+    expect(workFileRefusal(`${WORK}/body.json`, TOOLS, WORK)).toBeNull()
+    expect(workFileRefusal('/work/tools-shelf/body.json', TOOLS, WORK)).toBeNull()
+    expect(workFileRefusal('D:\\Users\\someone\\tools\\b.json', WIN_TOOLS, WORK)).toBeNull()
+  })
+
+  it('says where the file goes instead', () => {
+    const said = workFileRefusal('/work/tools/body.json', TOOLS, WORK) ?? ''
+    expect(said).toContain('public')
+    expect(said).toContain(WORK)
   })
 })
 

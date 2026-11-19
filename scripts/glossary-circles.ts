@@ -18,7 +18,8 @@
  * done for one glossary is not done for the next (CLAUDE.md, _The apparatus,
  * book by book_), and an entry nothing points at is one no reader opens.
  */
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readJsonSync } from './lib/json-file.mjs'
+import { writeFileSync } from 'node:fs'
 import { assembleBook } from '@core/assemble'
 import { applyEdits } from '@core/edits'
 import { partsIn, withMarkup, type InlinePart } from '@core/transcribe/markup'
@@ -28,7 +29,7 @@ const [bookPath, out] = process.argv.slice(-2)
 if (!bookPath?.endsWith('.json') || !out?.endsWith('.json') || bookPath === out) {
   throw new Error('glossary-circles.ts <book.json> <batch.json>')
 }
-const run = JSON.parse(readFileSync(bookPath, 'utf8')).run
+const run = readJsonSync(bookPath).run
 const doc = applyEdits(assembleBook(run.transcriptions), run.edits ?? [])
 const section = [...(run.edits ?? [])]
   .reverse()

@@ -15,6 +15,7 @@
  * _The Lost Keys of Masonry_. `--check` exits non-zero on any
  * finding the paper did not contradict.
  */
+import { readJsonSync } from './lib/json-file.mjs'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { gunzipSync } from 'node:zlib'
@@ -36,7 +37,7 @@ if (!bookPath) {
   process.exit(2)
 }
 
-const file = JSON.parse(readFileSync(bookPath, 'utf8'))
+const file = readJsonSync(bookPath)
 const doc = applyEdits(assembleBook(file.run.transcriptions), file.run.edits ?? [])
 
 const reconPath = flag('recon') ?? join(dirname(bookPath), 'recon.json.gz')

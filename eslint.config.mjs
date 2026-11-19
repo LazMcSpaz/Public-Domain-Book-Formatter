@@ -6,7 +6,7 @@ export default tseslint.config(
   {
     // Vendored third-party assets, build output, and generated screenshots are
     // not ours to lint.
-    ignores: ['dist/**', 'public/**', 'screenshots/**', 'node_modules/**']
+    ignores: ['dist/**', 'public/**', 'screenshots/**', 'node_modules/**', '.claude/worktrees/**']
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

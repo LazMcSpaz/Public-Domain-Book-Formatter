@@ -25,6 +25,7 @@
  * The dictionary is `word-list`, 274,000 English words, a development
  * dependency: this runs under Node over `books/*` and never in the page.
  */
+import { readJsonSync } from './lib/json-file.mjs'
 import { execFileSync } from 'node:child_process'
 import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join, resolve } from 'node:path'
@@ -67,7 +68,7 @@ const dictionary = new Set(readFileSync(wordsFile, 'utf8').split('\n'))
  * those pages.
  */
 function textsOf(path: string): { id: string; text: string }[] {
-  const file = JSON.parse(readFileSync(path, 'utf8'))
+  const file = readJsonSync(path)
   const doc = applyEdits(assembleBook(file.run.transcriptions), file.run.edits ?? [])
   return printedTexts(doc, { markup: false })
 }

@@ -24,6 +24,7 @@
  *   node scripts/drive.mjs shot design
  *   node scripts/drive.mjs quit
  */
+import { readJson, readJsonSync, readText } from './lib/json-file.mjs'
 import { chromium } from 'playwright'
 import { createServer } from 'node:http'
 import { access, mkdir, writeFile } from 'node:fs/promises'
@@ -36,6 +37,7 @@ import {
   statSync,
   writeFileSync
 } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, resolve } from 'node:path'
 
 const PORT = Number(process.env.DRIVE_PORT ?? 7788)
@@ -76,7 +78,7 @@ function shelfDirForKey(key) {
     const card = resolve(books, dir, 'about.json')
     if (!existsSync(card)) continue
     try {
-      if (JSON.parse(readFileSync(card, 'utf8')).key === key) return dir
+      if (readJsonSync(card).key === key) return dir
     } catch {
       // A card that will not parse names no book; the next one might.
     }
@@ -434,9 +436,8 @@ async function serve() {
    * when the book has not reached that gate.
    */
   const bookTitle = async (where) => {
-    const { readFile } = await import('node:fs/promises')
     try {
-      const book = JSON.parse(await readFile(resolve(where, 'book.json'), 'utf8'))
+      const book = await readJson(resolve(where, 'book.json'))
       const exp = book.answers?.export ?? {}
       if (exp.title) return exp.seriesLine ? `${exp.title}*, *${exp.seriesLine}` : exp.title
     } catch {
@@ -503,18 +504,54 @@ async function serve() {
     )
 
   /**
-   * Refuse a sheet aimed inside this repository. Compared through the real
-   * folders, so a shelf reached by a link is judged by where it really is.
+   * A path through its real folder, so a shelf reached by a link is judged by
+   * where it really is.
    */
-  const refuseInsideTools = async (target, bookFile) => {
-    let real = target
+  const realTarget = (target) => {
     try {
-      real = resolve(realpathSync(dirname(target)), basename(target))
+      return resolve(realpathSync(dirname(target)), basename(target))
     } catch {
-      /* the folder is not there yet; the write will say so */
+      return target // the folder is not there yet; the write will say so
     }
-    const refused = await askShelfMap('sheetRefusal', real, REPO_REAL, bookFile)
+  }
+
+  /** Refuse a sheet aimed inside this repository. */
+  const refuseInsideTools = async (target, bookFile) => {
+    const refused = await askShelfMap('sheetRefusal', realTarget(target), REPO_REAL, bookFile)
     if (refused) throw new Error(refused)
+  }
+
+  /**
+   * Where the working files go when no path is named: a scratch folder under
+   * the system's temporary folder, outside every repository. They carry the
+   * book's text, and they used to default to a bare name in this repository,
+   * which is public.
+   */
+  const WORK_DIR = resolve(tmpdir(), 'pdbf-work')
+
+  /**
+   * Where a working file made from the current book goes (`body`, `truth`,
+   * `chunks`, `concordance`, `witness`, `second`, `cleantrial`), settled
+   * before any work: at the path the session named, resolved as a sheet's is,
+   * or `name` in `WORK_DIR`. Never inside this repository: the same guard as
+   * the sheets, with its own message.
+   */
+  const workTarget = async (name, given) => {
+    const target = given ? resolve(REPO, given) : resolve(WORK_DIR, name)
+    const refused = await askShelfMap('workFileRefusal', realTarget(target), REPO_REAL, WORK_DIR)
+    if (refused) throw new Error(refused)
+    await mkdir(dirname(target), { recursive: true })
+    return target
+  }
+
+  /**
+   * A working file a later verb reads (`witness second.json`): a name that is
+   * not absolute is looked for in `WORK_DIR` first, where the verb that made
+   * it put it, and otherwise read as given.
+   */
+  const workInput = (given) => {
+    const scratch = resolve(WORK_DIR, given)
+    return !isAbsolute(given) && existsSync(scratch) ? scratch : resolve(REPO, given)
   }
 
   /**
@@ -958,9 +995,9 @@ async function serve() {
      * which is a false alarm indistinguishable from a real one.
      */
     load: async ([bookPath, scanPath]) => {
-      const { readFile, stat } = await import('node:fs/promises')
+      const { stat } = await import('node:fs/promises')
       const bookFile = resolve(REPO, bookPath)
-      const json = await readFile(bookFile, 'utf8')
+      const json = await readText(bookFile)
       const scan = resolve(REPO, scanPath)
       const meta = await stat(scan)
       const name = scanPath.split('/').pop()
@@ -1217,7 +1254,7 @@ async function serve() {
       // writing the book to a file called `--force`.
       const flags = args.filter((a) => a.startsWith('--'))
       let [bookPath, out] = args.filter((a) => !a.startsWith('--'))
-      const { readFile, writeFile } = await import('node:fs/promises')
+      const { writeFile } = await import('node:fs/promises')
       // With no output named, the book goes back where it came from. The old
       // default was `book.out.json` in the current directory — which, run from
       // the formatter checkout, wrote a book file and an `images/` tree into
@@ -1243,7 +1280,7 @@ async function serve() {
       // against without a real book having been read.
       const original =
         bookPath && bookPath !== '-'
-          ? JSON.parse(await readFile(resolve(REPO, bookPath), 'utf8'))
+          ? await readJson(resolve(REPO, bookPath))
           : { run: {}, answers: {}, voice: {}, notesCheckpoint: null, scan: null }
       const result = await page.evaluate(
         async ([repo, was]) => {
@@ -1638,8 +1675,7 @@ async function serve() {
       const answersFrom = wanted.find((a) => a.startsWith('answers='))?.slice(8) ?? null
       let fromFile = null
       if (answersFrom) {
-        const { readFile } = await import('node:fs/promises')
-        fromFile = JSON.parse(await readFile(resolve(REPO, answersFrom), 'utf8')).answers ?? {}
+        fromFile = (await readJson(resolve(REPO, answersFrom))).answers ?? {}
       }
       const tweaks = Object.fromEntries(
         wanted
@@ -1831,7 +1867,7 @@ async function serve() {
       if (!scanPath || !pagesPath) {
         throw new Error('transcribe <scan.pdf> <pages.json> [merge|replace]')
       }
-      const { readFile, stat } = await import('node:fs/promises')
+      const { stat } = await import('node:fs/promises')
       // `-` means the book this session is working on, resolved the way every
       // other verb resolves it. A scan loaded in an earlier session lives in
       // the store and nowhere on this filesystem, so demanding a path made the
@@ -1845,7 +1881,7 @@ async function serve() {
           lastModified: Math.floor(meta.mtimeMs)
         }
       }
-      const raw = JSON.parse(await readFile(resolve(REPO, pagesPath), 'utf8'))
+      const raw = await readJson(resolve(REPO, pagesPath))
       const pages = Array.isArray(raw) ? raw : (raw.pages ?? [])
       if (!Array.isArray(pages) || pages.length === 0) {
         throw new Error(`${pagesPath}: no pages. Expected an array, or { "pages": [...] }.`)
@@ -2331,7 +2367,8 @@ async function serve() {
      * "Panchadasi" and "akasha" cold and files them as incoherent, which is the
      * commonest way a sense pass drowns in findings nobody wants.
      */
-    chunks: async ([out = 'chunks.json']) => {
+    chunks: async ([given]) => {
+      const out = await workTarget('chunks.json', given)
       const built = await page.evaluate(
         async ([repo]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
@@ -2488,9 +2525,9 @@ async function serve() {
      *
      *   concordance findings.json [out.json]
      */
-    concordance: async ([path = 'findings.json', out = 'concordance.json']) => {
-      const { readFile } = await import('node:fs/promises')
-      const raw = JSON.parse(await readFile(resolve(REPO, path), 'utf8'))
+    concordance: async ([path = 'findings.json', given]) => {
+      const out = await workTarget('concordance.json', given)
+      const raw = await readJson(workInput(path))
       const built = await page.evaluate(
         async ([repo, raw]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
@@ -2521,7 +2558,7 @@ async function serve() {
         },
         [REPO, raw]
       )
-      await writeFile(resolve(out), JSON.stringify(built.concordance, null, 1))
+      await writeFile(out, JSON.stringify(built.concordance, null, 1))
       const withParallel = built.concordance.filter((w) => w.parallels.length > 0).length
       return {
         wrote: out,
@@ -2552,8 +2589,8 @@ async function serve() {
      * be acted on.
      */
     crops: async ([path = 'findings.json', dir = 'crops', dpi = '200']) => {
-      const { readFile, writeFile, mkdir } = await import('node:fs/promises')
-      const raw = JSON.parse(await readFile(resolve(REPO, path), 'utf8'))
+      const { writeFile, mkdir } = await import('node:fs/promises')
+      const raw = await readJson(resolve(REPO, path))
       const { shape, located } = await page.evaluate(
         async ([repo, raw]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
@@ -2640,9 +2677,9 @@ async function serve() {
      */
     review: async ([findingsPath = 'findings.json', verdictsPath = 'verdicts.json', given]) => {
       const { target: out } = await sheetTarget('sense.md', given)
-      const { readFile, writeFile } = await import('node:fs/promises')
-      const rawFindings = JSON.parse(await readFile(resolve(REPO, findingsPath), 'utf8'))
-      const rawVerdicts = JSON.parse(await readFile(resolve(REPO, verdictsPath), 'utf8'))
+      const { writeFile } = await import('node:fs/promises')
+      const rawFindings = await readJson(resolve(REPO, findingsPath))
+      const rawVerdicts = await readJson(resolve(REPO, verdictsPath))
       const built = await page.evaluate(
         async ([repo, rawFindings, rawVerdicts]) => {
           const coherence = await import(`/@fs${repo}/src/core/coherence/index.ts`)
@@ -2745,7 +2782,8 @@ async function serve() {
      * included, as the `<i>` tags `applyEdits` reads back — so a list of fixes
      * can be checked before any of it is written.
      */
-    body: async ([out = 'body.json']) => {
+    body: async ([given]) => {
+      const out = await workTarget('body.json', given)
       const doc = await readBody()
       const { writeFile } = await import('node:fs/promises')
       await writeFile(out, JSON.stringify(doc, null, 1))
@@ -2785,7 +2823,6 @@ async function serve() {
       if (!dir) throw new Error('finish <shelf-book-directory>')
       const { execFile } = await import('node:child_process')
       const { promisify } = await import('node:util')
-      const { readFile } = await import('node:fs/promises')
       const { tmpdir } = await import('node:os')
       const { join } = await import('node:path')
       const where = resolve(REPO, dir)
@@ -2802,7 +2839,7 @@ async function serve() {
       // handed. The headwords come off the book file exactly as the script
       // reads them, so the two doors cannot disagree about what the glossary
       // holds.
-      const book = JSON.parse(await readFile(join(where, 'book.json'), 'utf8'))
+      const book = await readJson(join(where, 'book.json'))
       const glossary = (book.run?.edits ?? []).find(
         (e) => e.kind === 'section' && /glossar/iu.test(e.title ?? '')
       )
@@ -2956,7 +2993,8 @@ async function serve() {
      *
      *   truth [out.json]
      */
-    truth: async ([out = 'truth.json']) => {
+    truth: async ([given]) => {
+      const out = await workTarget('truth.json', given)
       const built = await page.evaluate(
         async ([repo]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
@@ -2979,7 +3017,7 @@ async function serve() {
         },
         [REPO]
       )
-      await writeFile(resolve(out), JSON.stringify(built, null, 1))
+      await writeFile(out, JSON.stringify(built, null, 1))
       const placed = built.leaves.reduce((n, l) => n + l.words.length, 0)
       const unplaced = built.leaves.reduce((n, l) => n + l.unplaced, 0)
       return {
@@ -4276,7 +4314,7 @@ async function serve() {
         .filter((a) => !a.startsWith('--') && !taken.has(a))
         .map(Number)
         .filter(Number.isFinite)
-      const out = value('--out') ?? 'second.json'
+      const out = await workTarget('second.json', value('--out'))
       const tier = value('--tier') ?? 'tiny'
       const layer = args.includes('--layer')
       const built = await page.evaluate(
@@ -4367,7 +4405,7 @@ async function serve() {
       for (const n of Object.keys(built.texts).sort((a, b) => Number(a) - Number(b))) {
         if (leaves.length === 0 || leaves.includes(Number(n))) second[n] = built.texts[n]
       }
-      await writeFile(resolve(REPO, out), JSON.stringify(second, null, 1))
+      await writeFile(out, JSON.stringify(second, null, 1))
       const fresh = built.per.filter((p) => !p.cached)
       return {
         wrote: out,
@@ -4402,13 +4440,15 @@ async function serve() {
      * preset the same few words for reading the page correctly.
      */
     cleantrial: async (args) => {
-      const { readFile, writeFile } = await import('node:fs/promises')
+      const { writeFile } = await import('node:fs/promises')
       const isFlagValue = (list, a) => {
         const at = list.indexOf(a)
         return at > 0 && list[at - 1].startsWith('--')
       }
-      const out =
-        args.find((a) => !a.startsWith('--') && !isFlagValue(args, a)) ?? 'cleantrial.json'
+      const out = await workTarget(
+        'cleantrial.json',
+        args.find((a) => !a.startsWith('--') && !isFlagValue(args, a))
+      )
       const value = (flag) => {
         const at = args.indexOf(flag)
         return at === -1 ? null : (args[at + 1] ?? null)
@@ -4416,9 +4456,9 @@ async function serve() {
       const truthPath = value('--truth')
       const leavesArg = value('--leaves')
       if (!truthPath || !leavesArg) {
-        throw new Error('cleantrial <out.json> --truth <truth.json> --leaves 1,2,3 [--presets a,b]')
+        throw new Error('cleantrial [out.json] --truth <truth.json> --leaves 1,2,3 [--presets a,b]')
       }
-      const truth = JSON.parse(await readFile(resolve(REPO, truthPath), 'utf8'))
+      const truth = await readJson(workInput(truthPath))
       const leaves = leavesArg.split(',').map(Number)
       const presets = (value('--presets') ?? 'off,gentle,gentle+despeckle,binarise').split(',')
       const byLeaf = new Map(truth.leaves.map((l) => [l.pageIndex, l]))
@@ -4479,7 +4519,7 @@ async function serve() {
         },
         [REPO, wanted, presets]
       )
-      await writeFile(resolve(REPO, out), JSON.stringify(rows, null, 1))
+      await writeFile(out, JSON.stringify(rows, null, 1))
       const by = {}
       for (const r of rows) {
         const b = (by[r.preset] ??= { leaves: 0, substantive: 0, agreeing: 0, words: 0 })
@@ -4573,11 +4613,11 @@ async function serve() {
      */
     card: async ([dir]) => {
       if (!dir) throw new Error('card <shelf-book-directory>')
-      const { readFile, writeFile } = await import('node:fs/promises')
+      const { writeFile } = await import('node:fs/promises')
       const where = resolve(REPO, dir)
       // The sheets written here quote the book: never into this repository.
       await refuseInsideTools(resolve(where, 'queries.md'), null)
-      const json = await readFile(resolve(where, 'book.json'), 'utf8')
+      const json = await readText(resolve(where, 'book.json'))
       // The sheets are headed with the book's name, as `queries` heads them:
       // the export title where the book has reached that gate, else whatever
       // a person already wrote at the head of the sheet. The run in this
@@ -4669,10 +4709,11 @@ async function serve() {
      * two readers could not agree on", which is an order of magnitude shorter
      * with the hardest cases at the top.
      */
-    witness: async ([secondPath, out = 'witness.json', ...ns]) => {
+    witness: async ([secondPath, given, ...ns]) => {
       if (!secondPath) throw new Error('witness <second.json> [out.json] [leaf...] [--ours <f>]')
-      const { readFile, writeFile } = await import('node:fs/promises')
-      const second = JSON.parse(await readFile(resolve(REPO, secondPath), 'utf8'))
+      const { writeFile } = await import('node:fs/promises')
+      const out = await workTarget('witness.json', given)
+      const second = await readJson(workInput(secondPath))
       // `--ours <file>` compares a reading of our own that is not the raw OCR
       // — a draft, with the running head and folio already taken off the top.
       // Without it the commonest disagreement on every single leaf is the page
@@ -4684,7 +4725,7 @@ async function serve() {
       // unsure about.
       const oursAt = ns.indexOf('--ours')
       const oursPath = oursAt === -1 ? null : ns[oursAt + 1]
-      const ours = oursPath ? JSON.parse(await readFile(resolve(REPO, oursPath), 'utf8')) : null
+      const ours = oursPath ? await readJson(workInput(oursPath)) : null
       const only = ns
         .filter((_, i) => i !== oursAt && i !== oursAt + 1)
         .map(Number)
@@ -4761,7 +4802,7 @@ async function serve() {
         },
         [REPO, second, only, ours]
       )
-      await writeFile(resolve(REPO, out), JSON.stringify(report, null, 1), 'utf8')
+      await writeFile(out, JSON.stringify(report, null, 1), 'utf8')
       return {
         wrote: out,
         ours: oursPath ?? 'the cached OCR, furniture and all',
@@ -4804,8 +4845,8 @@ async function serve() {
      */
     emphasis: async ([inPath, outPath]) => {
       if (!inPath) throw new Error('emphasis <done.json> [out.json]')
-      const { readFile, writeFile } = await import('node:fs/promises')
-      const batch = JSON.parse(await readFile(resolve(REPO, inPath), 'utf8'))
+      const { writeFile } = await import('node:fs/promises')
+      const batch = await readJson(resolve(REPO, inPath))
       const pages = Array.isArray(batch) ? batch : (batch.pages ?? [])
       if (pages.length === 0) throw new Error(`${inPath} holds no pages.`)
 
@@ -5741,8 +5782,7 @@ async function serve() {
      */
     answers: async ([from]) => {
       if (!from) throw new Error('answers <file.json>  ({ "design": {...}, "export": {...} })')
-      const { readFile } = await import('node:fs/promises')
-      const given = JSON.parse(await readFile(resolve(REPO, from), 'utf8'))
+      const given = await readJson(resolve(REPO, from))
       return page.evaluate(
         async ([repo, given]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
@@ -5882,8 +5922,7 @@ async function serve() {
       const besideBook = dirname(out)
       const exportTitle = (() => {
         try {
-          return JSON.parse(readFileSync(resolve(besideBook, 'book.json'), 'utf8')).answers?.export
-            ?.title
+          return readJsonSync(resolve(besideBook, 'book.json')).answers?.export?.title
             ? 'book'
             : null
         } catch {
@@ -6609,8 +6648,7 @@ async function serve() {
       // The same guard as the single form: no entry may take a block's tags
       // to zero.
       if (argv[0] === '--batch') {
-        const { readFile } = await import('node:fs/promises')
-        const entries = JSON.parse(await readFile(resolve(REPO, argv[1]), 'utf8'))
+        const entries = await readJson(resolve(REPO, argv[1]))
         return page.evaluate(
           async ([repo, entries]) => {
             const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
@@ -6703,8 +6741,7 @@ async function serve() {
 
       let replacement = null
       if (from) {
-        const { readFile } = await import('node:fs/promises')
-        replacement = (await readFile(resolve(REPO, from), 'utf8')).replace(/\n+$/u, '')
+        replacement = (await readText(resolve(REPO, from))).replace(/\n+$/u, '')
       }
 
       return page.evaluate(
@@ -7490,8 +7527,7 @@ async function serve() {
       const now = flag('now')
       let replacement = null
       if (from) {
-        const { readFile } = await import('node:fs/promises')
-        replacement = (await readFile(resolve(REPO, from), 'utf8')).replace(/\n+$/u, '')
+        replacement = (await readText(resolve(REPO, from))).replace(/\n+$/u, '')
       }
 
       return page.evaluate(
@@ -7620,7 +7656,7 @@ async function serve() {
       if (!file) throw new Error('propose <file.json> [--by "<who>"] [--replace]')
       const by = flags.find((f) => f.startsWith('--by='))?.slice('--by='.length) ?? ''
       const replace = flags.includes('--replace')
-      const raw = JSON.parse(readFileSync(resolve(file), 'utf8'))
+      const raw = readJsonSync(resolve(file))
       const given = Array.isArray(raw) ? raw : Array.isArray(raw?.proposals) ? raw.proposals : null
       if (!given) throw new Error('That file is not an array of proposals.')
       const proposals = given.map((p) => ({
