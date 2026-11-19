@@ -15,7 +15,7 @@ import {
   type PositionedLine,
   type TextMeasurer
 } from '@core/layout'
-import { defaultStyleProfile } from '@core/style'
+import { DEFAULT_STYLE_PROFILES, defaultStyleProfile } from '@core/style'
 import type { StyleProfile } from '@core/model'
 import type { BookDocument } from '@core/assemble'
 
@@ -220,5 +220,22 @@ describe('a page number set a fixed distance from the foot', () => {
     expect(said).toContain(FOLIO_NOT_PLACED)
     expect(said).not.toContain(FOLIO_NOT_MIRRORED)
     expect(furniture(house({ folioFromFootPt: 36 })).book.warnings).toEqual([])
+  })
+
+  it('warns about a set distance only where a page number prints at the foot', () => {
+    const warnings = (profile: StyleProfile): string[] =>
+      layout(doc, profile, measurer, {
+        edition: { title: 'A Book', author: 'An Author', editionDate: '2026' }
+      }).warnings.map((w) => w.text)
+    expect(warnings(house({ folioFromFootPt: 40 }))).toContain(FOLIO_NOT_PLACED)
+    for (const pageNumber of ['topOuter', 'none'] as const) {
+      expect(warnings(house({ folioFromFootPt: 40, pageNumber })), pageNumber).not.toContain(
+        FOLIO_NOT_PLACED
+      )
+    }
+  })
+
+  it('is set in no shipped look, so a book on any of them keeps its page number', () => {
+    for (const look of DEFAULT_STYLE_PROFILES) expect(look.folioFromFootPt, look.id).toBe(0)
   })
 })
