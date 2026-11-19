@@ -154,7 +154,7 @@ function judgeReport(interior, got) {
       : shortened.length > 0
         ? person(
             'R2',
-            `clean, from ${got.from}, but ${shortened.length} running head${shortened.length === 1 ? ' was' : 's were'} too long for the page and printed shorter; the owner reads each, and settles it with a short form or a sign-off`,
+            `clean, from ${got.from}, but ${shortened.length} running head${shortened.length === 1 ? ' was' : 's were'} too long for the page and printed shorter; the owner reads each and signs them off (nothing can give a head a short form yet)`,
             shortened,
             [interior.sha256]
           )
