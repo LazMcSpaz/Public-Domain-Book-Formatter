@@ -62,6 +62,9 @@ function c2(ctx) {
  * read off the book's own recon reading). The command exits 0 on the text half
  * alone when it has no reading of this copy to read the paper from, so that
  * half is reported NOT CHECKED with its reason, never folded into a pass.
+ * A book with no scan at all (its recorded shape says no pixels: a born-digital
+ * PDF or an EPUB) has no paper to read, so for it the paper half does not
+ * apply and the text half is the whole check.
  */
 export function c3(ctx) {
   const res = ctx.run.viteNode('scripts/page-turns-of.ts', [ctx.bookJson, '--check'])
@@ -75,12 +78,16 @@ export function c3(ctx) {
     ]
   }
   const paper = /paper read from \d+ leaves/u.exec(head[3])
-  const said = `${head[1]} split, ${head[2]} owed${paper ? `; ${paper[0]}` : ' (text half)'}`
+  const noScan = ctx.shape?.pixels === false
+  const half = noScan
+    ? ' (text half; the book has no scan, so the paper half does not apply)'
+    : ' (text half)'
+  const said = `${head[1]} split, ${head[2]} owed${paper ? `; ${paper[0]}` : half}`
   const text = byExit('C3', res, /\d+ split; \d+ owed/u, {
     ok: said,
     bad: `${said}; crop each finding before joining`
   })
-  if (text.outcome === 'NOT CHECKED' || paper) return [text]
+  if (text.outcome === 'NOT CHECKED' || paper || noScan) return [text]
   const why = /text only: (.*)/u.exec(head[3])?.[1] ?? 'the command did not say it read the paper'
   return [
     text,

@@ -107,6 +107,23 @@ describe('C3, paragraphs broken at a page turn', () => {
     expect(r.summary).toMatch(/paper half did not run \(no recon reading at x\)/)
   })
 
+  it('passes on the text half alone for a book with no scan, where the paper half does not apply', () => {
+    const r = whole(
+      'C3',
+      c3(
+        ctxWith(
+          {
+            viteNode: () =>
+              said(0, 'book.json\n  0 split; 0 owed; text only: no recon reading at x')
+          },
+          { shape: { pixels: false } }
+        )
+      )
+    )
+    expect(r.outcome).toBe('PASSED')
+    expect(r.summary).toMatch(/paper half does not apply/)
+  })
+
   it('passes only when the paper was read too', () => {
     expect(c3With(said(0, 'book.json\n  0 split; 0 owed; paper read from 12 leaves')).outcome).toBe(
       'PASSED'
