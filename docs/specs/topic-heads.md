@@ -53,7 +53,7 @@ A house look may carry a `topicHeads` rule beside `shortBook`. Left out, it is t
 - `src/platform/browser/house-look.ts`, `interior.ts`, `src/app/house-look.ts`: the heads laid in when a book inherits the house look, and the question handed on.
 - `scripts/drive.mjs`: `proof` reports `askOwner`, `headsShortened` and each heading's level in `chapters`; `answers` refuses a partial design over an inherited one (`--partial` writes it anyway); `insert … heading --level 2` writes a subheading.
 - `scripts/lib/readiness-ready.mjs`, `src/core/coherence/readiness.ts`: R2 puts `headsShortened` to a person.
-- Tests (`test/topic-heads.test.ts`, `test/head-tidy.test.ts`, `test/divisions.test.ts`, `test/house-heads.test.ts`, `test/house-look-wired.test.ts`, `test/readiness-scripts.test.ts`, `test/style-editable.test.ts`), `docs/process/export.md`, `docs/process/checking.md`, `docs/reference/commands.md`, the house look spec and the folder guides.
+- Tests (`test/topic-heads.test.ts`, `test/head-tidy.test.ts`, `test/divisions.test.ts`, `test/house-heads.test.ts`, `test/house-look-wired.test.ts`, `test/readiness-heads.test.ts`, `test/style-editable.test.ts`), `docs/process/export.md`, `docs/process/checking.md`, `docs/reference/commands.md`, the house look spec and the folder guides.
 
 ## Rules/decisions that apply
 
@@ -69,3 +69,7 @@ A house look may carry a `topicHeads` rule beside `shortBook`. Left out, it is t
 - A place to keep a short form for a long running head. Until there is one, a shortened head is reported in `headsShortened` and the readiness check asks the owner to read it and sign it off.
 - Topic heads in a book whose chapters only list their topics: the owner decides per book.
 - Reporting shortened heads in books without topic heads (it would change published books' laid-out result).
+
+## Order of switching on
+
+The shelf's `imprint/house-look.json` gains `"runningHeadTidy": true` only after this work is on `main` and the app is deployed: an older reader refuses a setting it does not know, and would refuse the whole house look.

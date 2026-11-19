@@ -47,6 +47,11 @@ describe('R2 and the running heads shortened to fit', () => {
    * ready. They are a person's to read now, each with what printed and where,
    * settled by a sign-off on this interior.
    */
+  it('has not run when the report gives the shortened heads as something other than a list', async () => {
+    const { r2 } = await judge({ ...clean, pdfSha256: B, headsShortened: 'none' })
+    expect(r2.outcome).toBe('NOT CHECKED')
+  })
+
   it('puts every running head shortened to fit to a person, who signs it off', async () => {
     const headsShortened = [
       { text: 'Of the Lamp that Burned All Night', setAs: 'Of the Lamp…', pages: [7, 9] },

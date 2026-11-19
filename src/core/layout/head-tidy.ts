@@ -3,7 +3,8 @@
  * (`runningHeadTidy`: the owner's decision of 19 November 2026, in the house
  * look only; every book set before keeps its heads exactly as they were).
  *
- * Two rules, each kept to where it reads right:
+ * Two rules, each kept to where it reads right, after any note reference mark
+ * left at the end of the heading is taken off (a running head never carries one):
  *
  * - **A final full stop goes, on every head.** A heading set as a sentence
  *   ("What a Keeper Should Be.") is a name once it is in the head, and a name
@@ -31,19 +32,23 @@
  * Pure: text in, text out.
  */
 
+const UNITS = 'one|two|three|four|five|six|seven|eight|nine'
+const TENS = 'twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety'
+/** A number in words up to ninety-nine, a hyphenated one ("Twenty-One") whole. */
 const NUMBER_WORDS =
-  'one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve|thirteen|' +
-  'fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty'
+  `(?:${TENS})(?:-(?:${UNITS}))?|` +
+  `${UNITS}|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen`
 /** A Roman numeral, never empty. */
 const ROMAN = '(?=[ivxlcdm])m{0,3}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})'
 
 /**
- * "Part II." or "Part Six" and a dash (long, short or a hyphen), "Part 3:",
- * "Section IV. ", each with something after it.
+ * "Part II." or "Part Six" and a dash (long or short, two hyphens, or one hyphen
+ * with spaces round it, so the hyphen inside "Twenty-One" is never taken for
+ * one), "Part 3:", "Section IV. ", each with something after it.
  */
 const PART_LABEL = new RegExp(
   `^(?:part|section)\\s+(?:${ROMAN}|\\d{1,3}|${NUMBER_WORDS})\\b` +
-    `(?:\\s*\\.?\\s*(?:[\\u2014\\u2013]+|-{1,2}|:)\\s*|\\.\\s+)(?=[\\p{L}\\p{N}“"‘'(\\[])`,
+    `(?:\\s*\\.?\\s*(?:[\\u2014\\u2013]+|--|:)\\s*|\\s*\\.?\\s+-\\s+|\\.\\s+)(?=[\\p{L}\\p{N}“"‘'(\\[])`,
   'iu'
 )
 
@@ -53,15 +58,35 @@ const CLOSING = /[”’"')\]»]*$/u
 /** The last word before the stop is a run of initials: "J. K. L", "U.S.A". */
 const INITIALS = /\p{Lu}\.\s?\p{Lu}$/u
 /** Words always shortened, whose full stop is their own. */
-const SHORTENED = /(?:^|[\s(,])(?:etc|viz|cf|ibid|jr|sr|esq|co|bros|ltd|inc|vol|vols)$/iu
+const SHORTENED =
+  /(?:^|[\s(,])(?:etc|&c|viz|cf|ibid|i\.e|e\.g|jr|sr|esq|co|bros|ltd|inc|vol|vols|cont|ed|eds|pp|mr|mrs|dr|mme|mlle)$/iu
 /** A heading that is only a figure or a single letter: a number, not a sentence. */
 const NUMERAL = /^(?:\d+|\p{L})$/u
+
+/** What is left after a label that numbered a range ("Part I.–II.—"): another number and a dash. */
+const RANGE_REST = new RegExp(`^(?:${ROMAN}|\\d{1,3})\\b\\.?\\s*[\\u2014\\u2013-]`, 'iu')
+
+/** Note reference marks left at the end of a heading, which a running head never carries. */
+const TRAILING_MARKS = /[\s\u00b9\u00b2\u00b3\u2070-\u2079*\u2020\u2021\u2016\u00b6]+$/u
 
 /** The text with a leading part label taken off, or as it was when it has none. */
 export function withoutPartLabel(text: string): string {
   const trimmed = text.trim()
   const label = PART_LABEL.exec(trimmed)
-  return label ? trimmed.slice(label[0].length) : trimmed
+  if (!label) return trimmed
+  const rest = trimmed.slice(label[0].length)
+  // A label that numbers a range is not stripped: half of it would be left.
+  return RANGE_REST.test(rest) ? trimmed : rest
+}
+
+/**
+ * The text with note reference marks at its end taken off (¹, ², *, †, ‡ and
+ * the like). Marks paired with a note are already gone from a heading; this
+ * takes the ones that never paired. Only trailing ones: a leading § numbers a
+ * section and stays.
+ */
+export function withoutNoteMarks(text: string): string {
+  return text.trim().replace(TRAILING_MARKS, '')
 }
 
 /** The text with a final full stop taken off, where the stop ends a sentence. */
@@ -69,7 +94,8 @@ export function withoutFinalFullStop(text: string): string {
   const trimmed = text.trim()
   const closing = CLOSING.exec(trimmed)?.[0] ?? ''
   const body = trimmed.slice(0, trimmed.length - closing.length)
-  if (!body.endsWith('.') || body.endsWith('..')) return trimmed
+  // An ellipsis, typed close ("...") or spaced (". . ."), keeps every dot.
+  if (!body.endsWith('.') || /\.\s?\.$/u.test(body)) return trimmed
   const before = body.slice(0, -1).trimEnd()
   if (!before || INITIALS.test(before) || SHORTENED.test(before) || NUMERAL.test(before)) {
     return trimmed
@@ -79,5 +105,6 @@ export function withoutFinalFullStop(text: string): string {
 
 /** A running head as a book that tidies its heads prints it. */
 export function tidyRunningHead(text: string, opts: { topic: boolean }): string {
-  return withoutFinalFullStop(opts.topic ? withoutPartLabel(text) : text)
+  const unmarked = withoutNoteMarks(text)
+  return withoutFinalFullStop(opts.topic ? withoutPartLabel(unmarked) : unmarked)
 }

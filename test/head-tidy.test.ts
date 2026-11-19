@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { tidyRunningHead, withoutFinalFullStop, withoutPartLabel } from '@core/layout'
+import { withoutNoteMarks } from '@core/layout/head-tidy'
 
 /**
  * What a running head says in a book that tidies its heads (the owner's
@@ -86,5 +87,43 @@ describe('a running head, tidied', () => {
     expect(tidyRunningHead('Part II.—Concerning the Lamp.', { topic: false })).toBe(
       'Part II.—Concerning the Lamp'
     )
+  })
+})
+
+describe('the review of 19 November 2026', () => {
+  it('keeps every dot of an ellipsis, spaced or close', () => {
+    expect(withoutFinalFullStop('In this part . . .')).toBe('In this part . . .')
+    expect(withoutFinalFullStop('And this reminds me of. . .')).toBe('And this reminds me of. . .')
+    expect(withoutFinalFullStop('And so on...')).toBe('And so on...')
+  })
+
+  it('never takes the hyphen inside a number for the label’s dash', () => {
+    expect(withoutPartLabel('Part Twenty-One — The Lamp')).toBe('The Lamp')
+    expect(withoutPartLabel('Part Twenty-One')).toBe('Part Twenty-One')
+    expect(withoutPartLabel('Part Two - The Lamp')).toBe('The Lamp')
+  })
+
+  it('leaves a label that numbers a range whole', () => {
+    expect(withoutPartLabel('Part I.\u2013II.\u2014The Lamp')).toBe(
+      'Part I.\u2013II.\u2014The Lamp'
+    )
+  })
+
+  it('drops note marks left at the end of a heading, never a leading section sign', () => {
+    expect(withoutNoteMarks('Letter No. II\u00b2')).toBe('Letter No. II')
+    expect(withoutNoteMarks('Of the Lamp*\u2020')).toBe('Of the Lamp')
+    expect(tidyRunningHead('Of the Lamp.\u00b9', { topic: false })).toBe('Of the Lamp')
+    expect(withoutNoteMarks('\u00a7 I. Of the Lamp')).toBe('\u00a7 I. Of the Lamp')
+  })
+
+  it('keeps the full stop of more words always shortened', () => {
+    for (const heading of [
+      'Of Lamps, Wicks, &c.',
+      'Of the Oil, i.e.',
+      'Of the Lamp, cont.',
+      'Letters to Mme.'
+    ]) {
+      expect(withoutFinalFullStop(heading), heading).toBe(heading)
+    }
   })
 })

@@ -161,6 +161,34 @@ describe('what divides a chapter', () => {
     const undivided = [block('heading', 'The Door', 1), block('heading', 'Of the Door', 2), prose()]
     expect(chapterDivisions(undivided)[0]!.topics).toEqual([])
     expect(divisionCounts(chapterDivisions(undivided)).divided).toBe(0)
+    // The chapter's own title repeated, even when it begins like the sections.
+    const repeated = [
+      block('heading', 'Of the Lamp', 1),
+      block('heading', 'OF THE LAMP.', 2),
+      prose(),
+      block('heading', 'Of the Oil', 2),
+      prose(),
+      block('heading', 'Of the Wick', 2),
+      prose()
+    ]
+    expect(chapterDivisions(repeated)[0]!.topics.map((t) => t.title)).toEqual([
+      'Of the Oil',
+      'Of the Wick'
+    ])
+    // A leading article says nothing: "THE LAMP" does not begin like "The Oil".
+    const articled = [
+      block('heading', 'A Chapter', 1),
+      block('heading', 'THE LAMP', 2),
+      prose(),
+      block('heading', 'The Oil', 2),
+      prose(),
+      block('heading', 'The Wick', 2),
+      prose()
+    ]
+    expect(chapterDivisions(articled)[0]!.topics.map((t) => t.title)).toEqual([
+      'The Oil',
+      'The Wick'
+    ])
   })
 
   it('a part title with no text of its own is not counted', () => {

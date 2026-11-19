@@ -144,6 +144,12 @@ function judgeReport(interior, got) {
       `pictures dropped: ${JSON.stringify(rep.imagesDropped)}`,
     rep.designFrom !== 'the book file' && `design from ${rep.designFrom}`
   ].filter(Boolean)
+  // Present but not a list is not "none": the report cannot be read, so R2
+  // has not run (a missing count is never a zero).
+  if (rep.headsShortened !== undefined && !Array.isArray(rep.headsShortened)) {
+    const why = `${got.from} gives headsShortened as something other than a list`
+    return [notRun('R2', why), notRun('R3', why)]
+  }
   const shortened = shortenedHeads(rep)
   const r2 =
     wrong.length > 0

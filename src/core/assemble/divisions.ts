@@ -97,7 +97,11 @@ export function chapterDivisions(blocks: readonly BookBlock[]): ChapterDivision[
     const divisions = dividers.filter((e) => e.level === topicLevel)
     // A heading before any text opens the first section when it is like them.
     const opening = inside.filter(
-      (e) => !textBefore(e.blockIndex) && e.level === topicLevel && openingLike(e, divisions)
+      (e) =>
+        !textBefore(e.blockIndex) &&
+        e.level === topicLevel &&
+        !sameWords(e.title, chapter.title) &&
+        openingLike(e, divisions)
     )
     out.push({
       chapter,
@@ -131,6 +135,17 @@ function headingLead(title: string): string | null {
   if (words.length === 1 && (/^\d+$/u.test(words[0]!) || ROMAN_NUMERAL.test(words[0]!))) return '#'
   const lead = words[0] && ARTICLES.has(words[0]) && words.length > 1 ? words[1] : words[0]
   return lead ?? null
+}
+
+/** Whether two headings say the same words, capitals and punctuation aside: a title repeated. */
+function sameWords(a: string, b: string): boolean {
+  const words = (t: string): string =>
+    t
+      .normalize('NFKD')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
+      .trim()
+  return words(a) !== '' && words(a) === words(b)
 }
 
 /** Whether a heading before any text begins as one of the chapter's dividing headings does. */
