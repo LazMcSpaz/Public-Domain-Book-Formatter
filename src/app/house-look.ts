@@ -98,8 +98,15 @@ export function useHouseLook(input: {
     })
       .then((pages) => {
         const now = latest.current
-        // The person started answering, or moved on, while it measured.
-        if (now.fileKey !== fileKey || Object.keys(now.answers).length > 0) return
+        // The person started answering, or moved on, while it measured. A
+        // different step's answers must never receive the house design.
+        if (
+          now.stepId !== 'design' ||
+          now.fileKey !== fileKey ||
+          Object.keys(now.answers).length > 0
+        ) {
+          return
+        }
         const { design, short } = houseDesignFor(house.look, pages)
         seeded.current = fileKey
         now.setAnswers(asBookDesign(design))

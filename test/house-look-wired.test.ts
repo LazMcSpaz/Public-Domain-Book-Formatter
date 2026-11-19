@@ -76,6 +76,12 @@ describe('proof and the design gate inherit through one door', () => {
     expect(proof).toMatch(/DEFAULTS/u)
   })
 
+  it('the gate is filled only while the person is still on the design step when measuring ends', () => {
+    const then = hook.slice(hook.indexOf('.then((pages)'))
+    expect(then).toMatch(/now\.stepId !== 'design' \|\|/)
+    expect(then.indexOf("now.stepId !== 'design'")).toBeLessThan(then.indexOf('now.setAnswers('))
+  })
+
   it('inherited answers are kept with a fresh look, so a banked look cannot creep under them', () => {
     expect(platform).toMatch(/return \{ \.\.\.design, profile: FRESH_LOOK \}/u)
     expect((platform.match(/design: asBookDesign\(/gu) ?? []).length).toBe(3)

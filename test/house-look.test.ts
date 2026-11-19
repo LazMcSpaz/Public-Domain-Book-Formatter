@@ -6,6 +6,7 @@ import {
   houseLookLine,
   inheritDesign,
   isShortBook,
+  normalizeStyleProfile,
   parseHouseLook,
   styleQuestions,
   trimForLength,
@@ -67,6 +68,24 @@ describe('the house look file', () => {
   it('lives at the top of the shelf, in the shelf map', () => {
     expect(HOUSE_LOOK_PATH).toBe('design/house-look.json')
     expect(houseLookPath()).toBe(HOUSE_LOOK_PATH)
+  })
+
+  it('lays a file that names no trim out on 7x10, and its short books on 6x9', () => {
+    const { trimSize: _drop, ...noTrim } = HOUSE
+    void _drop
+    const read = look(file({ design: noTrim, shortBook: { underPages: 100, design: {} } }))
+    expect(read.design['trimSize']).toBe('7x10')
+    expect(read.shortBook?.design['trimSize']).toBe('6x9')
+    expect(houseDesignFor(read, 150).design['trimSize']).toBe('7x10')
+    expect(houseDesignFor(read, 40).design['trimSize']).toBe('6x9')
+  })
+
+  it('reads a look banked before the new settings existed with both of them off', () => {
+    // The app lays a published book over the newest banked look on a device,
+    // so a look saved before these settings must never turn them on.
+    const old = normalizeStyleProfile({ id: 'sp-old', name: 'Banked last year', trimSize: '7x10' })
+    expect(old.folioMirrorsHead).toBe(false)
+    expect(old.avoidShortLastLines).toBe(false)
   })
 
   it('reads a good file, with the short-book rule defaulting to under 100 pages at 6x9', () => {

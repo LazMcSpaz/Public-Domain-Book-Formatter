@@ -2678,8 +2678,10 @@ export function layout(
         'as a chapter; run-in sub-heads want level 2'
     })
   }
-  // A fallback said out loud: the mirrored page number would print into the text.
-  if (profile.folioMirrorsHead && !folioPlace(profile, measurer).mirrored) {
+  // A fallback said out loud, and only where a page number prints at the foot:
+  // the mirrored place is blocked, so the number keeps its old one.
+  const folioAtFoot = profile.pageNumber === 'bottomCenter' || profile.pageNumber === 'bottomOuter'
+  if (profile.folioMirrorsHead && folioAtFoot && !folioPlace(profile, measurer).mirrored) {
     warnings.push({ pageIndex: 0, text: FOLIO_NOT_MIRRORED })
   }
 

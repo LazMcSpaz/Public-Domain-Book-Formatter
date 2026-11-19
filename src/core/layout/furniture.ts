@@ -76,7 +76,8 @@ export function folioPlace(
 /** The warning a book gets when its page number cannot be mirrored. */
 export const FOLIO_NOT_MIRRORED =
   'the page number cannot sit as far from the foot as the running head sits from the top ' +
-  'without printing into the text, so it keeps its old place; deepen the bottom margin'
+  '(KDP keeps it a quarter inch from the edge, and it never rises toward the text), so it ' +
+  'keeps its old place; change the top or bottom margin'
 
 /** Where a page number at the foot of the page has its baseline, from the top. */
 export function folioBaseline(profile: StyleProfile, measurer: TextMeasurer): number {

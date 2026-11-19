@@ -135,6 +135,20 @@ describe('the page number mirrors the running head', () => {
     expect(furniture(house({ ...profile, folioMirrorsHead: false })).book.warnings).toEqual([])
   })
 
+  it('warns only where a page number prints at the foot', () => {
+    const blocked = { margins: { top: 1, bottom: 0.5, inner: 1.125, outer: 0.75 } }
+    const warnings = (profile: StyleProfile): string[] =>
+      layout(doc, profile, measurer, {
+        edition: { title: 'A Book', author: 'An Author', editionDate: '2026' }
+      }).warnings.map((w) => w.text)
+    expect(warnings(house(blocked))).toContain(FOLIO_NOT_MIRRORED)
+    for (const pageNumber of ['topOuter', 'none'] as const) {
+      expect(warnings(house({ ...blocked, pageNumber })), pageNumber).not.toContain(
+        FOLIO_NOT_MIRRORED
+      )
+    }
+  })
+
   it('reads the face’s cap height, and its ascent where the measurer has none', () => {
     expect(measurer.metrics({ family: 'T', style: 'regular' }, 10).ascent).toBe(7.5)
     const noCap: TextMeasurer = {

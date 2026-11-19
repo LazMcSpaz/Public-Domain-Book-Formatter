@@ -134,10 +134,16 @@ export function parseHouseLook(text: string): { look: HouseLook } | { error: str
     }
     const short = readDesign(rule['design'] ?? {}, '`shortBook.design`')
     if (typeof short === 'string') return { error: short }
-    shortBook = { underPages: under, design: short }
+    // A short book's trim is written in when the rule names none, so it is
+    // laid out on the trim the report names, never on the engine's default.
+    shortBook = { underPages: under, design: { trimSize: SHORT_BOOK_TRIM, ...short } }
   }
   const name = typeof raw['name'] === 'string' && raw['name'].trim() ? raw['name'].trim() : ''
-  return { look: { name: name || 'The house look', design, shortBook } }
+  // Likewise the house trim: a file that names none is still laid out, measured
+  // and reported on 7x10, never on the engine's own default (6x9).
+  return {
+    look: { name: name || 'The house look', design: { trimSize: HOUSE_TRIM, ...design }, shortBook }
+  }
 }
 
 /**
