@@ -339,7 +339,10 @@ because }`. Not rulings: only the editor picking one files anything. Write
   reading grade and flat stretches; exit 1 means a person reads the flagged
   passages.
 - `node scripts/drive.mjs answers a.json`: merges design and edition answers
-  into the open book. `save` writes them to `book.json`.
+  into the open book. `save` writes them to `book.json`. Refuses design
+  answers that would replace the house look a book with no design inherits
+  (they would become its whole design), naming what would be lost: write
+  `proof`'s `inherited` answers instead. `--partial` writes them anyway.
 - `node scripts/drive.mjs annotate p284b12 --after "Triangle." note.txt --id ed-columns`:
   a footnote of the editor's own, hung after a phrase the block prints exactly
   once. Running it again with the same `--id` replaces it;
@@ -347,6 +350,8 @@ because }`. Not rulings: only the editor picking one files anything. Write
 - `node scripts/drive.mjs insert p640b3 table t.txt --id modern --header`: a
   block the editor wrote, after the named block: a table (rows on lines,
   cells split by `|`), a caption or a heading. `insert drop <id>` removes it.
+  A heading is level 1, a chapter, unless `--level <n>` says otherwise
+  (`insert p88b4 heading t.txt --level 2` sets a subheading).
 - `npx vite-node --config vitest.config.ts scripts/glossary-packets.ts <book.json> --shelf <shelf> --out <dir>`:
   for each glossary entry, the evidence it is written from: Blavatsky's own
   Glossary entry, her other books, the author's uses. Method in
@@ -460,9 +465,11 @@ its SHA-256 as `pdfSha256`; reports unprintable characters; a book with no
 design answers of its own is laid out in the shelf's house look,
 `imprint/house-look.json`, and `designFrom` and `inherited` say so, with
 chapter and topic running heads when at least half its chapters are divided
-by subheadings; `askOwner` names a book whose chapters only open with lists
-of topics, and `headsShortened` every topic-heads book's running head too long
-for the page), `querycrops`, `crops`, `card`, `shelf`, `section`,
+by subheadings, and tidy heads when the look sets `runningHeadTidy`;
+`chapters` gives every heading with its level and page; `askOwner` names a
+book whose chapters only open with lists of topics, and `headsShortened` every
+topic-heads book's running head too long for the page, which is not a warning
+and goes to a person under readiness R2), `querycrops`, `crops`, `card`, `shelf`, `section`,
 `bare`, `query`, `truth` (the proofed text, leaf by leaf, as `truth.json` in
 the scratch folder); `scripts/flatten-cover.py <cover.pdf>
 <cover-flat.pdf>` (the cover copy KDP accepts);

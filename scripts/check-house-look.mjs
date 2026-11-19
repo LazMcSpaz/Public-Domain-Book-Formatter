@@ -37,7 +37,8 @@ const HOUSE = {
     marginOuter: '0.75',
     runningHeadRise: '1.2',
     folioFromFootPt: '24.8',
-    avoidShortLastLines: true
+    avoidShortLastLines: true,
+    runningHeadTidy: true
   },
   shortBook: { underPages: 100, design: { trimSize: '6x9' } }
 }

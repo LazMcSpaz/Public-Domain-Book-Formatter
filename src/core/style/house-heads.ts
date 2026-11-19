@@ -67,7 +67,11 @@ export function houseHeadsFor(look: HouseLook, counts: DivisionCounts): HouseHea
         'book keeps its author and chapter running heads, or whether he will say where each ' +
         'listed topic begins, so it can be set as a subheading and the book given chapter and ' +
         'topic heads. The tools never guess which pages a listed topic covers. Record his ' +
-        'answer in the ledger and write the heads he chose into the book (docs/process/export.md).'
+        'answer in the ledger. To keep his choice, write the `inherited` answers proof reports ' +
+        'as the book’s whole design: they carry the heads. If he says where the topics begin, ' +
+        'set them as subheadings first, run proof again and write its new `inherited`. Never ' +
+        'write the two head answers alone: the book would lose the rest of the house look ' +
+        '(docs/process/export.md).'
     }
   }
   return {

@@ -428,6 +428,14 @@ export interface StyleProfile {
    * changes line breaks, so it is off for every book set before it existed.
    */
   avoidShortLastLines: boolean
+  /**
+   * Tidy what a running head says (the owner's decision of 19 November 2026,
+   * house look only): every head drops a final full stop, and a topic head
+   * drops a leading part label ("Part II." and a dash, "Section IV."). The rule is
+   * `tidyRunningHead` in `@core/layout/head-tidy`. Margin furniture only, but
+   * it changes what the head prints, so it is off for every book set before.
+   */
+  runningHeadTidy: boolean
   ornaments: OrnamentChoices
   /** Front-matter visual toggles. */
   frontMatter: {

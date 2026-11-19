@@ -82,6 +82,87 @@ describe('what divides a chapter', () => {
     expect(topicHeadingIds(blocks)).toEqual(new Set([blocks[2]!.id, blocks[3]!.id]))
   })
 
+  /**
+   * The owner's ruling: a chapter that opens straight into its first section
+   * shows that section from its first page, as a chapter of letters opening
+   * on "Letter No. 1" does.
+   */
+  it('a heading before any text that opens the first section, like the rest, is a topic', () => {
+    const letters = [
+      block('heading', 'The Letters', 1),
+      block('heading', 'Letter No. 1', 2),
+      prose(),
+      block('heading', 'Letter No. 2', 2),
+      prose(),
+      block('heading', 'Letter No. 3', 2),
+      prose()
+    ]
+    const [chapter] = chapterDivisions(letters)
+    expect(chapter!.topics.map((t) => t.title)).toEqual([
+      'Letter No. 1',
+      'Letter No. 2',
+      'Letter No. 3'
+    ])
+    expect(topicHeadingIds(letters).has(letters[1]!.id)).toBe(true)
+    const numbered = [
+      block('heading', 'The Stanzas', 1),
+      block('heading', 'I.', 2),
+      prose(),
+      block('heading', 'II.', 2),
+      prose()
+    ]
+    expect(chapterDivisions(numbered)[0]!.topics.map((t) => t.title)).toEqual(['I.', 'II.'])
+    const parts = [
+      block('heading', 'The Keeper', 1),
+      block('heading', 'Part One.', 2),
+      prose(),
+      block('heading', 'Part Two.', 2),
+      prose()
+    ]
+    expect(chapterDivisions(parts)[0]!.topics.map((t) => t.title)).toEqual([
+      'Part One.',
+      'Part Two.'
+    ])
+  })
+
+  it('a byline, a title repeated in capitals or a lone part line before the text is never a topic', () => {
+    const bylined = [
+      block('heading', 'The Lamp', 1),
+      block('heading', 'THE LAMP AND THE KEEPER.', 2),
+      block('heading', 'By A. N. Author.', 2),
+      prose(),
+      block('heading', 'Of the Oil', 2),
+      prose(),
+      block('heading', 'Of the Wick', 2),
+      prose()
+    ]
+    expect(chapterDivisions(bylined)[0]!.topics.map((t) => t.title)).toEqual([
+      'Of the Oil',
+      'Of the Wick'
+    ])
+    const partLine = [
+      block('heading', 'The Stair', 1),
+      block('heading', 'Part One.', 2),
+      prose(),
+      block('heading', 'The Oil', 2),
+      prose()
+    ]
+    expect(chapterDivisions(partLine)[0]!.topics.map((t) => t.title)).toEqual(['The Oil'])
+    // Alike, but not at the level the chapter is divided at.
+    const deeper = [
+      block('heading', 'The Bell', 1),
+      block('heading', 'Of Bells', 2),
+      prose(),
+      block('heading', 'Of Ropes', 3),
+      prose()
+    ]
+    expect(chapterDivisions(deeper)[0]!.topics.map((t) => t.title)).toEqual(['Of Ropes'])
+    // Nothing divides the text: an opening heading alone does not make it divided.
+    const undivided = [block('heading', 'The Door', 1), block('heading', 'Of the Door', 2), prose()]
+    expect(chapterDivisions(undivided)[0]!.topics).toEqual([])
+    expect(divisionCounts(chapterDivisions(undivided)).divided).toBe(0)
+  })
+
   it('a part title with no text of its own is not counted', () => {
     const blocks = [block('heading', 'PART ONE', 1), ...divided('The Lamp', 2)]
     const counts = divisionCounts(chapterDivisions(blocks))
@@ -111,6 +192,23 @@ describe('a book is descriptive when at least half its chapters are divided', ()
   it('takes the share as a parameter', () => {
     expect(isDescriptive(counts(2, 2), 0.75)).toBe(false)
     expect(isDescriptive(counts(3, 1), 0.75)).toBe(true)
+  })
+
+  /**
+   * A share multiplied out can land just above the count it equals: 0.56 × 25
+   * is 14.000000000000002 in floating point, so 14 chapters of 25 fell short
+   * of a 56% rule, and 7 of 25 of a 28% one.
+   */
+  it('meets a share exactly at its boundary, whatever the share', () => {
+    const of = (divided: number, counted: number) => ({ counted, divided, listed: 0 })
+    expect(isDescriptive(of(14, 25), 0.56)).toBe(true)
+    expect(isDescriptive(of(13, 25), 0.56)).toBe(false)
+    expect(isDescriptive(of(7, 25), 0.28)).toBe(true)
+    expect(isDescriptive(of(7, 10), 0.7)).toBe(true)
+    expect(isDescriptive(of(6, 10), 0.7)).toBe(false)
+    const listed = (n: number, counted: number) => ({ counted, divided: 0, listed: n })
+    expect(opensWithTopicLists(listed(14, 25), 0.56)).toBe(true)
+    expect(opensWithTopicLists(listed(13, 25), 0.56)).toBe(false)
   })
 
   it('a book with no chapter of text is not descriptive', () => {
@@ -170,6 +268,33 @@ describe('a list of topics under the chapter title', () => {
     const divisions = chapterDivisions(blocks)
     expect(divisions.map((d) => d.opensWithTopicList)).toEqual([true, true, false])
     expect(divisionCounts(divisions)).toEqual({ counted: 3, divided: 0, listed: 2 })
+  })
+
+  /**
+   * Only a paragraph is a list of topics. A motto set as verse, a quotation of
+   * four short sentences and a column of maxims each have the shape of one,
+   * and each raised the owner's question about a book that has no lists.
+   */
+  it('a motto in verse, a quotation of short sentences or maxims is not a list of topics', () => {
+    const shaped = [
+      ['verse', 'Over the Water—Under the Stone—Into the Night—Out of the Day.'],
+      ['blockquote', 'Keep the lamp. Climb the stair. Ring the bell. Watch the water.'],
+      ['list-item', 'Know the Keeper. Mind the Stair. Trim the Wick. Bar the Door.']
+    ] as const
+    for (const [kind, text] of shaped) {
+      // The shape alone would pass: only the kind of block tells them apart.
+      expect(looksLikeTopicList(text), text).toBe(true)
+      const first = [block('heading', 'The Lamp', 1), block(kind, text), prose()]
+      const afterMotto = [
+        block('heading', 'The Stair', 1),
+        block('epigraph', '“Water under stone.”'),
+        block(kind, text),
+        prose()
+      ]
+      for (const blocks of [first, afterMotto]) {
+        expect(chapterDivisions(blocks)[0]!.opensWithTopicList, `${kind} opening`).toBe(false)
+      }
+    }
   })
 
   it('a chapter with a list and subheadings is divided, not listed', () => {

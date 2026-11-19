@@ -13,6 +13,7 @@ What a new book gets:
 - **No scrap at the end of a paragraph.** A paragraph no longer ends with "pris-" on one line and "on." alone on the next. The line before the last is not broken with a hyphen, and the last line holds at least about six letters (three ems). Only a paragraph that ended that way is set again; every other paragraph keeps its lines. If both cannot be had without spacing a line out too far, the last line's length comes first and the hyphen may stay; if even that cannot be had, the paragraph is set as before.
 - **Short books are 6×9.** A book that would print under 100 pages at 7×10 is set 6×9 instead, with everything else the same. The 6×9 side margins work out the same as the 7×10 ones (1.125 in and 0.75 in), because the engine's standard margins are the same on both pages.
 - **Topic heads for a book divided by subheadings** (your decision of 19 November 2026; [its spec](topic-heads.md)). When at least half of a book's chapters are divided by subheadings in the text, the left page carries the chapter title and the right page the topic in force on it. Any other book keeps the author and the chapter. A book whose chapters only open with a list of topics keeps the author and the chapter, and `proof` puts the question to you.
+- **Tidy heads** (your decision of 19 November 2026; [the details](topic-heads.md)). Every running head drops a final full stop ("WHAT A KEEPER SHOULD BE." prints without it), keeping a question mark, an exclamation mark and closing quotation marks. A topic head also drops a part label in front of the topic ("Part II." and its dash, "Section IV."), unless the label is the whole heading. Only the heads change, never a line of text.
 
 What does not change:
 
@@ -65,7 +66,8 @@ Hebrew and Greek: the house face has neither, so those letters are drawn from Ca
     "marginOuter": "0.75",
     "runningHeadRise": "1.2",
     "folioFromFootPt": "24.8",
-    "avoidShortLastLines": true
+    "avoidShortLastLines": true,
+    "runningHeadTidy": true
   },
   "shortBook": { "underPages": 100, "design": { "trimSize": "6x9" } }
 }
@@ -77,7 +79,7 @@ Hebrew and Greek: the house face has neither, so those letters are drawn from Ca
 
 - `src/core/style/house-look.ts` (new): the file format, `inheritDesign` (a book's own answers win), `trimForLength` and `isShortBook` (the 100-page rule, threshold a parameter), `houseDesignFor`, the one-line report.
 - `src/core/sync/shelf.ts`: `HOUSE_LOOK_PATH`, in the shelf map.
-- `src/core/model/types.ts`, `src/core/style/*`: four settings, off in every shipped look, a question each: `folioMirrorsHead`, `avoidShortLastLines`, `runningHeadRise` (in body sizes, from 1 to 2; standard 2) and `folioFromFootPt` (in points; 0 sets none). 1.125 in offered as a margin.
+- `src/core/model/types.ts`, `src/core/style/*`: five settings, off in every shipped look, a question each: `folioMirrorsHead`, `avoidShortLastLines`, `runningHeadRise` (in body sizes, from 1 to 2; standard 2), `folioFromFootPt` (in points; 0 sets none) and `runningHeadTidy` (tidy heads, [topic-heads.md](topic-heads.md)). 1.125 in offered as a margin.
 - `src/core/layout/frames.ts`: the head's rise read from the look (`headRiseOf`); a rise out of range is set at the standard 2, with a warning. Never above 2, so the head never comes nearer the trim than the standard place.
 - `src/core/layout/furniture.ts` (new): the page number's place, either set from the foot or mirrored from the head's cap height (read from the face), never nearer the edge than KDP's 0.25 in plus the figures' descent, and never up toward the text. A set distance wins over mirroring.
 - `src/core/layout/runts.ts` (new) and `break-lines.ts`: the no-scrap rule; `paginate.ts` passes it to prose.

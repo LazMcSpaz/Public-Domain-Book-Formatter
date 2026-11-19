@@ -58,13 +58,13 @@ import { FURNITURE_SIZE_RATIO, folioBaseline, furnitureFont, furnitureWarnings }
 import { proseBreaks, runtRule, type RuntRule } from './runts'
 import {
   shortenedHeadLog,
-  shortenedHeadWarning,
-  topicHead,
+  topicShown,
   topicsAfterHeading,
   topicsOnNewPage,
   usesTopicHeads,
   type PageTopics
 } from './topic-heads'
+import { tidyRunningHead } from './head-tidy'
 import type { TextMeasurer } from './measure'
 import { hangPunctuation } from './optical'
 import {
@@ -2564,22 +2564,31 @@ function buildDropCapFlowable(
   }
 }
 
-/** The running-head text for one side of a page. */
+/**
+ * The running-head text for one side of a page, tidied when the look asks
+ * (`runningHeadTidy`: a final full stop dropped, and a topic's part label).
+ */
 function runningHeadText(
   mode: StyleProfile['runningHeads']['verso'],
   edition: LayoutEdition,
   page: PageBuilder,
-  folio: string | null
+  folio: string | null,
+  tidy: boolean
 ): string {
+  const said = (text: string, topic = false): string =>
+    tidy ? tidyRunningHead(text, { topic }) : text
   switch (mode) {
     case 'bookTitle':
-      return edition.title
+      return said(edition.title)
     case 'author':
-      return edition.author
+      return said(edition.author)
     case 'chapterTitle':
-      return page.chapterTitle ?? edition.title
-    case 'topic':
-      return topicHead(page.topics, page.chapterTitle ?? edition.title)
+      return said(page.chapterTitle ?? edition.title)
+    case 'topic': {
+      // The topic in force, else (before the chapter's first) the chapter title.
+      const topic = topicShown(page.topics)
+      return topic === null ? said(page.chapterTitle ?? edition.title) : said(topic, true)
+    }
     case 'pageNumber':
       return folio ?? ''
     case 'none':
@@ -3584,7 +3593,9 @@ export function layout(
    */
   const frontMatterPageCount = pages.filter((p) => p.section === 'front').length
 
-  // A book with topic heads reports every head it had to shorten.
+  // A book with topic heads reports every head it had to shorten, in
+  // `headsShortened` and not in the warnings: nothing can give a head a short
+  // form yet, so a warning could never be cleared (`topic-heads.ts`).
   const shortened = usesTopicHeads(profile) ? shortenedHeadLog() : null
   const laidOut: LaidOutPage[] = pages.map((p) =>
     finishPage(p, profile, options.edition, measurer, {
@@ -3597,7 +3608,6 @@ export function layout(
     })
   )
   const headsShortened = shortened?.heads() ?? []
-  for (const head of headsShortened) warnings.push(shortenedHeadWarning(head))
 
   // Every note that found a reference was placed, because a page is only ever
   // closed once the lines referencing its notes have been set. Anything left
@@ -3769,7 +3779,7 @@ function finishPage(
 
   if (!page.suppressRunningHead && page.section === 'body') {
     const mode = page.side === 'verso' ? profile.runningHeads.verso : profile.runningHeads.recto
-    const text = runningHeadText(mode, edition, page, folio)
+    const text = runningHeadText(mode, edition, page, folio, profile.runningHeadTidy)
     if (text.trim().length > 0) {
       const line = furnitureLine(text, profile, measurer, page, {
         baseline: runningHeadBaseline(profile),

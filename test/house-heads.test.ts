@@ -5,6 +5,7 @@ import {
   houseHeadsFor,
   houseHeadsForBook,
   houseLookLine,
+  houseSettingsLost,
   parseHouseLook,
   styleQuestions,
   defaultStyleProfile,
@@ -109,6 +110,64 @@ describe('the house look’s topic-heads rule', () => {
     expect(
       parseHouseLook(houseFile({ topicHeads: { design: { runningHeadSide: 'topic' } } }))
     ).toMatchObject({ error: expect.stringMatching(/runningHeadSide/u) })
+  })
+
+  /**
+   * Read strictly, as the rest of the file is: each of these used to be read
+   * as the owner's rule, or as heads nobody chose, without a word.
+   */
+  it('refuses a key it does not have, a rule that says nothing, and a head no question offers', () => {
+    const refusal = (topicHeads: unknown): string => {
+      const parsed = parseHouseLook(houseFile({ topicHeads }))
+      expect('error' in parsed, JSON.stringify(topicHeads)).toBe(true)
+      return 'error' in parsed ? parsed.error : ''
+    }
+    expect(refusal({ atLeast: 0.5, share: 0.6 })).toMatch(/names share, which a topic-heads rule/u)
+    expect(refusal({ atleast: 0.5 })).toMatch(/atleast/u)
+    expect(refusal({})).toMatch(/says nothing/u)
+    expect(refusal({ design: {} })).toMatch(/sets nothing/u)
+    // The topic is offered for the right page only.
+    expect(refusal({ design: { runningHeadVerso: 'topic' } })).toMatch(
+      /`runningHeadVerso` cannot be "topic": the topic is offered for the right page only/u
+    )
+    expect(refusal({ design: { runningHeadRecto: 'chapter' } })).toMatch(
+      /`runningHeadRecto` cannot be "chapter"; it offers .*chapterTitle/u
+    )
+    expect(refusal({ design: { runningHeadTidy: 'yes' } })).toMatch(/yes or no/u)
+    // What the owner's rule says, written out, is still read.
+    expect(look(houseFile({ topicHeads: DEFAULT_TOPIC_HEADS })).topicHeads).toEqual(
+      DEFAULT_TOPIC_HEADS
+    )
+  })
+})
+
+describe('a book that inherits the house look keeps it whole', () => {
+  /**
+   * `drive.mjs answers` merges key by key. Two head answers written into a
+   * book with no design of its own became its whole design: it stopped
+   * inheriting, was laid out in the engine's defaults, and `proof` still said
+   * "the book file".
+   */
+  const house = look()
+
+  it('names every house setting a partial design would lose', () => {
+    const heads: Answers = { runningHeadVerso: 'chapterTitle', runningHeadRecto: 'topic' }
+    const lost = houseSettingsLost(undefined, heads, house)
+    expect(lost).toEqual(Object.keys(house.design).filter((id) => !(id in heads)))
+    expect(lost).toContain('font')
+    expect(lost).toContain('trimSize')
+    // Only a banked look's name and the name to bank under is still no design.
+    expect(houseSettingsLost({ profile: 'fresh' }, { ...heads, profile: 'fresh' }, house)).toEqual(
+      lost
+    )
+  })
+
+  it('loses nothing when the inherited answers are written, or the book has a design of its own', () => {
+    const inherited: Answers = { ...house.design, runningHeadRecto: 'topic' }
+    expect(houseSettingsLost(undefined, inherited, house)).toEqual([])
+    expect(houseSettingsLost(HOUSE, { ...HOUSE, runningHeadRecto: 'topic' }, house)).toEqual([])
+    expect(houseSettingsLost({}, {}, house)).toEqual([])
+    expect(houseSettingsLost(undefined, { runningHeadRecto: 'topic' }, null)).toEqual([])
   })
 })
 

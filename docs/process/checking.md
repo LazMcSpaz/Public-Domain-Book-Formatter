@@ -203,7 +203,12 @@ CHECKED item cannot be signed off.
   Exists; a sheet to read (needs `pdftotext`), every word decided.
 - **R2 Export report clean.** The `node scripts/drive.mjs proof "answers=<book.json>" "pdf=<interior.pdf>"`
   run that wrote the file: `warnings: 0`, `notesDropped: []`, `imagesDropped: []`,
-  `designFrom: "the book file"`. Exists; read.
+  `designFrom: "the book file"`. Exists; read. A book with topic heads may
+  also list `headsShortened`: running heads too long for the page, printed
+  shorter. Nothing can give a head a short form yet, so they are not
+  warnings; the readiness command reports R2 as NEEDS A PERSON, listing each
+  head, what printed instead and its pages, and the owner settles it with a
+  `Signed off: R2 <sha256 of the interior>` line once he has read them.
 - **R3 No character printed as an empty box.** `unprintable` in the same
   report is empty, or each one is ruled by the editor. Exists; read. Refusing
   on it is a (proposed check).

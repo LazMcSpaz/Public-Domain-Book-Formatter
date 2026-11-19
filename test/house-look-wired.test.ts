@@ -99,6 +99,22 @@ describe('proof and the design gate inherit through one door', () => {
     expect(proof).toMatch(/built\.headsShortened/u)
   })
 
+  /**
+   * Two head answers merged into a book with no design became its whole
+   * design: the book left the house look for the engine's defaults while
+   * `proof` said "the book file". `answers` asks core what would be lost, from
+   * the house look beside the book file, and writes nothing unless told.
+   */
+  it('answers refuses a partial design that would replace an inherited one', () => {
+    const answers = verb('answers')
+    expect(answers).toMatch(/houseLookBeside\(bookFile, await askShelfMap\('houseLookPath'\)\)/u)
+    expect(answers).toMatch(/style\.houseSettingsLost\(had\.design, next\.design, parsed\.look\)/u)
+    const refusal = answers.indexOf('if (lost.length > 0 && !partial)')
+    expect(refusal).toBeGreaterThan(-1)
+    expect(answers.indexOf('localStorage.setItem(key', refusal)).toBeGreaterThan(refusal)
+    expect(answers).toMatch(/throw new Error\(/u)
+  })
+
   it('the app measures the length as proof does, from the shipped defaults', () => {
     expect(hook).toMatch(/defaultLook: null, styleProfiles: \[\]/u)
   })

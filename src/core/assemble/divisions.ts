@@ -12,9 +12,23 @@
  * is one chapter); nothing re-derives them.
  *
  * **What divides a chapter.** A heading below the chapter's level that comes
- * after some of the chapter's text. A heading standing at the chapter's head
- * before any text (a byline, "Part One.", a title repeated under the number)
- * divides nothing, so it is never a topic.
+ * after some of the chapter's text.
+ *
+ * **A chapter that opens straight into its first section** (the owner's
+ * ruling, 19 November 2026). A heading standing at the chapter's head before
+ * any text is a topic when it is the first of the sections that divide the
+ * chapter: a chapter of letters opening on "Letter No. 1", then "Letter No.
+ * 2" after the first letter's text, shows "Letter No. 1" from its first page.
+ * It is told from the other headings that stand there (a byline, a title
+ * repeated in capitals under the chapter's own, a lone "Part One.") by
+ * resemblance: it is at the level the chapter is divided at, and it begins the
+ * way one of those dividing headings does (`openingLike`). "Letter No. 1" and
+ * "Letter No. 2" begin alike; "By the Keeper" and "Of the Water" do not.
+ * Neither "the chapter is divided later at the same level" nor "text follows
+ * it" alone keeps bylines out: in the shelf's lecture series both hold for
+ * "By" lines and for titles repeated in capitals. Resemblance misses a first
+ * section named unlike the rest ("Introduction" before "Stanza I"), whose
+ * pages keep the chapter title in the head, as they did before.
  *
  * **Which level is the topic.** In each chapter, the shallowest level that
  * divides it. Most books divide a chapter with level-2 heads, and those are
@@ -45,7 +59,10 @@ export interface ChapterDivision {
   hasText: boolean
   /** The level its text is divided at, or null when nothing divides it. */
   topicLevel: number | null
-  /** The headings that divide it at that level, in order: its topics. */
+  /**
+   * Its topics, in order: the headings that divide it at that level, after a
+   * heading that opens its first section before any text, if one does.
+   */
   topics: ChapterEntry[]
   /** Whether it opens with a list of topics under its title. */
   opensWithTopicList: boolean
@@ -77,21 +94,57 @@ export function chapterDivisions(blocks: readonly BookBlock[]): ChapterDivision[
     }
     const dividers = inside.filter((e) => textBefore(e.blockIndex))
     const topicLevel = dividers.length > 0 ? Math.min(...dividers.map((e) => e.level)) : null
+    const divisions = dividers.filter((e) => e.level === topicLevel)
+    // A heading before any text opens the first section when it is like them.
+    const opening = inside.filter(
+      (e) => !textBefore(e.blockIndex) && e.level === topicLevel && openingLike(e, divisions)
+    )
     out.push({
       chapter,
       hasText: textBefore(end),
       topicLevel,
-      topics: dividers.filter((e) => e.level === topicLevel),
+      topics: [...opening, ...divisions],
       opensWithTopicList: opensWithList(blocks, chapter.blockIndex + 1, end)
     })
   })
   return out
 }
 
+/** Words a heading may begin with that say nothing of what it is. */
+const ARTICLES = new Set(['the', 'a', 'an'])
+/** A Roman numeral in lower case, never empty ("civil" is a word, not one). */
+const ROMAN_NUMERAL = /^(?=[ivxlcdm])m{0,3}(?:cm|cd|d?c{0,3})(?:xc|xl|l?x{0,3})(?:ix|iv|v?i{0,3})$/u
+
+/**
+ * How a heading begins, for telling a chapter's first section from a byline
+ * or a repeated title: its first word, a leading article aside, in lower case;
+ * or `#` for a heading that is only a number ("1.", "IV."). Null when it has
+ * no word at all.
+ */
+function headingLead(title: string): string | null {
+  const words = title
+    .normalize('NFKD')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .split(/\s+/u)
+    .filter((w) => w.length > 0)
+  if (words.length === 1 && (/^\d+$/u.test(words[0]!) || ROMAN_NUMERAL.test(words[0]!))) return '#'
+  const lead = words[0] && ARTICLES.has(words[0]) && words.length > 1 ? words[1] : words[0]
+  return lead ?? null
+}
+
+/** Whether a heading before any text begins as one of the chapter's dividing headings does. */
+function openingLike(heading: ChapterEntry, divisions: readonly ChapterEntry[]): boolean {
+  const lead = headingLead(heading.title)
+  return lead !== null && divisions.some((d) => headingLead(d.title) === lead)
+}
+
 /**
  * Whether the opening of a chapter is a list of topics: the first block under
  * its title (headings under it skipped), or the second when the first is a
- * quotation set as a motto.
+ * quotation set as a motto. Only a paragraph can be the list: a motto set as
+ * verse, a quotation of short sentences or a column of maxims has the shape
+ * of a list and is none.
  */
 function opensWithList(blocks: readonly BookBlock[], from: number, end: number): boolean {
   const opening: BookBlock[] = []
@@ -100,13 +153,10 @@ function opensWithList(blocks: readonly BookBlock[], from: number, end: number):
     if (block.kind !== 'heading') opening.push(block)
   }
   const [first, second] = opening
-  if (first && looksLikeTopicList(first.text)) return true
-  return (
-    first !== undefined &&
-    QUOTATION_KINDS.has(first.kind) &&
-    second !== undefined &&
-    looksLikeTopicList(second.text)
-  )
+  const isList = (block: BookBlock | undefined): boolean =>
+    block !== undefined && block.kind === 'paragraph' && looksLikeTopicList(block.text)
+  if (isList(first)) return true
+  return first !== undefined && QUOTATION_KINDS.has(first.kind) && isList(second)
 }
 
 /** The fewest phrases that make a list of topics. Three short sentences can be prose. */
@@ -157,7 +207,17 @@ export function divisionCounts(divisions: readonly ChapterDivision[]): DivisionC
  * of text is not.
  */
 export function isDescriptive(counts: DivisionCounts, share = DESCRIPTIVE_SHARE): boolean {
-  return counts.counted > 0 && counts.divided >= share * counts.counted
+  return atLeastShare(counts.divided, counts.counted, share)
+}
+
+/**
+ * Whether `part` of `whole` chapters is at least `share` of them. Divided, not
+ * multiplied: 0.56 × 25 is 14.000000000000002 in floating point, so 14
+ * chapters of 25 fell short of a 56% rule. A share written as a decimal and a
+ * count that equals it divide to the same number.
+ */
+function atLeastShare(part: number, whole: number, share: number): boolean {
+  return whole > 0 && part / whole >= share
 }
 
 /**
@@ -166,7 +226,9 @@ export function isDescriptive(counts: DivisionCounts, share = DESCRIPTIVE_SHARE)
  */
 export function opensWithTopicLists(counts: DivisionCounts, share = DESCRIPTIVE_SHARE): boolean {
   return (
-    !isDescriptive(counts, share) && counts.listed > 0 && counts.listed >= share * counts.counted
+    !isDescriptive(counts, share) &&
+    counts.listed > 0 &&
+    atLeastShare(counts.listed, counts.counted, share)
   )
 }
 

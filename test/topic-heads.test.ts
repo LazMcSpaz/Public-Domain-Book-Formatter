@@ -140,6 +140,27 @@ describe('the topic a page shows', () => {
     expect(head[at(b.topicD)]).toBe('Of the Water')
   })
 
+  it('shows a chapter’s first section from its first page when the chapter opens straight into it', () => {
+    const opening = block('heading', 'The Letters', 1)
+    const first = block('heading', 'Letter No. 1', 2)
+    const second = block('heading', 'Letter No. 2', 2)
+    const letters = docOf([
+      opening,
+      first,
+      block('paragraph', words(1500)),
+      second,
+      block('paragraph', words(900))
+    ])
+    const letterBook = laid(letters, profile)
+    const letterHeads = heads(letterBook, profile)
+    const at2 = pageOf(letterBook, second)
+    expect(at2).toBeGreaterThan(pageOf(letterBook, opening) + 1)
+    for (let p = pageOf(letterBook, opening) + 1; p < at2; p++) {
+      expect(letterHeads[p], `page ${p + 1}`).toBe('Letter No. 1')
+    }
+    expect(letterHeads[at2]).toBe('Letter No. 2')
+  })
+
   it('takes side heads as topics in a chapter they alone divide', () => {
     expect(head[at(b.sideE)]).toBe('Stone.')
     expect(head[at(b.sideF)]).toBe('Oak.')
@@ -208,10 +229,10 @@ describe('a topic too long for the page', () => {
     expect(
       run!.xPt + fixedWidthMeasurer(0.5).widthOf(run!.text, run!.font, run!.sizePt)
     ).toBeLessThanOrEqual(frame.xPt + frame.widthPt + 1e-6)
-    // And said in the warnings, so the owner can give it a short form.
-    const warning = book.warnings.find((w) => w.text.includes(long))
-    expect(warning?.pageIndex).toBe(rectos[0])
-    expect(warning?.text).toMatch(/short form/u)
+    // Not a warning: nothing can give a head a short form yet, so a warning
+    // would keep the book from ever passing the readiness check (R2 needs
+    // `warnings: 0`). The readiness check puts `headsShortened` to a person.
+    expect(book.warnings).toEqual([])
   })
 
   it('a head that fits is not reported', () => {
@@ -231,5 +252,119 @@ describe('a topic too long for the page', () => {
     const book = laid(titled, profileWith('author', 'chapterTitle'))
     expect('headsShortened' in book).toBe(false)
     expect(book.warnings).toEqual([])
+  })
+})
+
+describe('a book set in small capitals', () => {
+  /**
+   * A face without small capitals sets the head in full capitals, so what is
+   * drawn differs from the heading in case alone. That is not a cut, and must
+   * not be reported as one.
+   */
+  const { b, doc } = threeChapters()
+  const profile: StyleProfile = {
+    ...profileWith('chapterTitle', 'topic'),
+    runningHeadStyle: 'smallCaps'
+  }
+
+  it('is drawn in capitals and reports no head that fits as shortened', () => {
+    const book = laid(doc, profile)
+    const drawn = heads(book, profile)
+    const lamp = pageOf(book, b.topicA)
+    const recto = book.pages[lamp]!.side === 'recto' ? lamp : lamp + 1
+    expect(drawn[recto]).toBe('OF THE LAMP')
+    expect(book.headsShortened).toEqual([])
+  })
+
+  it('reports a long topic once, cut in capitals, under its own words', () => {
+    const long =
+      'Of the Lamp that Burned Through the Long Night in the Keeper’s House Above the Stair'
+    const book = laid(
+      docOf([
+        block('heading', 'The Long Chapter', 1),
+        block('paragraph', words(300)),
+        block('heading', long, 2),
+        block('paragraph', words(1500))
+      ]),
+      profile
+    )
+    expect(book.headsShortened).toHaveLength(1)
+    const [entry] = book.headsShortened!
+    expect(entry!.text).toBe(long)
+    expect(entry!.setAs).toBe(entry!.setAs.toLocaleUpperCase())
+    expect(long.toLocaleUpperCase().startsWith(entry!.setAs.slice(0, -1))).toBe(true)
+  })
+})
+
+describe('a book that tidies its running heads', () => {
+  const chapter = block('heading', 'The Lamp House.', 1)
+  const intro = block('paragraph', words(900))
+  const part = block('heading', 'Part II.—Of the Lamp.', 2)
+  const partText = block('paragraph', words(900))
+  const labelOnly = block('heading', 'Part Three.', 2)
+  const labelText = block('paragraph', words(900))
+  const asked = block('heading', 'Is the Lamp Lit?', 2)
+  const askedText = block('paragraph', words(900))
+  const second = block('heading', 'Part One.—The Keeper.', 1)
+  const secondIntro = block('paragraph', words(900))
+  const side = block('heading', 'Stone.', 3)
+  const sideText = block('paragraph', words(900))
+  const doc = docOf([
+    chapter,
+    intro,
+    part,
+    partText,
+    labelOnly,
+    labelText,
+    asked,
+    askedText,
+    second,
+    secondIntro,
+    side,
+    sideText
+  ])
+  const tidy: StyleProfile = { ...profileWith('topic', 'topic'), runningHeadTidy: true }
+  const book = laid(doc, tidy)
+  const drawn = heads(book, tidy)
+  const at = (b: BookBlock) => pageOf(book, b)
+
+  it('drops a final full stop on every head, and keeps a question mark', () => {
+    expect(drawn[at(chapter) + 1]).toBe('The Lamp House')
+    expect(drawn[at(labelOnly)]).toBe('Part Three')
+    expect(drawn[at(asked)]).toBe('Is the Lamp Lit?')
+    expect(drawn[at(side)]).toBe('Stone')
+  })
+
+  it('drops a topic’s part label, never a chapter title’s', () => {
+    expect(drawn[at(part)]).toBe('Of the Lamp')
+    // Before the chapter's first topic, the topic head shows the chapter title.
+    expect(at(side)).toBeGreaterThan(at(second) + 1)
+    expect(drawn[at(second) + 1]).toBe('Part One.—The Keeper')
+    // And so does the chapter head on the left page, all through the chapter.
+    const split: StyleProfile = { ...profileWith('chapterTitle', 'topic'), runningHeadTidy: true }
+    const splitBook = laid(doc, split)
+    const splitHeads = heads(splitBook, split)
+    const versos = splitBook.pages
+      .map((p, i) => ({ p, i }))
+      .filter(({ p, i }) => p.side === 'verso' && i > at(second) && splitHeads[i] !== null)
+    expect(versos.length).toBeGreaterThan(0)
+    for (const { i } of versos) expect(splitHeads[i]).toBe('Part One.—The Keeper')
+  })
+
+  it('does not report a tidied head as shortened', () => {
+    expect(book.headsShortened).toEqual([])
+    expect(book.warnings).toEqual([])
+  })
+
+  it('changes nothing with the setting off: the heads say what the headings say', () => {
+    const plain = profileWith('topic', 'topic')
+    const untidied = laid(doc, plain)
+    const plainHeads = heads(untidied, plain)
+    expect(plainHeads[at(part)]).toBe('Part II.—Of the Lamp.')
+    expect(plainHeads[at(chapter) + 1]).toBe('The Lamp House.')
+    expect(plainHeads[at(side)]).toBe('Stone.')
+    // Furniture only: every line of text and every page is where it was.
+    expect(untidied.pages.length).toBe(book.pages.length)
+    expect(untidied.blockPages).toEqual(book.blockPages)
   })
 })

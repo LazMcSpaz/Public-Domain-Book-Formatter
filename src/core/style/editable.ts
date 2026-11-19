@@ -274,6 +274,17 @@ export function styleQuestions(
       ]
     },
     {
+      id: 'runningHeadTidy',
+      type: 'confirm',
+      prompt: 'Tidy what the running heads say?',
+      help:
+        'A head drops the full stop at the end of its heading (“What a Keeper Should Be.” ' +
+        'prints without it; a question mark stays), and a topic head drops a part label ' +
+        'in front of its topic (“Part II.” and a dash before “Of the Lamp” leave “Of the Lamp”). It ' +
+        'changes only the heads, never a line of text; a book already printed keeps it off.',
+      defaultValue: profile.runningHeadTidy
+    },
+    {
       id: 'runningHeadRise',
       type: 'choice',
       prompt: 'How high above the text does the running head sit?',
@@ -607,6 +618,7 @@ export function applyStyleAnswers(profile: StyleProfile, answers: Answers): Styl
     runningHeadRise: pickNumber(answers, 'runningHeadRise', profile.runningHeadRise),
     folioFromFootPt: pickNumber(answers, 'folioFromFootPt', profile.folioFromFootPt),
     avoidShortLastLines: pickBool(answers, 'avoidShortLastLines', profile.avoidShortLastLines),
+    runningHeadTidy: pickBool(answers, 'runningHeadTidy', profile.runningHeadTidy),
     ornaments: {
       chapterOpener: pickOrnament(answers, 'ornamentChapter', profile.ornaments.chapterOpener),
       sectionDivider: pickOrnament(answers, 'ornamentDivider', profile.ornaments.sectionDivider),

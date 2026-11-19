@@ -30,6 +30,7 @@ export {
   hasOwnDesign,
   houseDesignFor,
   houseLookLine,
+  houseSettingsLost,
   inheritDesign,
   isShortBook,
   parseHouseLook,

@@ -14,15 +14,19 @@
  *
  * **Long heads.** A head is never let into the margin: `fitRunningHead`
  * shortens it as it shortens a long chapter title. In a book with topic heads
- * every shortened head is reported, once per head with the pages it falls on,
- * so the owner can give it a short form. Books with no topic head are not
- * reported on, so a published book's layout and report stay exactly as they
- * were.
+ * every shortened head is reported in `headsShortened`, once per head with the
+ * pages it falls on, and the readiness check puts the list to a person. It is
+ * not a layout warning: nothing in the book can give a head a short form yet,
+ * so a warning could never be cleared, and the readiness check needs
+ * `warnings: 0`. A head the book tidies (`head-tidy.ts`) is judged by what it
+ * says once tidied, so a full stop or a part label dropped is not a cut.
+ * Books with no topic head are not reported on, so a published book's layout
+ * and report stay exactly as they were.
  *
  * Pure: the page builder calls these as headings are set.
  */
 import type { StyleProfile } from '@core/model'
-import type { LayoutWarning, ShortenedHead } from './types'
+import type { ShortenedHead } from './types'
 
 /** What a page knows of the topics, for its running head. */
 export interface PageTopics {
@@ -62,9 +66,14 @@ export function topicsAfterHeading(
   return { ...topics, first: topics.first ?? heading.title, last: heading.title }
 }
 
+/** The topic a page's head names, or null before the chapter's first. */
+export function topicShown(topics: PageTopics): string | null {
+  return topics.first ?? topics.carried
+}
+
 /** The topic a page's head shows, or the chapter title before the chapter's first. */
 export function topicHead(topics: PageTopics, chapterTitle: string): string {
-  return topics.first ?? topics.carried ?? chapterTitle
+  return topicShown(topics) ?? chapterTitle
 }
 
 /**
@@ -91,17 +100,5 @@ export function shortenedHeadLog(): {
       else byText.set(key, { text: key, setAs: drawn, pageIndexes: [pageIndex] })
     },
     heads: () => [...byText.values()]
-  }
-}
-
-/** The warning for a shortened head, on the first page it falls on. */
-export function shortenedHeadWarning(head: ShortenedHead): LayoutWarning {
-  const pages = head.pageIndexes.length
-  const set = head.setAs ? `set as “${head.setAs}”` : 'left out, as no word of it fits'
-  return {
-    pageIndex: head.pageIndexes[0] ?? 0,
-    text:
-      `the running head “${head.text}” is too long for the page and is ${set} ` +
-      `on ${pages} page${pages === 1 ? '' : 's'}; it wants a short form`
   }
 }

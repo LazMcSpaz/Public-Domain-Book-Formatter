@@ -28,16 +28,32 @@ field, and looks at the pages.
   top of the shelf; [the spec](../specs/house-look.md)). With no design answers
   of its own, `proof` lays it out in the house look, on 6×9 if it prints under
   100 pages at 7×10, and says so in `designFrom`; the report's `inherited` is
-  the answers it used. Once the owner approves the look, write them into the
-  book (`answers` with them as `"design"`, then `save`): the export needs
+  the answers it used, the running heads included. Once the owner approves
+  the look, write the whole `inherited` set into the book: put it in a file
+  as `"design"`, run `answers` with that file, then `save`. The export needs
   `designFrom: "the book file"`, and a book keeps its look when the house look
   changes.
+- **Never write part of a design into a book that has none.** `answers`
+  merges key by key, so a few answers written over nothing become the book's
+  whole design: the book stops inheriting the house look, is laid out in the
+  engine's defaults for everything they leave out, and `designFrom` still
+  says "the book file". `answers` refuses this and names what would be lost.
+  To change one setting, lay the change over the `inherited` set and write
+  that.
 - **The running heads follow the book's structure** (the owner's decision of
   19 November 2026; [the spec](../specs/topic-heads.md)). A book inheriting
   the house look whose chapters are, at least half of them, divided by
   subheadings in the text gets the chapter title on the left page and the
   topic in force on the right; any other book keeps the author and the
   chapter. `designFrom` says which, and why.
+- **Check the heading levels before trusting that verdict.** The rule counts
+  the level-1 headings as chapters and asks what divides them. The report's
+  `chapters` lists every heading with its `level`: if the level-1 entries are
+  parts or sections and the real chapters are level 2, the book is judged by
+  its parts, and its chapter titles become the topics. Say so to the owner
+  with a spread rendered in front of him. Do not retype the levels just to
+  change the verdict: the levels also decide the contents and where pages
+  break, so a change to them is his decision.
 - **Chapters that only open with a list of topics are the owner's question.**
   When `proof` reports `askOwner`, the chapters print a list of topics under
   the title and no subheadings in the text, and no tool can know which pages
@@ -47,9 +63,26 @@ field, and looks at the pages.
   or say where each listed topic begins so it can be set as a subheading,
   after which the book is divided and gets topic heads. Never set topic
   heads on such a book without his answer. Record the question and his
-  answer in the book's `ledger.md`, and write the heads he chose into the
-  book's design answers (`runningHeadVerso`, `runningHeadRecto`) with
-  `answers` and `save`.
+  answer in the book's `ledger.md`. Then:
+  - **He keeps the author and chapter heads:** write `proof`'s `inherited`
+    set as the book's design, as above. It already carries those heads.
+  - **He says where each topic begins:** set each one as a subheading,
+    level 2, at the place he names. Where the topic's words already stand in
+    the text, split them off into a block of their own and retype it:
+    `node scripts/drive.mjs split <blockId> "<the topic's first words>" "<words just after the topic>"`
+    (leave out the first phrase when the topic opens the paragraph; `split`
+    names the blocks it made), then
+    `node scripts/drive.mjs block <the topic's block id> retype heading 2`.
+    Where its words are not in the text, write them as a new heading after
+    the block before the place:
+    `node scripts/drive.mjs insert <blockId> heading <file> --level 2`.
+    Without `--level 2` an inserted heading is level 1, which the engine
+    takes for a new chapter. Then run `proof` again: it now finds the
+    chapters divided, gives chapter and topic heads, and its new `inherited`
+    is what to write as the book's design.
+
+  Never write `runningHeadVerso` and `runningHeadRecto` alone: that is a
+  partial design, refused above.
 
 ## Steps
 
@@ -73,8 +106,12 @@ field, and looks at the pages.
    - `notesPlaced` and `imagesPlaced` match what the book holds;
    - `designFrom: "the book file"`, not `DEFAULTS`;
    - `headsShortened`, in a book with topic heads: each running head too long
-     for the page, what was set instead and on which pages. Each one wants a
-     short form from the owner; it is also counted in the warnings;
+     for the page, what was printed instead and on which pages. They are not
+     warnings, since nothing can give a head a short form yet. The readiness
+     check puts them to the owner under R2 as NEEDS A PERSON, and he settles
+     them with a `Signed off: R2` line ([checking.md](checking.md)). A head
+     tidied by the house look (a full stop or a part label dropped) is not
+     counted as shortened;
    - `askOwner`: see "Before you start"; the book's heads are not settled
      until the owner answers;
    - `unprintable`: characters drawn as an empty box because no face carries

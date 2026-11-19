@@ -22,7 +22,8 @@ Heading: `paginate.ts` (about 4,800 lines) is to be split along clear responsibi
 - `frames.ts`: `frameFor`, page geometry and the running head's rise (`runningHeadRise`, standard `RUNNING_HEAD_RISE`).
 - `furniture.ts`: the running head's face and the page number's place (`folioFromFootPt` sets it from the foot; `folioMirrorsHead` mirrors the head's cap height).
 - `runts.ts`: no scrap at the end of a paragraph (`avoidShortLastLines`).
-- `topic-heads.ts`: the `topic` running head (the first topic starting on the page, else the one in force, else the chapter title) and the report of heads shortened to fit.
+- `topic-heads.ts`: the `topic` running head (the first topic starting on the page, else the one in force, else the chapter title) and the report of heads shortened to fit (`headsShortened`, never a warning: nothing can clear it, and readiness R2 puts it to a person).
+- `head-tidy.ts`: tidy heads (`runningHeadTidy`): a final full stop dropped, and a topic's part label.
 - `toc.ts`, `contents-pages.ts`, `contents-split.ts`: the contents, laid out twice so its numbers are measured.
 - `types.ts`: what a laid-out page is made of (points, origin top left).
 

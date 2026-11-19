@@ -114,6 +114,7 @@ export const BANKED_STYLE_KEYS: readonly (keyof StyleProfile)[] = [
   'runningHeadRise',
   'folioFromFootPt',
   'avoidShortLastLines',
+  'runningHeadTidy',
   'ornaments',
   'frontMatter'
 ]

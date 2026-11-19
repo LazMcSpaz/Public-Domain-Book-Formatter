@@ -178,22 +178,88 @@ export function parseHouseLook(text: string): { look: HouseLook } | { error: str
   }
 }
 
+/** What a topic-heads rule may say. */
+const TOPIC_RULE_KEYS = ['atLeast', 'design']
+
 /**
  * The topic-heads rule from a file: the owner's when it names none, none when
  * it says `null`, else its own (a share above 0 and at most 1, and answers),
  * or the reason it cannot be used.
+ *
+ * Read strictly, as the rest of the file is: a key the rule does not have, a
+ * rule that says nothing, and an answer no question offers are each refused
+ * with the reason, never passed over, because each would set every new book
+ * in heads nobody chose.
  */
 function readTopicHeads(raw: unknown): TopicHeadsRule | null | string {
   if (raw === undefined) return DEFAULT_TOPIC_HEADS
   if (raw === null) return null
   if (!isRecord(raw)) return '`topicHeads` is not a rule'
+  const keys = Object.keys(raw)
+  if (keys.length === 0) {
+    return '`topicHeads` says nothing: leave it out for the owner’s rule, or write `null` for none'
+  }
+  const unknown = keys.filter((k) => !TOPIC_RULE_KEYS.includes(k))
+  if (unknown.length > 0) {
+    return `\`topicHeads\` names ${unknown.join(', ')}, which a topic-heads rule does not have (it takes \`atLeast\` and \`design\`)`
+  }
   const share = raw['atLeast'] ?? DEFAULT_TOPIC_HEADS.atLeast
   if (typeof share !== 'number' || !(share > 0 && share <= 1)) {
     return '`topicHeads.atLeast` is not a share of the chapters (above 0, at most 1)'
   }
   const design = readDesign(raw['design'] ?? DEFAULT_TOPIC_HEADS.design, '`topicHeads.design`')
   if (typeof design === 'string') return design
+  if (Object.keys(design).length === 0) {
+    return '`topicHeads.design` sets nothing, so a book divided by subheadings would get no heads of its own'
+  }
+  const offered = unofferedAnswer(design, '`topicHeads.design`')
+  if (offered) return offered
   return { atLeast: share, design }
+}
+
+/**
+ * The first answer in `design` that its question does not offer, said with
+ * the reason; null when every one is offered. Only the detailed controls'
+ * choices and yes-or-no questions are checked here: the interview's are the
+ * wizard's to read.
+ */
+function unofferedAnswer(design: Answers, where: string): string | null {
+  const questions = styleQuestions(defaultStyleProfile(), { hasSynopses: true })
+  for (const [id, value] of Object.entries(design)) {
+    const question = questions.find((q) => q.id === id)
+    if (question?.type === 'confirm' && typeof value !== 'boolean') {
+      return `${where}: \`${id}\` is answered yes or no (true or false), not ${JSON.stringify(value)}`
+    }
+    if (question?.type !== 'choice') continue
+    const choices = question.options.map((o) => o.value)
+    if (choices.includes(String(value))) continue
+    const rightOnly =
+      value === 'topic' && choices.includes('chapterTitle')
+        ? ': the topic is offered for the right page only (`runningHeadRecto`)'
+        : ''
+    return `${where}: \`${id}\` cannot be ${JSON.stringify(value)}${rightOnly}; it offers ${choices.join(', ')}`
+  }
+  return null
+}
+
+/**
+ * The house look's settings a book would lose if `merged` were written as its
+ * design: empty unless the book has no design of its own (`had`), so it is set
+ * in the house look, and `merged` would give it one. From then on a book's
+ * own answers win, so every setting they leave out comes from the engine's
+ * defaults, while `proof` says the look is "the book file". Two head answers
+ * written over nothing turned a house-look book into a 6x9 book in the
+ * default face. The way to keep the look is `proof`'s `inherited` answers,
+ * which carry every setting and the heads.
+ */
+export function houseSettingsLost(
+  had: Answers | null | undefined,
+  merged: Answers,
+  house: HouseLook | null
+): string[] {
+  if (!house || hasOwnDesign(had) || !hasOwnDesign(merged)) return []
+  const set = (v: unknown): boolean => v !== undefined && v !== null && v !== ''
+  return Object.keys(house.design).filter((id) => !set(merged[id]))
 }
 
 /**
