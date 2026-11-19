@@ -398,7 +398,13 @@ After a few days of normal use following task 12.
 
 **Verify:** a synthetic fixture; the check fails with the fault put back.
 
-## 19. The house look lives on the shelf, and the default face covers Hebrew and Greek
+## 19. The house look lives on the shelf, and the default face covers Hebrew and Greek (built 19 November 2026; the file waits on the owner)
+
+**Built 19 November 2026** (spec [specs/house-look.md](specs/house-look.md)). The owner chose the look: the design _The Lost Keys of Masonry_, the _Collected Manuscript Lectures_ and _The Theosophical Glossary_ share, with side margins 50% wider, the page number as far from the foot as the running head is from the top, no paragraph ending on a scrap, the Vine and Bud ornament, and 6×9 for a book under 100 pages at 7×10. A book with no design of its own inherits the look from `design/house-look.json` on the shelf, in `proof` and at the app's design gate; its own answers always win. The new settings are off by default: a review laid out 44 looks, including every shelf book's own, on `main` and on the branch, and all came out byte-identical. Hebrew and Greek print in the look (Cardo). **Still to do:** write `design/house-look.json` on the shelf once the owner approves the sample pages, and add `design/` to the shelf's CLAUDE.md. Follow-ups from the review:
+
+- A look banked in the app from the house look would be laid under every published book re-exported in that browser (published book files name no `profile`); write `profile: "fresh"` into them, or refuse to bank the house look.
+- The short-last-line rule is untested on notes, drop-cap paragraphs, text round figures and glossary headwords; ragged text (notes) can still break a word with no hyphen drawn, an older fault (`break-lines.ts`) that may reach published books and is to be checked against their PDFs.
+- `parseHouseLook` checks names and types, not values (a misspelt ornament is dropped silently); the app and `proof` count pages slightly differently near 100; the design gate's help text still names the old defaults.
 
 **Why (plain English).** `proof` on the new book found "no design answers for this book" and fell back to defaults (6×9, Crimson Pro), because the house look lives in a browser profile, not on the shelf. The owner's standing answer for a new book is "the same as the others". The default face has no Hebrew, so Hebrew letters, superscript letters and two symbols printed as boxes.
 
