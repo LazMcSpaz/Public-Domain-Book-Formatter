@@ -24,10 +24,11 @@
  *   node scripts/drive.mjs shot design
  *   node scripts/drive.mjs quit
  */
-import { readJson, readJsonSync, readText } from './lib/json-file.mjs'
+import { readJson, readJsonSync, readText, stripBom } from './lib/json-file.mjs'
 import { chromium } from 'playwright'
 import { createServer } from 'node:http'
-import { access, mkdir, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { access, mkdir, readFile, writeFile } from 'node:fs/promises'
 import {
   createReadStream,
   existsSync,
@@ -472,8 +473,15 @@ async function serve() {
    * quote the book. `load` sets it; `save` sets it only for a book that has
    * none yet (a new book saved to the shelf for the first time), so a copy
    * saved elsewhere does not take the sheets with it.
+   *
+   * Beside it, under `BOOK_SHA`, the SHA-256 of that file's bytes as `load`
+   * read them or `save` wrote them: `readiness.mjs` runs its driver checks
+   * only when it is the fingerprint of the file it checks, so a stale copy
+   * cannot pass for today's book.
    */
   const BOOK_FILE = 'pdbf.drive.file.'
+  const BOOK_SHA = 'pdbf.drive.sha.'
+  const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex')
   const currentBookFile = () =>
     page.evaluate(
       async ([repo, prefix]) => {
@@ -490,17 +498,19 @@ async function serve() {
       },
       [REPO, BOOK_FILE]
     )
-  const rememberBookFile = (key, file, onlyIfNone) =>
+  const rememberBookFile = (key, file, onlyIfNone, sha) =>
     page.evaluate(
-      ([k, f, prefix, soft]) => {
+      ([k, f, prefix, soft, s, shaPrefix]) => {
         try {
-          if (soft && localStorage.getItem(prefix + k)) return
+          const had = localStorage.getItem(prefix + k)
+          if (soft && had && had !== f) return
           localStorage.setItem(prefix + k, f)
+          localStorage.setItem(shaPrefix + k, s)
         } catch {
           /* a driver that cannot remember refuses sheets instead of misplacing them */
         }
       },
-      [key, file, BOOK_FILE, onlyIfNone]
+      [key, file, BOOK_FILE, onlyIfNone, sha, BOOK_SHA]
     )
 
   /**
@@ -688,7 +698,7 @@ async function serve() {
      */
     book: async ([action]) => {
       return page.evaluate(
-        async ([repo, arg, bookFilePrefix]) => {
+        async ([repo, arg, bookFilePrefix, bookShaPrefix]) => {
           const runStore = await import(`/@fs${repo}/src/platform/browser/run-store.ts`)
           const provenance = await import(`/@fs${repo}/src/core/provenance/index.ts`)
           const queriesMod = await import(`/@fs${repo}/src/core/queries/index.ts`)
@@ -732,6 +742,8 @@ async function serve() {
             scanStored: wanted ? Boolean(await runStore.loadSourceFile(wanted)) : false,
             // The `book.json` it was loaded from: where its sheets are written.
             bookFile: wanted ? localStorage.getItem(bookFilePrefix + wanted) : null,
+            // The SHA-256 of that file as it was loaded or last saved.
+            bookSha: wanted ? localStorage.getItem(bookShaPrefix + wanted) : null,
             commentsOpen: memos.filter((m) => !m.resolved).length,
             commentsAnswered: memos.filter((m) => m.resolved).length,
             marked: marked.length,
@@ -772,7 +784,7 @@ async function serve() {
             stored: runs.map((r) => r.fileName)
           }
         },
-        [REPO, action ?? '', BOOK_FILE]
+        [REPO, action ?? '', BOOK_FILE, BOOK_SHA]
       )
     },
 
@@ -997,7 +1009,8 @@ async function serve() {
     load: async ([bookPath, scanPath]) => {
       const { stat } = await import('node:fs/promises')
       const bookFile = resolve(REPO, bookPath)
-      const json = await readText(bookFile)
+      const bytes = await readFile(bookFile)
+      const json = stripBom(bytes.toString('utf8'))
       const scan = resolve(REPO, scanPath)
       const meta = await stat(scan)
       const name = scanPath.split('/').pop()
@@ -1163,8 +1176,9 @@ async function serve() {
         },
         [loaded.key]
       )
-      // And where it came from, which is where its sheets go.
-      await rememberBookFile(loaded.key, bookFile, false)
+      // And where it came from, which is where its sheets go, with the
+      // fingerprint of the bytes read.
+      await rememberBookFile(loaded.key, bookFile, false, sha256(bytes))
 
       const out = {
         ...loaded,
@@ -1430,8 +1444,9 @@ async function serve() {
       // A book that was never loaded from a file (one being put on the shelf
       // for the first time) has its sheets beside where it now is. A book
       // that was loaded keeps the file it came from: a copy saved somewhere
-      // else does not take its sheets with it.
-      await rememberBookFile(result.key, path, true)
+      // else does not take its sheets with it. Saved over the file it came
+      // from, the fingerprint follows the bytes now there.
+      await rememberBookFile(result.key, path, true, sha256(Buffer.from(json, 'utf8')))
       const parsed = proposed
       const verdicts = parsed.answers?.['gate-uncertainties'] ?? {}
       const fixes = Object.entries(verdicts).filter(

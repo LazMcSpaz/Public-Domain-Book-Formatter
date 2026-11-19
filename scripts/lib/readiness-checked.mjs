@@ -56,6 +56,9 @@ function c2(ctx) {
   })
 }
 
+/** How `page-turns-of.ts` says there is no recon reading at all, after "text only: ". */
+const NO_READING = /^no recon reading at /u
+
 /**
  * C3 in two halves: the text half (a paragraph that stops at a leaf's foot and
  * runs on at the next head) and the paper half (the next leaf's first line,
@@ -64,7 +67,10 @@ function c2(ctx) {
  * half is reported NOT CHECKED with its reason, never folded into a pass.
  * A book with no scan at all (its recorded shape says no pixels: a born-digital
  * PDF or an EPUB) has no paper to read, so for it the paper half does not
- * apply and the text half is the whole check.
+ * apply and the text half is the whole check; but only when the command says
+ * there is no recon reading at all (`NO_READING`). A reading it refused (of
+ * another copy, unreadable, empty) is evidence the book has a scan whatever
+ * its shape says, so the paper half is still NOT CHECKED.
  */
 export function c3(ctx) {
   const res = ctx.run.viteNode('scripts/page-turns-of.ts', [ctx.bookJson, '--check'])
@@ -78,9 +84,11 @@ export function c3(ctx) {
     ]
   }
   const paper = /paper read from \d+ leaves/u.exec(head[3])
-  const noScan = ctx.shape?.pixels === false
+  const textOnly = /text only: (.*)/u.exec(head[3])?.[1] ?? null
+  const shapeSaysNoScan = ctx.shape?.pixels === false
+  const noScan = shapeSaysNoScan && !paper && textOnly !== null && NO_READING.test(textOnly)
   const half = noScan
-    ? ' (text half; the book has no scan, so the paper half does not apply)'
+    ? ' (text half; the book has no scan and no recon reading, so the paper half does not apply)'
     : ' (text half)'
   const said = `${head[1]} split, ${head[2]} owed${paper ? `; ${paper[0]}` : half}`
   const text = byExit('C3', res, /\d+ split; \d+ owed/u, {
@@ -88,12 +96,16 @@ export function c3(ctx) {
     bad: `${said}; crop each finding before joining`
   })
   if (text.outcome === 'NOT CHECKED' || paper || noScan) return [text]
-  const why = /text only: (.*)/u.exec(head[3])?.[1] ?? 'the command did not say it read the paper'
+  const why = textOnly ?? 'the command did not say it read the paper'
+  const scanAfterAll =
+    shapeSaysNoScan && textOnly !== null
+      ? '; its shape says it has no scan, but a recon reading is there, so it has one'
+      : ''
   return [
     text,
     notRun(
       'C3',
-      `the paper half did not run (${why}); only the book's own recon reading can say where a leaf's first line starts`
+      `the paper half did not run (${why})${scanAfterAll}; only the book's own recon reading can say where a leaf's first line starts`
     )
   ]
 }

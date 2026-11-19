@@ -47,7 +47,9 @@ const doc = applyEdits(assembleBook(file.run.transcriptions), file.run.edits ?? 
 const reconPath = flag('recon') ?? join(dirname(bookPath), 'recon.json.gz')
 const byLeaf = new Map<number, DraftWord[]>()
 // Why the paper half did not run, when it did not: the line `readiness.mjs`
-// reports C3's paper half NOT CHECKED from.
+// reports C3's paper half NOT CHECKED from. Only "no recon reading at" lets a
+// book with no scan pass on the text half (`NO_READING` in
+// `lib/readiness-checked.mjs`); every other reason means a reading is there.
 let textOnly: string | null = null
 if (!existsSync(reconPath)) textOnly = `no recon reading at ${reconPath}`
 else {

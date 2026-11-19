@@ -121,11 +121,20 @@ const same = (a, b) => {
   }
 }
 
+/** Why the driver checks do not run when its copy is not this file's bytes. */
+export const STALE_COPY =
+  "the driver's copy is not this book file: load it again (`drive.mjs load <book.json> <scan>`)"
+
 /**
- * Whether the driver can run this book's checks: up, and holding this book.
+ * Whether the driver can run this book's checks: up, holding this book, and
+ * holding it as this `book.json` is today. `drive.mjs load` (and `save`, over
+ * the file the book came from) records the SHA-256 of the file's bytes; a copy
+ * with no fingerprint, or another one, is stale, and a check run on it could
+ * pass while the report fingerprints a different file. Edits made in the
+ * driver and not saved leave the fingerprint as it was, so save first.
  * `{ ok, why }`; `why` is the line the report prints either way.
  */
-export async function driverFor(run, bookDir, scanName) {
+export async function driverFor(run, bookDir, scanName, bookSha) {
   const port = Number(process.env.DRIVE_PORT ?? 7788)
   if (!(await portOpen(port))) {
     return {
@@ -142,11 +151,21 @@ export async function driverFor(run, bookDir, scanName) {
   }
   const { bookFile, current } = res.json
   const mine = join(bookDir, 'book.json')
-  if ((bookFile && same(bookFile, mine)) || (!bookFile && current && current === scanName)) {
-    return { ok: true, why: `up on port ${port}, with this book open (${current})` }
+  if (!((bookFile && same(bookFile, mine)) || (!bookFile && current && current === scanName))) {
+    return {
+      ok: false,
+      why: `up on port ${port}, but it has ${current ?? 'no book'} open${bookFile ? ` (from ${bookFile})` : ''}, not this book; \`drive.mjs load\` it first`
+    }
   }
-  return {
-    ok: false,
-    why: `up on port ${port}, but it has ${current ?? 'no book'} open${bookFile ? ` (from ${bookFile})` : ''}, not this book; \`drive.mjs load\` it first`
+  const held = res.json.bookSha
+  if (typeof held !== 'string' || !bookSha || held.toLowerCase() !== bookSha.toLowerCase()) {
+    // A driver started before it recorded fingerprints answers without the
+    // field at all, and loading again there would record nothing.
+    const old =
+      'bookSha' in res.json
+        ? ''
+        : '; this driver is older than that record, so restart it first (`drive.mjs quit`, then `serve`)'
+    return { ok: false, why: `up on port ${port}, but ${STALE_COPY}${old}` }
   }
+  return { ok: true, why: `up on port ${port}, with this book open (${current}) as it is on disk` }
 }

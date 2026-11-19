@@ -25,7 +25,13 @@ The full list of checks, C1 to C12 for _checked_ and R1 to R11 for _ready to upl
   fingerprint goes to a person); `--witness <w.json>` hands C6 an italic witness; `--out <file>` writes the
   report elsewhere (never inside this repository, which it refuses). The
   driver's checks (C1, C5, C7, and R2 and R3 without a saved report) run only
-  when `drive.mjs serve` is up with this book open. A check a person must do
+  when `drive.mjs serve` is up with this book open, loaded from this
+  `book.json` as it is now: `load` records the file's SHA-256 and the report
+  compares it, so a copy loaded before the file changed is NOT CHECKED ("load
+  it again"). Edits made in the driver and not saved do not change that
+  fingerprint and are not seen by the comparison: `save` before running
+  readiness (a save over the file the book came from records the new
+  fingerprint). A check a person must do
   counts once `ledger.md` signs it off: `Signed off: <check> <sha256> <date>
 <who, and what>` (the report prints each line ready to fill in).
   **[before upload]**
@@ -108,7 +114,9 @@ builds its own copy.
   open for the commands below. Start this first.
 - `node scripts/drive.mjs load <book.json> <scan.pdf>`: loads a book from the
   shelf into the driver's browser, and remembers the `book.json` so the sheets
-  are written beside it. **Warning:** the scan is
+  are written beside it, with the SHA-256 of the file as read (`book` shows
+  both as `bookFile` and `bookSha`; the readiness command compares the
+  fingerprint). **Warning:** the scan is
   `scans/<sha256>.pdf`, named in `book.json` under `scan.path`. The PDF next to
   `book.json` is the export; loading it creates a second, wrong book (check
   with `runs`).

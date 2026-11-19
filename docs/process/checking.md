@@ -102,6 +102,14 @@ Each file is a local path, a storage key, or the path it had on the shelf
 both repositories, and each file's SHA-256 goes in the report. It runs every
 command below and reads its exit code and output; the driver's checks run only
 when `drive.mjs serve` is up with the book open, and are NOT CHECKED otherwise.
+They also need the driver's copy to be this `book.json` as it is now:
+`drive.mjs load` (and `save`, over the file the book came from) records the
+file's SHA-256, and the readiness command compares it with the file it
+checks. With none recorded, or another one, every driver check (C1, C5, C6's
+C1 half, C7, and R2 and R3 without a saved report) is NOT CHECKED: "the
+driver's copy is not this book file: load it again". Edits made in the
+driver and not saved do not change that fingerprint, so the comparison
+cannot see them: save before running readiness.
 `--export-report <proof.json>` gives R2 and R3 the saved output of the
 `proof` run that wrote the interior. It counts only when its `pdfSha256` is
 the interior's SHA-256: a report of another PDF is NOT CHECKED, and one that
@@ -147,7 +155,12 @@ CHECKED item cannot be signed off.
   recon reading (`recon.json.gz` beside it). With none, or with a reading of
   another copy of the scan (another file or leaf count, whose leaves do not
   line up with the book's), the command runs the text half only and says why,
-  and the readiness command reports the paper half NOT CHECKED.
+  and the readiness command reports the paper half NOT CHECKED. A book with no
+  scan (its recorded shape says no pixels: a born-digital PDF or an EPUB)
+  passes on the text half alone, but only when the command says there is no
+  recon reading at all. A reading that is there and was refused (of another
+  copy, unreadable, or empty) shows the book has a scan after all, so the
+  paper half is still NOT CHECKED, whatever the shape says.
 - **C4 Lines lost or moved, against a second reading.** Scan routes:
   `npx vite-node --config vitest.config.ts scripts/coverage-of.ts <book.json> [--second <second.json>]`
   (refuses when too few leaves carry words: make one with `drive.mjs second`).

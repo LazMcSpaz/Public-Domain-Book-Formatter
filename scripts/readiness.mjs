@@ -136,7 +136,8 @@ for (const [role, arg] of Object.entries(named)) {
 console.error(
   `Readiness of ${basename(bookDir)}, asked for: ${stage === 'ready' ? 'ready to upload' : 'checked'}`
 )
-const driver = await driverFor(run, bookDir, book.scan?.fileName ?? null)
+const bookSha = sha256Of(bookJson)
+const driver = await driverFor(run, bookDir, book.scan?.fileName ?? null, bookSha)
 let body = null
 const ctx = {
   run,
@@ -147,7 +148,7 @@ const ctx = {
   bookRel: relative(shelf, bookDir).split('\\').join('/'),
   folder: basename(bookDir),
   book,
-  bookSha: sha256Of(bookJson),
+  bookSha,
   shape: parseShape(book.run?.shape),
   scratch,
   sheets: dirname(out),

@@ -1,9 +1,10 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer, type AddressInfo, type Server } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { gzipSync } from 'node:zlib'
-import { afterAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import * as coherence from '@core/coherence'
 import { combineResults, type CheckResult } from '@core/coherence'
 // @ts-expect-error — plain Node modules with no types: `readiness.mjs` loads
@@ -12,7 +13,9 @@ import { c3, c5 } from '../scripts/lib/readiness-checked.mjs'
 // @ts-expect-error — as above.
 import { exportReport, r11, r2r3 } from '../scripts/lib/readiness-ready.mjs'
 // @ts-expect-error — as above.
-import { runner } from '../scripts/lib/readiness-run.mjs'
+import { STALE_COPY, driverFor, runner } from '../scripts/lib/readiness-run.mjs'
+// @ts-expect-error — as above.
+import { sha256Of } from '../scripts/lib/readiness-files.mjs'
 
 /**
  * The checks `readiness.mjs` runs, each fed the answer a command could give,
@@ -107,21 +110,30 @@ describe('C3, paragraphs broken at a page turn', () => {
     expect(r.summary).toMatch(/paper half did not run \(no recon reading at x\)/)
   })
 
+  const noScanWith = (out: string): CheckResult =>
+    whole('C3', c3(ctxWith({ viteNode: () => said(0, out) }, { shape: { pixels: false } })))
+
   it('passes on the text half alone for a book with no scan, where the paper half does not apply', () => {
-    const r = whole(
-      'C3',
-      c3(
-        ctxWith(
-          {
-            viteNode: () =>
-              said(0, 'book.json\n  0 split; 0 owed; text only: no recon reading at x')
-          },
-          { shape: { pixels: false } }
-        )
-      )
-    )
+    const r = noScanWith('book.json\n  0 split; 0 owed; text only: no recon reading at x')
     expect(r.outcome).toBe('PASSED')
     expect(r.summary).toMatch(/paper half does not apply/)
+  })
+
+  /**
+   * The shape said no pixels, so every refusal was waved through as "no scan".
+   * A reading refused is a reading that exists: the book has a scan after all.
+   */
+  it('is NOT CHECKED for a book with no scan in its shape whose reading was refused', () => {
+    for (const why of [
+      'the recon reading at x is of another copy: it reads other.pdf, not this book’s scan',
+      'the recon reading at x could not be read: Unexpected end of JSON input',
+      'the recon reading at x holds no words'
+    ]) {
+      const r = noScanWith(`book.json\n  0 split; 0 owed; text only: ${why}`)
+      expect(r.outcome, why).toBe('NOT CHECKED')
+      expect(r.summary, why).toMatch(/paper half did not run/)
+      expect(r.summary, why).toMatch(/a recon reading is there, so it has one/)
+    }
   })
 
   it('passes only when the paper was read too', () => {
@@ -140,7 +152,7 @@ describe('C3, paragraphs broken at a page turn', () => {
    * copy of the scan (another file, more leaves): its leaves do not line up
    * with the book's, so the paper half must not run against it.
    */
-  const bookWith = (name: string, reading: Record<string, unknown>): string => {
+  const bookWith = (name: string, reading: Record<string, unknown> | null): string => {
     const at = join(dir, name)
     mkdirSync(at)
     writeFileSync(
@@ -158,14 +170,32 @@ describe('C3, paragraphs broken at a page turn', () => {
     const words = [
       { text: 'w', confidence: 90, bbox: { x0: 0, y0: 0, x1: 9, y1: 9 }, pageIndex: 0 }
     ]
-    writeFileSync(join(at, 'recon.json.gz'), gzipSync(JSON.stringify({ ...reading, words })))
+    if (reading) {
+      writeFileSync(join(at, 'recon.json.gz'), gzipSync(JSON.stringify({ ...reading, words })))
+    }
     return join(at, 'book.json')
   }
-  const real = (bookJson: string): CheckResult =>
+  const real = (bookJson: string, shape?: Record<string, unknown>): CheckResult =>
     whole(
       'C3',
-      c3(ctxWith({}, { bookJson, run: runner({ tools: REPO, shelf: dir, scratch: dir }) }))
+      c3(ctxWith({}, { bookJson, shape, run: runner({ tools: REPO, shelf: dir, scratch: dir }) }))
     )
+
+  /** The same, matched on what the real command prints, not on a guess at it. */
+  it('lets a book with no scan off the paper half only when the command finds no reading', () => {
+    const none = real(bookWith('no-scan', null), { pixels: false })
+    expect(none.outcome, none.details?.join('\n')).toBe('PASSED')
+    const refused = real(
+      bookWith('no-scan-refused', {
+        key: 'synthetic-1906.pdf\u000020\u00001',
+        fileName: 'synthetic-1906.pdf',
+        pageCount: 6
+      }),
+      { pixels: false }
+    )
+    expect(refused.outcome, refused.details?.join('\n')).toBe('NOT CHECKED')
+    expect(refused.summary).toMatch(/another copy: it reads synthetic-1906\.pdf/)
+  }, 120_000)
 
   it('does not read the paper off a reading of another copy', () => {
     const bookJson = bookWith('other-copy', {
@@ -188,6 +218,91 @@ describe('C3, paragraphs broken at a page turn', () => {
     expect(r.outcome, r.details?.join('\n')).toBe('PASSED')
     expect(r.summary).toMatch(/paper read from 1 leaves/)
   }, 60_000)
+})
+
+describe('the driver checks run on the driver’s copy of this very file', () => {
+  /**
+   * `driverFor` asked only which path the book was loaded from, so a copy
+   * loaded before `book.json` changed ran C1, C5 and C7 and could pass them
+   * while the report fingerprinted the file as it is now. Something has to
+   * answer on the driver's port for `driverFor` to ask at all: a socket that
+   * hangs up stands in for it, and the stub answers `drive.mjs book`.
+   */
+  const at = join(dir, 'driven')
+  const bookJson = join(at, 'book.json')
+  let server: Server
+  const was = process.env['DRIVE_PORT']
+  let then = ''
+  let now = ''
+  beforeAll(async () => {
+    mkdirSync(at)
+    const run = { key: 'synthetic.pdf\u000010\u00001', fileName: 'synthetic.pdf', pageCount: 2 }
+    writeFileSync(bookJson, JSON.stringify({ run: { ...run, edits: [] } }))
+    then = sha256Of(bookJson)
+    writeFileSync(bookJson, JSON.stringify({ run: { ...run, edits: [{ id: 'e1' }] } }))
+    now = sha256Of(bookJson)
+    server = createServer((socket) => socket.end())
+    await new Promise<void>((done) => server.listen(0, '127.0.0.1', done))
+    process.env['DRIVE_PORT'] = String((server.address() as AddressInfo).port)
+  })
+  afterAll(async () => {
+    if (was === undefined) delete process.env['DRIVE_PORT']
+    else process.env['DRIVE_PORT'] = was
+    await new Promise((done) => server.close(done))
+  })
+
+  const holding = (answer: Record<string, unknown>) =>
+    driverFor(
+      {
+        drive: (verb: unknown) => {
+          expect(verb).toBe('book')
+          return answered(0, { current: 'synthetic.pdf', bookFile: bookJson, ...answer })
+        }
+      },
+      at,
+      'synthetic.pdf',
+      now
+    ) as Promise<{ ok: boolean; why: string }>
+
+  it('runs them when the copy was loaded from these very bytes', async () => {
+    const d = await holding({ bookSha: now })
+    expect(d.ok, d.why).toBe(true)
+  })
+
+  it('does not run them on a copy loaded before the file changed, or with no fingerprint', async () => {
+    for (const answer of [{ bookSha: then }, { bookSha: null }]) {
+      const d = await holding(answer)
+      expect(d.ok, JSON.stringify(answer)).toBe(false)
+      expect(d.why).toContain(STALE_COPY)
+    }
+    const old = await holding({})
+    expect(old.ok).toBe(false)
+    expect(old.why).toContain(STALE_COPY)
+    expect(old.why).toMatch(/restart it/)
+  })
+
+  it('reports every driver check NOT CHECKED with that reason', async () => {
+    const zeros = answered(0, { references: 0, notes: 0, orphaned: 0 })
+    const fresh = await holding({ bookSha: now })
+    expect(c5(ctxWith({ drive: () => zeros }, { driver: fresh })).outcome).toBe('PASSED')
+    const stale = await holding({ bookSha: then })
+    const r: CheckResult = c5(ctxWith({ drive: never }, { driver: stale }))
+    expect(r.outcome).toBe('NOT CHECKED')
+    expect(r.summary).toContain(
+      "the driver's copy is not this book file: load it again (`drive.mjs load <book.json> <scan>`)"
+    )
+  })
+
+  /** The driver runs in a browser no test starts; this pins what it records. */
+  it('drive.mjs load records the fingerprint of the bytes it read, and book answers it', () => {
+    const driver = readFileSync(join(REPO, 'scripts', 'drive.mjs'), 'utf8')
+    const load = driver.slice(driver.indexOf('\n    load: async ('))
+    const loadBody = load.slice(0, load.indexOf('\n    },\n'))
+    expect(loadBody).toMatch(/const bytes = await readFile\(bookFile\)/)
+    expect(loadBody).toMatch(/const json = stripBom\(bytes\.toString\('utf8'\)\)/)
+    expect(loadBody).toMatch(/rememberBookFile\(loaded\.key, bookFile, false, sha256\(bytes\)\)/)
+    expect(driver).toMatch(/bookSha: wanted \? localStorage\.getItem\(bookShaPrefix \+ wanted\)/)
+  })
 })
 
 describe('R2 and R3, the export report', () => {
