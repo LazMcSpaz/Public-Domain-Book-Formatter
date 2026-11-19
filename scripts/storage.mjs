@@ -22,7 +22,7 @@
 import { spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { createReadStream, createWriteStream, existsSync, mkdirSync } from 'node:fs'
-import { readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { readFileSync, realpathSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { register } from 'node:module'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
@@ -46,6 +46,25 @@ const core = await import('../src/core/sync/storage.ts')
 const r2 = await import('./lib/r2.mjs')
 const { STORAGE_LIST, MAX_OBJECT_BYTES, TEST_KIND } = core
 const { fail, hashOf } = r2
+
+const TOOLS = resolve(dirname(fileURLToPath(import.meta.url)), '..')
+
+/** Refuse a destination inside this repository, which is public: book files never go in it. */
+function refuseInsideTools(target, what) {
+  let real = target
+  try {
+    real = join(realpathSync(dirname(target)), basename(target))
+  } catch {
+    /* the folder is not there yet */
+  }
+  const fold = (p) => (process.platform === 'win32' ? p.toLowerCase() : p)
+  const inside = relative(fold(realpathSync(TOOLS)), fold(real))
+  if (inside === '' || (!inside.startsWith('..') && !isAbsolute(inside))) {
+    fail(
+      `Refusing to write ${what} at ${target}: that is inside the tools repository, which is public. Use a folder outside it (the shelf, or a scratch folder).`
+    )
+  }
+}
 
 const mb = (bytes) => (bytes / 1e6).toFixed(1)
 const today = () => new Date().toISOString().slice(0, 10)
@@ -79,6 +98,7 @@ async function put(file, kind, { shelf = '', from = '' } = {}) {
   }
   const shelfDir = shelf ? resolve(shelf) : ''
   if (shelfDir && !existsSync(shelfDir)) fail(`There is no shelf folder at ${shelfDir}.`)
+  if (shelfDir) refuseInsideTools(join(shelfDir, STORAGE_LIST), 'the storage list')
   if (shelfDir) readShelfList(shelfDir) // a broken list stops the run before the upload
   const named = shelfPath(path, shelfDir, from)
 
@@ -112,7 +132,11 @@ async function put(file, kind, { shelf = '', from = '' } = {}) {
     const row = { key, sha256, bytes: size, from: named, added: today() }
     const result = core.addStorageRow(readShelfList(shelfDir), row)
     const list = join(shelfDir, STORAGE_LIST)
-    if (result.added) writeFileSync(list, core.serializeStorageList(result.rows))
+    if (result.added) {
+      // Written beside and renamed over, so a crash part-way cannot cut the list short.
+      writeFileSync(`${list}.tmp`, core.serializeStorageList(result.rows))
+      renameSync(`${list}.tmp`, list)
+    }
     listed = result.added ? 'added' : 'already listed'
   }
   return { key, sha256, bytes: size, uploaded, verified: true, listed, from: named }
@@ -121,6 +145,7 @@ async function put(file, kind, { shelf = '', from = '' } = {}) {
 async function get(key, out) {
   let target = resolve(out)
   if (existsSync(target) && statSync(target).isDirectory()) target = join(target, basename(key))
+  refuseInsideTools(target, key)
   const named = core.fingerprintOf(key)
   if (existsSync(target)) {
     const here = named ? await hashOf(createReadStream(target)) : null

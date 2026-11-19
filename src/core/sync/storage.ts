@@ -33,7 +33,10 @@ export interface StorageRow {
 }
 
 const SHA256 = /^[0-9a-f]{64}$/u
-const KIND = /^[a-z0-9_][a-z0-9_-]{0,39}(\/[a-z0-9_][a-z0-9_-]{0,39})*$/u
+// The first part names the kind of file (`scans`, `sources`, `pictures`,
+// `editions`, `exports`), lower case; the parts after it may be a book's real
+// folder name or an edition, which keep their capitals (`editions/Author-Title/1.0`).
+const KIND = /^[a-z0-9_][a-z0-9_-]{0,39}(\/[A-Za-z0-9_][A-Za-z0-9_.-]{0,99})*$/u
 const EXT = /^[a-z0-9]{1,10}$/u
 const DAY = /^\d{4}-\d{2}-\d{2}$/u
 const HEADER = STORAGE_COLUMNS.join('\t')

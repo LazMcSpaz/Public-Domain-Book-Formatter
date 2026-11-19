@@ -32,6 +32,12 @@ describe('storage keys', () => {
     expect(storageKey('_test', A, '')).toBe(`_test/${A}`)
   })
 
+  it('keeps the capitals of a book folder or edition after the kind', () => {
+    expect(storageKey('editions/Crowley-TheBookOfTheGoetia-1rjx53s/1.0', A, 'pdf')).toBe(
+      `editions/Crowley-TheBookOfTheGoetia-1rjx53s/1.0/${A}.pdf`
+    )
+  })
+
   it('refuses a bad kind, fingerprint or extension rather than guessing', () => {
     expect(() => storageKey('Sources', A, 'pdf')).toThrow(/storage kind/)
     expect(() => storageKey('../scans', A, 'pdf')).toThrow(/storage kind/)

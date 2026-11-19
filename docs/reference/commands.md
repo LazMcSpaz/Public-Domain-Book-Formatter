@@ -332,8 +332,7 @@ it is read from `CLOUDFLARE_API_TOKEN` (see
 [sessions.md](../process/sessions.md#storage-key-on-your-own-computer)).
 
 - `node scripts/storage.mjs put <file> --kind <kind> --shelf <shelf>`: puts
-  a file in the bucket as `<kind>/<sha256>.<ext>` (kinds such as `sources`,
-  `exports`, `scans`, `figures`), skips the upload when that key is already
+  a file in the bucket as `<kind>/<sha256>.<ext>` (refusing a `--shelf` or an output inside the tools repository) (kinds: `scans`, `sources`, `pictures`, `exports` for old exports not yet matched to an upload, and `editions/<book folder>/<edition>` for the exact files sent to KDP; a book folder keeps its capitals), skips the upload when that key is already
   there at that size, then always fetches it back and checks the
   fingerprint. With `--shelf` it adds a row to `STORAGE.tsv` at the shelf's
   root (key, fingerprint, bytes, where it was on the shelf, date); `--from
