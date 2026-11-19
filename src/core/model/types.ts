@@ -397,6 +397,23 @@ export interface StyleProfile {
    */
   folioMirrorsHead: boolean
   /**
+   * How far above the text block the running head's baseline sits, in body
+   * sizes, from 1 to 2. 2 is the standard place (since 25 October 2026),
+   * nearly three lines of air over the first line of text; 1.2 is where it
+   * sat before, about two. Never more than 2, so a head never comes nearer
+   * the trim than the standard place puts it. Margin furniture only.
+   */
+  runningHeadRise: number
+  /**
+   * Set a bottom page number with its baseline this many points above the
+   * bottom edge, wherever the running head is; it wins over
+   * `folioMirrorsHead`. 0 sets none, and the number hangs under the text (or
+   * mirrors the head). Never nearer the edge than KDP's quarter inch plus the
+   * figures' descent, and never up toward the text: then it keeps its old
+   * place and the book is warned. Margin furniture only.
+   */
+  folioFromFootPt: number
+  /**
    * Never end a paragraph on a scrap: the line before the last is not
    * hyphenated, and the last line is never shorter than a few letters. It
    * changes line breaks, so it is off for every book set before it existed.

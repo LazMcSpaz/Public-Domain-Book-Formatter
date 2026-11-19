@@ -1,4 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { readFileSync } from 'node:fs'
+import fontkit from '@pdf-lib/fontkit'
 import {
   DEFAULT_SHORT_BOOK,
   hasOwnDesign,
@@ -14,7 +16,15 @@ import {
 } from '@core/style'
 import { appliedLook, initialState } from '@core/wizard'
 import type { Answers } from '@core/wizard/questions'
-import { frameFor } from '@core/layout'
+import {
+  fixedWidthMeasurer,
+  folioBaseline,
+  folioPlace,
+  frameFor,
+  headCapTop,
+  runningHeadBaseline,
+  type TextMeasurer
+} from '@core/layout'
 import { validateKdp } from '@core/typeset'
 import { findOrnament } from '@core/ornament'
 import { BODY_FONTS } from '@core/design'
@@ -47,8 +57,30 @@ const HOUSE: Answers = {
   smallCapsFont: 'EB Garamond',
   marginInner: '1.125',
   marginOuter: '0.75',
-  folioMirrorsHead: true,
+  runningHeadRise: '1.2',
+  folioFromFootPt: '24.8',
   avoidShortLastLines: true
+}
+
+/** The new settings of the look: none is in a book set before them. */
+const NEW_IDS = [
+  'marginInner',
+  'marginOuter',
+  'folioMirrorsHead',
+  'runningHeadRise',
+  'folioFromFootPt',
+  'avoidShortLastLines'
+]
+
+/**
+ * The house look before the owner lowered its head (19 November 2026): the
+ * head at the standard rise, the page number mirrored on it.
+ */
+const HOUSE_BEFORE: Answers = {
+  ...Object.fromEntries(
+    Object.entries(HOUSE).filter(([id]) => id !== 'runningHeadRise' && id !== 'folioFromFootPt')
+  ),
+  folioMirrorsHead: true
 }
 
 const file = (over: Record<string, unknown> = {}): string =>
@@ -86,6 +118,15 @@ describe('the house look file', () => {
     const old = normalizeStyleProfile({ id: 'sp-old', name: 'Banked last year', trimSize: '7x10' })
     expect(old.folioMirrorsHead).toBe(false)
     expect(old.avoidShortLastLines).toBe(false)
+    // Nor move its running head or set its page number.
+    expect(old.runningHeadRise).toBe(2)
+    expect(old.folioFromFootPt).toBe(0)
+    // A banked value is kept when it is one a look may set, and refused otherwise.
+    const kept = normalizeStyleProfile({ runningHeadRise: 1.2, folioFromFootPt: 24.8 })
+    expect([kept.runningHeadRise, kept.folioFromFootPt]).toEqual([1.2, 24.8])
+    const odd = normalizeStyleProfile({ runningHeadRise: 3, folioFromFootPt: -4 })
+    expect([odd.runningHeadRise, odd.folioFromFootPt]).toEqual([2, 0])
+    expect(normalizeStyleProfile({ runningHeadRise: '1.2' }).runningHeadRise).toBe(2)
   })
 
   it('reads a good file, with the short-book rule defaulting to under 100 pages at 6x9', () => {
@@ -197,7 +238,9 @@ describe('the house look’s page', () => {
     expect(style.ornaments.chapterOpener).toBe('chapter-vine')
     expect(findOrnament('chapter-vine')?.kind).toBe('chapter')
     expect(style.ornaments.blankPage).toBe('chapter-asterism')
-    expect(style.folioMirrorsHead).toBe(true)
+    expect(style.folioMirrorsHead).toBe(false)
+    expect(style.runningHeadRise).toBe(1.2)
+    expect(style.folioFromFootPt).toBe(24.8)
     expect(style.avoidShortLastLines).toBe(true)
     // The engine's 7x10 nonfiction margins are 0.75 in and 0.5 in, gutter 0.13.
     const was = styleOf(
@@ -258,12 +301,56 @@ describe('the house look’s page', () => {
   it('is settings, not new defaults: a book set before keeps its look', () => {
     // A published book's answers, which name none of the new settings.
     const published = { ...HOUSE }
-    for (const id of ['marginInner', 'marginOuter', 'folioMirrorsHead', 'avoidShortLastLines']) {
-      delete published[id]
-    }
+    for (const id of NEW_IDS) delete published[id]
     const style = styleOf(published)
     expect(style.margins).toEqual({ inner: 0.75, outer: 0.5, top: 0.75, bottom: 0.75 })
     expect(style.folioMirrorsHead).toBe(false)
+    expect(style.runningHeadRise).toBe(2)
+    expect(style.folioFromFootPt).toBe(0)
     expect(style.avoidShortLastLines).toBe(false)
+  })
+})
+
+describe('the house look lowers its head and keeps its page number', () => {
+  // Libre Caslon Text's own metrics, read the way the app's font table reads
+  // them (`fonts.ts`), so the distances are the printed ones.
+  const caslon = fontkit.create(
+    readFileSync(
+      'node_modules/@expo-google-fonts/libre-caslon-text/400Regular/LibreCaslonText_400Regular.ttf'
+    )
+  )
+  const real: TextMeasurer = {
+    ...fixedWidthMeasurer(0.5),
+    metrics: (_font, sizePt) => {
+      const scale = sizePt / caslon.unitsPerEm
+      return {
+        ascent: caslon.ascent * scale,
+        descent: Math.abs(caslon.descent) * scale,
+        lineGap: caslon.lineGap * scale,
+        capHeight: caslon.capHeight * scale
+      }
+    },
+    hasSmallCaps: () => caslon.availableFeatures.includes('smcp')
+  }
+  const now = styleOf(HOUSE)
+  const before = styleOf(HOUSE_BEFORE)
+
+  it('sets the head 1.2 body sizes over the text, 8.8 pt lower than before', () => {
+    expect(frameFor(now, 'recto').yPt - runningHeadBaseline(now)).toBeCloseTo(1.2 * 11, 6)
+    expect(frameFor(before, 'recto').yPt - runningHeadBaseline(before)).toBeCloseTo(2 * 11, 6)
+    expect(headCapTop(now, real) - headCapTop(before, real)).toBeCloseTo(8.8, 6)
+    // The capitals start about 0.47 in below the top edge, 0.34 in before.
+    expect(headCapTop(now, real) / 72).toBeCloseTo(0.467, 3)
+    expect(headCapTop(before, real) / 72).toBeCloseTo(0.344, 3)
+  })
+
+  it('keeps the page number where it was, within 0.1 pt, on both trims', () => {
+    for (const trimSize of ['7x10', '6x9']) {
+      const n = { ...now, trimSize }
+      const b = { ...before, trimSize }
+      expect(folioPlace(b, real), trimSize).toMatchObject({ rule: 'mirrorsHead', honoured: true })
+      expect(folioPlace(n, real), trimSize).toMatchObject({ rule: 'fromFoot', honoured: true })
+      expect(Math.abs(folioBaseline(n, real) - folioBaseline(b, real)), trimSize).toBeLessThan(0.1)
+    }
   })
 })

@@ -8,7 +8,8 @@ What a new book gets:
 
 - **The same design as the three.** Libre Caslon at 11 pt on a 7×10 page, ornamented chapter openings with the Vine and Bud ornament, chapters opening on a right-hand page, no drop capital, the author and the chapter in the running heads, a one-level contents with each label on its own line, quotations set 4 ems in, side heads from the third level, small capitals from EB Garamond, the asterism on blank pages and a border round the title page.
 - **Wider side margins.** Half as wide again: the spine-side margin goes from 0.75 in to 1.125 in, the outside one from 0.5 in to 0.75 in. The binding allowance beside the spine stays 0.13 in. The top and bottom stay as they were.
-- **The page number balances the running head.** The number at the foot sits exactly as far up from the bottom edge as the running head's capitals sit down from the top edge. On the printed _Lost Keys_ the head starts 24.8 pt from the top and the number sat 36.8 pt from the bottom; now both are 24.8 pt. Only the number moves. No line of text and no page changes. If a book's margins would put the number into the text (a deep top margin over a shallow bottom one), it keeps its old place and the proof gives a warning.
+- **The running head sits lower, and the page number stays put** (your decision of 19 November 2026). The head stands 1.2 body sizes above the text, where it sat before 25 October 2026: its capitals start about 33.6 pt (0.47 in) below the top edge, 8.8 pt lower than on the printed _Lost Keys_ (24.8 pt). The page number at the foot stands 24.8 pt above the bottom edge, measured to the line its figures stand on; on the printed _Lost Keys_ it sat 36.8 pt up. Only the head and the number move. No line of text and no page changes. If a book's bottom margin would put the number into the text, it keeps its old place and the proof gives a warning.
+- **How that came about.** The first version of this look balanced the two: the number sat exactly as far up from the bottom edge as the head's capitals sat down from the top, both 24.8 pt. When the head came down, the number was meant to stay where it was rather than follow it, so the look now sets the number's distance from the foot on its own (24.8 pt) instead of mirroring the head. Mirroring is still there for any look that asks for it.
 - **No scrap at the end of a paragraph.** A paragraph no longer ends with "pris-" on one line and "on." alone on the next. The line before the last is not broken with a hyphen, and the last line holds at least about six letters (three ems). Only a paragraph that ended that way is set again; every other paragraph keeps its lines. If both cannot be had without spacing a line out too far, the last line's length comes first and the hyphen may stay; if even that cannot be had, the paragraph is set as before.
 - **Short books are 6×9.** A book that would print under 100 pages at 7×10 is set 6×9 instead, with everything else the same. The 6×9 side margins work out the same as the 7×10 ones (1.125 in and 0.75 in), because the engine's standard margins are the same on both pages.
 
@@ -27,8 +28,8 @@ Hebrew and Greek: the house face has neither, so those letters are drawn from Ca
 ## Done when (how we'll know it works; how the owner can try it)
 
 - A book with no design answers proofs in the house look, and `proof` says so. A book with answers of its own proofs in its own look.
-- Measured on the rendered pages: side margins 1.255 in (spine side, with the binding allowance) and 0.75 in; the head's capitals and the page number's foot each 24.8 pt from their edge, within 0.5 pt.
-- Tests show the scrap at the end of a paragraph without the setting and not with it; the page number in its new place and the text unmoved; trim by length at 99 and 100 pages; the house look inherited, and a book's own answers winning.
+- Measured on the rendered pages: side margins 1.255 in (spine side, with the binding allowance) and 0.75 in; the head's capitals about 33.6 pt below the top edge; the page number where the first version put it, its line 24.8 pt above the bottom edge; each within 0.5 pt. Measured on the _Lost Keys_ sample at 600 dpi on 19 November 2026: the head's ink starts 33.4 pt from the top (24.6 pt before), the page number's ink ends 24.7 pt from the bottom, exactly as before, and the text and the foot of the page are the same pixels as before.
+- Tests show the scrap at the end of a paragraph without the setting and not with it; the page number in its new place and the text unmoved; the head 1.2 body sizes over the text, and the page number within 0.1 pt of where the first version put it; trim by length at 99 and 100 pages; the house look inherited, and a book's own answers winning.
 - Each test fails when its fault is put back.
 - **The owner tries it:** open the _Lost Keys_ PDF set in the new look (the session names where it is) beside the printed copy, and look at the margins, the page numbers and the ends of paragraphs. When you approve, the house look file is written to the shelf.
 
@@ -61,7 +62,8 @@ Hebrew and Greek: the house face has neither, so those letters are drawn from Ca
     "smallCapsFont": "EB Garamond",
     "marginInner": "1.125",
     "marginOuter": "0.75",
-    "folioMirrorsHead": true,
+    "runningHeadRise": "1.2",
+    "folioFromFootPt": "24.8",
     "avoidShortLastLines": true
   },
   "shortBook": { "underPages": 100, "design": { "trimSize": "6x9" } }
@@ -74,8 +76,9 @@ Hebrew and Greek: the house face has neither, so those letters are drawn from Ca
 
 - `src/core/style/house-look.ts` (new): the file format, `inheritDesign` (a book's own answers win), `trimForLength` and `isShortBook` (the 100-page rule, threshold a parameter), `houseDesignFor`, the one-line report.
 - `src/core/sync/shelf.ts`: `HOUSE_LOOK_PATH`, in the shelf map.
-- `src/core/model/types.ts`, `src/core/style/*`: two settings, `folioMirrorsHead` and `avoidShortLastLines`, off in every shipped look; a question each; 1.125 in offered as a margin.
-- `src/core/layout/furniture.ts` (new): the page number's place, mirrored from the head's cap height (read from the face) and never nearer the edge than KDP's 0.25 in plus the figures' descent.
+- `src/core/model/types.ts`, `src/core/style/*`: four settings, off in every shipped look, a question each: `folioMirrorsHead`, `avoidShortLastLines`, `runningHeadRise` (in body sizes, from 1 to 2; standard 2) and `folioFromFootPt` (in points; 0 sets none). 1.125 in offered as a margin.
+- `src/core/layout/frames.ts`: the head's rise read from the look (`headRiseOf`); a rise out of range is set at the standard 2, with a warning. Never above 2, so the head never comes nearer the trim than the standard place.
+- `src/core/layout/furniture.ts` (new): the page number's place, either set from the foot or mirrored from the head's cap height (read from the face), never nearer the edge than KDP's 0.25 in plus the figures' descent, and never up toward the text. A set distance wins over mirroring.
 - `src/core/layout/runts.ts` (new) and `break-lines.ts`: the no-scrap rule; `paginate.ts` passes it to prose.
 - `src/core/layout/measure.ts`, `src/platform/browser/fonts.ts`: the measurer reports the face's cap height.
 - `src/platform/browser/house-look.ts` (new), `interior.ts`: reading the file, laying a book out in the look it gets, a layout-only page count.
@@ -86,7 +89,7 @@ Hebrew and Greek: the house face has neither, so those letters are drawn from Ca
 ## Rules/decisions that apply
 
 - Published books must not reflow: anything that moves a line or a page is a setting the house look turns on, never a new default.
-- The page number's move is margin furniture, but it is still a setting, off by default: a published book exported again for a correction should look exactly as it did.
+- The head's height and the page number's place are margin furniture, but they are still settings, off by default (a rise of 2, no distance set): a published book exported again for a correction should look exactly as it did. Checked on 19 November 2026, before and after the head was lowered: 48 looks (the shipped ones and their variants, every shelf book's design, the first house look) on two made-up books, and the 15 shelf books with a design of their own laid out from their own text, each with the test measurer and the real fonts: 222 laid-out books, byte for byte the same.
 - KDP: the spine-side margin plus allowance (1.255 in) beats the largest minimum KDP asks for (0.875 in past 700 pages); outside, top and bottom are at least 0.25 in; furniture stays 0.25 in from the trim.
 - `src/core/CLAUDE.md`: the rules are pure core, tested; the platform and the app only fetch and lay out.
 - `scripts/CLAUDE.md`: `drive.mjs` must not grow needlessly; new logic in new files.

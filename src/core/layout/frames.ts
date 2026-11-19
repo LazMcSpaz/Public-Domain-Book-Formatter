@@ -91,17 +91,49 @@ export function linesPerFrame(frame: PageFrame, leadingPt: number, ascentPt: num
 
 /**
  * How far above the text block the running head's baseline sits, in body
- * sizes. 1.2 put the head about two lines over the first line of text, and
- * the editor found it crowded on every book (25 October 2026); 2.0 gives
- * nearly three lines of air and, on a 7×10 at 11pt with a 0.75in top margin,
- * leaves the head's letters 0.37in from the trim — inside KDP's 0.25in rule
- * with room for the printer's variance.
+ * sizes, unless a look sets its own (`runningHeadRise`). 1.2 put the head about
+ * two lines over the first line of text, and the editor found it crowded on
+ * every book (25 October 2026); 2.0 gives nearly three lines of air and, on a
+ * 7×10 at 11pt with a 0.75in top margin, leaves the head's letters 0.37in from
+ * the trim, inside KDP's 0.25in rule with room for the printer's variance.
+ * Every book set before the setting existed keeps it.
  */
 export const RUNNING_HEAD_RISE = 2.0
 
+/**
+ * The rises a look may set, in body sizes. Never above the standard 2.0, so a
+ * head is never nearer the trim than the standard place puts it and KDP's
+ * quarter inch is no more at risk than it always was; never below one body
+ * size, so the head's descenders stay clear of the first line of text.
+ */
+export const RUNNING_HEAD_RISE_LEAST = 1
+export const RUNNING_HEAD_RISE_MOST = RUNNING_HEAD_RISE
+
+/** Whether a rise is one a look may set. */
+export function isHeadRise(rise: unknown): rise is number {
+  return (
+    typeof rise === 'number' &&
+    Number.isFinite(rise) &&
+    rise >= RUNNING_HEAD_RISE_LEAST &&
+    rise <= RUNNING_HEAD_RISE_MOST
+  )
+}
+
+/**
+ * The rise a profile's head is set at: its own, or the standard one where it
+ * sets none (a profile from before the setting) or one out of range (the
+ * layout then warns: `furnitureWarnings`).
+ */
+export function headRiseOf(profile: StyleProfile): number {
+  return isHeadRise(profile.runningHeadRise) ? profile.runningHeadRise : RUNNING_HEAD_RISE
+}
+
 /** Where the running head's baseline sits — above the text block, in the margin. */
 export function runningHeadBaseline(profile: StyleProfile): number {
-  return Math.max(12, profile.margins.top * PT_PER_INCH - profile.bodyFontSize * RUNNING_HEAD_RISE)
+  return Math.max(
+    12,
+    profile.margins.top * PT_PER_INCH - profile.bodyFontSize * headRiseOf(profile)
+  )
 }
 
 /** Where a bottom folio's baseline sits — below the text block, in the margin. */

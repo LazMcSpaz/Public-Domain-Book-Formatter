@@ -114,9 +114,11 @@ describe('answers fold back onto the profile', () => {
       hyphenate: false,
       opticalMargins: false,
       chaptersOpenRecto: false,
-      // The house look's two settings, both off in every profile shipped.
+      // The house look's settings, all off in every profile shipped.
       folioMirrorsHead: true,
       avoidShortLastLines: true,
+      runningHeadRise: 1.2,
+      folioFromFootPt: 24.8,
       headingStyle: { ...base.headingStyle, smallCaps: true, centered: false },
       frontMatter: {
         titlePage: false,

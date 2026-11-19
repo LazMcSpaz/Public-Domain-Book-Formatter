@@ -54,13 +54,7 @@ import {
 import { anchorIllustrations } from './illustrations'
 import { typographicQuotes, withTypographicQuotes } from './quotes'
 import { frameFor, leadingFor, linesPerFrame, runningHeadBaseline, trimToPoints } from './frames'
-import {
-  FOLIO_NOT_MIRRORED,
-  FURNITURE_SIZE_RATIO,
-  folioBaseline,
-  folioPlace,
-  furnitureFont
-} from './furniture'
+import { FURNITURE_SIZE_RATIO, folioBaseline, furnitureFont, furnitureWarnings } from './furniture'
 import { proseBreaks, runtRule, type RuntRule } from './runts'
 import type { TextMeasurer } from './measure'
 import { hangPunctuation } from './optical'
@@ -2678,12 +2672,9 @@ export function layout(
         'as a chapter; run-in sub-heads want level 2'
     })
   }
-  // A fallback said out loud, and only where a page number prints at the foot:
-  // the mirrored place is blocked, so the number keeps its old one.
-  const folioAtFoot = profile.pageNumber === 'bottomCenter' || profile.pageNumber === 'bottomOuter'
-  if (profile.folioMirrorsHead && folioAtFoot && !folioPlace(profile, measurer).mirrored) {
-    warnings.push({ pageIndex: 0, text: FOLIO_NOT_MIRRORED })
-  }
+  // Fallbacks said out loud: a head rise out of range, or a page number at the
+  // foot whose mirrored or set place is blocked, so it keeps its old one.
+  for (const text of furnitureWarnings(profile, measurer)) warnings.push({ pageIndex: 0, text })
 
   // --- footnote geometry ---------------------------------------------------
   //

@@ -57,6 +57,8 @@ const BODY_SIZES = [9.5, 10, 10.5, 11, 11.5, 12, 12.5, 13]
 const MARGIN_STEPS = [0.4, 0.5, 0.6, 0.75, 0.85, 1, 1.125, 1.2]
 const GUTTER_STEPS = [0, 0.06, 0.13, 0.19, 0.25, 0.32]
 const HEADING_SCALES = [1.2, 1.4, 1.6, 1.8, 2]
+/** A page number's distance up from the bottom edge, in points; 24.8 is the house look's. */
+const FOLIO_FROM_FOOT_STEPS = [21.6, 24.8, 28.8, 36]
 
 const RUNNING_HEAD_MODES: RunningHeadMode[] = [
   'none',
@@ -262,6 +264,22 @@ export function styleQuestions(
       ]
     },
     {
+      id: 'runningHeadRise',
+      type: 'choice',
+      prompt: 'How high above the text does the running head sit?',
+      help:
+        'Counted in body sizes, from the top of the text to the line the head stands on. ' +
+        'Two is the standard place, with nearly three lines of air under the head; 1.2 ' +
+        'sets it about two lines over the text. It moves the head and any page number ' +
+        'that follows it, never a line of text.',
+      defaultValue: String(profile.runningHeadRise),
+      options: [
+        { value: '2', label: '2 body sizes (the standard)' },
+        { value: '1.6', label: '1.6 body sizes' },
+        { value: '1.2', label: '1.2 body sizes, nearer the text' }
+      ]
+    },
+    {
       id: 'pageNumber',
       type: 'choice',
       prompt: 'Page numbers',
@@ -275,6 +293,23 @@ export function styleQuestions(
         'Set a page number at the foot as far from the edge as the running head is at the top?',
       help: 'The two then frame the page evenly. It moves only the number, never a line of text.',
       defaultValue: profile.folioMirrorsHead
+    },
+    {
+      id: 'folioFromFootPt',
+      type: 'choice',
+      prompt: 'Or set a page number at the foot a fixed distance up from the bottom edge?',
+      help:
+        'Measured to the line the figures stand on. A distance set here keeps the number ' +
+        'where it is whatever the running head does, and wins over mirroring the head. It ' +
+        'moves only the number, never a line of text, and KDP’s quarter inch is kept.',
+      defaultValue: String(profile.folioFromFootPt),
+      options: [
+        { value: '0', label: 'No: under the text, or mirroring the head' },
+        ...FOLIO_FROM_FOOT_STEPS.map((pt) => ({
+          value: String(pt),
+          label: `${pt} pt (${Number((pt / 72).toFixed(2))} in)`
+        }))
+      ]
     },
     {
       id: 'dropCap',
@@ -559,6 +594,8 @@ export function applyStyleAnswers(profile: StyleProfile, answers: Answers): Styl
       pick(answers, 'smallCapsFont', profile.smallCapsFont || SAME_FACE)
     ),
     folioMirrorsHead: pickBool(answers, 'folioMirrorsHead', profile.folioMirrorsHead),
+    runningHeadRise: pickNumber(answers, 'runningHeadRise', profile.runningHeadRise),
+    folioFromFootPt: pickNumber(answers, 'folioFromFootPt', profile.folioFromFootPt),
     avoidShortLastLines: pickBool(answers, 'avoidShortLastLines', profile.avoidShortLastLines),
     ornaments: {
       chapterOpener: pickOrnament(answers, 'ornamentChapter', profile.ornaments.chapterOpener),

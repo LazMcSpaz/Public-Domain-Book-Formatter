@@ -35,7 +35,8 @@ const HOUSE = {
     ornamentChapter: 'chapter-vine',
     marginInner: '1.125',
     marginOuter: '0.75',
-    folioMirrorsHead: true,
+    runningHeadRise: '1.2',
+    folioFromFootPt: '24.8',
     avoidShortLastLines: true
   },
   shortBook: { underPages: 100, design: { trimSize: '6x9' } }
