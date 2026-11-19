@@ -88,7 +88,19 @@ Both finish commands defer to it.
 
 **Verify:** `harness/check.py` and the tests.
 
-## 3. Big files into Cloudflare R2, and finished books cut down to what they need
+## 3. Big files into Cloudflare R2, and finished books cut down to what they need (mostly done 19 November 2026)
+
+**Done 19 November 2026.**
+
+- **The bucket** `libri-vetus-files` and the storage command `scripts/storage.mjs` (put, get, list, verify, self-test), reviewed and live.
+- **The reference copies** (`sources/`, 72 files, 852 MB) and **every old export and cover file** (58 files, 280 MB) moved. Each was fetched back and matched by fingerprint before it left the shelf, and is listed in the shelf's `STORAGE.tsv`.
+- **The shelf's files went from about 2 GB to about 843 MB,** and the shelf now ignores new exports written beside a book.
+
+**Still open:**
+
+- the ritual magic session migrates its own files from the owner's computer;
+- the live books' "retire the working files" step waits for task 11's records of what went to KDP;
+- the weekly backup copies the bucket too (after the cleanup).
 
 **Why (plain English).** The shelf repository is about 5.5 GB with its history, almost all of it scans and exported PDFs, and every session downloads it. The books themselves are about 2 MB each. The owner also wants a finished book to carry no files nobody needs. Decisions [0051](decisions/0051-big-files-live-in-cloudflare-r2.md) and [0052](decisions/0052-what-a-finished-book-keeps.md) say what goes where.
 

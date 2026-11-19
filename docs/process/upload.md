@@ -124,7 +124,7 @@ The last step of every upload, by [decision 0052](../decisions/0052-what-a-finis
    - check sheets older than the latest readiness report.
 4. **Tell the owner** what was moved and what was deleted.
 
-Never delete a scan, a reference copy, an uploaded file, the book file or a hand-written record. Until the storage bucket exists ([cleanup task 3](../cleanup-plan.md)), skip step 2 and leave large files on the computer they were made on.
+Never delete a scan, a reference copy, an uploaded file, the book file or a hand-written record. Step 2 uses `node scripts/storage.mjs put <file> --kind <kind> --shelf <shelf>` ([commands](../reference/commands.md)); the uploaded files go under the kind `editions/<book folder>/<edition>`.
 
 ## Never
 
