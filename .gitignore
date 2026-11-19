@@ -57,3 +57,7 @@ __pycache__/
 /witness.json
 /second.json
 /cleantrial.json
+
+# Isolated git worktrees that subagents build in. Each is a whole checkout;
+# its work reaches the repository as a pushed branch, never as these files.
+/.claude/worktrees/
