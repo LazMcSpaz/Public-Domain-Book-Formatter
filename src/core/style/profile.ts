@@ -16,6 +16,7 @@ import type {
   RunningHeadStyle,
   StyleProfile
 } from '@core/model'
+import { isHeadRise } from '@core/layout/frames'
 import { defaultStyleProfile } from './defaults'
 
 const RUNNING_HEAD_MODES: RunningHeadMode[] = [
@@ -62,6 +63,11 @@ function sideLevel(v: unknown, fallback: number): number {
 
 function depth(v: unknown, fallback: number): number {
   return typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= 6 ? v : fallback
+}
+
+/** A distance from the page's edge in points: 0 (none set) or more. */
+function distance(v: unknown, fallback: number): number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : fallback
 }
 
 function oneOf<T extends string>(v: unknown, allowed: T[], fallback: T): T {
@@ -152,6 +158,10 @@ export function normalizeStyleProfile(raw: unknown): StyleProfile {
     smallCapsFont:
       typeof raw['smallCapsFont'] === 'string' ? (raw['smallCapsFont'] as string) : d.smallCapsFont,
     folioMirrorsHead: bool(raw['folioMirrorsHead'], d.folioMirrorsHead),
+    runningHeadRise: isHeadRise(raw['runningHeadRise'])
+      ? raw['runningHeadRise']
+      : d.runningHeadRise,
+    folioFromFootPt: distance(raw['folioFromFootPt'], d.folioFromFootPt),
     avoidShortLastLines: bool(raw['avoidShortLastLines'], d.avoidShortLastLines),
     ornaments: {
       chapterOpener:
@@ -193,6 +203,8 @@ export function mergeStyle(base: StyleProfile, patch: Partial<StyleProfile>): St
   if (patch.quoteIndentEms !== undefined) next.quoteIndentEms = patch.quoteIndentEms
   if (patch.smallCapsFont !== undefined) next.smallCapsFont = patch.smallCapsFont
   if (patch.folioMirrorsHead !== undefined) next.folioMirrorsHead = patch.folioMirrorsHead
+  if (patch.runningHeadRise !== undefined) next.runningHeadRise = patch.runningHeadRise
+  if (patch.folioFromFootPt !== undefined) next.folioFromFootPt = patch.folioFromFootPt
   if (patch.avoidShortLastLines !== undefined) {
     next.avoidShortLastLines = patch.avoidShortLastLines
   }

@@ -111,6 +111,8 @@ export const BANKED_STYLE_KEYS: readonly (keyof StyleProfile)[] = [
   'quoteIndentEms',
   'smallCapsFont',
   'folioMirrorsHead',
+  'runningHeadRise',
+  'folioFromFootPt',
   'avoidShortLastLines',
   'ornaments',
   'frontMatter'

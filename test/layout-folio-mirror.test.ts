@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   FOLIO_NOT_MIRRORED,
+  FOLIO_NOT_PLACED,
   FURNITURE_SIZE_RATIO,
   KDP_TRIM_SAFE_PT,
   bottomFolioBaseline,
@@ -125,12 +126,12 @@ describe('the page number mirrors the running head', () => {
     // runs down to 36pt from it: the number would print into the last line.
     const profile = house({ margins: { top: 1, bottom: 0.5, inner: 1.125, outer: 0.75 } })
     const { book, page, folio } = furniture(profile)
-    expect(folioPlace(profile, measurer).mirrored).toBe(false)
+    expect(folioPlace(profile, measurer).honoured).toBe(false)
     expect(folio.baselinePt).toBeCloseTo(bottomFolioBaseline(profile), 6)
     expect(folio.baselinePt).toBeGreaterThan(page.frame.yPt + page.frame.heightPt)
     expect(book.warnings.map((w) => w.text)).toContain(FOLIO_NOT_MIRRORED)
     // The house look's own margins mirror, with nothing to warn about.
-    expect(folioPlace(house(), measurer).mirrored).toBe(true)
+    expect(folioPlace(house(), measurer).honoured).toBe(true)
     expect(furniture(house()).book.warnings).toEqual([])
     expect(furniture(house({ ...profile, folioMirrorsHead: false })).book.warnings).toEqual([])
   })
@@ -161,5 +162,63 @@ describe('the page number mirrors the running head', () => {
     const profile = house()
     expect(headCapTop(profile, noCap)).toBeCloseTo(32 - 0.75 * 11 * FURNITURE_SIZE_RATIO, 6)
     expect(headCapTop(profile, measurer)).toBeCloseTo(32 - 0.7 * 11 * FURNITURE_SIZE_RATIO, 6)
+  })
+})
+
+describe('a page number set a fixed distance from the foot', () => {
+  it('sits there whatever the running head does, and wins over mirroring', () => {
+    for (const runningHeadRise of [2, 1.6, 1.2]) {
+      const profile = house({ runningHeadRise, folioFromFootPt: 24.8 })
+      const { page, head, folio } = furniture(profile)
+      expect(head.baselinePt).toBeCloseTo(54 - 11 * runningHeadRise, 6)
+      expect(page.heightPt - folio.baselinePt).toBeCloseTo(24.8, 6)
+      expect(folioPlace(profile, measurer)).toMatchObject({ rule: 'fromFoot', honoured: true })
+    }
+    // Mirrored alone, the number follows the head down.
+    const lowered = house({ runningHeadRise: 1.2 })
+    const mirrored = furniture(lowered)
+    expect(mirrored.page.heightPt - mirrored.folio.baselinePt).toBeCloseTo(
+      headCapTop(lowered, measurer),
+      6
+    )
+    expect(headCapTop(lowered, measurer)).toBeCloseTo(headCapTop(house(), measurer) + 0.8 * 11, 6)
+  })
+
+  it('moves no line of text and no page', () => {
+    const set = furniture(house({ folioMirrorsHead: false, folioFromFootPt: 24.8 }))
+    const off = furniture(house({ folioMirrorsHead: false }))
+    expect(set.book.pages.length).toBe(off.book.pages.length)
+    expect(set.text).toEqual(off.text)
+    expect(set.folio.baselinePt).not.toBe(off.folio.baselinePt)
+    // Nor does lowering the head.
+    const lowered = furniture(house({ folioFromFootPt: 24.8, runningHeadRise: 1.2 }))
+    expect(lowered.book.pages.length).toBe(off.book.pages.length)
+    expect(lowered.text).toEqual(off.text)
+    expect(lowered.folio.baselinePt).toBe(set.folio.baselinePt)
+  })
+
+  it('is off at 0, the default', () => {
+    expect(defaultStyleProfile().folioFromFootPt).toBe(0)
+    const profile = house({ folioMirrorsHead: false, folioFromFootPt: 0 })
+    expect(folioPlace(profile, measurer)).toMatchObject({ rule: 'underText', honoured: true })
+    expect(furniture(profile).folio.baselinePt).toBeCloseTo(bottomFolioBaseline(profile), 6)
+  })
+
+  it('never comes nearer the bottom edge than KDP’s 0.25 in plus the figures’ descent', () => {
+    const profile = house({ folioFromFootPt: 5 })
+    const descent = 0.25 * 11 * FURNITURE_SIZE_RATIO
+    expect(720 - folioBaseline(profile, measurer)).toBeCloseTo(KDP_TRIM_SAFE_PT + descent, 6)
+  })
+
+  it('never rises into the text: too far up keeps the old place, said', () => {
+    // The old place is 54 - 17.6 = 36.4pt above the foot; 40pt would be nearer the text.
+    const profile = house({ folioFromFootPt: 40 })
+    const { book, folio } = furniture(profile)
+    expect(folioPlace(profile, measurer)).toMatchObject({ rule: 'fromFoot', honoured: false })
+    expect(folio.baselinePt).toBeCloseTo(bottomFolioBaseline(profile), 6)
+    const said = book.warnings.map((w) => w.text)
+    expect(said).toContain(FOLIO_NOT_PLACED)
+    expect(said).not.toContain(FOLIO_NOT_MIRRORED)
+    expect(furniture(house({ folioFromFootPt: 36 })).book.warnings).toEqual([])
   })
 })
