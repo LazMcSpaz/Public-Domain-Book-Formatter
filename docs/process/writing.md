@@ -202,10 +202,11 @@ per piece (`introduction`, `notes`, `edition-note` and the like):
     A change to the voice goes into the card first (`voice.mjs set`,
     `voice.mjs avoid`), then `.claude/agents/etsu.md` is changed to say the
     same; never change only one.
-15. **Finish as any change to a book**: save, re-export, regenerate the readable
-    files (`node scripts/book-files.mjs <book-dir>` rewrites `introduction.md`
-    and `notes.md`), one commit ([export.md](./export.md)). Etsu saves and
-    regenerates; the re-export is the typesetter's.
+15. **Finish as any change to a book**: save, regenerate the readable files
+    (`node scripts/book-files.mjs <book-dir>` rewrites `introduction.md` and
+    `notes.md`), and make one commit of `book.json` and the readable files.
+    Etsu saves and regenerates. The re-export is the typesetter's and is never
+    committed ([export.md](./export.md), step 8).
 
 ## Checks that must pass
 

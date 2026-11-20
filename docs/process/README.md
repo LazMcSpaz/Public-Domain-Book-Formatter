@@ -78,7 +78,9 @@ Every book role's definition points here; these hold for every run.
 - **Hand-offs go through the shelf**: the book, the files the run leaves, its
   status note and its report. The managing editor writes each book's
   `ledger.md` from the reports; a role never edits it, so runs working at the
-  same time never write the same file. Where a document says something goes
+  same time never write the same file. The one exception is the "By the
+  numbers" section, which `node scripts/book-files.mjs` rewrites by itself
+  when a role regenerates the readable files. Where a document says something goes
   in the ledger, the role puts it in its report.
 - **Status notes**, with `node scripts/work.mjs … --shelf <shelf>`, under the
   role's own name and the stage its definition gives: `start` when the run

@@ -111,9 +111,9 @@ cannot see it.
    there is no message argument. `save` refuses when it would drop rulings or
    edits the file holds; `--force` only when the run is meant to replace the
    file.
-6. **A change to a book is four things in one commit**: `book.json`, the
-   re-exported PDF, the regenerated readable files, then commit and push all
-   of it together ([export.md](./export.md)).
+6. **A change to a book is one commit**: `book.json` and the regenerated
+   readable files, committed and pushed together. The PDF and EPUB are never
+   committed: they go to storage ([export.md](./export.md), step 8).
 7. **Push, and check it landed**: `git rev-list --count origin/<branch>..HEAD`
    must print 0 in both repositories.
 8. **Bring `main` level at every natural stopping point.** The app reads the

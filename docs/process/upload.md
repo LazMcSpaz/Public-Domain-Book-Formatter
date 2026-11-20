@@ -28,8 +28,8 @@ uploads it.
 
 - The book is checked, with the results in its ledger
   ([checking.md](./checking.md)).
-- The interior and EPUB were exported from the `book.json` beside them, in
-  the same commit ([export.md](./export.md)).
+- The interior and EPUB were exported from the `book.json` as it stands on
+  the shelf ([export.md](./export.md)).
 - Per-book listings, ISBNs and cover status live on the shelf
   (`KDP-listings.md` at its root), never in this public repository.
 
@@ -70,7 +70,8 @@ uploads it.
    `pdfinfo <interior.pdf> | grep Pages` with `pageCount` in
    `covers/softcover.json` and `covers/hardcover.json`. To recut, the cover
    specs are the record and the composer redraws them (see "Covers today"
-   below). Then flatten both, in the same commit:
+   below). Then flatten both (the flat files, like every cover file, go to
+   storage, never into a commit):
 
    ```bash
    python3 scripts/flatten-cover.py covers/softcover.pdf covers/softcover-flat.pdf

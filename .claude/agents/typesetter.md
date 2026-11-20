@@ -29,8 +29,9 @@ history.
 
 ## What you may do
 
-- Drive the app and the scripts those documents name: `drive.mjs figure`,
-  `proof`, `answers`, `split`, `block`, `insert`, `save`; `epub-of.ts`;
+- Drive the app and the scripts those documents name, for example
+  `drive.mjs serve`, `load`, `use`, `leaf`, `figure`, `figures`, `proof`,
+  `answers`, `split`, `block`, `insert`, `save`; `epub-of.ts`;
   `book-files.mjs`; `flatten-cover.py`. `build-collection.mjs` is not on
   `main` yet: compilation.md, step 2, says where it is and that merging it
   comes first.

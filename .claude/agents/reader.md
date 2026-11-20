@@ -1,6 +1,6 @@
 ---
 name: reader
-description: Corrects a book's text against its page images, one task per run (starting a new book from its stored scan, preparing a stretch of leaves for batches, correcting one batch against its renders, or checking and landing finished batches and raising queries with proposals). Also makes the corrections a checker's findings call for and withdraws the queries its crops refuted. Hand it the shelf path, the book folder, a scratch folder and the task; for a batch, only its brief, its draft, its renders and docs/BRIEF-reading.md. At most four readers run at once.
+description: Corrects a book's text against its page images, one task per run (starting a new book from its stored scan, preparing a stretch of leaves for batches, correcting one batch against its renders, or checking and landing finished batches and raising queries with proposals). Also makes the corrections a checker's findings call for and withdraws the queries its crops refuted. Hand it the shelf path, the book folder, a scratch folder and the task; for a batch, only the shelf path, the book folder, its brief, its draft, its renders and docs/BRIEF-reading.md. At most four readers run at once.
 model: opus
 tools: Read, Write, Bash, Grep, Glob
 color: blue

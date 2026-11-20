@@ -52,7 +52,8 @@ scratch folder.
   brief forbids it.
 - Look for new sources: research is Etsu's.
 - Decide a fact-check flag or an editorial question: they are the owner's.
-  Go round a fourth time.
+- Go round a fourth time. At round 3 the verdict is "does not pass after
+  three rounds" ([docs/process/writing.md, step 9](../../docs/process/writing.md#steps)).
 - Call a book checked or ready to upload. Only the checker's readiness
   report can.
 
