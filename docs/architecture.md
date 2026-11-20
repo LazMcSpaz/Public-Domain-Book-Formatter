@@ -60,7 +60,7 @@ A plain-English map of this repository: what each folder is for and who may use 
 | `docs/`                                    | Process documents, plans, measurement ledgers. Being sorted into the layers below.                                                                                             |
 | `public/`                                  | Fonts, OCR data, icons: files the app loads. Vendored, not edited by hand.                                                                                                     |
 | `harness/`                                 | The rules (`rules.json`), the check script (`check.py`) and the list of known old problems (`baseline.json`).                                                                  |
-| `.claude/agents/`                          | The writer persona (`etsu.md`).                                                                                                                                                |
+| `.claude/agents/`                          | The team's agents, one definition per role ([specs/agent-roles.md](specs/agent-roles.md)); `test/agent-roles.test.ts` keeps them in step with the roles the status notes know. |
 | `.github/workflows/`                       | Automatic runs: every check (`npm run verify`) on every push, and deploying the app.                                                                                           |
 | `books/`, `voice/`, four images at the top | Leftovers: old copies of two books, the audiobook pronunciation list, stray uploads. To be moved or removed by cleanup tasks.                                                  |
 

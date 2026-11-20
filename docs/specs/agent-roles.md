@@ -30,13 +30,13 @@ When the tools themselves need changing, a **builder** and a separate **reviewer
 ## Done when (how we'll know it works; how the owner can try it)
 
 - The owner approves this spec.
-- The seven role definitions exist in `.claude/agents/`, each pointing to its process document, and `docs/process/README.md`'s role column names them.
+- The role definitions exist in `.claude/agents/`, each pointing to its process document, and `docs/process/README.md`'s role column names them. Eight were built, one for every role but the managing editor: `etsu.md` and seven new ones, because the builder and the reviewer got definitions too.
 - **The pilot:** _Clairvoyance and Occult Powers_ goes from where it stands to "ready to upload" through the team. The readiness report is the only verdict given. We record, for comparison with how books were done before: how long it took, the rounds in the writing loop, how many questions reached the owner, and what the checker caught.
 - **The owner tries it:** asks the managing editor "where does _Clairvoyance_ stand?" and gets each stage, who did it and what the check said; and receives the introduction only after Etsu's editor has passed it.
 
 ## Modules touched
 
-- `.claude/agents/`: six new role definitions beside `etsu.md` (the managing editor is the session itself, guided by `docs/process/sessions.md`).
+- `.claude/agents/`: seven new role definitions beside `etsu.md` (scout, reader, typesetter, Etsu's editor, checker, builder and reviewer; the managing editor is the session itself, guided by `docs/process/sessions.md`).
 - `docs/process/`: `README.md`'s role table; `writing.md` gains the writer and editor loop; small changes where a document names a role.
 - No change to the app, the layout engine or the shelf's layout.
 
