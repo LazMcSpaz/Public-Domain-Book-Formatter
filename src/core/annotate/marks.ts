@@ -152,13 +152,28 @@ export function checkGlossaryMarks(
     // first: the books introduce a term in a run-in heading set in capitals,
     // and a circle belongs on the words rather than on the heading. Reporting
     // the first occurrence unmarked would flag every one of those.
+    //
+    // A family is looked for by its whole phrase and by its surname, and an
+    // unmarked one is placed on whichever the book uses first: the surname
+    // where it first names one of them (G7), "Smithers family" only where that
+    // comes first. At the same place the surname wins. Any other entry keeps
+    // its terms' order.
+    const family = familySurname(entry) !== null
+    let at: [number, number] = [Infinity, Infinity]
+    const sooner = (b: number, i: number) => b < at[0] || (b === at[0] && i <= at[1])
     for (const term of headwordTerms(entry)) {
       const re = pattern(term, isNameTerm(entry, term))
-      for (const block of prose) {
+      for (const [b, block] of prose.entries()) {
         for (const hit of block.text.matchAll(re)) {
           const marked = hit[0].endsWith(GLOSSARY_MARK)
-          if (!found || (marked && !verdict.marked)) {
+          const i = hit.index ?? 0
+          if (
+            !found ||
+            (marked && !verdict.marked) ||
+            (family && !marked && !verdict.marked && sooner(b, i))
+          ) {
             verdict = { entry, term, blockId: block.id, marked }
+            at = [b, i]
           }
           found = true
           if (marked) break

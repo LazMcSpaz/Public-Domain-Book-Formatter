@@ -72,5 +72,37 @@ describe('a family entry, matched by surname', () => {
     // An unmarked use takes its circle on the whole phrase, matched as before.
     const placed = placeMissingMarks(['Elder Brothers.'], [para('p3', 'the elder brothers wait')])
     expect(placed.blocks).toEqual([{ id: 'p3', text: 'the elder brothers° wait' }])
+    // The sweep keeps that circle: the phrase is matched as before, not as a name.
+    expect(
+      withoutStrayMarks(
+        ['Elder Brothers.'],
+        placed.blocks.map((b) => para(b.id, b.text))
+      ).removed
+    ).toEqual([])
+  })
+
+  it('places a missing circle on whichever the book uses first, the surname or the phrase', () => {
+    const surnameFirst = placeMissingMarks(
+      ['Smithers family.'],
+      [
+        para('p1', 'The Rev. J. Smithers and his daughters sat at the table.'),
+        para('p2', 'Years later the Smithers family moved away.')
+      ]
+    )
+    expect(surnameFirst.blocks).toEqual([
+      { id: 'p1', text: 'The Rev. J. Smithers° and his daughters sat at the table.' }
+    ])
+    // Where the phrase comes first, it starts with the surname: the circle
+    // goes on the surname there, as G7 says.
+    const phraseFirst = placeMissingMarks(
+      ['Smithers family.'],
+      [
+        para('p1', 'The Smithers family lived by the church.'),
+        para('p2', 'The Rev. J. Smithers sat at the table.')
+      ]
+    )
+    expect(phraseFirst.blocks).toEqual([
+      { id: 'p1', text: 'The Smithers° family lived by the church.' }
+    ])
   })
 })
