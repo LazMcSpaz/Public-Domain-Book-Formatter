@@ -5,8 +5,8 @@
  * `src/core/sync/work-paths.ts`), handed in as `work` and `paths` because a
  * script loads core only after registering `resolve-ts.mjs`.
  */
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync } from 'node:fs'
-import { writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync } from 'node:fs'
+import { readlinkSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { TOOLS, toolsRefusal } from './tools-guard.mjs'
@@ -118,6 +118,26 @@ export function shelfNotes({ work, paths, fail }) {
     return read.notes[0]
   }
 
+  /**
+   * The first folder on the way from the shelf's top to `rel` that is a link
+   * to something not there, with what the link says; or null. Making the
+   * note's folder through it would fail with a bare system error.
+   */
+  function brokenLinkOnTheWay(shelf, rel) {
+    const parts = rel.split('/').slice(0, -1)
+    for (let i = 1; i <= parts.length; i++) {
+      const at = onShelf(shelf, parts.slice(0, i).join('/'))
+      let link = false
+      try {
+        link = lstatSync(at).isSymbolicLink()
+      } catch {
+        return null // not there yet: it will be made
+      }
+      if (link && !existsSync(at)) return { at, to: readlinkSync(at) }
+    }
+    return null
+  }
+
   function writeNote(shelf, note, fresh) {
     const rel = paths.statusNotePath(note)
     const file = onShelf(shelf, rel)
@@ -129,7 +149,19 @@ export function shelfNotes({ work, paths, fail }) {
       fail(
         `The note would not read back, so it was not written:\n  - ${back.problems.join('\n  - ')}`
       )
-    mkdirSync(dirname(file), { recursive: true })
+    const broken = brokenLinkOnTheWay(shelf, rel)
+    if (broken) {
+      fail(
+        `${broken.at} is a link to ${broken.to}, which is not there, so the note has nowhere to go. Point the link at a real folder or remove it. Nothing was written.`
+      )
+    }
+    try {
+      mkdirSync(dirname(file), { recursive: true })
+    } catch (e) {
+      fail(
+        `Could not make the folder ${dirname(rel)} on the shelf (${e.code}). Nothing was written.`
+      )
+    }
     if (fresh) {
       try {
         writeFileSync(file, text, { flag: 'wx' })
@@ -139,8 +171,17 @@ export function shelfNotes({ work, paths, fail }) {
         throw e
       }
     } else {
-      writeFileSync(`${file}.part`, text)
-      renameSync(`${file}.part`, file)
+      // Written beside and renamed over. Whatever is at the .part name first
+      // goes (a link planted there would otherwise carry the write wherever
+      // it points), and the write refuses anything that appears in between.
+      const part = `${file}.part`
+      try {
+        rmSync(part, { force: true })
+        writeFileSync(part, text, { flag: 'wx' })
+      } catch (e) {
+        fail(`${rel}.part is in the way and could not be cleared (${e.code}). Nothing was written.`)
+      }
+      renameSync(part, file)
     }
     return rel
   }

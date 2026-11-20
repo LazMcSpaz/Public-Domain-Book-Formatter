@@ -6,14 +6,18 @@
  *
  * The target need not exist yet. Links are followed from the nearest folder
  * that does exist, so a scratch folder that is really a link into the tools
- * is caught. Any copy of the tools counts, not only the one this script runs
- * from: a session working in a second checkout or a worktree must not write
- * into the first. Case is folded on Windows, whose disks ignore it.
+ * is caught, at any depth: a shelf whose `work` folder, or one month's folder,
+ * links into a subfolder of a tools copy is refused too. A link whose target
+ * is missing is followed by what it says, so a write that would create that
+ * target inside the tools is refused as well. Any copy of the tools counts,
+ * not only the one this script runs from: a session working in a second
+ * checkout or a worktree must not write into the first. Case is folded on
+ * Windows, whose disks ignore it.
  *
- * Plain Node; used by `storage.mjs` and `work.mjs`, tested in
- * `test/work-script.test.ts`.
+ * Plain Node; used by `storage.mjs`, `work.mjs` and `drive.mjs`, tested in
+ * `test/work-script.test.ts` and `test/storage-script.test.ts`.
  */
-import { existsSync, realpathSync } from 'node:fs'
+import { existsSync, lstatSync, readlinkSync, realpathSync } from 'node:fs'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { readJsonSync } from './json-file.mjs'
@@ -23,14 +27,29 @@ export const TOOLS = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..'
 
 const NAME = readJsonSync(join(TOOLS, 'package.json')).name
 
-/** `target` with every link in the part of it that exists resolved. */
-function real(target) {
+/** The text of the link at `path`, or null when it is not a link. */
+function linkText(path) {
+  try {
+    return lstatSync(path).isSymbolicLink() ? readlinkSync(path) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * `target` with every link in the part of it that exists resolved, and a
+ * link whose target is missing followed by what it says (at most 40 deep, as
+ * the system itself stops a loop of links).
+ */
+function real(target, depth = 0) {
   let probe = resolve(target)
   const rest = []
   for (;;) {
     try {
       return join(realpathSync(probe), ...rest)
     } catch {
+      const said = depth < 40 ? linkText(probe) : null
+      if (said !== null) return real(join(resolve(dirname(probe), said), ...rest), depth + 1)
       const up = dirname(probe)
       if (up === probe) return resolve(target)
       rest.unshift(basename(probe))

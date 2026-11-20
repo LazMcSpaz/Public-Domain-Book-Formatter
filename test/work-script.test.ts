@@ -1,6 +1,6 @@
 import { spawnSync } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from 'node:fs'
-import { symlinkSync, writeFileSync } from 'node:fs'
+import { lstatSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -215,19 +215,118 @@ describe('the guard and the writer under work.mjs', () => {
   })
 
   it('never writes a new note over a file already there', () => {
-    const fail = (m: string) => {
-      throw new Error(m)
-    }
-    const { writeNote } = shelfNotes({ work, paths, fail })
-    const note = work.startNote({
-      id: 'dupe0001',
-      role: 'reader',
-      book: BOOK,
-      stage: 'reading',
-      job: 'Read',
-      now: '2026-11-19T10:00:00Z'
-    })
+    const { writeNote } = shelfNotes({ work, paths, fail: thrown })
+    const note = madeUpNote('dupe0001')
     writeNote(shelf, note, true)
     expect(() => writeNote(shelf, note, true)).toThrow(/already on the shelf; a new run never/)
   })
+})
+
+const thrown = (m: string) => {
+  throw new Error(m)
+}
+const madeUpNote = (id: string) =>
+  work.startNote({
+    id,
+    role: 'reader',
+    book: BOOK,
+    stage: 'reading',
+    job: 'Read',
+    now: '2026-11-19T10:00:00Z'
+  })
+
+/** A made-up shelf with one book, in the temporary folder. */
+function shelfAt(name: string) {
+  const at = join(dir, name)
+  mkdirSync(join(at, 'books', BOOK), { recursive: true })
+  return at
+}
+
+/**
+ * A copy of the tools in the temporary folder (any folder whose package.json
+ * is the tools' own), with an empty subfolder. Never the real checkout: if
+ * the guard breaks, the note lands here, where the test sees it.
+ */
+function toolsCopy(name: string, sub: string) {
+  const copy = join(dir, name)
+  mkdirSync(join(copy, sub), { recursive: true })
+  writeFileSync(join(copy, 'package.json'), readFileSync(join(REPO, 'package.json')))
+  return { copy, inside: join(copy, sub) }
+}
+
+const startOn = (at: string) =>
+  cmd(['start', '--role', 'reader', '--book', BOOK, '--stage', 'reading', '--job', 'Read'], at)
+
+describe('the guard follows links into a subfolder of a tools copy', () => {
+  it('refuses a shelf whose work folder links there, and writes nothing', () => {
+    const { inside } = toolsCopy('tools-copy-work', join('src', 'deep'))
+    const at = shelfAt('shelf-work-linked')
+    symlinkSync(inside, join(at, 'work'), 'dir')
+    expect(toolsRefusal(join(at, 'work', 'runs', '2026-11', 'x.json'), 'a note')).toMatch(
+      /inside the tools repository \(.*tools-copy-work\)/
+    )
+    const r = startOn(at)
+    expect(r.status).toBe(1)
+    expect(r.err).toMatch(/inside the tools repository .*tools-copy-work/)
+    expect(readdirSync(inside)).toEqual([])
+  }, 30_000)
+
+  it('refuses a month folder that links there, and writes nothing', () => {
+    const { inside } = toolsCopy('tools-copy-month', join('src', 'month'))
+    const at = shelfAt('shelf-month-linked')
+    mkdirSync(join(at, 'work', 'runs'), { recursive: true })
+    symlinkSync(inside, join(at, 'work', 'runs', '2026-11'), 'dir')
+    expect(toolsRefusal(join(at, 'work', 'runs', '2026-11', 'x.json'), 'a note')).toMatch(
+      /tools-copy-month/
+    )
+    const { writeNote } = shelfNotes({ work, paths, fail: thrown })
+    expect(() => writeNote(at, madeUpNote('month001'), true)).toThrow(
+      /inside the tools repository .*tools-copy-month/
+    )
+    expect(readdirSync(inside)).toEqual([])
+  }, 30_000)
+
+  it('refuses a work link into the tools whose target is not there yet', () => {
+    const { copy } = toolsCopy('tools-copy-dangling', 'src')
+    const at = shelfAt('shelf-dangling-into-tools')
+    symlinkSync(join(copy, 'src', 'not-yet'), join(at, 'work'), 'dir')
+    expect(toolsRefusal(join(at, 'work', 'runs', 'x.json'), 'a note')).toMatch(
+      /tools-copy-dangling/
+    )
+    const r = startOn(at)
+    expect(r.status).toBe(1)
+    expect(r.err).toMatch(/inside the tools repository/)
+    expect(existsSync(join(copy, 'src', 'not-yet'))).toBe(false)
+  }, 30_000)
+})
+
+describe('the writer under work.mjs', () => {
+  it('says plainly that a work link points nowhere, and writes nothing', () => {
+    const at = shelfAt('shelf-dangling')
+    const nowhere = join(dir, 'nowhere')
+    symlinkSync(nowhere, join(at, 'work'), 'dir')
+    const r = startOn(at)
+    expect(r.status).toBe(1)
+    expect(r.err).toMatch(/work is a link to .*nowhere, which is not there.*Nothing was written/)
+    expect(r.err).not.toMatch(/\n\s+at /)
+    expect(existsSync(nowhere)).toBe(false)
+  }, 30_000)
+
+  it('replaces a link planted at <note>.json.part instead of writing through it', () => {
+    const { copy } = toolsCopy('tools-copy-part', 'src')
+    const at = shelfAt('shelf-part')
+    const s = startOn(at)
+    expect(s.status, s.err).toBe(0)
+    const id = idIn(s.out)
+    const [file] = notesOn(at)
+    const note = join(at, ...file!.path.split('/'))
+    const planted = join(copy, 'src', 'planted.json')
+    symlinkSync(planted, `${note}.part`)
+    const p = cmd(['progress', id, '--done', '1', '--of', '2', '--unit', 'leaves'], at)
+    expect(p.status, p.err).toBe(0)
+    expect(existsSync(planted)).toBe(false)
+    expect(lstatSync(note).isSymbolicLink()).toBe(false)
+    const read = work.readNotes(notesOn(at))
+    expect(read.notes[0]!.progress).toEqual({ done: 1, total: 2, unit: 'leaves' })
+  }, 30_000)
 })

@@ -14,7 +14,7 @@ The automated tests (vitest), one flat folder of `*.test.ts` files plus `fixture
 ## Key files
 
 - `../vitest.config.ts`: runs `test/**/*.test.ts` in Node and defines the aliases.
-- `fixtures/`: OCR word boxes, a sample hOCR file, the English word list.
+- `fixtures/`: OCR word boxes, a sample hOCR file, the English word list, and `fake-r2.mjs`, a stand-in for the storage bucket that a script test loads with `node --import` so no request leaves the machine.
 - `layout-*.test.ts`: the engine, measured with `fixedWidthMeasurer` so every break is exact arithmetic.
 - `provenance.test.ts`: also pins the route table in `docs/FLOW.md` to the code.
 

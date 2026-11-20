@@ -28,6 +28,7 @@ import { readJson, readJsonSync, readText, stripBom } from './lib/json-file.mjs'
 import { findBookPictures, findPicture, picturePlaces } from './lib/book-pictures.mjs'
 import { houseLookBeside } from './lib/house-look.mjs'
 import { tickRecon } from './lib/drive-ticker.mjs'
+import { toolsRefusal } from './lib/tools-guard.mjs'
 import { reconReport, statusReport } from './lib/recon-report.mjs'
 import { chromium } from 'playwright'
 import { createServer } from 'node:http'
@@ -534,9 +535,17 @@ async function serve() {
     }
   }
 
-  /** Refuse a sheet aimed inside this repository. */
+  /**
+   * Refuse a sheet aimed inside the tools. The shelf map answers for this
+   * checkout, with a message naming the folder the sheet belongs in; then
+   * `lib/tools-guard.mjs`, the guard every script that writes book work
+   * shares, answers for any copy of the tools (another checkout, a worktree)
+   * and for a link into one at any depth.
+   */
   const refuseInsideTools = async (target, bookFile) => {
-    const refused = await askShelfMap('sheetRefusal', realTarget(target), REPO_REAL, bookFile)
+    const refused =
+      (await askShelfMap('sheetRefusal', realTarget(target), REPO_REAL, bookFile)) ??
+      toolsRefusal(target, 'this sheet, which quotes the book,')
     if (refused) throw new Error(refused)
   }
 
@@ -552,12 +561,14 @@ async function serve() {
    * Where a working file made from the current book goes (`body`, `truth`,
    * `chunks`, `concordance`, `witness`, `second`, `cleantrial`), settled
    * before any work: at the path the session named, resolved as a sheet's is,
-   * or `name` in `WORK_DIR`. Never inside this repository: the same guard as
+   * or `name` in `WORK_DIR`. Never inside the tools: the same two guards as
    * the sheets, with its own message.
    */
   const workTarget = async (name, given) => {
     const target = given ? resolve(REPO, given) : resolve(WORK_DIR, name)
-    const refused = await askShelfMap('workFileRefusal', realTarget(target), REPO_REAL, WORK_DIR)
+    const refused =
+      (await askShelfMap('workFileRefusal', realTarget(target), REPO_REAL, WORK_DIR)) ??
+      toolsRefusal(target, "this working file, which carries the book's text,")
     if (refused) throw new Error(refused)
     await mkdir(dirname(target), { recursive: true })
     return target

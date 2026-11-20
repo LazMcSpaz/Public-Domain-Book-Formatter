@@ -2,10 +2,13 @@ import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 
 /**
- * The refusal itself is tested in sheets-beside-the-book.test.ts. This pins
- * the wiring the driver cannot be unit-tested for (it runs the shelf map in a
- * browser page): every sheet destination goes through `sheetTarget`, which
- * must call `refuseInsideTools`, which must ask `sheetRefusal` and throw on
+ * The refusal itself is tested in sheets-beside-the-book.test.ts, and the
+ * shared guard in work-script.test.ts. This pins the wiring the driver cannot
+ * be unit-tested for (it runs the shelf map in a browser page): every sheet
+ * destination goes through `sheetTarget`, which must call
+ * `refuseInsideTools`, which must ask `sheetRefusal` (this checkout, with a
+ * message naming the book's folder), then `toolsRefusal` from
+ * `lib/tools-guard.mjs` (any copy of the tools, links followed), and throw on
  * an answer. Take any link out and this fails, so a sheet that quotes a book
  * cannot quietly start landing in this public repository again.
  */
@@ -23,10 +26,15 @@ describe('the sheet guard is wired into the driver', () => {
     expect(body('sheetTarget')).toMatch(/await refuseInsideTools\(target, book\.file\)/)
   })
 
-  it('refuseInsideTools asks sheetRefusal and throws on an answer', () => {
+  it('refuseInsideTools asks sheetRefusal, then the shared guard, and throws on an answer', () => {
     const guard = body('refuseInsideTools')
     expect(guard).toMatch(/askShelfMap\('sheetRefusal'/)
+    expect(guard).toMatch(/\?\?\s*toolsRefusal\(target, /)
     expect(guard).toMatch(/if \(refused\) throw new Error\(refused\)/)
+  })
+
+  it('the shared guard is the one in lib/tools-guard.mjs', () => {
+    expect(driver).toMatch(/^import \{ toolsRefusal \} from '\.\/lib\/tools-guard\.mjs'$/m)
   })
 
   it('no sheet verb defaults to a bare file name, which would land in the repository root', () => {
@@ -64,6 +72,7 @@ describe('the working-file guard is wired into the driver', () => {
     const guard = body('workTarget')
     expect(guard).toMatch(/: resolve\(WORK_DIR, name\)/)
     expect(guard).toMatch(/askShelfMap\('workFileRefusal', realTarget\(target\), REPO_REAL/)
+    expect(guard).toMatch(/\?\?\s*toolsRefusal\(target, /)
     expect(guard).toMatch(/if \(refused\) throw new Error\(refused\)/)
   })
 

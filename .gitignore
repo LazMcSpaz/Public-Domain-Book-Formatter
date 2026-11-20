@@ -47,6 +47,11 @@ __pycache__/
 /*.rulings.md
 /*.review.md
 
+# The agents' status notes belong on the shelf (`work/runs/`), written by
+# `scripts/work.mjs`, which refuses this repository. This line is the net
+# under that refusal, as the sheets' lines above are under theirs.
+/work/
+
 # Working files some verbs still write to this checkout by default, each of
 # which carries the book's text: inputs for the session's next command, never
 # repository content.

@@ -21,8 +21,8 @@
  */
 import { spawnSync } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
-import { createReadStream, createWriteStream, existsSync, mkdirSync } from 'node:fs'
-import { readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { closeSync, createReadStream, createWriteStream, existsSync, mkdirSync } from 'node:fs'
+import { openSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { register } from 'node:module'
 import { tmpdir } from 'node:os'
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from 'node:path'
@@ -52,6 +52,21 @@ const { fail, hashOf } = r2
 function refuseInsideTools(target, what) {
   const why = toolsRefusal(target, what)
   if (why) fail(why)
+}
+
+/**
+ * A new file at `path`, to be written beside its destination and renamed
+ * over it. Whatever is at that name first goes: a link planted there would
+ * otherwise carry the write wherever it points. The open refuses anything
+ * that appears in between. Returns the open file's number.
+ */
+function freshBeside(path) {
+  try {
+    rmSync(path, { force: true })
+    return openSync(path, 'wx')
+  } catch (e) {
+    fail(`${path} is in the way and could not be cleared (${e.code}). Move it, then try again.`)
+  }
 }
 
 const mb = (bytes) => (bytes / 1e6).toFixed(1)
@@ -122,8 +137,14 @@ async function put(file, kind, { shelf = '', from = '' } = {}) {
     const list = join(shelfDir, STORAGE_LIST)
     if (result.added) {
       // Written beside and renamed over, so a crash part-way cannot cut the list short.
-      writeFileSync(`${list}.tmp`, core.serializeStorageList(result.rows))
-      renameSync(`${list}.tmp`, list)
+      const tmp = `${list}.tmp`
+      const fd = freshBeside(tmp)
+      try {
+        writeFileSync(fd, core.serializeStorageList(result.rows))
+      } finally {
+        closeSync(fd)
+      }
+      renameSync(tmp, list)
     }
     listed = result.added ? 'added' : 'already listed'
   }
@@ -145,7 +166,7 @@ async function get(key, out) {
   const stream = await r2.download(key)
   mkdirSync(dirname(target), { recursive: true })
   const part = `${target}.part`
-  const sink = createWriteStream(part)
+  const sink = createWriteStream(part, { fd: freshBeside(part) })
   let got = null
   try {
     got = await hashOf(stream, sink)
