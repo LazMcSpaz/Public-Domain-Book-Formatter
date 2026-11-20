@@ -159,8 +159,7 @@ The full list lives in one place, so the three documents cannot disagree: [check
 
 ## What it produces and where it goes
 
-`books/<dir>/<Name>.pdf` and `<Name>.epub` beside the book, made from the
-`book.json` committed with them, and never committed themselves (the shelf
+`books/<dir>/<Name>.pdf` and `<Name>.epub` beside the book, made from the `book.json` as it stands on the shelf, and never committed (the shelf
 ignores them; the exact files sent to KDP go to storage at upload); the
 readable files regenerated; a ledger entry,
 written by the managing editor from the typesetter's and the checker's

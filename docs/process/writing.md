@@ -20,6 +20,8 @@ glossary has its own method: [glossary.md](./glossary.md).)
   the bias audit, the voice card and the "Never" lists, flatness, plain
   language) and writes round notes. It never edits a draft.
 - **The owner** approves the prose and decides every fact-check flag.
+- The **typesetter** re-exports the book once the prose is landed
+  ([.claude/agents/typesetter.md](../../.claude/agents/typesetter.md)).
 - The **managing editor** launches each run with only its files, carries
   drafts and flags to the owner, and writes the ledger.
 

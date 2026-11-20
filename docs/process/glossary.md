@@ -26,6 +26,8 @@ over an existing one (start from the glossary in `book.json`).
   edits the draft.
 - **The owner** decides the cut list, approves the glossary and decides every
   fact-check flag.
+- The **typesetter** re-exports the book once the glossary is landed
+  ([.claude/agents/typesetter.md](../../.claude/agents/typesetter.md)).
 - The **managing editor** launches each run with only its files and carries
   the cut list, drafts and flags to the owner.
 
@@ -96,11 +98,11 @@ rounds.
    It refuses an entry for a head the glossary lacks or one not opening on its
    own `<b>Head.</b>`, and reports every quotation of five words or more no
    packet carries, entries over 150 words, long dashes and a preamble whose
-   count is wrong. Etsu fixes what it reports in the replies (the preamble
-   included, under `__preamble__`) and merges again, never by editing the
-   draft, and may run the audit below,
-   before handing the draft in; only Etsu's editor's run counts. Commit the
-   draft with the packets and the replies it was merged from.
+   count is wrong. Etsu fixes what it reports by changing the replies (the
+   preamble included, under `__preamble__`) and merging again, never by
+   editing the draft. Etsu may run the audit below before handing the draft
+   in; only Etsu's editor's run counts. Commit the draft with the packets and
+   the replies it was merged from.
 5. **G5, Etsu's editor's checks and notes**, over the whole glossary at once:
    - the merge again, from the same packets, replies and cut list, written
      to its own scratch folder so Etsu's draft is never overwritten:
@@ -165,10 +167,10 @@ rounds.
 8. **G8, finish** as for any change to a book: save, regenerate the readable
    files (`node scripts/book-files.mjs <book-dir>` rewrites `glossary.md`), and
    make one commit of `book.json` and the readable files. The re-export is the
-   typesetter's and is never committed ([export.md](./export.md), step 8). The managing editor records in `ledger.md`
-   what the cut list removed,
-   how many entries were rewritten, how many quotations the merge flagged and
-   what was done about each, and how many circles were placed.
+   typesetter's and is never committed ([export.md](./export.md), step 8).
+   The managing editor records in `ledger.md` what the cut list removed, how
+   many entries were rewritten, how many quotations the merge flagged and what
+   was done about each, and how many circles were placed.
 
 ## Checks that must pass
 

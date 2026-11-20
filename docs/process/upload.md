@@ -70,8 +70,8 @@ uploads it.
    `pdfinfo <interior.pdf> | grep Pages` with `pageCount` in
    `covers/softcover.json` and `covers/hardcover.json`. To recut, the cover
    specs are the record and the composer redraws them (see "Covers today"
-   below). Then flatten both (the flat files, like every cover file, go to
-   storage, never into a commit):
+   below). Then flatten both (the flat files are never committed; the uploaded ones go
+   to storage):
 
    ```bash
    python3 scripts/flatten-cover.py covers/softcover.pdf covers/softcover-flat.pdf
