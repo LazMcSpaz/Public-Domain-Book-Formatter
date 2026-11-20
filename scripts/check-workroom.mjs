@@ -12,7 +12,8 @@
  * - at phone width, do the columns stack, is every tap target 44 px tall?
  * - does one Escape close only the topmost dialog, with focus kept inside it?
  * - is the device copy of the notes in the Workroom's own database, never in
- *   localStorage, trimmed, and forgotten from Settings?
+ *   localStorage, trimmed, and forgotten from Settings, every other store
+ *   left as it was and the open page's copy dropped too?
  * - do `javascript:` and `data:` links in a sheet stay words, does a long
  *   JSON file stop at the limit, is a rejected token named, and is nothing
  *   read while the page is hidden (`lib/workroom-checks.mjs`)?
@@ -249,7 +250,7 @@ await page.evaluate(() => document.activeElement?.blur())
 if (SHOTS) await page.screenshot({ path: join(SHOTS, 'workroom-phone.png'), fullPage: true })
 await checkTapTargets(page, check)
 await page.setViewportSize({ width: 1180, height: 820 })
-await checkSettingsForgets(page, check, shelf)
+await checkSettingsForgets(page, check, shelf, seen)
 
 // --- a questions link lands on that book's question screen ---
 const built = await page.evaluate(async (repo) => {

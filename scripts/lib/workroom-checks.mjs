@@ -5,6 +5,15 @@
  * the page is hidden. Each takes the check's page and its `check(ok, what)`.
  * Every book is made up (`workroom-fixture.mjs`).
  */
+import {
+  MAIN_DB,
+  MAIN_VERSION,
+  WORKROOM_DB,
+  changesIn,
+  countsOf,
+  deviceSnapshot,
+  seedMainDatabase
+} from './device-db.mjs'
 import { madeUpNotes, stubShelf } from './workroom-fixture.mjs'
 
 /** The first version's key in `localStorage`, which must be gone after a start. */
@@ -83,8 +92,13 @@ export async function checkTrimmed(page, check, shelf, path) {
   )
 }
 
-/** Settings' storage panel shows the copy and can forget it. */
-export async function checkSettingsForgets(page, check, shelf) {
+/**
+ * Settings' storage panel shows the copy and forgets it: only the Workroom's
+ * database is emptied; the main database (a made-up record seeded in every
+ * store) and any other stays as it was; and the open page's own copy goes
+ * too, so the Workroom reads every note from the shelf again and keeps it.
+ */
+export async function checkSettingsForgets(page, check, shelf, seen) {
   await page.evaluate(() => (window.location.hash = '#settings'))
   const line = page.locator('[data-storage="workroom-notes"]')
   await line.waitFor({ timeout: 10000 })
@@ -93,6 +107,8 @@ export async function checkSettingsForgets(page, check, shelf) {
     words.includes(`${shelf.notes.size} status notes`),
     `Settings shows the Workroom's copy and its size (${words.slice(0, 80)}…)`
   )
+  await seedMainDatabase(page)
+  const before = await deviceSnapshot(page)
   await line.locator('button').click()
   await page
     .waitForFunction(
@@ -105,8 +121,23 @@ export async function checkSettingsForgets(page, check, shelf) {
     )
     .catch(() => null)
   check((await notesInDatabase(page)) === 0, "Settings' storage panel forgets the copy")
+  const after = await deviceSnapshot(page)
+  const others = Object.keys(before).filter((name) => name !== WORKROOM_DB)
+  const changed = others.flatMap((name) => changesIn(name, before, after))
+  check(
+    before[MAIN_DB]?.version === MAIN_VERSION && changed.length === 0,
+    `and leaves every other store as it was (${countsOf(after, MAIN_DB)}` +
+      `${changed.length ? `; ${changed.join('; ')}` : ''})`
+  )
+  const blobs = seen.blobs
   await page.evaluate(() => (window.location.hash = '#workroom'))
   await page.waitForSelector('[data-view="roles"]', { timeout: 15000 })
+  const held = await databaseReaches(page, shelf.notes.size)
+  check(
+    seen.blobs - blobs === shelf.notes.size && held === shelf.notes.size,
+    "the open page's copy goes too: every note read from the shelf again and kept " +
+      `(${seen.blobs - blobs} fetched, ${held} kept)`
+  )
 }
 
 /** Links in a sheet: a web link is a link; `javascript:` and `data:` stay words. */
