@@ -109,10 +109,12 @@ export {
   WORK_ROOT,
   bookFolderProblem,
   linkLabel,
+  notesInRunsTree,
   runIdOfPath,
   runIdProblem,
   runsMonthPath,
   shelfPathProblem,
   statusNotePath,
-  type NoteName
+  type NoteName,
+  type RunsTreeEntry
 } from './work-paths'

@@ -130,6 +130,30 @@ export function runIdOfPath(path: string): string | null {
   return m ? m[1]! : null
 }
 
+/** One entry of a listing of `work/runs`, as GitHub's trees API gives it. */
+export interface RunsTreeEntry {
+  /** From the `work/runs` folder, as `2026-11/2026-11-19-…json`. */
+  path: string
+  type: string
+  sha: string
+}
+
+/**
+ * The entries of a listing of `work/runs` that are notes, each with its path
+ * from the shelf's top: a `.json` file directly inside a month folder
+ * (`yyyy-mm`), as `work.mjs list` reads them. Anything else (a stray file at
+ * the top, a deeper folder) is passed over; a misnamed note inside a month is
+ * kept, so `readNotes` can report it rather than hide it.
+ */
+export function notesInRunsTree(
+  entries: readonly RunsTreeEntry[]
+): { path: string; sha: string }[] {
+  return entries
+    .filter((e) => e.type === 'blob' && /^\d{4}-\d{2}\/[^/]+\.json$/u.test(e.path))
+    .map((e) => ({ path: `${RUNS_ROOT}/${e.path}`, sha: e.sha }))
+    .sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0))
+}
+
 /** A name for a link to a sheet the owner knows by name; else the file's own name. */
 export function linkLabel(path: string): string {
   const name = path.split('/').pop() ?? path

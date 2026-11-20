@@ -106,8 +106,7 @@ import {
 import { normalizeVoice, voiceLosesWork, type EditorVoice } from '@core/annotate'
 import { toBase64 } from '@core/project'
 import { reach } from './shelf-fetch'
-
-const API = 'https://api.github.com'
+import { API, NO_CACHE, headers, unshared } from './shelf-request'
 
 /**
  * Which shelf directory each book lives in, as the listing last found it.
@@ -164,26 +163,17 @@ export async function shelfDirFor(config: ShelfConfig, key: string): Promise<str
 }
 
 /**
- * Every read of the shelf goes to the network.
- *
- * Not a tuning choice: see the note on the ETag, above. `no-store` also keeps
- * the *response* out of the cache, which is what stops one read shadowing the
- * next one's answer.
- */
-const NO_CACHE = 'no-store' as const
-
-/**
  * A read's URL, made one that nothing can already have an answer for.
  *
  * `unshared` is not decoration and not a retry counter: see the note on the
  * ETag and on `s-maxage`, above. Every read of the shelf goes through here, so
  * that the property holds for the reads as a class rather than for whichever
- * one somebody last thought about.
+ * one somebody last thought about. The mark, `no-store` and the headers are in
+ * `shelf-request.ts`, shared with the Workroom's reader of the git trees.
  */
 function readUrl(config: ShelfConfig, path: string): string {
   return (
-    contentsUrl(config, path) +
-    `?ref=${encodeURIComponent(config.branch)}&unshared=${Date.now()}-${++reads}`
+    contentsUrl(config, path) + `?ref=${encodeURIComponent(config.branch)}&unshared=${unshared()}`
   )
 }
 
@@ -197,26 +187,6 @@ function readUrl(config: ShelfConfig, path: string): string {
 function contentsUrl(config: ShelfConfig, path: string): string {
   const encoded = path.split(/[\\/]/u).map(encodeURIComponent).join('/')
   return `${API}/repos/${config.repo}/contents/${encoded}`
-}
-
-/**
- * A counter beside the clock, because the clock is not fine enough.
- *
- * `Date.now()` is milliseconds, and two reads of one path inside a millisecond
- * — a flush reading the book and then a picture, a gate fetching two crops —
- * would produce the same URL and hand the second one the first one's answer.
- * That is the whole fault again, in the small. The counter makes the property
- * hold for *every* read rather than for reads that happen to be far enough
- * apart, which is the distinction this module has now got wrong twice.
- */
-let reads = 0
-
-function headers(config: ShelfConfig, accept = 'application/vnd.github+json'): HeadersInit {
-  return {
-    Authorization: `Bearer ${config.token}`,
-    Accept: accept,
-    'X-GitHub-Api-Version': '2022-11-28'
-  }
 }
 
 /** What went wrong, in words that name the thing to go and fix. */

@@ -39,6 +39,18 @@ describe('reading a link', () => {
   })
 
   /**
+   * The shelf's renamed folders are "Author-Title-id", with capitals, and
+   * `drive.mjs link` and the Workroom name a book by its folder. A link that
+   * read only lower case opened the intake screen instead of the questions for
+   * every one of them. The folder here is made up.
+   */
+  it('names a book by its shelf folder, capitals, dots and underscores included', () => {
+    const link = parseDeepLink('#book=Nobody-TheLanternOfDust-abc123&at=queries')
+    expect(link).toEqual({ slug: 'Nobody-TheLanternOfDust-abc123', at: 'gate-queries', leaf: null })
+    expect(parseDeepLink('#book=a_book.v2-1x').slug).toBe('a_book.v2-1x')
+  })
+
+  /**
    * A hash arrives from a phone's address bar. The worst outcome of a typo is
    * the ordinary intake screen — never a throw, and never a book nobody asked
    * for.
@@ -49,7 +61,8 @@ describe('reading a link', () => {
       ['some other route', '#settings'],
       ['a slug with a slash in it', '#book=../../etc/passwd'],
       ['a slug with a space', '#book=human aura'],
-      ['an upper-case slug, which no shelf makes', '#book=Human-Aura'],
+      ['a slug with "..", even with no slash', '#book=a..b'],
+      ['a slug starting with a dot', '#book=.hidden'],
       ['an empty slug', '#book=']
     ] as const) {
       it(what, () => {

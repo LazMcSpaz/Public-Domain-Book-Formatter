@@ -81,7 +81,14 @@ export function parseDeepLink(hash: string): DeepLink {
 
   const params = new URLSearchParams(trimmed)
   const slug = params.get('book')?.trim() ?? ''
-  if (!slug || !/^[a-z0-9-]{1,120}$/u.test(slug)) return empty
+  // The shelf's own folder names, as `drive.mjs link` and the Workroom write
+  // them: renamed folders carry capitals ("Author-Title-id"), and a name
+  // computed from a key may carry a dot or an underscore. Never a slash, a
+  // space or "..". The name only picks a book out of the shelf's listing; it
+  // never builds a path.
+  if (!slug || !/^[A-Za-z0-9-][A-Za-z0-9._-]{0,119}$/u.test(slug) || slug.includes('..')) {
+    return empty
+  }
 
   const raw = params.get('at')?.trim().toLowerCase() ?? ''
   const at = ALIASES[raw] ?? (STEP_IDS.has(raw) ? (raw as StepId) : null)
