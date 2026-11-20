@@ -60,6 +60,10 @@ describe('reading a link', () => {
       ['no hash at all', ''],
       ['some other route', '#settings'],
       ['a slug with a slash in it', '#book=../../etc/passwd'],
+      // A slash alone, with no "..", so only the slash rule can refuse it.
+      ['a shelf folder with a slash in it', '#book=Nobody/TheLanternOfDust-abc123&at=queries'],
+      ['a slash written as %2F', '#book=Nobody%2FTheLanternOfDust-abc123'],
+      ['a backslash', '#book=Nobody\\TheLanternOfDust-abc123'],
       ['a slug with a space', '#book=human aura'],
       ['a slug with "..", even with no slash', '#book=a..b'],
       ['a slug starting with a dot', '#book=.hidden'],

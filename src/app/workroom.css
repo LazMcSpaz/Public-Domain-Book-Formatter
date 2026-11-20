@@ -415,7 +415,7 @@
 }
 .wr-stage {
   color: #a8874a;
-  font-size: 12px;
+  font-size: 13px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   margin-bottom: 1px;
@@ -559,6 +559,9 @@
 }
 .wr-overlay-file {
   z-index: 60;
+}
+.wr-overlay:focus {
+  outline: none;
 }
 .wr-backdrop {
   position: fixed;
@@ -780,6 +783,36 @@
 .wr-json-none {
   color: var(--wr-muted);
   font-style: italic;
+}
+
+/* --- a finger, not a pointer: every tap target at least 44 px tall, made so
+   by padding, never by bigger type (checked at 390 px by check:workroom) --- */
+@media (max-width: 560px), (pointer: coarse) {
+  .wr-back,
+  .wr-refresh,
+  .wr-link,
+  .wr-close,
+  .wr-empty button {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+    padding-top: 0;
+    padding-bottom: 0;
+  }
+  .wr-back,
+  .wr-refresh,
+  .wr-link {
+    border-radius: 22px;
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+  .wr-links {
+    gap: 8px;
+  }
+  .wr-latest button {
+    min-height: 44px;
+    padding: 11px 0;
+  }
 }
 
 /* --- tablet in portrait, phone --- */

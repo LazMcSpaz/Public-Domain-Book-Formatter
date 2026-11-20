@@ -9,7 +9,13 @@
  * - is a refresh one request when nothing changed, does a new note arrive
  *   when the page is shown again, fetched alone, and does a reopened app
  *   fetch nothing it already has?
- * - at phone width, do the columns stack?
+ * - at phone width, do the columns stack, is every tap target 44 px tall?
+ * - does one Escape close only the topmost dialog, with focus kept inside it?
+ * - is the device copy of the notes in the app's database, never in
+ *   localStorage, trimmed, and forgotten from Settings?
+ * - do `javascript:` and `data:` links in a sheet stay words, does a long
+ *   JSON file stop at the limit, is a rejected token named, and is nothing
+ *   read while the page is hidden (`lib/workroom-checks.mjs`)?
  * - is a malformed note listed as unreadable, with its reason?
  * - does a questions link land on that book's question screen?
  * - does an empty shelf say so plainly?
@@ -25,6 +31,18 @@ import { chromium } from 'playwright'
 import { mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { BAD_NOTE, BOOKS, lateNote, madeUpNotes, stubShelf } from './lib/workroom-fixture.mjs'
+import {
+  checkDeviceCopy,
+  checkDialogKeys,
+  checkHiddenPage,
+  checkLongJson,
+  checkRejectedToken,
+  checkSettingsForgets,
+  checkSheetLinks,
+  checkTapTargets,
+  checkTrimmed,
+  plantOldCopy
+} from './lib/workroom-checks.mjs'
 
 const REPO = resolve(import.meta.dirname, '..')
 const URL_BASE = process.env.PDBF_URL ?? 'http://localhost:5173'
@@ -49,21 +67,33 @@ if (process.env.PDBF_TRACE) {
   page.on('console', (m) => console.log('  page:', m.text().slice(0, 160)))
   page.on('pageerror', (e) => console.log('  pageerror:', String(e).slice(0, 200)))
 }
-await page.addInitScript(() => {
+const seed = () => {
   localStorage.setItem(
     'pdbf.shelf',
     JSON.stringify({ repo: 'Someone/Made-Up-Shelf', branch: 'main', token: 'github_pat_harness' })
   )
-})
+}
+await page.addInitScript(seed)
 
 const shelf = { notes: madeUpNotes(), books: [], files: new Map() }
 const seen = await stubShelf(page, shelf)
 const lantern = (name) => `books/${BOOKS.lantern}/${name}`
 shelf.files.set(
   lantern('readiness.md'),
-  '# Readiness report\n\nMade up for the check.\n\n| Check | Result |\n|---|---|\n| C1 | passed |\n| R4 | NOT CHECKED |\n'
+  '# Readiness report\n\nMade up for the check.\n\n| Check | Result |\n|---|---|\n| C1 | passed |\n| R4 | NOT CHECKED |\n\n' +
+    'See [the guide](https://example.com/guide), [Run this](javascript:alert(document.domain)), ' +
+    '[Loud](JAVASCRIPT:alert(1)) and [A page](data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==).\n'
 )
-shelf.files.set(`books/${BOOKS.doors}/about.json`, JSON.stringify({ pages: 148, complete: true }))
+const LEAVES = 5000
+const uploadPack = `books/${BOOKS.doors}/about.json`
+shelf.files.set(
+  uploadPack,
+  JSON.stringify({
+    pages: 148,
+    complete: true,
+    leaves: Array.from({ length: LEAVES }, (_, i) => i + 1)
+  })
+)
 
 await page.goto(`${URL_BASE}/#workroom`, { waitUntil: 'networkidle' })
 await page.waitForSelector('[data-view="roles"]', { timeout: 15000 })
@@ -157,8 +187,8 @@ check(
   sheet.includes('NOT CHECKED') && !sheet.includes('|') && !sheet.includes('#'),
   'the readiness report opens as a readable sheet, not raw Markdown'
 )
-await page.click(`[data-file="${lantern('readiness.md')}"] .wr-close`)
-await page.click('[data-detail="checkr01"] .wr-close')
+await checkSheetLinks(page, check, lantern('readiness.md'))
+await checkDialogKeys(page, check, lantern('readiness.md'))
 
 // --- live, and read efficiently ---
 const before = { ...seen }
@@ -181,6 +211,7 @@ check(
   `a new note arrives when the page is shown again, fetched alone (${seen.blobs - before.blobs})`
 )
 const reopened = seen.blobs
+await plantOldCopy(page)
 await page.reload({ waitUntil: 'networkidle' })
 const back = await page
   .waitForSelector('[data-run="late0001"]', { timeout: 10000 })
@@ -190,6 +221,10 @@ check(
   back && seen.blobs === reopened,
   `a reopened app fetches no note it already has (${seen.blobs - reopened})`
 )
+await checkDeviceCopy(page, check, shelf)
+await checkTrimmed(page, check, shelf, latePath)
+await checkRejectedToken(page, check, shelf)
+await checkLongJson(page, check, uploadPack, LEAVES)
 
 // --- the phone ---
 await page.setViewportSize({ width: 390, height: 844 })
@@ -209,8 +244,12 @@ check(
 )
 const wide = await page.evaluate(() => document.documentElement.scrollWidth)
 check(wide <= 390, `no sideways scrolling at phone width (${wide}px)`)
+// Focus came back to the last link opened; the picture is of the page at rest.
+await page.evaluate(() => document.activeElement?.blur())
 if (SHOTS) await page.screenshot({ path: join(SHOTS, 'workroom-phone.png'), fullPage: true })
+await checkTapTargets(page, check)
 await page.setViewportSize({ width: 1180, height: 820 })
+await checkSettingsForgets(page, check, shelf)
 
 // --- a questions link lands on that book's question screen ---
 const built = await page.evaluate(async (repo) => {
@@ -287,6 +326,8 @@ check(
     'No agent has reported yet. Notes appear here as the team works.',
   'an empty shelf says so plainly'
 )
+
+await checkHiddenPage(browser, check, URL_BASE, seed)
 
 await browser.close()
 if (problems.length > 0) {

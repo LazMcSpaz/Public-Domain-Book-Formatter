@@ -5,11 +5,12 @@
  * page. Read through the shelf connection (`getText`, `getBytes`), so every
  * read is the shelf's current copy.
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { linkLabel, type ShelfConfig } from '@core/sync'
-import { linkOpens, markdownBlocks } from '@core/work'
+import { jsonOutline, linkOpens, markdownBlocks, type Outline, type OutlineNode } from '@core/work'
 import { getBytes, getText } from '../platform/browser/shelf'
 import { MarkdownView } from './MarkdownView'
+import { useDialogFocus } from './dialog-focus'
 
 type Loaded =
   | { state: 'loading' }
@@ -61,16 +62,13 @@ export function ShelfFileView({
     }
   }, [config, path, kind])
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  const dialog = useRef<HTMLDivElement>(null)
+  useDialogFocus(dialog, onClose)
 
   return (
     <div
+      ref={dialog}
+      tabIndex={-1}
       className="wr-overlay wr-overlay-file"
       role="dialog"
       aria-modal="true"
@@ -146,14 +144,14 @@ function SheetText({
 const MAX_VALUES = 3000
 
 function JsonText({ text }: { text: string }): JSX.Element {
-  const parsed = useMemo((): { ok: true; value: unknown } | { ok: false } => {
+  const outlined = useMemo((): Outline | null => {
     try {
-      return { ok: true, value: JSON.parse(text) as unknown }
+      return jsonOutline(JSON.parse(text) as unknown, MAX_VALUES)
     } catch {
-      return { ok: false }
+      return null
     }
   }, [text])
-  if (!parsed.ok) {
+  if (!outlined) {
     return (
       <>
         <p className="wr-warn">This file does not read as JSON; here it is as written.</p>
@@ -161,48 +159,52 @@ function JsonText({ text }: { text: string }): JSX.Element {
       </>
     )
   }
-  // Built by plain calls, not components, so the count is spent in order
-  // before the note under it is decided.
-  const budget = { left: MAX_VALUES }
-  const tree = outline(parsed.value, budget)
   return (
     <div className="wr-json">
-      {tree}
-      {budget.left < 0 ? (
-        <p className="wr-quiet">The rest of this file is too long to show here.</p>
+      {outlined.root ? <OutlineView node={outlined.root} /> : null}
+      {outlined.hidden > 0 ? (
+        <p className="wr-quiet" data-hidden={outlined.hidden}>
+          {outlined.hidden.toLocaleString()} more {outlined.hidden === 1 ? 'entry' : 'entries'} not
+          shown: the file is too long to show in full here.
+        </p>
       ) : null}
     </div>
   )
 }
 
-/** A JSON value as an outline: names in small capitals, lists numbered, text as text. */
-function outline(value: unknown, budget: { left: number }): JSX.Element | null {
-  if (--budget.left < 0) return null
-  if (value === null) return <span className="wr-json-none">none</span>
-  if (typeof value === 'string') return <span className="wr-json-text">{value}</span>
-  if (typeof value === 'boolean')
-    return <span className="wr-json-plain">{value ? 'yes' : 'no'}</span>
-  if (typeof value === 'number') return <span className="wr-json-plain">{value}</span>
-  if (Array.isArray(value)) {
-    if (value.length === 0) return <span className="wr-json-none">(empty list)</span>
-    return (
-      <ol className="wr-json-list">
-        {value.map((v, i) => (
-          <li key={i}>{outline(v, budget)}</li>
-        ))}
-      </ol>
-    )
+/** Core's outline of a JSON value: names in small capitals, lists numbered, text as text. */
+function OutlineView({ node }: { node: OutlineNode }): JSX.Element {
+  switch (node.kind) {
+    case 'none':
+      return <span className="wr-json-none">none</span>
+    case 'text':
+      return <span className="wr-json-text">{node.text}</span>
+    case 'plain':
+      return <span className="wr-json-plain">{node.text}</span>
+    case 'list':
+      if (node.items.length === 0) return <span className="wr-json-none">(empty list)</span>
+      return (
+        <ol className="wr-json-list">
+          {node.items.map((item, i) => (
+            <li key={i}>
+              <OutlineView node={item} />
+            </li>
+          ))}
+        </ol>
+      )
+    case 'fields':
+      if (node.fields.length === 0) return <span className="wr-json-none">(nothing)</span>
+      return (
+        <dl className="wr-json-obj">
+          {node.fields.map((f) => (
+            <div key={f.name} className="wr-json-row">
+              <dt>{f.name}</dt>
+              <dd>
+                <OutlineView node={f.value} />
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )
   }
-  const entries = Object.entries(value as Record<string, unknown>)
-  if (entries.length === 0) return <span className="wr-json-none">(nothing)</span>
-  return (
-    <dl className="wr-json-obj">
-      {entries.map(([k, v]) => (
-        <div key={k} className="wr-json-row">
-          <dt>{k}</dt>
-          <dd>{outline(v, budget)}</dd>
-        </div>
-      ))}
-    </dl>
-  )
 }

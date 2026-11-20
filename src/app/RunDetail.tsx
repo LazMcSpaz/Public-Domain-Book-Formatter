@@ -3,7 +3,7 @@
  * came of it, what it waits on, the files it left, the job it took over from
  * and whom it handed to. Opened by a tap on any card; read-only.
  */
-import { useEffect } from 'react'
+import { useRef } from 'react'
 import {
   ROLE_LABELS,
   SHOWN_LABELS,
@@ -13,6 +13,7 @@ import {
   type StatusNote
 } from '@core/work'
 import { linkLabel } from '@core/sync'
+import { useDialogFocus } from './dialog-focus'
 import { Emblem } from './workroom-emblems'
 import {
   Bar,
@@ -45,13 +46,8 @@ function when(at: string): string {
 }
 
 export function RunDetail({ view, note, runs, act, onClose }: RunDetailProps): JSX.Element {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent): void => {
-      if (e.key === 'Escape') onClose()
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  const dialog = useRef<HTMLDivElement>(null)
+  useDialogFocus(dialog, onClose)
 
   const other = (id: string): JSX.Element => {
     const run = runs.get(id)
@@ -65,7 +61,14 @@ export function RunDetail({ view, note, runs, act, onClose }: RunDetailProps): J
   const files = note.files.map((path) => ({ label: linkLabel(path), path }))
 
   return (
-    <div className="wr-overlay" role="dialog" aria-modal="true" aria-label="A job in detail">
+    <div
+      ref={dialog}
+      tabIndex={-1}
+      className="wr-overlay"
+      role="dialog"
+      aria-modal="true"
+      aria-label="A job in detail"
+    >
       <div className="wr-backdrop" onClick={onClose} />
       <article className="wr-sheet wr-detail" data-detail={view.id}>
         <header className="wr-sheet-head">

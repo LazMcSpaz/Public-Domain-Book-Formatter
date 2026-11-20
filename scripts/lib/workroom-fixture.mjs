@@ -138,8 +138,10 @@ export async function stubShelf(page, shelf) {
         private: true
       })
     }
+    if (path.endsWith('/git/ref/heads/main')) return json(200, { ref: 'refs/heads/main' })
     if (path.endsWith('/git/trees/main:work/runs')) {
       seen.trees++
+      if (shelf.refuse) return json(shelf.refuse, { message: 'Bad credentials' })
       if (shelf.notes.size === 0) return json(404, { message: 'Not Found' })
       const tree = [...shelf.notes].map(([p, text]) => ({
         path: p.replace(/^work\/runs\//u, ''),

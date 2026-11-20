@@ -64,3 +64,4 @@ export {
 } from './board'
 export { isWebLink, linkOpens, shelfLinkFrom, type LinkOpen } from './links'
 export { inline, markdownBlocks, type ListItem, type MdBlock, type Span } from './markdown'
+export { jsonOutline, type Outline, type OutlineNode } from './outline'
