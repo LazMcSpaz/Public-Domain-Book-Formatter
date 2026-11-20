@@ -23,7 +23,7 @@ Heading: `App.tsx` (about 5,700 lines) is to be split along clear responsibiliti
 - `passages.ts`, `dom-offsets.ts`: the column both views build, and DOM to text offsets.
 - `PageBrowser.tsx`, `PreviewPane.tsx`: pages of the finished PDF, rendered from its bytes.
 - `house-look.ts`: `useHouseLook`, the design gate opened in the shelf's house look for a book with no design.
-- `main.tsx`: the entry and its hash routes (`#settings`, `#workroom`); the `#preview` route (`DevPreview.tsx`) is dev-only.
+- `main.tsx`: the entry and its hash routes (`#settings`, `#workroom`); the `#preview` route (`DevPreview.tsx`) is dev-only. `NewerVersionNotice.tsx`: the band, on every screen, asking the owner to reload when a newer version of the app opened the device's database in another tab.
 - `Workroom.tsx`: the agents' work read live from the shelf's status notes; `WorkroomCards.tsx` and `RunDetail.tsx` draw it, `workroom-live.ts` keeps it fresh, `workroom-emblems.tsx` and `workroom.css` are the approved look.
 - `ShelfFileView.tsx`, `MarkdownView.tsx`: a shelf file opened readably (Markdown, JSON, text, pictures). `dialog-focus.ts`: a Workroom dialog's keys and focus. `WorkroomStorage.tsx`: Settings' line for the notes kept on the device.
 

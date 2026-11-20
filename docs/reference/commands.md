@@ -123,11 +123,19 @@ builds its own copy.
   work (a stale run shown as stale), a job's timeline, a sheet opened
   readably, a questions link landing on the query screen, one request per
   refresh with only new notes fetched, nothing read while the page is
-  hidden, the device copy kept in the app's database (never localStorage)
-  and trimmed, the phone layout with 44 px tap targets, one Escape closing
-  only the topmost dialog, `javascript:` links shown as words, a long JSON
-  file cut off cleanly, a rejected token named, an unreadable note listed,
-  and the empty shelf. `-- --shots <folder>` also saves screenshots.
+  hidden, the device copy kept in the Workroom's own database (never
+  localStorage), trimmed, and forgotten from Settings with every other store
+  left as it was, the phone layout with 44 px tap targets, one Escape
+  closing only the topmost dialog, `javascript:` links shown as words, a
+  long JSON file cut off cleanly, a rejected token named, an unreadable note
+  listed, and the empty shelf. `-- --shots <folder>` also saves screenshots.
+- `npm run check:device-db`: checks the app's main database (runs, kept
+  scans, readings, the outbox), seeded as `main` builds it with a made-up
+  record in every store, is left at its version with every store and record
+  unchanged by the shelf screen, the Workroom and Settings' Forget; that a
+  browser left at version 8 by an earlier Workroom build still opens it; that
+  a held-up open closes its late connection; and that a newer version opened
+  in another tab makes the page let go and say to reload.
 
 ## Opening and reading a book
 

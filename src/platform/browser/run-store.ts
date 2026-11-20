@@ -46,6 +46,12 @@ const DB_NAME = 'pdbf'
  * added `outbox`, the changes made here that the shelf has not taken yet. The
  * upgrade handler below creates whichever stores are missing rather than
  * switching on the old version, so a database at any version arrives complete.
+ *
+ * Never 8: a Workroom build that was never deployed raised it to 8 for a store
+ * of its notes (they have a database of their own now, `note-store.ts`), and a
+ * browser that ran it keeps the database at 8 (`openDb` opens it at that
+ * version). The next store added here makes it 9, so such a browser upgrades
+ * too. A cache that costs nothing to lose never raises this version.
  */
 const DB_VERSION = 7
 const STORE = 'runs'
