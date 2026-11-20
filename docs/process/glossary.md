@@ -15,7 +15,9 @@ over an existing one (start from the glossary in `book.json`).
   ([.claude/agents/etsu.md](../../.claude/agents/etsu.md)). Drafts the cut
   list, builds the evidence packets, writes the entries (one run per packet
   of about thirty), merges them into each round's draft, answers Etsu's
-  editor's notes, and lands the text and circles once approved.
+  editor's notes, and lands the text and circles once approved. The packets
+  and the entries written from them are kept in the book's `drafts/` folder,
+  so that Etsu's editor works from the same evidence.
 - **Etsu's editor**: the `etsu-editor` agent
   ([.claude/agents/etsu-editor.md](../../.claude/agents/etsu-editor.md)).
   Runs every checking pass on each round's draft of the whole glossary (the
@@ -74,7 +76,7 @@ rounds.
    author gives an occult sense kept) and **put the list to the editor with
    counts. Never cut silently.**
 2. **G2, the evidence** (Etsu), one packet per entry:
-   `npx vite-node --config vitest.config.ts scripts/glossary-packets.ts <book.json> --shelf ~/Public-Domain-Books-Storage --out <work>/packets [--terms terms.txt]`.
+   `npx vite-node --config vitest.config.ts scripts/glossary-packets.ts <book.json> --shelf ~/Public-Domain-Books-Storage --out <book-dir>/drafts/glossary-packets [--terms terms.txt]`.
    Each packet holds the current entry, Blavatsky's _Theosophical Glossary_
    entry (her spellings folded in), passages from her other books, and the
    author's own uses. `index.md` lists the entries she does not define: read
@@ -84,16 +86,25 @@ rounds.
 3. **G3, the writing pass** (Etsu). One run per packet, each given
    `docs/briefs/glossary-plain.md` (the editor's Hall notes in his words, and
    the entry rules). Each returns `{ "<Head>": "<b>Head.</b> …" }` for every
-   entry in its packet; one also writes `"__preamble__"` (G6).
+   entry in its packet; one also writes `"__preamble__"` (G6). Each reply is
+   kept as `drafts/glossary-replies/out-<k>.json`, `<k>` being its packet's
+   number.
 4. **G4, merge into the round's draft** (Etsu):
-   `npx vite-node --config vitest.config.ts scripts/glossary-merge.ts <book.json> --out <book-dir>/drafts/glossary-round-<n>.txt --packets <work>/packets [--drop "<Head>" …] out-1.json out-2.json …`.
+   `npx vite-node --config vitest.config.ts scripts/glossary-merge.ts <book.json> --out <book-dir>/drafts/glossary-round-<n>.txt --packets <book-dir>/drafts/glossary-packets [--drop "<Head>" …] <book-dir>/drafts/glossary-replies/out-*.json`,
+   with a `--drop` for each cut on the owner's cut list.
    It refuses an entry for a head the glossary lacks or one not opening on its
    own `<b>Head.</b>`, and reports every quotation of five words or more no
    packet carries, entries over 150 words, long dashes and a preamble whose
    count is wrong. Etsu fixes what it reports, and may run the audit below,
-   before handing the draft in; only Etsu's editor's run counts.
+   before handing the draft in; only Etsu's editor's run counts. Commit the
+   draft with the packets and the replies it was merged from.
 5. **G5, Etsu's editor's checks and notes**, over the whole glossary at once:
-   - the merge again, for its report;
+   - the merge again, from the same packets, replies and cut list, written
+     to its own scratch folder so Etsu's draft is never overwritten:
+     `glossary-merge.ts` as in G4 with `--out <scratch>/glossary-merge.txt`,
+     then `diff <scratch>/glossary-merge.txt <book-dir>/drafts/glossary-round-<n>.txt`.
+     Read its report; any difference from the draft means the draft was
+     changed after the merge, and is a note;
    - the audit:
      `node scripts/voice.mjs audit <book-dir>/drafts/glossary-round-<n>.txt --name "Etsu T. Dhent" --shelf ~/Public-Domain-Books-Storage`;
    - **read the doctrinal entries end to end for flatness**;
@@ -105,16 +116,19 @@ rounds.
    - every quotation and fact against the packets, and the rules for every
      entry above.
 
-   It writes `drafts/glossary-round-<n>-notes.md`: each note the entry, the
-   sentence, the problem and the rule; the fact-check flags for the owner;
-   the checks run; and the verdict, passes or goes round again.
+   It writes `drafts/glossary-round-<n>-notes.md`, as
+   [writing.md](./writing.md) step 9 says: each note the entry, the sentence,
+   the problem and the rule; the fact-check flags for the owner; the checks
+   run; and one of its three verdicts (passes, goes round again, does not
+   pass after three rounds).
 
    **Revise and go round** (Etsu): answer every note in
    `drafts/glossary-round-<n>-answers.md`, giving the old sentence and the
    new for each plain-language note (the record of the pass for the shelf),
-   change the packet replies, merge again as round n+1, and back to G5. **At
-   most three rounds**: a draft that passes, or one that has not passed after
-   round 3, goes to the owner through the managing editor with the notes.
+   change the replies in `drafts/glossary-replies/`, merge again as round
+   n+1, and back to G5. **At most three rounds**: a draft that passes, or one
+   whose round 3 verdict is "does not pass after three rounds", goes to the
+   owner through the managing editor with the notes.
 
 6. **G6, the preamble**, two short paragraphs: what the circle means and how
    many entries there are; that the author's usage is his own and the entry
@@ -173,9 +187,10 @@ rounds.
 ## What it produces and where it goes
 
 The glossary as a `section` edit and its circles as text edits in `book.json`;
-`glossary.md` regenerated; the cut list beside the book; the drafts, round
-notes and answers (with the plain-language pass's old and new sentences) in
-its `drafts/` folder; a ledger entry with the numbers above.
+`glossary.md` regenerated; the cut list beside the book; the packets, the
+replies, the drafts, round notes and answers (with the plain-language pass's
+old and new sentences) in its `drafts/` folder; a ledger entry with the
+numbers above.
 
 ## Never
 

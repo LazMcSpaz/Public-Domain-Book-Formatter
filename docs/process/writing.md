@@ -129,13 +129,19 @@ per piece (`introduction`, `notes`, `edition-note` and the like):
    then `node scripts/voice.mjs check <notes.json> <body.json>`. Any
    `ANCHOR NOT FOUND` is a note pointing at nothing; every `check:` item is a
    date, figure or name the book itself never states, and must be in the brief.
-4. **Fact-check** (Etsu's editor). Every claim against the research brief and
-   the sources it names. It flags what it cannot confirm, with the choices
-   (cut, soften, or keep as a joke), for the owner to decide, and removes
-   nothing itself.
+4. **Fact-check** (Etsu's editor). List every sentence that reads as a
+   literal claim about a real person, date, event or publication, and check
+   each against the research brief and the sources it names (the shelf's
+   `reference/` texts, or the named page, read with WebFetch). Look for no
+   new sources: research is Etsu's. Flag what cannot be confirmed: the
+   sentence, what could not be confirmed, and the choices (cut, soften, or
+   keep as a joke), for the owner to decide. Figures of speech are left alone
+   and not listed. It removes nothing itself.
 5. **Bias audit** (Etsu's editor):
    `node scripts/voice.mjs audit <book.json> --name "Etsu T. Dhent" --shelf ~/Public-Domain-Books-Storage`
-   (or any prose file in place of the book). It reports every hedge on a
+   (or any prose file in place of the book; for notes, put their texts in a
+   `.txt` in the scratch folder first, since the audit does not read a list
+   of notes). It reports every hedge on a
    sentence about the tradition, the hedge ratio overall and over definitions
    only, dismissals, banned phrasing, reading directions, long dashes and a
    reading grade. A non-zero exit means every flagged passage is read. Each
@@ -156,16 +162,29 @@ per piece (`introduction`, `notes`, `edition-note` and the like):
    another name is noted, for Etsu to rewrite so it says the point, keeping
    the life in it.
 9. **Round notes and verdict** (Etsu's editor), in
-   `drafts/<piece>-round-<n>-notes.md`. Each note gives the sentence, the
-   problem and the rule it breaks; the fact-check flags stand in a section of
-   their own, for the owner; the checks run are listed with what each said.
-   The verdict is **passes** (no note left for Etsu) or **goes round again**.
+   `drafts/<piece>-round-<n>-notes.md`, the only file Etsu's editor writes.
+   - Each note quotes the sentence exactly, says the problem, and names the
+     rule it breaks and where that rule is written (the voice card's
+     section, the audit's line, product.md's "Never", a step of this
+     document). No note without a rule. A note may say what the fix must
+     achieve, never the replacement prose: Etsu writes that.
+   - From round 2, Etsu's answers to the last round are read first. A note
+     answered well is dropped; one that was not is raised again, saying why.
+   - The fact-check flags stand in a section of their own, for the owner.
+     They never hold up the verdict: they travel with the draft.
+   - The checks run are listed with what each said (the audit's summary
+     line, the notes check's result).
+   - The notes end in one of three verdicts: **passes** (no note is left for
+     Etsu); **goes round again** (rounds 1 and 2 only); **does not pass after
+     three rounds** (round 3 only: the draft goes to the owner with every
+     round's notes and answers).
 10. **Revise** (Etsu). Answer every note in `drafts/<piece>-round-<n>-answers.md`
     (what changed, or why the sentence was kept) and write round n+1. Back
     to step 3.
 11. **At most three rounds.** A draft that passes goes to the owner through
-    the managing editor. One that has not passed after round 3 goes to him
-    too, with every round's notes and answers, rather than going round again.
+    the managing editor. One whose round 3 verdict is "does not pass after
+    three rounds" goes to him too, with every round's notes and answers,
+    rather than going round again.
     The fact-check flags always go to him, whatever the verdict.
 12. **The owner approves**, and decides each flag. A memo asking for prose is
     answered with a proposal in its resolution, never a landed edit.
