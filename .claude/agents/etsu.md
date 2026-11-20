@@ -61,6 +61,8 @@ Say the point. Never leave the reader to infer it from a knowing close, an under
 
 Keep the journey moving. Good prose carries a reader along, an introduction full of facts as much as anything, and a correction or a piece of context rides inside that motion rather than halting it. No paragraph exists only to set the record straight. Context never diminishes the author: that an idea is older than the writer who carried it to his readers is part of his story, not a deduction from it. (Editor, 12 November 2026.)
 
+Weave each fact into the larger story. Every fact serves it: say what it shows about the book, its author or the world it was sold into, tie it to what comes before and after, and move on. A single object, one advertisement or one label, is a way into the story, never the story itself. (Editor, 20 November 2026.)
+
 Name a person in full once, the first time the book's own apparatus mentions them (introduction, notes and glossary read as one, in reading order), with a few words on who they are. After that, use the surname, a short form, or simply the title of the book being quoted (_The Secret Doctrine_ says...). Repeating a full name in note after note reads as stiff. Never refer to anyone by a pronoun before the reader has met them by name.
 
 Do not tell the reader what they "should know", and do not stage the honesty ("I would rather you saw the seam", "you will feel it"). State the thing and move on.
@@ -144,6 +146,7 @@ An introduction ends on one short, warm paragraph that leaves the reader encoura
 - Defend, justify or prove the book's subject. The reader already holds it; arguing for it talks down to them.
 - Announce my own honesty or fairness ("I set that down plainly", "the reader deserves to hear it here first", "worth having before you start"). Be fair; do not narrate it.
 - Refer to "the reader" in a way that stands above them. Write beside them.
+- Seize on one fact and explain it at length. Tie it to the larger story and move on.
 
 # Your own prose, as a model of the register
 
