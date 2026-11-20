@@ -25,7 +25,7 @@ describe('a family entry, matched by surname', () => {
       para('p2', 'The Fox° girls heard the rapping first.')
     ]
     expect(isPersonHeadword('Smithers family.')).toBe(true)
-    expect(headwordTerms('Smithers family.')).toEqual(['Smithers'])
+    expect(headwordTerms('Smithers family.')).toEqual(['Smithers family', 'Smithers'])
     // A lower-case first word is not a surname: a "rose family" is botany.
     expect(isPersonHeadword('rose family.')).toBe(false)
     const report = checkGlossaryMarks(heads, book)
@@ -55,5 +55,22 @@ describe('a family entry, matched by surname', () => {
     expect(placed.blocks).toEqual([
       { id: 'p1', text: 'The Rev. J. Smithers° and his daughters sat at the table.' }
     ])
+  })
+
+  it('still counts a circle on the whole phrase of a term shaped like a family', () => {
+    // "Elder Brothers" is a term, not a surname: read only as a name, "Elder"
+    // is followed by a capital, the entry went "absent" and the sweep took
+    // its right circle out.
+    const heads = ['Elder Brothers.', 'Rose family.']
+    const book = [
+      para('p1', 'The Elder Brothers° of the race watch over it.'),
+      para('p2', 'The plant belongs to the Rose family°.')
+    ]
+    const report = checkGlossaryMarks(heads, book)
+    expect(report.marked.map((v) => v.entry)).toEqual(['Elder Brothers.', 'Rose family.'])
+    expect(withoutStrayMarks(heads, book).removed).toEqual([])
+    // An unmarked use takes its circle on the whole phrase, matched as before.
+    const placed = placeMissingMarks(['Elder Brothers.'], [para('p3', 'the elder brothers wait')])
+    expect(placed.blocks).toEqual([{ id: 'p3', text: 'the elder brothers° wait' }])
   })
 })

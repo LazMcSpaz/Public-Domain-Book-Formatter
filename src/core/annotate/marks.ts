@@ -1,7 +1,7 @@
 import { mapPlainText } from '../edits/sweep'
-import { isPersonHeadword, personSurname } from './person-headword'
+import { familySurname, isNameTerm, isPersonHeadword, personSurname } from './person-headword'
 
-export { isPersonHeadword }
+export { isNameTerm, isPersonHeadword }
 
 /**
  * Does every glossary entry the book actually uses have a mark on it?
@@ -59,7 +59,8 @@ export const GLOSSARY_MARK = '°'
  * `Nimbus, halo` and `Gnome, sylph, undine, salamander` are one entry covering
  * several words, and the book may use any of them. A leading article is
  * dropped because `Aura, the human aura` is an entry about *aura*. A person
- * is looked for by surname (`isPersonHeadword`).
+ * is looked for by surname (`isPersonHeadword`); a family by its whole phrase,
+ * then by its surname.
  */
 export function headwordTerms(headword: string): string[] {
   const surname = personSurname(headword)
@@ -81,7 +82,9 @@ export function headwordTerms(headword: string): string[] {
   // for as two halves with the quote marks on, and its circle never found.
   // The whole is asked first; a true list never matches whole and falls
   // through to its parts.
-  return whole.includes(',') ? [whole, ...parts] : parts
+  const terms = whole.includes(',') ? [whole, ...parts] : parts
+  const family = familySurname(headword)
+  return family ? [...terms, family] : terms
 }
 
 /**
@@ -149,9 +152,8 @@ export function checkGlossaryMarks(
     // first: the books introduce a term in a run-in heading set in capitals,
     // and a circle belongs on the words rather than on the heading. Reporting
     // the first occurrence unmarked would flag every one of those.
-    const person = isPersonHeadword(entry)
     for (const term of headwordTerms(entry)) {
-      const re = pattern(term, person)
+      const re = pattern(term, isNameTerm(entry, term))
       for (const block of prose) {
         for (const hit of block.text.matchAll(re)) {
           const marked = hit[0].endsWith(GLOSSARY_MARK)
@@ -228,9 +230,8 @@ export function marksByPosition(
 ): Map<number, string> {
   const claimed = new Map<number, { entry: string; length: number }>()
   for (const entry of headwords) {
-    const person = isPersonHeadword(entry)
     for (const term of headwordTerms(entry)) {
-      for (const hit of plainText.matchAll(pattern(term, person))) {
+      for (const hit of plainText.matchAll(pattern(term, isNameTerm(entry, term)))) {
         if (!hit[0].endsWith(GLOSSARY_MARK)) continue
         const at = (hit.index ?? 0) + hit[0].length - 1
         const have = claimed.get(at)
@@ -289,7 +290,7 @@ export function placeMissingMarks(
     const after =
       before === undefined
         ? null
-        : withGlossaryMark(before, verdict.term, isPersonHeadword(verdict.entry))
+        : withGlossaryMark(before, verdict.term, isNameTerm(verdict.entry, verdict.term))
     if (id === null || after === null) {
       unplaced.push(verdict)
       continue
@@ -333,7 +334,7 @@ export function withoutStrayMarks(
     headwordTerms(entry).flatMap((term) => {
       const words = term.split(/[\s-]+/)
       const openings = words.slice(1).map((_, k) => words.slice(0, k + 1).join(' '))
-      return [term, ...openings].map((t) => pattern(t, isPersonHeadword(entry)))
+      return [term, ...openings].map((t) => pattern(t, isNameTerm(entry, term)))
     })
   )
   const out: { id: string; text: string }[] = []

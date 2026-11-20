@@ -27,12 +27,7 @@ import { caretOffset, offsetAtPoint, setCaret } from './dom-offsets'
 import { outlineOf, passagesOf, sectionTitlesOf, type Passage } from './passages'
 import type { BareMark, Footnote, Illustration } from '@core/assemble'
 import { anchorIllustrations, prepareFootnotes, type NoteReference } from '@core/layout'
-import {
-  checkGlossaryMarks,
-  glossaryHeadwords,
-  isPersonHeadword,
-  withGlossaryMark
-} from '@core/annotate'
+import { checkGlossaryMarks, glossaryHeadwords, isNameTerm, withGlossaryMark } from '@core/annotate'
 import type { BookDocument } from '@core/assemble'
 import type { BlockKind } from '@core/transcribe'
 import { withMarkup, wordCount } from '@core/transcribe'
@@ -431,7 +426,11 @@ export function BookEditor({
     if (!verdict.blockId) return
     const passage = passages.find((x) => x.id === verdict.blockId)
     if (!passage) return
-    const marked = withGlossaryMark(passage.text, verdict.term, isPersonHeadword(verdict.entry))
+    const marked = withGlossaryMark(
+      passage.text,
+      verdict.term,
+      isNameTerm(verdict.entry, verdict.term)
+    )
     if (marked === null) return
     push({ kind: 'text', blockId: passage.id, text: marked })
     jumpTo(passage.id)

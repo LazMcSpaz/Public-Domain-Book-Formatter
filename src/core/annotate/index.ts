@@ -79,6 +79,7 @@ export {
   GLOSSARY_MARK,
   checkGlossaryMarks,
   headwordTerms,
+  isNameTerm,
   isPersonHeadword,
   type MarkableBlock,
   type MarkReport,
