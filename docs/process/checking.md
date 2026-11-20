@@ -11,8 +11,9 @@ is **checked** ([README.md](./README.md)).
 The **checker** ([.claude/agents/checker.md](../../.claude/agents/checker.md)),
 never the role that did the reading. It runs the checks, reads every finding
 against the page and writes findings and verdicts; it fixes nothing. The
-corrections its findings call for (steps 3 and 4) are made by a **reader**
-handed the checker's sheet, and the checker then runs the checks again. The
+corrections its findings call for (steps 3 and 4), and the withdrawal of the
+queries its crops refute (step 8), are made by a **reader** handed the
+checker's sheet, and the checker then runs the checks again. The
 sense reading (step 6) and the adjudication (step 7) are separate checker
 runs: the run that adjudicates never raised the findings. The managing
 editor writes the results into the ledger from the checker's report.
