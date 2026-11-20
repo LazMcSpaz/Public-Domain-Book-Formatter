@@ -2,6 +2,7 @@
   "modules": [
     "src/core",
     "src/core/layout",
+    "src/core/cover",
     "src/platform/browser",
     "src/app",
     "scripts",

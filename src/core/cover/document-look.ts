@@ -1,0 +1,370 @@
+/**
+ * A cover's look: the arrangement, palette, faces, rules, frame, grounds and
+ * sizes a collection banks. See `profile.ts` for which of them travel.
+ *
+ * Pure: types and option lists.
+ */
+import { type GroundPattern } from './patterns'
+import { type GroundFigure } from './figures'
+import { type PressMark } from './document'
+
+/**
+ * How the front cover is arranged.
+ *
+ * Deliberately a small closed set. Each is a *typographic tradition* rather
+ * than a slot layout, and each degrades sensibly when there is no picture —
+ * which matters, because a cover with no art at all is a legitimate and often
+ * better answer for a public-domain reprint.
+ */
+export type Arrangement =
+  /** Type centred in the upper third, picture below, rule between. The default. */
+  | 'classic-centered'
+  /** A framed window of art with the type above and below it, panel borders. */
+  | 'plate-window'
+  /** A solid band across the top carrying the type, art filling the rest. */
+  | 'banded'
+  /** Art bled to every edge, type over it in a legible plate. */
+  | 'full-bleed'
+  /** No picture at all: type, rule and ornament, in the jobbing-printer manner. */
+  | 'typographic'
+  /**
+   * The label cover: every word held in one block near the head, and the rest
+   * of the board left empty.
+   *
+   * Distinct from `typographic`, which is the jobbing-printer's page — title
+   * at the head, author at the foot, and the space between them doing the
+   * work. This is the cloth binding's paper label, and the difference is
+   * whether the type is one thing or two. It is what a series of reprints from
+   * one tradition usually wants, because a device over a compact block is a
+   * mark on a plain board rather than a decoration on a busy one.
+   */
+  | 'label'
+
+export const ARRANGEMENTS: readonly Arrangement[] = [
+  'classic-centered',
+  'plate-window',
+  'banded',
+  'full-bleed',
+  'typographic',
+  'label'
+]
+
+export const ARRANGEMENT_LABEL: Readonly<Record<Arrangement, string>> = {
+  'classic-centered': 'Classic — type above, picture below',
+  'plate-window': 'Plate in a window, type around it',
+  banded: 'Banded — a title panel over the art',
+  'full-bleed': 'Full-bleed art with the type over it',
+  typographic: 'Typographic — no picture',
+  label: 'Label — all the type in one block near the head'
+}
+
+/** How a title is set. */
+export type TitleCase = 'as-typed' | 'upper' | 'small-caps'
+
+/** A colour as `#rrggbb`. Kept as a string so a profile stays plain JSON. */
+export type Hex = string
+
+export interface CoverPalette {
+  /** The cover's ground. */
+  ground: Hex
+  /** Type and rules. */
+  ink: Hex
+  /** A second colour for rules, bands and ornament. */
+  accent: Hex
+  /**
+   * Ink used where type sits over the picture rather than the ground — which
+   * is a different decision, and the one that goes wrong most often.
+   */
+  overArt: Hex
+  /**
+   * The ground figure's own colour.
+   *
+   * Its own role rather than the ink's because a figure and the type it sits
+   * behind are never the same decision: white type over a dark board wants a
+   * *warm* ghost, and a figure taking the ink would be the one colour that
+   * cannot be asked for. Absent, it falls back to the ink, which is what every
+   * look banked before this field existed was drawn with.
+   */
+  figure: Hex
+}
+
+/** A rule under or around the type. */
+export type RuleStyle = 'none' | 'single' | 'double' | 'ornamented'
+
+/**
+ * A frame struck round the front cover's border.
+ *
+ * The oldest device on a printed board, and the one that does most for a
+ * reprint that has no picture: it turns an empty panel into a deliberate one.
+ * Front only, and that is not an oversight — a frame round the back cover
+ * would run straight through the rectangle KDP prints the barcode over, so the
+ * one panel where it cannot be drawn honestly is the one where it would be
+ * covered up.
+ */
+export type FrameStyle = 'none' | 'plain' | 'double'
+
+export const FRAME_STYLES: readonly FrameStyle[] = ['none', 'plain', 'double']
+
+/**
+ * The reusable look — what a *collection* shares.
+ *
+ * Everything here is deliberately free of one book's facts. Nothing in this
+ * object names a title, a page count or a picture, which is what makes banking
+ * it safe: applying a banked look to the next volume can only change how it
+ * looks, never what it says. `BANKED_COVER_KEYS` in `profile.ts` enforces that
+ * rather than trusting it.
+ */
+export interface CoverLook {
+  arrangement: Arrangement
+  palette: CoverPalette
+  /** Family names as `StyleProfile` names them, so the same faces are offered. */
+  titleFont: string
+  authorFont: string
+  /** Back-cover copy and the imprint line. */
+  bodyFont: string
+  titleCase: TitleCase
+  /**
+   * Title size in points, or `null` to fit it to the measure.
+   *
+   * Null is the default and the recommendation: a fitted title is the one
+   * setting that makes a five-word title and a fifteen-word title both look
+   * deliberate, and a collection of reprints has both.
+   */
+  titleSizePt: number | null
+  /**
+   * The subtitle's size as a share of the title's, or `null` for the default.
+   *
+   * The default share is small on purpose — a subtitle is usually an
+   * explanatory phrase, and one set near the title's size would compete with
+   * it. But a reprinted multi-volume work often has no such thing: *Isis
+   * Unveiled* is "Science" and "Theology", *The Secret Doctrine*
+   * "Cosmogenesis" and "Anthropogenesis", and those name the volume as
+   * squarely as the title names the work. A reader looking along a shelf for
+   * the second volume is looking for that word.
+   *
+   * A share rather than a size in points, because the title's own size is
+   * usually fitted: bank a look, give volume two a longer title, and a
+   * subtitle pinned in points would stay put while the title shrank past it.
+   */
+  subtitleRatio: number | null
+  /**
+   * The subtitle's size in points, which overrides `subtitleRatio` when set.
+   *
+   * The share above is right for one book and wrong for a shelf of them. It
+   * is a share of the *fitted* title, and a fitted title is a function of how
+   * many letters the title has: measured across this collection at 7 x 10,
+   * one share of 0.34 printed the subtitle at 10.9 pt on a three-line title
+   * and 16.3 pt on a two-line one. A reader looking along a shelf reads those
+   * as two different presses.
+   *
+   * So a collection that wants its subtitles to agree pins the points, and
+   * `BANKED_COVER_KEYS` carries it to volume two. Null keeps the share, which
+   * is what a single book should use.
+   */
+  subtitleSizePt: number | null
+  /**
+   * The author's size in points, which overrides the share of the title.
+   *
+   * Same argument as the subtitle, and the measurement that prompted it is
+   * the same run: 16 pt on one board and 29.8 pt on the next, from one share
+   * of 0.62, because the titles above them fitted differently. The floor
+   * `AUTHOR_MIN_PT` still applies, since a name nobody can read along a shelf
+   * is the fault this whole area was last changed to fix.
+   */
+  authorSizePt: number | null
+  /**
+   * The spine's type size in points, or null for the shipped ceiling.
+   *
+   * The spine is the part of a book a shelf actually shows, so a collection
+   * wants one size along all of them. Left to itself the engine takes the
+   * largest size the fold and the run of fold allow, which differs per book:
+   * measured across this collection at 7 x 10, three spines of almost the
+   * same thickness could carry 31, 33.5 and 27.5 pt, the differences coming
+   * from how long each title is rather than from anything anyone chose.
+   *
+   * Pinned, it is still reduced where the fold is too narrow or the line too
+   * long, and the reduction is reported. A thin book cannot hold the
+   * collection's size and should not pretend to.
+   */
+  spineSizePt: number | null
+  rule: RuleStyle
+  /** A frame round the front cover's border, struck in the accent colour. */
+  frontFrame: FrameStyle
+  /**
+   * The size the back-cover copy sets at, or null for the default.
+   *
+   * In points rather than a share of anything, because unlike the subtitle
+   * there is nothing on the back cover for it to be a share *of*: the measure
+   * is fixed by `blurbFrame` and the panel is otherwise empty. What it trades
+   * is plain — a larger size is read at arm's length in a shop and costs
+   * words, since the block has a bottom it must stay above.
+   */
+  blurbSizePt: number | null
+  /**
+   * A frame round the back-cover copy, struck in the accent colour.
+   *
+   * Round the *copy*, not round the panel: a border on the back cover would
+   * run under the rectangle KDP prints the barcode over, which is why
+   * `frontFrame` is front-only. A box drawn to the type it encloses has no
+   * such problem, and it is what a paper label does on the back board.
+   */
+  blurbBorder: FrameStyle
+  /** Ornament id from the shipped library, or null. */
+  ornamentId: string | null
+  /**
+   * Whether the author's name sits at the foot of the board rather than under
+   * the title.
+   *
+   * A `typographic` cover always does this — the empty middle of the panel is
+   * what a picture would otherwise be doing — and for every other arrangement
+   * the author belongs in the block, under the rule. The exception is a ground
+   * whose subject stands exactly there: the radiant eye is built about its
+   * pupil and the pupil is set under the rule, so an author in the block prints
+   * across it. Moving the type is the repair rather than moving the eye,
+   * because where the eye goes is the design and where a line of 13pt roman
+   * goes is not.
+   */
+  authorAtFoot: boolean
+  /**
+   * Whether the ground figure runs across the whole sheet, through the spine
+   * and over the back, instead of stopping at the fold.
+   *
+   * `wrapFigureFrame` carries the argument. It supersedes `groundFigureBack`,
+   * there being no companion to place when the picture is already continuous.
+   */
+  groundFigureWrap: boolean
+  /**
+   * Whether the ground figure runs at full tint to the trim instead of fading
+   * out before it.
+   *
+   * A figure normally fades to nothing at the trim on its cut edges, which is
+   * right for a picture that stops: an edge that reaches nothing on all four
+   * sides reads the same on all four in a reader's hands. A line diagram that
+   * is meant to run off the cover reads as cut short by the fade instead. The
+   * fold edge of a figure that does not wrap keeps its fade whatever this says,
+   * because a picture split at a fold that creeps must not meet itself there.
+   * Off by default, so every cover placed before this prints as it did.
+   */
+  groundFigureToEdge: boolean
+  /** Whether the spine carries the title and author (thickness permitting). */
+  spineText: boolean
+  /** Whether the imprint prints at the foot of the front cover. */
+  imprintOnFront: boolean
+  /**
+   * Whether an omnibus says how many works it holds, above the titles.
+   *
+   * A look decision rather than a book one: whether this press announces the
+   * count is a habit it should keep across a series, not something to be
+   * decided again per volume. Off by default — two titles under one rule with
+   * an italic *and* between them already say it, and a label above them stacked
+   * under a series line is one line of small capitals too many.
+   */
+  announceWorks: boolean
+  /**
+   * The press's own mark, printed at the foot of the spine.
+   *
+   * Part of the *look* and banked with it, because a colophon device belongs
+   * to the publisher rather than to any book — the whole point of it is that
+   * it is the same on everything they print. A look that lost its mark on
+   * volume two would not be the same look.
+   *
+   * Carried as a data URL rather than an id, and that is deliberate. Every
+   * other picture in this app is megabytes of scan and lives outside the
+   * document; a press mark is a couple of kilobytes and has to travel wherever
+   * the look travels, or banking one produces a series whose second volume is
+   * missing its device. `applyCoverLook` stays a total function because of it.
+   *
+   * SVG or PNG alike: it is rasterised at the size it prints, so vector source
+   * stays sharp on a fold three-eighths of an inch wide.
+   */
+  pressMark: PressMark | null
+  /**
+   * The emblem on the front, when it is not the printer's own mark.
+   *
+   * These are two different things wearing one name. `pressMark` belongs to
+   * the **publisher** — the same device on everything they print, which is why
+   * it goes at the foot of every spine. What a reprint from one tradition
+   * wants on its *board* is usually the book's own emblem: a Theosophical seal
+   * on Blavatsky, an all-seeing eye on Hall. Before this they shared a slot,
+   * so putting the printer's mark on the spine took the book's emblem off the
+   * front.
+   *
+   * Null keeps the old behaviour exactly — the front shows the press mark —
+   * so every look banked before this is unchanged.
+   */
+  frontMark: PressMark | null
+  /**
+   * Whether a mark also prints on the front, above the type.
+   *
+   * A second decision rather than a consequence of having a mark, because the
+   * two placements say different things: on the spine a device is a
+   * publisher's signature, and on the front it is part of the design — an
+   * emblem the book is *about*, as often as not, which is why a series of
+   * reprints from one tradition wants it and a general list does not. Part of
+   * the look, so a collection cannot have it on volume one and not volume two.
+   */
+  markOnFront: boolean
+  /**
+   * A texture across the whole wrap, or none.
+   *
+   * Part of the look because it is the surface the series is printed on — the
+   * one element a reader takes in before they have read a word, and the one
+   * that must not change between volumes.
+   */
+  groundPattern: GroundPattern | null
+  /**
+   * How strongly that ground prints, or `null` for the pattern's own value.
+   *
+   * `null` rather than a number, because each pattern's default was measured
+   * against what it is made of — a field of 10pt type and a field of laid lines
+   * do not want the same tint — so a look that has never been asked the
+   * question must keep deferring to it. A number is a book overruling the
+   * measurement, clamped to what a press will hold.
+   */
+  groundPatternOpacity: number | null
+  /**
+   * One large picture behind the front cover's type, or none.
+   *
+   * Not a second texture: a figure has a centre and a pair of edges, so it
+   * prints on the front panel alone rather than across a fold that creeps.
+   * See `figures.ts`.
+   */
+  groundFigure: GroundFigure | null
+  /** How strongly that figure prints. Clamped to what a press will hold. */
+  groundFigureOpacity: number
+  /**
+   * Whether the back and the spine carry a mirrored companion of that figure.
+   *
+   * It fades to nothing before the fold, so the two are never asked to meet —
+   * which is what lets a figure reach the back at all. See `figures.ts`.
+   */
+  groundFigureBack: boolean
+  /**
+   * Whether the figure is held inside the front frame instead of bleeding.
+   *
+   * A ground figure normally runs off three edges, which is right for a
+   * device or a texture: there is no edge to notice. A *picture* is different.
+   * Knapp's plate is an architecture with its own border, and bled off the
+   * trim it reads as a photograph someone cropped badly. Held inside the
+   * frame it reads as a plate set on the board, which is what it is.
+   *
+   * False by default, so every figure placed before this is unmoved.
+   */
+  groundFigureInFrame: boolean
+  /**
+   * Take the figure's ink from the source's lightness rather than its
+   * darkness. False for every traced figure, which is line on white; true for
+   * a tonal plate on a dark board, which would otherwise print as a negative.
+   */
+  groundFigureInvert: boolean
+  /**
+   * A framed figure's box runs to the inner edge of the frame's inner rule,
+   * touching it, instead of standing `FRAME_CLEARANCE_IN` inside it.
+   *
+   * For a picture with a border of its own drawn to meet the frame, where the
+   * clearance a line of type wants reads as a gap. Only meaningful with
+   * `groundFigureInFrame` and a frame; false by default, so every cover placed
+   * before it is unmoved.
+   */
+  groundFigureOnRule: boolean
+}

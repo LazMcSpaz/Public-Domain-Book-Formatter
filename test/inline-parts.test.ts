@@ -462,6 +462,13 @@ const ITALIC: FontRef = { family: 'Test', style: 'italic' }
 const faced: TextMeasurer = {
   widthOf: (text, font, sizePt) =>
     [...text].length * sizePt * (font.style === 'italic' ? 0.6 : font.style === 'bold' ? 0.7 : 0.5),
+  inkExtents: (text, font, sizePt) => ({
+    left: 0,
+    right:
+      [...text].length *
+      sizePt *
+      (font.style === 'italic' ? 0.6 : font.style === 'bold' ? 0.7 : 0.5)
+  }),
   metrics: (_font, sizePt) => ({ ascent: sizePt * 0.75, descent: sizePt * 0.25, lineGap: 0 }),
   hasSmallCaps: () => false,
   hasBold: () => true

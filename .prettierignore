@@ -4,3 +4,6 @@ public/voice-samples
 public/audio
 screenshots
 test/fixtures/english-words.json
+public/patterns
+public/marks
+public/devices

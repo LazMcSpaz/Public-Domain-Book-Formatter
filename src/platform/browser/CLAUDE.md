@@ -30,6 +30,7 @@ Everything the engine needs a browser for: PDF rendering (pdf.js), OCR (Tesserac
 - `transport.ts`: `browserTransport`, the `fetch` every model call is handed (the core never reaches the network).
 - `run-store.ts`: the device's main IndexedDB database (`pdbf`, version 7): runs, banked looks, kept scans, readings, the outbox; `onNewerAppOpened` for the reload band.
 - `settings.ts`: the settings kept in `localStorage`; a save answers a refusal in words (`device-write.ts`).
+- `cover-preview.ts`, `cover-pdf.ts`, `press-mark.ts`: the cover drawn from core's composed items (grounds, figures and texture files rasterised at the size they print), written as a PDF and previewed from its bytes; `renderFrontCover` crops the front. `cover-looks.ts`: banked cover looks, in a database of their own (`pdbf-covers`).
 
 ## Folder-specific rules and lessons
 
