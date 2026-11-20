@@ -160,7 +160,8 @@ rounds.
    headword's own. **Read every `placed` line before the batch lands**: a word
    with two senses takes the circle on whichever comes first ("a fair medium
    sample"), so take a wrong one out and place it by hand. People are matched
-   as names, by surname. **A cut leaves circles behind**: the same run removes
+   as names, by surname; so is a family ("Smithers family", "Fox sisters"),
+   circled on the surname where the book first names one of them. **A cut leaves circles behind**: the same run removes
    every circle no entry claims and lists each as `REMOVED`; run it after
    every cut.
 

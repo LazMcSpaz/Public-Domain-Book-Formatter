@@ -1,4 +1,7 @@
 import { mapPlainText } from '../edits/sweep'
+import { isPersonHeadword, personSurname } from './person-headword'
+
+export { isPersonHeadword }
 
 /**
  * Does every glossary entry the book actually uses have a mark on it?
@@ -49,40 +52,6 @@ export interface MarkReport {
 
 /** The circle this edition puts after a word that has an entry. */
 export const GLOSSARY_MARK = '°'
-
-/**
- * A headword that names a person, `Surname, Given Names (dates)`: the comma
- * there inverts a name, it does not list alternatives. Read as alternatives,
- * `Balfour, Arthur James (1848-1930)` looked for "Arthur James" on its own.
- */
-const PERSON = /^\s*([^,()]+?),\s*[^()]+?\s*\([^)]*\d[^)]*\)\s*\.?\s*$/
-
-/**
- * A person with no dates in the headword: `Berry, Franklin L.`,
- * `Panchadasi, Swami`, `Gordon, Mrs Alice`. Told by what the given part
- * carries, an initial or a title, because the shape alone cannot tell a
- * person from two alternatives: measured over every glossary on the shelf,
- * `Freemasonry, Masonry`, `Yoga, Yogi` and `Theosophy, Theosophical Society`
- * are "Capitalised, Capitalised" too, and not one of them carries either.
- * A dateless person with neither (`Gray, Elisha`) reads as alternatives, as
- * it did before; the house style gives a person dates.
- */
-const UNDATED_PERSON =
-  /^\s*(\p{Lu}[\p{L}'\u2019-]+),\s*((?:\p{Lu}[\p{L}'\u2019-]*\.?\s*){1,5})\.?\s*$/u
-const INITIAL_OR_TITLE =
-  /(?:^|\s)(?:\p{Lu}\.|Mrs\.?|Mr\.?|Miss|Madame|Mme\.?|Dr\.?|Sir|Lord|Lady|Colonel|Col\.|Captain|Capt\.|General|Professor|Prof\.|Rev\.?|Swami|Count|Countess|Baron)(?=\.?(?:\s|$))/u
-
-function personSurname(headword: string): string | null {
-  const dated = PERSON.exec(headword)
-  if (dated) return dated[1]!.trim()
-  const undated = UNDATED_PERSON.exec(headword)
-  if (undated && INITIAL_OR_TITLE.test(` ${undated[2]!.trim()}`)) return undated[1]!.trim()
-  return null
-}
-
-export function isPersonHeadword(headword: string): boolean {
-  return personSurname(headword) !== null
-}
 
 /**
  * The alternatives a headword offers.
