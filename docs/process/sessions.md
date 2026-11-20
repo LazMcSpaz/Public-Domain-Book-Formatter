@@ -68,19 +68,28 @@ agent ([below](#status-notes-what-you-are-doing-on-the-shelf)).
 Ask the owner first, because guessing any of these wastes the run: the scan
 and which printing it is; whether the book stands alone or joins others in a
 volume; the imprint details, if not banked in a saved look; anything already
-ruled on that edition. Then put it on the shelf with
-`npx vite-node --config vitest.config.ts scripts/shelf-new-book.ts <shelf> <scan> <Author-TitleCamel> <leaves> <voice-from/book.json> <leaf0.json>`,
-and before reading a leaf record its shape:
+ruled on that edition. Then the scout finds, fetches and stores the scan,
+and a reader reads its first leaf and puts it on the shelf with
+`npx vite-node --config vitest.config.ts scripts/shelf-new-book.ts <shelf> <scan> <Author-TitleCamel> <leaves> <voice-from/book.json> <leaf0.json>`
+(where each argument comes from: [sourcing.md](./sourcing.md), step 8), and
+before reading a leaf records its shape:
 `node scripts/shape.mjs <book-dir> --write`, or
-`--declare '<json>' --because '<reason>'` where nothing can measure it. A book
-put on the shelf any other way needs `node scripts/drive.mjs card <book-dir>`
-as well as `save`, or the shelf list cannot see it.
+`--declare '<json>' --because '<reason>' --write` where nothing can measure
+it. A book put on the shelf any other way needs
+`node scripts/drive.mjs card <book-dir>` as well as `save`, or the shelf list
+cannot see it.
 
 ## Steps: working on a book
 
 1. **Start the servers**: `npm run dev &` (the app on port 5173), then
    `node scripts/drive.mjs serve &` (the driver on port 7788).
-2. **Load the book from the shelf**, with the scan named in `book.json`:
+2. **Load the book from the shelf**, with the scan named in `book.json`. If
+   that scan is not in your checkout (a new book's scan lives only in
+   storage), fetch it first:
+   `node scripts/storage.mjs get <key> <shelf>/<scan.path>`, where the key is
+   the row of the shelf's `STORAGE.tsv` whose fingerprint is the one in
+   `scan.path` (for a scan, normally the same `scans/<sha256>.pdf`). Never
+   commit the fetched copy. Then
    `node scripts/drive.mjs load <shelf>/books/<dir>/book.json <shelf>/<scan.path>`,
    then `node scripts/drive.mjs use <shelf>/<scan.path>`. The PDF beside
    `book.json` is the export; loading it makes a second, wrong book that
@@ -211,16 +220,17 @@ out the work, keeps each book's `ledger.md`, prepares the KDP listing pack
 and keeps the shelf tidy; it does not do the hands-on work. How a role is
 launched: [README.md](./README.md#the-team).
 
-| The work                                                                         | Launch                                |
-| -------------------------------------------------------------------------------- | ------------------------------------- |
-| Find or fetch a scan, a second copy, a reference copy or a picture; start a book | `scout`                               |
-| Prepare a stretch for batches; correct one batch; land batches and raise queries | `reader`, at most four at once        |
-| Make the corrections a checker's findings call for                               | `reader`                              |
-| Research and draft an introduction, notes or a glossary; answer the notes on it  | `etsu`                                |
-| Check each of Etsu's drafts and write the round notes                            | `etsu-editor`                         |
-| Cut, trace and place pictures; lay out; export; covers; EPUB; assemble a volume  | `typesetter`                          |
-| The checks on the text, adjudication, the image check, the readiness report      | `checker`                             |
-| Change the tools                                                                 | `builder`, then a separate `reviewer` |
+| The work                                                                            | Launch                                |
+| ----------------------------------------------------------------------------------- | ------------------------------------- |
+| Find or fetch a scan, a second copy, a reference copy or a picture; `scan.md`       | `scout`                               |
+| Start a new book from the stored scan: its first leaf, the book file, its shape     | `reader`                              |
+| Prepare a stretch for batches; correct one batch; land batches and raise queries    | `reader`, at most four at once        |
+| Make the corrections a checker's findings call for; withdraw the queries it refuted | `reader`                              |
+| Research and draft an introduction, notes or a glossary; answer the notes on it     | `etsu`                                |
+| Check each of Etsu's drafts and write the round notes                               | `etsu-editor`                         |
+| Cut, trace and place pictures; lay out; export; covers; EPUB; assemble a volume     | `typesetter`                          |
+| The checks on the text, adjudication, the image check, the readiness report         | `checker`                             |
+| Change the tools                                                                    | `builder`, then a separate `reviewer` |
 
 - **Hand each run only its brief and its task's files**: the shelf path, the
   book folder, a scratch folder outside both repositories, the run id it

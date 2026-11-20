@@ -447,8 +447,8 @@ The PDF export (`drive.mjs proof`) and cover flattening
   got?"
 - `node scripts/shape.mjs <book-dir> --write`: measures what the book is made
   of (pixels, where its text came from, a second copy) and records it as
-  `run.shape`. `--declare '<json>' --because '<reason>'` where nothing can
-  measure it; `--shelf books/` gives one row per book; `--flow` regenerates
+  `run.shape`. `--declare '<json>' --because '<reason>' --write` where
+  nothing can measure it (without `--write` it only prints the shape); `--shelf books/` gives one row per book; `--flow` regenerates
   the table in `docs/FLOW.md`.
 - `node scripts/drive.mjs corrections <book-dir>`: rewrites the entries of
   `corrections.md` from the book as it stands, keeping the prose above them.

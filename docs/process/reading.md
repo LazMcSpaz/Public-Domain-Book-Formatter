@@ -178,7 +178,7 @@ then the book's own repeated passages (`drive.mjs parallels`), then
 only context speaks to is a **query**, never a correction. Heading levels and
 lost line breaks are set by hand (`drive.mjs split`, `drive.mjs block`). A
 Paper Capture PDF that redraws about half its words in a font is not a
-photograph: declare its shape with `shape.mjs --declare … --because …`. An
+photograph: declare its shape with `shape.mjs --declare … --because … --write`. An
 EPUB's chapters come in through
 `node scripts/drive.mjs epub <book.epub> e.json 1 2 3`, then `transcribe`.
 

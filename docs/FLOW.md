@@ -41,7 +41,7 @@ declared by a person, with a reason, where nothing here can measure it.
 node scripts/shape.mjs <book-dir>            # measure the book's scan, print the shape and route
 node scripts/shape.mjs <book-dir> --write    # …and record it in book.json
 node scripts/shape.mjs --shelf books/        # one row per book: shape, how, route
-node scripts/shape.mjs <book-dir> --declare '{"pixels":true,"textLayer":"none","externalText":false,"container":"pdf"}' --because "…"
+node scripts/shape.mjs <book-dir> --declare '{"pixels":true,"textLayer":"none","externalText":false,"container":"pdf"}' --because "…" --write
 ```
 
 `book-files.mjs --finish` owes a book with no recorded shape, because a book

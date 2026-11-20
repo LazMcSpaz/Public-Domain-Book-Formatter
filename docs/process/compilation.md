@@ -46,7 +46,7 @@ check that cannot run on the whole volume ran on each part.
    next compilation.
 3. **Declare the shape.** The volume's book file names no scan
    (`scan: null`), so nothing can measure it:
-   `node scripts/shape.mjs <book-dir> --declare '<json>' --because '<reason>'`,
+   `node scripts/shape.mjs <book-dir> --declare '<json>' --because '<reason>' --write`,
    with the parts' shapes named in the reason.
 4. **Load it in the driver against a stand-in.** `drive.mjs load` needs a PDF.
    For the Lectures a stand-in PDF of blank leaves, one per leaf of the volume,

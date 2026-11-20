@@ -22,7 +22,7 @@ Three other places this folder leans on rather than repeats:
 | Job                                                               | Document                           | Role that runs it                                                                            |
 | ----------------------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------- |
 | Start a session, load and save books, push                        | [sessions.md](./sessions.md)       | every session, whatever its role                                                             |
-| Find, compare and fetch sources; start a new book                 | [sourcing.md](./sourcing.md)       | scout                                                                                        |
+| Find, compare and fetch sources; start a new book                 | [sourcing.md](./sourcing.md)       | scout (a reader reads the first leaf and starts the book)                                    |
 | Get the text right, leaf by leaf, against the page                | [reading.md](./reading.md)         | reader                                                                                       |
 | Check the read text against itself, the scan and a second reading | [checking.md](./checking.md)       | checker (a reader makes the corrections its findings call for)                               |
 | Write the introduction, notes and other signed prose              | [writing.md](./writing.md)         | Etsu (research and drafts) and Etsu's editor (every check)                                   |

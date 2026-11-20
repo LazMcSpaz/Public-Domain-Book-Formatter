@@ -17,9 +17,13 @@ works by hand, as below.
 
 ## Who runs it
 
-The **scout** ([.claude/agents/scout.md](../../.claude/agents/scout.md)). The
-**owner** chooses the printing and decides every rights question; the
-managing editor puts them to him.
+The **scout** ([.claude/agents/scout.md](../../.claude/agents/scout.md)) runs
+every step but one. Starting the book (step 8) takes a reading of its first
+leaf, and the scout does not read, so a **reader**
+([.claude/agents/reader.md](../../.claude/agents/reader.md)) does it, then
+hands back to the scout for the book's `scan.md`. The **owner** chooses the
+printing and decides every rights question; the managing editor puts them to
+him.
 
 ## Before you start
 
@@ -84,36 +88,77 @@ managing editor puts them to him.
    ([decision 0051](../decisions/0051-big-files-live-in-cloudflare-r2.md)):
    commit the small files by name.
 
-7. **Start the book on the shelf**, as [sessions.md](./sessions.md#starting-a-new-book)
-   says, with `scripts/shelf-new-book.ts`, then record its shape with
-   `node scripts/shape.mjs <book-dir> --write` (or `--declare '<json>' --because '<reason>'`
-   where nothing can measure it). The script copies the scan into the shelf's
-   `scans/`, where the driver reads it; that copy stays out of git, and a
-   later session fetches it back with
-   `node scripts/storage.mjs get scans/<sha256>.pdf <shelf>/scans/<sha256>.pdf`.
-8. **Write the book's `scan.md`** beside its `book.json`: the printing chosen
-   and the owner's answer, the library and identifier, the rights evidence and
-   his decision, the file's SHA-256 and storage key, its known faults, any
-   second copy, and the path of the candidates sheet.
-9. **Hand on**: commit and push, then
-   `work.mjs handoff <id> --to reader --result "<one line>"`, or `done` when
-   the job was a reference copy or a picture.
+7. **Hand the scan to a reader.** Add the chosen file's SHA-256 and storage
+   key to the candidates sheet, commit it and push, then
+   `work.mjs handoff <id> --to reader --result "<printing> stored as scans/<sha256>.pdf; start the book"`.
+   For a reference copy or a picture the job ends here, with `done`.
+8. **Start the book on the shelf** (the reader), with
+   `npx vite-node --config vitest.config.ts scripts/shelf-new-book.ts <shelf> <scan> <Author-TitleCamel> <leaves> <voice-from/book.json> <leaf0.json>`.
+   Each argument comes from here:
+   - `<shelf>`: the shelf's path.
+   - `<scan>`: the chosen file, fetched from storage into your scratch folder:
+     `node scripts/storage.mjs get scans/<sha256>.pdf <scratch>/<sha256>.pdf`
+     (the key is on the candidates sheet and in `STORAGE.tsv`).
+   - `<Author-TitleCamel>`: the candidates sheet's name without
+     `-candidates.md`. The script adds a short tag to it.
+   - `<leaves>`: the scan's page count, from `pdfinfo <scan>` (`Pages:`); for
+     an EPUB, the number of spine documents.
+   - `<voice-from/book.json>`: the `book.json` of a shelf book that already
+     carries the editor's voice (its `voice.penName` is "Etsu T. Dhent"), so
+     the new book starts with it; `''` starts from an empty voice.
+   - `<leaf0.json>`: leaf 0, read by you against a render of it
+     (`pdftoppm -f 1 -l 1 -r 150 -png <scan> <scratch>/leaf`), as one
+     transcription: `{"pageIndex":0,"role":"<role>","blocks":[…]}`. A scan's
+     first leaf is usually a cover, a library's notice or a blank, which
+     takes its role (the roles are listed in
+     [BRIEF-reading.md](../BRIEF-reading.md)) and no blocks. A leaf that
+     prints words keeps the rule of [reading.md](./reading.md): correct the
+     text its layer gives (`pdftotext -f 1 -l 1 <scan> -`) against the render,
+     never type it out. The first batch reads leaf 0 again, and landing it
+     replaces this one.
+
+   The script copies the scan into the shelf's `scans/`, where the driver
+   reads it; that copy stays out of git, and a later session fetches it back
+   with `node scripts/storage.mjs get scans/<sha256>.pdf <shelf>/scans/<sha256>.pdf`.
+   Then record the book's shape with `node scripts/shape.mjs <book-dir> --write`
+   (or `--declare '<json>' --because '<reason>' --write` where nothing can
+   measure it), commit the new folder by name, push, and
+   `work.mjs handoff <id> --to scout --result "Started books/<folder>"`.
+
+9. **Write the book's `scan.md`** (the scout) beside its `book.json`: the
+   printing chosen and the owner's answer, the library and identifier, the
+   rights evidence and his decision, the file's SHA-256 and storage key, its
+   known faults, any second copy, and the path of the candidates sheet.
+10. **Hand on**: commit and push, then
+    `work.mjs handoff <id> --to reader --result "<one line>"`.
+
+**The app cannot show a new book's pages yet.** It fetches the scan named in
+`book.json` (`scan.path`) from the shelf on GitHub, and a new book's scan is
+only in storage. Until cleanup task 6 is finished (the scans follow the one
+map of the shelf), the app on the tablet opens a new book's text,
+corrections and notes but not its page images: it says the scan is not on
+the shelf and asks for the file. Sessions fetch the scan with
+`storage.mjs get`, as above.
 
 ## Status notes
 
 `shelf-new-book.ts` settles the book's folder name only when it makes the
 folder: it adds a short tag to the name you give it. A note that named the
 folder before then would name one that never exists, and the owner's
-Workroom would show it. So a new book takes two runs:
+Workroom would show it. So a new book takes three runs:
 
-- **Steps 1 to 7, naming no book:**
+- **The scout, steps 1 to 7, naming no book:**
   `node scripts/work.mjs start --role scout --job "<find and fetch a printing of …>"`.
   It waits on the owner at step 4; once he has answered, the next scout is
   handed the same run id and moves it on with `progress`. After step 7,
-  `done` with the new folder in its result.
-- **Steps 8 and 9, naming the folder:**
-  `start --role scout --book <folder> --stage sourcing --from <id>`, then
-  `handoff` to the reader.
+  `handoff --to reader`.
+- **The reader, step 8, naming no book either**, because the folder does
+  not exist until the script makes it:
+  `start --role reader --job "Start the book from scans/<sha256>.pdf" --from <scout's id>`,
+  then `handoff --to scout` with the new folder in its result.
+- **The scout, steps 9 and 10, naming the folder:**
+  `start --role scout --book <folder> --stage sourcing --from <reader's id>`,
+  then `handoff --to reader`, for the reading.
 
 A job on a book already on the shelf (a second copy, a reference copy, a
 picture) is one run that names the book from its start. Everything else is as
@@ -134,14 +179,16 @@ says.
 
 The candidates sheet in the shelf's `sources/`; the scan, reference copies and
 picture originals in storage, each in `STORAGE.tsv`; the new book's folder
-with its `book.json`, card, recorded shape and `scan.md`; the status notes.
-The managing editor writes the ledger entry from the scout's report.
+with its `book.json`, card and recorded shape (the reader's) and `scan.md`
+(the scout's); the status notes. The managing editor writes the ledger entry
+from the scout's and the reader's reports.
 
 ## Never
 
 - Never choose the printing or settle a rights question; the owner does.
 - Never take a catalogue's rights flag as the answer.
 - Never start a book on the shelf before the owner has answered.
+- Never let the scout read a leaf: leaf 0 is a reader's.
 - Never commit a scan or a reference copy to the shelf; they go to storage.
 - Never spend money, sign up for anything, or handle a key.
 - Never put a downloaded file, book text or a study book's details in this
