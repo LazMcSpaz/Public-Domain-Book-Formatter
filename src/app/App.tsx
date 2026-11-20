@@ -4693,6 +4693,9 @@ export function App(): JSX.Element {
             )
           })}
         </ol>
+        <a className="rail-settings rail-workroom" href="#workroom">
+          Workroom
+        </a>
         <a className="rail-settings" href="#settings">
           Settings
         </a>
@@ -4748,6 +4751,9 @@ export function App(): JSX.Element {
                           : `Read unread scans (${pickable.length})`}
                       </button>
                     ) : null}
+                    <a className="shelf-workroom" href="#workroom">
+                      Workroom
+                    </a>
                     <button
                       type="button"
                       className="shelf-refresh"

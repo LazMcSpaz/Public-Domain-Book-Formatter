@@ -4,6 +4,7 @@ import { App } from './App'
 import { prepareInstall } from '../platform/browser/install'
 import { Settings } from './Settings'
 import { applyTheme, readTheme } from './theme'
+import { Workroom } from './Workroom'
 import './styles.css'
 
 /**
@@ -32,6 +33,13 @@ function Root(): JSX.Element {
   // way to change an API key or reclaim storage, so it cannot be a dev tool.
   if (hash.startsWith('#settings')) {
     return <Settings onClose={() => (window.location.hash = '')} />
+  }
+
+  // The Workroom: what the agents are doing, read live from the shelf. Its own
+  // address, so it can be added to the Home Screen; a questions link in it
+  // leaves for `#book=…&at=queries`, which mounts the app afresh to land there.
+  if (hash.startsWith('#workroom')) {
+    return <Workroom onClose={() => (window.location.hash = '')} />
   }
 
   if (DevPreview && hash.startsWith('#preview')) {

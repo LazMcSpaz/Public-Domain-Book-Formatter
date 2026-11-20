@@ -4530,3 +4530,32 @@ textarea.galley-plain {
 sc {
   font-variant-caps: small-caps;
 }
+
+/* --- the Workroom's doors ---------------------------------------------------
+   One tap from the shelf (beside Refresh) and from the rail on every screen.
+   The screen itself is styled in `workroom.css`. */
+.shelf-workroom {
+  font-family: var(--ui);
+  font-size: 0.8rem;
+  padding: 4px 14px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, #c9a75a 70%, var(--line));
+  color: #f1d48a;
+  background: linear-gradient(180deg, #1b1a26, #232131);
+  text-decoration: none;
+}
+.rail-workroom {
+  margin-right: 16px;
+}
+@media (max-width: 860px) {
+  .rail {
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+    grid-template-areas:
+      'title workroom settings theme'
+      'steps steps steps steps';
+  }
+  .rail-workroom {
+    grid-area: workroom;
+    margin-right: 0;
+  }
+}
