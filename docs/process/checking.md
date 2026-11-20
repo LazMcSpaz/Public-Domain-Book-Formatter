@@ -33,8 +33,8 @@ editor writes the results into the ledger from the checker's report.
 1. **Free checks first**, because they cost nothing: C1, C2 and C5 below, and
    `node scripts/drive.mjs consistency out.json` (a name spelled two ways, a
    doubled word, a quotation never closed, a reference to a missing chapter).
-   Score each check per book in the ledger; never tune a threshold to make a
-   book pass.
+   Score each check per book in your report, for the ledger, which the
+   managing editor writes; never tune a threshold to make a book pass.
 2. **Read every flagged place with its whole block.** The sheet `damage`
    writes carries the whole paragraph because the paragraph usually settles
    it. Return a verdict per finding, never rewritten text.
@@ -76,8 +76,10 @@ editor writes the results into the ledger from the checker's report.
    `node scripts/drive.mjs concordance findings.json`: a place with a parallel
    is settled, a place with only context goes to the editor as a query.
 8. **Run the crop pass over the queries too**, before the editor sees them.
-   One confident query once described a page that does not exist. Withdraw a
-   refuted one with `drive.mjs unquery <leaf> <quote> "<reason>"`.
+   One confident query once described a page that does not exist. The checker
+   names each query its crop refutes, with the crop and the reason, in its
+   sheet. Withdrawing one changes the book, so a reader does it, with
+   `drive.mjs unquery <leaf> <quote> "<reason>"` for each, then `save`.
 9. **The editor decides.** The verdicts and queries go to him as one sheet:
    the crop, what the paper says, what was proposed, what the checks made of
    it. `node scripts/drive.mjs link review` opens the book where decisions
@@ -85,9 +87,10 @@ editor writes the results into the ledger from the checker's report.
 10. **Look at rendered pages before believing the checks**
     (`node scripts/drive.mjs proof 1 9 40 "answers=<book.json>"`). Several
     faults here were invisible in every count and obvious on the page.
-11. **Keep the ledger.** For the sense pass and every check: raised, confirmed,
-    refuted. If few findings survive the pixels, tighten or drop the pass; a
-    check nobody scores manufactures confidence.
+11. **Score every pass for the ledger.** For the sense pass and every check:
+    raised, confirmed, refuted, in the checker's report; the managing editor
+    writes the scores into the ledger. If few findings survive the pixels,
+    tighten or drop the pass; a check nobody scores manufactures confidence.
 12. **Record the results**: run `node scripts/readiness.mjs <book-dir>` (below).
     Its report, `readiness.md` beside the book, names every check in the list
     as passed, failed, needs a person or NOT CHECKED with its reason. Note the
@@ -149,8 +152,8 @@ file for R items, `book.json` for C items; both covers for R7 and R10), the
 day it was done, and who did it and what was decided. The report gives each
 item its line with the fingerprint filled in. A sign-off counts only for that
 exact file: a new export or a new save of the book needs a new line. The
-person who did the reading writes it, or says so and the session writes it;
-a session never signs off a reading it did not see done. A FAILED or NOT
+person who did the reading writes it, or says so and the managing editor
+writes it; a session never signs off a reading it did not see done. A FAILED or NOT
 CHECKED item cannot be signed off.
 
 **For "checked"**, on the book as it stands on the shelf:
@@ -251,7 +254,8 @@ CHECKED item cannot be signed off.
 ## What it produces and where it goes
 
 Corrections landed in `book.json` through sweeps and `correct`; queries with
-proposals for the editor; the dated check results and scores in `ledger.md`;
+proposals for the editor; the dated check results and scores in `ledger.md`,
+written by the managing editor from the checker's report;
 `damage.md` and other check sheets beside the book. Save, regenerate the
 readable files and push in one commit ([sessions.md](./sessions.md)).
 

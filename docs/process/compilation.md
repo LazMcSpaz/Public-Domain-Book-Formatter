@@ -71,7 +71,8 @@ check that cannot run on the whole volume ran on each part.
 ## Checks that must pass
 
 The full list in [checking.md](./checking.md) and [upload.md](./upload.md),
-with two differences for a compilation, each recorded in the ledger:
+with two differences for a compilation, each named in the checker's report
+and recorded in the ledger by the managing editor:
 
 - C3 (page turns) runs on the text half only;
 - C4 (coverage) runs per part with a scan; parts with no scan anywhere (two of

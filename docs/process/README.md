@@ -127,8 +127,9 @@ owner, told exactly what was not checked, says to go ahead.
 
 The report is `readiness.md`, written beside the book by the command: the
 files and their fingerprints, one row per check with its result and what it
-found, the details, and the verdict. Note the verdict and the date in the
-book's `ledger.md` under a dated heading.
+found, the details, and the verdict. The managing editor notes the verdict
+and the date in the book's `ledger.md` under a dated heading, from the
+checker's report.
 
 The stories behind these rules, the faults that cost real time on real books,
 are kept in `docs/archive/CLAUDE-pre-harness.md`. They are history, not

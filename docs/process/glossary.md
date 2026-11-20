@@ -165,9 +165,10 @@ rounds.
   (C7).
 - `node scripts/book-files.mjs --shelf <shelf>/books/` shows the book has the
   apparatus the last comparable one got (C9).
-- Asked out loud and answered in the ledger: does every entry for a word the
-  book uses have a mark on that word? Does any entry tell the reader where to
-  go next? Has this book got the apparatus the last one got?
+- Asked out loud and answered in Etsu's report, for the ledger: does every
+  entry for a word the book uses have a mark on that word? Does any entry
+  tell the reader where to go next? Has this book got the apparatus the last
+  one got?
 
 ## What it produces and where it goes
 

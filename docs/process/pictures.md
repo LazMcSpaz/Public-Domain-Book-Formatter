@@ -127,15 +127,16 @@ before the book is called checked.
 - The image check sheet has no WRONG left open.
 - `npx vite-node --config vitest.config.ts scripts/epub-of.ts <book-dir> <out-dir>`
   names no picture with neither a caption nor a description (R11).
-- The contact sheets were looked at, and the ledger says the sweep is a floor.
+- The contact sheets were looked at, and the typesetter's report says the
+  sweep is a floor (the managing editor puts it in the ledger).
 
 ## What it produces and where it goes
 
 Picture edits in `book.json`; the pixels in `images/` beside the book (a few
 older ones sit in `images/` at the top of the shelf, and are found there); the
 originals and tracings in `art/`; the provenance record and the image check
-sheet; a ledger entry saying what the sweep found and what it could have
-missed.
+sheet; a ledger entry, written by the managing editor from the reports,
+saying what the sweep found and what it could have missed.
 
 ## Never
 

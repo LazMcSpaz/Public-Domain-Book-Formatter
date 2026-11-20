@@ -17,7 +17,10 @@ uploads it.
   runs the readiness command on the exact files; its report gives the only
   verdict.
 - The **typesetter** ([.claude/agents/typesetter.md](../../.claude/agents/typesetter.md))
-  recuts and flattens the covers when they do not fit the interior.
+  recuts and flattens the covers when they do not fit the interior, and
+  exports again after a correction.
+- A **reader** ([.claude/agents/reader.md](../../.claude/agents/reader.md))
+  corrects a word the spelling sheet's crop shows is wrong.
 - **The owner presses the buttons on KDP.** No agent ever spends money or
   handles keys on his behalf.
 
@@ -48,12 +51,17 @@ uploads it.
    CHECKED. What it does and how a person's check is signed off:
    [checking.md](checking.md#checks-that-must-pass-the-full-list-for-checked-and-ready-to-upload).
 
-3. **Read the spelling sheet word by word** (R1). It is the check KDP's own
+3. **The spelling sheet, word by word** (R1). It is the check KDP's own
    spell-check runs on the interior; it reads the exported file itself, so it
    holds every part that prints, contents and front matter included. A word
-   the scan's second reading agrees with is printed so; a word it disagrees
-   with is ours to crop and correct. Nothing on the sheet is changed
-   automatically: an author's own coinages stay.
+   the scan's second reading agrees with is printed so. A word it disagrees
+   with is ours: the checker crops it (`drive.mjs leaf`) and a reader corrects
+   it from the crop, after which the typesetter exports again and the checks
+   run on the new file. Nothing on the sheet is changed automatically: an
+   author's own coinages stay. **The owner reads the sheet and decides each
+   word**: the managing editor puts it to him (`work.mjs ask` naming the
+   sheet) and, on his word, writes his `Signed off: R1` line in the ledger
+   ([checking.md](checking.md#checks-that-must-pass-the-full-list-for-checked-and-ready-to-upload)).
 4. **Make sure the covers are for this interior** (R7; a recut is the
    typesetter's). A cover's spine is
    computed from the interior's page count and the paper (cream, black and
@@ -95,8 +103,9 @@ uploads it.
 6. **Run the readiness command again** (the checker) once the sheets are
    read and signed off in `ledger.md`. It writes `readiness.md` beside the
    book: the files and their fingerprints, each check passed, failed, needs a
-   person or NOT CHECKED with its reason, and the verdict. Note the verdict
-   and date in the ledger and give the owner the report.
+   person or NOT CHECKED with its reason, and the verdict. The checker reports
+   the verdict and its date; the managing editor notes them in the ledger and
+   gives the owner the report.
 7. **Only then say "ready to upload"** (the managing editor, reading the
    checker's report), and only if the report's verdict says so. If the
    owner, told exactly what was not checked, says to go ahead anyway, record
@@ -148,6 +157,13 @@ The last step of every upload, by [decision 0052](../decisions/0052-what-a-finis
    - contact sheets and scratch files;
    - check sheets older than the latest readiness report.
 4. **Tell the owner** what was moved and what was deleted.
+
+**The book's `drafts/` folder** (Etsu's drafts, Etsu's editor's round notes,
+Etsu's answers and the glossary packets) is not on decision 0052's list, as
+kept, moved or deleted. It holds the record of how the prose was checked, so
+it is not plainly a scratch file. Leave it where it is until the owner
+decides whether drafts are kept (the cleanup plan's "After the cleanup", step
+4); do not read 0052 as covering it.
 
 Never delete a scan, a reference copy, an uploaded file, the book file or a hand-written record. Step 2 uses `node scripts/storage.mjs put <file> --kind <kind> --shelf <shelf>` ([commands](../reference/commands.md)); the uploaded files go under the kind `editions/<book folder>/<edition>`.
 

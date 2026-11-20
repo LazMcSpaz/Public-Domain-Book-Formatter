@@ -114,9 +114,10 @@ invention appears. Every arrangement below exists to keep that true.
    - Matter in columns lands as a `table`: one printed line is one row, and a
      cell the paper sets over two lines is two rows. A no-break space binds
      nothing in this engine.
-   - A symbol set inside a line is a figure, cut in the same session
-     ([pictures.md](./pictures.md)), or the character the book prints for it
-     elsewhere.
+   - A symbol set inside a line is the typesetter's
+     ([pictures.md](./pictures.md), step 4): leave it as the draft has it
+     and name its leaf and block in your report. The typesetter cuts it as a
+     figure, or sets the character the book prints for it elsewhere.
    - Front matter gets its `role` in the first batch.
    - A book that gathers numbered notes per Part or chapter records each mark
      as the superscript character (`¹`), never a plain `1`.
@@ -198,7 +199,8 @@ EPUB's chapters come in through
 complete; `recon.json.gz` and `second.json` beside it; `queries.md`,
 `proposals.md`, `rulings.md` and `review.md` (written by `drive.mjs queries`);
 query crops in `queries/`; a `ledger.md` entry per stretch (batches, tokens
-spent, what the checks found). Then the book goes to
+spent, what the checks found), written by the managing editor from the
+reader's report. Then the book goes to
 [checking.md](./checking.md).
 
 ## Never

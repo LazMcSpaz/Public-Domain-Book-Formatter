@@ -65,8 +65,9 @@ its readiness report is the only verdict.
   (`proof <page> "answers=<book.json>"`): keep the author and chapter heads,
   or say where each listed topic begins so it can be set as a subheading,
   after which the book is divided and gets topic heads. Never set topic
-  heads on such a book without his answer. Record the question and his
-  answer in the book's `ledger.md`. Then:
+  heads on such a book without his answer. Put the question and his answer
+  in your report, for the ledger; the managing editor writes them in the
+  book's `ledger.md`. Then:
   - **He keeps the author and chapter heads:** write `proof`'s `inherited`
     set as the book's design, as above. It already carries those heads.
   - **He says where each topic begins:** set each one as a subheading,
@@ -157,8 +158,9 @@ The full list lives in one place, so the three documents cannot disagree: [check
 ## What it produces and where it goes
 
 `books/<dir>/<Name>.pdf` and `<Name>.epub` on the shelf, made from the
-`book.json` in the same commit; the readable files regenerated; a ledger entry
-with the page count, the report's fields and every check result. (An export
+`book.json` in the same commit; the readable files regenerated; a ledger entry,
+written by the managing editor from the typesetter's and the checker's
+reports, with the page count, the report's fields and every check result. (An export
 receipt beside each file, saying what made it, when, and what it passed, is
 planned.)
 
