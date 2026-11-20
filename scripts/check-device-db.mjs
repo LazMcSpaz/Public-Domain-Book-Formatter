@@ -17,10 +17,13 @@
  * - when a newer version of the app opens the main database in another tab,
  *   does this page let go and tell the owner to reload?
  *
- *   node scripts/check-device-db.mjs   (needs the dev server on :5173)
+ *   node scripts/check-device-db.mjs [--shots <folder>]   (needs the dev server on :5173)
+ *
+ * With `--shots`, saves newer-version.png there: the reload band, at phone width.
  */
 import { chromium } from 'playwright'
-import { resolve } from 'node:path'
+import { mkdirSync } from 'node:fs'
+import { join, resolve } from 'node:path'
 import {
   MAIN_DB,
   MAIN_STORES,
@@ -38,8 +41,11 @@ const URL_BASE = process.env.PDBF_URL ?? 'http://localhost:5173'
 const CHROME = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
 /** A page of the app's own origin with nothing on it: the databases are seeded there first. */
 const BLANK = `${URL_BASE}/check-device-db-blank`
-/** The main database's code at the address the app's own screens import it from. */
+/** The main database's code as the dev server serves it, to read the database from a page. */
 const RUN_STORE = `/@fs${resolve(import.meta.dirname, '..')}/src/platform/browser/run-store.ts`
+const at = process.argv.indexOf('--shots')
+const SHOTS = at > -1 ? resolve(process.argv[at + 1] ?? '.') : null
+if (SHOTS) mkdirSync(SHOTS, { recursive: true })
 
 const problems = []
 function check(ok, what) {
@@ -353,6 +359,11 @@ async function forgetInSettings(page) {
     /newer version of the app/u.test(words) && /Reload this page/u.test(words),
     `and the owner is told plainly to reload (${words.trim().slice(0, 70)}…)`
   )
+  if (SHOTS && words) {
+    await one.page.setViewportSize({ width: 390, height: 844 })
+    await one.page.screenshot({ path: join(SHOTS, 'newer-version.png') })
+    await one.page.setViewportSize({ width: 1180, height: 820 })
+  }
   const loaded = one.page.waitForEvent('load')
   if (words) await notice.locator('button').click()
   else await one.page.reload()
