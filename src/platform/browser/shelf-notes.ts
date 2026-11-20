@@ -62,14 +62,18 @@ export interface DeviceNoteCache extends NoteCache {
 }
 
 /**
- * A cache kept on the device as well (`note-store.ts`: the app's database,
- * never `localStorage`), so reopening the app fetches only what changed while
- * it was closed. Written after a read that changed it, trimmed to what the
- * shelf lists; a read that changed nothing writes nothing. The write is never
- * waited for, so a slow or refused one cannot hold up the screen; a refused
- * one is tried again after the next read. A device that keeps nothing (no
- * database) has this page's copy only: a lost cache costs requests, never a
- * note.
+ * A cache kept on the device as well (`note-store.ts`: the Workroom's own
+ * database, never `localStorage`), so reopening the app fetches only what
+ * changed while it was closed. Written after a read that changed it, trimmed
+ * to what the shelf lists; a read that changed nothing writes nothing. The
+ * write is never waited for, so a slow or refused one cannot hold up the
+ * screen; a refused one is tried again after the next read. A device that
+ * keeps nothing (no database) has this page's copy only: a lost cache costs
+ * requests, never a note.
+ *
+ * When the owner forgets the copy in Settings (in this tab or another), this
+ * page's copy is dropped too, with any write not yet made, so the next read
+ * fetches every note from the shelf and keeps it again.
  */
 export function deviceNoteCache(device: DeviceNotes | null = databaseNotes()): DeviceNoteCache {
   const notes = new Map<string, string>()
@@ -79,14 +83,24 @@ export function deviceNoteCache(device: DeviceNotes | null = databaseNotes()): D
   let store = device
   let loading: Promise<void> | null = null
   let saving: Promise<void> = Promise.resolve()
+  /** Counts the times the copy was forgotten; a load or write begun before one is dropped. */
+  let forgotten = 0
+  device?.onForget?.(() => {
+    forgotten++
+    notes.clear()
+    added.clear()
+    trimmed = false
+  })
   return {
     ready: () =>
       (loading ??= (async () => {
+        const since = forgotten
         const kept = await store?.load().catch(() => null)
         if (!kept) {
           store = null
           return
         }
+        if (since !== forgotten) return
         for (const [sha, text] of kept) if (!notes.has(sha)) notes.set(sha, text)
       })()),
     get: (sha) => notes.get(sha),
@@ -102,11 +116,13 @@ export function deviceNoteCache(device: DeviceNotes | null = databaseNotes()): D
       if (!target || (added.size === 0 && !trimmed)) return
       const add = new Map(added)
       const keep = new Set(shas)
+      const since = forgotten
       added.clear()
       trimmed = false
       saving = saving.then(async () => {
+        if (since !== forgotten) return
         const ok = await target.save(add, keep).catch(() => false)
-        if (ok) return
+        if (ok || since !== forgotten) return
         // Refused (storage full, or the database busy): try again after the next read.
         trimmed = true
         for (const [sha, text] of add)
@@ -133,23 +149,35 @@ export async function readWorkNotes(config: ShelfConfig, cache: NoteCache): Prom
   const wanted = notesInRunsTree(listing)
   const files: NoteFile[] = []
   const unreadable: UnreadableNote[] = []
+  // This read's own copy of every text it has, so a cache dropped while it is
+  // on its way (the owner forgetting it in Settings) cannot leave a hole in it.
+  const have = new Map<string, string>()
+  for (const w of wanted) {
+    const text = cache.get(w.sha)
+    if (text !== undefined) have.set(w.sha, text)
+  }
   // One fetch per content: a note copied by hand under a second name has the same sha.
   const missing = [
-    ...new Map(wanted.filter((w) => cache.get(w.sha) === undefined).map((w) => [w.sha, w])).values()
+    ...new Map(wanted.filter((w) => !have.has(w.sha)).map((w) => [w.sha, w])).values()
   ]
   let next = 0
   let fetched = 0
   const worker = async (): Promise<void> => {
     while (next < missing.length) {
       const note = missing[next++]!
-      const problem = await fetchNote(config, note.sha, cache)
-      if (problem) unreadable.push({ path: note.path, problems: [problem] })
-      else fetched++
+      const got = await fetchNote(config, note.sha)
+      if (got.problem !== null) {
+        unreadable.push({ path: note.path, problems: [got.problem] })
+        continue
+      }
+      cache.set(note.sha, got.text)
+      have.set(note.sha, got.text)
+      fetched++
     }
   }
   await Promise.all(Array.from({ length: Math.min(AT_ONCE, missing.length) }, worker))
   for (const w of wanted) {
-    const text = cache.get(w.sha)
+    const text = have.get(w.sha)
     if (text !== undefined) files.push({ path: w.path, text })
   }
   cache.keepOnly(new Set(wanted.map((w) => w.sha)))
@@ -252,26 +280,32 @@ function treeOf(body: unknown): ParsedTree {
   return { sha: b.sha, truncated: b.truncated === true, entries }
 }
 
-/** Fetch one note by its sha into the cache; a problem with it, in words, or null. */
+/** One note fetched by its sha: its text, or a problem with it in words. */
 async function fetchNote(
   config: ShelfConfig,
-  sha: string,
-  cache: NoteCache
-): Promise<string | null> {
+  sha: string
+): Promise<{ text: string; problem: null } | { text: null; problem: string }> {
   const response = await reach(gitReadUrl(config, `blobs/${encodeURIComponent(sha)}`), {
     headers: headers(config, 'application/vnd.github.raw'),
     cache: NO_CACHE
   })
   if (response.status === 404) {
-    return 'The shelf listed this note but did not have it when asked (it changed while being read). The next read tries again.'
+    return {
+      text: null,
+      problem:
+        'The shelf listed this note but did not have it when asked (it changed while being read). The next read tries again.'
+    }
   }
   if (!response.ok) throw refused(response, 'reading a status note')
   const bytes = new Uint8Array(await response.arrayBuffer())
   if ((await blobSha(bytes)) !== sha) {
-    return 'What came back is not this note (its fingerprint does not match), so it was not kept. The next read tries again.'
+    return {
+      text: null,
+      problem:
+        'What came back is not this note (its fingerprint does not match), so it was not kept. The next read tries again.'
+    }
   }
-  cache.set(sha, new TextDecoder().decode(bytes))
-  return null
+  return { text: new TextDecoder().decode(bytes), problem: null }
 }
 
 function refused(response: Response, what: string): ShelfError {

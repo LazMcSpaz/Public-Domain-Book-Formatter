@@ -4559,3 +4559,31 @@ sc {
     margin-right: 0;
   }
 }
+
+/* --- a newer version opened in another tab (`NewerVersionNotice.tsx`) -------
+   Above every screen, the Workroom's included, until the page is reloaded. */
+.newer-version {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+  padding: 12px 16px;
+  font-family: var(--ui);
+  font-size: 0.95rem;
+  color: var(--ink);
+  background: var(--accent-soft);
+  border-bottom: 3px solid var(--warn);
+  box-shadow: 0 2px 10px rgb(0 0 0 / 25%);
+}
+.newer-version p {
+  margin: 0;
+  flex: 1 1 18rem;
+}
+.newer-version button {
+  min-height: 44px;
+}

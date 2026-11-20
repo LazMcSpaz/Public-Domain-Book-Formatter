@@ -36,7 +36,12 @@ export interface LiveNotes {
   refresh: () => void
 }
 
-/** One cache for the page, so leaving the Workroom and coming back fetches nothing twice. */
+/**
+ * One cache for the page, so leaving the Workroom and coming back fetches
+ * nothing twice. When Settings forgets the device copy (in this tab or
+ * another), the cache drops its own copy too (`deviceNoteCache`), so the next
+ * read fetches every note from the shelf again, as Settings says it will.
+ */
 let pageCache: NoteCache | null = null
 const cache = (): NoteCache => (pageCache ??= deviceNoteCache())
 

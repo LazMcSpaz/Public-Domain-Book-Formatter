@@ -15,8 +15,16 @@ import { blobsIn, config, note, shelfOf, stubGitHub } from './fixtures/notes-git
  * cache asks of it. The books are made up.
  */
 
-/** A stand-in for the database: notes by sha, every write counted. */
-function fakeDevice(): DeviceNotes & { kept: Map<string, string>; saves: number } {
+/**
+ * A stand-in for the database: notes by sha, every write counted, and
+ * `forget()` doing what Settings' button does (empty it, tell every cache).
+ */
+function fakeDevice(): DeviceNotes & {
+  kept: Map<string, string>
+  saves: number
+  forget: () => void
+} {
+  const listeners = new Set<() => void>()
   const device = {
     kept: new Map<string, string>(),
     saves: 0,
@@ -26,6 +34,14 @@ function fakeDevice(): DeviceNotes & { kept: Map<string, string>; saves: number 
       for (const sha of [...device.kept.keys()]) if (!keep.has(sha)) device.kept.delete(sha)
       for (const [sha, text] of add) if (keep.has(sha)) device.kept.set(sha, text)
       return Promise.resolve(true)
+    },
+    onForget: (listener: () => void) => {
+      listeners.add(listener)
+      return () => void listeners.delete(listener)
+    },
+    forget: () => {
+      for (const listener of listeners) listener()
+      device.kept.clear()
     }
   }
   return device
@@ -147,6 +163,66 @@ describe('the copy of the notes kept on the device', () => {
     stubGitHub(() => shelfOf(note('aaaa1111', null)))
     const read = await readWorkNotes(config, deviceNoteCache(device))
     expect(read.notes).toHaveLength(1)
+  })
+
+  it('drops the page’s copy when the owner forgets the device copy, and reads the shelf again', async () => {
+    const device = fakeDevice()
+    const seen = stubGitHub(() => shelfOf(note('aaaa1111', null), note('bbbb2222', null)))
+    const cache = deviceNoteCache(device)
+    await readWorkNotes(config, cache)
+    await cache.saved()
+    device.forget()
+    seen.length = 0
+    const again = await readWorkNotes(config, cache)
+    await cache.saved()
+    expect(again.notes).toHaveLength(2)
+    expect(blobsIn(seen)).toHaveLength(2)
+    expect(device.kept.size).toBe(2)
+  })
+
+  it('lets no write queued before the forget put the notes back', async () => {
+    const device = fakeDevice()
+    const save = device.save
+    let release = (): void => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    // The first write lands at once and answers late, as a slow commit does.
+    device.save = (add, keep) => {
+      const done = save(add, keep)
+      return device.saves === 1 ? gate.then(() => done) : done
+    }
+    const shelf = shelfOf(note('aaaa1111', null))
+    stubGitHub(() => shelf)
+    const cache = deviceNoteCache(device)
+    await readWorkNotes(config, cache)
+    const late = note('bbbb2222', null)
+    for (const [path, text] of shelfOf(late)) shelf.set(path, text)
+    await readWorkNotes(config, cache)
+    device.forget()
+    release()
+    await cache.saved()
+    expect(device.saves).toBe(1)
+    expect(device.kept.size).toBe(0)
+  })
+
+  it('shows every note from a read that was on its way when the copy was forgotten', async () => {
+    const device = fakeDevice()
+    stubGitHub(() =>
+      shelfOf(note('aaaa1111', null), note('bbbb2222', null), note('cccc3333', null))
+    )
+    // The third note answers late, and the owner forgets the copy meanwhile,
+    // after the first two are already in the page's copy.
+    const github = globalThis.fetch
+    let blobs = 0
+    globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/git/blobs/') && ++blobs === 3) {
+        await new Promise((resolve) => setTimeout(resolve, 20))
+        device.forget()
+      }
+      return github(input, init)
+    }) as typeof fetch
+    const read = await readWorkNotes(config, deviceNoteCache(device))
+    expect(blobs).toBe(3)
+    expect(read.notes).toHaveLength(3)
   })
 
   it('removes the first version’s copy from localStorage, and nothing else', () => {

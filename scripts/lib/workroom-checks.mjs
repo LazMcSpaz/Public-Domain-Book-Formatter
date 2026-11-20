@@ -10,20 +10,22 @@ import { madeUpNotes, stubShelf } from './workroom-fixture.mjs'
 /** The first version's key in `localStorage`, which must be gone after a start. */
 export const OLD_NOTES_KEY = 'pdbf.workroom.notes'
 
-/** How many notes the app's database keeps for the Workroom (-1: no store). */
+/** How many notes the Workroom's own database keeps (-1: no such database or store). */
 export function notesInDatabase(page) {
   return page.evaluate(
     () =>
       new Promise((resolve) => {
-        const open = indexedDB.open('pdbf')
+        const open = indexedDB.open('pdbf-workroom')
+        // Never create it from here: a missing database is an answer.
+        open.onupgradeneeded = () => open.transaction.abort()
         open.onerror = () => resolve(-1)
         open.onsuccess = () => {
           const db = open.result
-          if (!db.objectStoreNames.contains('workroom-notes')) {
+          if (!db.objectStoreNames.contains('notes')) {
             db.close()
             return resolve(-1)
           }
-          const count = db.transaction('workroom-notes').objectStore('workroom-notes').count()
+          const count = db.transaction('notes').objectStore('notes').count()
           count.onsuccess = () => {
             db.close()
             resolve(count.result)
@@ -50,12 +52,12 @@ export function plantOldCopy(page) {
   return page.evaluate((key) => localStorage.setItem(key, 'x'.repeat(200_000)), OLD_NOTES_KEY)
 }
 
-/** After a start: the notes are in the database, none in `localStorage`, the old copy gone. */
+/** After a start: the notes are in the Workroom's database, none in `localStorage`, the old copy gone. */
 export async function checkDeviceCopy(page, check, shelf) {
   const held = await databaseReaches(page, shelf.notes.size)
   check(
     held === shelf.notes.size,
-    `the device copy is in the app's database (${held} of ${shelf.notes.size} notes)`
+    `the device copy is in the Workroom's own database (${held} of ${shelf.notes.size} notes)`
   )
   const local = await page.evaluate(() => {
     let size = 0

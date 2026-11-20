@@ -11,7 +11,7 @@
  *   fetch nothing it already has?
  * - at phone width, do the columns stack, is every tap target 44 px tall?
  * - does one Escape close only the topmost dialog, with focus kept inside it?
- * - is the device copy of the notes in the app's database, never in
+ * - is the device copy of the notes in the Workroom's own database, never in
  *   localStorage, trimmed, and forgotten from Settings?
  * - do `javascript:` and `data:` links in a sheet stay words, does a long
  *   JSON file stop at the limit, is a rejected token named, and is nothing
