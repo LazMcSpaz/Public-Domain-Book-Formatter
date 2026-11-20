@@ -12,8 +12,10 @@
  *
  * Pure: the caller hands in the time and, for a new run, random bytes.
  */
+import { timeOrder } from './fields'
 import { checkStatusNote } from './note'
 import {
+  LIMITS,
   STATUS_NOTE_FORMAT,
   STATUS_NOTE_VERSION,
   type NoteEvent,
@@ -123,7 +125,7 @@ export function noteHandoff(
  * order. The command says so when that happens.
  */
 export function stampFor(note: StatusNote, now: string): string {
-  return now < note.updatedAt ? note.updatedAt : now
+  return timeOrder(now, note.updatedAt) < 0 ? note.updatedAt : now
 }
 
 function finish(
@@ -152,6 +154,13 @@ function next(
     throw new Error(
       `Run ${note.id} is already ${note.state}; a finished run is never reopened. ` +
         `Start a new run with --from ${note.id}.`
+    )
+  }
+  if (!isFinal(state) && note.history.length >= LIMITS.history - 1) {
+    throw new Error(
+      `Run ${note.id} has ${note.history.length} changes, the most a run in progress may have; ` +
+        `the last place is kept for its finish. Finish it with done, fail or handoff, ` +
+        `and start a new run with --from ${note.id}.`
     )
   }
   const at = stampFor(note, change.now)

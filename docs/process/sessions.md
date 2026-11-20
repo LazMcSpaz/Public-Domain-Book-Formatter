@@ -167,6 +167,32 @@ agents working at the same time never write the same one
 - **A note never says a book is checked or ready to upload.** Only the
   readiness report does ([README.md](./README.md)); the checker's note links
   to it.
+- **Never write or edit a note by hand, and never in the tools repository.**
+  Only `work.mjs` writes notes, and only on the shelf; it checks each one
+  before writing it and refuses any folder inside the tools.
+
+**A stale run holds its book.** A run silent for twelve hours while working
+is shown as stale, and the book stays at that run's stage until the run is
+closed, however far other work has gone. Its own session closes it if it comes
+back. Otherwise only the managing editor closes another session's run: with
+`fail` when the job was not finished, or `done` when the work is all there,
+and always a `--note` saying who closed it and why, as
+`--note "Closed by the managing editor: the session stopped on 18 November; leaves 1 to 20 are saved"`.
+The next piece of the job is a new run with `--from`.
+
+**When git reports a conflict on a note,** two sessions changed the same run
+(most often the managing editor closed a run whose session then came back).
+Never mend the file by hand. Keep the copy already on `main`
+(`git checkout origin/main -- <the note's path>`), finish the merge, then make
+your change again with `work.mjs`. If that copy is already finished, start a
+new run with `--from` for what you did.
+
+**A note `list` cannot read** is left out of every list, with its reasons;
+the command exits 1 so it is not missed. Do not guess what it said, and do not
+mend it by hand. Bring back the last copy git has that reads
+(`git log -- <path>`, then `git checkout <commit> -- <path>`) and check with
+`work.mjs show <id>`; if no copy reads, tell the owner the path and the
+reasons and leave the file as it is.
 
 Roles: `managing-editor`, `scout`, `reader`, `typesetter`, `etsu` (the
 writer), `etsu-editor` (Etsu's editor), `checker`, and `builder` and

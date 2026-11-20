@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  LIMITS,
   checkStatusNote,
   noteAsk,
   noteDone,
@@ -120,6 +121,52 @@ describe('a status note', () => {
     expect(parseStatusNote(serializeStatusNote(next)).ok).toBe(true)
   })
 
+  it('compares times by the moment they name, not as text', () => {
+    // As text "10:00:00.500Z" sorts before "10:00:00Z"; it is half a second after.
+    const later = noteProgress(fresh(), { now: '2026-11-19T10:00:00.500Z' })
+    expect(later.history.map((e) => e.at)).toEqual([T0, '2026-11-19T10:00:00.500Z'])
+    expect(parseStatusNote(serializeStatusNote(later)).ok).toBe(true)
+    expect(stampFor(later, '2026-11-19T10:00:00Z')).toBe('2026-11-19T10:00:00.500Z')
+    const behind = noteProgress(later, { now: '2026-11-19T10:00:00Z' })
+    expect(behind.updatedAt).toBe('2026-11-19T10:00:00.500Z')
+    // The same moment written two ways is the same moment.
+    expect(problemsAfter((n) => (n.history[0].at = '2026-11-19T10:00:00.000Z'))).toEqual([])
+    // And a time that really is earlier is still out of order.
+    expect(
+      problemsAfter((n) => (n.history[1].at = n.updatedAt = '2026-11-19T09:59:59.999Z'), later)
+    ).toContainEqual(expect.stringMatching(/The timeline is out of order: history event 2/))
+  })
+
+  it('keeps the last place in the timeline for the finish, so a run is never stuck', () => {
+    const start = fresh()
+    const event = start.history[0]!
+    const full = {
+      ...start,
+      history: Array.from({ length: LIMITS.history - 1 }, () => ({ ...event }))
+    }
+    expect(checkStatusNote(full).ok).toBe(true)
+    const later = '2026-11-19T11:00:00Z'
+    expect(() => noteProgress(full, { now: later })).toThrow(
+      /has 999 changes, the most a run in progress may have.*--from abcd1234/
+    )
+    expect(() =>
+      noteAsk(full, { now: later, what: 'Rule', links: [{ label: 'q', path: 'q.md' }] })
+    ).toThrow(/the most a run in progress may have/)
+    for (const finished of [
+      noteDone(full, { now: later, result: 'Read' }),
+      noteFailed(full, { now: later, result: 'Scan missing' }),
+      noteHandoff(full, { now: later, role: 'checker', result: 'Read' })
+    ]) {
+      expect(finished.history).toHaveLength(LIMITS.history)
+      expect(parseStatusNote(serializeStatusNote(finished)).ok).toBe(true)
+    }
+    const stuck = { ...full, history: [...full.history, { ...event }] }
+    const p = checkStatusNote(stuck)
+    expect(!p.ok && p.problems).toEqual([
+      '"history" has 1000 events, the most a run may have, and the last one does not finish the run. The last place is kept for done, failed or handed off.'
+    ])
+  })
+
   it('makes run ids of eight lower-case letters and digits', () => {
     expect(runIdFrom([0, 25, 26, 35, 36, 255, 7, 8])).toBe('az09adhi')
     expect(() => runIdFrom([1, 2, 3])).toThrow(/eight random bytes/)
@@ -176,7 +223,40 @@ describe('the parser refuses a note it cannot believe, with plain reasons', () =
   it('an ask on a run that is not waiting', () => {
     expect(
       problemsAfter((n) => (n.owner = { what: 'x', links: [{ label: 'a', path: 'a.md' }] }))
-    ).toEqual(['"owner" is set but the run is working: only a waiting run asks the owner.'])
+    ).toEqual([
+      '"owner" is set but the run is working: only a waiting run asks the owner.',
+      '"owner" is not the ask of the last history event: the top of the note is the run as its timeline ends.'
+    ])
+  })
+
+  it('a top that says something other than the last history event', () => {
+    expect(problemsAfter((n) => (n.progress.done = 5))).toEqual([
+      '"progress" is not what the last history event says: the top of the note is the run as its timeline ends.'
+    ])
+    expect(problemsAfter((n) => (n.progress = null))).toContainEqual(
+      expect.stringMatching(/^"progress" is not what the last history event says/)
+    )
+    expect(problemsAfter((n) => (n.owner.what = 'Something else'), asked())).toEqual([
+      '"owner" is not the ask of the last history event: the top of the note is the run as its timeline ends.'
+    ])
+    expect(problemsAfter((n) => (n.owner.links[0].path = 'books/x/other.md'), asked())).toEqual([
+      '"owner" is not the ask of the last history event: the top of the note is the run as its timeline ends.'
+    ])
+    const reordered = problemsAfter((n) => {
+      const { unit, total, done } = n.progress
+      n.progress = { unit, total, done }
+    })
+    expect(reordered).toEqual([])
+  })
+
+  it('a hand-off to the run itself', () => {
+    const handed = noteHandoff(fresh(), { now: T0, role: 'checker', result: 'Read' })
+    expect(problemsAfter((n) => (n.handoff.run = n.id), handed)).toEqual([
+      '"handoff" run names this run itself; a run cannot hand its work to itself.'
+    ])
+    expect(() =>
+      noteHandoff(fresh(), { now: T0, role: 'checker', run: 'abcd1234', result: 'Read' })
+    ).toThrow(/cannot hand its work to itself/)
   })
 
   it('a timeline out of order, or ending somewhere the run is not', () => {

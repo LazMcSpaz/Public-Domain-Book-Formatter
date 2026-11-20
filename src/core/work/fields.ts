@@ -31,6 +31,10 @@ export function textValue(
   }
 }
 
+// Whole seconds, or up to three places after them (what JavaScript's own
+// `toISOString` writes); `work.mjs` writes whole seconds. Two times are
+// compared by the moment they name (`timeOrder`), never as text: as text,
+// "10:00:00.500Z" sorts before "10:00:00Z".
 const UTC = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/u
 
 /** Why `at` is not a UTC time a note may carry, or null when it is. */
@@ -43,6 +47,34 @@ export function timeProblem(at: unknown, name: string): string | null {
     return `${name} (${at}) is not a real time.`
   }
   return null
+}
+
+/**
+ * Earlier, the same moment or later: below zero when `a` is before `b`, zero
+ * when they name the same moment (`10:00:00Z` and `10:00:00.000Z`), above
+ * zero when `a` is after. Both must be times `timeProblem` accepts.
+ */
+export function timeOrder(a: string, b: string): number {
+  return Date.parse(a) - Date.parse(b)
+}
+
+/**
+ * The same value, whatever order an object's keys are in: the rule of
+ * `canonicalJson` in `../sync/same.ts`, written again here because that
+ * module loads the whole project parser, which `work.mjs` has no need of.
+ */
+function sameValue(a: unknown, b: unknown): boolean {
+  const canon = (v: unknown): string =>
+    JSON.stringify(v, (_key, x: unknown) =>
+      x && typeof x === 'object' && !Array.isArray(x)
+        ? Object.fromEntries(
+            Object.keys(x)
+              .sort()
+              .map((k) => [k, (x as Record<string, unknown>)[k]])
+          )
+        : x
+    )
+  return canon(a) === canon(b)
 }
 
 /** Exactly these keys, each present; the reasons say which are missing or extra. */
@@ -106,12 +138,22 @@ export function checkOwner(f: Fields, value: unknown, name: string): void {
 /**
  * The timeline: one event per change, oldest first. The first is the start
  * (working, at `startedAt`); the last is the run as it stands (its state, at
- * `updatedAt`); nothing follows a final event; a waiting event carries the
- * ask and no other does.
+ * `updatedAt`, with its progress and its ask); nothing follows a final event;
+ * a waiting event carries the ask and no other does.
+ *
+ * At most `LIMITS.history` events, and the last place is kept for the event
+ * that finishes the run, so a run that has used every other place can still
+ * say done, failed or handed off; it is never stuck.
  */
 export function checkHistory(
   f: Fields,
-  run: { state: RunState | null; started: string | null; updated: string | null }
+  run: {
+    state: RunState | null
+    started: string | null
+    updated: string | null
+    progress: unknown
+    owner: unknown
+  }
 ): void {
   const history = f.v['history']
   if (!Array.isArray(history) || history.length === 0) {
@@ -120,6 +162,14 @@ export function checkHistory(
   }
   if (history.length > LIMITS.history) {
     f.problems.push(`"history" has more than ${LIMITS.history} events; start a new run instead.`)
+  } else if (history.length === LIMITS.history) {
+    const last = (history[history.length - 1] ?? {}) as Record<string, unknown>
+    const state = last['state']
+    if (typeof state !== 'string' || !isFinal(state as RunState)) {
+      f.problems.push(
+        `"history" has ${LIMITS.history} events, the most a run may have, and the last one does not finish the run. The last place is kept for done, failed or handed off.`
+      )
+    }
   }
   let before: string | null = null
   history.forEach((event, i) => {
@@ -130,7 +180,7 @@ export function checkHistory(
     const why = timeProblem(e['at'], `${name} "at"`)
     if (why) f.problems.push(why)
     const at = why ? null : (e['at'] as string)
-    if (at && before && at < before) {
+    if (at && before && timeOrder(at, before) < 0) {
       f.problems.push(
         `The timeline is out of order: ${name} (${at}) is before the one above it (${before}).`
       )
@@ -158,7 +208,7 @@ export function checkHistory(
     if (i === 0) {
       if (state !== 'working')
         f.problems.push('The first history event must be the start (working).')
-      if (run.started && at && at !== run.started) {
+      if (run.started && at && timeOrder(at, run.started) !== 0) {
         f.problems.push('The first history event is not at "startedAt".')
       }
     }
@@ -166,8 +216,18 @@ export function checkHistory(
       if (run.state && state !== run.state) {
         f.problems.push(`The last history event is ${String(state)} but the run is ${run.state}.`)
       }
-      if (run.updated && at && at !== run.updated) {
+      if (run.updated && at && timeOrder(at, run.updated) !== 0) {
         f.problems.push('The last history event is not at "updatedAt".')
+      }
+      if (!sameValue(e['progress'], run.progress)) {
+        f.problems.push(
+          '"progress" is not what the last history event says: the top of the note is the run as its timeline ends.'
+        )
+      }
+      if (!sameValue(e['owner'], run.owner)) {
+        f.problems.push(
+          '"owner" is not the ask of the last history event: the top of the note is the run as its timeline ends.'
+        )
       }
     }
   })

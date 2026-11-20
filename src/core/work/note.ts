@@ -28,6 +28,7 @@ import {
   checkOwner,
   checkProgress,
   textValue,
+  timeOrder,
   timeProblem,
   type Fields
 } from './fields'
@@ -119,12 +120,14 @@ export function checkStatusNote(raw: unknown): NoteCheck {
   checkFiles(f)
   checkHandoff(f)
 
-  if (started && updated && updated < started) p.push('"updatedAt" is before "startedAt".')
-  if (finished && updated && finished !== updated) {
+  if (started && updated && timeOrder(updated, started) < 0) {
+    p.push('"updatedAt" is before "startedAt".')
+  }
+  if (finished && updated && timeOrder(finished, updated) !== 0) {
     p.push('"finishedAt" and "updatedAt" differ: nothing changes a run once it has finished.')
   }
   if (state) agreesWithState(f, state)
-  checkHistory(f, { state, started, updated })
+  checkHistory(f, { state, started, updated, progress: v['progress'], owner: v['owner'] })
   return p.length ? { ok: false, problems: p } : { ok: true, note: raw as StatusNote }
 }
 
@@ -219,6 +222,8 @@ function checkHandoff(f: Fields): void {
   const run = o['run']
   if (!('run' in o) || (run !== null && (typeof run !== 'string' || runIdProblem(run)))) {
     f.problems.push('"handoff" run must be a run id, or null when the next run is not known yet.')
+  } else if (run !== null && run === f.v['id']) {
+    f.problems.push('"handoff" run names this run itself; a run cannot hand its work to itself.')
   }
   if (!('note' in o)) f.problems.push('"handoff" note is missing (null when there is none).')
   else textValue(f, o['note'], '"handoff" note', LIMITS.note, true)

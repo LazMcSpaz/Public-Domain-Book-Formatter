@@ -20,8 +20,11 @@
  * (working, waiting or stale), because a book is not past a stage still
  * being worked; when nothing is live, the furthest stage with any run.
  *
- * A hand-off is **picked up** when a run names it as `from`, or when the
- * hand-off named a run that is on the shelf.
+ * A hand-off is **picked up** by a run of the role it went to that started
+ * at or after the hand-off and names it as `from`, or by the run of that
+ * role the hand-off itself named, when that run is on the shelf. A run of
+ * another role that names it (Etsu starting from a reader's run, say), or one
+ * that started before the hand-off, takes nothing off the role's list.
  *
  * Pure: notes and the time in, the views out.
  */
@@ -35,6 +38,7 @@ import {
   type StatusNote
 } from './vocab'
 import { statusNotePath } from '../sync/work-paths'
+import { timeOrder } from './fields'
 
 export const STALE_AFTER_HOURS = 12
 export const RECENT_DAYS = 7
@@ -123,11 +127,10 @@ export function workroom(
 ): Workroom {
   const recentFrom = Date.parse(now) - (options.recentDays ?? RECENT_DAYS) * 24 * HOUR
   const runs = runViews(notes, now, options)
-  const newest = (a: RunView, b: RunView) => cmp(b.updatedAt, a.updatedAt) || cmp(a.id, b.id)
+  const newest = (a: RunView, b: RunView) => timeOrder(b.updatedAt, a.updatedAt) || cmp(a.id, b.id)
+  const oldest = (a: RunView, b: RunView) => timeOrder(a.updatedAt, b.updatedAt) || cmp(a.id, b.id)
 
-  const waiting = runs
-    .filter((r) => r.shown === 'waiting')
-    .sort((a, b) => cmp(a.updatedAt, b.updatedAt) || cmp(a.id, b.id))
+  const waiting = runs.filter((r) => r.shown === 'waiting').sort(oldest)
 
   const byBook = new Map<string, RunView[]>()
   for (const run of runs) {
@@ -137,7 +140,7 @@ export function workroom(
   const books = [...byBook].map(([book, list]) =>
     bookView(book, list.sort(newest), options.latestPerBook ?? 5)
   )
-  books.sort((a, b) => cmp(b.updatedAt, a.updatedAt) || cmp(a.book, b.book))
+  books.sort((a, b) => timeOrder(b.updatedAt, a.updatedAt) || cmp(a.book, b.book))
 
   const roles = ROLES.map((role): RoleView => {
     const own = runs.filter((r) => r.role === role)
@@ -147,14 +150,46 @@ export function workroom(
       inProgress: own.filter((r) => LIVE.includes(r.shown)).sort(newest),
       recent: own
         .filter((r) => r.finishedAt !== null && Date.parse(r.finishedAt) >= recentFrom)
-        .sort((a, b) => cmp(b.finishedAt!, a.finishedAt!) || cmp(a.id, b.id))
+        .sort((a, b) => timeOrder(b.finishedAt!, a.finishedAt!) || cmp(a.id, b.id))
         .slice(0, options.recentPerRole ?? 10),
       awaiting: runs
         .filter((r) => r.handoff?.role === role && r.handoff.pickedUpBy === null)
-        .sort((a, b) => cmp(a.updatedAt, b.updatedAt) || cmp(a.id, b.id))
+        .sort(oldest)
     }
   })
   return { now, waiting, books, roles }
+}
+
+/** What `filterWorkroom` keeps: one book, one role, or both. */
+export interface WorkroomFilter {
+  book?: string | null
+  role?: Role | null
+}
+
+/**
+ * The three views narrowed to one book or one role, as `work.mjs list
+ * --book` and `--role` show them, in text and in JSON alike. Waiting runs
+ * and each role's own runs are kept when they are of that book and role; a
+ * book is kept when one of its latest runs is; work handed to a role is kept
+ * when it is of that book.
+ */
+export function filterWorkroom(room: Workroom, only: WorkroomFilter): Workroom {
+  const { book, role } = only
+  if (!book && !role) return room
+  const keep = (r: RunView) => (!book || r.book === book) && (!role || r.role === role)
+  return {
+    now: room.now,
+    waiting: room.waiting.filter(keep),
+    books: room.books.filter((b) => (!book || b.book === book) && (!role || b.latest.some(keep))),
+    roles: room.roles
+      .filter((r) => !role || r.role === role)
+      .map((r) => ({
+        ...r,
+        inProgress: r.inProgress.filter(keep),
+        recent: r.recent.filter(keep),
+        awaiting: r.awaiting.filter((x) => !book || x.book === book)
+      }))
+  }
 }
 
 /** One note per run id: where a copy exists, the one changed last. */
@@ -162,14 +197,15 @@ function latestCopies(notes: readonly StatusNote[]): StatusNote[] {
   const byId = new Map<string, StatusNote>()
   for (const note of notes) {
     const had = byId.get(note.id)
-    if (!had || note.updatedAt > had.updatedAt) byId.set(note.id, note)
+    if (!had || timeOrder(note.updatedAt, had.updatedAt) > 0) byId.set(note.id, note)
   }
   return [...byId.values()]
 }
 
 /**
  * Every run as the Workroom shows it, one per run id: stale or not, whether
- * its hand-off was picked up, and which runs took it over.
+ * its hand-off was picked up (by a run of the role it went to, as the head
+ * of this file says), and which runs took it over.
  */
 export function runViews(
   all: readonly StatusNote[],
@@ -179,7 +215,7 @@ export function runViews(
   const notes = latestCopies(all)
   const now = Date.parse(at)
   const staleAfter = options.staleAfterHours ?? STALE_AFTER_HOURS
-  const ids = new Set(notes.map((n) => n.id))
+  const byNoteId = new Map(notes.map((n) => [n.id, n]))
   const followers = new Map<string, StatusNote[]>()
   for (const note of notes) {
     if (note.from) followers.set(note.from, [...(followers.get(note.from) ?? []), note])
@@ -188,15 +224,17 @@ export function runViews(
     const { format: _f, version: _v, history, handoff, ...rest } = note
     const quietHours = Math.max(0, Math.floor((now - Date.parse(note.updatedAt)) / HOUR))
     const after = (followers.get(note.id) ?? []).sort(
-      (a, b) => cmp(a.startedAt, b.startedAt) || cmp(a.id, b.id)
+      (a, b) => timeOrder(a.startedAt, b.startedAt) || cmp(a.id, b.id)
     )
-    const named = handoff?.run && ids.has(handoff.run) ? handoff.run : null
+    const ofRole = (n: StatusNote | undefined) => !!handoff && n?.role === handoff.role
+    const named = handoff?.run && ofRole(byNoteId.get(handoff.run)) ? handoff.run : null
+    const taker = after.find((n) => ofRole(n) && timeOrder(n.startedAt, note.updatedAt) >= 0)
     return {
       ...rest,
       path: statusNotePath(note),
       shown: note.state === 'working' && quietHours >= staleAfter ? 'stale' : note.state,
       quietHours,
-      handoff: handoff ? { ...handoff, pickedUpBy: named ?? after[0]?.id ?? null } : null,
+      handoff: handoff ? { ...handoff, pickedUpBy: named ?? taker?.id ?? null } : null,
       followedBy: after.map((n) => n.id),
       pickedUp: [],
       events: history.length

@@ -23,23 +23,29 @@ The ledger stays as it is: the ledger is the book's own written record of what w
 
 One JSON file per run, version 1, parsed strictly by `src/core/work/note.ts` (its words in `vocab.ts`, the checks on each part in `fields.ts`, the changes a run makes in `changes.ts`):
 
-| Field                                  | What it holds                                                                                                                                  |
-| -------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `format`, `version`                    | `"status-note"`, `1`. Any other version is refused, with a reason.                                                                             |
-| `id`                                   | Eight lower-case letters and digits, random, made by the command.                                                                              |
-| `role`                                 | One of the seven roles, or `builder` or `reviewer` (below).                                                                                    |
-| `book`                                 | The book's folder under `books/`, or `null` for tools or shelf work.                                                                           |
-| `stage`                                | One of the eight stages (below); `null` exactly when `book` is `null`.                                                                         |
-| `job`                                  | The job in plain words, one line.                                                                                                              |
-| `state`                                | `working`, `waiting` (on the owner), `done`, `failed` or `handed-off`. The last three are final.                                               |
-| `progress`                             | `null`, or `{ done, total, unit }`: "20 of 40 leaves".                                                                                         |
-| `startedAt`, `updatedAt`, `finishedAt` | UTC times. `finishedAt` is set exactly when the state is final.                                                                                |
-| `result`                               | One line: what came of it. Required when done, failed or handed off.                                                                           |
-| `owner`                                | While `waiting` only: `{ what, links: [{ label, path }] }`, at least one link, each a path on the shelf.                                       |
-| `files`                                | Paths on the shelf the run left.                                                                                                               |
-| `from`                                 | The run this one took over from, or `null`.                                                                                                    |
-| `handoff`                              | When handed off: `{ role, run, note }`, the role it goes to and, if known, the run.                                                            |
-| `history`                              | Every change, oldest first: `{ at, state, note, progress, owner }`. The first is the start; the last matches the note's state and `updatedAt`. |
+| Field                                  | What it holds                                                                                                                         |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `format`, `version`                    | `"status-note"`, `1`. Any other version is refused, with a reason.                                                                    |
+| `id`                                   | Eight lower-case letters and digits, random, made by the command.                                                                     |
+| `role`                                 | One of the seven roles, or `builder` or `reviewer` (below).                                                                           |
+| `book`                                 | The book's folder under `books/`, or `null` for tools or shelf work.                                                                  |
+| `stage`                                | One of the eight stages (below); `null` exactly when `book` is `null`.                                                                |
+| `job`                                  | The job in plain words, one line.                                                                                                     |
+| `state`                                | `working`, `waiting` (on the owner), `done`, `failed` or `handed-off`. The last three are final.                                      |
+| `progress`                             | `null`, or `{ done, total, unit }`: "20 of 40 leaves".                                                                                |
+| `startedAt`, `updatedAt`, `finishedAt` | UTC times, compared by the moment they name. `finishedAt` is set exactly when the state is final.                                     |
+| `result`                               | One line: what came of it. Required when done, failed or handed off.                                                                  |
+| `owner`                                | While `waiting` only: `{ what, links: [{ label, path }] }`, at least one link, each a path on the shelf (never into a `.git` folder). |
+| `files`                                | Paths on the shelf the run left.                                                                                                      |
+| `from`                                 | The run this one took over from, or `null`.                                                                                           |
+| `handoff`                              | When handed off: `{ role, run, note }`, the role it goes to and, if known, the run (never this run itself).                           |
+| `history`                              | Every change, oldest first: `{ at, state, note, progress, owner }`. The first is the start; the last matches the note's top.          |
+
+**The top and the timeline agree:** the last history event has the note's `state`, its `updatedAt` as its time, and the same `progress` and `owner`, so the two can never tell different stories.
+
+**Times:** `work.mjs` writes whole seconds (`2026-11-19T14:05:00Z`); up to three places after the seconds are accepted, as JavaScript writes them. Times are compared by the moment they name, never as text: as text, `10:00:00.500Z` sorts before `10:00:00Z`.
+
+**The timeline's length:** at most 1,000 events, and the last place is kept for the event that finishes the run (done, failed or handed off). A run in progress that has used 999 places is told to finish and start a new run with `--from`; it can always finish, so it is never stuck.
 
 **Roles:** `managing-editor`, `scout`, `reader`, `typesetter`, `etsu` (Etsu, the writer), `etsu-editor` (Etsu's editor), `checker`, from [agent-roles.md](agent-roles.md), and `builder` and `reviewer` for tools work. `etsu` matches the existing `.claude/agents/etsu.md`; the writer's editor is `etsu-editor`, not `editor`, because the process documents call the owner "the editor".
 
@@ -65,13 +71,15 @@ and under "Working files": "`work/runs/`: the status notes (written by `work.mjs
 
 `node scripts/work.mjs <verb>` with `--shelf <dir>` (default: `$SHELF`, then the shelf checked out beside the tools, then `~/Public-Domain-Books-Storage`). It writes only into a shelf (a folder with `books/`), refuses any folder inside the tools repository, checks every note with the core parser before writing it, and never commits or pushes: the session commits its notes with its work.
 
-- `start --role <role> --book <folder> --stage <stage> --job "<words>"` (`--from <run>`, `--of <n> --unit <word>`, `--note`): prints the new run's id.
+- `start --role <role> --book <folder> --stage <stage> --job "<words>"` (`--from <run>`, `--of <n> --unit <word>`, `--note`): prints the new run's id. With `--from`, the start is stamped no earlier than that run's last change, so a clock that is behind cannot make a run that takes over look as if it started before the hand-off.
 - `progress <id>` (`--done <n> --of <m> --unit <word>`, `--note`): also returns a waiting run to working.
 - `ask <id> --what "<what the owner must do>" --where <shelf path>` (repeatable; `"Label=path"` to name it).
 - `done <id> --result "<one line>"` (`--file <shelf path>`, repeatable).
 - `fail <id> --result "<why>"`.
-- `handoff <id> --to <role> --result "<one line>"` (`--run <id>`, `--note`, `--file`).
-- `list` (`--book`, `--role`, `--json`): the three Workroom lists. `show <id>` (`--json`): one run and its timeline.
+- `handoff <id> --to <role> --result "<one line>"` (`--run <id>`, a run of that role, `--note`, `--file`).
+- `list` (`--book`, `--role`, `--json`): the three Workroom lists, narrowed to one book or role in text and in JSON alike; an unknown role is refused with the list of roles. `show <id>` (`--json`): one run and its timeline.
+
+**Never by hand, never in the tools.** A note is written only by `work.mjs`, and only on the shelf. Its refusal of the tools repository follows links at any depth (a `work` folder or a month folder linked into any copy of the tools is refused), and it writes a changed note beside the old one and renames it over, clearing anything planted at that name first. The tools' `.gitignore` lists `/work/` as the net under the refusal.
 
 ## The reader
 
@@ -79,15 +87,26 @@ and under "Working files": "`work/runs/`: the status notes (written by `work.mjs
 
 1. **Waiting on you:** every waiting run, longest waiting first, with what is needed and the links.
 2. **Books:** each book's current stage and how it stands, each stage's latest run, its latest runs, and how many of its runs wait on the owner.
-3. **Roles:** every role in order, with its runs in progress (stale ones marked), its runs finished in the last seven days, and work handed to it that no run has picked up yet. A hand-off counts as picked up when a later run names it as `from`, or when it named its next run.
+3. **Roles:** every role in order, with its runs in progress (stale ones marked), its runs finished in the last seven days, and work handed to it that no run has picked up yet. A hand-off counts as picked up when a run of the role it went to, started at or after the hand-off, names it as `from`, or when the hand-off named a run of that role. A run of another role naming it (Etsu starting from a reader's run, say) does not take it off the list.
 
 `readNotes(files)` parses many files at once, checks each name against its note, and reports unreadable notes and repeated ids separately, so one bad file does not hide the rest.
+
+## Two sessions on one run, stale runs, unreadable notes
+
+Each run has its own file and only its own session changes it, so two sessions meet on one note only when one of them is not the run's own: most often the managing editor closing a stale run whose session then comes back.
+
+- **A stale run holds its book** at that stage until it is closed (a book's current stage is its earliest live stage, and stale counts as live). Its own session closes it if it comes back; otherwise only the managing editor closes it, with `fail` (not finished) or `done` (the work is all there) and a `--note` saying who closed it and why.
+- **A conflict on a note** is never mended by hand: the session keeps the copy already on `main`, finishes the merge and makes its change again with `work.mjs`; if that copy is already finished, it starts a new run with `--from`.
+- **An unreadable note** is left out of every view, with its reasons, and `list` exits 1. The session brings back the last copy git has that reads; if none does, it tells the owner the path and the reasons and leaves the file.
+
+These steps are in [sessions.md](../process/sessions.md#status-notes-what-you-are-doing-on-the-shelf).
 
 ## Modules touched
 
 - `src/core/work/` (new): the note, its parser and changes, the Workroom reader.
 - `src/core/sync/work-paths.ts` (new), exported from `src/core/sync/index.ts`; `shelf.ts` is not touched.
-- `scripts/work.mjs` (new), with `scripts/lib/work-shelf.mjs` (the shelf side: finding it, reading and writing notes) and `scripts/lib/work-print.mjs` (the wording); `scripts/lib/tools-guard.mjs` (new), the "inside the tools repository" refusal, now shared with `scripts/storage.mjs`.
+- `scripts/work.mjs` (new), with `scripts/lib/work-shelf.mjs` (the shelf side: finding it, reading and writing notes) and `scripts/lib/work-print.mjs` (the wording); `scripts/lib/tools-guard.mjs` (new), the "inside the tools repository" refusal, now shared with `scripts/storage.mjs` and asked by `scripts/drive.mjs` after its own message-giving refusals.
+- `test/storage-script.test.ts` and `test/fixtures/fake-r2.mjs` (new): `storage.mjs` against a stand-in for the bucket, so its refusals are tested with no request sent; `.gitignore` gains `/work/`.
 - `docs/process/sessions.md`, `docs/process/README.md`, `docs/reference/commands.md`, `docs/architecture.md`, the root and folder `CLAUDE.md` files.
 - No change to the app, the layout engine, any export or any book.
 
@@ -109,5 +128,5 @@ and under "Working files": "`work/runs/`: the status notes (written by `work.mjs
 
 - **Reading the notes over GitHub.** The app lists `work/runs/`, then each month folder, then fetches each note: one request per note. For speed it should take the whole tree in one request (GitHub's trees API) and fetch only the notes it shows. A waiting note can be months old, so it cannot simply read the last month or two.
 - **Opening a link.** A link is a path on the shelf; the app decides how to open each kind (the questions sheet in the query screen, a Markdown sheet as text, a PDF in its viewer).
-- **The owner's answer.** When he rules in the app, the run stays waiting until its agent or the managing editor moves it on. The Workroom may want to show "answered, not yet picked up" by comparing the ask's time with the sheet's last change.
+- **Open point for step 3: "the owner answered".** When he rules in the app, the run stays waiting until its agent or the managing editor moves it on with `progress` or `done`. The Workroom may want to show "answered, not yet picked up", by comparing the ask's time with the sheet's last change or by a record of the answer of its own. Which, and whether that record lives in the note (a version 2) or beside it, is decided with step 3; nothing in version 1 holds it.
 - **Who is "you".** The views are written for one owner; other people working on it later would need the ask to name whom it waits on.

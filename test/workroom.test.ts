@@ -199,6 +199,48 @@ describe('roles', () => {
   })
 })
 
+describe('a hand-off is picked up only by its own role, after it', () => {
+  // A reader hands the book to the checker at 13:00. Etsu starts from the
+  // reader's run (to write while the check runs), and a checker run that
+  // started at 12:00, before the hand-off, also names it: neither picks it up.
+  const handed = noteHandoff(run('reader09', 'reader', A, 'reading', at(19, 9)), {
+    now: at(19, 13),
+    role: 'checker',
+    result: 'Read 40 of 40 leaves'
+  })
+  const etsu = run('etsuwr09', 'etsu', A, 'writing', at(19, 13), 'reader09')
+  const early = run('checkr08', 'checker', A, 'checking', at(19, 12), 'reader09')
+  const view = workroom([handed, etsu, early], NOW)
+  const of = (r: Role) => view.roles.find((x) => x.role === r)!
+
+  it('is still handed to the checker, and not picked up', () => {
+    expect(ids(of('checker').awaiting)).toEqual(['reader09'])
+    const reader = of('reader').recent.find((r) => r.id === 'reader09')!
+    expect(reader.handoff).toMatchObject({ role: 'checker', pickedUpBy: null })
+    expect(reader.followedBy).toEqual(['checkr08', 'etsuwr09'])
+    expect(of('etsu').inProgress[0]!.pickedUp).toEqual([])
+  })
+
+  it('is picked up by a checker run that starts at or after the hand-off', () => {
+    const checker = run('checkr09', 'checker', A, 'checking', at(19, 13), 'reader09')
+    const after = workroom([handed, etsu, early, checker], NOW)
+    expect(after.roles.find((x) => x.role === 'checker')!.awaiting).toEqual([])
+    const reader = after.roles.find((x) => x.role === 'reader')!.recent[0]!
+    expect(reader.handoff).toMatchObject({ pickedUpBy: 'checkr09' })
+  })
+
+  it('is not picked up by naming a run of another role', () => {
+    const named = noteHandoff(run('reader10', 'reader', A, 'reading', at(19, 9)), {
+      now: at(19, 13),
+      role: 'checker',
+      run: 'etsuwr09',
+      result: 'Read'
+    })
+    const view2 = workroom([named, etsu], NOW)
+    expect(ids(view2.roles.find((x) => x.role === 'checker')!.awaiting)).toEqual(['reader10'])
+  })
+})
+
 describe('the reader’s own rules', () => {
   it('waits longer before calling a run stale when told to', () => {
     const patient = workroom(ALL, NOW, { staleAfterHours: 100 })
@@ -210,6 +252,22 @@ describe('the reader’s own rules', () => {
     const twice = workroom([earlier, ...ALL, earlier], NOW)
     const reader = twice.roles.find((r) => r.role === 'reader')!
     expect(reader.inProgress.map((r) => [r.id, r.updatedAt])).toEqual([['reader02', at(17, 12)]])
+  })
+
+  it('orders by the moment, however a time is written', () => {
+    // As text, 13:00:00.500Z sorts before 13:00:00Z.
+    const a = noteProgress(run('readr0a1', 'reader', A, 'reading', at(19, 9)), {
+      now: '2026-11-19T13:00:00.500Z'
+    })
+    const b = noteProgress(run('readr0b1', 'reader', B, 'reading', at(19, 9)), {
+      now: '2026-11-19T13:00:00Z'
+    })
+    const r = workroom([a, b], NOW)
+    expect(r.books.map((x) => x.book)).toEqual([A, B])
+    expect(ids(r.roles.find((x) => x.role === 'reader')!.inProgress)).toEqual([
+      'readr0a1',
+      'readr0b1'
+    ])
   })
 
   it('gives each run its place on the shelf', () => {

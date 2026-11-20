@@ -41,6 +41,7 @@ export {
   RECENT_DAYS,
   SHOWN_LABELS,
   STALE_AFTER_HOURS,
+  filterWorkroom,
   runViews,
   workroom,
   type BookView,
@@ -49,5 +50,6 @@ export {
   type Shown,
   type StageRow,
   type Workroom,
+  type WorkroomFilter,
   type WorkroomOptions
 } from './workroom'

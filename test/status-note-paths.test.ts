@@ -80,6 +80,14 @@ describe('a path on the shelf a note may name', () => {
     expect(shelfPathProblem('books/A/notes (draft 2).md')).toBeNull()
   })
 
+  it('never reaches into a .git folder, in any case', () => {
+    for (const path of ['.git/config', 'books/x/.git/HEAD', 'books/.GIT/x.md', '.Git']) {
+      expect(shelfPathProblem(path), path).toMatch(/reaches into a \.git folder/)
+    }
+    expect(shelfPathProblem('books/x/.gitignore')).toBeNull()
+    expect(shelfPathProblem('.github/notes.md')).toBeNull()
+  })
+
   it('never leaves the shelf or hides a full path', () => {
     expect(shelfPathProblem('../x.md')).toMatch(/"\.\."/)
     expect(shelfPathProblem('/home/x.md')).toMatch(/from the shelf's top/)

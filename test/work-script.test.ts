@@ -50,6 +50,7 @@ const idIn = (out: string) => /Started run ([a-z0-9]{8})/.exec(out)?.[1] ?? ''
 describe('work.mjs on a made-up shelf', () => {
   let reader = ''
   let checker = ''
+  let scout = ''
 
   it('starts a run and writes a note core believes, where core says it goes', () => {
     const r = cmd([
@@ -154,7 +155,48 @@ describe('work.mjs on a made-up shelf', () => {
       ...job
     ])
     expect(s.status, s.err).toBe(0)
+    scout = idIn(s.out)
   }, 60_000)
+
+  it('refuses a hand-off naming a run of another role, writing nothing', () => {
+    const e = cmd(['start', '--role', 'etsu', '--book', BOOK, '--stage', 'writing', '--job', 'W'])
+    expect(e.status, e.err).toBe(0)
+    const etsu = idIn(e.out)
+    const before = notesOn(shelf).map((f) => f.text)
+    const h = cmd(['handoff', etsu, '--to', 'checker', '--run', scout, '--result', 'Drafted'])
+    expect(h.status).toBe(1)
+    expect(h.err).toMatch(new RegExp(`Run ${scout} is a scout run, but the work goes to checker`))
+    expect(notesOn(shelf).map((f) => f.text)).toEqual(before)
+    expect(cmd(['done', etsu, '--result', 'Drafted']).status).toBe(0)
+  }, 60_000)
+
+  it('narrows list to one book or one role, in JSON as in text', () => {
+    const byBook = JSON.parse(cmd(['list', '--json', '--book', 'Not-Here-xyz']).out)
+    expect(byBook.waiting).toEqual([])
+    expect(byBook.books.map((b: { book: string }) => b.book)).toEqual(['Not-Here-xyz'])
+    const scouts = byBook.roles.find((r: { role: string }) => r.role === 'scout')
+    expect(scouts.inProgress.map((r: { id: string }) => r.id)).toEqual([scout])
+    const readers = byBook.roles.find((r: { role: string }) => r.role === 'reader')
+    expect(readers.recent).toEqual([])
+
+    const byRole = JSON.parse(cmd(['list', '--json', '--role', 'checker']).out)
+    expect(byRole.roles.map((r: { role: string }) => r.role)).toEqual(['checker'])
+    expect(byRole.waiting.map((r: { id: string }) => r.id)).toEqual([checker])
+    expect(byRole.books.map((b: { book: string }) => b.book)).toEqual([BOOK])
+
+    const text = cmd(['list', '--role', 'checker'])
+    expect(text.out).toMatch(/Showing only role checker\./)
+    expect(text.out).not.toMatch(/Not-Here-xyz/)
+  }, 60_000)
+
+  it('refuses list for a role that does not exist, naming the roles', () => {
+    for (const json of [[], ['--json']]) {
+      const r = cmd(['list', '--role', 'proofreader', ...json])
+      expect(r.status).toBe(1)
+      expect(r.out).toBe('')
+      expect(r.err).toMatch(/"proofreader" is not a role\. Use one of: managing-editor, scout,/)
+    }
+  }, 30_000)
 
   it('reports a note it cannot believe, and still lists the rest', () => {
     const month = readdirSync(join(shelf, 'work', 'runs'))[0]!
@@ -225,15 +267,15 @@ describe('the guard and the writer under work.mjs', () => {
 const thrown = (m: string) => {
   throw new Error(m)
 }
-const madeUpNote = (id: string) =>
-  work.startNote({
-    id,
-    role: 'reader',
-    book: BOOK,
-    stage: 'reading',
-    job: 'Read',
-    now: '2026-11-19T10:00:00Z'
-  })
+const madeUpInput = (id: string): work.StartInput => ({
+  id,
+  role: 'reader',
+  book: BOOK,
+  stage: 'reading',
+  job: 'Read',
+  now: '2026-11-19T10:00:00Z'
+})
+const madeUpNote = (id: string) => work.startNote(madeUpInput(id))
 
 /** A made-up shelf with one book, in the temporary folder. */
 function shelfAt(name: string) {
@@ -310,6 +352,25 @@ describe('the writer under work.mjs', () => {
     expect(r.err).toMatch(/work is a link to .*nowhere, which is not there.*Nothing was written/)
     expect(r.err).not.toMatch(/\n\s+at /)
     expect(existsSync(nowhere)).toBe(false)
+  }, 30_000)
+
+  it('starts a run taking over no earlier than the hand-off, when this clock is behind', () => {
+    const at = shelfAt('shelf-clock')
+    const { writeNote } = shelfNotes({ work, paths, fail: thrown })
+    // A reader on a computer whose clock is far ahead handed the book on.
+    const ahead = '2099-01-01T10:00:00Z'
+    const handed = work.noteHandoff(work.startNote({ ...madeUpInput('ahead001'), now: ahead }), {
+      now: ahead,
+      role: 'checker',
+      result: 'Read'
+    })
+    writeNote(at, handed, true)
+    const job = ['--stage', 'checking', '--job', 'Check', '--from', 'ahead001']
+    const s = cmd(['start', '--role', 'checker', '--book', BOOK, ...job], at)
+    expect(s.status, s.err).toBe(0)
+    expect(s.err).toMatch(/clock is behind run ahead001's last change; the start is stamped 2099/)
+    const room = JSON.parse(cmd(['list', '--json', '--role', 'reader'], at).out)
+    expect(room.roles[0].recent[0].handoff).toMatchObject({ pickedUpBy: idIn(s.out) })
   }, 30_000)
 
   it('replaces a link planted at <note>.json.part instead of writing through it', () => {

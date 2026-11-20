@@ -78,14 +78,15 @@ function links(owner) {
   return owner.links.map((l) => `${l.label}, ${l.path}`).join('; ')
 }
 
-/** The three lists, filtered to one book or role when asked. */
+/** The three lists, already narrowed by core's `filterWorkroom` when asked for one book or role. */
 export function printWorkroom(room, w, { shelf, count, book, role }) {
   const out = []
   const now = room.now
-  const keep = (r) => (!book || r.book === book) && (!role || r.role === role)
   out.push(`Status notes on ${shelf}: ${count} run${count === 1 ? '' : 's'}, read ${when(now)}.`)
+  const only = [book && `book ${book}`, role && `role ${role}`].filter(Boolean)
+  if (only.length) out.push(`Showing only ${only.join(' and ')}.`)
 
-  const waiting = room.waiting.filter(keep)
+  const waiting = room.waiting
   out.push('', `WAITING ON YOU (${waiting.length})`)
   if (!waiting.length) out.push('  Nothing is waiting on you.')
   waiting.forEach((r, i) => {
@@ -97,9 +98,7 @@ export function printWorkroom(room, w, { shelf, count, book, role }) {
     out.push(`     Open: ${links(r.owner)}`)
   })
 
-  const books = room.books.filter(
-    (b) => (!book || b.book === book) && (!role || b.latest.some(keep))
-  )
+  const books = room.books
   out.push('', `BOOKS (${books.length})`)
   if (!books.length) out.push('  No book has a status note yet.')
   for (const b of books) {
@@ -113,10 +112,9 @@ export function printWorkroom(room, w, { shelf, count, book, role }) {
   out.push('', 'ROLES')
   const idle = []
   for (const r of room.roles) {
-    if (role && r.role !== role) continue
-    const going = r.inProgress.filter(keep)
-    const done = r.recent.filter(keep)
-    const handed = r.awaiting.filter((x) => !book || x.book === book)
+    const going = r.inProgress
+    const done = r.recent
+    const handed = r.awaiting
     if (!going.length && !done.length && !handed.length) {
       idle.push(r.label)
       continue

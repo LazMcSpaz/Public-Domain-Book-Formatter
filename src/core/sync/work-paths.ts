@@ -53,7 +53,9 @@ export function bookFolderProblem(folder: string): string | null {
 /**
  * Why `path` is not a path on the shelf a note may name, or null when it is.
  * Relative to the shelf's top, with forward slashes, never leaving it: a link
- * the Workroom opens must land on the shelf and nowhere else.
+ * the Workroom opens must land on the shelf and nowhere else. Never into a
+ * `.git` folder either (in any case, as Windows reads it): that is git's own
+ * store, not a file of the shelf's.
  */
 export function shelfPathProblem(path: string): string | null {
   const why = (reason: string) => `"${path}" is not a path on the shelf: ${reason}`
@@ -66,6 +68,9 @@ export function shelfPathProblem(path: string): string | null {
   for (const segment of path.split('/')) {
     if (segment === '' || segment === '.' || segment === '..') {
       return why('it has an empty, "." or ".." part.')
+    }
+    if (segment.toLowerCase() === '.git') {
+      return why("it reaches into a .git folder, which is git's own store, not a file to open.")
     }
     if (!PATH_SEGMENT.test(segment) || segment.trim() !== segment) {
       return why(`the part "${segment}" holds a character a shelf path does not use.`)

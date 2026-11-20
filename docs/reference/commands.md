@@ -452,7 +452,9 @@ paths inside the shelf.
 
 - `node scripts/work.mjs start --role <role> --book <folder> --stage <stage> --job "<words>"`:
   starts a run and prints its id. `--from <id>` names the run it takes over
-  from; `--of <n> --unit <word>` (and `--done <n>`) start its progress;
+  from (the start is stamped no earlier than that run's last change, even on
+  a computer whose clock is behind); `--of <n> --unit <word>` (and
+  `--done <n>`) start its progress;
   `--note` adds a word. With no `--book` and no `--stage` it is tools or
   shelf work. A book not on the shelf is refused, except for a scout at
   `sourcing`. Roles: `managing-editor`, `scout`, `reader`, `typesetter`,
@@ -471,16 +473,19 @@ paths inside the shelf.
 - `node scripts/work.mjs fail <id> --result "<why>"`: the run could not
   finish.
 - `node scripts/work.mjs handoff <id> --to <role> --result "<one line>"`: the
-  run hands its work on; `--run <id>` names the next run when it exists,
-  `--note` says what the next role needs to know. The next run names this one
+  run hands its work on; `--run <id>` names the next run when it exists (a
+  run of the role the work goes to, never this run itself), `--note` says what
+  the next role needs to know. The next run, of that role, names this one
   with `start --from <id>`.
 - `node scripts/work.mjs list`: what is waiting on the owner (longest first,
   with the files to open), each book's stage and its stages' latest runs, and
   each role's runs in progress, finished in the last seven days, and handed to
   it but not picked up. A run silent for twelve hours while working shows as
   stale (`--stale-hours <n>` to change it). `--book <folder>` and
-  `--role <role>` narrow it; `--json` prints the views as data. A note that
-  cannot be read is listed with its reasons and makes the command exit 1.
+  `--role <role>` narrow it, in text and with `--json` (the views as data)
+  alike; a role that does not exist is refused, with the list of roles. A
+  note that cannot be read is listed with its reasons and makes the command
+  exit 1.
 - `node scripts/work.mjs show <id>`: one run, how it stands, and its
   timeline; `--json` prints the note itself.
 

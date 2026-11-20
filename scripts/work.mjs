@@ -159,7 +159,16 @@ function start(shelf, opts) {
   if (!opts['--job']) fail('Say what the job is, in plain words: --job "<words>".')
   const progress = progressFrom(opts, null)
   const from = opts['--from'] ?? null
-  if (from) findNote(shelf, from)
+  // A run taking over starts no earlier than the run it takes over last
+  // spoke, even on a computer whose clock is behind: a hand-off counts as
+  // picked up only by a run that starts at or after it.
+  const now = nowUtc()
+  const start = from ? work.stampFor(findNote(shelf, from), now) : now
+  if (start !== now) {
+    console.error(
+      `This computer's clock is behind run ${from}'s last change; the start is stamped ${start}.`
+    )
+  }
   let note
   try {
     note = work.startNote({
@@ -168,7 +177,7 @@ function start(shelf, opts) {
       book,
       stage,
       job: opts['--job'],
-      now: nowUtc(),
+      now: start,
       from,
       progress: progress ?? null,
       note: opts['--note'] ?? null
@@ -240,7 +249,14 @@ function verbs(verb, shelf, words, opts) {
       const role = need('--to', 'which role takes the work on')
       const result = need('--result', 'what this run did')
       const run = opts['--run'] ?? null
-      if (run) findNote(shelf, run)
+      if (run) {
+        const next = findNote(shelf, run)
+        if (work.ROLES.includes(role) && next.role !== role) {
+          fail(
+            `Run ${run} is a ${next.role} run, but the work goes to ${role}: --run names the next run of the role the work goes to.`
+          )
+        }
+      }
       const { note, rel } = change(shelf, id, (n, now) =>
         work.noteHandoff(n, {
           now,
@@ -262,14 +278,21 @@ function verbs(verb, shelf, words, opts) {
 }
 
 function list(shelf, opts) {
+  const book = opts['--book'] ?? null
+  const role = opts['--role'] ?? null
+  if (role !== null && !work.ROLES.includes(role)) {
+    fail(`"${role}" is not a role. Use one of: ${work.ROLES.join(', ')}.`)
+  }
+  if (book !== null) {
+    const why = paths.bookFolderProblem(book)
+    if (why) fail(why)
+  }
   const read = work.readNotes(noteFiles(shelf))
   const staleAfterHours = count(opts['--stale-hours'], '--stale-hours')
-  const room = work.workroom(read.notes, nowUtc(), { staleAfterHours })
+  const all = work.workroom(read.notes, nowUtc(), { staleAfterHours })
+  const room = work.filterWorkroom(all, { book, role })
   if (opts['--json']) console.log(JSON.stringify({ ...room, unreadable: read.unreadable }, null, 2))
-  else {
-    const filter = { shelf, count: read.notes.length, book: opts['--book'], role: opts['--role'] }
-    console.log(printWorkroom(room, work, filter))
-  }
+  else console.log(printWorkroom(room, work, { shelf, count: read.notes.length, book, role }))
   if (read.unreadable.length) {
     console.error(`\n${read.unreadable.length} note(s) could not be read and are not shown:`)
     for (const u of read.unreadable)
