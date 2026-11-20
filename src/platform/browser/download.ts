@@ -34,3 +34,15 @@ export function downloadPdf(bytes: Uint8Array, fileName: string): void {
 export function downloadText(contents: string, fileName: string, mimeType: string): void {
   downloadBlob(new Blob([contents], { type: `${mimeType};charset=utf-8` }), fileName)
 }
+
+/**
+ * A picture the app rendered — the front cover, and anything else that is an
+ * image of the book rather than the book.
+ *
+ * Kept apart from `downloadPdf` for the same reason `downloadText` is: a PNG of
+ * the front cover is not a cover file, and a KDP upload of one would be
+ * rejected. The name it gets says `front`, never `cover`.
+ */
+export function downloadPng(bytes: Uint8Array, fileName: string): void {
+  downloadBlob(new Blob([new Uint8Array(bytes)], { type: 'image/png' }), fileName)
+}

@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { prepareInstall } from '../platform/browser/install'
 import { forgetOldNoteCopy } from '../platform/browser/note-store'
+import { CoverStudio } from './CoverStudio'
 import { NewerVersionNotice } from './NewerVersionNotice'
 import { Settings } from './Settings'
 import { applyTheme, readTheme } from './theme'
@@ -42,6 +43,13 @@ function Root(): JSX.Element {
   // leaves for `#book=…&at=queries`, which mounts the app afresh to land there.
   if (hash.startsWith('#workroom')) {
     return <Workroom onClose={() => (window.location.hash = '')} />
+  }
+
+  // The cover arm. A route of its own rather than a stage of the wizard,
+  // because a cover is wanted for books this app never set — and the export
+  // screen links in here with the measured page count already in hand.
+  if (hash.startsWith('#cover')) {
+    return <CoverStudio onClose={() => (window.location.hash = '')} />
   }
 
   if (DevPreview && hash.startsWith('#preview')) {

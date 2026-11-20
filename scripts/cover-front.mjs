@@ -1,0 +1,205 @@
+/**
+ * Build a front cover from a spec file, headlessly.
+ *
+ * The cover studio is where a cover is *designed*; this is for the other
+ * occasion — a cover whose design is already settled, wanted as a picture, from
+ * a session rather than from a screen. It is the driver's shape rather than the
+ * studio's: a JSON spec in, a PNG out, no clicking.
+ *
+ * It composes through the app's own modules in a real browser, so it is not a
+ * second implementation of anything: `renderFrontCover` writes the same PDF the
+ * studio's download button hands over and crops the front panel out of it.
+ * Nothing here draws.
+ *
+ *   npm run dev
+ *   node scripts/cover-front.mjs spec.json out.png
+ *
+ * `--sheet` writes the whole flat cover instead of the front panel — the same
+ * bytes, uncropped — for the one question a front cannot answer: whether the
+ * back and the fold are right.
+ *
+ * `--pdf <out.pdf>` writes the cover file itself beside the picture, which is
+ * what a printer is handed. It needs `--sheet`, since a cover file is the whole
+ * flat sheet and never the cropped front panel. The two come out of one run on
+ * purpose: the PNG is a raster of that exact PDF, so nothing can drift between
+ * what was approved and what is uploaded.
+ *
+ * The spec is a partial cover document — `trimSize`, `pageCount`, `paper`,
+ * `binding` (`paperback` or `hardcover`), `device` (the emblem on the board)
+ * and `mark` (the printer's own, at the foot of the spine),
+ * `look`, `content` — merged over the shipped defaults and normalised by
+ * `normalizeLook`, so an old or hand-written spec cannot half-apply. Two fields
+ * are the script's own: `device`, a file name under `public/devices`, which is
+ * read here and handed over as the look's press mark; and `widthPx`, how wide
+ * the picture should come out. A third, `pageCountMeasured`, says the page
+ * count was taken off a typeset interior rather than guessed, which is the one
+ * thing the spine check cannot find out for itself: set it only when the
+ * number came from the exported book.
+ */
+import { chromium } from 'playwright'
+import { readFile, writeFile } from 'node:fs/promises'
+import { basename, resolve } from 'node:path'
+
+/** Vite serves source under `/@fs` by absolute path; `/src/...` is the app's own tree. */
+const REPO = process.cwd()
+
+const args = process.argv.slice(2)
+const sheet = args.includes('--sheet')
+// The PDF is what a printer is given; the PNG is what a person looks at. The
+// bytes are the same composition either way — `renderCoverPreview` rasterises
+// the file it has just written — so writing both out of one run is the only
+// way they cannot come to disagree.
+const pdfAt = args.indexOf('--pdf')
+const pdfPath = pdfAt >= 0 ? args[pdfAt + 1] : null
+if (pdfAt >= 0 && !pdfPath) {
+  console.error('--pdf wants a path to write the cover file to')
+  process.exit(2)
+}
+// `pdfAt` is -1 when `--pdf` was not given, and `-1 + 1` is 0 — which dropped
+// the spec path and left the usage message as the only output, on the plain
+// `spec out.png` call that is the common one. Guarded rather than clamped,
+// because the index only means anything when the flag is there at all.
+const pdfValueAt = pdfAt >= 0 ? pdfAt + 1 : -1
+const positional = args.filter((a, i) => a !== '--sheet' && a !== '--pdf' && i !== pdfValueAt)
+const [specPath, outPath] = positional
+if (!specPath || !outPath) {
+  console.error(
+    'usage: node scripts/cover-front.mjs <spec.json> <out.png> [--sheet] [--pdf <out.pdf>]'
+  )
+  process.exit(2)
+}
+// A cover file carries the whole flat sheet, never the cropped front panel.
+if (pdfPath && !sheet) {
+  console.error('--pdf is the whole flat cover, so it needs --sheet')
+  process.exit(2)
+}
+
+const URL_BASE = process.env.APP_URL ?? 'http://localhost:5173'
+const EXECUTABLE = process.env.CHROMIUM_PATH ?? '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'
+
+const spec = JSON.parse(await readFile(resolve(specPath), 'utf8'))
+
+/**
+ * A device from `public/devices`, as the look's press mark.
+ *
+ * The proportions come from the SVG's own viewBox rather than being assumed:
+ * the composer sizes the mark from them, so a wrong ratio is a squashed seal.
+ */
+async function loadMark(name) {
+  if (!name) return null
+  // A bare name still means a device, which is what every spec written before
+  // the printer's mark existed says. A name with a folder in it is taken as
+  // given, so `marks/inkball.svg` reaches the press marks.
+  const rel = name.includes('/') ? name : `devices/${basename(name)}`
+  const file = resolve('public', rel)
+  const svg = await readFile(file, 'utf8')
+  const box = /viewBox="([\d.\s-]+)"/.exec(svg)
+  if (!box) throw new Error(`${file} has no viewBox, so its proportions are unknown.`)
+  const [, , w, h] = box[1].trim().split(/\s+/).map(Number)
+  return {
+    dataUrl: `data:image/svg+xml;base64,${Buffer.from(svg, 'utf8').toString('base64')}`,
+    widthPx: w,
+    heightPx: h,
+    fileName: basename(file)
+  }
+}
+
+// `device` is the emblem on the board; `mark` is the printer's own, at the
+// foot of the spine. A spec naming only `device` behaves as it always did.
+const frontMark = await loadMark(spec.device)
+const mark = (await loadMark(spec.mark)) ?? frontMark
+
+const browser = await chromium.launch({ executablePath: EXECUTABLE, args: ['--no-sandbox'] })
+const page = await browser.newPage({ viewport: { width: 900, height: 700 } })
+const errors = []
+page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`))
+page.on('console', (m) => {
+  if (m.type() === 'error') errors.push(m.text())
+})
+
+await page.goto(`${URL_BASE}/#cover`, { waitUntil: 'networkidle' })
+
+const result = await page.evaluate(
+  async ({ spec, mark, frontMark, repo, sheet, wantPdf }) => {
+    const core = await import(`/@fs${repo}/src/core/cover/index.ts`)
+    const platform = await import(`/@fs${repo}/src/platform/browser/cover-preview.ts`)
+
+    const doc = core.defaultCover(spec.trimSize ?? '6x9', spec.pageCount ?? 0)
+    if (spec.paper) doc.paper = spec.paper
+    // Paperback or hardcover. The same design on two different objects, so a
+    // book published in both is two runs of this script over two specs.
+    if (spec.binding) doc.binding = spec.binding
+    doc.look = core.normalizeLook({
+      ...doc.look,
+      ...(spec.look ?? {}),
+      ...(mark ? { pressMark: mark } : {}),
+      ...(spec.mark && frontMark ? { frontMark } : {})
+    })
+    doc.content = { ...doc.content, ...(spec.content ?? {}) }
+
+    // The sheet comes back as an object URL and a PNG both; the front comes
+    // back as bytes, because an icon is made to be stored. Fetching the URL is
+    // how the sheet's pixels are got at from here.
+    const front = sheet
+      ? await (async () => {
+          const preview = await platform.renderCoverPreview(doc, {
+            scale: (spec.widthPx ?? 1000) / (72 * 12),
+            // Only when the spec says the count came off a typeset interior.
+            // Left out, the spine check reports `pending` on every cover this
+            // script draws, which is a check nobody can learn anything from.
+            pageCountMeasured: spec.pageCountMeasured === true
+          })
+          const blob = await (await fetch(preview.url)).blob()
+          const bytes = new Uint8Array(await blob.arrayBuffer())
+          platform.releaseCoverPreview(preview)
+          return { ...preview, bytes, dpi: preview.widthPx / 12 }
+        })()
+      : await platform.renderFrontCover(doc, {
+          widthPx: spec.widthPx ?? 1000,
+          pageCountMeasured: spec.pageCountMeasured === true
+        })
+    let binary = ''
+    for (const byte of front.bytes) binary += String.fromCharCode(byte)
+    let pdfBinary = ''
+    if (wantPdf && front.pdf) {
+      for (const byte of front.pdf.bytes) pdfBinary += String.fromCharCode(byte)
+    }
+    return {
+      png: btoa(binary),
+      pdf: wantPdf && front.pdf ? btoa(pdfBinary) : null,
+      pdfPt: front.pdf ? [front.pdf.widthPt, front.pdf.heightPt] : null,
+      missingImages: front.pdf?.missingImages ?? [],
+      widthPx: front.widthPx,
+      heightPx: front.heightPx,
+      dpi: front.dpi,
+      warnings: front.composed.warnings,
+      substitutions: front.substitutions,
+      checks: front.validation.checks
+        .filter((c) => c.level !== 'ok')
+        .map((c) => `${c.level}: ${c.label} — ${c.detail}`)
+    }
+  },
+  { spec, mark, frontMark, repo: REPO, sheet, wantPdf: pdfPath !== null }
+)
+
+await writeFile(resolve(outPath), Buffer.from(result.png, 'base64'))
+if (pdfPath) {
+  if (!result.pdf) {
+    console.error('the composer returned no PDF for this cover')
+    process.exit(1)
+  }
+  await writeFile(resolve(pdfPath), Buffer.from(result.pdf, 'base64'))
+}
+await browser.close()
+
+console.log(
+  `${outPath}: ${result.widthPx} × ${result.heightPx} px, ${Math.round(result.dpi)} DPI across the printed front.`
+)
+for (const w of result.warnings) console.log(`  warning: ${w}`)
+for (const [asked, used] of result.substitutions) console.log(`  substituted: ${asked} → ${used}`)
+for (const c of result.checks) console.log(`  ${c}`)
+
+if (errors.length > 0) {
+  console.error(`\n${errors.length} console error(s):\n${errors.join('\n')}`)
+  process.exit(1)
+}

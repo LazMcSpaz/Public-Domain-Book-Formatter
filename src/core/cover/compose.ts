@@ -1,0 +1,2210 @@
+/**
+ * A cover document, laid out onto the flat sheet.
+ *
+ * The counterpart of `@core/layout`'s `layout()`, and built to the same
+ * contract: a **pure function of its inputs** that returns absolute positions
+ * and nothing needing interpretation. Given a font table you can draw what
+ * comes out of here, measure it, or diff two of them.
+ *
+ * Everything is in points with the origin at the top-left of the whole sheet,
+ * bleed included, y running downward — the convention the layout engine uses
+ * for pages, so `cover-pdf` flips the origin in exactly the way `pdf-out`
+ * already does and the two writers stay recognisably the same code.
+ *
+ * ## Why arrangements rather than a canvas
+ *
+ * Free placement would make every cover a fresh act of design and make a
+ * *collection* — the thing this arm exists for — a matter of remembering what
+ * you did last time. An arrangement is a tradition with the sizes derived from
+ * the trim, so the same look applied to a 5×8 and a 7×10 is the same look
+ * rather than the same numbers.
+ *
+ * ## Nothing is drawn into the barcode
+ *
+ * `geometry.barcode` is a hole in the back cover. The blurb's measure stops
+ * above it, and the validator warns if anything else lands in it. KDP prints
+ * over that rectangle no matter what is under it.
+ *
+ * Pure: no DOM, no I/O. Text is measured through the injected `TextMeasurer`,
+ * which in the browser is the same fontkit call pdf-lib makes to encode text.
+ */
+import type { FontRef, TextMeasurer } from '@core/layout'
+import { typographicQuotes } from '@core/layout'
+import { parseInlineMarkup } from '@core/transcribe'
+import type { OrnamentArt } from '@core/ornament'
+import { sizeAfterOps } from '@core/image'
+import { worksLabel, type CoverDocument, type FrameStyle, type Hex } from './document'
+import { GROUND_IMAGE_ID, groundPattern, isImageGround, patternOpacity } from './patterns'
+import {
+  BAR_HEIGHT_IN,
+  GUARD_DROP_MODULES,
+  MODULE_IN,
+  QUIET_LEFT_MODULES,
+  QUIET_RIGHT_MODULES,
+  SYMBOL_MODULES,
+  BARCODE_BARS,
+  BARCODE_SPACE,
+  encodeEan13,
+  printedGroups
+} from './barcode'
+import {
+  backFigureFramePt,
+  figureFramePt,
+  framedFigureFrame,
+  wrapFigureFramePt,
+  figureOpacity,
+  GROUND_FIGURE_BACK_ID,
+  GROUND_FIGURE_ID
+} from './figures'
+import {
+  contains,
+  coverGeometry,
+  MIN_PAGES_FOR_SPINE_TEXT,
+  overlaps,
+  PAPER_CALIPER_IN,
+  pt,
+  SAFE_MARGIN_IN,
+  SPINE_TEXT_CLEARANCE_IN,
+  spineWidth,
+  type CoverGeometry,
+  type Rect
+} from './geometry'
+
+/** A solid rectangle — grounds, bands, and the scrim under type over art. */
+export interface FillItem {
+  kind: 'fill'
+  xPt: number
+  yPt: number
+  widthPt: number
+  heightPt: number
+  color: Hex
+  /** 0–1. Only the scrim uses it; everything else is opaque. */
+  opacity?: number
+  /**
+   * What drew it, where a check needs to tell one fill from another.
+   *
+   * Only the barcode uses it: its rectangles sit inside the one area of the
+   * sheet where the rule is "nothing may be drawn", and without a name the
+   * check would fire on every cover that carries its own.
+   */
+  id?: string
+}
+
+/**
+ * The cover's picture, placed.
+ *
+ * Carries the **source rectangle in pixels** as well as the destination, so a
+ * `cover` fit is a crop of the pixels rather than a clip of the drawing. That
+ * is not a workaround: cropping in pixels is what makes the effective DPI here
+ * the DPI of the pixels *actually printed*, which is the number the KDP check
+ * needs. Clipping would divide by a width half the image never occupied.
+ */
+export interface CoverImageItem {
+  kind: 'image'
+  id: string
+  xPt: number
+  yPt: number
+  widthPt: number
+  heightPt: number
+  /** The part of the (post-op) source to draw, in source pixels. */
+  srcX: number
+  srcY: number
+  srcWidth: number
+  srcHeight: number
+  /**
+   * 0–1. Only a picture-backed ground uses it.
+   *
+   * The cover's artwork is never drawn at partial opacity — a faded plate is a
+   * mistake, not a treatment — so this exists for the one case where the
+   * picture *is* the texture.
+   */
+  opacity?: number
+}
+
+export interface CoverTextItem {
+  kind: 'text'
+  text: string
+  font: FontRef
+  sizePt: number
+  /** Left edge of the run; alignment is already resolved into it. */
+  xPt: number
+  /** The baseline, not the top. */
+  yPt: number
+  color: Hex
+  /**
+   * The run's measured advance width.
+   *
+   * Carried rather than re-measured because the validator has to know whether a
+   * line of type crosses the trim, and a validator that measured it itself
+   * would be a second opinion about the same string — the thing the whole
+   * "one renderer" rule exists to prevent.
+   */
+  widthPt: number
+  /**
+   * The run's ink box either side of the baseline, from the face's own metrics.
+   *
+   * Carried for the same reason as `widthPt`, and it is the difference between
+   * a safe-margin check that means something and one that reports every line
+   * set at the top of a panel. Deriving it from the point size would be a
+   * *second* opinion about how tall the type is, and it would be wrong by
+   * whatever the face's ascent is not.
+   */
+  ascentPt: number
+  descentPt: number
+  /**
+   * Quarter-turn for spine text, anticlockwise in PDF terms.
+   *
+   * −90 sets the line reading top-to-bottom, which is how an English-language
+   * spine reads: shelve the book and the title runs the right way up.
+   */
+  rotate?: -90
+  /** What drew it — only the barcode's digits need naming. See `FillItem.id`. */
+  id?: string
+}
+
+export interface CoverRuleItem {
+  kind: 'rule'
+  xPt: number
+  yPt: number
+  widthPt: number
+  thicknessPt: number
+  color: Hex
+}
+
+export interface CoverOrnamentItem {
+  kind: 'ornament'
+  xPt: number
+  yPt: number
+  scale: number
+  art: OrnamentArt
+  color: Hex
+  /**
+   * 0–1. Only the ground pattern uses it.
+   *
+   * A texture across the whole wrap has to sit far enough back that the type in
+   * front of it loses nothing, and a press cannot resolve a tint much below
+   * five per cent — so this is a narrow, deliberate range rather than a knob.
+   */
+  opacity?: number
+}
+
+export type CoverItem =
+  FillItem | CoverImageItem | CoverTextItem | CoverRuleItem | CoverOrnamentItem
+
+export interface ComposeOptions {
+  measurer: TextMeasurer
+  /** The shipped ornament library, for resolving `look.ornamentId`. */
+  ornaments?: readonly OrnamentArt[]
+}
+
+export interface PlacedArt {
+  id: string
+  /** Where it printed, in inches — what the DPI check divides by. */
+  rect: Rect
+  /** Pixels actually used along each axis, after ops and after the fit crop. */
+  usedWidthPx: number
+  usedHeightPx: number
+}
+
+export interface ComposedCover {
+  geometry: CoverGeometry
+  items: CoverItem[]
+  placedArt: PlacedArt | null
+  /**
+   * What could not be honoured, in plain language.
+   *
+   * Same rule as the interior's dropped notes: a cover that quietly lost its
+   * subtitle is a cover nobody checks until it is printed.
+   */
+  warnings: string[]
+}
+
+/**
+ * The id the press mark is placed under.
+ *
+ * A fixed id rather than one derived from the file, because the mark is a
+ * property of the look and the renderer has to find its pixels without knowing
+ * which book it is setting.
+ */
+export const PRESS_MARK_ID = '__press-mark__'
+
+/**
+ * The narrowest a press mark may print and still be a device.
+ *
+ * Worth knowing what this implies, because it is not obvious: a fold wide
+ * enough for a mark is always wide enough for text too. With KDP's clearance
+ * either side this needs a 0.305 in fold — 122 pages on cream, 136 on white —
+ * and KDP's own floor for spine text is seventy-nine, so "a mark on a spine
+ * too thin for type" is a case that cannot arise, and the two are still
+ * decided separately because that is a fact about today's numbers rather
+ * than a rule.
+ *
+ * It was 0.2, a judgement rather than a measurement, and it left the mark off
+ * the 128-page *Human Aura and Astral World* by five thousandths of an inch:
+ * the one spine of the collection without the device, on a book whose
+ * hardcover carries it. The inkball is one silhouette with no counters, and at
+ * 0.185 in — 55 pixels across at 300 DPI — it reads as the same mark the
+ * thicker spines beside it print.
+ */
+export const MIN_MARK_WIDTH_IN = 0.18
+
+/**
+ * The id the front cover's device is placed under.
+ *
+ * Its own id rather than the spine's, although both draw the same artwork.
+ * The two print at very different sizes — a third of an inch on the fold
+ * against an inch or more on the board — and the renderer rasterises a mark at
+ * the size it was placed at, so one raster serving both would be wrong at
+ * whichever it was not made for.
+ */
+export const FRONT_MARK_ID = '__front-mark__'
+
+/**
+ * The barcode's own items, so the checks can tell it from an intruder.
+ *
+ * The barcode area is the one rectangle on the sheet where the rule is
+ * "nothing may be drawn", because KDP prints over whatever is there. A cover
+ * that carries its *own* barcode is the exception that proves it, and without
+ * an id the check would fire on exactly the covers that got it right.
+ */
+export const BARCODE_ID = '__barcode__'
+
+/**
+ * How far in from the trim the frame is struck.
+ *
+ * Not the quarter inch the safe area asks for. Trim varies by up to a
+ * sixteenth, and on a line parallel to the edge that variation is the one
+ * place it is plainly visible — a border a sixteenth narrower down one side
+ * than the other reads as a crooked book. An eighth of an inch inside the safe
+ * line, the same wobble is a sixteenth in three eighths and nobody sees it.
+ */
+export const FRAME_INSET_IN = 0.375
+
+/**
+ * How far the edition statement sits below the title's rule, as a share of its
+ * own size. A hair, by request: enough to read as a separate line and not
+ * enough to float free of the title it belongs to.
+ */
+/**
+ * How much of the subtitle's size the edition line takes when both are set.
+ *
+ * On a cover with no subtitle the edition line is the subtitle slot and takes
+ * its full size. With one, it is the line underneath that says what *this*
+ * printing is — "Annotated", "Illustrated", a volume number — and at the same
+ * size the two read as two subtitles. Two thirds is plainly subordinate and
+ * still sets at 10 to 11 pt against this collection's 16, which is readable
+ * on a board at arm's length.
+ */
+const EDITION_LABEL_SHARE = 0.66
+
+export const EDITION_DROP = 0.45
+
+/**
+ * How much clear space the frame keeps between itself and the type.
+ *
+ * Without it the type box is still the safe area, which is *outside* the
+ * frame — so a centred line long enough to fill the measure would be struck
+ * through by the frame's own sides.
+ */
+export const FRAME_CLEARANCE_IN = 0.14
+
+const FRAME_PLAIN_PT = 1.25
+const FRAME_DOUBLE_OUTER_PT = 1.5
+const FRAME_DOUBLE_INNER_PT = 0.6
+const FRAME_DOUBLE_GAP_PT = 3.5
+
+/** How wide the front's device prints, as a share of the type's own measure. */
+const FRONT_MARK_FRACTION = 0.2
+
+/** And never wider than this, however wide the trim is. */
+const FRONT_MARK_MAX_IN = 1.4
+
+/**
+ * The deepest a front device may be, as a share of the safe area's height.
+ *
+ * A quarter leaves the title and what follows it three quarters of the board,
+ * which is the proportion the `label` arrangement is built around. Without it
+ * only the width was bounded, so a device six times as tall as it is wide
+ * drew past the trim and took the type with it.
+ */
+const FRONT_MARK_MAX_HEIGHT_SHARE = 0.25
+
+/** Title sizes are searched in this range, largest first. */
+const TITLE_MAX_PT = 64
+const TITLE_MIN_PT = 14
+const SUBTITLE_RATIO = 0.42
+
+/**
+ * The most of the title a *pinned* subtitle size may take.
+ *
+ * A share may ask for more, and that is the case the share exists for: on a
+ * reprinted multi-volume work the subtitle names the volume and is read as
+ * hard as the title. A pinned size is a collection's one number applied to
+ * every board, so on a book whose title came out small it can arrive level
+ * with the title and print as two titles. Three quarters keeps it plainly
+ * subordinate without making the pinned number useless.
+ */
+const SUBTITLE_MAX_SHARE = 0.75
+/**
+ * The author's size, as a share of the title's.
+ *
+ * Raised from 0.38, then again, on the editor's standing note that the name
+ * was coming out small on every cover this arm has made. At 0.38 a 30 pt title
+ * set its author at 11.4 pt, which is a caption, and the author of a book is
+ * not a caption: a reader scanning a shelf is often looking for the name
+ * rather than the title.
+ *
+ * 0.62 was chosen against the test a cover actually faces first — rendered at
+ * a 160 px search thumbnail, where the name has to resolve at all. At 0.52 it
+ * was legible only just; at 0.62 it reads, and it still does not compete with
+ * the title.
+ */
+const AUTHOR_RATIO = 0.62
+
+/**
+ * And never smaller than this, whatever the title does.
+ *
+ * A share alone fails at the small end — a short title fitted to a narrow trim
+ * can come out at 20 pt, and a fifth of that is unreadable from the distance a
+ * cover is first seen at. 16 pt is the floor the thumbnail test settles on.
+ */
+const AUTHOR_MIN_PT = 16
+
+/**
+ * The largest the spine may set, however thick the book is.
+ *
+ * Raised from 14 with the author's size and for the same reason: a spine is
+ * read edge-on from a shelf, at a distance and usually at an angle, and 14 pt
+ * was the quietest line on the whole cover. The thickness bound below is what
+ * actually protects a thin spine, so this ceiling only ever binds on a book
+ * fat enough to carry the type.
+ */
+/**
+ * The default ceiling on spine type, where a collection has banked none.
+ *
+ * It is a backstop and not the usual bound: `maxByThickness` already holds
+ * the type to 0.62 of the fold, which is what actually keeps a spine from
+ * looking wrong. At 16 the backstop was doing the binding instead — measured
+ * across this shelf, three spines of about 1.1 in could each carry 27 to 33
+ * pt and all three set at 16, leaving two thirds of the fold empty on the one
+ * part of a book a shelf shows. Raised to a size no ordinary fold reaches, so
+ * that what decides a spine is the fold and the length of the line on it.
+ */
+/**
+ * How much of the safe fold the spine's type may fill.
+ *
+ * `spineSafe` is already inset by KDP's sixteenth of an inch on each edge, so
+ * part of this is white and part of it is slack against the metrics.
+ *
+ * A hair under 1.0 rather than a design choice: the box is now the same one
+ * `itemBounds` reports and `withinSafe` tests, so at exactly 1.0 a line would
+ * sit on the boundary and `contains` would turn on a rounding error. Five per
+ * cent is enough to keep it inside and costs well under a point.
+ */
+const SPINE_FOLD_MARGIN = 0.95
+
+const SPINE_MAX_PT = 36
+
+/** What the back-cover copy sets at when the look names no size. */
+export const BLURB_PT = 10.5
+
+/**
+ * The white between the copy and the box drawn round it.
+ *
+ * Generous on purpose: a rule struck close to type reads as a table cell, and
+ * the thing this imitates is a paper label, where the ink stands well in from
+ * the border. There is room for it because the copy's measure is already far
+ * narrower than the panel.
+ */
+const BLURB_FRAME_PAD_IN = 0.28
+
+/**
+ * How far the back-cover copy sits in from each trimmed edge.
+ *
+ * Far more than the quarter inch the safe area requires, and not for safety.
+ * It is the **measure**. Set to the full safe width of a 6×9 back cover, this
+ * copy runs about ninety-five characters to the line, where comfortable
+ * reading is forty-five to seventy-five: the eye loses its place on the return
+ * sweep and the block reads as dense before a word of it has been taken in.
+ * An inch brings a 6×9 to roughly seventy.
+ */
+const BLURB_SIDE_INSET_IN = 1
+
+/**
+ * The widest the copy is allowed to set, whatever the trim.
+ *
+ * A fixed inset alone does not generalise: an inch either side of an 8.5×11
+ * back cover still leaves six and a half inches, which is a hundred and
+ * thirteen characters and worse than what this was meant to fix. So the inset
+ * is a floor and this is a ceiling, and on a wide trim the block is centred in
+ * what is left rather than stretched across it.
+ */
+const BLURB_MAX_MEASURE_IN = 4.6
+const IMPRINT_PT = 9
+const LEADING = 1.25
+
+function face(
+  family: string,
+  style: 'regular' | 'italic' | 'bold' = 'regular',
+  smallCaps = false
+): FontRef {
+  return smallCaps ? { family, style, smallCaps: true } : { family, style }
+}
+
+/**
+ * Break a paragraph greedily to a measure.
+ *
+ * Greedy, not Knuth–Plass, and deliberately: the book's paragraphs are
+ * justified over a fixed measure where the total-badness optimum is visible,
+ * and a cover's lines are centred, few, and short, where it is not. Running the
+ * book's line breaker over a three-word title would be borrowing a machine to
+ * make the same three lines.
+ */
+export function wrapText(
+  text: string,
+  maxWidthPt: number,
+  font: FontRef,
+  sizePt: number,
+  measurer: TextMeasurer
+): string[] {
+  const words = text.split(/\s+/).filter((w) => w.length > 0)
+  if (words.length === 0) return []
+  const lines: string[] = []
+  let line = ''
+  for (const word of words) {
+    const candidate = line ? `${line} ${word}` : word
+    if (line && measurer.widthOf(candidate, font, sizePt) > maxWidthPt) {
+      lines.push(line)
+      line = word
+    } else {
+      line = candidate
+    }
+  }
+  if (line) lines.push(line)
+  return lines
+}
+
+/** One stretch of a blurb line set in one face. */
+export interface StyledRun {
+  text: string
+  font: FontRef
+}
+
+const sameFont = (a: FontRef, b: FontRef): boolean =>
+  a.family === b.family && a.style === b.style && !!a.smallCaps === !!b.smallCaps
+
+/** `line` with one more word on the end, as a new array — the caller may discard it. */
+function appended(line: readonly StyledRun[], word: string, font: FontRef): StyledRun[] {
+  const runs = line.map((r) => ({ ...r }))
+  const last = runs[runs.length - 1]
+  if (!last) return [{ text: word, font }]
+  if (sameFont(last.font, font)) {
+    last.text += ` ${word}`
+    return runs
+  }
+  // The space between two differently-set words is drawn in the face of the
+  // word *before* it, so a line's runs abut and the writer advances by widths it
+  // measured rather than re-deriving a word space of its own.
+  last.text += ' '
+  runs.push({ text: word, font })
+  return runs
+}
+
+/**
+ * A paragraph of the editor's own prose, broken to a measure, keeping its
+ * emphasis.
+ *
+ * The blurb is the one thing on a cover that is *written* rather than read off
+ * a title page, and the editor's prose names books. Set as one string in one
+ * face, `<i>The Secret Teachings of All Ages</i>` prints the angle brackets —
+ * which is this repository's most-repeated fault, recorded three times over: a
+ * table's cells kept their tags, a written section could not italicise a word,
+ * and a glossary naming forty books printed every title in roman. Each was the
+ * same shape as this one, a run of text emitted with a single font.
+ *
+ * The reader is `parseInlineMarkup` rather than a second one, and it fits
+ * without translation: emphasis comes back as indices of whitespace-separated
+ * words, which is already the coordinate `wrapText` walks in.
+ *
+ * Strong is offered to `fontFor` and resolved there, so a face with no bold
+ * makes the same honest substitution the layout engine makes rather than a
+ * smeared outline.
+ */
+export function wrapMarkup(
+  raw: string,
+  maxWidthPt: number,
+  fontFor: (style: 'regular' | 'italic' | 'bold') => FontRef,
+  sizePt: number,
+  measurer: TextMeasurer
+): StyledRun[][] {
+  const { text, emphasis, strong } = parseInlineMarkup(raw)
+  const italic = new Set(emphasis)
+  const bold = new Set(strong)
+  const words = text.split(/\s+/).filter((w) => w.length > 0)
+  if (words.length === 0) return []
+
+  // Strong first, as `spansFor` does: there is no bold italic here either, and
+  // first match wins, so a marked word inside an italic phrase sets bold roman.
+  const styleOf = (i: number): 'regular' | 'italic' | 'bold' =>
+    bold.has(i) ? 'bold' : italic.has(i) ? 'italic' : 'regular'
+  const widthOf = (runs: readonly StyledRun[]): number =>
+    runs.reduce((w, r) => w + measurer.widthOf(r.text, r.font, sizePt), 0)
+
+  const lines: StyledRun[][] = []
+  let line: StyledRun[] = []
+  for (let i = 0; i < words.length; i++) {
+    const font = fontFor(styleOf(i))
+    const candidate = appended(line, words[i]!, font)
+    if (line.length > 0 && widthOf(candidate) > maxWidthPt) {
+      lines.push(line)
+      line = [{ text: words[i]!, font }]
+    } else {
+      line = candidate
+    }
+  }
+  if (line.length > 0) lines.push(line)
+  return lines
+}
+
+/**
+ * The largest size at which `text` sets in at most `maxLines` within the box.
+ *
+ * Searched in half-point steps from the top down, so the answer is the same
+ * every time this cover is composed — a title that resized by a point between
+ * the preview and the export would make the gate meaningless.
+ */
+/**
+ * A title's lines, honouring a stack the editor typed.
+ *
+ * A newline in a title is a **hard break**, and it is the one place in this
+ * codebase where a hand break is right. The book's body forbids them because
+ * it reflows to whatever measure the design gate settles on, so a break typed
+ * against one measure rots against the next. A display title does not reflow:
+ * it is three or four words set as a shape, and where those words divide is a
+ * design decision no rule about measures will reproduce. `THE / MANUSCRIPT /
+ * LECTURES` is not what a breaker would choose and is what the cover wants.
+ *
+ * Safe for a banked look by construction: the break lives in `content.title`,
+ * and `CoverContent` is the half that never travels, so volume two cannot
+ * inherit volume one's stacking.
+ *
+ * Each segment is still wrapped, so a stacked line too long for the measure
+ * breaks rather than running off the board.
+ */
+/** A stacked title as one line, for anywhere a break cannot be set. */
+export function flattened(text: string): string {
+  return text.replace(/\s*\n\s*/gu, ' ').trim()
+}
+
+export function stackedLines(
+  text: string,
+  maxWidthPt: number,
+  font: FontRef,
+  sizePt: number,
+  measurer: TextMeasurer
+): string[] {
+  if (!text.includes('\n')) return wrapText(text, maxWidthPt, font, sizePt, measurer)
+  return text
+    .split('\n')
+    .flatMap((segment) => wrapText(segment, maxWidthPt, font, sizePt, measurer))
+}
+
+export function fitText(
+  text: string,
+  box: { widthPt: number; heightPt: number },
+  maxLines: number,
+  font: FontRef,
+  measurer: TextMeasurer,
+  maxPt = TITLE_MAX_PT,
+  minPt = TITLE_MIN_PT
+): { sizePt: number; lines: string[] } {
+  for (let size = maxPt; size >= minPt; size -= 0.5) {
+    const lines = stackedLines(text, box.widthPt, font, size, measurer)
+    if (lines.length === 0) return { sizePt: size, lines: [] }
+    if (lines.length > maxLines) continue
+    const tallest = Math.max(...lines.map((l) => measurer.widthOf(l, font, size)))
+    if (tallest > box.widthPt) continue
+    if (lines.length * size * LEADING > box.heightPt) continue
+    return { sizePt: size, lines }
+  }
+  // Nothing fit. Set it at the floor and let the validator say so — silently
+  // dropping words off a title is the one outcome worse than a tight cover.
+  return { sizePt: minPt, lines: stackedLines(text, box.widthPt, font, minPt, measurer) }
+}
+
+/**
+ * One size that fits *every* one of these, largest first.
+ *
+ * Equal weight is the whole point of an omnibus cover: two works bound together
+ * are two works, and setting the longer title smaller so it fits would say the
+ * shorter one matters more. So the size is the smallest of what each could take
+ * on its own, and they are all set at it.
+ */
+export function fitTitlesTogether(
+  titles: readonly string[],
+  box: { widthPt: number; heightPt: number },
+  maxLinesEach: number,
+  font: FontRef,
+  measurer: TextMeasurer,
+  maxPt = TITLE_MAX_PT,
+  minPt = TITLE_MIN_PT
+): { sizePt: number; lines: string[][] } {
+  const budget = box.heightPt / Math.max(1, titles.length)
+  let sizePt = maxPt
+  for (const title of titles) {
+    const fitted = fitText(
+      title,
+      { widthPt: box.widthPt, heightPt: budget },
+      maxLinesEach,
+      font,
+      measurer,
+      maxPt,
+      minPt
+    )
+    sizePt = Math.min(sizePt, fitted.sizePt)
+  }
+  return {
+    sizePt,
+    lines: titles.map((t) => stackedLines(t, box.widthPt, font, sizePt, measurer))
+  }
+}
+
+function applyCase(text: string, kind: CoverDocument['look']['titleCase']): string {
+  return kind === 'upper' ? text.toUpperCase() : text
+}
+
+/**
+ * Lay a block of centred lines into `items`, returning the y below it.
+ *
+ * Centred on the **ink**, not on the advance box. Every line on a cover is
+ * display type at 20 to 60 points, where the difference is visible: measured on
+ * a real sheet, `THE ASTRAL WORLD` and `THE HUMAN AURA` set at the same size
+ * and centred by advance landed 2.5 pixels — about 2.7 points — apart, because
+ * a `D` has a tight right side bearing and an `A` has a wide one. Nothing was
+ * wrong with the arithmetic; it was centring the wrong box.
+ */
+function centeredLines(
+  items: CoverItem[],
+  lines: readonly string[],
+  panel: Rect,
+  topPt: number,
+  font: FontRef,
+  sizePt: number,
+  color: Hex,
+  measurer: TextMeasurer
+): number {
+  const metrics = measurer.metrics(font, sizePt)
+  const leading = sizePt * LEADING
+  const centreX = pt(panel.x + panel.width / 2)
+  let y = topPt
+  for (const line of lines) {
+    const width = measurer.widthOf(line, font, sizePt)
+    const ink = measurer.inkExtents(line, font, sizePt)
+    // Put the middle of the ink on the middle of the panel: the origin is the
+    // centre less half the ink span, less however far the ink starts from the
+    // origin.
+    const xPt = centreX - (ink.left + ink.right) / 2
+    items.push({
+      kind: 'text',
+      text: line,
+      font,
+      sizePt,
+      xPt,
+      yPt: y + metrics.ascent,
+      color,
+      widthPt: width,
+      ascentPt: metrics.ascent,
+      descentPt: metrics.descent
+    })
+    y += leading
+  }
+  return y
+}
+
+/**
+ * Fit a picture into a frame, in the printer's sense rather than the browser's.
+ *
+ * `cover` returns the source rectangle that fills the frame without distorting
+ * it — a centred crop. `contain` shrinks the frame to the picture's proportions
+ * instead, so nothing is cut and nothing is stretched. Neither ever changes the
+ * aspect ratio: a squashed engraving is the tell of a machine-made cover.
+ */
+export function fitArt(
+  frame: Rect,
+  sourceWidthPx: number,
+  sourceHeightPx: number,
+  mode: 'cover' | 'contain'
+): { dest: Rect; srcX: number; srcY: number; srcWidth: number; srcHeight: number } | null {
+  if (sourceWidthPx <= 0 || sourceHeightPx <= 0 || frame.width <= 0 || frame.height <= 0) {
+    return null
+  }
+  const frameRatio = frame.width / frame.height
+  const artRatio = sourceWidthPx / sourceHeightPx
+
+  if (mode === 'contain') {
+    const dest =
+      artRatio > frameRatio
+        ? {
+            x: frame.x,
+            y: frame.y + (frame.height - frame.width / artRatio) / 2,
+            width: frame.width,
+            height: frame.width / artRatio
+          }
+        : {
+            x: frame.x + (frame.width - frame.height * artRatio) / 2,
+            y: frame.y,
+            width: frame.height * artRatio,
+            height: frame.height
+          }
+    return { dest, srcX: 0, srcY: 0, srcWidth: sourceWidthPx, srcHeight: sourceHeightPx }
+  }
+
+  // Cover: keep the frame, take the biggest centred crop with the frame's ratio.
+  if (artRatio > frameRatio) {
+    const srcWidth = sourceHeightPx * frameRatio
+    return {
+      dest: { ...frame },
+      srcX: (sourceWidthPx - srcWidth) / 2,
+      srcY: 0,
+      srcWidth,
+      srcHeight: sourceHeightPx
+    }
+  }
+  const srcHeight = sourceWidthPx / frameRatio
+  return {
+    dest: { ...frame },
+    srcX: 0,
+    srcY: (sourceHeightPx - srcHeight) / 2,
+    srcWidth: sourceWidthPx,
+    srcHeight
+  }
+}
+
+/**
+ * The area of the front panel type may occupy.
+ *
+ * The safe area, unless a frame is struck — in which case it is whatever the
+ * frame leaves, because the safe area lies *outside* the frame and setting to
+ * it would run a centred line of any length through the border.
+ */
+export function frontTypeArea(geometry: CoverGeometry, frame: FrameStyle): Rect {
+  if (frame === 'none') return geometry.frontSafe
+  const inset = FRAME_INSET_IN + FRAME_CLEARANCE_IN
+  const panel = geometry.front
+  return {
+    x: panel.x + inset,
+    y: panel.y + inset,
+    width: panel.width - inset * 2,
+    height: panel.height - inset * 2
+  }
+}
+
+/** Four fills making the outline of a rectangle, drawn inside its own edge. */
+function strokeRect(
+  items: CoverItem[],
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  thickness: number,
+  color: Hex
+): void {
+  if (width <= thickness * 2 || height <= thickness * 2) return
+  const bar = (bx: number, by: number, bw: number, bh: number): FillItem => ({
+    kind: 'fill',
+    xPt: bx,
+    yPt: by,
+    widthPt: bw,
+    heightPt: bh,
+    color
+  })
+  // Sides drawn between the two horizontals rather than corner to corner: at
+  // this thickness an overlapped corner is invisible, and a butted one stays
+  // right if the frame is ever drawn at partial opacity.
+  items.push(bar(x, y, width, thickness))
+  items.push(bar(x, y + height - thickness, width, thickness))
+  items.push(bar(x, y + thickness, thickness, height - thickness * 2))
+  items.push(bar(x + width - thickness, y + thickness, thickness, height - thickness * 2))
+}
+
+/**
+ * The frame round the front cover, in the accent colour.
+ *
+ * Drawn after the picture so it sits on top of a bled one, and before the
+ * type, which it must never touch — `frontTypeArea` is what keeps them apart.
+ */
+/**
+ * A frame of the given style, in points, round a box given in points.
+ *
+ * One implementation for both frames this cover can carry. The double rule's
+ * arithmetic is the whole of it, and a second copy of that arithmetic is a
+ * second frame that comes to look slightly unlike the first.
+ */
+function drawFrame(
+  items: CoverItem[],
+  style: FrameStyle,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  color: Hex
+): void {
+  if (style === 'none') return
+  if (style === 'plain') {
+    strokeRect(items, x, y, width, height, FRAME_PLAIN_PT, color)
+    return
+  }
+  strokeRect(items, x, y, width, height, FRAME_DOUBLE_OUTER_PT, color)
+  const step = FRAME_DOUBLE_OUTER_PT + FRAME_DOUBLE_GAP_PT
+  strokeRect(
+    items,
+    x + step,
+    y + step,
+    width - step * 2,
+    height - step * 2,
+    FRAME_DOUBLE_INNER_PT,
+    color
+  )
+}
+
+function drawFrontFrame(
+  items: CoverItem[],
+  geometry: CoverGeometry,
+  style: FrameStyle,
+  color: Hex
+): void {
+  const panel = geometry.front
+  drawFrame(
+    items,
+    style,
+    pt(panel.x + FRAME_INSET_IN),
+    pt(panel.y + FRAME_INSET_IN),
+    pt(panel.width - FRAME_INSET_IN * 2),
+    pt(panel.height - FRAME_INSET_IN * 2),
+    color
+  )
+}
+
+function ruleItem(
+  x: number,
+  y: number,
+  width: number,
+  color: Hex,
+  thickness = 0.75
+): CoverRuleItem {
+  return { kind: 'rule', xPt: x, yPt: y, widthPt: width, thicknessPt: thickness, color }
+}
+
+function drawRule(
+  items: CoverItem[],
+  style: CoverDocument['look']['rule'],
+  panel: Rect,
+  yPt: number,
+  widthIn: number,
+  color: Hex,
+  ornament: OrnamentArt | null
+): number {
+  if (style === 'none') return yPt
+  const width = pt(widthIn)
+  const x = pt(panel.x + panel.width / 2) - width / 2
+  if (style === 'ornamented' && ornament) {
+    const scale = pt(widthIn * 0.5) / ornament.width
+    items.push({
+      kind: 'ornament',
+      xPt: pt(panel.x + panel.width / 2) - (ornament.width * scale) / 2,
+      yPt,
+      scale,
+      art: ornament,
+      color
+    })
+    return yPt + ornament.height * scale
+  }
+  items.push(ruleItem(x, yPt, width, color))
+  if (style === 'double') {
+    items.push(ruleItem(x, yPt + 3, width, color))
+    return yPt + 3.75
+  }
+  return yPt + 0.75
+}
+
+/** The measure available for back-cover copy, stopping short of the barcode. */
+export function blurbFrame(geometry: CoverGeometry): Rect {
+  // Started a little down the panel rather than hard against the top safe line.
+  // Back-cover copy set at the very top of the panel reads as a caption that
+  // slid; every printed book puts it in the upper middle.
+  const inset = geometry.backSafe.height * 0.12
+
+  // In from both trimmed edges by the inset, then narrowed further and centred
+  // if that still leaves too long a line to read.
+  const available = Math.max(0, geometry.back.width - BLURB_SIDE_INSET_IN * 2)
+  const width = Math.min(available, BLURB_MAX_MEASURE_IN)
+  const x = geometry.back.x + (geometry.back.width - width) / 2
+
+  const safe = {
+    x,
+    width,
+    y: geometry.backSafe.y + inset,
+    height: geometry.backSafe.height - inset
+  }
+  // The barcode sits in the bottom corner; the copy simply ends above it rather
+  // than flowing around it. Wrapping text around a rectangle KDP will paste
+  // over is fiddly and looks, on the printed book, like a mistake.
+  const bottomLimit = geometry.barcode.y - 0.25
+  return { ...safe, height: Math.max(0, Math.min(safe.y + safe.height, bottomLimit) - safe.y) }
+}
+
+/**
+ * The barcode, in the area KDP reserves for one.
+ *
+ * Drawn only when the printing has an ISBN. Without one the area stays clear
+ * and KDP prints its own there, which is the black-on-white rectangle this
+ * exists to replace.
+ *
+ * Two things are not design decisions and are treated as such. The symbol's
+ * proportions are GS1's, so it is scaled to fit the area rather than fitted to
+ * it: a barcode stretched to fill a box is a barcode that scans as a different
+ * number or not at all. And the colours are KDP's, not the palette's: black
+ * on a white patch, which is the one thing KDP's barcode check accepts —
+ * see `barcode.ts` for the covers that learnt it.
+ */
+function layBarcode(
+  items: CoverItem[],
+  warnings: string[],
+  geometry: CoverGeometry,
+  doc: CoverDocument,
+  measurer: TextMeasurer
+): void {
+  const { look, content } = doc
+  if (!content.isbn.trim()) return
+  const encoded = encodeEan13(content.isbn, content.isbnAddOn)
+  if (!encoded) {
+    // Refused rather than drawn wrong: a symbol that scans to a number no book
+    // has is a return, where no symbol at all is only KDP printing its own.
+    warnings.push(
+      `"${content.isbn}" is not a valid ISBN-13 (thirteen digits whose check digit agrees), ` +
+        'so no barcode was drawn and KDP will print its own.'
+    )
+    return
+  }
+
+  const area = geometry.barcode
+  const digitPt = 7
+  // A five-digit add-on prints its digits *above* its bars, so the symbol
+  // needs headroom that a bare EAN-13 does not. Without it they set above the
+  // patch, on the board — which is how this was found, by cropping a render.
+  const topPadIn = encoded.addOn ? digitPt / 72 + 0.03 : 0
+  // Height: bars, then the line the digits sit on. Width: the symbol plus its
+  // quiet zones, which are part of the symbol and not padding round it.
+  const widthModules = QUIET_LEFT_MODULES + encoded.widthModules + QUIET_RIGHT_MODULES
+  const nominalWidth = widthModules * MODULE_IN
+  const nominalHeight = BAR_HEIGHT_IN + digitPt / 72 + topPadIn
+  const scale = Math.min(area.width / nominalWidth, area.height / nominalHeight, 1)
+  const moduleIn = MODULE_IN * scale
+  const barHeightIn = BAR_HEIGHT_IN * scale
+  const guardDropIn = GUARD_DROP_MODULES * moduleIn
+  if (scale < 1) {
+    // Reported because magnification below 80% is outside GS1's range and a
+    // printer may refuse it; the symbol is still drawn, to its own proportions.
+    warnings.push(
+      `The barcode is set at ${(scale * 100).toFixed(0)}% of nominal size to fit the area KDP reserves.`
+    )
+  }
+
+  const totalWidth = widthModules * moduleIn
+  // The digits scale with the symbol. Left at a fixed size they overflow a
+  // reduced patch, because the headroom reserved for them shrinks and they do
+  // not — which is exactly how the add-on escaped the first time.
+  const digitSize = digitPt * scale
+  const topIn = encoded.addOn ? digitSize / 72 + 0.03 * scale : 0
+  const totalHeight = topIn + barHeightIn + guardDropIn + digitSize / 72
+  // Centred in the area, which keeps the quiet zones clear of whatever the
+  // back cover does next to it.
+  const originX = area.x + (area.width - totalWidth) / 2
+  const originY = area.y + (area.height - totalHeight) / 2
+
+  items.push({
+    kind: 'fill',
+    id: BARCODE_ID,
+    xPt: pt(originX),
+    yPt: pt(originY),
+    widthPt: pt(totalWidth),
+    heightPt: pt(totalHeight),
+    color: BARCODE_SPACE
+  })
+
+  const barsLeft = originX + QUIET_LEFT_MODULES * moduleIn
+  const barsTop = originY + topIn
+  for (const bar of encoded.bars) {
+    const isAddOn = bar.from >= SYMBOL_MODULES
+    items.push({
+      kind: 'fill',
+      id: BARCODE_ID,
+      xPt: pt(barsLeft + bar.from * moduleIn),
+      yPt: pt(barsTop),
+      widthPt: pt(bar.width * moduleIn),
+      // An add-on's bars end level with the main symbol's; only the guards of
+      // the main symbol run on past the digits.
+      heightPt: pt(isAddOn ? barHeightIn : barHeightIn + (bar.guard ? guardDropIn : 0)),
+      color: BARCODE_BARS
+    })
+  }
+
+  // The digits, which are what a human reads when a scanner will not.
+  const digitFont = face(look.bodyFont, 'regular')
+  const groups = printedGroups(encoded.digits)
+  const baseline = barsTop + barHeightIn + guardDropIn + digitSize / 72
+  const put = (text: string, centreIn: number): void => {
+    const width = measurer.widthOf(text, digitFont, digitSize)
+    const metrics = measurer.metrics(digitFont, digitSize)
+    items.push({
+      kind: 'text',
+      id: BARCODE_ID,
+      text,
+      font: digitFont,
+      sizePt: digitSize,
+      xPt: pt(centreIn) - width / 2,
+      yPt: pt(baseline),
+      color: BARCODE_BARS,
+      widthPt: width,
+      ascentPt: metrics.ascent,
+      descentPt: metrics.descent
+    })
+  }
+  // The lead digit sits out in the left quiet zone, which is where EAN-13
+  // prints it; the two groups of six sit under their own halves.
+  put(groups.lead, originX + (QUIET_LEFT_MODULES - 4) * moduleIn)
+  put(groups.left, barsLeft + 24.5 * moduleIn)
+  put(groups.right, barsLeft + 71.5 * moduleIn)
+  if (encoded.addOn) {
+    const addOnCentre = barsLeft + (SYMBOL_MODULES + 9 + 23) * moduleIn
+    const width = measurer.widthOf(encoded.addOn, digitFont, digitSize)
+    const metrics = measurer.metrics(digitFont, digitSize)
+    items.push({
+      kind: 'text',
+      id: BARCODE_ID,
+      text: encoded.addOn,
+      font: digitFont,
+      sizePt: digitSize,
+      xPt: pt(addOnCentre) - width / 2,
+      // Above its own bars and inside the patch, where EAN-13 prints it.
+      yPt: pt(originY + topIn - 0.03 * scale),
+      color: BARCODE_BARS,
+      widthPt: width,
+      ascentPt: metrics.ascent,
+      descentPt: metrics.descent
+    })
+  }
+}
+
+export function composeCover(doc: CoverDocument, options: ComposeOptions): ComposedCover {
+  const { measurer } = options
+  const geometry = coverGeometry({
+    trimSize: doc.trimSize,
+    pageCount: doc.pageCount,
+    paper: doc.paper,
+    binding: doc.binding
+  })
+  const items: CoverItem[] = []
+  const warnings: string[] = []
+  const { look, content } = doc
+  const palette = look.palette
+  const ornament =
+    (look.ornamentId && options.ornaments?.find((o) => o.id === look.ornamentId)) || null
+  if (look.ornamentId && !ornament) {
+    warnings.push(`The ornament "${look.ornamentId}" is not in the library; none was drawn.`)
+  }
+
+  // The ground, over the whole sheet including bleed. Anything short of the
+  // bleed leaves a white sliver at the trim, which is the commonest way a
+  // first cover comes back wrong.
+  items.push({
+    kind: 'fill',
+    xPt: 0,
+    yPt: 0,
+    widthPt: pt(geometry.fullWidthIn),
+    heightPt: pt(geometry.fullHeightIn),
+    color: palette.ground
+  })
+
+  // The ground pattern, over the whole sheet and under everything else.
+  //
+  // Placed here — after the ground colour and before any panel — so it runs
+  // across the back, the spine and the front as one field. That is the point of
+  // it: an allover texture has no alignment to notice, which is what makes it
+  // survive a fold that creeps by an eighth of an inch.
+  if (look.groundPattern && isImageGround(look.groundPattern)) {
+    // Out to every edge, so the trim cuts through the texture rather than
+    // past it — and across the fold, because an allover ground has no
+    // alignment to misregister.
+    items.push({
+      kind: 'image',
+      id: GROUND_IMAGE_ID,
+      xPt: 0,
+      yPt: 0,
+      widthPt: pt(geometry.fullWidthIn),
+      heightPt: pt(geometry.fullHeightIn),
+      srcX: 0,
+      srcY: 0,
+      // Filled in by the renderer once it knows what it rendered; the composer
+      // cannot know a vector source's pixel count because it does not have one.
+      srcWidth: 0,
+      srcHeight: 0,
+      opacity: patternOpacity(look.groundPattern, look.groundPatternOpacity)
+    })
+  } else if (look.groundPattern) {
+    const placements = groundPattern(
+      look.groundPattern,
+      pt(geometry.fullWidthIn),
+      pt(geometry.fullHeightIn),
+      ornament ?? options.ornaments?.[0] ?? null
+    )
+    if (placements.length === 0) {
+      warnings.push('The fleuron ground needs an ornament to repeat, and none was chosen.')
+    }
+    for (const place of placements) {
+      items.push({
+        kind: 'ornament',
+        xPt: place.xPt,
+        yPt: place.yPt,
+        scale: place.scale,
+        art: place.art,
+        color: palette.ink,
+        opacity: patternOpacity(look.groundPattern, look.groundPatternOpacity)
+      })
+    }
+  }
+
+  // The ground figure, over the front panel and under everything on it.
+  //
+  // After the pattern, because a book that has both wants the figure in front
+  // of the texture rather than behind it, and before every panel, because
+  // nothing on the front should have to compete with a ground for the eye.
+  // Its pixels are the renderer's: a vector source has no pixel count until
+  // something has drawn it, which is the same bargain the picture-backed
+  // pattern strikes two blocks up.
+  if (look.groundFigure) {
+    // Three placements, and they are different objects rather than three
+    // sizes of one. A wrap runs the whole sheet; a bled figure runs the front
+    // panel off three edges; a framed one is a plate standing inside the
+    // border, which is what a picture with its own architecture wants.
+    const framed = framedFigureFrame(geometry, FRAME_INSET_IN, FRAME_CLEARANCE_IN)
+    const frame = look.groundFigureWrap
+      ? wrapFigureFramePt(geometry)
+      : look.groundFigureInFrame && look.frontFrame !== 'none'
+        ? {
+            xPt: pt(framed.x),
+            yPt: pt(framed.y),
+            widthPt: pt(framed.width),
+            heightPt: pt(framed.height)
+          }
+        : figureFramePt(geometry)
+    items.push({
+      kind: 'image',
+      id: GROUND_FIGURE_ID,
+      xPt: frame.xPt,
+      yPt: frame.yPt,
+      widthPt: frame.widthPt,
+      heightPt: frame.heightPt,
+      srcX: 0,
+      srcY: 0,
+      srcWidth: 0,
+      srcHeight: 0,
+      opacity: figureOpacity(look.groundFigureOpacity)
+    })
+
+    // And its companion on the back and the spine, at the same tint, fading
+    // out before the fold. Placed in its own item rather than as one picture
+    // across the wrap: two boxes that never touch cannot misregister, and one
+    // that spans the fold always can.
+    // No companion when the picture already runs the width of the sheet:
+    // there is nothing left on the back for it to sit on.
+    if (look.groundFigureBack && !look.groundFigureWrap) {
+      const back = backFigureFramePt(geometry)
+      items.push({
+        kind: 'image',
+        id: GROUND_FIGURE_BACK_ID,
+        xPt: back.xPt,
+        yPt: back.yPt,
+        widthPt: back.widthPt,
+        heightPt: back.heightPt,
+        srcX: 0,
+        srcY: 0,
+        srcWidth: 0,
+        srcHeight: 0,
+        opacity: figureOpacity(look.groundFigureOpacity)
+      })
+    }
+  }
+
+  // Art dimensions after retouching — the op stack can crop, and the DPI check
+  // must divide the pixels that survive, not the ones that arrived.
+  const art = content.art
+  const sized =
+    art.id && art.sourceWidthPx > 0
+      ? sizeAfterOps(art.sourceWidthPx, art.sourceHeightPx, art.ops)
+      : { width: 0, height: 0 }
+  const hasArt = Boolean(art.id) && sized.width > 0 && sized.height > 0
+
+  let arrangement = look.arrangement
+  if (!hasArt && arrangement !== 'typographic' && arrangement !== 'label') {
+    warnings.push(
+      `The "${arrangement}" arrangement wants a picture and none is chosen; the front was set typographically instead.`
+    )
+    arrangement = 'typographic'
+  }
+
+  const placedArt = layFrontCover(
+    items,
+    warnings,
+    geometry,
+    doc,
+    arrangement,
+    ornament,
+    measurer,
+    hasArt ? { id: art.id as string, widthPx: sized.width, heightPx: sized.height } : null
+  )
+
+  layBackCover(items, warnings, geometry, doc, ornament, measurer)
+  laySpine(items, warnings, geometry, doc, measurer)
+  layBarcode(items, warnings, geometry, doc, measurer)
+
+  return { geometry, items, placedArt, warnings }
+}
+
+function layFrontCover(
+  items: CoverItem[],
+  warnings: string[],
+  geometry: CoverGeometry,
+  doc: CoverDocument,
+  arrangement: CoverDocument['look']['arrangement'],
+  ornament: OrnamentArt | null,
+  measurer: TextMeasurer,
+  art: { id: string; widthPx: number; heightPx: number } | null
+): PlacedArt | null {
+  const { look, content } = doc
+  const palette = look.palette
+  // Not `geometry.frontSafe`: a frame is struck inside the safe line, so where
+  // type may go is whatever the frame leaves. Unframed the two are the same.
+  const safe = frontTypeArea(geometry, look.frontFrame)
+  const panel = geometry.front
+  const smallCaps = look.titleCase === 'small-caps' && measurer.hasSmallCaps(look.titleFont)
+  if (look.titleCase === 'small-caps' && !smallCaps) {
+    warnings.push(
+      `${look.titleFont} has no real small capitals, so the title was set in full capitals rather than scaled-down ones.`
+    )
+  }
+  const titleFont = face(look.titleFont, 'regular', smallCaps)
+  const authorFont = face(look.authorFont)
+  // A face without real small capitals sets them as full capitals — the same
+  // choice the interior's headings make. Scaling capitals down is the forgery
+  // this codebase refuses everywhere else, and it would be no less a forgery
+  // six inches high on a cover.
+  const titleText = smallCaps
+    ? content.title
+    : applyCase(content.title, look.titleCase === 'small-caps' ? 'upper' : look.titleCase)
+
+  // Where the type sits, and how much of the panel the picture may have.
+  const overArt = arrangement === 'full-bleed' || arrangement === 'banded'
+  const inkColor = overArt ? palette.overArt : palette.ink
+
+  let placed: PlacedArt | null = null
+
+  // --- the picture ------------------------------------------------------
+  if (art) {
+    let frame: Rect
+    if (arrangement === 'full-bleed') {
+      // Out to the sheet's edge on three sides; the fold is the fourth.
+      frame = {
+        x: panel.x,
+        y: 0,
+        width: geometry.fullWidthIn - panel.x,
+        height: geometry.fullHeightIn
+      }
+    } else if (arrangement === 'banded') {
+      // The art takes the whole panel; the band is drawn over it below.
+      frame = {
+        x: panel.x,
+        y: 0,
+        width: geometry.fullWidthIn - panel.x,
+        height: geometry.fullHeightIn
+      }
+    } else if (arrangement === 'plate-window') {
+      frame = {
+        x: safe.x,
+        y: safe.y + safe.height * 0.26,
+        width: safe.width,
+        height: safe.height * 0.46
+      }
+    } else {
+      // classic-centered: the lower half, below the type.
+      frame = {
+        x: safe.x,
+        y: safe.y + safe.height * 0.44,
+        width: safe.width,
+        height: safe.height * 0.5
+      }
+    }
+
+    const fitted = fitArt(frame, art.widthPx, art.heightPx, content.art.fit)
+    if (fitted) {
+      items.push({
+        kind: 'image',
+        id: art.id,
+        xPt: pt(fitted.dest.x),
+        yPt: pt(fitted.dest.y),
+        widthPt: pt(fitted.dest.width),
+        heightPt: pt(fitted.dest.height),
+        srcX: fitted.srcX,
+        srcY: fitted.srcY,
+        srcWidth: fitted.srcWidth,
+        srcHeight: fitted.srcHeight
+      })
+      placed = {
+        id: art.id,
+        rect: fitted.dest,
+        usedWidthPx: fitted.srcWidth,
+        usedHeightPx: fitted.srcHeight
+      }
+      if (arrangement === 'plate-window') {
+        const border = fitted.dest
+        items.push(ruleItem(pt(border.x), pt(border.y) - 4, pt(border.width), palette.accent))
+        items.push(
+          ruleItem(pt(border.x), pt(border.y + border.height) + 4, pt(border.width), palette.accent)
+        )
+      }
+    }
+  }
+
+  // --- the frame ---------------------------------------------------------
+  //
+  // After the picture, so a bled plate is framed rather than covering the
+  // border, and before the type, which `frontTypeArea` has already kept clear
+  // of it.
+  drawFrontFrame(items, geometry, look.frontFrame, palette.accent)
+
+  // --- the band, over the art -------------------------------------------
+  let typeTop = pt(safe.y)
+  let typeBox = { widthPt: pt(safe.width), heightPt: pt(safe.height) }
+
+  if (arrangement === 'banded') {
+    const bandHeightIn = panel.height * 0.34
+    items.push({
+      kind: 'fill',
+      xPt: pt(panel.x),
+      yPt: 0,
+      widthPt: pt(geometry.fullWidthIn - panel.x),
+      heightPt: pt(bandHeightIn + geometry.bleedIn),
+      color: palette.accent
+    })
+    typeTop = pt(geometry.bleedIn + 0.3)
+    typeBox = { widthPt: pt(safe.width), heightPt: pt(bandHeightIn - 0.4) }
+  } else if (arrangement === 'full-bleed') {
+    // A scrim, so the title is legible over whatever the picture is doing
+    // there. Held to the type's own block rather than the whole cover: a
+    // full-cover wash is how a good picture is turned into a grey one.
+    const scrimTop = geometry.fullHeightIn * 0.58
+    items.push({
+      kind: 'fill',
+      xPt: pt(panel.x),
+      yPt: pt(scrimTop),
+      widthPt: pt(geometry.fullWidthIn - panel.x),
+      heightPt: pt(geometry.fullHeightIn - scrimTop),
+      color: palette.ink,
+      opacity: 0.55
+    })
+    typeTop = pt(scrimTop + 0.35)
+    typeBox = { widthPt: pt(safe.width), heightPt: pt(geometry.fullHeightIn - scrimTop - 0.7) }
+  } else if (arrangement === 'plate-window') {
+    typeBox = { widthPt: pt(safe.width), heightPt: pt(safe.height * 0.22) }
+  } else if (arrangement === 'classic-centered') {
+    typeBox = { widthPt: pt(safe.width), heightPt: pt(safe.height * 0.38) }
+  } else if (arrangement === 'label') {
+    // A label sits near the head and holds everything: the empty board below
+    // it is the design, so the block must not drift down into it. Started a
+    // little below the safe line rather than on it, because type hard against
+    // a frame reads as having been pushed there.
+    typeTop = pt(safe.y + safe.height * 0.06)
+    typeBox = { widthPt: pt(safe.width), heightPt: pt(safe.height * 0.34) }
+  } else {
+    // Typographic. With no picture to balance against, type starting at the top
+    // safe line reads as a page that lost its illustration. The old jobbing
+    // printers put the title in the upper third and the imprint at the foot,
+    // and the space between them is the design — so the block starts down the
+    // panel and the author goes to the foot below.
+    typeTop = pt(safe.y + safe.height * 0.16)
+    typeBox = { widthPt: pt(safe.width), heightPt: pt(safe.height * 0.5) }
+  }
+
+  let y = typeTop
+
+  // --- the device, over the type ------------------------------------------
+  //
+  // Placed before anything else and charged against the type's own height
+  // budget, so the title is fitted to the space that is actually left rather
+  // than to the space there would have been without it.
+  // The book's own emblem where it has one, and the printer's mark otherwise:
+  // a publisher with one device still gets it on the board by setting nothing.
+  const frontDevice = look.frontMark ?? look.pressMark
+  if (look.markOnFront && frontDevice) {
+    const mark = frontDevice
+    const wantedWidthIn = Math.min(safe.width * FRONT_MARK_FRACTION, FRONT_MARK_MAX_IN)
+    // The width was capped and the height never was, so a tall device scaled
+    // off the board: at six to one on a 6 x 9 the artwork alone is 6.6 in on a
+    // 7.5 in safe area, and everything under it sets past the trim. The cap is
+    // on the device's *height* as a share of the safe area, with the width
+    // taken back in proportion so the artwork is never squashed to fit.
+    const wantedHeightIn = wantedWidthIn * (mark.heightPx / mark.widthPx)
+    const maxHeightIn = safe.height * FRONT_MARK_MAX_HEIGHT_SHARE
+    const scale = wantedHeightIn > maxHeightIn ? maxHeightIn / wantedHeightIn : 1
+    if (scale < 1) {
+      warnings.push(
+        `The device on the front is ${wantedHeightIn.toFixed(2)} in deep for its width, ` +
+          `which is more board than a device may have, so it was set at ` +
+          `${(wantedWidthIn * scale).toFixed(2)} in wide.`
+      )
+    }
+    const widthIn = wantedWidthIn * scale
+    const heightIn = wantedHeightIn * scale
+    items.push({
+      kind: 'image',
+      id: FRONT_MARK_ID,
+      xPt: pt(panel.x + panel.width / 2) - pt(widthIn) / 2,
+      yPt: y,
+      widthPt: pt(widthIn),
+      heightPt: pt(heightIn),
+      srcX: 0,
+      srcY: 0,
+      srcWidth: mark.widthPx,
+      srcHeight: mark.heightPx
+    })
+    const consumed = pt(heightIn) + pt(widthIn) * 0.32
+    y += consumed
+    // The device moves the type down; it does not eat the title.
+    //
+    // It used to be charged against the height budget, on the reasoning that a
+    // title should be fitted to the space actually left. The consequence was
+    // not what anybody chose: the `label` box is a third of the panel, a
+    // device is an inch and a third of it, and *The Theosophical Glossary*
+    // came out with an 18 pt title where the same cover without a device
+    // fits 42. Measured beside its neighbours the effect was plain — the
+    // author, pinned at 26, printed half again as large as the title above it.
+    //
+    // That is this file's own lesson about the author's size, in the other
+    // direction: check what a size is a share *of*. The box was sized without
+    // a device in mind, so charging one against it takes the title's space
+    // rather than the slack there never was. The budget is kept and the block
+    // starts lower, clamped so it still ends inside the safe area — and the
+    // clamp reports, because a title quietly refitted is the failure mode.
+    const roomBelow = pt(safe.y + safe.height) - y
+    const kept = Math.min(typeBox.heightPt, Math.max(0, roomBelow))
+    if (kept < typeBox.heightPt) {
+      warnings.push(
+        'The device over the title leaves less room than the arrangement asks for, ' +
+          'so the title was fitted to what is left.'
+      )
+    }
+    typeBox = { widthPt: typeBox.widthPt, heightPt: kept }
+  }
+
+  // --- series line -------------------------------------------------------
+  if (content.series.trim()) {
+    const size = Math.max(9, Math.min(16, typeBox.widthPt * 0.035))
+    y = centeredLines(
+      items,
+      [content.series.toUpperCase()],
+      geometry.front,
+      y,
+      face(look.bodyFont, 'regular', measurer.hasSmallCaps(look.bodyFont)),
+      size,
+      overArt ? palette.overArt : palette.accent,
+      measurer
+    )
+    y += size * 0.9
+  }
+
+  /**
+   * The edition statement, set under the rule. Returns where the next thing
+   * goes, so a cover without one is laid out exactly as it was before.
+   */
+  const setEdition = (after: number): number => {
+    if (!content.edition.trim()) return after
+    const editionFont = face(look.bodyFont, 'regular', measurer.hasSmallCaps(look.bodyFont))
+    // The banked subtitle size governs this line too, because on a cover that
+    // has no subtitle this *is* the subtitle slot: *The Human Aura* names its
+    // volumes here and *The Theosophical Glossary* says "Illustrated" here,
+    // and a collection whose subtitles agree at 16 pt while these two set at
+    // 15 has a difference a reader can see and nobody chose. Without one it
+    // keeps the share of the measure it had, which is what a single book that
+    // has banked nothing should get.
+    //
+    // Where a subtitle *is* set, this line is a third-rank label rather than
+    // the subtitle, and must not set level with it: "ANNOTATED AND
+    // ILLUSTRATED" over "The Legend of Hiram Abiff" at one size reads as two
+    // subtitles arguing. `EDITION_LABEL_SHARE` of the subtitle keeps it a
+    // label — small enough not to intrude on a title, large enough that KDP
+    // can find the words it requires an edition of a public-domain text to
+    // carry.
+    const banked = look.subtitleSizePt ?? Math.max(9, Math.min(16, typeBox.widthPt * 0.035))
+    const size = content.subtitle.trim() ? Math.max(8, banked * EDITION_LABEL_SHARE) : banked
+    // Dropped a little below the rule rather than set directly under it. The
+    // rule belongs to the title, so a line tight beneath it reads as part of
+    // the title's own block; a few points of air makes it a second thing the
+    // board says.
+    const from = after + size * EDITION_DROP
+    // A newline stacks it, the way one in a title does. A statement naming a
+    // series and the volumes in it is two thoughts, and set on one line under
+    // a rule it reads as a caption; stacked, it reads as a label. The break is
+    // the editor's where they type it, and `stackedLines` still wraps each
+    // segment, so a stacked line too long for the measure breaks rather than
+    // running off the board.
+    const next = centeredLines(
+      items,
+      stackedLines(content.edition.toUpperCase(), typeBox.widthPt, editionFont, size, measurer),
+      geometry.front,
+      from,
+      editionFont,
+      size,
+      overArt ? palette.overArt : palette.accent,
+      measurer
+    )
+    return next + size * 0.9
+  }
+
+  /** The author, set below whatever came before it. */
+  const setAuthor = (relativeTo: number, titleSizePt: number): void => {
+    if (!content.author.trim()) return
+    // A banked size wins over the share, so a collection's names agree along
+    // a shelf instead of each tracking its own fitted title. The floor still
+    // applies either way: it is what stops a name being a caption.
+    // Bounded above by the title, which a share could never break and a
+    // pinned size can. Measured on this shelf: with the author pinned at 26
+    // for the collection, the two covers whose titles were crushed by a
+    // device printed an 18 pt title under a 26 pt name. Nobody reads that as
+    // a design. The floor wins where the two meet, because a name nobody can
+    // read is the worse fault and the real answer there is a larger title.
+    const asked = Math.max(AUTHOR_MIN_PT, look.authorSizePt ?? titleSizePt * AUTHOR_RATIO)
+    const size = Math.max(AUTHOR_MIN_PT, Math.min(asked, titleSizePt))
+    if (size < asked) {
+      warnings.push(
+        `The author's name was set at ${size.toFixed(1)} pt rather than the ` +
+          `${asked.toFixed(1)} pt asked for, so it does not print larger than the title.`
+      )
+    }
+    const lines = wrapText(content.author, typeBox.widthPt, authorFont, size, measurer)
+    // On a typographic cover the author sits low, with the empty middle of the
+    // panel doing the work a picture would otherwise do — and any cover may ask
+    // for the same, which is what a ground with a subject under the rule needs.
+    const authorTop =
+      arrangement === 'typographic' || look.authorAtFoot
+        ? pt(safe.y + safe.height * 0.74)
+        : relativeTo
+    centeredLines(items, lines, geometry.front, authorTop, authorFont, size, inkColor, measurer)
+  }
+
+  const works = content.works.map((w) => w.trim()).filter((w) => w.length > 0)
+
+  if (works.length >= 2) {
+    // --- an omnibus: every work at the same size ---------------------------
+    //
+    // Two treatises bound together are two treatises. Setting the longer title
+    // smaller so it fits would say the shorter one matters more, and putting
+    // the second in the subtitle would say it outright.
+    const accentInk = overArt ? palette.overArt : palette.accent
+    const labelFont = face(look.bodyFont, 'regular', measurer.hasSmallCaps(look.bodyFont))
+    const labelSize = Math.max(9, Math.min(14, typeBox.widthPt * 0.03))
+    // Announced only if the press wants it announced. Two titles with a rule
+    // under them and an italic conjunction between already read as two works;
+    // a label above them is a second, quieter way of saying the same thing,
+    // and stacked under a series line it is one small-capital line too many.
+    if (look.announceWorks) {
+      y = centeredLines(
+        items,
+        [worksLabel(works.length)],
+        geometry.front,
+        y,
+        labelFont,
+        labelSize,
+        accentInk,
+        measurer
+      )
+      y += labelSize * 0.8
+    }
+
+    // No rule above the titles. The pair is closed underneath and open at the
+    // top, so the series line above it reads as belonging to the cover rather
+    // than being boxed in with the titles.
+    const ruleWidth = safe.width * 0.62
+    y += labelSize * 0.5
+
+    const cased = works.map((w) =>
+      smallCaps ? w : applyCase(w, look.titleCase === 'small-caps' ? 'upper' : look.titleCase)
+    )
+    // An omnibus honours a pinned size exactly as a single title does. It did
+    // not, and said nothing: `titleSizePt` is documented as setting the title's
+    // size, so a collection that pinned one got a fitted size on the volume
+    // that happened to hold two works and no report that the field had been
+    // ignored. Pinning is also the only way to give display type more air
+    // inside a frame without moving `FRAME_CLEARANCE_IN`, which is shared and
+    // would re-size every cover already approved.
+    const fitted =
+      look.titleSizePt !== null
+        ? {
+            sizePt: look.titleSizePt,
+            lines: cased.map((w) =>
+              stackedLines(w, typeBox.widthPt, titleFont, look.titleSizePt!, measurer)
+            )
+          }
+        : fitTitlesTogether(
+            cased,
+            { widthPt: typeBox.widthPt, heightPt: typeBox.heightPt * 0.56 },
+            2,
+            titleFont,
+            measurer
+          )
+
+    const conjunctionFont = face(look.bodyFont, 'italic')
+    const conjunctionSize = Math.max(10, fitted.sizePt * 0.4)
+    fitted.lines.forEach((lines, index) => {
+      if (index > 0) {
+        y += conjunctionSize * 0.45
+        y = centeredLines(
+          items,
+          ['and'],
+          geometry.front,
+          y,
+          conjunctionFont,
+          conjunctionSize,
+          inkColor,
+          measurer
+        )
+        y += conjunctionSize * 0.45
+      }
+      y = centeredLines(
+        items,
+        lines,
+        geometry.front,
+        y,
+        titleFont,
+        fitted.sizePt,
+        inkColor,
+        measurer
+      )
+    })
+
+    y += labelSize * 1.1
+    y = drawRule(
+      items,
+      look.rule === 'none' ? 'none' : 'single',
+      geometry.front,
+      y,
+      ruleWidth,
+      accentInk,
+      null
+    )
+    y += fitted.sizePt * 0.5
+    y = setEdition(y)
+    setAuthor(y, fitted.sizePt)
+  } else if (titleText.trim()) {
+    const reserved = typeBox.heightPt * (content.subtitle.trim() ? 0.55 : 0.72)
+    const fitted =
+      look.titleSizePt !== null
+        ? {
+            sizePt: look.titleSizePt,
+            lines: stackedLines(titleText, typeBox.widthPt, titleFont, look.titleSizePt, measurer)
+          }
+        : fitText(
+            titleText,
+            { widthPt: typeBox.widthPt, heightPt: reserved },
+            3,
+            titleFont,
+            measurer
+          )
+    if (fitted.lines.length * fitted.sizePt * LEADING > reserved) {
+      warnings.push('The title is taller than the space the arrangement gives it.')
+    }
+    y = centeredLines(
+      items,
+      fitted.lines,
+      geometry.front,
+      y,
+      titleFont,
+      fitted.sizePt,
+      inkColor,
+      measurer
+    )
+    y += fitted.sizePt * 0.35
+
+    // --- rule ------------------------------------------------------------
+    y = drawRule(
+      items,
+      look.rule,
+      geometry.front,
+      y,
+      safe.width * 0.5,
+      overArt ? palette.overArt : palette.accent,
+      ornament
+    )
+    y += fitted.sizePt * 0.35
+
+    // --- edition statement, under the rule ---------------------------------
+    //
+    // Under the rule rather than above the title, which is where the series
+    // line goes: a series names something the book belongs to and an edition
+    // statement names this printing, so they are read in different places and
+    // must not share a slot. Small capitals in the accent, the same treatment
+    // the series line gets, because the two are the same kind of line.
+    y = setEdition(y)
+
+    if (content.subtitle.trim()) {
+      // The editor's size where one is set: on a reprinted multi-volume work
+      // the subtitle names the volume and is read as hard as the title is.
+      // A banked size in points wins over the share, for the reason
+      // `CoverLook.subtitleSizePt` gives: a share of a fitted title makes two
+      // books in one collection disagree about how big a subtitle is.
+      // Bounded by the title for the same reason the author is, and lower: a
+      // subtitle is a subordinate line, and set level with the title it reads
+      // as two titles. The ceiling binds only a *pinned* size. A share that
+      // asks for more is the editor saying the subtitle names the volume,
+      // which is the case the share was built for.
+      const wanted = look.subtitleSizePt ?? fitted.sizePt * (look.subtitleRatio ?? SUBTITLE_RATIO)
+      const ceiling =
+        look.subtitleSizePt === null ? Number.POSITIVE_INFINITY : fitted.sizePt * SUBTITLE_MAX_SHARE
+      const size = Math.max(10, Math.min(wanted, ceiling))
+      if (size < wanted) {
+        warnings.push(
+          `The subtitle was set at ${size.toFixed(1)} pt rather than the ` +
+            `${wanted.toFixed(1)} pt asked for, so it stays under the title.`
+        )
+      }
+      // A newline stacks it, exactly as one in the title or the edition
+      // statement does. A subtitle naming two things — the legend and what
+      // this edition adds to it — is two thoughts, and run together on one
+      // line it reads as a caption. `stackedLines` still wraps each segment,
+      // so a stacked line too long for the measure breaks rather than running
+      // off the board.
+      const lines = stackedLines(
+        content.subtitle,
+        typeBox.widthPt,
+        face(look.bodyFont, 'italic'),
+        size,
+        measurer
+      )
+      y = centeredLines(
+        items,
+        lines,
+        geometry.front,
+        y,
+        face(look.bodyFont, 'italic'),
+        size,
+        inkColor,
+        measurer
+      )
+      y += size * 0.6
+    }
+
+    setAuthor(y, fitted.sizePt)
+  }
+
+  // --- imprint at the foot ------------------------------------------------
+  if (look.imprintOnFront && content.imprint.trim()) {
+    const size = IMPRINT_PT
+    const font = face(look.bodyFont, 'regular', measurer.hasSmallCaps(look.bodyFont))
+    const metrics = measurer.metrics(font, size)
+    const width = measurer.widthOf(content.imprint, font, size)
+    items.push({
+      kind: 'text',
+      text: content.imprint,
+      font,
+      sizePt: size,
+      xPt: pt(panel.x + panel.width / 2) - width / 2,
+      yPt: pt(safe.y + safe.height) - metrics.descent,
+      color: overArt ? palette.overArt : palette.ink,
+      widthPt: width,
+      ascentPt: metrics.ascent,
+      descentPt: metrics.descent
+    })
+  }
+
+  return placed
+}
+
+function layBackCover(
+  items: CoverItem[],
+  warnings: string[],
+  geometry: CoverGeometry,
+  doc: CoverDocument,
+  ornament: OrnamentArt | null,
+  measurer: TextMeasurer
+): void {
+  const { look, content } = doc
+  const frame = blurbFrame(geometry)
+  const bodyFont = face(look.bodyFont)
+  const palette = look.palette
+
+  let y = pt(frame.y)
+
+  if (ornament && look.rule !== 'none') {
+    const widthIn = Math.min(frame.width * 0.35, 1.6)
+    const scale = pt(widthIn) / ornament.width
+    items.push({
+      kind: 'ornament',
+      xPt: pt(frame.x + frame.width / 2) - (ornament.width * scale) / 2,
+      yPt: y,
+      scale,
+      art: ornament,
+      color: palette.accent
+    })
+    y += ornament.height * scale + 14
+  }
+
+  // A cover is new matter entirely — nothing on it is being reproduced from a
+  // page — so there is no faithfulness argument for keeping a typewriter mark,
+  // and no switch. The function is the interior's own, so the quotes on the
+  // board and the quotes inside the book cannot come out differently.
+  const paragraphs = typographicQuotes(content.blurb)
+    .split(/\n{2,}/)
+    .filter((p) => p.trim().length > 0)
+  const hasBold = measurer.hasBold(look.bodyFont)
+  const blurbFont = (style: 'regular' | 'italic' | 'bold'): FontRef =>
+    face(look.bodyFont, style === 'bold' && !hasBold ? 'italic' : style)
+  const sizePt = look.blurbSizePt ?? BLURB_PT
+  // One set of metrics for every line, taken from the body face: an italic
+  // phrase must not shift the line it sits in off the others.
+  const metrics = measurer.metrics(bodyFont, sizePt)
+  const bottom = pt(frame.y + frame.height)
+  const copyTop = y
+  let copyBottom = y
+  let overflowed = false
+  for (const paragraph of paragraphs) {
+    const lines = wrapMarkup(paragraph.trim(), pt(frame.width), blurbFont, sizePt, measurer)
+    for (const runs of lines) {
+      if (y + metrics.ascent > bottom) {
+        overflowed = true
+        break
+      }
+      let x = pt(frame.x)
+      for (const run of runs) {
+        const width = measurer.widthOf(run.text, run.font, sizePt)
+        items.push({
+          kind: 'text',
+          text: run.text,
+          font: run.font,
+          sizePt,
+          xPt: x,
+          yPt: y + metrics.ascent,
+          color: palette.ink,
+          widthPt: width,
+          ascentPt: metrics.ascent,
+          descentPt: metrics.descent
+        })
+        x += width
+      }
+      y += sizePt * 1.4
+      copyBottom = y - sizePt * (1.4 - 1)
+    }
+    if (overflowed) break
+    y += sizePt * 0.7
+  }
+  if (overflowed) {
+    warnings.push(
+      `The back-cover copy is longer than the space it has at ${sizePt} pt and was cut. Shorten it, or set it smaller.`
+    )
+  }
+
+  // The box is drawn round the copy that was *set*, not round the frame it was
+  // set in: that frame runs down to the barcode, so a box on it would stand
+  // three inches of empty board below the last line. Pushed after the type
+  // because it is struck round it and never over it.
+  if (look.blurbBorder !== 'none' && copyBottom > copyTop) {
+    const pad = pt(BLURB_FRAME_PAD_IN)
+    drawFrame(
+      items,
+      look.blurbBorder,
+      pt(frame.x) - pad,
+      copyTop - pad,
+      pt(frame.width) + pad * 2,
+      copyBottom - copyTop + pad * 2,
+      palette.accent
+    )
+  }
+
+  if (content.imprint.trim()) {
+    const font = face(look.bodyFont, 'regular', measurer.hasSmallCaps(look.bodyFont))
+    const m = measurer.metrics(font, IMPRINT_PT)
+    items.push({
+      kind: 'text',
+      text: content.imprint,
+      font,
+      sizePt: IMPRINT_PT,
+      // Aligned with the copy above it, not with the safe area. An imprint
+      // sitting three quarters of an inch to the left of the only other text
+      // on the panel reads as having come adrift from it.
+      xPt: pt(frame.x),
+      yPt: pt(geometry.backSafe.y + geometry.backSafe.height) - m.descent,
+      color: palette.ink,
+      widthPt: measurer.widthOf(content.imprint, font, IMPRINT_PT),
+      ascentPt: m.ascent,
+      descentPt: m.descent
+    })
+  }
+}
+
+function laySpine(
+  items: CoverItem[],
+  warnings: string[],
+  geometry: CoverGeometry,
+  doc: CoverDocument,
+  measurer: TextMeasurer
+): void {
+  const { look, content } = doc
+  const safe = geometry.spineSafe
+
+  // --- the press mark, at the foot ---------------------------------------
+  //
+  // Placed first because it takes space the text then has to work around, and
+  // drawn even on a spine too thin for text: a device three-eighths of an inch
+  // wide still reads as a publisher's mark where a line of type would not.
+  let markTopIn: number | null = null
+  const mark = look.pressMark
+  const usableWidth = geometry.spineIn - SPINE_TEXT_CLEARANCE_IN * 2
+  if (mark && usableWidth < MIN_MARK_WIDTH_IN) {
+    // Reported rather than dropped, which is the rule everywhere else here.
+    // Below about a fifth of an inch a device is a smudge with a shape it can
+    // no longer show, and shrinking it to fit would print exactly that.
+    // The page count it would take is worked from this book's own paper and
+    // binding, by the same arithmetic the spine is: a fixed figure in the
+    // sentence was right for one stock and wrong for the others.
+    const neededIn = MIN_MARK_WIDTH_IN + SPINE_TEXT_CLEARANCE_IN * 2
+    const empty = spineWidth(0, geometry.paper, geometry.binding)
+    const pages = Math.ceil((neededIn - empty) / PAPER_CALIPER_IN[geometry.paper])
+    const atPages = pages > 0 ? ` — about ${pages} pages on this paper` : ''
+    warnings.push(
+      `The spine is ${geometry.spineIn.toFixed(3)} in, too narrow to print the press's mark ` +
+        `legibly, so it was left off. It needs ${neededIn.toFixed(3)} in of fold${atPages}.`
+    )
+  }
+  if (mark && usableWidth >= MIN_MARK_WIDTH_IN) {
+    // As much of the fold as it safely can, up to the ceiling. The share only
+    // governs a *narrow* spine: on anything over about three-quarters of an
+    // inch the 0.42 ceiling binds first, so raising it enlarges the mark on a
+    // slim book and moves nothing on a fat one. It was 0.78, which printed a
+    // 0.21 in mark on a 0.394 in spine — half the size of the same mark on
+    // the thick books beside it, and the editor read that as the mark being
+    // wrong rather than the fold being narrow. The clearance either side is
+    // already taken off `usableWidth`, so what is left here is a hair of
+    // margin against the fold wandering.
+    const width = Math.min(usableWidth * 0.95, 0.42)
+    const height = width * (mark.heightPx / mark.widthPx)
+    // Never more than a fraction of the fold's length: a device that grows
+    // with the book would dominate the spine of a thin one.
+    const capped = Math.min(height, geometry.spine.height * 0.14)
+    const finalWidth = capped < height ? capped * (mark.widthPx / mark.heightPx) : width
+    const x = geometry.spine.x + (geometry.spine.width - finalWidth) / 2
+    const y = geometry.spine.y + geometry.spine.height - SAFE_MARGIN_IN - capped
+    items.push({
+      kind: 'image',
+      id: PRESS_MARK_ID,
+      xPt: pt(x),
+      yPt: pt(y),
+      widthPt: pt(finalWidth),
+      heightPt: pt(capped),
+      srcX: 0,
+      srcY: 0,
+      srcWidth: mark.widthPx,
+      srcHeight: mark.heightPx
+    })
+    markTopIn = y
+  }
+
+  if (!look.spineText) return
+  if (!geometry.spineTextAllowed) {
+    warnings.push(
+      `At ${geometry.pageCount} pages the spine is too narrow for KDP to print text on it ` +
+        `(they want ${MIN_PAGES_FOR_SPINE_TEXT} pages or more), so it was left blank.`
+    )
+    return
+  }
+  if (!safe || safe.width <= 0) {
+    warnings.push('The spine is too narrow for text once clearance is allowed; it was left blank.')
+    return
+  }
+
+  const font = face(look.titleFont, 'regular', measurer.hasSmallCaps(look.titleFont))
+  // The spine's *width* is the type's height, so the size is bounded by it.
+  // The fold's own bound, taken from the face rather than from a constant.
+  //
+  // It was `pt(safe.width) * 0.62`, and measured off a rendered sheet that is
+  // two and a third times too careful: on the 0.356 in spine of *The Lost
+  // Keys of Masonry* the ink came to 0.10 in across a fold with 0.231 in to
+  // give, leaving 0.12 and 0.14 in of bare board either side of a line set at
+  // 10.3 pt. `spineSafe` has already taken KDP's sixteenth of an inch off
+  // each edge, so what is left is the type's to use.
+  //
+  // What bounds it is the height of the line's own box, which is what the
+  // same metrics centre it by, so the two cannot disagree: at 10.3 pt the
+  // box is 0.709 em = 0.101 in and the measured ink was 0.10 in. A share of
+  // the fold is kept back (`SPINE_FOLD_MARGIN`) so a fold that wanders still
+  // has white either side of the type rather than KDP's bare minimum.
+  const boxPerEm = (() => {
+    const at = measurer.metrics(font, 100)
+    // Ascent *plus* descent, which is the box `itemBounds` gives a rotated run
+    // and therefore the box the safe-area check measures. The first version of
+    // this used `ascent - descent`, which is twice the offset from the fold's
+    // centre line to the baseline and not a height at all — 0.709 em against
+    // the true 1.305 for this face. It sized the two thin spines at nearly
+    // twice what the fold allows and both covers failed their own check.
+    //
+    // The pixels said otherwise and were not wrong: the *ink* of this line is
+    // about 0.71 em, because EB Garamond declares an ascent of 1.007 em to
+    // leave room for accented capitals this line does not contain. But the
+    // gate measures the declared box, and a gate is not something to argue out
+    // of its warning to win a few points of type. Sizing by the ink would need
+    // the measurer to report a per-string extent, which it does not; until it
+    // does, the engine and the check agree.
+    return (at.ascent + at.descent) / 100
+  })()
+  const maxByThickness =
+    boxPerEm > 0 ? (pt(safe.width) * SPINE_FOLD_MARGIN) / boxPerEm : pt(safe.width) * 0.62
+  // The spine is one line of type along a fold, so a title the editor stacked
+  // for the board is flattened here. Left in, the newline reaches the writer as
+  // a character to draw, which is a spine that prints wrong and says nothing.
+  const line = [flattened(content.title), content.author].filter((s) => s.trim()).join(' · ')
+  if (!line.trim()) return
+
+  // The run of fold the text may occupy: down to the mark, if there is one,
+  // with a gap so the two do not touch.
+  const runTop = safe.y
+  const runBottom = markTopIn === null ? safe.y + safe.height : markTopIn - 0.12
+  const runLength = Math.max(0, runBottom - runTop)
+
+  // The collection's own size where it has banked one, the shipped ceiling
+  // otherwise. Either is still bounded by the fold's width and then cut down
+  // to the run of fold available, because neither of those is a preference.
+  const asked = look.spineSizePt ?? SPINE_MAX_PT
+  let size = Math.min(asked, maxByThickness)
+  const maxLengthPt = pt(runLength)
+  while (size > 6 && measurer.widthOf(line, font, size) > maxLengthPt) size -= 0.5
+  if (measurer.widthOf(line, font, size) > maxLengthPt) {
+    warnings.push('The spine text is longer than the spine; it was left off.')
+    return
+  }
+  // Said rather than left to be noticed on a shelf. A book too thin to carry
+  // the collection's spine size is an ordinary fact about that book, and the
+  // editor should learn it here and not from the printed copy.
+  if (look.spineSizePt !== null && size < look.spineSizePt) {
+    warnings.push(
+      `The spine sets at ${size.toFixed(1)} pt rather than the collection's ` +
+        `${look.spineSizePt.toFixed(1)} pt: ` +
+        (size === Math.min(asked, maxByThickness)
+          ? `a ${geometry.spineIn.toFixed(3)} in fold holds no more.`
+          : 'the title and author are too long for the fold at that size.')
+    )
+  }
+
+  const metrics = measurer.metrics(font, size)
+  const textLength = measurer.widthOf(line, font, size)
+  // Rotated −90°, the run starts at the top of the spine and reads downward.
+  // x is the baseline's distance across the spine; centre the glyphs in it.
+  const centreX = pt(geometry.spine.x + geometry.spine.width / 2)
+  const startY = pt(runTop + runLength / 2) - textLength / 2
+
+  items.push({
+    kind: 'text',
+    text: line,
+    font,
+    sizePt: size,
+    xPt: centreX - (metrics.ascent - metrics.descent) / 2,
+    yPt: startY,
+    color: look.palette.ink,
+    widthPt: textLength,
+    ascentPt: metrics.ascent,
+    descentPt: metrics.descent,
+    rotate: -90
+  })
+}
+
+/** Every rectangle an item occupies, in inches — what the validator inspects. */
+export function itemBounds(item: CoverItem): Rect | null {
+  switch (item.kind) {
+    case 'fill':
+    case 'image':
+      return {
+        x: item.xPt / 72,
+        y: item.yPt / 72,
+        width: item.widthPt / 72,
+        height: item.heightPt / 72
+      }
+    case 'rule':
+      return {
+        x: item.xPt / 72,
+        y: item.yPt / 72,
+        width: item.widthPt / 72,
+        height: item.thicknessPt / 72
+      }
+    case 'ornament':
+      return {
+        x: item.xPt / 72,
+        y: item.yPt / 72,
+        width: (item.art.width * item.scale) / 72,
+        height: (item.art.height * item.scale) / 72
+      }
+    case 'text': {
+      // The ink box the composer measured, not a fraction of the point size.
+      const lengthIn = item.widthPt / 72
+      const ascentIn = item.ascentPt / 72
+      const descentIn = item.descentPt / 72
+      if (item.rotate === -90) {
+        // Turned a quarter clockwise, the run advances downward and the
+        // ascender leans toward the front cover.
+        return {
+          x: item.xPt / 72 - descentIn,
+          y: item.yPt / 72,
+          width: ascentIn + descentIn,
+          height: lengthIn
+        }
+      }
+      return {
+        x: item.xPt / 72,
+        y: item.yPt / 72 - ascentIn,
+        width: lengthIn,
+        height: ascentIn + descentIn
+      }
+    }
+  }
+}
+
+export { contains, overlaps }
+
+/**
+ * Where a picture *would* print on this cover, before there is one.
+ *
+ * The studio has to say "this needs 1800 × 2700 pixels" while the user is
+ * choosing a model, which is before any art exists to measure. Composing with a
+ * stand-in of a known size and reading back the rectangle answers that with the
+ * real arrangement rather than a second copy of its geometry — so a change to
+ * how `plate-window` sizes its window cannot leave this advice behind.
+ *
+ * Returns null for an arrangement that has no picture in it.
+ */
+export function artFrame(doc: CoverDocument, measurer: TextMeasurer): Rect | null {
+  if (doc.look.arrangement === 'typographic') return null
+  const probe: CoverDocument = {
+    ...doc,
+    content: {
+      ...doc.content,
+      art: {
+        id: '__probe__',
+        // A 2:3 stand-in: `cover` fit keeps the frame whatever the proportions,
+        // and `contain` needs *some* ratio to letterbox against. Portrait is
+        // the right guess for a cover, and the caller is told the frame, not
+        // the picture.
+        sourceWidthPx: 2000,
+        sourceHeightPx: 3000,
+        provenance: null,
+        ops: [],
+        fit: 'cover'
+      }
+    }
+  }
+  return composeCover(probe, { measurer }).placedArt?.rect ?? null
+}
