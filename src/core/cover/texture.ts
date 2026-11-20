@@ -29,7 +29,9 @@
  *   `groundFigureBack` and `groundFigureInvert`, for this picture.
  *
  * The picture is tinted like every figure: its dark is the ink. Prepare it as
- * ink on white (`scripts/cover-texture.py`).
+ * ink on white (`scripts/cover-texture.py`). A book's own text set as a field
+ * (`scripts/textground.mjs`, an SVG) is a texture too, placed `wrap`: the
+ * text is the book's, so it is made per book and never kept here.
  *
  * Pure: reading the spec and setting the document. The pixels are the
  * platform's.
@@ -84,7 +86,9 @@ export const TEXTURE_TYPES: Readonly<Record<string, string>> = {
   png: 'image/png',
   jpg: 'image/jpeg',
   jpeg: 'image/jpeg',
-  webp: 'image/webp'
+  webp: 'image/webp',
+  // A vector field, such as the text ground `scripts/textground.mjs` makes.
+  svg: 'image/svg+xml'
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {

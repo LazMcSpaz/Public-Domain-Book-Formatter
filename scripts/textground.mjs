@@ -3,11 +3,15 @@
  * The book's own text, set as a ground.
  *
  * A dense field of the volume's words across the whole wrap, printed faint
- * under the type. It is a *pattern* and not a figure, in this app's own sense
- * (`src/core/cover/patterns.ts`): allover, with no centre and no subject, so
- * there is nothing for a fold that creeps by an eighth of an inch to move. That
- * is what lets it run across the back, the spine and the front as one field
- * without the single-picture argument a ground figure needs.
+ * under the type: allover, with no centre and no subject, so there is nothing
+ * for a fold that creeps by an eighth of an inch to move, and it can run across
+ * the back, the spine and the front as one field.
+ *
+ * The field is the book's own text, so it is never kept in the tools, which
+ * are public: write it beside the book (or to a scratch folder), and the
+ * script refuses a path inside a copy of the tools. A cover uses it as a
+ * `texture` block with placement `wrap` (`src/core/cover/texture.ts`), the
+ * file given to `scripts/cover-front.mjs` with `--textures`.
  *
  * ## Why the glyphs come out as paths
  *
@@ -46,6 +50,7 @@
  */
 import { readFileSync, writeFileSync } from 'node:fs'
 import { readJsonSync } from './lib/json-file.mjs'
+import { toolsRefusal } from './lib/tools-guard.mjs'
 import { createRequire } from 'node:module'
 
 const require = createRequire(import.meta.url)
@@ -87,6 +92,11 @@ function flag(name, fallback) {
 const [, , bookPath, outPath] = process.argv
 if (!bookPath || !outPath || bookPath.startsWith('--')) {
   console.error('usage: node scripts/textground.mjs <book.json> <out.svg> [options]')
+  process.exit(2)
+}
+const refused = toolsRefusal(outPath, "a book's text ground")
+if (refused) {
+  console.error(refused)
   process.exit(2)
 }
 

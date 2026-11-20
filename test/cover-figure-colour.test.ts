@@ -53,9 +53,7 @@ function interviewState(doc: CoverDocument): CoverInterviewState {
     doc,
     pageCountMeasured: true,
     bankedLooks: [],
-    plates: [],
-    hasReplicateToken: false,
-    replicateAvailable: null
+    plates: []
   }
 }
 

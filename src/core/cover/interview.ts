@@ -59,27 +59,16 @@ export interface CoverInterviewState {
   bankedLooks: readonly SavedCoverLook[]
   /** Plates from this book's own scan, if it was read here. */
   plates: readonly PlateOffer[]
-  /** True when a Replicate token is stored, so the key question is skipped. */
-  hasReplicateToken: boolean
-  /**
-   * Whether the browser can reach Replicate at all.
-   *
-   * `null` until the probe lands. Only an explicit `false` withdraws the offer,
-   * so the door appears optimistically rather than flickering in — the same
-   * shape as `batchAvailable`, and for the same reason.
-   */
-  replicateAvailable: boolean | null
   /**
    * Which door the user has taken to a picture, as answered on this gate.
    *
    * Carried in the state rather than read out of the answers by the question
    * builder, because the builder is pure and takes the book's state: it is the
    * same reason the wizard's steps take a `WizardState` and not the answer map.
-   * What it buys is the rule the whole interview runs on — a model, a brief and
-   * a subject are three questions nobody uploading their own picture should
-   * ever be shown.
+   * What it buys is the rule the whole interview runs on: a plate chooser is a
+   * question nobody uploading their own picture should ever be shown.
    */
-  artSource?: 'plate' | 'upload' | 'generated' | 'none'
+  artSource?: 'plate' | 'upload' | 'none'
 
   /** A rendered sample of the cover as it currently stands. */
   previewUrl?: string

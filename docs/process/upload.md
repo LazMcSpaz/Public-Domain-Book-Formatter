@@ -134,9 +134,11 @@ node scripts/cover-front.mjs covers/softcover.json softcover.png --sheet --pdf c
 - `look.groundFigureOnRule` (with `groundFigureInFrame`, or the texture's
   `on-rule` placement) sets a framed picture on the frame's inner rule.
 - A spec that names a built-in figure the composer does not have stops with a
-  message. Specs written on the old branch that name `candidate-at-the-gates`,
-  `sinnett`, `mahatma-hands` or `swami-plate` need that picture given as a
-  texture file first (the typesetter's).
+  message, and so does one naming a ground pattern it does not have. Specs
+  written on the old branch that name `candidate-at-the-gates`, `sinnett`,
+  `mahatma-hands` or `swami-plate`, or the `lexicon` pattern, need that
+  picture (or, for `lexicon`, the text ground `scripts/textground.mjs` makes)
+  given as a texture file first (the typesetter's).
 
 ## When KDP refuses a file
 

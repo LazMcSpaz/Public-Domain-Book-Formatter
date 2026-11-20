@@ -12,6 +12,7 @@ import { fixedWidthMeasurer } from '@core/layout'
 import { BUILTIN_ORNAMENTS } from '@core/ornament'
 import {
   GROUND_IMAGE_ID,
+  GROUND_IMAGE_SRC,
   GROUND_PATTERNS,
   groundPattern,
   isImageGround,
@@ -163,26 +164,26 @@ describe('how faint a ground prints is the pattern’s, until a book says otherw
   })
 })
 
-describe('the book’s own text as a ground', () => {
-  function lexicon(patch: (d: CoverDocument) => void = () => {}): CoverDocument {
+describe('a picture-backed ground is one field across the sheet', () => {
+  function marbled(patch: (d: CoverDocument) => void = () => {}): CoverDocument {
     return bookCover((d) => {
-      d.look.groundPattern = 'lexicon'
+      d.look.groundPattern = 'marbled'
       patch(d)
     })
   }
 
-  it('is a picture rather than paths, like the marble and for the same reason', () => {
-    // Glyph outlines by the thousand, which `drawSvgPath` would write as one
-    // flat fill per path; it is rasterised by the browser instead.
-    expect(isImageGround('lexicon')).toBe(true)
-    expect(groundPattern('lexicon', 100, 100, BUILTIN_ORNAMENTS[0]!)).toEqual([])
+  it('is a picture rather than paths', () => {
+    // A trace with gradients, which `drawSvgPath` would write as one flat fill
+    // per path; it is rasterised by the browser instead.
+    expect(isImageGround('marbled')).toBe(true)
+    expect(groundPattern('marbled', 100, 100, BUILTIN_ORNAMENTS[0]!)).toEqual([])
   })
 
   it('runs across the back, the spine and the front as one field', () => {
-    // The whole argument for a text ground crossing the fold: it is allover,
-    // so there is no subject for a fold that creeps to move. A figure gets its
-    // own panel; this does not need one.
-    const { items, geometry } = composeCover(lexicon(), { measurer })
+    // The argument for an allover ground crossing the fold: there is no subject
+    // for a fold that creeps to move. A figure gets its own panel; this does
+    // not need one.
+    const { items, geometry } = composeCover(marbled(), { measurer })
     const ground = items.find((i) => i.kind === 'image' && i.id === GROUND_IMAGE_ID)!
     if (ground.kind !== 'image') throw new Error('unreachable')
     expect(ground.xPt).toBe(0)
@@ -191,12 +192,21 @@ describe('the book’s own text as a ground', () => {
   })
 
   it('prints faint enough to be a surface', () => {
-    const { items } = composeCover(lexicon(), { measurer })
+    const { items } = composeCover(marbled(), { measurer })
     const ground = items.find((i) => i.kind === 'image' && i.id === GROUND_IMAGE_ID)!
     if (ground.kind !== 'image') throw new Error('unreachable')
-    expect(ground.opacity).toBe(PATTERN_OPACITY.lexicon)
+    expect(ground.opacity).toBe(PATTERN_OPACITY.marbled)
     expect(ground.opacity!).toBeLessThanOrEqual(MAX_PATTERN_OPACITY)
     expect(ground.opacity!).toBeGreaterThanOrEqual(MIN_PATTERN_OPACITY)
+  })
+
+  it('carries no book’s text: that is made per book and given as a texture', () => {
+    // A text ground is the book's own words, so it is never a built-in pattern
+    // (this repository is public); `scripts/textground.mjs` makes it beside
+    // the book and the spec names the file in a texture block.
+    expect(GROUND_PATTERNS as readonly string[]).not.toContain('lexicon')
+    for (const src of Object.values(GROUND_IMAGE_SRC))
+      expect(src).toMatch(/^\/patterns\/marbled\.svg$/)
   })
 })
 

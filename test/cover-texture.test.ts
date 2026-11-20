@@ -60,6 +60,10 @@ describe('readTextureSpec', () => {
     })
   })
 
+  it('takes an SVG, which is what a text ground is made as', () => {
+    expect(readTextureSpec({ file: 'text-ground.svg', placement: 'wrap' }).problems).toEqual([])
+  })
+
   it('reads every field a typesetter can set', () => {
     const read = spec({
       placement: 'on-rule',

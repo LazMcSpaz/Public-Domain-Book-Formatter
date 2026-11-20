@@ -445,10 +445,11 @@ left|right` with the text running past it. `figure list` and
   (`#cover`) in a headless browser, front and flat sheet, for looking at a
   change to the studio.
 - `node scripts/textground.mjs <book.json> <out.svg> [--from <leaf>]`: the
-  book's own text as a cover ground (the `lexicon` pattern): its words as one
-  dense field, turned, bold and italic kept, the glyphs as paths.
-- `python3 scripts/trace-device.py <scan.png> <out.svg> [--crop x0,y0,x1,y1]`: a scanned emblem traced to vector for
-  `public/devices/` (needs `potrace` for Python; its opening comment has the options).
+  book's own text as a cover ground: its words as one dense field, turned,
+  bold and italic kept, the glyphs as paths. It is the book's text, so write
+  it beside the book or to a scratch folder (the command refuses any path in a
+  copy of the tools) and give it to the cover as a `texture` block with
+  placement `wrap`.
 
 The PDF export (`drive.mjs proof`) and cover flattening
 (`scripts/flatten-cover.py`) are listed under "Named elsewhere" below.

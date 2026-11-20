@@ -24,9 +24,9 @@ In more detail:
 ## Modules touched
 
 - `src/core/cover/` (new folder of core: the cover's geometry, layout, checks, look and interview), split to the 400-line limit.
-- `src/platform/browser/` (`cover-pdf.ts`, `cover-preview.ts`, `press-mark.ts`, `replicate.ts`, `cover-looks.ts`, and small additions to `fonts.ts`, `download.ts`, `settings.ts`).
+- `src/platform/browser/` (`cover-pdf.ts`, `cover-preview.ts`, `press-mark.ts`, `cover-looks.ts`, and small additions to `fonts.ts` and `download.ts`).
 - `src/app/` (`CoverStudio.tsx` and its parts, the `#cover` route, the export screen's button).
-- `scripts/` (`cover-front.mjs`, `cover-texture.py`, `screenshot-cover.mjs`, `textground.mjs`, `trace-device.py`, `lib/chromium.mjs`).
+- `scripts/` (`cover-front.mjs`, `cover-texture.py`, `screenshot-cover.mjs`, `textground.mjs`, `lib/chromium.mjs`).
 - `test/` (the cover tests).
 - `public/devices`, `public/marks`, `public/patterns` (the vector artwork the composer draws).
 - `docs/` (this spec, `process/upload.md`, `reference/commands.md`, `reference/cover-composer.md`, `architecture.md`).
@@ -34,7 +34,7 @@ In more detail:
 ## Rules/decisions that apply
 
 - This repository is public: no book's pictures go into it. The three photographs on the draft branch (`public/figures/`) stay out; a book's picture reaches the composer only as a texture file named in its spec.
-- Only listed packages (`harness/rules.json`); nothing new is added. `cover-texture.py` uses Pillow and NumPy, as the other Python scripts do.
+- Only listed packages (`harness/rules.json`); nothing new is added. `cover-texture.py` uses Pillow only, which `flatten-cover.py` and `epub-shrink-images.py` already use. Known gap, older than this change: the Python packages (Pillow, and `img2pdf` for `flatten-cover.py`) have no decision record, since `rules.json` lists only npm packages.
 - Module boundaries: the cover core stays pure (`npm run typecheck:core`); the browser parts stay in `src/platform/browser/`.
 - Never raise the main device database's version for a cache (`src/platform/browser/CLAUDE.md`): banked cover looks get their own database.
 - The baseline may only shrink: every new file is under 400 lines.
@@ -42,6 +42,9 @@ In more detail:
 
 ## Out of scope
 
-- Changing any cover spec on the shelf. A spec that names `candidate-at-the-gates`, `sinnett`, `mahatma-hands` or `swami-plate` needs its picture given as a texture file before it can be recut; that is the typesetter's.
+- Making cover art with an outside image service (Replicate, built on the cover branch): a paid service the approved summary does not name and `docs/product.md` does not list. It stays on `claude/cover-front-icons` until the owner decides; it would come back with a decision record.
+- A book's own text as a built-in ground (the branch's `lexicon` pattern, which was one book's text): `scripts/textground.mjs` makes it per book, outside the tools, and a spec gives it as a texture.
+- `scripts/trace-device.py`, which needs NumPy and `potrace`, packages no script on `main` uses; the vector devices it traced are kept, the tool stays on the old branch.
+- Changing any cover spec on the shelf. A spec that names `candidate-at-the-gates`, `sinnett`, `mahatma-hands` or `swami-plate`, or the `lexicon` pattern, needs its picture or text given as a texture file before it can be recut; that is the typesetter's.
 - The book-specific cutting steps in the typesetter's scratch script (the crops, the canopy, skyline and floor extensions) and `make-handwriting-ground.py`; they stay with the typesetter.
 - `scripts/radiance.mjs`, which made one emblem's artwork; that artwork is kept, the tool stays on the old branch.

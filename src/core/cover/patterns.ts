@@ -33,8 +33,7 @@ import type { OrnamentArt } from '@core/ornament'
 import { auricField, guilloche, laidPaper, ribbons } from './patterns-shapes'
 export { WAVE_PERIOD_IN, waveOffset } from './patterns-shapes'
 
-export type GroundPattern =
-  'laid' | 'fleuron' | 'aura' | 'guilloche' | 'marbled' | 'lexicon' | 'wave'
+export type GroundPattern = 'laid' | 'fleuron' | 'aura' | 'guilloche' | 'marbled' | 'wave'
 
 export const GROUND_PATTERNS: readonly GroundPattern[] = [
   'laid',
@@ -42,7 +41,6 @@ export const GROUND_PATTERNS: readonly GroundPattern[] = [
   'aura',
   'guilloche',
   'marbled',
-  'lexicon',
   'wave'
 ]
 
@@ -60,8 +58,7 @@ export const GROUND_IMAGE_ID = '__ground__'
 
 /** Where a picture-backed ground's file lives, relative to the app. */
 export const GROUND_IMAGE_SRC: Readonly<Partial<Record<GroundPattern, string>>> = {
-  marbled: '/patterns/marbled.svg',
-  lexicon: '/patterns/lexicon.svg'
+  marbled: '/patterns/marbled.svg'
 }
 
 /** Whether this ground is a picture rather than drawn paths. */
@@ -75,7 +72,6 @@ export const PATTERN_LABEL: Readonly<Record<GroundPattern, string>> = {
   aura: 'Auric ovoids — the diagram from The Human Aura, as a field',
   guilloche: 'Guilloche — the engine-turned rosette of a share certificate',
   marbled: 'Marbled paper — the swirled endpaper of a bound book',
-  lexicon: 'The book’s own text, set as a field and turned',
   wave: 'Flowing bands — the undulating lines of a 1970s poster'
 }
 
@@ -88,8 +84,6 @@ export const PATTERN_NOTE: Readonly<Record<GroundPattern, string>> = {
     'The engraved lathe-work of 1910s commercial printing — banknotes, share certificates, diplomas. Expensive-looking and entirely of the period.',
   marbled:
     'The house pattern. Supplied as artwork rather than drawn here, so it prints as a picture at the resolution the sheet needs rather than as paths.',
-  lexicon:
-    'The volume’s own words, run together into one field and set at an angle — headwords bold and language tags italic, as the book sets them. Generated per book by `scripts/textground.mjs`, which is why it is artwork rather than paths.',
   wave: 'Parallel lines that undulate in step and drift out of it, so along the sheet they crowd together and open out again. Drawn rather than supplied, so it prints as vector at any size, and allover by construction.'
 }
 
@@ -103,14 +97,9 @@ export const PATTERN_OPACITY: Readonly<Record<GroundPattern, number>> = {
   // lightest a print-on-demand press can be relied on to hold, not a safe
   // middle, and it is the one number here that a proof copy should settle.
   marbled: 0.05,
-  // Measured rather than chosen: the field's ink coverage is 12.75%, which is
-  // the same order as the laid paper's lines, so it sits in the same band they
-  // do. The type is 10pt, whose stems are about 0.8pt, well clear of the
-  // hairline floor above; setting it smaller to fit more of the book in is the
-  // way to break rule 2.
-  lexicon: 0.1,
   // Measured by summing stroked length against the sheet's area on a 6×9
-  // wrap: see the note beside `lexicon`. Set after looking at the board.
+  // wrap, which puts its coverage in the laid paper's band. Set after looking
+  // at the board.
   wave: 0.14
 }
 

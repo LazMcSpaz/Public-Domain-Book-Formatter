@@ -50,16 +50,6 @@ export type ArtProvenance =
   | { kind: 'plate'; pageIndex: number; caption: string }
   /** A file the user supplied. */
   | { kind: 'upload'; fileName: string }
-  /**
-   * Made by a model.
-   *
-   * The model, the prompt and the seed are kept because a cover is a public
-   * artefact with a claim attached — that this is a faithful reprint of an old
-   * book — and a generated picture on it is a thing a reader is entitled to
-   * know about. Keeping the record costs a few hundred bytes and makes the
-   * credit line in `describeProvenance` a fact rather than a memory.
-   */
-  | { kind: 'generated'; model: string; prompt: string; seed: number | null }
 
 export interface CoverArt {
   /** Stable id; the renderer resolves pixels by it. Null when there is no art. */
@@ -272,7 +262,5 @@ export function describeProvenance(p: ArtProvenance | null): string | null {
       return `Cover illustration from the original edition, page ${p.pageIndex + 1}.`
     case 'upload':
       return `Cover illustration supplied by the editor (${p.fileName}).`
-    case 'generated':
-      return `Cover illustration generated with ${p.model}.`
   }
 }

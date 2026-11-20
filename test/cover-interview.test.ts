@@ -36,8 +36,6 @@ function state(patch: Partial<CoverInterviewState> = {}): CoverInterviewState {
     pageCountMeasured: true,
     bankedLooks: [],
     plates: [],
-    hasReplicateToken: false,
-    replicateAvailable: null,
     ...patch
   }
 }
@@ -97,15 +95,6 @@ describe('never ask what is not relevant yet', () => {
     expect(q.options[0]!.evidence?.[0]).toMatchObject({ kind: 'image' })
     // And the plate is the recommendation when the book has one.
     expect(choice(artQuestions(withPlates), 'cover-art-source').defaultValue).toBe('plate')
-  })
-
-  it('withdraws generation when the browser cannot reach Replicate', () => {
-    const unreachable = state({ replicateAvailable: false })
-    const source = choice(artQuestions(unreachable), 'cover-art-source')
-    expect(source.options.map((o) => o.value)).not.toContain('generated')
-    // Optimistic until told otherwise, so the door does not flicker into view.
-    const unknown = artQuestions(state({ replicateAvailable: null }))
-    expect(choice(unknown, 'cover-art-source').options.map((o) => o.value)).toContain('generated')
   })
 })
 
@@ -210,7 +199,7 @@ describe('answers fold back into the cover', () => {
     expect(lookQuestions(bare).some((q) => q.id === 'cover-pattern-opacity')).toBe(false)
 
     const from = state()
-    from.doc.look.groundPattern = 'lexicon'
+    from.doc.look.groundPattern = 'wave'
     from.doc.look.groundPatternOpacity = 0.14
     expect(lookQuestions(from).some((q) => q.id === 'cover-pattern-opacity')).toBe(true)
 
@@ -310,26 +299,23 @@ describe('the picture questions follow the door taken', () => {
     }
   ]
 
-  it('asks nothing about a model or a brief when the picture is being uploaded', () => {
-    const ids = artQuestions(state({ artSource: 'upload' })).map((q) => q.id)
-    expect(ids).toContain('cover-art-source')
-    expect(ids).not.toContain('cover-art-brief')
-    expect(ids).not.toContain('cover-art-model')
+  it('asks nothing about a plate when the picture is being uploaded', () => {
+    const ids = artQuestions(state({ plates, artSource: 'upload' })).map((q) => q.id)
+    expect(ids).toEqual(['cover-art-source'])
   })
 
   it('asks which plate only when a plate is being used', () => {
     expect(artQuestions(state({ plates, artSource: 'plate' })).map((q) => q.id)).toContain(
       'cover-plate'
     )
-    expect(artQuestions(state({ plates, artSource: 'generated' })).map((q) => q.id)).not.toContain(
+    expect(artQuestions(state({ plates, artSource: 'none' })).map((q) => q.id)).not.toContain(
       'cover-plate'
     )
   })
 
-  it('asks the brief only when one is being made', () => {
-    const ids = artQuestions(state({ artSource: 'generated' })).map((q) => q.id)
-    expect(ids).toContain('cover-art-brief')
-    expect(ids).toContain('cover-art-model')
+  it('offers no door to a picture made by an outside service', () => {
+    const source = choice(artQuestions(state({ plates })), 'cover-art-source')
+    expect(source.options.map((o) => o.value)).toEqual(['plate', 'upload', 'none'])
   })
 
   it('asks nothing further when there is to be no picture', () => {

@@ -31,8 +31,9 @@
  *   the spec when that is not given. The picture stays with the book: it is
  *   served to the page for this run only and never copied into the tools.
  *
- * A spec naming a built-in `groundFigure` the composer does not have stops
- * here with a message, rather than drawing a cover with no figure.
+ * A spec naming a built-in `groundFigure` or `groundPattern` the composer
+ * does not have stops here with a message, rather than drawing a cover
+ * without it.
  *
  * Chromium: `CHROMIUM_PATH` when set, otherwise Playwright's own
  * (`lib/chromium.mjs`). The dev server: `APP_URL`, default port 5173.
@@ -107,6 +108,7 @@ async function loadMark(name) {
 }
 
 const TEXTURE_TYPES = {
+  '.svg': 'image/svg+xml',
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -127,7 +129,7 @@ async function loadTexture() {
   const folder = resolve(parsed.textures ?? dirname(resolve(specPath)))
   const file = resolve(folder, name)
   const type = TEXTURE_TYPES[extname(file).toLowerCase()]
-  if (!type) return { error: `texture.file must be a png, jpg or webp file: ${name}` }
+  if (!type) return { error: `texture.file must be a png, jpg, webp or svg file: ${name}` }
   if (!existsSync(file)) {
     return { error: `texture file not found: ${file} (give its folder with --textures <folder>)` }
   }
@@ -181,6 +183,16 @@ const result = await page.evaluate(
           `The spec names the ground figure "${named}", which the composer does not have. ` +
           `Built in: ${core.GROUND_FIGURES.join(', ')}. A book's own picture is given as a ` +
           '"texture" block naming its file instead.'
+      }
+    }
+
+    const pattern = spec.look?.groundPattern
+    if (pattern && !core.GROUND_PATTERNS.includes(pattern)) {
+      return {
+        error:
+          `The spec names the ground pattern "${pattern}", which the composer does not have. ` +
+          `Built in: ${core.GROUND_PATTERNS.join(', ')}. A book's own text as a ground is made ` +
+          'with scripts/textground.mjs and given as a "texture" block (placement "wrap").'
       }
     }
 

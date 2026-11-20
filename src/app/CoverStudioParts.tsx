@@ -1,21 +1,18 @@
 /**
- * The cover studio's pieces: the question groups, the picture's file and
- * generation fields, the press's mark, banking a look, and the preview with
+ * The cover studio's pieces: the question groups, the picture's file field, the press's mark, banking a look, and the preview with
  * its checks. Split out of `CoverStudio.tsx`, which holds the state.
  */
 import type { ReactNode } from 'react'
-import type { CoverDocument, ResolutionVerdict, ArtModel } from '@core/cover'
+import type { CoverDocument } from '@core/cover'
 import { downloadPdf } from '../platform/browser/download'
 import type { CoverPreview } from '../platform/browser/cover-preview'
-import { saveReplicateToken } from '../platform/browser/settings'
-import { forgetReplicateReach } from '../platform/browser/replicate'
 
 /**
  * Which groups are open on arrival.
  *
  * The sheet, the look, the words and the choice of picture are the decisions
- * that make a cover; the palette, the ornament, the back-cover copy and the
- * generation brief are refinements of those, and putting all eight on screen at
+ * that make a cover; the palette, the ornament and the back-cover copy are
+ * refinements of those, and putting all seven on screen at
  * once turns an interview into the panel of forty fields the design gate exists
  * not to be. The refinements are one click away and nothing is hidden: a
  * `details` element is open to a page search and to a screen reader.
@@ -30,8 +27,7 @@ const OPEN_GROUPS: ReadonlySet<string> = new Set([
 const GROUP_TITLE: Readonly<Record<string, string>> = {
   'group-palette': 'The colours',
   'group-ornament': 'Rules and ornament',
-  'group-back': 'The back cover',
-  'group-generate': 'Making a picture'
+  'group-back': 'The back cover'
 }
 
 export function CoverGroup({ id, children }: { id: string; children: ReactNode }): JSX.Element {
@@ -95,77 +91,6 @@ export function UploadField(props: {
         }}
       />
       {artError ? <div className="help warn">{artError}</div> : null}
-    </div>
-  )
-}
-
-/** Making a picture with Replicate: the token, the reach, and the button that spends. */
-export function GenerateField(props: {
-  token: string
-  setToken: (token: string) => void
-  reachable: boolean | null
-  verdict: ResolutionVerdict | null
-  needed: { width: number; height: number } | null
-  model: ArtModel | undefined
-  generating: string | null
-  genError: string | null
-  genNotes: string[]
-  onGenerate: () => Promise<void>
-}): JSX.Element {
-  const { token, setToken, reachable, verdict, needed, model, generating } = props
-  return (
-    <div className="q">
-      <span className="prompt">Make it</span>
-      {!token.trim() ? (
-        <>
-          <div className="help">
-            A Replicate token, which stays in this browser and goes nowhere but Replicate. It is
-            never written into a book file.
-          </div>
-          <input
-            type="password"
-            placeholder="r8_…"
-            onChange={(e) => {
-              saveReplicateToken(e.target.value)
-              forgetReplicateReach()
-              setToken(e.target.value)
-            }}
-          />
-        </>
-      ) : null}
-
-      {reachable === false ? (
-        <div className="help warn">
-          This browser cannot reach Replicate — their API does not accept requests from a web page,
-          and this app has no server to route one through. Everything else here still works: make
-          the picture wherever you normally would and choose “a picture of your own”.
-        </div>
-      ) : null}
-
-      {verdict && verdict.kind === 'short' ? (
-        <div className="help warn">{verdict.message}</div>
-      ) : verdict && needed ? (
-        <div className="help">
-          {model?.label} can reach the {needed.width} × {needed.height} pixels this needs.
-        </div>
-      ) : null}
-
-      <div className="actions">
-        <button
-          type="button"
-          className="primary"
-          disabled={!token.trim() || generating !== null || reachable === false}
-          onClick={() => void props.onGenerate()}
-        >
-          {generating ? `Working — ${generating}…` : 'Generate (this spends money)'}
-        </button>
-      </div>
-      {props.genError ? <div className="help warn">{props.genError}</div> : null}
-      {props.genNotes.map((note) => (
-        <div key={note} className="help">
-          {note}
-        </div>
-      ))}
     </div>
   )
 }

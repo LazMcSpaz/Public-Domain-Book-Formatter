@@ -5,7 +5,6 @@
  * Pure: questions are data.
  */
 import type { Question } from '@core/wizard'
-import { ART_BRIEFS, BRIEF_LABEL, BRIEF_NOTE, SUGGESTED_ART_MODELS } from './art'
 import { type CoverInterviewState } from './interview'
 
 /** The book's own words. */
@@ -98,13 +97,6 @@ export function artQuestions(state: CoverInterviewState): Question[] {
     label: 'A picture of your own',
     description: 'Anything you have the right to print — including art from the original edition.'
   })
-  if (state.replicateAvailable !== false) {
-    sources.push({
-      value: 'generated',
-      label: 'Make one',
-      description: 'Costs money on Replicate, and nothing is generated until you ask for it.'
-    })
-  }
   sources.push({ value: 'none', label: 'No picture' })
 
   const out: Question[] = [
@@ -135,53 +127,6 @@ export function artQuestions(state: CoverInterviewState): Question[] {
       defaultValue: plates[0]?.id ?? ''
     })
   }
-
-  if (source !== 'generated') return out
-
-  out.push(
-    {
-      id: 'cover-art-brief',
-      type: 'choice',
-      group: 'generate',
-      prompt: 'What kind of picture?',
-      help: 'Generation is good at surfaces and devices and poor at scenes and people. This is the difference between a cover that reads as printed and one that reads as made by a machine.',
-      options: ART_BRIEFS.map((b) => ({
-        value: b,
-        label: BRIEF_LABEL[b],
-        description: BRIEF_NOTE[b]
-      })),
-      defaultValue: 'ground'
-    },
-    {
-      id: 'cover-art-subject',
-      type: 'text',
-      group: 'generate',
-      prompt: 'Of what?',
-      placeholder: 'laid paper with a faint chain line, the colour of old vellum',
-      defaultValue: ''
-    },
-    {
-      id: 'cover-art-model',
-      type: 'choice',
-      group: 'generate',
-      prompt: 'Which model?',
-      help: 'The number that matters is pixels, not quality: a cover needs about five megapixels at 300 DPI, and most models give one.',
-      options: SUGGESTED_ART_MODELS.map((m) => ({
-        value: m.slug,
-        label: m.label,
-        description: m.note
-      })),
-      defaultValue: SUGGESTED_ART_MODELS[0]?.slug ?? ''
-    },
-    {
-      id: 'cover-art-direction',
-      type: 'text',
-      group: 'generate',
-      prompt: 'Anything else to tell it?',
-      defaultValue: '',
-      multiline: true
-    }
-  )
 
   return out
 }

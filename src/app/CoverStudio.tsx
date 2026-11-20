@@ -47,7 +47,6 @@ import {
   BankField,
   CoverGroup,
   fileName,
-  GenerateField,
   PressMarkField,
   PreviewPane,
   UploadField
@@ -94,8 +93,8 @@ export function CoverStudio({ onClose }: { onClose: () => void }): JSX.Element {
     typeof answers['cover-art-source'] === 'string' ? answers['cover-art-source'] : ''
   ) as CoverInterviewState['artSource'] | ''
   const frame = useMemo(() => artFrame(doc, fixedWidthMeasurer()), [doc])
-  const art = useCoverArt({ answers, source, doc, setDoc, frame, plateSource })
-  const { artBytes, token, reachable } = art
+  const art = useCoverArt({ answers, source, setDoc, frame, plateSource })
+  const { artBytes } = art
 
   const state: CoverInterviewState = useMemo(
     () => ({
@@ -103,14 +102,12 @@ export function CoverStudio({ onClose }: { onClose: () => void }): JSX.Element {
       pageCountMeasured: handoff?.pageCountMeasured ?? false,
       bankedLooks: banked,
       plates: plateSource.offers,
-      hasReplicateToken: token.trim().length > 0,
-      replicateAvailable: reachable,
       // What the user has already said about where the picture comes from, so
       // the interview can withdraw the questions that belong to the other
-      // doors rather than showing a model chooser to someone with a file.
+      // doors rather than showing a plate chooser to someone with a file.
       ...(source ? { artSource: source } : {})
     }),
-    [doc, handoff, banked, plateSource.offers, token, reachable, source]
+    [doc, handoff, banked, plateSource.offers, source]
   )
 
   const questions = useMemo(() => coverQuestions(state), [state])
@@ -263,21 +260,6 @@ export function CoverStudio({ onClose }: { onClose: () => void }): JSX.Element {
                   artError={art.artError}
                   onUpload={art.onUpload}
                   onError={setArtError}
-                />
-              ) : null}
-
-              {group.id === 'group-generate' && source === 'generated' ? (
-                <GenerateField
-                  token={token}
-                  setToken={art.setToken}
-                  reachable={reachable}
-                  verdict={art.verdict}
-                  needed={art.needed}
-                  model={art.model}
-                  generating={art.generating}
-                  genError={art.genError}
-                  genNotes={art.genNotes}
-                  onGenerate={art.onGenerate}
                 />
               ) : null}
             </CoverGroup>

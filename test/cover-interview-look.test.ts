@@ -21,8 +21,6 @@ function state(patch: Partial<CoverInterviewState> = {}): CoverInterviewState {
     pageCountMeasured: true,
     bankedLooks: [],
     plates: [],
-    hasReplicateToken: false,
-    replicateAvailable: null,
     ...patch
   }
 }

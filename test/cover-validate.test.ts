@@ -118,7 +118,7 @@ describe('validateCover', () => {
         id: 'art',
         sourceWidthPx: 1024,
         sourceHeightPx: 1024,
-        provenance: { kind: 'generated', model: 'x/y', prompt: 'a ground', seed: null },
+        provenance: { kind: 'upload', fileName: 'small.png' },
         ops: [],
         fit: 'cover'
       }
