@@ -424,6 +424,32 @@ left|right` with the text running past it. `figure list` and
 - Spelling on the exported PDF: see `spelling-of.ts --text` under "Checking a
   book's text". **[before upload]**
 
+- `node scripts/cover-front.mjs <spec.json> <out.png> [--sheet] [--pdf <out.pdf>] [--textures <folder>]`:
+  a cover drawn from its spec (the book's `covers/softcover.json` or
+  `hardcover.json`) with the dev server running (`npm run dev`; another port
+  through `APP_URL`). The front panel as a picture, or with `--sheet` the
+  whole flat cover; `--pdf` (needs `--sheet`) writes the cover file itself
+  from the same run. A spec's `texture` block names a book's own picture as
+  the ground: its file is found in `--textures <folder>` (fetch it from
+  storage first), or beside the spec. It prints the picture's size and DPI,
+  the ground figure's box in inches, warnings and every check that is not
+  ok. A spec naming a built-in figure the composer does not have stops with a
+  message. Chromium: `CHROMIUM_PATH`, else Playwright's own. How a spec is
+  written: [cover-composer.md](cover-composer.md).
+- `python3 scripts/cover-texture.py <in> <out.png> --box <w>x<h> [--crop x0,y0,x1,y1] [--levels 70,205] [--drop-red 55] [--fade-top 0.07] [--height-in <h>] [--align x,y] [--dpi n]`:
+  a picture prepared as a texture: ink on white, red lettering dropped,
+  the head faded, and set at a height and place on a canvas the size of the
+  ground figure box `cover-front.mjs` printed. Needs Pillow. The picture
+  and the file it makes stay with the book (shelf or storage), never here.
+- `node scripts/screenshot-cover.mjs [out-folder]`: the cover studio
+  (`#cover`) in a headless browser, front and flat sheet, for looking at a
+  change to the studio.
+- `node scripts/textground.mjs <book.json> <out.svg> [--from <leaf>]`: the
+  book's own text as a cover ground (the `lexicon` pattern): its words as one
+  dense field, turned, bold and italic kept, the glyphs as paths.
+- `python3 scripts/trace-device.py <scan.png> <out.svg> [--crop x0,y0,x1,y1]`: a scanned emblem traced to vector for
+  `public/devices/` (needs `potrace` for Python; its opening comment has the options).
+
 The PDF export (`drive.mjs proof`) and cover flattening
 (`scripts/flatten-cover.py`) are listed under "Named elsewhere" below.
 

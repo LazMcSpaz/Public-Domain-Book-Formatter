@@ -104,7 +104,10 @@ page.on('console', (m) => {
   if (m.type() === 'error') errors.push(m.text())
 })
 
-const field = (label, kind = 'input') =>
+// A text field, never the radio buttons of a size question whose prompt
+// shares the words ("The author" and "How large the author's name sets").
+const TEXT_INPUT = 'input:not([type=radio]):not([type=checkbox]):not([type=file])'
+const field = (label, kind = TEXT_INPUT) =>
   page.locator('.q', { hasText: label }).locator(kind).first()
 
 await page.goto(`${URL_BASE}/#cover`, { waitUntil: 'networkidle' })

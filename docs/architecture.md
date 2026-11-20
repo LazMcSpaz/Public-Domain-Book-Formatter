@@ -25,6 +25,7 @@ A plain-English map of this repository: what each folder is for and who may use 
 - `assemble/`: pages joined into one book: page seams, hyphens, footnotes linked.
 - `coherence/`: checks that read the whole book against itself (damage, spelling, page turns, apparatus, emphasis), and the readiness list with its verdict.
 - `control/`: the protocol the driver uses to operate the app from outside.
+- `cover/`: the cover: the flat KDP sheet, the composer, the cover checks, the banked look, the cover interview, and grounds (patterns, figures, a book's picture as a texture file). Its own CLAUDE.md.
 - `design/`: the design interview: a few questions produce a full style.
 - `draft/`: the free reading: OCR words shaped into a page's blocks.
 - `edits/`: corrections held as a list and applied over the original reading.
@@ -58,7 +59,7 @@ A plain-English map of this repository: what each folder is for and who may use 
 | `scripts/`                                 | Commands sessions run: the driver (`drive.mjs`), checks, exports, covers, glossary tools. `scripts/reading-kit/` is the second reading pipeline (to be merged into the first). |
 | `test/`                                    | Automated tests (vitest). `npm test` runs them.                                                                                                                                |
 | `docs/`                                    | Process documents, plans, measurement ledgers. Being sorted into the layers below.                                                                                             |
-| `public/`                                  | Fonts, OCR data, icons: files the app loads. Vendored, not edited by hand.                                                                                                     |
+| `public/`                                  | Fonts, OCR data, icons, the cover's vector devices, marks and patterns: files the app loads. No book's pictures: those stay on the shelf.                                      |
 | `harness/`                                 | The rules (`rules.json`), the check script (`check.py`) and the list of known old problems (`baseline.json`).                                                                  |
 | `.claude/agents/`                          | The team's agents, one definition per role ([specs/agent-roles.md](specs/agent-roles.md)); `test/agent-roles.test.ts` keeps them in step with the roles the status notes know. |
 | `.github/workflows/`                       | Automatic runs: every check (`npm run verify`) on every push, and deploying the app.                                                                                           |

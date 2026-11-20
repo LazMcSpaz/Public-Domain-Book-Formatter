@@ -17,7 +17,7 @@
  *    sheet, which catch a rearranged panel or a dropped bleed.
  *
  * The rows below currently carry (2) and (3). The repository's own KDP
- * templates should be measured into (1) — see `docs/PLAN-cover.md`.
+ * templates should be measured into (1) — see `docs/reference/cover-composer.md`.
  */
 import { describe, expect, it } from 'vitest'
 import {

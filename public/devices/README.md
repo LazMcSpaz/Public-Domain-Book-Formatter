@@ -124,7 +124,7 @@ thousandths of the width.
 `all-seeing-eye-radiant.svg` — the same engraving with every one of its rays
 carried on to the edges of the board, so the whole cover is the radiance and the
 eye sits in the middle of it rather than in a half-disc at the foot. Written by
-`scripts/radiance.mjs` from `all-seeing-eye.svg`, which is the file to re-run if
+`scripts/radiance.mjs` (on the branch `claude/cover-front-icons`; not brought to `main`) from `all-seeing-eye.svg`, which is the file to re-run if
 the trace is ever redone.
 
 Shipped at `--width 3.6 --at 0.4883`. `--at` is the pupil's height as a
