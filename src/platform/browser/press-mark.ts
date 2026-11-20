@@ -35,7 +35,7 @@
  * Browser-only.
  */
 
-import { coverOffsetX, coverScale, type FigureFade } from '@core/cover'
+import { alignedOffset, coverOffsetX, coverScale, type FigureFade } from '@core/cover'
 
 /** How finely the mark is rendered, in dots per inch of printed size. */
 const MARK_DPI = 600
@@ -177,6 +177,12 @@ export async function renderGroundImage(input: {
    * to move it. See `FIGURE_ZOOM`; a texture never needs it.
    */
   zoom?: number
+  /**
+   * Where the picture sits down the box when it overflows it, 0 (its top on
+   * the box's) to 1 (its foot on the box's). The middle when left out, which
+   * is how every built-in figure has always been placed.
+   */
+  anchorY?: number
   /** Draw the artwork flipped, so the two panels are a pair about the spine. */
   mirrorX?: boolean
   /**
@@ -216,7 +222,7 @@ export async function renderGroundImage(input: {
   const drawW = naturalW * scale
   const drawH = naturalH * scale
   const x = coverOffsetX(widthPx, drawW, input.anchorX ?? 0.5, input.targetX ?? 0.5)
-  const top = (heightPx - drawH) / 2
+  const top = alignedOffset(heightPx, drawH, input.anchorY ?? 0.5)
   if (input.mirrorX) {
     // Flip about the drawn rectangle's own right edge, so the box coordinates
     // the offset was computed in are the ones the picture lands in: a source

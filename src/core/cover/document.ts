@@ -30,6 +30,7 @@ export {
   type RuleStyle,
   type TitleCase
 } from './document-look'
+import type { GroundTexture } from './texture'
 export { normalizeLook } from './document-normalize'
 
 /** A supplied device, as bytes and the proportions to place it by. */
@@ -145,6 +146,14 @@ export interface CoverContent {
    */
   isbnAddOn: string
   art: CoverArt
+  /**
+   * A picture from a file printed faintly as the ground figure, or null.
+   *
+   * Content rather than look, like `art`: it is this book's picture, and the
+   * file stays with the book (see `texture.ts`). When set it is the ground
+   * figure, placed by the look's figure switches.
+   */
+  groundTexture: GroundTexture | null
 }
 
 export interface CoverDocument {
@@ -225,7 +234,8 @@ export function emptyContent(): CoverContent {
     imprint: '',
     isbn: '',
     isbnAddOn: '90000',
-    art: emptyArt()
+    art: emptyArt(),
+    groundTexture: null
   }
 }
 

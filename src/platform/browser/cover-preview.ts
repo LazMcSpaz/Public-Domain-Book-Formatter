@@ -157,24 +157,42 @@ async function buildCover(
   // picture is drawn at the resolution it prints at. `renderGroundImage`
   // already covers and centre-crops, which is exactly what a figure bleeding
   // off three edges needs, so there is no second fit here to disagree with it.
+  //
+  // A texture from a file (`@core/cover` `texture.ts`) is drawn the same way,
+  // from the file the cover command served, at its own scale and alignment.
+  const texture = doc.content.groundTexture
+  const named = doc.look.groundFigure
+  const figureSource = texture
+    ? {
+        src: texture.src,
+        anchorX: texture.alignX,
+        targetX: texture.alignX,
+        anchorY: texture.alignY,
+        zoom: texture.scale
+      }
+    : named
+      ? {
+          src: FIGURE_SRC[named],
+          anchorX: FIGURE_ANCHOR_X[named],
+          // On a wrap the box is the whole sheet, so the subject has to be
+          // aimed at the front panel's centre line rather than the sheet's.
+          targetX: doc.look.groundFigureWrap ? wrapAnchorTarget(composed.geometry) : 0.5,
+          zoom: FIGURE_ZOOM[named]
+        }
+      : null
   const figureItem = composed.items.find((i) => i.kind === 'image' && i.id === GROUND_FIGURE_ID)
-  if (figureItem && figureItem.kind === 'image' && doc.look.groundFigure) {
+  if (figureItem && figureItem.kind === 'image' && figureSource) {
     const figure = await renderGroundImage({
-      src: FIGURE_SRC[doc.look.groundFigure],
+      ...figureSource,
       widthIn: figureItem.widthPt / 72,
       heightIn: figureItem.heightPt / 72,
       // The figure's own colour, not the ink: see `CoverPalette.figure`. The
       // ground *pattern* above stays on the ink, because it is allover and
       // reads as a tint of the type rather than as a picture behind it.
       color: doc.look.palette.figure,
-      anchorX: FIGURE_ANCHOR_X[doc.look.groundFigure],
-      // On a wrap the box is the whole sheet, so the subject has to be aimed at
-      // the front panel's centre line rather than the sheet's, and there is no
-      // fold edge to hold the tint back from — every edge is a trim edge.
-      targetX: doc.look.groundFigureWrap ? wrapAnchorTarget(composed.geometry) : 0.5,
-      zoom: FIGURE_ZOOM[doc.look.groundFigure],
       invert: doc.look.groundFigureInvert,
-      // Every edge, not only the fold: see `figureFade`. A framed figure is
+      // Every edge, not only the fold: see `figureFade`; on a wrap there is no
+      // fold edge to hold the tint back from. A framed figure is
       // the exception and takes none: its edges are inside the border with
       // board showing all round, so there is no cut and no fold for a fade to
       // rescue, and softening them would turn a plate into a vignette.
@@ -197,16 +215,18 @@ async function buildCover(
   // of the front's so the two are one scale, with the tint faded out well short
   // of the fold. The composer's own geometry, not a second computation of it.
   const backItem = composed.items.find((i) => i.kind === 'image' && i.id === GROUND_FIGURE_BACK_ID)
-  if (backItem && backItem.kind === 'image' && doc.look.groundFigure) {
+  if (backItem && backItem.kind === 'image' && figureSource) {
     const geometry = composed.geometry
     const back = await renderGroundImage({
-      src: FIGURE_SRC[doc.look.groundFigure],
+      src: figureSource.src,
       widthIn: backItem.widthPt / 72,
       heightIn: backItem.heightPt / 72,
       color: doc.look.palette.figure,
-      anchorX: backAnchorX(doc.look.groundFigure),
+      // Mirrored, so the anchor is read from the other side (`backAnchorX`).
+      anchorX: texture ? 1 - texture.alignX : named ? backAnchorX(named) : 0.5,
       targetX: backAnchorTarget(geometry),
-      zoom: FIGURE_ZOOM[doc.look.groundFigure],
+      ...(texture ? { anchorY: texture.alignY } : {}),
+      zoom: figureSource.zoom,
       mirrorX: true,
       fade: figureFade(geometry, 'right', doc.look.groundFigureToEdge)
     })

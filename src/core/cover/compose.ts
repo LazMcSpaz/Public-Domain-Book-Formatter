@@ -165,8 +165,15 @@ export function composeCover(doc: CoverDocument, options: ComposeOptions): Compo
   // nothing on the front should have to compete with a ground for the eye.
   // Its pixels are the renderer's: a vector source has no pixel count until
   // something has drawn it, which is the same bargain the picture-backed
-  // pattern strikes two blocks up.
-  if (look.groundFigure) {
+  // pattern strikes two blocks up. A texture from a file (`texture.ts`) is a
+  // ground figure too, placed by the same switches.
+  if (content.groundTexture && look.groundFigureInFrame && look.frontFrame === 'none') {
+    warnings.push(
+      `The texture ${content.groundTexture.fileName} was asked to stand inside the frame, ` +
+        'and the front has no frame, so it runs off the front panel instead.'
+    )
+  }
+  if (look.groundFigure || content.groundTexture) {
     // Three placements, and they are different objects rather than three
     // sizes of one. A wrap runs the whole sheet; a bled figure runs the front
     // panel off three edges; a framed one is a plate standing inside the
