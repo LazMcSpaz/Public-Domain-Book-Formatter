@@ -52,6 +52,12 @@ const DB_NAME = 'pdbf'
  * browser that ran it keeps the database at 8 (`openDb` opens it at that
  * version). The next store added here makes it 9, so such a browser upgrades
  * too. A cache that costs nothing to lose never raises this version.
+ *
+ * An older page keeps writing after a newer one raises the version (`openDb`
+ * falls back to the version the database has), so a new version only adds
+ * stores: its upgrade never converts records in place, and it reads records in
+ * the version-7 shape. Before raising it, make the reload band wait for
+ * pending saves (`NewerVersionNotice.tsx`).
  */
 const DB_VERSION = 7
 const STORE = 'runs'

@@ -43,6 +43,7 @@ Everything the engine needs a browser for: PDF rendering (pdf.js), OCR (Tesserac
 - Recon renders, uses and releases one page at a time; never hold page canvases (a 300-DPI page is about 19 MB).
 - `localStorage` is for small records the app needs (the token, the API key, preferences): anything that grows with use goes in IndexedDB, never there; on a phone it is about 5 MB, and full it stops the token being saved (`test/workroom-device-notes.test.ts`, `npm run check:workroom`).
 - A cache that costs nothing to lose gets its own database (as `note-store.ts`); never raise the main database's version for one (`npm run check:device-db`).
+- A new version of the main database only adds stores and reads version-7 records as they are: older pages keep writing into it (`run-store.ts`).
 - Every reader of the recon cache, app or driver, asks with `BOOK_RECON`: `loadReconCache` deletes a record it cannot use (`test/recon-wired.test.ts`).
 - Revoke every object URL you mint for crops and thumbnails; `releaseRecon` frees recon's.
 - Cleaned pixels feed only the OCR engine (`recognizeLeaf`); every crop and the second reader use the original render.
