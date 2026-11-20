@@ -278,4 +278,21 @@ describe('the cache kept on the device', () => {
     const read = await readWorkNotes(config, deviceNoteCache(storage))
     expect(read.notes).toHaveLength(1)
   })
+
+  it('writes to the device only after a read that changed something', async () => {
+    const storage = fakeStorage()
+    let writes = 0
+    const set = storage.setItem.bind(storage)
+    storage.setItem = (k: string, v: string) => {
+      writes++
+      set(k, v)
+    }
+    const shelf = shelfOf(note('aaaa1111', null))
+    stubGitHub(() => shelf)
+    const cache = deviceNoteCache(storage)
+    await readWorkNotes(config, cache)
+    await readWorkNotes(config, cache)
+    await readWorkNotes(config, cache)
+    expect(writes).toBe(1)
+  })
 })

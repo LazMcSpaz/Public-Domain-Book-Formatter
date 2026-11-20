@@ -56,10 +56,10 @@ const DEVICE_KEY = 'pdbf.workroom.notes'
 
 /**
  * A cache kept on the device as well, so reopening the app fetches only what
- * changed while it was closed. Written once per read, after it is trimmed to
- * what the shelf lists. A device that will not store it (private browsing,
- * storage full) still has this page's copy: a lost cache costs requests,
- * never a note.
+ * changed while it was closed. Written after a read that changed it, trimmed
+ * to what the shelf lists; a read that changed nothing writes nothing. A
+ * device that will not store it (private browsing, storage full) still has
+ * this page's copy: a lost cache costs requests, never a note.
  */
 export function deviceNoteCache(storage: Storage | null = deviceStorage()): NoteCache {
   const notes = new Map<string, string>()
@@ -73,11 +73,19 @@ export function deviceNoteCache(storage: Storage | null = deviceStorage()): Note
   } catch {
     /* an unreadable record is an empty cache */
   }
+  let changed = false
   return {
     get: (sha) => notes.get(sha),
-    set: (sha, text) => void notes.set(sha, text),
+    set: (sha, text) => {
+      notes.set(sha, text)
+      changed = true
+    },
     keepOnly: (shas) => {
-      for (const sha of [...notes.keys()]) if (!shas.has(sha)) notes.delete(sha)
+      for (const sha of [...notes.keys()]) {
+        if (!shas.has(sha)) changed = notes.delete(sha) || changed
+      }
+      if (!changed) return
+      changed = false
       try {
         storage?.setItem(DEVICE_KEY, JSON.stringify(Object.fromEntries(notes)))
       } catch {
