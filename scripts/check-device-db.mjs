@@ -276,39 +276,43 @@ async function forgetInSettings(page) {
   const one = await page()
   const records = madeUpRecords()
   await seedMainDatabase(one.page, { records })
-  // A slow device, made on purpose: once `window.askNewer` is set, the next
-  // open of the main database tells the other tab to open a newer version,
-  // and the read on that connection hands its answer over 1.5 s late, so this
-  // page is still holding the connection when the other tab asks. Nothing in
-  // the app's own code is changed.
+  // A slow device, made on purpose: once `window.askNewer` is set, the app's
+  // next open of the main database tells the other tab to open a newer
+  // version, and the first read on that connection hands its answer over
+  // 1.5 s late, so this page still holds the connection when the other tab
+  // asks. Nothing in the app's own code is changed.
   await one.page.addInitScript(() => {
     const open = IDBFactory.prototype.open
-    const getAll = IDBObjectStore.prototype.getAll
     const channel = new BroadcastChannel('check-device-db')
     IDBFactory.prototype.open = function (name, ...rest) {
       const request = open.call(this, name, ...rest)
       if (name === 'pdbf' && window.askNewer) {
         window.askNewer = false
-        window.slowRead = true
-        request.addEventListener('success', () => channel.postMessage('now'))
+        request.addEventListener('success', () => {
+          window.slowDb = request.result
+          channel.postMessage('now')
+        })
       }
       return request
     }
-    IDBObjectStore.prototype.getAll = function (...args) {
-      const request = getAll.apply(this, args)
-      if (!window.slowRead) return request
-      window.slowRead = false
-      let handler = null
-      Object.defineProperty(request, 'onsuccess', {
-        get: () => handler,
-        set: (fn) => {
-          handler = fn
-        }
-      })
-      request.addEventListener('success', (event) =>
-        setTimeout(() => handler?.call(request, event), 1500)
-      )
-      return request
+    for (const method of ['get', 'getAll', 'getAllKeys', 'count']) {
+      const real = IDBObjectStore.prototype[method]
+      IDBObjectStore.prototype[method] = function (...args) {
+        const request = real.apply(this, args)
+        if (!window.slowDb || this.transaction.db !== window.slowDb) return request
+        window.slowDb = null
+        let handler = null
+        Object.defineProperty(request, 'onsuccess', {
+          get: () => handler,
+          set: (fn) => {
+            handler = fn
+          }
+        })
+        request.addEventListener('success', (event) =>
+          setTimeout(() => handler?.call(request, event), 1500)
+        )
+        return request
+      }
     }
   })
   await one.page.goto(`${URL_BASE}/`, { waitUntil: 'networkidle' })
@@ -330,10 +334,11 @@ async function forgetInSettings(page) {
     },
     { name: MAIN_DB, version: MAIN_VERSION + 1 }
   )
-  await one.page.evaluate(async (path) => {
+  // Settings reads the main database as it opens: the app's own read.
+  await one.page.evaluate(() => {
     window.askNewer = true
-    await (await import(path)).storedReconSizes()
-  }, RUN_STORE)
+    window.location.hash = '#settings'
+  })
   const opened = await Promise.race([
     other.page.evaluate(() => window.newer),
     new Promise((resolve) => setTimeout(() => resolve('no answer'), 10000))
@@ -343,13 +348,15 @@ async function forgetInSettings(page) {
   check(took < 1000, `this page lets go at once, and the newer version opens (${opened})`)
   const notice = one.page.locator('[data-newer-version]')
   await notice.waitFor({ timeout: 5000 }).catch(() => null)
-  const words = (await notice.textContent().catch(() => '')) ?? ''
+  const words = (await notice.textContent({ timeout: 1000 }).catch(() => '')) ?? ''
   check(
     /newer version of the app/u.test(words) && /Reload this page/u.test(words),
     `and the owner is told plainly to reload (${words.trim().slice(0, 70)}…)`
   )
-  await notice.locator('button').click()
-  await one.page.waitForLoadState('networkidle')
+  const loaded = one.page.waitForEvent('load')
+  if (words) await notice.locator('button').click()
+  else await one.page.reload()
+  await loaded
   await one.page.waitForSelector('#root *', { timeout: 15000 })
   const reloaded = await one.page.evaluate(
     async (path) => (await import(path)).storedFileKeys(),
