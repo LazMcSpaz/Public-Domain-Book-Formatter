@@ -15,10 +15,14 @@ Three kinds of picture work, each with its own rules:
 
 ## Who runs it
 
-- **Image tracer**: finds, measures, cuts, cleans and traces, and writes the
-  provenance record.
-- **Image checker**: a reader who did not do that work, checking every picture
-  against its passage, its caption and its source. The checker edits nothing.
+- **Typesetter** ([.claude/agents/typesetter.md](../../.claude/agents/typesetter.md)):
+  finds, measures, cuts, cleans, traces and places the pictures, and writes
+  the provenance record.
+- **Scout** ([.claude/agents/scout.md](../../.claude/agents/scout.md)): finds
+  and licenses the pictures added for this edition, on the candidates sheet.
+- **Checker** ([.claude/agents/checker.md](../../.claude/agents/checker.md)):
+  the image check, by an agent that did not do the work, every picture against
+  its passage, its caption and its source. The checker edits nothing.
 
 ## Before you start
 
@@ -71,8 +75,8 @@ Three kinds of picture work, each with its own rules:
 
 ## Steps: pictures added for this edition
 
-1. **A candidates sheet for the editor** (`image-candidates.md` beside the
-   book): the places a picture would help a reader most, each with its passage,
+1. **A candidates sheet for the editor** (the scout; `image-candidates.md`
+   beside the book): the places a picture would help a reader most, each with its passage,
    the kind (an old plate, or a diagram drawn new from the entry's words) and
    the source found. The editor chooses.
 2. **Source rules.** A pre-1931 image is preferred. Check the licence on the
@@ -107,7 +111,7 @@ Three kinds of picture work, each with its own rules:
 
 ## Steps: the image check
 
-The image checker opens every picture, reads the whole entry or passage it
+The checker opens every picture, reads the whole entry or passage it
 illustrates, and checks the caption and source against what the picture shows
 and against the source's own record (licence included). Each picture is graded
 OK, MINOR or WRONG with the reason, in a dated sheet beside the book (today

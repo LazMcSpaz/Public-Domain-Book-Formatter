@@ -8,9 +8,12 @@ this job is finished the book is **read** ([README.md](./README.md)).
 
 ## Who runs it
 
-The **reader (OCR cleaner)**. In practice: one coordinating session that
-drafts, triages and lands, and short-lived subagents that each correct a
-handful of leaves against their renders and then end.
+The **reader** ([.claude/agents/reader.md](../../.claude/agents/reader.md)),
+one task per run, each launched by the managing editor: a reader prepares a
+stretch (steps 1 to 5); batch readers, at most four at once, each correct one
+batch against its renders and then end; a reader checks and lands the
+finished batches and raises the queries (steps 6 to 13). The checks of
+[checking.md](./checking.md) are the checker's.
 
 ## The one rule
 
@@ -78,14 +81,16 @@ invention appears. Every arrangement below exists to keep that true.
 5. **Batch the leaves into subagents.** Render the leaves
    (`node scripts/drive.mjs leaf <n> <name> 150`), then
    `node scripts/batch.mjs <draft.json> <out-dir> --per 13 --renders <dir> --prefix <tag> --seam <prev-tail.txt>`
-   writes one lean draft and one brief per batch. Give each brief to one
-   subagent. Every reader also gets `docs/BRIEF-reading.md`, the shared method
+   writes one lean draft and one brief per batch. The managing editor gives
+   each brief to one batch reader, at most four at once. Every reader also
+   gets `docs/BRIEF-reading.md`, the shared method
    (`batch.mjs` writes that path into each brief, so the file moves only
    together with `scripts/batch.mjs`). Readers open renders **three at a
    time**, then write; a request carrying more images times out and the batch
    is lost. If a reader dies at the render-loading turn, relaunch it and say
-   nothing was written. Ten to thirteen leaves a batch. The coordinating
-   session never opens page images itself. The reading kit
+   nothing was written. Ten to thirteen leaves a batch. The reader who
+   prepares and lands the batches never reads a leaf off its render itself,
+   and nor does the managing editor: the batch readers do. The reading kit
    ([scripts/reading-kit/README.md](../../scripts/reading-kit/README.md)) is
    the same loop in stretches of thirty leaves, with a per-book `PROMPT.md`.
 6. **Check each batch before landing it**:

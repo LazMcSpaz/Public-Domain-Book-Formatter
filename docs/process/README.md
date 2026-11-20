@@ -19,23 +19,47 @@ Three other places this folder leans on rather than repeats:
 
 ## The jobs
 
-| Job                                                               | Document                           | Role that runs it                                       |
-| ----------------------------------------------------------------- | ---------------------------------- | ------------------------------------------------------- |
-| Start a session, load and save books, push                        | [sessions.md](./sessions.md)       | every session, whatever its role                        |
-| Get the text right, leaf by leaf, against the page                | [reading.md](./reading.md)         | reader (OCR cleaner)                                    |
-| Check the read text against itself, the scan and a second reading | [checking.md](./checking.md)       | scan checker                                            |
-| Write the introduction, notes and other signed prose              | [writing.md](./writing.md)         | researcher, writer, fact-checker, plain-language reader |
-| Make or revise a glossary                                         | [glossary.md](./glossary.md)       | writer, plain-language reader                           |
-| Cut, place, source, trace and check pictures                      | [pictures.md](./pictures.md)       | image tracer, image checker                             |
-| Lay the book out and write the PDF and EPUB                       | [export.md](./export.md)           | format checker                                          |
-| Prove the exact files and prepare the KDP listing                 | [upload.md](./upload.md)           | publisher                                               |
-| Build one volume out of several separately read works             | [compilation.md](./compilation.md) | compiler                                                |
+| Job                                                               | Document                           | Role that runs it                                                                            |
+| ----------------------------------------------------------------- | ---------------------------------- | -------------------------------------------------------------------------------------------- |
+| Start a session, load and save books, push                        | [sessions.md](./sessions.md)       | every session, whatever its role                                                             |
+| Find, compare and fetch sources; start a new book                 | [sourcing.md](./sourcing.md)       | scout                                                                                        |
+| Get the text right, leaf by leaf, against the page                | [reading.md](./reading.md)         | reader                                                                                       |
+| Check the read text against itself, the scan and a second reading | [checking.md](./checking.md)       | checker (a reader makes the corrections its findings call for)                               |
+| Write the introduction, notes and other signed prose              | [writing.md](./writing.md)         | Etsu (research and drafts) and Etsu's editor (every check)                                   |
+| Make or revise a glossary                                         | [glossary.md](./glossary.md)       | Etsu and Etsu's editor                                                                       |
+| Cut, place, source, trace and check pictures                      | [pictures.md](./pictures.md)       | typesetter, and checker for the picture checks (scout finds added pictures)                  |
+| Lay the book out and write the PDF and EPUB                       | [export.md](./export.md)           | typesetter lays out, checker checks                                                          |
+| Prove the exact files and prepare the KDP listing                 | [upload.md](./upload.md)           | managing editor (files, listing pack) and checker (readiness); the owner presses the buttons |
+| Build one volume out of several separately read works             | [compilation.md](./compilation.md) | typesetter assembles; reader and checker for each part, checker for the whole                |
 
-The roles are not yet separate agents, except the writer, which is the `etsu`
-agent ([.claude/agents/etsu.md](../../.claude/agents/etsu.md)). Making each
-role an agent definition is planned. Today one session often plays several
-roles. Where a document says a check is done by a reader who did not do the
-work, that is not optional: give it to a fresh subagent.
+A compilation is assembled by the typesetter because putting the parts
+together is making the book file and its pages, the stage the status notes
+call `layout`; its checks stay with the checker, so nobody checks their own
+work.
+
+## The team
+
+Each role is an agent, defined in [.claude/agents/](../../.claude/agents/)
+under its own name, every one on Opus ([the spec](../specs/agent-roles.md)).
+A role's brief is the document named above, read after this folder's
+[sessions.md](./sessions.md). The managing editor is the chat session itself
+and has no file: it launches a role with the Agent tool and the role's name
+(`scout`, `reader`, `typesetter`, `etsu`, `etsu-editor`, `checker`, and
+`builder` and `reviewer` for changes to the tools). Claude Code loads the
+definitions when a session starts, so a definition added or changed during a
+session is used by name only from the next session; until then, point a
+general-purpose agent at the file and tell it to adopt it.
+
+Hand each run only its brief and the files of its task, never the book's
+whole history: tokens are saved there, not by a smaller model. Run at most
+four readers at once. No agent checks its own work: what a role makes is
+checked by the checker, Etsu's drafts by Etsu's editor, and a change to the
+tools by a reviewer that did not write it. Where a document says a check is
+done by a reader who did not do the work, that is the checker, or Etsu's
+editor for prose, and it is not optional. The managing editor writes each
+book's `ledger.md` from the runs' reports; the roles do not edit it, so runs
+working at the same time never write the same file. How the managing editor
+runs the team: [sessions.md](./sessions.md#running-the-team-the-managing-editor).
 
 ## Status notes: every role, every job
 

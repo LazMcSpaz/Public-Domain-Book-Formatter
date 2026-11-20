@@ -204,6 +204,44 @@ writer), `etsu-editor` (Etsu's editor), `checker`, and `builder` and
 role's work; `work.mjs show <id>` shows one run's timeline. Every option is in
 [commands.md](../reference/commands.md#status-notes).
 
+## Running the team (the managing editor)
+
+The chat session the owner talks to is the managing editor. It plans, hands
+out the work, keeps each book's `ledger.md`, prepares the KDP listing pack
+and keeps the shelf tidy; it does not do the hands-on work. How a role is
+launched: [README.md](./README.md#the-team).
+
+| The work                                                                         | Launch                                |
+| -------------------------------------------------------------------------------- | ------------------------------------- |
+| Find or fetch a scan, a second copy, a reference copy or a picture; start a book | `scout`                               |
+| Prepare a stretch for batches; correct one batch; land batches and raise queries | `reader`, at most four at once        |
+| Make the corrections a checker's findings call for                               | `reader`                              |
+| Research and draft an introduction, notes or a glossary; answer the notes on it  | `etsu`                                |
+| Check each of Etsu's drafts and write the round notes                            | `etsu-editor`                         |
+| Cut, trace and place pictures; lay out; export; covers; EPUB; assemble a volume  | `typesetter`                          |
+| The checks on the text, adjudication, the image check, the readiness report      | `checker`                             |
+| Change the tools                                                                 | `builder`, then a separate `reviewer` |
+
+- **Hand each run only its brief and its task's files**: the shelf path, the
+  book folder, a scratch folder outside both repositories, the run id it
+  takes over from, and the owner's answers it needs. Never a whole history.
+- **After each run**, read its report and its status note
+  (`node scripts/work.mjs show <id>`), then write the ledger entry under a
+  dated heading: which role and run, what was done, and what each check said.
+  Commit it, push, and bring `main` level ("Steps: working on a book",
+  step 8). The roles push their work; bringing `main` level is yours.
+- **Never check your own work, and never let a role check its own.** What a
+  role makes goes to the checker, Etsu's drafts to Etsu's editor, a change to
+  the tools to a reviewer that did not write it.
+- **The readiness report is the only verdict given to the owner.** Read him
+  the checker's report and its verdict; never pass on any role's own word,
+  or your own, that a book is checked or ready to upload.
+- **Questions go to the owner as the role raised them**, with its suggested
+  answers and none chosen. His answer goes back to the role in its next run.
+  Sign-off lines in the ledger are written only on his word.
+- **The driver holds one book.** Two roles using it on different books at
+  once need their own ports and profile (below).
+
 ## Two sessions at once
 
 One book is worked by one session at a time: a correction does not merge with
@@ -289,6 +327,7 @@ file, a prompt or the chat.
 1. Everything committed and pushed; `rev-list` prints 0 in both repositories.
 2. `main` brought level (step 8).
 3. The ledger says what was done, by which role, and what is NOT CHECKED.
+   In the team the managing editor writes it, from each role's report.
 4. Your status note says how the run ended (done, failed, handed off, or
    waiting on the owner with the file to open), and it is committed with the
    work.

@@ -12,8 +12,12 @@ records what is known rather than a settled method.
 
 ## Who runs it
 
-The **compiler**: assembles the parts, keeps the parts list, and makes sure
-every check that cannot run on the whole volume ran on each part.
+The **typesetter** ([.claude/agents/typesetter.md](../../.claude/agents/typesetter.md))
+assembles the parts and keeps the parts list: putting the parts together is
+making the book file and its pages, the stage the status notes call
+`layout`. Each part is read by readers and checked by the **checker** as an
+ordinary book, and the checker checks the whole volume and makes sure every
+check that cannot run on the whole volume ran on each part.
 
 ## Before you start
 

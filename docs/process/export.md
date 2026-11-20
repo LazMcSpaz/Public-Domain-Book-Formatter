@@ -10,8 +10,11 @@ misleads whoever opens it next, and nothing warns.
 
 ## Who runs it
 
-The **format checker**: lays the book out, reads the export report field by
-field, and looks at the pages.
+The **typesetter** ([.claude/agents/typesetter.md](../../.claude/agents/typesetter.md))
+lays the book out, reads the export report field by field, and looks at the
+pages. The **checker** ([.claude/agents/checker.md](../../.claude/agents/checker.md))
+then runs the checks for the stage on the exact files the typesetter made;
+its readiness report is the only verdict.
 
 ## Before you start
 

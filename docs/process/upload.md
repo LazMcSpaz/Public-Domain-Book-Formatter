@@ -10,9 +10,16 @@ uploads it.
 
 ## Who runs it
 
-The **publisher**. A session prepares the files, the checks and the listing;
-**the owner presses the buttons on KDP**. A session never spends money or
-handles keys on his behalf.
+- The **managing editor** names the exact files, writes the listing pack
+  (it alone writes `KDP-listings.md`), records the upload and retires the
+  working files.
+- The **checker** ([.claude/agents/checker.md](../../.claude/agents/checker.md))
+  runs the readiness command on the exact files; its report gives the only
+  verdict.
+- The **typesetter** ([.claude/agents/typesetter.md](../../.claude/agents/typesetter.md))
+  recuts and flattens the covers when they do not fit the interior.
+- **The owner presses the buttons on KDP.** No agent ever spends money or
+  handles keys on his behalf.
 
 ## Before you start
 
@@ -29,8 +36,8 @@ handles keys on his behalf.
    the EPUB, each by its path, its storage key, or the path it had on the
    shelf. Every check below runs on these files and no others. A check run on
    an earlier export proves nothing about this one.
-2. **Run the readiness command** on them, which runs the whole list, C1 to C12
-   and R1 to R11, and records each file's SHA-256:
+2. **Run the readiness command** (the checker) on them, which runs the
+   whole list, C1 to C12 and R1 to R11, and records each file's SHA-256:
 
    ```bash
    node scripts/readiness.mjs <shelf>/books/<book> --interior <file> \
@@ -47,7 +54,8 @@ handles keys on his behalf.
    the scan's second reading agrees with is printed so; a word it disagrees
    with is ours to crop and correct. Nothing on the sheet is changed
    automatically: an author's own coinages stay.
-4. **Make sure the covers are for this interior** (R7). A cover's spine is
+4. **Make sure the covers are for this interior** (R7; a recut is the
+   typesetter's). A cover's spine is
    computed from the interior's page count and the paper (cream, black and
    white is the editor's standing choice), so a re-export that changes the page
    count invalidates both covers. Compare
@@ -65,7 +73,8 @@ handles keys on his behalf.
    composed cover's transparency, then errored. Flat copies go stale with
    their covers: re-flatten after every recut.
 
-5. **Write the listing**, following KDP's rules for a public-domain book:
+5. **Write the listing** (the managing editor), following KDP's rules for a
+   public-domain book:
    - the label goes in the title field, in brackets: "(Annotated)",
      "(Illustrated)" or "(Translated)"; a subtitle does not count;
    - "Illustrated" needs ten or more original illustrations; "Annotated"
@@ -83,14 +92,15 @@ handles keys on his behalf.
    Ask the owner about territories and KDP's question on AI-generated content
    until each book's card records them (planned).
 
-6. **Run the readiness command again** once the sheets are read and signed
-   off in `ledger.md`. It writes `readiness.md` beside the book: the files and
-   their fingerprints, each check passed, failed, needs a person or NOT
-   CHECKED with its reason, and the verdict. Note the verdict and date in the
-   ledger and give the owner the report.
-7. **Only then say "ready to upload"**, and only if the report's verdict says
-   so. If the owner, told exactly what was not checked, says to go ahead
-   anyway, record his words in the ledger; the report still says what it says.
+6. **Run the readiness command again** (the checker) once the sheets are
+   read and signed off in `ledger.md`. It writes `readiness.md` beside the
+   book: the files and their fingerprints, each check passed, failed, needs a
+   person or NOT CHECKED with its reason, and the verdict. Note the verdict
+   and date in the ledger and give the owner the report.
+7. **Only then say "ready to upload"** (the managing editor, reading the
+   checker's report), and only if the report's verdict says so. If the
+   owner, told exactly what was not checked, says to go ahead anyway, record
+   his words in the ledger; the report still says what it says.
 8. **After he uploads**, record what went up (date, files, commit, hashes) in
    the ledger and update the book's entry in `KDP-listings.md`. (A permanent
    release per edition, tagged with the book's ID, is planned.)

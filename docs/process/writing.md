@@ -4,17 +4,27 @@
 
 Write what this edition adds to the book in the editor's voice, Etsu T.
 Dhent: the introduction, the footnotes, any afterword or preamble. The prose
-introduces the author and the book truthfully and warmly, and its facts are
-checked by someone other than the writer. (The glossary has its own method:
-[glossary.md](./glossary.md).)
+introduces the author and the book truthfully and warmly, and every draft is
+checked by an agent other than the writer before the owner sees it. (The
+glossary has its own method: [glossary.md](./glossary.md).)
 
 ## Who runs it
 
-- **Researcher**: builds the research brief, the only source of facts.
-- **Writer**: the `etsu` agent ([.claude/agents/etsu.md](../../.claude/agents/etsu.md)).
-- **Fact-checker**: a second reader who checks every claim against the brief.
-- **Plain-language reader**: a different reader who finds lines that make the
-  reader work out the point.
+- **Etsu**, researcher and writer: the `etsu` agent
+  ([.claude/agents/etsu.md](../../.claude/agents/etsu.md)). Builds the
+  research brief, the only source of facts; writes every draft; answers
+  Etsu's editor's notes.
+- **Etsu's editor**: the `etsu-editor` agent
+  ([.claude/agents/etsu-editor.md](../../.claude/agents/etsu-editor.md)).
+  Runs every checking pass on each draft (the notes check, the fact-check,
+  the bias audit, the voice card and the "Never" lists, flatness, plain
+  language) and writes round notes. It never edits a draft.
+- **The owner** approves the prose and decides every fact-check flag.
+- The **managing editor** launches each run with only its files, carries
+  drafts and flags to the owner, and writes the ledger.
+
+In this document "the editor" is the owner, whose pen name is Etsu T. Dhent.
+The agent that checks the drafts is always called Etsu's editor.
 
 ## The editorial stance
 
@@ -77,9 +87,10 @@ every fact-check.
   `node scripts/voice.mjs card --name "Etsu T. Dhent" --shelf ~/Public-Domain-Books-Storage`.
   Without `--name` it refuses (the shelf holds two card files). Without
   `--shelf`, run from the formatter, it silently prints an empty default card.
-- **The `etsu` agent loads only at the start of a session.** If it was added
-  or changed mid-session, either start a new session or point a
-  general-purpose agent at `.claude/agents/etsu.md` and tell it to adopt it.
+- **The `etsu` and `etsu-editor` agents load only at the start of a
+  session.** If one was added or changed mid-session, either start a new
+  session or point a general-purpose agent at its file and tell it to adopt
+  it.
 - **Gather what the editor marked while reading**:
   `node scripts/drive.mjs reading --tag intro --json` (and `--tag note`,
   `--tag glossary`). These are the passages he actually stopped at, and they
@@ -87,59 +98,94 @@ every fact-check.
 
 ## Steps
 
-1. **Research brief** (researcher). Write `research-brief.md` in the book's
+Drafts and notes live in the book's `drafts/` folder on the shelf, one set
+per piece (`introduction`, `notes`, `edition-note` and the like):
+
+- `drafts/<piece>-round-<n>.txt`: Etsu's draft for round n, in the notation
+  of `etsu.md`. Notes are `drafts/notes-round-<n>.json`, the list
+  `voice.mjs check` reads (`{ "blockId", "anchorText", "text" }` each).
+- `drafts/<piece>-round-<n>-notes.md`: Etsu's editor's notes on it, ending in
+  a verdict.
+- `drafts/<piece>-round-<n>-answers.md`: Etsu's answer to each of those
+  notes, written with the next round's draft.
+
+1. **Research brief** (Etsu). Write `research-brief.md` in the book's
    folder on the shelf: every fact about the author, the book and the people
    and events it names, each graded (Firm, Likely, Uncertain, Contested) with
    its sources, under the sources rule above. A fact not in the brief does not
    go in the prose.
-2. **Brief the writer.** Hand `etsu` the verified facts from the brief and the
-   reading marks. It writes in the voice rather than being argued into it
-   afterwards. Notes are sparing, for what a reader of the period knew and a
-   reader now does not; a note is not a definition (definitions are the
-   glossary's). Judge the notes by what they hang on: when nine in ten hang on
-   proper names, the reader's own stopping places were not used.
-3. **Land the prose.** A note:
-   `node scripts/drive.mjs annotate <blockId> --after "<phrase>" note.txt --id <id>`
-   (the phrase must occur once in the block; the same `--id` replaces it;
-   `annotate drop <id>` removes it). An introduction or afterword: no verb
-   creates a section yet, so add it in the app's galley (Edit the book), then
-   replace its text with `node scripts/drive.mjs section <id> --from intro.txt`
-   (`section` alone lists the sections; `--was … --now …` amends one phrase).
-4. **Check the notes mechanically.** `node scripts/drive.mjs body` (its
-   result names the `body.json` it wrote), then
-   `node scripts/voice.mjs check <notes.json> <body.json>`, where
-   `notes.json` lists each note as `{ "blockId", "anchorText", "text" }`. Any
+2. **Draft** (Etsu). The managing editor hands Etsu the brief and the reading
+   marks, nothing more. It writes in the voice rather than being argued into
+   it afterwards, and writes round 1. Notes are sparing, for what a reader of
+   the period knew and a reader now does not; a note is not a definition
+   (definitions are the glossary's). Judge the notes by what they hang on:
+   when nine in ten hang on proper names, the reader's own stopping places
+   were not used. Etsu may run steps 3 and 5 on its own draft before handing
+   it in, to save a round; only Etsu's editor's run counts.
+3. **Check the notes mechanically** (Etsu's editor). Make the body with
+   `node scripts/drive.mjs body` (its result names the `body.json` it wrote),
+   or with no driver
+   `npx vite-node --config vitest.config.ts scripts/body-of.ts <book.json> <body.json>`,
+   then `node scripts/voice.mjs check <notes.json> <body.json>`. Any
    `ANCHOR NOT FOUND` is a note pointing at nothing; every `check:` item is a
    date, figure or name the book itself never states, and must be in the brief.
-5. **Fact-check** (a second reader, not the writer). Every claim against the
-   research brief. It flags what it cannot confirm for the editor to decide
-   and removes nothing itself.
-6. **Bias audit**:
+4. **Fact-check** (Etsu's editor). Every claim against the research brief and
+   the sources it names. It flags what it cannot confirm, with the choices
+   (cut, soften, or keep as a joke), for the owner to decide, and removes
+   nothing itself.
+5. **Bias audit** (Etsu's editor):
    `node scripts/voice.mjs audit <book.json> --name "Etsu T. Dhent" --shelf ~/Public-Domain-Books-Storage`
    (or any prose file in place of the book). It reports every hedge on a
    sentence about the tradition, the hedge ratio overall and over definitions
    only, dismissals, banned phrasing, reading directions, long dashes and a
-   reading grade. A non-zero exit means a person reads every flagged passage.
-   Decide each hedge: keep it on a contested claim or a single-witness story,
-   take it off doctrine. Fix the draft and run it again; never loosen the
-   audit to make a draft pass.
-7. **Read for flatness.** The audit cannot see it. Read the doctrinal passages
-   end to end and ask whether they sound written by someone who finds the
-   material alive. Rewrite any that do not.
-8. **Plain-language pass** (a reader who did not write it), with the brief
+   reading grade. A non-zero exit means every flagged passage is read. Each
+   hedge is decided: kept on a contested claim or a single-witness story,
+   taken off doctrine. Etsu fixes the draft in the next round and the audit is
+   run again; never loosen the audit to make a draft pass.
+6. **The voice card and the "Never" lists** (Etsu's editor). The draft
+   against the voice card (`voice.mjs card`, as in "Before you start"), the
+   "Never" list of [product.md](../product.md) and the one at the end of this
+   document.
+7. **Read for flatness** (Etsu's editor). The audit cannot see it. Read the
+   doctrinal passages end to end and ask whether they sound written by someone
+   who finds the material alive. Any that do not are noted for Etsu to
+   rewrite.
+8. **Plain-language pass** (Etsu's editor), with the brief
    `docs/briefs/glossary-oblique.md`, which works on an introduction or notes
-   as well as a glossary: lines that hint, riddle or point back past another
-   name are rewritten to say the point, keeping the life in them.
-9. **The editor approves.** A memo asking for prose is answered with a
-   proposal in its resolution, never a landed edit.
-10. **Keep the voice card the source.** A note the editor accepted can teach
-    the voice: `node scripts/voice.mjs learn --passage "…" --note "…" --name "Etsu T. Dhent" --shelf <shelf>`.
+   as well as a glossary: every line that hints, riddles or points back past
+   another name is noted, for Etsu to rewrite so it says the point, keeping
+   the life in it.
+9. **Round notes and verdict** (Etsu's editor), in
+   `drafts/<piece>-round-<n>-notes.md`. Each note gives the sentence, the
+   problem and the rule it breaks; the fact-check flags stand in a section of
+   their own, for the owner; the checks run are listed with what each said.
+   The verdict is **passes** (no note left for Etsu) or **goes round again**.
+10. **Revise** (Etsu). Answer every note in `drafts/<piece>-round-<n>-answers.md`
+    (what changed, or why the sentence was kept) and write round n+1. Back
+    to step 3.
+11. **At most three rounds.** A draft that passes goes to the owner through
+    the managing editor. One that has not passed after round 3 goes to him
+    too, with every round's notes and answers, rather than going round again.
+    The fact-check flags always go to him, whatever the verdict.
+12. **The owner approves**, and decides each flag. A memo asking for prose is
+    answered with a proposal in its resolution, never a landed edit.
+13. **Land the prose** (Etsu, once approved). A note:
+    `node scripts/drive.mjs annotate <blockId> --after "<phrase>" note.txt --id <id>`
+    (the phrase must occur once in the block; the same `--id` replaces it;
+    `annotate drop <id>` removes it). An introduction or afterword: no verb
+    creates a section yet, so add it in the app's galley (Edit the book), then
+    replace its text with `node scripts/drive.mjs section <id> --from intro.txt`
+    (`section` alone lists the sections; `--was … --now …` amends one phrase).
+14. **Keep the voice card the source** (the managing editor, on the owner's
+    word). A note the editor accepted can teach the voice:
+    `node scripts/voice.mjs learn --passage "…" --note "…" --name "Etsu T. Dhent" --shelf <shelf>`.
     A change to the voice goes into the card first (`voice.mjs set`,
     `voice.mjs avoid`), then `.claude/agents/etsu.md` is changed to say the
     same; never change only one.
-11. **Finish as any change to a book**: save, re-export, regenerate the readable
+15. **Finish as any change to a book**: save, re-export, regenerate the readable
     files (`node scripts/book-files.mjs <book-dir>` rewrites `introduction.md`
-    and `notes.md`), one commit ([export.md](./export.md)).
+    and `notes.md`), one commit ([export.md](./export.md)). Etsu saves and
+    regenerates; the re-export is the typesetter's.
 
 ## Checks that must pass
 
@@ -148,26 +194,32 @@ every fact-check.
   [checking.md](./checking.md)).
 - `node scripts/voice.mjs check <notes.json> body.json`: no `ANCHOR NOT FOUND`,
   every `check:` item found in the research brief.
-- The fact-checker's flags each decided by the editor.
+- Etsu's editor's last round notes say the draft passes, or it went to the
+  owner after round 3 with every round's notes.
+- Etsu's editor's fact-check flags each decided by the owner.
 - No working note left in the prose (C11 in [checking.md](./checking.md)).
 - `node scripts/book-files.mjs <book-dir> --check` exits 0.
 
 ## What it produces and where it goes
 
-`research-brief.md`, drafts and pass records beside the book on the shelf;
+`research-brief.md` beside the book, and the drafts, round notes and answers
+in its `drafts/` folder, on the shelf;
 the introduction as a `section` edit and the notes as note edits in
 `book.json`; `introduction.md` and `notes.md` regenerated from it; a ledger
-entry naming who wrote, who checked and what the audit said.
+entry, written by the managing editor, naming who wrote, who checked, how
+many rounds it took and what the audit said.
 
 ## Never
 
 - Never assert or quietly deny the truth of the tradition; never hedge a
   doctrine.
-- Never let a writer judge its own even-handedness; the audit and a second
-  reader do.
+- Never let a writer judge its own even-handedness; the audit and Etsu's
+  editor do.
 - Never use a fact that is not in the research brief, or rest one on
   Wikipedia alone.
-- Never let the fact-checker delete; it flags.
+- Never let Etsu's editor edit a draft or delete; it notes and flags, and
+  Etsu rewrites.
+- Never go round a fourth time; after round 3 the draft goes to the owner.
 - Never tell the reader what to read next, and never describe the edition's
   method in its prose.
 - Never put a working note such as "(delete)" in a block's or a section's

@@ -7,6 +7,14 @@ path** and **the output path** in the task you give alongside it.
 The same pass works on an introduction or a set of notes: give it the text,
 and ask for the changed paragraphs instead of entries.
 
+**In the team, Etsu's editor runs this pass** on every draft, as one of its
+checks ([glossary.md](../process/glossary.md), G5, and
+[writing.md](../process/writing.md)). It takes the class and the examples
+from this brief, but writes notes in place of the output below: the
+sentence, the problem, the rule. It never rewrites an entry. Etsu does, and
+its answers to the notes give the old and the new sentence, the record
+`changes.md` used to hold.
+
 ---
 
 ## The editor's note, in his words

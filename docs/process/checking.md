@@ -8,9 +8,14 @@ is **checked** ([README.md](./README.md)).
 
 ## Who runs it
 
-The **scan checker**. The deterministic checks can be run by the session that
-did the reading; the adjudication (step 7) must be done by a fresh reader that
-did not raise the findings.
+The **checker** ([.claude/agents/checker.md](../../.claude/agents/checker.md)),
+never the role that did the reading. It runs the checks, reads every finding
+against the page and writes findings and verdicts; it fixes nothing. The
+corrections its findings call for (steps 3 and 4) are made by a **reader**
+handed the checker's sheet, and the checker then runs the checks again. The
+sense reading (step 6) and the adjudication (step 7) are separate checker
+runs: the run that adjudicates never raised the findings. The managing
+editor writes the results into the ledger from the checker's report.
 
 ## Before you start
 
@@ -33,7 +38,8 @@ did not raise the findings.
 2. **Read every flagged place with its whole block.** The sheet `damage`
    writes carries the whole paragraph because the paragraph usually settles
    it. Return a verdict per finding, never rewritten text.
-3. **Fix a class with a sweep, carefully.**
+3. **Fix a class with a sweep, carefully** (a reader, from the checker's
+   findings).
    `node scripts/drive.mjs sweep --was "<text>"` only finds;
    `--now "<text>"` writes, and there is no dry run. Read every hit and its
    case first. A sweep matches the string, not the word (`Herschel` is inside
@@ -44,8 +50,9 @@ did not raise the findings.
    two split words in one book were fixed once and missed once. An `attested`
    damage finding lands through `sweep`, after a person agrees the class is
    real, never one block at a time and never automatically.
-4. **Crop before joining or moving anything.** A page-turn finding was right
-   about nine times in ten, not ten. Crop the turn
+4. **Crop before joining or moving anything** (the checker crops; a reader
+   joins or moves). A page-turn finding was right about nine times in ten,
+   not ten. Crop the turn
    (`node scripts/drive.mjs leaf <n> <name> 600 <x,y,w,h>`) and join only what
    the paper runs on. A line the coverage check says is missing comes from the
    page, or from a second copy of the same printing.
@@ -59,7 +66,8 @@ did not raise the findings.
    quote, a kind, why, and what it expects, marked as a guess.
 7. **Adjudicate every finding against the page, blind.**
    `node scripts/drive.mjs crops findings.json` cuts a crop per finding and
-   strips the reason and the guess; a fresh reader says what the paper says;
+   strips the reason and the guess; a checker run that did not raise the
+   findings says what the paper says;
    `node scripts/drive.mjs review findings.json verdicts.json` writes the sheet
    (`sense.md`) with the score at its foot; a correction is built from the
    verdict, never from the guess. Shown both, a model
@@ -83,7 +91,8 @@ did not raise the findings.
 12. **Record the results**: run `node scripts/readiness.mjs <book-dir>` (below).
     Its report, `readiness.md` beside the book, names every check in the list
     as passed, failed, needs a person or NOT CHECKED with its reason. Note the
-    verdict and the date under a dated heading in `ledger.md`.
+    verdict and the date under a dated heading in `ledger.md` (the managing
+    editor, from the checker's report).
 
 ## Checks that must pass: the full list for "checked" and "ready to upload"
 

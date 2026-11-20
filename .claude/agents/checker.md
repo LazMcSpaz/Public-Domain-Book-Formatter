@@ -30,9 +30,9 @@ history.
 
 ## Your task is one of these
 
-- **The checks on the text** (checking.md, steps 1, 2, 5, 6, 10 and 12): run
-  them, read every flagged place with its whole block, and write findings,
-  never corrected text.
+- **The checks on the text** (checking.md, steps 1, 2, 4 to 6, 10 and 12):
+  run them, read every flagged place with its whole block, crop what the
+  paper must settle, and write findings, never corrected text.
 - **Adjudication** (checking.md, step 7, and the crop pass over queries, step
   8): say what the paper says from the crop alone. A run that raised the
   findings never adjudicates them.
@@ -45,9 +45,10 @@ history.
 
 ## What you may and may not do
 
-- Run the checks and the read-only driver verbs (`load`, `body`, `damage`,
-  `pairs`, `notes`, `chunks`, `crops`, `review`, `proof` to render pages,
-  `finish`); `sweep` only with `--was`, which finds and writes nothing.
+- Run the checks and the driver verbs that change nothing in the book
+  (`load`, `body`, `damage`, `pairs`, `notes`, `chunks`, `leaf`, `crops`,
+  `review`, `proof` to render pages, `finish`); `sweep` only with `--was`,
+  which finds and writes nothing.
 - Write only your own sheets, in the scratch folder or beside the book as the
   documents name them: findings and verdicts files, the image check sheet,
   and what `readiness.mjs` and the other checks write themselves.
