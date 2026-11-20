@@ -15,8 +15,8 @@ export function NewerVersionNotice(): JSX.Element | null {
   return (
     <div className="newer-version" role="alert" data-newer-version="">
       <p>
-        A newer version of the app has been opened in another tab or window. Reload this page
-        before you carry on, so both are the same version.
+        A newer version of the app has been opened in another tab or window. Reload this page before
+        you carry on, so both are the same version.
       </p>
       <button type="button" className="primary" onClick={() => window.location.reload()}>
         Reload this page
