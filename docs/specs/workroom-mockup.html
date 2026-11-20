@@ -1,0 +1,484 @@
+<!doctype html><meta charset="utf-8" /><style>
+  @font-face {
+    font-family: G;
+    src: url(../../node_modules/@expo-google-fonts/eb-garamond/400Regular/EBGaramond_400Regular.ttf);
+  }
+  @font-face {
+    font-family: C;
+    src: url(../../node_modules/@expo-google-fonts/cardo/400Regular/Cardo_400Regular.ttf);
+  }
+  * {
+    box-sizing: border-box;
+  }
+  html {
+    background: #f1ece2;
+  }
+  body {
+    margin: 0;
+    width: 1600px;
+    min-height: 1000px;
+    padding-bottom: 16px;
+    font-family: G;
+    color: #2b2620;
+    background: linear-gradient(180deg, #f4efe6, #ece5d8);
+  }
+  .band {
+    background:
+      radial-gradient(900px 300px at 80% -40%, #3a3560 0%, transparent 60%),
+      linear-gradient(180deg, #1b1a26, #232131);
+    padding: 22px 36px 18px;
+    border-bottom: 1px solid #c9a75a;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  }
+  header {
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 0 0 12px;
+  }
+  h1 {
+    font-family: C;
+    font-weight: 400;
+    font-size: 34px;
+    margin: 0;
+    letter-spacing: 0.07em;
+    color: #f3e2b3;
+  }
+  .live {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 15px;
+    color: #d8cfb8;
+  }
+  .dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: #7fd38a;
+    box-shadow:
+      0 0 0 4px rgba(127, 211, 138, 0.18),
+      0 0 12px #7fd38a;
+  }
+  .tag {
+    font-size: 13px;
+    color: #b9ae94;
+    border: 1px solid #514b6a;
+    border-radius: 12px;
+    padding: 2px 10px;
+  }
+  .stats {
+    display: flex;
+    gap: 14px;
+  }
+  .stat {
+    flex: 1;
+    border: 1px solid rgba(214, 180, 106, 0.35);
+    border-radius: 12px;
+    padding: 10px 16px;
+    background: linear-gradient(160deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.015));
+  }
+  .stat b {
+    display: block;
+    font-family: C;
+    font-weight: 400;
+    font-size: 30px;
+    color: #f1d48a;
+  }
+  .stat span {
+    font-size: 14px;
+    color: #cdc2a7;
+  }
+  .wrap {
+    display: flex;
+    gap: 18px;
+    padding: 20px 36px 10px;
+  }
+  .side {
+    width: 340px;
+    flex: none;
+  }
+  .panel {
+    border-radius: 14px;
+    padding: 14px 16px;
+    margin-bottom: 16px;
+  }
+  .panel.ask-panel {
+    background: linear-gradient(170deg, #3b1d24, #2a1620);
+    border: 1px solid #c9a75a;
+    box-shadow: 0 10px 24px rgba(59, 29, 36, 0.28);
+    color: #f3e7d0;
+  }
+  .panel.books {
+    background: #fffdf8;
+    border: 1px solid #e0d6c3;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  }
+  .panel h2,
+  .lane h2 {
+    font-family: C;
+    font-weight: 400;
+    font-size: 19px;
+    letter-spacing: 0.05em;
+    margin: 0 0 10px;
+  }
+  .ask-panel h2 {
+    color: #f3e2b3;
+  }
+  .ask {
+    position: relative;
+    padding: 9px 12px 9px 14px;
+    margin: 0 0 9px;
+    border-radius: 9px;
+    background: rgba(255, 255, 255, 0.06);
+    font-size: 15.5px;
+  }
+  .ask:before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 8px;
+    bottom: 8px;
+    width: 3px;
+    border-radius: 2px;
+    background: #f1d48a;
+    box-shadow: 0 0 8px #f1d48a;
+  }
+  .ask .m {
+    font-size: 13px;
+    color: #d9c9a8;
+  }
+  .book {
+    display: flex;
+    gap: 11px;
+    align-items: center;
+    margin: 0 0 11px;
+  }
+  .spine {
+    width: 30px;
+    height: 44px;
+    border-radius: 3px;
+    box-shadow:
+      inset -3px 0 0 rgba(0, 0, 0, 0.25),
+      0 2px 5px rgba(0, 0, 0, 0.25);
+  }
+  .book .t {
+    font-family: C;
+    font-size: 14.5px;
+    color: #2b2620;
+  }
+  .book .m {
+    font-size: 12.5px;
+    color: #857a6b;
+  }
+  .steps {
+    display: flex;
+    gap: 3px;
+    margin-top: 5px;
+  }
+  .steps i {
+    width: 22px;
+    height: 4px;
+    border-radius: 2px;
+    background: #e3dbcd;
+  }
+  .steps .d {
+    background: #b8923f;
+  }
+  .steps .n {
+    background: #e2b24d;
+    box-shadow: 0 0 6px rgba(226, 178, 77, 0.8);
+  }
+  .board {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 14px;
+  }
+  .lane {
+    border-radius: 14px;
+    padding: 12px;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid #e0d6c3;
+  }
+  .who {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+  }
+  .who h2 {
+    margin: 0;
+    color: #2b2620;
+  }
+  .sig {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    display: grid;
+    place-items: center;
+    border: 1px solid #c9a75a;
+    background: radial-gradient(circle, #2a2838, #1b1a26);
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+  }
+  .sig svg {
+    width: 19px;
+    height: 19px;
+    stroke: var(--c);
+    fill: none;
+    stroke-width: 1.5;
+  }
+  .who small {
+    display: block;
+    font-size: 12.5px;
+    color: #857a6b;
+  }
+  .card {
+    background: #fffdf8;
+    border: 1px solid #e6ddcc;
+    border-radius: 10px;
+    padding: 10px 12px;
+    margin: 0 0 10px;
+    font-size: 14.5px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
+  }
+  .card .t {
+    font-family: C;
+    font-size: 15px;
+    color: #2b2620;
+    margin-bottom: 3px;
+  }
+  .card .s {
+    color: #5d544a;
+  }
+  .bar {
+    height: 6px;
+    background: #ece5d8;
+    border-radius: 4px;
+    margin: 8px 0 4px;
+    overflow: hidden;
+  }
+  .bar i {
+    display: block;
+    height: 100%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #b8923f, #e9c56a);
+  }
+  .m2 {
+    font-size: 12.5px;
+    color: #857a6b;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    border-radius: 10px;
+    padding: 2px 9px;
+    margin-top: 6px;
+  }
+  .pill.run {
+    background: #e4f0de;
+    color: #3f6a2e;
+  }
+  .pill.run:before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: #5aa864;
+    box-shadow: 0 0 6px #5aa864;
+  }
+  .pill.ok {
+    background: #e3e9f4;
+    color: #2f5a8a;
+  }
+  .pill.bad {
+    background: #f5e0dd;
+    color: #9b2c2c;
+  }
+</style>
+<div class="band">
+  <header>
+    <h1>THE WORKROOM</h1>
+    <span class="live"><span class="dot"></span>live from the shelf · 2 min ago</span
+    ><span class="tag">mock-up, made-up data · approved by the owner on 19 November 2026</span>
+  </header>
+  <div class="stats">
+    <div class="stat"><b>3</b><span>waiting on you</span></div>
+    <div class="stat"><b>5</b><span>agents at work</span></div>
+    <div class="stat"><b>4</b><span>books in progress</span></div>
+    <div class="stat"><b>23 / 23</b><span>Seven Doors readiness checks passed</span></div>
+  </div>
+</div>
+<div class="wrap">
+  <div class="side">
+    <div class="panel ask-panel">
+      <h2>WAITING ON YOU</h2>
+      <div class="ask">
+        <b>Invisible Lamp:</b> 4 questions, Chapter VII
+        <div class="m">from the Reader · page crops attached</div>
+      </div>
+      <div class="ask">
+        <b>Invisible Lamp:</b> the introduction
+        <div class="m">passed Etsu's editor on round 2</div>
+      </div>
+      <div class="ask">
+        <b>Seven Doors:</b> upload pack ready
+        <div class="m">readiness 23 passed · 0 failed · 0 not checked</div>
+      </div>
+    </div>
+    <div class="panel books">
+      <h2>THE BOOKS</h2>
+      <div class="book">
+        <div class="spine" style="background: #4b2a5e"></div>
+        <div>
+          <div class="t">The Invisible Lamp</div>
+          <div class="m">pilot · writing</div>
+          <div class="steps">
+            <i class="d"></i><i class="d"></i><i class="d"></i><i class="n"></i><i></i><i></i
+            ><i></i>
+          </div>
+        </div>
+      </div>
+      <div class="book">
+        <div class="spine" style="background: #24465c"></div>
+        <div>
+          <div class="t">The Keeper's Notebook</div>
+          <div class="m">pictures</div>
+          <div class="steps">
+            <i class="d"></i><i class="d"></i><i class="n"></i><i></i><i></i><i></i><i></i>
+          </div>
+        </div>
+      </div>
+      <div class="book">
+        <div class="spine" style="background: #5e2a2a"></div>
+        <div>
+          <div class="t">The Seven Doors</div>
+          <div class="m">upload</div>
+          <div class="steps">
+            <i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i><i class="d"></i
+            ><i class="d"></i><i class="n"></i>
+          </div>
+        </div>
+      </div>
+      <div class="book">
+        <div class="spine" style="background: #2f4a2c"></div>
+        <div>
+          <div class="t">The Bell and the Rope (1904)</div>
+          <div class="m">finding the source</div>
+          <div class="steps"><i class="n"></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="board">
+    <div class="lane" style="--c: #7fb8d3">
+      <div class="who">
+        <div class="sig">
+          <svg viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="8" />
+            <path d="M12 4v16M4 12h16M12 7l3 5-3 5-3-5z" />
+          </svg>
+        </div>
+        <div>
+          <h2>Scout</h2>
+          <small>finds and fetches sources</small>
+        </div>
+      </div>
+      <div class="card">
+        <div class="t">The Bell and the Rope (1904)</div>
+        <div class="s">Comparing 3 scans for the best printing</div>
+        <span class="pill run">working · since 10:14</span>
+      </div>
+    </div>
+    <div class="lane" style="--c: #9fd38a">
+      <div class="who">
+        <div class="sig">
+          <svg viewBox="0 0 24 24">
+            <path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z" />
+            <circle cx="12" cy="12" r="2.5" />
+          </svg>
+        </div>
+        <div>
+          <h2>Reader</h2>
+          <small>text against the page</small>
+        </div>
+      </div>
+      <div class="card">
+        <div class="t">Invisible Lamp</div>
+        <div class="s">Batch 9 of 12 · 2 readers</div>
+        <div class="bar"><i style="width: 74%"></i></div>
+        <div class="m2">242 of 328 pages</div>
+        <span class="pill run">working</span>
+      </div>
+    </div>
+    <div class="lane" style="--c: #d3a67f">
+      <div class="who">
+        <div class="sig">
+          <svg viewBox="0 0 24 24">
+            <rect x="5" y="4" width="14" height="16" rx="1" />
+            <path d="M8 8h8M8 11h8M8 14h5" />
+          </svg>
+        </div>
+        <div>
+          <h2>Typesetter</h2>
+          <small>pictures, layout, covers</small>
+        </div>
+      </div>
+      <div class="card">
+        <div class="t">The Keeper's Notebook</div>
+        <div class="s">Tracing plates</div>
+        <div class="bar"><i style="width: 30%"></i></div>
+        <div class="m2">12 of 40 plates</div>
+        <span class="pill run">working</span>
+      </div>
+      <div class="card">
+        <div class="t">The Seven Doors</div>
+        <div class="s">Covers recut to 148 pages</div>
+        <span class="pill ok">done</span>
+      </div>
+    </div>
+    <div class="lane" style="--c: #c99be0">
+      <div class="who">
+        <div class="sig">
+          <svg viewBox="0 0 24 24">
+            <path d="M5 19c4-1 9-6 13-14-6 3-11 8-13 14z" />
+            <path d="M5 19l5-5" />
+          </svg>
+        </div>
+        <div>
+          <h2>Etsu &amp; editor</h2>
+          <small>writes · checks the writing</small>
+        </div>
+      </div>
+      <div class="card">
+        <div class="t">Invisible Lamp · introduction</div>
+        <div class="s">Round 1: 6 notes · Round 2: passed</div>
+        <span class="pill ok">passed the editor</span>
+      </div>
+      <div class="who" style="margin-top: 14px; --c: #f1d48a">
+        <div class="sig">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 3l7 3v6c0 4-3 7-7 9-4-2-7-5-7-9V6z" />
+            <path d="M9 12l2 2 4-4" />
+          </svg>
+        </div>
+        <div>
+          <h2>Checker</h2>
+          <small>the independent gate</small>
+        </div>
+      </div>
+      <div class="card">
+        <div class="t">The Seven Doors</div>
+        <div class="s">Readiness on the exact upload files</div>
+        <span class="pill ok">23 passed</span>
+      </div>
+      <div class="card">
+        <div class="t">The Quiet Stair</div>
+        <div class="s">Readiness</div>
+        <span class="pill bad">3 not checked</span>
+      </div>
+    </div>
+  </div>
+</div>
